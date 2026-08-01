@@ -918,28 +918,18 @@ def _train_and_score_dataset(
     """Train an MLP on (X, y), then score every media in the active dataset.
 
     *embedder_name* is the embedder the external labels in *X_list* were
-    embedded with; scoring sources the haystack matrix from the same embedder
+    embedded with; scoring sources the haystack vectors from the same embedder
     so the trained MLP and the scored vectors share one space.  ``None`` reads
-    each media's primary vector.
+    each media's primary vector.  The same name is handed to
+    :func:`train_and_threshold` so the safe-threshold GMM is fitted on exactly
+    the score distribution returned here - including the region max-pool on a
+    patch dataset, where results also gain a ``best_region`` box.
     """
-    import torch  # noqa: PLC0415
-
-    from vtscore.detectors.training import train_and_threshold
-    from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
-    from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
+    from vtscore.detectors.training import score_media_with_model, train_and_threshold  # noqa: PLC0415
 
     snap = snapshot_medias()
-    model, threshold = train_and_threshold(X_list, y_list, snap=snap)
-
-    all_ids, all_embs = get_embedding_matrix_for_snap(snap, embedder_name)
-    X_all = torch.from_numpy(all_embs)
-    with torch.no_grad():
-        X_all = X_all.to(next(model.parameters()).device)
-        scores = sigmoid_to_finite_scores(model(X_all))
-
-    paired = sorted(zip(all_ids, scores, strict=True), key=lambda x: x[1], reverse=True)
-    results = [{"id": cid, "score": round(s, 4)} for cid, s in paired]
-    return results, threshold
+    model, threshold = train_and_threshold(X_list, y_list, snap=snap, embedder_name=embedder_name)
+    return score_media_with_model(model, snap, embedder_name), threshold
 
 
 @sorting_bp.route("/api/label-file-sort", methods=["POST"])
@@ -953,7 +943,11 @@ def _train_and_score_dataset(
 )
 @sorting_bp.alt_response(500, description="Label file sort failed (unexpected exception).")
 def label_file_sort():
-    """Train MLP on external media files from a label file, then sort all medias."""
+    """Train MLP on external media files from a label file, then sort all medias.
+
+    On a patch dataset each result also carries the ``best_region`` box of the
+    region that drove its score, matching the cosine- and learned-sort paths.
+    """
     if "file" not in request.files:
         abort(400, message="No file provided")
 

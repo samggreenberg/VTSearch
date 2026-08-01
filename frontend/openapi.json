@@ -13807,6 +13807,7 @@
     },
     "/api/label-file-sort": {
       "post": {
+        "description": "On a patch dataset each result also carries the ``best_region`` box of the\nregion that drove its score, matching the cosine- and learned-sort paths.",
         "operationId": "label_file_sort",
         "responses": {
           "200": {

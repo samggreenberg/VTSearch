@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from vtscore.utils.scores import sigmoid_to_finite_array, sigmoid_to_finite_scores
+from vtscore.utils.scores import sigmoid_to_finite_array
 
 if TYPE_CHECKING:
     import torch.nn as nn
@@ -177,7 +177,10 @@ def train_and_threshold(
        ``calibration_fraction`` settings).
     2. Full-data model training (respects ``inclusion`` setting).
     3. Optional safe-threshold blending when ``get_safe_thresholds()`` is
-       enabled and *snap* is provided.
+       enabled and *snap* is provided.  The GMM half of that blend is fitted
+       on the per-media scores :func:`_score_all_media` produces - region
+       max-pooled on a patch dataset - so it sees the distribution the
+       threshold will actually cut.
 
     ``inclusion`` is read from ``get_inclusion()``, which resolves to the
     *active detector context's* inclusion (seeded from the user's settings
@@ -288,17 +291,22 @@ def train_and_threshold(
         model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
 
     if safe:
-        from vtscore.embedding.matrix import get_embedding_matrix_for_snap
-
         # `safe` is only True when `snap` is truthy (see assignment above),
         # so the narrowing is real even though pyright can't track it.
         assert snap is not None
-        score_emb = embedder_name if embedder_name is not None else _score_embedder_for_snap(snap)
-        _all_ids, all_embs = get_embedding_matrix_for_snap(snap, score_emb)
-        X_all = torch.from_numpy(all_embs)
-        with torch.no_grad():
-            X_all = X_all.to(next(model.parameters()).device)
-            all_scores = sigmoid_to_finite_scores(model(X_all))
+        # Fit the GMM on the *inference* score distribution.  `_score_all_media`
+        # is the same call scoring makes (`score_media_with_model`), so on a
+        # patch dataset the GMM sees the region max-pooled per-media scores the
+        # threshold will actually cut.  Scoring the image-level embedding matrix
+        # instead fitted the GMM on a systematically lower distribution (the
+        # region max is ≥ the single image-level row), biasing the midpoint cut
+        # low → over-inclusion on region-voting detectors.  Plain single-vector
+        # datasets take `_score_all_media`'s embedding-matrix fallback, so their
+        # behaviour is unchanged.  *embedder_name* is forwarded as-is (not
+        # pre-resolved) so the region-vs-plain gating matches inference exactly.
+        # Mirrors `_train_and_score_xy` and
+        # `eval.voting_iterations._blend_safe_threshold`.
+        _all_ids, all_scores, _best_region = _score_all_media(model, snap, embedder_name)
         # The GMM blend is applied only on a *fresh* retrain: the fold-ordering
         # cache above stores the raw cross-cal orderings, so a later inclusion
         # slide re-derives the unblended cutoff (intentional - see
