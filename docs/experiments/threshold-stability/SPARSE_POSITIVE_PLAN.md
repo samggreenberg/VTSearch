@@ -224,3 +224,30 @@ extreme-value statistic). Re-ran base vs defer6 (DINOv3/hac, 5 classes × 10 see
   persist; the win is in the cost *level*, not jumpiness.
 - **Best combo = new-GMM + defer6** (lowest cost_sd/cost_auc/final_cost, runaways 15%),
   though regret ticks up vs new-GMM base. Worth updating to the new GMM regardless.
+
+---
+
+## What's special about the spiking *vectors*? (pure embedding, #2790)
+
+`spike_vectors.py` — no eval framework, just cached SigLIP 2 whole-image embeddings.
+For each class: G = positive vectors, B = negatives, S = spikers (bad, ≥5 seeds). For
+each spiker, its **percentile among all bads** on several geometric features; mean over
+71 classes (one strong spiker each):
+
+| feature | spiker pctile | reading |
+|---|---|---|
+| `margin` = cos_G − cos_B | **0.69** | the signature: spikers lean toward good on the good↔bad axis |
+| `proj_w` (Fisher axis) | 0.69 | identical (monotone with margin) |
+| `cos_G` (good centroid) | 0.62 | more class-like than typical bads |
+| `cos_B` (bad centroid) | 0.44 | *less* bad-like |
+| `max_cos_G` (nearest good) | 0.59 | mildly nearer one exemplar |
+| `knn_good` | 0.56 | slightly more good neighbors |
+| `b_outlier` | 0.53 | ~typical — **not** an outlier |
+
+**A spiker is a negative pulled toward the good cluster and away from the bad cluster
+— a boundary case near the model's cut, leaning good but not extreme, and NOT an
+isolated outlier.** That is why nothing stands out in the pixels: the signal is a soft
+position in embedding space, not a distinct visual feature. The effect is real but
+moderate and **class-dependent** (strong: oven/sink/zebra/elephant, margin pct 0.9+;
+weak/reversed: umbrella/vase/surfboard). Consistent with "vaguely hard negatives."
+Tool: `spike_vectors.py`.
