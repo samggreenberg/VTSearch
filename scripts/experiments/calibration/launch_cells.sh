@@ -32,10 +32,13 @@ B=$(sbatch --parsable --job-name=cal-cells --array=0-$((N-1))%$CONC \
   --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py")
 echo "cells array: $B"
 
+# Which analyzer runs after the cells: the #2781 study's analyze.py (default)
+# or the #2799 safe-threshold study's analyze_safe.py (set by launch_safe.sh).
+ANALYZE="${CALIB_ANALYZE:-analyze.py}"
 A=$(sbatch --parsable --dependency=afterany:$B --job-name=cal-analyze --mem=16G \
   --cpus-per-task=4 --time=0:40:00 --partition=cpu \
   --export=ALL --output="$LOGS/analyze-%j.out" \
-  --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python analyze.py")
+  --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python $ANALYZE")
 echo "analyze: $A"
 echo "$B" > "$LOGS/.cells_jobid"
 echo "Report -> $CALIB_RESULTS/REPORT.md"

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -143,6 +144,89 @@ def _weighted_gaussian_crossing(
     return mu_lo + max(inside)
 
 
+@dataclass(frozen=True)
+class GmmFit1D:
+    """The two components of a fitted 1-D, 2-component GMM, ordered by mean.
+
+    Carries exactly the parameters the two candidate cut rules need, so one EM
+    fit can be re-cut under both rules (the safe-threshold measurement study,
+    issue #2799) instead of re-fitting per rule.  ``lo`` is the Bad (low-mean)
+    component, ``hi`` the Good one.
+    """
+
+    w_lo: float
+    mu_lo: float
+    var_lo: float
+    w_hi: float
+    mu_hi: float
+    var_hi: float
+
+    def midpoint(self) -> float:
+        """The historical cut: the midpoint between the two component means."""
+        return (self.mu_lo + self.mu_hi) / 2.0
+
+    def crossing_or_midpoint(self) -> float:
+        """The production cut: equal-density crossing, midpoint when none exists."""
+        crossing = _weighted_gaussian_crossing(self.w_lo, self.mu_lo, self.var_lo, self.w_hi, self.mu_hi, self.var_hi)
+        return self.midpoint() if crossing is None else crossing
+
+
+def gmm_fit_array(scores: "list[float] | np.ndarray") -> np.ndarray:
+    """The (possibly subsampled) float64 array a score-GMM is fitted on.
+
+    Above :data:`_GMM_MAX_SAMPLES` scores, takes a deterministic (seed-42)
+    random subsample; below, returns the scores unchanged.  Exposed separately
+    from :func:`fit_score_gmm` so a caller that needs the fit's *input* too
+    (e.g. for the median fallback, or to transform the same sample into logit
+    space) subsamples exactly once.
+    """
+    arr = np.asarray(scores, dtype=np.float64)
+    if arr.shape[0] > _GMM_MAX_SAMPLES:
+        rng = np.random.default_rng(42)
+        arr = rng.choice(arr, size=_GMM_MAX_SAMPLES, replace=False)
+    return arr
+
+
+def fit_score_gmm(arr: np.ndarray) -> GmmFit1D | None:
+    """Fit a deterministic 2-component GMM to a 1-D score array.
+
+    Returns ``None`` when the fit fails (fewer than 2 scores, or an EM
+    failure), leaving the fallback policy to the caller -
+    :func:`calculate_gmm_threshold` falls back to the median.
+    """
+    if arr.shape[0] < 2:
+        return None
+
+    from sklearn.mixture import GaussianMixture  # noqa: PLC0415
+
+    try:
+        gmm: GaussianMixture = GaussianMixture(n_components=2, random_state=42)
+        gmm.fit(arr.reshape(-1, 1))
+
+        # The stubs type these ``np.ndarray | None``; all are set after ``fit``.
+        assert gmm.means_ is not None
+        assert gmm.covariances_ is not None
+        assert gmm.weights_ is not None
+        means = np.ravel(gmm.means_)
+        # ``covariances_`` is (n_components, 1, 1) under the default "full"
+        # covariance type; ravel gives the two scalar variances.
+        variances = np.ravel(gmm.covariances_)
+        weights = np.ravel(gmm.weights_)
+
+        low_idx = 0 if means[0] < means[1] else 1
+        high_idx = 1 - low_idx
+        return GmmFit1D(
+            w_lo=float(weights[low_idx]),
+            mu_lo=float(means[low_idx]),
+            var_lo=float(variances[low_idx]),
+            w_hi=float(weights[high_idx]),
+            mu_hi=float(means[high_idx]),
+            var_hi=float(variances[high_idx]),
+        )
+    except Exception:
+        return None
+
+
 def calculate_gmm_threshold(scores: list[float]) -> float:
     """Use a Gaussian Mixture Model to find a threshold between two score distributions.
 
@@ -175,55 +259,13 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
     if len(scores) < 2:
         return 0.5
 
-    from sklearn.mixture import GaussianMixture  # noqa: PLC0415
-
-    arr = np.asarray(scores, dtype=np.float64)
-    if arr.shape[0] > _GMM_MAX_SAMPLES:
-        rng = np.random.default_rng(42)
-        arr = rng.choice(arr, size=_GMM_MAX_SAMPLES, replace=False)
-
-    # Reshape for sklearn
-    X = arr.reshape(-1, 1)
-
-    try:
-        # Fit a 2-component GMM
-        gmm: GaussianMixture = GaussianMixture(n_components=2, random_state=42)
-        gmm.fit(X)
-
-        # Get the means of the two components.  The stub types `means_`
-        # as `np.ndarray | None`; after `fit` it's always set.
-        assert gmm.means_ is not None
-        means = np.ravel(gmm.means_)
-
-        # Identify which component is "low" (Bad) and which is "high" (Good)
-        low_idx = 0 if means[0] < means[1] else 1
-        high_idx = 1 - low_idx
-
-        # Threshold is at the intersection of the two Gaussians; the midpoint
-        # between the means is the fallback when that intersection is not a
-        # usable boundary (degenerate fit, or root outside the two means).
-        midpoint = float((means[low_idx] + means[high_idx]) / 2.0)
-
-        # ``covariances_`` is (n_components, 1, 1) under the default "full"
-        # covariance type; ravel gives the two scalar variances.  Both attributes
-        # are stub-typed ``np.ndarray | None`` and always set after ``fit``.
-        assert gmm.covariances_ is not None
-        assert gmm.weights_ is not None
-        variances = np.ravel(gmm.covariances_)
-        weights = np.ravel(gmm.weights_)
-        crossing = _weighted_gaussian_crossing(
-            float(weights[low_idx]),
-            float(means[low_idx]),
-            float(variances[low_idx]),
-            float(weights[high_idx]),
-            float(means[high_idx]),
-            float(variances[high_idx]),
-        )
-        return midpoint if crossing is None else crossing
-    except Exception:
+    arr = gmm_fit_array(scores)
+    fit = fit_score_gmm(arr)
+    if fit is None:
         # If GMM fails, return median (of the subsample when one was taken -
         # representative of the full distribution and keeps this path bounded).
         return float(np.median(arr))
+    return fit.crossing_or_midpoint()
 
 
 def _score_rows_digest(score_rows_by_group: dict | None) -> bytes | None:
@@ -981,8 +1023,27 @@ def calculate_safe_threshold(
         ``DetectorContext.threshold`` without breaking ``score >= threshold``
         comparisons.
     """
-    gmm_threshold = calculate_gmm_threshold(all_scores)
+    return blend_gmm_threshold(xcal_threshold, calculate_gmm_threshold(all_scores), n_labels)
 
+
+def safe_blend_weight(n_labels: int) -> float:
+    """The x-cal weight of the safe-threshold blend at *n_labels* labels.
+
+    Linear ramp: 0 at 6 labels (pure GMM), 1 at 20 (pure x-cal).
+    """
+    MIN_LABELS = 6
+    MAX_LABELS = 20
+    return max(0.0, min(1.0, (n_labels - MIN_LABELS) / (MAX_LABELS - MIN_LABELS)))
+
+
+def blend_gmm_threshold(xcal_threshold: float, gmm_threshold: float, n_labels: int) -> float:
+    """Blend an x-cal and a GMM threshold on the safe-threshold label ramp.
+
+    The blending core of :func:`calculate_safe_threshold`, split out so a
+    caller with a pre-computed GMM cut (the #2799 measurement harness re-cuts
+    one fitted GMM under several rules) applies the identical ramp and
+    finite-guards without re-fitting.
+    """
     # Defend against non-finite inputs from either side: an upstream
     # ``calculate_cross_calibration_threshold`` can theoretically still
     # surface inf/NaN, and ``calculate_gmm_threshold`` returns NaN when
@@ -998,11 +1059,7 @@ def calculate_safe_threshold(
     if not gmm_finite:
         return xcal_threshold
 
-    # Linear ramp: 0 at 6 labels, 1 at 20 labels
-    MIN_LABELS = 6
-    MAX_LABELS = 20
-    label_weight = max(0.0, min(1.0, (n_labels - MIN_LABELS) / (MAX_LABELS - MIN_LABELS)))
-
+    label_weight = safe_blend_weight(n_labels)
     blended = label_weight * xcal_threshold + (1.0 - label_weight) * gmm_threshold
     if not math.isfinite(blended):
         return 0.5
