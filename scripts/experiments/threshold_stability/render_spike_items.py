@@ -17,7 +17,7 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts" / "sod"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "sod"))
 
 from datasets import SodDataset  # noqa: E402
 
