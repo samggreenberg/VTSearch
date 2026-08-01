@@ -223,10 +223,16 @@ class TestSimulateVotingIterations:
         medias = _make_separable_clips(n_per_cat=10)
         for seed in (42, 99):
             rows = simulate_voting_iterations(medias, "alpha", seed=seed, calibrate_count=1)
-            # Row 0 is the 1-good/1-bad cold start, below the calibration
-            # floor (fewer than 4 votes returns the 0.5 default), so it is not
-            # governed by the conformal rule.
-            for row in rows[1:]:
+            for row in rows:
+                # Only rows where a stratified fold split can actually form are
+                # governed by the conformal rule; below that
+                # ``compute_fold_orderings`` returns its flat 0.5
+                # ``too_few_default`` (issue #2788), which this regression is
+                # not about.  Keyed on the calibrator's own precondition rather
+                # than on row position, so a change in the simulated vote order
+                # cannot quietly widen or narrow what is asserted.
+                if row["n_good"] < 2 or row["n_bad"] < 2:
+                    continue
                 assert row["fnr"] < 1.0, f"seed {seed}, t={row['t']}: cut rejected every positive"
 
     def test_t_values_monotonically_increase(self):
