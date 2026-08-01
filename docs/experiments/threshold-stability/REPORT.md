@@ -81,23 +81,32 @@ rank-transfer are not worth adopting.
 
 ## Spike attribution — what vote causes a spike
 
-_Pending the full 5-class conformal trace run (job 437015). Preliminary read on
-stop-sign (10 seeds, 49 up-spikes) below; the section is finalized when the run
-completes._
+Drill-down over all 5 classes × 10 seeds (`--labeling-trace --no-trace-images`),
+attributing every up-spike (`Δcost > 0.1`) to the vote added that step
+(`scripts/experiments/threshold_stability/spike_analysis.py`). **235 up-spikes.**
+Stated on model-independent metrics (test-set `cost`/`fnr`/`fpr`; "the cut is bad" =
+far from *that step's own* oracle cut — never a raw threshold compared across the
+retrained models).
 
-Drill-down attributes every up-spike (`Δcost > 0.1`) to the vote added that step
-(`scripts/experiments/threshold_stability/spike_analysis.py`), stated on
-model-independent metrics (test-set `cost`/`fnr`/`fpr`; "the cut is bad" = far from
-*that step's own* oracle cut — never a raw threshold compared across the retrained
-models).
+| signal (test-set / within-model) | share |
+|---|---|
+| culprit is a **Bad** vote | 93% |
+| Bad **and** `hard`-selected (surfaced at the boundary) | 89% |
+| `hard`-selected (any label) | 97% |
+| **sparse positives** at spike (`n_good ≤ 6`; median `n_good` = **3**) | 87% |
+| **FNR**-driven (Δfnr > Δfpr) | 59% |
+| **runaway** (Δfnr > 0.2 — operating point rejects many test positives) | 22% |
+| **narrow** (recovers within 2 steps) | 32% (47% still elevated after 5) |
 
-Preliminary pattern (stop-sign): a spike is a **Bad vote (92%) on a `hard`-selected
-boundary item (86%)** while positives are **sparse — 94%, median n_good = 3**. The
-conformal cut's gap-midpoint already caps the cut at that step's lowest calibration
-positive, so the catastrophic FNR→1.0 runaways are down (~20% of spikes, ~half the
-pre-conformal rate) and ~47% of spikes now recover within 2 steps. What remains is the
-sparse-positive regime: with only ~3 positives, even the lowest-positive anchor is
-itself unstable, so a boundary Bad vote still moves the operating point sharply.
+**Pattern:** a spike is a **Bad vote on a `hard`-selected boundary item while
+positives are sparse** — median `n_good` = 3 at the spike. The conformal cut's
+gap-midpoint caps each retrained model's cut at its own lowest calibration positive,
+so the catastrophic FNR→1.0 runaways are the minority (22%) rather than the rule, and
+FNR- vs FPR-driven spikes are now roughly balanced (59% FNR). What survives is the
+sparse-positive case: with only ~3 positives the lowest-positive anchor is itself
+unstable, so a boundary Bad vote still shoves the operating point — sometimes up (FNR)
+and about as often down (FPR flood). The instability is a **too-few-positives**
+problem, not a rule problem.
 
 **Blockable (all within-model / vote-count based, no cross-step threshold compare):**
 
