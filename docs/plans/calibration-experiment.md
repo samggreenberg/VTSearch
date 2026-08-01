@@ -41,7 +41,22 @@ strategy.
 
 - **Cold-start degenerate defaults.** Post-#2784 the residual degenerate
   thresholds are dominated by the `too_few_default` (0.5) path at < ~4 votes,
-  which the fix does not touch — filed separately as a concrete bug.
+  which the fix does not touch — filed separately as #2788, with its measurement
+  spec pre-registered in
+  [`coldstart-threshold-experiment.md`](coldstart-threshold-experiment.md).
+  Note that this study ran before the harness's Autopilot-fidelity alignment, so
+  some of those sub-quorum steps are ones the app would never have shown a user;
+  the #2788 experiment measures the app-visible share.
+
+<!-- item-sep -->
+
+- **Re-run under Autopilot fidelity.** Every number in the report comes from the
+  legacy vote order (`autopilot_fidelity=False`): training from the first
+  (1 good, 1 bad) pair instead of the app's 3-good/4-bad quorum, bad votes from
+  the bottom of the sort rather than the text sort's cutoff. Re-running with the
+  default (`True`) would say how much of the measured regret — especially at low
+  `t` — survives on trajectories a user would actually walk. Cheap: same cells,
+  same pickles, one flag.
 
 <!-- item-sep -->
 

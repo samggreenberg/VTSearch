@@ -199,10 +199,20 @@ grouped path.
   cross-arm comparable; comparisons stay at cost/regret.
 - Max-Patch harness carryovers (the exemplar may land in the test split; pool
   acquisition scores by the whole-image vector in every style).
+- These runs predate the harness's Autopilot-fidelity alignment (#2788), so the
+  simulated user trains from the first (1 good, 1 bad) pair rather than at the
+  app's 3-good/4-bad quorum. That inflates the cold-start end of the trajectory:
+  part of the residual `too_few_default` degeneracy in Finding 1 is a step the
+  app would never show a user. The conformal-rule findings are unaffected (they
+  are keyed on cuts the calibrator actually computes), but a re-run under
+  `autopilot_fidelity=True` should be read as the app-visible picture.
 
 ## Reproduce
 
 Runner: `scripts/experiments/calibration/` (`launch_all.sh` → `prepare_data.py`
 → `run_cells.py` → `analyze.py`). Reuses the Max-Patch pickles where the
 (dataset, embedder) pair coincides; only `siglip_l` is embedded fresh. Figures:
-`regret_vs_t.png`, `fpr_tail_vs_npool.png`.
+`regret_vs_t.png`, `fpr_tail_vs_npool.png`. Pass `autopilot_fidelity=False` to
+`simulate_voting_iterations` to reproduce these numbers exactly (see
+[`docs/EVAL.md`](../../EVAL.md)); the runner's default is now the app-faithful
+vote order.
