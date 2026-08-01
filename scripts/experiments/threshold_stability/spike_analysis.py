@@ -41,7 +41,7 @@ def _class_seed(trace_path: Path) -> tuple[str, str]:
     cfg = trace_path.parent.parent.name
     # Strip the coco_ prefix and the _<embedder>_<proposal>... suffix so the class is
     # comparable across embedders/proposals (whole/siglip2 vs hac/dinov3, etc.).
-    m = re.match(r"^coco_(.*?)_(siglip2|siglip|dinov2|dinov3|clip)_(whole|hac|sliding|dino)\b", cfg)
+    m = re.match(r"^coco_(.*?)_(siglip2|siglip|dinov2|dinov3|clip)_(whole|hac|sliding|dino)", cfg)
     cls = m.group(1) if m else cfg.replace("coco_", "").replace("_siglip2_whole", "")
     return cls, seed
 
