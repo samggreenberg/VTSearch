@@ -170,3 +170,30 @@ is GPU-cap-free there). **1,580 traces, 6,729 spikes, 5,225 distinct culprit ite
   keeps the example and drops the instability.
 - Visual catalog: published Artifact (1 high-confidence offender per category, ≥12/20).
   Tools: `spike_items.py` (per-item + confidence tiers), `render_spike_items.py`.
+
+---
+
+## Do the spike-causing items transfer across path / embedder? (robustness)
+
+`spike_overlap.py` compares the offender sets (image ids that spiked in ≥K seeds)
+between two runs, same 5 classes × 10 seeds.
+
+- **Q1 — region-voting (hac/DINOv3) vs whole-image (SigLIP 2): no overlap.** Every
+  class's top offender is a different image (whole stop-sign `562818` 10/10 vs
+  region-voting `500826` 2/10; traffic-light `47769` 10/10 vs `366178` 2/10; etc.).
+  Jaccard 0.
+- **Q2 — same path, DINOv3 vs DINOv2 (both hac/region-voting): also no overlap.**
+  Top offenders are entirely different images per class; Jaccard 0. So it isn't the
+  proposal path that decides — it's the **embedder**.
+- **Also observed:** the whole/SigLIP 2 path *concentrates* on strong repeat
+  offenders (8–10/10 seeds), while both region-voting/DINO paths are **diffuse** (top
+  only 2–4/10) — the bag-aware max-over-nodes scoring adds per-seed noise, so no single
+  image is reliably the boundary case there.
+
+**Conclusion: spikers are representation-specific, not a property of the image.** An
+image sits at the decision boundary of *one embedder's* score landscape when positives
+are sparse; a different embedder puts different images there. This means the "valuable
+hard examples" are found **per embedder** — the SigLIP 2 mislabels/look-alikes and the
+DINO ones are different sets, both worth harvesting. (The sparse-positive fix
+`--defer-cut-goods` is embedder-agnostic — it stabilizes the cut regardless of which
+images are at the boundary.)
