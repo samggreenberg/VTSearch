@@ -296,45 +296,57 @@ hard negatives actually spike.** Tool: `spike_vectors.py --embedder siglip`; art
 If the vector position only weakly tilts the odds, *what* sets them? The unit that
 answers this is the **vote event**, not the item: `spike_events.py` rebuilds every
 Bad-vote event from the traces (~77k per embedder) with the **state at vote time**
-(`n_good`, `n_bad`, `t`, `surface_margin` = item score − cut, `select_mode`, `head`,
-`calib_mode`) plus context geometry vs the labeled-so-far sets, and whether it spiked
-(Δcost > 0.1). No re-run — it's all in the `--labeling-trace` output.
+(`n_good`, `n_bad`, `t`, `surface_margin` = item score − cut, `select_mode`, `head`)
+plus context geometry vs the labeled-so-far sets, and whether it spiked (Δcost > 0.1).
 
-**First, the mechanism (two distinct phenomena, don't conflate them).** The trace's
-`head`/`calib_mode` fields show the loop runs a **cosine cold-start** (no MLP) through the
-all-Goods phase: cost is *frozen* (flat across every `n_bad`=0 step in 1519/1580 traces).
-The **first Bad vote is where the MLP switches on** — `head` flips `cosine → mlp` in all
-1580 traces the instant both classes exist (3 goods + 1 bad). So the big cost jump at the
-first bad is a **one-time cosine→MLP handoff**, not a retrain destabilizing: the frozen
-cold-start cost is replaced by the first MLP's calibrated cost (worse 79% of the time,
-median Δ +0.14). 931/1580 of these cross the Δcost>0.1 bar, which is what inflated an
-earlier "first bad = 59–71%" reading — real, but a model *switch*, not the recurring
-instability. The `margin`≥0.5 "confident FP ⇒ 62–77%" pattern lives almost entirely here
-too (only the cold-start cut ever surfaces items that far above it).
+### Harness-fidelity fix (this changed the mechanism story)
 
-**Recurring MLP-retrain spikes** are the phenomenon of interest: every Bad vote once the
-MLP is already on (`n_bad`≥1). 4947 (S1) / 5122 (S2) of them. Both embedders agree to
-within a few points on every cut (S1 = SigLIP 1, S2 = SigLIP 2):
+The app's autopilot (cold-start, `retrainMode=false`) surfaces the **good and bad phases
+with text/example (cosine) sort** and only switches to the learned **MLP at the `hard`
+phase** — once `n_good ≥ good_to_start` (3) **and** `n_bad ≥ bad_to_start` (4)
+(`label-view.component.ts` phase dispatch / `AutopilotPhaseMachine.next_phase`). The
+realistic harness (`_resolve_step_head`) instead switched to the MLP the instant *both*
+classes existed (the **first bad**, `n_bad`=1), so it was scoring *and selecting* with a
+1–3-bad MLP the app would never use. Fixed: gate MLP training on
+`mlp_eligible = n_good ≥ good_to_start ∧ n_bad ≥ bad_to_start`, holding the cosine
+cold-start head through the whole good+bad phase. Verified end-to-end (`head` stays
+`cosine` at `n_bad` 0→3, flips to `mlp` at `n_bad`=4) and 42 region_curve tests pass.
+**All numbers below are the post-fix re-run** (`broad_sig1_v2`, `broad_v2`); the pre-fix
+`n_bad<4` "spikes" were harness artifacts and are now exactly **0.000**.
 
-| condition (recurring, `n_bad`≥1) | spike rate S1 / S2 |
+### The three regimes
+
+1. **Cosine phase (`n_bad` 0–3, good+bad phases):** no MLP; cost is *frozen* (flat across
+   every `n_bad`=0 step in 1519/1580 traces). Spike rate at `n_bad` 0 and 1 is **0.000** —
+   the old "first bad = 59–71%" was entirely the too-early MLP switch.
+2. **Hard-phase handoff (`n_bad` 3→4):** the app fires learned sort entering the `hard`
+   phase, replacing the frozen cosine cost with the first MLP's calibrated cost. This
+   crosses the Δcost>0.1 bar **~41% (S1) / 53% (S2)** of the time — a real, app-faced,
+   *one-time* model switch (smaller than the old bogus 1-bad handoff because the MLP now
+   has 4 bads). Not a retrain instability.
+3. **Recurring MLP-retrain spikes (`n_bad` ≥ 4):** the phenomenon of interest. Both
+   embedders agree to within a few points (S1 = SigLIP 1, S2 = SigLIP 2):
+
+| condition | spike rate S1 / S2 |
 |---|---|
-| **base** (recurring Bad vote) | 6.6% / 6.8% |
-| item **below** cut (`margin`<0) | **0.6% / 0.6%** |
-| item **at/above** cut (`margin`≥0) | 15.3% / 15.7% |
-| &nbsp;&nbsp;└ `margin` just above, [0, 0.1) | 15.5% / 15.9% |
-| &nbsp;&nbsp;└ `margin` just below, [−0.1, 0) | 0.3% / 0.3% |
-| sparse pos `n_good`≤3 → ≥15 | 10→2% / 10→2% |
-| `margin`≥0 ∧ `n_good`≤4 (best profile) | 16.3% / 17.1% |
+| **base** (all Bad votes) | 6.7% / 7.5% |
+| `n_bad` 0 / 1 (cosine phase) | **0.000 / 0.000** |
+| item **below** cut (`margin`<0) | **0.7% / 0.9%** |
+| item **at/above** cut (`margin`≥0) | 15.5% / 17.3% |
+| &nbsp;&nbsp;└ just above [0, 0.1) | 15.9% / 17.7% |
+| &nbsp;&nbsp;└ just below [−0.1, 0) | 0.5% / 0.7% |
+| sparse pos `n_good` 3 → ≥15 | 8→2% / 10→3% |
+| `margin`≥0 ∧ `n_good`≤4 (best profile) | 16.7% / — |
 
 **The necessary condition is "the item is a live false-positive," not "hard-ish Bad far
 from other bads."** A recurring spike essentially requires the voted item to currently
 score **at/above the cut** (`margin`≥0) — the crossing at `margin`=0 is nearly a hard
-boundary (0.3% just below vs 15.5% just above). Voting Bad on something the MLP already
+boundary (0.5% just below vs 15.9% just above). Voting Bad on something the MLP already
 scores as bad can't move the operating point. `margin≥0` is the (near-)necessary gate.
 
-**Amplifier:** **sparse positives** — `n_good`≤3 ⇒ ~10%, decaying monotonically to ~2%
-by `n_good`≥15 (fewer positives pin the cut, so one boundary Bad shoves it further). The
-logistic ranks `surface_margin` (+0.77) then `n_good` (−0.28/−0.35) on both; all else minor.
+**Amplifier:** **sparse positives** — `n_good`=3 ⇒ ~8–10%, decaying monotonically to ~2%
+by `n_good`≥15. The logistic ranks `surface_margin` (+0.64) then `n_good` (−0.28) on both;
+all else minor.
 
 **"Far from other bads" is NOT a driver.** Distance to the labeled-bad set (`nb_cos_max`)
 and the context good↔bad margin are flat-to-slightly-*rising* in spike rate on both
@@ -345,19 +357,19 @@ distance. (Consistent with the vector study: spikers aren't outliers.)
 The residual is the exact cut arithmetic on that retrain — whether this one Bad tips the
 operating point across a real match — which isn't a function of the vote's own features.
 
-**Why the same item spikes only sometimes (when a spiker does NOT spike).** 100/114 (S1)
-and 104/126 (S2) robust spikers **also** have no-spike occurrences — the same item does
-both. Holding the item fixed, the spike occurrences differ from the no-spike ones by
-**trajectory timing, not geometry**: Δ`t` −2.1/−1.4, Δ`n_bad` −1.6/−1.0, Δ`n_good`
-−0.5/−0.4, Δ`surface_margin` +0.03/+0.02; every geometry delta ≈ 0. So a spiker spikes
-when caught **early — few positives, while it still scores above the cut**; the *same*
-item voted later, after the negative set has grown and its score has fallen below the
-stabilized cut, lands in the 0.6% floor and does nothing. Spiking is a property of *when*
+**Why the same item spikes only sometimes (when a spiker does NOT spike).** 78/95 (S1)
+robust spikers **also** have no-spike occurrences — the same item does both. Holding the
+item fixed, the spike occurrences differ from the no-spike ones by **trajectory timing,
+not geometry**: Δ`t` −1.9, Δ`n_bad` −1.4, Δ`n_good` −0.5, Δ`surface_margin` +0.01; every
+geometry delta ≈ 0. So a spiker spikes when caught **early — few positives, while it still
+scores above the cut**; the *same* item voted later, after its score has fallen below the
+stabilized cut, lands in the 0.7% floor and does nothing. Spiking is a property of *when*
 the item is met, not of the item.
 
-Tool: `spike_events.py`, `inspect_mech.py`; artifacts `broad_sig1/spike_events_sig1.json`,
-`broad/spike_events_sig2.json`. Two guards fall out: (1) the cosine→MLP handoff cost step
-is one-time and could be smoothed (warm-start the MLP cut toward the cold-start operating
-point); (2) recurring spikes need a live FP at the cut with sparse positives — most are
-narrow/self-correcting, but damping the cut move while `n_good` is small (the shipped
-crossing-GMM / `defer-cut-goods` levers) is the mitigation.
+Tool: `spike_events.py`, `inspect_mech.py`; harness fix in `region_curve.py`
+(`_resolve_step_head`); artifacts `broad_sig1_v2/spike_events.json`,
+`broad_v2/spike_events.json`. Two guards fall out: (1) the hard-phase cosine→MLP handoff
+is one-time and app-faced — could be smoothed by warm-starting the first MLP cut toward
+the cold-start operating point; (2) recurring spikes need a live FP at the cut with sparse
+positives — damp the cut move while `n_good` is small (the shipped crossing-GMM /
+`defer-cut-goods` levers).
