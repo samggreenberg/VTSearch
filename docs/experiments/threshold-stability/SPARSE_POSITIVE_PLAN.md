@@ -99,3 +99,27 @@ selection, so the whole trajectory improves, not just the sparse window.
 it is the sparse-positive fix, and unlike raising `good_to_start` it costs the user
 nothing. Confirm on the region-voting/hac path and at other prevalences before
 shipping to the app.
+
+---
+
+## Confirmation: region-voting / hac path (DINOv3, bag-aware grouped calibration)
+
+Re-ran `base` vs `defer6` on the path real detectors use — hac proposal + region-voting
+(max over ~24 HAC nodes, grouped conformal calibration), DINOv3, same 5 classes × 10 seeds.
+
+| arm | spike_rate | cost_sd | runaway% | cost_auc | final_cost | votes_in_good | regret | n_spikes |
+|---|---|---|---|---|---|---|---|---|
+| `base` | 0.181 | 0.306 | 35% | 0.446 | 0.294 | 9.3 | 0.184 | 263 |
+| **`defer6`** | **0.128** | **0.201** | **16%** | **0.390** | **0.267** | 9.3 | **0.133** | **184** |
+
+**`defer6` confirms — still a Pareto win** (spikes −30%, runaways ~2×, cost_sd −34%,
+cost_auc / final_cost / regret all lower, zero extra budget). Two caveats: (a) the
+**effect is smaller** than on the whole-image path (−30% vs −90% spikes) — the hac
+max-over-nodes score distribution is more skewed, so the 2-component GMM cut is less
+clean; (b) the **residual is still the sparse regime** (defer6 spikes: 96% Bad, 91%
+`n_good ≤ 6`, median 3). The baseline spike *pattern* is identical across paths (263
+hac vs 235 whole; 93% Bad, ~70%+ sparse), so the phenomenon is not path-specific.
+
+**Takeaway:** ship `--defer-cut-goods ≈ 6`; it helps everywhere. The region-voting
+path needs follow-up (a bag-aware deferred cut, not a plain pool GMM) to close the
+gap. Prevalence robustness (below 1/100) still needs LVIS/VG — COCO val2017 caps it.
