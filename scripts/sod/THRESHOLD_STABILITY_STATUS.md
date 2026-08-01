@@ -52,32 +52,34 @@ Consequence to confirm before Stage B: porting the conformal rule changes the
   - Tests: `tests_lib/sorting/test_replay_thresholds.py` (5, all pass) — order,
     dedup, per-step rows, med3 = median of last 3, decomposition.
 
-172/172 `tests_lib/sorting` pass; ruff/codespell clean.
+- **Stage B live-loop wiring** (owner confirmed the reframe): `sweep.py` gains
+  `--threshold-rule {argmin,conformal,rank-transfer}` + `--threshold-smooth {none,med3}`,
+  threaded through `evaluate_realistic_curve` → `_realistic_one_seed` →
+  `_resolve_step_head` → `_train_pool_head`, where the whole/box-pool threshold now
+  dispatches through `calibrated_threshold`. med3 smoothing + per-step diagnostic
+  trace columns (`delta_threshold`, `spike`, `regret`, `threshold_rule`) added.
+  **Default `argmin`/`none` is byte-identical** — all 42 `test_region_curve.py` pass.
+- **CPU Grid runner** `scripts/experiments/threshold_stability/` — `experiment_config`
+  (6 arms × 5 classes × 10 seeds = 50 cells), `common`, `run_cells` (Stage B sweep
+  per arm + Stage A replay of the baseline trace), `launch_all.sh`/`launch_cells.sh`
+  (CPU, no gres), `analyze.py`, `README.md`. Reuses the #2790 SigLIP2/whole cache.
 
-## Remaining work (owner-gated)
+63 targeted tests pass (16 rules + 5 replay + 42 region_curve); 172/172 sorting-lib;
+ruff/codespell clean on all new files.
 
-1. **Validate `CacheVectorLoader` against one real cell** — confirm the whole-path
-   pooling in `region_curve.py::_train_pool_head` (all exemplar rows vs first) and
-   the `final_pool_scores` source for rank-transfer. Isolated to one class so this
-   is a one-file edit.
-2. **Port the conformal rule into the live loop (Stage B)** — add
-   `--threshold-rule {argmin,conformal,rank-transfer}` + `--threshold-smooth {none,med3}`
-   to `sweep.py`, wire `calibrated_threshold` into `region_curve.py:713` (whole) and
-   the rv path; default `argmin`/`none` = byte-identical. Add the per-step diagnostic
-   trace columns (`delta_threshold`, `spike`, `regret`, per-fold thresholds,
-   `n_folds_used/skipped`) to the trace dict (`region_curve.py:1015`) + csv writer
-   (`viz.py:847`). Confirm the plan reframe first (see decisions).
-3. **Runner** `scripts/experiments/threshold_stability/` — copy the `max_patch/`
-   template (**CPU-only**, drop the gpu gres): `experiment_config.py` (6 arms ×
-   5 classes × 10 seeds; `THRSTAB_*` env knobs), `common.py`, `run_cells.py`
-   (one array cell per (class, seed), all arms inside, both stages), `launch_all.sh`
-   /`launch_cells.sh`, `analyze.py`. Reuse the #2790 SigLIP2/whole cache in
-   `docs/experiments/sod-sweep/cache` as-is (no re-embed).
-4. **Run + report** → `docs/experiments/threshold-stability/REPORT.md`, verdict via
-   the plan's decision rules.
+## Remaining work (owner-gated, needs the Grid)
 
-## Open decisions for the owner
-- PR target: this repo's policy is "all PRs → `dev`", but this harness only exists
-  on `evaluation-framework`. Where should this branch land?
-- Confirm the plan reframe (argmin = infidelity, conformal = production Autopilot)
-  before wiring Stage B, since it changes what the arms mean.
+1. **Validate `CacheVectorLoader` on one real cell** — confirm the whole-path vote→vector
+   assembly matches `_train_pool_head` (all exemplar rows vs first; the `final_pool_scores`
+   source for rank-transfer) before the full 50-cell launch. One-file edit.
+2. **Region-voting path conformal** — the rv/`train_rv_head` grouped path still
+   calibrates via argmin; wiring the conformal rule there needs grouped stratified
+   folds (a separate, larger port). The whole path — the #2790 case — is done.
+3. **Run + report** → `docs/experiments/threshold-stability/REPORT.md`, verdict via the
+   plan's decision rules. `analyze.py` scaffolds the aggregation.
+
+## Notes for the merge
+- PR **#2795** targets `evaluation-framework` (owner's call).
+- `./run-tests.sh` runs a pyright gate; `scripts/sod/sweep.py` carries **pre-existing**
+  pyright optional-member warnings (lines ~179-192, the `_sod_orig_*` PIL monkey-patch)
+  unrelated to this change — surfaced but not introduced here.
