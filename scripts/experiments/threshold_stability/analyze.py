@@ -26,7 +26,7 @@ import experiment_config as cfg  # noqa: E402
 def _load_stage_a(cells_dir: Path):
     import pandas as pd  # noqa: PLC0415
 
-    files = sorted(cells_dir.glob("*/replay.csv"))
+    files = sorted(cells_dir.glob("*/replay_seed*.csv"))
     frames = []
     for p in files:
         try:
@@ -35,8 +35,8 @@ def _load_stage_a(cells_dir: Path):
             continue
         if df.empty:
             continue
-        slug = p.parent.name  # <class_slug>__seed<seed>
-        df["cell"] = slug
+        df["cell"] = p.parent.name  # <class_slug>
+        df["seed"] = p.stem.removeprefix("replay_seed")  # replay_seed<N>.csv
         frames.append(df)
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
