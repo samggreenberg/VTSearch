@@ -801,17 +801,27 @@ def _resolve_step_head(
     calibrate_count,
     cal_fraction,
     threshold_rule="conformal",
+    good_to_start=3,
+    bad_to_start=4,
 ):
     """Return ``(cached, steps_since_train)`` for one step.
 
     ``cached`` is ``(predict, raw_thr, n_votes, calib, blend)``. Trains a fresh
-    head when both classes exist and a retrain is due (no model yet, cadence
-    elapsed, or the current model is a cold-start); otherwise reuses the cache, or
-    falls back to the cosine cold-start while only one class is labeled.
+    MLP head only once the autopilot would actually *use* one — the app surfaces
+    the initial good/bad phases with text/example (cosine) sort and switches to the
+    learned MLP only at the ``hard`` phase, i.e. once ``good >= good_to_start`` AND
+    ``bad >= bad_to_start`` (``label-view.component.ts`` phase dispatch /
+    :meth:`AutopilotPhaseMachine.next_phase`). Until then — including the whole
+    ``bad`` phase, where only 1..3 bads exist — we hold the cosine cold-start head
+    so we never score or *select* with an MLP the app wouldn't be using yet. Once
+    eligible, trains a fresh head when a retrain is due (no model yet, cadence
+    elapsed, or the current model is still a cold-start).
     """
     both = bool(good_ids) and bool(bad_ids)
+    # Mirror the app's text-sort → learned-sort handoff at the hard-phase boundary.
+    mlp_eligible = len(good_ids) >= good_to_start and len(bad_ids) >= bad_to_start
     due = cached is None or steps_since_train >= retrain_cadence or not cached[4]
-    if both and due:
+    if both and mlp_eligible and due:
         res = _train_pool_head(
             inputs,
             good_ids,
@@ -828,7 +838,7 @@ def _resolve_step_head(
         if res is not None:
             predict, raw_thr, n_votes, calib = res
             return (predict, raw_thr, n_votes, calib, True), 0
-    if cached is None or not both:
+    if cached is None or not both or not mlp_eligible:
         predict, thr0 = _cosine_coldstart(inputs, cold_query)
         return (predict, thr0, len(good_ids) + len(bad_ids), "cosine_coldstart", False), 0
     return cached, steps_since_train + 1
@@ -981,6 +991,8 @@ def _realistic_one_seed(
             calibrate_count=calibrate_count,
             cal_fraction=cal_fraction,
             threshold_rule=threshold_rule,
+            good_to_start=good_to_start,
+            bad_to_start=bad_to_start,
         )
         predict, raw_thr, n_votes, calib, blend = cached
 
