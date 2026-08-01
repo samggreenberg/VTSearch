@@ -1,0 +1,194 @@
+"""Pre-registered grid for the calibration study (issue #2781).
+
+One place the prepare stage, the SLURM array indexer, and the analyzer all agree
+on.  See ``docs/plans/calibration-experiment.md`` for the design.
+
+Arms (each an ``(embedder, style)`` pair):
+
+* ``visual_genome_m`` (region voting; ground-truth boxes):
+  ``siglip`` / ``siglip_l`` × ``whole_image`` (row-wise conformal), and
+  ``dinov3_patch`` × {``max_patch``, ``max_patch_pca_hac``} (grouped bag
+  calibration).  The raw-patch tree arm additionally re-pools its own per-node
+  scores under ``topk`` and ``pnorm`` (remedial variants, emitted as extra rows).
+* ``caltech101_m`` (binary voting; boxless): ``siglip`` / ``siglip_l`` ×
+  ``whole_image`` only — the ordinary row-wise conformal path most users hit.
+
+Category selection (scale-band on the boxed VG set, prevalence-spread on the
+boxless Caltech set) is copied from the Max-Patch runner so the two studies
+select the *same* categories and their pickles are interchangeable.
+"""
+
+from __future__ import annotations
+
+import os
+import zlib
+
+# --- Datasets and their embedders (arms differ per dataset) ---
+DATASETS = os.environ.get("CALIB_DATASETS", "visual_genome_m,caltech101_m").split(",")
+
+DATASET_EMBEDDERS: dict[str, list[str]] = {
+    "visual_genome_m": os.environ.get("CALIB_VG_EMBEDDERS", "siglip,siglip_l,dinov3_patch").split(","),
+    "caltech101_m": os.environ.get("CALIB_CALTECH_EMBEDDERS", "siglip,siglip_l").split(","),
+}
+
+#: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
+REGION_VOTING_BY_DATASET: dict[str, bool] = {
+    "visual_genome_m": True,
+    "caltech101_m": False,
+}
+
+# --- Styles per embedder kind ---
+PATCH_STYLES = os.environ.get("CALIB_PATCH_STYLES", "max_patch,max_patch_pca_hac").split(",")
+SINGLE_STYLES = ["whole_image"]
+
+#: The style whose per-node scores get re-pooled into the remedial arms.
+REPOOL_STYLE = "max_patch_pca_hac"
+REPOOL_VARIANTS = [v for v in os.environ.get("CALIB_REPOOL_VARIANTS", "topk,pnorm").split(",") if v]
+REPOOL_TOPK = int(os.environ.get("CALIB_REPOOL_TOPK", "4"))
+
+#: Inclusion values the fold orderings are re-thresholded at for the budget sweep.
+INCLUSION_SWEEP_KS = [int(k) for k in os.environ.get("CALIB_SWEEP_KS", "-4,-2,-1,0,1,2,4").split(",")]
+
+# --- Sizing knobs ---
+SEEDS = list(range(int(os.environ.get("CALIB_N_SEEDS", "4"))))
+MAX_STEPS = int(os.environ.get("CALIB_MAX_STEPS", "150"))
+EXEMPLAR_CANDIDATES = int(os.environ.get("CALIB_EXEMPLAR_CANDIDATES", "8"))
+
+# --- Production-faithful fixed choices (pre-registered) ---
+INCLUSION = 0
+SIM_FRACTION = 0.5
+CALIBRATE_COUNT = 2
+CALIBRATION_FRACTION = 0.5
+SAFE_THRESHOLDS = False
+MEDIA_TYPE = "image"
+
+# --- Category-selection parameters (copied from the Max-Patch runner) ---
+_MIN_CATEGORY_COUNT = int(os.environ.get("CALIB_MIN_CAT_COUNT", "20"))
+N_CATEGORIES = int(os.environ.get("CALIB_N_CATEGORIES", "6"))  # prevalence-spread count (Caltech)
+N_PER_BAND = int(os.environ.get("CALIB_N_PER_BAND", "6"))  # scale-band count (VG)
+MAX_VOTED_AREA = float(os.environ.get("CALIB_MAX_VOTED_AREA", "0.80"))
+
+PATCH_AREA = 1 / 196  # one DINOv3 patch, ~0.51 % of the image
+LEAF_AREA = 1 / 12  # smallest HAC leaf, ~8.3 %
+SCALE_BANDS: list[tuple[str, float, float]] = [
+    ("sub_patch", 0.0, PATCH_AREA),
+    ("patch_to_leaf", PATCH_AREA, LEAF_AREA),
+    ("leaf_to_4x", LEAF_AREA, 4 * LEAF_AREA),
+    ("above_4x", 4 * LEAF_AREA, 1.01),
+]
+
+
+def is_patch_embedder(embedder: str) -> bool:
+    """True for embedders that produce a patch grid + HAC tree."""
+    return embedder.endswith("_patch")
+
+
+def styles_for_embedder(embedder: str) -> list[str]:
+    """The style arms an embedder participates in."""
+    return PATCH_STYLES if is_patch_embedder(embedder) else SINGLE_STYLES
+
+
+def embedders_for_dataset(dataset: str) -> list[str]:
+    return DATASET_EMBEDDERS.get(dataset, [])
+
+
+def pickle_name(dataset: str, embedder: str) -> str:
+    return f"{dataset}__{embedder}.pkl"
+
+
+def crops_basename(dataset: str, embedder: str) -> str:
+    return f"{dataset}__{embedder}__crops"
+
+
+def category_rng_seed(category: str) -> int:
+    """Deterministic (process-stable) RNG seed for a category's exemplar draw."""
+    return zlib.crc32(category.encode("utf-8")) & 0x7FFFFFFF
+
+
+def select_categories_by_prevalence(category_counts: dict[str, int], n: int = N_CATEGORIES) -> list[str]:
+    """Pick *n* categories spanning common->rare (boxless datasets)."""
+    usable = sorted(
+        ((c, n_) for c, n_ in category_counts.items() if n_ >= _MIN_CATEGORY_COUNT),
+        key=lambda kv: kv[1],
+        reverse=True,
+    )
+    if len(usable) <= n:
+        return [c for c, _ in usable]
+    idx = [round(i * (len(usable) - 1) / (n - 1)) for i in range(n)]
+    return [usable[i][0] for i in sorted(set(idx))]
+
+
+def select_categories_by_scale(
+    medias: dict,
+    category_counts: dict[str, int],
+    n_per_band: int = N_PER_BAND,
+) -> tuple[list[str], dict]:
+    """Pick categories stratified by voted-box scale (boxed datasets)."""
+    from vtscore.eval.labels import category_scale_stats  # noqa: PLC0415
+
+    stats: dict[str, dict] = {}
+    dropped_large: list[tuple[str, float]] = []
+    for cat, count in category_counts.items():
+        if count < _MIN_CATEGORY_COUNT:
+            continue
+        s = category_scale_stats(medias, cat)
+        if s is None:
+            continue
+        if s["voted_area"] > MAX_VOTED_AREA:
+            dropped_large.append((cat, s["voted_area"]))
+            continue
+        stats[cat] = s
+
+    selected: list[str] = []
+    report: dict = {
+        "dropped_above_max_voted_area": sorted(dropped_large),
+        "max_voted_area": MAX_VOTED_AREA,
+        "bands": {},
+    }
+    for name, lo, hi in SCALE_BANDS:
+        in_band = sorted(
+            (c for c, s in stats.items() if lo <= s["voted_area"] < hi),
+            key=lambda c: (stats[c]["union_inflation"], c),
+        )
+        picks = in_band[:n_per_band]
+        selected.extend(picks)
+        report["bands"][name] = {
+            "range": [lo, hi],
+            "target": n_per_band,
+            "n_candidates": len(in_band),
+            "under_populated": len(picks) < n_per_band,
+            "selected": picks,
+            "not_selected": in_band[n_per_band:],
+            "scales": {c: stats[c] for c in picks},
+        }
+    return sorted(selected), report
+
+
+def select_categories(medias: dict, category_counts: dict[str, int]) -> tuple[list[str], dict]:
+    """Scale-stratified when boxed, else prevalence-spread."""
+    selected, report = select_categories_by_scale(medias, category_counts)
+    if selected:
+        report["mode"] = "scale_bands"
+        return selected, report
+    return select_categories_by_prevalence(category_counts), {
+        "mode": "prevalence",
+        "reason": "dataset carries no ground-truth region boxes; no scale axis to stratify",
+    }
+
+
+def array_cells(categories_by_dataset: dict[str, dict[str, list[str]]]) -> list[dict]:
+    """Enumerate ``(dataset, embedder, category, seed)`` cells for the SLURM array.
+
+    Each cell runs **all styles** for its embedder inside one task (they share
+    the loaded pickle), so an embedder's arms are paired on identical data,
+    splits, and exemplar.  Deterministic order -> a task index maps to a stable
+    cell across submissions.
+    """
+    cells: list[dict] = []
+    for ds in DATASETS:
+        per_emb = categories_by_dataset.get(ds, {})
+        for emb in embedders_for_dataset(ds):
+            for cat in per_emb.get(emb, []):
+                for seed in SEEDS:
+                    cells.append({"dataset": ds, "embedder": emb, "category": cat, "seed": seed})
+    return cells
