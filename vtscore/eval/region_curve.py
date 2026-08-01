@@ -34,6 +34,7 @@ import numpy as np
 
 from vtscore.eval.error_metrics import f1_at, max_f1, min_weighted_cost, weighted_error
 from vtscore.eval.scoring_heads import CosineHead, MLPHead, max_pool_over_images, max_pool_with_argmax
+from vtscore.eval.threshold_rules import calibrated_threshold, median_smooth
 from vtscore.eval.xcal import cross_calibrated_threshold
 
 
@@ -680,11 +681,19 @@ def _train_pool_head(
     safe_thresholds: bool,
     calibrate_count: int,
     cal_fraction: float,
+    threshold_rule: str = "argmin",
 ):
     """Train a head on the current good/bad votes; returns
     ``(predict_fn, raw_threshold, n_votes, calib_mode)`` or ``None`` on a
     single-class / empty budget. Region-voting reuses :func:`train_rv_head`
-    (snapped positives + leaf-flood bags); otherwise a box-pool/whole MLP."""
+    (snapped positives + leaf-flood bags); otherwise a box-pool/whole MLP.
+
+    *threshold_rule* selects the whole/box-pool path's calibration rule (#2790):
+    ``"argmin"`` (default) is byte-identical to the historical ``xcal`` behaviour;
+    ``"conformal"`` / ``"rank-transfer"`` run production Autopilot's split-conformal
+    rule via :func:`vtscore.eval.threshold_rules.calibrated_threshold`. (The
+    region-voting branch still calibrates through :func:`train_rv_head`; wiring the
+    rule into that grouped path is tracked separately — see THRESHOLD_STABILITY_STATUS.)"""
     good = sorted(good_ids)
     bad = sorted(bad_ids)
     if not good or not bad:
@@ -726,11 +735,12 @@ def _train_pool_head(
     x = np.vstack([pos, neg]).astype(np.float32)
     y = np.array([1.0] * pos.shape[0] + [0.0] * neg.shape[0], dtype=np.float32)
     head = MLPHead(inputs.input_dim)
-    raw_thr = cross_calibrated_threshold(
+    raw_thr = calibrated_threshold(
         x,
         y,
         head.trainer_fn(),
         seed,
+        rule=threshold_rule,
         inclusion_value=inclusion,
         calibrate_count=calibrate_count,
         cal_fraction=cal_fraction,
@@ -806,6 +816,7 @@ def _resolve_step_head(
     safe_thresholds,
     calibrate_count,
     cal_fraction,
+    threshold_rule="argmin",
 ):
     """Return ``(cached, steps_since_train)`` for one step.
 
@@ -828,6 +839,7 @@ def _resolve_step_head(
             safe_thresholds=safe_thresholds,
             calibrate_count=calibrate_count,
             cal_fraction=cal_fraction,
+            threshold_rule=threshold_rule,
         )
         if res is not None:
             predict, raw_thr, n_votes, calib = res
@@ -917,6 +929,8 @@ def _realistic_one_seed(
     bad_to_start: int,
     retrain_cadence: int,
     stop_at_done: bool,
+    threshold_rule: str = "argmin",
+    threshold_smooth: str = "none",
 ) -> tuple[list[dict], dict | None]:
     """Run one seed's labeling loop. Returns ``(rows, final)`` where ``final`` is a dict
     ``{predict, threshold, n_good, n_bad, t, trace}`` for the last step (head + blended
@@ -952,6 +966,8 @@ def _realistic_one_seed(
     }
     cached = None  # (predict, raw_thr, n_votes, calib, blend)
     steps_since_train = 0
+    raw_threshold_history: list[float] = []  # blended thresholds, for the med3 smoother
+    prev_threshold: float | None = None  # previous step's threshold, for delta/spike diagnostics
     trace: list[dict] = []  # per-step labeling record (order, id, phase, head, threshold, …)
     final: dict | None = None  # {predict, threshold, n_good, n_bad, t, trace} of the last step
 
@@ -979,6 +995,7 @@ def _realistic_one_seed(
             safe_thresholds=safe_thresholds,
             calibrate_count=calibrate_count,
             cal_fraction=cal_fraction,
+            threshold_rule=threshold_rule,
         )
         predict, raw_thr, n_votes, calib, blend = cached
 
@@ -989,6 +1006,11 @@ def _realistic_one_seed(
             if (blend and safe_thresholds)
             else raw_thr
         )
+        # Temporal smoothing (#2790 med3 arm): median of the last 3 blended
+        # thresholds. Off by default (``none``) so the trace is byte-identical.
+        raw_threshold_history.append(float(threshold))
+        if threshold_smooth == "med3":
+            threshold = median_smooth(raw_threshold_history)
 
         err = weighted_error(test_scores, [float(v) for v in test_labels], threshold, inclusion)
         oracle = min_weighted_cost(test_scores, [float(v) for v in test_labels], inclusion)
@@ -1054,8 +1076,16 @@ def _realistic_one_seed(
                 "fnr": err["fnr"],
                 "f1": f1,
                 "stop_recommended": stop_recommended,
+                # Threshold-stability diagnostics (#2790): jump size vs the prior
+                # step, a spike flag (|Δcost| > 0.1), and this step's calibration
+                # regret (trained cost minus the oracle's best-cut cost).
+                "delta_threshold": (None if prev_threshold is None else round(float(threshold) - prev_threshold, 6)),
+                "spike": int(len(cost_history) > 1 and abs(cost_history[-1] - cost_history[-2]) > 0.1),
+                "regret": round(float(err["cost"]) - float(oracle), 6),
+                "threshold_rule": threshold_rule,
             }
         )
+        prev_threshold = float(threshold)
         final = {
             "predict": predict,
             "threshold": float(threshold),
@@ -1092,6 +1122,8 @@ def evaluate_realistic_curve(
     retrain_cadence: int = 1,
     stop_at_done: bool = False,
     return_finals: bool = False,
+    threshold_rule: str = "argmin",
+    threshold_smooth: str = "none",
 ) -> list[dict] | tuple[list[dict], dict[int, dict]]:
     """Realistic active-learning labeling curve: cost/fpr/fnr/F1/IoU vs ``t`` (total
     annotations), one row per ``(seed, t)``.
@@ -1132,6 +1164,8 @@ def evaluate_realistic_curve(
             bad_to_start=bad_to_start,
             retrain_cadence=retrain_cadence,
             stop_at_done=stop_at_done,
+            threshold_rule=threshold_rule,
+            threshold_smooth=threshold_smooth,
         )
         # Amortize the seed's wall-clock over its rows (per-step retrain dominates).
         per = round((time.perf_counter() - t0) * 1000.0 / max(len(seed_rows), 1), 3)
