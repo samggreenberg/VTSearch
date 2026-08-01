@@ -71,7 +71,9 @@ The rule is **monotone in `k` by construction**: raising inclusion can only lowe
 
 Because the fold models are inclusion-independent, the pooled held-out scores can be cached once and re-thresholded at any inclusion (this powers the Find Stats sweep across all inclusion values).
 
-For semantic (text/example) sorts, a **GMM-based threshold** is used instead: a 2-component Gaussian Mixture Model is fitted to the score distribution and the midpoint between component means serves as the threshold.
+For semantic (text/example) sorts, a **GMM-based threshold** is used instead: a 2-component Gaussian Mixture Model is fitted to the score distribution and the cut is placed at the **equal-density crossing** of the two fitted components — the score at which an item stops being better explained by the low ("Bad") component than by the high ("Good") one. Solving `w_lo·N(x; μ_lo, σ²_lo) = w_hi·N(x; μ_hi, σ²_hi)` is a quadratic in `x`; the root between the two means is the Bayes boundary between them. When no root lies strictly between the means (degenerate fit, or an extreme weight ratio that pushes it outside), the threshold falls back to the midpoint between the means.
+
+The crossing and the midpoint coincide exactly when the two components are equal-weight and equal-variance. They diverge under **region voting**, where a media's score is the max over ~24 region-node scores: the Bad mode is then an extreme-value statistic — shifted up, right-skewed, wider, and much heavier than the Good mode, since even a thoroughly bad image gets ~24 draws at a false-positive region. A wider/heavier low component puts the crossing *above* the midpoint, so the midpoint rule cuts inside Bad mass and over-includes. This matters most below 6 votes, where the safe-threshold ramp uses the pure GMM value (see issue #2798).
 
 ## PyTorch Environment Settings
 

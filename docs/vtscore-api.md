@@ -536,7 +536,7 @@ def train_model(
 
 ```python
 def calculate_gmm_threshold(scores: np.ndarray) -> float:
-    """Fit a 2-component GMM to scores; return the midpoint between component means."""
+    """Fit a 2-component GMM to scores; return the equal-density crossing of the two components."""
 
 def conformal_threshold(scores: np.ndarray, y: np.ndarray) -> float:
     """Split-conformal quantile rule mapping inclusion to a threshold over held-out (scores, y)."""
