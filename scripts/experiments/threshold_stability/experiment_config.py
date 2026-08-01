@@ -32,20 +32,20 @@ INCLUSION = int(os.environ.get("THRSTAB_INCLUSION", "0"))
 CLASSES = os.environ.get("THRSTAB_CLASSES", "stop sign,traffic light,fire hydrant,parking meter,bus").split(",")
 SEEDS = list(range(int(os.environ.get("THRSTAB_N_SEEDS", "10"))))
 
-#: Each arm: (name, threshold_rule, threshold_smooth, calibrate_count). All use the
-#: shipped conformal inclusion rule (argmin is retired — see the study report); the
-#: arms isolate fold count (k2 vs k8), temporal smoothing (med3), and the S3
-#: fold->final scale probe (rank-transfer, evaluated in Stage-A replay). ``conformal-k2``
-#: is the production-faithful baseline (conformal, calibrate_count=2 = the app default).
+#: Each arm: (name, threshold_rule, threshold_smooth, calibrate_count). Conformal is
+#: the only calibration rule now (argmin retired), so arms are named by what they
+#: vary: fold count (``k2`` = the app default of calibrate_count=2, ``k8`` = 8),
+#: temporal smoothing (``k2-med3``), and the S3 fold->final scale probe
+#: (``rank-transfer``, evaluated in Stage-A replay). ``k2`` is the baseline.
 ARMS: list[tuple[str, str, str, int]] = [
-    ("conformal-k2", "conformal", "none", 2),
-    ("conformal-k8", "conformal", "none", 8),
-    ("conformal-k2-med3", "conformal", "med3", 2),
-    ("rank-transfer-k2", "rank-transfer", "none", 2),
+    ("k2", "conformal", "none", 2),
+    ("k8", "conformal", "none", 8),
+    ("k2-med3", "conformal", "med3", 2),
+    ("rank-transfer", "rank-transfer", "none", 2),
 ]
 
 #: The baseline arm whose recorded --labeling-trace Stage A replays (frozen votes).
-BASELINE_ARM = "conformal-k2"
+BASELINE_ARM = "k2"
 
 #: Stage A replay depth (fold-split seeds × trainer seeds). The plan's 10×10 is
 #: 100 refits per (step, rule); default to a lighter 5×3 that still resolves the
