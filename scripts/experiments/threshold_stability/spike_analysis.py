@@ -53,6 +53,14 @@ def collect_spikes(root: Path, thresh: float) -> list[dict]:
                 continue
             nxt = trace[i + 1] if i + 1 < len(trace) else None
             recover = _f(nxt.get("cost")) - _f(cur.get("cost")) if nxt else float("nan")
+            # Steps until cost returns near the pre-spike level (within 0.05), up to 5
+            # steps out — measures how "narrow" the excursion actually is.
+            pre_cost = _f(prev.get("cost"))
+            recover_steps = None
+            for k in range(1, 6):
+                if i + k < len(trace) and _f(trace[i + k].get("cost")) <= pre_cost + 0.05:
+                    recover_steps = k
+                    break
             rows.append(
                 {
                     "cls": cls,
@@ -68,7 +76,8 @@ def collect_spikes(root: Path, thresh: float) -> list[dict]:
                     "d_fnr": round(_f(cur.get("fnr")) - _f(prev.get("fnr")), 4),
                     "d_fpr": round(_f(cur.get("fpr")) - _f(prev.get("fpr")), 4),
                     "recover_dcost": round(recover, 4),
-                    "narrow": bool(recover < -0.5 * dcost) if recover == recover else False,
+                    "recover_steps": recover_steps,  # None = still elevated 5 steps later
+                    "narrow": recover_steps is not None and recover_steps <= 2,
                     "surface_score": cur.get("surface_score"),
                     "surface_margin": cur.get("surface_margin"),
                     "n_good": prev.get("n_good"),
@@ -92,6 +101,9 @@ def summarize(rows: list[dict], n_traces: int, thresh: float) -> str:
     thr_up = pct(lambda r: r["d_threshold"] > 0)
     fnr_driven = pct(lambda r: r["d_fnr"] > r["d_fpr"])
     narrow = pct(lambda r: r["narrow"])
+    rec = Counter(("never>5" if r["recover_steps"] is None else r["recover_steps"]) for r in rows)
+    early = pct(lambda r: (r["t"] or 0) < 20)
+    bad_hard = pct(lambda r: r["culprit_label"] == "bad" and r["select_mode"] == "hard")
     by_phase = Counter(r["phase"] for r in rows)
     by_calib = Counter(r["calib_mode"] for r in rows)
     by_select = Counter(r["select_mode"] for r in rows)
@@ -103,9 +115,12 @@ def summarize(rows: list[dict], n_traces: int, thresh: float) -> str:
         f"# Spike attribution — {n} up-spikes (Δcost > {thresh}) across {n_traces} traces",
         "",
         f"Culprit vote label:   good={good}   bad={bad}",
+        f"  ... bad vote AND hard-selected: {bad_hard}",
         f"Threshold moved UP:   {thr_up}   (up = cut rejects more -> FNR)",
         f"FNR-driven (Δfnr>Δfpr): {fnr_driven}",
-        f"Narrow (recovers next step): {narrow}",
+        f"Early (t<20): {early}",
+        f"Narrow (recovers to pre-spike within 2 steps): {narrow}",
+        f"Recovery-steps distribution: {dict(sorted(rec.items(), key=lambda kv: str(kv[0])))}",
         "",
         f"By phase:  {dict(by_phase.most_common())}",
         f"By calib_mode: {dict(by_calib.most_common())}",
