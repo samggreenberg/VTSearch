@@ -66,7 +66,7 @@ class TestConformalThreshold:
         labels = [0.0] * len(neg) + [1.0] * len(pos)
         thrs = [conformal_threshold(scores, labels, inclusion_value=k) for k in range(-10, 11)]
         # Higher inclusion (larger k) can only lower the cut (include more).
-        for a, b in zip(thrs, thrs[1:], strict=True):
+        for a, b in zip(thrs, thrs[1:], strict=False):
             assert b <= a + 1e-9
 
     def test_overlap_regime_collapses_to_fp_guard(self):
