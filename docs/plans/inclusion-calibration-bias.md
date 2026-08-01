@@ -38,16 +38,31 @@ it rather than re-simulating the vote order.
   random and Autopilot voting overshoot the budget badly (excess 0.208 and 0.298
   respectively) — the calibration set is too small for a 25th-percentile read,
   and Autopilot is at its least exchangeable before the New phase has
-  diversified anything. Options worth measuring: widening the quantile's
-  effective support at low counts (e.g. interpolating against the population
-  score distribution rather than the current hard GMM blend), raising
-  `calibrate_count` when votes are scarce so the pooled calibration set grows,
-  or simply suppressing the confident framing of the Inclusion budget in the UI
-  until enough votes exist. Measure with the existing harness before changing
-  production; the 12-vote cell is the one that matters. The pre-registered
-  measurement spec for these options is
-  [`coldstart-threshold-experiment.md`](coldstart-threshold-experiment.md)
-  (issue #2788).
+  diversified anything. The 12-vote cell is the one that matters.
+
+  Scope this to the **post-quorum** window, t ∈ [5, 15] measured in votes. That
+  window is fully Autopilot-reachable: the app's first learned sort fires at the
+  Hard phase, 3 good + 4 bad, so vote 7 lands in the middle of it. (The *pre*-
+  quorum `too_few_default` = 0.5 path is not reachable on the Autopilot flow at
+  all — the Bad phase stays on the text sort and trains nothing — so it is not
+  part of this item; see `docs/EVAL.md` on harness fidelity and the `app_trained`
+  column.)
+
+  The concrete lever worth measuring is a **low-vote `calibrate_count` boost**:
+  8 folds when the vote count is below 10, else the current 2. At 5–15 votes two
+  folds pool only ~4–6 held-out scores, which is where both the residual
+  conformal-provenance degenerate cuts and the budget overshoot live; fold fits
+  at n ≤ 10 are milliseconds, so it is nearly free. Adopt iff it cuts
+  conformal-provenance degenerate steps at t ∈ [5, 15] by ≥ 50% **or** shrinks
+  the t = 12 budget excess, without regressing regret over t ∈ [20, 30]
+  (late-window non-inferiority). Check `threshold_percentile` at t ∈ {5, 6} too:
+  a non-degenerate but mid-mass cut that admits half the dataset is not a win.
+  Measure with the existing harness before changing production — run it with
+  `autopilot_fidelity=True` and filter on `app_trained`, or the pre-quorum steps
+  will dominate the counts again.
+
+  Independently defensible with no measurement: suppressing the confident
+  framing of the Inclusion budget in the UI until enough votes exist.
 
 <!-- item-sep -->
 
