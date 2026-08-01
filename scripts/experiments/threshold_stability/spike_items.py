@@ -90,12 +90,20 @@ def analyze(root: Path, thresh: float) -> dict:
 
     total_spikes = sum(d["n_spikes"] for d in items)
     repeat = [d for d in items if d["n_spikes"] >= 2]
+    # Confidence tiers: an item that spiked in >=K of its seeds is spiky by design, not
+    # coincidence. With 30 seeds, >=5 is a robust offender.
+    tiers = {f"items_ge{k}": sum(1 for d in items if d["n_spikes"] >= k) for k in (3, 5, 10)}
+    classes = {d["cls"] for d in items}
+    classes_with_offender = {d["cls"] for d in items if d["n_spikes"] >= 5}
     summary = {
         "n_traces": n_traces,
         "n_distinct_culprit_items": len(items),
         "total_spikes": total_spikes,
         "spikes_from_repeat_offenders": sum(d["n_spikes"] for d in repeat),
         "repeat_offender_items": len(repeat),
+        **tiers,
+        "n_classes": len(classes),
+        "classes_with_robust_offender": len(classes_with_offender),
         "bad_vote_share": round(sum(d["n_spikes"] for d in items if d["gt_label"] == "bad") / total_spikes, 3)
         if total_spikes
         else None,
