@@ -32,7 +32,7 @@ import experiment_config as cfg  # noqa: E402
 SOD = common.REPO / "scripts" / "sod"
 
 
-def _sweep_cmd(cls: str, seed: int, arm: tuple[str, str, str, int], out_dir: Path) -> list[str]:
+def _sweep_cmd(cls: str, arm: tuple[str, str, str, int], out_dir: Path) -> list[str]:
     _name, rule, smooth, kcount = arm
     return [
         sys.executable,
@@ -46,7 +46,7 @@ def _sweep_cmd(cls: str, seed: int, arm: tuple[str, str, str, int], out_dir: Pat
         "--proposals",
         cfg.PROPOSAL,
         "--iterations",
-        str(seed + 1),  # sweep seeds 0..N-1; run just this seed's row via array
+        str(len(cfg.SEEDS)),  # all seeds 0..N-1 in one sweep
         "--max-labels",
         str(cfg.MAX_LABELS),
         "--neg-multiple",
@@ -104,24 +104,29 @@ def _run(cmd: list[str]) -> int:
 
 
 def run_cell(cell: dict) -> None:
-    cls, seed = cell["cls"], cell["seed"]
-    cell_dir = common.RESULTS / "cells" / f"{cfg.class_slug(cls)}__seed{seed}"
+    cls = cell["cls"]
+    cell_dir = common.RESULTS / "cells" / cfg.class_slug(cls)
     cell_dir.mkdir(parents=True, exist_ok=True)
 
-    baseline_trace: Path | None = None
+    # Stage B: every arm, all seeds in one sweep each.
+    baseline_dir: Path | None = None
     for arm in cfg.ARMS:
         name = arm[0]
         out_dir = cell_dir / f"arm_{name}"
-        _run(_sweep_cmd(cls, seed, arm, out_dir))
-        # The sweep writes labeling_trace/<slug>/<config>/seed<seed>/; find this seed's dir.
-        traces = sorted(out_dir.glob(f"labeling_trace/*/*/seed{seed}"))
-        if name == cfg.BASELINE_ARM and traces:
-            baseline_trace = traces[0]
+        _run(_sweep_cmd(cls, arm, out_dir))
+        if name == cfg.BASELINE_ARM:
+            baseline_dir = out_dir
 
-    if baseline_trace is not None:
-        _run(_replay_cmd(cls, baseline_trace, cell_dir / "replay.csv"))
-    else:
-        common.log(f"WARN: no baseline trace for {cls} seed{seed}; Stage A replay skipped")
+    # Stage A: replay each seed's frozen baseline trace.
+    if baseline_dir is None:
+        common.log(f"WARN: no baseline arm dir for {cls}; Stage A skipped")
+        return
+    for seed in cfg.SEEDS:
+        traces = sorted(baseline_dir.glob(f"labeling_trace/*/*/seed{seed}"))
+        if not traces:
+            common.log(f"WARN: no baseline trace for {cls} seed{seed}; replay skipped")
+            continue
+        _run(_replay_cmd(cls, traces[0], cell_dir / f"replay_seed{seed}.csv"))
 
 
 def main(argv: list[str] | None = None) -> int:
