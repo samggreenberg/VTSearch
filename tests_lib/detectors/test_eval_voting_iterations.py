@@ -196,17 +196,14 @@ class TestSimulateVotingIterations:
             assert r1_cmp == r2_cmp
 
     def test_different_seeds_differ(self):
-        # Overlapping (not separable) categories on purpose: the cost sequence
-        # only reflects the seed while the task is hard enough for the vote
-        # ordering to matter.  On separable clips every seed converges to a
-        # perfect cut (cost 0 at every t), so the sequences coincide and the
-        # assertion below would be measuring nothing.
-        medias = _make_overlapping_clips(n_per_cat=10)
+        # Use *overlapping* data: on perfectly separable clips the conformal cut is
+        # the deterministic gap midpoint (seed-independent - cost is 0 for every
+        # seed), so cost can't distinguish seeds. With overlap the cut placement
+        # genuinely depends on the seeded Train/Calibrate split, so the seeds
+        # produce different t-indexed cost sequences.
+        medias = _make_overlapping_clips(n_per_cat=40, dim=16)
         rows1 = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
         rows2 = simulate_voting_iterations(medias, "alpha", seed=99, calibrate_count=1)
-        # Different seeds should produce different vote orderings / splits,
-        # so the t-indexed costs should differ (not guaranteed for every row,
-        # but at least the full sequence should differ).
         costs1 = [r["cost"] for r in rows1]
         costs2 = [r["cost"] for r in rows2]
         assert costs1 != costs2
