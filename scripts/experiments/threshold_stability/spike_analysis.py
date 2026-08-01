@@ -120,7 +120,8 @@ def summarize(rows: list[dict], n_traces: int, thresh: float) -> str:
         "",
         f"Culprit vote label:   good={good}   bad={bad}",
         f"  ... bad vote AND hard-selected: {bad_hard}",
-        f"Threshold moved UP:   {thr_up}   (up = cut rejects more -> FNR)",
+        f"Raw threshold 'up':   {thr_up}   (NOT model-comparable — MLP retrained each vote; "
+        f"use the FNR operating-point move below, which is test-set and sound)",
         f"FNR-driven (Δfnr>Δfpr): {fnr_driven}",
         f"Early (t<20): {early}",
         f"Sparse positives at spike (n_good<=6): {sparse_pos}   (median n_good at spike = {med_good})",
