@@ -291,6 +291,35 @@ hard negatives actually spike.** Tool: `spike_vectors.py --embedder siglip`; art
 `/exp/sgreenberg/threshold-stability/broad_sig1/spike_vectors_sig1.json`,
 `broad/spike_vectors_sig2_v2.json`.
 
+## The actual #2790 spikes: deep-run transient excursions (`deep_spikes.py`)
+
+The per-event work above characterizes *all* MLP-regime Bad votes; the #2790 complaint is
+specifically the violent jumps **deep in the run, while the MLP is already trained and
+improving** (issue: seed0 t~24, cost 0.088→0.424 then recovers). `deep_spikes.py` isolates
+these — tracking each spike's **up-jump and recovery** ("jump back to good"), sliced by
+depth `t`, on the faithful v2 traces. Both embedders identical.
+
+- **They persist deep and don't fade with learning.** Spike rate by `t`: t[20,30) ≈ 10%,
+  t[30,45) ≈ 6.6%, t[45+) ≈ 4%. A well-trained MLP at t=20–45 still spikes ~7–10% of Bad
+  votes.
+- **They are violent and self-correcting.** Median up-jump +0.17–0.19, but the tail is
+  catastrophic: e.g. `kite` s10 t27 **cost 0.009 → 0.993**; `baseball-glove` s3 t51 **0.037
+  → 1.000** — the cut lurches over *all* the positives (FNR→1), then **~37% snap back within
+  2 steps** (median recovery 2 steps); the other ~40–45% run away longer.
+- **Root cause = sparse POSITIVES that never resolve, not the handoff.** `n_good` median at
+  a deep spike is **5** (min 3) even at t=25–51 — the boundary/`hard` acquisition surfaces
+  mostly negatives, so the MLP is pinned by ~3–5 positives *for the whole run*. **93% of
+  deep spikes are live false-positives** (`surface_margin`≥0): one boundary Bad added to ~3
+  positives shoves the cut across the real matches → cost→1.0 → next retrain re-fits →
+  snap back. Pure threshold-*placement* instability (ranking/oracle barely moves, Stage B
+  cost_sd ≈ 4× oracle floor).
+- **Implication for mitigation:** staying in HardText longer (more *bads* before learned
+  sort) does **not** help — `n_good` stays ~5 regardless of bad count. The lever is the
+  *positive* side: hold a distribution cut while positives are sparse (`--defer-cut-goods`,
+  already a Pareto win at K=6 — and since `n_good` stays low all run, it applies throughout,
+  exactly where the deep spikes live), the crossing-GMM cut, or acquire more positives
+  (diversify away from pure boundary sampling). Tool: `deep_spikes.py`.
+
 ## When does a Bad vote spike? (per-EVENT, #2790)
 
 If the vector position only weakly tilts the odds, *what* sets them? The unit that
