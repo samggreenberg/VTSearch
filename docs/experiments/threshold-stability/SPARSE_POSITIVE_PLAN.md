@@ -251,3 +251,42 @@ position in embedding space, not a distinct visual feature. The effect is real b
 moderate and **class-dependent** (strong: oven/sink/zebra/elephant, margin pct 0.9+;
 weak/reversed: umbrella/vase/surfboard). Consistent with "vaguely hard negatives."
 Tool: `spike_vectors.py`.
+
+### Does the signature hold on a second embedder, and is it *predictive*? (SigLIP 1)
+
+Re-ran the whole pipeline on **SigLIP 1** (fresh embed of all 4,952 val2017 whole
+vectors → 79-class × 20-seed labeling simulation → `spike_items` → `spike_vectors`).
+Two questions: does the *descriptive* signature replicate across embedders, and is it
+*predictive* (would picking the vector-hard negatives actually find the spikers, letting
+us skip the simulation)? Added **precision@N / lift** to `spike_vectors.py`: rank all
+bads by a feature, take the top-N (N = #spikers, base rate ~1%), count how many spike.
+
+| feature | pctile S1 / S2 | lift S1 / S2 |
+|---|---|---|
+| `margin` = cos_G − cos_B | 0.68 / 0.69 | **0.0× / 2.5×** |
+| `proj_w` (Fisher axis) | 0.68 / 0.69 | 0.0× / 2.5× |
+| `cos_G` (good centroid) | 0.65 / 0.61 | 5.4× / 2.2× |
+| `cos_B` | 0.46 / 0.44 | 1.8× / 0.0× |
+| `max_cos_G` | 0.61 / 0.59 | 1.5× / 3.3× |
+| `knn_good` | 0.56 / 0.56 | 0.0× / 2.6× |
+| `b_outlier` | 0.52 / 0.53 | 0.0× / 0.9× |
+
+**The descriptive signature is embedder-invariant.** Every percentile matches SigLIP 2
+to ±0.04 — margin 0.68 vs 0.69, knn_good 0.56 vs 0.56, b_outlier 0.52 vs 0.53. So even
+though the *specific* spiking items don't transfer across embedders (0 overlap, above),
+the geometric *type* does: a spiker is a good-leaning boundary negative, not an outlier,
+in **both** representations. The "vaguely hard negative" picture is real and general.
+
+**But the signature is descriptively real and predictively near-useless.** The
+mean-percentile (≈ each feature's AUC as a spike predictor) is a soft central tendency
+at ~0.68 — which carries almost no mass into the top-1% tail where the precision@N cut
+falls. So precision@N is tiny everywhere (best case `cos_G` on SigLIP 1: 5.4× lift but
+still only 5% precision), it's **near-zero for the margin signature itself** (0.0× on
+SigLIP 1), and *which* feature has any lift isn't even stable across embedders (margin
+0.0× vs 2.5×; cos_B 1.8× vs 0.0×). **You cannot pre-screen spikers from the embedding
+geometry** — the top vector-hard negatives are ~95%+ non-spikers. Spiking is set by the
+per-step training dynamics (which model, which prior labels), which the static vector
+position only weakly tilts. **The app simulation is irreplaceable for identifying which
+hard negatives actually spike.** Tool: `spike_vectors.py --embedder siglip`; artifacts
+`/exp/sgreenberg/threshold-stability/broad_sig1/spike_vectors_sig1.json`,
+`broad/spike_vectors_sig2_v2.json`.
