@@ -711,7 +711,7 @@ def _resolve_select_mode(phase: str, soft_seek: int, hard_pick: int) -> tuple[st
     return select_mode, hard_pick
 
 
-def _calib_diag(pool_scores, good_ids, bad_ids, idx, threshold, labeled_id, pool_pos_pos) -> dict:
+def _calib_diag(pool_scores, good_ids, bad_ids, idx, threshold, labeled_id, pool_pos_pos, prev_threshold=None) -> dict:
     """Calibration-catastrophe diagnostics (#2790). ``cut_in_gap`` (0=top bad, 1=bottom labeled
     positive) locates the cut; ``poolpos_recall`` is the **true** recall over ALL pool positives
     (the test-like distribution the sim knows) — vs labeled recall which stays ~1 because the
@@ -737,6 +737,13 @@ def _calib_diag(pool_scores, good_ids, bad_ids, idx, threshold, labeled_id, pool
         cut_in_gap = round((threshold - bad_max) / (pos_min - bad_max), 4)
     ppos_above = sum(1 for p in pool_pos_pos if np.isfinite(pool_scores[p]) and pool_scores[p] >= threshold)
     n_ppos = len(pool_pos_pos)
+    # Recall at the PREVIOUS cut but with the CURRENT (retrained) scores: holds the cut fixed
+    # so it isolates the pure MLP-retrain SCORE effect from the cut-movement effect (#2790
+    # dominant-mode confirmation). recall@prevcut − recall[t−1] = score-driven Δ; recall[t] −
+    # recall@prevcut = cut-driven Δ; the two sum to the total recall change.
+    ppos_prevcut = None
+    if prev_threshold is not None:
+        ppos_prevcut = sum(1 for p in pool_pos_pos if np.isfinite(pool_scores[p]) and pool_scores[p] >= prev_threshold)
     return {
         "n_pos_above_cut": sum(1 for s in pos if s >= threshold),
         "n_pos_lab": len(pos),
@@ -744,6 +751,7 @@ def _calib_diag(pool_scores, good_ids, bad_ids, idx, threshold, labeled_id, pool
         "poolpos_above_cut": ppos_above,
         "n_poolpos": n_ppos,
         "poolpos_recall": round(ppos_above / n_ppos, 4) if n_ppos else None,
+        "poolpos_recall_prevcut": (round(ppos_prevcut / n_ppos, 4) if (ppos_prevcut is not None and n_ppos) else None),
         "vote_beats_pos": (sum(1 for s in pos if vote > s) if vote == vote else None),
         "vote_above_prev_badmax": (int(prev_bad_max is not None and vote > prev_bad_max) if vote == vote else None),
     }
@@ -1226,7 +1234,7 @@ def _realistic_one_seed(
                 "spike": int(len(cost_history) > 1 and abs(cost_history[-1] - cost_history[-2]) > 0.1),
                 "regret": round(float(err["cost"]) - float(oracle), 6),
                 "threshold_rule": threshold_rule,
-                **_calib_diag(pool_scores, good_ids, bad_ids, idx, threshold, labeled_id, pool_pos_pos),
+                **_calib_diag(pool_scores, good_ids, bad_ids, idx, threshold, labeled_id, pool_pos_pos, prev_threshold),
             }
         )
         prev_threshold = float(threshold)
