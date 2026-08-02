@@ -780,6 +780,7 @@ def _train_pool_head(
     calibrate_count: int,
     cal_fraction: float,
     threshold_rule: str = "conformal",
+    stable_folds: bool = False,
 ):
     """Train a head on the current good/bad votes; returns
     ``(predict_fn, raw_threshold, n_votes, calib_mode)`` or ``None`` on a
@@ -842,6 +843,7 @@ def _train_pool_head(
         inclusion_value=inclusion,
         calibrate_count=calibrate_count,
         cal_fraction=cal_fraction,
+        stable_folds=stable_folds,
     )
     if not np.isfinite(raw_thr):
         raw_thr = 0.5
@@ -917,6 +919,7 @@ def _resolve_step_head(
     threshold_rule="conformal",
     good_to_start=3,
     bad_to_start=4,
+    stable_folds=False,
 ):
     """Return ``(cached, steps_since_train)`` for one step.
 
@@ -948,6 +951,7 @@ def _resolve_step_head(
             calibrate_count=calibrate_count,
             cal_fraction=cal_fraction,
             threshold_rule=threshold_rule,
+            stable_folds=stable_folds,
         )
         if res is not None:
             predict, raw_thr, n_votes, calib = res
@@ -1042,6 +1046,7 @@ def _realistic_one_seed(
     defer_cut_goods: int = 0,
     soft_seek: int = 0,
     recall_target: float = 0.0,
+    stable_folds: bool = False,
 ) -> tuple[list[dict], dict | None]:
     """Run one seed's labeling loop. Returns ``(rows, final)`` where ``final`` is a dict
     ``{predict, threshold, n_good, n_bad, t, trace}`` for the last step (head + blended
@@ -1111,6 +1116,7 @@ def _realistic_one_seed(
             threshold_rule=threshold_rule,
             good_to_start=good_to_start,
             bad_to_start=bad_to_start,
+            stable_folds=stable_folds,
         )
         predict, raw_thr, n_votes, calib, blend = cached
 
@@ -1249,6 +1255,7 @@ def evaluate_realistic_curve(
     defer_cut_goods: int = 0,
     soft_seek: int = 0,
     recall_target: float = 0.0,
+    stable_folds: bool = False,
 ) -> list[dict] | tuple[list[dict], dict[int, dict]]:
     """Realistic active-learning labeling curve: cost/fpr/fnr/F1/IoU vs ``t`` (total
     annotations), one row per ``(seed, t)``.
@@ -1294,6 +1301,7 @@ def evaluate_realistic_curve(
             defer_cut_goods=defer_cut_goods,
             soft_seek=soft_seek,
             recall_target=recall_target,
+            stable_folds=stable_folds,
         )
         # Amortize the seed's wall-clock over its rows (per-step retrain dominates).
         per = round((time.perf_counter() - t0) * 1000.0 / max(len(seed_rows), 1), 3)

@@ -328,6 +328,32 @@ work by *reducing the cut's freedom* (defer/GMM/recall-anchor pin it to the scor
 or the positives), and why more positives barely moved FNR (mode-2 + the ranking floor remain).
 Tools: `calib_conditions.py`, `_calib_diag`; artifacts `broad_v2_diag3/`.
 
+### The "unobservable" residual IS the cross-calibration fold reshuffle (2026-08-02)
+
+Owner's insight: the threshold is set by **cross-calibration** (split labels Train/Calibrate,
+sub-model on Train, cut on Calibrate, ×`calibrate_count` folds pooled) — so *which fold the
+labels land in* should matter, and might explain the "hidden" residual. Reading the code, it
+does — precisely:
+
+- The conformal cut at `inclusion=0` is the **gap midpoint between the top negatives and
+  `min(pos)` — the *lowest calibration positive*** (`conformal_threshold`). So the cut is
+  pinned by the single lowest positive that landed in the Calibrate fold.
+- The split is `rng.permutation` of the positive/negative index arrays with a **fixed run
+  seed** (`stratified_fold_orderings`). With `cal_fraction=0.5` and ~3 positives, that's a
+  **1-train / 2-cal** split. When a vote arrives the arrays grow, so the permutation
+  **reshuffles which positive is held out to Train every step** — jerking `min(cal-positive)`
+  and hence the cut. It's not random noise: it's a *deterministic, chaotic* function of the
+  fold assignment, invisible from the vote's own score (which is why my earlier "stochastic /
+  unobservable" framing was incomplete — it's observable in fold space, just not vote space).
+- This also predicts the old Stage-B result that **`calibrate_count`=k8 is the dominant
+  stability lever, not the rule**: more folds pool more Calibrate positives, so the pooled
+  `min(cal-positive)` stabilizes to the true lowest → the cut stops jumping.
+
+**Tests in flight (2026-08-02 ~01:45 EDT, siglip2):** (a) `calibrate_count` sweep {2,4,8,16}
+— predict deep-spike rate ↓ monotonically; (b) `--stable-folds` (freeze the split to append
+position, no per-step reshuffle) as the causal clincher — predict spikes largely vanish.
+[RESULTS PENDING — fill in.]
+
 ## The actual #2790 spikes: deep-run transient excursions (`deep_spikes.py`)
 
 The per-event work above characterizes *all* MLP-regime Bad votes; the #2790 complaint is

@@ -66,6 +66,7 @@ def stratified_fold_orderings(
     *,
     calibrate_count: int = 2,
     cal_fraction: float = 0.5,
+    stable_folds: bool = False,
 ) -> list[tuple[list[float], list[float]]]:
     """Held-out ``(scores, labels)`` per fold under **class-stratified** splits.
 
@@ -99,7 +100,7 @@ def stratified_fold_orderings(
     rng = np.random.default_rng(seed)
     orderings: list[tuple[list[float], list[float]]] = []
     for k in range(max(1, calibrate_count)):
-        tr_idx, cal_idx = _stratified_split(pos_idx, neg_idx, cal_fraction, rng)
+        tr_idx, cal_idx = _stratified_split(pos_idx, neg_idx, cal_fraction, rng, stable=stable_folds)
         if tr_idx is None or cal_idx is None:
             continue
         if len({int(v) for v in y[tr_idx]}) < 2 or len({int(v) for v in y[cal_idx]}) < 2:
@@ -119,16 +120,23 @@ def _stratified_split(
     neg_idx: np.ndarray,
     cal_fraction: float,
     rng: np.random.Generator,
+    stable: bool = False,
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
     """One class-balanced Train/Calibrate split; ``(None, None)`` if unsplittable.
 
     Each class contributes ``round(class_n * cal_fraction)`` rows to Calibrate
     (clamped so both Train and Calibrate keep at least one of each class), so
     neither side is ever single-class — the guard the unstratified path lacks.
+
+    ``stable=True`` (#2790 causal test) **skips the permutation** — the fold is by
+    append position, so an item's Train/Calibrate membership does not reshuffle when
+    later votes arrive. Isolates whether the per-step fold reshuffle (which, with ~3
+    positives split 1-train/2-cal, jerks ``min(cal-positive)`` and hence the cut) is
+    what drives the spikes.
     """
 
     def _per_class(idx: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
-        perm = rng.permutation(idx)
+        perm = np.asarray(idx) if stable else rng.permutation(idx)
         n_cal = int(round(len(idx) * cal_fraction))
         n_cal = max(1, min(len(idx) - 1, n_cal))
         return perm[n_cal:], perm[:n_cal]  # (train, cal)
@@ -152,6 +160,7 @@ def calibrated_threshold(
     inclusion_value: int = 0,
     calibrate_count: int = 2,
     cal_fraction: float = 0.5,
+    stable_folds: bool = False,
 ) -> float:
     """Decision threshold under the named *rule*.
 
@@ -182,6 +191,7 @@ def calibrated_threshold(
             seed,
             calibrate_count=calibrate_count,
             cal_fraction=cal_fraction,
+            stable_folds=stable_folds,
         )
         if not orderings:
             return 0.5

@@ -460,6 +460,7 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
         defer_cut_goods=args.defer_cut_goods,
         soft_seek=args.soft_seek,
         recall_target=args.recall_target,
+        stable_folds=args.stable_folds,
     )
     rows: list[dict] = []
     if args.viz or args.labeling_trace:
@@ -667,6 +668,13 @@ def main() -> int:
         help="recall-tuned cut (#2790): anchor the threshold to catch this fraction of the "
         "labeled positives (the (1-R) quantile of their scores). Directly tunes FNR for "
         "rare-needle customers + resists FNR->1 spikes. 0 = off; e.g. 0.9 = catch 90%%.",
+    )
+    ap.add_argument(
+        "--stable-folds",
+        action="store_true",
+        help="causal #2790 test: freeze the cross-calibration Train/Calibrate split (fold by "
+        "append position, no per-step permutation) so an item's fold doesn't reshuffle when "
+        "later votes arrive. Isolates whether the fold reshuffle drives the spikes.",
     )
     ap.add_argument("--cal-fraction", type=float, default=0.5)
     ap.add_argument("--scales", type=_floats, default=(1.0, 0.75, 0.5, 0.3))
