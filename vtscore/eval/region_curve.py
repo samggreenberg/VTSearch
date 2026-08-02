@@ -695,38 +695,41 @@ def _resolve_select_mode(phase: str, soft_seek: int, hard_pick: int) -> tuple[st
     return select_mode, hard_pick
 
 
-def _calib_diag(pool_scores, good_ids, bad_ids, idx, threshold, labeled_id) -> dict:
-    """Calibration-catastrophe diagnostics (#2790). The training-recall-collapse hypothesis was
-    refuted (labeled positives stay above the cut at spikes), so this now measures the **bad
-    side / the gap** too: labeled positives are unrepresentatively high-scoring, the cut lives in
-    the gap between the top labeled bad and the bottom labeled positive, and the *test* positives
-    live in that gap. Suspected trigger: a Bad scored high *in the gap* (``vote_beats_bad`` near
-    the top of the bads / ``vote_above_badmax``) raises the conformal gap floor and pushes the cut
-    up through the test positives. ``cut_in_gap`` = 0 at the top bad, 1 at the bottom positive."""
+def _calib_diag(pool_scores, good_ids, bad_ids, idx, threshold, labeled_id, pool_pos_pos) -> dict:
+    """Calibration-catastrophe diagnostics (#2790). ``cut_in_gap`` (0=top bad, 1=bottom labeled
+    positive) locates the cut; ``poolpos_recall`` is the **true** recall over ALL pool positives
+    (the test-like distribution the sim knows) — vs labeled recall which stays ~1 because the
+    labeled positives are unrepresentatively high-scoring. A spike is the cut wobbling up through
+    the pool positives in the gap. ``vote_above_prev_badmax`` (fixed: compares the vote to the top
+    bad *before* this vote) tests whether a Bad raising the gap floor is the trigger."""
 
     def _sc(ids):
         return sorted(float(pool_scores[idx[i]]) for i in ids if i in idx and np.isfinite(pool_scores[idx[i]]))
 
     pos, bad = _sc(good_ids), _sc(bad_ids)
+    prev_bad = _sc([b for b in bad_ids if b != labeled_id])  # bads BEFORE this vote
     vote = float("nan")
     if labeled_id in idx and np.isfinite(pool_scores[idx[labeled_id]]):
         vote = float(pool_scores[idx[labeled_id]])
-    bad_max = bad[-1] if bad else None
-    pos_min = pos[0] if pos else None
+    bad_max, prev_bad_max, pos_min = (
+        (bad[-1] if bad else None),
+        (prev_bad[-1] if prev_bad else None),
+        (pos[0] if pos else None),
+    )
     cut_in_gap = None
     if bad_max is not None and pos_min is not None and pos_min > bad_max:
         cut_in_gap = round((threshold - bad_max) / (pos_min - bad_max), 4)
+    ppos_above = sum(1 for p in pool_pos_pos if np.isfinite(pool_scores[p]) and pool_scores[p] >= threshold)
+    n_ppos = len(pool_pos_pos)
     return {
         "n_pos_above_cut": sum(1 for s in pos if s >= threshold),
         "n_pos_lab": len(pos),
-        "n_bad_above_cut": sum(1 for s in bad if s >= threshold),
-        "pos_min": round(pos_min, 4) if pos_min is not None else None,
-        "bad_max": round(bad_max, 4) if bad_max is not None else None,
         "cut_in_gap": cut_in_gap,
-        "vote_score_now": round(vote, 4) if vote == vote else None,
+        "poolpos_above_cut": ppos_above,
+        "n_poolpos": n_ppos,
+        "poolpos_recall": round(ppos_above / n_ppos, 4) if n_ppos else None,
         "vote_beats_pos": (sum(1 for s in pos if vote > s) if vote == vote else None),
-        "vote_beats_bad": (sum(1 for s in bad if vote > s) if vote == vote else None),
-        "vote_above_badmax": (int(bad_max is not None and vote > bad_max) if vote == vote else None),
+        "vote_above_prev_badmax": (int(prev_bad_max is not None and vote > prev_bad_max) if vote == vote else None),
     }
 
 
@@ -1049,6 +1052,7 @@ def _realistic_one_seed(
     if setup is None:
         return [], None
     pool_ids, idx, pool_label, seed_id, cold_query, tree = setup
+    pool_pos_pos = [i for i, pid in enumerate(pool_ids) if pool_label[pid] == 1]  # positions of pool positives
     test_labels = [int(v) for v in inputs.test_labels]
 
     machine = AutopilotPhaseMachine(good_to_start=good_to_start, bad_to_start=bad_to_start)
@@ -1200,7 +1204,7 @@ def _realistic_one_seed(
                 "spike": int(len(cost_history) > 1 and abs(cost_history[-1] - cost_history[-2]) > 0.1),
                 "regret": round(float(err["cost"]) - float(oracle), 6),
                 "threshold_rule": threshold_rule,
-                **_calib_diag(pool_scores, good_ids, bad_ids, idx, threshold, labeled_id),
+                **_calib_diag(pool_scores, good_ids, bad_ids, idx, threshold, labeled_id, pool_pos_pos),
             }
         )
         prev_threshold = float(threshold)
