@@ -362,19 +362,25 @@ more stable cut and `min(cal-pos)`, but the effect is diminishing and modest.
 
 **Decomposition of the deep spikes — DIRECT measurement (corrects the by-exclusion estimate).**
 Instrumenting `poolpos_recall` at the *previous* cut with the *current* scores splits each
-spike's recall collapse into a score-driven term (MLP retrain, cut held) and a cut-driven term
-(cut moved, scores held). Result: **56% score-driven / 44% cut-driven** (confirmed on 800
-traces / 3002 spikes; the partial 67-trace read was 57/43). So — correcting my earlier
-by-exclusion claim of "75–85 / 15–25" — the **cut/calibration side is a larger contributor
-(~44%)** than the behavioral tests implied:
-- **MLP-retrain score variance (~56%)** — the under-determined 3-positive MLP gives different
-  scores each retrain; test positives wobble vs a fixed cut. Only more positives fix it (hard).
-- **Cut movement (~44%)** — but only ~13 points of this is the *removable* fold reshuffle
-  (`--stable-folds`) / ~16–19 via `calibrate_count`↑; the rest is the conformal cut faithfully
-  recomputing on the wildly-varying retrained scores. So the behavioral tests (which only
-  remove the fold-reshuffle slice) undercounted the cut's role — the owner's cross-calibration
-  hunch is more right than my first read said, though most of the cut movement is downstream of
-  the MLP variance, not independent of it.
+spike's recall drop into two **additive** credit terms (hold one fixed, move the other):
+`Δrecall = Δscore (retrained scores, cut held) + Δcut (cut moved, scores held)`. Averaged over
+the 3002 spikes (800 traces): total −0.094 = score −0.063 + cut −0.030 — i.e. **credit for the
+lost recall ≈ 67% under-determined-model / 33% moving-cut** (signed). (An earlier note said
+"56/44"; that was `mean(|score|)`/`mean(|cut|)` — the share of absolute *movement*, which
+over-credits the cut by counting recall-*helping* moves; **67/33 is the credit for the loss**.)
+This *is* a credit-attribution, **not** a partition of spikes ("X% of spikes are score-caused")
+— essentially every spike has both terms. Two caveats: (a) it's a first-order attribution, so
+decomposition order shifts it a few points; (b) the two aren't independent causes — **the cut
+moves *because* the scores moved** (the conformal cut recomputes on the retrained scores), so
+most of the 33% cut credit is *downstream* of the model variance. The genuinely independent,
+*removable* cut slice (the cross-calibration fold reshuffle) is only ~13% (`--stable-folds`;
+~16–19 via `calibrate_count`↑). So, correcting the earlier by-exclusion "75–85 / 15–25":
+- **Model score variance ≈ ⅔** — the under-determined 3-positive MLP gives different scores
+  each retrain; test positives wobble vs a fixed cut. Only more positives fix it (hard).
+- **Cut movement ≈ ⅓, but mostly downstream of the model** — only ~13 pts is the removable
+  fold reshuffle; the rest is the cut faithfully tracking the unstable MLP. The owner's
+  cross-calibration hunch is a real contributor (I first *under*counted it), but the removable
+  part is small.
 
 Both are rooted in **sparse positives**. This is *why* no observable sufficient condition
 exists — the dominant term is the MLP retrain's score shift, a complex nonlinear function of
