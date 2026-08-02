@@ -323,14 +323,17 @@ Tested the two candidate levers on the faithful harness (79 classes × 20 seeds)
 on one conclusion: **the bottleneck is positives, not the cut rule or the negatives.**
 
 **defer6 (crossing-GMM cut while sparse) crushes the deep cost-spikes ~8× — but trades
-F1.** Deep-spike rate t[20,30) 0.10 → 0.012 (both embedders); the distribution-based GMM
-cut doesn't lurch when one boundary Bad is added. BUT it does so by moving the operating
-point, not by being a better cut: SigLIP 2 @t60 FNR 0.32→0.18, FPR 0.02→0.09, **F1
-0.625→0.323**, weighted cost 0.343→0.268. The permissive GMM cut catches more positives
-but, under `neg_multiple`=100, the extra FPs wreck precision. So an earlier "defer6 is a
-Pareto win" (5-class, cost-only) is **wrong once F1 is included** — it suppresses transient
-cost-spikes by adopting a permanently worse-F1 cut. Cost and F1 only diverge for such
-threshold tricks; they agree everywhere else.
+the deep spikes.** Deep-spike rate t[20,30) 0.10 → 0.012 (both embedders); the
+distribution-based GMM cut doesn't lurch when one boundary Bad is added. It also **catches
+more needles**: SigLIP 2 @t60 FNR 0.32→**0.18** (misses 18% vs 32%), FPR 0.02→0.09, cost
+(=FNR+FPR) 0.343→**0.268**. (**Metric correction**, owner 2026-08-01: an intermediate write-up
+called this a regression on **F1** — that was wrong. Under `neg_multiple`=100, F1 collapses
+to precision ≈ 2·TP/(TP+FP) and *under-weights* FNR, so it penalises the extra FPs and hides
+the recall win. For a rare-needle, don't-miss-any customer the right metric is **FNR+FPR**
+(prevalence-independent, recall-inclusive) — which is what `cost` already is — and by it
+defer6 is a genuine **improvement**, catching 82% of needles vs 68% for a review set of 9%
+vs 2% of the hay. So the original cost-based "defer6 helps" stands; only the F1 detour was
+the error.)
 
 **Handoff-quality arms (`handoff_quality.py`, SigLIP 2) — staying in TextHard longer buys
 nothing; more positives is the only lever:**
@@ -351,14 +354,18 @@ goods** (the hard classes can't supply them).
 
 **Unified root cause = positive starvation.** The deep threshold spikes (cut pinned by ~3
 positives all run), the horrible Text→Learned scores (3-positive MLP never catches text),
-and the F1 ceiling all dissolve only when `n_good` grows. The one lever that is both
-**shippable and helps everything** (spikes *and* F1, no threshold trickery, no demanding
+and the recall/FNR ceiling all dissolve only when `n_good` grows. The one lever that is both
+**shippable and helps everything** (spikes *and* recall, no threshold trickery, no demanding
 goods) is **positive-*seeking* acquisition**: have the autopilot spend some picks surfacing
-its best *guesses* at positives for the user to confirm (interleave exploit/"top" picks
-through the `hard` phase) — the system doing the hard task, not begging for it. **Not yet
-built**; the g6/b4 arm is the "if goods were free" ceiling it should chase. Metric note:
-track **F1/recall alongside cost** — cost alone rewards precision-wrecking permissive cuts
-under the 100× imbalance. Tools: `handoff_quality.py`, `deep_spikes.py`.
+its best *guesses* at positives for the user to confirm — the `soft` select mode
+(`--soft-seek`), which picks the item with calibrated P(good)~0.7 (the ~50–76%-good band vs
+`hard`'s ~17%) — the system doing the hard task, not begging for it. **Built + under test**; the g6/b4 arm is the "if goods were free" ceiling it should chase. **Metric (owner
+2026-08-01):** evaluate on **FNR+FPR** (= `cost`) and **recall-at-review-budget**, *not* F1.
+Customers hunt rare needles (~0.1%) and can't miss any; F1 collapses to precision under that
+imbalance and under-weights FNR — the opposite of the goal. Since #2790 shows the *ranking*
+is the stable/good part and only the *threshold* is unstable, a threshold-independent
+recall@budget is the cleanest "customer value" metric. Tools: `handoff_quality.py`,
+`deep_spikes.py`, `soft_eval.py` (reports n_good / FNR / FPR / cost, not F1).
 
 ## When does a Bad vote spike? (per-EVENT, #2790)
 
