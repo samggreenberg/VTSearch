@@ -31,7 +31,10 @@ def collect(root: Path, thresh: float):
             if cur.get("head") != "mlp":
                 continue
             cig, pcig = cur.get("cut_in_gap"), prev.get("cut_in_gap")
-            pr, ppr = cur.get("poolpos_recall"), prev.get("poolpos_recall")
+            pr, ppr, prc = cur.get("poolpos_recall"), prev.get("poolpos_recall"), cur.get("poolpos_recall_prevcut")
+            # decompose the recall change into score-driven (cut held at prev) vs cut-driven
+            d_score = (prc - ppr) if (prc is not None and ppr is not None) else None
+            d_cut = (pr - prc) if (pr is not None and prc is not None) else None
             ev.append(
                 {
                     "is_spike": int(costs[i] - costs[i - 1] > thresh),
@@ -42,6 +45,8 @@ def collect(root: Path, thresh: float):
                     "d_thr": cur.get("delta_threshold"),
                     "poolpos_recall": pr,
                     "d_poolpos_recall": (pr - ppr if pr is not None and ppr is not None else None),
+                    "d_score": d_score,
+                    "d_cut": d_cut,
                 }
             )
     return ev
@@ -68,7 +73,16 @@ def main(argv=None):
         v = [a for a in x if a is not None and a == a]
         return statistics.fmean(v) if v else float("nan")
 
-    print("== (A) the catastrophe = TRUE (pool) recall collapse, vs cut movement ==")
+    print("== (A0) DECOMPOSE the recall collapse at spikes: score-driven (MLP retrain) vs cut-driven ==")
+    print(f"  Δrecall_total  spikes {m([e['d_poolpos_recall'] for e in sp]):+.4f}")
+    print(f"    ├ score-driven (cut held at prev)  {m([e['d_score'] for e in sp]):+.4f}")
+    print(f"    └ cut-driven   (scores held)       {m([e['d_cut'] for e in sp]):+.4f}")
+    ds = [abs(e["d_score"]) for e in sp if e["d_score"] is not None]
+    dc = [abs(e["d_cut"]) for e in sp if e["d_cut"] is not None]
+    tot = (statistics.fmean(ds) + statistics.fmean(dc)) if ds and dc else float("nan")
+    print(f"  share of |Δ| at spikes: score {statistics.fmean(ds) / tot:.0%}  cut {statistics.fmean(dc) / tot:.0%}")
+
+    print("\n== (A) the catastrophe = TRUE (pool) recall collapse, vs cut movement ==")
     print(
         f"  poolpos_recall   spikes {m([e['poolpos_recall'] for e in sp]):.3f}   non-spikes {m([e['poolpos_recall'] for e in ns]):.3f}"
     )
