@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from vtscore.eval.error_metrics import f1_at, max_f1, min_weighted_cost, weighted_error
-from vtscore.eval.scoring_heads import CosineHead, MLPHead, max_pool_over_images, max_pool_with_argmax
+from vtscore.eval.scoring_heads import CosineHead, MLPHead, make_head, max_pool_over_images, max_pool_with_argmax
 from vtscore.eval.threshold_rules import calibrated_threshold, median_smooth
 from vtscore.eval.xcal import cross_calibrated_threshold
 
@@ -805,6 +805,7 @@ def _train_pool_head(
     cal_fraction: float,
     threshold_rule: str = "conformal",
     stable_folds: bool = False,
+    head_strategy: str = "mlp",
 ):
     """Train a head on the current good/bad votes; returns
     ``(predict_fn, raw_threshold, n_votes, calib_mode)`` or ``None`` on a
@@ -857,7 +858,10 @@ def _train_pool_head(
     neg = np.vstack([inputs.pool_whole_vecs[idx[i]][None, :] for i in bad]).astype(np.float32)
     x = np.vstack([pos, neg]).astype(np.float32)
     y = np.array([1.0] * pos.shape[0] + [0.0] * neg.shape[0], dtype=np.float32)
-    head = MLPHead(inputs.input_dim)
+    # #2790 anti-spike arms: pick the head by strategy, keyed on the FULL labelset's n_good
+    # (len(good)) — decided once and reused for M0 (fit) AND every fold sub-model (trainer_fn),
+    # so the cross-calibration stays uniform (never averages an SVM threshold for an MLP).
+    head = make_head(head_strategy, inputs.input_dim, len(good))
     raw_thr = calibrated_threshold(
         x,
         y,
@@ -944,6 +948,7 @@ def _resolve_step_head(
     good_to_start=3,
     bad_to_start=4,
     stable_folds=False,
+    head_strategy="mlp",
 ):
     """Return ``(cached, steps_since_train)`` for one step.
 
@@ -976,6 +981,7 @@ def _resolve_step_head(
             cal_fraction=cal_fraction,
             threshold_rule=threshold_rule,
             stable_folds=stable_folds,
+            head_strategy=head_strategy,
         )
         if res is not None:
             predict, raw_thr, n_votes, calib = res
@@ -1071,6 +1077,7 @@ def _realistic_one_seed(
     soft_seek: int = 0,
     recall_target: float = 0.0,
     stable_folds: bool = False,
+    head_strategy: str = "mlp",
 ) -> tuple[list[dict], dict | None]:
     """Run one seed's labeling loop. Returns ``(rows, final)`` where ``final`` is a dict
     ``{predict, threshold, n_good, n_bad, t, trace}`` for the last step (head + blended
@@ -1141,6 +1148,7 @@ def _realistic_one_seed(
             good_to_start=good_to_start,
             bad_to_start=bad_to_start,
             stable_folds=stable_folds,
+            head_strategy=head_strategy,
         )
         predict, raw_thr, n_votes, calib, blend = cached
 
@@ -1280,6 +1288,7 @@ def evaluate_realistic_curve(
     soft_seek: int = 0,
     recall_target: float = 0.0,
     stable_folds: bool = False,
+    head_strategy: str = "mlp",
 ) -> list[dict] | tuple[list[dict], dict[int, dict]]:
     """Realistic active-learning labeling curve: cost/fpr/fnr/F1/IoU vs ``t`` (total
     annotations), one row per ``(seed, t)``.
@@ -1326,6 +1335,7 @@ def evaluate_realistic_curve(
             soft_seek=soft_seek,
             recall_target=recall_target,
             stable_folds=stable_folds,
+            head_strategy=head_strategy,
         )
         # Amortize the seed's wall-clock over its rows (per-step retrain dominates).
         per = round((time.perf_counter() - t0) * 1000.0 / max(len(seed_rows), 1), 3)

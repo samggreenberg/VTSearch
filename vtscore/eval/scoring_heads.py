@@ -137,6 +137,116 @@ class MLPHead:
         return self._predict(region_matrix)
 
 
+class _SklearnHead:
+    """Base for low-variance sklearn heads (#2790 anti-spike arms). Scores by
+    ``decision_function`` — a monotone real score, which is all ``conformal_threshold``
+    (quantile-based) needs; no probability calibration. Raises ``ValueError`` on a
+    single-class fold, matching :class:`MLPHead` so the fold loop skips it identically."""
+
+    name = "sklearn"
+
+    def __init__(self, input_dim: int) -> None:
+        self.input_dim = int(input_dim)
+        self._predict: PredictFn | None = None
+
+    def _make(self, seed: int):  # pragma: no cover - overridden
+        raise NotImplementedError
+
+    def _train(self, x: np.ndarray, y: np.ndarray, seed: int) -> PredictFn:
+        ya = np.asarray(y)
+        if len({int(v) for v in ya}) < 2:
+            raise ValueError("single-class fold")
+        clf = self._make(seed).fit(np.asarray(x, dtype=np.float64), ya)
+
+        def predict(z: np.ndarray) -> np.ndarray:
+            return np.asarray(clf.decision_function(np.asarray(z, dtype=np.float64)), dtype=np.float64)
+
+        return predict
+
+    def trainer_fn(self) -> "TrainerFn":
+        return self._train
+
+    def fit(self, x: np.ndarray, y: np.ndarray, seed: int) -> None:
+        self._predict = self._train(x, y, seed)
+
+    def score_rows(self, region_matrix: np.ndarray) -> np.ndarray:
+        if self._predict is None:
+            raise RuntimeError(f"{type(self).__name__}.fit must be called before scoring")
+        return self._predict(region_matrix)
+
+
+class LinearHead(_SklearnHead):
+    """L2-regularized logistic regression — max-bias/min-variance reference (#2790)."""
+
+    name = "linear"
+
+    def _make(self, seed: int):
+        from sklearn.linear_model import LogisticRegression  # noqa: PLC0415
+
+        return LogisticRegression(max_iter=1000, C=1.0, class_weight="balanced")
+
+
+class SVMHead(_SklearnHead):
+    """Linear SVM (max-margin, low variance) — better than the MLP when positives are sparse
+    (our MLP-vs-SVM study: SVM wins early). #2790 anti-spike arm."""
+
+    name = "svm"
+
+    def _make(self, seed: int):
+        from sklearn.svm import SVC  # noqa: PLC0415
+
+        return SVC(kernel="linear", C=1.0, class_weight="balanced", random_state=seed)
+
+
+class RegMLPHead(MLPHead):
+    """MLP with capacity annealed on the FULL labelset's ``n_good`` — tiny hidden dim + dropout
+    while positives are sparse, relaxing as they accumulate (#2790). Stays one model class
+    (no SVM→MLP score-scale handoff), so it's uniform across M0 and the fold sub-models."""
+
+    name = "reg-mlp"
+
+    def __init__(self, input_dim: int, n_good: int) -> None:
+        super().__init__(input_dim)
+        # Tiny hidden layer while positives are sparse (fewer params → lower variance),
+        # relaxing toward the default (64) as they accumulate. hidden_dim is the capacity knob
+        # train_model exposes (dropout is internal/fixed).
+        self.hidden_dim = max(4, min(64, 4 * max(1, int(n_good))))
+
+    def _train(self, x: np.ndarray, y: np.ndarray, seed: int) -> PredictFn:
+        import torch  # noqa: PLC0415
+
+        from vtscore.training.mlp import train_model  # noqa: PLC0415
+
+        xt = torch.tensor(np.asarray(x, dtype=np.float32))
+        yt = torch.tensor(np.asarray(y, dtype=np.float32)).unsqueeze(1)
+        model = train_model(xt, yt, self.input_dim, seed=seed, hidden_dim=self.hidden_dim)
+        return _mlp_predict_factory(model)
+
+
+def make_head(strategy: str, input_dim: int, n_good: int, *, anneal_k: int = 8):
+    """Build the calibration head for a step, keyed on the FULL labelset's ``n_good`` (#2790).
+
+    Decided ONCE here and reused for both M0 (``fit``) and every fold sub-model (via
+    ``trainer_fn``), so the cross-calibration stays **uniform** — we never average an SVM
+    threshold to calibrate an MLP. Anneal arms switch class at ``n_good == anneal_k``.
+    """
+    if strategy == "mlp":
+        return MLPHead(input_dim)
+    if strategy == "linear":
+        return LinearHead(input_dim)
+    if strategy == "svm":
+        return SVMHead(input_dim)
+    if strategy == "reg-mlp":
+        return RegMLPHead(input_dim, n_good)
+    if strategy == "anneal-svm":
+        return SVMHead(input_dim) if n_good < anneal_k else MLPHead(input_dim)
+    if strategy == "anneal-linear":
+        return LinearHead(input_dim) if n_good < anneal_k else MLPHead(input_dim)
+    if strategy == "anneal-reg":
+        return RegMLPHead(input_dim, n_good) if n_good < anneal_k else MLPHead(input_dim)
+    raise ValueError(f"unknown head strategy {strategy!r}")
+
+
 class CosineHead:
     """Zero-shot head: cosine to a fixed (L2-normalized) query vector."""
 
