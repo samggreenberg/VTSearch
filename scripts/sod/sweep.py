@@ -458,6 +458,7 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
         threshold_rule=args.threshold_rule,
         threshold_smooth=args.threshold_smooth,
         defer_cut_goods=args.defer_cut_goods,
+        soft_seek=args.soft_seek,
     )
     rows: list[dict] = []
     if args.viz or args.labeling_trace or args.confidence_gallery or args.training_nodes:
@@ -692,6 +693,14 @@ def main() -> int:
         default=0,
         help="sparse-positive fix (#2790): while n_good < this, don't trust the trained "
         "conformal cut — use a GMM cut on the model's pool scores. 0 = off.",
+    )
+    ap.add_argument(
+        "--soft-seek",
+        type=int,
+        default=0,
+        help="positive-seeking acquisition (#2790): in the learned 'hard' phase, every "
+        "Nth pick is a 'soft' pick (calibrated P(good)~0.7) to grow n_good instead of "
+        "only boundary hay. 0 = off, 2 = alternate hard/soft.",
     )
     ap.add_argument("--cal-fraction", type=float, default=0.5)
     ap.add_argument("--scales", type=_floats, default=(1.0, 0.75, 0.5, 0.3))

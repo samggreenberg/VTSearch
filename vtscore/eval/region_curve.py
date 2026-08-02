@@ -26,6 +26,7 @@ text-capable embedders (baseline). ``K == 0`` is the zero-shot cosine point
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -661,11 +662,62 @@ def _select_new(tree, pool_ids, pool_scores, threshold, labeled, idx):
     return _select_hard(pool_ids, pool_scores, threshold, labeled)
 
 
+def _gmm_p_good(fit, s: float) -> float:
+    """Posterior P(good) = P(high-mean component) for score ``s`` under the fitted GMM."""
+
+    def _npdf(x, mu, var):
+        return math.exp(-0.5 * (x - mu) ** 2 / var) / math.sqrt(2.0 * math.pi * var)
+
+    hi = fit.w_hi * _npdf(s, fit.mu_hi, fit.var_hi)
+    lo = fit.w_lo * _npdf(s, fit.mu_lo, fit.var_lo)
+    tot = hi + lo
+    return hi / tot if tot > 0 else 0.0
+
+
+def _select_soft(pool_ids, pool_scores, threshold, labeled, target_p: float = 0.7):
+    """Positive-*seeking* pick: the unlabeled item whose calibrated ``P(good|score)`` is
+    closest to ``target_p`` (~0.7). Targets *likely-but-not-certain* positives — the score
+    band that surfaces new positives (grows ``n_good``) while staying informative, unlike
+    ``top`` (P≈1, redundant/baby-easy) or ``hard`` (at the cut, negative-dominated in this
+    all-hay regime; measured ~17% good vs the soft band's ~50-76%). Fits a 2-component GMM
+    to the pool scores for the posterior; falls back to ``hard`` when the fit is unusable."""
+    from vtscore.training.thresholds import fit_score_gmm  # noqa: PLC0415
+
+    fit = fit_score_gmm(np.asarray(pool_scores, dtype=np.float64))
+    if fit is None or fit.var_hi <= 0.0 or fit.var_lo <= 0.0:
+        return _select_hard(pool_ids, pool_scores, threshold, labeled)
+    best, best_d = None, float("inf")
+    for i, pid in enumerate(pool_ids):
+        if pid in labeled:
+            continue
+        d = abs(_gmm_p_good(fit, float(pool_scores[i])) - target_p)
+        if d < best_d:
+            best_d, best = d, pid
+    return best if best is not None else _select_hard(pool_ids, pool_scores, threshold, labeled)
+
+
+def _resolve_select_mode(phase: str, soft_seek: int, hard_pick: int) -> tuple[str, int]:
+    """The phase's select mode, with positive-seeking ``soft`` interleaved (#2790).
+
+    In the learned phases (``hard``/``new``) every ``soft_seek``-th pick becomes ``soft``
+    (calibrated P(good)~0.7) to grow ``n_good`` instead of only boundary ``hard`` hay
+    (~17% good). Returns ``(select_mode, updated_hard_pick)``. ``soft_seek == 0`` is off.
+    """
+    select_mode = _PHASE_TO_SELECT[phase]
+    if soft_seek and phase in ("hard", "new"):
+        hard_pick += 1
+        if hard_pick % soft_seek == 0:
+            select_mode = "soft"
+    return select_mode, hard_pick
+
+
 def _select_next(select_mode, tree, pool_ids, pool_scores, threshold, labeled, idx):
     if select_mode == "top":
         return _select_top(pool_ids, pool_scores, labeled, idx)
     if select_mode == "new":
         return _select_new(tree, pool_ids, pool_scores, threshold, labeled, idx)
+    if select_mode == "soft":
+        return _select_soft(pool_ids, pool_scores, threshold, labeled)
     return _select_hard(pool_ids, pool_scores, threshold, labeled)  # "hard" (and any fallback)
 
 
@@ -942,6 +994,7 @@ def _realistic_one_seed(
     threshold_rule: str = "conformal",
     threshold_smooth: str = "none",
     defer_cut_goods: int = 0,
+    soft_seek: int = 0,
 ) -> tuple[list[dict], dict | None]:
     """Run one seed's labeling loop. Returns ``(rows, final)`` where ``final`` is a dict
     ``{predict, threshold, n_good, n_bad, t, trace}`` for the last step (head + blended
@@ -981,6 +1034,7 @@ def _realistic_one_seed(
     prev_threshold: float | None = None  # previous step's threshold, for delta/spike diagnostics
     trace: list[dict] = []  # per-step labeling record (order, id, phase, head, threshold, …)
     final: dict | None = None  # {predict, threshold, n_good, n_bad, t, trace} of the last step
+    hard_pick = 0  # counts learned-phase picks, for soft-seek interleaving
 
     for t in range(1, max_labels + 1):
         if pending is None:
@@ -1047,7 +1101,7 @@ def _realistic_one_seed(
         smart, stable, span = _step_indicators(cost_history, flip_history, prev_pred, cur_pred, tree, good, bad)
         prev_pred = cur_pred
         phase = machine.next_phase(good, bad, smart, stable, span)
-        select_mode = _PHASE_TO_SELECT[phase]
+        select_mode, hard_pick = _resolve_select_mode(phase, soft_seek, hard_pick)
         stop_recommended = phase == "done"
 
         rows.append(
@@ -1148,6 +1202,7 @@ def evaluate_realistic_curve(
     threshold_rule: str = "conformal",
     threshold_smooth: str = "none",
     defer_cut_goods: int = 0,
+    soft_seek: int = 0,
 ) -> list[dict] | tuple[list[dict], dict[int, dict]]:
     """Realistic active-learning labeling curve: cost/fpr/fnr/F1/IoU vs ``t`` (total
     annotations), one row per ``(seed, t)``.
@@ -1191,6 +1246,7 @@ def evaluate_realistic_curve(
             threshold_rule=threshold_rule,
             threshold_smooth=threshold_smooth,
             defer_cut_goods=defer_cut_goods,
+            soft_seek=soft_seek,
         )
         # Amortize the seed's wall-clock over its rows (per-step retrain dominates).
         per = round((time.perf_counter() - t0) * 1000.0 / max(len(seed_rows), 1), 3)
