@@ -360,14 +360,21 @@ the dominant wobble is the **MLP retrain itself** (scores shift), with the fold 
 for k=2/4/8/16 (overall 0.080→0.067; deepest band t[45+) 0.039→0.025, −36%). More folds pool a
 more stable cut and `min(cal-pos)`, but the effect is diminishing and modest.
 
-**Definitive decomposition of the deep spikes:**
-- **MLP-retrain score variance — dominant (~75–85%).** The under-determined 3-positive MLP
-  produces substantially different *scores* on every retrain; the test positives' scores
-  wobble relative to a fixed cut → FNR spike. No calibration change fixes this; only more
-  positives (a better-determined model) would — and that's hard (soft/g6b4 above).
-- **Cross-calibration variance — real but secondary (~15–25% combined).** Fold reshuffle
-  (~13%, `--stable-folds`) + few calibration points (~16–19%, `calibrate_count`↑). The
-  owner's hunch is a genuine contributor, just not the driver.
+**Decomposition of the deep spikes — DIRECT measurement (corrects the by-exclusion estimate).**
+Instrumenting `poolpos_recall` at the *previous* cut with the *current* scores splits each
+spike's recall collapse into a score-driven term (MLP retrain, cut held) and a cut-driven term
+(cut moved, scores held). Result: **~57% score-driven / ~43% cut-driven** (partial 67-trace
+sample; 40-class re-run pending). So — correcting my earlier by-exclusion claim of "75–85 /
+15–25" — the **cut/calibration side is a larger contributor (~43%)** than the behavioral tests
+implied:
+- **MLP-retrain score variance (~57%)** — the under-determined 3-positive MLP gives different
+  scores each retrain; test positives wobble vs a fixed cut. Only more positives fix it (hard).
+- **Cut movement (~43%)** — but only ~13 points of this is the *removable* fold reshuffle
+  (`--stable-folds`) / ~16–19 via `calibrate_count`↑; the rest is the conformal cut faithfully
+  recomputing on the wildly-varying retrained scores. So the behavioral tests (which only
+  remove the fold-reshuffle slice) undercounted the cut's role — the owner's cross-calibration
+  hunch is more right than my first read said, though most of the cut movement is downstream of
+  the MLP variance, not independent of it.
 
 Both are rooted in **sparse positives**. This is *why* no observable sufficient condition
 exists — the dominant term is the MLP retrain's score shift, a complex nonlinear function of
