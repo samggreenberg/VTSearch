@@ -31,16 +31,17 @@ def collect(root: Path, thresh: float):
             if cur.get("head") != "mlp":
                 continue
             cig, pcig = cur.get("cut_in_gap"), prev.get("cut_in_gap")
+            pr, ppr = cur.get("poolpos_recall"), prev.get("poolpos_recall")
             ev.append(
                 {
                     "is_spike": int(costs[i] - costs[i - 1] > thresh),
                     "label": cur.get("gt_label"),
-                    "vote_above_badmax": cur.get("vote_above_badmax"),
-                    "vote_beats_bad": cur.get("vote_beats_bad"),
-                    "n_bad_lab": (prev.get("n_bad") or 0),
+                    "vote_above_prev_badmax": cur.get("vote_above_prev_badmax"),
                     "cut_in_gap": cig,
                     "d_cut_in_gap": (cig - pcig if cig is not None and pcig is not None else None),
                     "d_thr": cur.get("delta_threshold"),
+                    "poolpos_recall": pr,
+                    "d_poolpos_recall": (pr - ppr if pr is not None and ppr is not None else None),
                 }
             )
     return ev
@@ -67,33 +68,41 @@ def main(argv=None):
         v = [a for a in x if a is not None and a == a]
         return statistics.fmean(v) if v else float("nan")
 
-    print("== (A) where the cut sits in the bad→positive gap (0=top bad, 1=bottom positive) ==")
+    print("== (A) the catastrophe = TRUE (pool) recall collapse, vs cut movement ==")
     print(
-        f"  cut_in_gap    spikes {m([e['cut_in_gap'] for e in sp]):.3f}   non-spikes {m([e['cut_in_gap'] for e in ns]):.3f}"
+        f"  poolpos_recall   spikes {m([e['poolpos_recall'] for e in sp]):.3f}   non-spikes {m([e['poolpos_recall'] for e in ns]):.3f}"
     )
     print(
-        f"  Δcut_in_gap   spikes {m([e['d_cut_in_gap'] for e in sp]):+.3f}   non-spikes {m([e['d_cut_in_gap'] for e in ns]):+.3f}"
+        f"  Δpoolpos_recall  spikes {m([e['d_poolpos_recall'] for e in sp]):+.3f}   non-spikes {m([e['d_poolpos_recall'] for e in ns]):+.3f}"
     )
-    print(f"  Δthreshold    spikes {m([e['d_thr'] for e in sp]):+.4f}   non-spikes {m([e['d_thr'] for e in ns]):+.4f}")
+    print(
+        f"  cut_in_gap       spikes {m([e['cut_in_gap'] for e in sp]):.3f}   non-spikes {m([e['cut_in_gap'] for e in ns]):.3f}"
+    )
+    print(
+        f"  Δcut_in_gap      spikes {m([e['d_cut_in_gap'] for e in sp]):+.3f}   non-spikes {m([e['d_cut_in_gap'] for e in ns]):+.3f}"
+    )
+    print(
+        f"  Δthreshold       spikes {m([e['d_thr'] for e in sp]):+.4f}   non-spikes {m([e['d_thr'] for e in ns]):+.4f}"
+    )
 
-    print("\n== (B) trigger: spike rate by vote-above-topbad (raises the gap floor) ==")
+    print("\n== (B) trigger: spike rate by vote-above-PREVIOUS-top-bad (raises the gap floor) ==")
     for lab in ("bad", "good"):
         for name, cond in [
-            (f"{lab} above top bad", lambda e, lab=lab: e["label"] == lab and e["vote_above_badmax"] == 1),
-            (f"{lab} below top bad", lambda e, lab=lab: e["label"] == lab and e["vote_above_badmax"] == 0),
+            (f"{lab} above prev top bad", lambda e, lab=lab: e["label"] == lab and e["vote_above_prev_badmax"] == 1),
+            (f"{lab} below prev top bad", lambda e, lab=lab: e["label"] == lab and e["vote_above_prev_badmax"] == 0),
         ]:
             k, tot, r = _rate(ev, cond)
             if tot:
-                print(f"    {name:<20} {k:>4}/{tot:<6} = {r:.3f}")
+                print(f"    {name:<22} {k:>4}/{tot:<6} = {r:.3f}")
 
     print("\n== (C) candidate rules (precision = P(spike|rule); recall = spikes caught) ==")
     tot_sp = len(sp)
     rules = [
-        ("vote above top bad (any)", lambda e: e["vote_above_badmax"] == 1),
-        ("Bad above top bad", lambda e: e["label"] == "bad" and e["vote_above_badmax"] == 1),
-        ("Δcut_in_gap > 0.1 (cut pushed up)", lambda e: (e["d_cut_in_gap"] or 0) > 0.1),
+        ("Bad above prev top bad", lambda e: e["label"] == "bad" and e["vote_above_prev_badmax"] == 1),
+        ("vote above prev top bad (any)", lambda e: e["vote_above_prev_badmax"] == 1),
         ("Δthreshold > 0 (cut moved up)", lambda e: (e["d_thr"] or 0) > 0),
-        ("above-topbad AND Δthr>0", lambda e: e["vote_above_badmax"] == 1 and (e["d_thr"] or 0) > 0),
+        ("Δcut_in_gap > 0.1", lambda e: (e["d_cut_in_gap"] or 0) > 0.1),
+        ("above-prev-topbad AND Δthr>0", lambda e: e["vote_above_prev_badmax"] == 1 and (e["d_thr"] or 0) > 0),
     ]
     print(f"  {'rule':<38} {'precision':>10} {'recall':>8} {'n':>8}")
     for nm, rule in rules:
