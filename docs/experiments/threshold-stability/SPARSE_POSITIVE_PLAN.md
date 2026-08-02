@@ -291,6 +291,43 @@ hard negatives actually spike.** Tool: `spike_vectors.py --embedder siglip`; art
 `/exp/sgreenberg/threshold-stability/broad_sig1/spike_vectors_sig1.json`,
 `broad/spike_vectors_sig2_v2.json`.
 
+## MECHANISM: what the hidden calibration catastrophe actually is (`calib_conditions.py`)
+
+Necessary+sufficient conditions, established by instrumenting the calibration (`_calib_diag`
+records, per MLP step: where the cut sits in the bad→positive gap, and `poolpos_recall` = the
+**true** recall over *all* pool positives, which the sim knows but the labeled data hides).
+Two hypotheses were **refuted** on the way, which is the crux of the answer:
+
+1. *Refuted:* a spike is **not** a training-recall collapse — at spikes 99.6% of labeled
+   positives stay **above** the cut. The cut does not jump above the labeled positives.
+2. *Refuted:* the trigger is **not** a vote scored high. Bads essentially never outscore a
+   labeled positive; and a Bad above the *previous top bad* spikes only 2.0% vs 12.4% for a
+   Bad *below* it. The vote's score position does not predict the spike.
+
+**What it is.** Acquisition surfaces *easy* (high-scoring) positives, so the ~3 labeled
+positives are unrepresentatively high and sit well above the cut. The conformal cut lives in
+the **gap** between the labeled bads and those high positives — and the *unlabeled/test*
+positives live densely in that gap, near the cut. Each vote **retrains** the MLP; with almost
+nothing pinning the cut in the gap, the cut (and/or the scores) **wobbles** on every refit. A
+spike is a step where the operating point wobbles **up** through that dense band of unlabeled
+positives → true recall collapses (`Δpoolpos_recall` −0.093 at spikes vs +0.004 otherwise;
+`Δcut_in_gap` +0.218, `Δthreshold` +0.031) — while labeled recall stays ~1, so it's invisible
+to the labeled data. **That divergence is why it's "hidden."**
+
+**Necessary** (all three): (1) sparse, unrepresentatively-high labeled positives → an
+under-determined cut in a wide gap; (2) a retrain wobble that moves the operating point up —
+the **cut** (~60% of spikes, `Δthreshold`>0) or the **scores** under a stable cut (~40%, a
+second mode); (3) unlabeled positives densely in that path.
+
+**Sufficient: none observable.** (2)∧(3) is sufficient, but (3) is *hidden* (unlabeled) and
+(2) is a *stochastic retrain outcome* not determined by the vote's features. The tightest
+labeled-observable predictor is the symptom "the cut moved up" — **60% recall, 18%
+precision**. No vote-level trigger exists. The unobservability of a sufficient condition is
+not a gap in the analysis; it **is** the nature of the catastrophe. This is also why the fixes
+work by *reducing the cut's freedom* (defer/GMM/recall-anchor pin it to the score distribution
+or the positives), and why more positives barely moved FNR (mode-2 + the ranking floor remain).
+Tools: `calib_conditions.py`, `_calib_diag`; artifacts `broad_v2_diag3/`.
+
 ## The actual #2790 spikes: deep-run transient excursions (`deep_spikes.py`)
 
 The per-event work above characterizes *all* MLP-regime Bad votes; the #2790 complaint is
