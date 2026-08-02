@@ -695,23 +695,38 @@ def _resolve_select_mode(phase: str, soft_seek: int, hard_pick: int) -> tuple[st
     return select_mode, hard_pick
 
 
-def _calib_diag(pool_scores, good_ids, idx, threshold, labeled_id) -> dict:
-    """Calibration-catastrophe diagnostics (#2790): where the trained cut sits **relative to
-    the labeled positives**, and where the just-voted item falls among them. A deep spike is
-    hypothesised to be a training-recall collapse — the cut jumping above the sparse positives
-    — so ``n_pos_above_cut`` (labeled positives still scored ≥ cut) is the key signal, and
-    ``vote_beats_pos`` (positives the just-voted item outscores) the suspected trigger."""
-    pos = sorted(float(pool_scores[idx[g]]) for g in good_ids if g in idx and np.isfinite(pool_scores[idx[g]]))
+def _calib_diag(pool_scores, good_ids, bad_ids, idx, threshold, labeled_id) -> dict:
+    """Calibration-catastrophe diagnostics (#2790). The training-recall-collapse hypothesis was
+    refuted (labeled positives stay above the cut at spikes), so this now measures the **bad
+    side / the gap** too: labeled positives are unrepresentatively high-scoring, the cut lives in
+    the gap between the top labeled bad and the bottom labeled positive, and the *test* positives
+    live in that gap. Suspected trigger: a Bad scored high *in the gap* (``vote_beats_bad`` near
+    the top of the bads / ``vote_above_badmax``) raises the conformal gap floor and pushes the cut
+    up through the test positives. ``cut_in_gap`` = 0 at the top bad, 1 at the bottom positive."""
+
+    def _sc(ids):
+        return sorted(float(pool_scores[idx[i]]) for i in ids if i in idx and np.isfinite(pool_scores[idx[i]]))
+
+    pos, bad = _sc(good_ids), _sc(bad_ids)
     vote = float("nan")
     if labeled_id in idx and np.isfinite(pool_scores[idx[labeled_id]]):
         vote = float(pool_scores[idx[labeled_id]])
+    bad_max = bad[-1] if bad else None
+    pos_min = pos[0] if pos else None
+    cut_in_gap = None
+    if bad_max is not None and pos_min is not None and pos_min > bad_max:
+        cut_in_gap = round((threshold - bad_max) / (pos_min - bad_max), 4)
     return {
         "n_pos_above_cut": sum(1 for s in pos if s >= threshold),
         "n_pos_lab": len(pos),
-        "pos_min": round(pos[0], 4) if pos else None,
-        "pos_max": round(pos[-1], 4) if pos else None,
+        "n_bad_above_cut": sum(1 for s in bad if s >= threshold),
+        "pos_min": round(pos_min, 4) if pos_min is not None else None,
+        "bad_max": round(bad_max, 4) if bad_max is not None else None,
+        "cut_in_gap": cut_in_gap,
         "vote_score_now": round(vote, 4) if vote == vote else None,
         "vote_beats_pos": (sum(1 for s in pos if vote > s) if vote == vote else None),
+        "vote_beats_bad": (sum(1 for s in bad if vote > s) if vote == vote else None),
+        "vote_above_badmax": (int(bad_max is not None and vote > bad_max) if vote == vote else None),
     }
 
 
@@ -1185,7 +1200,7 @@ def _realistic_one_seed(
                 "spike": int(len(cost_history) > 1 and abs(cost_history[-1] - cost_history[-2]) > 0.1),
                 "regret": round(float(err["cost"]) - float(oracle), 6),
                 "threshold_rule": threshold_rule,
-                **_calib_diag(pool_scores, good_ids, idx, threshold, labeled_id),
+                **_calib_diag(pool_scores, good_ids, bad_ids, idx, threshold, labeled_id),
             }
         )
         prev_threshold = float(threshold)
