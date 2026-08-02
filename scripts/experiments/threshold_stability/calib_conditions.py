@@ -1,15 +1,12 @@
-"""Necessary + sufficient conditions for the #2790 calibration catastrophe.
+"""Necessary + sufficient conditions for the #2790 calibration catastrophe (v2: the gap).
 
-Hypothesis: a deep spike is a **training-recall collapse** — the conformal cut jumping ABOVE
-the sparse labeled positives — triggered by a vote scored among/above them. The instrumented
-trace (region_curve `_calib_diag`) records, per MLP-regime step:
-  ``n_pos_above_cut`` (labeled positives still ≥ cut), ``n_pos_lab``, ``vote_beats_pos``
-  (positives the just-voted item outscored), ``gt_label``.
-This script tests:
-  (A) does a spike ⟺ training-recall collapse (n_pos_above_cut/n_pos_lab → 0)?
-  (B) the trigger: spike rate by (vote label, vote_beats_pos) — is "a Bad that outscores ≥1
-      positive" necessary (spike~0 otherwise) and sufficient (spike~1 when it holds)?
-  (C) precision/recall of candidate necessary+sufficient rules.
+v1 refuted the training-recall-collapse hypothesis: at spikes the labeled positives stay
+ABOVE the cut (recall_frac 0.996), and Bad votes essentially never outscore a labeled
+positive. The labeled positives are unrepresentatively high-scoring; the cut lives in the
+GAP between the top labeled bad and the bottom labeled positive, and the *test* positives
+live in that gap. Refined hypothesis: a spike is the cut being pushed UP within that gap
+(``cut_in_gap`` ↑), triggered by a Bad scored high in the gap (``vote_above_badmax`` — it
+raises the conformal gap floor). This tests it on the instrumented trace.
 """
 
 from __future__ import annotations
@@ -30,20 +27,20 @@ def collect(root: Path, thresh: float):
         tr = sorted(json.loads(tj.read_text()), key=lambda e: e["t"])
         costs = [_f(e.get("cost")) for e in tr]
         for i in range(1, len(tr)):
-            cur = tr[i]
+            cur, prev = tr[i], tr[i - 1]
             if cur.get("head") != "mlp":
                 continue
-            up = costs[i] - costs[i - 1]
-            npl = cur.get("n_pos_lab") or 0
-            nab = cur.get("n_pos_above_cut")
+            cig, pcig = cur.get("cut_in_gap"), prev.get("cut_in_gap")
             ev.append(
                 {
-                    "is_spike": int(up > thresh),
+                    "is_spike": int(costs[i] - costs[i - 1] > thresh),
                     "label": cur.get("gt_label"),
-                    "vote_beats_pos": cur.get("vote_beats_pos"),
-                    "n_pos_lab": npl,
-                    "recall_frac": (nab / npl if npl and nab is not None else None),
-                    "fnr": _f(cur.get("fnr")),
+                    "vote_above_badmax": cur.get("vote_above_badmax"),
+                    "vote_beats_bad": cur.get("vote_beats_bad"),
+                    "n_bad_lab": (prev.get("n_bad") or 0),
+                    "cut_in_gap": cig,
+                    "d_cut_in_gap": (cig - pcig if cig is not None and pcig is not None else None),
+                    "d_thr": cur.get("delta_threshold"),
                 }
             )
     return ev
@@ -56,59 +53,53 @@ def _rate(ev, cond):
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser(description="Necessary+sufficient conditions for #2790 spikes.")
+    ap = argparse.ArgumentParser(description="#2790 spike conditions (gap hypothesis).")
     ap.add_argument("--root", required=True)
     ap.add_argument("--thresh", type=float, default=0.1)
     args = ap.parse_args(argv)
     ev = collect(Path(args.root), args.thresh)
     n = len(ev)
     sp = [e for e in ev if e["is_spike"]]
+    ns = [e for e in ev if not e["is_spike"]]
     print(f"MLP-regime steps: {n}   up-spikes: {len(sp)} ({len(sp) / n:.3f})\n")
 
     def m(x):
         v = [a for a in x if a is not None and a == a]
         return statistics.fmean(v) if v else float("nan")
 
-    print("== (A) training-recall at the step: frac of labeled positives still >= cut ==")
-    print(f"  spikes    : recall_frac mean {m([e['recall_frac'] for e in sp]):.3f}  (→0 = cut above the positives)")
-    print(f"  non-spikes: recall_frac mean {m([e['recall_frac'] for e in ev if not e['is_spike']]):.3f}")
-    print(f"  spikes with ALL positives below cut (recall_frac==0): "
-          f"{sum(1 for e in sp if e['recall_frac'] == 0)}/{len(sp)}")  # fmt: skip
+    print("== (A) where the cut sits in the bad→positive gap (0=top bad, 1=bottom positive) ==")
+    print(
+        f"  cut_in_gap    spikes {m([e['cut_in_gap'] for e in sp]):.3f}   non-spikes {m([e['cut_in_gap'] for e in ns]):.3f}"
+    )
+    print(
+        f"  Δcut_in_gap   spikes {m([e['d_cut_in_gap'] for e in sp]):+.3f}   non-spikes {m([e['d_cut_in_gap'] for e in ns]):+.3f}"
+    )
+    print(f"  Δthreshold    spikes {m([e['d_thr'] for e in sp]):+.4f}   non-spikes {m([e['d_thr'] for e in ns]):+.4f}")
 
-    print("\n== (B) trigger: spike rate by vote label × how many positives it outscored ==")
+    print("\n== (B) trigger: spike rate by vote-above-topbad (raises the gap floor) ==")
     for lab in ("bad", "good"):
-        print(f"  {lab} votes:")
-        for bp in ("0", "1", "2", ">=3"):
-
-            def c(e, lab=lab, bp=bp):
-                if e["label"] != lab or e["vote_beats_pos"] is None:
-                    return False
-                v = e["vote_beats_pos"]
-                return {"0": v == 0, "1": v == 1, "2": v == 2, ">=3": v >= 3}[bp]
-
-            k, tot, r = _rate(ev, c)
+        for name, cond in [
+            (f"{lab} above top bad", lambda e, lab=lab: e["label"] == lab and e["vote_above_badmax"] == 1),
+            (f"{lab} below top bad", lambda e, lab=lab: e["label"] == lab and e["vote_above_badmax"] == 0),
+        ]:
+            k, tot, r = _rate(ev, cond)
             if tot:
-                print(f"    beats {bp:<3} positives: {k:>4}/{tot:<6} = {r:.3f}")
+                print(f"    {name:<20} {k:>4}/{tot:<6} = {r:.3f}")
 
-    print("\n== (C) candidate necessary+sufficient rules (precision = spike rate | rule; recall = spikes caught) ==")
-    rules = [
-        ("Bad AND beats >=1 pos", lambda e: e["label"] == "bad" and (e["vote_beats_pos"] or 0) >= 1),
-        ("beats >=1 pos (any label)", lambda e: (e["vote_beats_pos"] or 0) >= 1),
-        (
-            "Bad AND beats >=1 AND n_pos_lab<=5",
-            lambda e: e["label"] == "bad" and (e["vote_beats_pos"] or 0) >= 1 and (e["n_pos_lab"] or 0) <= 5,
-        ),  # noqa: E501
-        (
-            "Bad AND beats ALL pos",
-            lambda e: e["label"] == "bad" and e["n_pos_lab"] and e["vote_beats_pos"] == e["n_pos_lab"],
-        ),
-    ]
+    print("\n== (C) candidate rules (precision = P(spike|rule); recall = spikes caught) ==")
     tot_sp = len(sp)
-    print(f"  {'rule':<38} {'precision':>10} {'recall':>8} {'n':>7}")
-    for name, rule in rules:
+    rules = [
+        ("vote above top bad (any)", lambda e: e["vote_above_badmax"] == 1),
+        ("Bad above top bad", lambda e: e["label"] == "bad" and e["vote_above_badmax"] == 1),
+        ("Δcut_in_gap > 0.1 (cut pushed up)", lambda e: (e["d_cut_in_gap"] or 0) > 0.1),
+        ("Δthreshold > 0 (cut moved up)", lambda e: (e["d_thr"] or 0) > 0),
+        ("above-topbad AND Δthr>0", lambda e: e["vote_above_badmax"] == 1 and (e["d_thr"] or 0) > 0),
+    ]
+    print(f"  {'rule':<38} {'precision':>10} {'recall':>8} {'n':>8}")
+    for nm, rule in rules:
         k, tot, prec = _rate(ev, rule)
         rec = k / tot_sp if tot_sp else float("nan")
-        print(f"  {name:<38} {prec:>10.3f} {rec:>8.3f} {tot:>7}")
+        print(f"  {nm:<38} {prec:>10.3f} {rec:>8.3f} {tot:>8}")
     return 0
 
 
