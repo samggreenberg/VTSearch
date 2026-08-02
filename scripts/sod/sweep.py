@@ -459,6 +459,7 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
         threshold_smooth=args.threshold_smooth,
         defer_cut_goods=args.defer_cut_goods,
         soft_seek=args.soft_seek,
+        recall_target=args.recall_target,
     )
     rows: list[dict] = []
     if args.viz or args.labeling_trace or args.confidence_gallery or args.training_nodes:
@@ -701,6 +702,14 @@ def main() -> int:
         help="positive-seeking acquisition (#2790): in the learned 'hard' phase, every "
         "Nth pick is a 'soft' pick (calibrated P(good)~0.7) to grow n_good instead of "
         "only boundary hay. 0 = off, 2 = alternate hard/soft.",
+    )
+    ap.add_argument(
+        "--recall-target",
+        type=float,
+        default=0.0,
+        help="recall-tuned cut (#2790): anchor the threshold to catch this fraction of the "
+        "labeled positives (the (1-R) quantile of their scores). Directly tunes FNR for "
+        "rare-needle customers + resists FNR->1 spikes. 0 = off; e.g. 0.9 = catch 90%%.",
     )
     ap.add_argument("--cal-fraction", type=float, default=0.5)
     ap.add_argument("--scales", type=_floats, default=(1.0, 0.75, 0.5, 0.3))
