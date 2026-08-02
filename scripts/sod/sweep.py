@@ -461,6 +461,7 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
         soft_seek=args.soft_seek,
         recall_target=args.recall_target,
         stable_folds=args.stable_folds,
+        head_strategy=args.head_strategy,
     )
     rows: list[dict] = []
     if args.viz or args.labeling_trace or args.confidence_gallery or args.training_nodes:
@@ -718,6 +719,14 @@ def main() -> int:
         help="causal #2790 test: freeze the cross-calibration Train/Calibrate split (fold by "
         "append position, no per-step permutation) so an item's fold doesn't reshuffle when "
         "later votes arrive. Isolates whether the fold reshuffle drives the spikes.",
+    )
+    ap.add_argument(
+        "--head-strategy",
+        default="mlp",
+        choices=["mlp", "linear", "svm", "reg-mlp", "anneal-svm", "anneal-linear", "anneal-reg"],
+        help="anti-spike #2790 arm: model class for the calibration head, keyed on n_good and "
+        "uniform across M0 and the fold sub-models. linear/svm = low-variance throughout; "
+        "reg-mlp = capacity annealed within MLP; anneal-* = low-variance while n_good<8 then MLP.",
     )
     ap.add_argument("--cal-fraction", type=float, default=0.5)
     ap.add_argument("--scales", type=_floats, default=(1.0, 0.75, 0.5, 0.3))
