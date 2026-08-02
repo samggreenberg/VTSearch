@@ -695,6 +695,50 @@ def _resolve_select_mode(phase: str, soft_seek: int, hard_pick: int) -> tuple[st
     return select_mode, hard_pick
 
 
+def _calib_diag(pool_scores, good_ids, idx, threshold, labeled_id) -> dict:
+    """Calibration-catastrophe diagnostics (#2790): where the trained cut sits **relative to
+    the labeled positives**, and where the just-voted item falls among them. A deep spike is
+    hypothesised to be a training-recall collapse — the cut jumping above the sparse positives
+    — so ``n_pos_above_cut`` (labeled positives still scored ≥ cut) is the key signal, and
+    ``vote_beats_pos`` (positives the just-voted item outscores) the suspected trigger."""
+    pos = sorted(float(pool_scores[idx[g]]) for g in good_ids if g in idx and np.isfinite(pool_scores[idx[g]]))
+    vote = float("nan")
+    if labeled_id in idx and np.isfinite(pool_scores[idx[labeled_id]]):
+        vote = float(pool_scores[idx[labeled_id]])
+    return {
+        "n_pos_above_cut": sum(1 for s in pos if s >= threshold),
+        "n_pos_lab": len(pos),
+        "pos_min": round(pos[0], 4) if pos else None,
+        "pos_max": round(pos[-1], 4) if pos else None,
+        "vote_score_now": round(vote, 4) if vote == vote else None,
+        "vote_beats_pos": (sum(1 for s in pos if vote > s) if vote == vote else None),
+    }
+
+
+def _override_cut(threshold, calib, pool_scores, good_ids, idx, defer_cut_goods, recall_target):
+    """Post-calibration cut overrides (#2790). A no-op on the cosine cold-start.
+
+    ``recall_target`` R (0<R<1) **anchors the cut to the labeled positives** — the (1−R)
+    quantile of their pooled scores, i.e. catch R of them — which directly tunes FNR for
+    rare-needle customers and, being positive-anchored, structurally can't lurch above ALL
+    positives (resists the FNR→1 deep spikes). Falls back to ``defer_cut_goods`` K (GMM cut
+    on pool scores while n_good<K), else leaves the trained cut. Returns ``(threshold, calib)``.
+    """
+    if calib == "cosine_coldstart":
+        return threshold, calib
+    if recall_target:
+        pos = [float(pool_scores[idx[g]]) for g in good_ids if g in idx and np.isfinite(pool_scores[idx[g]])]
+        if len(pos) >= 2:
+            return float(np.quantile(pos, 1.0 - recall_target)), "recall_target"
+    if defer_cut_goods and len(good_ids) < defer_cut_goods:
+        from vtscore.training.thresholds import calculate_gmm_threshold  # noqa: PLC0415
+
+        finite = [float(s) for s in pool_scores if np.isfinite(s)]
+        if finite:
+            return calculate_gmm_threshold(finite), "defer_gmm"
+    return threshold, calib
+
+
 def _select_next(select_mode, tree, pool_ids, pool_scores, threshold, labeled, idx):
     if select_mode == "top":
         return _select_top(pool_ids, pool_scores, labeled, idx)
@@ -979,11 +1023,12 @@ def _realistic_one_seed(
     threshold_smooth: str = "none",
     defer_cut_goods: int = 0,
     soft_seek: int = 0,
+    recall_target: float = 0.0,
 ) -> tuple[list[dict], dict | None]:
     """Run one seed's labeling loop. Returns ``(rows, final)`` where ``final`` is a dict
     ``{predict, threshold, n_good, n_bad, t, trace}`` for the last step (head + blended
     threshold the final row measured, plus the per-step trace), or ``None`` when no step ran."""
-    from vtscore.training.thresholds import calculate_gmm_threshold, calculate_safe_threshold  # noqa: PLC0415
+    from vtscore.training.thresholds import calculate_safe_threshold  # noqa: PLC0415
 
     setup = _realistic_setup(inputs, seed, query_vec)
     if setup is None:
@@ -1067,11 +1112,7 @@ def _realistic_one_seed(
         # the model's pool scores instead (independent of the sparse calibration
         # positives). Off when ``defer_cut_goods == 0``; skips the cosine cold-start
         # step, which already has no trained cut.
-        if defer_cut_goods and len(good_ids) < defer_cut_goods and calib != "cosine_coldstart":
-            finite = [float(s) for s in pool_scores if np.isfinite(s)]
-            if finite:
-                threshold = calculate_gmm_threshold(finite)
-                calib = "defer_gmm"
+        threshold, calib = _override_cut(threshold, calib, pool_scores, good_ids, idx, defer_cut_goods, recall_target)
 
         err = weighted_error(test_scores, [float(v) for v in test_labels], threshold, inclusion)
         oracle = min_weighted_cost(test_scores, [float(v) for v in test_labels], inclusion)
@@ -1144,6 +1185,7 @@ def _realistic_one_seed(
                 "spike": int(len(cost_history) > 1 and abs(cost_history[-1] - cost_history[-2]) > 0.1),
                 "regret": round(float(err["cost"]) - float(oracle), 6),
                 "threshold_rule": threshold_rule,
+                **_calib_diag(pool_scores, good_ids, idx, threshold, labeled_id),
             }
         )
         prev_threshold = float(threshold)
@@ -1187,6 +1229,7 @@ def evaluate_realistic_curve(
     threshold_smooth: str = "none",
     defer_cut_goods: int = 0,
     soft_seek: int = 0,
+    recall_target: float = 0.0,
 ) -> list[dict] | tuple[list[dict], dict[int, dict]]:
     """Realistic active-learning labeling curve: cost/fpr/fnr/F1/IoU vs ``t`` (total
     annotations), one row per ``(seed, t)``.
@@ -1231,6 +1274,7 @@ def evaluate_realistic_curve(
             threshold_smooth=threshold_smooth,
             defer_cut_goods=defer_cut_goods,
             soft_seek=soft_seek,
+            recall_target=recall_target,
         )
         # Amortize the seed's wall-clock over its rows (per-step retrain dominates).
         per = round((time.perf_counter() - t0) * 1000.0 / max(len(seed_rows), 1), 3)
