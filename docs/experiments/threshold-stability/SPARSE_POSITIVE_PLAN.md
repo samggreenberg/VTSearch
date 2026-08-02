@@ -363,13 +363,13 @@ more stable cut and `min(cal-pos)`, but the effect is diminishing and modest.
 **Decomposition of the deep spikes — DIRECT measurement (corrects the by-exclusion estimate).**
 Instrumenting `poolpos_recall` at the *previous* cut with the *current* scores splits each
 spike's recall collapse into a score-driven term (MLP retrain, cut held) and a cut-driven term
-(cut moved, scores held). Result: **~57% score-driven / ~43% cut-driven** (partial 67-trace
-sample; 40-class re-run pending). So — correcting my earlier by-exclusion claim of "75–85 /
-15–25" — the **cut/calibration side is a larger contributor (~43%)** than the behavioral tests
-implied:
-- **MLP-retrain score variance (~57%)** — the under-determined 3-positive MLP gives different
+(cut moved, scores held). Result: **56% score-driven / 44% cut-driven** (confirmed on 800
+traces / 3002 spikes; the partial 67-trace read was 57/43). So — correcting my earlier
+by-exclusion claim of "75–85 / 15–25" — the **cut/calibration side is a larger contributor
+(~44%)** than the behavioral tests implied:
+- **MLP-retrain score variance (~56%)** — the under-determined 3-positive MLP gives different
   scores each retrain; test positives wobble vs a fixed cut. Only more positives fix it (hard).
-- **Cut movement (~43%)** — but only ~13 points of this is the *removable* fold reshuffle
+- **Cut movement (~44%)** — but only ~13 points of this is the *removable* fold reshuffle
   (`--stable-folds`) / ~16–19 via `calibrate_count`↑; the rest is the conformal cut faithfully
   recomputing on the wildly-varying retrained scores. So the behavioral tests (which only
   remove the fold-reshuffle slice) undercounted the cut's role — the owner's cross-calibration
