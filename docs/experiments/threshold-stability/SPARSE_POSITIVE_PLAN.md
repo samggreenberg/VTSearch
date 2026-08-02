@@ -315,10 +315,50 @@ depth `t`, on the faithful v2 traces. Both embedders identical.
   cost_sd ≈ 4× oracle floor).
 - **Implication for mitigation:** staying in HardText longer (more *bads* before learned
   sort) does **not** help — `n_good` stays ~5 regardless of bad count. The lever is the
-  *positive* side: hold a distribution cut while positives are sparse (`--defer-cut-goods`,
-  already a Pareto win at K=6 — and since `n_good` stays low all run, it applies throughout,
-  exactly where the deep spikes live), the crossing-GMM cut, or acquire more positives
-  (diversify away from pure boundary sampling). Tool: `deep_spikes.py`.
+  *positive* side (see the mitigation experiments below). Tool: `deep_spikes.py`.
+
+## Mitigation experiments: it's the positives, and threshold tricks trade F1
+
+Tested the two candidate levers on the faithful harness (79 classes × 20 seeds); both land
+on one conclusion: **the bottleneck is positives, not the cut rule or the negatives.**
+
+**defer6 (crossing-GMM cut while sparse) crushes the deep cost-spikes ~8× — but trades
+F1.** Deep-spike rate t[20,30) 0.10 → 0.012 (both embedders); the distribution-based GMM
+cut doesn't lurch when one boundary Bad is added. BUT it does so by moving the operating
+point, not by being a better cut: SigLIP 2 @t60 FNR 0.32→0.18, FPR 0.02→0.09, **F1
+0.625→0.323**, weighted cost 0.343→0.268. The permissive GMM cut catches more positives
+but, under `neg_multiple`=100, the extra FPs wreck precision. So an earlier "defer6 is a
+Pareto win" (5-class, cost-only) is **wrong once F1 is included** — it suppresses transient
+cost-spikes by adopting a permanently worse-F1 cut. Cost and F1 only diverge for such
+threshold tricks; they agree everywhere else.
+
+**Handoff-quality arms (`handoff_quality.py`, SigLIP 2) — staying in TextHard longer buys
+nothing; more positives is the only lever:**
+
+| arm | switch t | handoff jump | @t60 cost | @t60 F1 |
+|---|---|---|---|---|
+| g3/b4 baseline | 7.1 | +0.125 | 0.343 | 0.625 |
+| g3/b8 more bads | 11.1 | +0.065 | 0.345 | 0.621 |
+| g3/b12 more bads | 15.2 | +0.096 | 0.347 | 0.622 |
+| g6/b4 more goods | 10.4 | +0.054 | 0.334 | **0.677** |
+
+More bads (the *free* lever — the haystack is all hay) softens the one-time handoff jump
+but leaves the learned detector **flat** at matched budget. More *goods* is the only thing
+that moves quality (F1 0.625→**0.677**). But "require more goods" is **begging the
+question** — finding needles is the task VTSearch exists for; you can't demand them.
+Confirmed in the data: g6/b4 ran only 1540/1580 traces because **40 seeds couldn't reach 6
+goods** (the hard classes can't supply them).
+
+**Unified root cause = positive starvation.** The deep threshold spikes (cut pinned by ~3
+positives all run), the horrible Text→Learned scores (3-positive MLP never catches text),
+and the F1 ceiling all dissolve only when `n_good` grows. The one lever that is both
+**shippable and helps everything** (spikes *and* F1, no threshold trickery, no demanding
+goods) is **positive-*seeking* acquisition**: have the autopilot spend some picks surfacing
+its best *guesses* at positives for the user to confirm (interleave exploit/"top" picks
+through the `hard` phase) — the system doing the hard task, not begging for it. **Not yet
+built**; the g6/b4 arm is the "if goods were free" ceiling it should chase. Metric note:
+track **F1/recall alongside cost** — cost alone rewards precision-wrecking permissive cuts
+under the 100× imbalance. Tools: `handoff_quality.py`, `deep_spikes.py`.
 
 ## When does a Bad vote spike? (per-EVENT, #2790)
 
