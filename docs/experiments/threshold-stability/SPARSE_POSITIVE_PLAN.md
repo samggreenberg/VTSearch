@@ -349,10 +349,33 @@ does — precisely:
   stability lever, not the rule**: more folds pool more Calibrate positives, so the pooled
   `min(cal-positive)` stabilizes to the true lowest → the cut stops jumping.
 
-**Tests in flight (2026-08-02 ~01:45 EDT, siglip2):** (a) `calibrate_count` sweep {2,4,8,16}
-— predict deep-spike rate ↓ monotonically; (b) `--stable-folds` (freeze the split to append
-position, no per-step reshuffle) as the causal clincher — predict spikes largely vanish.
-[RESULTS PENDING — fill in.]
+**Result — the reshuffle is real but MINOR (hypothesis mostly refuted in magnitude).**
+`--stable-folds` (freeze the split → no per-step reshuffle) cut the deep-spike rate only
+~10–15% (t[20,30) 0.108→0.094; overall 0.080→0.072), **not** the ~60% predicted. Reason:
+freezing the fold *identity* doesn't freeze the *scores* — the MLP retrains every vote, so
+`min(cal-positive)`'s **score** still moves even when *which* positive it is stays fixed. So
+the dominant wobble is the **MLP retrain itself** (scores shift), with the fold reshuffle a
+~13% add-on. (Side effect: stable folds gave a better operating point — FNR 0.321→0.263, cost
+0.343→0.310.) The `calibrate_count` sweep agrees: deep-spike t[20,30) 0.108→0.100→0.097→0.088
+for k=2/4/8/16 (overall 0.080→0.067; deepest band t[45+) 0.039→0.025, −36%). More folds pool a
+more stable cut and `min(cal-pos)`, but the effect is diminishing and modest.
+
+**Definitive decomposition of the deep spikes:**
+- **MLP-retrain score variance — dominant (~75–85%).** The under-determined 3-positive MLP
+  produces substantially different *scores* on every retrain; the test positives' scores
+  wobble relative to a fixed cut → FNR spike. No calibration change fixes this; only more
+  positives (a better-determined model) would — and that's hard (soft/g6b4 above).
+- **Cross-calibration variance — real but secondary (~15–25% combined).** Fold reshuffle
+  (~13%, `--stable-folds`) + few calibration points (~16–19%, `calibrate_count`↑). The
+  owner's hunch is a genuine contributor, just not the driver.
+
+Both are rooted in **sparse positives**. This is *why* no observable sufficient condition
+exists — the dominant term is the MLP retrain's score shift, a complex nonlinear function of
+the whole label set, unpredictable from the vote. And it's *why the shipped fixes work*:
+defer/GMM/recall-anchor cut the *cut's* sensitivity (the ~15–25% calibration term) **and**
+park the operating point where a wobble crosses fewer test positives — they don't touch the
+MLP variance but blunt its consequence. Tools: `--stable-folds`, `--calibrate-count`;
+artifacts `broad_v2_stable/`, `broad_cc{4,8,16}/`.
 
 ## The actual #2790 spikes: deep-run transient excursions (`deep_spikes.py`)
 
