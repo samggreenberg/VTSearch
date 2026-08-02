@@ -291,6 +291,36 @@ hard negatives actually spike.** Tool: `spike_vectors.py --embedder siglip`; art
 `/exp/sgreenberg/threshold-stability/broad_sig1/spike_vectors_sig1.json`,
 `broad/spike_vectors_sig2_v2.json`.
 
+## FIX: a low-variance (linear) head stops the spikes (`--head-strategy`, `results_eval.py`)
+
+The deep spikes are ~85% under-determined-MLP score variance, so the direct fix is a
+lower-variance model while positives are sparse. Head-strategy sweep (20 COCO classes × 15
+seeds, SigLIP 2, MLP-regime, t≥20; trace-free via `results_eval.py` on `results.jsonl`):
+
+| head | deep-spike rate | spike size | @t60 cost | @t60 FNR | @t60 FPR |
+|---|---|---|---|---|---|
+| `mlp` (baseline) | 0.055 | 0.167 | 0.386 | 0.365 | 0.020 |
+| **`linear`** (logistic) | **0.025** | 0.140 | **0.352** | **0.299** | 0.052 |
+| **`svm`** (linear) | **0.023** | 0.134 | 0.356 | 0.308 | 0.049 |
+| `reg-mlp` (small hidden) | 0.042 | 0.152 | 0.381 | 0.310 | 0.071 |
+| `anneal-svm` | 0.026 | 0.139 | 0.364 | 0.319 | 0.044 |
+
+**A linear head (logistic / linear SVM) cuts the deep-spike rate ~55–58% AND improves the
+customer metric** (cost 0.386→0.352, FNR 0.365→**0.299** — catches more needles), for a modest
+FPR rise (0.02→0.05) — the trade a rare-needle customer wants. Not a trade: a Pareto win. The
+gap is largest early (t=20 cost 0.508→0.396), exactly the sparse regime the spikes live in.
+`reg-mlp` (shrinking the hidden layer) helps far less — the MLP's nonlinearity still injects
+variance; you must go fully linear. `anneal-svm ≈ svm` because `n_good` rarely clears the K=8
+switch (positives stay sparse), so it's SVM almost throughout. All arms are **uniform within
+cross-calibration** (`make_head` keyed on the full labelset's `n_good`, reused for M0 + the fold
+sub-models) and use conformal on raw `decision_function` scores (no Platt).
+
+**Recommendation:** for the #2790 spike regime (sparse positives, few dozen votes) replace the
+MLP with a **linear head**. Caveat: validated to t≤60; the earlier MLP-vs-SVM study found the
+MLP overtakes by ~t=200 with abundant labels, so the full production answer is an **anneal keyed
+on `n_good`** (linear/SVM while sparse → MLP once rich) — only the sparse end is tested here.
+Tools: `--head-strategy {linear,svm,reg-mlp,anneal-*}`, `results_eval.py`.
+
 ## MECHANISM: what the hidden calibration catastrophe actually is (`calib_conditions.py`)
 
 Necessary+sufficient conditions, established by instrumenting the calibration (`_calib_diag`
