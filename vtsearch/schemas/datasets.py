@@ -1000,6 +1000,23 @@ class ImporterFieldOptionsResponseSchema(Schema):
     options = fields.List(fields.Nested(FieldOptionsSchema), required=True)
 
 
+class ImporterSuggestedNameRequestSchema(Schema):
+    """Body for ``POST /api/dataset/import/<importer_name>/suggested-name``."""
+
+    values = fields.Dict(load_default=dict)
+
+
+class ImporterSuggestedNameResponseSchema(Schema):
+    """Response for ``POST /api/dataset/import/<importer_name>/suggested-name``.
+
+    ``dataset_name`` is what the importer would name a dataset built from
+    the supplied form values, i.e. the value the Dataset Name box is
+    prefilled with while the user is still typing.
+    """
+
+    dataset_name = fields.String(required=True)
+
+
 # ---------------------------------------------------------------------------
 # Registry routes (vtsearch/routes/datasets/registry.py)
 # ---------------------------------------------------------------------------

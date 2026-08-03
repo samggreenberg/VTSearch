@@ -1,4 +1,6 @@
 import { ChangeDetectionStrategy, ChangeDetectorRef, Component, inject, signal, input, output } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { EMPTY, Subject, catchError, debounceTime, filter, switchMap } from 'rxjs';
 
 import { FormsModule } from '@angular/forms';
 import { ClipperChooserComponent, ClipperSelection } from '../../../clipper-chooser/clipper-chooser.component';
@@ -24,6 +26,11 @@ import {
 } from '../../../../../models/api.models';
 import { ImportDefaultsService } from '../shared/import-defaults.service';
 import { availableConvertersFor, composeEmbedders, mediaTypeLabels, mediaTypeOptionIcons, mediaTypeOptionLabels, toFolderName, toTypeId } from '../shared/media-type.util';
+
+/** How long the form settles before asking the importer to name the dataset.
+ *  ``default_display_name`` may resolve a label from a remote service, so
+ *  keystrokes must not each cost a round trip. */
+const SUGGESTED_NAME_DEBOUNCE_MS = 250;
 
 /** Generic importer form: renders whatever fields an importer declares
  *  (``server_files``, ``pickle``, or any extension importer whose
@@ -71,8 +78,11 @@ export class GenericFormPickerComponent {
   readonly submitting = signal(false);
   readonly error = signal('');
   /** Whether the user has manually edited the generic-form dataset_name
-   *  input (so we stop auto-deriving it from path/url/file fields). */
+   *  input (so we stop asking the importer to name the dataset for them). */
   private datasetNameDirty = false;
+  /** Debounces the ``suggested-name`` round trip; ``switchMap`` drops the
+   *  reply to any request the user has already typed past. */
+  private readonly suggestedNameRequests = new Subject<void>();
 
   readonly availableClippers = signal<ClipperInfo[]>([]);
   /** Cleanup gates available for the current media type, and the subset the
@@ -95,6 +105,48 @@ export class GenericFormPickerComponent {
 
   clipperChooserOpen = false;
   clipperChooserClippers: ClipperInfo[] = [];
+
+  constructor() {
+    this.suggestedNameRequests
+      .pipe(
+        debounceTime(SUGGESTED_NAME_DEBOUNCE_MS),
+        // The user may have named the dataset since this request was armed,
+        // in which case there is nothing left to suggest.
+        filter(() => !this.datasetNameDirty),
+        switchMap(() => {
+          const importer = this.selectedImporter();
+          if (!importer) return EMPTY;
+          return this.datasetsCrudApi
+            .getImporterSuggestedName(importer.name, this.suggestedNameValues())
+            // A name hint is never worth an error banner: on failure the box
+            // just keeps whatever it already showed.
+            .pipe(catchError(() => EMPTY));
+        }),
+        takeUntilDestroyed(),
+      )
+      .subscribe((res) => {
+        // The user may have started typing while the request was in flight.
+        if (this.datasetNameDirty) return;
+        const suggested = (res.dataset_name || '').trim();
+        if (!suggested) return;
+        this.formValues['dataset_name'] = suggested;
+        this.cdr.markForCheck();
+      });
+  }
+
+  /** The form snapshot sent to ``suggested-name``: declared field values
+   *  only, minus ``dataset_name`` itself (the importer is being asked what
+   *  it would pick, not handed the answer). */
+  private suggestedNameValues(): Record<string, unknown> {
+    const values: Record<string, unknown> = {};
+    for (const field of this.selectedImporter()?.fields || []) {
+      if (field.key === 'dataset_name') continue;
+      const raw = this.formValues[field.key];
+      if (raw === undefined || raw === null || raw === '') continue;
+      values[field.key] = raw;
+    }
+    return values;
+  }
 
   get effectiveSoloMediaType(): string | null {
     return this.importDefaults.effectiveSoloMediaType;
@@ -181,6 +233,11 @@ export class GenericFormPickerComponent {
       }
     }
 
+    // Importers whose defaults already describe a dataset (a preselected
+    // select, a remembered path) get named before the user touches
+    // anything; the rest just get their display name back.
+    this.requestSuggestedDatasetName();
+
     // `open()` is invoked imperatively from the parent's importer-selection
     // handler (a listener bound on a sibling `<vt-source-picker>`), so this
     // component's own OnPush view is not on the ancestor-marked dirty path
@@ -212,7 +269,7 @@ export class GenericFormPickerComponent {
       this.refreshDynamicFieldOptions(field);
     }
     if (changedKey !== 'dataset_name') {
-      this.maybeApplyDerivedDatasetName();
+      this.requestSuggestedDatasetName();
     }
   }
 
@@ -226,39 +283,17 @@ export class GenericFormPickerComponent {
     this.onFieldChanged(key);
   }
 
-  private maybeApplyDerivedDatasetName(): void {
+  /** Ask the importer to name the dataset these form values describe.
+   *
+   *  The suggestion is computed server-side by the importer's
+   *  ``default_display_name``, so it is exactly the name the import would
+   *  fall back to if the box were left blank -- and an importer that maps
+   *  an opaque selection (an id, a saved-query key) onto a human-readable
+   *  label can surface that label here, which no client-side derivation
+   *  could work out.  No-ops once the user has typed a name of their own. */
+  private requestSuggestedDatasetName(): void {
     if (this.datasetNameDirty) return;
-    const derived = this.derivedDatasetName();
-    if (derived) {
-      this.formValues['dataset_name'] = derived;
-    }
-  }
-
-  private derivedDatasetName(): string {
-    const fields = this.selectedImporter()?.fields || [];
-    for (const f of fields) {
-      if (f.key === 'dataset_name') continue;
-      const raw = this.formValues[f.key];
-      if (typeof raw !== 'string' || !raw) continue;
-      if (f.field_type === 'url') {
-        const cleaned = raw.split('?')[0].replace(/\/+$/, '');
-        const tail = cleaned.split('/').pop() || '';
-        if (!tail) continue;
-        const stripped = tail.replace(/\.(?:tar\.gz|tar\.bz2|tar\.xz|tar|zip|rar)$/i, '');
-        return stripped || tail;
-      }
-      if (f.field_type === 'server_path' || f.field_type === 'file') {
-        const basename = raw.split(/[\\/]/).pop() || '';
-        if (!basename) continue;
-        const dot = basename.lastIndexOf('.');
-        return dot > 0 ? basename.slice(0, dot) : basename;
-      }
-      if (f.key === 'path') {
-        const parts = raw.split(/[\\/]/).filter(Boolean);
-        if (parts.length > 0) return parts[parts.length - 1];
-      }
-    }
-    return '';
+    this.suggestedNameRequests.next();
   }
 
   private refreshDynamicFieldOptions(field: ImporterField): void {
@@ -282,6 +317,10 @@ export class GenericFormPickerComponent {
         if (!this.formValues[key] && field.required && !field.allow_free_text && options.length > 0) {
           this.formValues[key] = options[0].value;
         }
+        // Auto-selecting an option is a form change like any other, and it
+        // is exactly the case the importer's own naming exists for: only it
+        // can turn the opaque option value back into a readable label.
+        this.requestSuggestedDatasetName();
       },
       error: (err) => {
         this.dynamicFieldLoading.update((m) => ({ ...m, [key]: false }));
@@ -376,7 +415,7 @@ export class GenericFormPickerComponent {
     if (input.files && input.files.length > 0) {
       this.selectedFile = input.files[0];
       this.formValues[fieldName] = input.files[0].name;
-      this.maybeApplyDerivedDatasetName();
+      this.requestSuggestedDatasetName();
     }
   }
 

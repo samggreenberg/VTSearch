@@ -21,6 +21,7 @@ from typing import Any, Iterator
 
 from vtscore.plugins import FieldOption, PluginBase, PluginField
 
+from .naming import derive_display_name
 from .origin import _dataset_name_field, _field_in_origin, _serialise_origin_value
 
 
@@ -204,13 +205,26 @@ class ImporterBase(PluginBase):
     def default_display_name(self, field_values: dict[str, Any]) -> str:
         """Return the importer-computed default name for a dataset.
 
-        Subclasses override this to derive a sensible default from
-        *field_values* (e.g. the demo importer reads the demo entry's
-        label).  The base implementation just returns :attr:`display_name`.
+        Subclasses override this to derive a name from *field_values* that
+        the generic derivation cannot reach -- most usefully, to turn an
+        opaque internal selection (an id, a saved-query key, a bucket
+        handle) into something human-readable.  The base implementation
+        walks the importer's own :attr:`fields` and derives a name from the
+        first URL / path / upload field that holds a value (see
+        :func:`~vtscore.datasets.importers.base.naming.derive_display_name`),
+        falling back to :attr:`display_name`.
+
+        This runs live while the user fills in the Add-Dataset form: the
+        frontend calls it through ``POST /api/dataset/import/<name>/
+        suggested-name`` on every field change and prefills the Dataset
+        Name box with the result.  Keep it cheap and side-effect free; if
+        it must reach a remote service to resolve a label, cache the
+        lookup, because it is called far more often than :meth:`run`.
+
         The user-typed ``dataset_name`` (when present) takes priority over
         whatever this method returns (see :meth:`resolve_display_name`).
         """
-        return self.display_name
+        return derive_display_name(self.fields, field_values) or self.display_name
 
     def resolve_display_name(self, field_values: dict[str, Any] | None) -> str:
         """Return the human-readable name to use for a dataset loaded with *field_values*.
