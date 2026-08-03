@@ -41,6 +41,44 @@ projection_bp = Blueprint(
 #: projection package on the request path.
 _VALID_SHAPES = ("hex", "square")
 
+#: The coarse phases every projection build walks through, in order:
+#: 1. arranging the items (the UMAP fit), 2. tiling the layout into the pyramid,
+#: 3. naming the regions (signposts).  Reported as ``step``/``total_steps`` on
+#: the build meta so the client draws **one** whole-job bar that fills across the
+#: build instead of three bars that each restart at zero.  The UMAP fit itself is
+#: a single opaque call with no fraction to report (see
+#: :mod:`vtscore.projection.umap_projection`), so phase position is the only
+#: honest "how far along" signal for the longest part of the build.
+_BUILD_STEPS = 3
+
+
+def _build_progress(job) -> dict:
+    """The ``status: building`` meta payload for an in-flight build *job*.
+
+    Carries the within-phase counts **and** the whole-job structure: which of
+    the :data:`_BUILD_STEPS` phases is running, plus an ``overall`` completion
+    fraction stitched from the two so the client's bar advances monotonically
+    across the whole build.  A phase with no countable total (the UMAP fit)
+    contributes its slice only when it ends — the bar parks and pulses inside it
+    rather than pretending to a fraction the fit cannot report.
+    """
+    total_steps = job.total_steps or 0
+    step = job.step or 0
+    within = job.current / job.total if job.total > 0 else 0.0
+    overall = None
+    if total_steps > 0 and step > 0:
+        overall = min(1.0, max(0.0, (step - 1 + within) / total_steps))
+    return {
+        "status": "building",
+        "job_id": job.job_id,
+        "current": job.current,
+        "total": job.total,
+        "message": job.message,
+        "step": step or None,
+        "total_steps": total_steps or None,
+        "overall": overall,
+    }
+
 
 def _shape_for(ctx) -> str:
     """The bin shape this dataset is tiled with, fixed by its media type.
@@ -78,13 +116,7 @@ def _subset_meta(ctx, bin_shape: str) -> dict:
         job = projection_jobs.get(ctx._subset_job_id)
         if job is not None:
             if job.status in ("running", "pending"):
-                return {
-                    "status": "building",
-                    "job_id": job.job_id,
-                    "current": job.current,
-                    "total": job.total,
-                    "message": job.message,
-                }
+                return _build_progress(job)
             if job.status == "error":
                 return {"status": "error", "error": job.error or "projection build failed"}
 
@@ -478,6 +510,7 @@ def _start_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str, *, for
             def _on_progress(status, message, current, total):
                 job.update_progress(current, total, message)
 
+            job.set_phase(1, _BUILD_STEPS, "arranging items")
             proj = fit_projection(
                 mat_copy,
                 ids_copy,
@@ -486,8 +519,9 @@ def _start_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str, *, for
                 compact=compact,
                 on_progress=_on_progress,
             )
-            job.update_progress(0, 1, "building pyramid")
+            job.set_phase(2, _BUILD_STEPS, "building pyramid")
             pyr = build_pyramid(proj, bin_shape=bin_shape)
+            job.set_phase(3, _BUILD_STEPS, "naming regions")
             _prep_signposts_best_effort(ctx, proj, job, subset=False)
             job.update_progress(1, 1, "done")
 
@@ -602,6 +636,7 @@ def _start_subset_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str,
             def _on_progress(status, message, current, total):
                 job.update_progress(current, total, message)
 
+            job.set_phase(1, _BUILD_STEPS, "arranging items")
             proj = fit_projection(
                 mat_copy,
                 ids_copy,
@@ -610,12 +645,13 @@ def _start_subset_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str,
                 compact=compact,
                 on_progress=_on_progress,
             )
-            job.update_progress(0, 1, "building pyramid")
+            job.set_phase(2, _BUILD_STEPS, "building pyramid")
             pyr = build_pyramid(proj, bin_shape=bin_shape)
             # Fresh signs over just this subset: the contrastive keyphrases
             # recompute against the subset's own siblings (better than any
             # filtered dataset-level signs), and the per-media texts were
             # cached at ingest, so this is the cheap half of the pipeline.
+            job.set_phase(3, _BUILD_STEPS, "naming regions")
             _prep_signposts_best_effort(ctx, proj, job, subset=True)
             job.update_progress(1, 1, "done")
 
@@ -776,13 +812,7 @@ def projection_meta():
         job = projection_jobs.get(ctx._full_job_id)
         if job is not None:
             if job.status in ("running", "pending"):
-                return {
-                    "status": "building",
-                    "job_id": job.job_id,
-                    "current": job.current,
-                    "total": job.total,
-                    "message": job.message,
-                }
+                return _build_progress(job)
             if job.status == "error":
                 return {"status": "error", "error": job.error or "projection build failed"}
 

@@ -53,6 +53,11 @@ class AsyncJob:
     current: int = 0
     total: int = 0
     message: str = ""
+    #: Optional multi-phase structure for jobs that walk a fixed sequence of
+    #: steps (see :meth:`set_phase`).  ``0`` means "single-phase job"; pollers
+    #: that render a whole-job bar skip the step decoration then.
+    step: int = 0
+    total_steps: int = 0
     started_at: float = 0.0
     cancel_event: threading.Event = field(default_factory=threading.Event)
     done_event: threading.Event = field(default_factory=threading.Event)
@@ -76,6 +81,22 @@ class AsyncJob:
         """Update progress counters atomically (single writer per job)."""
         self.current = current
         self.total = total
+        if message:
+            self.message = message
+
+    def set_phase(self, step: int, total_steps: int, message: str = "") -> None:
+        """Enter phase *step* of *total_steps*, resetting the within-phase counts.
+
+        A job made of several coarse phases (e.g. the projection build's fit →
+        tile → name-regions) calls this at each boundary so a poller can render
+        **one** whole-job bar instead of three bars that each restart at zero.
+        The within-phase ``current``/``total`` are zeroed because they belong to
+        the phase being left, not the one being entered.
+        """
+        self.step = step
+        self.total_steps = total_steps
+        self.current = 0
+        self.total = 0
         if message:
             self.message = message
 
