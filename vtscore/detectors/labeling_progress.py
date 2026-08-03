@@ -53,6 +53,18 @@ _cache_good_ids: set[int] = set()
 _cache_bad_ids: set[int] = set()
 _cache_prev_predictions: Optional[dict[int, int]] = None
 
+# ``(dataset_id, detector_id)`` the caches were built against, or ``None`` when
+# empty.  Both caches are module-level while ``label_history`` lives on the
+# *detector* context, and the active detector is resolved per request from the
+# ``X-Detector-Id`` header - so switching between two already-resident detectors
+# fires no registration hook and used to leave the previous detector's steps in
+# place.  ``_ensure_cache`` would then either return them verbatim (its history
+# being no shorter) or graft the new detector's events onto them: a plotted
+# curve, and a Smart/Stable verdict, belonging to the wrong detector.  Stamping
+# the owner turns that into an ordinary cold rebuild.
+_cache_owner: Optional[tuple[str, str]] = None
+_cache_div_owner: Optional[tuple[str, str]] = None
+
 # ---------------------------------------------------------------------------
 # Diversity replay cache (independent of the model cache)
 # ---------------------------------------------------------------------------
@@ -152,7 +164,7 @@ def _clear_model_cache() -> None:
     would be defeating its own purpose if it also threw away the coverage atlas
     (inclusion-independent, and the single most expensive artifact here).
     """
-    global _cache_inclusion, _cache_prev_predictions
+    global _cache_inclusion, _cache_prev_predictions, _cache_owner
     global _cache_monitored_ids, _cache_monitored_X, _cache_monitored_set
     with _progress_lock:
         _cached_steps.clear()
@@ -160,6 +172,7 @@ def _clear_model_cache() -> None:
         _cache_bad_ids.clear()
         _cache_prev_predictions = None
         _cache_inclusion = None
+        _cache_owner = None
         # The monitored pool is derived from ``clips_dict``; medias may have
         # changed under us, so drop it alongside everything else.
         _cache_monitored_ids = None
@@ -170,68 +183,49 @@ def _clear_model_cache() -> None:
 
 def clear_diversity_cache() -> None:
     """Drop the coverage atlas and the replayed per-step diversity series."""
-    global _cache_coverage_atlas
+    global _cache_coverage_atlas, _cache_div_owner
     with _progress_lock:
         _cache_coverage_atlas = None
         _cached_diversity.clear()
         _cache_div_good_ids.clear()
         _cache_div_bad_ids.clear()
+        _cache_div_owner = None
 
 
-def invalidate_progress_cache_from(media_id: int) -> None:
-    """Truncate the progress cache to just before *media_id* first appeared.
+def _current_owner() -> tuple[str, str]:
+    """Return the active ``(dataset_id, detector_id)``, or ``("", "")``.
 
-    Called when a vote switches polarity (good→bad or bad→good).  Steps
-    before the media was first labeled are still valid - their models never
-    included this media in training data.  Only steps from the first
-    appearance onward are discarded so they can be retrained and their
-    stability/evaluation metrics recomputed.
-
-    The diversity cache is deliberately left alone: coverage evidence is
-    polarity-agnostic (``CoverageAtlas._covered`` tests ``n_pos + n_neg > 0``),
-    so moving a label between the two channels cannot change any step's
-    ``coverage_level()``.  The old code rewound and replayed the atlas here for
-    a result that was provably identical.
+    Read *without* acquiring ``_state_lock``, for the same reason as
+    :func:`_active_context_atlas`: this runs under ``_progress_lock``, which
+    forbids taking ``_state_lock`` while held.  Both getters are lock-free
+    reads of a thread-local / request-scoped slot.  In a background job
+    ``JobManager`` binds both contexts on the worker thread, so this resolves
+    the job's own pair rather than whatever request last ran.
     """
-    global _cache_prev_predictions, _status_snapshot
-    with _progress_lock:
-        # Find the first cached step that includes media_id in its training data.
-        truncate_at = None
-        for i, step in enumerate(_cached_steps):
-            if media_id in step["good_ids"] or media_id in step["bad_ids"]:
-                truncate_at = i
-                break
+    try:
+        from vtscore.state.core import get_active_context, get_active_detector_context  # noqa: PLC0415
 
-        if truncate_at is None:
-            # Media never appeared in any cached step.  Still need to clear
-            # live models - they may have been injected by learned-sort
-            # without building the progress cache.
-            _live_models.clear()
-            return
+        return (get_active_context().dataset_id, get_active_detector_context().detector_id)
+    except Exception:
+        return ("", "")
 
-        # Keep steps [0, truncate_at); discard the rest.
-        del _cached_steps[truncate_at:]
 
-        # Restore the running ID sets to the surviving prefix's final state.
-        _cache_good_ids.clear()
-        _cache_bad_ids.clear()
-        if _cached_steps:
-            last = _cached_steps[-1]
-            _cache_good_ids.update(last["good_ids"])
-            _cache_bad_ids.update(last["bad_ids"])
-        else:
-            # truncate_at == 0: media was present from the very first step, so
-            # the whole prefix is gone and no label survives.  No cached step
-            # remains to source the Smart / Stable indicators from, so drop the
-            # stale snapshot (parity with the old step-0 full-clear path).
-            _status_snapshot = None
+def _discard_if_not_ours(owner: Optional[tuple[str, str]], history_len: int, *, diversity: bool) -> None:
+    """Drop a cache that belongs to another detector, or to a longer history.
 
-        # Reset the stability prediction chain - it will restart from the
-        # truncation point when _ensure_cache replays the remaining history.
-        _cache_prev_predictions = None
-
-        # Clear live models - some may have been trained with the old label.
-        _live_models.clear()
+    Two ways a cache stops describing the current state without any explicit
+    invalidation: the active detector changed under it (see :data:`_cache_owner`),
+    or ``label_history`` got *shorter* than the cache - which happens when a
+    failed label-sync rolls the history back to a saved prefix.  In both cases
+    the incremental "resume from ``len(cache)``" rule would silently serve or
+    extend the wrong series, so the cache is discarded and rebuilt.
+    """
+    current = _current_owner()
+    cached_len = len(_cached_diversity) if diversity else len(_cached_steps)
+    if owner is not None and owner != current:
+        clear_diversity_cache() if diversity else _clear_model_cache()
+    elif cached_len > history_len:
+        clear_diversity_cache() if diversity else _clear_model_cache()
 
 
 def inject_live_model(
@@ -326,7 +320,10 @@ def _ensure_diversity_cache(
     Deliberately independent of the model cache: the two used to share a walk,
     which meant a "diverse" plot trained an MLP per label step it never read.
     """
-    global _cache_coverage_atlas
+    global _cache_coverage_atlas, _cache_div_owner
+
+    _discard_if_not_ours(_cache_div_owner, len(label_history), diversity=True)
+    _cache_div_owner = _current_owner()
 
     if _cache_coverage_atlas is None and not _cached_diversity:
         _cache_coverage_atlas = _build_coverage_atlas(clips_dict)
@@ -620,16 +617,27 @@ def _ensure_cache(
     slow thing in the request, and without this the caller's progress bar sat
     at 0 % for its entire duration.
 
+    Nothing invalidates this cache on a vote, because ``label_history`` is
+    append-only: step *t* is a deterministic function of ``label_history[:t+1]``,
+    and appending an event cannot change any earlier prefix.  Changing your mind
+    about an item you voted on 200 clicks ago therefore costs one new step, not
+    a rebuild.  (It used to truncate back to that item's first appearance - which
+    also *broke* the Stable series, since restarting the prediction chain drops
+    the flip count at the resumption point.)
+
     Does **not** touch the coverage atlas or the diversity series - see
     :func:`_ensure_diversity_cache`.
     """
-    global _cache_inclusion
+    global _cache_inclusion, _cache_owner
+
+    _discard_if_not_ours(_cache_owner, len(label_history), diversity=False)
 
     if _cache_inclusion is not None and _cache_inclusion != inclusion_value:
         clear_progress_cache()
 
     if _cache_inclusion is None:
         _cache_inclusion = inclusion_value
+    _cache_owner = _current_owner()
 
     start = len(_cached_steps)
     total = len(label_history)
@@ -1148,11 +1156,19 @@ def cached_indicator_history(
 ) -> tuple[list[dict[str, Any]], bool]:
     """Read *metric*'s per-step history **without advancing the cache**.
 
-    Returns ``(history, complete)``.  ``complete`` is ``False`` - with an empty
-    history - whenever the per-step cache does not already cover the whole of
-    *label_history*; the caller is expected to fall back to the async
-    ``/api/eval/train-and-score`` job, which does the same work on a background
-    thread with progress and cancellation.
+    Returns ``(history, complete)``.  ``history`` is *whatever is cached right
+    now*, even when that is only a prefix of *label_history*; ``complete`` says
+    whether it covers the whole of it.  On ``complete=False`` the caller should
+    render what it got and then fall back to the async
+    ``/api/eval/train-and-score`` job to fill in the rest.
+
+    Returning the prefix is the point.  The Smart and Stable indicators are
+    computed from exactly these cached steps (the last ten of them), so a panel
+    showing a red/yellow/green light *is* a panel whose curve is already partly
+    computed.  Refusing to hand that curve over - the old behaviour returned an
+    empty list whenever the cache was behind by even one vote, which it is right
+    after every vote - meant the user waited for a full recompute to see data the
+    light had already been derived from.
 
     This is the counterpart to the ``calculate_*_over_time`` functions, which
     call :func:`_ensure_cache` and therefore retrain an MLP per uncached step
@@ -1160,37 +1176,42 @@ def cached_indicator_history(
     ``/api/labeling-status`` refuses to do (issue #2397), so the read path that
     backs the progress-plot modal must not do it either.
 
-    When the cache *is* complete every branch is cheap: ``smart`` runs forward
-    passes of the cached models over the (small) labeled set, and ``stable`` /
-    ``diverse`` are plain reads of values recorded during the cache build.
+    Every branch is cheap: ``smart`` runs forward passes of the cached models
+    over the (small) labeled set, and ``stable`` / ``diverse`` are plain reads of
+    values recorded during the walk.
 
     ``diverse`` reads a *different* cache from the other two (see
-    :func:`_ensure_diversity_cache`), so its freshness is checked separately;
-    nothing advances it in the background, so it is normally cold until the
+    :func:`_ensure_diversity_cache`), so its coverage is checked separately;
+    nothing advances it in the background, so it is normally empty until the
     async job builds it once.
     """
     # Reading the cache needs ``_progress_lock``, but a background worker holds
     # that lock for the *entire* duration of a cache build - which is exactly
     # the multi-second work this function exists to avoid waiting on.  Blocking
     # here would reintroduce the hang whenever the click lands mid-refresh, so
-    # give up quickly and report the cache as unavailable: the caller falls back
-    # to the async job, which is the right answer in that state anyway.
+    # give up quickly and report nothing cached: the caller falls back to the
+    # async job, which is the right answer in that state anyway.
     if not _progress_lock.acquire(timeout=_CACHE_READ_LOCK_TIMEOUT):
         return [], False
     try:
-        if metric == "diverse":
-            if len(_cached_diversity) < len(label_history):
-                return [], False
-            return [point for point in _cached_diversity if point is not None], True
+        if _cache_owner is not None and _cache_owner != _current_owner():
+            # Another detector's steps; not ours to serve. The next walk drops them.
+            return [], False
 
-        if not is_status_cache_fresh(label_history, inclusion_value):
+        if metric == "diverse":
+            data = [point for point in _cached_diversity if point is not None]
+            return data, len(_cached_diversity) >= len(label_history)
+
+        complete = is_status_cache_fresh(label_history, inclusion_value)
+        if _cache_inclusion is not None and _cache_inclusion != inclusion_value:
+            # Cutoffs (and so every plotted value) belong to another inclusion.
             return [], False
 
         if metric == "smart":
             data = _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
         else:
             data = [step["stability"] for step in _cached_steps if step["stability"] is not None]
-        return data, True
+        return data, complete
     finally:
         _progress_lock.release()
 
@@ -1201,10 +1222,13 @@ def is_status_cache_fresh(label_history: list[tuple[int, str, float]], inclusion
     A fresh cache means ``compute_labeling_status`` will not retrain any model,
     so the route can compute the status inline instead of deferring to a
     background worker.  A mismatched ``inclusion_value`` counts as not-fresh
-    because :func:`_ensure_cache` would rebuild the cache from scratch.
+    because :func:`_ensure_cache` would rebuild the cache from scratch, and so
+    does a cache belonging to another detector.
     """
     with _progress_lock:
         if _cache_inclusion is not None and _cache_inclusion != inclusion_value:
+            return False
+        if _cache_owner is not None and _cache_owner != _current_owner():
             return False
         return len(_cached_steps) >= len(label_history)
 

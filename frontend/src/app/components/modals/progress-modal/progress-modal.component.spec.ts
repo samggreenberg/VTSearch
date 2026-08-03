@@ -249,6 +249,50 @@ describe('ProgressModalComponent', () => {
     }
   });
 
+  it('paints the cached prefix immediately before handing off to the job', async () => {
+    // An incomplete cache still carries the steps the Smart/Stable light was
+    // derived from. Withholding them made the user wait out a full recompute to
+    // see data the panel had already used.
+    vi.useFakeTimers();
+    try {
+      fixture.componentRef.setInput('metric', 'smart');
+      TestBed.tick();
+
+      httpMock.expectOne(isHistory).flush({
+        metric: 'smart',
+        history: [
+          { num_labels: 5, error_cost: 0.9 },
+          { num_labels: 6, error_cost: 0.8 },
+        ],
+        complete: false,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Drawn right away, and the job is running to fill in the rest.
+      expect(component.partialData.length).toBe(2);
+      expect(component.runningJob).toBe(true);
+      expect(component.analyzing).toBe(true);
+
+      httpMock.expectOne('/api/eval/train-and-score').flush({
+        job_id: 'j8',
+        status: 'done',
+        metric: 'smart',
+        error_cost: [
+          { num_labels: 5, error_cost: 0.9 },
+          { num_labels: 6, error_cost: 0.8 },
+          { num_labels: 7, error_cost: 0.7 },
+        ],
+      });
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(component.analyzing).toBe(false);
+      expect(component.chartData.length).toBe(3);
+      expect(component.partialData.length).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('falls back to the async job when the cached read fails', async () => {
     // A failed cached read is recoverable: the job recomputes the series from
     // scratch, so the modal must not settle on the "no history" empty state.

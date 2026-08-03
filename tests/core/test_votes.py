@@ -9,7 +9,6 @@ from vtscore.detectors.labeling_progress import (
     _live_models,
     calculate_diversity_level_over_time,
     inject_live_model,
-    invalidate_progress_cache_from,
 )
 from vtscore.embedding.media_vectors import media_embedding
 from vtsearch.state import (
@@ -520,30 +519,45 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         resp = client.post("/api/labeling-progress")
         assert resp.status_code == 200
 
-    def test_invalidate_noop_when_media_not_in_cache(self, client):
-        """invalidate_progress_cache_from should be a no-op for unknown media."""
-        client.post("/api/medias/1/vote", json={"target": "good"})
-        client.post("/api/medias/2/vote", json={"target": "bad"})
+    def test_changing_your_mind_keeps_every_cached_step(self, client):
+        """A re-vote appends to history; it does not rewrite it.
+
+        Every cached step is a function of the label-history prefix, so a
+        polarity flip 200 clicks later invalidates nothing.  This used to
+        truncate back to the flipped media's first appearance and retrain
+        everything after it - a full rebuild triggered by changing your mind
+        about an early vote.
+        """
+        for i in range(1, 6):
+            client.post(f"/api/medias/{i}/vote", json={"target": "good"})
+        for i in range(6, 11):
+            client.post(f"/api/medias/{i}/vote", json={"target": "bad"})
         _ensure_cache(medias, label_history, 0)
-        assert len(_cached_steps) == 2
+        assert len(_cached_steps) == 10
+        models_before = [s["model"] for s in _cached_steps]
 
-        # Invalidate a media that never appeared in the cache
-        invalidate_progress_cache_from(999)
-        assert len(_cached_steps) == 2, "Cache should not change for unknown media"
+        # Flip media 1 - the very first thing voted on.
+        client.post("/api/medias/1/vote", json={"target": "bad"})
+
+        assert len(_cached_steps) == 10, "the flip must not discard cached steps"
+        assert [s["model"] for s in _cached_steps] == models_before
+
+        # The new event costs exactly one more step.
+        _ensure_cache(medias, label_history, 0)
+        assert len(_cached_steps) == 11
 
 
-class TestProgressAtlasClonesAndSurvivesInvalidate:
-    """The diversity replay clones the dataset context's atlas, and a polarity
-    flip leaves that replay entirely alone.
+class TestProgressAtlasClonesAndSurvivesVotes:
+    """The diversity replay clones the dataset context's atlas, and votes leave
+    that replay entirely alone.
 
     Building the coverage structure is hierarchical k-means over every
     embedding, so it must never be re-fit on a vote.  ``_build_coverage_atlas``
-    clones the context atlas (shared node table, fresh label overlay), and
-    because coverage evidence is polarity-agnostic
-    (``CoverageAtlas._covered`` tests ``n_pos + n_neg > 0``) a good↔bad switch
-    cannot change any step's ``coverage_level()`` - so
-    ``invalidate_progress_cache_from`` touches only the *model* cache and leaves
-    the atlas and the replayed series untouched.
+    clones the context atlas (shared node table, fresh label overlay), and no
+    vote invalidates anything: ``label_history`` is append-only, and coverage
+    evidence is polarity-agnostic besides (``CoverageAtlas._covered`` tests
+    ``n_pos + n_neg > 0``), so a good↔bad switch cannot change any step's
+    ``coverage_level()``.
 
     The atlas is also no longer built by the model walk at all: asking for the
     Smart or Stable curve used to pay for it, which on a dataset past
@@ -585,7 +599,7 @@ class TestProgressAtlasClonesAndSurvivesInvalidate:
         assert _cached_steps, "the model walk should still have run"
         assert labeling_progress._cache_coverage_atlas is None
 
-    def test_partial_invalidate_preserves_the_diversity_replay(self, client):
+    def test_a_polarity_flip_preserves_both_caches(self, client):
         build_coverage_atlas()
         # Steps: 0=(3,good), 1=(4,bad), 2=(1,good), 3=(2,bad); media 1 at step 2.
         self._vote(client, [(3, "good"), (4, "bad"), (1, "good"), (2, "bad")])
@@ -596,16 +610,15 @@ class TestProgressAtlasClonesAndSurvivesInvalidate:
         assert atlas_before.labeled_ids == {1, 2, 3, 4}
         series_before = list(labeling_progress._cached_diversity)
 
-        # Switch media 1 (good→bad): model steps 2-3 are discarded...
+        # Switch media 1 (good→bad). This appends an event; it rewrites nothing,
+        # so every model step and every diversity point survives.
         self._vote(client, [(1, "bad")])
-        assert len(_cached_steps) == 2
-
-        # ...but coverage is polarity-agnostic, so nothing about the replay moves.
+        assert len(_cached_steps) == 4
         assert labeling_progress._cache_coverage_atlas is atlas_before
         assert atlas_before.labeled_ids == {1, 2, 3, 4}
         assert labeling_progress._cached_diversity == series_before
 
-    def test_step0_invalidate_preserves_the_diversity_replay(self, client):
+    def test_flipping_the_very_first_vote_preserves_both_caches(self, client):
         build_coverage_atlas()
         self._vote(client, [(1, "good"), (2, "bad")])
         _ensure_cache(medias, label_history, 0)
@@ -613,9 +626,10 @@ class TestProgressAtlasClonesAndSurvivesInvalidate:
         atlas_before = labeling_progress._cache_coverage_atlas
         assert atlas_before is not None
 
-        # Switch media 1, present from step 0: the whole model prefix goes.
+        # Media 1 is present from step 0 - the worst case for the old truncation,
+        # which discarded the entire cache and retrained from scratch.
         self._vote(client, [(1, "bad")])
-        assert len(_cached_steps) == 0
+        assert len(_cached_steps) == 2
         assert labeling_progress._cache_coverage_atlas is atlas_before
         assert atlas_before.labeled_ids == {1, 2}
 

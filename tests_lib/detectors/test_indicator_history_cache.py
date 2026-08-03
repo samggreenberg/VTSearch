@@ -12,6 +12,8 @@ These tests pin the pieces that fixed it:
 
 * :func:`cached_indicator_history` reads the cache and **never advances it**,
   reporting ``complete=False`` instead, and never blocks on ``_progress_lock``.
+  It hands over whatever prefix it has - the same steps the Smart/Stable lights
+  were derived from - rather than withholding it until the cache is complete.
 * The stability pass's monitored pool is materialised once per cache lifetime
   rather than once per label step.
 * The fallback coverage-atlas build applies the same depth cap as every other
@@ -21,6 +23,8 @@ These tests pin the pieces that fixed it:
 * An inclusion change re-derives cutoffs from the cached models instead of
   discarding them.
 * The walk reports per-step progress and can publish a partial series.
+* Votes never invalidate anything (``label_history`` is append-only), and the
+  caches are stamped with the detector they belong to.
 """
 
 from __future__ import annotations
@@ -108,7 +112,11 @@ class TestCachedIndicatorHistory:
         assert len(data) > 0
 
     def test_partially_advanced_cache_reports_incomplete(self):
-        """A cache covering only a prefix must not yield a truncated plot."""
+        """A prefix is served, but flagged so the caller tops it up.
+
+        See ``TestPrefixIsServedNotWithheld`` for why the prefix is handed over
+        rather than withheld.
+        """
         clips = _clips(60)
         good, bad = _votes(8)
         lp.clear_progress_cache()
@@ -118,7 +126,7 @@ class TestCachedIndicatorHistory:
         data, complete = lp.cached_indicator_history("smart", clips, _history(8), good, bad, 0)
 
         assert complete is False
-        assert data == []
+        assert 0 < len(data) < 8
 
     def test_inclusion_change_reports_incomplete(self):
         """A cache built for another inclusion value would be rebuilt on read."""
@@ -358,3 +366,162 @@ class TestCacheWalkProgress:
 
         assert lengths == sorted(lengths)
         assert lengths[-1] == len(final)
+
+
+class TestPrefixIsServedNotWithheld:
+    """A behind cache still hands over what it has.
+
+    The Smart and Stable lights are computed from these very steps, so a panel
+    showing a red/yellow/green verdict is a panel whose curve is already partly
+    computed.  Returning an empty list until the cache covered the *whole*
+    history - which it stops doing the instant the next vote lands - made the
+    user wait out a full recompute to see data the light was derived from.
+    """
+
+    def test_behind_cache_returns_its_prefix(self):
+        clips = _clips(60)
+        good, bad = _votes(8)
+        lp.clear_progress_cache()
+
+        # Background worker got as far as 4 votes; 8 have now landed.
+        lp.calculate_error_cost_over_time(clips, _history(4), good, bad, 0)
+
+        for metric in ("smart", "stable"):
+            data, complete = lp.cached_indicator_history(metric, clips, _history(8), good, bad, 0)
+            assert complete is False, metric
+            assert len(data) > 0, metric
+
+    def test_prefix_matches_the_first_points_of_the_finished_series(self):
+        """The prefix must be a true prefix, not a differently-computed stub."""
+        clips = _clips(60)
+        good, bad = _votes(8)
+        lp.clear_progress_cache()
+        lp.calculate_error_cost_over_time(clips, _history(4), good, bad, 0)
+        partial, _ = lp.cached_indicator_history("smart", clips, _history(8), good, bad, 0)
+
+        full = lp.calculate_error_cost_over_time(clips, _history(8), good, bad, 0)
+
+        assert full[: len(partial)] == partial
+
+    def test_a_cold_cache_still_returns_nothing(self):
+        clips = _clips(60)
+        good, bad = _votes(8)
+        lp.clear_progress_cache()
+
+        data, complete = lp.cached_indicator_history("smart", clips, _history(8), good, bad, 0)
+
+        assert complete is False
+        assert data == []
+        assert lp._cached_steps == []
+
+    def test_another_inclusion_value_withholds_the_prefix(self):
+        """Cutoffs - and so every plotted value - belong to one inclusion."""
+        clips = _clips(60)
+        good, bad = _votes(8)
+        lp.clear_progress_cache()
+        lp.calculate_error_cost_over_time(clips, _history(4), good, bad, 0)
+
+        data, complete = lp.cached_indicator_history("smart", clips, _history(8), good, bad, 5)
+
+        assert complete is False
+        assert data == []
+
+
+class TestCacheOwnership:
+    """The caches are module-level; ``label_history`` is per-detector.
+
+    The active detector is resolved per request from a header, so switching
+    between two already-resident detectors fires no registration hook. Without
+    an owner stamp the previous detector's steps stayed put, and the resume-from-
+    ``len(cache)`` rule would serve them verbatim or graft the new detector's
+    events onto them.
+    """
+
+    def test_a_detector_switch_discards_the_other_detector_s_steps(self, monkeypatch):
+        clips = _clips(60)
+        good, bad = _votes(8)
+        lp.clear_progress_cache()
+
+        monkeypatch.setattr(lp, "_current_owner", lambda: ("ds", "detector-a"))
+        lp.calculate_error_cost_over_time(clips, _history(8), good, bad, 0)
+        assert len(lp._cached_steps) == 8
+
+        # Same dataset, different detector, and a *shorter* history - the case
+        # the old code returned early on, serving detector A's curve for B.
+        monkeypatch.setattr(lp, "_current_owner", lambda: ("ds", "detector-b"))
+        data, complete = lp.cached_indicator_history("smart", clips, _history(4), good, bad, 0)
+        assert (data, complete) == ([], False)
+        assert lp.is_status_cache_fresh(_history(4), 0) is False
+
+        lp.calculate_error_cost_over_time(clips, _history(4), good, bad, 0)
+        assert len(lp._cached_steps) == 4
+
+    def test_a_shrinking_history_discards_the_cache(self, monkeypatch):
+        """A failed label-sync rolls ``label_history`` back to a saved prefix."""
+        clips = _clips(60)
+        good, bad = _votes(8)
+        lp.clear_progress_cache()
+        monkeypatch.setattr(lp, "_current_owner", lambda: ("ds", "det"))
+        lp.calculate_error_cost_over_time(clips, _history(8), good, bad, 0)
+        assert len(lp._cached_steps) == 8
+
+        lp.calculate_error_cost_over_time(clips, _history(3), good, bad, 0)
+
+        assert len(lp._cached_steps) == 3
+
+    def test_the_diversity_cache_is_owned_too(self, monkeypatch):
+        clips = _clips(60)
+        lp.clear_progress_cache()
+        monkeypatch.setattr(lp, "_current_owner", lambda: ("ds", "detector-a"))
+        lp.calculate_diversity_level_over_time(clips, _history(8))
+        assert len(lp._cached_diversity) == 8
+
+        monkeypatch.setattr(lp, "_current_owner", lambda: ("ds", "detector-b"))
+        lp.calculate_diversity_level_over_time(clips, _history(4))
+
+        assert len(lp._cached_diversity) == 4
+
+
+class TestAppendOnlyHistoryNeedsNoInvalidation:
+    """Changing your mind costs one step, not a rebuild.
+
+    Every cached step is a deterministic function of ``label_history[:t+1]``, and
+    a re-vote *appends*.  The old code truncated back to the flipped media's
+    first appearance, which retrained everything after it and - because it reset
+    the prediction chain - also dropped a flip count from the Stable series that
+    a fresh replay would have had.
+    """
+
+    def _flip_history(self, n: int) -> list[tuple[int, str, float]]:
+        # Media 2 is first labeled at step 2; flip it after n steps.
+        return _history(n) + [(2, "bad", 99.0)]
+
+    def test_incremental_matches_a_cold_rebuild_exactly(self):
+        clips = _clips(200)
+        good, bad = _votes(10)
+        flipped = self._flip_history(10)
+
+        lp.clear_progress_cache()
+        lp.calculate_error_cost_over_time(clips, _history(10), good, bad, 0)
+        incremental = lp.calculate_error_cost_over_time(clips, flipped, good, bad, 0)
+        incremental_stability = lp.calculate_prediction_stability_over_time(clips, flipped, 0)
+
+        lp.clear_progress_cache()
+        cold = lp.calculate_error_cost_over_time(clips, flipped, good, bad, 0)
+        cold_stability = lp.calculate_prediction_stability_over_time(clips, flipped, 0)
+
+        assert incremental == cold
+        assert incremental_stability == cold_stability
+
+    def test_the_flip_costs_exactly_one_new_step(self):
+        clips = _clips(200)
+        good, bad = _votes(10)
+        lp.clear_progress_cache()
+        lp.calculate_error_cost_over_time(clips, _history(10), good, bad, 0)
+        models_before = [step["model"] for step in lp._cached_steps]
+
+        lp.calculate_error_cost_over_time(clips, self._flip_history(10), good, bad, 0)
+
+        assert len(lp._cached_steps) == 11
+        # Identity: the surviving steps were not retrained.
+        assert [s["model"] for s in lp._cached_steps[:10]] == models_before

@@ -88,8 +88,12 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
           // `complete: false` means the per-step cache is behind the label
           // history. The endpoint deliberately does not advance it (that build
           // is what used to hang this modal for tens of seconds), so hand off
-          // to the background job instead of rendering a truncated series.
+          // to the background job — but paint whatever it *did* have first.
+          // Those cached steps are the same ones the Smart/Stable light was
+          // derived from, so there is no reason to make the user wait for a
+          // full recompute before seeing them.
           if (!res.complete) {
+            this.applyPartial(res.history);
             this.runAnalysis();
             return;
           }

@@ -664,27 +664,24 @@ class TestStateProgressLockOrder:
         monkeypatch.setattr(_progress_mod, attr, wrapper)
         return captured
 
-    def test_set_vote_releases_state_lock_before_progress_invalidate(self, monkeypatch):
-        held = self._patch_capture(monkeypatch, "invalidate_progress_cache_from")
-        from vtsearch.state import set_vote
+    def test_votes_never_touch_the_progress_cache(self, monkeypatch):
+        """A vote takes no progress-cache lock at all, so it cannot order badly.
 
-        # First vote: none→good, no invalidation (old == "none").
+        ``label_history`` is append-only, so every cached step stays valid when
+        a vote lands; there is nothing to invalidate.  The lock-ordering hazard
+        this class guards is therefore *absent by construction* on the vote
+        path - which is stronger than ordering it correctly.
+        """
+        cleared = self._patch_capture(monkeypatch, "clear_progress_cache")
+        from vtsearch.state import set_vote, toggle_vote
+
         set_vote(1, "good")
-        # Second vote: good→bad, triggers invalidation (old == "good").
-        set_vote(1, "bad")
-        assert held, "invalidate_progress_cache_from was never called on good→bad"
-        assert held == [False] * len(held), f"_state_lock held during progress invalidate: {held}"
-
-    def test_toggle_vote_releases_state_lock_before_progress_invalidate(self, monkeypatch):
-        held = self._patch_capture(monkeypatch, "invalidate_progress_cache_from")
-        from vtsearch.state import toggle_vote
-
-        # First toggle: none→good (no invalidate).
+        set_vote(1, "bad")  # polarity flip
+        set_vote(1, "none")  # un-vote
         toggle_vote(2, "good")
-        # Second toggle: good→none (triggers invalidate).
-        toggle_vote(2, "good")
-        assert held, "invalidate_progress_cache_from was never called on toggle-off"
-        assert held == [False] * len(held), f"_state_lock held during progress invalidate: {held}"
+        toggle_vote(2, "good")  # toggle off
+
+        assert cleared == [], f"a vote reached the progress cache: {cleared}"
 
     def test_clear_votes_releases_state_lock_before_progress_clear(self, monkeypatch):
         held = self._patch_capture(monkeypatch, "clear_progress_cache")

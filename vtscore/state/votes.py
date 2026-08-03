@@ -401,20 +401,6 @@ def _set_vote_locked(
     return (old, target, click_time)
 
 
-def _needs_progress_invalidate(old_label: str, new_label: str) -> bool:
-    """Whether an ``old_label → new_label`` transition requires a progress-cache invalidate.
-
-    Cached models that included this media are stale on ANY training-set
-    membership change for it.  The old ``toggle_vote`` only invalidated on
-    polarity flips, which left the cache stale on good→none / bad→none.  The
-    rule is now: invalidate iff the media was previously labeled *and* the
-    new label is different (idempotent re-applies - including a re-vote with
-    a new region box - do not invalidate, matching the pre-M1 behaviour
-    where the idempotent path returned early before the invalidate site).
-    """
-    return old_label != "none" and old_label != new_label
-
-
 def _mark_verified_if_find_mode(ctx: Any, media_id: int, new_label: str) -> None:
     """In Find mode, a manual single-item vote *verifies* the item.
 
@@ -478,14 +464,11 @@ def set_vote(
     with _state_lock:
         result = _set_vote_locked(media_id, target, region_box=region_box, count_streak=count_streak)
         _mark_verified_if_find_mode(get_active_detector_context(), media_id, result[1])
-    # Progress-cache invalidation runs *after* ``_state_lock`` is released so
-    # we never establish a ``_state_lock → _progress_lock`` ordering across
-    # the two modules (audit M1).
-    old_label, new_label, _click_time = result
-    if _needs_progress_invalidate(old_label, new_label):
-        from vtscore.detectors.labeling_progress import invalidate_progress_cache_from
-
-        invalidate_progress_cache_from(media_id)
+    # No progress-cache invalidation: ``label_history`` is append-only, so every
+    # already-cached step is still exactly what a fresh replay of the (unchanged)
+    # prefix would produce.  Changing your mind about an item appends a *new*
+    # event; it does not rewrite the past.  See the note on
+    # ``labeling_progress._ensure_cache``.
     return result
 
 
@@ -526,11 +509,6 @@ def toggle_vote(
             region_box=region_box if target == "good" else None,
         )
         _mark_verified_if_find_mode(ctx, media_id, new)
-    # See the lock-ordering note on :func:`set_vote`.
-    if _needs_progress_invalidate(old, new):
-        from vtscore.detectors.labeling_progress import invalidate_progress_cache_from
-
-        invalidate_progress_cache_from(media_id)
 
 
 def apply_label(
