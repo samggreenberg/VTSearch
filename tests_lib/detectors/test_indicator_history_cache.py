@@ -61,7 +61,7 @@ class TestCachedIndicatorHistory:
         # No steps were built: the cache is exactly as cold as we left it.
         assert lp._cached_steps == []
 
-    def test_warm_cache_returns_series_for_every_metric(self):
+    def test_warm_cache_returns_series_for_the_model_metrics(self):
         clips = _clips(60)
         history = _history(8)
         good, bad = _votes(8)
@@ -70,10 +70,37 @@ class TestCachedIndicatorHistory:
         # Advance the cache the way the background worker does.
         lp.calculate_error_cost_over_time(clips, history, good, bad, 0)
 
-        for metric in ("smart", "stable", "diverse"):
+        for metric in ("smart", "stable"):
             data, complete = lp.cached_indicator_history(metric, clips, history, good, bad, 0)
             assert complete is True, metric
             assert len(data) > 0, metric
+
+    def test_model_walk_does_not_build_the_diversity_series(self):
+        """The two caches are independent, so neither funds the other's cost.
+
+        Advancing the model cache must not build a coverage atlas (a
+        hierarchical k-means over every embedding, and the dominant cost of the
+        old shared walk), and building the diversity series must not train a
+        single model.
+        """
+        clips = _clips(60)
+        history = _history(8)
+        good, bad = _votes(8)
+        lp.clear_progress_cache()
+
+        lp.calculate_error_cost_over_time(clips, history, good, bad, 0)
+        assert lp._cache_coverage_atlas is None
+        assert lp._cached_diversity == []
+        data, complete = lp.cached_indicator_history("diverse", clips, history, good, bad, 0)
+        assert complete is False
+        assert data == []
+
+        lp.clear_progress_cache()
+        lp.calculate_diversity_level_over_time(clips, history)
+        assert lp._cached_steps == []
+        data, complete = lp.cached_indicator_history("diverse", clips, history, good, bad, 0)
+        assert complete is True
+        assert len(data) > 0
 
     def test_partially_advanced_cache_reports_incomplete(self):
         """A cache covering only a prefix must not yield a truncated plot."""

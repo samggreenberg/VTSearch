@@ -806,9 +806,8 @@ class TestLiveModelReuse:
         )
         y = torch.tensor([1.0, 1.0, 0.0]).unsqueeze(1)
         live_model = train_model(X, y, 8)
-        live_threshold = 0.42
 
-        inject_live_model(good, bad, live_model, live_threshold)
+        inject_live_model(good, bad, live_model)
 
         # Now run _ensure_cache with a history that leads to {0,2} good, {1} bad
         history = [
@@ -822,7 +821,11 @@ class TestLiveModelReuse:
         # Step 2 should have used the injected model (same label set)
         step = _cached_steps[2]
         assert step["model"] is live_model, "Should reuse the injected live model"
-        assert step["threshold"] == live_threshold, "Should use the injected threshold"
+        # The cutoff is always derived by the cache itself, never carried in
+        # with the model: a live threshold is cross-calibrated while every
+        # other step's is in-sample, and mixing the two put a step-change into
+        # the plotted curve wherever a live model happened to land.
+        assert step["threshold"] is not None
 
     def test_non_matching_label_set_retrains(self, client):
         """When no live model matches, _ensure_cache should train normally."""
@@ -848,7 +851,7 @@ class TestLiveModelReuse:
         )
         y = torch.tensor([1.0, 1.0, 0.0]).unsqueeze(1)
         live_model = train_model(X, y, 8)
-        inject_live_model(good, bad, live_model, 0.5)
+        inject_live_model(good, bad, live_model)
 
         # Ensure cache for a different label set
         history = [
@@ -875,7 +878,7 @@ class TestLiveModelReuse:
         y = torch.tensor([1.0, 0.0]).unsqueeze(1)
         model = train_model(X, y, 8)
 
-        inject_live_model({0: None}, {1: None}, model, 0.5)
+        inject_live_model({0: None}, {1: None}, model)
         assert len(_live_models) == 1
 
         clear_progress_cache()
@@ -931,7 +934,7 @@ class TestLiveModelReuse:
         X = torch.tensor(np.array(embs), dtype=torch.float32)
         y = torch.tensor([1.0, 1.0, 1.0, 0.0, 0.0]).unsqueeze(1)
         live_model = train_model(X, y, 8)
-        inject_live_model(good, bad, live_model, 0.55)
+        inject_live_model(good, bad, live_model)
 
         _ensure_cache(clips, history, inclusion_value=0)
 
