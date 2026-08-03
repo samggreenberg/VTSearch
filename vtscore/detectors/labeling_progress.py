@@ -587,17 +587,15 @@ def _resolve_step_model(
     if model is None:
         y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
         # Linear (logistic) head, matching the production detector this previews.
-        # Warm-started from the previous step's weights: the two steps differ by
-        # a single label, and a linear head under BCE is a convex objective, so
-        # the optimum is init-independent and starting next to it converges in a
-        # fraction of the epochs a cold Adam run needs.
-        model = train_model(
-            X,
-            y,
-            X.shape[1],
-            hidden_dim=LINEAR_HEAD,
-            init_from=prev["model"] if prev is not None else None,
-        )
+        # This is the walk's remaining cost - ~105 ms per step, essentially all
+        # of it per-epoch autograd/Adam dispatch rather than arithmetic.  Warm-
+        # starting from the previous step's weights was tried and reverted: the
+        # early-stop plateau never fires either way, so it saved no epochs, and
+        # pairing it with a shorter budget left every step inheriting its
+        # predecessor's under-converged weights - measurably *further* from the
+        # converged fit than a cold run.  Cutting this further means changing
+        # what the curve previews, so it stays.
+        model = train_model(X, y, X.shape[1], hidden_dim=LINEAR_HEAD)
 
     threshold = _step_threshold(model, X, y_list, inclusion_value)
     stability = _compute_step_stability(model, threshold, clips_dict, all_media_ids, t, num_labels)

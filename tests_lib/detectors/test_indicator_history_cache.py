@@ -8,7 +8,7 @@ hierarchical-k-means coverage-atlas build - on the calling thread while holding
 work to a background worker (issue #2397), so the cache is behind for most of a
 labeling session and the modal absorbed the whole deferred build.
 
-These tests pin the three pieces that fixed it:
+These tests pin the pieces that fixed it:
 
 * :func:`cached_indicator_history` reads the cache and **never advances it**,
   reporting ``complete=False`` instead, and never blocks on ``_progress_lock``.
@@ -16,6 +16,11 @@ These tests pin the three pieces that fixed it:
   rather than once per label step.
 * The fallback coverage-atlas build applies the same depth cap as every other
   build site.
+* The model walk and the diversity replay are separate caches, so neither
+  metric funds the other's dominant cost.
+* An inclusion change re-derives cutoffs from the cached models instead of
+  discarding them.
+* The walk reports per-step progress and can publish a partial series.
 """
 
 from __future__ import annotations
@@ -23,6 +28,7 @@ from __future__ import annotations
 import threading
 
 import numpy as np
+import pytest
 
 import vtscore.detectors.labeling_progress as lp
 from vtscore.embedding.media_vectors import EMBEDDINGS_KEY
@@ -247,3 +253,109 @@ class TestFallbackAtlasDepth:
         assert atlas is not ctx_atlas
         # Structure shared by reference; only the label overlay is fresh.
         assert atlas.nodes is ctx_atlas.nodes
+
+
+class TestRethresholdOnInclusionChange:
+    """Moving the inclusion slider must not retrain the per-step models.
+
+    Inclusion never reaches ``train_model`` - it is applied afterwards as a pure
+    cutoff - so every cached model is still exactly the model its step would
+    train under the new value.  The slider used to call
+    ``clear_progress_cache()`` anyway, which meant the next metric read retrained
+    one model per label step from scratch.
+    """
+
+    def test_models_survive_and_are_reused(self):
+        clips = _clips(60)
+        history = _history(8)
+        good, bad = _votes(8)
+        lp.clear_progress_cache()
+        lp.calculate_error_cost_over_time(clips, history, good, bad, 0)
+        before = [step["model"] for step in lp._cached_steps if step["model"] is not None]
+        assert before
+
+        lp.rethreshold_progress_cache(5)
+        lp.calculate_error_cost_over_time(clips, history, good, bad, 5)
+
+        after = [step["model"] for step in lp._cached_steps if step["model"] is not None]
+        assert len(after) == len(before)
+        # Identity, not equality: nothing was retrained.
+        assert all(a is b for a, b in zip(after, before, strict=True))
+        assert lp._cache_inclusion == 5
+
+    def test_cutoffs_actually_move(self):
+        """Reusing the models must still re-derive every step's threshold."""
+        clips = _clips(60)
+        history = _history(8)
+        good, bad = _votes(8)
+        lp.clear_progress_cache()
+        lp.calculate_error_cost_over_time(clips, history, good, bad, -8)
+        low = [step["threshold"] for step in lp._cached_steps if step["threshold"] is not None]
+
+        lp.rethreshold_progress_cache(8)
+        lp.calculate_error_cost_over_time(clips, history, good, bad, 8)
+        high = [step["threshold"] for step in lp._cached_steps if step["threshold"] is not None]
+
+        assert low and len(low) == len(high)
+        # A more inclusive setting cannot raise the bar on any step.
+        assert all(h <= pytest.approx(low_t, abs=1e-6) for h, low_t in zip(high, low, strict=True))
+        assert any(h < low_t for h, low_t in zip(high, low, strict=True))
+
+    def test_the_expensive_atlas_is_not_dropped(self):
+        """The coverage atlas is inclusion-independent, so it must survive."""
+        clips = _clips(60)
+        history = _history(8)
+        lp.clear_progress_cache()
+        lp.calculate_diversity_level_over_time(clips, history)
+        lp.calculate_error_cost_over_time(clips, history, *_votes(8), 0)
+        atlas = lp._cache_coverage_atlas
+        assert atlas is not None
+
+        lp.rethreshold_progress_cache(3)
+
+        assert lp._cache_coverage_atlas is atlas
+        assert len(lp._cached_diversity) == len(history)
+
+
+class TestCacheWalkProgress:
+    """The walk is the whole runtime of the eval job, so it must report progress.
+
+    It used to run between a single 0/N and a single N/N update, leaving the
+    modal's bar pinned at 0 % for the entire wait.
+    """
+
+    def test_ensure_cache_reports_every_step(self):
+        clips = _clips(60)
+        history = _history(8)
+        lp.clear_progress_cache()
+        seen: list[tuple[int, int]] = []
+
+        lp.calculate_error_cost_over_time(clips, history, *_votes(8), 0, on_step=lambda d, t: seen.append((d, t)))
+
+        assert seen == [(k, len(history)) for k in range(1, len(history) + 1)]
+
+    def test_diversity_replay_reports_every_step(self):
+        clips = _clips(60)
+        history = _history(8)
+        lp.clear_progress_cache()
+        seen: list[tuple[int, int]] = []
+
+        lp.calculate_diversity_level_over_time(clips, history, on_step=lambda d, t: seen.append((d, t)))
+
+        assert seen == [(k, len(history)) for k in range(1, len(history) + 1)]
+
+    def test_partial_series_grows_with_the_walk(self):
+        """A mid-walk snapshot is a valid prefix, so the chart can fill in."""
+        clips = _clips(60)
+        history = _history(8)
+        good, bad = _votes(8)
+        lp.clear_progress_cache()
+        lengths: list[int] = []
+
+        def _snapshot(done: int, total: int) -> None:
+            lengths.append(len(lp.partial_indicator_series("smart", clips, good, bad, 0)))
+
+        final = lp.calculate_error_cost_over_time(clips, history, good, bad, 0, on_step=_snapshot)
+
+        assert lengths == sorted(lengths)
+        assert lengths[-1] == len(final)

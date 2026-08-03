@@ -136,21 +136,6 @@ def build_model_from_weights(weights: dict[str, list]) -> nn.Sequential:
     return model
 
 
-def _warm_start(model: nn.Sequential, init_from: nn.Sequential | None) -> None:
-    """Copy *init_from*'s weights into *model*, or leave the random init alone.
-
-    A shape mismatch means the caller switched architecture mid-sequence, which
-    is legitimate; the random init is then the right starting point, so the
-    mismatch is swallowed rather than raised.
-    """
-    if init_from is None:
-        return
-    try:
-        model.load_state_dict(init_from.state_dict())
-    except (RuntimeError, KeyError):
-        pass
-
-
 def train_model(
     X_train: torch.Tensor,
     y_train: torch.Tensor,
@@ -158,7 +143,6 @@ def train_model(
     seed: int = 42,
     hidden_dim: int | None = None,
     sample_weights: torch.Tensor | None = None,
-    init_from: nn.Sequential | None = None,
 ) -> nn.Sequential:
     """Train a small MLP classifier and return the trained model.
 
@@ -204,19 +188,6 @@ def train_model(
             ``(N, 1)``.  When ``None`` (default) inverse-class-frequency
             weights are computed internally.  When provided they replace the
             frequency weights entirely (the caller owns class balance).
-        init_from: Optional already-trained model of the *same architecture*
-            whose weights seed this run instead of a fresh random init (a
-            "warm start").  Intended for callers that fit a sequence of models
-            over incrementally-growing label sets, where consecutive fits land
-            close together: starting from the neighbour lets the early-stop
-            plateau fire in a handful of epochs instead of the full
-            ``TRAIN_EPOCHS`` budget.  Sound for the linear head
-            (:data:`LINEAR_HEAD`), whose BCE objective is convex and therefore
-            has an init-independent optimum; for the MLP head it biases the
-            result toward *init_from*'s basin, so pass it only when that is
-            what you want.  A shape mismatch is ignored (falls back to the
-            random init) rather than raised - the caller may legitimately be
-            switching widths mid-sequence.
 
     Returns:
         A trained ``nn.Sequential`` model in eval mode.
@@ -256,7 +227,6 @@ def train_model(
     g.manual_seed(seed)
 
     model = build_model(input_dim, hidden_dim=hidden_dim, dropout=MLP_DROPOUT, generator=g)
-    _warm_start(model, init_from)
     model = model.to(device)
     X_train = X_train.to(device)
     y_train = y_train.to(device)
