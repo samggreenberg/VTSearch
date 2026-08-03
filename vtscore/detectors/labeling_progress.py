@@ -52,7 +52,27 @@ _cached_steps: list[dict[str, Any]] = []
 _cache_good_ids: set[int] = set()
 _cache_bad_ids: set[int] = set()
 _cache_prev_predictions: Optional[dict[int, int]] = None
+
+# ---------------------------------------------------------------------------
+# Diversity replay cache (independent of the model cache)
+# ---------------------------------------------------------------------------
+# The "diverse" series is a pure function of the coverage atlas and the order
+# of label events - no MLP is involved.  It therefore gets its own cache and
+# its own replay, so that:
+#
+#   * asking for "smart"/"stable" never pays for a coverage-atlas build (a
+#     hierarchical k-means over every embedding - 47 s at 20k medias, 146 s at
+#     60k, where the dataset is past ``COVERAGE_ATLAS_AUTO_THRESHOLD`` and so
+#     has no load-time atlas to clone), and
+#   * asking for "diverse" never pays to train one MLP per label step.
+#
+# Both series used to be produced by a single ``_ensure_cache`` walk, so each
+# metric funded the other's dominant cost.
 _cache_coverage_atlas: Any = None  # CoverageAtlas | None
+#: One entry per label-history step, ``None`` where no atlas was available.
+_cached_diversity: list[Optional[dict[str, Any]]] = []
+_cache_div_good_ids: set[int] = set()
+_cache_div_bad_ids: set[int] = set()
 
 # Fixed pool the per-step stability forward pass scores, built once per cache
 # lifetime and reused by every step (see ``_monitored_pool``).  ``_cache_
@@ -71,11 +91,15 @@ _cache_monitored_set: Optional[set[int]] = None
 # status is never shown after a detector switch / vote clear.
 _status_snapshot: Optional[dict[str, Any]] = None
 
-# Live models injected by `train_and_score` during sorting.  Keyed by
-# ``(frozenset(good_ids), frozenset(bad_ids))`` so that ``_ensure_cache``
-# can look up the actual model that was used at each label step instead
-# of retraining from scratch.
-_live_models: dict[tuple[frozenset[int], frozenset[int]], tuple[Any, float]] = {}
+# Models available to ``_ensure_cache`` without retraining, keyed by
+# ``(frozenset(good_ids), frozenset(bad_ids))`` so a step whose label set
+# matches can reuse the model instead of training from scratch.  Populated
+# from two places: :func:`inject_live_model` (the model ``train_and_score``
+# actually used during sorting) and :func:`rethreshold_progress_cache` (every
+# model of a cache being replayed under a new inclusion value).  Only the model
+# is kept - the step's cutoff is always re-derived from the current inclusion,
+# so one series never mixes calibration schemes.
+_live_models: dict[tuple[frozenset[int], frozenset[int]], Any] = {}
 
 # Reentrant lock protecting all module-level cache variables.
 # RLock is used because public functions call _ensure_cache which may
@@ -105,10 +129,30 @@ _CACHE_READ_LOCK_TIMEOUT = 0.25
 def clear_progress_cache() -> None:
     """Clear all cached progress data.
 
-    Must be called whenever votes are cleared, medias change, or inclusion
-    is altered so that stale models are not reused.
+    Must be called whenever votes are cleared or medias change so that stale
+    models are not reused.  An *inclusion* change no longer needs this - see
+    :func:`rethreshold_progress_cache`, which keeps the (inclusion-independent)
+    models and re-derives only the cutoffs.
     """
-    global _cache_inclusion, _cache_prev_predictions, _cache_coverage_atlas, _status_snapshot
+    global _status_snapshot
+    with _progress_lock:
+        _clear_model_cache()
+        clear_diversity_cache()
+        # Drop the status snapshot too: it belonged to the just-cleared
+        # detector/labelset and would otherwise be served (stale) for the next
+        # one until its first background refresh lands.
+        _status_snapshot = None
+
+
+def _clear_model_cache() -> None:
+    """Drop the per-step model cache, leaving the diversity replay intact.
+
+    Split out of :func:`clear_progress_cache` for
+    :func:`rethreshold_progress_cache`, which must rebuild the model steps but
+    would be defeating its own purpose if it also threw away the coverage atlas
+    (inclusion-independent, and the single most expensive artifact here).
+    """
+    global _cache_inclusion, _cache_prev_predictions
     global _cache_monitored_ids, _cache_monitored_X, _cache_monitored_set
     with _progress_lock:
         _cached_steps.clear()
@@ -116,17 +160,22 @@ def clear_progress_cache() -> None:
         _cache_bad_ids.clear()
         _cache_prev_predictions = None
         _cache_inclusion = None
-        _cache_coverage_atlas = None
         # The monitored pool is derived from ``clips_dict``; medias may have
         # changed under us, so drop it alongside everything else.
         _cache_monitored_ids = None
         _cache_monitored_X = None
         _cache_monitored_set = None
         _live_models.clear()
-        # Drop the status snapshot too: it belonged to the just-cleared
-        # detector/labelset and would otherwise be served (stale) for the next
-        # one until its first background refresh lands.
-        _status_snapshot = None
+
+
+def clear_diversity_cache() -> None:
+    """Drop the coverage atlas and the replayed per-step diversity series."""
+    global _cache_coverage_atlas
+    with _progress_lock:
+        _cache_coverage_atlas = None
+        _cached_diversity.clear()
+        _cache_div_good_ids.clear()
+        _cache_div_bad_ids.clear()
 
 
 def invalidate_progress_cache_from(media_id: int) -> None:
@@ -137,6 +186,12 @@ def invalidate_progress_cache_from(media_id: int) -> None:
     included this media in training data.  Only steps from the first
     appearance onward are discarded so they can be retrained and their
     stability/evaluation metrics recomputed.
+
+    The diversity cache is deliberately left alone: coverage evidence is
+    polarity-agnostic (``CoverageAtlas._covered`` tests ``n_pos + n_neg > 0``),
+    so moving a label between the two channels cannot change any step's
+    ``coverage_level()``.  The old code rewound and replayed the atlas here for
+    a result that was provably identical.
     """
     global _cache_prev_predictions, _status_snapshot
     with _progress_lock:
@@ -178,33 +233,28 @@ def invalidate_progress_cache_from(media_id: int) -> None:
         # Clear live models - some may have been trained with the old label.
         _live_models.clear()
 
-        # Rewind the coverage-atlas overlay and replay the surviving labels
-        # rather than nulling the atlas (which would force a full hierarchical
-        # k-means rebuild on the next /api/labeling-status poll, starving the
-        # request pool at scale).  The structure is unchanged - only labels
-        # moved - so the atlas object identity survives the invalidate.
-        if _cache_coverage_atlas is not None:
-            _cache_coverage_atlas.reset_labeled()
-            for mid in _cache_good_ids | _cache_bad_ids:
-                if mid in _cache_coverage_atlas.vector_to_leaf:
-                    _cache_coverage_atlas.label(mid, good=mid in _cache_good_ids)
-
 
 def inject_live_model(
     good_votes: dict[int, None],
     bad_votes: dict[int, None],
     model: nn.Sequential,
-    threshold: float,
 ) -> None:
     """Register a live model from ``train_and_score`` for progress-cache reuse.
 
     Called by the learned-sort route after each live training run.  The model
     is stored keyed by its label set so ``_ensure_cache`` can look it up
     instead of retraining from scratch.
+
+    The live *threshold* is intentionally not carried over: it is
+    cross-calibrated over held-out folds, whereas every other step of the
+    series takes an in-sample :func:`conformal_threshold`.  Mixing the two put
+    a step-change into the plotted curve wherever a live model happened to land,
+    and made the cutoffs impossible to re-derive when inclusion moved.  The
+    cache now always derives its own cutoff (see :func:`_step_threshold`).
     """
     key = (frozenset(good_votes), frozenset(bad_votes))
     with _progress_lock:
-        _live_models[key] = (model, threshold)
+        _live_models[key] = model
 
 
 def _active_context_atlas() -> Any:
@@ -261,6 +311,66 @@ def _build_coverage_atlas(clips_dict: dict[int, dict[str, Any]]) -> Any:
     return CoverageAtlas(vectors, k=3, max_depth=auto_max_depth(len(vectors), k=3))
 
 
+def _ensure_diversity_cache(
+    clips_dict: dict[int, dict[str, Any]],
+    label_history: list[tuple[int, str, float]],
+    on_step: Optional[Any] = None,
+) -> None:
+    """Bring the per-step diversity series up to date with *label_history*.
+
+    Replays label events onto the coverage atlas, recording the coverage level
+    after each one.  No model is trained and no embedding is scored, so this
+    costs one atlas build (usually a free ``structural_clone`` of the dataset
+    context's) plus O(1) per step.
+
+    Deliberately independent of the model cache: the two used to share a walk,
+    which meant a "diverse" plot trained an MLP per label step it never read.
+    """
+    global _cache_coverage_atlas
+
+    if _cache_coverage_atlas is None and not _cached_diversity:
+        _cache_coverage_atlas = _build_coverage_atlas(clips_dict)
+
+    start = len(_cached_diversity)
+    total = len(label_history)
+    for t in range(start, total):
+        check_job_cancelled()
+        media_id, label, _ = label_history[t]
+        was_labeled = media_id in _cache_div_good_ids or media_id in _cache_div_bad_ids
+        if label == "unlabel":
+            _cache_div_good_ids.discard(media_id)
+            _cache_div_bad_ids.discard(media_id)
+        elif label == "good":
+            _cache_div_bad_ids.discard(media_id)
+            _cache_div_good_ids.add(media_id)
+        else:
+            _cache_div_good_ids.discard(media_id)
+            _cache_div_bad_ids.add(media_id)
+        _cached_diversity.append(_diversity_point(media_id, label, was_labeled))
+        if on_step is not None:
+            on_step(t + 1, total)
+
+
+def _diversity_point(media_id: int, label: str, was_labeled: bool) -> Optional[dict[str, Any]]:
+    """Mirror one label event onto the coverage atlas and return its level info."""
+    atlas = _cache_coverage_atlas
+    if atlas is None:
+        return None
+    if label == "unlabel":
+        # Only unlabel on the atlas when the item is no longer labeled at all
+        # (guards against good→bad re-labels going through "unlabel").
+        if was_labeled and media_id not in _cache_div_good_ids and media_id not in _cache_div_bad_ids:
+            if media_id in atlas.vector_to_leaf:
+                atlas.unlabel(media_id)
+    elif media_id in atlas.vector_to_leaf:
+        atlas.label(media_id, good=label == "good")
+    return {
+        "num_labels": len(_cache_div_good_ids) + len(_cache_div_bad_ids),
+        "diversity_level": atlas.coverage_level(),
+        "depth": atlas.total_nodes,
+    }
+
+
 def _apply_label_event(media_id: int, label: str) -> bool:
     """Update ``_cache_good_ids`` / ``_cache_bad_ids`` for one label event.
 
@@ -277,26 +387,6 @@ def _apply_label_event(media_id: int, label: str) -> bool:
         _cache_good_ids.discard(media_id)
         _cache_bad_ids.add(media_id)
     return was_labeled
-
-
-def _sync_coverage_atlas(media_id: int, label: str, was_labeled: bool) -> Optional[dict[str, Any]]:
-    """Mirror a label event onto the coverage atlas and return level info."""
-    if _cache_coverage_atlas is None:
-        return None
-    if label == "unlabel":
-        # Only unlabel on the atlas when the item is no longer labeled at all
-        # (guards against good→bad re-labels going through "unlabel").
-        if was_labeled and media_id not in _cache_good_ids and media_id not in _cache_bad_ids:
-            if media_id in _cache_coverage_atlas.vector_to_leaf:
-                _cache_coverage_atlas.unlabel(media_id)
-    else:
-        if media_id in _cache_coverage_atlas.vector_to_leaf:
-            _cache_coverage_atlas.label(media_id, good=label == "good")
-    return {
-        "num_labels": len(_cache_good_ids) + len(_cache_bad_ids),
-        "diversity_level": _cache_coverage_atlas.coverage_level(),
-        "depth": _cache_coverage_atlas.total_nodes,
-    }
 
 
 def _collect_training_data(
@@ -418,48 +508,26 @@ def _compute_step_stability(
     return stability
 
 
-def _train_step(
-    clips_dict: dict[int, dict[str, Any]],
-    all_media_ids: list[int],
-    t: int,
-    num_labels: int,
+def _step_threshold(
+    model: nn.Sequential,
+    X: Any,
+    y_list: list[float],
     inclusion_value: int,
-) -> tuple[Optional[nn.Sequential], Optional[float], Optional[dict[str, Any]]]:
-    """Train a model for one cache step and compute stability.
+) -> float:
+    """Derive one step's cutoff from its own training-set scores.
 
-    Returns ``(model, threshold, stability)``.  All three are ``None`` when
-    training is not possible (e.g. only one label polarity present).
+    Training-set scores, not held-out ones: this cache only needs a rough
+    per-step cutoff for the stability curve, so the optimistic (tighter) band
+    from in-sample quantiles is acceptable here.  Every step in a series - freshly
+    trained, reused-live, or replayed under a new inclusion - goes through this
+    one function, so a single curve never mixes calibration schemes.
     """
-    global _cache_prev_predictions
-
-    if not _cache_good_ids or not _cache_bad_ids:
-        # No model possible - clear prediction baseline so the first step
-        # after regaining a model doesn't produce a misleading flip count.
-        _cache_prev_predictions = None
-        return None, None, None
-
-    X_list, y_list = _collect_training_data(clips_dict)
-    if len(X_list) < 2:
-        return None, None, None
-
     import torch  # noqa: PLC0415
-
-    X = torch.tensor(np.array(X_list), dtype=torch.float32)
-    y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
-
-    # Linear (logistic) head, matching the production detector this previews.
-    model = train_model(X, y, X.shape[1], hidden_dim=LINEAR_HEAD)
 
     with torch.no_grad():
         X_dev = X.to(next(model.parameters()).device)
         scores = torch.sigmoid(model(X_dev)).squeeze(1).cpu().tolist()
-    # Training-set scores, not held-out ones: this cache only needs a rough
-    # per-step cutoff for the stability curve, so the optimistic (tighter)
-    # band from in-sample quantiles is acceptable here.
-    threshold = conformal_threshold(scores, y_list, inclusion_value)
-
-    stability = _compute_step_stability(model, threshold, clips_dict, all_media_ids, t, num_labels)
-    return model, threshold, stability
+    return conformal_threshold(scores, y_list, inclusion_value)
 
 
 def _resolve_step_model(
@@ -475,10 +543,13 @@ def _resolve_step_model(
     """Resolve the model, threshold, and stability for one cache step.
 
     Reuses the previous step's model when the training data is unchanged,
-    otherwise reuses a live model injected by ``train_and_score`` for this
-    exact label set, or trains a fresh one.  Returns ``(model, threshold,
-    stability)``.
+    otherwise reuses a model already available for this exact label set (see
+    :data:`_live_models`), or trains a fresh one.  Returns ``(model, threshold,
+    stability)``; all three are ``None`` when no model is possible (e.g. only
+    one label polarity present).
     """
+    global _cache_prev_predictions
+
     # Check whether the training data actually changed compared to the
     # previous step.  If the good/bad ID sets are identical, the model
     # would be the same - skip training and stability recording so the
@@ -493,31 +564,68 @@ def _resolve_step_model(
         threshold = prev["threshold"] if prev else None
         return model, threshold, None
 
-    # Check whether train_and_score already produced a model for
-    # this exact label set during live sorting.  If so, reuse it
-    # (correct cross-calibrated threshold, zero compute cost).
-    live_key = (frozenset(_cache_good_ids), frozenset(_cache_bad_ids))
-    live = _live_models.get(live_key)
-    if live is not None:
-        model, threshold = live
-        stability = _compute_step_stability(model, threshold, clips_dict, all_media_ids, t, num_labels)
-        return model, threshold, stability
+    if not _cache_good_ids or not _cache_bad_ids:
+        # No model possible - clear prediction baseline so the first step
+        # after regaining a model doesn't produce a misleading flip count.
+        _cache_prev_predictions = None
+        return None, None, None
 
-    return _train_step(clips_dict, all_media_ids, t, num_labels, inclusion_value)
+    X_list, y_list = _collect_training_data(clips_dict)
+    if len(X_list) < 2:
+        return None, None, None
+
+    import torch  # noqa: PLC0415
+
+    X = torch.tensor(np.array(X_list), dtype=torch.float32)
+
+    # A model for this exact label set may already exist - injected by
+    # ``train_and_score`` during live sorting, or carried over by
+    # ``rethreshold_progress_cache``.  Reusing it skips the step's dominant
+    # cost; the cutoff is re-derived either way.
+    live_key = (frozenset(_cache_good_ids), frozenset(_cache_bad_ids))
+    model = _live_models.get(live_key)
+    if model is None:
+        y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
+        # Linear (logistic) head, matching the production detector this previews.
+        # Warm-started from the previous step's weights: the two steps differ by
+        # a single label, and a linear head under BCE is a convex objective, so
+        # the optimum is init-independent and starting next to it converges in a
+        # fraction of the epochs a cold Adam run needs.
+        model = train_model(
+            X,
+            y,
+            X.shape[1],
+            hidden_dim=LINEAR_HEAD,
+            init_from=prev["model"] if prev is not None else None,
+        )
+
+    threshold = _step_threshold(model, X, y_list, inclusion_value)
+    stability = _compute_step_stability(model, threshold, clips_dict, all_media_ids, t, num_labels)
+    return model, threshold, stability
 
 
 def _ensure_cache(
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
     inclusion_value: int,
+    on_step: Optional[Any] = None,
 ) -> None:
-    """Bring the cache up to date with *label_history*.
+    """Bring the per-step *model* cache up to date with *label_history*.
 
     Only computes steps that are not yet cached.  If *inclusion_value*
     differs from the value used for existing cache entries the entire cache
-    is rebuilt.
+    is rebuilt - :func:`rethreshold_progress_cache` exists so that the normal
+    inclusion-slider path never reaches that branch.
+
+    *on_step*, when given, is called as ``on_step(done, total)`` after each
+    step so a background job can report real progress; the walk is the only
+    slow thing in the request, and without this the caller's progress bar sat
+    at 0 % for its entire duration.
+
+    Does **not** touch the coverage atlas or the diversity series - see
+    :func:`_ensure_diversity_cache`.
     """
-    global _cache_inclusion, _cache_coverage_atlas
+    global _cache_inclusion
 
     if _cache_inclusion is not None and _cache_inclusion != inclusion_value:
         clear_progress_cache()
@@ -526,25 +634,13 @@ def _ensure_cache(
         _cache_inclusion = inclusion_value
 
     start = len(_cached_steps)
-    if start >= len(label_history):
+    total = len(label_history)
+    if start >= total:
         return  # already up to date
 
     all_media_ids = sorted(clips_dict.keys())
 
-    if _cache_coverage_atlas is None:
-        _cache_coverage_atlas = _build_coverage_atlas(clips_dict)
-        # A freshly built (or cloned) atlas starts with an empty label overlay.
-        # Defensively seed it with any labels already accumulated in the
-        # running ID sets so coverage_level() is correct before the history
-        # replay below runs; normally these sets are empty at first build
-        # (invalidate rewinds and replays its atlas in place rather than
-        # nulling it, so this branch no longer runs mid-history).
-        if _cache_coverage_atlas is not None:
-            for mid in _cache_good_ids | _cache_bad_ids:
-                if mid in _cache_coverage_atlas.vector_to_leaf:
-                    _cache_coverage_atlas.label(mid, good=mid in _cache_good_ids)
-
-    for t in range(start, len(label_history)):
+    for t in range(start, total):
         # Each step retrains a model; honour a cancel of the owning eval job
         # here so a long history doesn't run to completion after cancel.  The
         # partially-built cache is a valid prefix (steps 0..t-1), so the next
@@ -553,8 +649,7 @@ def _ensure_cache(
         check_job_cancelled()
         media_id, label, _ = label_history[t]
 
-        was_labeled = _apply_label_event(media_id, label)
-        diversity_info = _sync_coverage_atlas(media_id, label, was_labeled)
+        _apply_label_event(media_id, label)
 
         good_ids = list(_cache_good_ids)
         bad_ids = list(_cache_bad_ids)
@@ -572,9 +667,64 @@ def _ensure_cache(
                 "good_ids": good_ids,
                 "bad_ids": bad_ids,
                 "stability": stability,
-                "diversity": diversity_info,
             }
         )
+        if on_step is not None:
+            on_step(t + 1, total)
+
+
+def rethreshold_progress_cache(inclusion_value: int) -> None:
+    """Re-key the per-step cache to a new *inclusion_value* without retraining.
+
+    Inclusion is a pure cutoff knob: :func:`~vtscore.training.mlp.train_model`
+    never sees it, so every cached step's model is still exactly the model that
+    step would train under the new value.  Only the derived cutoffs - and the
+    prediction flips that depend on them - change.
+
+    Rather than reconstruct those in place (which would have to re-derive which
+    steps recorded stability, and why), this hands every trained model back to
+    :data:`_live_models` and clears the step list.  The next :func:`_ensure_cache`
+    replays the history through the ordinary code path and finds a ready model
+    at every step, so the rebuild costs one stability forward pass per step and
+    trains nothing.  Measured on 20k medias / 200 votes that is ~1.7 s instead of
+    the ~21 s a full retrain took, which is what dragging the inclusion slider
+    used to cost.
+    """
+    global _cache_inclusion, _status_snapshot
+    with _progress_lock:
+        if _cache_inclusion is None or _cache_inclusion == inclusion_value:
+            _cache_inclusion = inclusion_value
+            return
+
+        preserved = {
+            (frozenset(step["good_ids"]), frozenset(step["bad_ids"])): step["model"]
+            for step in _cached_steps
+            if step["model"] is not None
+        }
+        # The monitored pool depends only on ``clips_dict`` (unchanged by an
+        # inclusion move), so carry it over rather than re-materialising it.
+        pool = (_cache_monitored_ids, _cache_monitored_X, _cache_monitored_set)
+        snapshot = _status_snapshot
+
+        # Model side only: the diversity replay and its atlas are untouched by
+        # a cutoff change.
+        _clear_model_cache()
+
+        _live_models.update(preserved)
+        _restore_monitored_pool(*pool)
+        # The snapshot is the stale-poll bridge, not a computed answer; keeping
+        # it avoids flashing "Computing indicators..." across a slider drag.
+        # The next poll recomputes it against the new cutoffs.
+        _status_snapshot = snapshot
+        _cache_inclusion = inclusion_value
+
+
+def _restore_monitored_pool(ids: Optional[list[int]], X: Any, id_set: Optional[set[int]]) -> None:
+    """Reinstate a monitored pool carried across a cache clear."""
+    global _cache_monitored_ids, _cache_monitored_X, _cache_monitored_set
+    _cache_monitored_ids = ids
+    _cache_monitored_X = X
+    _cache_monitored_set = id_set
 
 
 # ---------------------------------------------------------------------------
@@ -741,13 +891,16 @@ def calculate_error_cost_over_time(
     current_good_votes: dict[int, None],
     current_bad_votes: dict[int, None],
     inclusion_value: int = 0,
+    on_step: Optional[Any] = None,
 ) -> list[dict[str, Any]]:
     """Calculate classification error cost at each labelling step.
 
-    Uses cached models - no retraining.
+    Advances the per-step model cache if needed, then scores every cached model
+    against the current labelset (forward passes only).  Pass *on_step* to
+    receive ``(done, total)`` progress from the cache walk.
     """
     with _progress_lock:
-        _ensure_cache(clips_dict, label_history, inclusion_value)
+        _ensure_cache(clips_dict, label_history, inclusion_value, on_step=on_step)
         return _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
 
 
@@ -755,11 +908,34 @@ def calculate_prediction_stability_over_time(
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
     inclusion_value: int = 0,
+    on_step: Optional[Any] = None,
 ) -> list[dict[str, Any]]:
     """Return cached prediction-stability metrics for every step."""
     with _progress_lock:
-        _ensure_cache(clips_dict, label_history, inclusion_value)
+        _ensure_cache(clips_dict, label_history, inclusion_value, on_step=on_step)
         return [step["stability"] for step in _cached_steps if step["stability"] is not None]
+
+
+def partial_indicator_series(
+    metric: str,
+    clips_dict: dict[int, dict[str, Any]],
+    current_good_votes: dict[int, None],
+    current_bad_votes: dict[int, None],
+    inclusion_value: int = 0,
+) -> list[dict[str, Any]]:
+    """Return *metric*'s series over the steps cached **so far**.
+
+    Intended to be called from an ``on_step`` callback, so a long cache walk can
+    publish a curve that fills in as it goes instead of showing nothing until it
+    finishes.  ``_progress_lock`` is an ``RLock`` and the callback runs on the
+    thread already holding it, so re-entering here is free.
+    """
+    with _progress_lock:
+        if metric == "smart":
+            return _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
+        if metric == "stable":
+            return [step["stability"] for step in _cached_steps if step["stability"] is not None]
+        return [point for point in _cached_diversity if point is not None]
 
 
 def _compute_smart_status(
@@ -989,6 +1165,11 @@ def cached_indicator_history(
     When the cache *is* complete every branch is cheap: ``smart`` runs forward
     passes of the cached models over the (small) labeled set, and ``stable`` /
     ``diverse`` are plain reads of values recorded during the cache build.
+
+    ``diverse`` reads a *different* cache from the other two (see
+    :func:`_ensure_diversity_cache`), so its freshness is checked separately;
+    nothing advances it in the background, so it is normally cold until the
+    async job builds it once.
     """
     # Reading the cache needs ``_progress_lock``, but a background worker holds
     # that lock for the *entire* duration of a cache build - which is exactly
@@ -999,15 +1180,18 @@ def cached_indicator_history(
     if not _progress_lock.acquire(timeout=_CACHE_READ_LOCK_TIMEOUT):
         return [], False
     try:
+        if metric == "diverse":
+            if len(_cached_diversity) < len(label_history):
+                return [], False
+            return [point for point in _cached_diversity if point is not None], True
+
         if not is_status_cache_fresh(label_history, inclusion_value):
             return [], False
 
         if metric == "smart":
             data = _eval_cached_models(clips_dict, current_good_votes, current_bad_votes, inclusion_value)
-        elif metric == "stable":
-            data = [step["stability"] for step in _cached_steps if step["stability"] is not None]
         else:
-            data = [step["diversity"] for step in _cached_steps if step.get("diversity") is not None]
+            data = [step["stability"] for step in _cached_steps if step["stability"] is not None]
         return data, True
     finally:
         _progress_lock.release()
@@ -1076,17 +1260,17 @@ def stale_labeling_status(
 def calculate_diversity_level_over_time(
     clips_dict: dict[int, dict[str, Any]],
     label_history: list[tuple[int, str, float]],
-    inclusion_value: int = 0,
+    on_step: Optional[Any] = None,
 ) -> list[dict[str, Any]]:
-    """Return cached per-step diversity levels.
+    """Return per-step diversity levels, replaying the history if needed.
 
-    Diversity levels are computed and stored by :func:`_ensure_cache` as it
-    processes each label-history step, so this function ensures the cache is
-    current before reading it.
+    Trains nothing: the series depends only on the coverage atlas and the order
+    of label events.  It used to ride along on the model-cache walk, which meant
+    plotting it cost one MLP per label step.
     """
     with _progress_lock:
-        _ensure_cache(clips_dict, label_history, inclusion_value)
-        return [step["diversity"] for step in _cached_steps if step.get("diversity") is not None]
+        _ensure_diversity_cache(clips_dict, label_history, on_step=on_step)
+        return [point for point in _cached_diversity if point is not None]
 
 
 def analyze_labeling_progress(
@@ -1100,6 +1284,8 @@ def analyze_labeling_progress(
 
     Models and stability metrics are read from the per-step cache.  Error
     cost is recomputed cheaply using cached models (forward passes only).
+    This is the one caller that genuinely wants all three series, so it pays
+    for both walks.
     """
     with _progress_lock:
         _ensure_cache(clips_dict, label_history, inclusion_value)
@@ -1108,7 +1294,7 @@ def analyze_labeling_progress(
 
         stability = [step["stability"] for step in _cached_steps if step["stability"] is not None]
 
-        diversity = calculate_diversity_level_over_time(clips_dict, label_history, inclusion_value)
+        diversity = calculate_diversity_level_over_time(clips_dict, label_history)
 
     return {
         "error_cost_over_time": error_cost,
