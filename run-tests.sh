@@ -22,6 +22,44 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Wall-clock cap on the whole run.
+#
+# A healthy full run is single-digit minutes (frontend gate ~3min, pytest ~35s,
+# plus first-run dep install), so 30 minutes is ~5x the worst legitimate run and
+# will not misfire — but it bounds the failure mode where the run wedges and
+# nobody notices. That is not hypothetical: an xdist run once sat for 2h12m with
+# three of its four workers `<defunct>` and the master idle, because *nothing*
+# in this script had an upper bound. A per-test timeout does not cover that case
+# (a dead worker can't fire its own timeout), which is why the cap lives out
+# here, wrapping every stage — dep install, linters, npm, pytest alike.
+#
+# Implemented as a one-shot re-exec under `timeout`: the guard variable stops
+# the child from re-wrapping itself. Set VTSEARCH_TEST_TIMEOUT=0 to opt out (for
+# a deliberately long run, e.g. GPU tests or a full coverage sweep).
+VTSEARCH_TEST_TIMEOUT=${VTSEARCH_TEST_TIMEOUT:-1800}
+if [[ -z "${_VT_TIMEOUT_WRAPPED:-}" && "$VTSEARCH_TEST_TIMEOUT" != "0" ]] \
+    && command -v timeout >/dev/null 2>&1; then
+    export _VT_TIMEOUT_WRAPPED=1
+    # TERM first so pytest can print what it was doing; KILL 30s later for a
+    # process too wedged to answer (exactly the defunct-worker case).
+    set +e
+    timeout --signal=TERM --kill-after=30 "$VTSEARCH_TEST_TIMEOUT" "$0" "$@"
+    _timeout_status=$?
+    set -e
+    if [[ $_timeout_status -eq 124 || $_timeout_status -eq 137 ]]; then
+        echo ""
+        echo "============================================================"
+        echo "TESTS TIMED OUT after ${VTSEARCH_TEST_TIMEOUT}s (wall-clock cap)"
+        echo ""
+        echo "The run wedged rather than failed. Check for dead xdist workers"
+        echo "(ps aux | grep defunct) or a hung network/install step. Re-run a"
+        echo "single group to narrow it down, or set VTSEARCH_TEST_TIMEOUT=0"
+        echo "if this run is legitimately meant to take longer."
+        echo "============================================================"
+    fi
+    exit $_timeout_status
+fi
+
 # Install deps if needed
 bash .claude/hooks/ensure-test-deps.sh
 
