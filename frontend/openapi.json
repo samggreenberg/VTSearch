@@ -3190,6 +3190,13 @@
           "metric": {
             "type": "string"
           },
+          "partial": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
           "stability": {
             "items": {
               "$ref": "#/components/schemas/StabilityPoint"

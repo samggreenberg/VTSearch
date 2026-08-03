@@ -399,7 +399,7 @@ def _maybe_run_pipeline(args, parser, remaining) -> None:
         sys.exit(0)
 
 
-def _resolve_plugins(args, parser, remaining):
+def _resolve_plugins(args, parser: argparse.ArgumentParser, remaining):
     """Two-pass resolution of ``--importer``/``--exporter`` and their plugin args.
 
     Returns ``(args, importer, exporter)``; ``args`` is re-parsed once the
