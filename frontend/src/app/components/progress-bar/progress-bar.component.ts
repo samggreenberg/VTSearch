@@ -30,10 +30,12 @@ export class ProgressBarComponent {
   /**
    * Upper bound of the pulsing zone, on the `value` scale. When set (and
    * `pulsing` is on), the fill stays parked at `value` and the span from
-   * `value` to `pulseTo` renders as a tinted, shimmering band: the job is
-   * known to be somewhere inside that slice, its exact position unknowable
-   * (a count-less phase whose slice bounds *are* known — the bounded version
-   * of `pulsing`). `null` keeps the plain parked-fill shimmer.
+   * `value` to `pulseTo` renders as a tinted band with the *same* travelling
+   * block the whole-bar `indeterminate` spinner uses: the job is known to be
+   * somewhere inside that slice, its exact position unknowable. It is literally
+   * that spinner confined to a sub-range, which is why a zone spanning the
+   * whole bar is routed to `indeterminate` instead. `null` keeps the plain
+   * parked-fill shimmer.
    */
   readonly pulseTo = input<number | null>(null);
   /**

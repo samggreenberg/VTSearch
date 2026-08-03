@@ -5,23 +5,27 @@
   [attr.aria-valuemin]="0"
   [attr.aria-valuemax]="max()"
 >
+  <!-- While indeterminate the width is left to CSS (the shared 30% sweep rule);
+       an inline width here would have to be fought off with `!important`. -->
   <div
     class="progress-fill"
     [class.indeterminate]="indeterminate()"
     [class.progress-fill--pulsing]="pulsing() && !indeterminate() && pulseBandPercentage === 0"
     [class.progress-fill--smooth]="smooth()"
-    [style.width.%]="indeterminate() ? 100 : percentage"
+    [style.width.%]="indeterminate() ? null : percentage"
     [style.background]="fillColor"
   ></div>
   <!-- Bounded indeterminate zone: the current phase reports no counts but its
-       slice bounds are known, so shade fill-edge..pulseTo as "somewhere in
-       here". Carries the liveness shimmer, so the solid fill stays still. -->
+       slice bounds are known, so tint fill-edge..pulseTo as "somewhere in here"
+       and sweep the same block the whole-bar spinner uses across just that span. -->
   @if (pulseBandPercentage > 0) {
     <div
       class="progress-band"
       [class.progress-band--smooth]="smooth()"
       [style.left.%]="percentage"
       [style.width.%]="pulseBandPercentage"
-    ></div>
+    >
+      <div class="progress-band__block"></div>
+    </div>
   }
 </div>

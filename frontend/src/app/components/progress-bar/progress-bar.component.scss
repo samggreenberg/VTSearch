@@ -25,10 +25,8 @@
     transition: width 0.6s ease-out;
   }
 
-  &.indeterminate {
-    width: 30% !important;
-    animation: indeterminate 1.5s infinite ease-in-out;
-  }
+  // `.indeterminate` sizing/motion lives with `.progress-band__block` at the
+  // bottom of this file, so the two can never drift apart.
 
   // Indeterminate phase inside a determinate whole-job bar: the fill is parked
   // (there is no progress signal to advance it by), so sweep a highlight across
@@ -51,9 +49,9 @@
 
 // Bounded indeterminate zone: a count-less phase whose slice bounds ARE known
 // (the whole-job bar knows the phase spans, e.g. 50%..80%). The solid fill
-// parks at the slice floor and this band shades the floor..end span — "the job
-// is somewhere in here" — carrying the liveness shimmer so the earned fill
-// stays still and honest. Positioned by inline left/width from the component.
+// parks at the slice floor and this band tints the floor..end span, marking the
+// bounds of what is unknown; the block inside it sweeps that span to say "the
+// job is somewhere in here". Positioned by inline left/width from the component.
 .progress-band {
   position: absolute;
   top: 0;
@@ -62,15 +60,6 @@
   border-radius: var(--radius-sm);
   overflow: hidden;
 
-  &::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(90deg, transparent, rgb(255 255 255 / 45%), transparent);
-    transform: translateX(-100%);
-    animation: progress-shimmer 1.4s infinite ease-in-out;
-  }
-
   // Match the fill's easing so the band's left edge glides with the fill at
   // phase boundaries instead of detaching from it.
   transition: left var(--transition-slow) ease, width var(--transition-slow) ease;
@@ -78,6 +67,22 @@
   &.progress-band--smooth {
     transition: left 0.6s ease-out, width 0.6s ease-out;
   }
+}
+
+// The whole-bar spinner and the block travelling inside a bounded zone are the
+// same affordance at two scales — "I don't know where in here we are" — so they
+// are declared once, together: 30% of whichever box contains them, sweeping it
+// end to end. A zone that happens to span the whole bar is then
+// indistinguishable from the plain spinner, which is the point; `progressBarState`
+// collapses that case onto `.indeterminate` for exactly the same reason. Do not
+// fork these two rules — a reader who learns one has learned the other.
+.progress-fill.indeterminate,
+.progress-band__block {
+  width: 30%;
+  height: 100%;
+  background: var(--accent);
+  border-radius: var(--radius-sm);
+  animation: indeterminate 1.5s infinite ease-in-out;
 }
 
 @keyframes progress-shimmer {
