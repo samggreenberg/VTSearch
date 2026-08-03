@@ -574,7 +574,10 @@ class TestGoodTrainingVec:
         media = _patch_media(1, positive=True, category="apple")
         del media["patch_grid"]
         vec = _good_training_vec(media, "apple", region_voting=True)
-        np.testing.assert_allclose(vec, media_embedding(media))
+        # float32 pooling/snap rounding puts the smallest components ~1e-7 off
+        # the whole-image embedding; an absolute floor keeps the near-zero
+        # elements from tripping the default rtol-only comparison.
+        np.testing.assert_allclose(vec, media_embedding(media), atol=1e-6)
 
     def test_falls_back_without_matching_box(self):
         from vtscore.embedding.media_vectors import media_embedding
