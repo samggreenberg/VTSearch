@@ -290,11 +290,13 @@ class TestTrainScoreGeometryParity:
         """``max_hac``'s flood covers the CLS node and the leaves, but not the
         HAC **internal** nodes - which it nonetheless max-pools at inference.
 
-        That gap is deliberate (``bad_negative_vecs`` drops internals as
-        saliency-weighted pools of leaves it already suppresses, so they would
-        add correlated duplicates without adding coverage), but it means
-        ``max_hac`` scores rows no Bad vote trains down directly.  Pinned here
-        so the exception stays explicit rather than silent.
+        That gap is deliberate but *not* because internals are dominated by
+        their leaves - they are renormalised, so they are not (see
+        ``tests_lib/detectors/test_hac_internal_flood_gap.py``).  Flooding them
+        measurably costs ranking instead; see
+        :func:`~vtscore.detectors.training.bad_negative_vecs`.  Either way
+        ``max_hac`` scores rows no Bad vote trains down directly, so the
+        exception is pinned here rather than left silent.
         """
         rng = np.random.default_rng(46)
         media = _patch_media(1, "cat1", rng)
