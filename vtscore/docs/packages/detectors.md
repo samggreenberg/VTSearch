@@ -467,6 +467,7 @@ per label-history step with `model` / `threshold` / `good_ids` /
 |-------------------------------------------------|------------------------------------------------------------------------|
 | `clear_progress_cache()`                        | Drop everything. Call when votes are cleared, medias change, etc.      |
 | `clear_diversity_cache()`                       | Drop just the coverage atlas + replayed diversity series               |
+| `invalidate_progress_cache_from(media_id, *, coverage_changed)` | Drop cached steps from where `media_id` was first labeled (label-correction case) |
 | `rethreshold_progress_cache(inclusion)`         | Re-key the cache to a new cutoff, reusing every trained model          |
 | `inject_live_model(good, bad, model)`           | Register a model produced by `train_and_score` so the cache can reuse it |
 | `recreate_model_at_time(snap, history, t, inclusion)` | Return the model + threshold + good/bad ids for step `t`           |

@@ -429,6 +429,18 @@ embedder. Shares the S11 approach.
   lights honest from cold in ~1 s instead of a full walk. It needs `_cached_steps`
   to stop being a dense list indexed by step, so it is a real refactor, not a
   tweak.
+- **Correcting an early click replays the rest of the session:** a correction
+  rewrites that click in place and invalidates every cached step from it, so the
+  suffix refits against the corrected label — necessary work, not waste, but it
+  scales with how far back the correction lands. Measured at 20 k medias / 200
+  votes: correcting the click you just made replays 2 steps (235 ms), halfway
+  back replays 100 (7.8 s), and your third-ever click replays 198 (14.7 s).
+  Acceptable today because corrections are rare and usually recent, but it is
+  the same ~105 ms/step floor below, so anything that lowers that lowers this.
+  A cheaper variant, if it ever bites: only steps whose *training set* actually
+  differs need refitting, and the corrected media is one row of a growing
+  matrix — a rank-one update or a warm L-BFGS restart per step would converge in
+  a fraction of a cold Adam run precisely because the neighbouring fit is close.
 - **The per-step model walk's remaining floor (~105 ms/label step):** advancing
   the progress cache trains one linear head per label step, 200 full-batch Adam
   epochs each. Essentially all of that is per-epoch autograd/optimizer dispatch,
