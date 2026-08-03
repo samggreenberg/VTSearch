@@ -11,7 +11,7 @@ Models are specified via a **settings file** (`--settings`) whose
 `autofind_detectors` list names registered models.  Each name
 maps to `data/detectors/<name>.json`; the CLI re-resolves the
 labelset's origins, embeds them with the dataset's embedder, trains an
-MLP, and applies it to the dataset.  See below for the exact format.
+head, and applies it to the dataset.  See below for the exact format.
 
 ### Which user's Auto-Find list runs
 
@@ -104,7 +104,7 @@ Available exporters: `server_json_file` (JSON to server path), `server_csv_file`
 
 **Exporting the detectors themselves** (`portable_detector`): instead of the
 scored hits, write one standalone, portable scoring bundle per detector the run
-trained — an ONNX MLP (sigmoid baked in) plus a `manifest.json` and `README.md`,
+trained — the ONNX head (sigmoid baked in) plus a `manifest.json` and `README.md`,
 carrying **no embeddings and no raw media**. This is the headless counterpart to
 the GUI's portable-export modal, letting CI/automation produce a shareable
 scoring model. The `--dataset`/`--importer` still supplies the embedder space the
@@ -120,8 +120,9 @@ The `--filepath` accepts `{detector_name}` (and the date variables
 `{YYYYMMDD-HHMMSS}`, `{YYYYMMDD}`, `{YYYY}`, `{MM}`, `{DD}`, `{username}`). When
 the path omits `{detector_name}` and the run trained more than one detector, the
 detector name is inserted before the extension so bundles don't overwrite each
-other. Detectors whose scoring isn't the plain 2-layer MLP (patch DINOv2/v3,
-structural SIFT/VLAD) are skipped with a note rather than failing the run.
+other. Detectors whose scoring isn't a plain forward pass over one whole-item
+vector (patch DINOv2/v3, structural SIFT/VLAD) are skipped with a note rather
+than failing the run.
 
 **Scoring across source types (converter routing).** A detector declares the
 embedding space it needs (its `media_type`); it does not store a converter. When
@@ -149,7 +150,7 @@ with no `input_spec.clipper` scores whole media.
 **How to get the files:**
 
 - **Dataset file**: Export from the web UI via the dataset menu ("Export dataset"), or use a cached `.pkl` file from the `data/embeddings/` directory after loading a demo dataset.
-- **Settings file**: A JSON file listing the detector names that should run during `--autodetect`. Each name maps to a JSON labelset under `data/detectors/<name>.json`; the CLI re-resolves the labelset's origins, embeds them with the dataset's embedder, trains a fresh MLP, and scores the dataset.
+- **Settings file**: A JSON file listing the detector names that should run during `--autodetect`. Each name maps to a JSON labelset under `data/detectors/<name>.json`; the CLI re-resolves the labelset's origins, embeds them with the dataset's embedder, trains a fresh head, and scores the dataset.
 
 ```json
 {
@@ -158,7 +159,7 @@ with no `input_spec.clipper` scores whole media.
 }
 ```
 
-- **Detector file**: Created from the dashboard by labeling items in the right pane. The file stores origin info plus labels (no weights); the MLP is rebuilt from origins at scoring time.
+- **Detector file**: Created from the dashboard by labeling items in the right pane. The file stores origin info plus labels (no weights); the head is rebuilt from origins at scoring time.
 
 **Example output:**
 

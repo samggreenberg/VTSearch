@@ -355,8 +355,12 @@ class TestCliScoringNegativeHits:
         mlp, threshold = train_and_threshold(X, y, snap=snap)
         # Round-trip through serialize_weights to mirror the production path.
         weights = serialize_weights(mlp)
+        # ``train_and_threshold`` trains the linear (logistic) head (#2790), so
+        # the serialized model is a single ``Linear(d, 1)``.
+        assert set(weights) == {"0.weight", "0.bias"}
         rebuilt = build_model_from_weights(weights)
         assert rebuilt is not None
+        assert len(list(rebuilt)) == 1
         # Sanity check: torch tensor coverage matches
         with torch.no_grad():
             out = rebuilt(torch.zeros((1, weights["0.weight"][0].__len__()), dtype=torch.float32))

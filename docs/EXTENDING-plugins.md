@@ -1222,8 +1222,8 @@ classifier:
 2. Toggle its Auto-Find flag with
    `PUT /api/detectors/registry/<id>/autofind` so it runs from
    `/api/auto-detect` and the CLI's `--autodetect` flow.
-3. The MLP itself lives only in RAM; it's trained on demand from the
-   labelset's origins each time the model is loaded or scored.
+3. The trained head itself lives only in RAM; it's trained on demand
+   from the labelset's origins each time the model is loaded or scored.
 
 For ready-made classifiers without labels (e.g. an OCR or face-detector
 heuristic), build an Extractor or Localizer plugin instead; see

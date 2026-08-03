@@ -18,11 +18,20 @@ import pytest
 import torch
 from vtscore.detectors import portable_bundle as pb
 from vtscore.detectors.training import serialize_weights
-from vtscore.training.mlp import build_model
+from vtscore.training.mlp import LINEAR_HEAD, build_model
+
+# The exporter has to handle both heads: the linear (logistic) head production
+# trains (#2790) and the MLP the eval harness still builds.  Parameterising on
+# ``hidden`` runs every graph test over both shapes.
+HEADS = pytest.mark.parametrize("hidden", [LINEAR_HEAD, 8], ids=["linear", "mlp"])
 
 
-def _trained_weights(input_dim: int = 512, hidden: int = 8) -> dict:
-    """A small, deterministic 2-layer MLP serialized to the export format."""
+def _trained_weights(input_dim: int = 512, hidden: int = LINEAR_HEAD) -> dict:
+    """A small, deterministic detector head serialized to the export format.
+
+    Defaults to the production linear head so the head-agnostic manifest/bundle
+    tests below package what the app actually exports.
+    """
     gen = torch.Generator().manual_seed(0)
     model = build_model(input_dim, hidden_dim=hidden, dropout=0.5, generator=gen)
     model.eval()
@@ -47,27 +56,34 @@ def _sample_manifest(weights: dict) -> dict:
 
 
 class TestOnnxGraph:
-    def test_embedding_dim_from_weights(self):
-        assert pb.embedding_dim_from_weights(_trained_weights(input_dim=768)) == 768
+    @HEADS
+    def test_embedding_dim_from_weights(self, hidden):
+        assert pb.embedding_dim_from_weights(_trained_weights(input_dim=768, hidden=hidden)) == 768
 
     def test_split_rejects_non_two_layer(self):
+        # ``_split_linear_weights`` backs the MLP branch only; the linear head
+        # takes the 1-layer path in ``mlp_weights_to_onnx`` and never reaches it.
         with pytest.raises(ValueError, match="2-layer MLP"):
             pb._split_linear_weights({"0.weight": [[1.0]], "0.bias": [0.0]})
 
-    def test_onnx_is_valid(self):
+    @HEADS
+    def test_onnx_is_valid(self, hidden):
         import onnx  # noqa: PLC0415
 
-        model = onnx.load_from_string(pb.mlp_weights_to_onnx(_trained_weights()))
+        model = onnx.load_from_string(pb.mlp_weights_to_onnx(_trained_weights(hidden=hidden)))
         onnx.checker.check_model(model)
         assert {i.name for i in model.graph.input} == {pb.ONNX_INPUT_NAME}
         assert {o.name for o in model.graph.output} == {pb.ONNX_OUTPUT_NAME}
+        # The MLP's hidden activation is a Relu; the linear head has none.
+        assert ("Relu" in {node.op_type for node in model.graph.node}) is (hidden != LINEAR_HEAD)
 
-    def test_onnx_scores_match_torch(self):
-        """The emitted graph must reproduce sigmoid(model(x)) of the trained MLP."""
+    @HEADS
+    def test_onnx_scores_match_torch(self, hidden):
+        """The emitted graph must reproduce sigmoid(model(x)) of the trained head."""
         ort = pytest.importorskip("onnxruntime")
 
         gen = torch.Generator().manual_seed(1)
-        model = build_model(512, hidden_dim=8, dropout=0.5, generator=gen)
+        model = build_model(512, hidden_dim=hidden, dropout=0.5, generator=gen)
         model.eval()
         weights = serialize_weights(model)
 

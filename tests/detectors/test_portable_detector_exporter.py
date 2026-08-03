@@ -218,12 +218,21 @@ class TestExportCliDetectors:
         from vtscore.exporters import get_exporter
 
         exp = get_exporter("portable_detector")
-        # A single-layer weight dict can't be modelled by the fixed ONNX graph;
-        # the exporter must skip it rather than abort the whole export.
+        # The fixed ONNX graph models the linear head (1 Linear) and the 2-layer
+        # MLP; a 3-layer stack can't be modelled, so the exporter must skip it
+        # rather than abort the whole export.  (A single-layer dict is the valid
+        # production linear head, not malformed - so we can't use that here.)
         bad_descriptor = {
             "detector_name": "malformed",
             "media_type": "image",
-            "weights": {"0.weight": [[1.0, 2.0]], "0.bias": [0.0]},
+            "weights": {
+                "0.weight": [[1.0, 2.0]],
+                "0.bias": [0.0],
+                "3.weight": [[1.0]],
+                "3.bias": [0.0],
+                "6.weight": [[1.0]],
+                "6.bias": [0.0],
+            },
             "threshold": 0.5,
             "embedder": "siglip",
             "embedder_type": "semantic",

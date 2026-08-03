@@ -1,7 +1,7 @@
 """Build a standalone, portable detector bundle for transfer to other parties.
 
 CRITICAL - this is the one sanctioned exception to the "No Persisted Vectors or
-MLPs" rule (see ``CLAUDE.md``).  The bundle persists the *trained MLP* (as an
+MLPs" rule (see ``CLAUDE.md``).  The bundle persists the *trained head* (as an
 ONNX graph) so a third party can score their own media without VTSearch.  It
 deliberately does **not** include any embeddings or raw media: a scoring
 detector only needs three things - the trained classifier, the name of the
@@ -10,22 +10,24 @@ this module is derived from those; no media-derived vectors are ever written.
 
 The bundle is a zip with three members:
 
-* ``detector.onnx``  - the MLP with its sigmoid baked in (input ``embedding``
-  ``[batch, dim]`` -> output ``score`` ``[batch, 1]`` in ``[0, 1]``).
+* ``detector.onnx``  - the trained head with its sigmoid baked in (input
+  ``embedding`` ``[batch, dim]`` -> output ``score`` ``[batch, 1]`` in ``[0, 1]``).
 * ``manifest.json``  - machine-readable embedder name/dim, threshold, scoring
   convention, and label counts.  Lets the bundle be re-imported and scripted.
 * ``README.md``      - human-readable instructions: which embedder to run, the
   threshold, and a copy-paste ``onnxruntime`` inference snippet.
 
-The MLP architecture is fixed (``Linear -> ReLU -> Dropout -> Linear -> 1``; see
-:func:`vtscore.training.mlp.build_model`), so the ONNX graph is hand-assembled
-via ``onnx.helper`` rather than going through ``torch.onnx``.  That keeps this
-module torch-free (it operates on the ``serialize_weights`` nested-list dict),
-avoids the dynamo/onnxscript export machinery, and is fully deterministic.
+The head architecture comes from a closed set (see
+:func:`vtscore.training.mlp.build_model`): the production linear/logistic head
+``Linear -> 1``, or the MLP ``Linear -> ReLU -> Dropout -> Linear -> 1`` the eval
+harness still builds.  Both are hand-assembled here via ``onnx.helper`` rather
+than going through ``torch.onnx``.  That keeps this module torch-free (it
+operates on the ``serialize_weights`` nested-list dict), avoids the
+dynamo/onnxscript export machinery, and is fully deterministic.
 
-Every detector's MLP is this same 2-layer architecture regardless of embedder
-*type* (semantic / patch_semantic / structural) - the type only changes what
-feeds the MLP, not its shape - so the weight tensors alone can't tell a plain
+The head's shape is the same regardless of embedder *type* (semantic /
+patch_semantic / structural) - the type only changes what feeds the head, not
+its shape - so the weight tensors alone can't tell a plain
 detector from a patch or structural one.  Callers MUST call
 :func:`check_exportable` on the detector's locked embedder type before
 building a bundle: structural detectors are blocked outright (their stage-2
@@ -143,39 +145,64 @@ def _split_linear_weights(
 
 
 def embedding_dim_from_weights(weights: dict[str, list]) -> int:
-    """Return the input embedding dimensionality of a serialized detector MLP."""
-    w1, _b1, _w2, _b2 = _split_linear_weights(weights)
-    return int(w1.shape[1])
+    """Return the input embedding dimensionality of a serialized detector head.
+
+    Reads the first ``Linear`` layer's weight, whose second axis is the input
+    dimensionality for both the MLP (``[hidden, input_dim]``) and the linear
+    head (``[1, input_dim]``), so it is agnostic to the head's layer count.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    return int(np.asarray(weights["0.weight"], dtype=np.float32).shape[1])
 
 
 def mlp_weights_to_onnx(weights: dict[str, list]) -> bytes:
-    """Serialise a trained detector MLP to a standalone ONNX graph.
+    """Serialise a trained detector head to a standalone ONNX graph.
 
-    The graph computes ``sigmoid(Gemm(relu(Gemm(x, W1, b1)), W2, b2))`` - i.e.
-    the exact forward pass of the trained model with the inference-time sigmoid
-    baked in (the trained ``nn.Sequential`` emits raw logits).  Dropout is a
-    no-op at inference and is omitted.  The batch dimension is dynamic.
+    For the MLP the graph computes ``sigmoid(Gemm(relu(Gemm(x, W1, b1)), W2, b2))``;
+    for the linear (logistic) head - the production default, a single
+    ``Linear(input_dim, 1)`` - it is just ``sigmoid(Gemm(x, W, b))``.  Either way
+    it is the exact forward pass with the inference-time sigmoid baked in (the
+    trained ``nn.Sequential`` emits raw logits).  Dropout is a no-op at inference
+    and is omitted.  The batch dimension is dynamic.
     """
+    import numpy as np  # noqa: PLC0415
     from onnx import TensorProto, checker, helper, numpy_helper  # noqa: PLC0415
 
-    w1, b1, w2, b2 = _split_linear_weights(weights)
-    input_dim = int(w1.shape[1])
-
-    initializers = [
-        numpy_helper.from_array(w1, "hidden.weight"),
-        numpy_helper.from_array(b1, "hidden.bias"),
-        numpy_helper.from_array(w2, "output.weight"),
-        numpy_helper.from_array(b2, "output.bias"),
-    ]
-    nodes = [
-        # Gemm with transB=1 computes Y = X @ W^T + b, matching nn.Linear.
-        helper.make_node(
-            "Gemm", [ONNX_INPUT_NAME, "hidden.weight", "hidden.bias"], ["hidden_pre"], name="hidden", transB=1
-        ),
-        helper.make_node("Relu", ["hidden_pre"], ["hidden"], name="relu"),
-        helper.make_node("Gemm", ["hidden", "output.weight", "output.bias"], ["logit"], name="output", transB=1),
-        helper.make_node("Sigmoid", ["logit"], [ONNX_OUTPUT_NAME], name="sigmoid"),
-    ]
+    weight_keys = sorted((k for k in weights if k.endswith(".weight")), key=lambda k: int(k.split(".")[0]))
+    if len(weight_keys) == 1:
+        # Linear head: sigmoid(Gemm(x, W, b)).
+        w = np.asarray(weights["0.weight"], dtype=np.float32)
+        b = np.asarray(weights["0.bias"], dtype=np.float32)
+        input_dim = int(w.shape[1])
+        initializers = [
+            numpy_helper.from_array(w, "output.weight"),
+            numpy_helper.from_array(b, "output.bias"),
+        ]
+        nodes = [
+            helper.make_node(
+                "Gemm", [ONNX_INPUT_NAME, "output.weight", "output.bias"], ["logit"], name="output", transB=1
+            ),
+            helper.make_node("Sigmoid", ["logit"], [ONNX_OUTPUT_NAME], name="sigmoid"),
+        ]
+    else:
+        w1, b1, w2, b2 = _split_linear_weights(weights)
+        input_dim = int(w1.shape[1])
+        initializers = [
+            numpy_helper.from_array(w1, "hidden.weight"),
+            numpy_helper.from_array(b1, "hidden.bias"),
+            numpy_helper.from_array(w2, "output.weight"),
+            numpy_helper.from_array(b2, "output.bias"),
+        ]
+        nodes = [
+            # Gemm with transB=1 computes Y = X @ W^T + b, matching nn.Linear.
+            helper.make_node(
+                "Gemm", [ONNX_INPUT_NAME, "hidden.weight", "hidden.bias"], ["hidden_pre"], name="hidden", transB=1
+            ),
+            helper.make_node("Relu", ["hidden_pre"], ["hidden"], name="relu"),
+            helper.make_node("Gemm", ["hidden", "output.weight", "output.bias"], ["logit"], name="output", transB=1),
+            helper.make_node("Sigmoid", ["logit"], [ONNX_OUTPUT_NAME], name="sigmoid"),
+        ]
     graph = helper.make_graph(
         nodes,
         "vtsearch_detector",

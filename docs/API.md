@@ -40,7 +40,7 @@ chosen **per request** by two HTTP headers:
 | Header | Selects | Sent by |
 |--------|---------|---------|
 | `X-Dataset-Id` | Which loaded `DatasetContext` the request's `medias` / coverage / dataset-scoped votes resolve to | Angular's `HttpClient` interceptor on every API call |
-| `X-Detector-Id` | Which loaded `DetectorContext` the request's `good_votes` / `bad_votes` / MLP / labelset resolve to | Same interceptor |
+| `X-Detector-Id` | Which loaded `DetectorContext` the request's `good_votes` / `bad_votes` / model / labelset resolve to | Same interceptor |
 
 Key semantics (`app.py` `before_request`, `vtsearch/routes/_shared.py`):
 

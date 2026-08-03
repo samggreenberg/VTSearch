@@ -27,8 +27,8 @@ dataset by how well it matches. Detectors come from two places;
 either trained in the UI from good/bad votes in a labeling pass, or
 imported/loaded from disk and applied as-is. The architecture combines:
 
-- **Detectors (learned search)**: a small MLP trained on user votes
-  to predict good/bad labels. This is the primary search mechanism.
+- **Detectors (learned search)**: a linear (logistic) head trained on
+  user votes to predict good/bad labels. This is the primary search mechanism.
   Detectors are persisted as **labelsets** (origin info + labels; never
   weights; weights are an in-memory artifact, re-derived on demand from
   origins and the active embedder).
@@ -111,7 +111,7 @@ VTSearch/
 │   │   ├── store.py                On-disk labelset/query store
 │   │   ├── training.py             Vote-aware training, origin-based training
 │   │   ├── learned_sort.py         Learned-sort scoring/ranking over a trained detector
-│   │   ├── model_loading.py        Build/restore in-memory MLP from labels (no persisted weights)
+│   │   ├── model_loading.py        Build/restore in-memory head from labels (no persisted weights)
 │   │   ├── workflow.py             apply-labels-and-retrain orchestration (uses flask.g)
 │   │   ├── resolver.py             Origin → file + embedding resolution
 │   │   ├── embedder_sync.py        Reconcile detector labels against the active embedder
@@ -122,11 +122,11 @@ VTSearch/
 │   │   ├── labelset_elements.py    Labelset element materialisation
 │   │   ├── labelset_ops.py         Labelset add/remove/merge operations
 │   │   ├── labelset_rename.py      Labelset / category rename
-│   │   ├── labelset_training.py    Cross-dataset MLP training
+│   │   ├── labelset_training.py    Cross-dataset head training
 │   │   ├── positives_browse.py     Browse the detector's positive examples
 │   │   ├── dataset_sync.py         Sync detectors when a dataset loads
 │   │   ├── media_seeding.py        Media seeding utilities
-│   │   └── labeling_progress.py    Per-step MLP cache + stability analysis
+│   │   └── labeling_progress.py    Per-step head cache + stability analysis
 │   │
 │   ├── datasets/                   Dataset loading, downloading, ingestion
 │   │   ├── origin.py               Origin dataclass (per-element provenance)
@@ -392,18 +392,19 @@ modules on the right.
 
 **Dependencies:** `torch`, `sklearn`, `numpy`
 
-**What you get:** `train_model()` trains a 2-layer MLP classifier on
-embeddings + binary labels.  `conformal_threshold()` maps an
+**What you get:** `train_model()` trains a classifier on embeddings +
+binary labels — the linear (logistic) head production uses
+(`hidden_dim=LINEAR_HEAD`), or the MLP for a positive `hidden_dim`.  `conformal_threshold()` maps an
 `inclusion` value to a decision threshold via a split-conformal
 quantile rule over held-out calibration scores.  A separate
 `calculate_gmm_threshold()` fits a 2-component GMM for semantic sort
 thresholds.
 
 ```python
-from vtscore.training.mlp import train_model
+from vtscore.training.mlp import LINEAR_HEAD, train_model
 from vtscore.training.thresholds import conformal_threshold
 
-model = train_model(X_train, y_train, input_dim=512, seed=42, hidden_dim=None)
+model = train_model(X_train, y_train, input_dim=512, seed=42, hidden_dim=LINEAR_HEAD)
 threshold = conformal_threshold(scores, labels, inclusion_value=0)
 ```
 

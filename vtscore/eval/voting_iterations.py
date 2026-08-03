@@ -913,21 +913,25 @@ def _mlp_train_and_calibrate(
     calibrate_count: int,
     calibration_fraction: float,
 ) -> tuple[_StepModel, float, int, dict[str, float], dict[str, Any]]:
-    """Production MLP path — numerically identical to the pre-trainer harness.
+    """The MLP arm — numerically identical to the pre-trainer harness.
+
+    This is the harness's small-MLP candidate, not the live detector's head:
+    production trains the linear (logistic) head instead (the #2790 finding, see
+    ``vtscore.training.mlp.LINEAR_HEAD``).  Everything *around* the head still
+    mirrors the production ``_train_and_score_xy`` / ``train_and_threshold``
+    pipeline, so a reported cost differs from the live detector's only by the
+    head itself:
 
     Good votes region-pool their ground-truth box when *region_voting* is on
     (and the media supports it); Bad votes always train on the whole-image
     vector - matching the live detector, where only Yes-votes carry a region.
 
-    The threshold matches the production ``_train_and_score_xy`` /
-    ``train_and_threshold`` pipeline exactly so the reported cost measures what
-    the live detector computes:
-
     * ``hidden_dim`` is sized from the *full* label count and forced onto the
       calibration folds, so the fold models share the final model's architecture
-      (production passes this into ``cross_calibration_threshold_cached``).
-      Letting each fold auto-size to its own smaller train split would train
-      narrower fold nets and report a threshold the live pipeline never produces.
+      (production likewise threads one width into
+      ``cross_calibration_threshold_cached``).  Letting each fold auto-size to
+      its own smaller train split would train narrower fold nets and report a
+      threshold no single-architecture pipeline ever produces.
     * the fold splits use a fresh ``RandomState(42)`` - the fixed seed
       ``cross_calibration_threshold_cached`` always calibrates with - rather than
       the shared per-seed simulation RNG, so the calibration is byte-for-byte

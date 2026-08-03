@@ -315,15 +315,19 @@ def _mt_key(rng: np.random.RandomState):
 
 
 class TestProductionCalibrationFidelity:
-    """The eval's per-step threshold calibration mirrors production exactly.
+    """The eval's per-step threshold calibration mirrors production's protocol.
 
-    Production (`_train_and_score_xy` / `train_and_threshold`) sizes the hidden
-    layer from the full label count, forces that width onto the calibration
-    folds, and always calibrates with a fresh ``RandomState(42)`` (the fixed
-    seed baked into ``cross_calibration_threshold_cached``).  These tests spy on
-    the calibration call to prove the eval does the same, so overlapping the
-    fold split RNG with the per-seed simulation RNG or letting folds auto-size
-    can't silently reintroduce a production mismatch.
+    Production (`_train_and_score_xy` / `train_and_threshold`) threads a single
+    head architecture through both the final model and the calibration folds,
+    and always calibrates with a fresh ``RandomState(42)`` (the fixed seed baked
+    into ``cross_calibration_threshold_cached``).  These tests spy on the
+    calibration call to prove the eval does the same, so overlapping the fold
+    split RNG with the per-seed simulation RNG or letting folds auto-size can't
+    silently reintroduce a production mismatch.
+
+    The *head* itself is where the eval's MLP arm and production part ways:
+    production trains the linear head (#2790), while this arm keeps the MLP as a
+    sweep candidate, so the width asserted below is the arm's own auto-sizing.
     """
 
     def _spy_calibration(self, monkeypatch):
