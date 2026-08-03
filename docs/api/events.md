@@ -101,6 +101,13 @@ also re-emits the `loading-tasks` and `detector-loading-tasks` channels so
 finished tasks vanish from the UI once they pass their stale-prune window
 without a server-side timer.
 
+Between heartbeats an idle stream also writes a bare SSE comment (`: ka`)
+roughly every second. It is deliberately a comment — invisible to
+`EventSource`, so it does not feed the client's liveness signal — and exists
+only to probe the socket: a client that vanished abruptly (page reload) is
+detected on the first failed write, releasing its connection slot in ~1s
+instead of a full heartbeat period.
+
 ## Example
 
 ```ts

@@ -76,6 +76,8 @@ export class ConnectionStateService {
   readonly retrying = this._retrying.asReadonly();
 
   private consecutiveFailures = 0;
+  /** True while a stream-failure classification probe is in flight. */
+  private streamProbeInFlight = false;
 
   constructor() {
     // A browser-level `offline` event (the OS lost its network interface) is
@@ -113,6 +115,36 @@ export class ConnectionStateService {
     if (this.consecutiveFailures >= ConnectionStateService.OFFLINE_THRESHOLD) {
       this.goOffline();
     }
+  }
+
+  /**
+   * Record an error reported by the SSE stream ({@link ProgressEventsService}).
+   *
+   * `EventSource` hides HTTP status codes, so a stream error is ambiguous:
+   * the backend may be unreachable — or it answered the connect with an error
+   * such as the `/api/events` 503 slot-cap rejection, which *proves* it is
+   * alive. Counting the ambiguous error as a network failure used to lock the
+   * whole app offline when three cap rejections landed inside the slot-release
+   * window (#2816). Instead, send a single `/healthz` probe and let the
+   * interceptor classify the outcome: any HTTP response resets the failure
+   * tally (so the stream keeps retrying on its 2s timer until a slot frees),
+   * while a status-0 failure counts toward tripping the breaker exactly like
+   * any other request's.
+   */
+  recordStreamFailure(): void {
+    if (this.isOffline || this.streamProbeInFlight) return;
+    this.streamProbeInFlight = true;
+    this.http
+      .get('/healthz', {
+        context: new HttpContext().set(CONNECTION_PROBE, true),
+        responseType: 'text',
+      })
+      .subscribe({
+        // The interceptor already recorded the outcome (success or network
+        // failure); this subscription only tracks that the probe finished.
+        next: () => (this.streamProbeInFlight = false),
+        error: () => (this.streamProbeInFlight = false),
+      });
   }
 
   private goOffline(): void {

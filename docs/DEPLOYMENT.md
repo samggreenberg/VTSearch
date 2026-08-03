@@ -158,8 +158,12 @@ A few VTSearch-specific points matter when configuring the proxy:
   connections at `VTSEARCH_THREADS - 2` (override with
   `VTSEARCH_SSE_MAX_CONNECTIONS`) and returns `503` once saturated instead of
   starving the pool that serves ordinary requests; the frontend's `EventSource`
-  wrapper retries on a timer when that happens. Raising `VTSEARCH_THREADS` raises
-  the SSE cap along with it.
+  wrapper retries on a timer when that happens (a cap rejection proves the
+  backend is alive, so it never counts toward the client's offline circuit
+  breaker). Raising `VTSEARCH_THREADS` raises the SSE cap along with it. The
+  cap only applies under gunicorn: the dev server (`python app.py`) spawns a
+  thread per connection and runs uncapped unless `VTSEARCH_SSE_MAX_CONNECTIONS`
+  is set explicitly.
 - **Forwarded headers.** Pass `X-Forwarded-For`, `X-Forwarded-Proto`, and
   `X-Forwarded-Host` (and `Host`) so the app sees the real client and external
   scheme. For SSE/WebSocket-style streams also forward `Connection`/`Upgrade` if

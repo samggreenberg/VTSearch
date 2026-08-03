@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import queue
+import sys
 import threading
 import time
 import uuid
@@ -42,6 +43,18 @@ from vtscore.concurrency.progress import (
 #: must stay comfortably below the breaker's tolerance for consecutive poller
 #: misses; 5s is well under that.
 HEARTBEAT_SECONDS = 5.0
+
+#: Idle socket-probe cadence. With ``stream_with_context`` a client that
+#: vanished abruptly (page reload, killed tab) is only detected when a write
+#: to the dead socket fails — and the slot it holds via
+#: :func:`acquire_sse_slot` is only released then. If the only idle write
+#: were the heartbeat, a reloading page could collide with its *own*
+#: previous connection's slot for a full heartbeat period (#2816). So when
+#: no frame has been written for this long, the stream emits a bare SSE
+#: comment: invisible to the browser's ``EventSource`` (it must NOT reset
+#: the client's liveness breaker — only real events do), but enough to make
+#: the write fail fast and free the slot.
+KEEPALIVE_SECONDS = 1.0
 
 #: Per-process identifier emitted as the first SSE frame on every new
 #: connection. Clients compare it against the last value they saw; when
@@ -89,6 +102,22 @@ MAX_SSE_CONNECTIONS = int(os.environ.get("VTSEARCH_SSE_MAX_CONNECTIONS", str(_de
 
 _connection_lock = threading.Lock()
 _active_connections = 0
+
+
+def uncap_sse_connections() -> None:
+    """Remove the SSE connection cap for servers without a bounded thread pool.
+
+    The cap exists to keep long-lived streams from starving gunicorn's
+    ``gthread`` worker pool. The Flask dev server (``app.run(threaded=True)``,
+    see ``vtsearch/cli_main.py``) spawns a thread per connection and has no
+    pool to protect, so there the cap is pure downside: extra tabs get 503s
+    while the server has capacity to spare (#2816). An explicit
+    ``VTSEARCH_SSE_MAX_CONNECTIONS`` override still wins.
+    """
+    global MAX_SSE_CONNECTIONS
+    if "VTSEARCH_SSE_MAX_CONNECTIONS" in os.environ:
+        return
+    MAX_SSE_CONNECTIONS = sys.maxsize
 
 
 def acquire_sse_slot() -> bool:
@@ -141,7 +170,10 @@ def initial_snapshot() -> list[str]:
 
 
 def stream_progress_events(  # noqa: C901
-    *, heartbeat_seconds: float = HEARTBEAT_SECONDS, max_queue: int = 1024
+    *,
+    heartbeat_seconds: float = HEARTBEAT_SECONDS,
+    keepalive_seconds: float = KEEPALIVE_SECONDS,
+    max_queue: int = 1024,
 ) -> Generator[str, None, None]:
     """Yield SSE-formatted strings for every progress channel until disconnect.
 
@@ -191,25 +223,35 @@ def stream_progress_events(  # noqa: C901
             yield frame
 
         last_heartbeat = time.monotonic()
+        last_write = time.monotonic()
         while True:
-            timeout = max(0.0, heartbeat_seconds - (time.monotonic() - last_heartbeat))
+            deadline = min(last_heartbeat + heartbeat_seconds, last_write + keepalive_seconds)
             try:
-                name, snapshot = q.get(timeout=timeout)
+                name, snapshot = q.get(timeout=max(0.0, deadline - time.monotonic()))
                 yield _format_sse(name, snapshot)
             except queue.Empty:
-                # Emit the heartbeat as a real, named ``heartbeat`` event
-                # rather than an SSE comment (``: heartbeat``). Comments are
-                # invisible to the browser's EventSource API, so the client
-                # could not use them as a liveness signal; a named event fires
-                # a listener, letting the frontend treat every heartbeat as
-                # proof the backend is still alive (and keeping idle proxies
-                # open just as a comment would).
-                yield _format_sse("heartbeat", {"ts": time.time()})
-                # Re-emit task channels so clients see finished tasks
-                # disappear once their stale-prune window elapses.
-                for name, tasks_tracker in _TASK_CHANNELS.items():
-                    yield _format_sse(name, tasks_tracker.list_tasks())
-                last_heartbeat = time.monotonic()
+                if time.monotonic() - last_heartbeat >= heartbeat_seconds:
+                    # Emit the heartbeat as a real, named ``heartbeat`` event
+                    # rather than an SSE comment (``: heartbeat``). Comments are
+                    # invisible to the browser's EventSource API, so the client
+                    # could not use them as a liveness signal; a named event fires
+                    # a listener, letting the frontend treat every heartbeat as
+                    # proof the backend is still alive (and keeping idle proxies
+                    # open just as a comment would).
+                    yield _format_sse("heartbeat", {"ts": time.time()})
+                    # Re-emit task channels so clients see finished tasks
+                    # disappear once their stale-prune window elapses.
+                    for name, tasks_tracker in _TASK_CHANNELS.items():
+                        yield _format_sse(name, tasks_tracker.list_tasks())
+                    last_heartbeat = time.monotonic()
+                else:
+                    # Socket probe only (see KEEPALIVE_SECONDS): a comment is
+                    # invisible to EventSource, so it deliberately does not
+                    # feed the client's liveness breaker — its sole job is to
+                    # make a write happen so a dead connection raises and
+                    # releases its slot promptly.
+                    yield ": ka\n\n"
+            last_write = time.monotonic()
     finally:
         for subject, handler in subscriptions:
             subject.unsubscribe(handler)
