@@ -86,11 +86,23 @@ class TestToggleVote:
         assert label_history[0][0] == 1
         assert label_history[0][1] == "good"
 
-    def test_toggle_off_records_unlabel(self):
-        good_votes[1] = None
+    def test_toggle_off_removes_the_click(self):
+        """Toggling a label off deletes its event rather than appending one.
+
+        The history records what we now believe the labels were, so a withdrawn
+        label leaves no trace for the per-step replay to undo.
+        """
         toggle_vote(1, "good")
         assert len(label_history) == 1
-        assert label_history[0][1] == "unlabel"
+        toggle_vote(1, "good")
+        assert label_history == []
+
+    def test_toggle_off_without_a_recorded_click_is_a_no_op(self):
+        """A vote seeded straight into the dict has no event to remove."""
+        good_votes[1] = None
+        toggle_vote(1, "good")
+        assert label_history == []
+        assert 1 not in good_votes
 
     def test_toggle_assigns_click_time(self):
         toggle_vote(1, "good")
@@ -664,24 +676,38 @@ class TestStateProgressLockOrder:
         monkeypatch.setattr(_progress_mod, attr, wrapper)
         return captured
 
-    def test_votes_never_touch_the_progress_cache(self, monkeypatch):
-        """A vote takes no progress-cache lock at all, so it cannot order badly.
+    def test_set_vote_releases_state_lock_before_progress_invalidate(self, monkeypatch):
+        held = self._patch_capture(monkeypatch, "invalidate_progress_cache_from")
+        from vtsearch.state import set_vote
 
-        ``label_history`` is append-only, so every cached step stays valid when
-        a vote lands; there is nothing to invalidate.  The lock-ordering hazard
-        this class guards is therefore *absent by construction* on the vote
-        path - which is stronger than ordering it correctly.
-        """
-        cleared = self._patch_capture(monkeypatch, "clear_progress_cache")
-        from vtsearch.state import set_vote, toggle_vote
+        # First vote: none→good, no invalidation (a first label appends).
+        set_vote(1, "good")
+        # Second vote: good→bad, a correction, so the cache is invalidated.
+        set_vote(1, "bad")
+        assert held, "invalidate_progress_cache_from was never called on good→bad"
+        assert held == [False] * len(held), f"_state_lock held during progress invalidate: {held}"
+
+    def test_toggle_vote_releases_state_lock_before_progress_invalidate(self, monkeypatch):
+        held = self._patch_capture(monkeypatch, "invalidate_progress_cache_from")
+        from vtsearch.state import toggle_vote
+
+        # First toggle: none→good (no invalidate).
+        toggle_vote(2, "good")
+        # Second toggle: good→none (triggers invalidate).
+        toggle_vote(2, "good")
+        assert held, "invalidate_progress_cache_from was never called on toggle-off"
+        assert held == [False] * len(held), f"_state_lock held during progress invalidate: {held}"
+
+    def test_a_first_label_does_not_invalidate(self, monkeypatch):
+        """Appending a click cannot disturb a cached step, so it must not try."""
+        held = self._patch_capture(monkeypatch, "invalidate_progress_cache_from")
+        from vtsearch.state import set_vote
 
         set_vote(1, "good")
-        set_vote(1, "bad")  # polarity flip
-        set_vote(1, "none")  # un-vote
-        toggle_vote(2, "good")
-        toggle_vote(2, "good")  # toggle off
+        set_vote(2, "bad")
+        set_vote(3, "good")
 
-        assert cleared == [], f"a vote reached the progress cache: {cleared}"
+        assert held == [], "a first label reached the progress cache"
 
     def test_clear_votes_releases_state_lock_before_progress_clear(self, monkeypatch):
         held = self._patch_capture(monkeypatch, "clear_progress_cache")

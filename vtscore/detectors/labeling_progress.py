@@ -216,7 +216,8 @@ def _discard_if_not_ours(owner: Optional[tuple[str, str]], history_len: int, *, 
     Two ways a cache stops describing the current state without any explicit
     invalidation: the active detector changed under it (see :data:`_cache_owner`),
     or ``label_history`` got *shorter* than the cache - which happens when a
-    failed label-sync rolls the history back to a saved prefix.  In both cases
+    failed label-sync rolls the history back to a saved prefix.  (An un-vote
+    also shortens it, but that path invalidates explicitly.)  In both cases
     the incremental "resume from ``len(cache)``" rule would silently serve or
     extend the wrong series, so the cache is discarded and rebuilt.
     """
@@ -226,6 +227,70 @@ def _discard_if_not_ours(owner: Optional[tuple[str, str]], history_len: int, *, 
         clear_diversity_cache() if diversity else _clear_model_cache()
     elif cached_len > history_len:
         clear_diversity_cache() if diversity else _clear_model_cache()
+
+
+def invalidate_progress_cache_from(media_id: int, *, coverage_changed: bool = False) -> None:
+    """Discard cached steps from where *media_id* was first labeled.
+
+    Called when the user corrects a label they had already applied.
+    :func:`~vtscore.state.votes.correct_label_in_history` has just rewritten
+    that click *in place*, so every step from it onward was trained against a
+    label we now believe was wrong and has to be replayed - which is exactly
+    what a corrected series should do, and the whole point of the correction.
+    Steps before it never saw this media and are untouched.
+
+    (This function used to exist alongside an append-only history, where the
+    replay re-read the *unchanged* events and so reproduced the very models it
+    had just deleted - a rebuild that changed nothing.  Pairing it with the
+    in-place rewrite is what makes the invalidation mean something.)
+
+    *coverage_changed* additionally resets the diversity replay: a good↔bad
+    correction cannot move coverage (``CoverageAtlas._covered`` tests
+    ``n_pos + n_neg > 0``, so the item stays covered either way), but an un-vote
+    *removes* the event, which drops a labeled item and shifts every later step.
+    The atlas structure - the expensive part - is kept and only its label
+    overlay is rewound, so the next read replays without a k-means re-fit.
+    """
+    global _cache_prev_predictions
+    with _progress_lock:
+        # First cached step whose training data includes this media.  Under the
+        # one-event-per-media rule that is exactly the corrected event's index.
+        truncate_at = next(
+            (i for i, step in enumerate(_cached_steps) if media_id in step["good_ids"] or media_id in step["bad_ids"]),
+            None,
+        )
+        if truncate_at is not None:
+            del _cached_steps[truncate_at:]
+
+            # Restore the running ID sets to the surviving prefix's final state.
+            _cache_good_ids.clear()
+            _cache_bad_ids.clear()
+            if _cached_steps:
+                _cache_good_ids.update(_cached_steps[-1]["good_ids"])
+                _cache_bad_ids.update(_cached_steps[-1]["bad_ids"])
+
+            # Re-derive the prediction baseline from the last surviving step
+            # rather than nulling it.  Nulling made the first replayed step
+            # record no flip count at all, leaving the Stable series a point
+            # short of what a cold rebuild of the same history produces.
+            _cache_prev_predictions = _predictions_for_step(_cached_steps[-1] if _cached_steps else None)
+
+        if coverage_changed:
+            _reset_diversity_replay()
+
+
+def _reset_diversity_replay() -> None:
+    """Drop the replayed diversity series, keeping the atlas structure.
+
+    The series is O(1) per step to rebuild once the atlas exists; the atlas is
+    a hierarchical k-means over every embedding.  So a removal rewinds the
+    label overlay and replays from scratch rather than truncating precisely.
+    """
+    _cached_diversity.clear()
+    _cache_div_good_ids.clear()
+    _cache_div_bad_ids.clear()
+    if _cache_coverage_atlas is not None:
+        _cache_coverage_atlas.reset_labeled()
 
 
 def inject_live_model(
@@ -451,6 +516,45 @@ def _monitored_pool(
     return _cache_monitored_ids, _cache_monitored_X, _cache_monitored_set
 
 
+def _score_monitored_pool(
+    model: nn.Sequential,
+    threshold: float,
+    labeled_ids: set[int],
+) -> Optional[dict[int, int]]:
+    """Return ``{media_id: 0|1}`` over the still-unlabeled monitored pool.
+
+    Scores the whole pool in one pass and drops the currently-labeled ids
+    afterwards: scoring the handful of extra (labeled) rows is far cheaper than
+    re-materialising a per-step tensor of the unlabeled subset.  Requires the
+    pool to already exist (:func:`_monitored_pool`); returns ``None`` when there
+    is nothing to score.
+    """
+    import torch  # noqa: PLC0415
+
+    if _cache_monitored_X is None or _cache_monitored_ids is None:
+        return None
+    with torch.no_grad():
+        X_in = _cache_monitored_X.to(next(model.parameters()).device)
+        scores = torch.sigmoid(model(X_in)).squeeze(1).cpu().tolist()
+    return {
+        cid: 1 if score >= threshold else 0
+        for cid, score in zip(_cache_monitored_ids, scores, strict=True)
+        if cid not in labeled_ids
+    }
+
+
+def _predictions_for_step(step: Optional[dict[str, Any]]) -> Optional[dict[int, int]]:
+    """Re-derive the prediction baseline that *step* left behind.
+
+    Used after a truncation to resume the stability chain where the discarded
+    suffix picked it up, so the replayed series matches a cold rebuild of the
+    same history instead of losing its first flip count.
+    """
+    if step is None or step["model"] is None or step["threshold"] is None:
+        return None
+    return _score_monitored_pool(step["model"], step["threshold"], set(step["good_ids"]) | set(step["bad_ids"]))
+
+
 def _compute_step_stability(
     model: nn.Sequential,
     threshold: float,
@@ -461,7 +565,6 @@ def _compute_step_stability(
 ) -> Optional[dict[str, Any]]:
     """Compute prediction stability by comparing to the previous step's predictions."""
     global _cache_prev_predictions
-    import torch  # noqa: PLC0415
 
     monitored_ids, X_monitored, monitored_set = _monitored_pool(clips_dict, all_media_ids)
 
@@ -473,18 +576,9 @@ def _compute_step_stability(
     if num_unlabeled <= 0 or X_monitored is None:
         return {"time_index": t, "num_labels": num_labels, "num_flips": 0, "num_unlabeled": 0}
 
-    # Score the whole monitored pool in one pass and drop the currently-labeled
-    # ids afterwards.  Scoring the handful of extra (labeled) rows is far
-    # cheaper than re-materialising a per-step tensor of the unlabeled subset.
-    with torch.no_grad():
-        X_in = X_monitored.to(next(model.parameters()).device)
-        scores_unl = torch.sigmoid(model(X_in)).squeeze(1).cpu().tolist()
-
-    predictions: dict[int, int] = {
-        cid: 1 if score >= threshold else 0
-        for cid, score in zip(monitored_ids, scores_unl, strict=True)
-        if cid not in labeled_ids
-    }
+    predictions = _score_monitored_pool(model, threshold, labeled_ids)
+    if predictions is None:  # pool vanished under us; nothing to compare
+        return {"time_index": t, "num_labels": num_labels, "num_flips": 0, "num_unlabeled": 0}
 
     stability: Optional[dict[str, Any]] = None
     if _cache_prev_predictions is not None:
@@ -617,13 +711,12 @@ def _ensure_cache(
     slow thing in the request, and without this the caller's progress bar sat
     at 0 % for its entire duration.
 
-    Nothing invalidates this cache on a vote, because ``label_history`` is
-    append-only: step *t* is a deterministic function of ``label_history[:t+1]``,
-    and appending an event cannot change any earlier prefix.  Changing your mind
-    about an item you voted on 200 clicks ago therefore costs one new step, not
-    a rebuild.  (It used to truncate back to that item's first appearance - which
-    also *broke* the Stable series, since restarting the prediction chain drops
-    the flip count at the resumption point.)
+    Step *t* is a deterministic function of ``label_history[:t+1]``.  A *first*
+    label on a media appends, so it cannot disturb any cached step.  A
+    *correction* rewrites that media's event where it stands (see
+    :func:`~vtscore.state.votes.correct_label_in_history`) and
+    :func:`invalidate_progress_cache_from` drops every step from it onward, so
+    the replay here refits them against the corrected label.
 
     Does **not** touch the coverage atlas or the diversity series - see
     :func:`_ensure_diversity_cache`.

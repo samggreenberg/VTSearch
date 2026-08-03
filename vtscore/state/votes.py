@@ -79,6 +79,46 @@ def add_label_to_history(media_id: int, label: str) -> None:
         get_active_detector_context().label_history.append((media_id, label, time.time()))
 
 
+def correct_label_in_history(media_id: int, target: str) -> None:
+    """Rewrite (or drop) *media_id*'s existing label event, in place.
+
+    Called when the user **changes their mind** about a media they already
+    labeled.  That is not a new datapoint appended to the session - it is a
+    statement that the earlier label was *wrong*.  Every model trained after
+    that click was fit on data we now believe to be incorrect, so the event is
+    corrected where it stands and the progress cache is invalidated from that
+    index (see ``labeling_progress.invalidate_progress_cache_from``), which
+    replays the remainder against the corrected label.
+
+    Appending instead would have left the original click in the history, so the
+    replayed curve would still show the detector believing the wrong label for
+    every step in between - and would add a 21st point for what the user
+    experienced as fixing the 15th.
+
+    ``target == "none"`` (un-vote) *removes* the event: the correct statement is
+    that this media was never labeled, so the series has one fewer step rather
+    than a step that labels and a later step that unlabels.
+
+    Caller must hold ``_state_lock``.  No-op when the media has no event (a
+    ``silent`` restore, or an import that skipped the history).
+    """
+    history = get_active_detector_context().label_history
+    # At most one event per media survives under this rule, but scan from the
+    # end anyway so a history predating it corrects its most recent entry.
+    for i in range(len(history) - 1, -1, -1):
+        if history[i][0] != media_id:
+            continue
+        if target == "none":
+            del history[i]
+        else:
+            existing_id, _old_label, timestamp = history[i]
+            # Keep the original timestamp: this is still the same click, with a
+            # corrected verdict, and its position in the session is what the
+            # per-step curve is indexed by.
+            history[i] = (existing_id, target, timestamp)
+        return
+
+
 def add_textsort_suggestion(text: str) -> None:
     """Record a text-sort query as a suggested detector/labelset name.
 
@@ -367,6 +407,11 @@ def _set_vote_locked(
         existing_click = ctx.vote_click_times.get(media_id) if target != "none" else None
         return (old, old, existing_click)
 
+    # A first label appends; a change to an existing one *corrects the original
+    # event in place* rather than appending (see ``correct_label_in_history``).
+    correcting = old != "none"
+    record = correct_label_in_history if correcting else add_label_to_history
+
     if target == "good":
         ctx.bad_votes.pop(media_id, None)
         ctx.good_votes[media_id] = None
@@ -375,21 +420,23 @@ def _set_vote_locked(
         else:
             ctx.vote_region_boxes.pop(media_id, None)
         click_time = assign_click_time(media_id)
-        add_label_to_history(media_id, "good")
+        record(media_id, "good")
         coverage_atlas_label(media_id, good=True)
     elif target == "bad":
         ctx.good_votes.pop(media_id, None)
         ctx.vote_region_boxes.pop(media_id, None)
         ctx.bad_votes[media_id] = None
         click_time = assign_click_time(media_id)
-        add_label_to_history(media_id, "bad")
+        record(media_id, "bad")
         coverage_atlas_label(media_id, good=False)
     else:  # target == "none"
         ctx.good_votes.pop(media_id, None)
         ctx.bad_votes.pop(media_id, None)
         ctx.vote_region_boxes.pop(media_id, None)
         remove_click_time(media_id)
-        add_label_to_history(media_id, "unlabel")
+        # ``correcting`` is always true here - "none" from "none" was handled by
+        # the idempotent early-return - so this drops the media's event.
+        correct_label_in_history(media_id, "none")
         coverage_atlas_unlabel(media_id)
         click_time = None
 
@@ -399,6 +446,19 @@ def _set_vote_locked(
         _record_vote_locked(count_streak=count_streak)
 
     return (old, target, click_time)
+
+
+def _needs_progress_invalidate(old_label: str, new_label: str) -> bool:
+    """Whether an ``old_label → new_label`` transition is a *correction*.
+
+    A correction is a statement that an earlier click was wrong, so
+    :func:`correct_label_in_history` rewrites that event where it stands and
+    every cached step from it onward was trained on data we no longer believe.
+    A first label on an unlabeled media appends instead, and invalidates
+    nothing.  Idempotent re-applies (including a re-vote carrying a new region
+    box) return early before reaching here.
+    """
+    return old_label != "none" and old_label != new_label
 
 
 def _mark_verified_if_find_mode(ctx: Any, media_id: int, new_label: str) -> None:
@@ -464,11 +524,14 @@ def set_vote(
     with _state_lock:
         result = _set_vote_locked(media_id, target, region_box=region_box, count_streak=count_streak)
         _mark_verified_if_find_mode(get_active_detector_context(), media_id, result[1])
-    # No progress-cache invalidation: ``label_history`` is append-only, so every
-    # already-cached step is still exactly what a fresh replay of the (unchanged)
-    # prefix would produce.  Changing your mind about an item appends a *new*
-    # event; it does not rewrite the past.  See the note on
-    # ``labeling_progress._ensure_cache``.
+    # Progress-cache invalidation runs *after* ``_state_lock`` is released so
+    # we never establish a ``_state_lock → _progress_lock`` ordering across
+    # the two modules (audit M1).
+    old_label, new_label, _click_time = result
+    if _needs_progress_invalidate(old_label, new_label):
+        from vtscore.detectors.labeling_progress import invalidate_progress_cache_from
+
+        invalidate_progress_cache_from(media_id, coverage_changed=new_label == "none")
     return result
 
 
@@ -509,6 +572,11 @@ def toggle_vote(
             region_box=region_box if target == "good" else None,
         )
         _mark_verified_if_find_mode(ctx, media_id, new)
+    # See the lock-ordering note on :func:`set_vote`.
+    if _needs_progress_invalidate(old, new):
+        from vtscore.detectors.labeling_progress import invalidate_progress_cache_from
+
+        invalidate_progress_cache_from(media_id, coverage_changed=new == "none")
 
 
 def apply_label(

@@ -23,8 +23,10 @@ These tests pin the pieces that fixed it:
 * An inclusion change re-derives cutoffs from the cached models instead of
   discarding them.
 * The walk reports per-step progress and can publish a partial series.
-* Votes never invalidate anything (``label_history`` is append-only), and the
-  caches are stamped with the detector they belong to.
+* Correcting an existing label rewrites that click in place and invalidates
+  from it, and the replay reproduces a cold rebuild exactly; a first label
+  appends and invalidates nothing.
+* The caches are stamped with the detector they belong to.
 """
 
 from __future__ import annotations
@@ -482,46 +484,108 @@ class TestCacheOwnership:
         assert len(lp._cached_diversity) == 4
 
 
-class TestAppendOnlyHistoryNeedsNoInvalidation:
-    """Changing your mind costs one step, not a rebuild.
+class TestCorrectionInvalidatesFromThatPoint:
+    """A corrected click is replayed, and the replay matches a cold rebuild.
 
-    Every cached step is a deterministic function of ``label_history[:t+1]``, and
-    a re-vote *appends*.  The old code truncated back to the flipped media's
-    first appearance, which retrained everything after it and - because it reset
-    the prediction chain - also dropped a flip count from the Stable series that
-    a fresh replay would have had.
+    ``correct_label_in_history`` rewrites the click *in place*, so every step
+    from it onward has to refit against the corrected label -- that is the
+    correction propagating, and it is the whole reason to invalidate.  What must
+    not differ is the *result*: resuming from the surviving prefix has to produce
+    exactly what rebuilding the corrected history from scratch produces.
+
+    The old code got this wrong twice over.  It invalidated against an
+    append-only history, so the replay re-read the unchanged events and
+    reproduced the models it had just deleted -- a rebuild that changed nothing.
+    And it nulled the prediction baseline at the truncation point, so the first
+    replayed step recorded no flip count and the Stable series came out a point
+    short of a cold rebuild.
     """
 
-    def _flip_history(self, n: int) -> list[tuple[int, str, float]]:
-        # Media 2 is first labeled at step 2; flip it after n steps.
-        return _history(n) + [(2, "bad", 99.0)]
+    def _corrected(self, n: int, media_id: int, label: str) -> list[tuple[int, str, float]]:
+        """*n* clicks with *media_id*'s own click rewritten to *label* in place."""
+        history = _history(n)
+        idx = next(i for i, ev in enumerate(history) if ev[0] == media_id)
+        history[idx] = (media_id, label, history[idx][2])
+        return history
 
-    def test_incremental_matches_a_cold_rebuild_exactly(self):
+    def test_replay_matches_a_cold_rebuild_of_the_corrected_history(self):
         clips = _clips(200)
-        good, bad = _votes(10)
-        flipped = self._flip_history(10)
+        corrected = self._corrected(10, 4, "bad")
+        good = {k: None for k in range(10) if k % 2 == 0 and k != 4}
+        bad = {k: None for k in range(10) if k % 2 == 1 or k == 4}
 
         lp.clear_progress_cache()
-        lp.calculate_error_cost_over_time(clips, _history(10), good, bad, 0)
-        incremental = lp.calculate_error_cost_over_time(clips, flipped, good, bad, 0)
-        incremental_stability = lp.calculate_prediction_stability_over_time(clips, flipped, 0)
+        lp.calculate_error_cost_over_time(clips, _history(10), *_votes(10), 0)
+        lp.invalidate_progress_cache_from(4)
+        assert len(lp._cached_steps) == 4, "steps before media 4's click must survive"
+        incremental = lp.calculate_error_cost_over_time(clips, corrected, good, bad, 0)
+        incremental_stability = lp.calculate_prediction_stability_over_time(clips, corrected, 0)
 
         lp.clear_progress_cache()
-        cold = lp.calculate_error_cost_over_time(clips, flipped, good, bad, 0)
-        cold_stability = lp.calculate_prediction_stability_over_time(clips, flipped, 0)
+        cold = lp.calculate_error_cost_over_time(clips, corrected, good, bad, 0)
+        cold_stability = lp.calculate_prediction_stability_over_time(clips, corrected, 0)
 
         assert incremental == cold
         assert incremental_stability == cold_stability
 
-    def test_the_flip_costs_exactly_one_new_step(self):
+    def test_the_stability_chain_resumes_instead_of_restarting(self):
+        """Nulling the baseline dropped the flip count at the resume point."""
         clips = _clips(200)
-        good, bad = _votes(10)
+        corrected = self._corrected(10, 4, "bad")
+
         lp.clear_progress_cache()
-        lp.calculate_error_cost_over_time(clips, _history(10), good, bad, 0)
-        models_before = [step["model"] for step in lp._cached_steps]
+        lp.calculate_prediction_stability_over_time(clips, _history(10), 0)
+        lp.invalidate_progress_cache_from(4)
+        resumed = lp.calculate_prediction_stability_over_time(clips, corrected, 0)
 
-        lp.calculate_error_cost_over_time(clips, self._flip_history(10), good, bad, 0)
+        lp.clear_progress_cache()
+        cold = lp.calculate_prediction_stability_over_time(clips, corrected, 0)
 
-        assert len(lp._cached_steps) == 11
-        # Identity: the surviving steps were not retrained.
-        assert [s["model"] for s in lp._cached_steps[:10]] == models_before
+        assert len(resumed) == len(cold)
+        assert [entry["time_index"] for entry in resumed] == [entry["time_index"] for entry in cold]
+
+    def test_the_correction_actually_changes_the_later_steps(self):
+        """If the replay reproduced the old models the invalidation was pointless."""
+        clips = _clips(200)
+        lp.clear_progress_cache()
+        lp.calculate_error_cost_over_time(clips, _history(10), *_votes(10), 0)
+        before = [(sorted(s["good_ids"]), sorted(s["bad_ids"])) for s in lp._cached_steps]
+
+        corrected = self._corrected(10, 4, "bad")
+        lp.invalidate_progress_cache_from(4)
+        good = {k: None for k in range(10) if k % 2 == 0 and k != 4}
+        bad = {k: None for k in range(10) if k % 2 == 1 or k == 4}
+        lp.calculate_error_cost_over_time(clips, corrected, good, bad, 0)
+        after = [(sorted(s["good_ids"]), sorted(s["bad_ids"])) for s in lp._cached_steps]
+
+        assert before[:4] == after[:4], "the surviving prefix must be identical"
+        assert before[4:] != after[4:], "the corrected label must reach every later step"
+        for step_good, _step_bad in after[4:]:
+            assert 4 not in step_good
+
+    def test_an_unlabeled_media_invalidates_nothing(self):
+        clips = _clips(200)
+        lp.clear_progress_cache()
+        lp.calculate_error_cost_over_time(clips, _history(10), *_votes(10), 0)
+
+        lp.invalidate_progress_cache_from(999)
+
+        assert len(lp._cached_steps) == 10
+
+    def test_a_polarity_correction_leaves_the_diversity_replay_alone(self):
+        """Coverage is polarity-agnostic, so only a removal rewinds it."""
+        clips = _clips(200)
+        lp.clear_progress_cache()
+        lp.calculate_diversity_level_over_time(clips, _history(10))
+        atlas = lp._cache_coverage_atlas
+        series = list(lp._cached_diversity)
+
+        lp.invalidate_progress_cache_from(4)
+        assert lp._cached_diversity == series
+        assert lp._cache_coverage_atlas is atlas
+
+        # A removal does drop a labeled item, so the series is rewound - but the
+        # atlas structure, the expensive part, is kept for the replay.
+        lp.invalidate_progress_cache_from(4, coverage_changed=True)
+        assert lp._cached_diversity == []
+        assert lp._cache_coverage_atlas is atlas
