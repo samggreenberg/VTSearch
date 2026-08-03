@@ -68,6 +68,18 @@ class ProjectionMetaSchema(Schema):
             ),
         },
     )
+    overall_step_end = fields.Float(
+        load_default=None,
+        metadata={
+            "description": (
+                "Whole-job fraction (0..1) at which the running phase's slice "
+                "ends. With ``overall`` parked at the slice floor during a "
+                "count-less phase (the UMAP fit), the pair brackets the build's "
+                "true position so the client can shade the span as a bounded "
+                "indeterminate zone."
+            ),
+        },
+    )
     error = fields.String(load_default=None)
 
 

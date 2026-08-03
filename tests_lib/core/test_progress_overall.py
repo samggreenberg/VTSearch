@@ -100,6 +100,54 @@ class TestOverallFraction:
         assert t.get()["overall"] is None
 
 
+class TestOverallStepEnd:
+    """``overall_step_end`` marks where the current step's slice ends, so a
+    count-less step (``overall`` parked at the slice floor) still tells the
+    frontend "the job is somewhere in [overall, overall_step_end]" — the
+    bounded indeterminate zone."""
+
+    def test_none_without_step_structure(self):
+        t = _tracker()
+        t.update("loading", "no steps", current=5, total=10)
+        assert t.get()["overall_step_end"] is None
+
+    def test_countless_step_brackets_its_slice(self):
+        # The motivating example: three steps weighted 50/30/20. Step 1 done,
+        # step 2 count-less -> the bar parks at 0.5 and the slice ends at 0.8;
+        # the pair bounds where the job really is.
+        t = _tracker()
+        t.set_step_weights([0.5, 0.3, 0.2])
+        t.update("a", "T1 done", current=1, total=1, step=1, total_steps=3)
+        t.update("b", "T2 (no counts)", current=0, total=0, step=2, total_steps=3)
+        snap = t.get()
+        assert snap["overall"] == pytest.approx(0.5)
+        assert snap["overall_step_end"] == pytest.approx(0.8)
+
+    def test_equal_weight_slice_end(self):
+        t = _tracker()
+        # Step 3 of 4, half done -> overall 0.625, slice ends at 3/4.
+        t.update("embedding", "emb", current=5, total=10, step=3, total_steps=4)
+        snap = t.get()
+        assert snap["overall"] == pytest.approx(0.625)
+        assert snap["overall_step_end"] == pytest.approx(0.75)
+
+    def test_never_below_the_clamped_overall(self):
+        t = _tracker()
+        # Earn 0.8 within step 3 of 4, then jitter backwards: overall holds at
+        # its max, and step_end must still bracket it from above.
+        t.update("embedding", "x", current=8, total=10, step=3, total_steps=4)
+        t.update("embedding", "x", current=2, total=10, step=3, total_steps=4)
+        snap = t.get()
+        assert snap["overall_step_end"] >= snap["overall"]
+
+    def test_clears_when_step_structure_drops(self):
+        t = _tracker()
+        t.update("loading", "x", current=5, total=10, step=2, total_steps=4)
+        assert t.get()["overall_step_end"] is not None
+        t.update("idle", "", current=0, total=0, step=None, total_steps=None)
+        assert t.get()["overall_step_end"] is None
+
+
 class TestLoadStepMapping:
     """The status→step map and clipper step keep the unified bar monotonic."""
 

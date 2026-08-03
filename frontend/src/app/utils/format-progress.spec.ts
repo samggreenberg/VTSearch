@@ -70,6 +70,52 @@ describe('progressBarState', () => {
     expect(progressBarState({ current: 3, total: 12 }).pulsing).toBeUndefined();
     expect(progressBarState({}).pulsing).toBeUndefined();
   });
+
+  it('bounds the pulse with pulseTo when the slice end is known', () => {
+    // The motivating case: steps weighted 50/30/20, step 2 count-less. The
+    // bar parks at 0.5 and the backend says the slice ends at 0.8 — the job
+    // is somewhere in between, and the bar shades exactly that span.
+    const state = progressBarState({ overall: 0.5, current: 0, total: 0, overall_step_end: 0.8 });
+    expect(state.pulsing).toBe(true);
+    expect(state.pulseTo).toBe(0.8);
+  });
+
+  it('omits pulseTo when the phase reports real counts', () => {
+    expect(
+      progressBarState({ overall: 0.5, current: 3, total: 10, overall_step_end: 0.8 }).pulseTo,
+    ).toBeUndefined();
+  });
+
+  it('omits pulseTo when the slice end does not extend past the fill', () => {
+    expect(
+      progressBarState({ overall: 0.5, current: 0, total: 0, overall_step_end: 0.5 }).pulseTo,
+    ).toBeUndefined();
+  });
+
+  it('clamps pulseTo to 1', () => {
+    expect(
+      progressBarState({ overall: 0.5, current: 0, total: 0, overall_step_end: 1.2 }).pulseTo,
+    ).toBe(1);
+  });
+
+  it('renders a whole-bar zone exactly as a plain indeterminate bar', () => {
+    // A single count-less step ("Building coverage atlas…" reports 0/0 with
+    // step 1 of 1) knows nothing about anywhere, which is precisely what an
+    // indeterminate bar says. It must not animate differently from an
+    // identical job that happens to declare no step structure at all.
+    const oneStep = progressBarState({ overall: 0, current: 0, total: 0, overall_step_end: 1 });
+    const noStructure = progressBarState({ current: 0, total: 0 });
+    expect(oneStep).toEqual(noStructure);
+    expect(oneStep.indeterminate).toBe(true);
+    expect(oneStep.pulseTo).toBeUndefined();
+  });
+
+  it('still bounds a zone that starts at 0 but stops short of the end', () => {
+    // Step 1 of 4 with no counts: unknown, but only within the first quarter.
+    const state = progressBarState({ overall: 0, current: 0, total: 0, overall_step_end: 0.25 });
+    expect(state.indeterminate).toBe(false);
+    expect(state.pulseTo).toBe(0.25);
+  });
 });
 
 describe('isProgressIndeterminate', () => {

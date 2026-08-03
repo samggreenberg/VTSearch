@@ -59,15 +59,20 @@ def _build_progress(job) -> dict:
     the :data:`_BUILD_STEPS` phases is running, plus an ``overall`` completion
     fraction stitched from the two so the client's bar advances monotonically
     across the whole build.  A phase with no countable total (the UMAP fit)
-    contributes its slice only when it ends — the bar parks and pulses inside it
-    rather than pretending to a fraction the fit cannot report.
+    contributes its slice only when it ends — the bar parks inside it rather
+    than pretending to a fraction the fit cannot report.  ``overall_step_end``
+    (the fraction at which the running phase's slice ends) is published
+    alongside so the client can shade the parked-to-slice-end span as a bounded
+    indeterminate zone: "somewhere in here" is all the fit can honestly say.
     """
     total_steps = job.total_steps or 0
     step = job.step or 0
     within = job.current / job.total if job.total > 0 else 0.0
     overall = None
+    overall_step_end = None
     if total_steps > 0 and step > 0:
         overall = min(1.0, max(0.0, (step - 1 + within) / total_steps))
+        overall_step_end = max(min(1.0, step / total_steps), overall)
     return {
         "status": "building",
         "job_id": job.job_id,
@@ -77,6 +82,7 @@ def _build_progress(job) -> dict:
         "step": step or None,
         "total_steps": total_steps or None,
         "overall": overall,
+        "overall_step_end": overall_step_end,
     }
 
 

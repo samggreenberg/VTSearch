@@ -137,6 +137,10 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   readonly buildStep = signal<number | null>(null);
   readonly buildTotalSteps = signal<number | null>(null);
   readonly buildOverall = signal<number | null>(null);
+  /** Whole-job fraction where the running phase's slice ends; with the overall
+   *  parked at the slice floor during the count-less UMAP fit, the pair bounds
+   *  the bar's shimmer zone. See ProgressEvent.overall_step_end. */
+  readonly buildStepEnd = signal<number | null>(null);
 
   /** `<vt-progress-bar>` inputs for the build state, preferring the whole-job
    *  ``overall`` fraction so the bar fills once across the build rather than
@@ -146,6 +150,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       current: this.buildProgress(),
       total: this.buildTotal(),
       overall: this.buildOverall(),
+      overall_step_end: this.buildStepEnd(),
     }),
   );
 
@@ -1452,6 +1457,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     this.buildStep.set(meta?.step ?? null);
     this.buildTotalSteps.set(meta?.total_steps ?? null);
     this.buildOverall.set(meta?.overall ?? null);
+    this.buildStepEnd.set(meta?.overall_step_end ?? null);
   }
 
   private loadProjection(): void {

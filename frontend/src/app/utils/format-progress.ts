@@ -113,6 +113,16 @@ export interface ProgressBarState {
    * no progress signal to move it by.
    */
   pulsing?: boolean;
+  /**
+   * Upper bound of the pulsing zone, on the same scale as `value` (0..1 for
+   * `overall` bars): the whole-job fraction at which the current count-less
+   * phase's slice ends. When present, the bar sweeps the `value`..`pulseTo`
+   * span with the same block the whole-bar spinner uses — "the job is somewhere
+   * in here" — instead of shimmering the parked fill. Absent when the backend
+   * doesn't report the slice end, the phase is determinate, or the zone covers
+   * the whole bar (which collapses to a plain `indeterminate` bar).
+   */
+  pulseTo?: number;
 }
 
 /**
@@ -137,6 +147,22 @@ export function progressBarState(
     // Mid-job with no within-phase total to count against (and no error): the
     // current phase is indeterminate, so the parked fill should pulse in place.
     const pulsing = value < 1 && !(prog.total != null && prog.total > 0) && !prog.error;
+    // When the backend also reports where the count-less phase's slice ends,
+    // bound the pulse: the bar sweeps value..pulseTo as the unknown zone rather
+    // than shimmering the parked fill alone.
+    const stepEnd = prog.overall_step_end;
+    if (pulsing && stepEnd != null && isFinite(stepEnd) && stepEnd > value) {
+      // A zone covering the *whole* bar says exactly what a plain indeterminate
+      // bar says — nothing is known anywhere — so it renders as one, rather than
+      // as a band that happens to span everything. Without this, a job that
+      // declares a single count-less step (`step 1 of 1`, e.g. "Building
+      // coverage atlas…") would animate differently from an identical job that
+      // declares no step structure at all.
+      if (value <= 0 && stepEnd >= 1) {
+        return { value: 0, max: 1, indeterminate: true };
+      }
+      return { value, max: 1, indeterminate: false, pulsing, pulseTo: Math.min(1, stepEnd) };
+    }
     return { value, max: 1, indeterminate: false, pulsing };
   }
   const current = prog.current;

@@ -28,6 +28,17 @@ export class ProgressBarComponent {
    */
   readonly pulsing = input(false);
   /**
+   * Upper bound of the pulsing zone, on the `value` scale. When set (and
+   * `pulsing` is on), the fill stays parked at `value` and the span from
+   * `value` to `pulseTo` renders as a tinted band with the *same* travelling
+   * block the whole-bar `indeterminate` spinner uses: the job is known to be
+   * somewhere inside that slice, its exact position unknowable. It is literally
+   * that spinner confined to a sub-range, which is why a zone spanning the
+   * whole bar is routed to `indeterminate` instead. `null` keeps the plain
+   * parked-fill shimmer.
+   */
+  readonly pulseTo = input<number | null>(null);
+  /**
    * Opt-in for multi-stage jobs whose `value` is a single whole-job fraction
    * stitched from several phases (the dataset-load bar). It swaps the snappy
    * default fill transition for a longer ease so the unavoidable between-phase
@@ -53,6 +64,18 @@ export class ProgressBarComponent {
   get percentage(): number {
     if (this.max() <= 0) return 0;
     return Math.min(100, (this.value() / this.max()) * 100);
+  }
+
+  /**
+   * Width (in %) of the bounded pulse band: the `value`..`pulseTo` span of a
+   * count-less phase whose slice bounds are known. 0 (band not rendered)
+   * unless pulsing with a `pulseTo` beyond the current fill.
+   */
+  get pulseBandPercentage(): number {
+    const to = this.pulseTo();
+    if (!this.pulsing() || this.indeterminate() || to == null || this.max() <= 0) return 0;
+    const toPct = Math.min(100, (to / this.max()) * 100);
+    return Math.max(0, toPct - this.percentage);
   }
 
   /**

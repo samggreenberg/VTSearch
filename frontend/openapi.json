@@ -3190,13 +3190,6 @@
           "metric": {
             "type": "string"
           },
-          "partial": {
-            "items": {
-              "additionalProperties": {},
-              "type": "object"
-            },
-            "type": "array"
-          },
           "stability": {
             "items": {
               "$ref": "#/components/schemas/StabilityPoint"
@@ -5219,6 +5212,12 @@
           "overall": {
             "default": null,
             "description": "Whole-job completion fraction (0..1) stitched from the current phase and its within-phase counts, so one bar fills across the entire build instead of restarting at each phase.",
+            "nullable": true,
+            "type": "number"
+          },
+          "overall_step_end": {
+            "default": null,
+            "description": "Whole-job fraction (0..1) at which the running phase's slice ends. With ``overall`` parked at the slice floor during a count-less phase (the UMAP fit), the pair brackets the build's true position so the client can shade the span as a bounded indeterminate zone.",
             "nullable": true,
             "type": "number"
           },

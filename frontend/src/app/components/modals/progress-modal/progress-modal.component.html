@@ -14,15 +14,11 @@
         />
       }
     </div>
-  }
-  @if (!analyzing && emptyHistory) {
+  } @else if (emptyHistory) {
     <div class="analysis-loading">
       <p>No score history available yet. Label more items to build up history.</p>
     </div>
-  }
-  <!-- The canvas stays mounted for the partial series too, so a long job draws
-       its curve underneath the progress bar as the steps come in. -->
-  @if ((!analyzing && !emptyHistory) || partialData.length) {
+  } @else {
     <div class="chart-container">
       <canvas #chartCanvas width="600" height="300"></canvas>
     </div>

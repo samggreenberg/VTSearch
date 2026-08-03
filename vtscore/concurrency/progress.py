@@ -251,7 +251,7 @@ class ProgressTracker:
 
     def _compute_overall(
         self, current: int, total: int, step: Any, total_steps: Any, within_override: Optional[float] = None
-    ) -> tuple[Optional[float], Optional[float]]:
+    ) -> tuple[Optional[float], Optional[float], Optional[float]]:
         """Compute the whole-job completion fraction and a true overall ETA.
 
         When a caller declares a ``step``/``total_steps`` structure, the bar
@@ -260,8 +260,16 @@ class ProgressTracker:
         into the job's overall span by :meth:`_overall_raw_fraction` (weighted
         per step when weights were supplied, else equal weight).
 
-        Returns ``(overall, eta_seconds)``. Both are ``None`` when no step
-        structure is present (the caller falls back to the per-phase
+        Returns ``(overall, overall_step_end, eta_seconds)``.
+        ``overall_step_end`` is the whole-job fraction at which the *current*
+        step's slice ends — the bar's guaranteed position once this step
+        completes. A count-less step parks ``overall`` at its slice's floor, so
+        the pair bounds the job's true position (somewhere in
+        ``[overall, overall_step_end]``) and the frontend can render that span
+        as a bounded indeterminate zone instead of a bare parked fill.
+
+        All three are ``None`` when no step structure is present (the caller
+        falls back to the per-phase
         :meth:`_compute_eta`). The fraction is clamped to be monotonic
         non-decreasing within a job so the bar never visibly retreats; a step
         going *backwards* (or ``total_steps`` changing) is read as a brand-new
@@ -275,7 +283,7 @@ class ProgressTracker:
             self._overall_last_step = None
             self._overall_total_steps = None
             self._overall_smoothed_eta = None
-            return None, None
+            return None, None, None
 
         s = min(max(int(step), 1), int(total_steps))
         within = 0.0
@@ -284,6 +292,7 @@ class ProgressTracker:
         elif total and total > 0:
             within = min(max(current / total, 0.0), 1.0)
         raw = self._overall_raw_fraction(within, s, total_steps)
+        step_end = self._overall_raw_fraction(1.0, s, total_steps)
 
         now = time.monotonic()
         new_job = (
@@ -298,7 +307,7 @@ class ProgressTracker:
             self._overall_smoothed_eta = None
             self._overall_last_step = s
             self._overall_total_steps = total_steps
-            return raw, None
+            return raw, step_end, None
 
         step_advanced = self._overall_last_step is not None and s > self._overall_last_step
         self._overall_last_step = s
@@ -308,6 +317,10 @@ class ProgressTracker:
             raw = self._overall_max
         else:
             self._overall_max = raw
+        # The monotonic clamp can only hold values earned in this same step (a
+        # later step would have advanced ``s``), so ``raw`` cannot legitimately
+        # pass the slice end; clamp defensively so the pair always brackets.
+        step_end = max(step_end, raw)
 
         # Past the new-job guard above, the overall clock is always running.
         assert self._overall_start_time is not None
@@ -330,14 +343,14 @@ class ProgressTracker:
             self._overall_start_frac = raw
         if elapsed < self._ETA_MIN_ELAPSED or progressed <= 0 or raw >= 1.0:
             # Not enough signal yet (or done): hold the last smoothed estimate.
-            return raw, self._overall_smoothed_eta
+            return raw, step_end, self._overall_smoothed_eta
         raw_eta = elapsed * (1.0 - raw) / progressed
         if self._overall_smoothed_eta is None:
             self._overall_smoothed_eta = raw_eta
         else:
             alpha = self._ETA_SMOOTHING_ALPHA
             self._overall_smoothed_eta = alpha * raw_eta + (1.0 - alpha) * self._overall_smoothed_eta
-        return raw, self._overall_smoothed_eta
+        return raw, step_end, self._overall_smoothed_eta
 
     def update(
         self,
@@ -375,13 +388,16 @@ class ProgressTracker:
             # the bar fills once across the entire job instead of resetting at
             # each phase. Otherwise fall back to the per-phase ETA.
             overall = None
+            overall_step_end = None
             overall_eta = None
             if "overall" in self._extra_defaults or "eta_seconds" in self._extra_defaults:
-                overall, overall_eta = self._compute_overall(
+                overall, overall_step_end, overall_eta = self._compute_overall(
                     current, total, self._data.get("step"), self._data.get("total_steps"), within_override
                 )
             if "overall" in self._extra_defaults:
                 self._data["overall"] = overall
+            if "overall_step_end" in self._extra_defaults:
+                self._data["overall_step_end"] = overall_step_end
             if "eta_seconds" in self._extra_defaults:
                 raw_eta = overall_eta if overall is not None else self._compute_eta(status, current, total)
                 # Published coarse and sticky — see :meth:`_humble_eta`. Every
@@ -507,6 +523,12 @@ _PROGRESS_COMMON_EXTRAS: dict[str, Any] = {
     # by :meth:`ProgressTracker._compute_overall`. ``None`` for single-phase
     # operations (the frontend then falls back to ``current``/``total``).
     "overall": None,
+    # Whole-job fraction (0..1) at which the current step's slice ends. Paired
+    # with ``overall`` it brackets the job's true position when the current
+    # step is count-less (``overall`` parks at the slice floor); the frontend
+    # renders the span as a bounded indeterminate zone. ``None`` whenever
+    # ``overall`` is ``None``.
+    "overall_step_end": None,
 }
 
 
