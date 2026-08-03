@@ -7,8 +7,8 @@ from vtscore.detectors.labeling_progress import (
     _compute_stable_status,
     _ensure_cache,
     _live_models,
+    calculate_diversity_level_over_time,
     inject_live_model,
-    invalidate_progress_cache_from,
 )
 from vtscore.embedding.media_vectors import media_embedding
 from vtsearch.state import (
@@ -241,18 +241,27 @@ class TestLabelHistory:
         assert label_history[0][0] == 1
         assert label_history[0][1] == "good"
 
-    def test_unvote_good_adds_unlabel_history(self, client):
-        """target=none on a good media should record an 'unlabel' event."""
+    def test_unvote_good_removes_the_click(self, client):
+        """target=none says the click should never have happened.
+
+        The history records what we now believe the labels were, not a journal
+        of actions, so withdrawing a label deletes its event rather than
+        appending an ``unlabel`` that every replay then has to undo.
+        """
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/1/vote", json={"target": "none"})
-        assert len(label_history) == 2
-        assert label_history[1][1] == "unlabel"
+        assert label_history == []
 
-    def test_unvote_bad_adds_unlabel_history(self, client):
+    def test_unvote_bad_removes_the_click(self, client):
         client.post("/api/medias/1/vote", json={"target": "bad"})
         client.post("/api/medias/1/vote", json={"target": "none"})
-        assert len(label_history) == 2
-        assert label_history[1][1] == "unlabel"
+        assert label_history == []
+
+    def test_unvote_leaves_other_clicks_alone(self, client):
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
+        client.post("/api/medias/1/vote", json={"target": "none"})
+        assert [(entry[0], entry[1]) for entry in label_history] == [(2, "bad")]
 
     def test_idempotent_re_vote_does_not_grow_history(self, client):
         """Re-sending the current state appends nothing to label_history (H1)."""
@@ -262,23 +271,31 @@ class TestLabelHistory:
         assert len(label_history) == 1
         assert label_history[0][1] == "good"
 
-    def test_switch_vote_adds_new_label_history(self, client):
-        """Switching good->bad should add a 'bad' entry, not 'unlabel'."""
+    def test_switch_vote_corrects_the_existing_entry(self, client):
+        """Switching good->bad rewrites that click; it is not a second click."""
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/1/vote", json={"target": "bad"})
-        assert len(label_history) == 2
-        assert label_history[0][1] == "good"
-        assert label_history[1][1] == "bad"
+        assert len(label_history) == 1
+        assert label_history[0][0] == 1
+        assert label_history[0][1] == "bad"
+
+    def test_switch_keeps_the_click_s_position_in_the_session(self, client):
+        """The correction stays where the original click was, not at the end."""
+        client.post("/api/medias/1/vote", json={"target": "good"})
+        client.post("/api/medias/2/vote", json={"target": "bad"})
+        client.post("/api/medias/3/vote", json={"target": "good"})
+
+        client.post("/api/medias/1/vote", json={"target": "bad"})
+
+        assert [(entry[0], entry[1]) for entry in label_history] == [(1, "bad"), (2, "bad"), (3, "good")]
 
     def test_unvote_then_revote(self, client):
-        """Un-vote then re-vote should produce 3 history entries."""
+        """Un-vote drops the click; re-voting appends a fresh one at the end."""
         client.post("/api/medias/1/vote", json={"target": "good"})
         client.post("/api/medias/1/vote", json={"target": "none"})  # un-vote
         client.post("/api/medias/1/vote", json={"target": "bad"})  # revote bad
-        assert len(label_history) == 3
-        assert label_history[0][1] == "good"
-        assert label_history[1][1] == "unlabel"
-        assert label_history[2][1] == "bad"
+        assert len(label_history) == 1
+        assert label_history[0][1] == "bad"
         assert 1 in app_module.bad_votes
         assert 1 not in app_module.good_votes
 
@@ -370,138 +387,113 @@ class TestProgressCacheWithLabelChanges:
         assert data["bad_count"] == 4  # lost 1
 
 
-class TestProgressCacheInvalidatedOnVoteSwitch:
-    """Progress cache is partially invalidated when a vote switches polarity.
+class TestCorrectingAVoteInvalidatesFromThatPoint:
+    """Changing your mind rewrites the click; it does not append a new one.
 
-    Only cached steps from the point where the affected media first appeared
-    in the training data are discarded.  Earlier steps are preserved.
+    Voting on an unlabeled media appends an event.  Changing an existing label
+    is a different act: it says the earlier click was *wrong*.  So
+    ``correct_label_in_history`` rewrites that event where it stands and
+    ``invalidate_progress_cache_from`` drops every cached step from it onward -
+    those models were fit on data we no longer believe.  Steps before it never
+    saw the media and survive.
+
+    The two halves are load-bearing together.  With an append-only history the
+    invalidation replayed the *unchanged* events and reproduced the very models
+    it had deleted, so it cost a rebuild and changed nothing.
     """
 
-    def test_good_to_bad_truncates_from_first_appearance(self, client):
-        """Switching good→bad should keep steps before the media first appeared."""
-        # Steps: 0=(3,good), 1=(4,bad), 2=(1,good), 3=(2,bad)
-        # Media 1 first appears at step 2.
-        client.post("/api/medias/3/vote", json={"target": "good"})
-        client.post("/api/medias/4/vote", json={"target": "bad"})
-        client.post("/api/medias/1/vote", json={"target": "good"})
-        client.post("/api/medias/2/vote", json={"target": "bad"})
+    def _vote(self, client, votes):
+        for cid, target in votes:
+            assert client.post(f"/api/medias/{cid}/vote", json={"target": target}).status_code == 200
+
+    def _four_steps(self, client, first_target):
+        """Cache 4 steps; media 1 is click #2 (zero-based index 2)."""
+        self._vote(client, [(3, "good"), (4, "bad"), (1, first_target), (2, "bad")])
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 4
 
-        # Switch media 1 from good to bad; steps 0-1 preserved, 2-3 discarded
-        client.post("/api/medias/1/vote", json={"target": "bad"})
-        assert len(_cached_steps) == 2, "Steps before media 1's first appearance should be kept"
+    def test_good_to_bad_truncates_from_the_corrected_click(self, client):
+        self._four_steps(client, "good")
+        self._vote(client, [(1, "bad")])
+        assert len(_cached_steps) == 2, "steps before media 1's click must survive"
 
-    def test_bad_to_good_truncates_from_first_appearance(self, client):
-        """Switching bad→good should keep steps before the media first appeared."""
-        client.post("/api/medias/3/vote", json={"target": "good"})
-        client.post("/api/medias/4/vote", json={"target": "bad"})
-        client.post("/api/medias/1/vote", json={"target": "bad"})
-        client.post("/api/medias/2/vote", json={"target": "good"})
-        _ensure_cache(medias, label_history, 0)
-        assert len(_cached_steps) == 4
+    def test_bad_to_good_truncates_from_the_corrected_click(self, client):
+        self._four_steps(client, "bad")
+        self._vote(client, [(1, "good")])
+        assert len(_cached_steps) == 2
 
-        # Switch media 1 from bad to good; steps 0-1 preserved, 2-3 discarded
-        client.post("/api/medias/1/vote", json={"target": "good"})
-        assert len(_cached_steps) == 2, "Steps before media 1's first appearance should be kept"
-
-    def test_first_vote_switch_clears_entire_cache(self, client):
-        """If the switched media was in the very first step, full clear occurs."""
-        client.post("/api/medias/1/vote", json={"target": "good"})
-        client.post("/api/medias/2/vote", json={"target": "bad"})
+    def test_correcting_the_first_click_clears_everything(self, client):
+        self._vote(client, [(1, "good"), (2, "bad")])
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 2
 
-        # Switch media 1 (present from step 0); full clear
-        client.post("/api/medias/1/vote", json={"target": "bad"})
-        assert len(_cached_steps) == 0, "Cache should be fully cleared when media was in step 0"
+        self._vote(client, [(1, "bad")])
+        assert len(_cached_steps) == 0, "nothing precedes click #0"
 
-    def test_unvote_invalidates_cache_from_first_appearance(self, client):
-        """Un-voting (X→none) now invalidates the progress cache from the
-        media's first appearance; same rule as polarity flips (H1 cache-
-        invalidation fix).  Previously cache was retained, leaving cached
-        models trained against a label the user has since withdrawn.
-        """
-        # Steps: 0=(3,good), 1=(4,bad), 2=(1,good)
-        client.post("/api/medias/3/vote", json={"target": "good"})
-        client.post("/api/medias/4/vote", json={"target": "bad"})
-        client.post("/api/medias/1/vote", json={"target": "good"})
+    def test_the_correction_rewrites_the_click_rather_than_appending(self, client):
+        """20 clicks corrected is still 20 clicks, with the 15th changed."""
+        self._four_steps(client, "good")
+        assert len(label_history) == 4
+        assert label_history[2] == (1, "good", label_history[2][2])
+
+        self._vote(client, [(1, "bad")])
+
+        assert len(label_history) == 4, "a correction must not add a 5th click"
+        assert label_history[2][0] == 1
+        assert label_history[2][1] == "bad"
+
+    def test_the_correction_propagates_to_every_later_step(self, client):
+        """The whole point: later steps retrain against the corrected label."""
+        self._four_steps(client, "good")
+        assert 1 in _cached_steps[3]["good_ids"]
+
+        self._vote(client, [(1, "bad")])
+        _ensure_cache(medias, label_history, 0)
+
+        assert len(_cached_steps) == 4
+        assert 1 in _cached_steps[3]["bad_ids"]
+        assert 1 not in _cached_steps[3]["good_ids"]
+
+    def test_unvote_removes_the_click_entirely(self, client):
+        """An un-vote says the click should never have happened."""
+        self._vote(client, [(3, "good"), (4, "bad"), (1, "good")])
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 3
 
-        # Un-vote media 1 (first appears at step 2); keep 2 earlier steps.
-        client.post("/api/medias/1/vote", json={"target": "none"})
-        assert len(_cached_steps) == 2
+        self._vote(client, [(1, "none")])
 
-    def test_unvote_clears_cache_when_media_was_in_first_step(self, client):
-        """If the un-voted media was in step 0, the full cache is cleared."""
-        client.post("/api/medias/1/vote", json={"target": "good"})
-        client.post("/api/medias/2/vote", json={"target": "bad"})
-        _ensure_cache(medias, label_history, 0)
+        assert len(label_history) == 2, "the click is dropped, not marked 'unlabel'"
+        assert all(entry[0] != 1 for entry in label_history)
         assert len(_cached_steps) == 2
-
-        client.post("/api/medias/1/vote", json={"target": "none"})
-        assert len(_cached_steps) == 0, "Cache should be fully cleared when media was in step 0"
 
     def test_new_vote_does_not_clear_cache(self, client):
-        """Adding a brand-new vote (no prior label) should NOT clear the cache."""
-        client.post("/api/medias/1/vote", json={"target": "good"})
-        client.post("/api/medias/2/vote", json={"target": "bad"})
+        """A first label on an unlabeled media appends and invalidates nothing."""
+        self._vote(client, [(1, "good"), (2, "bad")])
         _ensure_cache(medias, label_history, 0)
         assert len(_cached_steps) == 2
 
-        # Add a new good vote on media 3 (no prior label)
-        client.post("/api/medias/3/vote", json={"target": "good"})
+        self._vote(client, [(3, "good")])
         assert len(_cached_steps) == 2, "Cache should not be cleared when adding a new vote"
 
-    def test_live_models_cleared_on_switch(self, client):
-        """Live models from learned-sort should also be cleared on a vote switch."""
-        client.post("/api/medias/1/vote", json={"target": "good"})
-        client.post("/api/medias/2/vote", json={"target": "bad"})
-        resp = client.post("/api/learned-sort", json={"wait": True})
-        assert resp.status_code == 200
-        assert len(_live_models) > 0
+    def test_running_ids_restored_to_the_surviving_prefix(self, client):
+        self._four_steps(client, "good")
+        self._vote(client, [(1, "bad")])
 
-        # Switch media 1 from good to bad; live models should be cleared
-        client.post("/api/medias/1/vote", json={"target": "bad"})
-        assert len(_live_models) == 0, "Live models should be cleared on vote switch"
-
-    def test_running_ids_restored_after_truncation(self, client):
-        """After partial truncation, _cache_good_ids/_cache_bad_ids match the last kept step."""
-        client.post("/api/medias/3/vote", json={"target": "good"})
-        client.post("/api/medias/4/vote", json={"target": "bad"})
-        client.post("/api/medias/1/vote", json={"target": "good"})
-        client.post("/api/medias/2/vote", json={"target": "bad"})
-        _ensure_cache(medias, label_history, 0)
-
-        # Switch media 1; truncates to 2 steps (steps 0-1)
-        client.post("/api/medias/1/vote", json={"target": "bad"})
         assert len(_cached_steps) == 2
-        # Running ID sets should match step 1's state: good={3}, bad={4}
         assert 3 in _cache_good_ids
         assert 4 in _cache_bad_ids
         assert 1 not in _cache_good_ids
         assert 1 not in _cache_bad_ids
 
-    def test_cache_rebuilds_correctly_after_partial_truncation(self, client):
-        """After partial invalidation, _ensure_cache replays from the truncation point."""
-        client.post("/api/medias/3/vote", json={"target": "good"})
-        client.post("/api/medias/4/vote", json={"target": "bad"})
-        client.post("/api/medias/1/vote", json={"target": "good"})
-        client.post("/api/medias/2/vote", json={"target": "bad"})
-        _ensure_cache(medias, label_history, 0)
-        assert len(_cached_steps) == 4
+    def test_surviving_steps_are_not_retrained(self, client):
+        self._four_steps(client, "good")
+        kept_models = [step["model"] for step in _cached_steps[:2]]
 
-        # Switch media 1 from good to bad; truncates to 2 steps
-        client.post("/api/medias/1/vote", json={"target": "bad"})
-        assert len(_cached_steps) == 2
-
-        # Rebuild cache; should replay from step 2 onward
+        self._vote(client, [(1, "bad")])
         _ensure_cache(medias, label_history, 0)
-        assert len(_cached_steps) == len(label_history)
-        # After replay, media 1 should be in bad_ids (final state)
-        assert 1 in _cache_bad_ids
-        assert 1 not in _cache_good_ids
+
+        # Identity: the prefix was reused, only the suffix refit.
+        assert [s["model"] for s in _cached_steps[:2]] == kept_models
 
     def test_labeling_progress_works_after_switch(self, client):
         """The /api/labeling-progress endpoint should work after a vote switch."""
@@ -519,28 +511,24 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
         resp = client.post("/api/labeling-progress")
         assert resp.status_code == 200
 
-    def test_invalidate_noop_when_media_not_in_cache(self, client):
-        """invalidate_progress_cache_from should be a no-op for unknown media."""
-        client.post("/api/medias/1/vote", json={"target": "good"})
-        client.post("/api/medias/2/vote", json={"target": "bad"})
-        _ensure_cache(medias, label_history, 0)
-        assert len(_cached_steps) == 2
 
-        # Invalidate a media that never appeared in the cache
-        invalidate_progress_cache_from(999)
-        assert len(_cached_steps) == 2, "Cache should not change for unknown media"
-
-
-class TestProgressAtlasClonesAndSurvivesInvalidate:
-    """The per-step progress atlas clones the dataset context's atlas and its
-    object identity survives cache invalidation.
+class TestProgressAtlasClonesAndSurvivesVotes:
+    """The diversity replay clones the dataset context's atlas, and a
+    good↔bad correction leaves that replay entirely alone.
 
     Building the coverage structure is hierarchical k-means over every
-    embedding; nulling the progress atlas on every polarity flip forced a full
-    re-fit under ``_progress_lock`` on the next ``/api/labeling-status`` poll.
-    Instead ``_build_coverage_atlas`` clones the context atlas (shared node
-    table, fresh label overlay) and ``invalidate_progress_cache_from`` rewinds
-    and replays that overlay in place rather than discarding the atlas.
+    embedding, so it must never be re-fit on a vote.  ``_build_coverage_atlas``
+    clones the context atlas (shared node table, fresh label overlay), and
+    coverage evidence is polarity-agnostic (``CoverageAtlas._covered`` tests
+    ``n_pos + n_neg > 0``), so switching a label between the two channels
+    cannot change any step's ``coverage_level()``.  Only an un-vote - which
+    drops the click outright - rewinds the replay, and even then the atlas
+    structure is kept.
+
+    The atlas is also no longer built by the model walk at all: asking for the
+    Smart or Stable curve used to pay for it, which on a dataset past
+    ``COVERAGE_ATLAS_AUTO_THRESHOLD`` (no load-time atlas to clone) was the
+    single largest cost in the request.
     """
 
     def _vote(self, client, votes):
@@ -554,7 +542,7 @@ class TestProgressAtlasClonesAndSurvivesInvalidate:
         assert ctx_atlas is not None
 
         self._vote(client, [(1, "good"), (2, "bad")])
-        _ensure_cache(medias, label_history, 0)
+        calculate_diversity_level_over_time(medias, label_history)
 
         prog_atlas = labeling_progress._cache_coverage_atlas
         assert prog_atlas is not None
@@ -568,35 +556,49 @@ class TestProgressAtlasClonesAndSurvivesInvalidate:
         assert prog_atlas._n_neg is not ctx_atlas._n_neg
         assert prog_atlas._labeled is not ctx_atlas._labeled
 
-    def test_partial_invalidate_preserves_atlas_identity(self, client):
+    def test_model_walk_does_not_build_an_atlas(self, client):
+        build_coverage_atlas()
+        self._vote(client, [(1, "good"), (2, "bad")])
+
+        _ensure_cache(medias, label_history, 0)
+
+        assert _cached_steps, "the model walk should still have run"
+        assert labeling_progress._cache_coverage_atlas is None
+
+    def test_a_polarity_correction_preserves_the_diversity_replay(self, client):
         build_coverage_atlas()
         # Steps: 0=(3,good), 1=(4,bad), 2=(1,good), 3=(2,bad); media 1 at step 2.
         self._vote(client, [(3, "good"), (4, "bad"), (1, "good"), (2, "bad")])
         _ensure_cache(medias, label_history, 0)
+        calculate_diversity_level_over_time(medias, label_history)
         atlas_before = labeling_progress._cache_coverage_atlas
         assert atlas_before is not None
         assert atlas_before.labeled_ids == {1, 2, 3, 4}
+        series_before = list(labeling_progress._cached_diversity)
 
-        # Switch media 1 (good→bad): steps 2-3 discarded, atlas rewound in place.
+        # Switch media 1 (good→bad). The model steps from its click are dropped,
+        # but coverage evidence is polarity-agnostic, so the diversity replay -
+        # and the atlas it was built from - are untouched.
         self._vote(client, [(1, "bad")])
-        atlas_after = labeling_progress._cache_coverage_atlas
-        assert atlas_after is atlas_before, "atlas rebuilt instead of rewound"
-        # Overlay rewound to the surviving prefix (steps 0-1): media 3 good, 4 bad.
-        assert atlas_after.labeled_ids == {3, 4}
+        assert len(_cached_steps) == 2
+        assert labeling_progress._cache_coverage_atlas is atlas_before
+        assert atlas_before.labeled_ids == {1, 2, 3, 4}
+        assert labeling_progress._cached_diversity == series_before
 
-    def test_step0_invalidate_preserves_atlas_identity(self, client):
+    def test_correcting_the_first_vote_preserves_the_atlas(self, client):
         build_coverage_atlas()
         self._vote(client, [(1, "good"), (2, "bad")])
         _ensure_cache(medias, label_history, 0)
+        calculate_diversity_level_over_time(medias, label_history)
         atlas_before = labeling_progress._cache_coverage_atlas
         assert atlas_before is not None
 
-        # Switch media 1, present from step 0: whole prefix gone, atlas emptied.
+        # Media 1 is click #0, so every model step goes - but the atlas, the
+        # expensive artifact, must survive a vote no matter what.
         self._vote(client, [(1, "bad")])
         assert len(_cached_steps) == 0
-        atlas_after = labeling_progress._cache_coverage_atlas
-        assert atlas_after is atlas_before, "atlas rebuilt on step-0 invalidate"
-        assert atlas_after.labeled_ids == set()
+        assert labeling_progress._cache_coverage_atlas is atlas_before
+        assert atlas_before.labeled_ids == {1, 2}
 
 
 class TestStableIndicatorThresholds:
@@ -806,9 +808,8 @@ class TestLiveModelReuse:
         )
         y = torch.tensor([1.0, 1.0, 0.0]).unsqueeze(1)
         live_model = train_model(X, y, 8)
-        live_threshold = 0.42
 
-        inject_live_model(good, bad, live_model, live_threshold)
+        inject_live_model(good, bad, live_model)
 
         # Now run _ensure_cache with a history that leads to {0,2} good, {1} bad
         history = [
@@ -822,7 +823,11 @@ class TestLiveModelReuse:
         # Step 2 should have used the injected model (same label set)
         step = _cached_steps[2]
         assert step["model"] is live_model, "Should reuse the injected live model"
-        assert step["threshold"] == live_threshold, "Should use the injected threshold"
+        # The cutoff is always derived by the cache itself, never carried in
+        # with the model: a live threshold is cross-calibrated while every
+        # other step's is in-sample, and mixing the two put a step-change into
+        # the plotted curve wherever a live model happened to land.
+        assert step["threshold"] is not None
 
     def test_non_matching_label_set_retrains(self, client):
         """When no live model matches, _ensure_cache should train normally."""
@@ -848,7 +853,7 @@ class TestLiveModelReuse:
         )
         y = torch.tensor([1.0, 1.0, 0.0]).unsqueeze(1)
         live_model = train_model(X, y, 8)
-        inject_live_model(good, bad, live_model, 0.5)
+        inject_live_model(good, bad, live_model)
 
         # Ensure cache for a different label set
         history = [
@@ -875,7 +880,7 @@ class TestLiveModelReuse:
         y = torch.tensor([1.0, 0.0]).unsqueeze(1)
         model = train_model(X, y, 8)
 
-        inject_live_model({0: None}, {1: None}, model, 0.5)
+        inject_live_model({0: None}, {1: None}, model)
         assert len(_live_models) == 1
 
         clear_progress_cache()
@@ -896,9 +901,9 @@ class TestLiveModelReuse:
         # A live model should have been injected for the current vote set
         key = (frozenset(app_module.good_votes), frozenset(app_module.bad_votes))
         assert key in _live_models, "learned-sort should inject the live model"
-        model, threshold = _live_models[key]
-        assert model is not None
-        assert isinstance(threshold, float)
+        # The model alone: its cross-calibrated threshold is deliberately not
+        # carried over, so the cache derives every step's cutoff the same way.
+        assert _live_models[key] is not None
 
     def test_live_model_stability_computed(self, client):
         """When a live model is reused, stability should still be computed."""
@@ -931,7 +936,7 @@ class TestLiveModelReuse:
         X = torch.tensor(np.array(embs), dtype=torch.float32)
         y = torch.tensor([1.0, 1.0, 1.0, 0.0, 0.0]).unsqueeze(1)
         live_model = train_model(X, y, 8)
-        inject_live_model(good, bad, live_model, 0.55)
+        inject_live_model(good, bad, live_model)
 
         _ensure_cache(clips, history, inclusion_value=0)
 

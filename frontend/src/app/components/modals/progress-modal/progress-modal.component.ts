@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, inject, input, OnDestroy, OnInit, output, viewChild } from '@angular/core';
 
-import { Subject, takeUntil, timer, switchMap, filter, take } from 'rxjs';
+import { Subject, takeUntil, timer, switchMap, filter, take, tap } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
 import { JobProgressComponent } from '../../job-progress/job-progress.component';
 import { SortingApiService } from '../../../services/sorting-api.service';
@@ -39,6 +39,10 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   analyzing = true;
   analysisProgress = 0;
   chartData: ErrorCostPoint[] | StabilityPoint[] | DiversityPoint[] = [];
+  /** Series over the steps the running job has computed so far. Drawn into the
+   *  same canvas while `analyzing` is still true, so a long walk shows a curve
+   *  filling in instead of an empty modal. */
+  partialData: ErrorCostPoint[] | StabilityPoint[] | DiversityPoint[] = [];
   emptyHistory = false;
   /** True once we've fallen back to the async train-and-score job, which
    *  swaps the brief "loading" line for a real progress bar + Cancel. */
@@ -84,8 +88,12 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
           // `complete: false` means the per-step cache is behind the label
           // history. The endpoint deliberately does not advance it (that build
           // is what used to hang this modal for tens of seconds), so hand off
-          // to the background job instead of rendering a truncated series.
+          // to the background job — but paint whatever it *did* have first.
+          // Those cached steps are the same ones the Smart/Stable light was
+          // derived from, so there is no reason to make the user wait for a
+          // full recompute before seeing them.
           if (!res.complete) {
+            this.applyPartial(res.history);
             this.runAnalysis();
             return;
           }
@@ -93,7 +101,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
           this.chartData = (res.history || []) as ErrorCostPoint[] | StabilityPoint[] | DiversityPoint[];
           this.emptyHistory = this.chartData.length === 0;
           if (!this.emptyHistory) {
-            setTimeout(() => this.renderChart(), 50);
+            setTimeout(() => this.renderChart(this.chartData), 50);
           }
         },
         // A failed cached read is not fatal: the job path recomputes the
@@ -159,6 +167,12 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
       .pipe(
         takeUntil(this.destroy$),
         switchMap(() => this.sortingApi.getEvalTrainAndScoreResult(jobId)),
+        // `running` polls carry the series over the steps computed so far;
+        // paint it so the modal shows a curve growing rather than a bare
+        // progress bar, then keep polling.
+        tap((res) => {
+          if (res.status === 'running') this.applyPartial(res.partial);
+        }),
         filter((res) => res.status !== 'running'),
         take(1),
       )
@@ -176,6 +190,18 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
           this.analyzing = false;
         },
       });
+  }
+
+  /** Render the in-progress series from a `running` poll.
+   *
+   *  Kept separate from `applyEvalResult`: `analyzing` deliberately stays true
+   *  so the progress bar and Cancel button remain, and an empty partial is a
+   *  no-op rather than the "no history" empty state — the job simply has not
+   *  reached its first publish yet. */
+  private applyPartial(partial: Array<Record<string, unknown>> | undefined): void {
+    if (!partial?.length) return;
+    this.partialData = partial as unknown as ErrorCostPoint[] | StabilityPoint[] | DiversityPoint[];
+    setTimeout(() => this.renderChart(this.partialData), 0);
   }
 
   /** Cancel the in-flight eval job (if any) and close the modal.
@@ -199,6 +225,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   private applyEvalResult(res: EvalTrainAndScoreResponse): void {
     this.analyzing = false;
     this.runningJob = false;
+    this.partialData = [];
     if (this.metric() === 'smart') {
       this.chartData = (res.error_cost || []) as ErrorCostPoint[];
     } else if (this.metric() === 'stable') {
@@ -211,25 +238,25 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
     // rather than an empty set of axes.
     this.emptyHistory = this.chartData.length === 0;
     if (!this.emptyHistory) {
-      setTimeout(() => this.renderChart(), 50);
+      setTimeout(() => this.renderChart(this.chartData), 50);
     }
   }
 
-  private renderChart(): void {
+  private renderChart(data: ErrorCostPoint[] | StabilityPoint[] | DiversityPoint[]): void {
     const chartCanvas = this.chartCanvas();
     if (!chartCanvas) return;
     const canvas = chartCanvas.nativeElement;
     switch (this.metric()) {
       case 'smart':
-        this.chartsService.renderErrorCostChart(canvas, this.chartData as ErrorCostPoint[]);
+        this.chartsService.renderErrorCostChart(canvas, data as ErrorCostPoint[]);
         break;
       case 'stable':
-        this.chartsService.renderStabilityChart(canvas, this.chartData as StabilityPoint[]);
+        this.chartsService.renderStabilityChart(canvas, data as StabilityPoint[]);
         break;
       case 'diverse':
         this.chartsService.renderDiversityChart(
           canvas,
-          this.chartData as DiversityPoint[],
+          data as DiversityPoint[],
           this.settingsState.settingsSignal()?.autopilot_goal_diversity ?? 40,
         );
         break;

@@ -86,11 +86,23 @@ class TestToggleVote:
         assert label_history[0][0] == 1
         assert label_history[0][1] == "good"
 
-    def test_toggle_off_records_unlabel(self):
-        good_votes[1] = None
+    def test_toggle_off_removes_the_click(self):
+        """Toggling a label off deletes its event rather than appending one.
+
+        The history records what we now believe the labels were, so a withdrawn
+        label leaves no trace for the per-step replay to undo.
+        """
         toggle_vote(1, "good")
         assert len(label_history) == 1
-        assert label_history[0][1] == "unlabel"
+        toggle_vote(1, "good")
+        assert label_history == []
+
+    def test_toggle_off_without_a_recorded_click_is_a_no_op(self):
+        """A vote seeded straight into the dict has no event to remove."""
+        good_votes[1] = None
+        toggle_vote(1, "good")
+        assert label_history == []
+        assert 1 not in good_votes
 
     def test_toggle_assigns_click_time(self):
         toggle_vote(1, "good")
@@ -668,9 +680,9 @@ class TestStateProgressLockOrder:
         held = self._patch_capture(monkeypatch, "invalidate_progress_cache_from")
         from vtsearch.state import set_vote
 
-        # First vote: none→good, no invalidation (old == "none").
+        # First vote: none→good, no invalidation (a first label appends).
         set_vote(1, "good")
-        # Second vote: good→bad, triggers invalidation (old == "good").
+        # Second vote: good→bad, a correction, so the cache is invalidated.
         set_vote(1, "bad")
         assert held, "invalidate_progress_cache_from was never called on good→bad"
         assert held == [False] * len(held), f"_state_lock held during progress invalidate: {held}"
@@ -685,6 +697,17 @@ class TestStateProgressLockOrder:
         toggle_vote(2, "good")
         assert held, "invalidate_progress_cache_from was never called on toggle-off"
         assert held == [False] * len(held), f"_state_lock held during progress invalidate: {held}"
+
+    def test_a_first_label_does_not_invalidate(self, monkeypatch):
+        """Appending a click cannot disturb a cached step, so it must not try."""
+        held = self._patch_capture(monkeypatch, "invalidate_progress_cache_from")
+        from vtsearch.state import set_vote
+
+        set_vote(1, "good")
+        set_vote(2, "bad")
+        set_vote(3, "good")
+
+        assert held == [], "a first label reached the progress cache"
 
     def test_clear_votes_releases_state_lock_before_progress_clear(self, monkeypatch):
         held = self._patch_capture(monkeypatch, "clear_progress_cache")
@@ -702,16 +725,19 @@ class TestStateProgressLockOrder:
         assert held, "clear_progress_cache was never called from clear_medias"
         assert held == [False] * len(held), f"_state_lock held during clear_progress_cache: {held}"
 
-    def test_set_inclusion_releases_state_lock_before_progress_clear(self, monkeypatch, isolated_settings):
-        held = self._patch_capture(monkeypatch, "clear_progress_cache")
+    def test_set_inclusion_releases_state_lock_before_progress_rethreshold(self, monkeypatch, isolated_settings):
+        # The slider re-keys the per-step cache rather than clearing it (the
+        # models are inclusion-independent), but the lock ordering is the same
+        # invariant: ``_progress_lock`` is only ever taken outside ``_state_lock``.
+        held = self._patch_capture(monkeypatch, "rethreshold_progress_cache")
         import vtsearch.state as _vstate
 
-        # Two distinct values to force the change-detection branch that triggers a clear.
+        # Two distinct values to force the change-detection branch.
         current = _vstate.get_inclusion()
         new_value = (current + 1) % 11  # inclusion is in [-10, 10]; bump within range
         _vstate.set_inclusion(new_value)
-        assert held, "clear_progress_cache was never called from set_inclusion"
-        assert held == [False] * len(held), f"_state_lock held during clear_progress_cache: {held}"
+        assert held, "rethreshold_progress_cache was never called from set_inclusion"
+        assert held == [False] * len(held), f"_state_lock held during progress rethreshold: {held}"
 
     def test_vote_mutation_does_not_block_when_progress_lock_held(self):
         """Concurrent ``set_vote`` mutations must not deadlock when ``_progress_lock`` is held.

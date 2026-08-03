@@ -8,6 +8,8 @@ as 422 with the standard ``errors`` envelope; handler-level rejects
 (400 / 404 / 500) with the standard ``message`` envelope.
 """
 
+import functools
+
 from flask_smorest import Blueprint, abort
 
 from vtscore.detectors.labeling_progress import (
@@ -18,6 +20,7 @@ from vtscore.detectors.labeling_progress import (
     calculate_prediction_stability_over_time,
     compute_labeling_status,
     is_status_cache_fresh,
+    partial_indicator_series,
     stale_labeling_status,
 )
 from vtsearch.schemas.eval import (
@@ -220,6 +223,69 @@ def _eval_done_payload(job) -> dict:
     }
 
 
+#: How often the running job republishes its partial series, in cache steps.
+#: Each republish is a forward pass of every cached model over the (small)
+#: labeled set, so it is cheap next to the step itself; 25 keeps the chart
+#: visibly filling in without turning the walk into a scoring loop.
+_PARTIAL_SERIES_EVERY = 25
+
+
+def _make_eval_runner(metric, clips, history, good_snap, bad_snap, inclusion, ds_ctx, det_ctx, n_total):
+    """Build the background target for one ``/api/eval/train-and-score`` job.
+
+    Everything it touches is snapshotted on the request thread, so the worker
+    computes against a consistent labelset even if more votes land mid-run.
+    """
+
+    def _on_step(job, done: int, total: int) -> None:
+        """Report real per-step progress, and republish the partial curve.
+
+        The cache walk is the entire runtime of this job.  It used to run
+        between a single 0/N and a single N/N update, so the client's progress
+        bar sat at 0 % for the whole wait and the modal showed nothing at all
+        until the final step landed.
+        """
+        job.update_progress(done, total, f"Computing {metric}...")
+        update_eval_progress("running", f"Computing {metric}...", done, total)
+        if done % _PARTIAL_SERIES_EVERY == 0:
+            job.partial = partial_indicator_series(metric, clips, good_snap, bad_snap, inclusion)
+
+    def _compute(job):
+        on_step = functools.partial(_on_step, job)
+        if metric == "smart":
+            return calculate_error_cost_over_time(clips, history, good_snap, bad_snap, inclusion, on_step=on_step)
+        if metric == "stable":
+            return calculate_prediction_stability_over_time(clips, history, inclusion, on_step=on_step)
+        return calculate_diversity_level_over_time(clips, history, on_step=on_step)
+
+    def _run(job):
+        from vtscore.state.core import thread_dataset_context, thread_detector_context
+
+        with thread_dataset_context(ds_ctx), thread_detector_context(det_ctx):
+            # Progress lives on the job, not on the global ``eval_progress``
+            # singleton, so overlapping evals don't decorrelate the poll from
+            # job identity.  The singleton is written only from the actually-
+            # running job (here, inside ``_run``) so the live SSE ``eval`` bar
+            # reflects the running job rather than a job still parked pending.
+            job.update_progress(0, n_total, f"Computing {metric}...")
+            update_eval_progress("running", f"Computing {metric}...", 0, n_total)
+            try:
+                job.result = {"metric": metric, "data": _compute(job)}
+                job.update_progress(n_total, n_total, "Done")
+                update_eval_progress("idle", "Done", n_total, n_total)
+            except CancelledError:
+                # User cancelled a running job: not a failure.  Clear the
+                # progress bar and re-raise so the JobManager marks the job
+                # ``cancelled`` rather than ``error``.
+                update_eval_progress("idle", "Cancelled", 0, 0)
+                raise
+            except Exception:
+                update_eval_progress("idle", "Error", 0, 0)
+                raise
+
+    return _run
+
+
 @eval_bp.route("/api/eval/train-and-score", methods=["POST"])
 @eval_bp.arguments(EvalTrainAndScoreRequestSchema)
 @eval_bp.response(200, EvalTrainAndScoreResponseSchema)
@@ -240,12 +306,7 @@ def eval_train_and_score(body: dict):
     Tests can pass ``{"wait": true}`` to block until the job completes.
     """
     from vtscore.concurrency.async_jobs import eval_jobs
-    from vtscore.state.core import (
-        get_active_context,
-        get_active_detector_context,
-        thread_dataset_context,
-        thread_detector_context,
-    )
+    from vtscore.state.core import get_active_context, get_active_detector_context
 
     metric = body["metric"]
     wait = body["wait"]
@@ -276,38 +337,9 @@ def eval_train_and_score(body: dict):
 
     n_total = max(len(history) - 1, 0)
 
-    def _run(job):
-        with thread_dataset_context(ds_ctx), thread_detector_context(det_ctx):
-            # Progress lives on the job, not on the global ``eval_progress``
-            # singleton, so overlapping evals don't decorrelate the poll from
-            # job identity.  The singleton is written only from the actually-
-            # running job (here, inside ``_run``) so the live SSE ``eval`` bar
-            # reflects the running job rather than a job still parked pending.
-            job.update_progress(0, n_total, f"Computing {metric}...")
-            update_eval_progress("running", f"Computing {metric}...", 0, n_total)
-            try:
-                if metric == "smart":
-                    data = calculate_error_cost_over_time(clips, history, good_snap, bad_snap, inclusion)
-                elif metric == "stable":
-                    data = calculate_prediction_stability_over_time(clips, history, inclusion)
-                else:
-                    data = calculate_diversity_level_over_time(clips, history, inclusion)
-                job.result = {"metric": metric, "data": data}
-                job.update_progress(n_total, n_total, "Done")
-                update_eval_progress("idle", "Done", n_total, n_total)
-            except CancelledError:
-                # User cancelled a running job: not a failure.  Clear the
-                # progress bar and re-raise so the JobManager marks the job
-                # ``cancelled`` rather than ``error``.
-                update_eval_progress("idle", "Cancelled", 0, 0)
-                raise
-            except Exception:
-                update_eval_progress("idle", "Error", 0, 0)
-                raise
-
     job = eval_jobs.start(
         signature,
-        _run,
+        _make_eval_runner(metric, clips, history, good_snap, bad_snap, inclusion, ds_ctx, det_ctx, n_total),
         dataset_id=ds_ctx.dataset_id,
         detector_id=det_ctx.detector_id,
     )
@@ -344,12 +376,15 @@ def eval_train_and_score_result(query: dict):
 
     if job.status in ("running", "pending"):
         # Read progress from the job itself (not the global ``eval_progress``
-        # singleton) so overlapping evals report their own numbers.
+        # singleton) so overlapping evals report their own numbers.  ``partial``
+        # carries the series over the steps computed so far, so the client can
+        # draw a curve that grows instead of an empty modal.
         return {
             "job_id": job.job_id,
             "status": "running",
             "current": job.current,
             "total": job.total,
+            "partial": job.partial or [],
         }
     if job.status == "error":
         abort(500, message=job.error or "Evaluation computation failed", job_id=job.job_id)
