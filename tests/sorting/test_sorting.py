@@ -99,6 +99,21 @@ class TestTrainAndScore:
         avg_bad = np.mean([score_map[i] for i in app_module.bad_votes])
         assert avg_good > avg_bad
 
+    def test_trains_the_linear_head(self):
+        """The vote path's detector is the linear (logistic) head, not the MLP.
+
+        Pins the #2790 swap on the pipeline users actually drive: a revert to
+        ``_auto_hidden_dim`` would put back a ReLU and a second Linear here.
+        """
+        app_module.good_votes.update({k: None for k in [1, 2, 3]})
+        app_module.bad_votes.update({k: None for k in [18, 19, 20]})
+        _results, _threshold, model = app_module.train_and_score(
+            app_module.medias, app_module.good_votes, app_module.bad_votes
+        )
+        assert model is not None
+        assert [type(layer) for layer in model] == [torch.nn.Linear]
+        assert set(model.state_dict()) == {"0.weight", "0.bias"}
+
     def test_order_changes_after_new_vote(self):
         """After adding a vote and retraining, the sort order should change."""
         app_module.good_votes.update({k: None for k in [1, 2, 3, 4, 5]})

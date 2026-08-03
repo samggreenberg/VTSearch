@@ -169,7 +169,7 @@ def train_and_threshold(
     groups: list | None = None,
     score_rows: dict | None = None,
 ) -> tuple[Any, float]:
-    """Train an MLP and compute a calibrated threshold.
+    """Train the detector head and compute a calibrated threshold.
 
     This is the canonical training pipeline used by all detector routes:
 
@@ -507,7 +507,7 @@ def _score_all_media(
     clips_dict: dict[int, dict[str, Any]],
     embedder_name: str | None = None,
 ) -> tuple[list[int], list[float], list[int]]:
-    """Score every media in *clips_dict* with the trained MLP.
+    """Score every media in *clips_dict* with the trained detector head.
 
     Region-aware datasets (those whose media expose ``patch_regions``)
     are scored by flattening all (media, region) vectors into one tensor,
@@ -633,7 +633,7 @@ def _train_and_score_xy(
     groups: list | None = None,
     score_rows: dict | None = None,
 ) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
-    """Train an MLP on ``(X_list, y_list)`` and score every media in *clips_dict*.
+    """Train the detector head on ``(X_list, y_list)`` and score every media in *clips_dict*.
 
     Shared core of :func:`train_and_score` (vote-driven) and
     :func:`vtscore.detectors.labelset_training.labelset_train_and_score`
@@ -641,10 +641,11 @@ def _train_and_score_xy(
     ``(X_list, y_list)``, so the guard → threshold → train → score → format
     tail lives here once.
 
-    ``hidden_dim`` and the safe-threshold label count are sized from the
-    **vote** count (distinct *groups*) rather than the row count, so region
-    flooding - which turns one Bad vote into many leaf rows - doesn't inflate
-    the model width or shift the small-count threshold ramp.  When *groups*
+    The head is the linear (logistic) one at every label count, so region
+    flooding can't inflate its capacity; the safe-threshold label count is
+    still sized from the **vote** count (distinct *groups*) rather than the row
+    count, so flooding - which turns one Bad vote into many leaf rows - doesn't
+    shift the small-count threshold ramp.  When *groups*
     reveals at least one multi-row bag (flooding actually happened), the
     calibration split, fold fits, and final fit all run **bag-aware**
     (grouped fold split, per-bag loss weights), and each calibration bag
@@ -748,7 +749,7 @@ def train_and_score(
     vote_region_boxes: dict[int, tuple[float, float, float, float]] | None = None,
     det_ctx: Any = None,
 ) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
-    """Train a small MLP on voted media embeddings and score every media.
+    """Train the detector head on voted media embeddings and score every media.
 
     Uses k-fold calibration to determine an appropriate decision threshold,
     then trains a final model on all labelled data and scores every media in

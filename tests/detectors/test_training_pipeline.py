@@ -263,10 +263,13 @@ class TestTrainDetectorFromOrigins:
         assert weights is not None
         # weights is a dict of {layer_name: nested_list_of_floats}.
         assert isinstance(weights, dict)
-        assert len(weights) > 0
         for key, layer in weights.items():
             assert isinstance(key, str)
             assert isinstance(layer, list)
+        # The production head is linear (#2790): a single ``Linear(d, 1)``, so
+        # the state dict carries only layer 0 and its weight is (1, d).
+        assert set(weights) == {"0.weight", "0.bias"}
+        assert np.asarray(weights["0.weight"]).shape == (1, 8)
         assert isinstance(threshold, float)
 
     def test_unresolvable_entries_are_skipped(self, stubbed_resolver):

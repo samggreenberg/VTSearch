@@ -1,7 +1,7 @@
 """Build a standalone, portable detector bundle for transfer to other parties.
 
 CRITICAL - this is the one sanctioned exception to the "No Persisted Vectors or
-MLPs" rule (see ``CLAUDE.md``).  The bundle persists the *trained MLP* (as an
+MLPs" rule (see ``CLAUDE.md``).  The bundle persists the *trained head* (as an
 ONNX graph) so a third party can score their own media without VTSearch.  It
 deliberately does **not** include any embeddings or raw media: a scoring
 detector only needs three things - the trained classifier, the name of the
@@ -10,22 +10,24 @@ this module is derived from those; no media-derived vectors are ever written.
 
 The bundle is a zip with three members:
 
-* ``detector.onnx``  - the MLP with its sigmoid baked in (input ``embedding``
-  ``[batch, dim]`` -> output ``score`` ``[batch, 1]`` in ``[0, 1]``).
+* ``detector.onnx``  - the trained head with its sigmoid baked in (input
+  ``embedding`` ``[batch, dim]`` -> output ``score`` ``[batch, 1]`` in ``[0, 1]``).
 * ``manifest.json``  - machine-readable embedder name/dim, threshold, scoring
   convention, and label counts.  Lets the bundle be re-imported and scripted.
 * ``README.md``      - human-readable instructions: which embedder to run, the
   threshold, and a copy-paste ``onnxruntime`` inference snippet.
 
-The MLP architecture is fixed (``Linear -> ReLU -> Dropout -> Linear -> 1``; see
-:func:`vtscore.training.mlp.build_model`), so the ONNX graph is hand-assembled
-via ``onnx.helper`` rather than going through ``torch.onnx``.  That keeps this
-module torch-free (it operates on the ``serialize_weights`` nested-list dict),
-avoids the dynamo/onnxscript export machinery, and is fully deterministic.
+The head architecture comes from a closed set (see
+:func:`vtscore.training.mlp.build_model`): the production linear/logistic head
+``Linear -> 1``, or the MLP ``Linear -> ReLU -> Dropout -> Linear -> 1`` the eval
+harness still builds.  Both are hand-assembled here via ``onnx.helper`` rather
+than going through ``torch.onnx``.  That keeps this module torch-free (it
+operates on the ``serialize_weights`` nested-list dict), avoids the
+dynamo/onnxscript export machinery, and is fully deterministic.
 
-Every detector's MLP is this same 2-layer architecture regardless of embedder
-*type* (semantic / patch_semantic / structural) - the type only changes what
-feeds the MLP, not its shape - so the weight tensors alone can't tell a plain
+The head's shape is the same regardless of embedder *type* (semantic /
+patch_semantic / structural) - the type only changes what feeds the head, not
+its shape - so the weight tensors alone can't tell a plain
 detector from a patch or structural one.  Callers MUST call
 :func:`check_exportable` on the detector's locked embedder type before
 building a bundle: structural detectors are blocked outright (their stage-2
