@@ -240,9 +240,10 @@ def train_and_threshold(
 
     # The production detector head is linear (logistic regression): stable under
     # sparse positives where a small MLP's per-retrain score wobble drove the
-    # threshold-stability #2790 spikes.  The same head sizes both the final model
-    # and the cached fold sub-models below, so the cached re-thresholding stays
-    # consistent with this run's threshold.
+    # threshold-stability #2790 spikes.  The same head sizes the final model and
+    # the calibration fold models on *both* branches below (cached and uncached),
+    # so the calibrated threshold is always measured on the architecture the
+    # final model actually has.
     hidden_dim = LINEAR_HEAD
 
     safe = bool(get_safe_thresholds() and snap)
@@ -282,6 +283,7 @@ def train_and_threshold(
             get_inclusion(),
             calibrate_count=get_calibrate_count(),
             calibration_fraction=get_calibration_fraction(),
+            hidden_dim=hidden_dim,
             groups=cal_groups,
             score_rows_by_group=cal_score_rows,
         )
