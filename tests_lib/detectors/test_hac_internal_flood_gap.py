@@ -151,9 +151,7 @@ class TestTheFloodGapItself:
 
         assert scored is not None
         assert len(scored) == len(regions)
-        uncovered = [
-            i for i, row in enumerate(scored) if not any(np.allclose(row, f, atol=1e-6) for f in flooded)
-        ]
+        uncovered = [i for i, row in enumerate(scored) if not any(np.allclose(row, f, atol=1e-6) for f in flooded)]
         assert uncovered, "expected the internals to be uncovered"
         assert set(uncovered) == set(_internal_indices(regions))
         assert len(flooded) == len(regions) - len(uncovered)

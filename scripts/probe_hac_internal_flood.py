@@ -231,7 +231,9 @@ def probe_ab(n_seeds: int) -> None:
         d = np.asarray([b[key] - a[key] for a, b in zip(rows_a, rows_b, strict=True)])
         ci = 1.96 * d.std(ddof=1) / np.sqrt(len(d))
         verdict = "excludes 0" if abs(d.mean()) > ci else "straddles 0"
-        print(f"    paired B-A {key:>4}: {d.mean():+.4f} +/- {ci:.4f} ({verdict}), B wins {int((d > 0).sum())}/{len(d)}")
+        print(
+            f"    paired B-A {key:>4}: {d.mean():+.4f} +/- {ci:.4f} ({verdict}), B wins {int((d > 0).sum())}/{len(d)}"
+        )
 
 
 def main() -> None:
