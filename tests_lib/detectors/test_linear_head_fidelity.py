@@ -89,9 +89,14 @@ def _sklearn_scores(X_train: np.ndarray, y_train: np.ndarray, X_score: np.ndarra
 
 
 def _rank_agreement(a: np.ndarray, b: np.ndarray) -> float:
-    from scipy.stats import spearmanr  # noqa: PLC0415
+    """Spearman rank correlation - Pearson over the two score vectors' ranks.
 
-    return float(spearmanr(a, b).statistic)
+    Computed here rather than via ``scipy.stats.spearmanr`` to keep the return
+    type concrete.  Both inputs are continuous sigmoid scores, so ties don't
+    arise and plain ordinal ranks are exact.
+    """
+    ranks = [np.argsort(np.argsort(v)).astype(np.float64) for v in (a, b)]
+    return float(np.corrcoef(ranks[0], ranks[1])[0, 1])
 
 
 class TestLogisticFidelity:
