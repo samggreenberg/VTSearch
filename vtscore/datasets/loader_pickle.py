@@ -56,6 +56,45 @@ def _load_embeddings_dict(media_info: dict[str, Any]) -> dict[str, Any] | None:
 _READ_SHARE = 0.5
 
 
+class _PickleLoadProgress:
+    """Composites a pickle load's two sub-phases onto one monotone bar.
+
+    Streaming/deserialising the container and converting each media measure
+    different things — bytes consumed, then items built — so reporting each on
+    its native scale would rewind the fraction to zero at the handover.  Every
+    consumer clamps monotonically (``ProgressTracker._compute_overall`` pins
+    ``overall``, ``AdaptiveLoadPacer.update`` pins ``_frac``), so that rewind
+    never shows as a retreat; it shows as the bar *freezing* for the whole item
+    loop.  Lighting up the read at the cost of deadening the conversion is not
+    a trade worth making, so both report against one denominator — the
+    ``medias.pkl`` byte size — with the read owning ``[0, _READ_SHARE]`` and
+    the item loop the rest.  The human-readable byte and item counts stay in
+    the message, where they are not load-bearing for the bar.
+    """
+
+    def __init__(self, on_progress: ProgressCallback, name: str) -> None:
+        self._on_progress = on_progress
+        self._name = name
+        self._total = 0
+
+    def on_read(self, read_bytes: int, total_bytes: int) -> None:
+        """Report the streaming read, and latch its denominator for the loop."""
+        self._total = total_bytes
+        if total_bytes > 0:
+            self._on_progress("loading", f"Reading {self._name}…", int(_READ_SHARE * read_bytes), total_bytes)
+
+    def on_item(self, loaded: int, total_count: int) -> None:
+        """Report the conversion loop, continuing the read's scale."""
+        message = f"Processing {loaded} of {total_count} items…"
+        if self._total <= 0 or total_count <= 0:
+            # Nothing to continue from (an unreadable entry size, or an empty
+            # dataset): fall back to the item scale on its own.
+            self._on_progress("loading", message, loaded, total_count)
+            return
+        done = _READ_SHARE + (1.0 - _READ_SHARE) * (loaded / total_count)
+        self._on_progress("loading", message, int(self._total * done), self._total)
+
+
 def _read_pickle_dataset(file_path: Path, on_progress: Any = None) -> dict[str, Any]:
     """Load a dataset ZIP container and assert the ``"medias"`` envelope.
 
@@ -426,30 +465,11 @@ def load_dataset_from_pickle(
         :func:`vtscore.state.coverage.restore_coverage_atlas_from_cache` to
         skip rebuilding the coverage atlas.
     """
-    # Both sub-phases of this load — streaming/deserialising the container, then
-    # converting each media — report against one denominator: the container's
-    # ``medias.pkl`` byte size.  They measure different things (bytes consumed
-    # vs items built), so giving each its native scale would rewind the fraction
-    # to zero at the handover, and every consumer clamps monotonically:
-    # ``ProgressTracker._compute_overall`` pins ``overall`` and
-    # ``AdaptiveLoadPacer.update`` pins ``_frac``.  A rewind therefore does not
-    # show as a rewind, it shows as a *freeze* for the whole item loop — which
-    # is how lighting up the read would have bought a lit read at the cost of a
-    # dead conversion.  One shared scale keeps the fraction monotone across the
-    # handover; the human-readable counts stay in the message.
-    read_total = 0
-
-    def _read_progress(read_bytes: int, total_bytes: int) -> None:
-        nonlocal read_total
-        read_total = total_bytes
-        if total_bytes > 0:
-            assert on_progress is not None
-            on_progress("loading", f"Reading {file_path.name}…", int(_READ_SHARE * read_bytes), total_bytes)
-
+    reporter = _PickleLoadProgress(on_progress, file_path.name) if on_progress is not None else None
     if on_progress is not None:
         on_progress("loading", f"Reading {file_path.name}…", 0, 0)
 
-    data = _read_pickle_dataset(file_path, _read_progress if on_progress is not None else None)
+    data = _read_pickle_dataset(file_path, reporter.on_read if reporter is not None else None)
     medias.clear()
     cached_coverage_atlas = data.get("coverage_atlas")
     medias_data = data["medias"]
@@ -466,20 +486,8 @@ def load_dataset_from_pickle(
     # per-client 1024-deep queue and start dropping frames).
     _progress_interval = max(1, total_count // 50) if total_count > 0 else 1
 
-    def _item_progress(loaded: int) -> None:
-        """Report the item loop on the shared byte scale set by the read."""
-        assert on_progress is not None
-        message = f"Processing {loaded} of {total_count} items…"
-        if read_total <= 0 or total_count <= 0:
-            # No denominator to continue from (an unreadable entry size, or an
-            # empty dataset): fall back to the item scale on its own.
-            on_progress("loading", message, loaded, total_count)
-            return
-        done = _READ_SHARE + (1.0 - _READ_SHARE) * (loaded / total_count)
-        on_progress("loading", message, int(read_total * done), read_total)
-
-    if on_progress is not None:
-        _item_progress(0)
+    if reporter is not None:
+        reporter.on_item(0, total_count)
 
     try:
         for media_id, media_info in medias_data.items():
@@ -497,8 +505,8 @@ def load_dataset_from_pickle(
                 continue
             medias[media_id] = media_data
             loaded_count += 1
-            if on_progress is not None and loaded_count % _progress_interval == 0:
-                _item_progress(loaded_count)
+            if reporter is not None and loaded_count % _progress_interval == 0:
+                reporter.on_item(loaded_count, total_count)
     except MemoryError:
         medias.clear()
         del data

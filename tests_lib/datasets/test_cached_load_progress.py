@@ -103,13 +103,9 @@ def assert_one_monotone_bar(progress: _Recorder) -> None:
     """
     counted = progress.counted
     assert counted, "load must report progress with a real denominator"
-    assert len({total for _, _, _, total in counted}) == 1, (
-        "both sub-phases must report against one shared denominator"
-    )
+    assert len({total for _, _, _, total in counted}) == 1, "both sub-phases must report against one shared denominator"
     fractions = progress.fractions
-    assert all(b >= a for a, b in zip(fractions, fractions[1:])), (
-        f"bar fraction must never retreat, got {fractions}"
-    )
+    assert all(b >= a for a, b in zip(fractions, fractions[1:])), f"bar fraction must never retreat, got {fractions}"
 
 
 def test_cached_demo_load_reports_per_item_progress(tmp_path: Path, monkeypatch):
