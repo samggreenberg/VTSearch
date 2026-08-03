@@ -293,7 +293,7 @@ class TestTrainScoreGeometryParity:
         That gap is deliberate but *not* because internals are dominated by
         their leaves - they are renormalised, so they are not (see
         ``tests_lib/detectors/test_hac_internal_flood_gap.py``).  Flooding them
-        simply measures as a wash; see
+        measurably costs ranking instead; see
         :func:`~vtscore.detectors.training.bad_negative_vecs`.  Either way
         ``max_hac`` scores rows no Bad vote trains down directly, so the
         exception is pinned here rather than left silent.

@@ -137,8 +137,8 @@ def _leaves_from_regions(regions) -> list[np.ndarray] | None:
     the leaves.  Internal HAC nodes are deliberately left out even though they
     are scored; see :func:`~vtscore.detectors.training.bad_negative_vecs` for
     why (they are renormalised, so *not* dominated by their leaves, but
-    flooding them measures as a wash).  Returns ``None`` for an empty/leafless
-    list.
+    flooding them measurably costs ranking).  Returns ``None`` for an
+    empty/leafless list.
     """
     if not regions:
         return None
