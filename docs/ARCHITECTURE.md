@@ -126,7 +126,7 @@ VTSearch/
 │   │   ├── positives_browse.py     Browse the detector's positive examples
 │   │   ├── dataset_sync.py         Sync detectors when a dataset loads
 │   │   ├── media_seeding.py        Media seeding utilities
-│   │   └── labeling_progress.py    Per-step head cache + stability analysis
+│   │   └── labeling_progress.py    Per-step head cache (+ separate diversity replay)
 │   │
 │   ├── datasets/                   Dataset loading, downloading, ingestion
 │   │   ├── origin.py               Origin dataclass (per-element provenance)

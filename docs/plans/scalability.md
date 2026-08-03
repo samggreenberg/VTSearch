@@ -402,13 +402,31 @@ embedder. Shares the S11 approach.
   `labeling_progress._build_coverage_atlas` clones the dataset context's atlas
   only when the id sets match exactly; otherwise it fits a throwaway private one
   under `_progress_lock`. On a dataset past the 50 k auto-build cutoff (so the
-  context has no atlas) that fit dominates a cold progress-cache build —
-  measured ~27 s of a 40 s build at 20 k media. It can't write the result back
+  context has no atlas) that fit is now the *entire* cost of the Diverse plot —
+  measured 47 s at 20 k media and 146 s at 60 k. It can't write the result back
   to the context from there because `_progress_lock` is held and the lock
   ordering forbids taking `_state_lock` under it. Fix direction: build the atlas
   before acquiring `_progress_lock` and publish it to the context so both paths
-  share one structure. Now off the request thread (the plot modal runs it as a
-  background job), so this is a cost problem, not a latency-hang.
+  share one structure. Off the request thread (the plot modal runs it as a
+  background job with live progress), so this is a cost problem, not a
+  latency-hang. Only the Diverse metric pays it now — Smart and Stable no longer
+  build an atlas at all.
+- **The per-step model walk's remaining floor (~105 ms/label step):** advancing
+  the progress cache trains one linear head per label step, 200 full-batch Adam
+  epochs each. Essentially all of that is per-epoch autograd/optimizer dispatch,
+  not arithmetic (the matmul is `n×512` for `n` in the low hundreds), so it does
+  not shrink with dataset size — it scales with *vote count*, ~21 s at 200 votes
+  and ~2 min at 1 k. Two things were measured and rejected: warm-starting each
+  step from the previous one saves no epochs (the early-stop plateau never fires
+  either way, since Adam keeps beating the absolute `min_delta = 1e-4` for
+  hundreds of epochs), and pairing a warm start with a shorter budget leaves each
+  step inheriting its predecessor's under-converged weights — measurably
+  *further* from the converged fit than a cold run. Real options, both of which
+  change what the curve previews and so need a product call first: fit the convex
+  logistic objective with L-BFGS instead of Adam, or subsample the plotted steps
+  (a 600 px canvas cannot resolve 1 k points anyway — but note the Smart
+  indicator reads the last 10 *cached* steps, so subsampling changes the
+  traffic-light semantics too).
 - **Columnar `medias` storage** (S4 full rewrite): deferred; requires redesign of
   every media-reading call site.
 - **Append-only vote journal** for labelset sources (S12 long-term): deferred
