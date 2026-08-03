@@ -255,6 +255,28 @@ coincide for plain-string options and differ for `(value, label)` tuples).
 400 (unknown / non-dynamic field), 404 (unknown importer), 501 (not
 implemented), 502 (remote error).
 
+### Importer suggested dataset name
+
+```
+POST /api/dataset/import/{importer_name}/suggested-name
+```
+
+**Body:** `{"values": {...}}` (the current form snapshot, optional).
+
+Calls the importer's `default_display_name(values)` and returns the name it
+would give a dataset built from those values, so the import modal can
+prefill its Dataset Name box — including a label the importer resolved from
+an opaque selection. See
+[Naming the imported dataset](../EXTENDING-plugins.md#naming-the-imported-dataset).
+
+Any `dataset_name` in `values` is dropped before the importer sees it: the
+route reports what the importer *would* pick, and the caller decides
+whether to overwrite what the user typed.
+
+→ `{"dataset_name": "Q1 Field Survey"}`
+
+404 (unknown importer), 502 (the importer raised).
+
 ### Detect media type
 
 ```

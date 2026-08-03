@@ -18,6 +18,7 @@ import type { DatasetStageFileResponse } from '../generated/api-client/models/da
 import type { DatasetStagingStartedResponse } from '../generated/api-client/models/dataset-staging-started-response';
 import type { DetectMediaTypeResponse } from '../generated/api-client/models/detect-media-type-response';
 import type { ImporterFieldOptionsResponse } from '../generated/api-client/models/importer-field-options-response';
+import type { ImporterSuggestedNameResponse } from '../generated/api-client/models/importer-suggested-name-response';
 import type {
   CleanerSelection,
   ImporterInfo,
@@ -32,6 +33,7 @@ import { datasetAllImporters } from '../generated/api-client/fn/datasets-listing
 import { datasetImporters } from '../generated/api-client/fn/datasets-listings/dataset-importers';
 import { detectMediaType } from '../generated/api-client/fn/datasets-ui/detect-media-type';
 import { importerFieldOptions } from '../generated/api-client/fn/datasets-staging/importer-field-options';
+import { importerSuggestedName } from '../generated/api-client/fn/datasets-staging/importer-suggested-name';
 import { loadDatasetFromSource } from '../generated/api-client/fn/datasets-load/load-dataset-from-source';
 import { loadDemoDatasetRoute } from '../generated/api-client/fn/datasets-load/load-demo-dataset-route';
 import { stageDemo } from '../generated/api-client/fn/datasets-staging/stage-demo';
@@ -97,6 +99,23 @@ export class DatasetsCrudApiService {
     return importerFieldOptions(this.http, this.config.rootUrl, {
       importer_name: importerName,
       body: { field_key: fieldKey, values },
+    }).pipe(map((r) => r.body));
+  }
+
+  /**
+   * Ask the importer what it would name a dataset built from *values*.
+   *
+   * Backed by the plugin's ``default_display_name``, so an importer can
+   * turn an opaque selection (an id, a saved-query key) into a
+   * human-readable name for the Dataset Name box.
+   */
+  getImporterSuggestedName(
+    importerName: string,
+    values: Record<string, unknown>,
+  ): Observable<ImporterSuggestedNameResponse> {
+    return importerSuggestedName(this.http, this.config.rootUrl, {
+      importer_name: importerName,
+      body: { values },
     }).pipe(map((r) => r.body));
   }
 

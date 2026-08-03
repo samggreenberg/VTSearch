@@ -1,6 +1,5 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
 import { Subject, Subscription } from 'rxjs';
 import { finalize, takeUntil } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
@@ -18,7 +17,7 @@ import { DashboardLoadingTasksService } from '../../services/dashboard-loading-t
 import { ToastService } from '../../services/toast.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { ActiveContextService } from '../../services/active-context.service';
-import { DatasetStateService } from '../../services/dataset-state.service';
+import { ActiveDetectorService } from '../../services/active-detector.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService, SortedItem } from '../../services/sort-state.service';
@@ -26,6 +25,7 @@ import { SortingApiService } from '../../services/sorting-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { ProgressEventsService } from '../../services/progress-events.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
+import { BrowseSubsetPrepService } from '../../services/browse-subset-prep.service';
 import { ProgressEvent } from '../../models/api.models';
 import {
   ProgressBarState,
@@ -61,7 +61,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private dialog = inject(VtDialogService);
   private ngZone = inject(NgZone);
   private activeContext = inject(ActiveContextService);
-  private datasetState = inject(DatasetStateService);
+  private activeDetector = inject(ActiveDetectorService);
   mediaState = inject(MediaStateService);
   voteState = inject(VoteStateService);
   sortState = inject(SortStateService);
@@ -69,7 +69,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private settingsState = inject(SettingsStateService);
   private progressEvents = inject(ProgressEventsService);
   private browseSubset = inject(BrowseSubsetService);
-  private router = inject(Router);
+  /** Public: the wait overlay binds this service's progress signals directly. */
+  browsePrep = inject(BrowseSubsetPrepService);
 
   readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
   readonly centerPanel = viewChild(CenterPanelComponent);
@@ -288,6 +289,11 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.destroy$.complete();
     this.voteState.setFindMode(false);
     this.voteState.stopPolling();
+    // Stop waiting on a map build if the user left Find some other way (the
+    // top bar, a context switch) — nothing should yank them into the browse
+    // view from a screen they already walked away from. A no-op on the
+    // handoff itself, which clears the wait before it navigates.
+    this.browsePrep.cancel();
     document.removeEventListener('mousemove', this.boundMouseMove);
     document.removeEventListener('mouseup', this.boundMouseUp);
     document.removeEventListener('mousemove', this.boundRightMouseMove);
@@ -297,6 +303,15 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   // --- Find-label scoring ---
 
   private progressPollSub: Subscription | null = null;
+
+  /**
+   * Whether Find is parked behind a wait overlay — either the detector scoring
+   * run or a Browse map build. Both block the three panels the same way, so
+   * every `[disabled]` binding reads this rather than one specific wait.
+   */
+  get waiting(): boolean {
+    return this.sortState.sortBusy || this.browsePrep.preparing();
+  }
 
   /** Unified bar state for the scoring overlay: prefers the whole-job
    *  ``overall`` fraction so the bar fills once across all Find phases. */
@@ -348,8 +363,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Start polling for progress concurrently
     this.startProgressPolling();
 
-    const modelName =
-      this.datasetState.detectors.find((d) => d.id === modelId)?.name || 'Detector';
+    const modelName = this.activeDetector.detectorName() || 'Detector';
     this.detectorsFindApi.findLabel({ detector_id: modelId })
       .pipe(
         takeUntil(this.destroy$),
@@ -726,17 +740,14 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   /**
-   * Stash *ids* for the browse view and navigate to
-   * `/browse/:datasetId?subset=1`, where they're UMAP'd on their own.
+   * Build the map for *ids* — a UMAP fit over just those items — behind Find's
+   * wait overlay, and hand off to `/browse/:datasetId?subset=1` only once it's
+   * ready. The fit can run for minutes on a large positive set, so it happens
+   * *here*, where the user has a progress bar and a Cancel, rather than in the
+   * browse view, which has nothing to draw until the layout lands.
    */
   private browseIds(ids: number[]): void {
-    const datasetId = this.activeContext.datasetId;
-    if (!datasetId || ids.length === 0) return;
-    this.browseSubset.set({
-      datasetId,
-      ids,
-    });
-    this.router.navigate(['/browse', datasetId], { queryParams: { subset: 1 } });
+    this.browsePrep.start(this.activeContext.datasetId, ids);
   }
 
   /**
@@ -765,9 +776,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   private toDatasetFromIds(ids: number[]): void {
     if (ids.length === 0) return;
-    const modelId = this.activeContext.modelId;
-    const detectorName =
-      this.datasetState.detectors.find((d) => d.id === modelId)?.name || 'Detector';
+    const detectorName = this.activeDetector.detectorName() || 'Detector';
     const base = [this.datasetName(), detectorName, 'Results'].filter((s) => !!s).join(' ');
 
     this.dialog.prompt('Name the new dataset', base).then((name) => {

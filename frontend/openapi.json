@@ -3190,6 +3190,13 @@
           "metric": {
             "type": "string"
           },
+          "partial": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
           "stability": {
             "items": {
               "$ref": "#/components/schemas/StabilityPoint"
@@ -4106,6 +4113,28 @@
         "required": [
           "id",
           "label"
+        ],
+        "type": "object"
+      },
+      "ImporterSuggestedNameRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "values": {
+            "additionalProperties": {},
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "ImporterSuggestedNameResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset_name"
         ],
         "type": "object"
       },
@@ -5187,6 +5216,12 @@
             "nullable": true,
             "type": "string"
           },
+          "overall": {
+            "default": null,
+            "description": "Whole-job completion fraction (0..1) stitched from the current phase and its within-phase counts, so one bar fills across the entire build instead of restarting at each phase.",
+            "nullable": true,
+            "type": "number"
+          },
           "point_count": {
             "default": null,
             "nullable": true,
@@ -5201,6 +5236,12 @@
             "description": "idle | building | ready | error",
             "type": "string"
           },
+          "step": {
+            "default": null,
+            "description": "Which coarse build phase is running (1-based).",
+            "nullable": true,
+            "type": "integer"
+          },
           "tile_span": {
             "default": null,
             "nullable": true,
@@ -5208,6 +5249,12 @@
           },
           "total": {
             "default": null,
+            "nullable": true,
+            "type": "integer"
+          },
+          "total_steps": {
+            "default": null,
+            "description": "How many coarse phases the whole build has.",
             "nullable": true,
             "type": "integer"
           }
@@ -10083,6 +10130,61 @@
         ]
       }
     },
+    "/api/dataset/import/{importer_name}/suggested-name": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "importer_name",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Calls the importer's ``default_display_name(field_values)`` with a\nsnapshot of the current form, so the Add-Dataset form can prefill its\nDataset Name box with something human-readable -- including a label a\nplugin resolved from an opaque internal selection, which no\nclient-side derivation could produce.  The user's own ``dataset_name``\nis deliberately ignored here: the caller only asks for the suggestion,\nand decides for itself whether to overwrite what the user typed.\n\nErrors from the plugin are surfaced as a 502 with the original\nmessage; the frontend treats any failure as \"no suggestion\" and leaves\nthe box alone, since a name hint is never worth blocking an import.",
+        "operationId": "importer_suggested_name",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImporterSuggestedNameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImporterSuggestedNameResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Unknown importer name."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "502": {
+            "description": "default_display_name raised an error."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the name the importer would give a dataset built from these values.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
     "/api/dataset/importers": {
       "get": {
         "operationId": "dataset_importers",
@@ -13807,6 +13909,7 @@
     },
     "/api/label-file-sort": {
       "post": {
+        "description": "On a patch dataset each result also carries the ``best_region`` box of the\nregion that drove its score, matching the cosine- and learned-sort paths.",
         "operationId": "label_file_sort",
         "responses": {
           "200": {

@@ -23,13 +23,27 @@ if TYPE_CHECKING:
     import torch.nn as nn
 
 
+#: ``hidden_dim`` sentinel selecting the **linear (logistic-regression) head** -
+#: a single ``Linear(input_dim, 1)`` with no hidden layer.  This is the
+#: **production detector head**: trained through :func:`train_model`'s balanced
+#: BCE-with-logits loop it *is* logistic regression, and its linear decision
+#: boundary avoids the retrain-to-retrain score wobble a small MLP shows when
+#: positives are sparse (the threshold-stability #2790 finding).  Positive
+#: ``hidden_dim`` values build the MLP instead; that path survives only for the
+#: eval harness / experiments and unit tests, and is not reachable from the app.
+LINEAR_HEAD = 0
+
+
 def _auto_hidden_dim(n_train: int) -> int:
-    """Choose hidden-layer width based on training-set size.
+    """Choose MLP hidden-layer width based on training-set size.
 
     Keeps the model small when few votes are available to reduce
     overfitting, and grows (up to ``MLP_HIDDEN_MAX``) as more labels
     arrive.  The width is floored at ``MLP_HIDDEN_MIN`` (8): below ~8
     neurons the detector underfits and destabilizes on harder tasks.
+
+    Only the MLP head uses this; the production linear head (:data:`LINEAR_HEAD`)
+    has no hidden layer.
     """
     return max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))
 
@@ -56,17 +70,24 @@ def build_model(
             thread-safe and deterministic.
 
     Returns:
-        An ``nn.Sequential`` model with layers:
-        ``Linear(input_dim, hidden_dim) -> ReLU -> Dropout -> Linear(hidden_dim, 1)``.
+        An ``nn.Sequential`` model.  With ``hidden_dim > 0`` (the MLP) the layers
+        are ``Linear(input_dim, hidden_dim) -> ReLU -> Dropout -> Linear(hidden_dim, 1)``.
+        With ``hidden_dim == 0`` (:data:`LINEAR_HEAD`, the production head) it is a
+        single ``Linear(input_dim, 1)`` - a linear/logistic head with no hidden
+        layer; ``dropout`` is ignored there (a bare linear map has nothing to
+        regularise with dropout, matching plain logistic regression).
     """
     import torch.nn as nn  # noqa: PLC0415
 
-    model = nn.Sequential(
-        nn.Linear(input_dim, hidden_dim),
-        nn.ReLU(),
-        nn.Dropout(dropout),
-        nn.Linear(hidden_dim, 1),
-    )
+    if hidden_dim == LINEAR_HEAD:
+        model = nn.Sequential(nn.Linear(input_dim, 1))
+    else:
+        model = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(hidden_dim, 1),
+        )
     if generator is not None:
         for module in model.modules():
             if isinstance(module, nn.Linear):
@@ -100,7 +121,13 @@ def build_model_from_weights(weights: dict[str, list]) -> nn.Sequential:
         weights["3.bias"] = weights.pop("2.bias")
 
     input_dim = len(weights["0.weight"][0])
-    hidden_dim = len(weights["0.bias"])
+    if "3.weight" in weights:
+        # MLP: the second Linear's bias length is the hidden width.
+        hidden_dim = len(weights["0.bias"])
+    else:
+        # Linear head (:data:`LINEAR_HEAD`): a single ``Linear(input_dim, 1)``,
+        # so the only keys are ``0.weight`` / ``0.bias``.
+        hidden_dim = LINEAR_HEAD
 
     model = build_model(input_dim, hidden_dim=hidden_dim, dropout=0.0)
     state_dict = {k: torch.tensor(v, dtype=torch.float32) for k, v in weights.items()}

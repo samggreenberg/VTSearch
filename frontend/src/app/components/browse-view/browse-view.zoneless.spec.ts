@@ -11,6 +11,7 @@ import { DatasetsRegistryApiService } from '../../services/datasets-registry-api
 import { DetectorsRegistryApiService } from '../../services/detectors-registry-api.service';
 import { SettingsStateService } from '../../services/settings-state.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
+import { BrowseSelectionService } from '../../services/browse-selection.service';
 import { MediasApiService } from '../../services/medias-api.service';
 import { DatasetsListingsApiService } from '../../services/datasets-listings-api.service';
 import { VtDialogService } from '../../services/dialog.service';
@@ -39,6 +40,11 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     const noop = () => {};
     const projectionStub: Partial<ProjectionApiService> = {
       getMeta: () => metaSubject.asObservable(),
+      // The post-verify cull's in-place re-bin. Left un-emitting so the verify
+      // tests below assert what the panel does *before* the server answers —
+      // which is the whole point: the details must repaint on the click, not a
+      // round-trip later.
+      subsetRemove: () => EMPTY as unknown as ReturnType<ProjectionApiService['subsetRemove']>,
     };
     const tileCacheStub: Partial<TileCacheService> = {
       setSubset: noop,
@@ -76,7 +82,10 @@ describe('BrowseViewComponent (zoneless canary)', () => {
       take: () => null,
       markReturningToFind: noop,
     };
-    const mediasStub: Partial<MediasApiService> = {};
+    const mediasStub: Partial<MediasApiService> = {
+      voteBulk: () =>
+        of({ ok: true, changed: 0, missing: [] }) as ReturnType<MediasApiService['voteBulk']>,
+    };
     const routeStub = {
       snapshot: {
         queryParamMap: { get: () => null },
@@ -206,13 +215,13 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     } as unknown as Parameters<typeof component.onCanvasContextMenu>[0]);
 
     // The docked panel shows the bin (members carried), and NO floating popup opens.
-    expect(component.contextMembers).toEqual([3, 4, 5]);
-    expect(component.contextRepId).toBe(4);
+    expect(component.contextMembers()).toEqual([3, 4, 5]);
+    expect(component.contextRepId()).toBe(4);
     expect(component.contextMenuOpen).toBe(false);
 
     // The panel's X clears the shown bin but leaves the panel itself docked.
     component.onDetailsDismiss();
-    expect(component.contextMembers).toEqual([]);
+    expect(component.contextMembers()).toEqual([]);
     expect(component.detailsDocked()).toBe(true);
     expect(component.detailsPanelShown()).toBe(true);
   });
@@ -243,7 +252,7 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     expect(component.detailsPanelHidden()).toBe(false);
     expect(component.detailsPanelShown()).toBe(true);
     expect(component.contextMenuOpen).toBe(false);
-    expect(component.contextMembers).toEqual([11, 12]);
+    expect(component.contextMembers()).toEqual([11, 12]);
   });
 
   it('un-hides the details panel when a floating window is docked into it', async () => {
@@ -288,13 +297,97 @@ describe('BrowseViewComponent (zoneless canary)', () => {
     component.onDockRequested();
     expect(component.detailsDocked()).toBe(true);
     expect(component.contextMenuOpen).toBe(false);
-    expect(component.contextMembers).toEqual([7, 8]);
+    expect(component.contextMembers()).toEqual([7, 8]);
 
     // Pop out: the panel's bin re-opens as a floating window at a default anchor.
     component.onPopOutRequested();
     expect(component.detailsDocked()).toBe(false);
     expect(component.contextMenuOpen).toBe(true);
-    expect(component.contextMembers).toEqual([7, 8]);
+    expect(component.contextMembers()).toEqual([7, 8]);
+  });
+
+  it('prunes verified items out of the open bin so the details panel repaints', async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+    const selection = fixture.debugElement.injector.get(BrowseSelectionService);
+
+    // A Find-positives browse with a bin open in the docked left panel.
+    component.subset = true;
+    component.subsetIds = [1, 2, 3, 4];
+    component.detailsDocked.set(true);
+    component.onCanvasContextMenu({
+      members: [1, 2, 3],
+      repId: 2,
+      clientX: 0,
+      clientY: 0,
+      bounds: null,
+    } as unknown as Parameters<typeof component.onCanvasContextMenu>[0]);
+
+    // Verify two of that bin's items away — the representative among them.
+    selection.addAll([1, 2]);
+    component.onVerify('bad');
+    await settleZoneless(fixture);
+
+    // The panel drops the removed items and keeps the survivor, moving the
+    // representative off the culled one instead of showing a stale bin.
+    expect(component.contextMembers()).toEqual([3]);
+    expect(component.contextRepId()).toBe(3);
+    // The map lost them too, and the selection they came from is empty again.
+    expect(component.subsetIds).toEqual([3, 4]);
+    expect(selection.size).toBe(0);
+  });
+
+  it('resets the details panel to empty when the whole open bin is verified away', async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+    const selection = fixture.debugElement.injector.get(BrowseSelectionService);
+
+    component.subset = true;
+    component.subsetIds = [1, 2, 3];
+    component.detailsDocked.set(true);
+    component.onCanvasContextMenu({
+      members: [1, 2],
+      repId: 1,
+      clientX: 0,
+      clientY: 0,
+      bounds: null,
+    } as unknown as Parameters<typeof component.onCanvasContextMenu>[0]);
+
+    // Every member of the open bin goes.
+    selection.addAll([1, 2]);
+    component.onVerify('good');
+    await settleZoneless(fixture);
+
+    // Empty details, not a stale bin of removed items. The panel itself stays
+    // docked (showing its empty hint) — only its contents were cleared.
+    expect(component.contextMembers()).toEqual([]);
+    expect(component.contextRepId()).toBeNull();
+    expect(component.detailsPanelShown()).toBe(true);
+  });
+
+  it('leaves the open bin alone when the verified items came from elsewhere', async () => {
+    await settleZoneless(fixture);
+    const component = fixture.componentInstance;
+    const selection = fixture.debugElement.injector.get(BrowseSelectionService);
+
+    component.subset = true;
+    component.subsetIds = [1, 2, 3, 4];
+    component.detailsDocked.set(true);
+    component.onCanvasContextMenu({
+      members: [1, 2],
+      repId: 1,
+      clientX: 0,
+      clientY: 0,
+      bounds: null,
+    } as unknown as Parameters<typeof component.onCanvasContextMenu>[0]);
+
+    // The user selected items from other bins (marquee, select-all-in-view).
+    selection.addAll([3, 4]);
+    component.onVerify('bad');
+    await settleZoneless(fixture);
+
+    expect(component.contextMembers()).toEqual([1, 2]);
+    expect(component.contextRepId()).toBe(1);
   });
 
   it('persists the details panel width from a divider drag, clamped', async () => {

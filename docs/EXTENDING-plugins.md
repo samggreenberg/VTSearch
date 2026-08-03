@@ -369,6 +369,7 @@ to the framework.
 | `_fetch_records_bulk_impl()` | `(records: list, field_values: dict, thin: bool) -> list[dict | None]` | Batched fetch hook. Default loops `fetch_record`. Override to issue concurrent / batched I/O |
 | `run_cli()` | `(field_values: dict, medias: dict, thin: bool = False) -> None` | CLI variant; default delegates to `run()`. Override when `run()` expects FileStorage objects |
 | `get_field_options()` | `(field_key: str, current_values: dict) -> Sequence[FieldOption]` | Compute dropdown options for fields declared with `dynamic_options=True`; each option is a plain string or a `(value, label)` tuple. See [Dynamic field options](#dynamic-field-options) |
+| `default_display_name()` | `(field_values: dict) -> str` | Name the datasets this importer produces. Shown live in the form's Dataset Name box and used verbatim when the user leaves it blank. Default derives a name from your URL / path / upload fields. See [Naming the imported dataset](#naming-the-imported-dataset) |
 | `run_chunked()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | Yield chunks of medias for piecewise processing. Set `supports_chunked = True` |
 | `run_chunked_cli()` | `(field_values, chunk_size, thin) -> Iterator[dict]` | CLI variant of `run_chunked()` |
 | `build_origin()` | `(field_values: dict) -> dict` | Build an origin dict for provenance tracking. Default uses importer name + string field values |
@@ -608,6 +609,63 @@ string and `(value, label)` shapes are coerced to `{value, label}` before
 serialisation. Any exception your `get_field_options()` raises is returned
 as a 502 with the exception message; perfect for surfacing remote-service
 errors directly to the user.
+
+### Naming the imported dataset
+
+Every importer's form carries a **Dataset Name** field that you never
+declare: the base class appends it to your `fields` when the form is
+serialised (`ImporterBase.to_dict`). Whatever the user types there wins.
+When they leave it blank, the name comes from your importer's
+`default_display_name(field_values)`.
+
+That method is also what the form *shows*. As the user fills the form in,
+the modal asks your importer what it would name the result and prefills
+the Dataset Name box with the answer, so the box is never a mystery: what
+it shows is what the import will use, and the user can still overwrite it.
+
+The base implementation walks your own declared fields and derives a name
+from the first one holding a usable value: a `url` field's tail, a
+`server_path` / `folder` leaf, an uploaded file's stem (archive extensions
+like `.tar.gz` are stripped). Field declaration order decides precedence.
+So an importer whose form is "a URL" or "a path" needs no naming code at
+all.
+
+Override it when the form holds something opaque — an id, a saved-query
+key, a bucket handle — and only your importer can turn it into words:
+
+```python
+class ReCallerImporter(DatasetImporter):
+    name = "recaller"
+    fields = [
+        PluginField("media_type", "Media Type", "select", options=all_folder_names()),
+        PluginField("query_id", "Query ID", "select", dynamic_options=True,
+                    depends_on=["media_type"]),
+    ]
+
+    def default_display_name(self, field_values):
+        query = _lookup_query(field_values.get("query_id", ""))
+        # Fall back to the base derivation when there is nothing to resolve.
+        return query.title if query else super().default_display_name(field_values)
+```
+
+Now picking *Q1 Field Survey* in the dropdown fills the Dataset Name box
+with `Q1 Field Survey` instead of leaving the user staring at `q-8f31`.
+
+Two constraints worth knowing:
+
+- **Keep it cheap.** It runs on every form change (debounced), not once
+  per import, so cache any remote lookup it needs. It should have no side
+  effects.
+- **Don't read `dataset_name` inside it.** The user's own answer is
+  stripped before your method is called — `resolve_display_name()` already
+  gives it priority — so `field_values` holds only the form fields you
+  declared.
+
+API contract: `POST /api/dataset/import/<name>/suggested-name` with body
+`{"values": {...}}` returns `{"dataset_name": "..."}`. An exception from
+your `default_display_name()` comes back as a 502; the form treats any
+failure as "no suggestion" and leaves the box untouched, since a name hint
+is never worth blocking an import over.
 
 ### How it gets invoked
 
@@ -1222,8 +1280,8 @@ classifier:
 2. Toggle its Auto-Find flag with
    `PUT /api/detectors/registry/<id>/autofind` so it runs from
    `/api/auto-detect` and the CLI's `--autodetect` flow.
-3. The MLP itself lives only in RAM; it's trained on demand from the
-   labelset's origins each time the model is loaded or scored.
+3. The trained head itself lives only in RAM; it's trained on demand
+   from the labelset's origins each time the model is loaded or scored.
 
 For ready-made classifiers without labels (e.g. an OCR or face-detector
 heuristic), build an Extractor or Localizer plugin instead; see

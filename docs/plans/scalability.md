@@ -402,13 +402,61 @@ embedder. Shares the S11 approach.
   `labeling_progress._build_coverage_atlas` clones the dataset context's atlas
   only when the id sets match exactly; otherwise it fits a throwaway private one
   under `_progress_lock`. On a dataset past the 50 k auto-build cutoff (so the
-  context has no atlas) that fit dominates a cold progress-cache build —
-  measured ~27 s of a 40 s build at 20 k media. It can't write the result back
+  context has no atlas) that fit is now the *entire* cost of the Diverse plot —
+  measured 47 s at 20 k media and 146 s at 60 k. It can't write the result back
   to the context from there because `_progress_lock` is held and the lock
   ordering forbids taking `_state_lock` under it. Fix direction: build the atlas
   before acquiring `_progress_lock` and publish it to the context so both paths
-  share one structure. Now off the request thread (the plot modal runs it as a
-  background job), so this is a cost problem, not a latency-hang.
+  share one structure. Off the request thread (the plot modal runs it as a
+  background job with live progress), so this is a cost problem, not a
+  latency-hang. Only the Diverse metric pays it now — Smart and Stable no longer
+  build an atlas at all.
+- **Nothing warms the per-step cache outside the label view:** the only thing
+  that advances it is the `/api/labeling-status` background worker, which the
+  label view polls every 2–10 s. That makes an *active* session cheap (one step,
+  ~105 ms, per vote, absorbed between clicks) but leaves the cache cold after a
+  session start, a detector load, or any stretch spent in another view — and a
+  cold cache is the only remaining path on which a progress plot takes tens of
+  seconds. Fix direction: warm it opportunistically after a detector finishes
+  loading, rather than waiting for the first poll from a view the user may not
+  open. Note the Smart/Stable *verdicts* have the same cold-start cost and hide
+  it behind `stale=true`, so this is not only a plot problem — it is why a
+  freshly-loaded detector's lights are a snapshot of nothing for a while.
+- **The Smart/Stable verdicts only need the last ~10 steps, but pay for all N:**
+  `_compute_smart_status` reads `_cached_steps[-10:]`, and a step's model depends
+  only on the label sets at that step — derivable by replaying the (free) event
+  list without training anything earlier. A tail-window build would make the
+  lights honest from cold in ~1 s instead of a full walk. It needs `_cached_steps`
+  to stop being a dense list indexed by step, so it is a real refactor, not a
+  tweak.
+- **Correcting an early click replays the rest of the session:** a correction
+  rewrites that click in place and invalidates every cached step from it, so the
+  suffix refits against the corrected label — necessary work, not waste, but it
+  scales with how far back the correction lands. Measured at 20 k medias / 200
+  votes: correcting the click you just made replays 2 steps (235 ms), halfway
+  back replays 100 (7.8 s), and your third-ever click replays 198 (14.7 s).
+  Acceptable today because corrections are rare and usually recent, but it is
+  the same ~105 ms/step floor below, so anything that lowers that lowers this.
+  A cheaper variant, if it ever bites: only steps whose *training set* actually
+  differs need refitting, and the corrected media is one row of a growing
+  matrix — a rank-one update or a warm L-BFGS restart per step would converge in
+  a fraction of a cold Adam run precisely because the neighbouring fit is close.
+- **The per-step model walk's remaining floor (~105 ms/label step):** advancing
+  the progress cache trains one linear head per label step, 200 full-batch Adam
+  epochs each. Essentially all of that is per-epoch autograd/optimizer dispatch,
+  not arithmetic (the matmul is `n×512` for `n` in the low hundreds), so it does
+  not shrink with dataset size — it scales with *vote count*, ~21 s at 200 votes
+  and ~2 min at 1 k. Two things were measured and rejected: warm-starting each
+  step from the previous one saves no epochs (the early-stop plateau never fires
+  either way, since Adam keeps beating the absolute `min_delta = 1e-4` for
+  hundreds of epochs), and pairing a warm start with a shorter budget leaves each
+  step inheriting its predecessor's under-converged weights — measurably
+  *further* from the converged fit than a cold run. Real options, both of which
+  change what the curve previews and so need a product call first: fit the convex
+  logistic objective with L-BFGS instead of Adam, or subsample the plotted steps
+  (a 600 px canvas cannot resolve 1 k points anyway — but note the Smart
+  indicator reads the last 10 *cached* steps, so subsampling changes the
+  traffic-light semantics too).
 - **Columnar `medias` storage** (S4 full rewrite): deferred; requires redesign of
   every media-reading call site.
 - **Append-only vote journal** for labelset sources (S12 long-term): deferred

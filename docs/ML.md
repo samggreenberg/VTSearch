@@ -1,22 +1,28 @@
 # Machine Learning Details
 
-VTSearch uses a small MLP (multi-layer perceptron) neural network to learn a binary classifier from user votes ("good" vs "bad"). The model operates on embeddings produced by pretrained feature extractors (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text) and outputs a score in [0, 1] for each item in the dataset.
+VTSearch learns a binary classifier from user votes ("good" vs "bad") using a **linear (logistic) head** — a single `Linear(input_dim, 1)` trained with balanced binary cross-entropy, i.e. logistic regression. The model operates on embeddings produced by pretrained feature extractors (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text) and outputs a score in [0, 1] for each item in the dataset.
 
-Alongside the MLP, each dataset carries a **[Coverage Atlas](#coverage-atlas)** — a hierarchical partition of the embedding space that guides the autopilot's diversity sampling and provides calibrated typicality scores for domain-shift detection.
+Alongside the head, each dataset carries a **[Coverage Atlas](#coverage-atlas)** — a hierarchical partition of the embedding space that guides the autopilot's diversity sampling and provides calibrated typicality scores for domain-shift detection.
 
 ## Architecture
 
-The MLP is defined in `vtscore/training/mlp.py` via `build_model()`:
+The head is defined in `vtscore/training/mlp.py` via `build_model()`. Production always builds the linear head, selected by the `hidden_dim=LINEAR_HEAD` (`0`) sentinel:
 
 ```
-Linear(input_dim, hidden_dim) -> ReLU -> Dropout(p) -> Linear(hidden_dim, 1)
+Linear(input_dim, 1)
 ```
 
 - **Input dimension**: Dynamic, depends on the embedding model for the current media type (see [Embedding Models](#embedding-models) below).
-- **Hidden layer**: Width chosen automatically by `_auto_hidden_dim(n_train)`: `max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))`, i.e. 8–32 neurons depending on training set size. Dropout (`MLP_DROPOUT=0.5`) is applied after ReLU during training.
+- **No hidden layer**: hence no ReLU and no dropout — a bare linear map has nothing to regularize with dropout, matching plain logistic regression.
 - **Output**: A single logit. `torch.sigmoid` is applied at inference time to produce a probability in [0, 1].
 
 The model outputs raw logits (not probabilities) during training. This allows the use of `BCEWithLogitsLoss`, which fuses the sigmoid and binary cross-entropy computation using the log-sum-exp trick for better numerical stability. At inference time, `torch.sigmoid()` is applied explicitly to convert logits to probabilities.
+
+### Why linear, and where the MLP survives
+
+The head used to be a small MLP (`Linear(input_dim, hidden_dim) -> ReLU -> Dropout(p) -> Linear(hidden_dim, 1)`, width auto-sized by `_auto_hidden_dim(n_train)`). With only ~3–5 labeled positives that MLP is under-determined: each retrain wobbles the scores, and the calibrated cut lurches over the unlabeled positives — the threshold-stability spikes tracked in issue #2790. A linear boundary has no such freedom, and measurements on COCO/SigLIP2 and VG/SigLIP1+2 put the deep-spike rate roughly 55–73% lower at equal or better FNR and cost.
+
+`build_model(input_dim, hidden_dim=N)` with `N > 0` still builds the MLP, and `_auto_hidden_dim` still sizes it. That path exists only for the eval harness's MLP sweep arm (see [`docs/EVAL.md`](EVAL.md)) and unit tests; it is not reachable from the app. The Stage-2 structural-verification classifier (`vtscore/training/structural_similarity.py`) is a separate feature and keeps its own MLP.
 
 ## Training Configuration
 
@@ -26,8 +32,7 @@ The model outputs raw logits (not probabilities) during training. This allows th
 | **Optimizer** | Adam | `lr=0.001`, `weight_decay=1e-4` |
 | **Epochs (cap)** | 200 | Configurable via `TRAIN_EPOCHS` in `config.py` or the `VTSEARCH_TRAIN_EPOCHS` env var |
 | **Early-stop patience** | 10 | Training halts when the loss fails to improve for this many consecutive epochs (configurable via `TRAIN_PATIENCE` / `VTSEARCH_TRAIN_PATIENCE`; set 0 to disable) |
-| **Hidden layer** | 8–32 neurons | `max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))` (i.e. `max(8, min(32, n_train // 3))`) via `_auto_hidden_dim()` |
-| **Dropout** | 0.5 | Applied after ReLU, active only during training |
+| **Head** | `Linear(input_dim, 1)` | The `LINEAR_HEAD` sentinel (`hidden_dim=0`); no hidden layer, no dropout |
 | **Batching** | Full-batch | All labeled data in every forward pass |
 | **Reproducibility** | Local `torch.Generator` | Per-model seed (default 42) for thread-safe deterministic init |
 | **Gradient scoping** | `torch.enable_grad()` | Explicitly enabled during training loop |
@@ -48,15 +53,14 @@ Targets are label-smoothed with ε = 0.05 (`MLP_LABEL_SMOOTHING` in `vtscore/con
 
 A decision threshold separating "good" from "bad" predictions is computed via **cross-calibration**:
 
-1. Compute `hidden_dim` once from the **full** label count.
-2. Split labeled data into Train (1 − `calibration_fraction`) and Calibrate (`calibration_fraction`).
-3. Train a fold model on Train **using the full-data `hidden_dim`**, score the held-out Calibrate portion.
-4. Repeat for `calibrate_count` independent random splits.
-5. Pool every fold's held-out (score, label) pairs and apply the **conformal inclusion rule** (`conformal_threshold`) once. Pooling — rather than averaging per-fold thresholds — is deliberate: the knob's resolution is bounded by how many calibration scores the quantiles are taken over.
+1. Split labeled data into Train (1 − `calibration_fraction`) and Calibrate (`calibration_fraction`).
+2. Train a fold model on Train **using the same head as the final model**, score the held-out Calibrate portion.
+3. Repeat for `calibrate_count` independent random splits.
+4. Pool every fold's held-out (score, label) pairs and apply the **conformal inclusion rule** (`conformal_threshold`) once. Pooling — rather than averaging per-fold thresholds — is deliberate: the knob's resolution is bounded by how many calibration scores the quantiles are taken over.
 
 The `calibrate_count` setting defaults to `2` (`DEFAULT_CALIBRATE_COUNT` in `vtscore/config.py`) and can be raised or lowered (`VTSEARCH_CALIBRATE_COUNT`) to trade calibration quality (and Inclusion-knob resolution — more folds means more pooled calibration scores) for latency. (The eval runner uses its own default of `2` for a separate, non-interactive path — see [`docs/EVAL.md`](EVAL.md).) When `safe_thresholds` is enabled and fewer than 6 labels exist, the cross-calibration step is skipped entirely; the `calculate_safe_threshold` blender weights the calibrated value at 0 in that regime, so paying for the fold trainings would be pure waste. With `safe_thresholds` **off**, the cross-calibrated value is the cutoff the detector actually uses, so it is computed at every label count — every training entry point (vote-driven Train, labelset re-derivation, Find, and detector-load-from-origins) cross-calibrates below 6 labels rather than falling back to 0.5.
 
-**Why fold models use the full-data hidden_dim:** The hidden-layer width is normally auto-sized from the training-set size (`n_train // 3`, clamped to 4–32). Without intervention, each fold model would train on fewer examples and therefore get a smaller hidden layer than the final model. A smaller architecture produces a different score distribution, so thresholds found on fold models would not transfer faithfully to the final model. By forcing fold models to use the same `hidden_dim` as the final model, the architectures match: same capacity, same score distribution shape. The only difference is the fold models see less data, which is the whole point (you want held-out calibration data). Existing regularization (dropout 0.5, weight decay 1e-4) and the small max width (32) prevent the slightly "oversized" fold models from overfitting meaningfully.
+**Why fold models share the final model's architecture:** a different architecture produces a different score distribution, so a threshold found on fold models would not transfer faithfully to the final model. The training code threads one `hidden_dim` through both the final fit and every fold fit, so the two can't drift apart. With the linear head that value is a constant (`LINEAR_HEAD`), which makes the property automatic — the head has no capacity to size. It mattered more under the old MLP, whose width was auto-sized from the training-set size: left alone, each fold would have trained on fewer examples and got a narrower hidden layer than the final model.
 
 The **Calibration Fraction** setting (0–1, default 0.5) controls how much data is reserved for threshold calibration vs. model training in each split. For example, a value of 0.2 means 80% Train / 20% Calibrate. If the fraction is so extreme that a valid Train/Calibrate split cannot be formed (fewer than 2 training examples or fewer than 1 calibration example), the system returns a maximum threshold so that nothing is predicted as Good.
 
@@ -71,7 +75,9 @@ The rule is **monotone in `k` by construction**: raising inclusion can only lowe
 
 Because the fold models are inclusion-independent, the pooled held-out scores can be cached once and re-thresholded at any inclusion (this powers the Find Stats sweep across all inclusion values).
 
-For semantic (text/example) sorts, a **GMM-based threshold** is used instead: a 2-component Gaussian Mixture Model is fitted to the score distribution and the midpoint between component means serves as the threshold.
+For semantic (text/example) sorts, a **GMM-based threshold** is used instead: a 2-component Gaussian Mixture Model is fitted to the score distribution and the cut is placed at the **equal-density crossing** of the two fitted components — the score at which an item stops being better explained by the low ("Bad") component than by the high ("Good") one. Solving `w_lo·N(x; μ_lo, σ²_lo) = w_hi·N(x; μ_hi, σ²_hi)` is a quadratic in `x`; the root between the two means is the Bayes boundary between them. When no root lies strictly between the means (degenerate fit, or an extreme weight ratio that pushes it outside), the threshold falls back to the midpoint between the means.
+
+The crossing and the midpoint coincide exactly when the two components are equal-weight and equal-variance. They diverge under **region voting**, where a media's score is the max over ~24 region-node scores: the Bad mode is then an extreme-value statistic — shifted up, right-skewed, wider, and much heavier than the Good mode, since even a thoroughly bad image gets ~24 draws at a false-positive region. A wider/heavier low component puts the crossing *above* the midpoint, so the midpoint rule cuts inside Bad mass and over-includes. This matters most below 6 votes, where the safe-threshold ramp uses the pure GMM value (see issue #2798).
 
 ## PyTorch Environment Settings
 
@@ -83,7 +89,7 @@ For semantic (text/example) sorts, a **GMM-based threshold** is used instead: a 
 | dtype | `training.py` | `torch.float32` |
 | Device | default | CPU (GPU supported, see tests) |
 
-Threading is restricted to 1 to minimize memory overhead; the real cost is the embedding models, not the MLP.
+Threading is restricted to 1 to minimize memory overhead; the real cost is the embedding models, not the head.
 
 ## Embedding Models
 
@@ -112,7 +118,7 @@ Each media type uses a different pretrained model to produce fixed-size embeddin
 
 Each embedder lives in its own `embedder_<name>.py` file inside the media-type package and exposes a module-level `EMBEDDER` sentinel; the default for a given media type is whichever embedder overrides `is_default` to return `True` (exactly one per media type).
 
-Audio, image, and text media types each ship alternative embedders alongside the default. The image variants come in **single/patch pairs**: `_single` embedders produce one CLS-pooled vector per image (cheap, same shape as SigLIP); `_patch` embedders additionally produce a hierarchical HAC region tree (~24 region vectors per image) and the raw patch grid, enabling region-level similarity, region-aware MLP scoring, and region voting on yes-votes.  See [`docs/plans/patch-embedder.md`](plans/patch-embedder.md) for the full design.
+Audio, image, and text media types each ship alternative embedders alongside the default. The image variants come in **single/patch pairs**: `_single` embedders produce one CLS-pooled vector per image (cheap, same shape as SigLIP); `_patch` embedders additionally produce a hierarchical HAC region tree (~24 region vectors per image) and the raw patch grid, enabling region-level similarity, region-aware detector scoring, and region voting on yes-votes.  See [`docs/plans/patch-embedder.md`](plans/patch-embedder.md) for the full design.
 
 Embedders carry capability flags consumed by the routes layer and the frontend:
 
@@ -122,11 +128,11 @@ Embedders carry capability flags consumed by the routes layer and the frontend:
 
 The **document** media type has no embedding model of its own. Documents (PDF, DOC, PPT) are intended to be converted to other media types (images or text) via media converters in `vtscore/converters/` before embedding.
 
-Embeddings are computed once when a dataset is loaded. The full-image vector lands in each clip's `"embeddings"` dict, keyed by embedder name (`numpy.ndarray` values; read it through the `media_embedding` accessor); patch embedders additionally populate `"patch_regions"` (list of `RegionVector`s, fp16-on-disk / fp32-in-RAM) and `"patch_grid"` (`H × W × D` ndarray, fp16). The MLP trains on these pre-computed vectors, so training is fast (typically < 1 second for 200 epochs on a few hundred labeled examples).
+Embeddings are computed once when a dataset is loaded. The full-image vector lands in each clip's `"embeddings"` dict, keyed by embedder name (`numpy.ndarray` values; read it through the `media_embedding` accessor); patch embedders additionally populate `"patch_regions"` (list of `RegionVector`s, fp16-on-disk / fp32-in-RAM) and `"patch_grid"` (`H × W × D` ndarray, fp16). The detector head trains on these pre-computed vectors, so training is fast (typically < 1 second for 200 epochs on a few hundred labeled examples).
 
 ### Region-aware training on patch-region datasets
 
-Inference max-pools the MLP over each image's `patch_regions` (an image scores by its **best** region — see `score_media`). Training is shaped to match that scorer, and it is deliberately asymmetric between Good and Bad votes — the multiple-instance-learning treatment of a max-pool bag:
+Inference max-pools the head over each image's `patch_regions` (an image scores by its **best** region — see `score_media`). Training is shaped to match that scorer, and it is deliberately asymmetric between Good and Bad votes — the multiple-instance-learning treatment of a max-pool bag:
 
 - **Good vote** — a positive bag needs only *one* good region, and the user tells us which via an optional `region_box` (drawn by Shift-drag on the focus pane). The box is **snapped to the nearest `patch_regions` node** (max box-IoU, `snap_box_to_region`), so the positive is one of the exact candidates the max-pool will score — not a fresh uniform pool that matches no node. A Good vote with no box falls back to the full-image CLS node.
 - **Bad vote** — a negative bag asserts that *no* region is good, so a Bad vote **floods the image's CLS + HAC-leaf nodes** (the disjoint covering set; saliency-weighted internal nodes are dropped as redundant) as negatives. This trains every leaf down, so the max-pool can't surface a look-alike sub-region of a rejected image.
@@ -221,7 +227,7 @@ What actually happens when the autopilot enters its "Explore Diversity" phase, c
 5. **The user votes.** The vote lands in the detector's labels *and* increments `n_neg` (or `n_pos`) in the item's leaf and all its ancestors — the region is now covered, and the next `next_sample` call moves on to the next uncovered region.
 6. **The Span indicator advances.** Each labeling-status poll reads `span_info()`; when 40 consecutive breadth-first nodes carry evidence, Span turns green and the autopilot declares the collection covered.
 
-Either outcome of step 5 helped: a flip hands the MLP a training example from a region it was confidently wrong about (the next retrain bends the boundary there); a non-flip certifies the region at its weakest point for one click.
+Either outcome of step 5 helped: a flip hands the head a training example from a region it was confidently wrong about (the next retrain bends the boundary there); a non-flip certifies the region at its weakest point for one click.
 
 ### Tutorial: checking for domain shift before reusing a detector
 

@@ -228,7 +228,29 @@ plot_eval_results(results, output_dir="eval_seeds")
 
 The voting-iterations evaluation measures how classification quality improves as more votes are cast. This is useful for understanding how many labels a user needs to provide before the model converges.
 
-Votes are cast in the order the app's **Autopilot** would present them — the eval reproduces the real user flow rather than an academic active-learning heuristic. Autopilot seeds the first few positives from text sort when available (pass `seed_scores`, a per-media cosine-to-query ranking), else from a handful of random known-good examples, then gathers the initial negatives and cycles the standard Good / Bad / Hard / New phases. `autopilot` is the only vote-order strategy; every result row carries `strategy="autopilot"`.
+Votes are cast in the order the app's **Autopilot** would present them — the eval reproduces the real user flow rather than an academic active-learning heuristic. Autopilot seeds the first few positives from text sort when available (pass `seed_scores`, a per-media cosine-to-query ranking), else from a handful of random known-good examples, then gathers the initial negatives and works through the standard Good / Bad / Hard / New phases. `autopilot` is the only vote-order strategy; every result row carries `strategy="autopilot"`.
+
+#### Autopilot fidelity (`autopilot_fidelity`, default `True`)
+
+The simulated user follows the app's **own** phase machine, ported in [`vtscore/eval/autopilot_flow.py`](../vtscore/eval/autopilot_flow.py). That matters because the harness's earlier approximation diverged from the app in ways that changed what studies measured:
+
+| | app (and the harness now) | old approximation |
+|---|---|---|
+| First trained detector | at quorum — 3 good **and** 4 bad | at the first `(≥1 good, ≥1 bad)` pair |
+| Bad-phase pick | the **text sort's cutoff** (Select `hard` on a text sort) | the bottom of the sort |
+| Hard-phase pick | nearest the cutoff **by rank** | nearest **by score** |
+| Hard → New | when the *smart* and *stable* indicators go green | alternating on step parity |
+
+The first row is the one that bites. Because the app stays on the text sort through the Bad phase, its first learned sort always has ≥2 votes of each class, so it can never hit the calibrator's `too_few_default` path — while the old harness trained at 3 good + 1 bad on every trajectory and recorded a flat 0.5 threshold there. Issue #2788's cold-start degenerate thresholds were largely that artifact.
+
+Two columns make this visible in the output:
+
+- **`phase`** — the Autopilot phase after that vote (`good` / `bad` / `hard` / `new` / `done` / `exhausted`).
+- **`app_trained`** — `1` exactly when the app would have had a trained detector on screen. **A threshold recorded where this is `0` is one no user would ever see**, so any analysis of threshold quality should filter on it.
+
+Metrics are still recorded at every trainable step in both modes — fidelity changes the *vote order* and the `app_trained` flag, not measurement coverage.
+
+Pass `autopilot_fidelity=False` to reproduce studies published before the flow was aligned (the Max-Patch, MLP-vs-SVM, and Inclusion-knob reports); that path is byte-for-byte the old behaviour. New studies should leave it on.
 
 ```python
 #!/usr/bin/env python

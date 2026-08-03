@@ -1,0 +1,67 @@
+# Calibration study runner (issues #2781, #2799)
+
+Measures **calibration regret** — the extra `FPR + FNR` cost the trained
+(cross-calibrated conformal) threshold pays versus the *oracle* threshold for the
+same ranking — across the region-voting and binary-voting arms, decomposes it
+into rule inefficiency vs calibration→test shift, hunts the runaway-threshold
+bug, tests whether re-pooling can save the raw-patch tree, and checks the
+Inclusion budget under grouped calibration. Design: `docs/plans/calibration-experiment.md`.
+
+## Arms
+
+| Dataset | Embedder | Style(s) | Calibration |
+|---|---|---|---|
+| `visual_genome_m` | `siglip`, `siglip_l` | `whole_image` | row-wise |
+| `visual_genome_m` | `dinov3_patch` | `max_patch`, `max_patch_pca_hac` | grouped (bag max-pool) |
+| `caltech101_m` | `siglip`, `siglip_l` | `whole_image` | row-wise |
+
+The `max_patch_pca_hac` arm additionally emits two **remedial re-pools** of its
+own per-node scores (`topk` k=4, `pnorm` extreme-value normalisation), each with
+its own recalibrated threshold, tagged in the `pool_variant` column.
+
+## Stages
+
+1. **`prepare_data.py`** — ensures a per-`(dataset, embedder)` pickle + exemplar
+   crops for every arm. Reuses the Max-Patch pickles/crops where the pair
+   coincides (VG×{siglip,dinov3_patch}, Caltech×siglip); only embeds the missing
+   `siglip_l` pairs.
+2. **`run_cells.py`** — one SLURM-array task per `(dataset, embedder, category,
+   seed)` cell; runs every style for the embedder, emitting the calibration
+   metrics (`_CALIBRATION_COLUMNS`) to `results/cells/task_<idx>.csv` and the
+   inclusion sweep (`_INCLUSION_SWEEP_COLUMNS`) to `task_<idx>__sweep.csv`.
+3. **`analyze.py`** — concatenates the cells, computes the pre-registered
+   deliverables, writes `results/summary.json`, `results/agg/*.csv`,
+   `results/figures/*.png`, and a `results/REPORT.md` draft.
+
+## Running on the Grid
+
+```bash
+cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
+bash launch_all.sh          # reuse-symlink -> prepare (GPU) -> cells -> analyze
+```
+
+`launch_all.sh` points `VTSEARCH_DATA_DIR` at the Max-Patch datadir so the shared
+embeddings pickles and demo data are read in place (the `siglip_l` pickles land
+alongside them harmlessly), and writes all study output under
+`/exp/$USER/calibration`.
+
+## Fixed config (pre-registered)
+
+`inclusion=0` (cost = FPR + FNR), `sim_fraction=0.5`, `calibrate_count=2`,
+`calibration_fraction=0.5`, `safe_thresholds=False`, MLP trainer, 150 votes,
+4 seeds. Env knobs mirror the `MAXPATCH_*` set under the `CALIB_*` prefix.
+
+## Safe-threshold GMM study (issue #2799)
+
+```bash
+cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
+bash launch_safe.sh      # safe_thresholds ON, VG only, 30 votes, 8 seeds
+```
+
+`launch_safe.sh` re-drives the same pipeline with `CALIB_SAFE_THRESHOLDS=1`:
+every step then emits one extra row per safe-threshold GMM variant
+(`gmm_variant` column — fit geometry x cut rule x fit space, plus an
+`xcal_only` control), and the analyze stage runs `analyze_safe.py` instead of
+`analyze.py`. Results land under `/exp/$USER/calibration-safe`, reusing the
+shared Max-Patch pickles/crops in place. Design and pre-registered decision
+rules: `docs/plans/safe-threshold-gmm-experiment.md`.

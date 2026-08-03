@@ -10,9 +10,11 @@
       <div class="browse-status">
         <p class="browse-status-message">Building the map…</p>
         <vt-progress-bar
-          [indeterminate]="buildTotal() <= 0"
-          [value]="buildProgress()"
-          [max]="buildTotal()"
+          [indeterminate]="buildBar().indeterminate"
+          [pulsing]="!!buildBar().pulsing"
+          [smooth]="true"
+          [value]="buildBar().value"
+          [max]="buildBar().max"
         />
         <!-- Reserved-height lines so the count/detail appearing or disappearing
              doesn't re-center the column and shift the bar above it. -->
@@ -21,7 +23,7 @@
             {{ buildProgress() }} / {{ buildTotal() }}
           }
         </span>
-        <span class="browse-status-detail">{{ buildMessage() }}</span>
+        <span class="browse-status-detail">{{ buildDetail() }}</span>
       </div>
     }
     @case ('error') {
@@ -50,8 +52,8 @@
             <vt-browse-bin-popup
               [docked]="true"
               [availableWidth]="detailsPanelWidth()"
-              [memberIds]="contextMembers"
-              [repId]="contextRepId"
+              [memberIds]="contextMembers()"
+              [repId]="contextRepId()"
               [mediaType]="mediaType()"
               [volume]="volume()"
               [hoverThumbRadius]="thumbnailRadius"
@@ -181,8 +183,8 @@
               [x]="contextMenuX"
               [y]="contextMenuY"
               [bounds]="contextBounds"
-              [memberIds]="contextMembers"
-              [repId]="contextRepId"
+              [memberIds]="contextMembers()"
+              [repId]="contextRepId()"
               [mediaType]="mediaType()"
               [volume]="volume()"
               [hoverThumbRadius]="thumbnailRadius"

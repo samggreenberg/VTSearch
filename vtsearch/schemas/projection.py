@@ -50,6 +50,24 @@ class ProjectionMetaSchema(Schema):
     current = fields.Integer(load_default=None)
     total = fields.Integer(load_default=None)
     message = fields.String(load_default=None)
+    step = fields.Integer(
+        load_default=None,
+        metadata={"description": "Which coarse build phase is running (1-based)."},
+    )
+    total_steps = fields.Integer(
+        load_default=None,
+        metadata={"description": "How many coarse phases the whole build has."},
+    )
+    overall = fields.Float(
+        load_default=None,
+        metadata={
+            "description": (
+                "Whole-job completion fraction (0..1) stitched from the current "
+                "phase and its within-phase counts, so one bar fills across the "
+                "entire build instead of restarting at each phase."
+            ),
+        },
+    )
     error = fields.String(load_default=None)
 
 

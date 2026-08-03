@@ -131,6 +131,7 @@ See [EXTENDING-plugins.md § Adding a Data Importer](EXTENDING-plugins.md#adding
 - [ ] Subclass `DatasetImporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `run(self, field_values, medias, thin=False)`: populate `medias` in-place
 - [ ] Expose `IMPORTER = YourImporter()` at module level
+- [ ] If your form holds opaque values (ids, query keys), override `default_display_name(field_values)` so the Dataset Name box shows a readable name — see [Naming the imported dataset](EXTENDING-plugins.md#naming-the-imported-dataset)
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/dataset/all-importers` includes your importer
 

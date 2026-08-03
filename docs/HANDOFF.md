@@ -27,7 +27,7 @@ small trained ranker that scores every item in the dataset by how well
 it matches what you're looking for. There are two ways to search:
 
 - **Train a new detector.** Vote a handful of items good or bad in the
-  UI; a small MLP neural network learns from those votes to rank the
+  UI; a linear (logistic) model learns from those votes to rank the
   rest of the collection. **Autopilot** drives this loop, picking which
   item to show next and when each phase ends, so most users never need
   to think about sort modes or selection strategies directly.
@@ -58,7 +58,7 @@ deployments. Runs locally or in Docker.
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Module structure, dependency graph, extractability matrix, state management |
 | [API.md](API.md) | HTTP API reference (all REST endpoints, request/response formats) |
 | [CLI.md](CLI.md) | Command-line interface reference (autodetect, importers, exporters) |
-| [ML.md](ML.md) | MLP architecture, training config, embedding models, threshold calibration, Coverage Atlas |
+| [ML.md](ML.md) | Detector-head architecture, training config, embedding models, threshold calibration, Coverage Atlas |
 | [EVAL.md](EVAL.md) | Evaluation framework (metrics, runner, visualisation) |
 | [EXTENDING.md](EXTENDING.md) | Plugin authoring index: splits into **[EXTENDING-plugins.md](EXTENDING-plugins.md)** (importers/exporters/sources), **[EXTENDING-media.md](EXTENDING-media.md)** (media types/embedders/clippers/converters), **[EXTENDING-processors.md](EXTENDING-processors.md)** (detectors/localizers/extractors). EXTENDING.md itself holds auth, dependencies, and checklists. |
 | [demos.md](demos.md) | Available demo datasets |
@@ -138,7 +138,7 @@ See `vtscore/converters/`.
 
 ### Detectors and processors
 
-A **detector** is a trained MLP that classifies clips as positive/negative.
+A **detector** is a trained classifier head that labels clips positive/negative.
 An **extractor** groups clips into categories. A **localizer** identifies
 regions of interest within clips (e.g. face detection). All three are types
 of **processors** and can be exported/imported as JSON files.
@@ -320,7 +320,7 @@ exports results without starting the web server.
 
 1. Load a dataset
 2. Vote several clips as good/bad (minimum ~10 votes recommended)
-3. Click "Learned Sort" to train the MLP on your votes
+3. Click "Learned Sort" to train the detector on your votes
 4. Export the detector via the detectors panel
 
 ### Import pre-trained detectors

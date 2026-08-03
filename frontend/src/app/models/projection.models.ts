@@ -106,6 +106,20 @@ export interface ProjectionMeta {
   current?: number;
   total?: number;
   message?: string;
+  /**
+   * Which coarse build phase is running, and how many the build has in total
+   * (arranging → tiling → naming regions). The UMAP fit reports no fraction of
+   * its own, so phase position is the only honest "how far along" signal for
+   * the longest stretch of the build.
+   */
+  step?: number | null;
+  total_steps?: number | null;
+  /**
+   * Whole-job completion fraction (0..1) stitched from {@link step} and the
+   * within-phase counts, so one bar fills across the entire build instead of
+   * restarting at each phase. Mirrors ``ProgressEvent.overall``.
+   */
+  overall?: number | null;
   error?: string;
 }
 

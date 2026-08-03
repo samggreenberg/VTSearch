@@ -16,9 +16,19 @@ from vtscore.datasets.loader import load_dataset_from_pickle, load_dataset_from_
 
 
 def _get_progress():
-    from vtscore.concurrency.progress import update_progress
+    """Resolve the progress sink, preferring the per-task thread callback.
 
-    return update_progress
+    ``_run_importer`` installs the load's own stepped tracker as the thread
+    progress before calling ``run()``, so preferring it routes this importer's
+    messages to the dashboard row for *this* import.  Reporting straight to the
+    global ``update_progress`` singleton (the previous behaviour) published on
+    the ``dataset`` channel instead, where the row never reads it.  Mirrors
+    ``vtscore.datasets.loader._default_progress``.
+    """
+    from vtscore.concurrency.progress import get_thread_progress, update_progress
+
+    cb = get_thread_progress()
+    return cb if cb is not None else update_progress
 
 
 class PickleDatasetImporter(ImporterBase):
@@ -59,7 +69,10 @@ class PickleDatasetImporter(ImporterBase):
             # UploadedFile.save() persists to disk; FileStorage, CliUploadedFile,
             # and BytesIOUploadedFile all implement it.
             file_obj.save(temp_path)
-            load_dataset_from_pickle(temp_path, medias, thin=thin)
+            # Same reason as the cached-demo path in ``loader_demo``: reading
+            # the pickle is the whole import, so without the callback the
+            # dashboard row shows one static message until it finishes.
+            load_dataset_from_pickle(temp_path, medias, thin=thin, on_progress=progress)
         finally:
             temp_path.unlink(missing_ok=True)
         progress("idle", f"Loaded {len(medias)} medias from file")

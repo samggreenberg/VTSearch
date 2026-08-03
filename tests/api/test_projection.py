@@ -148,6 +148,58 @@ class TestProjectionMeta:
         assert meta["status"] == "ready"
         assert meta["point_count"] > 0
 
+    @patch("vtscore.projection.fit_projection", side_effect=_fake_fit_projection)
+    def test_building_reports_phase_and_overall(self, _mock_fit, client):
+        """A build in flight reports which phase it's in and a whole-job fraction.
+
+        The Find view now waits out a Browse map build *in Find*, behind a
+        progress bar, instead of dropping the user into an empty browse view.
+        That bar needs to show total work and position, and the UMAP fit itself
+        reports no fraction of its own — so the meta carries the coarse phase
+        (``step``/``total_steps``) plus an ``overall`` fraction stitched from the
+        phase and its within-phase counts.
+        """
+        import threading
+
+        started = threading.Event()
+        release = threading.Event()
+
+        def _blocker(job):
+            started.set()
+            release.wait(timeout=30)
+
+        # Park the build in the pending slot so its job is inspectable and
+        # nothing races with the phase we stamp on it below.
+        projection_jobs.start(("blocker",), _blocker, dataset_id="__other__")
+        assert started.wait(timeout=5)
+
+        try:
+            build_body = client.post("/api/projection/build").get_json()
+            assert build_body["status"] == "building"
+            job = projection_jobs.get(build_body["job_id"])
+            assert job is not None
+
+            # Phase 1 of 3, no within-phase counts (the UMAP fit's shape).
+            job.set_phase(1, 3, "arranging items")
+            meta = client.get("/api/projection/meta").get_json()
+            assert meta["status"] == "building"
+            assert (meta["step"], meta["total_steps"]) == (1, 3)
+            assert meta["message"] == "arranging items"
+            assert meta["overall"] == pytest.approx(0.0)
+
+            # Halfway through phase 2 of 3 → one third plus half of a third.
+            job.set_phase(2, 3, "building pyramid")
+            job.update_progress(1, 2, "building pyramid")
+            meta = client.get("/api/projection/meta").get_json()
+            assert (meta["step"], meta["total_steps"]) == (2, 3)
+            assert meta["overall"] == pytest.approx(0.5)
+        finally:
+            release.set()
+
+        build_job = projection_jobs.get(build_body["job_id"])
+        assert build_job is not None
+        assert build_job.done_event.wait(timeout=30)
+
 
 class TestProjectionBuild:
     """``POST /api/projection/build`` background job lifecycle."""

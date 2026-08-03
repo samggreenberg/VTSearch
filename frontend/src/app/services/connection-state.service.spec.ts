@@ -79,4 +79,50 @@ describe('ConnectionStateService', () => {
     expect(reqs.length).toBe(1);
     reqs[0].flush('ok');
   });
+
+  // --- recordStreamFailure(): classifying ambiguous SSE errors (#2816) ---
+
+  it('recordStreamFailure() probes /healthz instead of counting a failure', () => {
+    // Three SSE errors in a row used to trip the breaker even though the
+    // backend was answering (503 slot-cap rejections). Now each error only
+    // fires a probe; a healthy answer keeps the app online.
+    service.recordStreamFailure();
+    const req = httpMock.expectOne('/healthz');
+    req.flush('ok');
+    service.recordStreamFailure();
+    httpMock.expectOne('/healthz').flush('ok');
+    service.recordStreamFailure();
+    httpMock.expectOne('/healthz').flush('ok');
+    expect(service.isOffline).toBe(false);
+  });
+
+  it('recordStreamFailure() sends one probe at a time', () => {
+    service.recordStreamFailure();
+    service.recordStreamFailure();
+    const reqs = httpMock.match('/healthz');
+    expect(reqs.length).toBe(1);
+    reqs[0].flush('ok');
+    // Once the probe settles, a new stream error may probe again.
+    service.recordStreamFailure();
+    httpMock.expectOne('/healthz').flush('ok');
+  });
+
+  it('recordStreamFailure() does not probe while offline', () => {
+    service.recordNetworkFailure();
+    service.recordNetworkFailure();
+    service.recordNetworkFailure();
+    expect(service.isOffline).toBe(true);
+    // Recovery stays manual: no automatic probing once the breaker tripped.
+    service.recordStreamFailure();
+    httpMock.expectNone('/healthz');
+  });
+
+  it('recordStreamFailure() probes again after a failed probe settles', () => {
+    // A network-level probe failure (backend really gone) must not wedge the
+    // in-flight flag; the next stream error probes again.
+    service.recordStreamFailure();
+    httpMock.expectOne('/healthz').error(new ProgressEvent('error'));
+    service.recordStreamFailure();
+    httpMock.expectOne('/healthz').flush('ok');
+  });
 });

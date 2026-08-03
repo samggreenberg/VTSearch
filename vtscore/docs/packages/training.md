@@ -179,14 +179,23 @@ lists from votes, caching on `DetectorContext`) sits one layer up.
 
 `vtscore/training/thresholds.py:17`. Fits a 2-component
 `sklearn.mixture.GaussianMixture` to the score list and returns the
-midpoint between the two component means. Used to produce a reasonable
-operating point even when only a few labels exist - the score
-distribution still tends to be bimodal because the embedder space
-already separates "kind of like X" from "kind of not like X".
+**equal-density crossing** of the two weighted components - the root of
+`w_lo·N(x; μ_lo, σ²_lo) = w_hi·N(x; μ_hi, σ²_hi)` lying between the two
+means. Used to produce a reasonable operating point even when only a few
+labels exist - the score distribution still tends to be bimodal because
+the embedder space already separates "kind of like X" from "kind of not
+like X".
 
-Falls back to `np.median(scores)` when GMM fitting raises (e.g.
-degenerate score distributions), and to `0.5` when fewer than 2 scores
-are provided.
+The crossing equals the midpoint between the means for equal-weight,
+equal-variance components, and departs from it when they differ - notably
+under region voting, where each media scores as the max over ~24 region
+nodes and the Bad component comes out wide, right-skewed and heavy, which
+pushes the crossing above the midpoint (issue #2798).
+
+Falls back to the midpoint between the means when no crossing lies
+strictly between them, to `np.median(scores)` when GMM fitting raises
+(e.g. degenerate score distributions), and to `0.5` when fewer than 2
+scores are provided.
 
 ### `conformal_threshold(scores, labels, inclusion_value=0)`
 

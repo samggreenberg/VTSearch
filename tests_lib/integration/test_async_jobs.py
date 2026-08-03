@@ -605,3 +605,33 @@ class TestRunningJobCancellation:
         assert pending.status == "done"
         assert pending.result == {"signature": "sig-B"}
         assert marker == ["start", "sig-B"]
+
+
+class TestPhaseProgress:
+    """``AsyncJob.set_phase`` — the multi-phase progress structure."""
+
+    def test_phase_defaults_to_single_phase(self):
+        job = AsyncJob(job_id="j1")
+        assert (job.step, job.total_steps) == (0, 0)
+
+    def test_set_phase_records_position_and_clears_within_phase_counts(self):
+        """Entering a phase zeroes the counts left over from the previous one.
+
+        The within-phase ``current``/``total`` describe the phase being *left*;
+        carrying them into the next phase would make a poller draw a bar that
+        is momentarily complete for work that hasn't started.
+        """
+        job = AsyncJob(job_id="j1")
+        job.update_progress(7, 7, "arranging items")
+
+        job.set_phase(2, 3, "building pyramid")
+
+        assert (job.step, job.total_steps) == (2, 3)
+        assert (job.current, job.total) == (0, 0)
+        assert job.message == "building pyramid"
+
+    def test_set_phase_keeps_the_previous_message_when_given_none(self):
+        job = AsyncJob(job_id="j1")
+        job.update_progress(1, 2, "arranging items")
+        job.set_phase(2, 3)
+        assert job.message == "arranging items"

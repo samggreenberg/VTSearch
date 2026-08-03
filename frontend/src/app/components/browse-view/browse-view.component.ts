@@ -38,6 +38,7 @@ import {
 } from '../browse-canvas/hex-render.util';
 import type { ProjectionMeta, RegionLabelPayload } from '../../models/projection.models';
 import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
+import { progressBarState } from '../../utils/format-progress';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
@@ -130,6 +131,31 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   readonly buildProgress = signal(0);
   readonly buildTotal = signal(0);
   readonly buildMessage = signal('');
+  /** Whole-job build position: which coarse phase (arranging → tiling →
+   *  naming regions) is running, and the stitched 0..1 fraction across all of
+   *  them, both reported by the projection meta. */
+  readonly buildStep = signal<number | null>(null);
+  readonly buildTotalSteps = signal<number | null>(null);
+  readonly buildOverall = signal<number | null>(null);
+
+  /** `<vt-progress-bar>` inputs for the build state, preferring the whole-job
+   *  ``overall`` fraction so the bar fills once across the build rather than
+   *  restarting at each phase. */
+  readonly buildBar = computed(() =>
+    progressBarState({
+      current: this.buildProgress(),
+      total: this.buildTotal(),
+      overall: this.buildOverall(),
+    }),
+  );
+
+  /** Phase line under the bar: `"Step 2 of 3 · building pyramid"`. */
+  readonly buildDetail = computed(() => {
+    const step = this.buildStep();
+    const totalSteps = this.buildTotalSteps();
+    const phase = step != null && totalSteps != null && totalSteps > 1 ? `Step ${step} of ${totalSteps}` : '';
+    return [phase, this.buildMessage()].filter(Boolean).join(' · ');
+  });
 
   /**
    * Discrete thumbnail-size multipliers, one per named icon size (XS…XL),
@@ -337,11 +363,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   contextMenuOpen = false;
   contextMenuX = 0;
   contextMenuY = 0;
-  contextMembers: number[] = [];
+  /** Signals, not plain fields: besides the right-click handler they are also
+   *  written from the post-verify prune ({@link pruneDetailsPanel}), which runs
+   *  in an HTTP subscribe where a plain-field write would never repaint the
+   *  details panel under zoneless. */
+  readonly contextMembers = signal<number[]>([]);
   /** Representative (centroid) id of the right-clicked bin — the popup opens on
    *  it and scrolls its 1-D member list to it, so the detail view starts on the
    *  same image whose thumbnail the user clicked. */
-  contextRepId: number | null = null;
+  readonly contextRepId = signal<number | null>(null);
   /** Canvas bounds the popup clamps inside, so it stays on the canvas rather
    *  than spilling onto the side panel or past the canvas edges. */
   contextBounds: DOMRect | null = null;
@@ -1073,8 +1103,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       this.dismissContextMenu();
       return;
     }
-    this.contextMembers = event.members;
-    this.contextRepId = event.repId;
+    this.contextMembers.set(event.members);
+    this.contextRepId.set(event.repId);
     if (this.detailsDocked()) {
       // A right-click on a bin always wants the details visible, so it undoes a
       // previous dismissal (the panel's X on an empty panel) — the panel comes
@@ -1103,7 +1133,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * ({@link onCanvasContextMenu}).
    */
   onDetailsDismiss(): void {
-    if (this.contextMembers.length === 0) {
+    if (this.contextMembers().length === 0) {
       this.detailsPanelHidden.set(true);
       return;
     }
@@ -1115,8 +1145,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (this.detailsDocked()) {
       // Docked: dismissal (the panel's X, or an empty-space right-click)
       // clears the shown bin; the panel itself stays, showing its empty hint.
-      this.contextMembers = [];
-      this.contextRepId = null;
+      this.contextMembers.set([]);
+      this.contextRepId.set(null);
     }
     // Release the canvas's pinned enlarge so live hover resumes on the bin now
     // under the cursor.
@@ -1140,7 +1170,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    *  re-open the current bin as a floating window over the canvas. */
   onPopOutRequested(): void {
     this.persistBinDetailsDocked(false);
-    if (this.contextMembers.length === 0) return;
+    if (this.contextMembers().length === 0) return;
     // No summon point (the click was in the panel header) — anchor the window
     // over the upper-left of the canvas; its own clamping keeps it on-screen.
     const main = this.content()?.nativeElement.querySelector('.browse-main');
@@ -1186,10 +1216,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       );
       return;
     }
-    this.status.set('building');
-    this.buildProgress.set(0);
-    this.buildTotal.set(0);
-    this.buildMessage.set('');
+    this.enterBuilding();
     this.buildRequest()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
@@ -1226,10 +1253,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // arm the one-shot survive mark so the canvas keeps it when the fresh
     // projection id lands, instead of treating the re-fit as a new projection.
     this.selection.markSurviveProjectionChange();
-    this.status.set('building');
-    this.buildProgress.set(0);
-    this.buildTotal.set(0);
-    this.buildMessage.set('');
+    this.enterBuilding();
     const request$ = this.subset
       ? this.projectionApi.reprojectSubset(this.subsetIds)
       : this.projectionApi.reproject();
@@ -1299,6 +1323,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     const removed = new Set(removedIds);
     const remaining = this.subsetIds.filter((id) => !removed.has(id));
     this.selection.clear();
+    this.pruneDetailsPanel(removed);
     const label = target === 'good' ? 'Verified Good' : 'Verified Bad';
     this.toast.success({
       message: `Marked ${removedIds.length} item${removedIds.length === 1 ? '' : 's'} ${label}.`,
@@ -1325,6 +1350,37 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
             message: 'Items were verified, but the browse view could not refresh.',
           }),
       });
+  }
+
+  /**
+   * Drop the *removed* ids from the bin the details panel (or floating window)
+   * is showing, so it repaints instead of listing items that have just left the
+   * map. The bin the user culled from is almost always the one still open on the
+   * left — that is where they picked the items — so without this the panel keeps
+   * a stale list of removed items long after the canvas has dropped them.
+   *
+   * Surviving members stay put: the cull re-bins the frozen layout in place, so
+   * the bin is the same bin minus a few items, and the panel keeps showing the
+   * rest. Only when the culled representative goes does the panel move to the
+   * first survivor. Verifying away the *whole* bin resets the details to their
+   * empty state — docked, the panel keeps its slot and shows its empty hint;
+   * floating, the window closes — and releases the canvas's pinned enlarge,
+   * since the bin it was holding open no longer has any items.
+   */
+  private pruneDetailsPanel(removed: Set<number>): void {
+    const members = this.contextMembers();
+    if (members.length === 0) return;
+    const survivors = members.filter((id) => !removed.has(id));
+    if (survivors.length === members.length) return;
+    this.contextMembers.set(survivors);
+    if (survivors.length === 0) {
+      this.contextRepId.set(null);
+      this.contextMenuOpen = false;
+      this.canvas()?.unpinCell();
+      return;
+    }
+    const rep = this.contextRepId();
+    if (rep == null || removed.has(rep)) this.contextRepId.set(survivors[0]);
   }
 
   /**
@@ -1382,6 +1438,22 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     return this.mediaTypeCaps.usesThumbnails(this.mediaType()) ? 'Loading thumbnails…' : 'Loading map…';
   }
 
+  /** Enter the building state with a cleared bar (a fresh build starts at 0). */
+  private enterBuilding(): void {
+    this.status.set('building');
+    this.applyBuildProgress(null);
+  }
+
+  /** Mirror a meta's build progress onto the bar's signals. */
+  private applyBuildProgress(meta: ProjectionMeta | null): void {
+    this.buildProgress.set(meta?.current ?? 0);
+    this.buildTotal.set(meta?.total ?? 0);
+    this.buildMessage.set(meta?.message ?? '');
+    this.buildStep.set(meta?.step ?? null);
+    this.buildTotalSteps.set(meta?.total_steps ?? null);
+    this.buildOverall.set(meta?.overall ?? null);
+  }
+
   private loadProjection(): void {
     this.status.set('loading');
     this.polling = false;
@@ -1430,9 +1502,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (meta.status === 'building') {
       // A build is already in flight (e.g. started at ingest); track it.
       this.status.set('building');
-      this.buildProgress.set(meta.current ?? 0);
-      this.buildTotal.set(meta.total ?? 0);
-      this.buildMessage.set(meta.message ?? '');
+      this.applyBuildProgress(meta);
       this.pollBuildStatus();
       return;
     }
@@ -1469,9 +1539,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
               this.errorMessage.set(meta.error || 'Failed to build the map');
               return;
             }
-            this.buildProgress.set(meta.current ?? 0);
-            this.buildTotal.set(meta.total ?? 0);
-            this.buildMessage.set(meta.message ?? '');
+            this.applyBuildProgress(meta);
             this.pollTimer = setTimeout(poll, 1000);
           },
           error: () => {

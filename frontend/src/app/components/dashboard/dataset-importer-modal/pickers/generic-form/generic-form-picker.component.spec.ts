@@ -120,6 +120,88 @@ describe('GenericFormPickerComponent', () => {
     expect(component.formValues['q']).toBe('');
   });
 
+  describe('importer-suggested dataset name', () => {
+    // The suggestion round trip is debounced, so every assertion here has to
+    // step past SUGGESTED_NAME_DEBOUNCE_MS before the request exists.
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it('prefills the Dataset Name box with the name the importer would use', () => {
+      openAndFlush();
+      component.formValues['path'] = '/data/field-recordings';
+      component.onFieldChanged('path');
+      vi.advanceTimersByTime(300);
+
+      const req = httpMock.expectOne('/api/dataset/import/generic_form/suggested-name');
+      expect(req.request.body.values['path']).toBe('/data/field-recordings');
+      // The importer is asked what it would pick, not handed the answer.
+      expect(req.request.body.values['dataset_name']).toBeUndefined();
+      req.flush({ dataset_name: 'Field Recordings' });
+
+      expect(component.formValues['dataset_name']).toBe('Field Recordings');
+    });
+
+    it('re-asks once a dynamic select resolves, so an opaque id can become a label', () => {
+      const field = { key: 'query_id', field_type: 'select', dynamic_options: true, required: true } as any;
+      component.selectedImporter.set({ name: 'imp', fields: [field] } as any);
+      (component as any).refreshDynamicFieldOptions(field);
+      httpMock
+        .expectOne((req) => req.url.endsWith('/api/dataset/import/imp/options'))
+        .flush({ options: [{ value: 'q-8f31', label: 'Q1 Field Survey' }] });
+      expect(component.formValues['query_id']).toBe('q-8f31');
+
+      vi.advanceTimersByTime(300);
+      const req = httpMock.expectOne('/api/dataset/import/imp/suggested-name');
+      expect(req.request.body.values['query_id']).toBe('q-8f31');
+      req.flush({ dataset_name: 'Q1 Field Survey' });
+
+      expect(component.formValues['dataset_name']).toBe('Q1 Field Survey');
+    });
+
+    it('stops asking once the user names the dataset themselves', () => {
+      openAndFlush();
+      component.onDatasetNameInput('My Corpus');
+      component.formValues['path'] = '/data/sounds';
+      component.onFieldChanged('path');
+      vi.advanceTimersByTime(300);
+
+      httpMock.expectNone((req) => req.url.endsWith('/suggested-name'));
+      expect(component.formValues['dataset_name']).toBe('My Corpus');
+    });
+
+    it('keeps the current name and stays silent when the importer errors', () => {
+      openAndFlush();
+      component.formValues['dataset_name'] = 'Earlier Suggestion';
+      component.formValues['path'] = '/data/sounds';
+      component.onFieldChanged('path');
+      vi.advanceTimersByTime(300);
+
+      httpMock
+        .expectOne('/api/dataset/import/generic_form/suggested-name')
+        .flush({ message: 'upstream down' }, { status: 502, statusText: 'Bad Gateway' });
+
+      expect(component.formValues['dataset_name']).toBe('Earlier Suggestion');
+      expect(component.error()).toBe('');
+    });
+
+    it('keeps suggesting after a failed request', () => {
+      openAndFlush();
+      component.formValues['path'] = '/data/one';
+      component.onFieldChanged('path');
+      vi.advanceTimersByTime(300);
+      httpMock
+        .expectOne('/api/dataset/import/generic_form/suggested-name')
+        .flush({ message: 'upstream down' }, { status: 502, statusText: 'Bad Gateway' });
+
+      component.formValues['path'] = '/data/two';
+      component.onFieldChanged('path');
+      vi.advanceTimersByTime(300);
+      httpMock.expectOne('/api/dataset/import/generic_form/suggested-name').flush({ dataset_name: 'Two' });
+
+      expect(component.formValues['dataset_name']).toBe('Two');
+    });
+  });
+
   it('surfaces a server error without emitting importStarted', () => {
     openAndFlush();
     component.formValues['path'] = '/data/sounds';

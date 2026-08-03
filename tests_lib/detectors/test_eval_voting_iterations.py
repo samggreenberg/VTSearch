@@ -223,10 +223,16 @@ class TestSimulateVotingIterations:
         medias = _make_separable_clips(n_per_cat=10)
         for seed in (42, 99):
             rows = simulate_voting_iterations(medias, "alpha", seed=seed, calibrate_count=1)
-            # Row 0 is the 1-good/1-bad cold start, below the calibration
-            # floor (fewer than 4 votes returns the 0.5 default), so it is not
-            # governed by the conformal rule.
-            for row in rows[1:]:
+            for row in rows:
+                # Only rows where a stratified fold split can actually form are
+                # governed by the conformal rule; below that
+                # ``compute_fold_orderings`` returns its flat 0.5
+                # ``too_few_default`` (issue #2788), which this regression is
+                # not about.  Keyed on the calibrator's own precondition rather
+                # than on row position, so a change in the simulated vote order
+                # cannot quietly widen or narrow what is asserted.
+                if row["n_good"] < 2 or row["n_bad"] < 2:
+                    continue
                 assert row["fnr"] < 1.0, f"seed {seed}, t={row['t']}: cut rejected every positive"
 
     def test_t_values_monotonically_increase(self):
@@ -309,15 +315,19 @@ def _mt_key(rng: np.random.RandomState):
 
 
 class TestProductionCalibrationFidelity:
-    """The eval's per-step threshold calibration mirrors production exactly.
+    """The eval's per-step threshold calibration mirrors production's protocol.
 
-    Production (`_train_and_score_xy` / `train_and_threshold`) sizes the hidden
-    layer from the full label count, forces that width onto the calibration
-    folds, and always calibrates with a fresh ``RandomState(42)`` (the fixed
-    seed baked into ``cross_calibration_threshold_cached``).  These tests spy on
-    the calibration call to prove the eval does the same, so overlapping the
-    fold split RNG with the per-seed simulation RNG or letting folds auto-size
-    can't silently reintroduce a production mismatch.
+    Production (`_train_and_score_xy` / `train_and_threshold`) threads a single
+    head architecture through both the final model and the calibration folds,
+    and always calibrates with a fresh ``RandomState(42)`` (the fixed seed baked
+    into ``cross_calibration_threshold_cached``).  These tests spy on the
+    calibration call to prove the eval does the same, so overlapping the fold
+    split RNG with the per-seed simulation RNG or letting folds auto-size can't
+    silently reintroduce a production mismatch.
+
+    The *head* itself is where the eval's MLP arm and production part ways:
+    production trains the linear head (#2790), while this arm keeps the MLP as a
+    sweep candidate, so the width asserted below is the arm's own auto-sizing.
     """
 
     def _spy_calibration(self, monkeypatch):

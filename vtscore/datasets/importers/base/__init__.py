@@ -31,6 +31,8 @@ The base is split across submodules:
   spec-parsing / converter-ingestion helpers.
 - :mod:`~vtscore.datasets.importers.base.origin` — origin-serialisation policy
   helpers and the synthetic dataset-name field.
+- :mod:`~vtscore.datasets.importers.base.naming` — the generic dataset-name
+  derivation behind :meth:`~ImporterBase.default_display_name`.
 
 Example – a minimal SFTP importer skeleton::
 
@@ -74,6 +76,7 @@ from vtscore.plugins import PluginField
 
 from .core import ImporterBase
 from .dataset_importer import DatasetImporter
+from .naming import derive_display_name, strip_archive_suffix
 from .origin import DATASET_NAME_FIELD_KEY
 from .specs import MissingMediaTypeError, PickerView, SourceSpec
 
@@ -85,4 +88,6 @@ __all__ = [
     "PickerView",
     "PluginField",
     "SourceSpec",
+    "derive_display_name",
+    "strip_archive_suffix",
 ]

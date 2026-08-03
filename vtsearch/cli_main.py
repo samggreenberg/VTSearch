@@ -399,7 +399,7 @@ def _maybe_run_pipeline(args, parser, remaining) -> None:
         sys.exit(0)
 
 
-def _resolve_plugins(args, parser, remaining):
+def _resolve_plugins(args, parser: argparse.ArgumentParser, remaining):
     """Two-pass resolution of ``--importer``/``--exporter`` and their plugin args.
 
     Returns ``(args, importer, exporter)``; ``args`` is re-parsed once the
@@ -823,6 +823,12 @@ def _run_server(args, app, initialize_server) -> None:
     _preflight_port(port)
     initialize_server(mode_label="LOCAL" if args.local else "PRODUCTION")
     print(f"\U0001f310 Open http://localhost:{port} in your browser", flush=True)
+    # The dev server spawns a thread per connection (threaded=True): there is
+    # no bounded worker pool for long-lived SSE streams to starve, so the
+    # gunicorn-oriented connection cap is pure downside here (#2816).
+    from vtscore.concurrency.events import uncap_sse_connections
+
+    uncap_sse_connections()
     app.run(host="0.0.0.0", port=port, debug=False, threaded=True)
 
 
