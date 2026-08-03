@@ -6,6 +6,7 @@ import pickle
 import zipfile
 
 import numpy as np
+import pytest
 
 from vtscore.datasets.container import (
     append_projection,
@@ -65,6 +66,65 @@ class TestContainerFormat:
         assert meta["embedder"] == "test_embedder"
         assert meta["clipper"] == "test_clipper"
         assert meta["name"] == "Test Dataset"
+
+    def test_read_reports_byte_progress(self, tmp_path):
+        """``on_progress`` tracks the read against the entry's byte size.
+
+        The counter wraps the stream the *unpickler* pulls from, so it spans
+        deserialisation too — not just the transfer.  That is the whole point:
+        on a text-shaped container the raw transfer is a small minority of the
+        phase, so counting transfer alone would leave most of it dark.
+        """
+        path = tmp_path / "dataset.pkl"
+        write_container(path, _medias_pkl_bytes(200), _meta())
+        with zipfile.ZipFile(str(path), "r") as zf:
+            entry_size = zf.getinfo("medias.pkl").file_size
+
+        seen: list[tuple[int, int]] = []
+        data, _meta_out = read_container(path, on_progress=lambda c, t: seen.append((c, t)))
+
+        assert len(data["medias"]) == 200, "streaming must not disturb the payload"
+        assert seen, "a read with a callback must report progress"
+        assert all(total == entry_size for _, total in seen)
+        assert [c for c, _ in seen] == sorted(c for c, _ in seen), "counter must not retreat"
+        assert all(current <= entry_size for current, _ in seen)
+
+    def test_read_publishes_denominator_before_streaming(self, tmp_path):
+        """The first tick carries the total, even when the read fits in one gulp.
+
+        Callers scale their whole phase against this denominator, so a
+        container small enough to finish inside a single tick must still
+        announce it rather than leaving the caller with no scale.
+        """
+        path = tmp_path / "dataset.pkl"
+        write_container(path, _medias_pkl_bytes(1), _meta())
+
+        seen: list[tuple[int, int]] = []
+        read_container(path, on_progress=lambda c, t: seen.append((c, t)))
+
+        assert seen[0][0] == 0
+        assert seen[0][1] > 0
+
+    def test_read_without_progress_still_round_trips(self, tmp_path):
+        """The no-callback path stays the plain streamed read."""
+        path = tmp_path / "dataset.pkl"
+        write_container(path, _medias_pkl_bytes(20), _meta())
+        data, meta = read_container(path)
+        assert len(data["medias"]) == 20
+        assert meta["embedder"] == "test_embedder"
+
+    def test_streamed_read_still_rejects_forbidden_classes(self, tmp_path):
+        """Streaming must not weaken the restricted unpickler's allowlist."""
+        import pickle as _pickle
+
+        path = tmp_path / "evil.pkl"
+        payload = b"c__builtin__\neval\n(S'1+1'\ntR."
+        with zipfile.ZipFile(str(path), "w") as zf:
+            zf.writestr("medias.pkl", payload)
+            zf.writestr("meta.json", "{}")
+
+        with pytest.raises(_pickle.UnpicklingError):
+            read_container(path, on_progress=lambda c, t: None)
 
     def test_payload_stored_uncompressed(self, tmp_path):
         """medias.pkl must be stored (ZIP_STORED), not DEFLATE-compressed.
