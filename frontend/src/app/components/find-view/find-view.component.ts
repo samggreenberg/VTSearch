@@ -1,6 +1,5 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Router } from '@angular/router';
 import { Subject, Subscription } from 'rxjs';
 import { finalize, takeUntil } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
@@ -72,7 +71,6 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private browseSubset = inject(BrowseSubsetService);
   /** Public: the wait overlay binds this service's progress signals directly. */
   browsePrep = inject(BrowseSubsetPrepService);
-  private router = inject(Router);
 
   readonly layoutRef = viewChild.required<ElementRef<HTMLElement>>('layout');
   readonly centerPanel = viewChild(CenterPanelComponent);
