@@ -174,9 +174,13 @@ export class ProgressEventsService implements OnDestroy {
     es.onopen = () => this.connection.recordSuccess();
 
     es.onerror = () => {
-      // Feed the circuit breaker: an SSE error is a connectivity signal too,
-      // so a dashboard sitting on only the stream still trips offline.
-      this.connection.recordNetworkFailure();
+      // Feed the circuit breaker indirectly: EventSource hides the HTTP
+      // status, so this error may be a dead backend or a 503 slot-cap
+      // rejection from a perfectly healthy one. recordStreamFailure()
+      // probes /healthz to tell the two apart — a dashboard sitting on only
+      // the stream still trips offline (via failed probes) when the backend
+      // is really gone, but a cap rejection no longer locks the app (#2816).
+      this.connection.recordStreamFailure();
       // EventSource reconnects on its own for transient failures, but
       // schedules an extra reconnect in case the server closed the stream
       // permanently. Idempotent: if `source` is already non-null the next

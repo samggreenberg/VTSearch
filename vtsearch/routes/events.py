@@ -31,7 +31,11 @@ def progress_events() -> Response:
     ordinary requests; once the cap is hit new connects get a 503 instead of
     starving the pool. ``EventSource`` treats a non-2xx response as a fatal
     error and stops auto-reconnecting, so the frontend's own ``onerror``
-    handler schedules a manual reconnect (see ``progress-events.service.ts``).
+    handler schedules a manual reconnect (see ``progress-events.service.ts``);
+    it also probes ``/healthz`` to classify the error, so a cap rejection —
+    proof the backend is alive — never counts toward the offline circuit
+    breaker (#2816). The dev server (``app.run(threaded=True)``) has no
+    thread pool to protect and runs uncapped (``uncap_sse_connections``).
     """
     if not acquire_sse_slot():
         response = jsonify({"message": "Too many live event streams open; retry shortly."})

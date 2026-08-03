@@ -43,6 +43,8 @@ class FakeEventSource {
 
 describe('ProgressEventsService liveness wiring', () => {
   let recordSuccess: ReturnType<typeof vi.fn>;
+  let recordNetworkFailure: ReturnType<typeof vi.fn>;
+  let recordStreamFailure: ReturnType<typeof vi.fn>;
   let status: WritableSignal<ConnectionStatus>;
   let originalEventSource: typeof EventSource;
 
@@ -52,11 +54,14 @@ describe('ProgressEventsService liveness wiring', () => {
     globalThis.EventSource = FakeEventSource as unknown as typeof EventSource;
 
     recordSuccess = vi.fn();
+    recordNetworkFailure = vi.fn();
+    recordStreamFailure = vi.fn();
     status = signal<ConnectionStatus>('online');
     const connectionStub = {
       status,
       recordSuccess,
-      recordNetworkFailure: vi.fn(),
+      recordNetworkFailure,
+      recordStreamFailure,
       get isOffline() {
         return status() === 'offline';
       },
@@ -98,6 +103,21 @@ describe('ProgressEventsService liveness wiring', () => {
     recordSuccess.mockClear();
     es.emit('dataset', { status: 'loading', current: 5, total: 10 });
     expect(recordSuccess).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks the connection service to classify an SSE error, never counting it as a network failure outright (#2816)', () => {
+    // EventSource hides HTTP statuses: the error may be a 503 slot-cap
+    // rejection from a live backend. recordStreamFailure() probes /healthz
+    // to tell; a direct recordNetworkFailure() here is exactly the bug that
+    // locked the app offline behind a manual Retry.
+    const es = connectedSource();
+    es.readyState = FakeEventSource.CLOSED;
+    es.onerror!();
+    expect(recordStreamFailure).toHaveBeenCalledTimes(1);
+    expect(recordNetworkFailure).not.toHaveBeenCalled();
+    // Tear down the 2s reconnect timer the error handler scheduled.
+    status.set('offline');
+    TestBed.tick();
   });
 
   // --- detectorTaskUntilDone$: awaiting one task's terminal frame (#2703) ---
@@ -205,6 +225,7 @@ describe('ProgressEventsService (zoneless view canary)', () => {
       status,
       recordSuccess: vi.fn(),
       recordNetworkFailure: vi.fn(),
+      recordStreamFailure: vi.fn(),
       get isOffline() {
         return status() === 'offline';
       },

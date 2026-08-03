@@ -321,6 +321,38 @@ class TestEventsRoute:
         finally:
             gen.close()
 
+    def test_idle_stream_emits_keepalive_comment_between_heartbeats(self):
+        """An idle stream probes the socket with an SSE comment well before
+        the next heartbeat, so a dead client's slot is released in ~1s
+        instead of a full heartbeat period (#2816). The probe must be a
+        comment (invisible to EventSource), never a named event."""
+        gen = stream_progress_events(heartbeat_seconds=60.0, keepalive_seconds=0.01)
+        try:
+            assert next(gen).startswith(": connected")
+            for _ in initial_snapshot():
+                next(gen)
+            # The next idle wakeup is the socket-probe comment, not a heartbeat.
+            chunk = next(gen)
+            assert chunk.startswith(": ")
+            assert "event:" not in chunk
+        finally:
+            gen.close()
+
+    def test_heartbeat_still_fires_with_keepalive_enabled(self):
+        """Keepalive probes must not starve the named heartbeat the client's
+        liveness breaker depends on."""
+        gen = stream_progress_events(heartbeat_seconds=0.05, keepalive_seconds=0.01)
+        try:
+            heartbeat = None
+            deadline = time.monotonic() + 2.0
+            while heartbeat is None and time.monotonic() < deadline:
+                chunk = next(gen)
+                if chunk.startswith("event: heartbeat\n"):
+                    heartbeat = chunk
+            assert heartbeat is not None, "no heartbeat frame arrived"
+        finally:
+            gen.close()
+
     def test_initial_dataset_snapshot_reflects_current_state(self):
         dataset_progress.update("loading", "snap", 7, 8)
         try:
@@ -428,6 +460,24 @@ class TestSseConnectionCapPrimitive:
     def test_default_max_connections_floors_at_one(self, monkeypatch):
         monkeypatch.setenv("VTSEARCH_THREADS", "1")
         assert events_mod._default_max_connections() == 1
+
+    def test_uncap_removes_the_cap(self, monkeypatch):
+        """The dev server (`app.run(threaded=True)`) has no thread pool to
+        protect, so `_run_server` uncaps SSE connections (#2816)."""
+        monkeypatch.delenv("VTSEARCH_SSE_MAX_CONNECTIONS", raising=False)
+        monkeypatch.setattr(events_mod, "MAX_SSE_CONNECTIONS", 2)
+        events_mod.uncap_sse_connections()
+        assert events_mod.MAX_SSE_CONNECTIONS > 10**6
+        for _ in range(10):
+            assert acquire_sse_slot() is True
+        for _ in range(10):
+            release_sse_slot()
+
+    def test_uncap_respects_explicit_env_override(self, monkeypatch):
+        monkeypatch.setenv("VTSEARCH_SSE_MAX_CONNECTIONS", "4")
+        monkeypatch.setattr(events_mod, "MAX_SSE_CONNECTIONS", 4)
+        events_mod.uncap_sse_connections()
+        assert events_mod.MAX_SSE_CONNECTIONS == 4
 
 
 class TestSseConnectionCapRoute:
