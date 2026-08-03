@@ -466,15 +466,12 @@ per label-history step with `model` / `threshold` / `good_ids` /
 | Function                                        | Behaviour                                                              |
 |-------------------------------------------------|------------------------------------------------------------------------|
 | `clear_progress_cache()`                        | Drop everything. Call when votes are cleared, medias change, etc.      |
-| `clear_diversity_cache()`                       | Drop just the coverage atlas + replayed diversity series               |
-| `invalidate_progress_cache_from(media_id, *, coverage_changed)` | Drop cached steps from where `media_id` was first labeled (label-correction case) |
-| `rethreshold_progress_cache(inclusion)`         | Re-key the cache to a new cutoff, reusing every trained model          |
-| `inject_live_model(good, bad, model)`           | Register a model produced by `train_and_score` so the cache can reuse it |
+| `invalidate_progress_cache_from(media_id)`      | Truncate the cache to just before `media_id` first appeared (vote-flip case) |
+| `inject_live_model(good, bad, model, threshold)`| Register a model produced by `train_and_score` so the cache can reuse it |
 | `recreate_model_at_time(snap, history, t, inclusion)` | Return the model + threshold + good/bad ids for step `t`           |
 | `calculate_error_cost_over_time(...)`           | Per-step FPR/FNR-weighted cost on current votes                        |
 | `calculate_prediction_stability_over_time(...)` | Per-step flip-count on unlabeled medias                                |
-| `calculate_diversity_level_over_time(...)`      | Per-step diversity-tree coverage (separate replay; trains nothing)     |
-| `cached_indicator_history(metric, ...)`         | Read whatever is cached now + a `complete` flag; never advances the cache |
+| `calculate_diversity_level_over_time(...)`      | Per-step diversity-tree coverage                                       |
 | `compute_labeling_status(...)`                  | Aggregate red / yellow / green status for the Smart / Stable / Span indicators |
 | `analyze_labeling_progress(...)`                | Run the three "over-time" functions and bundle the result              |
 

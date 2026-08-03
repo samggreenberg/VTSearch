@@ -70,6 +70,33 @@ describe('progressBarState', () => {
     expect(progressBarState({ current: 3, total: 12 }).pulsing).toBeUndefined();
     expect(progressBarState({}).pulsing).toBeUndefined();
   });
+
+  it('bounds the pulse with pulseTo when the slice end is known', () => {
+    // The motivating case: steps weighted 50/30/20, step 2 count-less. The
+    // bar parks at 0.5 and the backend says the slice ends at 0.8 — the job
+    // is somewhere in between, and the bar shades exactly that span.
+    const state = progressBarState({ overall: 0.5, current: 0, total: 0, overall_step_end: 0.8 });
+    expect(state.pulsing).toBe(true);
+    expect(state.pulseTo).toBe(0.8);
+  });
+
+  it('omits pulseTo when the phase reports real counts', () => {
+    expect(
+      progressBarState({ overall: 0.5, current: 3, total: 10, overall_step_end: 0.8 }).pulseTo,
+    ).toBeUndefined();
+  });
+
+  it('omits pulseTo when the slice end does not extend past the fill', () => {
+    expect(
+      progressBarState({ overall: 0.5, current: 0, total: 0, overall_step_end: 0.5 }).pulseTo,
+    ).toBeUndefined();
+  });
+
+  it('clamps pulseTo to 1', () => {
+    expect(
+      progressBarState({ overall: 0.5, current: 0, total: 0, overall_step_end: 1.2 }).pulseTo,
+    ).toBe(1);
+  });
 });
 
 describe('isProgressIndeterminate', () => {

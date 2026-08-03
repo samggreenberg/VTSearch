@@ -43,6 +43,7 @@
       [max]="bar().max"
       [indeterminate]="bar().indeterminate"
       [pulsing]="bar().pulsing ?? false"
+      [pulseTo]="bar().pulseTo ?? null"
       [smooth]="smooth()"
     />
     <span class="jp__eta" [title]="eta() ? etaTooltip : ''">{{ eta() }}</span>

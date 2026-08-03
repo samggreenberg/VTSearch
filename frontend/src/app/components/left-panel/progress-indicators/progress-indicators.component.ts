@@ -25,6 +25,9 @@ export class ProgressIndicatorsComponent {
   /** Whole-job fraction (0..1) for multi-step scoring; ``null`` falls back to
    *  current/total. See ProgressEvent.overall. */
   readonly sortOverall = input<number | null>(null);
+  /** Whole-job fraction where the current step's slice ends; bounds the
+   *  pulsing zone during a count-less step. See ProgressEvent.overall_step_end. */
+  readonly sortStepEnd = input<number | null>(null);
   /** Overall remaining-seconds estimate; ``null`` hides the ETA chip. */
   readonly sortEtaSeconds = input<number | null>(null);
 
@@ -42,6 +45,7 @@ export class ProgressIndicatorsComponent {
       current: this.sortProgress(),
       total: this.sortProgressTotal(),
       overall: this.sortOverall(),
+      overall_step_end: this.sortStepEnd(),
     });
   }
 

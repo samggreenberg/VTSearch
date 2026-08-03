@@ -67,6 +67,23 @@ describe('JobProgressComponent', () => {
     expect(fill?.classList).toContain('progress-fill--pulsing');
   });
 
+  it('passes the bar pulseTo bound through as the shimmer band', async () => {
+    fixture.componentRef.setInput('bar', {
+      value: 0.5,
+      max: 1,
+      indeterminate: false,
+      pulsing: true,
+      pulseTo: 0.8,
+    });
+    await settleZoneless(fixture);
+    const band = (fixture.nativeElement as HTMLElement).querySelector(
+      '.progress-band',
+    ) as HTMLElement;
+    expect(band).not.toBeNull();
+    expect(band.style.left).toBe('50%');
+    expect(band.style.width).toBe('30%');
+  });
+
   it('emits cancel and stops the click from bubbling', async () => {
     const emit = vi.spyOn(component.cancel, 'emit');
     const btn = (fixture.nativeElement as HTMLElement).querySelector(

@@ -113,6 +113,15 @@ export interface ProgressBarState {
    * no progress signal to move it by.
    */
   pulsing?: boolean;
+  /**
+   * Upper bound of the pulsing zone, on the same scale as `value` (0..1 for
+   * `overall` bars): the whole-job fraction at which the current count-less
+   * phase's slice ends. When present, the bar renders the `value`..`pulseTo`
+   * span as a bounded shimmer band — "the job is somewhere in here" — instead
+   * of shimmering the parked fill. Absent when the backend doesn't report the
+   * slice end or the phase is determinate.
+   */
+  pulseTo?: number;
 }
 
 /**
@@ -137,6 +146,13 @@ export function progressBarState(
     // Mid-job with no within-phase total to count against (and no error): the
     // current phase is indeterminate, so the parked fill should pulse in place.
     const pulsing = value < 1 && !(prog.total != null && prog.total > 0) && !prog.error;
+    // When the backend also reports where the count-less phase's slice ends,
+    // bound the pulse: the bar shades value..pulseTo as a shimmer zone rather
+    // than shimmering the parked fill alone.
+    const stepEnd = prog.overall_step_end;
+    if (pulsing && stepEnd != null && isFinite(stepEnd) && stepEnd > value) {
+      return { value, max: 1, indeterminate: false, pulsing, pulseTo: Math.min(1, stepEnd) };
+    }
     return { value, max: 1, indeterminate: false, pulsing };
   }
   const current = prog.current;

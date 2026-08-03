@@ -15,6 +15,7 @@
       [sortProgress]="sortState.sortProgress"
       [sortProgressTotal]="sortState.sortProgressTotal"
       [sortOverall]="sortState.sortOverall"
+      [sortStepEnd]="sortState.sortStepEnd"
       [sortEtaSeconds]="sortState.sortEtaSeconds"
       [labelingStatus]="null"
       [gridGoalWidth]="gridGoalWidthLeft()"
@@ -46,6 +47,8 @@
           <p class="find-wait-message">Please wait: scoring dataset with detector…</p>
           <vt-progress-bar
             [indeterminate]="sortBar.indeterminate"
+            [pulsing]="!!sortBar.pulsing"
+            [pulseTo]="sortBar.pulseTo ?? null"
             [value]="sortBar.value"
             [max]="sortBar.max"
           />
@@ -71,6 +74,7 @@
           <vt-progress-bar
             [indeterminate]="browsePrep.bar().indeterminate"
             [pulsing]="!!browsePrep.bar().pulsing"
+            [pulseTo]="browsePrep.bar().pulseTo ?? null"
             [smooth]="true"
             [value]="browsePrep.bar().value"
             [max]="browsePrep.bar().max"

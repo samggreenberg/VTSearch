@@ -12,6 +12,7 @@
         <vt-progress-bar
           [indeterminate]="buildBar().indeterminate"
           [pulsing]="!!buildBar().pulsing"
+          [pulseTo]="buildBar().pulseTo ?? null"
           [smooth]="true"
           [value]="buildBar().value"
           [max]="buildBar().max"

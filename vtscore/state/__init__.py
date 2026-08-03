@@ -239,16 +239,12 @@ def set_inclusion(value: int) -> None:
     # ``_progress_lock`` is acquired strictly outside ``_state_lock`` so the
     # two locks never establish a cross-module ordering (audit M1).
     # ``_ensure_cache`` self-heals if a concurrent reader observes the new
-    # inclusion before this runs - it clears whenever ``_cache_inclusion``
-    # differs from the current value.
+    # inclusion before this clear runs - it re-clears whenever
+    # ``_cache_inclusion`` differs from the current value.
     if changed:
-        from vtscore.detectors.labeling_progress import rethreshold_progress_cache
+        from vtscore.detectors.labeling_progress import clear_progress_cache
 
-        # The labeling-progress models are inclusion-independent too, so the
-        # slider re-keys the per-step cache instead of dropping it.  Clearing it
-        # here meant every nudge of the slider re-trained one model per label
-        # step the next time the panel or a progress plot asked for a metric.
-        rethreshold_progress_cache(value)
+        clear_progress_cache()
         # Inclusion is a pure cutoff knob: re-threshold from the cached fold
         # orderings instead of dropping the (inclusion-independent) MLP, so the
         # scores stay frozen across a slide.  See docs/plans/find-verification-workflow.md.

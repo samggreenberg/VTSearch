@@ -8,9 +8,20 @@
   <div
     class="progress-fill"
     [class.indeterminate]="indeterminate()"
-    [class.progress-fill--pulsing]="pulsing() && !indeterminate()"
+    [class.progress-fill--pulsing]="pulsing() && !indeterminate() && pulseBandPercentage === 0"
     [class.progress-fill--smooth]="smooth()"
     [style.width.%]="indeterminate() ? 100 : percentage"
     [style.background]="fillColor"
   ></div>
+  <!-- Bounded indeterminate zone: the current phase reports no counts but its
+       slice bounds are known, so shade fill-edge..pulseTo as "somewhere in
+       here". Carries the liveness shimmer, so the solid fill stays still. -->
+  @if (pulseBandPercentage > 0) {
+    <div
+      class="progress-band"
+      [class.progress-band--smooth]="smooth()"
+      [style.left.%]="percentage"
+      [style.width.%]="pulseBandPercentage"
+    ></div>
+  }
 </div>

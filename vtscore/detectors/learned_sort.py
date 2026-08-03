@@ -224,7 +224,7 @@ def run_learned_sort(
         if model is not None and model_matches_local_votes(
             labelset, has_cross_dataset, local_good, local_bad, good, bad
         ):
-            inject_live_model(good, bad, model)
+            inject_live_model(good, bad, model, threshold)
 
         if det_ctx is not _empty_detector_context and model is not None:
             update_det_ctx_with_trained_model(det_ctx, model, threshold, labelset, training_medias, snap, good, bad)
