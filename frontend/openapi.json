@@ -4116,6 +4116,28 @@
         ],
         "type": "object"
       },
+      "ImporterSuggestedNameRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "values": {
+            "additionalProperties": {},
+            "type": "object"
+          }
+        },
+        "type": "object"
+      },
+      "ImporterSuggestedNameResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "dataset_name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset_name"
+        ],
+        "type": "object"
+      },
       "InclusionRequest": {
         "additionalProperties": false,
         "properties": {
@@ -10103,6 +10125,61 @@
           }
         },
         "summary": "Return dropdown options for a dynamic-options field.",
+        "tags": [
+          "datasets_staging"
+        ]
+      }
+    },
+    "/api/dataset/import/{importer_name}/suggested-name": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "importer_name",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Calls the importer's ``default_display_name(field_values)`` with a\nsnapshot of the current form, so the Add-Dataset form can prefill its\nDataset Name box with something human-readable -- including a label a\nplugin resolved from an opaque internal selection, which no\nclient-side derivation could produce.  The user's own ``dataset_name``\nis deliberately ignored here: the caller only asks for the suggestion,\nand decides for itself whether to overwrite what the user typed.\n\nErrors from the plugin are surfaced as a 502 with the original\nmessage; the frontend treats any failure as \"no suggestion\" and leaves\nthe box alone, since a name hint is never worth blocking an import.",
+        "operationId": "importer_suggested_name",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImporterSuggestedNameRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImporterSuggestedNameResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "404": {
+            "description": "Unknown importer name."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "502": {
+            "description": "default_display_name raised an error."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return the name the importer would give a dataset built from these values.",
         "tags": [
           "datasets_staging"
         ]

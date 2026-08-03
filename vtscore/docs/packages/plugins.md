@@ -149,7 +149,7 @@ frontend handles its result-display directly.
 
 | Method | Description |
 |--------|-------------|
-| `resolve_display_name(field_values) -> str` | Override to return a dataset-specific label (e.g. the demo importer returns the demo name). Default returns `display_name`. |
+| `resolve_display_name(field_values) -> str` | Returns the label for the thing these `field_values` describe: the user-typed `dataset_name` when non-empty, else `default_display_name(field_values)`. Importers override `default_display_name`, not this. Default returns `display_name`. |
 | `add_cli_arguments(parser)` | Walks `fields` and adds an `argparse` argument per field. `"checkbox"` fields use `BooleanOptionalAction` (`--<key>` / `--no-<key>`). `"select"` fields get a `choices` constraint. `"number"` fields get `type=int` or `type=float` per `is_integer_number()`. |
 | `validate_cli_field_values(field_values)` | Raises `ValueError("Missing required argument: --<flag>")` if any non-checkbox required field is empty. Checkboxes are skipped because argparse always populates them. |
 | `to_dict()` | Returns the JSON-serialisable plugin metadata used by listing endpoints: `{name, display_name, description, icon, fields, ui_mode, hidden_from_picker}`. |

@@ -4,8 +4,9 @@ Migrated to ``flask_smorest`` so these routes appear in
 ``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
 
 JSON-shaped routes (available-files, combine, stage-demo, clear-staging,
-importer-field-options) use the standard ``@arguments`` + ``@response``
-decorators; schema-level validation failures surface as 422.
+importer-field-options, importer-suggested-name) use the standard
+``@arguments`` + ``@response`` decorators; schema-level validation
+failures surface as 422.
 Multipart-upload routes (``stage-file``) and plugin-field routes
 (``stage-import/<importer>``, ``import/<importer>``) keep ``@arguments``
 omitted; the latter pair's body shape depends on the importer plugin
@@ -32,6 +33,7 @@ from vtscore.concurrency.progress import CancelledError, loading_tasks
 from vtscore.config import EMBEDDINGS_DIR
 from vtscore.datasets import DEMO_DATASETS, export_dataset_to_file, get_importer, list_importers
 from vtscore.datasets.file_types import count_file_types
+from vtscore.datasets.importers.base import DATASET_NAME_FIELD_KEY
 from vtscore.datasets.load_pipeline import (
     STAGING_DIR,
     _run_importer_in_background,
@@ -63,6 +65,8 @@ from vtsearch.schemas.datasets import (
     DatasetStagingStartedResponseSchema,
     ImporterFieldOptionsRequestSchema,
     ImporterFieldOptionsResponseSchema,
+    ImporterSuggestedNameRequestSchema,
+    ImporterSuggestedNameResponseSchema,
 )
 from vtsearch.state import get_active_context, snapshot_medias
 from vtscore.security.pickle import peek_pickle_dataset_summary
@@ -628,6 +632,41 @@ def importer_field_options(body: dict, importer_name: str):
     if not isinstance(options, list):
         abort(500, message="get_field_options must return a list")
     return {"options": [_normalise_option(o) for o in options]}
+
+
+@datasets_staging_bp.route("/api/dataset/import/<importer_name>/suggested-name", methods=["POST"])
+@datasets_staging_bp.arguments(ImporterSuggestedNameRequestSchema)
+@datasets_staging_bp.response(200, ImporterSuggestedNameResponseSchema)
+@datasets_staging_bp.alt_response(404, description="Unknown importer name.")
+@datasets_staging_bp.alt_response(502, description="default_display_name raised an error.")
+def importer_suggested_name(body: dict, importer_name: str):
+    """Return the name the importer would give a dataset built from these values.
+
+    Calls the importer's ``default_display_name(field_values)`` with a
+    snapshot of the current form, so the Add-Dataset form can prefill its
+    Dataset Name box with something human-readable -- including a label a
+    plugin resolved from an opaque internal selection, which no
+    client-side derivation could produce.  The user's own ``dataset_name``
+    is deliberately ignored here: the caller only asks for the suggestion,
+    and decides for itself whether to overwrite what the user typed.
+
+    Errors from the plugin are surfaced as a 502 with the original
+    message; the frontend treats any failure as "no suggestion" and leaves
+    the box alone, since a name hint is never worth blocking an import.
+    """
+    importer, err = get_plugin_or_404(get_importer, list_importers, importer_name, "importer")
+    if err:
+        return err
+    assert importer is not None  # narrowed by err check
+
+    values = {k: v for k, v in (body.get("values") or {}).items() if k != DATASET_NAME_FIELD_KEY}
+
+    try:
+        suggested = importer.default_display_name(values)
+    except Exception as exc:  # noqa: BLE001 (surface remote-service errors verbatim)
+        abort(502, message=str(exc) or type(exc).__name__)
+
+    return {"dataset_name": str(suggested or "").strip()}
 
 
 # ---------------------------------------------------------------------------

@@ -482,6 +482,122 @@ class TestImporterDefaultDisplayName:
         assert "dataset_name" not in origin["params"]
 
 
+class TestBaseDefaultDisplayName:
+    """An importer that overrides nothing still gets a readable default name.
+
+    ``ImporterBase.default_display_name`` derives one from the importer's own
+    declared URL / path / upload fields, so a plugin only overrides it when it
+    knows something the fields do not (e.g. the label behind an opaque id).
+    """
+
+    def _importer(self, *fields):
+        from vtscore.datasets.importers.base import DatasetImporter
+
+        class Imp(DatasetImporter):
+            name = "derived"
+            display_name = "Derived Importer"
+            description = "Declares fields but no naming code."
+
+            def run(self, field_values, medias):
+                pass
+
+        Imp.fields = list(fields)
+        return Imp()
+
+    def test_url_field_uses_tail(self):
+        from vtscore.datasets.importers.base import PluginField
+
+        imp = self._importer(PluginField("url", "URL", "url"))
+        assert imp.default_display_name({"url": "https://example.org/sets/sirens"}) == "sirens"
+
+    def test_url_field_ignores_query_fragment_and_trailing_slash(self):
+        from vtscore.datasets.importers.base import PluginField
+
+        imp = self._importer(PluginField("url", "URL", "url"))
+        assert imp.default_display_name({"url": "https://example.org/sets/sirens/?token=abc"}) == "sirens"
+        assert imp.default_display_name({"url": "https://example.org/sets/sirens#part2"}) == "sirens"
+
+    def test_url_field_strips_compound_archive_suffix(self):
+        from vtscore.datasets.importers.base import PluginField
+
+        imp = self._importer(PluginField("url", "URL", "url"))
+        assert imp.default_display_name({"url": "https://example.org/genres.tar.gz"}) == "genres"
+
+    def test_server_path_keeps_a_dotted_directory_name(self):
+        from vtscore.datasets.importers.base import PluginField
+
+        # A path may name a directory, so only archive suffixes come off --
+        # ``2024.raw`` is a folder, not a file with an extension.
+        imp = self._importer(PluginField("root", "Root", "server_path"))
+        assert imp.default_display_name({"root": "/data/2024.raw"}) == "2024.raw"
+        assert imp.default_display_name({"root": "/data/photos.zip"}) == "photos"
+
+    def test_file_field_takes_the_stem(self):
+        from vtscore.datasets.importers.base import PluginField
+
+        imp = self._importer(PluginField("file", "File", "file"))
+        assert imp.default_display_name({"file": "/tmp/uploads/genres.pkl"}) == "genres"
+
+    def test_file_field_reads_an_upload_filename(self):
+        from vtscore.datasets.importers.base import PluginField
+
+        class Upload:
+            filename = "Field Recordings.zip"
+
+        imp = self._importer(PluginField("file", "File", "file"))
+        assert imp.default_display_name({"file": Upload()}) == "Field Recordings"
+
+    def test_text_field_named_path_is_treated_as_a_path(self):
+        from vtscore.datasets.importers.base import PluginField
+
+        imp = self._importer(PluginField("path", "Path", "text"))
+        assert imp.default_display_name({"path": "/data/sounds/sirens/"}) == "sirens"
+
+    def test_windows_separators(self):
+        from vtscore.datasets.importers.base import PluginField
+
+        imp = self._importer(PluginField("root", "Root", "server_path"))
+        assert imp.default_display_name({"root": r"C:\datasets\sirens"}) == "sirens"
+
+    def test_field_declaration_order_decides_precedence(self):
+        from vtscore.datasets.importers.base import PluginField
+
+        imp = self._importer(
+            PluginField("url", "URL", "url"),
+            PluginField("root", "Root", "server_path"),
+        )
+        values = {"url": "https://example.org/from-url", "root": "/data/from-path"}
+        assert imp.default_display_name(values) == "from-url"
+
+    def test_opaque_field_types_contribute_nothing(self):
+        from vtscore.datasets.importers.base import PluginField
+
+        imp = self._importer(
+            PluginField("query_id", "Query", "select", options=["q-8f31"]),
+            PluginField("token", "Token", "password"),
+            PluginField("limit", "Limit", "number"),
+        )
+        # Nothing derivable: this is exactly the case an importer overrides
+        # ``default_display_name`` to handle.
+        assert imp.default_display_name({"query_id": "q-8f31", "token": "s3cret", "limit": "10"}) == "Derived Importer"
+
+    def test_no_values_falls_back_to_display_name(self):
+        from vtscore.datasets.importers.base import PluginField
+
+        imp = self._importer(PluginField("url", "URL", "url"))
+        assert imp.default_display_name({}) == "Derived Importer"
+        assert imp.default_display_name({"url": "   "}) == "Derived Importer"
+
+    def test_user_typed_name_is_not_used_as_its_own_default(self):
+        from vtscore.datasets.importers.base import PluginField
+
+        imp = self._importer(PluginField("url", "URL", "url"))
+        # ``resolve_display_name`` owns that precedence; the derivation skips
+        # the synthetic field entirely.
+        assert imp.default_display_name({"dataset_name": "Typed"}) == "Derived Importer"
+        assert imp.resolve_display_name({"dataset_name": "Typed"}) == "Typed"
+
+
 # ---------------------------------------------------------------------------
 # Folder importer not in builtin names
 # ---------------------------------------------------------------------------
