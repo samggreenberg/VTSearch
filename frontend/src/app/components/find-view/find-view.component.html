@@ -23,7 +23,7 @@
       [textQuery]="sortState.textQuery"
       [datasetName]="datasetName()"
       [panelMode]="'find'"
-      [disabled]="sortState.sortBusy"
+      [disabled]="waiting"
       [autopilotCollapsed]="false"
       [autopilotEnabled]="false"
       (mediaSelect)="onMediaSelect($event)"
@@ -62,10 +62,37 @@
           <button class="btn btn--secondary btn--sm" (click)="onSortCancel()">Cancel</button>
         </div>
       </div>
+    } @else if (browsePrep.preparing()) {
+      <!-- Browse builds its map here, in Find, rather than dropping the user
+           into an empty browse view to watch it fit (issue: the black screen). -->
+      <div class="find-wait-overlay" role="status" aria-live="polite">
+        <div class="find-wait-content">
+          <p class="find-wait-message">Please wait: building the map to browse…</p>
+          <vt-progress-bar
+            [indeterminate]="browsePrep.bar().indeterminate"
+            [pulsing]="!!browsePrep.bar().pulsing"
+            [smooth]="true"
+            [value]="browsePrep.bar().value"
+            [max]="browsePrep.bar().max"
+          />
+          <!-- Reserved-height lines so the count/phase appearing or disappearing
+               doesn't re-center the column and shift the bar above it. -->
+          <span class="find-wait-count">
+            @if (browsePrep.count()) {
+              {{ browsePrep.count() }}
+            }
+            @if (browsePrep.eta()) {
+              <span class="find-wait-eta">{{ browsePrep.eta() }}</span>
+            }
+          </span>
+          <span class="find-wait-detail">{{ browsePrep.detail() }}</span>
+          <button class="btn btn--secondary btn--sm" (click)="browsePrep.cancel()">Cancel</button>
+        </div>
+      </div>
     }
     <vt-center-panel
       [media]="mediaState.selectedMedia"
-      [disabled]="sortState.sortBusy"
+      [disabled]="waiting"
       (mediaVoted)="onMediaVoted($event)"
     />
   </div>
@@ -77,7 +104,7 @@
     <vt-right-panel
       [medias]="mediaState.mediasSignal()"
       [focusMode]="focusModeRight()"
-      [disabled]="sortState.sortBusy"
+      [disabled]="waiting"
       mode="find"
       (mediaSelected)="onMediaSelect($event)"
       (mediaVoted)="onHoverVote($event)"

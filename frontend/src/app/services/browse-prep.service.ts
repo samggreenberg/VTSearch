@@ -20,6 +20,13 @@ interface BrowsePrepState {
   current: number;
   total: number;
   message: string;
+  /** Whole-job build position reported by the projection meta: which coarse
+   *  phase (arranging → tiling → naming regions) is running, and the stitched
+   *  0..1 fraction across all of them. Carried onto the synthetic row so the
+   *  dashboard bar fills once across the build instead of restarting per phase. */
+  step: number | null;
+  totalSteps: number | null;
+  overall: number | null;
   error: string;
 }
 
@@ -78,6 +85,9 @@ export class BrowsePrepService {
       current: 0,
       total: 0,
       message: 'Loading dataset…',
+      step: null,
+      totalSteps: null,
+      overall: null,
       error: '',
     });
 
@@ -156,13 +166,26 @@ export class BrowsePrepService {
     if (s.phase === 'error') {
       return this.synthTask(datasetId, 'idle', '', 0, 0, s.error);
     }
-    return this.synthTask(datasetId, 'building', s.message, s.current, s.total, '');
+    return {
+      ...this.synthTask(datasetId, 'building', s.message, s.current, s.total, ''),
+      step: s.step,
+      total_steps: s.totalSteps,
+      overall: s.overall,
+    };
   }
 
   // --- projection phase ---
 
   private startProjection(datasetId: string): void {
-    this.patch({ phase: 'projecting', current: 0, total: 0, message: 'Building the map…' });
+    this.patch({
+      phase: 'projecting',
+      current: 0,
+      total: 0,
+      message: 'Building the map…',
+      step: null,
+      totalSteps: null,
+      overall: null,
+    });
     this.pollErrors = 0;
     this.projectionApi
       .getMeta()
@@ -189,6 +212,9 @@ export class BrowsePrepService {
         current: meta.current ?? 0,
         total: meta.total ?? 0,
         message: meta.message || 'Building the map…',
+        step: meta.step ?? null,
+        totalSteps: meta.total_steps ?? null,
+        overall: meta.overall ?? null,
       });
       this.schedulePoll(datasetId);
       return;

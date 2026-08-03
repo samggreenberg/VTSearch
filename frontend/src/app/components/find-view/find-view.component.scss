@@ -77,3 +77,13 @@
 .find-wait-eta {
   color: var(--text-muted);
 }
+
+// Phase line under the bar ("Step 2 of 3 · building pyramid"). Reserves its
+// height like the count above it so phase changes never re-center the column.
+.find-wait-detail {
+  font-size: var(--font-sm);
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.4;
+  min-height: 1.4em;
+}

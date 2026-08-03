@@ -38,6 +38,7 @@ import {
 } from '../browse-canvas/hex-render.util';
 import type { ProjectionMeta, RegionLabelPayload } from '../../models/projection.models';
 import { snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
+import { progressBarState } from '../../utils/format-progress';
 import { shortcutsBlocked } from '../../utils/keyboard-shortcuts';
 import type { AppSettings } from '../../generated/api-client/models/app-settings';
 import type { SettingsUpdate } from '../../generated/api-client/models/settings-update';
@@ -130,6 +131,31 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   readonly buildProgress = signal(0);
   readonly buildTotal = signal(0);
   readonly buildMessage = signal('');
+  /** Whole-job build position: which coarse phase (arranging → tiling →
+   *  naming regions) is running, and the stitched 0..1 fraction across all of
+   *  them, both reported by the projection meta. */
+  readonly buildStep = signal<number | null>(null);
+  readonly buildTotalSteps = signal<number | null>(null);
+  readonly buildOverall = signal<number | null>(null);
+
+  /** `<vt-progress-bar>` inputs for the build state, preferring the whole-job
+   *  ``overall`` fraction so the bar fills once across the build rather than
+   *  restarting at each phase. */
+  readonly buildBar = computed(() =>
+    progressBarState({
+      current: this.buildProgress(),
+      total: this.buildTotal(),
+      overall: this.buildOverall(),
+    }),
+  );
+
+  /** Phase line under the bar: `"Step 2 of 3 · building pyramid"`. */
+  readonly buildDetail = computed(() => {
+    const step = this.buildStep();
+    const totalSteps = this.buildTotalSteps();
+    const phase = step != null && totalSteps != null && totalSteps > 1 ? `Step ${step} of ${totalSteps}` : '';
+    return [phase, this.buildMessage()].filter(Boolean).join(' · ');
+  });
 
   /**
    * Discrete thumbnail-size multipliers, one per named icon size (XS…XL),
@@ -1186,10 +1212,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       );
       return;
     }
-    this.status.set('building');
-    this.buildProgress.set(0);
-    this.buildTotal.set(0);
-    this.buildMessage.set('');
+    this.enterBuilding();
     this.buildRequest()
       .pipe(takeUntil(this.destroy$))
       .subscribe({
@@ -1226,10 +1249,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     // arm the one-shot survive mark so the canvas keeps it when the fresh
     // projection id lands, instead of treating the re-fit as a new projection.
     this.selection.markSurviveProjectionChange();
-    this.status.set('building');
-    this.buildProgress.set(0);
-    this.buildTotal.set(0);
-    this.buildMessage.set('');
+    this.enterBuilding();
     const request$ = this.subset
       ? this.projectionApi.reprojectSubset(this.subsetIds)
       : this.projectionApi.reproject();
@@ -1382,6 +1402,22 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     return this.mediaTypeCaps.usesThumbnails(this.mediaType()) ? 'Loading thumbnails…' : 'Loading map…';
   }
 
+  /** Enter the building state with a cleared bar (a fresh build starts at 0). */
+  private enterBuilding(): void {
+    this.status.set('building');
+    this.applyBuildProgress(null);
+  }
+
+  /** Mirror a meta's build progress onto the bar's signals. */
+  private applyBuildProgress(meta: ProjectionMeta | null): void {
+    this.buildProgress.set(meta?.current ?? 0);
+    this.buildTotal.set(meta?.total ?? 0);
+    this.buildMessage.set(meta?.message ?? '');
+    this.buildStep.set(meta?.step ?? null);
+    this.buildTotalSteps.set(meta?.total_steps ?? null);
+    this.buildOverall.set(meta?.overall ?? null);
+  }
+
   private loadProjection(): void {
     this.status.set('loading');
     this.polling = false;
@@ -1430,9 +1466,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (meta.status === 'building') {
       // A build is already in flight (e.g. started at ingest); track it.
       this.status.set('building');
-      this.buildProgress.set(meta.current ?? 0);
-      this.buildTotal.set(meta.total ?? 0);
-      this.buildMessage.set(meta.message ?? '');
+      this.applyBuildProgress(meta);
       this.pollBuildStatus();
       return;
     }
@@ -1469,9 +1503,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
               this.errorMessage.set(meta.error || 'Failed to build the map');
               return;
             }
-            this.buildProgress.set(meta.current ?? 0);
-            this.buildTotal.set(meta.total ?? 0);
-            this.buildMessage.set(meta.message ?? '');
+            this.applyBuildProgress(meta);
             this.pollTimer = setTimeout(poll, 1000);
           },
           error: () => {
