@@ -173,6 +173,102 @@ class TestProductionPathTrainsTheLinearHead:
         assert [type(layer) for layer in model] == [torch.nn.Linear]
         assert set(serialize_weights(model)) == {"0.weight", "0.bias"}
 
+    def _region_labels(self, seed: int = 5, rows_per_bad_bag: int = 3):
+        """Flooded region label set: 4 Good rows (one bag each), 4 Bad bags of N rows.
+
+        Mirrors what region flooding hands ``train_and_threshold``: a Good vote
+        contributes its one snapped-box row, a Bad vote floods its leaf set.
+        """
+        rng = np.random.default_rng(seed)
+
+        def _unit(vec: np.ndarray) -> np.ndarray:
+            return (vec / (np.linalg.norm(vec) + 1e-8)).astype(np.float32)
+
+        good_proto = _unit(rng.standard_normal(DIM))
+        bad_proto = _unit(rng.standard_normal(DIM))
+        X_list: list[np.ndarray] = []
+        y_list: list[float] = []
+        groups: list = []
+        for i in range(4):
+            X_list.append(_unit(good_proto + 0.1 * rng.standard_normal(DIM)))
+            y_list.append(1.0)
+            groups.append(("g", i))
+        for i in range(4):
+            for _ in range(rows_per_bad_bag):
+                X_list.append(_unit(bad_proto + 0.1 * rng.standard_normal(DIM)))
+                y_list.append(0.0)
+                groups.append(("b", i))
+        return X_list, y_list, groups
+
+    def _spy_hidden_dims(self, monkeypatch) -> list:
+        """Record the ``hidden_dim`` of every ``train_model`` call (folds + final).
+
+        Patches both the defining module and the package re-export: the
+        calibration folds resolve ``train_model`` from ``vtscore.training.mlp``
+        at call time, while ``train_and_threshold``'s final fit resolves it from
+        the ``vtscore.training`` package namespace.
+        """
+        import vtscore.training as training_pkg  # noqa: PLC0415
+        import vtscore.training.mlp as mlp_module  # noqa: PLC0415
+
+        seen: list = []
+        real = mlp_module.train_model
+
+        def spy(*args, **kwargs):
+            seen.append(kwargs.get("hidden_dim", "MISSING"))
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(mlp_module, "train_model", spy)
+        monkeypatch.setattr(training_pkg, "train_model", spy)
+        return seen
+
+    def test_uncached_calibration_folds_use_the_linear_head(self, monkeypatch):
+        """The ``det_ctx is None`` branch calibrates on the linear head too (#2824).
+
+        Before the fix this branch omitted ``hidden_dim`` from
+        ``calculate_cross_calibration_threshold``, so the fold models auto-sized
+        to the MLP while the final model was linear - the threshold was measured
+        on an architecture the detector never ships.
+        """
+        from vtscore.detectors.training import train_and_threshold  # noqa: PLC0415
+
+        seen = self._spy_hidden_dims(monkeypatch)
+        _snap, X_list, y_list = self._snap_and_labels()
+        train_and_threshold(X_list, y_list)
+
+        # At least the calibration folds plus the final fit.
+        assert len(seen) >= 2
+        assert all(h == LINEAR_HEAD for h in seen), f"non-linear train_model calls: {seen}"
+
+    def test_region_bag_uncached_path_uses_the_linear_head(self, monkeypatch):
+        """A flooded region label set calibrates + trains linear end-to-end (#2824)."""
+        from vtscore.detectors.training import train_and_threshold  # noqa: PLC0415
+
+        seen = self._spy_hidden_dims(monkeypatch)
+        X_list, y_list, groups = self._region_labels()
+        model, _threshold = train_and_threshold(X_list, y_list, groups=groups)
+
+        assert len(seen) >= 2
+        assert all(h == LINEAR_HEAD for h in seen), f"non-linear train_model calls: {seen}"
+        assert [type(layer) for layer in model] == [torch.nn.Linear]
+
+    def test_region_bag_cached_path_uses_the_linear_head(self, monkeypatch):
+        """The det_ctx (cached grouped-calibration) path is linear end-to-end too."""
+        from types import SimpleNamespace  # noqa: PLC0415
+
+        from vtscore.detectors.training import train_and_threshold  # noqa: PLC0415
+
+        seen = self._spy_hidden_dims(monkeypatch)
+        X_list, y_list, groups = self._region_labels()
+        det_ctx = SimpleNamespace(calibration_cache=None)
+        model, _threshold = train_and_threshold(X_list, y_list, det_ctx=det_ctx, groups=groups)
+
+        assert len(seen) >= 2
+        assert all(h == LINEAR_HEAD for h in seen), f"non-linear train_model calls: {seen}"
+        assert [type(layer) for layer in model] == [torch.nn.Linear]
+        # The fold orderings were cached for a later no-retrain Inclusion slide.
+        assert det_ctx.calibration_cache is not None
+
 
 class TestLinearHeadStructure:
     def test_single_linear_layer(self):
