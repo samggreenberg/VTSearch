@@ -300,4 +300,106 @@ describe('ProgressModalComponent', () => {
       vi.useRealTimers();
     }
   });
+
+  it('draws the partial series from running polls while the job continues', async () => {
+    // A cold cache walk can run for tens of seconds. `running` polls carry the
+    // series over the steps computed so far, so the modal shows a curve filling
+    // in rather than a bar at 0% and nothing else.
+    vi.useFakeTimers();
+    try {
+      fixture.componentRef.setInput('metric', 'smart');
+      TestBed.tick();
+      missCachedHistory('smart');
+
+      httpMock.expectOne('/api/eval/train-and-score').flush({
+        job_id: 'j6',
+        status: 'running',
+        current: 0,
+        total: 100,
+      });
+
+      await vi.advanceTimersByTimeAsync(200);
+      httpMock.expectOne(isResult).flush({
+        job_id: 'j6',
+        status: 'running',
+        current: 25,
+        total: 100,
+        partial: [{ num_labels: 5, error_cost: 0.9 }],
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      // Still analyzing: the progress bar and Cancel must stay put.
+      expect(component.analyzing).toBe(true);
+      expect(component.partialData.length).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(500);
+      httpMock.expectOne(isResult).flush({
+        job_id: 'j6',
+        status: 'running',
+        current: 50,
+        total: 100,
+        partial: [
+          { num_labels: 5, error_cost: 0.9 },
+          { num_labels: 6, error_cost: 0.7 },
+        ],
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(component.partialData.length).toBe(2);
+
+      await vi.advanceTimersByTimeAsync(500);
+      httpMock.expectOne(isResult).flush({
+        job_id: 'j6',
+        status: 'done',
+        metric: 'smart',
+        error_cost: [
+          { num_labels: 5, error_cost: 0.9 },
+          { num_labels: 6, error_cost: 0.7 },
+          { num_labels: 7, error_cost: 0.6 },
+        ],
+      });
+
+      await vi.advanceTimersByTimeAsync(50);
+      expect(component.analyzing).toBe(false);
+      expect(component.chartData.length).toBe(3);
+      // The partial is dropped once the real result lands.
+      expect(component.partialData.length).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('ignores an empty partial rather than showing the empty state', async () => {
+    vi.useFakeTimers();
+    try {
+      fixture.componentRef.setInput('metric', 'smart');
+      TestBed.tick();
+      missCachedHistory('smart');
+
+      httpMock.expectOne('/api/eval/train-and-score').flush({
+        job_id: 'j7',
+        status: 'running',
+        current: 0,
+        total: 100,
+      });
+
+      await vi.advanceTimersByTimeAsync(200);
+      httpMock.expectOne(isResult).flush({ job_id: 'j7', status: 'running', current: 3, total: 100, partial: [] });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(component.analyzing).toBe(true);
+      expect(component.emptyHistory).toBe(false);
+      expect(component.partialData.length).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(500);
+      httpMock.expectOne(isResult).flush({
+        job_id: 'j7',
+        status: 'done',
+        metric: 'smart',
+        error_cost: [{ num_labels: 5, error_cost: 0.5 }],
+      });
+      await vi.advanceTimersByTimeAsync(50);
+      expect(component.chartData.length).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
