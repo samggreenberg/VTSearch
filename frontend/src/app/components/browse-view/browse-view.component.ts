@@ -337,11 +337,15 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
   contextMenuOpen = false;
   contextMenuX = 0;
   contextMenuY = 0;
-  contextMembers: number[] = [];
+  /** Signals, not plain fields: besides the right-click handler they are also
+   *  written from the post-verify prune ({@link pruneDetailsPanel}), which runs
+   *  in an HTTP subscribe where a plain-field write would never repaint the
+   *  details panel under zoneless. */
+  readonly contextMembers = signal<number[]>([]);
   /** Representative (centroid) id of the right-clicked bin — the popup opens on
    *  it and scrolls its 1-D member list to it, so the detail view starts on the
    *  same image whose thumbnail the user clicked. */
-  contextRepId: number | null = null;
+  readonly contextRepId = signal<number | null>(null);
   /** Canvas bounds the popup clamps inside, so it stays on the canvas rather
    *  than spilling onto the side panel or past the canvas edges. */
   contextBounds: DOMRect | null = null;
@@ -1073,8 +1077,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
       this.dismissContextMenu();
       return;
     }
-    this.contextMembers = event.members;
-    this.contextRepId = event.repId;
+    this.contextMembers.set(event.members);
+    this.contextRepId.set(event.repId);
     if (this.detailsDocked()) {
       // A right-click on a bin always wants the details visible, so it undoes a
       // previous dismissal (the panel's X on an empty panel) — the panel comes
@@ -1103,7 +1107,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    * ({@link onCanvasContextMenu}).
    */
   onDetailsDismiss(): void {
-    if (this.contextMembers.length === 0) {
+    if (this.contextMembers().length === 0) {
       this.detailsPanelHidden.set(true);
       return;
     }
@@ -1115,8 +1119,8 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     if (this.detailsDocked()) {
       // Docked: dismissal (the panel's X, or an empty-space right-click)
       // clears the shown bin; the panel itself stays, showing its empty hint.
-      this.contextMembers = [];
-      this.contextRepId = null;
+      this.contextMembers.set([]);
+      this.contextRepId.set(null);
     }
     // Release the canvas's pinned enlarge so live hover resumes on the bin now
     // under the cursor.
@@ -1140,7 +1144,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
    *  re-open the current bin as a floating window over the canvas. */
   onPopOutRequested(): void {
     this.persistBinDetailsDocked(false);
-    if (this.contextMembers.length === 0) return;
+    if (this.contextMembers().length === 0) return;
     // No summon point (the click was in the panel header) — anchor the window
     // over the upper-left of the canvas; its own clamping keeps it on-screen.
     const main = this.content()?.nativeElement.querySelector('.browse-main');
@@ -1299,6 +1303,7 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
     const removed = new Set(removedIds);
     const remaining = this.subsetIds.filter((id) => !removed.has(id));
     this.selection.clear();
+    this.pruneDetailsPanel(removed);
     const label = target === 'good' ? 'Verified Good' : 'Verified Bad';
     this.toast.success({
       message: `Marked ${removedIds.length} item${removedIds.length === 1 ? '' : 's'} ${label}.`,
@@ -1325,6 +1330,37 @@ export class BrowseViewComponent implements OnInit, OnDestroy {
             message: 'Items were verified, but the browse view could not refresh.',
           }),
       });
+  }
+
+  /**
+   * Drop the *removed* ids from the bin the details panel (or floating window)
+   * is showing, so it repaints instead of listing items that have just left the
+   * map. The bin the user culled from is almost always the one still open on the
+   * left — that is where they picked the items — so without this the panel keeps
+   * a stale list of removed items long after the canvas has dropped them.
+   *
+   * Surviving members stay put: the cull re-bins the frozen layout in place, so
+   * the bin is the same bin minus a few items, and the panel keeps showing the
+   * rest. Only when the culled representative goes does the panel move to the
+   * first survivor. Verifying away the *whole* bin resets the details to their
+   * empty state — docked, the panel keeps its slot and shows its empty hint;
+   * floating, the window closes — and releases the canvas's pinned enlarge,
+   * since the bin it was holding open no longer has any items.
+   */
+  private pruneDetailsPanel(removed: Set<number>): void {
+    const members = this.contextMembers();
+    if (members.length === 0) return;
+    const survivors = members.filter((id) => !removed.has(id));
+    if (survivors.length === members.length) return;
+    this.contextMembers.set(survivors);
+    if (survivors.length === 0) {
+      this.contextRepId.set(null);
+      this.contextMenuOpen = false;
+      this.canvas()?.unpinCell();
+      return;
+    }
+    const rep = this.contextRepId();
+    if (rep == null || removed.has(rep)) this.contextRepId.set(survivors[0]);
   }
 
   /**

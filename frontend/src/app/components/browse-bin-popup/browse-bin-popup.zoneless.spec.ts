@@ -490,6 +490,64 @@ describe('BrowseBinPopupComponent (docked presentation)', () => {
     fixture.destroy();
   });
 
+  it('repaints in place when the open bin is culled, keeping the viewed item auditioning', async () => {
+    // The browse view prunes verified items out of the bin on show, so the panel
+    // stops listing items that have left the map. That is the *same* bin minus a
+    // few members, not a fresh summon: the grid must re-chunk without throwing
+    // away the viewed item, re-scrolling, or restarting the audition.
+    const playStub = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    const loadStub = vi
+      .spyOn(HTMLMediaElement.prototype, 'load')
+      .mockImplementation(() => {});
+
+    const fixture = makeDockedFixture([7, 8, 9], 'audio');
+    const played: (NowPlaying | null)[] = [];
+    fixture.componentInstance.nowPlaying.subscribe((v) => played.push(v));
+    await settlePasses(fixture);
+
+    // The user hovered member 9, so that is what the pane shows and hears.
+    fixture.componentInstance.onEntryEnter(9);
+    await settlePasses(fixture);
+    expect(fixture.componentInstance.displayedId).toBe(9);
+    const emissions = played.length;
+
+    // Item 7 (the representative) is verified away; the view hands down the
+    // survivors and moves the representative to the first of them.
+    fixture.componentRef.setInput('memberIds', [8, 9]);
+    fixture.componentRef.setInput('repId', 8);
+    await settlePasses(fixture);
+
+    // The grid dropped the culled item…
+    expect(fixture.componentInstance.displayRows.flat()).toEqual([8, 9]);
+    // …and everything else held still: same viewed item, same clip still
+    // sounding (no fresh now-playing emission for the new representative).
+    expect(fixture.componentInstance.displayedId).toBe(9);
+    expect(played.length).toBe(emissions);
+
+    playStub.mockRestore();
+    loadStub.mockRestore();
+    fixture.destroy();
+  });
+
+  it('still resets to the representative for a genuinely new bin', async () => {
+    // The counterpart to the cull path: different members (not a subset of the
+    // ones on show) is a fresh summon, so the pane re-opens on the new bin's
+    // representative rather than holding the old viewed item.
+    const fixture = makeDockedFixture([1, 2, 3]);
+    await settlePasses(fixture);
+
+    fixture.componentInstance.onEntryEnter(3);
+    await settlePasses(fixture);
+    expect(fixture.componentInstance.displayedId).toBe(3);
+
+    fixture.componentRef.setInput('memberIds', [20, 21]);
+    fixture.componentRef.setInput('repId', 21);
+    await settlePasses(fixture);
+    expect(fixture.componentInstance.displayedId).toBe(21);
+
+    fixture.destroy();
+  });
+
   it('derives the docked grid column count from the panel width', async () => {
     const fixture = makeDockedFixture([1, 2, 3, 4, 5, 6]);
     await settlePasses(fixture);

@@ -352,7 +352,20 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
       const memberIds = this.memberIds();
       this.repId();
       untracked(() => {
-        this.ids = memberIds ?? [];
+        const next = memberIds ?? [];
+        // An *in-place cull* — the browse view pruning verified items out of the
+        // bin already on show (see ``BrowseViewComponent.pruneDetailsPanel``) —
+        // is not a fresh summon: the user is looking at the same pile, minus a
+        // few items. Re-chunk the grid and leave everything else alone, so the
+        // repaint doesn't restart the audition, throw away the viewed item, or
+        // scroll the grid back to the representative.
+        if (this.isInPlaceCull(next)) {
+          this.ids = next;
+          this.rebuildRows();
+          this.cdr.markForCheck();
+          return;
+        }
+        this.ids = next;
         this.stopAudio();
         // Open on the bin's representative (the centroid whose thumbnail the user
         // right-clicked) so the pane is never blank and the detail view starts on
@@ -680,6 +693,20 @@ export class BrowseBinPopupComponent implements AfterViewInit, OnDestroy {
       });
     }
     this.cdr.markForCheck();
+  }
+
+  /**
+   * Whether *next* is the bin currently on show with some members removed and
+   * the viewed item still among them — the shape the browse view's post-verify
+   * prune produces. A genuinely new bin (a different pile, one that grew, or one
+   * whose viewed item is gone) fails this and takes the full reset path, which
+   * re-opens on the representative.
+   */
+  private isInPlaceCull(next: number[]): boolean {
+    if (next.length === 0 || next.length >= this.ids.length) return false;
+    if (this.previewId == null || !next.includes(this.previewId)) return false;
+    const current = new Set(this.ids);
+    return next.every((id) => current.has(id));
   }
 
   /** The id the preview opens on and the grid scrolls to: the bin's
