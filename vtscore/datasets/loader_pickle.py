@@ -426,7 +426,13 @@ def load_dataset_from_pickle(
     missing_media = 0
     loaded_count = 0
     total_count = len(medias_data)
-    _progress_interval = max(1, min(50, total_count // 50)) if total_count > 0 else 1
+    # ~50 updates for the whole loop, whatever the item count.  The old
+    # ``min(50, total // 50)`` capped the *interval* at 50 instead of the
+    # update count, so it inverted above 2500 items: a 300k-item dataset
+    # emitted 6,000 progress events, each one a full re-serialisation of the
+    # task list pushed to every open SSE stream (enough to back up the
+    # per-client 1024-deep queue and start dropping frames).
+    _progress_interval = max(1, total_count // 50) if total_count > 0 else 1
     if on_progress is not None:
         on_progress("loading", f"Processing 0 of {total_count} items…", 0, total_count)
 

@@ -139,7 +139,14 @@ def _try_load_cached(
         return False
 
     on_progress("loading", f"Loading {dataset_name} dataset...", 0, 0)
-    _loader.load_dataset_from_pickle(pkl_file, medias)
+    # Forward the callback: for a demo the picker shows as "Ready", reading this
+    # pickle *is* the whole import, and it is the slowest thing in the job (tens
+    # of seconds on the larger demos).  Without the callback the dashboard row
+    # sat on this one static message with no counter and no bar movement for the
+    # entire load, which reads as "nothing is happening" right after the user
+    # clicks Import.  ``load_dataset_from_pickle`` emits "Reading <file>…" and
+    # then a per-item "Processing i of N items…" tick.
+    _loader.load_dataset_from_pickle(pkl_file, medias, on_progress=on_progress)
 
     # Check if any medias were actually loaded
     if len(medias) == 0:

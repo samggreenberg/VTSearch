@@ -1092,7 +1092,7 @@ class TestDemoCacheEmbedderMismatch:
 
         medias: dict = {}
 
-        def fake_load(path, m):
+        def fake_load(path, m, **kwargs):
             m[1] = {"embedding": np.array([0.1, 0.2]), "file": "/fake/file.png"}
 
         with (
@@ -1131,7 +1131,7 @@ class TestDemoCacheEmbedderMismatch:
 
         medias: dict = {}
 
-        def fake_load(path, m):
+        def fake_load(path, m, **kwargs):
             m[1] = {"embedding": np.array([0.1]), "file": "/fake/file.png"}
 
         with (
@@ -1308,7 +1308,7 @@ class TestDemoCacheClipperMismatch:
         demo_name = "fake_audio_demo"
         self._write_cache(embeddings_dir, demo_name, "sound_tiling", {"duration": 2.0})
 
-        def fake_load(path, m):
+        def fake_load(path, m, **kwargs):
             m[1] = {"embedding": np.array([0.1]), "media_type": "audio"}
 
         with (
