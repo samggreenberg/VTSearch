@@ -28,7 +28,6 @@ from __future__ import annotations
 import threading
 
 import numpy as np
-import pytest
 
 import vtscore.detectors.labeling_progress as lp
 from vtscore.embedding.media_vectors import EMBEDDINGS_KEY
@@ -298,7 +297,7 @@ class TestRethresholdOnInclusionChange:
 
         assert low and len(low) == len(high)
         # A more inclusive setting cannot raise the bar on any step.
-        assert all(h <= pytest.approx(low_t, abs=1e-6) for h, low_t in zip(high, low, strict=True))
+        assert all(h <= low_t + 1e-6 for h, low_t in zip(high, low, strict=True))
         assert any(h < low_t for h, low_t in zip(high, low, strict=True))
 
     def test_the_expensive_atlas_is_not_dropped(self):

@@ -7,6 +7,7 @@ from vtscore.detectors.labeling_progress import (
     _compute_stable_status,
     _ensure_cache,
     _live_models,
+    calculate_diversity_level_over_time,
     inject_live_model,
     invalidate_progress_cache_from,
 )
@@ -532,15 +533,22 @@ class TestProgressCacheInvalidatedOnVoteSwitch:
 
 
 class TestProgressAtlasClonesAndSurvivesInvalidate:
-    """The per-step progress atlas clones the dataset context's atlas and its
-    object identity survives cache invalidation.
+    """The diversity replay clones the dataset context's atlas, and a polarity
+    flip leaves that replay entirely alone.
 
     Building the coverage structure is hierarchical k-means over every
-    embedding; nulling the progress atlas on every polarity flip forced a full
-    re-fit under ``_progress_lock`` on the next ``/api/labeling-status`` poll.
-    Instead ``_build_coverage_atlas`` clones the context atlas (shared node
-    table, fresh label overlay) and ``invalidate_progress_cache_from`` rewinds
-    and replays that overlay in place rather than discarding the atlas.
+    embedding, so it must never be re-fit on a vote.  ``_build_coverage_atlas``
+    clones the context atlas (shared node table, fresh label overlay), and
+    because coverage evidence is polarity-agnostic
+    (``CoverageAtlas._covered`` tests ``n_pos + n_neg > 0``) a good↔bad switch
+    cannot change any step's ``coverage_level()`` - so
+    ``invalidate_progress_cache_from`` touches only the *model* cache and leaves
+    the atlas and the replayed series untouched.
+
+    The atlas is also no longer built by the model walk at all: asking for the
+    Smart or Stable curve used to pay for it, which on a dataset past
+    ``COVERAGE_ATLAS_AUTO_THRESHOLD`` (no load-time atlas to clone) was the
+    single largest cost in the request.
     """
 
     def _vote(self, client, votes):
@@ -554,7 +562,7 @@ class TestProgressAtlasClonesAndSurvivesInvalidate:
         assert ctx_atlas is not None
 
         self._vote(client, [(1, "good"), (2, "bad")])
-        _ensure_cache(medias, label_history, 0)
+        calculate_diversity_level_over_time(medias, label_history)
 
         prog_atlas = labeling_progress._cache_coverage_atlas
         assert prog_atlas is not None
@@ -568,35 +576,48 @@ class TestProgressAtlasClonesAndSurvivesInvalidate:
         assert prog_atlas._n_neg is not ctx_atlas._n_neg
         assert prog_atlas._labeled is not ctx_atlas._labeled
 
-    def test_partial_invalidate_preserves_atlas_identity(self, client):
+    def test_model_walk_does_not_build_an_atlas(self, client):
+        build_coverage_atlas()
+        self._vote(client, [(1, "good"), (2, "bad")])
+
+        _ensure_cache(medias, label_history, 0)
+
+        assert _cached_steps, "the model walk should still have run"
+        assert labeling_progress._cache_coverage_atlas is None
+
+    def test_partial_invalidate_preserves_the_diversity_replay(self, client):
         build_coverage_atlas()
         # Steps: 0=(3,good), 1=(4,bad), 2=(1,good), 3=(2,bad); media 1 at step 2.
         self._vote(client, [(3, "good"), (4, "bad"), (1, "good"), (2, "bad")])
         _ensure_cache(medias, label_history, 0)
+        calculate_diversity_level_over_time(medias, label_history)
         atlas_before = labeling_progress._cache_coverage_atlas
         assert atlas_before is not None
         assert atlas_before.labeled_ids == {1, 2, 3, 4}
+        series_before = list(labeling_progress._cached_diversity)
 
-        # Switch media 1 (good→bad): steps 2-3 discarded, atlas rewound in place.
+        # Switch media 1 (good→bad): model steps 2-3 are discarded...
         self._vote(client, [(1, "bad")])
-        atlas_after = labeling_progress._cache_coverage_atlas
-        assert atlas_after is atlas_before, "atlas rebuilt instead of rewound"
-        # Overlay rewound to the surviving prefix (steps 0-1): media 3 good, 4 bad.
-        assert atlas_after.labeled_ids == {3, 4}
+        assert len(_cached_steps) == 2
 
-    def test_step0_invalidate_preserves_atlas_identity(self, client):
+        # ...but coverage is polarity-agnostic, so nothing about the replay moves.
+        assert labeling_progress._cache_coverage_atlas is atlas_before
+        assert atlas_before.labeled_ids == {1, 2, 3, 4}
+        assert labeling_progress._cached_diversity == series_before
+
+    def test_step0_invalidate_preserves_the_diversity_replay(self, client):
         build_coverage_atlas()
         self._vote(client, [(1, "good"), (2, "bad")])
         _ensure_cache(medias, label_history, 0)
+        calculate_diversity_level_over_time(medias, label_history)
         atlas_before = labeling_progress._cache_coverage_atlas
         assert atlas_before is not None
 
-        # Switch media 1, present from step 0: whole prefix gone, atlas emptied.
+        # Switch media 1, present from step 0: the whole model prefix goes.
         self._vote(client, [(1, "bad")])
         assert len(_cached_steps) == 0
-        atlas_after = labeling_progress._cache_coverage_atlas
-        assert atlas_after is atlas_before, "atlas rebuilt on step-0 invalidate"
-        assert atlas_after.labeled_ids == set()
+        assert labeling_progress._cache_coverage_atlas is atlas_before
+        assert atlas_before.labeled_ids == {1, 2}
 
 
 class TestStableIndicatorThresholds:
@@ -899,9 +920,9 @@ class TestLiveModelReuse:
         # A live model should have been injected for the current vote set
         key = (frozenset(app_module.good_votes), frozenset(app_module.bad_votes))
         assert key in _live_models, "learned-sort should inject the live model"
-        model, threshold = _live_models[key]
-        assert model is not None
-        assert isinstance(threshold, float)
+        # The model alone: its cross-calibrated threshold is deliberately not
+        # carried over, so the cache derives every step's cutoff the same way.
+        assert _live_models[key] is not None
 
     def test_live_model_stability_computed(self, client):
         """When a live model is reused, stability should still be computed."""

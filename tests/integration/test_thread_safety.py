@@ -702,16 +702,19 @@ class TestStateProgressLockOrder:
         assert held, "clear_progress_cache was never called from clear_medias"
         assert held == [False] * len(held), f"_state_lock held during clear_progress_cache: {held}"
 
-    def test_set_inclusion_releases_state_lock_before_progress_clear(self, monkeypatch, isolated_settings):
-        held = self._patch_capture(monkeypatch, "clear_progress_cache")
+    def test_set_inclusion_releases_state_lock_before_progress_rethreshold(self, monkeypatch, isolated_settings):
+        # The slider re-keys the per-step cache rather than clearing it (the
+        # models are inclusion-independent), but the lock ordering is the same
+        # invariant: ``_progress_lock`` is only ever taken outside ``_state_lock``.
+        held = self._patch_capture(monkeypatch, "rethreshold_progress_cache")
         import vtsearch.state as _vstate
 
-        # Two distinct values to force the change-detection branch that triggers a clear.
+        # Two distinct values to force the change-detection branch.
         current = _vstate.get_inclusion()
         new_value = (current + 1) % 11  # inclusion is in [-10, 10]; bump within range
         _vstate.set_inclusion(new_value)
-        assert held, "clear_progress_cache was never called from set_inclusion"
-        assert held == [False] * len(held), f"_state_lock held during clear_progress_cache: {held}"
+        assert held, "rethreshold_progress_cache was never called from set_inclusion"
+        assert held == [False] * len(held), f"_state_lock held during progress rethreshold: {held}"
 
     def test_vote_mutation_does_not_block_when_progress_lock_held(self):
         """Concurrent ``set_vote`` mutations must not deadlock when ``_progress_lock`` is held.
