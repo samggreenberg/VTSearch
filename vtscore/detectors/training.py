@@ -395,10 +395,31 @@ def bad_negative_vecs(
     leaves, the disjoint set that tiles the image - as negatives.  This is the
     multiple-instance-learning treatment of a rejected image: since inference
     scores an image by its **best** region (max-pool), a Bad vote asserts that
-    *no* region of it should score high, so we train every leaf down.  Internal
-    HAC nodes (``children`` set) are saliency-weighted pools of those leaves and
-    are dropped as redundant (they inflate the negative count with correlated
-    duplicates without adding coverage).
+    *no* region of it should score high, so we train every leaf down.
+
+    Internal HAC nodes (``children`` set) are **not** flooded, even though
+    :func:`_score_all_media` max-pools them.  This is a deliberate, measured
+    exception, not a redundancy claim: an internal node is *not* dominated by
+    its leaves.  :func:`~vtscore.media.patch_embed.build_hac_tree` sets
+    ``merged_vec = _l2_normalize(sum_a + sum_b)``, so the merged vector is the
+    convex-hull point of its descendants **renormalised back to the unit
+    sphere** - a gain of ``1 / ||mean(descendant leaf vecs)||``, ~1.53x on real
+    trees.  Under the linear production head that scales the logit by the same
+    factor, so an internal node can and does out-score every one of its own
+    leaves (~4.7% of node/direction pairs).
+
+    Flooding them anyway was A/B'd over 24 synthetic patch detectors
+    (``scripts/probe_hac_internal_flood.py``) and it **hurts**: paired AP
+    -0.058 ± 0.036 (95% CI, excludes zero; the leaves-only arm wins 19 of 24
+    seeds), while FPR (+0.037 ± 0.045) and FNR (-0.010 ± 0.049) both straddle
+    zero.  It does buy back some of the gap - the share of negatives whose
+    winning row is an internal node falls 4.6% → 2.7% - but suppressing a
+    rejected image's renormalised mean directions also suppresses the geometry
+    a *positive* image's concept-blob internal lives in, and that costs more
+    than it buys.  So the flood stays leaves-only, and the gap stays pinned by
+    ``test_max_hac_floods_every_scored_row_except_hac_internals`` and
+    ``tests_lib/detectors/test_hac_internal_flood_gap.py`` rather than papered
+    over.  See #2731.
 
     Non-patch media contribute a single image-level vector, exactly as before,
     so every legacy single-vector dataset is byte-for-byte unchanged.
