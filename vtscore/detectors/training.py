@@ -225,7 +225,7 @@ def train_and_threshold(
         calculate_safe_threshold,
         train_model,
     )
-    from vtscore.training.mlp import _auto_hidden_dim
+    from vtscore.training.mlp import LINEAR_HEAD
     from vtscore.training.thresholds import NO_GOOD_THRESHOLD, cross_calibration_threshold_cached
 
     X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
@@ -238,11 +238,12 @@ def train_and_threshold(
     n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
     cal_score_rows = _calibration_score_rows(groups, cal_groups, score_rows)
 
-    # Size the hidden layer from the vote count (the same width train_model()
-    # picks by default when unflooded), so when we cache the fold orderings
-    # below their models match the final model — keeping the cached
-    # re-thresholding consistent with this run's threshold.
-    hidden_dim = _auto_hidden_dim(n_votes)
+    # The production detector head is linear (logistic regression): stable under
+    # sparse positives where a small MLP's per-retrain score wobble drove the
+    # threshold-stability #2790 spikes.  The same head sizes both the final model
+    # and the cached fold sub-models below, so the cached re-thresholding stays
+    # consistent with this run's threshold.
+    hidden_dim = LINEAR_HEAD
 
     safe = bool(get_safe_thresholds() and snap)
     # Below the safe-threshold ramp floor the cross-cal output is blended
@@ -655,7 +656,7 @@ def _train_and_score_xy(
     """
     import torch  # noqa: PLC0415
 
-    from vtscore.training.mlp import _auto_hidden_dim, train_model  # noqa: PLC0415
+    from vtscore.training.mlp import LINEAR_HEAD, train_model  # noqa: PLC0415
     from vtscore.training.thresholds import (  # noqa: PLC0415
         calculate_safe_threshold,
         cross_calibration_threshold_cached,
@@ -679,7 +680,8 @@ def _train_and_score_xy(
     # per bag when a Bad vote flooded its leaf set; a no-op on legacy datasets.
     n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
     cal_score_rows = _calibration_score_rows(groups, cal_groups, score_rows)
-    hidden_dim = _auto_hidden_dim(n_votes)
+    # Linear (logistic) production head - see train_and_threshold for why.
+    hidden_dim = LINEAR_HEAD
 
     # Skip k-fold calibration *only* when safe-thresholds is on and the label
     # count is below the ``calculate_safe_threshold`` ramp floor: there the
@@ -864,10 +866,10 @@ def train_detector_from_origins(
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
 ) -> tuple[dict[str, list] | None, float]:
-    """Resolve origin entries to files, embed them, and train a detector MLP.
+    """Resolve origin entries to files, embed them, and train a detector head.
 
     This is the load-time counterpart of file-based detector export: given
-    the origin lists that were saved to disk, it re-derives the MLP weights
+    the origin lists that were saved to disk, it re-derives the head weights
     by resolving the original media files, embedding them, and training.
 
     Args:
@@ -893,7 +895,7 @@ def train_detector_from_origins(
     import torch  # noqa: PLC0415
 
     from vtscore.detectors.resolver import embed_file, resolve_file_context
-    from vtscore.training.mlp import train_model
+    from vtscore.training.mlp import LINEAR_HEAD, train_model
     from vtscore.training.thresholds import calculate_cross_calibration_threshold
 
     X_list: list = []
@@ -948,8 +950,9 @@ def train_detector_from_origins(
         inclusion,
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
+        hidden_dim=LINEAR_HEAD,
     )
-    model = train_model(X, y, input_dim)
+    model = train_model(X, y, input_dim, hidden_dim=LINEAR_HEAD)
 
     state_dict = model.state_dict()
     weights = {k: v.cpu().tolist() for k, v in state_dict.items()}

@@ -143,39 +143,64 @@ def _split_linear_weights(
 
 
 def embedding_dim_from_weights(weights: dict[str, list]) -> int:
-    """Return the input embedding dimensionality of a serialized detector MLP."""
-    w1, _b1, _w2, _b2 = _split_linear_weights(weights)
-    return int(w1.shape[1])
+    """Return the input embedding dimensionality of a serialized detector head.
+
+    Reads the first ``Linear`` layer's weight, whose second axis is the input
+    dimensionality for both the MLP (``[hidden, input_dim]``) and the linear
+    head (``[1, input_dim]``), so it is agnostic to the head's layer count.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    return int(np.asarray(weights["0.weight"], dtype=np.float32).shape[1])
 
 
 def mlp_weights_to_onnx(weights: dict[str, list]) -> bytes:
-    """Serialise a trained detector MLP to a standalone ONNX graph.
+    """Serialise a trained detector head to a standalone ONNX graph.
 
-    The graph computes ``sigmoid(Gemm(relu(Gemm(x, W1, b1)), W2, b2))`` - i.e.
-    the exact forward pass of the trained model with the inference-time sigmoid
-    baked in (the trained ``nn.Sequential`` emits raw logits).  Dropout is a
-    no-op at inference and is omitted.  The batch dimension is dynamic.
+    For the MLP the graph computes ``sigmoid(Gemm(relu(Gemm(x, W1, b1)), W2, b2))``;
+    for the linear (logistic) head - the production default, a single
+    ``Linear(input_dim, 1)`` - it is just ``sigmoid(Gemm(x, W, b))``.  Either way
+    it is the exact forward pass with the inference-time sigmoid baked in (the
+    trained ``nn.Sequential`` emits raw logits).  Dropout is a no-op at inference
+    and is omitted.  The batch dimension is dynamic.
     """
+    import numpy as np  # noqa: PLC0415
     from onnx import TensorProto, checker, helper, numpy_helper  # noqa: PLC0415
 
-    w1, b1, w2, b2 = _split_linear_weights(weights)
-    input_dim = int(w1.shape[1])
-
-    initializers = [
-        numpy_helper.from_array(w1, "hidden.weight"),
-        numpy_helper.from_array(b1, "hidden.bias"),
-        numpy_helper.from_array(w2, "output.weight"),
-        numpy_helper.from_array(b2, "output.bias"),
-    ]
-    nodes = [
-        # Gemm with transB=1 computes Y = X @ W^T + b, matching nn.Linear.
-        helper.make_node(
-            "Gemm", [ONNX_INPUT_NAME, "hidden.weight", "hidden.bias"], ["hidden_pre"], name="hidden", transB=1
-        ),
-        helper.make_node("Relu", ["hidden_pre"], ["hidden"], name="relu"),
-        helper.make_node("Gemm", ["hidden", "output.weight", "output.bias"], ["logit"], name="output", transB=1),
-        helper.make_node("Sigmoid", ["logit"], [ONNX_OUTPUT_NAME], name="sigmoid"),
-    ]
+    weight_keys = sorted((k for k in weights if k.endswith(".weight")), key=lambda k: int(k.split(".")[0]))
+    if len(weight_keys) == 1:
+        # Linear head: sigmoid(Gemm(x, W, b)).
+        w = np.asarray(weights["0.weight"], dtype=np.float32)
+        b = np.asarray(weights["0.bias"], dtype=np.float32)
+        input_dim = int(w.shape[1])
+        initializers = [
+            numpy_helper.from_array(w, "output.weight"),
+            numpy_helper.from_array(b, "output.bias"),
+        ]
+        nodes = [
+            helper.make_node(
+                "Gemm", [ONNX_INPUT_NAME, "output.weight", "output.bias"], ["logit"], name="output", transB=1
+            ),
+            helper.make_node("Sigmoid", ["logit"], [ONNX_OUTPUT_NAME], name="sigmoid"),
+        ]
+    else:
+        w1, b1, w2, b2 = _split_linear_weights(weights)
+        input_dim = int(w1.shape[1])
+        initializers = [
+            numpy_helper.from_array(w1, "hidden.weight"),
+            numpy_helper.from_array(b1, "hidden.bias"),
+            numpy_helper.from_array(w2, "output.weight"),
+            numpy_helper.from_array(b2, "output.bias"),
+        ]
+        nodes = [
+            # Gemm with transB=1 computes Y = X @ W^T + b, matching nn.Linear.
+            helper.make_node(
+                "Gemm", [ONNX_INPUT_NAME, "hidden.weight", "hidden.bias"], ["hidden_pre"], name="hidden", transB=1
+            ),
+            helper.make_node("Relu", ["hidden_pre"], ["hidden"], name="relu"),
+            helper.make_node("Gemm", ["hidden", "output.weight", "output.bias"], ["logit"], name="output", transB=1),
+            helper.make_node("Sigmoid", ["logit"], [ONNX_OUTPUT_NAME], name="sigmoid"),
+        ]
     graph = helper.make_graph(
         nodes,
         "vtsearch_detector",
