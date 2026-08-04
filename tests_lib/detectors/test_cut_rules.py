@@ -165,12 +165,18 @@ class TestSupervisedAndOracleCuts:
 
 
 class TestDecomposition:
-    def _sample(self, rng, n=4000, prevalence=0.05):
+    def _sample(self, rng, n=6000, prevalence=0.08):
+        """A sparse but cleanly separated pool - every rule has a root here.
+
+        Overlapping modes are covered by ``test_missing_rules_are_nan_...``; this
+        fixture exists to check the chain's arithmetic, which needs all four cuts
+        to exist.
+        """
         labels = (rng.random(n) < prevalence).astype(float)
         scores = np.where(
             labels == 1.0,
-            rng.normal(0.75, 0.07, n),
-            rng.normal(0.30, 0.12, n),
+            rng.normal(0.80, 0.06, n),
+            rng.normal(0.25, 0.08, n),
         ).clip(0.0, 1.0)
         return scores, labels
 
@@ -187,11 +193,9 @@ class TestDecomposition:
         rng = np.random.default_rng(8)
         scores, labels = self._sample(rng)
         cuts, _params = decomposition_cuts(scores, labels, 1.0, 1.0)
-        terms = [
-            cuts["cross"] - cuts["priorfree"],
-            cuts["priorfree"] - cuts["supervised"],
-            cuts["supervised"] - cuts["sim_oracle"],
-        ]
+        chain = ["cross", "priorfree", "supervised", "sim_oracle"]
+        assert all(math.isfinite(cuts[name]) for name in chain), cuts
+        terms = [cuts[a] - cuts[b] for a, b in zip(chain, chain[1:], strict=True)]
         assert sum(terms) == pytest.approx(cuts["cross"] - cuts["sim_oracle"], abs=1e-12)
 
     def test_prior_free_sits_below_the_count_optimal_cut(self):

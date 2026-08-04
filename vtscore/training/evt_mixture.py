@@ -227,7 +227,11 @@ def fit_gumbel_normal_mixture(
             return None
         r = np.exp(log_lo - denom)
         ll = float(denom.mean())
-        if abs(ll - prev_ll) <= _EM_TOL * max(1.0, abs(prev_ll)):
+        # ``prev_ll`` starts at -inf, where both sides of the tolerance test are
+        # inf and ``inf <= inf`` would declare convergence after a single M/E
+        # step - leaving the fit at its initialisation.  Only test once there is
+        # a finite previous value to compare against.
+        if math.isfinite(prev_ll) and abs(ll - prev_ll) <= _EM_TOL * max(1.0, abs(prev_ll)):
             break
         prev_ll = ll
 
