@@ -43,6 +43,130 @@ over **13 653 steps** (max abs diff 0.0), and `pooled_cross` reproduces #2799's
 headline (+0.0034 here vs +0.0036 there). The harness is measuring the shipped
 code and the same phenomenon.
 
+## What the prior-free crossing is
+
+### The variables
+
+The safe-threshold path fits a 2-component Gaussian mixture to the **unlabelled**
+sim-set scores — every media in the pool, scored by the current detector, with no
+labels involved:
+
+```
+f(x) = w_lo · N(x; mu_lo, var_lo)  +  w_hi · N(x; mu_hi, var_hi)
+```
+
+| symbol | code | what it is |
+|---|---|---|
+| `x` | — | one media's score, a sigmoid output in [0, 1] |
+| `w_lo`, `w_hi` | `GmmFit1D.w_lo/.w_hi` | mixture weights, summing to 1: the share of the fitted distribution EM assigns to each component |
+| `mu_lo`, `mu_hi` | `.mu_lo/.mu_hi` | the component means — `lo` is the Bad (low-score) mode, `hi` the Good one |
+| `var_lo`, `var_hi` | `.var_lo/.var_hi` | the component variances |
+| `fpr_weight`, `fnr_weight` | `inclusion_weights(k)` | the cost of a false positive vs a missed match. `(1, 1)` at Inclusion 0; raising Inclusion raises `fnr_weight` |
+| `lam` | `crossing(lam=…)` | the tilt this study added: it multiplies the Good side of the equation |
+
+Note that `w_lo` and `w_hi` are properties of a **curve fitted to unlabelled
+scores**. Nothing in the fit knows which media are true matches.
+
+### The rule we shipped in #2798, and what it optimises
+
+```
+w_lo · N_lo(x)  ==  w_hi · N_hi(x)
+```
+
+Divide both sides by `f(x)` and this is the textbook Bayes boundary: the score at
+which `P(Bad | x) == P(Good | x)`, with `w_lo`/`w_hi` playing **class priors** and
+`N_lo`/`N_hi` playing **class-conditional densities**. Cutting there minimises the
+expected *number* of mistakes:
+
+```
+count loss  =  P(Bad) · FPR  +  P(Good) · FNR
+```
+
+Each error is weighted by how *common* its class is. That is a coherent
+objective — it is simply not ours.
+
+### What we actually score
+
+```
+cost = fpr_weight · FPR + fnr_weight · FNR
+```
+
+`FPR` divides by the number of negatives and `FNR` by the number of positives, so
+each error is normalised by **its own** class. The objective therefore does not
+depend on the class balance at all — deliberately, because that is what makes
+Inclusion ("what fraction of true matches am I willing to miss") mean the same
+thing on a dataset that is 1 % positive and one that is 30 % positive.
+
+### The derivation
+
+Write the rates as integrals over the true class-conditional densities:
+
+```
+FPR(tau) = integral of f_neg from tau to +inf     (negatives landing above the cut)
+FNR(tau) = integral of f_pos from -inf to tau     (positives landing below it)
+```
+
+Differentiate the cost and set it to zero — the cut sits where moving it stops
+helping:
+
+```
+dL/dtau  =  -fpr_weight · f_neg(tau)  +  fnr_weight · f_pos(tau)  =  0
+
+    =>   fnr_weight · f_pos(tau)  ==  fpr_weight · f_neg(tau)
+```
+
+**No priors appear.** They cannot: they were never in the objective. Contrast the
+count loss, whose stationarity condition is `P(Good)·f_pos == P(Bad)·f_neg` —
+there the priors appear precisely because they are in the loss.
+
+Now identify the fitted components with the classes (`f_neg = N_lo`,
+`f_pos = N_hi`) and ask what `lam` turns the implemented solve into the correct
+one. We need `N_lo(tau) == (fnr_weight/fpr_weight) · N_hi(tau)`, while the code
+solves `N_lo(tau) == lam · (w_hi/w_lo) · N_hi(tau)`, so
+
+```
+lam = (fnr_weight / fpr_weight) · (w_lo / w_hi)
+```
+
+The `w_lo/w_hi` factor exists for one purpose: to **cancel** the prior odds the
+original equation smuggled in. At Inclusion 0 the cost weights are equal and this
+is simply `lam = w_lo / w_hi`.
+
+### Why the old cut was biased, and by how much
+
+With equal variances the family has a closed form:
+
+```
+x(lam) = midpoint  +  var · ln( w_lo / (lam · w_hi) ) / (mu_hi - mu_lo)
+```
+
+- **`lam = 1`** (#2798): the offset is `var·ln(w_lo/w_hi)/(mu_hi-mu_lo)`. The pool
+  is overwhelmingly negative, so `w_lo >> w_hi`, the log is large and positive,
+  and the cut sits **well above** the midpoint — admitting too little.
+- **`lam = w_lo/w_hi`** (prior-free): the log term becomes `ln(1) = 0` and the cut
+  **is exactly the midpoint**.
+
+That is why the historical midpoint was so hard to beat: under equal variances it
+*is* the rate-optimal rule, not a heuristic that got lucky. And it is why a third
+point exists — with unequal variances the two separate, and the gap is the part of
+the correct rule the midpoint cannot express.
+
+### The robustness argument, which turned out to matter
+
+Cancelling the weights does more than fix the loss: it makes the cut **immune to
+the weights being wrong**. After substituting `lam`, the equation is
+`fnr_weight·N_hi == fpr_weight·N_lo` — `w_lo` and `w_hi` are gone, so the cut
+depends only on the four component moments and the two cost weights.
+
+This matters because the mixture weights are *not* class priors, and this study
+measured how badly: on the control arm the fitted `w_hi` averaged **0.35 against a
+true positive prevalence of 0.09**. EM's high component is "media with a
+confidently-scored region", not "true matches". The count-optimal cut is therefore
+wrong twice over — the wrong loss, corrected by a prior it has mis-estimated by
+4x — while the prior-free cut never consults that number at all.
+`test_prior_free_crossing_does_not_depend_on_the_mixture_weights` pins the
+invariance to 1e-12.
+
 ## Why: the derivation was right, but it is not the dominant error
 
 Decomposing today's gap on the production arm, in **excess-cost** units
