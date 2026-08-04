@@ -93,9 +93,21 @@ submit_arm() {
   missing=$(cd "$HERE" && python - "$results/cells" "$n" <<'PY'
 import sys
 from pathlib import Path
+
 cells, n = Path(sys.argv[1]), int(sys.argv[2])
 have = {int(p.stem.split("_")[1]) for p in cells.glob("task_*.csv") if "__sweep" not in p.name}
-print(",".join(str(i) for i in range(n) if i not in have))
+todo = [i for i in range(n) if i not in have]
+# Collapse consecutive indices into ranges.  sbatch rejects an over-long
+# --array string outright ("Pathname ... too long"), which a fully-missing arm
+# would hit immediately at ~1300 comma-separated entries.
+parts, start = [], None
+for i, v in enumerate(todo):
+    if start is None:
+        start = v
+    if i + 1 == len(todo) or todo[i + 1] != v + 1:
+        parts.append(str(start) if start == v else f"{start}-{v}")
+        start = None
+print(",".join(parts))
 PY
 )
   if [[ -z "$missing" ]]; then
