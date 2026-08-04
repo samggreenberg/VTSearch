@@ -15,8 +15,17 @@ import pytest
 
 _REPO_ROOT = Path(__file__).parent.parent.parent
 
-# Packages that every VTSearch deployment requires regardless of variant.
-# These are imported at app startup before any plugin-specific code runs.
+# Packages that every VTSearch deployment requires regardless of variant:
+# the web/app framework, the numeric + model stack every embedder and the
+# ranker sit on, and umap-learn for the Browse projection. A slim file may
+# drop media-type-specific deps (librosa, PyMuPDF, ultralytics, ...) but
+# never these.
+#
+# Only list packages nothing else pulls in transitively. threadpoolctl and
+# huggingface_hub are imported directly by vtscore but arrive with
+# scikit-learn / transformers, so a slim file that omits them still works;
+# umap-learn has no such carrier, which is how issue #2843 (LabBench image
+# built without umap-learn) happened.
 _ALWAYS_REQUIRED: frozenset[str] = frozenset(
     {
         "flask",
@@ -24,6 +33,16 @@ _ALWAYS_REQUIRED: frozenset[str] = frozenset(
         "marshmallow",
         "pydantic",
         "werkzeug",
+        "gunicorn",
+        "numpy",
+        "requests",
+        "tqdm",
+        "scikit-learn",
+        "torch",
+        # Browse canvas: vtscore.gpu_backends.umap_fit_transform falls back to
+        # the CPU umap-learn reducer whenever cuML is absent (always, in the
+        # slim images).
+        "umap-learn",
     }
 )
 
@@ -58,6 +77,7 @@ def test_slim_requirements_include_core_deps(req_file: Path) -> None:
     declared = _parse_packages(req_file)
     missing = {_normalise(p) for p in _ALWAYS_REQUIRED} - declared
     assert not missing, (
-        f"{req_file.name} is missing core framework deps: {sorted(missing)}\n"
-        "Add them to the '── Core framework ──' section of that file."
+        f"{req_file.name} is missing deps every deployment needs: {sorted(missing)}\n"
+        "Add them to that file (core framework / numeric stack entries near the top; "
+        "umap-learn under the '── VTSBrowse projection ──' heading)."
     )
