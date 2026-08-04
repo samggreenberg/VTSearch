@@ -1,7 +1,35 @@
 # How safe should safe-thresholds be? (#2841)
 
-**Status: Phase 1 (screen) complete and reported below. Phase 2 (A/B) running;
-its section and the final verdict are not yet written.**
+## Verdict
+
+**The handoff is too fast, production's cut is the worst-calibrated of the nine
+schedules measured, and the two voting modes want different curves.**
+
+| | ship | vs `prod` (7-20 votes) | holds at `fpr x4`? |
+|---|---|---|---|
+| **Region voting** | **`slow`** (hand off by 40 labels, not 20) | −0.0422 cost, p=1.4e-28, 79% of cells | **yes**, −0.0366 |
+| **Binary voting** | **`cap50`** (production ramp, capped at half GMM forever) | −0.0173 cost, p=7.6e-43, 68% of cells | **yes**, −0.0119 |
+
+If a single schedule is preferred over a per-mode one, ship **`cap50`
+everywhere**: it is the only schedule that improves *both* modes under *every*
+weighting tested (region −0.0210, binary −0.0173), though it leaves most of the
+available region-voting gain on the table.
+
+**Not recommended, despite scoring best at the shipped operating point:**
+`vslow` (region −0.0539, binary −0.0328) and `pure_gmm` (region −0.0530). Their
+binary-voting advantage is a *lower cut*, not better calibration, and reverses
+hard when false positives are weighted more — `pure_gmm` goes to **+0.2446** at
+`fpr x4`. Since the Inclusion knob is defined as `wf·FPR + wn·FNR`, that
+reweighting is not hypothetical: it is roughly what an Inclusion-averse user
+experiences.
+
+**The issue's premise was inverted, then vindicated by a different route.**
+"Just use the GMM all the time" is *not* obviously bad — on region voting it was
+among the best schedules at the shipped operating point, and it is the closest
+to the oracle cut of any schedule measured there (mean |gap| 0.0228 vs
+production's 0.0359). But it is the least robust choice, so the answer to "how
+safe should safe be" is **permanently a little safe** (a cap, or a much longer
+ramp), not "always maximally safe".
 
 ## The question
 
@@ -225,7 +253,7 @@ moving the Inclusion knob changes the conformal rule itself, not just the
 weights. It answers "is this win an artefact of a symmetric metric", which is
 the question it was added for, and nothing more.
 
-## Reading so far
+## Reading after Phase 1
 
 The two questions come apart:
 
@@ -240,13 +268,146 @@ The two questions come apart:
 
 `cap50` was not in the pre-registered promotion list (which ranked on the
 shipped metric alone), so it was **added** as an extra A/B arm rather than
-quietly substituted; the pre-registered arms all still run.
+quietly substituted; the pre-registered arms all still ran.
 
-## Phase 2 — A/B trajectories
+**The A/B upheld this reading.** The pre-registered rule — beat `prod` at
+p < 0.01 on your own mode without losing on the other — is passed by `vslow`,
+`slow`, `cap50`, `pure_gmm` and (region) `rare`, and on the shipped metric alone
+it selects `vslow`. The recommendation is `slow`/`cap50` instead **because of
+the post-hoc robustness analysis**, which is a deviation from the
+pre-registration and is flagged as one. Anyone who prefers to hold the
+pre-registration strictly should read the verdict as `vslow`, and should also
+accept that its binary-voting gain reverses under reweighting.
 
-_Running. Nine arms (`prod`, `pure_gmm`, `vslow`, `slow`, `rare`, `pos`,
-`cap50`, `cap80`, `corridor`), 16 seeds, 1344 cells each, full independent
-trajectories so acquisition feedback is included._
+## Phase 2 — A/B trajectories (the verdict)
+
+Nine arms, 16 seeds, 1344 cells each (12,096 cells, 312,606 rows), each a full
+independent trajectory so the blend's effect on *which items Autopilot asked the
+user to label* is included. Paired per cell, since two arms' step *t* are not
+the same state.
+
+Region voting (n = 339 paired cells, `prod` cost 0.5336):
+
+| schedule | d_cost | % improved | p (Wilcoxon) | d_fnr | d_fpr | `fpr x2` | `fpr x4` |
+|---|---|---|---|---|---|---|---|
+| `vslow` | −0.0539 | 78.5 | 1.3e-30 | −0.0621 | +0.0082 | −0.0458 | −0.0295 |
+| `pure_gmm` | −0.0530 | 78.2 | 5.9e-25 | −0.0713 | +0.0183 | −0.0347 | **+0.0019** |
+| **`slow`** | **−0.0422** | 78.8 | 1.4e-28 | −0.0440 | +0.0019 | −0.0403 | **−0.0366** |
+| `cap50` | −0.0210 | 81.1 | 8.0e-35 | −0.0218 | +0.0009 | −0.0201 | −0.0184 |
+| `rare` | −0.0188 | 59.3 | 1.6e-05 | −0.0186 | −0.0002 | −0.0190 | −0.0195 |
+| `pos` | −0.0083 | 52.8 | 0.10 (n.s.) | −0.0118 | +0.0035 | −0.0048 | +0.0022 |
+| `cap80` | −0.0041 | 71.4 | 5.0e-23 | −0.0037 | −0.0004 | −0.0045 | −0.0052 |
+| `corridor` | −0.0021 | 46.3 | 0.62 (n.s.) | −0.0069 | +0.0048 | +0.0027 | +0.0123 |
+
+Binary voting (n = 922 paired cells, `prod` cost 0.4940):
+
+| schedule | d_cost | % improved | p (Wilcoxon) | d_fnr | d_fpr | `fpr x2` | `fpr x4` |
+|---|---|---|---|---|---|---|---|
+| `vslow` | −0.0328 | 66.6 | 9.6e-34 | −0.0879 | +0.0552 | +0.0224 | **+0.1325** |
+| `pos` | −0.0303 | 69.5 | 6.8e-37 | −0.0561 | +0.0259 | −0.0040 | +0.0478 |
+| `rare` | −0.0300 | 69.6 | 8.3e-37 | −0.0555 | +0.0255 | −0.0041 | +0.0470 |
+| `slow` | −0.0273 | 62.0 | 2.0e-26 | −0.0592 | +0.0320 | +0.0050 | +0.0689 |
+| `pure_gmm` | −0.0230 | 60.1 | 1.2e-14 | −0.1122 | +0.0892 | +0.0663 | **+0.2446** |
+| `corridor` | −0.0226 | 62.1 | 4.2e-19 | −0.0332 | +0.0105 | −0.0121 | +0.0090 |
+| **`cap50`** | **−0.0173** | 68.1 | 7.6e-43 | −0.0190 | +0.0018 | −0.0155 | **−0.0119** |
+| `cap80` | −0.0034 | 62.0 | 1.3e-24 | −0.0032 | −0.0002 | −0.0036 | −0.0041 |
+
+Every arm also cut the **degenerate-threshold rate** (−0.0025 binary, −0.0011
+region) — the #2788 cold-start "admit nothing" failure — and moved AP by ≤0.014,
+confirming these are calibration and acquisition effects, not ranking effects.
+
+### The screen under-stated everything, and acquisition is why
+
+The A/B effects are consistently *larger* than the screen's (region `vslow`
+−0.0539 vs −0.0501). The reason shows up past the ramp, at **21+ votes**, where
+every schedule has converged and the blend has no authority at all:
+
+| | `pure_gmm` | `vslow` | `slow` | `cap50` |
+|---|---|---|---|---|
+| region d_cost | −0.1015 | −0.0968 | −0.0592 | (−0.0246 `cap80`) |
+| binary d_cost | −0.0528 | −0.0568 | −0.0367 | −0.0452 |
+
+Nothing but **acquisition feedback** can carry a difference there: the blended
+threshold feeds Autopilot's Hard pick, so a better-calibrated blend asks the
+user to label better items, and the resulting detector stays better long after
+the blend has handed over. On region voting that channel is roughly **twice the
+size of the direct effect** — and it is invisible to any within-step analysis,
+which is exactly why the screen was never allowed to decide.
+
+### Why the winners win: bias vs spread
+
+Mean signed gap to each step's own oracle cut (`bias`; negative = cuts lower)
+and the SD of that gap within a cell (`spread`; lower = steadier):
+
+| region | bias | spread | \|gap\| | | binary | bias | spread | \|gap\| |
+|---|---|---|---|---|---|---|---|---|
+| `pure_gmm` | −0.0038 | 0.0105 | **0.0228** | | `rare` | −0.0009 | 0.0528 | **0.0634** |
+| `vslow` | −0.0003 | 0.0115 | 0.0232 | | `pos` | −0.0010 | 0.0529 | 0.0635 |
+| `slow` | +0.0035 | 0.0135 | 0.0250 | | `vslow` | −0.0354 | 0.0512 | 0.0676 |
+| `cap50` | +0.0100 | 0.0172 | 0.0304 | | `slow` | −0.0151 | 0.0618 | 0.0704 |
+| `rare` | +0.0131 | 0.0175 | 0.0326 | | `pure_gmm` | −0.0561 | 0.0426 | 0.0745 |
+| `prod` | +0.0153 | 0.0230 | 0.0359 | | `cap50` | +0.0125 | 0.0702 | 0.0787 |
+| | | | | | `prod` | +0.0277 | 0.0867 | 0.0935 |
+
+Three things this settles:
+
+1. **Production cuts too high and too noisily.** It has the largest positive
+   bias on both modes and the largest spread on both — the worst-calibrated
+   schedule of the nine on binary voting, and second-worst on region. The whole
+   study's headline is really this: the shipped ramp hands over to a
+   *systematically conservative and unstable* estimate too early.
+2. **The prediction held.** The cap family buys **spread** (binary 0.0702 vs
+   production's 0.0867; region 0.0172 vs 0.0230) while `pure_gmm` on binary buys
+   **bias** (−0.0561, far below the oracle). Averaging with a label-free cut is
+   a variance-reduction operation, and variance reduction helps under any
+   weighting while bias only helps when the weighting likes its direction —
+   which is precisely the `fpr x4` pattern.
+3. **`rare` is the best-calibrated cut on binary voting** (|gap| 0.0634,
+   essentially unbiased) — the rarer-class statistic really is the right thing
+   to ramp on, as #2790's positive-starvation diagnosis predicted. It is not the
+   recommendation only because its *cost* advantage still reverses at `fpr x4`;
+   being closest to the oracle threshold and being robust under reweighting are
+   not the same thing, because a small threshold error maps to a large rate
+   change where the score density is steep.
+
+On region voting `pure_gmm` is both near-unbiased and steadiest, yet still
+loses its advantage at `fpr x4`. That tension is real and unexplained by the
+decomposition alone; it is the clearest open thread this study leaves.
+
+## Limitations
+
+- **COCO carries only binary voting.** The #2790 cache has whole-image and HAC
+  region vectors but not the raw patch grid `max_patch` pools over, so the
+  region-voting verdict rests on Visual Genome alone. A COCO region arm needs a
+  real re-embed; until then, `slow`-for-region is a single-dataset result — the
+  weakest link in this report.
+- **The reweighting is a scoring sensitivity.** Moving the Inclusion knob
+  changes the conformal rule *and* the weights, so `fpr x4` approximates an
+  Inclusion-averse user rather than reproducing one. It was also added
+  post-hoc.
+- **One head, one inclusion, 30 steps.** Everything is the production linear
+  head at inclusion 0 over the first 30 votes. The past-the-ramp window says the
+  effects persist, but nothing here measures a 200-vote session.
+- **A transient full-disk incident** on the shared `/exp/sgreenberg` volume
+  killed ~950 cells mid-run. All were re-run; the 49 files it left behind were
+  zero-byte rather than partially written (verified by field-count validation
+  across every cell in every arm), so no cell contributed truncated data.
+
+## Follow-ups
+
+- **Re-embed COCO with patch grids** so region voting has a second dataset.
+- **Why does `pure_gmm` lose at `fpr x4` on region voting** despite being the
+  closest to the oracle cut and the steadiest? The bias/spread decomposition
+  does not explain it; the likely answer is score-density curvature near the
+  cut, which the harness could measure directly.
+- **`rare` deserves another look.** It is the best-calibrated cut on binary
+  voting and essentially unbiased, but its endpoints (1→8 rare-class labels)
+  were guessed, not tuned. A tuned rare-class ramp may dominate `cap50`.
+- **`corridor` is not dead, it is untuned.** Clamping to the component means is
+  a no-op on region voting (p=0.62) because the corridor is far wider than the
+  x-cal error; a tighter corridor (a fraction of the mean gap) is the version
+  worth testing. Note also that `corridor_ramp` releases its clamp entirely past
+  its endpoint, which is discontinuous — see the class docstring.
 
 ## Provenance
 
