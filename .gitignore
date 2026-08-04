@@ -62,3 +62,5 @@ scratch/
 docs/experiments/**
 !docs/experiments/**/
 !docs/experiments/**/*.md
+docs/experiments/hac-tree
+docs/experiments/hac-leaf-ablation-2
