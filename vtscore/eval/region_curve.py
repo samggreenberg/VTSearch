@@ -916,9 +916,14 @@ def _row_realistic(
     select_mode,
     stop_recommended,
     oracle_extra=None,
+    head_strategy=None,
 ) -> dict:
     row = _row(inputs, head_kind, t, n_bad, seed, threshold, err, oracle, calib, f1, mean_iou, corloc, oracle_extra)
     row["n_pos"] = int(n_good)  # override: for the realistic loop n_pos is the good count, not t
+    # head is the per-step scoring family (cosine vs mlp); the *arm* actually swept is
+    # --head-strategy, which used to survive only in the output directory name and left
+    # re-analyses guessing (#2825). Record it so a row is genuinely self-describing.
+    row["head_strategy"] = head_strategy
     row["t"] = int(t)
     row["n_good"] = int(n_good)
     row["n_bad"] = int(n_bad)
@@ -1205,6 +1210,7 @@ def _realistic_one_seed(
                 select_mode,
                 stop_recommended,
                 oracle_extra=oracle_extra,
+                head_strategy=head_strategy,
             )
         )
         # Per-step labeling record: how the item was surfaced (from pending_meta,
