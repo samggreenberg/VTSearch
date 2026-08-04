@@ -258,7 +258,7 @@ class TestSettingsAPI:
         assert data["theme"] == "system"
         assert data["calibrate_count"] == 2
         assert data["calibration_fraction"] == 0.5
-        assert data["safe_thresholds"] is False
+        assert data["safe_thresholds"] is True
         assert isinstance(data["focus_mode_left"], dict)
         for v in data["focus_mode_left"].values():
             assert v == "click"
