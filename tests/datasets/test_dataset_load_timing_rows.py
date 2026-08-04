@@ -89,9 +89,7 @@ class TestDatasetLoadRecordsTimingRows:
         assert rows, "the sink was created but empty"
         assert {r["task"] for r in rows} == {"dataset_load"}
 
-    def test_rows_cover_the_declared_steps_and_survive_the_fitter(
-        self, isolated_settings, tmp_path, monkeypatch
-    ):
+    def test_rows_cover_the_declared_steps_and_survive_the_fitter(self, isolated_settings, tmp_path, monkeypatch):
         """Rows the fitter rejects are no better than rows never written, so the
         emitted shape is checked through ``normalize_row`` rather than by eye."""
         sink = tmp_path / "timings.jsonl"
@@ -108,9 +106,7 @@ class TestDatasetLoadRecordsTimingRows:
         assert all(r["media_type"] == "audio" and r["embedder"] == "clap" for r in rows)
         assert all(normalize_row(r) is not None for r in rows), "the fitter must accept every emitted row"
 
-    def test_download_size_hint_rides_along_for_byte_scaled_steps(
-        self, isolated_settings, tmp_path, monkeypatch
-    ):
+    def test_download_size_hint_rides_along_for_byte_scaled_steps(self, isolated_settings, tmp_path, monkeypatch):
         """``download``/``extract`` are fit as a per-MB rate, so a load that knows
         its archive size must record it or those two steps go unfittable."""
         sink = tmp_path / "timings.jsonl"
