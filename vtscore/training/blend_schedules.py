@@ -192,10 +192,19 @@ class CorridorSchedule(BlendSchedule):
     The corridor is the interval between the two component means.  Outside it a
     cut is nearly always degenerate - below ``mu_lo`` it admits the entire Bad
     mode, above ``mu_hi`` it rejects the entire Good mode - while the midpoint
-    (the production GMM cut) is its exact centre.  With *ramped* the corridor
-    opens from that midpoint at ``lo`` labels (a zero-width corridor == pure
-    GMM) to the full interval at ``hi``, and is unbounded past it; otherwise the
-    full corridor applies at every label count.
+    (the production GMM cut) is its exact centre.  Unramped, that corridor
+    applies at every label count: the family's own thesis is that a wild cut is
+    never acceptable, however many labels back it.
+
+    With *ramped* the corridor instead opens from the midpoint at ``lo`` labels
+    (zero width == pure GMM) to the full interval at ``hi``, and then **releases
+    entirely** - past ``hi`` the x-cal cut is returned unclamped, matching the
+    production philosophy that enough labels earn full trust.  Note this makes
+    ``ramped`` discontinuous at ``hi`` for a wild x-cal: just below, the cut is
+    clamped to almost the full corridor; at ``hi`` it is not clamped at all.
+    That is deliberate (it is what "ramped" means here) but it is also in
+    tension with the unramped variant's thesis, which is why both are measured.
+    See the #2841 report for which one the data prefers.
 
     Falls back to the plain blend when no GMM fit is available (the median
     fallback path), so the corridor never silently becomes a no-op cut.
@@ -211,6 +220,11 @@ class CorridorSchedule(BlendSchedule):
         # A corridor always consults the x-cal cut (it is the value being
         # clamped), so the fold calibration is never skippable - except where
         # the corridor has collapsed to a point and the answer is the GMM cut.
+        #
+        # This is a *skip* predicate, not a mixing weight: a clamp has no
+        # weighted-average interpretation, so the 1.0 returned here should be
+        # read as "x-cal is consulted", and the ``blend_weight`` column of a
+        # corridor row means nothing more than that.
         if self.ramped and _ramp(ctx.n_labels, self.lo, self.hi) <= 0.0:
             return 0.0
         return 1.0
