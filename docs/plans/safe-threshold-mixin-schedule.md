@@ -5,7 +5,49 @@ blend-vs-no-blend. But the blend has a free schedule inside it — **how much GM
 for how long** — and nobody has ever measured it. This plan is the search for the
 best mix-in curve.
 
-**Status: design/orientation only. No compute launched yet.**
+**Status: machinery built and verified; Phase 1 (screen) launching.**
+
+<!-- item-sep -->
+
+## Pre-registration (written before the screen was launched)
+
+**Disclosure:** two single-cell smoke runs were inspected first, to prove the
+harness emits correct rows (`prod`'s counterfactual row reproduced the live
+blended threshold and cost to 0.000e+00 on both arms). One cell is far below
+any power threshold and is not evidence, but it was seen, so the ranking rules
+below are fixed here rather than after the fact.
+
+**Primary metric.** Inclusion-weighted `cost` (= `wf·FPR + wn·FNR` at
+inclusion 0, i.e. FPR + FNR), averaged over **app-visible steps in the 7–20
+vote window** — 7 because that is the app's first trained-detector step, 20
+because that is where the production ramp ends. Secondary: FNR, FPR, regret vs
+the step's own oracle cut, and the degenerate-cut rate. AP/AUROC are reported
+as guardrails only: a schedule changes the *threshold*, so a ranking move means
+the acquisition path changed, not the blend.
+
+**Reported separately for region voting and binary voting**, never pooled.
+The issue explicitly allows different winners, and the two arms have different
+score geometry (max-pooled vs single-vector), so a pooled number would hide the
+answer rather than summarise it.
+
+**Phase 1 → Phase 2 promotion rule.** The A/B runs take the union of: the top 3
+schedules by mean ramp cost on the region arm, the top 3 on the binary arm, plus
+`prod` (the incumbent) and `pure_gmm` (the issue's straw man) as fixed anchors.
+`pure_xcal` is *not* re-run: it is safe-thresholds OFF, which #2799 already
+measured and rejected.
+
+**Verdict rule.** A schedule replaces `prod` only if, on the **A/B** runs
+(not the screen), it beats `prod` on paired-cell mean cost with p < 0.01 on its
+own arm, and does not lose on the other arm at p < 0.01. Ties go to the
+incumbent. If region and binary voting disagree and both effects survive, the
+recommendation is a per-mode schedule, which the app can express because the
+schedule is resolved per training call.
+
+**Known limitation, stated up front.** The screen re-cuts a single trajectory —
+the one `prod` produced — so it cannot see that a different schedule would have
+labelled different items. #2799 showed that channel is real and can carry a gain
+past the blend's own authority. The screen therefore ranks candidates; only
+Phase 2 decides.
 
 <!-- item-sep -->
 
