@@ -186,6 +186,44 @@ def curves(on: pd.DataFrame, off: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
     return out
 
 
+def make_figures(curve: pd.DataFrame, fig_dir: Path) -> list[str]:
+    """ON-vs-OFF curves per arm: the shape the window tables average over."""
+    try:
+        import matplotlib  # noqa: PLC0415
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt  # noqa: PLC0415
+    except Exception as exc:  # noqa: BLE001 - headless box without matplotlib
+        common.log(f"skipping figures: {type(exc).__name__}")
+        return []
+
+    fig_dir.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+    for metric, ylabel in (("cost", "inclusion-weighted cost"), ("fnr", "FNR"), ("degenerate", "degenerate rate")):
+        if metric not in curve.columns:
+            continue
+        arms = sorted(curve["arm"].unique())
+        fig, axes = plt.subplots(1, len(arms), figsize=(6 * len(arms), 4), squeeze=False)
+        for ax, arm in zip(axes[0], arms, strict=False):
+            sub = curve[curve["arm"] == arm]
+            for run, style in (("safe_off", "--"), ("safe_on", "-")):
+                s = sub[sub["run"] == run].sort_values("n_votes")
+                if not s.empty:
+                    ax.plot(s["n_votes"], s[metric], style, label=run)
+            ax.axvspan(6, 20, color="0.9", zorder=0)  # the ramp window
+            ax.set_title(arm.split("/", 1)[-1], fontsize=9)
+            ax.set_xlabel("votes (n_good + n_bad)")
+            ax.set_ylabel(ylabel)
+            ax.legend(fontsize=8)
+        fig.suptitle(f"{ylabel} vs votes — safe thresholds ON vs OFF (shaded = blend ramp)", fontsize=10)
+        fig.tight_layout()
+        path = fig_dir / f"ab_{metric}_vs_votes.png"
+        fig.savefig(path, dpi=140)
+        plt.close(fig)
+        written.append(path.name)
+    return written
+
+
 def verdict(tbl: pd.DataFrame, scope: str = "app_visible") -> dict:
     """The ship decision: force ``safe_thresholds`` on for every user, or not?
 
@@ -235,6 +273,7 @@ def main() -> int:
     agg_dir = out_dir / "agg"
     tbl = paired_window_table(on, off, agg_dir)
     curve = curves(on, off, agg_dir)
+    figures = make_figures(curve, out_dir / "figures")
     verdicts = {scope: verdict(tbl, scope) for scope in SCOPES}
     v = verdicts["app_visible"]
 
@@ -283,7 +322,8 @@ def main() -> int:
         json.dumps(verdicts, indent=2),
         "```",
         "",
-        f"Curves: `agg/ab_curves_vs_votes.csv` ({len(curve)} rows) · paired cells: `agg/ab_paired_cells.csv`",
+        f"Curves: `agg/ab_curves_vs_votes.csv` ({len(curve)} rows) · paired cells: `agg/ab_paired_cells.csv`"
+        + (f" · figures: {', '.join(figures)}" if figures else ""),
     ]
     (out_dir / "REPORT_AB.md").write_text("\n".join(lines) + "\n")
     common.log(f"wrote {out_dir / 'REPORT_AB.md'}")
