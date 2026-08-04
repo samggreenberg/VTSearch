@@ -66,10 +66,6 @@ class TestSettingsModule:
         settings_mod.reset()
         assert settings_mod.get_inclusion() == 7
 
-    def test_safe_thresholds_default_on(self):
-        """On by default since the #2799 A/B (see the setting's own comment)."""
-        assert settings_mod.get_safe_thresholds() is True
-
     def test_safe_thresholds_opt_out_persists(self, isolated_settings):
         """A user who turns it off keeps it off — the default is only a default."""
         settings_mod.set_safe_thresholds(False)
@@ -192,7 +188,8 @@ class TestSettingsModule:
         assert raw["safe_thresholds"] is True
 
     def test_safe_thresholds_default(self):
-        assert settings_mod.get_safe_thresholds() is False
+        """On by default since the #2799 A/B (see the setting's own comment)."""
+        assert settings_mod.get_safe_thresholds() is True
 
     def test_get_set_show_metadata(self, isolated_settings):
         settings_mod.set_show_metadata(False)
@@ -464,7 +461,7 @@ class TestSettingsModule:
         assert defaults["theme"] == "system"
         assert defaults["calibrate_count"] == 2
         assert defaults["calibration_fraction"] == 0.5
-        assert defaults["safe_thresholds"] is False
+        assert defaults["safe_thresholds"] is True
         assert defaults["show_metadata"] is False
         assert isinstance(defaults["grid_icon_size_left"], dict)
         for v in defaults["grid_icon_size_left"].values():
