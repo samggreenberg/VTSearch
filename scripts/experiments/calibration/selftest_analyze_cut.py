@@ -34,6 +34,17 @@ import pandas as pd
 RAMP_EFFECT = -0.04
 #: Planted decomposition, in threshold units: the prior/loss term dominates.
 PLANTED_TERMS = {"prior_loss": 0.10, "identification": 0.02, "misspecification": 0.01, "transfer": 0.005}
+#: The same chain in cost units, anchored to a noise-free oracle cost, so the
+#: analyzer's "which term dominates" verdict has a known right answer.
+ORACLE_COST = 0.20
+PLANTED_COST_TERMS = {"prior_loss": 0.10, "identification": 0.02, "misspecification": 0.01, "transfer": 0.005}
+#: Raw-cut cost per chain variant, built backwards from the oracle.
+_CHAIN_RAW_COST = {
+    "pooled_sim_oracle": ORACLE_COST + PLANTED_COST_TERMS["transfer"],
+    "pooled_supervised": ORACLE_COST + PLANTED_COST_TERMS["transfer"] + PLANTED_COST_TERMS["misspecification"],
+}
+_CHAIN_RAW_COST["pooled_priorfree"] = _CHAIN_RAW_COST["pooled_supervised"] + PLANTED_COST_TERMS["identification"]
+_CHAIN_RAW_COST["pooled_cross"] = _CHAIN_RAW_COST["pooled_priorfree"] + PLANTED_COST_TERMS["prior_loss"]
 CATEGORIES = ["cat_a", "cat_b", "cat_c"]
 SEEDS = [0, 1, 2, 3]
 ARMS = [("dinov3_patch", "max_patch"), ("siglip", "whole_image")]
@@ -79,8 +90,12 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                     ident = _ident(cat, seed, t, embedder, style)
                     in_ramp = 6 <= t <= 20
                     base_cost = 0.30 + 0.002 * rng.standard_normal()
-                    oracle_cost = base_cost - 0.08
+                    oracle_cost = ORACLE_COST
                     oracle_threshold = 0.50
+                    # Shared jitter: the realised offset and its closed-form
+                    # prediction move together, so the identity stays exact while
+                    # the correlation the analyzer reports is still computable.
+                    jitter = 0.01 * rng.standard_normal()
 
                     # The base (production) row, and the variant that must match it.
                     threshold = 0.55
@@ -89,6 +104,7 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                         # The blended and raw columns move together here except
                         # for the decoy, which wins only after blending.
                         decoy = variant == "pooled_gumbel_cross" and in_ramp
+                        raw_cost = _CHAIN_RAW_COST.get(variant, base_cost) + (0.02 if decoy else 0.0)
                         row = dict(ident)
                         row.update(
                             pool_variant="max",
@@ -101,7 +117,7 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                             gmm_cut=oracle_threshold + (0.0 if variant == WINNER else 0.05),
                             blend_weight=0.5,
                             cut_fallback=0,
-                            raw_cut_cost=base_cost + effect + (0.02 if decoy else 0.0),
+                            raw_cut_cost=raw_cost,
                             raw_cut_fpr=0.1,
                             raw_cut_fnr=0.2,
                             cost=base_cost + effect + (RAMP_EFFECT if decoy else 0.0),
@@ -137,7 +153,7 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                         tau_sim_oracle = tau_test_oracle + PLANTED_TERMS["transfer"]
                         tau_supervised = tau_sim_oracle + PLANTED_TERMS["misspecification"]
                         tau_priorfree = tau_supervised + PLANTED_TERMS["identification"]
-                        tau_cross = tau_priorfree + PLANTED_TERMS["prior_loss"]
+                        tau_cross = tau_priorfree + PLANTED_TERMS["prior_loss"] + jitter
                         d = dict(ident)
                         d.update(
                             geometry=geometry,
@@ -155,7 +171,7 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                             gmm_logit_loglik=1.0,
                             # Equal-variance closed form for this fit, so the
                             # identity check has something exact to recover.
-                            pred_offset_equal_var=PLANTED_TERMS["prior_loss"],
+                            pred_offset_equal_var=PLANTED_TERMS["prior_loss"] + jitter,
                             evt_ok=1,
                             evt_w_lo=0.95,
                             evt_loc_lo=-1.0,
@@ -169,7 +185,7 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                             s_mu_pos=0.80,
                             s_var_pos=0.01,
                             s_prevalence=0.05,
-                            tau_mid=tau_cross - PLANTED_TERMS["prior_loss"],
+                            tau_mid=tau_cross - PLANTED_TERMS["prior_loss"] - jitter,
                             tau_cross=tau_cross,
                             tau_priorfree=tau_priorfree,
                             tau_rate=tau_priorfree,
@@ -261,7 +277,9 @@ def main() -> int:
         ok &= _check("decomposition telescopes", bool((pooled["residual"].abs() < 1e-9).all()))
         for term, planted in PLANTED_TERMS.items():
             got = float(pooled[f"term_{term}"].iloc[0])
-            ok &= _check(f"term {term}", abs(got - planted) < 1e-9, f"{got:.5f} vs {planted}")
+            # prior_loss carries the shared jitter, which averages out over cells.
+            tol = 2e-3 if term == "prior_loss" else 1e-9
+            ok &= _check(f"term {term}", abs(got - planted) < tol, f"{got:.5f} vs {planted}")
         ok &= _check(
             "dominant term named",
             dec["dominant_error_term"] == "prior_loss",
@@ -273,6 +291,11 @@ def main() -> int:
         ok &= _check(
             "offset identity recovered",
             bool(pooled_off) and abs(pooled_off[0]["mean_abs_residual"]) < 1e-9,
+        )
+        ok &= _check(
+            "offset correlation computable",
+            bool(pooled_off) and abs(pooled_off[0]["corr"] - 1.0) < 1e-6,
+            "" if not pooled_off else f"corr={pooled_off[0]['corr']}",
         )
 
         evt = pd.read_csv(root / "agg" / "cut_evt_evidence.csv")
