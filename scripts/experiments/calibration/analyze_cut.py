@@ -321,13 +321,19 @@ def cost_decomposition(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
     )
     if wide.empty or oracle is None:
         return pd.DataFrame()
+    missing = [c for c in COST_CHAIN if c not in wide.columns]
+    if missing:
+        # A chain link that never emitted a row (e.g. an oracle variant with no
+        # root anywhere) would make the whole decomposition silently wrong; say so.
+        common.log(f"cost decomposition skipped - no rows for {missing}")
+        return pd.DataFrame()
     wide = wide.join(oracle.to_frame("oracle_cost"), how="inner").reset_index()
 
-    wide["cost_prior_loss"] = wide.get("pooled_cross") - wide.get("pooled_priorfree")
-    wide["cost_identification"] = wide.get("pooled_priorfree") - wide.get("pooled_supervised")
-    wide["cost_misspecification"] = wide.get("pooled_supervised") - wide.get("pooled_sim_oracle")
-    wide["cost_transfer"] = wide.get("pooled_sim_oracle") - wide["oracle_cost"]
-    wide["cost_total"] = wide.get("pooled_cross") - wide["oracle_cost"]
+    wide["cost_prior_loss"] = wide["pooled_cross"] - wide["pooled_priorfree"]
+    wide["cost_identification"] = wide["pooled_priorfree"] - wide["pooled_supervised"]
+    wide["cost_misspecification"] = wide["pooled_supervised"] - wide["pooled_sim_oracle"]
+    wide["cost_transfer"] = wide["pooled_sim_oracle"] - wide["oracle_cost"]
+    wide["cost_total"] = wide["pooled_cross"] - wide["oracle_cost"]
 
     cols = ["cost_prior_loss", "cost_identification", "cost_misspecification", "cost_transfer", "cost_total"]
     out = []
@@ -382,9 +388,10 @@ def offset_predictions(diag: pd.DataFrame, df: pd.DataFrame, agg_dir: Path) -> d
     keys = ["arm", "category", "seed", "t"]
     v = df[df["gmm_variant"].isin(("pooled_cross", INCUMBENT))]
     wide = v.pivot_table(index=keys, columns="gmm_variant", values="raw_cut_cost", aggfunc="first")
+    if "pooled_cross" not in wide.columns or INCUMBENT not in wide.columns:
+        return {"identity": per_geom.to_dict("records"), "scaling": {"n": 0}}
     penalty = pd.DataFrame(index=wide.index)
-    if "pooled_cross" in wide and INCUMBENT in wide:
-        penalty["penalty"] = wide["pooled_cross"] - wide[INCUMBENT]
+    penalty["penalty"] = wide["pooled_cross"] - wide[INCUMBENT]
     pooled = d[d["geometry"] == "pooled"].set_index(keys)
     joined = penalty.join(pooled[["actual_offset", "pred_offset_equal_var"]], how="inner").dropna()
 
