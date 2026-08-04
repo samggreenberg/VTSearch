@@ -186,6 +186,42 @@ def weight_sensitivity(cells: pd.DataFrame, baseline: str = BASELINE) -> pd.Data
     return pd.DataFrame(out).sort_values(["mode", "fpr x1 (shipped)"]).reset_index(drop=True)
 
 
+def threshold_error_decomposition(df: pd.DataFrame) -> pd.DataFrame:
+    """Split each schedule's distance from the oracle cut into **bias** and **spread**.
+
+    Two very different things can make a schedule score better, and the cost
+    column cannot tell them apart:
+
+    * **Bias** - the cut sits systematically below the oracle's, trading FNR for
+      FPR.  That is a real gain only at an operating point that likes the trade,
+      and it reverses when false positives are weighted more (see
+      :func:`weight_sensitivity`).
+    * **Spread** - the cut is *steadier* step to step.  A noisy threshold is
+      sometimes too high (misses) and sometimes too low (false alarms), so
+      reducing its variance improves **both** error types at once, under any
+      weighting.
+
+    Averaging with a label-free GMM cut is a variance-reduction operation, so
+    the prediction is that schedules keeping a permanent GMM share buy spread
+    while schedules that merely keep the GMM *longer* buy bias.  This measures
+    it instead of assuming it: per schedule, the mean signed gap to the oracle
+    (bias) and the SD of that gap within a cell (spread).
+    """
+    w = df[(df.n_votes >= RAMP_LO) & (df.n_votes <= RAMP_HI)]
+    w = w[np.isfinite(w.get("oracle_threshold", pd.Series(dtype=float)))]
+    if w.empty or "oracle_threshold" not in w.columns:
+        return pd.DataFrame()
+    w = w.assign(gap=w["threshold"] - w["oracle_threshold"])
+    keys = ["mode", "dataset", "embedder", "style", "category", "seed", "schedule"]
+    per_cell = w.groupby(keys, as_index=False).agg(
+        bias=("gap", "mean"),
+        spread=("gap", "std"),
+        abs_gap=("gap", lambda s: s.abs().mean()),
+    )
+    out = per_cell.groupby(["mode", "schedule"], as_index=False)[["bias", "spread", "abs_gap"]].mean()
+    return out.sort_values(["mode", "abs_gap"]).reset_index(drop=True)
+
+
 def past_ramp_effect(df: pd.DataFrame, baseline: str = BASELINE) -> pd.DataFrame:
     """Paired cost delta over steps **past** the production ramp (21+ votes).
 
@@ -298,6 +334,25 @@ def write_report(path: Path, mode: str, deltas: pd.DataFrame, extra: dict) -> No
             _fmt_generic(sens, "binary"),
             "",
         ]
+    decomp = extra.pop("_decomposition", None)
+    if decomp is not None and not decomp.empty:
+        body += [
+            "## Bias vs spread against the oracle cut",
+            "",
+            "`bias` = mean signed gap to the step's own oracle threshold (negative = cuts lower, "
+            "trading FNR for FPR). `spread` = SD of that gap within a cell (lower = steadier). "
+            "A schedule that wins on **spread** improves both error types under any weighting; one "
+            "that wins on **bias** has only moved the operating point.",
+            "",
+            "### Region voting",
+            "",
+            _fmt_generic(decomp, "region"),
+            "",
+            "### Binary voting",
+            "",
+            _fmt_generic(decomp, "binary"),
+            "",
+        ]
     past = extra.pop("_past_ramp", None)
     if past is not None and not past.empty:
         body += [
@@ -347,6 +402,10 @@ def main(argv: list[str] | None = None) -> int:
         sens = weight_sensitivity(cells)
         sens.to_csv(results / "screen_sensitivity.csv", index=False)
         extra["_sensitivity"] = sens
+        decomp = threshold_error_decomposition(df[df.schedule != ""])
+        if not decomp.empty:
+            decomp.to_csv(results / "screen_decomposition.csv", index=False)
+            extra["_decomposition"] = decomp
         write_report(results / "REPORT_screen.md", "screen", deltas, extra)
         deltas.to_csv(results / "screen_deltas.csv", index=False)
         (results / "promote.json").write_text(json.dumps(promote, indent=2))
@@ -371,6 +430,10 @@ def main(argv: list[str] | None = None) -> int:
         sens = weight_sensitivity(cells)
         sens.to_csv(results / "ab_sensitivity.csv", index=False)
         extra["_sensitivity"] = sens
+        decomp = threshold_error_decomposition(df)
+        if not decomp.empty:
+            decomp.to_csv(results / "ab_decomposition.csv", index=False)
+            extra["_decomposition"] = decomp
         past = past_ramp_effect(df)
         if not past.empty:
             past.to_csv(results / "ab_past_ramp.csv", index=False)
