@@ -145,6 +145,62 @@ def paired_vs_baseline(cells: pd.DataFrame, baseline: str = BASELINE) -> pd.Data
     return pd.DataFrame(out).sort_values(["mode", "d_cost"]).reset_index(drop=True)
 
 
+#: Cost weightings the verdict is stress-tested under.  The scored metric is
+#: ``wf*FPR + wn*FNR`` at inclusion 0, where both weights are 1 - so a schedule
+#: can win simply by cutting lower, trading a lot of FNR for a little FPR.  That
+#: is a real win at this operating point, but it would reverse for a user who
+#: cares more about false alarms, and #2790 flagged exactly this trap.  Re-scoring
+#: the same cells under asymmetric weights separates "genuinely better calibrated"
+#: from "merely more permissive".
+COST_WEIGHTS: tuple[tuple[str, float, float], ...] = (
+    ("fpr x1 (shipped)", 1.0, 1.0),
+    ("fpr x2", 2.0, 1.0),
+    ("fpr x4", 4.0, 1.0),
+    ("fnr x2", 1.0, 2.0),
+)
+
+
+def weight_sensitivity(cells: pd.DataFrame, baseline: str = BASELINE) -> pd.DataFrame:
+    """Paired cost delta vs *baseline* under each weighting in :data:`COST_WEIGHTS`.
+
+    A schedule whose advantage survives ``fpr x4`` is better calibrated; one
+    whose advantage flips is only exploiting the symmetric weights.
+    """
+    keys = ["mode", "dataset", "embedder", "style", "category", "seed"]
+    base = cells[cells.schedule == baseline].set_index(keys)
+    out = []
+    for (mode, sched), grp in cells.groupby(["mode", "schedule"]):
+        if sched == baseline:
+            continue
+        g = grp.set_index(keys)
+        shared = g.index.intersection(base.index)
+        if len(shared) < 3:
+            continue
+        a, b = g.loc[shared], base.loc[shared]
+        row = {"mode": mode, "schedule": sched, "n_cells": int(len(shared))}
+        for label, wf, wn in COST_WEIGHTS:
+            ca = wf * a["fpr"] + wn * a["fnr"]
+            cb = wf * b["fpr"] + wn * b["fnr"]
+            row[label] = float((ca - cb).mean())
+        out.append(row)
+    return pd.DataFrame(out).sort_values(["mode", "fpr x1 (shipped)"]).reset_index(drop=True)
+
+
+def past_ramp_effect(df: pd.DataFrame, baseline: str = BASELINE) -> pd.DataFrame:
+    """Paired cost delta over steps **past** the production ramp (21+ votes).
+
+    In an A/B run the schedules have all converged by 21 votes on the
+    ``prod``-shaped curves, so a surviving difference there cannot be the blend
+    acting directly - it is the trajectory, i.e. the blend having steered which
+    items Autopilot asked the user to label.  #2799 found that channel carries
+    real gain, so it is measured rather than assumed away.
+    """
+    cells = cell_means(df, lo=21, hi=10_000)
+    if cells.empty:
+        return pd.DataFrame()
+    return paired_vs_baseline(cells, baseline)
+
+
 def promotion_list(deltas: pd.DataFrame, top_n: int = 3) -> list[str]:
     """The pre-registered phase-2 arm set: top *top_n* per mode + fixed anchors.
 
@@ -185,6 +241,20 @@ def _fmt(deltas: pd.DataFrame, mode: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _fmt_generic(df: pd.DataFrame, mode: str) -> str:
+    g = df[df["mode"] == mode] if "mode" in df.columns else df
+    if g.empty:
+        return "_(none)_\n"
+    cols = [c for c in g.columns if c != "mode"]
+    lines = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
+    for _, r in g.iterrows():
+        cells = [
+            str(r[c]) if isinstance(r[c], str) else (f"{int(r[c])}" if c == "n_cells" else f"{r[c]:+.4f}") for c in cols
+        ]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines) + "\n"
+
+
 def write_report(path: Path, mode: str, deltas: pd.DataFrame, extra: dict) -> None:
     baseline_note = (
         "Every schedule was re-cut on the **same** production trajectory, so rows are exactly "
@@ -210,6 +280,42 @@ def write_report(path: Path, mode: str, deltas: pd.DataFrame, extra: dict) -> No
         "",
         _fmt(deltas, "binary"),
         "",
+    ]
+    sens = extra.pop("_sensitivity", None)
+    if sens is not None and not sens.empty:
+        body += [
+            "## Cost-weighting sensitivity",
+            "",
+            "Same cells, re-scored under asymmetric weights. A winner that survives `fpr x4` is "
+            "better calibrated; one that flips was only cutting lower.",
+            "",
+            "### Region voting",
+            "",
+            _fmt_generic(sens, "region"),
+            "",
+            "### Binary voting",
+            "",
+            _fmt_generic(sens, "binary"),
+            "",
+        ]
+    past = extra.pop("_past_ramp", None)
+    if past is not None and not past.empty:
+        body += [
+            "## Past the ramp (21+ votes)",
+            "",
+            "Where every schedule has converged, so a surviving difference is acquisition "
+            "feedback: the blend having steered which items got labelled.",
+            "",
+            "### Region voting",
+            "",
+            _fmt(past, "region"),
+            "",
+            "### Binary voting",
+            "",
+            _fmt(past, "binary"),
+            "",
+        ]
+    body += [
         "## Provenance",
         "",
         "```json",
@@ -238,6 +344,9 @@ def main(argv: list[str] | None = None) -> int:
         deltas = paired_vs_baseline(cells)
         promote = promotion_list(deltas)
         extra["promote_to_ab"] = promote
+        sens = weight_sensitivity(cells)
+        sens.to_csv(results / "screen_sensitivity.csv", index=False)
+        extra["_sensitivity"] = sens
         write_report(results / "REPORT_screen.md", "screen", deltas, extra)
         deltas.to_csv(results / "screen_deltas.csv", index=False)
         (results / "promote.json").write_text(json.dumps(promote, indent=2))
@@ -259,6 +368,13 @@ def main(argv: list[str] | None = None) -> int:
         extra["n_rows"] = int(len(df))
         cells = cell_means(df)
         deltas = paired_vs_baseline(cells)
+        sens = weight_sensitivity(cells)
+        sens.to_csv(results / "ab_sensitivity.csv", index=False)
+        extra["_sensitivity"] = sens
+        past = past_ramp_effect(df)
+        if not past.empty:
+            past.to_csv(results / "ab_past_ramp.csv", index=False)
+            extra["_past_ramp"] = past
         write_report(results / "REPORT_ab.md", "ab", deltas, extra)
         deltas.to_csv(results / "ab_deltas.csv", index=False)
         print(deltas.to_string(index=False))
