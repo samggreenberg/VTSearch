@@ -85,11 +85,18 @@ submit_arm() {
   if ! [[ "$n" =~ ^[0-9]+$ ]] || [[ "$n" -eq 0 ]]; then
     echo "ERROR: no cells for $tag (prepare not run?)" >&2; return 1
   fi
+  # The cluster caps total queued jobs (MaxJobCount), and one arm is >1300
+  # array tasks, so a batch of arms can be refused partway through.  Fail loudly
+  # instead of printing an empty job id and marching on as if it had worked.
   local j
-  j=$(sbatch --parsable --job-name="mix-$tag" --array=0-$((n-1))%"$CONC" \
+  if ! j=$(sbatch --parsable --job-name="mix-$tag" --array=0-$((n-1))%"$CONC" \
     --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" --partition="$PARTITION" \
     --output="$LOGS/$tag-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $envx && cd $HERE && python run_cells.py")
+    --wrap="source $WT/gridenv.sh && $envx && cd $HERE && python run_cells.py" 2>&1) \
+    || [[ -z "$j" || ! "$j" =~ ^[0-9]+ ]]; then
+    echo "ERROR: sbatch refused arm $tag: $j" >&2
+    return 1
+  fi
   echo "$j"
 }
 
@@ -108,7 +115,7 @@ case "$MODE" in
     echo "analyze: $A"
     ;;
   ab)
-    [[ $# -ge 2 ]] || { echo "usage: launch_mixin.sh ab SCHEDULE [SCHEDULE...]" >&2; exit 1; }
+    [[ $# -ge 1 ]] || { echo "usage: launch_mixin.sh ab SCHEDULE [SCHEDULE...]" >&2; exit 1; }
     JOBS=()
     for sched in "$@"; do
       RESULTS="$CALIB_EXP/results-ab/$sched"
