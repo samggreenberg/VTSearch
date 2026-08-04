@@ -568,13 +568,17 @@ def _safe_gmm_variant_rows(
     sim_image_scores: list[float],
     inclusion: int,
     n_pool_rows: float,
+    schedule: str | None = None,
 ) -> list[dict[str, Any]]:
     """One metric row per safe-threshold GMM variant (issue #2799).
 
     Every variant re-cuts the *same* per-step model: the two candidate sim-set
     score distributions are fitted once per (fit, space) pair, each fit yields
-    both cut rules, and each cut is blended with the step's conformal threshold on
-    the production label ramp.  All variants are evaluated against the same
+    both cut rules, and each cut is blended with the step's conformal threshold
+    under *the run's own mix-in schedule*.  Passing the schedule matters since
+    #2841 made it vary: with the default instead, ``pooled_mid`` would stop
+    reproducing the production blend, which is the property the whole #2799
+    variant family is validated by.  All variants are evaluated against the same
     held-out test scores (*base_scores*, the inference max-pool), so the rows
     are paired within a step by construction.
     """
@@ -600,7 +604,7 @@ def _safe_gmm_variant_rows(
         n_good=int(details.get("n_good", 0)),
         n_bad=int(details.get("n_bad", n_votes)),
     )
-    weight = safe_blend_weight(ctx)
+    weight = safe_blend_weight(ctx, schedule)
     rows: list[dict[str, Any]] = []
     for name, _fit, _cut, _space in _SAFE_GMM_VARIANTS:
         if name == "xcal_only":
@@ -609,7 +613,7 @@ def _safe_gmm_variant_rows(
             provenance = pre_blend_provenance
         else:
             gmm_cut = cuts[(_fit, _space)][_cut]
-            threshold = blend_gmm_threshold(xcal, gmm_cut, ctx)
+            threshold = blend_gmm_threshold(xcal, gmm_cut, ctx, schedule=schedule)
             provenance = "gmm_blend"
         row = _operating_metrics(
             base_scores,
@@ -1831,6 +1835,7 @@ def simulate_voting_iterations(  # noqa: C901
                         sim_image_scores,
                         inclusion,
                         n_pool_rows=metric_rows[0]["n_pool_rows"],
+                        schedule=blend_schedule,
                     )
                 )
             # One extra row per mix-in schedule (issue #2841), on the production

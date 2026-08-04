@@ -25,7 +25,12 @@ from vtscore.training.thresholds import (
 
 
 class TestCalculateSafeThreshold:
-    """Unit tests for the calculate_safe_threshold blending function."""
+    """Unit tests for the calculate_safe_threshold blending function.
+
+    The pure-x-cal cases name ``prod`` explicitly: since #2841 the shipped
+    schedules never hand over completely, so an implicit default here would be
+    asserting a property no shipped schedule has.
+    """
 
     def test_few_labels_returns_gmm(self):
         """With fewer than 6 labels, result should equal the GMM threshold."""
@@ -39,7 +44,7 @@ class TestCalculateSafeThreshold:
         """With >= 20 labels, result equals x-cal."""
         scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
         xcal = 0.45
-        safe = calculate_safe_threshold(xcal, scores, 25)
+        safe = calculate_safe_threshold(xcal, scores, 25, schedule="prod")
         assert safe == pytest.approx(xcal, abs=1e-6)
 
     def test_intermediate_labels_blend(self):
@@ -58,7 +63,7 @@ class TestCalculateSafeThreshold:
         """With >= 20 labels, even extreme x-cal values are used directly."""
         scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
         for xcal in [0.02, 0.98]:
-            safe = calculate_safe_threshold(xcal, scores, 30)
+            safe = calculate_safe_threshold(xcal, scores, 30, schedule="prod")
             assert safe == pytest.approx(xcal, abs=1e-6)
 
     def test_exactly_6_labels_starts_ramp(self):
@@ -73,7 +78,7 @@ class TestCalculateSafeThreshold:
         """At exactly 20 labels, label_weight should be 1 → pure x-cal."""
         scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
         xcal = 0.45
-        safe = calculate_safe_threshold(xcal, scores, 20)
+        safe = calculate_safe_threshold(xcal, scores, 20, schedule="prod")
         assert safe == pytest.approx(xcal, abs=1e-6)
 
     def test_infinite_xcal_falls_back_to_gmm_without_nan(self):
