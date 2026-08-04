@@ -240,6 +240,8 @@ def fit_both_mixtures(scores: list[float] | np.ndarray) -> tuple[GmmFit1D | None
     nan = float("nan")
     params: dict[str, Any] = {
         "sim_n": float(arr.size),
+        # What ``calculate_gmm_threshold`` returns when the fit fails.
+        "fallback_median": float(np.median(arr)) if arr.size else nan,
         "gmm_ok": 1 if gmm is not None else 0,
         "evt_ok": 1 if evt is not None else 0,
         "w_lo": nan,
@@ -307,6 +309,11 @@ def decomposition_cuts(
 
     if gmm is not None:
         cuts.update(gaussian_cuts(gmm, fpr_weight, fnr_weight))
+    else:
+        # Mirror :func:`calculate_gmm_threshold`'s fallback exactly, so the
+        # ``mid`` rule reproduces the shipped threshold even when EM fails - and
+        # so it stays a usable fallback for the rules that have no root.
+        cuts["mid"] = params["fallback_median"]
     if evt is not None:
         cuts.update(evt_cuts(evt, fpr_weight, fnr_weight))
 

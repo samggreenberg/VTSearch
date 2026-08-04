@@ -195,6 +195,7 @@ _CUT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
     "geometry",
     "sim_n",
     "sim_prevalence",
+    "fallback_median",
     # Fitted Gaussian mixture.
     "gmm_ok",
     "w_lo",
