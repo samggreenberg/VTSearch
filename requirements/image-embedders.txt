@@ -34,6 +34,13 @@ pandas
 matplotlib
 scipy
 
+# ── VTSBrowse projection ─────────────────────────────────────────────
+# The Browse canvas fits UMAP on the embedding matrix (vtscore.gpu_backends
+# .umap_fit_transform, imported lazily). Needed by every deployment
+# regardless of media type: nothing else pulls umap-learn in transitively,
+# so omitting it leaves Browse broken at runtime rather than at build time.
+umap-learn
+
 # ── PyTorch (CPU) ────────────────────────────────────────────────────
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch>=2.0.0
