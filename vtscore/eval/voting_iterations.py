@@ -205,7 +205,11 @@ _CUT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
     "var_hi",
     "gmm_loglik",
     "pred_offset_equal_var",
-    # Fitted Gumbel(low) + Normal(high) mixture.
+    "gmm_logit_loglik",
+    # Fitted Gumbel(low) + Normal(high) mixture.  Its component parameters are in
+    # LOGIT units (that is where the extreme-value limit lives and where it is
+    # fitted); its log likelihood is converted back to score space so the two
+    # families are directly comparable.
     "evt_ok",
     "evt_w_lo",
     "evt_loc_lo",

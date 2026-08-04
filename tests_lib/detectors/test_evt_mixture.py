@@ -70,37 +70,64 @@ class TestGumbelNormalMixture:
         assert fit.scale_lo == pytest.approx(0.06, abs=0.02)
         assert fit.mu_hi == pytest.approx(0.80, abs=0.03)
 
-    def test_beats_the_gaussian_mixture_on_max_pooled_scores(self):
+    def _max_pooled_logits(self, seed=13, n=8_000, m=24, prevalence=0.08):
+        """Two modes, each media scored by the max over *m* region logits."""
+        rng = np.random.default_rng(seed)
+        labels = (rng.random(n) < prevalence).astype(float)
+        bad = rng.normal(0.0, 1.0, size=(n, m))
+        logits = bad.max(axis=1)
+        idx = np.flatnonzero(labels == 1.0)
+        others = bad[idx, 1:].max(axis=1) if m > 1 else np.full(idx.size, -np.inf)
+        logits[idx] = np.maximum(rng.normal(3.0, 1.0, size=idx.size), others)
+        return logits
+
+    def test_beats_the_gaussian_mixture_on_max_pooled_logits(self):
         """The misspecification claim, on data generated the way region voting is.
 
-        Each media's score is the max over 24 region logits, which is exactly the
-        regime where a Gaussian low component is the wrong shape.
+        Negatives are all Bad regions, positives carry one object region, and each
+        media scores by the max — exactly the regime where a Gaussian low
+        component is the wrong shape.  But only on the **logit** axis, where the
+        maximum is taken; see the sigmoid-axis control below, which is why the
+        production fit and this one live on different axes.
         """
-        rng = np.random.default_rng(13)
-        n, m = 8_000, 24
-        bad = rng.normal(0.0, 1.0, size=(n, m)).max(axis=1)
-        scores = 1.0 / (1.0 + np.exp(-bad))
-        arr = gmm_fit_array(scores)
+        logits = self._max_pooled_logits()
+        arr = gmm_fit_array(logits)
         gauss = fit_score_gmm(arr)
         evt = fit_gumbel_normal_mixture(arr, init_split=None if gauss is None else gauss.midpoint())
         assert gauss is not None and evt is not None
         assert evt.mean_loglik > gaussian_mixture_mean_loglik(arr, gauss)
 
-    def test_claims_no_advantage_on_single_draw_scores(self):
+    def test_claims_no_advantage_on_the_sigmoid_axis(self):
+        """The control for the *axis*: squashed scores are not Gumbel-shaped.
+
+        A sigmoid is a strong nonlinear squash, so the max-of-m structure that the
+        limit theorem describes is not visible on the score axis and a 2-Gaussian
+        mixture fits it better.  This test exists so that a future change fitting
+        the EVT component on scores instead of logits fails loudly rather than
+        quietly reporting a worse mixture.
+        """
+        logits = self._max_pooled_logits()
+        arr = gmm_fit_array(1.0 / (1.0 + np.exp(-logits)))
+        gauss = fit_score_gmm(arr)
+        evt = fit_gumbel_normal_mixture(arr, init_split=None if gauss is None else gauss.midpoint())
+        assert gauss is not None and evt is not None
+        assert evt.mean_loglik < gaussian_mixture_mean_loglik(arr, gauss)
+
+    def test_claims_no_advantage_on_single_draw_logits(self):
         """m = 1 is not a maximum of anything, so the Gumbel must not win big.
 
-        This is the control that keeps the previous test from merely showing
-        "more flexible shape fits better".
+        The control for the *family*: same axis and machinery, no max-pool. Keeps
+        the max-pooled test from merely showing "more flexible shape fits better".
         """
         rng = np.random.default_rng(14)
-        lo = rng.normal(0.3, 0.08, 9_000)
-        hi = rng.normal(0.75, 0.06, 1_000)
+        lo = rng.normal(-2.0, 1.0, 9_000)
+        hi = rng.normal(2.0, 0.8, 1_000)
         arr = gmm_fit_array(np.concatenate([lo, hi]))
         gauss = fit_score_gmm(arr)
-        evt = fit_gumbel_normal_mixture(arr, init_split=gauss.midpoint())
+        evt = fit_gumbel_normal_mixture(arr, init_split=None if gauss is None else gauss.midpoint())
         assert gauss is not None and evt is not None
         gain = evt.mean_loglik - gaussian_mixture_mean_loglik(arr, gauss)
-        assert gain < 0.05
+        assert gain < 0.02
 
     def test_too_few_points_returns_none(self):
         assert fit_gumbel_normal_mixture(np.array([0.1, 0.2])) is None

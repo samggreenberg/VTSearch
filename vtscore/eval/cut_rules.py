@@ -59,6 +59,33 @@ from vtscore.training.evt_mixture import (
 )
 from vtscore.training.thresholds import GmmFit1D, fit_score_gmm, gmm_fit_array
 
+#: Sigmoid scores are clipped into ``[eps, 1-eps]`` before the logit transform so
+#: saturated scores stay finite.
+_LOGIT_EPS = 1e-6
+
+
+def _to_logit(x: np.ndarray) -> np.ndarray:
+    p = np.clip(np.asarray(x, dtype=np.float64), _LOGIT_EPS, 1.0 - _LOGIT_EPS)
+    return np.log(p) - np.log1p(-p)
+
+
+def _from_logit(u: float) -> float:
+    return float(1.0 / (1.0 + math.exp(-u)))
+
+
+def _mean_log_jacobian(x: np.ndarray) -> float:
+    """``mean log |du/dx|`` for ``u = logit(x)``, i.e. ``-mean log(x(1-x))``.
+
+    A density fitted in logit space cannot be compared to one fitted in score
+    space without this: ``f_x(x) = f_u(u) * du/dx``.  Adding it converts a
+    logit-space log likelihood into the score-space one, which is what makes the
+    Gaussian-vs-Gumbel comparison a like-for-like model comparison rather than an
+    artefact of the axis each was fitted on.
+    """
+    p = np.clip(np.asarray(x, dtype=np.float64), _LOGIT_EPS, 1.0 - _LOGIT_EPS)
+    return float(-np.mean(np.log(p) + np.log1p(-p)))
+
+
 #: Cut rules backed by the Gaussian mixture, in the order they are reported.
 GAUSSIAN_RULES: tuple[str, ...] = ("mid", "cross", "priorfree", "rate")
 #: Cut rules backed by the Gumbel(low) + Normal(high) mixture.
@@ -96,12 +123,22 @@ def gaussian_cuts(fit: GmmFit1D, fpr_weight: float, fnr_weight: float) -> dict[s
 
 
 def evt_cuts(fit: GumbelNormalFit1D, fpr_weight: float, fnr_weight: float) -> dict[str, float]:
-    """Every EVT-family cut from one Gumbel+Normal fit.  NaN where undefined."""
-    return {
-        "gumbel_cross": _finite(fit.crossing()),
-        "gumbel_priorfree": _finite(fit.rate_crossing(1.0, 1.0)),
-        "gumbel_rate": _finite(fit.rate_crossing(fpr_weight, fnr_weight)),
-    }
+    """Every EVT-family cut from one Gumbel+Normal fit, mapped back to score space.
+
+    The fit lives in **logit** space (see :func:`fit_both_mixtures`), but a
+    density crossing is invariant under a monotone reparametrisation: both sides
+    of ``w_lo*f_lo == lam*w_hi*f_hi`` pick up the same Jacobian, which cancels.
+    So the root can be solved on the logit axis and squashed back, and it is the
+    same point as solving in score space would have given.
+    """
+    out = {}
+    for name, cut in (
+        ("gumbel_cross", fit.crossing()),
+        ("gumbel_priorfree", fit.rate_crossing(1.0, 1.0)),
+        ("gumbel_rate", fit.rate_crossing(fpr_weight, fnr_weight)),
+    ):
+        out[name] = float("nan") if cut is None else _from_logit(cut)
+    return out
 
 
 def supervised_cut(
@@ -175,15 +212,31 @@ def sim_oracle_cut(
 def fit_both_mixtures(scores: list[float] | np.ndarray) -> tuple[GmmFit1D | None, GumbelNormalFit1D | None, dict]:
     """Fit the Gaussian and the Gumbel+Normal mixture to the same sample.
 
-    Both see the identical (possibly subsampled) array and the EVT fit is seeded
-    from the Gaussian one's midpoint, so ``evt_loglik_gain`` - the per-point log
-    likelihood difference - is a like-for-like comparison of the two low-component
-    shapes rather than an initialisation artefact.  A positive gain is direct
-    evidence for the misspecification hypothesis.
+    **The EVT fit is done in logit space, and that is not a detail.**  The
+    extreme-value limit applies to the max of the *region logits*; the score is
+    that max pushed through a sigmoid, which is a strongly nonlinear squash, so a
+    Gumbel fitted to sigmoid scores is fitting the wrong axis and measurably
+    loses to a 2-Gaussian mixture.  On the logit axis - where the maximum is
+    actually taken - the family is the right one.  (This is a different claim
+    from #2799's dead logit-space *Gaussian* variant: the cut is invariant to a
+    monotone reparametrisation, so moving a Gaussian across spaces changes little;
+    changing the *family* to the one the limit theorem names is the hypothesis.)
+
+    Both fits see the identical (possibly subsampled) sample and the EVT fit is
+    seeded from the Gaussian one's midpoint, so ``evt_loglik_gain`` is not an
+    initialisation artefact.  It is reported in **score-space** units: the
+    logit-space log likelihoods have the change-of-variable Jacobian added back
+    (:func:`_mean_log_jacobian`), without which a cross-space comparison is
+    meaningless.  ``gmm_logit_loglik`` is the same Gaussian mixture fitted on the
+    logit axis, so a gain can be attributed to the *family* rather than the axis.
     """
     arr = gmm_fit_array(scores)
     gmm = fit_score_gmm(arr)
-    evt = fit_gumbel_normal_mixture(arr, init_split=None if gmm is None else gmm.midpoint())
+    u = _to_logit(arr)
+    jac = _mean_log_jacobian(arr)
+    gmm_logit = fit_score_gmm(u)
+    init = None if gmm is None else float(_to_logit(np.array([gmm.midpoint()]))[0])
+    evt = fit_gumbel_normal_mixture(u, init_split=init)
     nan = float("nan")
     params: dict[str, Any] = {
         "sim_n": float(arr.size),
@@ -201,10 +254,13 @@ def fit_both_mixtures(scores: list[float] | np.ndarray) -> tuple[GmmFit1D | None
         "evt_mu_hi": nan,
         "evt_var_hi": nan,
         "gmm_loglik": nan,
+        "gmm_logit_loglik": nan,
         "evt_loglik": nan,
         "evt_loglik_gain": nan,
         "pred_offset_equal_var": nan,
     }
+    if gmm_logit is not None:
+        params["gmm_logit_loglik"] = gaussian_mixture_mean_loglik(u, gmm_logit) + jac
     if gmm is not None:
         params.update(
             w_lo=gmm.w_lo,
@@ -217,13 +273,14 @@ def fit_both_mixtures(scores: list[float] | np.ndarray) -> tuple[GmmFit1D | None
             pred_offset_equal_var=gmm.equal_var_offset(),
         )
     if evt is not None:
+        # These four are in logit units; the loglik is converted to score space.
         params.update(
             evt_w_lo=evt.w_lo,
             evt_loc_lo=evt.loc_lo,
             evt_scale_lo=evt.scale_lo,
             evt_mu_hi=evt.mu_hi,
             evt_var_hi=evt.var_hi,
-            evt_loglik=evt.mean_loglik,
+            evt_loglik=evt.mean_loglik + jac,
         )
     if gmm is not None and evt is not None:
         params["evt_loglik_gain"] = params["evt_loglik"] - params["gmm_loglik"]
@@ -270,5 +327,6 @@ def decomposition_cuts(
             z = (tau_star - gmm.mu_lo) / math.sqrt(gmm.var_lo)
             params["oracle_lo_sf_gauss"] = float(0.5 * math.erfc(z / math.sqrt(2.0)))
         if evt is not None:
-            params["oracle_lo_sf_evt"] = evt.lo_survival(tau_star)
+            # The EVT fit lives on the logit axis, so the tail level is read there.
+            params["oracle_lo_sf_evt"] = evt.lo_survival(float(_to_logit(np.array([tau_star]))[0]))
     return cuts, params
