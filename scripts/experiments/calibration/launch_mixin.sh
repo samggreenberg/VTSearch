@@ -74,6 +74,13 @@ submit_arm() {
   local results="$1" extra="$2" tag="$3"
   local envx="$BASE_ENV CALIB_RESULTS=$results $extra"
   mkdir -p "$results/cells"
+  # Every arm writes its own results dir but reads the *one* prepare stage, so
+  # the category selection and startup exemplars are identical across arms by
+  # construction - otherwise arms would differ by more than their schedule.
+  local prepared="$CALIB_EXP/results"
+  [[ -f "$prepared/prepare_info.json" ]] || { echo "ERROR: run prepare_data.py first" >&2; return 1; }
+  ln -sfn "$prepared/prepare_info.json" "$results/prepare_info.json"
+  ln -sfn "$prepared/crops" "$results/crops"
   local n; n=$(cell_count "$envx")
   if ! [[ "$n" =~ ^[0-9]+$ ]] || [[ "$n" -eq 0 ]]; then
     echo "ERROR: no cells for $tag (prepare not run?)" >&2; return 1
