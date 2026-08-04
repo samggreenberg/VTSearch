@@ -1,22 +1,29 @@
-"""Tests for the equal-density cut rule in ``calculate_gmm_threshold`` (issue #2798).
+"""Tests for the equal-density crossing solver (issue #2798, reverted by #2833).
 
-The threshold used to be the midpoint between the two fitted component means.
-That rule is only the Bayes boundary when the components are equal-weight and
-equal-variance; under region voting a media's score is the max over ~24 region
-nodes, so the Bad mode is an extreme-value statistic - wider, right-skewed, and
-far heavier than the Good mode - and the midpoint lands inside Bad mass.  These
-tests pin the crossing solver's algebra, its degenerate-case fallbacks, and the
-end-to-end behaviour change on a max-pooled distribution.
+#2798 cut ``calculate_gmm_threshold`` at the two fitted components' equal-density
+crossing instead of the midpoint between their means, on the argument that under
+region max-pooling the Bad mode is an extreme-value statistic (wider, heavier)
+so the midpoint lands inside Bad mass.  #2799 measured the two rules as paired
+within-step variants and the crossing lost on cost, so #2833 put production back
+on the midpoint.
+
+The solver survives as an eval variant (``*_cross`` in ``_SAFE_GMM_VARIANTS``)
+and as the starting point for #2836, so its algebra and degenerate-case
+fallbacks are still pinned here.  ``TestGmmThresholdCutRule`` pins the other
+half: that ``calculate_gmm_threshold`` no longer consults it.
 """
 
 import math
 from unittest import mock
 
 import numpy as np
+import pytest
 
 from vtscore.training.thresholds import (
     _weighted_gaussian_crossing,
     calculate_gmm_threshold,
+    fit_score_gmm,
+    gmm_fit_array,
 )
 
 
@@ -101,50 +108,60 @@ def _pooled_scores(n, mu, sd, rng, k=24):
     return np.max(1.0 / (1.0 + np.exp(-logits)), axis=1)
 
 
+def _fitted_midpoint(scores: np.ndarray) -> float:
+    """The midpoint between the means of the same GMM ``calculate_gmm_threshold`` fits."""
+    from sklearn.mixture import GaussianMixture
+
+    fitted = GaussianMixture(n_components=2, random_state=42).fit(np.asarray(scores).reshape(-1, 1))
+    assert fitted.means_ is not None
+    return float(np.ravel(fitted.means_).mean())
+
+
 class TestGmmThresholdCutRule:
-    def test_symmetric_bimodal_still_cuts_at_the_midpoint(self):
-        """Equal-weight, equal-variance modes: the rule change is a no-op."""
+    def test_symmetric_bimodal_cuts_at_the_midpoint(self):
+        """Equal-weight, equal-variance modes: both rules agree here anyway."""
         rng = np.random.default_rng(1)
         lo = rng.normal(0.2, 0.05, size=5000)
         hi = rng.normal(0.8, 0.05, size=5000)
         scores = np.clip(np.concatenate([lo, hi]), 0.0, 1.0).tolist()
         assert abs(calculate_gmm_threshold(scores) - 0.5) < 0.02
 
-    def test_max_pooled_distribution_cuts_above_the_midpoint(self):
-        """On a region-voted score distribution the cut moves up off the midpoint."""
-        from sklearn.mixture import GaussianMixture
+    def test_max_pooled_distribution_still_cuts_at_the_midpoint(self):
+        """The #2833 revert, on the geometry where the two rules disagree most.
 
+        A region-voted score distribution is exactly where #2798's crossing pulled
+        the cut up off the midpoint; production must now sit on the midpoint again.
+        """
         rng = np.random.default_rng(7)
         bad = _pooled_scores(950, -2.0, 1.0, rng)
         good = _pooled_scores(50, 1.5, 1.0, rng)
         scores = np.concatenate([bad, good])
 
-        threshold = calculate_gmm_threshold(scores.tolist())
-        fitted = GaussianMixture(n_components=2, random_state=42).fit(scores.reshape(-1, 1))
-        assert fitted.means_ is not None
-        midpoint = float(np.ravel(fitted.means_).mean())
+        midpoint = _fitted_midpoint(scores)
+        assert calculate_gmm_threshold(scores.tolist()) == pytest.approx(midpoint)
 
-        assert threshold > midpoint
-        # And it buys real precision: same recall, far fewer Bad medias admitted.
-        assert (good >= threshold).sum() == (good >= midpoint).sum()
-        assert (bad >= threshold).sum() < (bad >= midpoint).sum()
+        # The fixture is only meaningful if the reverted rule really would differ:
+        # the crossing on this fit sits above the midpoint, and trades FPR for FNR.
+        fit = fit_score_gmm(gmm_fit_array(scores.tolist()))
+        assert fit is not None
+        crossing = fit.crossing_or_midpoint()
+        assert crossing > midpoint
+        assert (bad >= crossing).sum() < (bad >= midpoint).sum()
 
-    def test_falls_back_to_the_midpoint_when_no_crossing_exists(self):
-        """A ``None`` from the solver must land exactly on the old midpoint rule."""
-        from sklearn.mixture import GaussianMixture
+    def test_the_crossing_solver_is_not_consulted(self):
+        """Production is on the midpoint outright, not on a crossing that falls back.
 
+        Sabotaging the solver must not move the threshold by a single ULP - the
+        rule no longer routes through it at all.
+        """
         rng = np.random.default_rng(2)
-        scores = np.clip(
-            np.concatenate([rng.normal(0.25, 0.04, size=800), rng.normal(0.75, 0.09, size=200)]),
-            0.0,
-            1.0,
-        )
-        fitted = GaussianMixture(n_components=2, random_state=42).fit(scores.reshape(-1, 1))
-        assert fitted.means_ is not None
-        midpoint = float(np.ravel(fitted.means_).mean())
-
-        with mock.patch("vtscore.training.thresholds._weighted_gaussian_crossing", return_value=None):
-            assert calculate_gmm_threshold(scores.tolist()) == midpoint
+        scores = _pooled_scores(1000, -1.0, 1.1, rng).tolist()
+        expected = calculate_gmm_threshold(scores)
+        with mock.patch(
+            "vtscore.training.thresholds._weighted_gaussian_crossing",
+            side_effect=AssertionError("the production cut must not call the crossing solver"),
+        ):
+            assert calculate_gmm_threshold(scores) == expected
 
     def test_threshold_stays_inside_the_score_range(self):
         rng = np.random.default_rng(5)

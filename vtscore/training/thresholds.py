@@ -98,16 +98,27 @@ def _weighted_gaussian_crossing(
     Solves ``w_lo * N(x; mu_lo, var_lo) == w_hi * N(x; mu_hi, var_hi)``.  Taking
     logs makes the difference a quadratic ``f(x) = a x^2 + b x + c`` (``f > 0``
     means the Bad component owns that score), so the crossing is a root of that
-    quadratic - the Bayes decision boundary between the two fitted components.
+    quadratic - the Bayes decision boundary between the two fitted components
+    **with the mixture weights as class priors**, i.e. the cut that minimises
+    expected misclassification *count*.
 
-    This is the cut the midpoint-between-means rule only approximates, and the
-    two agree **exactly** when the components are equal-weight and equal-variance.
-    They diverge precisely where region voting lives: a media's score is the max
-    over ~24 region nodes, so the Bad mode is an extreme-value statistic - wider,
-    right-skewed, and far heavier than the Good mode.  A wider/heavier low
-    component pushes the crossing *above* the midpoint (with equal variances the
-    offset is ``var * ln(w_lo/w_hi) / (mu_hi - mu_lo)``), so the midpoint sits
-    inside Bad mass and over-includes.
+    **Not the shipped cut.**  Production cuts at the midpoint between the means
+    (:func:`calculate_gmm_threshold`); this solver stays live only as an eval
+    variant (``*_cross`` in :data:`vtscore.eval.voting_iterations._SAFE_GMM_VARIANTS`).
+    #2798 shipped it on the geometry argument below and #2799 measured it as a
+    small net loss (+0.0036 cost at 6-20 votes, +0.0059 at 2-5), so #2833 reverted
+    it.  The geometry argument was right in *direction* - the crossing does sit
+    above the midpoint under max-pooling - but the exchange rate is unfavourable:
+    it buys ~1 FPR for ~1.3 FNR, and for a needle-finding tool the missed positive
+    is the worse error.  #2836 is the open question of why (leading hypothesis:
+    we score a *rate* loss, so the prior-odds term in this crossing is the bias).
+
+    The crossing and the midpoint agree **exactly** when the components are
+    equal-weight and equal-variance.  They diverge precisely where region voting
+    lives: a media's score is the max over ~24 region nodes, so the Bad mode is an
+    extreme-value statistic - wider, right-skewed, and far heavier than the Good
+    mode.  A wider/heavier low component pushes the crossing *above* the midpoint
+    (with equal variances the offset is ``var * ln(w_lo/w_hi) / (mu_hi - mu_lo)``).
 
     Returns ``None`` - meaning "the caller should fall back to the midpoint" -
     whenever the crossing is not a well-defined boundary: non-positive weights or
@@ -150,8 +161,8 @@ class GmmFit1D:
 
     Carries exactly the parameters the two candidate cut rules need, so one EM
     fit can be re-cut under both rules (the safe-threshold measurement study,
-    issue #2799) instead of re-fitting per rule.  ``lo`` is the Bad (low-mean)
-    component, ``hi`` the Good one.
+    issue #2799, and its #2836 follow-up) instead of re-fitting per rule.  ``lo``
+    is the Bad (low-mean) component, ``hi`` the Good one.
     """
 
     w_lo: float
@@ -162,11 +173,11 @@ class GmmFit1D:
     var_hi: float
 
     def midpoint(self) -> float:
-        """The historical cut: the midpoint between the two component means."""
+        """The production cut: the midpoint between the two component means."""
         return (self.mu_lo + self.mu_hi) / 2.0
 
     def crossing_or_midpoint(self) -> float:
-        """The production cut: equal-density crossing, midpoint when none exists."""
+        """Eval-only cut (#2798, reverted by #2833): equal-density crossing, midpoint when none exists."""
         crossing = _weighted_gaussian_crossing(self.w_lo, self.mu_lo, self.var_lo, self.w_hi, self.mu_hi, self.var_hi)
         return self.midpoint() if crossing is None else crossing
 
@@ -231,18 +242,16 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
     """Use a Gaussian Mixture Model to find a threshold between two score distributions.
 
     Fits a 2-component GMM to the provided scores, assuming a bimodal distribution
-    representing Bad (low) and Good (high) classes.  Returns the **equal-density
-    crossing** of the two fitted components (see :func:`_weighted_gaussian_crossing`)
-    - the score at which a media stops being better explained by the Bad component
-    than by the Good one - falling back to the midpoint between the component means
-    when no crossing exists strictly between them.
+    representing Bad (low) and Good (high) classes, and returns the **midpoint
+    between the two fitted component means**.
 
-    The crossing and the midpoint coincide for equal-weight, equal-variance
-    components; they separate when the low component is wider or heavier, which is
-    the standing shape of a region-voted score distribution (every media's score is
-    a max over ~24 region nodes, so even a thoroughly Bad image gets ~24 draws at a
-    false positive).  Cutting at the midpoint there lands inside Bad mass and
-    over-includes.
+    #2798 replaced this midpoint with the components' equal-density crossing (see
+    :func:`_weighted_gaussian_crossing`) on the geometry argument that max-pooling
+    fattens the Bad mode, so the midpoint cuts inside Bad mass.  #2799 measured the
+    two as paired within-step variants and the crossing lost on cost in every
+    max-pooled window (report ``docs/experiments/safe-thresholds/REPORT.md``), so
+    #2833 reverted to the midpoint.  The crossing solver is retained for the eval
+    variant family and for #2836, which is looking for a third, better-founded cut.
 
     For score sets larger than :data:`_GMM_MAX_SAMPLES`, fits on a deterministic
     (seed-42) random subsample - the two-Gaussian fit is unchanged in practice
@@ -265,7 +274,7 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
         # If GMM fails, return median (of the subsample when one was taken -
         # representative of the full distribution and keeps this path bounded).
         return float(np.median(arr))
-    return fit.crossing_or_midpoint()
+    return fit.midpoint()
 
 
 def _score_rows_digest(score_rows_by_group: dict | None) -> bytes | None:

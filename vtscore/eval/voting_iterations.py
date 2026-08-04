@@ -498,11 +498,13 @@ def _operating_metrics(
 #: ``fit_scores`` picks which sim-set score distribution the GMM is fitted on
 #: ("pooled" = the style's inference max-pool, what production fits post-#2797;
 #: "image" = the whole-image vector scores, the historical pre-#2797 geometry).
-#: ``cut`` picks the rule ("cross" = equal-density crossing, production
-#: post-#2798; "mid" = midpoint-of-means, historical).  ``space`` fits the GMM
-#: on sigmoid scores ("sig") or their logits ("logit", the #2798 open idea).
-#: ``xcal_only`` is the no-blend control: the raw conformal threshold at the
-#: same step.  ``pooled_cross`` must reproduce the production blend exactly.
+#: ``cut`` picks the rule ("mid" = midpoint-of-means, what production ships:
+#: #2798 swapped it for the crossing, #2799 measured that as a net loss and
+#: #2833 reverted it; "cross" = the equal-density crossing, kept as a variant
+#: for the #2836 follow-up).  ``space`` fits the GMM on sigmoid scores ("sig")
+#: or their logits ("logit", the #2798 open idea).  ``xcal_only`` is the
+#: no-blend control: the raw conformal threshold at the same step.
+#: ``pooled_mid`` must reproduce the production blend exactly.
 _SAFE_GMM_VARIANTS: tuple[tuple[str, str, str, str], ...] = (
     ("xcal_only", "", "", ""),
     ("image_mid", "image", "mid", "sig"),
@@ -523,7 +525,7 @@ def _gmm_cuts(scores: list[float], space: str) -> dict[str, float]:
 
     Mirrors :func:`vtscore.training.thresholds.calculate_gmm_threshold`'s
     semantics per fallback (0.5 below 2 scores, median on fit failure) so the
-    ``("cross", "sig")`` cut blended on the pooled scores reproduces the
+    ``("mid", "sig")`` cut blended on the pooled scores reproduces the
     production safe threshold bit-for-bit.  With ``space="logit"`` the GMM is
     fitted on the logit-transformed sample and the cut mapped back through the
     sigmoid; the median fallback stays in the original space (the sigmoid is
