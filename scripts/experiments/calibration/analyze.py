@@ -49,7 +49,9 @@ def _arm(row) -> str:
 
 
 def load_all(cells_dir: Path) -> tuple[pd.DataFrame, pd.DataFrame]:
-    main_files = sorted(p for p in cells_dir.glob("task_*.csv") if "__sweep" not in p.name)
+    main_files = sorted(
+        p for p in cells_dir.glob("task_*.csv") if "__sweep" not in p.name and "__cutdiag" not in p.name
+    )
     sweep_files = sorted(cells_dir.glob("task_*__sweep.csv"))
     main = pd.concat([pd.read_csv(p) for p in main_files], ignore_index=True) if main_files else pd.DataFrame()
     sweep = pd.concat([pd.read_csv(p) for p in sweep_files], ignore_index=True) if sweep_files else pd.DataFrame()
