@@ -66,6 +66,16 @@ class TestSettingsModule:
         settings_mod.reset()
         assert settings_mod.get_inclusion() == 7
 
+    def test_safe_thresholds_default_on(self):
+        """On by default since the #2799 A/B (see the setting's own comment)."""
+        assert settings_mod.get_safe_thresholds() is True
+
+    def test_safe_thresholds_opt_out_persists(self, isolated_settings):
+        """A user who turns it off keeps it off — the default is only a default."""
+        settings_mod.set_safe_thresholds(False)
+        settings_mod.reset()
+        assert settings_mod.get_safe_thresholds() is False
+
     def test_autofind_detectors_default_empty(self):
         assert settings_mod.get_autofind_detectors() == []
 

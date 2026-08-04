@@ -341,7 +341,14 @@ class UserSettings(BaseModel):
     # concrete theme to opt out and return to "system" to opt back in.
     theme: Theme = "system"
     enrich_descriptions: bool = False
-    safe_thresholds: bool = False
+    # On by default since the #2799 A/B: blending the conformal cut with the GMM
+    # threshold below ~13 votes cut cost 0.546 -> 0.472 and FNR 0.416 -> 0.346 on
+    # the production region-vote arm (81 % of cells improved, p = 5.6e-23),
+    # *without* raising FPR, and the gain persists past the blend's authority
+    # because the threshold steers Autopilot's next pick.  See
+    # docs/experiments/safe-thresholds/REPORT.md.  Users who already toggled it
+    # keep their stored value; this default only applies to fresh settings.
+    safe_thresholds: bool = True
     calibrate_count: Annotated[int, _clamp(1, 100)] = DEFAULT_CALIBRATE_COUNT
     calibration_fraction: Annotated[float, _clamp(0.0, 1.0)] = 0.5
     audio_playing: bool = True
