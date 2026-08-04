@@ -31,11 +31,15 @@ import numpy as np
 #: Floors that keep a degenerate M-step from producing a spike component.
 _MIN_SCALE = 1e-9
 _MIN_VAR = 1e-12
-#: Fixed-point / EM iteration budgets.  Both converge in well under these on
-#: real score samples; the caps only bound the pathological cases.
-_SCALE_ITERS = 200
-_EM_ITERS = 200
-_EM_TOL = 1e-9
+#: Fixed-point / EM iteration budgets.  Both converge in well under these on real
+#: score samples; the caps only bound the pathological cases.  The tolerances are
+#: deliberately looser than float precision: this fit runs once per step per cell
+#: (and once per replicate in the theory bench), and the last few digits of a
+#: scale parameter cannot move a cut by anything a threshold comparison can see.
+_SCALE_ITERS = 100
+_SCALE_TOL = 1e-10
+_EM_ITERS = 100
+_EM_TOL = 1e-8
 #: Bisection steps for the crossing root.  60 halvings take a unit interval to
 #: ~1e-18, i.e. below float64 resolution on a [0, 1] score axis.
 _BISECT_ITERS = 60
@@ -51,7 +55,7 @@ def _normal_logpdf(x: np.ndarray, mu: float, var: float) -> np.ndarray:
     return -0.5 * (math.log(2.0 * math.pi * var) + (x - mu) ** 2 / var)
 
 
-def _weighted_gumbel_mle(x: np.ndarray, w: np.ndarray) -> tuple[float, float] | None:
+def _weighted_gumbel_mle(x: np.ndarray, w: np.ndarray, init_scale: float | None = None) -> tuple[float, float] | None:
     """Weighted MLE ``(loc, scale)`` for a Gumbel, by the standard fixed point.
 
     The score equations reduce to a single fixed point in the scale,
@@ -61,6 +65,13 @@ def _weighted_gumbel_mle(x: np.ndarray, w: np.ndarray) -> tuple[float, float] | 
     ``e^{-x/scale}`` underflows to zero for every point unless the largest
     exponent is factored out first (the ratio is shift-invariant, and the shift
     re-enters ``loc`` as an additive term).
+
+    *init_scale* warm-starts the fixed point.  This is not a micro-optimisation:
+    the M-step runs inside an EM loop where the scale barely moves between
+    iterations, so warm-starting collapses the inner loop to one or two passes
+    and takes the whole fit from ``O(EM * SCALE_ITERS * n)`` to about
+    ``O(EM * n)`` - the difference between a fit that costs a minute and one
+    that costs a moment, at every step of every cell.
     """
     total = float(w.sum())
     if total <= 0.0 or x.size == 0:
@@ -71,6 +82,8 @@ def _weighted_gumbel_mle(x: np.ndarray, w: np.ndarray) -> tuple[float, float] | 
         return None
     # Method-of-moments start: Var(Gumbel) = pi^2 scale^2 / 6.
     scale = max(math.sqrt(6.0 * var) / math.pi, _MIN_SCALE)
+    if init_scale is not None and math.isfinite(init_scale) and init_scale > _MIN_SCALE:
+        scale = init_scale
 
     for _ in range(_SCALE_ITERS):
         u = -x / scale
@@ -83,7 +96,7 @@ def _weighted_gumbel_mle(x: np.ndarray, w: np.ndarray) -> tuple[float, float] | 
         if not (math.isfinite(nxt) and nxt > 0.0):
             return None
         nxt = max(nxt, _MIN_SCALE)
-        converged = abs(nxt - scale) <= 1e-12 * max(1.0, scale)
+        converged = abs(nxt - scale) <= _SCALE_TOL * max(1.0, scale)
         scale = nxt
         if converged:
             break
@@ -204,8 +217,8 @@ def fit_gumbel_normal_mixture(
     loc_lo = scale_lo = mu_hi = var_hi = float("nan")
     ll = -math.inf
     for _ in range(_EM_ITERS):
-        # --- M step ---
-        gum = _weighted_gumbel_mle(x, r)
+        # --- M step (warm-started from the previous iteration's scale) ---
+        gum = _weighted_gumbel_mle(x, r, init_scale=None if math.isnan(scale_lo) else scale_lo)
         if gum is None:
             return None
         loc_lo, scale_lo = gum

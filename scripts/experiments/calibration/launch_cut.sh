@@ -66,5 +66,25 @@ T=$(sbatch --parsable --job-name=cut-theory --mem=8G --cpus-per-task=4 \
   --wrap="source $WT/gridenv.sh && export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS && cd $HERE && python theory_bench.py --reps ${CUT_THEORY_REPS:-40}")
 echo "theory bench job: $T   -> $CALIB_RESULTS/theory/"
 
-# --- The data half: the standard prepare -> cells -> analyze chain. ---
+# --- The data half. ---
+# The arms are identical to #2799's, so its prepare output (the category counts
+# in prepare_info.json and the exemplar-crop symlinks into the Max-Patch results)
+# is reusable verbatim.  Seeding from it skips the GPU prepare stage entirely,
+# which otherwise queues behind the 4-GPU QOS cap for nothing: there is no new
+# embedding to do.  Falls back to the full chain if that run's output is gone.
+REUSE="${CUT_REUSE_PREPARE:-/exp/$USER/calibration-safe-linear/results}"
+if [[ -f "$REUSE/prepare_info.json" ]]; then
+  mkdir -p "$CALIB_RESULTS/cells" "$CALIB_RESULTS/crops"
+  cp "$REUSE/prepare_info.json" "$CALIB_RESULTS/prepare_info.json"
+  for f in "$REUSE"/crops/*; do
+    dst="$CALIB_RESULTS/crops/$(basename "$f")"
+    # cp -P would copy the symlink itself, whose relative target would not
+    # resolve from here; resolve it to the real file instead.
+    [[ -e "$dst" ]] || ln -s "$(readlink -f "$f")" "$dst"
+  done
+  echo "reused prepare from $REUSE"
+  exec bash "$HERE/launch_cells.sh"
+fi
+
+echo "no reusable prepare at $REUSE; running the full chain"
 exec bash "$HERE/launch_all.sh"
