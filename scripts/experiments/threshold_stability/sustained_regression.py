@@ -228,7 +228,10 @@ def find_sustained_rise(s, k: int, delta: float, hold: int, min_up_frac: float):
             cand = _validate_rise(s, min_i, j, delta, hold, min_up_frac)
             if cand is not None and (best is None or cand["rise"] * cand["hold"] > best["rise"] * best["hold"]):
                 best = cand
-        if s[j] < s[min_i]:
+        # ``<=`` on purpose: anchor the floor at the LAST step that was at the best-so-far, not
+        # the first. With ``<`` a long flat stretch gets swallowed into the segment and drags
+        # ``up_frac`` down to the rejection boundary, so real climbs off a plateau are missed.
+        if s[j] <= s[min_i]:
             min_i = j
     return best
 
@@ -386,6 +389,27 @@ def characterise(run: Run, det: dict) -> dict:
         ups = sum(1 for x, y in zip(thr_vals, thr_vals[1:]) if y > x)
         thr_mono = ups / (len(thr_vals) - 1)
 
+    # What the user was actually feeding the loop across the segment. The mechanism claim is
+    # that a wrong-way stretch is a stretch where the bad votes keep coming and the good ones
+    # stop, so the cut has nothing holding it down and marches up through the test positives.
+    d_good = _delta(run, "n_good", a, b)
+    d_bad = _delta(run, "n_bad", a, b)
+    votes = (d_good or 0) + (d_bad or 0)
+    good_share = (d_good / votes) if votes else None
+    run_good = run.steps[-1].get("n_good")
+    run_bad = run.steps[-1].get("n_bad")
+    run_votes = (run_good or 0) + (run_bad or 0)
+    good_share_run = (run_good / run_votes) if run_votes else None
+    # Longest stretch inside the segment with no new positive at all.
+    dry = best_dry = 0
+    for i in range(a + 1, b + 1):
+        prev, cur = run.steps[i - 1].get("n_good"), run.steps[i].get("n_good")
+        if prev is not None and cur is not None and cur > prev:
+            dry = 0
+        else:
+            dry += 1
+            best_dry = max(best_dry, dry)
+
     return {
         "t_start": sa.get("t"),
         "t_end": sb.get("t"),
@@ -407,6 +431,11 @@ def characterise(run: Run, det: dict) -> dict:
         "n_bad_start": sa.get("n_bad"),
         "n_good_end": sb.get("n_good"),
         "n_bad_end": sb.get("n_bad"),
+        "d_n_good": d_good,
+        "d_n_bad": d_bad,
+        "good_share_segment": good_share,
+        "good_share_run": good_share_run,
+        "longest_no_positive_stretch": best_dry,
         "phase_start": sa.get("phase"),
         "calib_start": sa.get("calib_mode"),
         "regret_start": _regret(sa),
@@ -421,7 +450,7 @@ def null_severities(run: Run, cfg, n: int, rng: random.Random):
     """Severity the detector reports on *n* surrogates of this run's own cost moves."""
     out = []
     for _ in range(n):
-        d = detect(permuted_copy(run, rng, cfg.null_mode), cfg)
+        d = detect(permuted_copy(run, rng, cfg.null_mode, cfg.null_block), cfg)
         out.append(d["severity"] if d is not None else 0.0)
     return out
 
@@ -431,7 +460,23 @@ def permutation_p(observed: float, nulls) -> float:
     return (1 + sum(1 for v in nulls if v >= observed)) / (len(nulls) + 1)
 
 
-def permuted_copy(run: Run, rng: random.Random, mode: str = "demean") -> Run:
+def _shuffle_blocks(deltas, block: int, rng: random.Random):
+    """Reorder contiguous blocks of moves instead of individual moves.
+
+    Single-move shuffling is the wrong null here: a #2790 deep spike is a ``+0.9`` step
+    immediately followed by a ``-0.9`` recovery, and shuffling separates the pair, so the
+    surrogate manufactures exactly the sustained level shifts we are testing for. Keeping
+    moves in blocks preserves that local pairing, which is what makes the test usable.
+    """
+    if block <= 1:
+        rng.shuffle(deltas)
+        return deltas
+    blocks = [deltas[i : i + block] for i in range(0, len(deltas), block)]
+    rng.shuffle(blocks)
+    return [d for b in blocks for d in b]
+
+
+def permuted_copy(run: Run, rng: random.Random, mode: str = "demean", block: int = 5) -> Run:
     """A same-volatility surrogate of this run's cost curve.
 
     ``demean`` (default) re-centres the step-to-step moves to zero net drift before
@@ -439,6 +484,7 @@ def permuted_copy(run: Run, rng: random.Random, mode: str = "demean") -> Run:
     run, which is the null a *trend* claim has to beat. ``raw`` reshuffles the moves as they
     are — but that preserves the run's start and end points, so it can only ask whether the
     ordering is unusual, never whether the run ended worse. Use it as a sensitivity check.
+    *block* is the block length for the reshuffle (see :func:`_shuffle_blocks`).
     """
     idx = list(range(len(run.steps)))
     costs = [run.steps[i].get("cost") for i in idx]
@@ -449,7 +495,7 @@ def permuted_copy(run: Run, rng: random.Random, mode: str = "demean") -> Run:
     if mode == "demean":
         drift = sum(deltas) / len(deltas)
         deltas = [d - drift for d in deltas]
-    rng.shuffle(deltas)
+    deltas = _shuffle_blocks(list(deltas), block, rng)
     new = list(costs)
     cur = costs[have[0]]
     for pos, d in zip(have[1:], deltas):
@@ -481,36 +527,72 @@ def ramped_copy(run: Run, total_rise: float, cfg) -> Run | None:
     return Run(key=run.key, meta=run.meta, steps=steps)
 
 
+def gated_detect(run: Run, cfg, rng: random.Random):
+    """detect() plus the per-run permutation gate — the full pipeline, as applied to real data."""
+    d = detect(run, cfg)
+    if d is None:
+        return None
+    if cfg.per_run_null:
+        if permutation_p(d["severity"], null_severities(run, cfg, cfg.per_run_null, rng)) > cfg.null_alpha:
+            return None
+    return d
+
+
+def fp_report(runs, cfg, reps: int, rng: random.Random):
+    """Type-I error: feed the pipeline surrogates that contain no trend by construction."""
+    groups = defaultdict(lambda: [0, 0])
+    for r in runs:
+        for _ in range(reps):
+            sur = permuted_copy(r, rng, cfg.null_mode, cfg.null_block)
+            g = groups[(r.meta["dataset"], r.meta["proposal"], r.meta["embedder"])]
+            g[1] += 1
+            if gated_detect(sur, cfg, rng) is not None:
+                g[0] += 1
+    print(f"\n== type-I error (pipeline run on trend-free surrogates, target <= {cfg.null_alpha:.2f}) ==")
+    print(f"  {'group':<50} {'trials':>7} {'false pos':>10} {'rate':>7}")
+    for g, (hit, tot) in sorted(groups.items()):
+        print(f"  {str(g):<50} {tot:>7} {hit:>10} {hit / max(1, tot):>7.3f}")
+
+
 def power_report(runs, cfg, rise: float, rng: random.Random):
-    """Per-source: how volatile the cost curves are, and whether a planted trend is findable."""
+    """Per-source: how volatile the cost curves are, and whether a planted trend is findable.
+
+    Two columns, because they answer different questions. ``on run`` plants the rise on the
+    real trajectory, so it measures whether this much *extra* worsening would show up on top
+    of whatever the run already does — and most runs are busy improving, which cancels much
+    of it. ``on flat`` plants the same rise on a trendless surrogate of the same volatility,
+    which isolates the detector's own sensitivity. Read ``on flat`` when deciding whether a
+    source's zero detections mean "nothing there" or "could not have seen it".
+    """
     groups = defaultdict(list)
     for r in runs:
         groups[(r.meta["dataset"], r.meta["proposal"], r.meta["embedder"])].append(r)
     print(f"\n== detection power (planted sustained rise of +{rise:.2f} in cost over the back half) ==")
-    print(f"  {'group':<50} {'runs':>5} {'|dcost| med':>11} {'planted found':>14}")
+    print(f"  {'group':<50} {'runs':>5} {'|dcost| med':>11} {'on run':>8} {'on flat':>8} {'drift':>8}")
     for g, rs in sorted(groups.items()):
-        vols = []
-        found = tried = 0
+        vols, drifts = [], []
+        found = found_flat = tried = 0
         for r in rs:
             idx = analysis_window(r, cfg.regime)
             cs = [r.steps[i].get("cost") for i in idx]
             cs = [c for c in cs if c is not None]
             if len(cs) > 2:
                 vols.append(statistics.median(abs(b - a) for a, b in zip(cs, cs[1:])))
+                drifts.append(cs[-1] - cs[0])
             ramped = ramped_copy(r, rise, cfg)
             if ramped is None:
                 continue
             tried += 1
-            d = detect(ramped, cfg)
-            if d is None:
-                continue
-            if cfg.per_run_null:
-                if permutation_p(d["severity"], null_severities(ramped, cfg, cfg.per_run_null, rng)) > cfg.null_alpha:
-                    continue
-            found += 1
+            if gated_detect(ramped, cfg, rng) is not None:
+                found += 1
+            flat = ramped_copy(permuted_copy(r, rng, "demean", cfg.null_block), rise, cfg)
+            if flat is not None and gated_detect(flat, cfg, rng) is not None:
+                found_flat += 1
         vol = statistics.median(vols) if vols else float("nan")
+        dr = statistics.median(drifts) if drifts else float("nan")
         rate = found / tried if tried else float("nan")
-        print(f"  {str(g):<50} {len(rs):>5} {vol:>11.4f} {rate:>13.0%}")
+        rate_f = found_flat / tried if tried else float("nan")
+        print(f"  {str(g):<50} {len(rs):>5} {vol:>11.4f} {rate:>7.0%} {rate_f:>8.0%} {dr:>+8.3f}")
 
 
 # --------------------------------------------------------------------------- reporting
@@ -582,6 +664,18 @@ def report(runs, dets, cfg, null_rate=None):
     for c in ch:
         ph[c["phase_start"]] += 1
     print(f"  phase at onset           : {dict(sorted(ph.items(), key=lambda kv: -kv[1]))}")
+
+    print("\n== what the loop was being fed across the wrong-way segment ==")
+    print(f"  votes added: good {_med(c['d_n_good'] for c in ch):.0f}  bad {_med(c['d_n_bad'] for c in ch):.0f}"
+          "   (median)")  # fmt: skip
+    gs = [c["good_share_segment"] for c in ch if c["good_share_segment"] is not None]
+    gr = [c["good_share_run"] for c in ch if c["good_share_run"] is not None]
+    print(f"  share of votes that were GOOD: {_med(gs):.2f} inside the segment "
+          f"vs {_med(gr):.2f} over the whole run")  # fmt: skip
+    print(f"  segments where NOT ONE new positive arrived: "
+          f"{_share(ch, lambda c: (c['d_n_good'] or 0) == 0):.0%}")  # fmt: skip
+    print(f"  longest run of steps with no new positive  : median "
+          f"{_med(c['longest_no_positive_stretch'] for c in ch):.0f} steps")  # fmt: skip
 
     withor = [c for c in ch if c["ranking_share"] is not None]
     if withor:
@@ -705,6 +799,12 @@ def build_parser():
     ap.add_argument("--per-run-null", type=int, default=99,
                     help="permutation replicates used to significance-test each detection (0 = magnitude only)")  # fmt: skip
     ap.add_argument("--null-alpha", type=float, default=0.05, help="permutation p-value a detection must clear")
+    ap.add_argument("--sample", type=int, default=0,
+                    help="deterministically subsample this many runs (calibration only, 0 = all)")  # fmt: skip
+    ap.add_argument("--null-block", type=int, default=5,
+                    help="block length for the surrogate reshuffle; 1 = shuffle single moves")  # fmt: skip
+    ap.add_argument("--fp-check", type=int, default=0,
+                    help="run the FULL pipeline on N surrogates per run and report the type-I error rate")  # fmt: skip
     ap.add_argument("--null-mode", choices=("demean", "raw"), default="demean",
                     help="surrogate construction; see permuted_copy")  # fmt: skip
     ap.add_argument("--seed", type=int, default=0)
@@ -739,6 +839,10 @@ def main(argv=None):
         runs += got
     if not runs:
         raise SystemExit("no runs loaded")
+    if cfg.sample and cfg.sample < len(runs):
+        step = len(runs) / cfg.sample  # even stride keeps every source represented
+        runs = [runs[int(i * step)] for i in range(cfg.sample)]
+        print(f"[sample] calibrating on {len(runs)} runs (even stride)")
 
     rng = random.Random(cfg.seed)
     dets, raw_hits = [], 0
@@ -772,6 +876,8 @@ def main(argv=None):
     head_independence(runs, dets)
     if cfg.power_rise:
         power_report(runs, cfg, cfg.power_rise, random.Random(cfg.seed + 1))
+    if cfg.fp_check:
+        fp_report(runs, cfg, cfg.fp_check, random.Random(cfg.seed + 2))
     for spec in cfg.show:
         show_runs(runs, spec, cfg)
 

@@ -41,6 +41,9 @@ class _Cfg:
     late_window = 10
     regime = "learned"
     null_mode = "demean"
+    null_block = 5
+    per_run_null = 99
+    null_alpha = 0.05
     top = 5
 
 
@@ -266,3 +269,47 @@ def test_a_steady_climb_beats_its_own_null_but_a_jumpy_flat_run_does_not():
     d2 = detect(jumpy, cfg)
     if d2 is not None:
         assert permutation_p(d2["severity"], null_severities(jumpy, cfg, 99, rng)) > 0.05
+
+
+# --------------------------------------------------------------------------- block surrogate
+
+
+def test_block_shuffle_keeps_a_spike_next_to_its_recovery():
+    """A +0.9 jump and its -0.9 snap-back must not be torn apart by the surrogate."""
+    from sustained_regression import _shuffle_blocks
+
+    deltas = [0.0, 0.0, 0.9, -0.9, 0.0, 0.0, 0.0, 0.0]
+    for seed in range(20):
+        out = _shuffle_blocks(list(deltas), block=4, rng=random.Random(seed))
+        i = out.index(0.9)
+        assert out[i + 1] == -0.9, out
+
+
+def test_single_move_shuffle_does_tear_the_pair_apart():
+    """Which is exactly why block=1 makes the null far too conservative here."""
+    from sustained_regression import _shuffle_blocks
+
+    deltas = [0.0, 0.0, 0.9, -0.9, 0.0, 0.0, 0.0, 0.0]
+    torn = 0
+    for seed in range(40):
+        out = _shuffle_blocks(list(deltas), block=1, rng=random.Random(seed))
+        i = out.index(0.9)
+        if i + 1 >= len(out) or out[i + 1] != -0.9:
+            torn += 1
+    assert torn > 20
+
+
+def test_block_surrogate_still_destroys_a_trend():
+    run = _run([0.10 + 0.02 * i for i in range(40)])
+    perm = permuted_copy(run, random.Random(0), mode="demean", block=5)
+    seq = perm.series("cost")
+    assert abs(seq[-1] - seq[0]) < 1e-9
+
+
+def test_climb_off_a_long_plateau_is_found():
+    """The floor must anchor at the END of the plateau, else up_frac sinks and the climb is lost."""
+    s = [0.10] * 25 + [0.10 + 0.012 * i for i in range(1, 26)]
+    hit = find_sustained_rise(s, k=5, delta=0.10, hold=5, min_up_frac=0.5)
+    assert hit is not None
+    assert hit["start_idx"] >= 24  # anchored at the end of the plateau, not index 0
+    assert hit["up_frac"] > 0.9
