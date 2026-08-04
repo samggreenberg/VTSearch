@@ -29,12 +29,21 @@ DATASETS = os.environ.get("CALIB_DATASETS", "visual_genome_m,caltech101_m").spli
 DATASET_EMBEDDERS: dict[str, list[str]] = {
     "visual_genome_m": os.environ.get("CALIB_VG_EMBEDDERS", "siglip,siglip_l,dinov3_patch").split(","),
     "caltech101_m": os.environ.get("CALIB_CALTECH_EMBEDDERS", "siglip,siglip_l").split(","),
+    # COCO-2017-val, assembled from the #2790 sweep cache by
+    # ``build_coco_pickle.py`` (issue #2841).  Whole-image embedders only: that
+    # cache holds each image's whole vector and its HAC region vectors but not
+    # the raw patch grid, so no region-voting style can be built from it.
+    "coco_val": os.environ.get("CALIB_COCO_EMBEDDERS", "siglip,siglip2").split(","),
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
+#: COCO *is* boxed, but its cached vectors cannot feed a patch style (see above),
+#: so it runs as a second binary-voting dataset - which is exactly the axis
+#: #2841 asks about separately from region voting.
 REGION_VOTING_BY_DATASET: dict[str, bool] = {
     "visual_genome_m": True,
     "caltech101_m": False,
+    "coco_val": False,
 }
 
 # --- Styles per embedder kind ---
