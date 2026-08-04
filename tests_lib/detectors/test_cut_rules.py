@@ -195,7 +195,7 @@ class TestDecomposition:
         cuts, _params = decomposition_cuts(scores, labels, 1.0, 1.0)
         chain = ["cross", "priorfree", "supervised", "sim_oracle"]
         assert all(math.isfinite(cuts[name]) for name in chain), cuts
-        terms = [cuts[a] - cuts[b] for a, b in zip(chain, chain[1:], strict=True)]
+        terms = [cuts[a] - cuts[b] for a, b in zip(chain[:-1], chain[1:], strict=True)]
         assert sum(terms) == pytest.approx(cuts["cross"] - cuts["sim_oracle"], abs=1e-12)
 
     def test_prior_free_sits_below_the_count_optimal_cut(self):
