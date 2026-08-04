@@ -62,7 +62,7 @@ mkdir -p "$LOGS"
 
 # --- The theory half: independent of any dataset, so it runs now. ---
 T=$(sbatch --parsable --job-name=cut-theory --mem=8G --cpus-per-task=4 \
-  --time=1:00:00 --partition=cpu --export=ALL --output="$LOGS/theory-%j.out" \
+  --time="${CUT_THEORY_TIME:-3:00:00}" --partition=cpu --export=ALL --output="$LOGS/theory-%j.out" \
   --wrap="source $WT/gridenv.sh && export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS && cd $HERE && python theory_bench.py --reps ${CUT_THEORY_REPS:-40}")
 echo "theory bench job: $T   -> $CALIB_RESULTS/theory/"
 
