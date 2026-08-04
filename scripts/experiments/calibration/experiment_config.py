@@ -81,6 +81,29 @@ MEDIA_TYPE = "image"
 #: every VTSearch user?") is only answerable on the shipped head.
 HEAD = os.environ.get("CALIB_HEAD", "mlp")
 
+#: Which safe-threshold mix-in schedule the run *lives* under (issue #2841).
+#: This steers the trajectory - the blended threshold feeds Autopilot's Hard
+#: pick - so an A/B between schedules needs one full run per value here.
+BLEND_SCHEDULE = os.environ.get("CALIB_BLEND_SCHEDULE") or None
+
+
+#: Extra schedules to score *counterfactually* on this run's trajectory, one
+#: metric row each (tagged ``schedule``).  Free relative to the simulation, but
+#: blind to acquisition feedback - the screen, not the verdict.  ``"all"``
+#: expands to the whole registry.
+def _schedule_variants() -> list[str]:
+    raw = os.environ.get("CALIB_SCHEDULE_VARIANTS", "").strip()
+    if not raw:
+        return []
+    if raw == "all":
+        from vtscore.training.blend_schedules import schedule_names  # noqa: PLC0415
+
+        return schedule_names()
+    return [s.strip() for s in raw.split(",") if s.strip()]
+
+
+SCHEDULE_VARIANTS = _schedule_variants()
+
 # --- Category-selection parameters (copied from the Max-Patch runner) ---
 _MIN_CATEGORY_COUNT = int(os.environ.get("CALIB_MIN_CAT_COUNT", "20"))
 N_CATEGORIES = int(os.environ.get("CALIB_N_CATEGORIES", "6"))  # prevalence-spread count (Caltech)

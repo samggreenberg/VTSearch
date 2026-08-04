@@ -131,6 +131,8 @@ def main(argv: list[str] | None = None) -> int:
             repool_topk=cfg.REPOOL_TOPK,
             inclusion_sweep_ks=cfg.INCLUSION_SWEEP_KS,
             sweep_sink=sweep_local,
+            blend_schedule=cfg.BLEND_SCHEDULE,
+            schedule_variants=cfg.SCHEDULE_VARIANTS,
         )
         for r in rows:
             r["embedder"] = emb
