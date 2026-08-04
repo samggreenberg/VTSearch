@@ -49,12 +49,32 @@ def _voting_mode(row: pd.Series) -> str:
 
 
 def load_cells(results: Path) -> pd.DataFrame:
-    """Concatenate every ``task_*.csv`` under *results*/cells."""
+    """Concatenate every ``task_*.csv`` under *results*/cells.
+
+    A cell killed mid-write leaves a zero-byte file (this run lost 49 to a
+    transient ENOSPC on the shared volume).  Those are **skipped and counted**
+    rather than silently dropped: an unreadable cell is missing data, and a
+    study that quietly analyses 1295 of 1344 cells while reporting neither
+    number is exactly how a disk incident turns into a wrong verdict.
+    """
     files = sorted((results / "cells").glob("task_*.csv"))
     files = [f for f in files if not f.name.endswith("__sweep.csv")]
     if not files:
         raise SystemExit(f"no cell CSVs under {results / 'cells'}")
-    frames = [pd.read_csv(f) for f in files]
+    frames, unreadable = [], []
+    for f in files:
+        try:
+            frames.append(pd.read_csv(f))
+        except (pd.errors.EmptyDataError, pd.errors.ParserError):
+            unreadable.append(f.name)
+    if unreadable:
+        print(
+            f"WARNING: {len(unreadable)} of {len(files)} cell files under {results.name} "
+            f"were unreadable and are excluded: {', '.join(sorted(unreadable)[:5])}"
+            + (" ..." if len(unreadable) > 5 else "")
+        )
+    if not frames:
+        raise SystemExit(f"every cell CSV under {results / 'cells'} was unreadable")
     df = pd.concat([f for f in frames if len(f)], ignore_index=True)
     for col in ("schedule", "gmm_variant"):
         df[col] = df[col].fillna("")
