@@ -1,9 +1,9 @@
 """Mix-in schedules for the safe-threshold blend (issue #2841).
 
-The load-bearing test here is :meth:`TestProductionFidelity.
-test_prod_reproduces_the_historical_ramp`: every other schedule is an
-experimental arm, but ``prod`` is what ships, so it must stay bit-identical to
-the hard-coded ``clip((n - 6) / 14, 0, 1)`` it replaced.
+``prod`` no longer ships - #2841 replaced it with a schedule per voting mode -
+but it stays pinned bit-identical to the hard-coded ``clip((n - 6) / 14, 0, 1)``
+it replaced, because every number in the study's report is a delta against it.
+If ``prod`` drifts, the report stops meaning anything.
 """
 
 from __future__ import annotations
@@ -14,9 +14,11 @@ import pytest
 
 from vtscore.training.blend_schedules import (
     PRODUCTION_SCHEDULE,
+    PRODUCTION_SCHEDULE_BY_MODE,
     SAFE_BLEND_SCHEDULES,
     BlendContext,
     get_schedule,
+    production_schedule_for,
     schedule_names,
 )
 from vtscore.training.thresholds import (
@@ -38,16 +40,33 @@ def _ctx(n: int, good: int | None = None) -> BlendContext:
 
 
 class TestProductionFidelity:
-    """``prod`` is the shipped rule; #2841 must not have moved it."""
+    """``prod`` is the study's baseline; nothing may move it."""
 
     @pytest.mark.parametrize("n", range(0, 80))
     def test_prod_reproduces_the_historical_ramp(self, n):
+        # Named explicitly: the default is no longer `prod`, so an implicit
+        # lookup here would quietly test whatever ships instead.
         historical = max(0.0, min(1.0, (n - 6) / 14))
-        assert safe_blend_weight(_ctx(n)) == historical
+        assert safe_blend_weight(_ctx(n), "prod") == historical
 
-    def test_production_schedule_is_the_default(self):
-        assert PRODUCTION_SCHEDULE == "prod"
-        assert get_schedule(None) is get_schedule("prod")
+    def test_the_mode_agnostic_default_is_the_universally_robust_schedule(self):
+        """#2841 ships a schedule per voting mode; the mode-agnostic fallback is
+        the one arm that improved *both* modes under *every* cost weighting, so a
+        caller that cannot say which mode it is in still improves on the old
+        ramp."""
+        assert PRODUCTION_SCHEDULE == "cap50"
+        assert get_schedule(None) is get_schedule("cap50")
+
+    def test_each_voting_mode_gets_the_schedule_the_study_chose(self):
+        assert production_schedule_for(region_voting=True) == "slow"
+        assert production_schedule_for(region_voting=False) == "cap50"
+        assert production_schedule_for(region_voting=None) == PRODUCTION_SCHEDULE
+
+    def test_every_shipped_schedule_beats_the_old_ramp_on_its_own_mode(self):
+        """Guards against a typo silently shipping a schedule the study rejected."""
+        for name in {*PRODUCTION_SCHEDULE_BY_MODE.values(), PRODUCTION_SCHEDULE}:
+            assert name in SAFE_BLEND_SCHEDULES
+            assert name != "prod", "prod is the measurement baseline, not a ship target"
 
     def test_blend_matches_a_hand_computed_average(self):
         # 13 labels → weight 0.5 → the plain midpoint of the two cuts.
@@ -175,10 +194,17 @@ class TestCorridorFamily:
 class TestSkipDerivation:
     """The fold-calibration skip must follow the schedule, not a magic number."""
 
-    def test_production_discards_xcal_below_the_ramp_floor(self):
-        assert xcal_is_discarded(_ctx(5))
-        assert xcal_is_discarded(_ctx(6))
-        assert not xcal_is_discarded(_ctx(7))
+    def test_the_old_ramp_discards_xcal_below_its_floor(self):
+        assert xcal_is_discarded(_ctx(5), "prod")
+        assert xcal_is_discarded(_ctx(6), "prod")
+        assert not xcal_is_discarded(_ctx(7), "prod")
+
+    def test_the_shipped_schedules_also_discard_it_below_six(self):
+        """Both shipped curves keep the old pure-GMM floor, so the fold-training
+        skip still applies where it always did."""
+        for name in PRODUCTION_SCHEDULE_BY_MODE.values():
+            assert xcal_is_discarded(_ctx(6), name)
+            assert not xcal_is_discarded(_ctx(7), name)
 
     def test_a_schedule_that_trusts_xcal_early_stops_the_skip(self):
         """The #2841 fidelity fix: before it, the app hard-coded "< 6 votes" and

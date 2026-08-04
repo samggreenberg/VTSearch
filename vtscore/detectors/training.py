@@ -126,6 +126,23 @@ def _flood_context(
     return n_votes, cal_groups, sample_weights
 
 
+def _blend_schedule_for_snap(snap: dict | None) -> str:
+    """The safe-threshold mix-in schedule these medias should be blended under.
+
+    #2841 measured the two voting modes separately and they want different
+    curves, so the schedule is resolved per training call rather than being one
+    global constant.  The mode follows the *scoring* geometry, not how the user
+    happened to vote: a patch dataset always scores by max-pooling over regions
+    (see :func:`_score_all_media`), which is exactly the ``region`` arm of the
+    study, while a single-vector dataset is the ``binary`` arm.
+    """
+    from vtscore.training.blend_schedules import production_schedule_for  # noqa: PLC0415
+
+    if not snap:
+        return production_schedule_for(region_voting=None)
+    return production_schedule_for(region_voting=_patch_embedder_for_snap(snap) is not None)
+
+
 def _calibration_score_rows(
     groups: list | None,
     cal_groups: list | None,
@@ -259,7 +276,7 @@ def train_and_threshold(
     # (#2841) cannot leave this skip behind blending against a placeholder.
     # Safe-thresholds OFF falls through to real cross-calibration at every
     # label count.
-    if safe and xcal_is_discarded(blend_ctx):
+    if safe and xcal_is_discarded(blend_ctx, _blend_schedule_for_snap(snap)):
         threshold = NO_GOOD_THRESHOLD
         # This branch never recomputes the fold orderings, so drop any stale
         # cache from a previous ≥6-label training - otherwise a later
@@ -323,7 +340,7 @@ def train_and_threshold(
         # cache above stores the raw cross-cal orderings, so a later inclusion
         # slide re-derives the unblended cutoff (intentional - see
         # recompute_detector_thresholds_for_inclusion).
-        threshold = calculate_safe_threshold(threshold, all_scores, blend_ctx)
+        threshold = calculate_safe_threshold(threshold, all_scores, blend_ctx, schedule=_blend_schedule_for_snap(snap))
 
     return model, threshold
 
@@ -736,7 +753,7 @@ def _train_and_score_xy(
     # value, and before #2841 the two paths disagreed on it (Find admitted
     # nothing, the vote path admitted everything scoring ≥ 0.5).  Admitting
     # nothing is the safe reading of "we never computed a threshold".
-    if safe_thresholds and xcal_is_discarded(blend_ctx):
+    if safe_thresholds and xcal_is_discarded(blend_ctx, _blend_schedule_for_snap(clips_dict)):
         threshold = NO_GOOD_THRESHOLD
         # Drop any fold-ordering cache from a previous ≥6-label training:
         # this branch neither reads nor rewrites it, and a later inclusion
@@ -775,7 +792,9 @@ def _train_and_score_xy(
         # are raw cross-cal, so an inclusion slide re-derives the unblended
         # cutoff (see recompute_detector_thresholds_for_inclusion).  The label
         # counts are votes, not flooded rows, so the small-count ramp is unmoved.
-        threshold = calculate_safe_threshold(threshold, scores, blend_ctx)
+        threshold = calculate_safe_threshold(
+            threshold, scores, blend_ctx, schedule=_blend_schedule_for_snap(clips_dict)
+        )
 
     results = _format_results(all_ids, scores, best_region, clips_dict)
     return results, threshold, model

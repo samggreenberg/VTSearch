@@ -1565,6 +1565,16 @@ def simulate_voting_iterations(  # noqa: C901
     # scored region-aware (max-pool over regions) the same way the live
     # detector scores them, regardless of how the Good votes were assembled.
     region_aware = any(clips_dict[cid].get("patch_regions") for cid in clips_dict)
+    # Mirror the app's per-mode schedule default (#2841): with no explicit arm,
+    # a patch dataset blends under the region schedule and a single-vector one
+    # under the binary schedule, exactly as `_blend_schedule_for_snap` decides
+    # in `vtscore.detectors.training`.  Without this the harness would measure a
+    # schedule no detector actually uses - the same app/framework drift #2841
+    # had to fix in the `< 6 votes` skip.
+    if blend_schedule is None:
+        from vtscore.training.blend_schedules import production_schedule_for  # noqa: PLC0415
+
+        blend_schedule = production_schedule_for(region_voting=region_aware)
 
     import torch  # noqa: PLC0415
 

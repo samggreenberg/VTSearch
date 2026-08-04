@@ -278,20 +278,23 @@ each to use. `ctx` is a `BlendContext` carrying the vote counts (total,
 good, bad — in votes, not flooded rows); a bare `int` is accepted where
 only the total is known.
 
-The shipped schedule (`prod`) ramps linearly from pure-GMM at 6 labels
-to pure-cross-cal at 20:
+The shipped schedule depends on the **voting mode**, because #2841
+measured the two separately and they want different curves
+(`PRODUCTION_SCHEDULE_BY_MODE`, resolved per training call by
+`vtscore.detectors.training._blend_schedule_for_snap`):
 
-| `n_labels` | Result                                      |
-|-----------:|---------------------------------------------|
-|    `<= 6`  | pure GMM threshold                          |
-|    `6..20` | linear interpolation                        |
-|   `>= 20`  | pure cross-cal threshold                    |
+| mode | schedule | shape |
+|---|---|---|
+| region (patch dataset) | `slow` | pure GMM ≤6 labels → pure cross-cal at **40** |
+| binary (single vector) | `cap50` | the old 6→20 ramp, but capped at **half** cross-cal forever |
+| unknown | `cap50` | the one arm that improved both modes under every weighting |
 
-Other schedules in the registry vary the endpoints, the curve shape, the
-statistic the ramp reads (total labels vs the rarer class), or replace
-the weighted average with a clamp into the GMM's component means. They
-exist because issue #2841 measures which one is best; `prod` is what
-ships until that lands.
+The historical rule — a single 6→20 linear ramp — is retained as `prod`,
+the baseline every number in the study's report is a delta against.
+Other registry entries vary the endpoints, the curve shape, the statistic
+the ramp reads (total labels vs the rarer class), or replace the weighted
+average with a clamp into the GMM's component means.
+See `docs/experiments/mixin-schedule/REPORT.md`.
 
 When `xcal_threshold` is `float("inf")` (no valid fold split), falls
 back entirely to the GMM threshold.

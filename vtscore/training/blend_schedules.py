@@ -279,12 +279,50 @@ _SCHEDULES: tuple[BlendSchedule, ...] = (
 
 SAFE_BLEND_SCHEDULES: dict[str, BlendSchedule] = {s.name: s for s in _SCHEDULES}
 
-#: The shipped schedule.  #2841 will propose flipping this once the run reports.
-PRODUCTION_SCHEDULE = "prod"
+#: The shipped schedule per **voting mode** (issue #2841 measured them
+#: separately and they want different curves; see
+#: ``docs/experiments/mixin-schedule/REPORT.md``).
+#:
+#: * ``region`` - a patch dataset, which always scores by max-pooling over
+#:   regions.  Its x-cal cut needs far longer to become trustworthy, so the
+#:   handoff runs to 40 labels instead of 20 (−0.0422 cost vs the old ramp,
+#:   p=1.4e-28, and it still wins when false positives are weighted 4x).
+#: * ``binary`` - one vector per media.  Here a longer ramp wins only by cutting
+#:   lower, which reverses under reweighting; what survives is keeping a
+#:   permanent half-share of the label-free GMM cut, which reduces the *spread*
+#:   of the threshold rather than relocating it (−0.0173, p=7.6e-43).
+#:
+#: The old single ramp (``prod``) is retained in the registry as the measurement
+#: baseline and as the thing to compare against if this is ever revisited.
+PRODUCTION_SCHEDULE_BY_MODE: dict[str, str] = {
+    "region": "slow",
+    "binary": "cap50",
+}
+
+#: Fallback when the voting mode is unknown.  ``cap50`` is the safe default: it
+#: is the only schedule #2841 found that improves **both** modes under **every**
+#: cost weighting tested, so a caller that cannot say which mode it is in still
+#: gets a strict improvement over the old ramp.
+PRODUCTION_SCHEDULE = "cap50"
+
+
+def production_schedule_for(*, region_voting: bool | None) -> str:
+    """The shipped schedule name for a detector that does (or doesn't) region-vote.
+
+    ``None`` means "unknown", which takes :data:`PRODUCTION_SCHEDULE`.
+    """
+    if region_voting is None:
+        return PRODUCTION_SCHEDULE
+    return PRODUCTION_SCHEDULE_BY_MODE["region" if region_voting else "binary"]
 
 
 def get_schedule(name: str | None = None) -> BlendSchedule:
-    """Look up a schedule by name; ``None`` yields the production one."""
+    """Look up a schedule by name; ``None`` yields the mode-agnostic default.
+
+    Prefer passing an explicit name resolved through
+    :func:`production_schedule_for` - the default here cannot know the voting
+    mode, and the two modes want different curves.
+    """
     key = name or PRODUCTION_SCHEDULE
     try:
         return SAFE_BLEND_SCHEDULES[key]
