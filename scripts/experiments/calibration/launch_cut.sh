@@ -57,6 +57,15 @@ export CALIB_CPUS="${CALIB_CPUS:-4}"
 export CALIB_CONC="${CALIB_CONC:-40}"
 export CALIB_TIME="${CALIB_TIME:-1:30:00}"
 
+# Where the embeddings pickles, models and HF cache live.  ``launch_all.sh`` sets
+# these itself, but the reuse path below skips it and goes straight to the cells
+# array -- and without them ``EMBEDDINGS_DIR`` resolves *relative to the cwd*, so
+# every cell dies on `No such file: embeddings/visual_genome_m__siglip.pkl`.
+MAXPATCH="/exp/$USER/max-patch"
+export VTSEARCH_DATA_DIR="${VTSEARCH_DATA_DIR:-$MAXPATCH/datadir}"
+export VTSEARCH_MODELS_DIR="${VTSEARCH_MODELS_DIR:-$MAXPATCH/models}"
+export HF_HOME="${HF_HOME:-/exp/$USER/.cache/huggingface}"
+
 LOGS="$CALIB_EXP/logs"
 mkdir -p "$LOGS"
 
