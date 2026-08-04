@@ -1,0 +1,283 @@
+"""Mix-in schedules for the safe-threshold blend (issue #2841).
+
+Safe-thresholds trades a **GMM cut** (fitted on the score distribution, needs no
+labels, never wild) against a **cross-calibration cut** (conformal, uses the
+labels, unreliable when there are few).  #2799 settled *whether* to blend; this
+module owns *how much, for how long*.
+
+The historical rule was a single hard-coded line - x-cal weight
+``clip((n - 6) / 14, 0, 1)``, i.e. pure GMM at ≤6 labels, pure x-cal at ≥20,
+linear between.  Three independent choices were baked into it and none had been
+measured: the **endpoints** (6, 20), the **shape** (linear), and the
+**statistic** the schedule reads (total labels).  A fourth question - whether a
+weighted average is even the right combiner - is not expressible as a weight at
+all.  Each is a family here.
+
+A schedule is anything that maps *(x-cal cut, GMM cut, label counts, GMM fit)*
+to a final threshold.  Most do it through a weight, so :class:`WeightSchedule`
+covers them; :class:`CorridorSchedule` does not (it clamps rather than averages)
+and overrides :meth:`BlendSchedule.combine` directly.
+
+Registry lookups go through :func:`get_schedule`.  :data:`PRODUCTION_SCHEDULE`
+is the shipped default and reproduces the historical ramp exactly.
+"""
+
+from __future__ import annotations
+
+import math
+from collections.abc import Callable
+from dataclasses import dataclass
+
+__all__ = [
+    "PRODUCTION_SCHEDULE",
+    "SAFE_BLEND_SCHEDULES",
+    "BlendContext",
+    "BlendSchedule",
+    "CorridorSchedule",
+    "WeightSchedule",
+    "get_schedule",
+    "schedule_names",
+]
+
+
+@dataclass(frozen=True)
+class BlendContext:
+    """The label counts a schedule may read.
+
+    Counts are in **votes** (bags), not training rows: region flooding turns one
+    Bad vote into many rows, and a schedule that read rows would hand off to
+    x-cal the instant a single Bad vote flooded.  See
+    :func:`vtscore.detectors.training._flood_context`.
+
+    ``n_good``/``n_bad`` are carried alongside ``n_labels`` because the binding
+    constraint on conformal calibration is the **rarer** class, not the total:
+    a 19-bad/1-good labelset has 20 labels and one positive, and #2790 traced
+    the deep threshold spikes to exactly that starvation.  Schedules that ignore
+    them (the historical family) simply never read the fields.
+    """
+
+    n_labels: int
+    n_good: int
+    n_bad: int
+
+    @property
+    def n_rare(self) -> int:
+        """Labels in the rarer class - the count conformal calibration is limited by."""
+        return min(self.n_good, self.n_bad)
+
+    @classmethod
+    def from_labels(cls, y_list: list[float], groups: list | None = None) -> "BlendContext":
+        """Build a context from a training labelset, collapsing flooded bags.
+
+        With *groups* the counts are per distinct bag (one vote = one bag, whose
+        rows share a label); without, every row is its own vote.
+        """
+        if groups is None:
+            good = sum(1 for v in y_list if v == 1.0)
+            return cls(n_labels=len(y_list), n_good=good, n_bad=len(y_list) - good)
+        by_bag: dict[object, float] = {}
+        for label, group in zip(y_list, groups, strict=True):
+            by_bag.setdefault(group, label)
+        good = sum(1 for v in by_bag.values() if v == 1.0)
+        return cls(n_labels=len(by_bag), n_good=good, n_bad=len(by_bag) - good)
+
+
+class BlendSchedule:
+    """Base: how a schedule turns two candidate cuts into one threshold."""
+
+    # Annotated without values on purpose: a class-attribute default here would
+    # be picked up by the ``@dataclass`` subclasses as a *field* default via
+    # ``getattr``, which then forces every following field to carry one too.
+    #: Registry key.
+    name: str
+    #: One line for the report / settings help.
+    description: str
+
+    def weight(self, ctx: BlendContext) -> float:
+        """The weight on the **x-cal** cut in ``[0, 1]``; 0 means pure GMM.
+
+        Combiners that are not weighted averages still define this, because the
+        training path uses ``weight == 0`` to decide whether the expensive fold
+        calibration can be skipped entirely (see
+        :func:`vtscore.training.thresholds.xcal_is_discarded`).  A schedule that
+        always consults the x-cal cut must therefore never return 0.
+        """
+        raise NotImplementedError
+
+    def combine(self, xcal: float, cut: float, ctx: BlendContext, fit: object | None = None) -> float:
+        """Final threshold from the x-cal cut, the GMM cut, and the label counts.
+
+        *fit* is the :class:`~vtscore.training.thresholds.GmmFit1D` behind *cut*
+        when one is available (``None`` on the median/degenerate fallbacks);
+        only schedules that need the component geometry read it.  Callers must
+        have already resolved non-finite inputs.
+        """
+        w = self.weight(ctx)
+        return w * xcal + (1.0 - w) * cut
+
+
+def _ramp(x: float, lo: float, hi: float) -> float:
+    """Linear 0→1 ramp over ``[lo, hi]``, clipped outside."""
+    if hi <= lo:
+        return 1.0 if x >= hi else 0.0
+    return max(0.0, min(1.0, (x - lo) / (hi - lo)))
+
+
+@dataclass(frozen=True)
+class WeightSchedule(BlendSchedule):
+    """A schedule expressed as an x-cal weight over a ramped statistic.
+
+    ``stat`` names the label count the ramp reads (``"labels"``, ``"good"``,
+    ``"rare"``); ``lo``/``hi`` are its pure-GMM and pure-x-cal endpoints;
+    ``shape`` warps the ramp's ``[0, 1]`` progress; ``cap`` bounds the resulting
+    weight so a schedule can decline to ever hand off completely.
+    """
+
+    name: str
+    description: str
+    lo: float
+    hi: float
+    stat: str = "labels"
+    shape: str = "linear"
+    cap: float = 1.0
+
+    def _stat(self, ctx: BlendContext) -> int:
+        if self.stat == "labels":
+            return ctx.n_labels
+        if self.stat == "good":
+            return ctx.n_good
+        if self.stat == "rare":
+            return ctx.n_rare
+        raise ValueError(f"unknown schedule statistic: {self.stat!r}")
+
+    def weight(self, ctx: BlendContext) -> float:
+        t = _ramp(self._stat(ctx), self.lo, self.hi)
+        return min(self.cap, _SHAPES[self.shape](t))
+
+
+#: Warps a ramp's ``[0, 1]`` progress.  ``convex`` holds the GMM longer and then
+#: hands off fast; ``concave`` does the reverse; ``step`` is a hard switch at the
+#: ramp's midpoint; ``logistic`` is a smooth step, renormalised so it still hits
+#: exactly 0 and 1 at the endpoints.
+_LOGISTIC_K = 8.0
+
+
+def _logistic(t: float) -> float:
+    raw = 1.0 / (1.0 + math.exp(-_LOGISTIC_K * (t - 0.5)))
+    lo = 1.0 / (1.0 + math.exp(_LOGISTIC_K * 0.5))
+    hi = 1.0 / (1.0 + math.exp(-_LOGISTIC_K * 0.5))
+    return (raw - lo) / (hi - lo)
+
+
+_SHAPES: dict[str, Callable[[float], float]] = {
+    "linear": lambda t: t,
+    "convex": lambda t: t * t,
+    "concave": lambda t: math.sqrt(t),
+    "step": lambda t: 1.0 if t >= 0.5 else 0.0,
+    "logistic": _logistic,
+}
+
+
+@dataclass(frozen=True)
+class CorridorSchedule(BlendSchedule):
+    """Bound the x-cal cut instead of averaging it away.
+
+    A weighted average taxes *every* x-cal cut, including the good ones, to
+    defend against the rare wild one - and the pathology safe-thresholds
+    actually fixes is wild: #2788's cold-start "admit nothing" cuts, which #2799
+    showed the blend eliminates outright on the whole-image arm.  A clamp is the
+    targeted version of that: it is a no-op whenever x-cal is sensible and only
+    bites when it leaves the corridor the fitted GMM considers plausible.
+
+    The corridor is the interval between the two component means.  Outside it a
+    cut is nearly always degenerate - below ``mu_lo`` it admits the entire Bad
+    mode, above ``mu_hi`` it rejects the entire Good mode - while the midpoint
+    (the production GMM cut) is its exact centre.  With *ramped* the corridor
+    opens from that midpoint at ``lo`` labels (a zero-width corridor == pure
+    GMM) to the full interval at ``hi``, and is unbounded past it; otherwise the
+    full corridor applies at every label count.
+
+    Falls back to the plain blend when no GMM fit is available (the median
+    fallback path), so the corridor never silently becomes a no-op cut.
+    """
+
+    name: str
+    description: str
+    lo: float = 6.0
+    hi: float = 20.0
+    ramped: bool = True
+
+    def weight(self, ctx: BlendContext) -> float:
+        # A corridor always consults the x-cal cut (it is the value being
+        # clamped), so the fold calibration is never skippable - except where
+        # the corridor has collapsed to a point and the answer is the GMM cut.
+        if self.ramped and _ramp(ctx.n_labels, self.lo, self.hi) <= 0.0:
+            return 0.0
+        return 1.0
+
+    def combine(self, xcal: float, cut: float, ctx: BlendContext, fit: object | None = None) -> float:
+        mu_lo = getattr(fit, "mu_lo", None)
+        mu_hi = getattr(fit, "mu_hi", None)
+        if mu_lo is None or mu_hi is None:
+            return super().combine(xcal, cut, ctx, fit)
+        lo_edge, hi_edge = (mu_lo, mu_hi) if mu_lo <= mu_hi else (mu_hi, mu_lo)
+        if self.ramped:
+            openness = _ramp(ctx.n_labels, self.lo, self.hi)
+            if openness >= 1.0:
+                return xcal
+            lo_edge = cut + (lo_edge - cut) * openness
+            hi_edge = cut + (hi_edge - cut) * openness
+        return max(lo_edge, min(hi_edge, xcal))
+
+
+#: Every mix-in strategy #2841 measures.  ``prod`` is the shipped ramp and must
+#: stay bit-identical to the historical ``clip((n - 6) / 14, 0, 1)``.
+#:
+#: The two extremes are controls, not proposals: ``pure_gmm`` is the issue's
+#: straw man (ignore the learned threshold forever) and ``pure_xcal`` is
+#: safe-thresholds OFF, which #2799 already measured as the loser.
+_SCHEDULES: tuple[BlendSchedule, ...] = (
+    # --- controls: the two ends of the axis ---
+    WeightSchedule("pure_gmm", "Never trust the learned cut", lo=0, hi=0, cap=0.0),
+    WeightSchedule("pure_xcal", "Never blend (= safe-thresholds off)", lo=0, hi=0),
+    # --- family A: endpoints, linear shape ---
+    WeightSchedule("prod", "Shipped ramp: pure GMM ≤6, pure x-cal ≥20", lo=6, hi=20),
+    WeightSchedule("fast", "Hand off by 12 labels", lo=6, hi=12),
+    WeightSchedule("slow", "Hand off by 40 labels", lo=6, hi=40),
+    WeightSchedule("vslow", "Hand off by 80 labels", lo=6, hi=80),
+    WeightSchedule("early", "Start trusting x-cal at 2 labels", lo=2, hi=20),
+    WeightSchedule("late", "Hold pure GMM until 10 labels", lo=10, hi=30),
+    # --- family B: shape at the production endpoints ---
+    WeightSchedule("convex", "Hold the GMM, then hand off fast", lo=6, hi=20, shape="convex"),
+    WeightSchedule("concave", "Hand off early, then crawl", lo=6, hi=20, shape="concave"),
+    WeightSchedule("step", "Hard switch at 13 labels", lo=6, hi=20, shape="step"),
+    WeightSchedule("logistic", "Smooth step centred at 13 labels", lo=6, hi=20, shape="logistic"),
+    # --- family C: schedule on the class that actually limits calibration ---
+    WeightSchedule("rare", "Ramp on the rarer class (1→8)", lo=1, hi=8, stat="rare"),
+    WeightSchedule("pos", "Ramp on the positive count (1→8)", lo=1, hi=8, stat="good"),
+    # --- family D: never hand off completely ---
+    WeightSchedule("cap80", "Production ramp, but keep 20% GMM forever", lo=6, hi=20, cap=0.8),
+    WeightSchedule("cap50", "Production ramp, but keep 50% GMM forever", lo=6, hi=20, cap=0.5),
+    # --- family E: bound the x-cal cut instead of averaging it ---
+    CorridorSchedule("corridor", "Clamp x-cal between the component means", ramped=False),
+    CorridorSchedule("corridor_ramp", "Corridor opening from the midpoint over 6→20", ramped=True),
+)
+
+SAFE_BLEND_SCHEDULES: dict[str, BlendSchedule] = {s.name: s for s in _SCHEDULES}
+
+#: The shipped schedule.  #2841 will propose flipping this once the run reports.
+PRODUCTION_SCHEDULE = "prod"
+
+
+def get_schedule(name: str | None = None) -> BlendSchedule:
+    """Look up a schedule by name; ``None`` yields the production one."""
+    key = name or PRODUCTION_SCHEDULE
+    try:
+        return SAFE_BLEND_SCHEDULES[key]
+    except KeyError:
+        raise ValueError(f"unknown safe-threshold schedule {key!r}; known: {', '.join(schedule_names())}") from None
+
+
+def schedule_names() -> list[str]:
+    """Registry keys, in declaration order."""
+    return list(SAFE_BLEND_SCHEDULES)

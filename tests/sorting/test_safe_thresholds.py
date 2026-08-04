@@ -32,14 +32,14 @@ class TestCalculateSafeThreshold:
         scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
         xcal = 0.4
         gmm = calculate_gmm_threshold(scores)
-        safe = calculate_safe_threshold(xcal, scores, n_labels=4)
+        safe = calculate_safe_threshold(xcal, scores, 4)
         assert safe == pytest.approx(gmm, abs=1e-6)
 
     def test_many_labels_returns_xcal(self):
         """With >= 20 labels, result equals x-cal."""
         scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
         xcal = 0.45
-        safe = calculate_safe_threshold(xcal, scores, n_labels=25)
+        safe = calculate_safe_threshold(xcal, scores, 25)
         assert safe == pytest.approx(xcal, abs=1e-6)
 
     def test_intermediate_labels_blend(self):
@@ -47,7 +47,7 @@ class TestCalculateSafeThreshold:
         scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
         xcal = 0.4
         gmm = calculate_gmm_threshold(scores)
-        safe = calculate_safe_threshold(xcal, scores, n_labels=13)  # midpoint
+        safe = calculate_safe_threshold(xcal, scores, 13)  # midpoint
 
         # Should be strictly between gmm and xcal (unless they're equal)
         if abs(gmm - xcal) > 1e-6:
@@ -58,7 +58,7 @@ class TestCalculateSafeThreshold:
         """With >= 20 labels, even extreme x-cal values are used directly."""
         scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
         for xcal in [0.02, 0.98]:
-            safe = calculate_safe_threshold(xcal, scores, n_labels=30)
+            safe = calculate_safe_threshold(xcal, scores, 30)
             assert safe == pytest.approx(xcal, abs=1e-6)
 
     def test_exactly_6_labels_starts_ramp(self):
@@ -66,14 +66,14 @@ class TestCalculateSafeThreshold:
         scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
         xcal = 0.4
         gmm = calculate_gmm_threshold(scores)
-        safe = calculate_safe_threshold(xcal, scores, n_labels=6)
+        safe = calculate_safe_threshold(xcal, scores, 6)
         assert safe == pytest.approx(gmm, abs=1e-6)
 
     def test_exactly_20_labels_ends_ramp(self):
         """At exactly 20 labels, label_weight should be 1 → pure x-cal."""
         scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
         xcal = 0.45
-        safe = calculate_safe_threshold(xcal, scores, n_labels=20)
+        safe = calculate_safe_threshold(xcal, scores, 20)
         assert safe == pytest.approx(xcal, abs=1e-6)
 
     def test_infinite_xcal_falls_back_to_gmm_without_nan(self):
@@ -83,7 +83,7 @@ class TestCalculateSafeThreshold:
 
         scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
         gmm = calculate_gmm_threshold(scores)
-        safe = calculate_safe_threshold(float("inf"), scores, n_labels=4)
+        safe = calculate_safe_threshold(float("inf"), scores, 4)
         assert math.isfinite(safe)
         assert safe == pytest.approx(gmm, abs=1e-6)
 
@@ -93,7 +93,7 @@ class TestCalculateSafeThreshold:
 
         scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
         gmm = calculate_gmm_threshold(scores)
-        safe = calculate_safe_threshold(float("nan"), scores, n_labels=13)
+        safe = calculate_safe_threshold(float("nan"), scores, 13)
         assert math.isfinite(safe)
         assert safe == pytest.approx(gmm, abs=1e-6)
 
@@ -105,7 +105,7 @@ class TestCalculateSafeThreshold:
 
         scores = [0.1, 0.2, 0.3, 0.7, 0.8, 0.9]
         gmm = calculate_gmm_threshold(scores)
-        safe = calculate_safe_threshold(NO_GOOD_THRESHOLD, scores, n_labels=4)
+        safe = calculate_safe_threshold(NO_GOOD_THRESHOLD, scores, 4)
         assert math.isfinite(safe)
         assert safe == pytest.approx(gmm, abs=1e-6)
 
