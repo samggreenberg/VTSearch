@@ -98,7 +98,12 @@ def main() -> int:
         assert rc == 0, f"analyze_ab returned {rc}"
 
         tbl = pd.read_csv(on_dir / "agg" / "ab_window_by_arm.csv")
-        cost = tbl[tbl["metric"] == "cost"].set_index("window")
+        assert set(tbl["scope"]) == {"app_visible", "all_steps"}, set(tbl["scope"])
+        # Fabricated rows are all app_trained=1, so both scopes must agree.
+        for scope in ("app_visible", "all_steps"):
+            s = tbl[(tbl["scope"] == scope) & (tbl["metric"] == "cost") & (tbl["window"] == "ramp_6_20")]
+            assert abs(float(s["delta_on_minus_off"].iloc[0]) - RAMP_EFFECT) < 0.005, s
+        cost = tbl[(tbl["metric"] == "cost") & (tbl["scope"] == "app_visible")].set_index("window")
 
         # Variant rows must be excluded: a mean cost near 0.99 would mean the
         # analyzer read the ON run's counterfactual rows instead of its real ones.

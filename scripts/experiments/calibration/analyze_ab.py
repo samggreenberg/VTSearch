@@ -58,6 +58,15 @@ METRICS: tuple[str, ...] = ("cost", "fnr", "fpr", "regret", "average_precision",
 
 CELL_KEYS: tuple[str, ...] = ("arm", "category", "seed")
 
+#: Row scopes the comparison is computed over.  ``app_visible`` keeps only the
+#: steps at which the app would have had a trained detector on screen
+#: (``app_trained``): before the Good/Bad quorum the app sorts by text/example
+#: cosine, so neither the threshold the user sees nor the next Hard pick comes
+#: from the detector — a difference measured there is a difference no user
+#: experiences (the #2788 lesson).  ``all_steps`` keeps every trainable step,
+#: which is what a purely numerical reading of the harness would report.
+SCOPES: tuple[str, ...] = ("app_visible", "all_steps")
+
 
 def _md(df: pd.DataFrame) -> str:
     try:
@@ -112,39 +121,50 @@ def _wilcoxon(delta: np.ndarray) -> tuple[float, str]:
         return float("nan"), f"{type(exc).__name__}"
 
 
+def _scoped(df: pd.DataFrame, scope: str) -> pd.DataFrame:
+    """Restrict to the steps *scope* counts (see :data:`SCOPES`)."""
+    if scope == "app_visible" and "app_trained" in df.columns:
+        return df[df["app_trained"] == 1]
+    return df
+
+
 def paired_window_table(on: pd.DataFrame, off: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
-    """Mean ON, mean OFF, and paired Δ (ON − OFF) per (arm, window, metric)."""
+    """Mean ON, mean OFF, and paired Δ (ON − OFF) per (scope, arm, window, metric)."""
     rows: list[dict] = []
     paired_cells: list[pd.DataFrame] = []
-    for wname, (lo, hi) in WINDOWS.items():
-        a, b = _cell_means(on, lo, hi), _cell_means(off, lo, hi)
-        if a.empty or b.empty:
-            continue
-        j = a.merge(b, on=list(CELL_KEYS), suffixes=("_on", "_off"))
-        if j.empty:
-            continue
-        j.insert(0, "window", wname)
-        paired_cells.append(j)
-        for arm, sub in j.groupby("arm"):
-            for m in METRICS:
-                if f"{m}_on" not in sub.columns:
-                    continue
-                delta = (sub[f"{m}_on"] - sub[f"{m}_off"]).to_numpy(dtype=float)
-                p, note = _wilcoxon(delta)
-                rows.append(
-                    {
-                        "arm": arm,
-                        "window": wname,
-                        "metric": m,
-                        "n_cells": int(len(sub)),
-                        "safe_on": float(np.nanmean(sub[f"{m}_on"])),
-                        "safe_off": float(np.nanmean(sub[f"{m}_off"])),
-                        "delta_on_minus_off": float(np.nanmean(delta)),
-                        "win_rate_on": float(np.mean(delta < 0)) if np.isfinite(delta).any() else float("nan"),
-                        "p_wilcoxon": p,
-                        "note": note,
-                    }
-                )
+    for scope in SCOPES:
+        on_s, off_s = _scoped(on, scope), _scoped(off, scope)
+        for wname, (lo, hi) in WINDOWS.items():
+            a, b = _cell_means(on_s, lo, hi), _cell_means(off_s, lo, hi)
+            if a.empty or b.empty:
+                continue
+            j = a.merge(b, on=list(CELL_KEYS), suffixes=("_on", "_off"))
+            if j.empty:
+                continue
+            j.insert(0, "window", wname)
+            j.insert(0, "scope", scope)
+            paired_cells.append(j)
+            for arm, sub in j.groupby("arm"):
+                for m in METRICS:
+                    if f"{m}_on" not in sub.columns:
+                        continue
+                    delta = (sub[f"{m}_on"] - sub[f"{m}_off"]).to_numpy(dtype=float)
+                    p, note = _wilcoxon(delta)
+                    rows.append(
+                        {
+                            "scope": scope,
+                            "arm": arm,
+                            "window": wname,
+                            "metric": m,
+                            "n_cells": int(len(sub)),
+                            "safe_on": float(np.nanmean(sub[f"{m}_on"])),
+                            "safe_off": float(np.nanmean(sub[f"{m}_off"])),
+                            "delta_on_minus_off": float(np.nanmean(delta)),
+                            "win_rate_on": float(np.mean(delta < 0)) if np.isfinite(delta).any() else float("nan"),
+                            "p_wilcoxon": p,
+                            "note": note,
+                        }
+                    )
     tbl = pd.DataFrame(rows)
     agg_dir.mkdir(parents=True, exist_ok=True)
     tbl.to_csv(agg_dir / "ab_window_by_arm.csv", index=False)
@@ -157,7 +177,7 @@ def curves(on: pd.DataFrame, off: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
     """Mean cost/FNR/FPR vs vote count for each run — the shape behind the windows."""
     frames = []
     for df in (on, off):
-        metrics = [m for m in ("cost", "fnr", "fpr", "threshold", "degenerate") if m in df.columns]
+        metrics = [m for m in ("cost", "fnr", "fpr", "threshold", "degenerate", "app_trained") if m in df.columns]
         g = df.groupby(["arm", "run", "n_votes"], as_index=False)[metrics].mean()
         g["n_rows"] = df.groupby(["arm", "run", "n_votes"]).size().to_numpy()
         frames.append(g)
@@ -166,23 +186,26 @@ def curves(on: pd.DataFrame, off: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
     return out
 
 
-def verdict(tbl: pd.DataFrame) -> dict:
+def verdict(tbl: pd.DataFrame, scope: str = "app_visible") -> dict:
     """The ship decision: force ``safe_thresholds`` on for every user, or not?
 
-    Read on the production region-vote arm (``max_patch``).  Forcing a default
-    on for everyone needs the blend to *help* where it has authority (the two
-    sub-20-vote windows) and to not *hurt* once it has none (post-ramp, where
-    only selection feedback can carry a difference).
+    Read on the production region-vote arm (``max_patch``) and, by default, on
+    the steps a user would actually see a detector at (``app_visible``).
+    Forcing a default on for everyone needs the blend to *help* where it has
+    authority (the two sub-20-vote windows) and to not *hurt* once it has none
+    (post-ramp, where only selection feedback can carry a difference).
     """
-    out: dict = {}
-    prod = tbl[~tbl["arm"].str.contains("whole_image", na=False)]
+    out: dict = {"scope": scope}
+    prod = tbl[(tbl["scope"] == scope) & ~tbl["arm"].str.contains("whole_image", na=False)]
     for wname in WINDOWS:
         w = prod[(prod["window"] == wname) & (prod["metric"] == "cost")]
         if w.empty:
+            out[wname] = {"n_cells": 0, "reading": "no steps in this window at this scope"}
             continue
         d = float(w["delta_on_minus_off"].mean())
         p = float(w["p_wilcoxon"].mean())
         out[wname] = {
+            "n_cells": int(w["n_cells"].max()),
             "delta_cost_on_minus_off": d,
             "p": p,
             "reading": ("safe ON better" if d < 0 else "safe ON worse") + (" (significant)" if p < 0.05 else " (n.s.)"),
@@ -212,7 +235,14 @@ def main() -> int:
     agg_dir = out_dir / "agg"
     tbl = paired_window_table(on, off, agg_dir)
     curve = curves(on, off, agg_dir)
-    v = verdict(tbl)
+    verdicts = {scope: verdict(tbl, scope) for scope in SCOPES}
+    v = verdicts["app_visible"]
+
+    # Where the detector actually goes live: the app sorts by text/example
+    # cosine until the Good/Bad quorum, so this is the first vote count at which
+    # the blend can change anything a user sees.
+    live = on[on["app_trained"] == 1]["n_votes"] if "app_trained" in on.columns else pd.Series(dtype=float)
+    first_live = int(live.min()) if not live.empty else -1
 
     heads = sorted(set(on.get("head", pd.Series(dtype=str)).dropna().unique()))
     summary = {
@@ -223,7 +253,9 @@ def main() -> int:
         "n_cells_on": int(on.groupby(list(CELL_KEYS)).ngroups),
         "n_cells_off": int(off.groupby(list(CELL_KEYS)).ngroups),
         "windows": {k: list(v_) for k, v_ in WINDOWS.items()},
+        "first_app_visible_vote_count": first_live,
         "verdict": v,
+        "verdict_by_scope": verdicts,
     }
     (out_dir / "summary_ab.json").write_text(json.dumps(summary, indent=2))
 
@@ -237,14 +269,18 @@ def main() -> int:
         "Hard pick, the two arms vote on different items, so cells (category × seed), not",
         "steps, are the paired units.",
         "",
+        f"The app shows a trained detector from **{first_live} votes** onward; below that it",
+        "sorts by text/example cosine, so `scope=app_visible` is what users actually get and",
+        "`scope=all_steps` is the purely numerical reading.",
+        "",
         "## Per-window paired comparison (Δ = ON − OFF; negative = safe thresholds better)",
         "",
         _md(tbl),
         "",
-        "## Verdict",
+        "## Verdict (read on the production max_patch arm, app-visible steps)",
         "",
         "```json",
-        json.dumps(v, indent=2),
+        json.dumps(verdicts, indent=2),
         "```",
         "",
         f"Curves: `agg/ab_curves_vs_votes.csv` ({len(curve)} rows) · paired cells: `agg/ab_paired_cells.csv`",
