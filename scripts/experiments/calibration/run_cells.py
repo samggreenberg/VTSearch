@@ -76,7 +76,10 @@ def main(argv: list[str] | None = None) -> int:
     ds, emb, cat, seed = cell["dataset"], cell["embedder"], cell["category"], cell["seed"]
     styles = cfg.styles_for_embedder(emb)
     region_voting = cfg.REGION_VOTING_BY_DATASET.get(ds, False)
-    common.log(f"cell {idx}/{len(cells)}: dataset={ds} embedder={emb} category={cat} seed={seed} styles={styles}")
+    common.log(
+        f"cell {idx}/{len(cells)}: dataset={ds} embedder={emb} category={cat} seed={seed} "
+        f"styles={styles} head={cfg.HEAD} safe_thresholds={cfg.SAFE_THRESHOLDS}"
+    )
 
     import pandas as pd
 
@@ -121,6 +124,7 @@ def main(argv: list[str] | None = None) -> int:
             max_steps=cfg.MAX_STEPS,
             seed_scores=seed_scores,
             trainer="mlp",
+            head=cfg.HEAD,
             style=style,
             emit_calibration_metrics=True,
             repool_variants=variants,

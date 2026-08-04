@@ -16,6 +16,12 @@ MEM="${CALIB_MEM:-48G}"
 CPUS="${CALIB_CPUS:-6}"
 TIME="${CALIB_TIME:-4:00:00}"
 CONC="${CALIB_CONC:-8}"
+# Partition + optional GPU request.  Cells that train the linear head (#2799)
+# are small enough to run on the cpu partition, where the array is not capped
+# by the GPU QOS - set CALIB_PARTITION=cpu CALIB_GRES=none for that.
+PARTITION="${CALIB_PARTITION:-gpu}"
+GRES_ARG=(--gres="$GRES")
+[[ "$GRES" == "none" || -z "$GRES" ]] && GRES_ARG=()
 
 ENVX="export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS VTSEARCH_DATA_DIR=${VTSEARCH_DATA_DIR:-} VTSEARCH_MODELS_DIR=${VTSEARCH_MODELS_DIR:-} HF_HOME=${HF_HOME:-}"
 
@@ -24,10 +30,10 @@ if ! [[ "$N" =~ ^[0-9]+$ ]] || [[ "$N" -eq 0 ]]; then
   echo "ERROR: could not determine cell count (got '$N'); is prepare done?" >&2
   exit 1
 fi
-echo "cells to run: $N (array 0-$((N-1))%$CONC, $GRES)"
+echo "cells to run: $N (array 0-$((N-1))%$CONC, partition=$PARTITION gres=$GRES)"
 
 B=$(sbatch --parsable --job-name=cal-cells --array=0-$((N-1))%$CONC \
-  --gres="$GRES" --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" --partition=gpu \
+  "${GRES_ARG[@]}" --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" --partition="$PARTITION" \
   --export=ALL --output="$LOGS/cells-%A_%a.out" \
   --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py")
 echo "cells array: $B"

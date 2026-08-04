@@ -65,6 +65,13 @@ CALIBRATION_FRACTION = 0.5
 SAFE_THRESHOLDS = os.environ.get("CALIB_SAFE_THRESHOLDS", "0") == "1"
 MEDIA_TYPE = "image"
 
+#: Which torch head each step trains (``vtscore.eval.voting_iterations.HEADS``).
+#: #2781 ran the harness's historical auto-sized MLP; the #2799 safe-threshold
+#: study runs ``linear`` — the head the live detector actually trains since
+#: #2790/#2809 — because its question ("should safe_thresholds be forced on for
+#: every VTSearch user?") is only answerable on the shipped head.
+HEAD = os.environ.get("CALIB_HEAD", "mlp")
+
 # --- Category-selection parameters (copied from the Max-Patch runner) ---
 _MIN_CATEGORY_COUNT = int(os.environ.get("CALIB_MIN_CAT_COUNT", "20"))
 N_CATEGORIES = int(os.environ.get("CALIB_N_CATEGORIES", "6"))  # prevalence-spread count (Caltech)
