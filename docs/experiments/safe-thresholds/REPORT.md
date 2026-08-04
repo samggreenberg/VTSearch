@@ -136,6 +136,14 @@ difference (cost −0.0041, p = 0.88) — on the single-vector arm the selection
 feedback does not carry, so the durable post-ramp gain is specific to the region
 arm.
 
+**A note on the app-visible filter.** Because the arms label different items, the
+`app_trained` filter is applied inside each arm's own trajectory, so the two
+compared step sets are not literally the same steps — which is the point: this is
+a comparison of *policies*, and when the detector appears is itself part of what
+the policy does. The unfiltered `all_steps` scope, which applies no such filter,
+agrees in sign and size on every headline number (ramp Δcost −0.0754 vs −0.0742,
+ΔFNR −0.0747 vs −0.0708), so nothing here rests on the filter.
+
 ### Harness fidelity
 
 The safe-ON run also emits, per step, one row per GMM variant re-cutting the
