@@ -87,7 +87,8 @@ def _cuml_active() -> bool:
         return False
 
 
-def _download_size_mb_for(dataset_id: str) -> Optional[float]:
+def download_size_mb_for(dataset_id: str) -> Optional[float]:
+    """Declared archive size of a demo dataset, or ``None`` for anything else."""
     try:
         from vtscore.datasets.config import DEMO_DATASETS  # noqa: PLC0415
 
@@ -97,6 +98,27 @@ def _download_size_mb_for(dataset_id: str) -> Optional[float]:
     except Exception:
         pass
     return None
+
+
+def resolve_download_size_mb(dataset_id: str = "") -> Optional[float]:
+    """Best-effort archive size in MB for the load identified by *dataset_id*.
+
+    The byte-scaled steps of a load (the transfer and the unpack) are fit as a
+    per-MB rate, so a row without this is a row those two steps cannot use.
+    Resolution order is explicit override, then the demo catalogue's declared
+    size; a non-demo import has no declared archive and yields ``None``.
+
+    Shared by both recorders (``VTSEARCH_PROFILE_LOAD`` and
+    ``VTSEARCH_TIMING_RECORD``) so their rows agree on the same load's size.
+    """
+    dataset_id = dataset_id or os.environ.get("VTSEARCH_PROFILE_DATASET_ID", "")
+    override = os.environ.get("VTSEARCH_PROFILE_DOWNLOAD_MB", "").strip()
+    if override:
+        try:
+            return float(override)
+        except ValueError:
+            pass
+    return download_size_mb_for(dataset_id)
 
 
 class LoadProfiler:
@@ -168,8 +190,7 @@ class LoadProfiler:
         if not self._path:
             return
         dataset_id = dataset_id or os.environ.get("VTSEARCH_PROFILE_DATASET_ID", "")
-        dl_mb_env = os.environ.get("VTSEARCH_PROFILE_DOWNLOAD_MB")
-        download_size_mb = float(dl_mb_env) if dl_mb_env else _download_size_mb_for(dataset_id)
+        download_size_mb = resolve_download_size_mb(dataset_id)
 
         with self._lock:
             order = list(self._phase_order)
