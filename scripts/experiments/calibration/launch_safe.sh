@@ -19,6 +19,9 @@ export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
 export CALIB_SAFE_THRESHOLDS=1
 export CALIB_ANALYZE=analyze_safe.py
+# The head the live detector ships since #2790/#2809 - the blend's authority is
+# only worth measuring on the model users actually get.
+export CALIB_HEAD="${CALIB_HEAD:-linear}"
 
 # Visual Genome region voting only; production patch arm + single-vector control.
 export CALIB_DATASETS="${CALIB_DATASETS:-visual_genome_m}"
