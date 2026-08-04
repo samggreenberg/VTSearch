@@ -170,9 +170,14 @@ The function is the per-vote hot path:
   is pooled on the fly via
   `vtscore.media.patch_embed.box_to_vote_vector` - image-level voting
   on a patch-aware media gets the same vector as in v1.
-- Below 6 labels the cross-cal trainings are skipped (threshold defaults
-  to 0.5) because the safe-threshold blend would discard the result
-  anyway.
+- Where the mix-in schedule puts zero weight on the cross-cal cut (with
+  the production schedule, at 6 labels or fewer) the cross-cal trainings
+  are skipped, because the blend would discard the result anyway. The
+  condition is asked of the schedule (`xcal_is_discarded`) rather than
+  hard-coded, so changing the schedule carries its own skip. The
+  placeholder left behind is `NO_GOOD_THRESHOLD` on every path: it is
+  normally discarded, but a degenerate GMM makes the blend fall back to
+  it, and "admit nothing" is the safe reading of "never computed".
 - `_score_all_media` (line 187) takes one of two paths. Region-aware
   datasets flatten all `(media, region)` vectors into one tensor, run
   a single forward pass, and max-pool per media so the winning region

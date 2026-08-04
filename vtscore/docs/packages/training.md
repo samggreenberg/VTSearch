@@ -268,18 +268,30 @@ The key bytes encode the actual training vectors (not just label IDs),
 so if the embedder changes and a labelset is re-resolved to different
 embeddings, the cache invalidates automatically.
 
-### `calculate_safe_threshold(xcal_threshold, all_scores, n_labels)`
+### `calculate_safe_threshold(xcal_threshold, all_scores, ctx, schedule=None)`
 
-`vtscore/training/thresholds.py:312`. Blends the cross-calibration
+`vtscore/training/thresholds.py`. Combines the cross-calibration
 threshold with a GMM threshold computed on the full score distribution.
-The cross-cal output gets noisy below ~20 labels; this blend ramps
-linearly from pure-GMM at 6 labels to pure-cross-cal at 20:
+The cross-cal output gets noisy when labels are few, so a **mix-in
+schedule** (`vtscore/training/blend_schedules.py`) decides how much of
+each to use. `ctx` is a `BlendContext` carrying the vote counts (total,
+good, bad — in votes, not flooded rows); a bare `int` is accepted where
+only the total is known.
+
+The shipped schedule (`prod`) ramps linearly from pure-GMM at 6 labels
+to pure-cross-cal at 20:
 
 | `n_labels` | Result                                      |
 |-----------:|---------------------------------------------|
-|     `< 6`  | pure GMM threshold                          |
+|    `<= 6`  | pure GMM threshold                          |
 |    `6..20` | linear interpolation                        |
 |   `>= 20`  | pure cross-cal threshold                    |
+
+Other schedules in the registry vary the endpoints, the curve shape, the
+statistic the ramp reads (total labels vs the rarer class), or replace
+the weighted average with a clamp into the GMM's component means. They
+exist because issue #2841 measures which one is best; `prod` is what
+ships until that lands.
 
 When `xcal_threshold` is `float("inf")` (no valid fold split), falls
 back entirely to the GMM threshold.
