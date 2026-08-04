@@ -92,6 +92,17 @@ built so the alternatives are measured rather than argued.
   lands, and the crossing is solved against a fiction. Repaired by fitting the
   low component as a **Gumbel** (`vtscore/training/evt_mixture.py`).
 
+  **The axis matters, and it is not the score axis.** The limit theorem applies
+  to the max of the region *logits*; a score is that max pushed through a
+  sigmoid, and the squash destroys the shape. Measured before this study ran: a
+  Gumbel fitted to sigmoid scores *loses* to a 2-Gaussian mixture (−0.008 mean
+  log likelihood at m = 24), and wins on the logit axis. So the EVT fit is done
+  in logit space and the cut mapped back — which is exact, because a density
+  crossing is invariant under a monotone reparametrisation (both sides pick up
+  the same Jacobian). This is a different claim from #2799's dead logit-space
+  *Gaussian* variant: that moved a family across axes, which changes little;
+  this changes the family to the one the limit theorem names.
+
 <!-- item-sep -->
 
 - **Identification.** The mixture's high component is whatever the upper mode
@@ -135,8 +146,8 @@ so the exact rate-optimal cut is a grid minimisation and **every rule's excess
 loss is measured against the truth**, with no held-out sample and no noise.
 Sweeps `m ∈ {1, 6, 24}` (m = 1 is the whole-image control, where the
 extreme-value story must vanish), prevalence, separation, variance ratio, and
-sample size, and repeats the whole sweep at n = 200 000 to separate a rule's own
-error from small-sample jitter.
+sample size, and repeats the whole sweep at n = 50 000 (the GMM's own subsample cap) to
+separate a rule's own error from small-sample jitter.
 
 Note what prevalence does *not* do in those two lines: it does not appear. The
 truth is prevalence-free, so sweeping it while holding the correct answer fixed
@@ -200,7 +211,8 @@ fitted mixture parameters of both families.
 4. **The EVT gain is geometry-specific.** `evt_loglik_gain > 0` on the pooled
    geometry and ≈ 0 on the image geometry and at `m = 1` in the bench. A gain
    that is uniform across geometries means the Gumbel is merely more flexible,
-   not more correct.
+   not more correct. (`gmm_logit_loglik` is recorded alongside so a gain is
+   attributable to the *family* rather than to the logit axis it is fitted on.)
 
 If (1) holds and (3) fails, the diagnosis is wrong and the decomposition says
 which of the alternatives took over.

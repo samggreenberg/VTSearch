@@ -323,7 +323,9 @@ def make_figures(df: pd.DataFrame, outdir: Path) -> list[str]:
     for ax, m in zip(axes[0], M_VALUES, strict=False):
         sub = by[by["m"] == m]
         grid = sub.pivot(index="sd_ratio", columns="separation", values="winner")
-        num = grid.map(lambda r: codes.get(r, -1))
+        # DataFrame.map only exists on pandas >= 2.1; go column-wise so the
+        # figure does not depend on the cluster venv's pandas minor version.
+        num = grid.apply(lambda col: col.map(lambda r: codes.get(r, -1)))
         ax.imshow(num.to_numpy(), aspect="auto", cmap="tab10", vmin=0, vmax=9, origin="lower")
         ax.set_xticks(range(len(grid.columns)))
         ax.set_xticklabels([f"{c:g}" for c in grid.columns])
