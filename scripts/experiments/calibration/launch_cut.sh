@@ -70,10 +70,16 @@ LOGS="$CALIB_EXP/logs"
 mkdir -p "$LOGS"
 
 # --- The theory half: independent of any dataset, so it runs now. ---
+# CUT_SKIP_THEORY=1 relaunches only the data half, for when the cells array has
+# to be resubmitted and a healthy theory job is already running.
+if [[ -n "${CUT_SKIP_THEORY:-}" ]]; then
+  echo "theory bench skipped (CUT_SKIP_THEORY set)"
+else
 T=$(sbatch --parsable --job-name=cut-theory --mem=8G --cpus-per-task=4 \
   --time="${CUT_THEORY_TIME:-3:00:00}" --partition=cpu --export=ALL --output="$LOGS/theory-%j.out" \
   --wrap="source $WT/gridenv.sh && export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS && cd $HERE && python theory_bench.py --reps ${CUT_THEORY_REPS:-40}")
 echo "theory bench job: $T   -> $CALIB_RESULTS/theory/"
+fi
 
 # --- The data half. ---
 # The arms are identical to #2799's, so its prepare output (the category counts
