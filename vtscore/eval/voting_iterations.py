@@ -671,11 +671,10 @@ def _schedule_variant_rows(
     cal_scores = np.array([s for scores, _ in fold_orderings for s in scores]) if fold_orderings else None
     cal_labels = np.array([lb for _, labels_ in fold_orderings for lb in labels_]) if fold_orderings else None
 
-    ctx = BlendContext(
-        n_labels=n_votes,
-        n_good=int(details.get("n_good", 0)),
-        n_bad=int(details.get("n_bad", n_votes)),
-    )
+    # Required, not defaulted: the ``rare``/``pos`` families ramp on the class
+    # split, so a guessed split would silently mis-score two whole families
+    # rather than fail.  The caller sets both keys alongside ``n_votes``.
+    ctx = BlendContext(n_labels=n_votes, n_good=int(details["n_good"]), n_bad=int(details["n_bad"]))
     # One fit, re-combined under every schedule.  The corridor schedules need
     # the component means, so the fit object rides along with the cut.
     gmm_cut, gmm_fit = fit_gmm_threshold(sim_pooled_scores)
