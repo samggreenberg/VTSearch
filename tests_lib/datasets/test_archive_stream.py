@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import os
 import tarfile
 import threading
 import zipfile
@@ -33,6 +34,14 @@ def _make_tar(tmp_path: Path) -> Path:
             info.size = len(payload)
             tf.addfile(info, io.BytesIO(payload))
     return archive
+
+
+def _make_one_member_tar(path: Path, payload: bytes = MEMBER_A, name: str = "m.bin") -> Path:
+    with tarfile.open(path, "w") as tf:
+        info = tarfile.TarInfo(name)
+        info.size = len(payload)
+        tf.addfile(info, io.BytesIO(payload))
+    return path
 
 
 def _make_zip(tmp_path: Path) -> Path:
@@ -89,19 +98,45 @@ class TestReadMember:
         # Rewrite the archive with a differently-sized member; the cache key
         # folds in size+mtime, so the new index must be picked up.
         new_payload = MEMBER_A + b"EXTRA"
-        with tarfile.open(archive, "w") as tf:
-            info = tarfile.TarInfo("chunk_a.mp4")
-            info.size = len(new_payload)
-            tf.addfile(info, io.BytesIO(new_payload))
+        _make_one_member_tar(archive, new_payload, "chunk_a.mp4")
+        # Stamp a distinct mtime rather than trusting the filesystem's timestamp
+        # resolution: this asserts the cache-key contract, not the clock.
+        bumped = archive.stat().st_mtime_ns + 10**9
+        os.utime(archive, ns=(bumped, bumped))
         assert read_member(archive, "chunk_a.mp4") == new_payload
 
+    def test_index_cache_busts_on_same_tick_rewrite(self, tmp_path):
+        """A rewrite that leaves (size, mtime) untouched must still be noticed.
 
-def _make_one_member_tar(path: Path, payload: bytes = MEMBER_A, name: str = "m.bin") -> Path:
-    with tarfile.open(path, "w") as tf:
-        info = tarfile.TarInfo(name)
-        info.size = len(payload)
-        tf.addfile(info, io.BytesIO(payload))
-    return path
+        tar pads members to 512-byte blocks, so a member that grows by a few
+        bytes can leave the archive's size unchanged; on a filesystem with
+        coarse mtime the rewrite can also land in the same tick as the write we
+        indexed.  Both are forced here so the stat key is *identical* and only
+        the header-block probe can catch the change.
+        """
+        archive = _make_one_member_tar(tmp_path / "shard.tar", MEMBER_A, "chunk_a.mp4")
+        stamp = archive.stat().st_mtime_ns
+        size_before = archive.stat().st_size
+        assert member_size(archive, "chunk_a.mp4") == len(MEMBER_A)
+
+        new_payload = MEMBER_A + b"EXTRA"
+        _make_one_member_tar(archive, new_payload, "chunk_a.mp4")
+        os.utime(archive, ns=(stamp, stamp))  # same mtime tick as the indexed write
+        assert archive.stat().st_size == size_before  # same 512-block padding
+        assert archive.stat().st_mtime_ns == stamp
+
+        assert read_member(archive, "chunk_a.mp4") == new_payload
+
+    def test_settled_index_stops_probing(self, tmp_path):
+        """Past the settle window a hit is served without re-reading the head."""
+        archive = _make_tar(tmp_path)
+        assert member_size(archive, "chunk_a.mp4") == len(MEMBER_A)
+        entry = archive_stream._index_cache[archive_stream._cache_key(archive)]
+        assert not entry.settled
+        # Age the entry past the window; the next lookup settles it for good.
+        entry.first_seen_ns -= archive_stream._SETTLE_NS + 1
+        assert member_size(archive, "chunk_a.mp4") == len(MEMBER_A)
+        assert entry.settled
 
 
 class TestHandlePool:

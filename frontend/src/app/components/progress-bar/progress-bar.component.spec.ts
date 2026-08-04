@@ -61,6 +61,15 @@ describe('ProgressBarComponent', () => {
     expect(fill.classList).toContain('indeterminate');
   });
 
+  it('should leave the indeterminate width to CSS rather than an inline style', async () => {
+    // The sweep's 30% width is shared with the bounded zone's block in one CSS
+    // rule; an inline width here would have to be overridden with `!important`.
+    fixture.componentRef.setInput('indeterminate', true);
+    await settleZoneless(fixture);
+    const fill = fixture.nativeElement.querySelector('.progress-fill') as HTMLElement;
+    expect(fill.style.width).toBe('');
+  });
+
   it('should not have aria-valuenow when indeterminate', async () => {
     fixture.componentRef.setInput('indeterminate', true);
     await settleZoneless(fixture);
@@ -87,6 +96,77 @@ describe('ProgressBarComponent', () => {
     const fill = fixture.nativeElement.querySelector('.progress-fill');
     expect(fill.classList).toContain('indeterminate');
     expect(fill.classList).not.toContain('progress-fill--pulsing');
+  });
+
+  describe('bounded pulse band ([pulseTo])', () => {
+    it('renders the band spanning fill-edge..pulseTo and keeps the fill solid', async () => {
+      // A count-less phase whose slice bounds are known: fill parks at 50%,
+      // the band shades 50%..80% — "the job is somewhere in here".
+      fixture.componentRef.setInput('pulsing', true);
+      fixture.componentRef.setInput('value', 0.5);
+      fixture.componentRef.setInput('max', 1);
+      fixture.componentRef.setInput('pulseTo', 0.8);
+      await settleZoneless(fixture);
+      const fill = fixture.nativeElement.querySelector('.progress-fill') as HTMLElement;
+      const band = fixture.nativeElement.querySelector('.progress-band') as HTMLElement;
+      expect(band).not.toBeNull();
+      expect(band.style.left).toBe('50%');
+      expect(band.style.width).toBe('30%');
+      // The band carries the motion, so the parked fill stays solid and still.
+      expect(fill.classList).not.toContain('progress-fill--pulsing');
+      expect(fill.style.width).toBe('50%');
+    });
+
+    it('sweeps the zone with the same block the whole-bar spinner uses', async () => {
+      // The band's block and `.progress-fill.indeterminate` share one CSS rule
+      // (see progress-bar.component.scss), so a zone reads as that spinner
+      // confined to a sub-range rather than as a second, unrelated animation.
+      fixture.componentRef.setInput('pulsing', true);
+      fixture.componentRef.setInput('value', 0.5);
+      fixture.componentRef.setInput('max', 1);
+      fixture.componentRef.setInput('pulseTo', 0.8);
+      await settleZoneless(fixture);
+      const block = fixture.nativeElement.querySelector('.progress-band .progress-band__block');
+      expect(block).not.toBeNull();
+    });
+
+    it('does not render the band without pulsing', async () => {
+      fixture.componentRef.setInput('value', 0.5);
+      fixture.componentRef.setInput('max', 1);
+      fixture.componentRef.setInput('pulseTo', 0.8);
+      await settleZoneless(fixture);
+      expect(fixture.nativeElement.querySelector('.progress-band')).toBeNull();
+    });
+
+    it('falls back to the parked-fill shimmer when pulseTo is null', async () => {
+      fixture.componentRef.setInput('pulsing', true);
+      fixture.componentRef.setInput('value', 0.5);
+      fixture.componentRef.setInput('max', 1);
+      await settleZoneless(fixture);
+      expect(fixture.nativeElement.querySelector('.progress-band')).toBeNull();
+      const fill = fixture.nativeElement.querySelector('.progress-fill');
+      expect(fill.classList).toContain('progress-fill--pulsing');
+    });
+
+    it('does not render a band that would not extend past the fill', async () => {
+      fixture.componentRef.setInput('pulsing', true);
+      fixture.componentRef.setInput('value', 0.5);
+      fixture.componentRef.setInput('max', 1);
+      fixture.componentRef.setInput('pulseTo', 0.5);
+      await settleZoneless(fixture);
+      expect(fixture.nativeElement.querySelector('.progress-band')).toBeNull();
+      // Zero-width band means the plain parked-fill shimmer takes over.
+      const fill = fixture.nativeElement.querySelector('.progress-fill');
+      expect(fill.classList).toContain('progress-fill--pulsing');
+    });
+
+    it('lets indeterminate win over the band', async () => {
+      fixture.componentRef.setInput('pulsing', true);
+      fixture.componentRef.setInput('indeterminate', true);
+      fixture.componentRef.setInput('pulseTo', 0.8);
+      await settleZoneless(fixture);
+      expect(fixture.nativeElement.querySelector('.progress-band')).toBeNull();
+    });
   });
 
   it('should not apply the smooth modifier by default', async () => {

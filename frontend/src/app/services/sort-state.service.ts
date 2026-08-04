@@ -40,6 +40,10 @@ export class SortStateService {
   // resetting per phase. ``null`` for single-phase sorts (fall back to
   // current/total). See ProgressEvent.overall / ProgressTracker._compute_overall.
   private readonly _sortOverall = signal<number | null>(null);
+  // Whole-job fraction at which the current step's slice ends; with
+  // `_sortOverall` parked at the slice floor during a count-less step, the
+  // pair bounds the pulsing zone. See ProgressEvent.overall_step_end.
+  private readonly _sortStepEnd = signal<number | null>(null);
   private readonly _sortEtaSeconds = signal<number | null>(null);
   private readonly _inclusion = signal(0);
   private readonly _loadSortLabel = signal('');
@@ -89,6 +93,10 @@ export class SortStateService {
 
   get sortOverall(): number | null {
     return this._sortOverall();
+  }
+
+  get sortStepEnd(): number | null {
+    return this._sortStepEnd();
   }
 
   get sortEtaSeconds(): number | null {
@@ -193,11 +201,13 @@ export class SortStateService {
     total: number,
     overall: number | null = null,
     etaSeconds: number | null = null,
+    stepEnd: number | null = null,
   ): void {
     this._sortProgress.set(current);
     this._sortProgressTotal.set(total);
     this._sortOverall.set(overall);
     this._sortEtaSeconds.set(etaSeconds);
+    this._sortStepEnd.set(stepEnd);
   }
 
   setInclusion(value: number): void {
@@ -222,6 +232,7 @@ export class SortStateService {
     this._sortProgress.set(0);
     this._sortProgressTotal.set(0);
     this._sortOverall.set(null);
+    this._sortStepEnd.set(null);
     this._sortEtaSeconds.set(null);
     this._inclusion.set(0);
     this._loadSortLabel.set('');

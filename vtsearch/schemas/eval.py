@@ -228,12 +228,6 @@ class EvalTrainAndScoreResponseSchema(Schema):
     metric = fields.String()
     current = fields.Integer()
     total = fields.Integer()
-    #: Series over the steps computed so far, sent on ``running`` polls so the
-    #: client can render a curve that fills in during a long walk.  Holds
-    #: whichever point shape matches the job's metric, so - like
-    #: ``IndicatorScoreHistoryResponseSchema.history`` - it stays an opaque list
-    #: rather than committing to one of the three nested schemas.
-    partial = fields.List(fields.Dict())
     error_cost = fields.List(fields.Nested(ErrorCostPointSchema))
     stability = fields.List(fields.Nested(StabilityPointSchema))
     diversity = fields.List(fields.Nested(DiversityPointSchema))

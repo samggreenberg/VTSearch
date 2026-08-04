@@ -49,12 +49,6 @@ class AsyncJob:
     signature: Any = None
     status: str = "running"  # "pending" | "running" | "done" | "error" | "cancelled"
     result: Any = None
-    # Best-effort partial output published by a long-running target so pollers
-    # can render something before the job finishes (the eval train-and-score
-    # walk uses this to fill its chart in as it goes).  Single writer - the
-    # worker thread - and readers only ever rebind the whole value, so no lock
-    # is needed.  Ignored for jobs whose target never sets it.
-    partial: Any = None
     error: str | None = None
     current: int = 0
     total: int = 0

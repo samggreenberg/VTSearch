@@ -186,6 +186,9 @@ class TestProjectionMeta:
             assert (meta["step"], meta["total_steps"]) == (1, 3)
             assert meta["message"] == "arranging items"
             assert meta["overall"] == pytest.approx(0.0)
+            # The count-less fit still bounds itself: its slice ends at 1/3,
+            # so the client can shade 0..1/3 as the bounded indeterminate zone.
+            assert meta["overall_step_end"] == pytest.approx(1 / 3)
 
             # Halfway through phase 2 of 3 → one third plus half of a third.
             job.set_phase(2, 3, "building pyramid")
@@ -193,6 +196,7 @@ class TestProjectionMeta:
             meta = client.get("/api/projection/meta").get_json()
             assert (meta["step"], meta["total_steps"]) == (2, 3)
             assert meta["overall"] == pytest.approx(0.5)
+            assert meta["overall_step_end"] == pytest.approx(2 / 3)
         finally:
             release.set()
 

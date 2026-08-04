@@ -9,7 +9,7 @@ from __future__ import annotations
 import io
 import pickle
 import struct
-from typing import TYPE_CHECKING, Any
+from typing import IO, TYPE_CHECKING, Any
 
 
 # Allowlist of (module, name) pairs that may be instantiated during unpickling.
@@ -101,12 +101,17 @@ class RestrictedUnpickler(pickle.Unpickler):
         )
 
 
-def safe_pickle_load(f: io.BufferedIOBase, **kwargs: Any) -> Any:
+def safe_pickle_load(f: io.BufferedIOBase | IO[bytes], **kwargs: Any) -> Any:
     """Deserialise a pickle stream using the restricted unpickler.
 
     Drop-in replacement for ``pickle.load(f)`` that blocks arbitrary code
     execution.  Any extra keyword arguments (e.g. ``encoding``) are
     forwarded to the underlying ``Unpickler``.
+
+    *f* is any readable binary stream, not just an in-memory buffer: the
+    container reader hands this the live ``ZipExtFile`` for ``medias.pkl`` so
+    the entry deserialises as it streams, instead of being materialised in
+    full first.
     """
     return RestrictedUnpickler(f, **kwargs).load()
 

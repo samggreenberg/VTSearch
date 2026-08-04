@@ -761,6 +761,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
             prog.total ?? 0,
             prog.overall ?? null,
             prog.eta_seconds ?? null,
+            prog.overall_step_end ?? null,
           );
         }
       });

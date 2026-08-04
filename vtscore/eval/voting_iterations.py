@@ -47,7 +47,7 @@ from vtscore.eval.al_strategies import ALContext, select_next
 from vtscore.eval.autopilot_flow import AutopilotFlow, app_has_detector
 from vtscore.eval.labels import media_is_positive, region_box_for_category
 from vtscore.eval.trainers import _cross_calibrated_threshold, _parse_trainer_spec
-from vtscore.training.mlp import _auto_hidden_dim, train_model
+from vtscore.training.mlp import LINEAR_HEAD, _auto_hidden_dim, train_model
 from vtscore.training.thresholds import (
     calculate_cross_calibration_threshold,
     calculate_safe_threshold,
@@ -78,6 +78,26 @@ class _StepModel:
     device: str
 
 
+#: Torch head choices for the harness's per-step ranker.  ``"mlp"`` is the
+#: historical harness candidate — a hidden layer auto-sized from the vote count
+#: (:func:`~vtscore.training.mlp._auto_hidden_dim`).  ``"linear"`` is the head
+#: the live detector actually trains since #2790/#2809
+#: (:data:`~vtscore.training.mlp.LINEAR_HEAD`, a single ``Linear(d, 1)`` =
+#: logistic regression), so a ``"linear"`` run measures the shipped detector.
+#: The choice is threaded into the calibration folds too, exactly as production
+#: threads one width through ``_train_and_score_xy``.
+HEADS: tuple[str, ...] = ("mlp", "linear")
+
+
+def _resolve_hidden_dim(head: str, n_votes: int) -> int:
+    """Hidden width for *head* at *n_votes* votes (0 = the linear head)."""
+    if head == "linear":
+        return LINEAR_HEAD
+    if head == "mlp":
+        return _auto_hidden_dim(n_votes)
+    raise ValueError(f"unknown head {head!r}; expected one of {HEADS}")
+
+
 #: Identifying columns every emitted row (main or sweep) leads with.  ``phase``
 #: and ``app_trained`` ride along so any downstream analysis - including the
 #: calibration study's threshold rows - can filter to the steps at which the app
@@ -88,6 +108,7 @@ _IDENT_COLUMNS: tuple[str, ...] = (
     "category",
     "strategy",
     "trainer",
+    "head",
     "style",
     "prevalence_arm",
     "realized_prevalence",
@@ -477,11 +498,13 @@ def _operating_metrics(
 #: ``fit_scores`` picks which sim-set score distribution the GMM is fitted on
 #: ("pooled" = the style's inference max-pool, what production fits post-#2797;
 #: "image" = the whole-image vector scores, the historical pre-#2797 geometry).
-#: ``cut`` picks the rule ("cross" = equal-density crossing, production
-#: post-#2798; "mid" = midpoint-of-means, historical).  ``space`` fits the GMM
-#: on sigmoid scores ("sig") or their logits ("logit", the #2798 open idea).
-#: ``xcal_only`` is the no-blend control: the raw conformal threshold at the
-#: same step.  ``pooled_cross`` must reproduce the production blend exactly.
+#: ``cut`` picks the rule ("mid" = midpoint-of-means, what production ships:
+#: #2798 swapped it for the crossing, #2799 measured that as a net loss and
+#: #2833 reverted it; "cross" = the equal-density crossing, kept as a variant
+#: for the #2836 follow-up).  ``space`` fits the GMM on sigmoid scores ("sig")
+#: or their logits ("logit", the #2798 open idea).  ``xcal_only`` is the
+#: no-blend control: the raw conformal threshold at the same step.
+#: ``pooled_mid`` must reproduce the production blend exactly.
 _SAFE_GMM_VARIANTS: tuple[tuple[str, str, str, str], ...] = (
     ("xcal_only", "", "", ""),
     ("image_mid", "image", "mid", "sig"),
@@ -502,7 +525,7 @@ def _gmm_cuts(scores: list[float], space: str) -> dict[str, float]:
 
     Mirrors :func:`vtscore.training.thresholds.calculate_gmm_threshold`'s
     semantics per fallback (0.5 below 2 scores, median on fit failure) so the
-    ``("cross", "sig")`` cut blended on the pooled scores reproduces the
+    ``("mid", "sig")`` cut blended on the pooled scores reproduces the
     production safe threshold bit-for-bit.  With ``space="logit"`` the GMM is
     fitted on the logit-transformed sample and the cut mapped back through the
     sigmoid; the median fallback stays in the original space (the sigmoid is
@@ -846,10 +869,16 @@ def _train_and_calibrate(
     inclusion: int,
     calibrate_count: int,
     calibration_fraction: float,
+    head: str = "mlp",
     style_obj: Any = None,
     emit_calibration_metrics: bool = False,
 ) -> tuple[_StepModel, float, int, dict[str, float], dict[str, Any]]:
     """Train the step's ranker and calibrate its threshold from the current votes.
+
+    *head* selects the torch head on both torch paths (see :data:`HEADS`):
+    ``"mlp"`` keeps the auto-sized hidden layer, ``"linear"`` trains the
+    production linear head.  It is ignored by the SVM path, which has no torch
+    head at all.
 
     Dispatches on *trainer*: ``"mlp"`` runs the production MLP path unchanged
     (see :func:`_mlp_train_and_calibrate`); any ``svm_*`` name runs the SVM path
@@ -875,6 +904,7 @@ def _train_and_calibrate(
             inclusion=inclusion,
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
+            head=head,
             emit_calibration_metrics=emit_calibration_metrics,
         )
     if trainer == "mlp":
@@ -888,6 +918,7 @@ def _train_and_calibrate(
             inclusion=inclusion,
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
+            head=head,
         )
     return _svm_train_and_calibrate(
         trainer,
@@ -912,21 +943,23 @@ def _mlp_train_and_calibrate(
     inclusion: int,
     calibrate_count: int,
     calibration_fraction: float,
+    head: str = "mlp",
 ) -> tuple[_StepModel, float, int, dict[str, float], dict[str, Any]]:
-    """The MLP arm — numerically identical to the pre-trainer harness.
+    """The torch arm — numerically identical to the pre-trainer harness at ``head="mlp"``.
 
-    This is the harness's small-MLP candidate, not the live detector's head:
-    production trains the linear (logistic) head instead (the #2790 finding, see
-    ``vtscore.training.mlp.LINEAR_HEAD``).  Everything *around* the head still
-    mirrors the production ``_train_and_score_xy`` / ``train_and_threshold``
-    pipeline, so a reported cost differs from the live detector's only by the
-    head itself:
+    At ``head="mlp"`` (the default) this is the harness's small-MLP candidate,
+    not the live detector's head: production trains the linear (logistic) head
+    instead (the #2790 finding, see ``vtscore.training.mlp.LINEAR_HEAD``).
+    ``head="linear"`` selects that production head, so the reported cost is the
+    shipped detector's.  Everything *around* the head mirrors the production
+    ``_train_and_score_xy`` / ``train_and_threshold`` pipeline either way:
 
     Good votes region-pool their ground-truth box when *region_voting* is on
     (and the media supports it); Bad votes always train on the whole-image
     vector - matching the live detector, where only Yes-votes carry a region.
 
-    * ``hidden_dim`` is sized from the *full* label count and forced onto the
+    * ``hidden_dim`` comes from the head (sized from the *full* label count on
+      the MLP head, 0 on the linear one) and is forced onto the
       calibration folds, so the fold models share the final model's architecture
       (production likewise threads one width into
       ``cross_calibration_threshold_cached``).  Letting each fold auto-size to
@@ -955,7 +988,7 @@ def _mlp_train_and_calibrate(
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     n_labels = len(good_votes) + len(bad_votes)
 
-    hidden_dim = _auto_hidden_dim(n_labels)
+    hidden_dim = _resolve_hidden_dim(head, n_labels)
     t_xcal = time.monotonic()
     threshold = calculate_cross_calibration_threshold(
         X_list,
@@ -1000,9 +1033,10 @@ def _style_train_and_calibrate(
     inclusion: int,
     calibrate_count: int,
     calibration_fraction: float,
+    head: str = "mlp",
     emit_calibration_metrics: bool = False,
 ) -> tuple[_StepModel, float, int, dict[str, float], dict[str, Any]]:
-    """Style-driven MLP path (the Max-Patch experiment arms).
+    """Style-driven torch path (the Max-Patch experiment arms).
 
     The detection style (see :mod:`vtscore.eval.patch_styles`) supplies the
     vote-to-vector rules: each Good vote contributes ``style.good_vec`` (given
@@ -1012,7 +1046,7 @@ def _style_train_and_calibrate(
 
     Training and calibration are **bag-aware**, exactly like the production
     vote path (:func:`vtscore.detectors.training._train_and_score_xy`): the
-    hidden width and the safe-threshold ramp size on distinct *votes* rather
+    head (see :data:`HEADS`) and the safe-threshold ramp size on distinct *votes* rather
     than flooded rows, the calibration folds split by bag, and the final fit
     weights each bag equally.  On a whole-image style every bag is one row, so
     this collapses to the historical single-vector behaviour.
@@ -1050,7 +1084,7 @@ def _style_train_and_calibrate(
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
 
-    hidden_dim = _auto_hidden_dim(n_votes)
+    hidden_dim = _resolve_hidden_dim(head, n_votes)
     t_xcal = time.monotonic()
     details: dict[str, Any] = {}
     if emit_calibration_metrics:
@@ -1277,6 +1311,7 @@ def simulate_voting_iterations(  # noqa: C901
     atlas_min_node_size: int = 20,
     seed_scores: Optional[dict[int, float]] = None,
     trainer: str = "mlp",
+    head: str = "mlp",
     target_prevalence: Optional[float] = None,
     style: Optional[str] = None,
     emit_calibration_metrics: bool = False,
@@ -1302,6 +1337,15 @@ def simulate_voting_iterations(  # noqa: C901
             first retrain even at the same seed — by design (the question is
             which model makes *VTSearch* better, and VTSearch's vote order
             depends on the model).
+        head: Which torch head the ``"mlp"`` trainer fits at each step (see
+            :data:`HEADS`): ``"mlp"`` (default) keeps the harness's historical
+            auto-sized hidden layer, ``"linear"`` trains the production linear
+            (logistic) head shipped in #2790/#2809 — the head a live VTSearch
+            detector actually has, so a ``"linear"`` run's thresholds and costs
+            are the ones users see.  The head is threaded into the calibration
+            folds as well, mirroring how production threads one width through
+            ``_train_and_score_xy``.  Ignored on the SVM trainers (no torch
+            head); recorded in the ``head`` result column.
         style: Optional detection-style name (see
             :mod:`vtscore.eval.patch_styles`): ``"whole_image"``, ``"max_hac"``,
             or ``"max_patch"``.  When set (MLP trainer only), the style owns the
@@ -1367,7 +1411,7 @@ def simulate_voting_iterations(  # noqa: C901
 
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
-        style, prevalence_arm, realized_prevalence, t, n_good, n_bad, phase,
+        head, style, prevalence_arm, realized_prevalence, t, n_good, n_bad, phase,
         app_trained, cost, fpr, fnr, auroc, average_precision, train_seconds,
         xcal_seconds, pool_score_seconds, test_score_seconds, backend, device,
         elapsed_seconds``.  ``n_good``/``n_bad`` report the vote counts behind
@@ -1383,6 +1427,11 @@ def simulate_voting_iterations(  # noqa: C901
     # Note: no torch.manual_seed() here - train_model handles its own
     # RNG seeding via fork_rng, keeping it thread-safe.
     start_time = time.monotonic()
+
+    if head not in HEADS:
+        raise ValueError(f"unknown head {head!r}; expected one of {HEADS}")
+    if head != "mlp" and trainer != "mlp":
+        raise ValueError(f"head={head!r} only applies to the torch trainer; got trainer={trainer!r}")
 
     style_obj: Any = None
     if style is not None:
@@ -1544,6 +1593,7 @@ def simulate_voting_iterations(  # noqa: C901
             inclusion=inclusion,
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
+            head=head,
             style_obj=style_obj,
             emit_calibration_metrics=emit_calibration_metrics,
         )
@@ -1623,6 +1673,7 @@ def simulate_voting_iterations(  # noqa: C901
             "category": target_category,
             "strategy": strategy,
             "trainer": trainer,
+            "head": head,
             "style": style or "",
             "prevalence_arm": prevalence_arm,
             "realized_prevalence": realized_prevalence,

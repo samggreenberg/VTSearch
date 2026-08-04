@@ -17,7 +17,7 @@ import { DashboardLoadingTasksService } from '../../services/dashboard-loading-t
 import { ToastService } from '../../services/toast.service';
 import { VtDialogService } from '../../services/dialog.service';
 import { ActiveContextService } from '../../services/active-context.service';
-import { ActiveDetectorService } from '../../services/active-detector.service';
+import { DatasetStateService } from '../../services/dataset-state.service';
 import { MediaStateService } from '../../services/media-state.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService, SortedItem } from '../../services/sort-state.service';
@@ -61,7 +61,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private dialog = inject(VtDialogService);
   private ngZone = inject(NgZone);
   private activeContext = inject(ActiveContextService);
-  private activeDetector = inject(ActiveDetectorService);
+  private datasetState = inject(DatasetStateService);
   mediaState = inject(MediaStateService);
   voteState = inject(VoteStateService);
   sortState = inject(SortStateService);
@@ -320,6 +320,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
       current: this.sortState.sortProgress,
       total: this.sortState.sortProgressTotal,
       overall: this.sortState.sortOverall,
+      overall_step_end: this.sortState.sortStepEnd,
     });
   }
 
@@ -340,6 +341,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
             prog.total ?? 0,
             prog.overall ?? null,
             prog.eta_seconds ?? null,
+            prog.overall_step_end ?? null,
           );
         }
       });
@@ -363,7 +365,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Start polling for progress concurrently
     this.startProgressPolling();
 
-    const modelName = this.activeDetector.detectorName() || 'Detector';
+    const modelName =
+      this.datasetState.detectors.find((d) => d.id === modelId)?.name || 'Detector';
     this.detectorsFindApi.findLabel({ detector_id: modelId })
       .pipe(
         takeUntil(this.destroy$),
@@ -776,7 +779,9 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    */
   private toDatasetFromIds(ids: number[]): void {
     if (ids.length === 0) return;
-    const detectorName = this.activeDetector.detectorName() || 'Detector';
+    const modelId = this.activeContext.modelId;
+    const detectorName =
+      this.datasetState.detectors.find((d) => d.id === modelId)?.name || 'Detector';
     const base = [this.datasetName(), detectorName, 'Results'].filter((s) => !!s).join(' ');
 
     this.dialog.prompt('Name the new dataset', base).then((name) => {

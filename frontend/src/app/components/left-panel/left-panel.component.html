@@ -64,6 +64,7 @@
           [sortProgress]="sortProgress()"
           [sortProgressTotal]="sortProgressTotal()"
           [sortOverall]="sortOverall()"
+          [sortStepEnd]="sortStepEnd()"
           [sortEtaSeconds]="sortEtaSeconds()"
           (cancel)="sortCancel.emit()"
         />
@@ -151,6 +152,7 @@
           [sortProgress]="sortProgress()"
           [sortProgressTotal]="sortProgressTotal()"
           [sortOverall]="sortOverall()"
+          [sortStepEnd]="sortStepEnd()"
           [sortEtaSeconds]="sortEtaSeconds()"
           (indicatorClick)="indicatorClick.emit($event)"
           (cancel)="sortCancel.emit()"

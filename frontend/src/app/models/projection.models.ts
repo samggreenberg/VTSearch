@@ -120,6 +120,13 @@ export interface ProjectionMeta {
    * restarting at each phase. Mirrors ``ProgressEvent.overall``.
    */
   overall?: number | null;
+  /**
+   * Whole-job fraction (0..1) at which the running phase's slice ends. With
+   * {@link overall} parked at the slice floor during the count-less UMAP fit,
+   * the pair brackets the build's true position so the bar can shade the span
+   * as a bounded indeterminate zone. Mirrors ``ProgressEvent.overall_step_end``.
+   */
+  overall_step_end?: number | null;
   error?: string;
 }
 

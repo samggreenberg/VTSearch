@@ -145,13 +145,18 @@ describe('BrowseSubsetPrepService', () => {
             step: 1,
             total_steps: 3,
             overall: 0,
+            overall_step_end: 1 / 3,
           }),
         );
       await vi.advanceTimersByTimeAsync(1000);
 
       // The UMAP fit has no fraction to report, so the bar keeps its earned
-      // fill and shimmers rather than pretending to advance.
+      // fill and sweeps the phase's slice rather than pretending to advance.
+      // The slice bound has to survive the meta → ProgressEvent copy: without
+      // it this bar has a 0%-wide fill and nothing to animate, leaving the
+      // overlay visibly dead for the longest phase of the build.
       expect(service.bar().pulsing).toBe(true);
+      expect(service.bar().pulseTo).toBeCloseTo(1 / 3);
       expect(service.count()).toBe('');
       expect(service.detail()).toBe('Step 1 of 3 · UMAP fit (900 points) — 12s elapsed');
     } finally {

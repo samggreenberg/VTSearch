@@ -93,6 +93,14 @@ export interface ProgressEvent {
    * where consumers fall back to ``current``/``total``.
    */
   overall?: number | null;
+  /**
+   * Whole-job fraction (0..1) at which the current step's slice ends. Paired
+   * with ``overall`` it brackets the job's true position while a count-less
+   * step keeps ``overall`` parked at the slice floor; `progressBarState` turns
+   * the span into a bounded shimmer zone (`pulseTo`). ``null`` whenever
+   * ``overall`` is ``null``.
+   */
+  overall_step_end?: number | null;
   /** Dataset-only: payload returned by combine-datasets staging. */
   staging_result?: unknown;
   /**
