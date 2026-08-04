@@ -2,11 +2,11 @@
 
 With ``safe_thresholds=True`` and ``emit_calibration_metrics=True`` the harness
 emits one extra metric row per GMM variant at every trainable step - the #2799
-measurement arms.  The load-bearing invariant is that the ``pooled_cross``
-variant (pooled fit, equal-density crossing, sigmoid space - i.e. exactly what
-production computes) reproduces the base row's blended threshold bit-for-bit,
-so the study measures the shipped code and every other variant differs from it
-along exactly one named axis.
+measurement arms.  The load-bearing invariant is that the ``pooled_mid``
+variant (pooled fit, midpoint-of-means, sigmoid space - i.e. exactly what
+production computes since the #2833 revert) reproduces the base row's blended
+threshold bit-for-bit, so the study measures the shipped code and every other
+variant differs from it along exactly one named axis.
 """
 
 from __future__ import annotations
@@ -67,13 +67,13 @@ class TestSafeGmmVariantRows:
             assert r["pool_variant"] == "max"
             assert 0.0 <= r["blend_weight"] <= 1.0 or np.isnan(r["blend_weight"])
 
-    def test_pooled_cross_reproduces_production_blend(self):
+    def test_pooled_mid_reproduces_production_blend(self):
         rows = _run_safe("max_patch")
         base = {r["t"]: r for r in rows if r["gmm_variant"] == ""}
-        pc = {r["t"]: r for r in rows if r["gmm_variant"] == "pooled_cross"}
-        assert set(base) == set(pc)
+        pm = {r["t"]: r for r in rows if r["gmm_variant"] == "pooled_mid"}
+        assert set(base) == set(pm)
         for t, b in base.items():
-            assert pc[t]["threshold"] == b["threshold"], f"step {t}: variant diverged from production"
+            assert pm[t]["threshold"] == b["threshold"], f"step {t}: variant diverged from production"
 
     def test_xcal_only_is_the_unblended_cut(self):
         rows = _run_safe("max_patch")

@@ -14,8 +14,9 @@ pre-registered #2799 deliverables (design + decision rules:
   change), ``pooled_cross_logit - pooled_cross`` (the logit-space idea), and
   ``pooled_cross - xcal_only`` (does the blend beat raw conformal at all?).
 * Threshold diagnostics: mean cut vs the oracle cut, degenerate rate.
-* A sanity check that the ``pooled_cross`` variant reproduces the production
-  blend (its threshold must equal the base row's).
+* A sanity check that the ``pooled_mid`` variant reproduces the production
+  blend (its threshold must equal the base row's).  This was ``pooled_cross``
+  while #2801's crossing cut shipped; #2833 reverted production to the midpoint.
 
 Writes ``results/summary.json``, ``results/agg/*.csv``,
 ``results/figures/*.png``, and a ``results/REPORT.md`` draft.
@@ -70,14 +71,18 @@ def load_cells(cells_dir: Path) -> pd.DataFrame:
 
 
 def production_blend_sanity(df: pd.DataFrame) -> dict:
-    """The ``pooled_cross`` variant must reproduce the production blended cut."""
+    """The ``pooled_mid`` variant must reproduce the production blended cut.
+
+    This tracked ``pooled_cross`` while #2801's crossing cut was shipped; #2833
+    reverted production to the midpoint, so the mirror is ``pooled_mid`` now.
+    """
     keys = ["arm", "category", "seed", "t"]
     base = df[(df["pool_variant"] == "max") & (df["gmm_variant"] == "")].set_index(keys)["threshold"]
-    pc = df[df["gmm_variant"] == "pooled_cross"].set_index(keys)["threshold"]
-    joined = base.to_frame("base").join(pc.to_frame("pooled_cross"), how="inner")
+    pm = df[df["gmm_variant"] == "pooled_mid"].set_index(keys)["threshold"]
+    joined = base.to_frame("base").join(pm.to_frame("pooled_mid"), how="inner")
     if joined.empty:
         return {"n_steps": 0, "max_abs_diff": None, "ok": None}
-    diff = (joined["base"] - joined["pooled_cross"]).abs()
+    diff = (joined["base"] - joined["pooled_mid"]).abs()
     return {
         "n_steps": int(len(joined)),
         "max_abs_diff": float(diff.max()),
@@ -191,7 +196,8 @@ def decision_rules(contrasts: dict) -> dict:
 
     * ``keep_crossing`` - #2801 stays unless the crossing cut is *significantly
       worse* than the midpoint on cost (p < 0.05 with a positive delta); the
-      revert is a one-line fallback swap.
+      revert is a one-line fallback swap.  (This rule fired ``False`` on the
+      #2799 run and #2833 performed the revert; production cuts at the midpoint.)
     * ``adopt_logit`` - the logit-space fit ships only if it beats the sigmoid
       crossing by >= 0.02 mean cost at p < 0.05.
     * ``blend_helps_cold_start`` - if the production blend is *worse* than the
@@ -259,7 +265,7 @@ def write_report(summary: dict, tables: dict, report_path: Path) -> None:
     lines = ["# Safe-threshold GMM study — auto-generated summary (issue #2799)", ""]
     lines.append(f"Rows: {summary.get('n_rows')} · variant rows: {summary.get('n_variant_rows')}")
     lines.append("")
-    lines.append("## Production-blend sanity (pooled_cross == base threshold)")
+    lines.append("## Production-blend sanity (pooled_mid == base threshold)")
     lines.append("")
     lines.append("```json")
     lines.append(json.dumps(summary["sanity"], indent=2))

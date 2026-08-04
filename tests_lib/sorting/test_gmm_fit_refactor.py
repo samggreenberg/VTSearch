@@ -6,7 +6,7 @@ re-blends pre-computed cuts on the production label ramp, so the monolithic
 ``gmm_fit_array`` + ``fit_score_gmm`` + ``GmmFit1D`` cuts and
 ``safe_blend_weight`` + ``blend_gmm_threshold``.  These tests pin the split's
 contract: recomposing the pieces must reproduce the production functions
-exactly, so the study's ``pooled_cross`` variant is guaranteed to measure the
+exactly, so the study's ``pooled_mid`` variant is guaranteed to measure the
 threshold production actually ships.
 """
 
@@ -79,7 +79,7 @@ class TestRecomposition:
         scores = _bimodal()
         fit = fit_score_gmm(gmm_fit_array(scores))
         assert fit is not None
-        assert calculate_gmm_threshold(scores) == fit.crossing_or_midpoint()
+        assert calculate_gmm_threshold(scores) == fit.midpoint()
 
     @pytest.mark.parametrize("n_labels", [2, 5, 6, 7, 13, 19, 20, 40])
     def test_calculate_safe_threshold_equals_blend_of_parts(self, n_labels):
