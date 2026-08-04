@@ -85,18 +85,43 @@ submit_arm() {
   if ! [[ "$n" =~ ^[0-9]+$ ]] || [[ "$n" -eq 0 ]]; then
     echo "ERROR: no cells for $tag (prepare not run?)" >&2; return 1
   fi
-  # The cluster caps total queued jobs (MaxJobCount), and one arm is >1300
-  # array tasks, so a batch of arms can be refused partway through.  Fail loudly
-  # instead of printing an empty job id and marching on as if it had worked.
-  local j
-  if ! j=$(sbatch --parsable --job-name="mix-$tag" --array=0-$((n-1))%"$CONC" \
-    --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" --partition="$PARTITION" \
-    --output="$LOGS/$tag-%A_%a.out" \
-    --wrap="source $WT/gridenv.sh && $envx && cd $HERE && python run_cells.py" 2>&1) \
-    || [[ -z "$j" || ! "$j" =~ ^[0-9]+ ]]; then
-    echo "ERROR: sbatch refused arm $tag: $j" >&2
+  # Which array indices still need running.  A cell that produced no CSV either
+  # never ran or died - this run lost ~950 cells to a transient ENOSPC on the
+  # shared /exp volume - so resubmitting only the gaps costs minutes instead of
+  # redoing a whole arm.  An arm with no output yet yields the full range.
+  local spec missing
+  missing=$(cd "$HERE" && python - "$results/cells" "$n" <<'PY'
+import sys
+from pathlib import Path
+cells, n = Path(sys.argv[1]), int(sys.argv[2])
+have = {int(p.stem.split("_")[1]) for p in cells.glob("task_*.csv") if "__sweep" not in p.name}
+print(",".join(str(i) for i in range(n) if i not in have))
+PY
+)
+  if [[ -z "$missing" ]]; then
+    echo "ERROR: arm $tag is already complete ($n/$n cells)" >&2
     return 1
   fi
+  spec="$missing"
+
+  # The cluster caps total queued jobs (MaxJobCount), and one arm is >1300 array
+  # tasks, so a batch of arms can be refused partway through.  Fail loudly rather
+  # than print an empty job id and march on.  sbatch writes an informational
+  # "Set partition to cpu" line to *stderr* even on success, so stderr must stay
+  # out of the job-id capture - folding it in makes every success look like a
+  # failure, which is exactly what silently skipped two arms here.
+  local j err
+  err=$(mktemp)
+  j=$(sbatch --parsable --job-name="mix-$tag" --array="$spec"%"$CONC" \
+    --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" --partition="$PARTITION" \
+    --output="$LOGS/$tag-%A_%a.out" \
+    --wrap="source $WT/gridenv.sh && $envx && cd $HERE && python run_cells.py" 2>"$err")
+  if [[ -z "$j" || ! "$j" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: sbatch refused arm $tag: $(cat "$err")" >&2
+    rm -f "$err"
+    return 1
+  fi
+  rm -f "$err"
   echo "$j"
 }
 
