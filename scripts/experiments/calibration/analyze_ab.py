@@ -83,7 +83,7 @@ def load_base_rows(results_dir: Path, label: str) -> pd.DataFrame:
     *operated at* counts — that is the threshold that drove the next Hard pick.
     """
     cells = results_dir / "cells"
-    files = sorted(p for p in cells.glob("task_*.csv") if "__sweep" not in p.name)
+    files = sorted(p for p in cells.glob("task_*.csv") if "__sweep" not in p.name and "__cutdiag" not in p.name)
     if not files:
         return pd.DataFrame()
     df = pd.concat([pd.read_csv(p) for p in files], ignore_index=True)
