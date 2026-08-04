@@ -68,10 +68,13 @@ SEPARATIONS: tuple[float, ...] = (1.0, 2.0, 3.0, 4.0)
 #: sd_good / sd_bad.  The equal-variance case is where the midpoint and the
 #: prior-free crossing coincide, so this sweep is what separates them.
 SD_RATIOS: tuple[float, ...] = (0.5, 1.0, 2.0)
-#: Sim-set sizes.  The large one is the population proxy that isolates
-#: misspecification from estimation noise.
+#: Sim-set sizes.  A real VG sim set is a few thousand media, so these bracket it.
 SAMPLE_SIZES: tuple[int, ...] = (500, 2000)
-POPULATION_N: int = 200_000
+#: The population proxy that isolates misspecification from estimation noise.
+#: Matched to ``_GMM_MAX_SAMPLES``: above it the Gaussian fit subsamples anyway,
+#: so a larger number would buy precision for the label-reading cuts only, while
+#: costing every fit linearly.
+POPULATION_N: int = 50_000
 
 MU_BAD = 0.0
 SD_BAD = 1.0
