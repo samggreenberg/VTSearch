@@ -153,11 +153,12 @@ class TestTrainAndScoreWithSafeThresholds:
 class TestSafeThresholdsSetting:
     """Tests for the safe_thresholds setting persistence."""
 
-    def test_default_is_false(self):
+    def test_default_is_true(self):
+        """On by default since the #2799 A/B (see the setting's own comment)."""
         from vtsearch import settings
 
         settings.reset()
-        assert settings.get_safe_thresholds() is False
+        assert settings.get_safe_thresholds() is True
 
     def test_set_and_get_true(self):
         from vtsearch import settings
@@ -310,7 +311,9 @@ class TestTrainingSettingsInvalidateLoadedDetector:
         ctx = self._loaded_ctx()
         # PUT through /api/settings routes through vtsearch.state setters
         # so the invalidation hook fires even on this code path (M7 fix).
-        resp = client.put("/api/settings", json={"safe_thresholds": True})
+        # The value has to actually *change* to invalidate, and the setting
+        # now defaults to on (#2799), so this turns it off.
+        resp = client.put("/api/settings", json={"safe_thresholds": False})
         assert resp.status_code == 200
         assert ctx.model is None
         assert ctx.threshold == 0.5
