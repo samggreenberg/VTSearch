@@ -3,9 +3,9 @@
 This is the no-extraction counterpart to :mod:`vtscore.datasets.archive`,
 which extracts a whole archive to :data:`~vtscore.config.DATA_DIR`.  Here we
 serve **one member on demand**: a ``{member_name: info}`` index is built once
-per archive (cached, keyed by path/size/mtime) and a byte range of a single
-member is read by seeking within that member's file object.  So playback of a
-media stored inside a multi-GB tar shard never materialises the member on disk
+per archive (cached, keyed by path/inode/size/mtime) and a byte range of a
+single member is read by seeking within that member's file object.  So playback
+of a media stored inside a multi-GB tar shard never materialises the member on disk
 and, paired with HTTP Range, downloads only the bytes the browser actually
 plays.
 
@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import tarfile
 import threading
+import time
 import zipfile
 from collections import OrderedDict
 from pathlib import Path
@@ -49,16 +50,58 @@ class ArchiveMemberError(Exception):
     """Raised when an archive or one of its members cannot be read."""
 
 
-# Process-scoped index cache.  Keyed by (resolved path, size, mtime_ns) so a
-# replaced archive busts the cache; the value is a {member_name: info} map of
-# tarfile.TarInfo / zipfile.ZipInfo objects (metadata only -- never bytes).
-_index_cache: dict[tuple[str, int, int], dict[str, Any]] = {}
-_index_lock = threading.Lock()
-
-
-def _cache_key(path: Path) -> tuple[str, int, int]:
+def _cache_key(path: Path) -> tuple[str, int, int, int]:
     st = path.stat()
-    return (str(path), st.st_size, st.st_mtime_ns)
+    return (str(path), st.st_ino, st.st_size, st.st_mtime_ns)
+
+
+#: How long a cached index stays *unsettled* after it is built, measured on a
+#: monotonic clock (so wall-clock or NFS server skew cannot affect it).
+#:
+#: Filesystems advance ``st_mtime`` only once per tick -- coarse enough on some
+#: (HLTCOE's ``/scratch``, ext3, FAT) that two back-to-back writes share one
+#: ``st_mtime_ns``.  An archive rewritten within one tick of the write we
+#: indexed, to the same 512-block-padded size, therefore keeps an identical
+#: cache key, and we would serve its stale index forever.  So while an entry is
+#: younger than this window we re-verify it on every lookup against the
+#: archive's first header block (cheap: one 512-byte read).  Once the window has
+#: passed, any later rewrite necessarily stamps an mtime the cached key cannot
+#: reproduce, so the stat key alone is authoritative and the probe stops --
+#: steady-state reads pay nothing.
+_SETTLE_NS = 2_000_000_000
+
+#: Bytes of the archive head folded into the freshness probe: exactly one tar
+#: header block (member name, size, checksum) or a zip local file header.
+_PROBE_BYTES = 512
+
+
+class _IndexEntry:
+    """A cached member index plus what we need to re-verify its freshness."""
+
+    __slots__ = ("first_seen_ns", "index", "probe", "settled")
+
+    def __init__(self, index: dict[str, Any], probe: bytes) -> None:
+        self.index = index
+        self.probe = probe
+        self.first_seen_ns = time.monotonic_ns()
+        self.settled = False
+
+
+def _read_probe(path: Path) -> bytes:
+    """Return the archive's first :data:`_PROBE_BYTES` bytes (``b""`` on error)."""
+    try:
+        with path.open("rb") as f:
+            return f.read(_PROBE_BYTES)
+    except OSError:
+        return b""
+
+
+# Process-scoped index cache.  Keyed by (resolved path, inode, size, mtime_ns)
+# so a replaced archive busts the cache; the value is an _IndexEntry wrapping a
+# {member_name: info} map of tarfile.TarInfo / zipfile.ZipInfo objects
+# (metadata only -- never bytes).
+_index_cache: dict[tuple[str, int, int, int], _IndexEntry] = {}
+_index_lock = threading.Lock()
 
 
 #: Upper bound on simultaneously-open archive handles.  Reads seek within a
@@ -110,7 +153,7 @@ class _PooledArchive:
 
 # Process-scoped pool of open archive handles, keyed like ``_index_cache`` and
 # ordered least-recently-used first for eviction.
-_handle_cache: OrderedDict[tuple[str, int, int], _PooledArchive] = OrderedDict()
+_handle_cache: OrderedDict[tuple[str, int, int, int], _PooledArchive] = OrderedDict()
 _handle_lock = threading.Lock()
 
 
@@ -203,16 +246,46 @@ def _build_index(path: Path) -> dict[str, Any]:
         raise ArchiveMemberError(f"Not a readable tar/zip archive: {path} ({exc})") from exc
 
 
+def _invalidate(key: tuple[str, int, int, int]) -> None:
+    """Drop the cached index *and* the pooled handle for *key* (archive changed).
+
+    The two locks are taken one after the other, never nested, and the evicted
+    handle is closed outside both (``close`` waits on its own read lock).
+    """
+    with _index_lock:
+        _index_cache.pop(key, None)
+    with _handle_lock:
+        pooled = _handle_cache.pop(key, None)
+    if pooled is not None:
+        pooled.close()
+
+
 def _index(path: Path) -> dict[str, Any]:
-    """Return the cached member index for *path*, building it on first use."""
+    """Return the cached member index for *path*, building it on first use.
+
+    A hit is trusted outright once the entry has settled (see
+    :data:`_SETTLE_NS`); before that it is re-verified against the archive's
+    first header block, so an archive rewritten within one mtime tick to the
+    same padded size -- which leaves the stat key untouched -- is still noticed.
+    """
     key = _cache_key(path)
     with _index_lock:
-        cached = _index_cache.get(key)
-    if cached is not None:
-        return cached
+        entry = _index_cache.get(key)
+    if entry is not None:
+        if entry.settled:
+            return entry.index
+        if _read_probe(path) == entry.probe:
+            # Past the coarse-mtime window the stat key can no longer be
+            # reproduced by a later rewrite, so stop probing this entry.
+            entry.settled = time.monotonic_ns() - entry.first_seen_ns > _SETTLE_NS
+            return entry.index
+        _invalidate(key)
+    # Probe *before* building so an archive rewritten mid-build leaves a probe
+    # that no longer matches, and the next lookup rebuilds rather than trusting.
+    probe = _read_probe(path)
     index = _build_index(path)
     with _index_lock:
-        _index_cache[key] = index
+        _index_cache[key] = _IndexEntry(index, probe)
     return index
 
 

@@ -1023,10 +1023,15 @@ class TestSyncFromSourceFreshness:
         first_load_in_flight = threading.Event()
         release_first_load = threading.Event()
 
+        # Generous waits: a loaded machine can stall the main thread for
+        # seconds, and a wait that expires early would let A finish before B
+        # ever races it -- testing nothing instead of failing.
+        wait_s = 30
+
         def slow_load(field_values):
             if not first_load_in_flight.is_set():
                 first_load_in_flight.set()
-                release_first_load.wait(timeout=5)
+                release_first_load.wait(timeout=wait_s)
             return real_load(field_values)
 
         src.load = slow_load  # type: ignore[assignment]
@@ -1039,13 +1044,15 @@ class TestSyncFromSourceFreshness:
         try:
             t_a = threading.Thread(target=reader, args=("a",))
             t_a.start()
-            assert first_load_in_flight.wait(timeout=5), "first load never started"
+            assert first_load_in_flight.wait(timeout=wait_s), "first load never started"
             t_b = threading.Thread(target=reader, args=("b",))
             t_b.start()
             # Let A's sync complete.
             release_first_load.set()
-            t_a.join(timeout=5)
-            t_b.join(timeout=5)
+            t_a.join(timeout=wait_s)
+            t_b.join(timeout=wait_s)
+            assert not t_a.is_alive(), "reader A never finished"
+            assert not t_b.is_alive(), "reader B never finished"
         finally:
             src.load = real_load  # type: ignore[assignment]
 
