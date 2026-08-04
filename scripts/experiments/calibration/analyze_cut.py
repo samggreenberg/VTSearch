@@ -539,7 +539,19 @@ def decisions(contrasts: pd.DataFrame, gaps: pd.DataFrame, costs: pd.DataFrame, 
         & (gaps["arm"].str.contains(PRODUCTION_ARM_SUBSTR))
         & (gaps["gmm_variant"].isin(SHIPPABLE))
     ]
-    out["closest_to_oracle"] = None if gp.empty else str(gp.sort_values("mean_abs_gap").iloc[0]["gmm_variant"])
+    # Several rules in this family are *aliases* rather than competitors - at
+    # inclusion 0 the cost weights are (1, 1), so `rate` reduces to `priorfree`
+    # exactly, and the two Gumbel tilts collapse the same way.  Picking a single
+    # argmin would tie-break arbitrarily between two names for one rule and then
+    # fail the ship test by comparing them as if they disagreed.  Report the
+    # whole tied set instead.
+    out["closest_to_oracle"] = None
+    out["closest_to_oracle_tied"] = []
+    if not gp.empty:
+        best_gap = float(gp["mean_abs_gap"].min())
+        tied = sorted(gp[gp["mean_abs_gap"] <= best_gap + 1e-9]["gmm_variant"].astype(str))
+        out["closest_to_oracle_tied"] = tied
+        out["closest_to_oracle"] = tied[0]
 
     # Does the winner regress the single-vector arm the cosine/text sort uses?
     ctrl = contrasts[
@@ -556,7 +568,7 @@ def decisions(contrasts: pd.DataFrame, gaps: pd.DataFrame, costs: pd.DataFrame, 
     )
     out["ship"] = bool(
         out["beats_midpoint"]
-        and out["closest_to_oracle"] == out["best_by_cost"]["variant"]
+        and out["best_by_cost"]["variant"] in out["closest_to_oracle_tied"]
         and not out["regresses_control"]
     )
 
