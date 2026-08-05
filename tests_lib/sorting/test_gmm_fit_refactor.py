@@ -90,17 +90,19 @@ class TestRecomposition:
 
 class TestBlend:
     def test_ramp_endpoints(self):
-        assert safe_blend_weight(2) == 0.0
-        assert safe_blend_weight(6) == 0.0
-        assert safe_blend_weight(13) == pytest.approx(0.5)
-        assert safe_blend_weight(20) == 1.0
-        assert safe_blend_weight(100) == 1.0
+        assert safe_blend_weight(2, "prod") == 0.0
+        assert safe_blend_weight(6, "prod") == 0.0
+        assert safe_blend_weight(13, "prod") == pytest.approx(0.5)
+        assert safe_blend_weight(20, "prod") == 1.0
+        assert safe_blend_weight(100, "prod") == 1.0
 
     def test_pure_gmm_below_ramp(self):
         assert blend_gmm_threshold(0.9, 0.3, 4) == pytest.approx(0.3)
 
     def test_pure_xcal_above_ramp(self):
-        assert blend_gmm_threshold(0.9, 0.3, 25) == pytest.approx(0.9)
+        # `prod` named explicitly: it is the only registered schedule that ever
+        # reaches pure x-cal, and #2841 stopped shipping it.
+        assert blend_gmm_threshold(0.9, 0.3, 25, schedule="prod") == pytest.approx(0.9)
 
     def test_non_finite_guards(self):
         nan = float("nan")

@@ -1,0 +1,662 @@
+"""Mix-in schedule study (#2841): rank the schedules, then judge the A/B.
+
+Two modes, matching the two phases of the design:
+
+``--mode screen``
+    Reads the counterfactual ``schedule`` rows from one production-trajectory
+    run.  Every schedule was re-cut on the *same* step of the *same* model, so
+    the comparison is exactly paired and needs no modelling of the trajectory.
+    Produces the promotion list for phase 2.
+
+``--mode ab --arms a,b,c``
+    Reads one full run per schedule and pairs them per **cell**
+    ``(dataset, embedder, style, category, seed)``.  Pairing per *step* would be
+    wrong here: the blended threshold feeds Autopilot's Hard pick, so two arms
+    label different items and their step *t* are not the same state.  This is
+    the mode that decides.
+
+Both modes report region voting and binary voting **separately** - #2841 allows
+them to want different curves, and pooling would hide exactly that.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+import common
+
+common.setup_env()
+
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+
+#: The window every headline number is computed over: the app's first trained
+#: detector appears at 7 votes, and the production ramp ends at 20.  Below 7 no
+#: user sees a threshold at all; above 20 the production schedule has handed
+#: over completely, so differences there are pure acquisition feedback (which is
+#: real, and reported separately, but is not the blend acting directly).
+RAMP_LO, RAMP_HI = 7, 20
+
+#: The incumbent every arm is compared against.
+BASELINE = "prod"
+
+
+def _voting_mode(row: pd.Series) -> str:
+    """Region voting vs binary voting - the axis #2841 may split its answer on."""
+    return "region" if row["style"] != "whole_image" else "binary"
+
+
+def load_cells(results: Path) -> pd.DataFrame:
+    """Concatenate every ``task_*.csv`` under *results*/cells.
+
+    A cell killed mid-write leaves a zero-byte file (this run lost 49 to a
+    transient ENOSPC on the shared volume).  Those are **skipped and counted**
+    rather than silently dropped: an unreadable cell is missing data, and a
+    study that quietly analyses 1295 of 1344 cells while reporting neither
+    number is exactly how a disk incident turns into a wrong verdict.
+    """
+    files = sorted((results / "cells").glob("task_*.csv"))
+    files = [f for f in files if not f.name.endswith("__sweep.csv")]
+    if not files:
+        raise SystemExit(f"no cell CSVs under {results / 'cells'}")
+    frames, unreadable = [], []
+    for f in files:
+        try:
+            frames.append(pd.read_csv(f))
+        except (pd.errors.EmptyDataError, pd.errors.ParserError):
+            unreadable.append(f.name)
+    if unreadable:
+        print(
+            f"WARNING: {len(unreadable)} of {len(files)} cell files under {results.name} "
+            f"were unreadable and are excluded: {', '.join(sorted(unreadable)[:5])}"
+            + (" ..." if len(unreadable) > 5 else "")
+        )
+    if not frames:
+        raise SystemExit(f"every cell CSV under {results / 'cells'} was unreadable")
+    df = pd.concat([f for f in frames if len(f)], ignore_index=True)
+    for col in ("schedule", "gmm_variant"):
+        df[col] = df[col].fillna("")
+    df["n_votes"] = df["n_good"] + df["n_bad"]
+    df["mode"] = df.apply(_voting_mode, axis=1)
+    return df
+
+
+def assert_screen_fidelity(df: pd.DataFrame) -> dict:
+    """The ``prod`` counterfactual row must reproduce the live blend exactly.
+
+    This is the study's load-bearing check: every schedule row is produced by
+    the same code path as ``prod``'s, so if ``prod`` reproduces the threshold
+    the run actually used, the other rows are being computed correctly too.  A
+    mismatch means the counterfactual and the live blend have drifted apart and
+    nothing downstream can be trusted.
+    """
+    base = df[(df.schedule == "") & (df.gmm_variant == "")]
+    prod = df[df.schedule == BASELINE]
+    keys = ["dataset", "embedder", "style", "category", "seed", "t"]
+    m = base.merge(prod, on=keys, suffixes=("_b", "_p"))
+    if m.empty:
+        raise SystemExit("fidelity check found no paired rows - is this a screen run?")
+    dt = (m.threshold_b - m.threshold_p).abs().max()
+    dc = (m.cost_b - m.cost_p).abs().max()
+    if not (dt < 1e-9 and dc < 1e-9):
+        raise SystemExit(f"FIDELITY FAILURE: prod variant != live blend (max dthreshold={dt:.3e}, dcost={dc:.3e})")
+    return {"paired_rows": int(len(m)), "max_threshold_diff": float(dt), "max_cost_diff": float(dc)}
+
+
+def cell_means(df: pd.DataFrame, lo: int = RAMP_LO, hi: int = RAMP_HI) -> pd.DataFrame:
+    """Collapse each cell's steps in the window to one number per metric.
+
+    Steps within a cell are strongly correlated (same model lineage, same
+    split), so they are not independent observations.  Aggregating to the cell
+    first makes the paired test's n the number of *cells*, which is the unit
+    that actually replicates.
+    """
+    w = df[(df.n_votes >= lo) & (df.n_votes <= hi)]
+    keys = ["mode", "dataset", "embedder", "style", "category", "seed", "schedule"]
+    metrics = ["cost", "fnr", "fpr", "regret", "average_precision", "auroc", "degenerate"]
+    have = [m for m in metrics if m in w.columns]
+    return w.groupby(keys, as_index=False)[have].mean()
+
+
+def paired_vs_baseline(cells: pd.DataFrame, baseline: str = BASELINE) -> pd.DataFrame:
+    """Per (mode, schedule): paired deltas against *baseline* over shared cells."""
+    from scipy import stats  # noqa: PLC0415
+
+    keys = ["mode", "dataset", "embedder", "style", "category", "seed"]
+    base = cells[cells.schedule == baseline].set_index(keys)
+    out = []
+    for (mode, sched), grp in cells.groupby(["mode", "schedule"]):
+        if sched == baseline:
+            continue
+        g = grp.set_index(keys)
+        shared = g.index.intersection(base.index)
+        if len(shared) < 3:
+            continue
+        a, b = g.loc[shared], base.loc[shared]
+        d = (a["cost"] - b["cost"]).to_numpy(dtype=float)
+        d = d[np.isfinite(d)]
+        if len(d) < 3:
+            continue
+        # Wilcoxon: the per-cell cost deltas are heavy-tailed (a handful of cells
+        # swing hugely when a cut goes degenerate), so a rank test is the honest
+        # default; the t-test rides along for comparability with #2799.
+        try:
+            w_p = float(stats.wilcoxon(d).pvalue) if np.any(d != 0) else 1.0
+        except ValueError:
+            w_p = 1.0
+        t_p = float(stats.ttest_rel(a["cost"], b["cost"], nan_policy="omit").pvalue)
+        row = {
+            "mode": mode,
+            "schedule": sched,
+            "n_cells": int(len(d)),
+            "cost": float(a["cost"].mean()),
+            "cost_baseline": float(b["cost"].mean()),
+            "d_cost": float(np.mean(d)),
+            "pct_improved": float(np.mean(d < 0) * 100),
+            "p_wilcoxon": w_p,
+            "p_ttest": t_p,
+        }
+        for metric in ("fnr", "fpr", "regret", "average_precision", "degenerate"):
+            if metric in a.columns:
+                row[f"d_{metric}"] = float((a[metric] - b[metric]).mean())
+        out.append(row)
+    return pd.DataFrame(out).sort_values(["mode", "d_cost"]).reset_index(drop=True)
+
+
+#: Cost weightings the verdict is stress-tested under.  The scored metric is
+#: ``wf*FPR + wn*FNR`` at inclusion 0, where both weights are 1 - so a schedule
+#: can win simply by cutting lower, trading a lot of FNR for a little FPR.  That
+#: is a real win at this operating point, but it would reverse for a user who
+#: cares more about false alarms, and #2790 flagged exactly this trap.  Re-scoring
+#: the same cells under asymmetric weights separates "genuinely better calibrated"
+#: from "merely more permissive".
+COST_WEIGHTS: tuple[tuple[str, float, float], ...] = (
+    ("fpr x1 (shipped)", 1.0, 1.0),
+    ("fpr x2", 2.0, 1.0),
+    ("fpr x4", 4.0, 1.0),
+    ("fnr x2", 1.0, 2.0),
+)
+
+
+def weight_sensitivity(cells: pd.DataFrame, baseline: str = BASELINE) -> pd.DataFrame:
+    """Paired cost delta vs *baseline* under each weighting in :data:`COST_WEIGHTS`.
+
+    A schedule whose advantage survives ``fpr x4`` is better calibrated; one
+    whose advantage flips is only exploiting the symmetric weights.
+    """
+    keys = ["mode", "dataset", "embedder", "style", "category", "seed"]
+    base = cells[cells.schedule == baseline].set_index(keys)
+    out = []
+    for (mode, sched), grp in cells.groupby(["mode", "schedule"]):
+        if sched == baseline:
+            continue
+        g = grp.set_index(keys)
+        shared = g.index.intersection(base.index)
+        if len(shared) < 3:
+            continue
+        a, b = g.loc[shared], base.loc[shared]
+        row = {"mode": mode, "schedule": sched, "n_cells": int(len(shared))}
+        for label, wf, wn in COST_WEIGHTS:
+            ca = wf * a["fpr"] + wn * a["fnr"]
+            cb = wf * b["fpr"] + wn * b["fnr"]
+            row[label] = float((ca - cb).mean())
+        out.append(row)
+    return pd.DataFrame(out).sort_values(["mode", "fpr x1 (shipped)"]).reset_index(drop=True)
+
+
+def threshold_error_decomposition(df: pd.DataFrame) -> pd.DataFrame:
+    """Split each schedule's distance from the oracle cut into **bias** and **spread**.
+
+    Two very different things can make a schedule score better, and the cost
+    column cannot tell them apart:
+
+    * **Bias** - the cut sits systematically below the oracle's, trading FNR for
+      FPR.  That is a real gain only at an operating point that likes the trade,
+      and it reverses when false positives are weighted more (see
+      :func:`weight_sensitivity`).
+    * **Spread** - the cut is *steadier* step to step.  A noisy threshold is
+      sometimes too high (misses) and sometimes too low (false alarms), so
+      reducing its variance improves **both** error types at once, under any
+      weighting.
+
+    Averaging with a label-free GMM cut is a variance-reduction operation, so
+    the prediction is that schedules keeping a permanent GMM share buy spread
+    while schedules that merely keep the GMM *longer* buy bias.  This measures
+    it instead of assuming it: per schedule, the mean signed gap to the oracle
+    (bias) and the SD of that gap within a cell (spread).
+    """
+    w = df[(df.n_votes >= RAMP_LO) & (df.n_votes <= RAMP_HI)]
+    w = w[np.isfinite(w.get("oracle_threshold", pd.Series(dtype=float)))]
+    if w.empty or "oracle_threshold" not in w.columns:
+        return pd.DataFrame()
+    w = w.assign(gap=w["threshold"] - w["oracle_threshold"])
+    keys = ["mode", "dataset", "embedder", "style", "category", "seed", "schedule"]
+    per_cell = w.groupby(keys, as_index=False).agg(
+        bias=("gap", "mean"),
+        spread=("gap", "std"),
+        abs_gap=("gap", lambda s: s.abs().mean()),
+    )
+    out = per_cell.groupby(["mode", "schedule"], as_index=False)[["bias", "spread", "abs_gap"]].mean()
+    return out.sort_values(["mode", "abs_gap"]).reset_index(drop=True)
+
+
+def past_ramp_effect(df: pd.DataFrame, baseline: str = BASELINE) -> pd.DataFrame:
+    """Paired cost delta over steps **past** the production ramp (21+ votes).
+
+    In an A/B run the schedules have all converged by 21 votes on the
+    ``prod``-shaped curves, so a surviving difference there cannot be the blend
+    acting directly - it is the trajectory, i.e. the blend having steered which
+    items Autopilot asked the user to label.  #2799 found that channel carries
+    real gain, so it is measured rather than assumed away.
+    """
+    cells = cell_means(df, lo=21, hi=10_000)
+    if cells.empty:
+        return pd.DataFrame()
+    return paired_vs_baseline(cells, baseline)
+
+
+#: Vote-count bands the long-horizon analysis reports separately.  The whole
+#: point of the follow-up is that a single averaged number hides a crossover:
+#: an inconsistent estimator (the GMM midpoint, which reads no labels) can beat
+#: a consistent one (the conformal cut) early and must lose to it eventually, so
+#: the question is *where*, not *whether*.
+VOTE_BANDS: tuple[tuple[str, int, int], ...] = (
+    ("7-20", 7, 20),
+    ("21-50", 21, 50),
+    ("51-100", 51, 100),
+    ("101-200", 101, 200),
+    ("201-300", 201, 300),
+    ("301+", 301, 10_000),
+)
+
+
+def band_curve(df: pd.DataFrame, baseline: str = BASELINE) -> pd.DataFrame:
+    """Paired cost delta vs *baseline* within each vote band.
+
+    Cells are re-paired *inside* each band, so a schedule that only wins early
+    and a schedule that only wins late are both visible instead of averaging
+    into one indistinguishable number.  ``n_cells`` shrinks in the later bands
+    as shallow categories run out of pool - read a band with few cells as
+    underpowered rather than as a null.
+    """
+    from scipy import stats  # noqa: PLC0415
+
+    keys = ["mode", "dataset", "embedder", "style", "category", "seed"]
+    out = []
+    for band, lo, hi in VOTE_BANDS:
+        cells = cell_means(df, lo=lo, hi=hi)
+        if cells.empty:
+            continue
+        base = cells[cells.schedule == baseline].set_index(keys)
+        if base.empty:
+            continue
+        for (mode, sched), grp in cells.groupby(["mode", "schedule"]):
+            if sched == baseline:
+                continue
+            g = grp.set_index(keys)
+            shared = g.index.intersection(base.index)
+            if len(shared) < 3:
+                continue
+            a, b = g.loc[shared], base.loc[shared]
+            d = (a["cost"] - b["cost"]).to_numpy(dtype=float)
+            d = d[np.isfinite(d)]
+            if len(d) < 3:
+                continue
+            try:
+                p = float(stats.wilcoxon(d).pvalue) if np.any(d != 0) else 1.0
+            except ValueError:
+                p = 1.0
+            out.append(
+                {
+                    "mode": mode,
+                    "band": band,
+                    "schedule": sched,
+                    "n_cells": int(len(d)),
+                    "d_cost": float(np.mean(d)),
+                    "pct_improved": float(np.mean(d < 0) * 100),
+                    "p_wilcoxon": p,
+                }
+            )
+    return pd.DataFrame(out)
+
+
+#: Positive-count bands.  Votes are what a user spends; **positives** are what
+#: the conformal cut actually learns from, and at realistic prevalence the two
+#: diverge hard - 300 votes buys a median of ~13 positives.  Banding on votes
+#: alone therefore cannot distinguish "the learned cut has converged" from "the
+#: user clicked a lot and still has almost no positives".
+POSITIVE_BANDS: tuple[tuple[str, int, int], ...] = (
+    ("1-3", 1, 3),
+    ("4-6", 4, 6),
+    ("7-10", 7, 10),
+    ("11-15", 11, 15),
+    ("16-25", 16, 25),
+    ("26+", 26, 10_000),
+)
+
+
+def positive_band_curve(df: pd.DataFrame, baseline: str = BASELINE) -> pd.DataFrame:
+    """Paired cost delta vs *baseline* banded by **positive** count.
+
+    The convergence argument for the learned cut is about labelled positives,
+    not clicks: the conformal rule needs both tails of the score distribution
+    and the positive tail is the scarce one.  This is the axis on which the
+    x-cal cut should be seen catching up, and the axis whose slope says how far
+    away the crossover is.
+    """
+    from scipy import stats  # noqa: PLC0415
+
+    keys = ["mode", "dataset", "embedder", "style", "category", "seed"]
+    out = []
+    for band, lo, hi in POSITIVE_BANDS:
+        w = df[(df.n_good >= lo) & (df.n_good <= hi)]
+        if w.empty:
+            continue
+        cells = w.groupby([*keys, "schedule"], as_index=False)["cost"].mean()
+        base = cells[cells.schedule == baseline].set_index(keys)
+        if base.empty:
+            continue
+        for (mode, sched), grp in cells.groupby(["mode", "schedule"]):
+            if sched == baseline:
+                continue
+            g = grp.set_index(keys)
+            shared = g.index.intersection(base.index)
+            d = (g.loc[shared, "cost"] - base.loc[shared, "cost"]).to_numpy(dtype=float)
+            d = d[np.isfinite(d)]
+            if len(d) < 5:
+                continue
+            try:
+                p = float(stats.wilcoxon(d).pvalue) if np.any(d != 0) else 1.0
+            except ValueError:
+                p = 1.0
+            out.append(
+                {
+                    "mode": mode,
+                    "band": band,
+                    "schedule": sched,
+                    "n_cells": int(len(d)),
+                    "d_cost": float(np.mean(d)),
+                    "p_wilcoxon": p,
+                }
+            )
+    return pd.DataFrame(out)
+
+
+def promotion_list(deltas: pd.DataFrame, top_n: int = 3) -> list[str]:
+    """The pre-registered phase-2 arm set: top *top_n* per mode + fixed anchors.
+
+    ``pure_xcal`` is deliberately absent - it is safe-thresholds OFF, already
+    measured and rejected by #2799, so spending a full arm on it would buy a
+    number we have.
+    """
+    picks: list[str] = []
+    for _mode, grp in deltas.groupby("mode"):
+        picks.extend(grp.nsmallest(top_n, "d_cost")["schedule"].tolist())
+    for anchor in (BASELINE, "pure_gmm"):
+        if anchor not in picks:
+            picks.append(anchor)
+    seen: set[str] = set()
+    return [p for p in picks if not (p in seen or seen.add(p))]
+
+
+def _fmt(deltas: pd.DataFrame, mode: str) -> str:
+    g = deltas[deltas["mode"] == mode]
+    if g.empty:
+        return "_(no cells)_\n"
+    cols = ["schedule", "n_cells", "cost", "d_cost", "pct_improved", "p_wilcoxon", "d_fnr", "d_fpr"]
+    cols = [c for c in cols if c in g.columns]
+    lines = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
+    for _, r in g.iterrows():
+        cells = []
+        for c in cols:
+            v = r[c]
+            if c == "schedule":
+                cells.append(str(v))
+            elif c == "n_cells":
+                cells.append(f"{int(v)}")
+            elif c.startswith("p_"):
+                cells.append(f"{v:.2g}")
+            else:
+                cells.append(f"{v:+.4f}" if c.startswith(("d_", "pct")) else f"{v:.4f}")
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines) + "\n"
+
+
+def _fmt_generic(df: pd.DataFrame, mode: str) -> str:
+    g = df[df["mode"] == mode] if "mode" in df.columns else df
+    if g.empty:
+        return "_(none)_\n"
+    cols = [c for c in g.columns if c != "mode"]
+    lines = ["| " + " | ".join(cols) + " |", "|" + "---|" * len(cols)]
+    for _, r in g.iterrows():
+        cells = [
+            str(r[c]) if isinstance(r[c], str) else (f"{int(r[c])}" if c == "n_cells" else f"{r[c]:+.4f}") for c in cols
+        ]
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines) + "\n"
+
+
+def write_report(path: Path, mode: str, deltas: pd.DataFrame, extra: dict) -> None:
+    baseline_note = (
+        "Every schedule was re-cut on the **same** production trajectory, so rows are exactly "
+        "paired within a step. This ranks candidates; it cannot see that another schedule would "
+        "have labelled different items."
+        if mode == "screen"
+        else "Each arm is a **full independent trajectory**, paired per cell. This includes the "
+        "blend's effect on which items Autopilot chose to label, which the screen structurally cannot see."
+    )
+    body = [
+        f"# Mix-in schedule study (#2841) - {mode}",
+        "",
+        baseline_note,
+        "",
+        f"Window: {RAMP_LO}-{RAMP_HI} votes (app's first trained step -> end of the production ramp). "
+        f"Baseline: `{BASELINE}`. Negative `d_cost` beats the incumbent.",
+        "",
+        "## Region voting",
+        "",
+        _fmt(deltas, "region"),
+        "",
+        "## Binary voting",
+        "",
+        _fmt(deltas, "binary"),
+        "",
+    ]
+    sens = extra.pop("_sensitivity", None)
+    if sens is not None and not sens.empty:
+        body += [
+            "## Cost-weighting sensitivity",
+            "",
+            "Same cells, re-scored under asymmetric weights. A winner that survives `fpr x4` is "
+            "better calibrated; one that flips was only cutting lower.",
+            "",
+            "### Region voting",
+            "",
+            _fmt_generic(sens, "region"),
+            "",
+            "### Binary voting",
+            "",
+            _fmt_generic(sens, "binary"),
+            "",
+        ]
+    bands = extra.pop("_bands", None)
+    if bands is not None and not bands.empty:
+        body += ["## Cost vs vote count (does x-cal ever overtake the blend?)", ""]
+        for mode in ("region", "binary"):
+            g = bands[bands["mode"] == mode]
+            if g.empty:
+                continue
+            piv = g.pivot_table(index="schedule", columns="band", values="d_cost")
+            cnt = g.pivot_table(index="schedule", columns="band", values="n_cells")
+            order = [b for b, _lo, _hi in VOTE_BANDS if b in piv.columns]
+            piv, cnt = piv[order], cnt[order]
+            body += [
+                f"### {mode.capitalize()} voting",
+                "",
+                "`d_cost` vs the baseline within each band (negative = beats it). "
+                "Cell counts thin out in the late bands as categories exhaust their pool.",
+                "",
+                "| schedule | " + " | ".join(order) + " |",
+                "|---" * (len(order) + 1) + "|",
+            ]
+            for sched in piv.index:
+                cells = []
+                for b in order:
+                    v, n = piv.loc[sched, b], cnt.loc[sched, b]
+                    cells.append("-" if pd.isna(v) else f"{v:+.4f} ({int(n)})")
+                body.append(f"| {sched} | " + " | ".join(cells) + " |")
+            body.append("")
+    pbands = extra.pop("_positive_bands", None)
+    if pbands is not None and not pbands.empty:
+        body += [
+            "## Cost vs POSITIVE count",
+            "",
+            "Votes are what the user spends; positives are what the conformal cut learns from, "
+            "and at realistic prevalence 300 votes buys only ~13 positives. This is the axis the "
+            "learned cut should be seen converging on.",
+            "",
+        ]
+        for mode in ("region", "binary"):
+            g = pbands[pbands["mode"] == mode]
+            if g.empty:
+                continue
+            piv = g.pivot_table(index="schedule", columns="band", values="d_cost")
+            cnt = g.pivot_table(index="schedule", columns="band", values="n_cells")
+            order = [b for b, _lo, _hi in POSITIVE_BANDS if b in piv.columns]
+            body += [
+                f"### {mode.capitalize()} voting",
+                "",
+                "| schedule | " + " | ".join(order) + " |",
+                "|---" * (len(order) + 1) + "|",
+            ]
+            for sched in piv.index:
+                cells = []
+                for b in order:
+                    v, n = piv.loc[sched, b], cnt.loc[sched, b]
+                    cells.append("-" if pd.isna(v) else f"{v:+.4f} ({int(n)})")
+                body.append(f"| {sched} | " + " | ".join(cells) + " |")
+            body.append("")
+    decomp = extra.pop("_decomposition", None)
+    if decomp is not None and not decomp.empty:
+        body += [
+            "## Bias vs spread against the oracle cut",
+            "",
+            "`bias` = mean signed gap to the step's own oracle threshold (negative = cuts lower, "
+            "trading FNR for FPR). `spread` = SD of that gap within a cell (lower = steadier). "
+            "A schedule that wins on **spread** improves both error types under any weighting; one "
+            "that wins on **bias** has only moved the operating point.",
+            "",
+            "### Region voting",
+            "",
+            _fmt_generic(decomp, "region"),
+            "",
+            "### Binary voting",
+            "",
+            _fmt_generic(decomp, "binary"),
+            "",
+        ]
+    past = extra.pop("_past_ramp", None)
+    if past is not None and not past.empty:
+        body += [
+            "## Past the ramp (21+ votes)",
+            "",
+            "Where every schedule has converged, so a surviving difference is acquisition "
+            "feedback: the blend having steered which items got labelled.",
+            "",
+            "### Region voting",
+            "",
+            _fmt(past, "region"),
+            "",
+            "### Binary voting",
+            "",
+            _fmt(past, "binary"),
+            "",
+        ]
+    body += [
+        "## Provenance",
+        "",
+        "```json",
+        json.dumps(extra, indent=2, sort_keys=True),
+        "```",
+        "",
+    ]
+    path.write_text("\n".join(body))
+
+
+def main(argv: list[str] | None = None) -> int:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--mode", choices=("screen", "ab"), default="screen")
+    ap.add_argument("--arms", default="", help="ab mode: comma-separated schedule names")
+    ap.add_argument("--results", default=None, help="override CALIB_RESULTS")
+    args = ap.parse_args(argv)
+
+    results = Path(args.results) if args.results else common.RESULTS
+    extra: dict = {"mode": args.mode, "results": str(results), "window": [RAMP_LO, RAMP_HI]}
+
+    if args.mode == "screen":
+        df = load_cells(results)
+        extra["fidelity"] = assert_screen_fidelity(df)
+        extra["n_rows"] = int(len(df))
+        cells = cell_means(df[df.schedule != ""])
+        deltas = paired_vs_baseline(cells)
+        promote = promotion_list(deltas)
+        extra["promote_to_ab"] = promote
+        sens = weight_sensitivity(cells)
+        sens.to_csv(results / "screen_sensitivity.csv", index=False)
+        extra["_sensitivity"] = sens
+        decomp = threshold_error_decomposition(df[df.schedule != ""])
+        if not decomp.empty:
+            decomp.to_csv(results / "screen_decomposition.csv", index=False)
+            extra["_decomposition"] = decomp
+        write_report(results / "REPORT_screen.md", "screen", deltas, extra)
+        deltas.to_csv(results / "screen_deltas.csv", index=False)
+        (results / "promote.json").write_text(json.dumps(promote, indent=2))
+        print("promotion list:", " ".join(promote))
+    else:
+        arms = [a.strip() for a in args.arms.split(",") if a.strip()]
+        if not arms:
+            raise SystemExit("--arms is required in ab mode")
+        frames = []
+        for arm in arms:
+            d = load_cells(results / arm)
+            # In an A/B run the *live* threshold is the arm; the counterfactual
+            # rows are noise here, so keep only the run's own base rows.
+            d = d[(d.schedule == "") & (d.gmm_variant == "")].copy()
+            d["schedule"] = arm
+            frames.append(d)
+        df = pd.concat(frames, ignore_index=True)
+        extra["arms"] = arms
+        extra["n_rows"] = int(len(df))
+        cells = cell_means(df)
+        deltas = paired_vs_baseline(cells)
+        sens = weight_sensitivity(cells)
+        sens.to_csv(results / "ab_sensitivity.csv", index=False)
+        extra["_sensitivity"] = sens
+        decomp = threshold_error_decomposition(df)
+        if not decomp.empty:
+            decomp.to_csv(results / "ab_decomposition.csv", index=False)
+            extra["_decomposition"] = decomp
+        bands = band_curve(df)
+        if not bands.empty:
+            bands.to_csv(results / "ab_bands.csv", index=False)
+            extra["_bands"] = bands
+        pos_bands = positive_band_curve(df)
+        if not pos_bands.empty:
+            pos_bands.to_csv(results / "ab_positive_bands.csv", index=False)
+            extra["_positive_bands"] = pos_bands
+        past = past_ramp_effect(df)
+        if not past.empty:
+            past.to_csv(results / "ab_past_ramp.csv", index=False)
+            extra["_past_ramp"] = past
+        write_report(results / "REPORT_ab.md", "ab", deltas, extra)
+        deltas.to_csv(results / "ab_deltas.csv", index=False)
+        print(deltas.to_string(index=False))
+
+    print(f"wrote report under {results}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

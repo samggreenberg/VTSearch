@@ -5,6 +5,16 @@ Practical, hard-won ops notes for running the `scripts/experiments/*` and
 patterns are general; HLTCOE-specific values are marked **[HLTCOE]**. Read this
 before launching a big sweep — most of it was learned by getting it wrong.
 
+This file covers **SLURM resources**. Its companions cover the rest of running a
+study, and the `grid-experiments` skill ties all three together:
+
+- **`preflight.sh`** — run before submitting arms; blocks the mistakes that are
+  mechanically checkable (results-dir collisions, the wrong mount's free space,
+  a stale worktree).
+- **`LESSONS.md`** — the incident log: what broke on real studies, what it cost,
+  and whether it is now prevented or still only advice. Append when something
+  breaks.
+
 ## 1. Right-size `--mem` (the #1 silent time-sink)
 
 **An over-fat `--mem` wedges your job off *idle* GPUs.** If `squeue` shows your

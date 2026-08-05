@@ -383,13 +383,47 @@ class TestCalibrationAtTinyLabelCounts:
             )
         assert patched.call_count == 1
 
-    def test_still_calibrates_when_enough_labels(self):
-        """With safe_thresholds=True and n_labels>=6, calibration still runs."""
+    def test_skips_calibration_at_exactly_the_ramp_floor(self):
+        """At exactly 6 labels the production ramp's x-cal weight is still 0, so
+        the fold trainings are discarded here too.
+
+        The skip used to be hard-coded at ``n_votes < 6`` and so paid for two
+        200-epoch fold fits at exactly 6 that the blender then multiplied by
+        zero.  Deriving it from the schedule (#2841) closes that off-by-one; the
+        threshold is unchanged because the x-cal value never reached it.  No
+        user sees the difference either way: the app's first trained-detector
+        step is at 7 votes.
+        """
         from vtscore.detectors import training as detector_training
         from vtscore.training import thresholds
 
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})  # 6 labels
+
+        with unittest.mock.patch.object(
+            thresholds,
+            "compute_fold_orderings",
+            side_effect=AssertionError("weight is 0 at the floor; calibration is waste"),
+        ) as patched:
+            detector_training.train_and_score(
+                app_module.medias,
+                app_module.good_votes,
+                app_module.bad_votes,
+                safe_thresholds=True,
+            )
+        patched.assert_not_called()
+
+    def test_still_calibrates_once_the_ramp_leaves_zero(self):
+        """At 7 labels the x-cal weight is nonzero, so calibration must run.
+
+        7 is also the app's first trained-detector step, so this is the first
+        label count at which the blend has any user-visible effect at all.
+        """
+        from vtscore.detectors import training as detector_training
+        from vtscore.training import thresholds
+
+        app_module.good_votes.update({k: None for k in [1, 2, 3]})
+        app_module.bad_votes.update({k: None for k in [17, 18, 19, 20]})  # 7 labels
 
         with unittest.mock.patch.object(
             thresholds,

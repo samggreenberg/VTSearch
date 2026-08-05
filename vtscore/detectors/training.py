@@ -126,6 +126,23 @@ def _flood_context(
     return n_votes, cal_groups, sample_weights
 
 
+def _blend_schedule_for_snap(snap: dict | None) -> str:
+    """The safe-threshold mix-in schedule these medias should be blended under.
+
+    #2841 measured the two voting modes separately and they want different
+    curves, so the schedule is resolved per training call rather than being one
+    global constant.  The mode follows the *scoring* geometry, not how the user
+    happened to vote: a patch dataset always scores by max-pooling over regions
+    (see :func:`_score_all_media`), which is exactly the ``region`` arm of the
+    study, while a single-vector dataset is the ``binary`` arm.
+    """
+    from vtscore.training.blend_schedules import production_schedule_for  # noqa: PLC0415
+
+    if not snap:
+        return production_schedule_for(region_voting=None)
+    return production_schedule_for(region_voting=_patch_embedder_for_snap(snap) is not None)
+
+
 def _calibration_score_rows(
     groups: list | None,
     cal_groups: list | None,
@@ -225,8 +242,13 @@ def train_and_threshold(
         calculate_safe_threshold,
         train_model,
     )
+    from vtscore.training.blend_schedules import BlendContext
     from vtscore.training.mlp import LINEAR_HEAD
-    from vtscore.training.thresholds import NO_GOOD_THRESHOLD, cross_calibration_threshold_cached
+    from vtscore.training.thresholds import (
+        NO_GOOD_THRESHOLD,
+        cross_calibration_threshold_cached,
+        xcal_is_discarded,
+    )
 
     X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
@@ -235,7 +257,7 @@ def train_and_threshold(
     # Bag-aware setup (region flooding): size on votes not rows, split/weight
     # per bag.  On a legacy label set every bag is one row, so this collapses
     # to the historical behaviour.
-    n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
+    _n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
     cal_score_rows = _calibration_score_rows(groups, cal_groups, score_rows)
 
     # The production detector head is linear (logistic regression): stable under
@@ -247,10 +269,14 @@ def train_and_threshold(
     hidden_dim = LINEAR_HEAD
 
     safe = bool(get_safe_thresholds() and snap)
-    # Below the safe-threshold ramp floor the cross-cal output is blended
-    # away (pure GMM), so don't pay for the fold trainings.  Safe-thresholds
-    # OFF falls through to real cross-calibration at every label count.
-    if safe and n_votes < 6:
+    blend_ctx = BlendContext.from_labels(y_list, cal_groups)
+    # Where the schedule discards the cross-cal output entirely (pure GMM),
+    # don't pay for the fold trainings.  The condition is asked of the schedule
+    # rather than hard-coded at "< 6 votes" so that changing the schedule
+    # (#2841) cannot leave this skip behind blending against a placeholder.
+    # Safe-thresholds OFF falls through to real cross-calibration at every
+    # label count.
+    if safe and xcal_is_discarded(blend_ctx, _blend_schedule_for_snap(snap)):
         threshold = NO_GOOD_THRESHOLD
         # This branch never recomputes the fold orderings, so drop any stale
         # cache from a previous ≥6-label training - otherwise a later
@@ -314,7 +340,7 @@ def train_and_threshold(
         # cache above stores the raw cross-cal orderings, so a later inclusion
         # slide re-derives the unblended cutoff (intentional - see
         # recompute_detector_thresholds_for_inclusion).
-        threshold = calculate_safe_threshold(threshold, all_scores, n_votes)
+        threshold = calculate_safe_threshold(threshold, all_scores, blend_ctx, schedule=_blend_schedule_for_snap(snap))
 
     return model, threshold
 
@@ -681,9 +707,12 @@ def _train_and_score_xy(
     import torch  # noqa: PLC0415
 
     from vtscore.training.mlp import LINEAR_HEAD, train_model  # noqa: PLC0415
+    from vtscore.training.blend_schedules import BlendContext  # noqa: PLC0415
     from vtscore.training.thresholds import (  # noqa: PLC0415
+        NO_GOOD_THRESHOLD,
         calculate_safe_threshold,
         cross_calibration_threshold_cached,
+        xcal_is_discarded,
     )
 
     num_good = sum(1 for v in y_list if v == 1.0)
@@ -702,22 +731,30 @@ def _train_and_score_xy(
 
     # Bag-aware setup (region flooding): size on votes not rows, split/weight
     # per bag when a Bad vote flooded its leaf set; a no-op on legacy datasets.
-    n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
+    _n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
     cal_score_rows = _calibration_score_rows(groups, cal_groups, score_rows)
+    blend_ctx = BlendContext.from_labels(y_list, cal_groups)
     # Linear (logistic) production head - see train_and_threshold for why.
     hidden_dim = LINEAR_HEAD
 
-    # Skip k-fold calibration *only* when safe-thresholds is on and the label
-    # count is below the ``calculate_safe_threshold`` ramp floor: there the
-    # calibrated value is entirely discarded by the pure-GMM blend
-    # (label_weight=0), so the two 200-epoch fold fits would be pure waste.
-    # With safe-thresholds OFF the cross-cal threshold is what the detector
-    # actually uses, so it is computed for every label count - this is what
-    # keeps the vote/labelset path agreeing with the Find path
+    # Skip k-fold calibration *only* where safe-thresholds is on and the
+    # schedule discards the calibrated value entirely (pure GMM): there the two
+    # 200-epoch fold fits would be pure waste.  Asking the schedule instead of
+    # hard-coding "< 6 votes" (#2841) keeps the skip honest when the schedule
+    # changes.  With safe-thresholds OFF the cross-cal threshold is what the
+    # detector actually uses, so it is computed for every label count - this is
+    # what keeps the vote/labelset path agreeing with the Find path
     # (:func:`train_and_threshold`), which has always cross-calibrated below 6
     # labels when safe-thresholds is off.
-    if safe_thresholds and n_votes < 6:
-        threshold = 0.5
+    #
+    # The placeholder is ``NO_GOOD_THRESHOLD``, matching the Find path.  It is
+    # normally discarded by the pure-GMM blend, but *not* when the GMM fit
+    # degenerates to non-finite: ``blend_gmm_threshold`` then falls back to this
+    # value, and before #2841 the two paths disagreed on it (Find admitted
+    # nothing, the vote path admitted everything scoring ≥ 0.5).  Admitting
+    # nothing is the safe reading of "we never computed a threshold".
+    if safe_thresholds and xcal_is_discarded(blend_ctx, _blend_schedule_for_snap(clips_dict)):
+        threshold = NO_GOOD_THRESHOLD
         # Drop any fold-ordering cache from a previous ≥6-label training:
         # this branch neither reads nor rewrites it, and a later inclusion
         # slide (`recompute_detector_thresholds_for_inclusion`) trusts any
@@ -754,8 +791,10 @@ def _train_and_score_xy(
         # Blend applies on this fresh retrain only; the cached fold orderings
         # are raw cross-cal, so an inclusion slide re-derives the unblended
         # cutoff (see recompute_detector_thresholds_for_inclusion).  The label
-        # count is votes, not flooded rows, so the small-count ramp is unmoved.
-        threshold = calculate_safe_threshold(threshold, scores, n_votes)
+        # counts are votes, not flooded rows, so the small-count ramp is unmoved.
+        threshold = calculate_safe_threshold(
+            threshold, scores, blend_ctx, schedule=_blend_schedule_for_snap(clips_dict)
+        )
 
     results = _format_results(all_ids, scores, best_region, clips_dict)
     return results, threshold, model

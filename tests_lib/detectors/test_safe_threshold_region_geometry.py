@@ -45,9 +45,9 @@ def captured_gmm_scores(monkeypatch):
     seen: list[list[float]] = []
     real = training_pkg.calculate_safe_threshold
 
-    def _spy(xcal_threshold, all_scores, n_labels):
+    def _spy(xcal_threshold, all_scores, ctx, **kwargs):
         seen.append([float(s) for s in all_scores])
-        return real(xcal_threshold, all_scores, n_labels)
+        return real(xcal_threshold, all_scores, ctx, **kwargs)
 
     monkeypatch.setattr(training_pkg, "calculate_safe_threshold", _spy)
     return seen

@@ -47,6 +47,7 @@ from vtscore.eval.al_strategies import ALContext, select_next
 from vtscore.eval.autopilot_flow import AutopilotFlow, app_has_detector
 from vtscore.eval.labels import media_is_positive, region_box_for_category
 from vtscore.eval.trainers import _cross_calibrated_threshold, _parse_trainer_spec
+from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.mlp import LINEAR_HEAD, _auto_hidden_dim, train_model
 from vtscore.training.thresholds import (
     anchored_gmm_fit,
@@ -149,6 +150,7 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     *_IDENT_COLUMNS,
     "pool_variant",
     "gmm_variant",
+    "schedule",
     "threshold",
     "threshold_provenance",
     "degenerate",
@@ -357,9 +359,10 @@ def _blend_safe_threshold(
     region_aware: bool,
     sim_clips: dict[int, dict[str, Any]] | None,
     X_all_clips: Any,
-    n_labels: int,
+    ctx: "BlendContext",
     sim_ids: list[int],
     style_obj: Any = None,
+    schedule: str | None = None,
 ) -> tuple[float, list[float], list[int]]:
     """Blend *threshold* with a GMM threshold over the simulation set's scores.
 
@@ -396,7 +399,7 @@ def _blend_safe_threshold(
         # X_all_clips was stacked over ``sorted(sim_ids)``; keep that ordering.
         ids = sorted(sim_ids)
         all_scores = np.asarray(step.predict(np.asarray(X_all_clips))).ravel().tolist()
-    return calculate_safe_threshold(threshold, all_scores, n_labels), all_scores, ids
+    return calculate_safe_threshold(threshold, all_scores, ctx, schedule=schedule), all_scores, ids
 
 
 def _evaluate_on_test(
@@ -547,6 +550,7 @@ def _operating_metrics(
         # Safe-threshold study columns (issue #2799): defaults here; the base
         # row and the per-variant rows overwrite them where they apply.
         "gmm_variant": "",
+        "schedule": "",
         "xcal_threshold": _r(float(threshold)),
         "gmm_cut": nan,
         "blend_weight": nan,
@@ -622,6 +626,7 @@ def _safe_gmm_variant_rows(
     sim_labels_by_geometry: dict[str, "np.ndarray"],
     inclusion: int,
     n_pool_rows: float,
+    schedule: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Metric rows per cut variant, plus the per-geometry decomposition rows.
 
@@ -684,7 +689,12 @@ def _safe_gmm_variant_rows(
         diag["tau_test_oracle"] = nan  # filled below, once the test oracle is known
         diag_rows.append(diag)
 
-    weight = safe_blend_weight(n_votes)
+    ctx = BlendContext(
+        n_labels=n_votes,
+        n_good=int(details.get("n_good", 0)),
+        n_bad=int(details.get("n_bad", n_votes)),
+    )
+    weight = safe_blend_weight(ctx, schedule)
     rows: list[dict[str, Any]] = []
     for name, geometry, rule in _SAFE_GMM_VARIANTS:
         fallback = 0
@@ -697,7 +707,7 @@ def _safe_gmm_variant_rows(
             if not np.isfinite(gmm_cut) and name not in _ORACLE_VARIANTS:
                 gmm_cut = cuts_by_geometry[geometry].get("mid", nan)
                 fallback = 1
-            threshold = blend_gmm_threshold(xcal, gmm_cut, n_votes) if np.isfinite(gmm_cut) else nan
+            threshold = blend_gmm_threshold(xcal, gmm_cut, ctx, schedule=schedule) if np.isfinite(gmm_cut) else nan
             provenance = "gmm_blend"
         if not np.isfinite(threshold):
             continue
@@ -713,6 +723,7 @@ def _safe_gmm_variant_rows(
             n_pool_rows=n_pool_rows,
         )
         row["gmm_variant"] = name
+        row["schedule"] = ""
         row["xcal_threshold"] = _r(xcal)
         row["gmm_cut"] = _r(gmm_cut)
         row["blend_weight"] = _r(weight)
@@ -730,6 +741,78 @@ def _safe_gmm_variant_rows(
         for diag in diag_rows:
             diag["tau_test_oracle"] = rows[0]["oracle_threshold"]
     return rows, diag_rows
+
+
+def _schedule_variant_rows(
+    details: dict[str, Any],
+    base_scores: "np.ndarray",
+    base_labels: "np.ndarray",
+    sim_pooled_scores: list[float],
+    inclusion: int,
+    n_pool_rows: float,
+    schedules: list[str],
+) -> list[dict[str, Any]]:
+    """One metric row per mix-in **schedule** (issue #2841).
+
+    The dual of :func:`_safe_gmm_variant_rows`, which holds the schedule fixed
+    and varies the GMM *cut*: here the cut is production's (midpoint of the
+    component means, fitted on the style's inference pool) and the *schedule*
+    varies.  Every schedule re-combines the same two candidate cuts from the
+    same per-step model against the same held-out test scores, so the rows are
+    paired within a step by construction and differ only in the mix-in rule.
+
+    This is the study's **screen**, not its verdict.  Holding the trajectory
+    fixed is precisely what makes it cheap - one simulation scores every
+    schedule - but the blended threshold also feeds acquisition (Autopilot's
+    Hard phase picks the item nearest the decision boundary), so schedules that
+    would have labelled *different items* cannot show that here.  The A/B runs
+    exist to measure what this screen structurally cannot see.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.training.thresholds import (  # noqa: PLC0415
+        blend_gmm_threshold,
+        fit_gmm_threshold,
+        safe_blend_weight,
+    )
+
+    xcal = float(details["xcal_threshold"])
+    n_votes = int(details["n_votes"])
+    pre_blend_provenance = str(details.get("pre_blend_provenance", "conformal"))
+    fold_orderings = details.get("fold_orderings") or []
+    cal_scores = np.array([s for scores, _ in fold_orderings for s in scores]) if fold_orderings else None
+    cal_labels = np.array([lb for _, labels_ in fold_orderings for lb in labels_]) if fold_orderings else None
+
+    # Required, not defaulted: the ``rare``/``pos`` families ramp on the class
+    # split, so a guessed split would silently mis-score two whole families
+    # rather than fail.  The caller sets both keys alongside ``n_votes``.
+    ctx = BlendContext(n_labels=n_votes, n_good=int(details["n_good"]), n_bad=int(details["n_bad"]))
+    # One fit, re-combined under every schedule.  The corridor schedules need
+    # the component means, so the fit object rides along with the cut.
+    gmm_cut, gmm_fit = fit_gmm_threshold(sim_pooled_scores)
+
+    rows: list[dict[str, Any]] = []
+    for name in schedules:
+        threshold = blend_gmm_threshold(xcal, gmm_cut, ctx, schedule=name, fit=gmm_fit)
+        weight = safe_blend_weight(ctx, name)
+        row = _operating_metrics(
+            base_scores,
+            base_labels,
+            threshold,
+            inclusion,
+            cal_scores,
+            cal_labels,
+            pool_variant="max",
+            provenance="gmm_blend" if weight < 1.0 else pre_blend_provenance,
+            n_pool_rows=n_pool_rows,
+        )
+        row["gmm_variant"] = ""
+        row["schedule"] = name
+        row["xcal_threshold"] = _r(xcal)
+        row["gmm_cut"] = _r(gmm_cut)
+        row["blend_weight"] = _r(weight)
+        rows.append(row)
+    return rows
 
 
 #: Default sweep grid for the anchored-mixture eval arms (issue #2852).  Each
@@ -1624,6 +1707,8 @@ def simulate_voting_iterations(  # noqa: C901
     repool_topk: int = 4,
     inclusion_sweep_ks: Optional[list[int]] = None,
     sweep_sink: Optional[list[dict[str, Any]]] = None,
+    blend_schedule: Optional[str] = None,
+    schedule_variants: Optional[list[str]] = None,
     cut_diag_sink: Optional[list[dict[str, Any]]] = None,
     autopilot_fidelity: bool = True,
     anchored_thresholds: bool = False,
@@ -1800,6 +1885,15 @@ def simulate_voting_iterations(  # noqa: C901
     # scored region-aware (max-pool over regions) the same way the live
     # detector scores them, regardless of how the Good votes were assembled.
     region_aware = any(clips_dict[cid].get("patch_regions") for cid in clips_dict)
+    # Mirror the app's per-mode schedule default (#2841): with no explicit arm, a
+    # patch dataset blends under the region schedule and a single-vector one
+    # under the binary schedule, exactly as `_blend_schedule_for_snap` decides in
+    # `vtscore.detectors.training`.  Without this the harness would measure a
+    # schedule no detector actually uses.
+    if blend_schedule is None:
+        from vtscore.training.blend_schedules import production_schedule_for  # noqa: PLC0415
+
+        blend_schedule = production_schedule_for(region_voting=region_aware)
 
     import torch  # noqa: PLC0415
 
@@ -1938,14 +2032,28 @@ def simulate_voting_iterations(  # noqa: C901
         sim_pooled_ids: list[int] = []
         if safe_thresholds:
             xcal_threshold = threshold
+            # Vote-level class counts, so a schedule can ramp on the rarer class
+            # (#2841).  The harness votes one media at a time, so bags and votes
+            # coincide here and the counts are the two vote dicts' sizes.
+            blend_ctx = BlendContext(n_labels=n_labels, n_good=len(good_votes), n_bad=len(bad_votes))
             threshold, sim_pooled_scores, sim_pooled_ids = _blend_safe_threshold(
-                threshold, step, region_aware, sim_clips, X_all_clips, n_labels, sim_ids, style_obj=style_obj
+                threshold,
+                step,
+                region_aware,
+                sim_clips,
+                X_all_clips,
+                blend_ctx,
+                sim_ids,
+                style_obj=style_obj,
+                schedule=blend_schedule,
             )
             if emit_calibration_metrics:
                 details["pre_blend_provenance"] = details.get("provenance", "conformal")
                 details["provenance"] = "gmm_blend"
                 details["xcal_threshold"] = xcal_threshold
                 details["n_votes"] = n_labels
+                details["n_good"] = len(good_votes)
+                details["n_bad"] = len(bad_votes)
 
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single
@@ -2047,11 +2155,27 @@ def simulate_voting_iterations(  # noqa: C901
                     },
                     inclusion,
                     n_pool_rows=metric_rows[0]["n_pool_rows"],
+                    schedule=blend_schedule,
                 )
                 metric_rows.extend(variant_rows)
                 if cut_diag_sink is not None:
                     for dr in diag_rows:
                         cut_diag_sink.append({**base_row, **dr})
+            # One extra row per mix-in schedule (issue #2841), on the production
+            # cut.  Independent of the cut-variant rows above: the schedule
+            # screen only needs the pooled sim scores the blend actually fits.
+            if schedule_variants and sim_pooled_scores is not None:
+                metric_rows.extend(
+                    _schedule_variant_rows(
+                        details,
+                        base_scores,
+                        base_labels,
+                        sim_pooled_scores,
+                        inclusion,
+                        n_pool_rows=metric_rows[0]["n_pool_rows"],
+                        schedules=schedule_variants,
+                    )
+                )
             # The #2852 anchored-mixture arms, paired against the same test
             # scores (and against pooled_mid / xcal_only above).
             if anchored_thresholds and sim_pooled_scores is not None:

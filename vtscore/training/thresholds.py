@@ -16,6 +16,8 @@ from typing import Any
 
 import numpy as np
 
+from vtscore.training.blend_schedules import BlendContext, BlendSchedule, get_schedule
+
 # Sentinel threshold meaning "predict nothing as Good". Sigmoid scores are
 # in [0, 1], so any value > 1.0 makes every ``score >= threshold`` check
 # evaluate to False. Kept finite (vs. ``float("inf")``) so it cannot poison
@@ -1382,56 +1384,106 @@ def calculate_cross_calibration_threshold(
     return threshold_from_fold_orderings(orderings, inclusion_value)
 
 
+def fit_gmm_threshold(scores: list[float]) -> tuple[float, GmmFit1D | None]:
+    """The GMM cut of *scores* **and** the fit behind it.
+
+    :func:`calculate_gmm_threshold` discards the fit; the corridor schedules
+    (issue #2841) need the component means, so this returns both from one EM
+    fit.  ``None`` accompanies the 0.5 / median fallbacks, where there is no
+    fit to speak of and a schedule must degrade to the plain blend.
+    """
+    if len(scores) < 2:
+        return 0.5, None
+    arr = gmm_fit_array(scores)
+    fit = fit_score_gmm(arr)
+    if fit is None:
+        return float(np.median(arr)), None
+    return fit.midpoint(), fit
+
+
 def calculate_safe_threshold(
     xcal_threshold: float,
     all_scores: list[float],
-    n_labels: int,
+    ctx: "BlendContext | int",
+    schedule: "str | BlendSchedule | None" = None,
 ) -> float:
-    """Blend cross-calibration and GMM thresholds for robustness with small label counts.
+    """Combine the cross-calibration and GMM thresholds under a mix-in schedule.
 
-    When few labels are available the cross-calibration threshold can be unreliable.
-    This function computes a GMM-based threshold on the full score distribution and
-    returns a weighted average of the two, where the weight assigned to x-cal grows
-    linearly with the number of labels.
-
-    Blending rules:
-        * ``n_labels <= 6``  → pure GMM threshold (the x-cal weight
-          ``(n_labels - 6) / 14`` is 0 at exactly 6).
-        * ``n_labels >= 20`` → pure x-cal threshold.
-        * In between → linear interpolation.
+    When few labels are available the cross-calibration threshold can be
+    unreliable, so a GMM cut fitted on the full score distribution stands in for
+    it.  *How much* it stands in - and for how long - is the schedule's job
+    (:mod:`vtscore.training.blend_schedules`, issue #2841).  The shipped default
+    is the historical ramp: pure GMM at ≤6 labels, pure x-cal at ≥20, linear
+    between.
 
     Args:
         xcal_threshold: The cross-calibrated threshold.
         all_scores: Model output scores for all medias (used for GMM fitting).
-        n_labels: Total number of labelled examples (good + bad).
+        ctx: A :class:`~vtscore.training.blend_schedules.BlendContext` carrying
+            the vote counts.  A bare ``int`` is accepted as the total label
+            count for callers that have no class breakdown; schedules that ramp
+            on the rarer class then see a degenerate split and are not
+            meaningful, so pass a real context wherever the labels are known.
+        schedule: Registry name or instance; ``None`` selects production.
 
     Returns:
-        A finite blended threshold float. If either input is non-finite,
-        falls back to the other; if both are non-finite, returns ``0.5``.
-        The result is guaranteed finite so it can be safely stored on
-        ``DetectorContext.threshold`` without breaking ``score >= threshold``
-        comparisons.
+        A finite threshold float. If either candidate is non-finite, falls back
+        to the other; if both are, returns ``0.5``.  The result is guaranteed
+        finite so it can be safely stored on ``DetectorContext.threshold``
+        without breaking ``score >= threshold`` comparisons.
     """
-    return blend_gmm_threshold(xcal_threshold, calculate_gmm_threshold(all_scores), n_labels)
+    cut, fit = fit_gmm_threshold(all_scores)
+    return blend_gmm_threshold(xcal_threshold, cut, ctx, schedule=schedule, fit=fit)
 
 
-def safe_blend_weight(n_labels: int) -> float:
-    """The x-cal weight of the safe-threshold blend at *n_labels* labels.
+def _as_context(ctx: "BlendContext | int") -> BlendContext:
+    """Normalise the ``BlendContext | int`` argument into a context.
 
-    Linear ramp: 0 at 6 labels (pure GMM), 1 at 20 (pure x-cal).
+    An ``int`` carries no class breakdown, so the split is left degenerate
+    rather than guessed: schedules reading ``n_good``/``n_rare`` would be
+    fabricating an answer, and a caller that wants them must supply real counts.
     """
-    MIN_LABELS = 6
-    MAX_LABELS = 20
-    return max(0.0, min(1.0, (n_labels - MIN_LABELS) / (MAX_LABELS - MIN_LABELS)))
+    if isinstance(ctx, BlendContext):
+        return ctx
+    return BlendContext(n_labels=int(ctx), n_good=0, n_bad=int(ctx))
 
 
-def blend_gmm_threshold(xcal_threshold: float, gmm_threshold: float, n_labels: int) -> float:
-    """Blend an x-cal and a GMM threshold on the safe-threshold label ramp.
+def safe_blend_weight(ctx: "BlendContext | int", schedule: "str | BlendSchedule | None" = None) -> float:
+    """The weight the schedule puts on the **x-cal** cut; 0 means pure GMM."""
+    sched = schedule if isinstance(schedule, BlendSchedule) else get_schedule(schedule)
+    return sched.weight(_as_context(ctx))
 
-    The blending core of :func:`calculate_safe_threshold`, split out so a
-    caller with a pre-computed GMM cut (the #2799 measurement harness re-cuts
-    one fitted GMM under several rules) applies the identical ramp and
-    finite-guards without re-fitting.
+
+def xcal_is_discarded(ctx: "BlendContext | int", schedule: "str | BlendSchedule | None" = None) -> bool:
+    """Whether the schedule throws the x-cal cut away entirely at these counts.
+
+    The training paths use this to skip the fold calibration - two 200-epoch
+    model fits - whose output would be multiplied by zero anyway.  Deriving the
+    skip from the schedule (rather than hard-coding "< 6 labels", which is what
+    both app paths did before #2841) is what keeps the skip correct when the
+    schedule changes: a schedule that trusts x-cal from the first label now
+    automatically stops the skip instead of silently blending against a
+    placeholder.
+    """
+    return safe_blend_weight(ctx, schedule) <= 0.0
+
+
+def blend_gmm_threshold(
+    xcal_threshold: float,
+    gmm_threshold: float,
+    ctx: "BlendContext | int",
+    schedule: "str | BlendSchedule | None" = None,
+    fit: GmmFit1D | None = None,
+) -> float:
+    """Combine a pre-computed x-cal and GMM cut under *schedule*.
+
+    The combining core of :func:`calculate_safe_threshold`, split out so a
+    caller with a pre-computed GMM cut (the #2799/#2841 measurement harness
+    re-cuts one fitted GMM under several rules and schedules) applies the
+    identical schedule and finite-guards without re-fitting.  *fit* is the
+    :class:`GmmFit1D` behind *gmm_threshold* when the caller has it; schedules
+    that need the component geometry (the corridors) fall back to a plain
+    weighted blend without it.
     """
     # Defend against non-finite inputs from either side: an upstream
     # ``calculate_cross_calibration_threshold`` can theoretically still
@@ -1448,8 +1500,8 @@ def blend_gmm_threshold(xcal_threshold: float, gmm_threshold: float, n_labels: i
     if not gmm_finite:
         return xcal_threshold
 
-    label_weight = safe_blend_weight(n_labels)
-    blended = label_weight * xcal_threshold + (1.0 - label_weight) * gmm_threshold
+    sched = schedule if isinstance(schedule, BlendSchedule) else get_schedule(schedule)
+    blended = sched.combine(xcal_threshold, gmm_threshold, _as_context(ctx), fit)
     if not math.isfinite(blended):
         return 0.5
     return blended

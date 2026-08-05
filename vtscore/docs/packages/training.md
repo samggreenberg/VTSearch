@@ -268,18 +268,33 @@ The key bytes encode the actual training vectors (not just label IDs),
 so if the embedder changes and a labelset is re-resolved to different
 embeddings, the cache invalidates automatically.
 
-### `calculate_safe_threshold(xcal_threshold, all_scores, n_labels)`
+### `calculate_safe_threshold(xcal_threshold, all_scores, ctx, schedule=None)`
 
-`vtscore/training/thresholds.py:312`. Blends the cross-calibration
+`vtscore/training/thresholds.py`. Combines the cross-calibration
 threshold with a GMM threshold computed on the full score distribution.
-The cross-cal output gets noisy below ~20 labels; this blend ramps
-linearly from pure-GMM at 6 labels to pure-cross-cal at 20:
+The cross-cal output gets noisy when labels are few, so a **mix-in
+schedule** (`vtscore/training/blend_schedules.py`) decides how much of
+each to use. `ctx` is a `BlendContext` carrying the vote counts (total,
+good, bad — in votes, not flooded rows); a bare `int` is accepted where
+only the total is known.
 
-| `n_labels` | Result                                      |
-|-----------:|---------------------------------------------|
-|     `< 6`  | pure GMM threshold                          |
-|    `6..20` | linear interpolation                        |
-|   `>= 20`  | pure cross-cal threshold                    |
+The shipped schedule depends on the **voting mode**, because #2841
+measured the two separately and they want different curves
+(`PRODUCTION_SCHEDULE_BY_MODE`, resolved per training call by
+`vtscore.detectors.training._blend_schedule_for_snap`):
+
+| mode | schedule | shape |
+|---|---|---|
+| region (patch dataset) | `slow` | pure GMM ≤6 labels → pure cross-cal at **40** |
+| binary (single vector) | `cap50` | the old 6→20 ramp, but capped at **half** cross-cal forever |
+| unknown | `cap50` | the one arm that improved both modes under every weighting |
+
+The historical rule — a single 6→20 linear ramp — is retained as `prod`,
+the baseline every number in the study's report is a delta against.
+Other registry entries vary the endpoints, the curve shape, the statistic
+the ramp reads (total labels vs the rarer class), or replace the weighted
+average with a clamp into the GMM's component means.
+See `docs/experiments/mixin-schedule/REPORT.md`.
 
 When `xcal_threshold` is `float("inf")` (no valid fold split), falls
 back entirely to the GMM threshold.

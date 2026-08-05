@@ -29,12 +29,21 @@ DATASETS = os.environ.get("CALIB_DATASETS", "visual_genome_m,caltech101_m").spli
 DATASET_EMBEDDERS: dict[str, list[str]] = {
     "visual_genome_m": os.environ.get("CALIB_VG_EMBEDDERS", "siglip,siglip_l,dinov3_patch").split(","),
     "caltech101_m": os.environ.get("CALIB_CALTECH_EMBEDDERS", "siglip,siglip_l").split(","),
+    # COCO-2017-val, assembled from the #2790 sweep cache by
+    # ``build_coco_pickle.py`` (issue #2841).  Whole-image embedders only: that
+    # cache holds each image's whole vector and its HAC region vectors but not
+    # the raw patch grid, so no region-voting style can be built from it.
+    "coco_val": os.environ.get("CALIB_COCO_EMBEDDERS", "siglip,siglip2").split(","),
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
+#: COCO *is* boxed, but its cached vectors cannot feed a patch style (see above),
+#: so it runs as a second binary-voting dataset - which is exactly the axis
+#: #2841 asks about separately from region voting.
 REGION_VOTING_BY_DATASET: dict[str, bool] = {
     "visual_genome_m": True,
     "caltech101_m": False,
+    "coco_val": False,
 }
 
 # --- Styles per embedder kind ---
@@ -96,6 +105,37 @@ ANCHORED_CHECKPOINTS = [
 #: #2790/#2809 — because its question ("should safe_thresholds be forced on for
 #: every VTSearch user?") is only answerable on the shipped head.
 HEAD = os.environ.get("CALIB_HEAD", "mlp")
+
+#: Which safe-threshold mix-in schedule the run *lives* under (issue #2841).
+#: This steers the trajectory - the blended threshold feeds Autopilot's Hard
+#: pick - so an A/B between schedules needs one full run per value here.
+BLEND_SCHEDULE = os.environ.get("CALIB_BLEND_SCHEDULE") or None
+
+
+#: Extra schedules to score *counterfactually* on this run's trajectory, one
+#: metric row each (tagged ``schedule``).  Free relative to the simulation, but
+#: blind to acquisition feedback - the screen, not the verdict.  ``"all"``
+#: expands to the whole registry.
+def _schedule_variants() -> list[str]:
+    raw = os.environ.get("CALIB_SCHEDULE_VARIANTS", "").strip()
+    if not raw:
+        return []
+    if raw == "all":
+        from vtscore.training.blend_schedules import schedule_names  # noqa: PLC0415
+
+        return schedule_names()
+    return [s.strip() for s in raw.split(",") if s.strip()]
+
+
+SCHEDULE_VARIANTS = _schedule_variants()
+
+#: Minimum positives a category must have **in the simulation half** to be kept.
+#: A long-horizon run (#2841 follow-up: does pure x-cal ever overtake the blend?)
+#: is bounded by positives, not pool size: once autopilot has exhausted them,
+#: every further vote is a negative and the conformal positive-quantile stops
+#: improving, so the tail of the curve would measure nothing.  0 disables the
+#: filter, which is the behaviour of every run before the follow-up.
+MIN_SIM_POSITIVES = int(os.environ.get("CALIB_MIN_SIM_POSITIVES", "0"))
 
 # --- Category-selection parameters (copied from the Max-Patch runner) ---
 _MIN_CATEGORY_COUNT = int(os.environ.get("CALIB_MIN_CAT_COUNT", "20"))
