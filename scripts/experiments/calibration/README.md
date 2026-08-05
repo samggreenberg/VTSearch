@@ -51,6 +51,7 @@ cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
 bash launch_all.sh          # reuse-symlink -> prepare (GPU) -> cells -> analyze
 bash launch_safe.sh         # the #2799 safe-threshold sizing, analyze_safe.py
 bash launch_cut.sh          # the #2836 cut-rule study: theory bench + analyze_cut.py
+bash launch_anchored.sh     # the #2852 anchored-mixture study, analyze_anchored.py
 ```
 
 Both study launchers are thin wrappers over `launch_all.sh` that flip the
@@ -86,3 +87,29 @@ every step then emits one extra row per safe-threshold GMM variant
 `analyze.py`. Results land under `/exp/$USER/calibration-safe`, reusing the
 shared Max-Patch pickles/crops in place. Design and pre-registered decision
 rules: `docs/plans/safe-threshold-gmm-experiment.md`.
+
+## Anchored-mixture study (issue #2852)
+
+```bash
+cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
+bash launch_anchored.sh  # safe+anchored ON, VG only, 300 votes (deep regime), 4 seeds
+```
+
+`launch_anchored.sh` additionally sets `CALIB_ANCHORED=1`: every step then
+emits one row per anchored-mixture arm — the label-anchored family
+(`anchored_w{W}_{rule}`: anchored EM on the final model's haystack scores with
+the voted items' scores clamped to their labelled component), the fold-anchored
+"cross-LabeledGMM" family (`fold_anchored_w{W}_{rule}_{combine}`: per-fold
+anchored fits on honest held-out anchors, rank-transferred back to the final
+scale), and the `rank_transfer` attribution arm — all step-paired against the
+`pooled_mid` (shipped blend) and `xcal_only` controls. The sweep grid is
+`CALIB_ANCHORED_WEIGHTS` × `CALIB_ANCHORED_RULES` ×
+`CALIB_ANCHORED_FOLD_COMBINES` (see `experiment_config.py`). Analyzer:
+`analyze_anchored.py` (H1–H4 verdicts + paired tables); self-test:
+`python selftest_analyze_anchored.py`. Results land under
+`/exp/$USER/calibration-anchored`. Design and pre-registered decision rules:
+`docs/plans/population-anchored-calibration.md`.
+
+Cost note: the fold-anchored arms score the sim set once per calibration fold
+per step (`calibrate_count=2` → two extra scoring passes); disable them with
+`CALIB_ANCHORED_FOLD_ARMS=0` for a cheap label-anchored-only run.
