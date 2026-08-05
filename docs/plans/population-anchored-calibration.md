@@ -59,6 +59,20 @@ one estimator, not two rivals averaged on a label-count schedule.
   mode removed (x-cal's strength). Replaces the ramp with an implicit,
   data-driven label/population weighting. Falls back to the unanchored GMM on
   degenerate fits, never to 0.5.
+- **Fold-anchored mixture** (refinement of #2852). The label-anchored mixture
+  as specced anchors on the **final model's** scores of the labeled items — but
+  those items were in the final model's training set, so their scores are
+  optimistically separated, and the anchors sit artificially deep in their
+  components exactly when labels are few (the regime the estimator exists
+  for). The repair: per fold, fit the anchored mixture on the **fold model's**
+  haystack scores with anchors from that fold's *held-out* labeled scores —
+  anchors and population now share one scale and the anchors are honest — then
+  carry each fold's cut back to the final model as a quantile of the fold's
+  haystack distribution realized on the final model's haystack distribution
+  (rank-transfer per fold), and combine across folds. Kills the train-anchor
+  bias and deficit 2 in one move. Cost: a haystack scoring pass per fold model
+  (cheap at linear-head/small-MLP scale, but not free like the final-model
+  variant, which reuses scores that already exist).
 - **Never-expiring blend** (control). The shipped blend with a permanent GMM
   floor weight instead of the 20-label expiry. Not a fusion — kept as the
   cheapest possible fix and as the arm that tests whether *any* scheduling
@@ -73,7 +87,8 @@ one estimator, not two rivals averaged on a label-count schedule.
 identical models, votes, and steps.
 
 **Arms:** pure x-cal (status quo past 20) · shipped safe-blend ·
-never-expiring blend · rank-transfer · label-anchored mixture.
+never-expiring blend · rank-transfer · label-anchored mixture ·
+fold-anchored mixture.
 
 **Metrics per step, paired:** inclusion-weighted cost, FNR/FPR, regret vs the
 oracle cut, step-to-step threshold delta, estimator path taken.
@@ -84,7 +99,8 @@ oracle cut, step-to-step threshold delta, estimator path taken.
   beats pure x-cal on regret. Which one attributes the deficit: rank-transfer
   absorbing GMM's late value ⇒ scale transfer (deficit 2) dominated;
   anchored-mixture winning where rank-transfer doesn't ⇒ quantile sample size
-  (deficit 1) dominated.
+  (deficit 1) dominated; fold-anchored beating label-anchored ⇒ the
+  train-score anchor bias was material, not just theoretical.
 - **H2 (fusion beats scheduling):** the winning fusion arm beats the
   never-expiring blend at matched steps — i.e. the ramp's problem is its
   *form*, not its expiry point.
