@@ -55,6 +55,31 @@ def _multi_user_mode(user_dir):
         set_login_provider(original)
 
 
+def _force_cold_sync(user_path, username: str = "default") -> None:
+    """Guarantee the next settings read runs a real sync-from-source pass.
+
+    Dropping ``_sync_state`` alone is **not** enough: the cross-worker dedup
+    marker (``<user_settings>.syncmark``) lives on disk and survives an
+    in-memory reset.  ``_adopt_sync_marker_if_current`` compares it against
+    the source's current ``peek_version`` and, when they match, stamps the
+    state as freshly synced and skips ``source.load()`` entirely.
+
+    ``set_settings_source_config`` writes that marker with the source's
+    ``st_mtime_ns`` at configure time, so a test that then rewrites the source
+    file only gets a load if the rewrite landed in a *later* filesystem
+    timestamp tick.  On a coarse-granularity filesystem it often doesn't, and
+    the load never happens - the flake behind #2858, where a test waiting on
+    "load started" sat out its full timeout.  Deleting the marker removes the
+    dependency on timestamp granularity: with no marker there is nothing to
+    adopt, so the load always fires.
+    """
+    from vtsearch import settings
+    from vtsearch import settings_store as settings_store_mod
+
+    settings._sync_state.pop(username, None)
+    settings_store_mod._sync_marker_path(user_path).unlink(missing_ok=True)
+
+
 # ---------------------------------------------------------------------------
 # SettingsSource base class
 # ---------------------------------------------------------------------------
@@ -979,8 +1004,9 @@ class TestSyncFromSourceFreshness:
             return real_load(field_values)
 
         monkeypatch.setattr(src, "load", flaky_load)
-        # Reset state so the first read forces a sync attempt.
-        settings._sync_state.pop("default", None)
+        # Reset state *and* the on-disk dedup marker so the first read is
+        # guaranteed to attempt a real load (see ``_force_cold_sync``).
+        _force_cold_sync(isolated_settings._user)
         # First read: load() raises, last_sync_succeeded stays False.
         settings.get_volume()
         state = settings._sync_state.get("default")
@@ -1015,8 +1041,11 @@ class TestSyncFromSourceFreshness:
         source_file.write_text(json.dumps({"volume": 0.31}))
 
         # Force a fresh sync attempt and slow down the source load so
-        # the racing window is wide and deterministic.
-        settings._sync_state.pop("default", None)
+        # the racing window is wide and deterministic.  Clearing the on-disk
+        # dedup marker too is what makes "a load will happen" a guarantee
+        # rather than a filesystem-timestamp coin flip (see
+        # ``_force_cold_sync``).
+        _force_cold_sync(isolated_settings._user)
         src = get_settings_source("server_json_file")
         assert src is not None
         real_load = src.load
@@ -1061,6 +1090,55 @@ class TestSyncFromSourceFreshness:
         # default for ``volume``.
         assert results["a"] == 0.31
         assert results["b"] == 0.31
+
+    def test_cold_sync_reset_loads_even_when_source_version_unchanged(self, tmp_path, isolated_settings, monkeypatch):
+        """``_force_cold_sync`` must trigger a load regardless of the source's mtime.
+
+        Regression guard for #2858: the two concurrency tests above reset only
+        ``_sync_state`` and relied on their post-configure source rewrite
+        landing in a *later* filesystem timestamp tick.  When it didn't, the
+        on-disk dedup marker still matched the source's ``peek_version``, the
+        sync was adopted instead of run, and the "load started" wait sat out
+        its whole timeout.  Here the source version is pinned to the marker
+        (the worst case, made deterministic) - a load must still happen.
+        """
+        import os
+
+        from vtsearch import settings
+        from vtsearch import settings_store as settings_store_mod
+        from vtsearch.settings_io.sources import get_settings_source
+
+        source_file = tmp_path / "remote.json"
+        config = {
+            "source_name": "server_json_file",
+            "field_values": {"filepath": str(source_file)},
+        }
+        settings.set_settings_source_config(config)
+
+        marker_version = settings_store_mod._read_sync_marker(isolated_settings._user)
+        assert marker_version is not None
+
+        # Rewrite the source, then pin its mtime back to the marker's token:
+        # the source *content* moved on but its version token did not, which is
+        # what a coarse-granularity filesystem produces on its own.
+        source_file.write_text(json.dumps({"volume": 0.31}))
+        os.utime(source_file, ns=(marker_version, marker_version))
+        assert source_file.stat().st_mtime_ns == marker_version
+
+        src = get_settings_source("server_json_file")
+        assert src is not None
+        loads = {"n": 0}
+        real_load = src.load
+
+        def counting_load(fv):
+            loads["n"] += 1
+            return real_load(fv)
+
+        monkeypatch.setattr(src, "load", counting_load)
+
+        _force_cold_sync(isolated_settings._user)
+        assert settings.get_volume() == 0.31
+        assert loads["n"] >= 1
 
     def test_local_write_dirty_key_survives_auto_resync(self, tmp_path, isolated_settings):
         """An auto re-sync (version-bump) must not silently overwrite a
