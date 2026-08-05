@@ -104,7 +104,7 @@ RUN if [ -n "$VTSEARCH_VERSION" ]; then echo "$VTSEARCH_VERSION" > vtsearch/_ver
 #
 # * ``hidden_plugins`` drops the Aud2Img (spectrogram) converter and the
 #   Downloaded Demo Media importer from every picker / listing API
-#   response. The Aud2Img converter is useless without librosa/matplotlib
+#   response. The Aud2Img converter is useless without librosa
 #   (omitted from ``requirements/labbench.txt``) and the demo importer
 #   needs outbound network access this container doesn't expect to have.
 #   Hidden plugins remain importable by name for any backend code that

@@ -141,11 +141,7 @@ _VOTING_COLUMNS: tuple[str, ...] = (
 #: Column order for the calibration study's main per-step frame (issue #2781),
 #: emitted only when ``emit_calibration_metrics``.  One row per ``pool_variant``;
 #: under ``safe_thresholds`` additionally one row per safe-threshold GMM variant
-#: (issue #2799), tagged in ``gmm_variant`` (``""`` on every other row), and one
-#: row per counterfactual mix-in schedule (issue #2841), tagged in ``schedule``.
-#: The two variant families are disjoint: a ``gmm_variant`` row varies the GMM
-#: *cut* at the production schedule, a ``schedule`` row varies the *schedule* at
-#: the production cut, and the base rows carry ``""`` in both.
+#: (issue #2799), tagged in ``gmm_variant`` (``""`` on every other row).
 _CALIBRATION_COLUMNS: tuple[str, ...] = (
     *_IDENT_COLUMNS,
     "pool_variant",
@@ -158,6 +154,10 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     "xcal_threshold",
     "gmm_cut",
     "blend_weight",
+    "cut_fallback",
+    "raw_cut_cost",
+    "raw_cut_fpr",
+    "raw_cut_fnr",
     "cost",
     "fpr",
     "fnr",
@@ -180,6 +180,67 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     "backend",
     "device",
     "elapsed_seconds",
+)
+
+#: Column order for the cut-decomposition side frame (issue #2836): one row per
+#: (step, geometry), written to a separate CSV by the runner.  Carries the fitted
+#: mixture parameters, the two families' fit quality, the label-supervised class
+#: moments, and every cut in the decomposition chain, so the analyzer can test
+#: the derivation offline without re-running the simulation.
+#:
+#: The chain telescopes ``tau_cross -> tau_priorfree -> tau_supervised ->
+#: tau_sim_oracle -> tau_test_oracle``; each consecutive pair differs in exactly
+#: one assumption (prior/loss, component identification, Gaussian shape, finite
+#: sim set), so the terms sum to the total error of today's rule.
+_CUT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
+    *_IDENT_COLUMNS,
+    "geometry",
+    "sim_n",
+    "sim_prevalence",
+    "fallback_median",
+    # Fitted Gaussian mixture.
+    "gmm_ok",
+    "w_lo",
+    "mu_lo",
+    "var_lo",
+    "w_hi",
+    "mu_hi",
+    "var_hi",
+    "gmm_loglik",
+    "pred_offset_equal_var",
+    "gmm_logit_loglik",
+    # Fitted Gumbel(low) + Normal(high) mixture.  Its component parameters are in
+    # LOGIT units (that is where the extreme-value limit lives and where it is
+    # fitted); its log likelihood is converted back to score space so the two
+    # families are directly comparable.
+    "evt_ok",
+    "evt_w_lo",
+    "evt_loc_lo",
+    "evt_scale_lo",
+    "evt_mu_hi",
+    "evt_var_hi",
+    "evt_loglik",
+    "evt_loglik_gain",
+    # Label-supervised class moments (diagnostic only).
+    "s_mu_neg",
+    "s_var_neg",
+    "s_mu_pos",
+    "s_var_pos",
+    "s_prevalence",
+    # The cut chain.
+    "tau_mid",
+    "tau_cross",
+    "tau_priorfree",
+    "tau_rate",
+    "tau_gumbel_cross",
+    "tau_gumbel_priorfree",
+    "tau_gumbel_rate",
+    "tau_supervised",
+    "tau_sim_oracle",
+    "tau_test_oracle",
+    # Where the true optimum sits in each fitted Bad component's upper tail.
+    "oracle_lo_sf_gauss",
+    "oracle_lo_sf_evt",
 )
 
 #: Column order for the inclusion-budget sweep side frame (long format, one row
@@ -295,9 +356,10 @@ def _blend_safe_threshold(
     sim_clips: dict[int, dict[str, Any]] | None,
     X_all_clips: Any,
     ctx: "BlendContext",
+    sim_ids: list[int],
     style_obj: Any = None,
     schedule: str | None = None,
-) -> tuple[float, list[float]]:
+) -> tuple[float, list[float], list[int]]:
     """Blend *threshold* with a GMM threshold over the simulation set's scores.
 
     Region-aware datasets (MLP + patch embedder only) score the sim set via
@@ -309,23 +371,31 @@ def _blend_safe_threshold(
     the sim set is scored through that style - the same scorer the test set
     uses - so the GMM sees the distribution the threshold will actually cut.
 
-    Returns ``(blended_threshold, sim_scores)`` - the scores the GMM was fitted
-    on ride along so the #2799 safe-threshold variant rows can re-cut the same
-    distribution without a second scoring pass.
+    Returns ``(blended_threshold, sim_scores, sim_ids)`` - the scores the GMM was
+    fitted on ride along so the #2799 safe-threshold variant rows can re-cut the
+    same distribution without a second scoring pass, and their media ids ride
+    along with them so the #2836 decomposition can attach each score's true label
+    without assuming the scorer preserved any particular ordering.
     """
     import numpy as np  # noqa: PLC0415
 
     if style_obj is not None:
         assert sim_clips is not None and step.torch_model is not None
-        all_scores = list(style_obj.score_media(step.torch_model, sim_clips).values())
+        score_map = style_obj.score_media(step.torch_model, sim_clips)
+        ids = list(score_map.keys())
+        all_scores = [float(score_map[cid]) for cid in ids]
     elif region_aware:
         from vtscore.detectors.training import score_media_with_model  # noqa: PLC0415
 
         assert sim_clips is not None and step.torch_model is not None
-        all_scores = [r["score"] for r in score_media_with_model(step.torch_model, sim_clips)]
+        scored = score_media_with_model(step.torch_model, sim_clips)
+        ids = [int(r["id"]) for r in scored]
+        all_scores = [float(r["score"]) for r in scored]
     else:
+        # X_all_clips was stacked over ``sorted(sim_ids)``; keep that ordering.
+        ids = sorted(sim_ids)
         all_scores = np.asarray(step.predict(np.asarray(X_all_clips))).ravel().tolist()
-    return calculate_safe_threshold(threshold, all_scores, ctx, schedule=schedule), all_scores
+    return calculate_safe_threshold(threshold, all_scores, ctx, schedule=schedule), all_scores, ids
 
 
 def _evaluate_on_test(
@@ -473,13 +543,18 @@ def _operating_metrics(
 
     return {
         "pool_variant": pool_variant,
-        # Safe-threshold study columns (issues #2799, #2841): defaults here; the
-        # base row and the per-variant rows overwrite them where they apply.
+        # Safe-threshold study columns (issue #2799): defaults here; the base
+        # row and the per-variant rows overwrite them where they apply.
         "gmm_variant": "",
         "schedule": "",
         "xcal_threshold": _r(float(threshold)),
         "gmm_cut": nan,
         "blend_weight": nan,
+        # Cut-rule study columns (issue #2836); only the variant rows set them.
+        "cut_fallback": 0,
+        "raw_cut_cost": nan,
+        "raw_cut_fpr": nan,
+        "raw_cut_fnr": nan,
         "threshold": _r(float(threshold)),
         "threshold_provenance": provenance,
         "degenerate": 1 if is_degenerate(scores, threshold) else 0,
@@ -502,88 +577,83 @@ def _operating_metrics(
     }
 
 
-#: Safe-threshold GMM variants (issue #2799): ``(name, fit_scores, cut, space)``.
-#: ``fit_scores`` picks which sim-set score distribution the GMM is fitted on
+#: Safe-threshold cut variants (issues #2799, #2836): ``(name, fit_scores, rule)``.
+#: ``fit_scores`` picks which sim-set score distribution the mixture is fitted on
 #: ("pooled" = the style's inference max-pool, what production fits post-#2797;
 #: "image" = the whole-image vector scores, the historical pre-#2797 geometry).
-#: ``cut`` picks the rule ("mid" = midpoint-of-means, what production ships:
-#: #2798 swapped it for the crossing, #2799 measured that as a net loss and
-#: #2833 reverted it; "cross" = the equal-density crossing, kept as a variant
-#: for the #2836 follow-up).  ``space`` fits the GMM on sigmoid scores ("sig")
-#: or their logits ("logit", the #2798 open idea).  ``xcal_only`` is the
-#: no-blend control: the raw conformal threshold at the same step.
-#: ``pooled_mid`` must reproduce the production blend exactly.
-_SAFE_GMM_VARIANTS: tuple[tuple[str, str, str, str], ...] = (
-    ("xcal_only", "", "", ""),
-    ("image_mid", "image", "mid", "sig"),
-    ("image_cross", "image", "cross", "sig"),
-    ("pooled_mid", "pooled", "mid", "sig"),
-    ("pooled_cross", "pooled", "cross", "sig"),
-    ("pooled_mid_logit", "pooled", "mid", "logit"),
-    ("pooled_cross_logit", "pooled", "cross", "logit"),
+#: ``rule`` names a cut in :mod:`vtscore.eval.cut_rules` - the ``lam``-tilt
+#: family over the Gaussian mixture ("mid" is production; "cross" is #2798's
+#: count-optimal crossing, reverted by #2833; "priorfree"/"rate" are #2836's
+#: rate-optimal tilts), the same tilts over a Gumbel-low mixture ("gumbel_*"),
+#: and the two label-reading diagnostics ("supervised", "sim_oracle") that locate
+#: the error rather than compete to ship.  ``xcal_only`` is the no-blend control:
+#: the raw conformal threshold at the same step.  ``pooled_mid`` must reproduce
+#: the production blend exactly.
+#:
+#: The #2798 logit-space variants are gone: #2799 measured them at +0.0006 cost
+#: (dead) and each extra fit costs a step's CPU that the #2836 arms need.
+_SAFE_GMM_VARIANTS: tuple[tuple[str, str, str], ...] = (
+    ("xcal_only", "", ""),
+    ("image_mid", "image", "mid"),
+    ("image_cross", "image", "cross"),
+    ("image_priorfree", "image", "priorfree"),
+    ("image_rate", "image", "rate"),
+    ("pooled_mid", "pooled", "mid"),
+    ("pooled_cross", "pooled", "cross"),
+    ("pooled_priorfree", "pooled", "priorfree"),
+    ("pooled_rate", "pooled", "rate"),
+    ("pooled_gumbel_cross", "pooled", "gumbel_cross"),
+    ("pooled_gumbel_priorfree", "pooled", "gumbel_priorfree"),
+    ("pooled_gumbel_rate", "pooled", "gumbel_rate"),
+    ("pooled_supervised", "pooled", "supervised"),
+    ("pooled_sim_oracle", "pooled", "sim_oracle"),
 )
 
-#: Sigmoid scores are clipped into ``[eps, 1-eps]`` before the logit transform
-#: so saturated scores stay finite.
-_LOGIT_EPS = 1e-6
-
-
-def _gmm_cuts(scores: list[float], space: str) -> dict[str, float]:
-    """Both GMM cut rules from one fit of *scores*, in sigmoid score space.
-
-    Mirrors :func:`vtscore.training.thresholds.calculate_gmm_threshold`'s
-    semantics per fallback (0.5 below 2 scores, median on fit failure) so the
-    ``("mid", "sig")`` cut blended on the pooled scores reproduces the
-    production safe threshold bit-for-bit.  With ``space="logit"`` the GMM is
-    fitted on the logit-transformed sample and the cut mapped back through the
-    sigmoid; the median fallback stays in the original space (the sigmoid is
-    monotone, so the two medians agree).
-    """
-    import numpy as np  # noqa: PLC0415
-
-    from vtscore.training.thresholds import fit_score_gmm, gmm_fit_array  # noqa: PLC0415
-
-    if len(scores) < 2:
-        return {"mid": 0.5, "cross": 0.5}
-    arr = gmm_fit_array(scores)
-    fit_arr = arr
-    if space == "logit":
-        p = np.clip(arr, _LOGIT_EPS, 1.0 - _LOGIT_EPS)
-        fit_arr = np.log(p) - np.log1p(-p)
-    fit = fit_score_gmm(fit_arr)
-    if fit is None:
-        med = float(np.median(arr))
-        return {"mid": med, "cross": med}
-    cuts = {"mid": fit.midpoint(), "cross": fit.crossing_or_midpoint()}
-    if space == "logit":
-        cuts = {name: float(1.0 / (1.0 + np.exp(-v))) for name, v in cuts.items()}
-    return cuts
+#: Variants that read the sim set's true labels.  Reported for the decomposition,
+#: never eligible to ship - a rule cannot see these labels in the app.
+_ORACLE_VARIANTS: frozenset[str] = frozenset({"pooled_supervised", "pooled_sim_oracle"})
 
 
 def _safe_gmm_variant_rows(
     details: dict[str, Any],
     base_scores: "np.ndarray",
     base_labels: "np.ndarray",
-    sim_pooled_scores: list[float],
-    sim_image_scores: list[float],
+    sim_scores_by_geometry: dict[str, list[float]],
+    sim_labels_by_geometry: dict[str, "np.ndarray"],
     inclusion: int,
     n_pool_rows: float,
     schedule: str | None = None,
-) -> list[dict[str, Any]]:
-    """One metric row per safe-threshold GMM variant (issue #2799).
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Metric rows per cut variant, plus the per-geometry decomposition rows.
 
-    Every variant re-cuts the *same* per-step model: the two candidate sim-set
-    score distributions are fitted once per (fit, space) pair, each fit yields
-    both cut rules, and each cut is blended with the step's conformal threshold
-    under *the run's own mix-in schedule*.  Passing the schedule matters since
-    #2841 made it vary: with the default instead, ``pooled_mid`` would stop
-    reproducing the production blend, which is the property the whole #2799
-    variant family is validated by.  All variants are evaluated against the same
-    held-out test scores (*base_scores*, the inference max-pool), so the rows
-    are paired within a step by construction.
+    Every variant re-cuts the *same* per-step model: each candidate sim-set score
+    distribution is fitted once (both mixture families), every cut rule reads that
+    one fit, and each cut is blended with the step's conformal threshold on the
+    production label ramp.  All variants are evaluated against the same held-out
+    test scores (*base_scores*, the inference max-pool), so the rows are paired
+    within a step by construction.
+
+    Two costs are recorded per variant: ``cost`` at the *blended* threshold (what
+    a user would get, and what the ship decision reads) and ``raw_cut_cost`` at
+    the unblended cut (what the *rule* is worth, undamped by the conformal
+    threshold it is averaged with).  On the ramp the blend can shrink a large cut
+    difference to a small cost difference, so the rule comparison belongs on the
+    raw column and the ship comparison on the blended one.
+
+    A rule whose root does not exist on a given fit falls back to that fit's
+    midpoint - production's own fallback - and is flagged in ``cut_fallback`` so
+    the analyzer can exclude fallen-back steps from a rule's own contrast rather
+    than silently scoring the midpoint under another name.  The oracle variants
+    do not fall back; they emit NaN cuts and are dropped by the analyzer's joins.
+
+    Returns ``(variant_rows, diagnostic_rows)``; the diagnostic rows carry the
+    fitted mixture parameters and every cut in the decomposition chain, one row
+    per (step, geometry), and still need the caller's identifying columns.
     """
     import numpy as np  # noqa: PLC0415
 
+    from vtscore.eval.calibration_metrics import inclusion_weights, operating_cost  # noqa: PLC0415
+    from vtscore.eval.cut_rules import decomposition_cuts  # noqa: PLC0415
     from vtscore.training.thresholds import blend_gmm_threshold, safe_blend_weight  # noqa: PLC0415
 
     xcal = float(details["xcal_threshold"])
@@ -592,12 +662,28 @@ def _safe_gmm_variant_rows(
     fold_orderings = details.get("fold_orderings") or []
     cal_scores = np.array([s for scores, _ in fold_orderings for s in scores]) if fold_orderings else None
     cal_labels = np.array([lb for _, labels_ in fold_orderings for lb in labels_]) if fold_orderings else None
+    wf, wn = inclusion_weights(inclusion)
+    nan = float("nan")
 
-    fit_scores = {"pooled": sim_pooled_scores, "image": sim_image_scores}
-    cuts: dict[tuple[str, str], dict[str, float]] = {}
-    for name, _fit, _cut, _space in _SAFE_GMM_VARIANTS:
-        if _fit and (_fit, _space) not in cuts:
-            cuts[(_fit, _space)] = _gmm_cuts(fit_scores[_fit], _space)
+    # One fit pass per geometry; every rule below reads these.
+    cuts_by_geometry: dict[str, dict[str, float]] = {}
+    diag_rows: list[dict[str, Any]] = []
+    geometries = sorted({fit for _n, fit, _r in _SAFE_GMM_VARIANTS if fit})
+    for geometry in geometries:
+        scores = sim_scores_by_geometry[geometry]
+        labels = sim_labels_by_geometry[geometry]
+        if len(scores) < 2:
+            # Mirrors calculate_gmm_threshold's "too few scores" default so the
+            # production-blend sanity check holds at every step.
+            cuts_by_geometry[geometry] = dict.fromkeys((r for _n, f, r in _SAFE_GMM_VARIANTS if f == geometry), 0.5)
+            continue
+        cuts, params = decomposition_cuts(scores, labels, wf, wn)
+        cuts_by_geometry[geometry] = cuts
+        diag = {"geometry": geometry, "sim_prevalence": _r(float(np.mean(labels))) if len(labels) else nan}
+        diag.update({k: _r(float(v)) for k, v in params.items()})
+        diag.update({f"tau_{name}": _r(float(value)) for name, value in cuts.items()})
+        diag["tau_test_oracle"] = nan  # filled below, once the test oracle is known
+        diag_rows.append(diag)
 
     ctx = BlendContext(
         n_labels=n_votes,
@@ -606,15 +692,21 @@ def _safe_gmm_variant_rows(
     )
     weight = safe_blend_weight(ctx, schedule)
     rows: list[dict[str, Any]] = []
-    for name, _fit, _cut, _space in _SAFE_GMM_VARIANTS:
+    for name, geometry, rule in _SAFE_GMM_VARIANTS:
+        fallback = 0
         if name == "xcal_only":
             threshold = xcal
-            gmm_cut = float("nan")
+            gmm_cut = nan
             provenance = pre_blend_provenance
         else:
-            gmm_cut = cuts[(_fit, _space)][_cut]
-            threshold = blend_gmm_threshold(xcal, gmm_cut, ctx, schedule=schedule)
+            gmm_cut = cuts_by_geometry[geometry][rule]
+            if not np.isfinite(gmm_cut) and name not in _ORACLE_VARIANTS:
+                gmm_cut = cuts_by_geometry[geometry].get("mid", nan)
+                fallback = 1
+            threshold = blend_gmm_threshold(xcal, gmm_cut, ctx, schedule=schedule) if np.isfinite(gmm_cut) else nan
             provenance = "gmm_blend"
+        if not np.isfinite(threshold):
+            continue
         row = _operating_metrics(
             base_scores,
             base_labels,
@@ -631,8 +723,20 @@ def _safe_gmm_variant_rows(
         row["xcal_threshold"] = _r(xcal)
         row["gmm_cut"] = _r(gmm_cut)
         row["blend_weight"] = _r(weight)
+        row["cut_fallback"] = fallback
+        if np.isfinite(gmm_cut):
+            raw_cost, raw_fpr, raw_fnr = operating_cost(base_scores, base_labels, gmm_cut, wf, wn)
+            row["raw_cut_cost"] = _r(raw_cost)
+            row["raw_cut_fpr"] = _r(raw_fpr)
+            row["raw_cut_fnr"] = _r(raw_fnr)
         rows.append(row)
-    return rows
+
+    # The last link in the chain: the best cut on the held-out test set.  Read off
+    # any emitted row (all share the same base_scores/base_labels oracle).
+    if rows and diag_rows:
+        for diag in diag_rows:
+            diag["tau_test_oracle"] = rows[0]["oracle_threshold"]
+    return rows, diag_rows
 
 
 def _schedule_variant_rows(
@@ -1409,9 +1513,10 @@ def simulate_voting_iterations(  # noqa: C901
     repool_topk: int = 4,
     inclusion_sweep_ks: Optional[list[int]] = None,
     sweep_sink: Optional[list[dict[str, Any]]] = None,
-    autopilot_fidelity: bool = True,
     blend_schedule: Optional[str] = None,
     schedule_variants: Optional[list[str]] = None,
+    cut_diag_sink: Optional[list[dict[str, Any]]] = None,
+    autopilot_fidelity: bool = True,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -1459,9 +1564,12 @@ def simulate_voting_iterations(  # noqa: C901
         safe_thresholds: When ``True``, blend the cross-calibration threshold
             with a GMM-based threshold for robustness with small label counts.
             Under ``emit_calibration_metrics`` with a *style*, each step
-            additionally emits one metric row per safe-threshold GMM variant
+            additionally emits one metric row per safe-threshold cut variant
             (:data:`_SAFE_GMM_VARIANTS`, tagged in the ``gmm_variant`` column) -
-            the #2799 measurement arms.
+            the #2799/#2836 measurement arms - and, when *cut_diag_sink* is
+            given, one :data:`_CUT_DIAGNOSTIC_COLUMNS` row per (step, geometry)
+            carrying the fitted mixture parameters and the #2836 decomposition
+            chain.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for
@@ -1500,18 +1608,6 @@ def simulate_voting_iterations(  # noqa: C901
             published studies reproduce byte-for-byte; see ``docs/EVAL.md``.
             Metrics are recorded at every trainable step in both modes — only
             the *vote order* and the ``app_trained`` flag differ.
-        blend_schedule: Which safe-threshold mix-in schedule the run *lives*
-            under (see :mod:`vtscore.training.blend_schedules`, issue #2841).
-            ``None`` selects production.  This one steers the trajectory: the
-            blended threshold feeds Autopilot's Hard pick, so two schedules
-            label different items and diverge — which is why comparing
-            schedules properly needs one run each, not the counterfactual rows
-            below.
-        schedule_variants: Extra schedule names to *score counterfactually* at
-            every step, emitted as one metric row each tagged in the
-            ``schedule`` column (requires ``emit_calibration_metrics``).  These
-            re-cut the same trajectory, so they screen many schedules for the
-            price of one run but are blind to acquisition feedback.
 
     Returns:
         List of row dicts.  Keys: ``seed, dataset, category, strategy, trainer,
@@ -1569,12 +1665,11 @@ def simulate_voting_iterations(  # noqa: C901
     # scored region-aware (max-pool over regions) the same way the live
     # detector scores them, regardless of how the Good votes were assembled.
     region_aware = any(clips_dict[cid].get("patch_regions") for cid in clips_dict)
-    # Mirror the app's per-mode schedule default (#2841): with no explicit arm,
-    # a patch dataset blends under the region schedule and a single-vector one
-    # under the binary schedule, exactly as `_blend_schedule_for_snap` decides
-    # in `vtscore.detectors.training`.  Without this the harness would measure a
-    # schedule no detector actually uses - the same app/framework drift #2841
-    # had to fix in the `< 6 votes` skip.
+    # Mirror the app's per-mode schedule default (#2841): with no explicit arm, a
+    # patch dataset blends under the region schedule and a single-vector one
+    # under the binary schedule, exactly as `_blend_schedule_for_snap` decides in
+    # `vtscore.detectors.training`.  Without this the harness would measure a
+    # schedule no detector actually uses.
     if blend_schedule is None:
         from vtscore.training.blend_schedules import production_schedule_for  # noqa: PLC0415
 
@@ -1714,19 +1809,21 @@ def simulate_voting_iterations(  # noqa: C901
 
         # Apply safe threshold blending if enabled
         sim_pooled_scores: list[float] | None = None
+        sim_pooled_ids: list[int] = []
         if safe_thresholds:
             xcal_threshold = threshold
             # Vote-level class counts, so a schedule can ramp on the rarer class
             # (#2841).  The harness votes one media at a time, so bags and votes
-            # coincide here and the counts are simply the two vote dicts' sizes.
+            # coincide here and the counts are the two vote dicts' sizes.
             blend_ctx = BlendContext(n_labels=n_labels, n_good=len(good_votes), n_bad=len(bad_votes))
-            threshold, sim_pooled_scores = _blend_safe_threshold(
+            threshold, sim_pooled_scores, sim_pooled_ids = _blend_safe_threshold(
                 threshold,
                 step,
                 region_aware,
                 sim_clips,
                 X_all_clips,
                 blend_ctx,
+                sim_ids,
                 style_obj=style_obj,
                 schedule=blend_schedule,
             )
@@ -1825,21 +1922,27 @@ def simulate_voting_iterations(  # noqa: C901
             # One extra row per safe-threshold GMM variant (issue #2799), all
             # evaluated against the same held-out max-pooled test scores.
             if X_sim_image is not None and sim_pooled_scores is not None:
+                sim_image_ids = sorted(sim_ids)
                 sim_image_scores = np.asarray(step.predict(X_sim_image)).ravel().tolist()
-                metric_rows.extend(
-                    _safe_gmm_variant_rows(
-                        details,
-                        base_scores,
-                        base_labels,
-                        sim_pooled_scores,
-                        sim_image_scores,
-                        inclusion,
-                        n_pool_rows=metric_rows[0]["n_pool_rows"],
-                        schedule=blend_schedule,
-                    )
+                variant_rows, diag_rows = _safe_gmm_variant_rows(
+                    details,
+                    base_scores,
+                    base_labels,
+                    {"pooled": sim_pooled_scores, "image": sim_image_scores},
+                    {
+                        "pooled": np.array([pool_labels[cid] for cid in sim_pooled_ids], dtype=np.float64),
+                        "image": np.array([pool_labels[cid] for cid in sim_image_ids], dtype=np.float64),
+                    },
+                    inclusion,
+                    n_pool_rows=metric_rows[0]["n_pool_rows"],
+                    schedule=blend_schedule,
                 )
+                metric_rows.extend(variant_rows)
+                if cut_diag_sink is not None:
+                    for dr in diag_rows:
+                        cut_diag_sink.append({**base_row, **dr})
             # One extra row per mix-in schedule (issue #2841), on the production
-            # cut.  Independent of the image-geometry rows above: the schedule
+            # cut.  Independent of the cut-variant rows above: the schedule
             # screen only needs the pooled sim scores the blend actually fits.
             if schedule_variants and sim_pooled_scores is not None:
                 metric_rows.extend(

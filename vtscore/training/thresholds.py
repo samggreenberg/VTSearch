@@ -94,15 +94,25 @@ def _weighted_gaussian_crossing(
     w_hi: float,
     mu_hi: float,
     var_hi: float,
+    *,
+    lam: float = 1.0,
 ) -> float | None:
     """Score between the two means where the weighted component densities cross.
 
-    Solves ``w_lo * N(x; mu_lo, var_lo) == w_hi * N(x; mu_hi, var_hi)``.  Taking
-    logs makes the difference a quadratic ``f(x) = a x^2 + b x + c`` (``f > 0``
-    means the Bad component owns that score), so the crossing is a root of that
-    quadratic - the Bayes decision boundary between the two fitted components
-    **with the mixture weights as class priors**, i.e. the cut that minimises
-    expected misclassification *count*.
+    Solves ``w_lo * N(x; mu_lo, var_lo) == lam * w_hi * N(x; mu_hi, var_hi)``.
+    Taking logs makes the difference a quadratic ``f(x) = a x^2 + b x + c``
+    (``f > 0`` means the Bad component owns that score), so the crossing is a
+    root of that quadratic - at ``lam == 1``, the Bayes decision boundary between
+    the two fitted components **with the mixture weights as class priors**, i.e.
+    the cut that minimises expected misclassification *count*.
+
+    *lam* tilts that boundary, and which value is correct depends on the loss
+    (issue #2836).  Minimising a weighted sum of **rates** - ``fpr_weight * FPR +
+    fnr_weight * FNR``, what the Inclusion knob is defined in terms of and what
+    this repo scores - instead puts the cut where ``fnr_weight * f_pos ==
+    fpr_weight * f_neg``, which carries no priors at all; that is
+    ``lam = (fnr_weight / fpr_weight) * (w_lo / w_hi)``, dividing the prior-odds
+    factor back out.  See :meth:`GmmFit1D.rate_crossing`.
 
     **Not the shipped cut.**  Production cuts at the midpoint between the means
     (:func:`calculate_gmm_threshold`); this solver stays live only as an eval
@@ -131,7 +141,7 @@ def _weighted_gaussian_crossing(
     interval the larger one is taken: above it the Good component dominates all
     the way to its own mean, which is the boundary a threshold wants.
     """
-    if not (w_lo > 0.0 and w_hi > 0.0 and var_lo > 0.0 and var_hi > 0.0):
+    if not (w_lo > 0.0 and w_hi > 0.0 and var_lo > 0.0 and var_hi > 0.0 and lam > 0.0):
         return None
     if not (mu_hi > mu_lo):
         return None
@@ -140,7 +150,7 @@ def _weighted_gaussian_crossing(
     # the roots exact while dropping the ``mu^2 / var`` terms that would dominate
     # the coefficients (and their cancellation) for score scales far from zero.
     d = mu_hi - mu_lo
-    offset = math.log(w_lo / w_hi) + 0.5 * math.log(var_hi / var_lo)
+    offset = math.log(w_lo / (lam * w_hi)) + 0.5 * math.log(var_hi / var_lo)
     a = 0.5 / var_hi - 0.5 / var_lo
     b = -d / var_hi
     c = 0.5 * d * d / var_hi + offset
@@ -178,10 +188,53 @@ class GmmFit1D:
         """The production cut: the midpoint between the two component means."""
         return (self.mu_lo + self.mu_hi) / 2.0
 
+    def crossing(self, lam: float = 1.0) -> float | None:
+        """Root of ``w_lo*N_lo(x) == lam*w_hi*N_hi(x)``; ``None`` when undefined."""
+        return _weighted_gaussian_crossing(
+            self.w_lo, self.mu_lo, self.var_lo, self.w_hi, self.mu_hi, self.var_hi, lam=lam
+        )
+
     def crossing_or_midpoint(self) -> float:
         """Eval-only cut (#2798, reverted by #2833): equal-density crossing, midpoint when none exists."""
-        crossing = _weighted_gaussian_crossing(self.w_lo, self.mu_lo, self.var_lo, self.w_hi, self.mu_hi, self.var_hi)
+        crossing = self.crossing()
         return self.midpoint() if crossing is None else crossing
+
+    def rate_crossing(self, fpr_weight: float = 1.0, fnr_weight: float = 1.0) -> float | None:
+        """The cut that minimises ``fpr_weight*FPR + fnr_weight*FNR`` (issue #2836).
+
+        A weighted sum of **rates** normalises each error by its own class, so it
+        is prevalence-free by construction - that is what makes the Inclusion knob
+        portable across datasets.  Differentiating it gives the stationarity
+        condition ``fnr_weight * f_pos(x) == fpr_weight * f_neg(x)``: the
+        **prior-free** density crossing, with no mixture weights in it.  Under the
+        identification ``f_neg = N_lo``, ``f_pos = N_hi`` that is
+        :meth:`crossing` at ``lam = (fnr_weight/fpr_weight) * (w_lo/w_hi)``,
+        i.e. exactly :meth:`crossing_or_midpoint`'s ``lam = 1`` rule with the
+        prior-odds factor divided back out.
+
+        With equal variances this lands at ``midpoint() +
+        var*ln(fpr_weight/fnr_weight)/(mu_hi-mu_lo)`` - so at equal cost weights
+        it *is* the midpoint-of-means, which is why the historical heuristic is
+        better than it looks.  With unequal variances the two separate, and the
+        gap is the part of this rule the midpoint cannot express.
+        """
+        if not (fpr_weight > 0.0 and fnr_weight > 0.0 and self.w_hi > 0.0):
+            return None
+        return self.crossing(lam=(fnr_weight / fpr_weight) * (self.w_lo / self.w_hi))
+
+    def equal_var_offset(self, lam: float = 1.0) -> float:
+        """Closed-form ``crossing(lam) - midpoint()`` **if** the variances were equal.
+
+        Evaluates ``var * ln(w_lo/(lam*w_hi)) / (mu_hi - mu_lo)`` at the
+        mixture-weighted variance.  Exact when ``var_lo == var_hi``; elsewhere it
+        is the first-order prediction issue #2836 checks the realised offset
+        against, and the size of the prior-odds bias it attributes to ``lam = 1``.
+        """
+        d = self.mu_hi - self.mu_lo
+        if not (d > 0.0 and self.w_hi > 0.0 and lam > 0.0):
+            return float("nan")
+        var = self.w_lo * self.var_lo + self.w_hi * self.var_hi
+        return var * math.log(self.w_lo / (lam * self.w_hi)) / d
 
 
 def gmm_fit_array(scores: "list[float] | np.ndarray") -> np.ndarray:

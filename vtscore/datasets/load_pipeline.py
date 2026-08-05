@@ -45,7 +45,7 @@ from vtscore.datasets.stages._common import (
     load_cost_terms,
     load_step_weights,
 )
-from vtscore.datasets.stages._load_profiler import start_profiler
+from vtscore.datasets.stages._load_profiler import resolve_download_size_mb, start_profiler
 from vtscore.datasets.stages.clipper import _apply_clipper_stage, _relazify_reference_clips_stage
 from vtscore.datasets.stages.embedding import embed_missing, _embed_missing_stage
 from vtscore.datasets.stages.finalize import (
@@ -57,6 +57,7 @@ from vtscore.datasets.stages.finalize import (
 from vtscore.datasets.stages.projection import _build_projection_stage, _maybe_signpost_texts_stage
 from vtscore.datasets.stages.registry import _register_and_migrate
 from vtscore.datasets.thumbnail_warm import start_archive_thumbnail_warm
+from vtscore.timing import record_task
 
 
 # Two independent gates control how many dataset loads can run concurrently
@@ -430,6 +431,23 @@ def _run_origin_load_in_background(
     # zero-cost when off. Subscribed before the first phase fires. See
     # docs/plans/progress-weight-calibration.md.
     profiler = start_profiler(tracker, media_type, embedder)
+    # The generic cross-task recorder (VTSEARCH_TIMING_RECORD), which every other
+    # long-running family also feeds. It runs alongside the load-specific
+    # profiler above rather than replacing it: the two answer different
+    # questions (this one fits the shared timing profile; that one additionally
+    # splits cold/warm model loads and finalize sub-slots), they write to
+    # separate files, and each is independently armed. Without this, an admin who
+    # armed only the documented ``VTSEARCH_TIMING_RECORD`` got rows for every task
+    # *except* the imports (#2845). ``status_phases`` splits step 1 into its two
+    # byte-scaled phases, which only the status string tells apart.
+    timing_recorder = record_task(
+        tracker,
+        "dataset_load",
+        media_type=media_type,
+        embedder=embedder,
+        status_phases={"extracting": "extract"},
+    )
+    timing_recorder.start()
     tracker.update("loading", "Preparing dataset...", step=1, total_steps=_TOTAL_LOAD_STEPS)
 
     # Snapshot the user that triggered the load so background per-user
@@ -573,9 +591,17 @@ def _run_origin_load_in_background(
         finally:
             # Pass the demo dataset id (empty for non-demo loads) so profiler
             # rows carry it and can resolve the archive size via
-            # ``_download_size_mb_for`` — otherwise app-recorded rows land with
+            # ``download_size_mb_for`` — otherwise app-recorded rows land with
             # ``dataset_id: ""`` and can't feed fit_load_weights.py (see #2614).
             profiler.finish(len(ctx.medias), dataset_id)  # writes JSONL + unbinds (no-op when off)
+            # A load that failed measured an abort, not a cost: ``ok=False`` tells
+            # the fitter to drop the run rather than fit a slope to it. The
+            # tracker is authoritative here because every failure path funnels
+            # through ``_handle_load_failure``, which stamps the error on it.
+            size_mb = download_size_mb_hint
+            if size_mb is None:
+                size_mb = resolve_download_size_mb(dataset_id)
+            timing_recorder.finish(n=len(ctx.medias), size_mb=size_mb, ok=not tracker.get().get("error"))
             loading_tasks.mark_finished(task_id)
 
     threading.Thread(target=task, daemon=True).start()

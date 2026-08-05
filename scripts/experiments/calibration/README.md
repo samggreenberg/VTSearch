@@ -1,4 +1,4 @@
-# Calibration study runner (issues #2781, #2799)
+# Calibration study runner (issues #2781, #2799, #2836)
 
 Measures **calibration regret** — the extra `FPR + FNR` cost the trained
 (cross-calibrated conformal) threshold pays versus the *oracle* threshold for the
@@ -33,12 +33,33 @@ its own recalibrated threshold, tagged in the `pool_variant` column.
    deliverables, writes `results/summary.json`, `results/agg/*.csv`,
    `results/figures/*.png`, and a `results/REPORT.md` draft.
 
+Under `CALIB_SAFE_THRESHOLDS=1` each step also emits one row per **cut variant**
+(`gmm_variant`; `_SAFE_GMM_VARIANTS`) and a per-(step, geometry) **cut
+decomposition** frame (`_CUT_DIAGNOSTIC_COLUMNS`) to `task_<idx>__cutdiag.csv`.
+Two alternative analyzers read those: `analyze_safe.py` (the #2799 safe-on/off
+question) and `analyze_cut.py` (the #2836 question of *which* cut and *why*).
+
+`theory_bench.py` is standalone and needs no dataset: it scores the same cut
+rules against a generative model of region voting whose exact rate-optimal cut is
+computable, so it can attribute a rule's error to the loss, the fitted family, or
+the sample size. Run it with `python theory_bench.py --reps 40`.
+
 ## Running on the Grid
 
 ```bash
 cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
 bash launch_all.sh          # reuse-symlink -> prepare (GPU) -> cells -> analyze
+bash launch_safe.sh         # the #2799 safe-threshold sizing, analyze_safe.py
+bash launch_cut.sh          # the #2836 cut-rule study: theory bench + analyze_cut.py
 ```
+
+Both study launchers are thin wrappers over `launch_all.sh` that flip the
+pre-registered knobs and point `CALIB_EXP` somewhere the other studies' outputs
+are not.
+
+Each analyzer has a self-test that runs it on fabricated cells with a planted
+answer, so a sign error is caught before an overnight run rather than after:
+`python selftest_analyze_ab.py`, `python selftest_analyze_cut.py`.
 
 `launch_all.sh` points `VTSEARCH_DATA_DIR` at the Max-Patch datadir so the shared
 embeddings pickles and demo data are read in place (the `siglip_l` pickles land

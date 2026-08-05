@@ -1,12 +1,13 @@
-"""Tests for the safe-threshold GMM variant rows in the eval harness (issue #2799).
+"""Tests for the safe-threshold cut variant rows in the eval harness (#2799, #2836).
 
 With ``safe_thresholds=True`` and ``emit_calibration_metrics=True`` the harness
-emits one extra metric row per GMM variant at every trainable step - the #2799
-measurement arms.  The load-bearing invariant is that the ``pooled_mid``
-variant (pooled fit, midpoint-of-means, sigmoid space - i.e. exactly what
-production computes since the #2833 revert) reproduces the base row's blended
-threshold bit-for-bit, so the study measures the shipped code and every other
-variant differs from it along exactly one named axis.
+emits one extra metric row per cut variant at every trainable step - the #2799
+and #2836 measurement arms - plus a per-(step, geometry) decomposition frame
+into ``cut_diag_sink``.  The load-bearing invariant is that the ``pooled_mid``
+variant (pooled fit, midpoint-of-means - i.e. exactly what production computes
+since the #2833 revert) reproduces the base row's blended threshold
+bit-for-bit, so the study measures the shipped code and every other variant
+differs from it along exactly one named axis.
 """
 
 from __future__ import annotations
@@ -15,6 +16,8 @@ import numpy as np
 
 from vtscore.eval.voting_iterations import (
     _CALIBRATION_COLUMNS,
+    _CUT_DIAGNOSTIC_COLUMNS,
+    _ORACLE_VARIANTS,
     _SAFE_GMM_VARIANTS,
     simulate_voting_iterations,
 )
@@ -22,10 +25,14 @@ from vtscore.eval.voting_iterations import (
 # Reuse the synthetic planted-patch dataset builders from the Max-Patch tests.
 from .test_max_patch_style import _planted_dataset
 
-_VARIANT_NAMES = {name for name, _fit, _cut, _space in _SAFE_GMM_VARIANTS}
+_VARIANT_NAMES = {name for name, _fit, _rule in _SAFE_GMM_VARIANTS}
+#: Variants that must appear at every trainable step.  The label-reading
+#: diagnostics may legitimately have no cut on a given fit (no root, or a step
+#: with one class in the sim set) and are emitted only when they do.
+_ALWAYS_EMITTED = _VARIANT_NAMES - set(_ORACLE_VARIANTS)
 
 
-def _run_safe(style, seed=0, max_steps=16):
+def _run_safe(style, seed=0, max_steps=16, diag_sink=None):
     medias, _ = _planted_dataset(n_per_cat=40, seed=seed)
     return simulate_voting_iterations(
         medias,
@@ -38,6 +45,7 @@ def _run_safe(style, seed=0, max_steps=16):
         max_steps=max_steps,
         style=style,
         emit_calibration_metrics=True,
+        cut_diag_sink=diag_sink,
     )
 
 
@@ -49,7 +57,8 @@ class TestSafeGmmVariantRows:
         for r in rows:
             by_step.setdefault(r["t"], set()).add(r["gmm_variant"])
         for variants_at_t in by_step.values():
-            assert variants_at_t == {"", *_VARIANT_NAMES}
+            assert _ALWAYS_EMITTED | {""} <= variants_at_t
+            assert variants_at_t <= {"", *_VARIANT_NAMES}
 
     def test_columns_and_tags(self):
         rows = _run_safe("max_patch")
@@ -110,6 +119,7 @@ class TestSafeGmmVariantRows:
         for variants in by_step.values():
             assert variants["image_mid"]["gmm_cut"] == variants["pooled_mid"]["gmm_cut"]
             assert variants["image_cross"]["gmm_cut"] == variants["pooled_cross"]["gmm_cut"]
+            assert variants["image_priorfree"]["gmm_cut"] == variants["pooled_priorfree"]["gmm_cut"]
 
     def test_no_variant_rows_without_safe_thresholds(self):
         medias, _ = _planted_dataset(n_per_cat=40, seed=0)
@@ -129,3 +139,41 @@ class TestSafeGmmVariantRows:
         assert all(r["gmm_variant"] == "" for r in rows)
         # Without the blend the recorded xcal threshold is the threshold itself.
         assert all(r["xcal_threshold"] == r["threshold"] for r in rows)
+
+
+class TestCutDiagnosticFrame:
+    """The #2836 decomposition side frame."""
+
+    def test_one_row_per_step_per_geometry_with_the_declared_columns(self):
+        diag: list[dict] = []
+        rows = _run_safe("max_patch", diag_sink=diag)
+        assert diag, "no cut-diagnostic rows produced"
+        steps = {r["t"] for r in rows if r["gmm_variant"] == ""}
+        for t in steps:
+            assert {d["geometry"] for d in diag if d["t"] == t} == {"pooled", "image"}
+        for d in diag:
+            assert set(_CUT_DIAGNOSTIC_COLUMNS).issubset(d.keys())
+
+    def test_cuts_agree_with_the_variant_rows(self):
+        """The frame is a second view of the same fit, not a second fit."""
+        diag: list[dict] = []
+        rows = _run_safe("max_patch", diag_sink=diag)
+        pooled = {d["t"]: d for d in diag if d["geometry"] == "pooled"}
+        for r in rows:
+            if r["gmm_variant"] not in ("pooled_mid", "pooled_cross", "pooled_priorfree"):
+                continue
+            rule = r["gmm_variant"].removeprefix("pooled_")
+            if r["cut_fallback"]:
+                continue  # the row reports the midpoint it fell back to
+            assert r["gmm_cut"] == pooled[r["t"]][f"tau_{rule}"]
+
+    def test_prevalence_is_a_fraction(self):
+        diag: list[dict] = []
+        _run_safe("max_patch", diag_sink=diag)
+        for d in diag:
+            assert 0.0 <= d["sim_prevalence"] <= 1.0
+            assert d["sim_n"] > 0
+
+    def test_no_diagnostic_rows_without_a_sink(self):
+        rows = _run_safe("max_patch")
+        assert rows  # the run still works with cut_diag_sink=None
