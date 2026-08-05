@@ -5,17 +5,24 @@
 **The handoff is too fast, production's cut is the worst-calibrated of the nine
 schedules measured, and the two voting modes want different curves.**
 
-| | ship | vs `prod` (7-20 votes) | holds at `fpr x4`? |
+| | ship | vs the old ramp | holds at `fpr x4`? |
 |---|---|---|---|
-| **Region voting** | **`slow`** (hand off by 40 labels, not 20) | −0.0422 cost, p=1.4e-28, 79% of cells | **yes**, −0.0366 |
-| **Binary voting** | **`cap50`** (production ramp, capped at half GMM) | −0.0173 cost, p=7.6e-43, 68% of cells | **yes**, −0.0119 |
+| **Region voting** | **`slow_cap50`** (ramp to 40 labels, capped at half GMM) | −0.0577 (7-20 votes), −0.094 by 51-100 | **yes**, improves to −0.0745 |
+| **Binary voting** | **`cap50`** (old ramp, capped at half GMM) | −0.0188 (7-20 votes), −0.051 by 201-300 | **yes**, improves to −0.0236 |
 
-`cap50` was re-tested to **300 votes** after the obvious objection that it never
-hands over to the learned cut. It holds, and its margin *grows* with depth
-(−0.019 → −0.051); every arm that hands over gives the advantage back, the
-earlier the worse. Not because the GMM wins in the limit — it cannot — but
-because 300 clicks buys only ~13 positives, so a real session never reaches the
-limit. See *The horizon problem* below.
+**Neither schedule ever hands over to the learned cut**, and both were re-tested
+at 10x the original horizon to make sure that is a finding and not an artefact.
+It survives: every arm that hands over gives its advantage back at the moment it
+does, monotone in release point, and the capped schedules' margins *grow* with
+depth. The first-pass answer for region (`slow`, a plain ramp to 40) was wrong
+for exactly this reason — it reaches pure x-cal at 40 labels and decays to
+nothing past it (+0.008 by 101-200 votes). `slow_cap50` keeps the ramp that won
+the early window and the cap that wins the rest.
+
+This is **not** because the GMM is better in the limit — it is an inconsistent
+estimator and cannot be. It is because 300 clicks buys a median of **~13
+positives**, and the learned cut converges in positives, not clicks. See
+*The horizon problem* below.
 
 If a single schedule is preferred over a per-mode one, ship **`cap50`
 everywhere**: it is the only schedule that improves *both* modes under *every*
@@ -462,7 +469,69 @@ than tuning the schedule further: the schedule is compensating for a data
 problem, and fixing the data problem is worth more than the compensation.
 A release keyed on **positives** rather than votes is the natural next arm.
 
-## The horizon problem (region voting, running)
+## The horizon problem: region voting
+
+Same design at 200 votes, 14 deep categories, 6 seeds, 6 arms. The region answer
+is **stronger** than binary's and it overturned the first-pass recommendation.
+
+`d_cost` vs `prod` by vote band:
+
+| schedule | 7-20 | 21-50 | 51-100 | 101-200 |
+|---|---|---|---|---|
+| **`slow_cap50`** | **−0.0577** | **−0.0856** | −0.0937 | −0.0822 |
+| `cap50` | −0.0260 | −0.0748 | **−0.0970** | **−0.0834** |
+| `slow` | −0.0577 | −0.0417 | −0.0008 | **+0.0077** |
+| `pure_xcal` | +0.0753 | +0.0168 | +0.0059 | +0.0046 |
+
+**`slow` — the first-pass region winner — decays to nothing.** 40 labels is
+exactly where it becomes pure x-cal, so past that band it *is* the losing arm.
+The 30-vote study measured it right up to the point it falls apart. `cap50` does
+the opposite, strengthening from −0.026 to −0.097.
+
+`slow_cap50` is the synthesis: `slow`'s gentler early ramp (which is why it won
+the early window) with `cap50`'s cap (which is why that one keeps winning). It
+is best or tied in every band, wins the 21-50 band outright, and **dominates
+`cap50` at every positive count**:
+
+| vs `prod` | 1-3 pos | 4-6 | 7-10 | 11-15 | 16-25 | 26+ |
+|---|---|---|---|---|---|---|
+| **`slow_cap50`** | **−0.0285** | **−0.0628** | **−0.0776** | **−0.0763** | **−0.0846** | **−0.1051** |
+| `cap50` | −0.0150 | −0.0444 | −0.0593 | −0.0732 | −0.0832 | −0.1017 |
+| `slow` | −0.0205 | −0.0422 | −0.0326 | −0.0072 | −0.0030 | +0.0016 |
+| `pure_xcal` | +0.0808 | +0.0663 | +0.0306 | +0.0281 | +0.0078 | +0.0037 |
+
+It is also the opposite of permissive: under `fpr x4` it **improves**, −0.0577 →
+−0.0745. (That sensitivity is computed on the headline 7-20 window, where
+`slow_cap50` and `slow` are identical by construction; the depth advantage is
+the band table above.)
+
+### Region and binary fail differently
+
+On **binary**, `cap50`'s edge over `pure_xcal` *narrows* as positives accumulate
+(−0.111 → −0.048) — the learned cut is slowly converging, exactly as theory
+says, just far too slowly to matter in a session.
+
+On **region** it *widens* (−0.015 → −0.102), and `pure_xcal` flattens at +0.004
+without ever crossing. That is the signature of a bias more labels cannot fix.
+The likely cause is the scoring geometry: region scoring max-pools over ~196
+patches, so the conformal cut is calibrated against an extreme-value
+distribution and is biased **structurally**, not statistically. If that is right
+the learned cut is inconsistent here *too*, and the GMM half is correcting a
+model-misspecification error rather than a small-sample one — which would
+explain why more data never rescues it. This is the study's most interesting
+open thread and is worth a dedicated experiment.
+
+### The synthesis does not transfer to binary
+
+`slow_cap50` also beats `cap50` on binary at the headline (−0.0322 vs −0.0188)
+— but it **flips to +0.0414 under `fpr x4`** while `cap50` holds at −0.0236. Its
+extra binary gain is a lower cut, not better calibration (d_fnr −0.057 against
+d_fpr +0.025, versus `cap50`'s near-Pareto −0.017/−0.002). Binary keeps `cap50`.
+The same curve is genuinely better calibrated on region and merely more
+permissive on binary, which is the sharpest evidence in this report that the two
+modes are different problems rather than one problem with two datasets.
+
+## Long-run design
 
 `cap50` never hands over to the learned cut. **That cannot be literally right,
 and this study could not have seen why.**
