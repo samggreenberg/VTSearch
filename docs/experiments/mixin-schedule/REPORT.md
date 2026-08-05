@@ -374,6 +374,38 @@ On region voting `pure_gmm` is both near-unbiased and steadiest, yet still
 loses its advantage at `fpr x4`. That tension is real and unexplained by the
 decomposition alone; it is the clearest open thread this study leaves.
 
+## The horizon problem (follow-up, running)
+
+`cap50` never hands over to the learned cut. **That cannot be literally right,
+and this study could not have seen why.**
+
+The GMM midpoint is an **inconsistent** estimator of the decision cut: it reads
+no labels, so its error floors out at whatever its two-component symmetry
+assumption gets wrong, however much data arrives. The cross-calibration cut is
+**consistent** — more labels tighten the conformal quantile toward the right
+threshold. Asymptotically pure x-cal *must* win. So the real question was never
+*whether* to hand over but **when**, and every number above was measured over a
+**30-vote** horizon, where the answer is "not yet" almost by construction.
+
+A longer run is under way to find the crossover:
+
+- **Deep categories only.** A long horizon is bounded by *positives in the
+  simulation set*, not pool size: once autopilot exhausts them, every further
+  vote is a negative and the conformal positive-quantile stops improving. With
+  a floor of 50 sim positives, 14 VG and 12 COCO categories survive; the
+  shallow ones (giraffe ~12, scissors ~14) cannot sustain the horizon and would
+  contribute noise dressed as a plateau.
+- **300 votes on binary voting** (`prod`, `cap50`, `pure_xcal`, and three
+  cap-then-release arms bracketing the handoff at 30→100, 50→200, 150→400),
+  **200 votes on region voting** (cheaper arm set; region cells cost ~10x).
+- **Reported per vote band** (7-20, 21-50, 51-100, 101-200, 201-300) rather than
+  as one average, because an average over a crossover is exactly the number that
+  hides it.
+
+If a release arm beats both `cap50` and `pure_xcal`, the shipped binary schedule
+should become that arm. Until then `cap50` stands only as *the best schedule
+over the first 30 votes*, which is where the evidence is.
+
 ## Limitations
 
 - **COCO carries only binary voting.** The #2790 cache has whole-image and HAC
@@ -385,9 +417,10 @@ decomposition alone; it is the clearest open thread this study leaves.
   changes the conformal rule *and* the weights, so `fpr x4` approximates an
   Inclusion-averse user rather than reproducing one. It was also added
   post-hoc.
-- **One head, one inclusion, 30 steps.** Everything is the production linear
-  head at inclusion 0 over the first 30 votes. The past-the-ramp window says the
-  effects persist, but nothing here measures a 200-vote session.
+- **One head, one inclusion, 30 steps.** Everything above is the production
+  linear head at inclusion 0 over the first 30 votes — which is why `cap50`'s
+  "never hand over" must be read as "not within 30 votes". See *The horizon
+  problem* above; the follow-up run addresses exactly this.
 - **A transient full-disk incident** on the shared `/exp/sgreenberg` volume
   killed ~950 cells mid-run. All were re-run; the 49 files it left behind were
   zero-byte rather than partially written (verified by field-count validation
