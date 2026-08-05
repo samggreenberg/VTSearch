@@ -23,11 +23,23 @@ from vtscore.training.evt_mixture import (
 from vtscore.training.thresholds import fit_score_gmm, gmm_fit_array
 
 
+def _mle(result: tuple[float, float] | None) -> tuple[float, float]:
+    """An MLE narrowed to non-``None`` (its degenerate-input return)."""
+    assert result is not None, "expected the MLE to converge on this sample"
+    return result
+
+
+def _root(x: float | None) -> float:
+    """A crossing narrowed to non-``None`` (its no-root return)."""
+    assert x is not None, "expected this fit to have a crossing"
+    return x
+
+
 class TestGumbelMle:
     def test_recovers_planted_parameters(self):
         rng = np.random.default_rng(3)
         x = rng.gumbel(loc=0.4, scale=0.08, size=60_000)
-        loc, scale = _weighted_gumbel_mle(x, np.ones_like(x))
+        loc, scale = _mle(_weighted_gumbel_mle(x, np.ones_like(x)))
         assert loc == pytest.approx(0.4, abs=5e-3)
         assert scale == pytest.approx(0.08, abs=5e-3)
 
@@ -39,7 +51,7 @@ class TestGumbelMle:
         """
         rng = np.random.default_rng(4)
         x = rng.gumbel(loc=0.9, scale=0.002, size=20_000)
-        loc, scale = _weighted_gumbel_mle(x, np.ones_like(x))
+        loc, scale = _mle(_weighted_gumbel_mle(x, np.ones_like(x)))
         assert math.isfinite(loc) and math.isfinite(scale)
         assert scale == pytest.approx(0.002, rel=0.1)
 
@@ -49,7 +61,7 @@ class TestGumbelMle:
         b = rng.gumbel(0.8, 0.05, 20_000)
         x = np.concatenate([a, b])
         w = np.concatenate([np.ones(20_000), np.zeros(20_000)])
-        loc, _scale = _weighted_gumbel_mle(x, w)
+        loc, _scale = _mle(_weighted_gumbel_mle(x, w))
         assert loc == pytest.approx(0.2, abs=1e-2)
 
     def test_degenerate_input_returns_none(self):
@@ -156,7 +168,7 @@ class TestEvtCrossing:
 
     def test_root_lies_between_the_modes(self):
         fit = self._fit()
-        x = fit.crossing()
+        x = _root(fit.crossing())
         assert fit.mode_lo < x < fit.mu_hi
 
     def test_rate_crossing_is_weight_free(self):
@@ -172,7 +184,7 @@ class TestEvtCrossing:
             mean_loglik=base.mean_loglik,
         )
         assert base.rate_crossing(1.0, 1.0) == pytest.approx(shifted.rate_crossing(1.0, 1.0), abs=1e-9)
-        assert shifted.crossing() > base.crossing()
+        assert _root(shifted.crossing()) > _root(base.crossing())
 
     def test_lo_survival_matches_the_gumbel_cdf(self):
         fit = self._fit()

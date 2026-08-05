@@ -22,11 +22,14 @@ gather data, and both produce the same file:
 When disarmed the cost is one ``os.environ`` lookup per task and a couple of
 no-op method calls; there is no tracker subscription and no file handle.
 
-The dataset-load pipeline has its own older, richer recorder
+The dataset-load pipeline *also* carries an older, richer recorder
 (:mod:`vtscore.datasets.stages._load_profiler`) that additionally distinguishes
-cold from warm model loads and cold from cached downloads. It stays as-is; the
+cold from warm model loads, cold from cached downloads, and the sub-slots inside
+finalize. The two run side by side on the same load: they answer different
+questions, are armed by different env vars, and write to different files. The
 tuning script's fitter reads both row shapes, so a pre-existing dataset-load
-calibration sweep still folds into a profile.
+calibration sweep still folds into a profile — but an admin who armed only
+``VTSEARCH_TIMING_RECORD`` gets import rows too, which for a while they did not.
 
 Kept in ``vtscore`` (no Flask) so a plain CLI or library run records the same
 way a served request does.

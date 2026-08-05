@@ -303,7 +303,10 @@ def decomposition_cuts(
     class moments - everything the analyzer needs to test the #2836 predictions
     offline without re-running the simulation.
     """
-    gmm, evt, params = fit_both_mixtures(sim_scores)
+    # The label-reading rules below index scores against labels, so normalize the
+    # caller's sequence once here rather than at each use site.
+    scores = np.asarray(sim_scores, dtype=float)
+    gmm, evt, params = fit_both_mixtures(scores)
     nan = float("nan")
     cuts: dict[str, float] = dict.fromkeys(ALL_RULES, nan)
 
@@ -317,10 +320,10 @@ def decomposition_cuts(
     if evt is not None:
         cuts.update(evt_cuts(evt, fpr_weight, fnr_weight))
 
-    sup, sup_stats = supervised_cut(sim_scores, sim_labels, fpr_weight, fnr_weight)
+    sup, sup_stats = supervised_cut(scores, sim_labels, fpr_weight, fnr_weight)
     params.update(sup_stats)
     cuts["supervised"] = sup
-    cuts["sim_oracle"] = sim_oracle_cut(sim_scores, sim_labels, fpr_weight, fnr_weight)
+    cuts["sim_oracle"] = sim_oracle_cut(scores, sim_labels, fpr_weight, fnr_weight)
 
     # Where the true optimum sits in the *fitted* Bad component's upper tail.  If
     # this is stable across steps and categories it is itself a shippable rule

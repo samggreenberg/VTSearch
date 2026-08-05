@@ -29,6 +29,16 @@ def _fit(w_lo=0.9, mu_lo=0.2, var_lo=0.01, w_hi=0.1, mu_hi=0.8, var_hi=0.01) -> 
     return GmmFit1D(w_lo=w_lo, mu_lo=mu_lo, var_lo=var_lo, w_hi=w_hi, mu_hi=mu_hi, var_hi=var_hi)
 
 
+def _root(x: float | None) -> float:
+    """A crossing narrowed to non-``None`` (its no-root return).
+
+    Every fit used below is well-separated and does have a root, so a ``None``
+    here is a real failure, not a case the assertion should tiptoe around.
+    """
+    assert x is not None, "expected this fit to have a crossing"
+    return x
+
+
 def _log_density_gap(fit: GmmFit1D, x: float, lam: float) -> float:
     """``log(w_lo*N_lo(x)) - log(lam*w_hi*N_hi(x))`` - zero at the crossing."""
 
@@ -55,8 +65,7 @@ class TestCrossingFamily:
     def test_larger_lam_moves_the_cut_down(self):
         """``lam`` scales the Good side up, so the boundary retreats toward Bad."""
         fit = _fit()
-        cuts = [fit.crossing(lam=lam) for lam in (0.5, 1.0, 2.0, 8.0)]
-        assert all(c is not None for c in cuts)
+        cuts = [_root(fit.crossing(lam=lam)) for lam in (0.5, 1.0, 2.0, 8.0)]
         assert cuts == sorted(cuts, reverse=True)
 
     def test_non_positive_lam_is_rejected(self):
@@ -87,8 +96,8 @@ class TestRateOptimalCut:
         cuts_rate, cuts_count = [], []
         for w_lo in (0.5, 0.9, 0.99, 0.999):
             fit = _fit(w_lo=w_lo, w_hi=1.0 - w_lo, var_lo=0.02, var_hi=0.004)
-            cuts_rate.append(fit.rate_crossing(1.0, 1.0))
-            cuts_count.append(fit.crossing())
+            cuts_rate.append(_root(fit.rate_crossing(1.0, 1.0)))
+            cuts_count.append(_root(fit.crossing()))
         assert max(cuts_rate) - min(cuts_rate) == pytest.approx(0.0, abs=1e-12)
         assert cuts_count == sorted(cuts_count)
         assert cuts_count[-1] > cuts_count[0] + 0.01
@@ -98,15 +107,15 @@ class TestRateOptimalCut:
         w_lo, var = 0.97, 0.01
         fit = _fit(w_lo=w_lo, w_hi=1.0 - w_lo, var_lo=var, var_hi=var)
         expected = var * math.log(fit.w_lo / fit.w_hi) / (fit.mu_hi - fit.mu_lo)
-        assert fit.crossing() - fit.midpoint() == pytest.approx(expected, rel=1e-9)
+        assert _root(fit.crossing()) - fit.midpoint() == pytest.approx(expected, rel=1e-9)
         assert fit.equal_var_offset() == pytest.approx(expected, rel=1e-9)
 
     def test_cost_weights_tilt_the_cut_the_right_way(self):
         """Caring more about misses (``fnr_weight`` up) must lower the cut."""
         fit = _fit(var_lo=0.02, var_hi=0.004)
-        base = fit.rate_crossing(1.0, 1.0)
-        assert fit.rate_crossing(1.0, 4.0) < base
-        assert fit.rate_crossing(4.0, 1.0) > base
+        base = _root(fit.rate_crossing(1.0, 1.0))
+        assert _root(fit.rate_crossing(1.0, 4.0)) < base
+        assert _root(fit.rate_crossing(4.0, 1.0)) > base
 
     def test_rate_crossing_matches_inclusion_weights(self):
         """Inclusion 0 is (1, 1), so the knob's neutral setting *is* prior-free."""
@@ -129,8 +138,8 @@ class TestRateOptimalCut:
         labels = np.concatenate([np.zeros(n_neg), np.ones(n_pos)])
         fit = GmmFit1D(w_lo=0.95, mu_lo=0.25, var_lo=0.02, w_hi=0.05, mu_hi=0.75, var_hi=0.004)
 
-        cost_rate = operating_cost(scores, labels, fit.rate_crossing(1.0, 1.0), 1.0, 1.0)[0]
-        cost_count = operating_cost(scores, labels, fit.crossing(), 1.0, 1.0)[0]
+        cost_rate = operating_cost(scores, labels, _root(fit.rate_crossing(1.0, 1.0)), 1.0, 1.0)[0]
+        cost_count = operating_cost(scores, labels, _root(fit.crossing()), 1.0, 1.0)[0]
         assert cost_rate < cost_count
 
 
