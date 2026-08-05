@@ -337,9 +337,12 @@ SAFE_BLEND_SCHEDULES: dict[str, BlendSchedule] = {s.name: s for s in _SCHEDULES}
 #: ``docs/experiments/mixin-schedule/REPORT.md``).
 #:
 #: * ``region`` - a patch dataset, which always scores by max-pooling over
-#:   regions.  Its x-cal cut needs far longer to become trustworthy, so the
-#:   handoff runs to 40 labels instead of 20 (−0.0422 cost vs the old ramp,
-#:   p=1.4e-28, and it still wins when false positives are weighted 4x).
+#:   regions.  Its x-cal cut needs far longer to become trustworthy *and* never
+#:   becomes trustworthy enough to trust alone: over a 200-vote horizon the
+#:   plain 6->40 ramp decays to nothing once it reaches pure x-cal (+0.008 by
+#:   101-200 votes), while capping at half keeps improving (-0.082).  So the
+#:   shipped curve is the slow ramp **with** the cap - best or tied in every
+#:   vote band and strictly better than ``cap50`` at every positive count.
 #: * ``binary`` - one vector per media.  Here a longer ramp wins only by cutting
 #:   lower, which reverses under reweighting; what survives is keeping a
 #:   permanent half-share of the label-free GMM cut, which reduces the *spread*
@@ -348,7 +351,7 @@ SAFE_BLEND_SCHEDULES: dict[str, BlendSchedule] = {s.name: s for s in _SCHEDULES}
 #: The old single ramp (``prod``) is retained in the registry as the measurement
 #: baseline and as the thing to compare against if this is ever revisited.
 PRODUCTION_SCHEDULE_BY_MODE: dict[str, str] = {
-    "region": "slow",
+    "region": "slow_cap50",
     "binary": "cap50",
 }
 

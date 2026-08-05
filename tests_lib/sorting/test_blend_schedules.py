@@ -58,7 +58,7 @@ class TestProductionFidelity:
         assert get_schedule(None) is get_schedule("cap50")
 
     def test_each_voting_mode_gets_the_schedule_the_study_chose(self):
-        assert production_schedule_for(region_voting=True) == "slow"
+        assert production_schedule_for(region_voting=True) == "slow_cap50"
         assert production_schedule_for(region_voting=False) == "cap50"
         assert production_schedule_for(region_voting=None) == PRODUCTION_SCHEDULE
 
@@ -150,6 +150,16 @@ class TestCapFamily:
         for n in (20, 100, 10_000):
             assert safe_blend_weight(_ctx(n), "cap80") == pytest.approx(0.8)
             assert safe_blend_weight(_ctx(n), "cap50") == pytest.approx(0.5)
+
+    def test_slow_cap50_is_slow_early_and_capped_late(self):
+        """The synthesis the region long run implies: `slow`'s gentler ramp kept
+        (it won the early window) but capped (it collapsed once it reached pure
+        x-cal at 40 labels)."""
+        for n in (7, 13, 20):
+            assert safe_blend_weight(_ctx(n), "slow_cap50") == safe_blend_weight(_ctx(n), "slow")
+        for n in (40, 100, 10_000):
+            assert safe_blend_weight(_ctx(n), "slow_cap50") == pytest.approx(0.5)
+            assert safe_blend_weight(_ctx(n), "slow") == pytest.approx(1.0)
 
 
 class TestCorridorFamily:
