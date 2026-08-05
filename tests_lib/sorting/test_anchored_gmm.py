@@ -87,6 +87,37 @@ class TestAnchoredEm:
         assert wrapped_prov == "unanchored:inverted_means"
         assert wrapped == fit_score_gmm(gmm_fit_array(arr))
 
+    def test_interleaved_anchors_are_not_degenerate(self):
+        # Ranking errors among the anchors are the NORMAL regime, not a
+        # degeneracy: the estimator is moment-based, so a Bad scoring above a
+        # Good (or a 24%-pairwise-inverted heavy overlap) just widens the
+        # components.  The fallback must trigger only on *mean* inversion of
+        # the anchor classes - the model ranking the labelset worse than
+        # chance - never on individual crossing pairs.  (An order-statistic
+        # sensitivity here would rebuild exactly the conformal rule's
+        # small-sample noise this estimator exists to escape.)
+        rng = np.random.default_rng(17)
+        arr = _bimodal(rng)
+
+        # One fully inverted pair on top of clean mode anchors.
+        a_scores = np.concatenate([rng.normal(0.2, 0.05, 10), rng.normal(0.8, 0.05, 10), [0.95, 0.05]])
+        a_labels = np.concatenate([np.zeros(10), np.ones(10), [0.0, 1.0]])
+        for weight in (1.0, 100.0, 1000.0):
+            fit, provenance = fit_anchored_score_gmm(arr, a_scores, a_labels, anchor_weight=weight)
+            assert provenance == "anchored", (weight, provenance)
+            assert fit is not None and 0.3 < fit.midpoint() < 0.7
+
+        # Heavily overlapping anchor classes: many crossing pairs, ordered means.
+        a_bad = rng.normal(0.45, 0.12, 20)
+        a_good = rng.normal(0.55, 0.12, 20)
+        assert any(b > g for b in a_bad for g in a_good)  # the overlap is real
+        a_scores2 = np.concatenate([a_bad, a_good])
+        a_labels2 = np.concatenate([np.zeros(20), np.ones(20)])
+        for weight in (1.0, 100.0, 1000.0):
+            fit, provenance = fit_anchored_score_gmm(arr, a_scores2, a_labels2, anchor_weight=weight)
+            assert provenance == "anchored", (weight, provenance)
+            assert fit is not None and fit.mu_hi > fit.mu_lo
+
     def test_huge_weight_converges_to_anchor_class_means(self):
         rng = np.random.default_rng(5)
         arr = _bimodal(rng)
