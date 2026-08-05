@@ -50,11 +50,15 @@ from vtscore.eval.trainers import _cross_calibrated_threshold, _parse_trainer_sp
 from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.mlp import LINEAR_HEAD, _auto_hidden_dim, train_model
 from vtscore.training.thresholds import (
+    anchored_gmm_fit,
     calculate_cross_calibration_threshold,
     calculate_safe_threshold,
     classify_threshold_provenance,
     compute_fold_orderings,
     compute_grouped_fold_node_scores,
+    fold_anchored_gmm_threshold,
+    gmm_cut_from_fit,
+    rank_transfer,
     threshold_from_fold_orderings,
 )
 
@@ -811,6 +815,186 @@ def _schedule_variant_rows(
     return rows
 
 
+#: Default sweep grid for the anchored-mixture eval arms (issue #2852).  Each
+#: (anchor_weight, cut rule[, fold combine]) combination is one paired
+#: within-step variant; the GRID run overrides these via
+#: ``simulate_voting_iterations``'s ``anchored_*`` parameters to exhaust the
+#: grid registered in ``docs/plans/population-anchored-calibration.md``.
+_ANCHORED_WEIGHTS: tuple[float, ...] = (1.0, 10.0, 100.0)
+_ANCHORED_RULES: tuple[str, ...] = ("mid", "rate")
+_ANCHORED_FOLD_COMBINES: tuple[str, ...] = ("qmean",)
+
+
+def _anchored_variant_rows(
+    details: dict[str, Any],
+    base_scores: "np.ndarray",
+    base_labels: "np.ndarray",
+    sim_scores: list[float],
+    sim_ids: list[int],
+    good_ids: list[int],
+    bad_ids: list[int],
+    fold_models: list,
+    style_obj: Any,
+    sim_clips: dict[int, dict[str, Any]] | None,
+    inclusion: int,
+    n_pool_rows: float,
+    weights: list[float],
+    rules: list[str],
+    fold_combines: list[str],
+    fold_anchored: bool,
+) -> list[dict[str, Any]]:
+    """Metric rows for the anchored-mixture threshold arms (issue #2852).
+
+    Three families, all evaluated against the same held-out test scores as the
+    #2799 variants so every row is step-paired with the shipped blend
+    (``pooled_mid``) and pure x-cal (``xcal_only``):
+
+    * ``anchored_w{W}_{rule}`` - the **label-anchored** mixture: anchored EM on
+      the final model's sim-set (haystack) scores with the voted items' own
+      final-model scores clamped to their labelled component.  One EM per
+      anchor weight; each cut rule re-cuts the same fit.
+    * ``fold_anchored_w{W}_{rule}_{combine}`` - the **fold-anchored**
+      ("cross-LabeledGMM") repair: per calibration fold, anchored EM on that
+      fold model's haystack scores with that fold's held-out labelled scores
+      as anchors (honest anchors, one shared scale), each fold's cut carried
+      to the final model by rank transfer and combined in quantile space.
+    * ``rank_transfer`` - the conformal x-cal cut carried from the pooled fold
+      haystack distribution to the final model's as a quantile: the
+      scale-transfer-only arm that attributes H1 (see the plan).
+
+    Anchored thresholds are used **raw** - the estimator replaces the blend
+    rather than feeding it - so ``blend_weight`` is NaN and ``raw_cut_*``
+    equals the headline cost columns.  The estimator path actually taken
+    (anchored / unanchored fallback / fold tally) is recorded in
+    ``threshold_provenance``.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval.calibration_metrics import inclusion_weights, operating_cost  # noqa: PLC0415
+
+    xcal = float(details["xcal_threshold"])
+    fold_orderings = details.get("fold_orderings") or []
+    cal_scores = np.array([s for scores, _ in fold_orderings for s in scores]) if fold_orderings else None
+    cal_labels = np.array([lb for _, labels_ in fold_orderings for lb in labels_]) if fold_orderings else None
+    wf, wn = inclusion_weights(inclusion)
+    nan = float("nan")
+
+    score_by_id = dict(zip(sim_ids, sim_scores, strict=True))
+    anchor_scores = [score_by_id[cid] for cid in (*good_ids, *bad_ids) if cid in score_by_id]
+    anchor_labels = [1.0] * sum(1 for cid in good_ids if cid in score_by_id) + [0.0] * sum(
+        1 for cid in bad_ids if cid in score_by_id
+    )
+    final_scores = np.asarray(sim_scores, dtype=np.float64)
+
+    rows: list[dict[str, Any]] = []
+
+    def emit(name: str, threshold: float, provenance: str, cut_fallback: int) -> None:
+        if not np.isfinite(threshold):
+            return
+        row = _operating_metrics(
+            base_scores,
+            base_labels,
+            threshold,
+            inclusion,
+            cal_scores,
+            cal_labels,
+            pool_variant="max",
+            provenance=provenance,
+            n_pool_rows=n_pool_rows,
+        )
+        row["gmm_variant"] = name
+        row["xcal_threshold"] = _r(xcal)
+        row["gmm_cut"] = _r(threshold)
+        row["blend_weight"] = nan
+        row["cut_fallback"] = cut_fallback
+        raw_cost, raw_fpr, raw_fnr = operating_cost(base_scores, base_labels, threshold, wf, wn)
+        row["raw_cut_cost"] = _r(raw_cost)
+        row["raw_cut_fpr"] = _r(raw_fpr)
+        row["raw_cut_fnr"] = _r(raw_fnr)
+        rows.append(row)
+
+    # --- Label-anchored family: one anchored EM per weight, re-cut per rule. ---
+    for weight in weights:
+        fit, provenance = anchored_gmm_fit(final_scores, anchor_scores, anchor_labels, anchor_weight=weight)
+        if fit is None:
+            continue
+        for rule in rules:
+            cut, fell_back = gmm_cut_from_fit(fit, rule, wf, wn)
+            emit(f"anchored_w{weight:g}_{rule}", cut, provenance, fell_back)
+
+    # --- Fold-anchored family + the rank-transfer attribution arm. ---
+    if fold_anchored and fold_models and fold_orderings and sim_clips is not None and style_obj is not None:
+        _emit_fold_anchored_rows(
+            emit,
+            xcal,
+            fold_models,
+            fold_orderings,
+            final_scores,
+            style_obj,
+            sim_clips,
+            wf,
+            wn,
+            weights,
+            rules,
+            fold_combines,
+        )
+
+    return rows
+
+
+def _emit_fold_anchored_rows(
+    emit: Callable[[str, float, str, int], None],
+    xcal: float,
+    fold_models: list,
+    fold_orderings: list[tuple[list[float], list[float]]],
+    final_scores: "np.ndarray",
+    style_obj: Any,
+    sim_clips: dict[int, dict[str, Any]],
+    wf: float,
+    wn: float,
+    weights: list[float],
+    rules: list[str],
+    fold_combines: list[str],
+) -> None:
+    """Score the sim set per fold model and emit the fold-family arm rows.
+
+    The scoring pass per fold model is the fold arms' whole marginal cost, so
+    it happens exactly once here regardless of how many (weight, rule, combine)
+    grid points re-cut it.  ``rank_transfer`` reuses the same fold scores: the
+    conformal cut carried from the pooled fold haystack distribution to the
+    final model's - the scale-transfer-only attribution arm of the plan.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    fold_hay: list[np.ndarray] = []
+    for model in fold_models:
+        score_map = style_obj.score_media(model, sim_clips)
+        fold_hay.append(np.asarray(list(score_map.values()), dtype=np.float64))
+    n_folds = min(len(fold_hay), len(fold_orderings))
+    fold_hay, orderings = fold_hay[:n_folds], fold_orderings[:n_folds]
+
+    emit(
+        "rank_transfer",
+        rank_transfer(xcal, np.concatenate(fold_hay), final_scores),
+        "rank_transfer",
+        0,
+    )
+    for weight in weights:
+        for rule in rules:
+            for combine in fold_combines:
+                threshold, provenance = fold_anchored_gmm_threshold(
+                    fold_hay,
+                    orderings,
+                    final_scores,
+                    anchor_weight=weight,
+                    cut_rule=rule,
+                    combine=combine,
+                    fpr_weight=wf,
+                    fnr_weight=wn,
+                )
+                emit(f"fold_anchored_w{weight:g}_{rule}_{combine}", threshold, provenance, 0)
+
+
 def _calibration_metric_rows(
     step: _StepModel,
     threshold: float,
@@ -1367,6 +1551,10 @@ def _calibrate_with_details(
     """
     import numpy as np  # noqa: PLC0415
 
+    # The trained fold models ride along in details["fold_models"] so the
+    # #2852 fold-anchored arm can score the haystack on each fold's own scale
+    # without retraining; production callers never see them.
+    fold_models: list = []
     if cal_groups is not None:
         fold_node_data, fallback = compute_grouped_fold_node_scores(
             X_list,
@@ -1378,12 +1566,14 @@ def _calibrate_with_details(
             calibration_fraction=calibration_fraction,
             hidden_dim=hidden_dim,
             score_rows_by_group=score_rows_by_group,
+            model_sink=fold_models,
         )
         if fallback is not None:
             return fallback, {
                 "provenance": classify_threshold_provenance(fallback),
                 "fold_orderings": [],
                 "fold_node_data": None,
+                "fold_models": [],
             }
         # Base (max) orderings from the same fold node data -> identical to
         # production's grouped calibration for this arm.
@@ -1393,6 +1583,7 @@ def _calibrate_with_details(
             "provenance": classify_threshold_provenance(None),
             "fold_orderings": fold_orderings,
             "fold_node_data": fold_node_data,
+            "fold_models": fold_models,
         }
 
     # Row-wise path (whole-image styles): no bag flooding, no node re-pooling.
@@ -1404,18 +1595,21 @@ def _calibrate_with_details(
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
         hidden_dim=hidden_dim,
+        model_sink=fold_models,
     )
     if fallback is not None:
         return fallback, {
             "provenance": classify_threshold_provenance(fallback),
             "fold_orderings": [],
             "fold_node_data": None,
+            "fold_models": [],
         }
     threshold = threshold_from_fold_orderings(fold_orderings, inclusion)
     return threshold, {
         "provenance": classify_threshold_provenance(None),
         "fold_orderings": fold_orderings,
         "fold_node_data": None,
+        "fold_models": fold_models,
     }
 
 
@@ -1517,6 +1711,11 @@ def simulate_voting_iterations(  # noqa: C901
     schedule_variants: Optional[list[str]] = None,
     cut_diag_sink: Optional[list[dict[str, Any]]] = None,
     autopilot_fidelity: bool = True,
+    anchored_thresholds: bool = False,
+    anchored_weights: Optional[list[float]] = None,
+    anchored_rules: Optional[list[str]] = None,
+    anchored_fold_arms: bool = True,
+    anchored_fold_combines: Optional[list[str]] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -1598,6 +1797,27 @@ def simulate_voting_iterations(  # noqa: C901
             follows the text sort (top items for the initial goods, the sort's
             cutoff for the initial bads); ``None`` (default) means the dataset
             has no text sort, so autopilot seeds from random known-good examples.
+        anchored_thresholds: When ``True`` (requires ``safe_thresholds``,
+            ``emit_calibration_metrics``, and a *style*), each step additionally
+            emits one metric row per anchored-mixture arm (issue #2852): the
+            label-anchored family (``anchored_w{W}_{rule}``), the fold-anchored
+            "cross-LabeledGMM" family (``fold_anchored_w{W}_{rule}_{combine}``),
+            and the ``rank_transfer`` attribution arm - see
+            :func:`_anchored_variant_rows`.  The fold arms score the sim set
+            once per calibration fold model per step, so they cost roughly one
+            extra scoring pass per fold.
+        anchored_weights: Anchor-weight grid for the anchored arms (default
+            :data:`_ANCHORED_WEIGHTS`).  Each labelled score counts as this
+            many haystack scores in the anchored EM's M-step.
+        anchored_rules: Cut rules applied to each anchored fit (default
+            :data:`_ANCHORED_RULES`): ``"mid"`` (production midpoint) and/or
+            ``"rate"`` (rate-optimal crossing at the live inclusion weights).
+        anchored_fold_arms: Include the fold-anchored + rank-transfer arms
+            (default ``True``); ``False`` keeps only the cheap label-anchored
+            family (no per-fold scoring passes).
+        anchored_fold_combines: How the fold arms combine per-fold cuts in
+            quantile space (default :data:`_ANCHORED_FOLD_COMBINES`):
+            ``"qmean"`` and/or ``"qmedian"``.
         autopilot_fidelity: When ``True`` (default) the simulated user follows
             the app's own phase machine
             (:class:`vtscore.eval.autopilot_flow.AutopilotFlow`): no detector is
@@ -1954,6 +2174,33 @@ def simulate_voting_iterations(  # noqa: C901
                         inclusion,
                         n_pool_rows=metric_rows[0]["n_pool_rows"],
                         schedules=schedule_variants,
+                    )
+                )
+            # The #2852 anchored-mixture arms, paired against the same test
+            # scores (and against pooled_mid / xcal_only above).
+            if anchored_thresholds and sim_pooled_scores is not None:
+                metric_rows.extend(
+                    _anchored_variant_rows(
+                        details,
+                        base_scores,
+                        base_labels,
+                        sim_pooled_scores,
+                        sim_pooled_ids,
+                        list(good_votes),
+                        list(bad_votes),
+                        details.get("fold_models") or [],
+                        style_obj,
+                        sim_clips,
+                        inclusion,
+                        n_pool_rows=metric_rows[0]["n_pool_rows"],
+                        weights=anchored_weights if anchored_weights is not None else list(_ANCHORED_WEIGHTS),
+                        rules=anchored_rules if anchored_rules is not None else list(_ANCHORED_RULES),
+                        fold_combines=(
+                            anchored_fold_combines
+                            if anchored_fold_combines is not None
+                            else list(_ANCHORED_FOLD_COMBINES)
+                        ),
+                        fold_anchored=anchored_fold_arms,
                     )
                 )
             for mr in metric_rows:
