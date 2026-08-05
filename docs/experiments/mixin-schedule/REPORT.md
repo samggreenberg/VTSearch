@@ -8,7 +8,14 @@ schedules measured, and the two voting modes want different curves.**
 | | ship | vs `prod` (7-20 votes) | holds at `fpr x4`? |
 |---|---|---|---|
 | **Region voting** | **`slow`** (hand off by 40 labels, not 20) | −0.0422 cost, p=1.4e-28, 79% of cells | **yes**, −0.0366 |
-| **Binary voting** | **`cap50`** (production ramp, capped at half GMM forever) | −0.0173 cost, p=7.6e-43, 68% of cells | **yes**, −0.0119 |
+| **Binary voting** | **`cap50`** (production ramp, capped at half GMM) | −0.0173 cost, p=7.6e-43, 68% of cells | **yes**, −0.0119 |
+
+`cap50` was re-tested to **300 votes** after the obvious objection that it never
+hands over to the learned cut. It holds, and its margin *grows* with depth
+(−0.019 → −0.051); every arm that hands over gives the advantage back, the
+earlier the worse. Not because the GMM wins in the limit — it cannot — but
+because 300 clicks buys only ~13 positives, so a real session never reaches the
+limit. See *The horizon problem* below.
 
 If a single schedule is preferred over a per-mode one, ship **`cap50`
 everywhere**: it is the only schedule that improves *both* modes under *every*
@@ -374,7 +381,88 @@ On region voting `pure_gmm` is both near-unbiased and steadiest, yet still
 loses its advantage at `fpr x4`. That tension is real and unexplained by the
 decomposition alone; it is the clearest open thread this study leaves.
 
-## The horizon problem (follow-up, running)
+## The horizon problem: does the learned threshold ever win? (binary voting)
+
+**Answer: not within a session anyone will ever have — because clicking buys
+votes, and the learned cut needs *positives*.**
+
+Six arms, 300 votes, 26 deep categories (≥50 positives in the simulation half),
+8 seeds, 1824 cells. Binary voting only; region is a separate run below.
+
+`d_cost` vs `prod`, by vote band (negative beats it, cell count in parens):
+
+| schedule | 7-20 | 21-50 | 51-100 | 101-200 | 201-300 |
+|---|---|---|---|---|---|
+| `cap50` | −0.0188 | −0.0388 | −0.0376 | −0.0401 | **−0.0511** |
+| `cap50_release_late` (150→400) | −0.0188 | −0.0388 | −0.0376 | −0.0402 | −0.0504 |
+| `cap50_release` (50→200) | −0.0188 | −0.0388 | −0.0376 | −0.0235 | **+0.0039** |
+| `cap50_release_early` (30→100) | −0.0188 | −0.0388 | −0.0259 | **+0.0029** | +0.0036 |
+| `pure_xcal` | +0.0520 | +0.0040 | −0.0024 | −0.0061 | −0.0123 |
+
+Three things, in order of how much they matter:
+
+1. **Handing over always costs, and costs more the earlier you do it.** The
+   release arms track `cap50` exactly until they release, then fall away from
+   it: `cap50_release_early` gives up its entire advantage and ends *worse than
+   the old ramp*; `cap50_release` follows one band later; `cap50_release_late`
+   barely releases inside 300 votes and stays with `cap50`. The ordering is
+   monotone in release point. That is as clean a refutation of "at some point
+   just use the threshold you worked for" as this design can produce.
+2. **`cap50`'s advantage *grows* with depth** (−0.019 → −0.051), rather than
+   decaying as the learned cut converges.
+3. **`pure_xcal` does eventually beat `prod`** — crossing zero around 51–100
+   votes and reaching −0.0123 by 201–300. But this is *not* the learned cut
+   winning: past 20 votes `prod` **is** pure x-cal (its ramp has weight 1), so
+   the two arms run an identical rule and differ only in the trajectory their
+   different early behaviour produced. It is an acquisition effect, not a
+   threshold-policy one.
+
+### Why: 300 clicks buys ~13 positives
+
+The convergence argument is about **labelled positives** — the conformal rule
+needs both tails and the positive tail is the scarce one. At realistic
+prevalence, votes and positives come apart badly:
+
+> After **300 votes**, the median cell holds **~13 positives**. Only
+> `building` (39% prevalence) exceeds 48.
+
+So banding on votes conflates "the learned cut has converged" with "the user
+clicked a lot and still has almost nothing to calibrate on". Banding on
+positives instead shows the convergence the theory predicts — and how far away
+it still is:
+
+| vs `prod` | 1-3 pos | 4-6 | 7-10 | 11-15 | 16-25 | 26+ |
+|---|---|---|---|---|---|---|
+| `cap50` | −0.0153 | −0.0578 | −0.0442 | −0.0356 | −0.0424 | −0.1333 |
+| `pure_xcal` | +0.0959 | +0.0493 | +0.0346 | +0.0192 | **+0.0140** | +0.0264 |
+| **`cap50` − `pure_xcal`** | −0.1113 | −0.1071 | −0.0780 | −0.0550 | **−0.0479** | −0.1449 |
+| p (Wilcoxon) | 1e-40 | 1e-34 | 2e-26 | 4e-15 | 2e-05 | 3e-05 |
+
+`pure_xcal`'s deficit shrinks monotonically from +0.096 to +0.014 as positives
+accumulate — **the consistency argument is visibly true**. The blend's edge
+narrows with it (−0.111 → −0.048). But it is still large and still highly
+significant at 16–25 positives, and at that rate of closure you would need on
+the order of 100+ positives to reach parity — **thousands of clicks at typical
+prevalence**. The 26+ band reverses the trend, but it is 19 cells dominated by
+one category and should be read as underpowered, not as a finding.
+
+**So the theory is right and the recommendation is unchanged.** `cap50` stands
+for binary voting, not because the GMM is better in the limit — it isn't — but
+because a real labelling session never reaches the limit. The right way to state
+it is not "never hand over" but **"do not hand over before ~100 positives, which
+a session will not reach"**.
+
+### What would change this
+
+If autopilot ever accumulated positives much faster — a better Good phase, a
+prevalence-aware acquisition rule, or class-balanced sampling — the crossover
+would move into reach and `cap50_release_late` (or a positive-count-triggered
+release) would become the right schedule. That is a more promising direction
+than tuning the schedule further: the schedule is compensating for a data
+problem, and fixing the data problem is worth more than the compensation.
+A release keyed on **positives** rather than votes is the natural next arm.
+
+## The horizon problem (region voting, running)
 
 `cap50` never hands over to the learned cut. **That cannot be literally right,
 and this study could not have seen why.**
@@ -387,7 +475,11 @@ threshold. Asymptotically pure x-cal *must* win. So the real question was never
 *whether* to hand over but **when**, and every number above was measured over a
 **30-vote** horizon, where the answer is "not yet" almost by construction.
 
-A longer run is under way to find the crossover:
+The region-voting long run (200 votes, 5 arms including `slow` and
+`cap50_release`) is still going; its bands will be added here. The binary
+result above is the one the question was about.
+
+Design of both long runs:
 
 - **Deep categories only.** A long horizon is bounded by *positives in the
   simulation set*, not pool size: once autopilot exhausts them, every further
