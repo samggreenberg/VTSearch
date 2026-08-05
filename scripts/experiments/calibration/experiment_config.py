@@ -65,6 +65,31 @@ CALIBRATION_FRACTION = 0.5
 SAFE_THRESHOLDS = os.environ.get("CALIB_SAFE_THRESHOLDS", "0") == "1"
 MEDIA_TYPE = "image"
 
+#: The #2852 anchored-mixture study (design + pre-registered decision rules:
+#: ``docs/plans/population-anchored-calibration.md``) flips this on via
+#: ``CALIB_ANCHORED=1``; every step then additionally emits the label-anchored,
+#: fold-anchored ("cross-LabeledGMM"), and rank-transfer arm rows.  Requires
+#: ``CALIB_SAFE_THRESHOLDS=1`` (the anchored arms ride the variant-row path).
+ANCHORED = os.environ.get("CALIB_ANCHORED", "0") == "1"
+#: Anchor-weight grid: each labelled score counts as this many haystack scores
+#: in the anchored EM.  Log-spaced from "one label = one haystack point" to
+#: "labels dominate the fit" - the fusion knob the sweep exists to place.
+ANCHORED_WEIGHTS = [float(w) for w in os.environ.get("CALIB_ANCHORED_WEIGHTS", "1,3,10,30,100").split(",") if w]
+#: Cut rules re-cutting each anchored fit: production midpoint, and the
+#: rate-optimal crossing (well-founded on an anchored fit, where the
+#: components *are* the classes - the #2836 identification term is gone).
+ANCHORED_RULES = [r for r in os.environ.get("CALIB_ANCHORED_RULES", "mid,rate").split(",") if r]
+#: Fold-anchored + rank-transfer arms cost one sim-set scoring pass per
+#: calibration fold per step; disable to keep only the cheap final-model arms.
+ANCHORED_FOLD_ARMS = os.environ.get("CALIB_ANCHORED_FOLD_ARMS", "1") == "1"
+#: How the fold arms combine per-fold cuts in quantile space.
+ANCHORED_FOLD_COMBINES = [c for c in os.environ.get("CALIB_ANCHORED_FOLD_COMBINES", "qmean,qmedian").split(",") if c]
+#: Vote-count checkpoints the anchored analyzer windows on (the plan's deep
+#: regime; each window is (previous checkpoint, checkpoint]).
+ANCHORED_CHECKPOINTS = [
+    int(c) for c in os.environ.get("CALIB_ANCHORED_CHECKPOINTS", "20,50,100,200,300").split(",") if c
+]
+
 #: Which torch head each step trains (``vtscore.eval.voting_iterations.HEADS``).
 #: #2781 ran the harness's historical auto-sized MLP; the #2799 safe-threshold
 #: study runs ``linear`` — the head the live detector actually trains since

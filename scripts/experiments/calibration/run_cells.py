@@ -135,6 +135,11 @@ def main(argv: list[str] | None = None) -> int:
             inclusion_sweep_ks=cfg.INCLUSION_SWEEP_KS,
             sweep_sink=sweep_local,
             cut_diag_sink=cutdiag_local,
+            anchored_thresholds=cfg.ANCHORED,
+            anchored_weights=cfg.ANCHORED_WEIGHTS,
+            anchored_rules=cfg.ANCHORED_RULES,
+            anchored_fold_arms=cfg.ANCHORED_FOLD_ARMS,
+            anchored_fold_combines=cfg.ANCHORED_FOLD_COMBINES,
         )
         for r in rows:
             r["embedder"] = emb

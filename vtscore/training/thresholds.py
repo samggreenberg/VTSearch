@@ -291,6 +291,314 @@ def fit_score_gmm(arr: np.ndarray) -> GmmFit1D | None:
         return None
 
 
+# --- Anchored (semi-supervised) mixture estimation: issue #2852 ---------------
+#
+# The label-anchored mixture fits the same 2-component 1-D Gaussian mixture as
+# ``fit_score_gmm`` but on a *partially labelled* sample: the haystack scores
+# are free, while each voted item's score has its component membership fixed by
+# its label (Good -> high component, Bad -> low component).  This is classical
+# semi-supervised ML estimation for a mixture: EM where the E-step clamps the
+# labelled points' responsibilities to one-hot and the M-step counts each
+# labelled point ``anchor_weight`` times.  ``anchor_weight`` is therefore the
+# single fusion knob: the anchors' M-step mass is ``anchor_weight * n_labels``
+# against the haystack's ``N``, so with few labels the population dominates
+# (the GMM regime) and as labels accumulate the labelled class-conditionals
+# take over smoothly - the schedule the safe-blend hand-tunes, derived instead
+# from relative likelihood mass.
+
+#: Default per-anchor multiplicity for the anchored EM: each labelled score
+#: counts as this many haystack scores in the M-step.  Chosen so a handful of
+#: votes is already visible against the ``_GMM_MAX_SAMPLES``-sized haystack
+#: sample without drowning it; the #2852 experiment sweeps this.
+ANCHOR_WEIGHT_DEFAULT = 10.0
+
+#: Relative variance floor for the anchored EM, as a fraction of the total
+#: sample variance.  A component pinned to (near-)duplicate anchor scores would
+#: otherwise collapse its variance to 0 and take the likelihood to infinity.
+_ANCHOR_VAR_FLOOR_FRAC = 1e-6
+
+#: Minimum mixture weight either anchored component may end with; below this
+#: the fit has effectively deleted a component and the anchored path must fall
+#: back to the unanchored fit.
+_ANCHOR_MIN_WEIGHT = 1e-6
+
+
+def _anchored_em(
+    x: np.ndarray,
+    a_lo: np.ndarray,
+    a_hi: np.ndarray,
+    init: GmmFit1D,
+    anchor_weight: float,
+    max_iter: int,
+    tol: float,
+) -> GmmFit1D | None:
+    """Run the anchored EM iterations; ``None`` on numerical failure.
+
+    *x* is the free (unlabelled) sample, *a_lo* / *a_hi* the anchor scores
+    clamped to the low / high component.  Pure numpy, log-domain E-step, fixed
+    iteration order - deterministic for fixed inputs by construction.  Only
+    numerical failure (non-finite parameters) returns ``None`` here; semantic
+    degeneracy (inverted means, collapsed component) is judged by the caller so
+    it can name the reason.
+    """
+    lam = float(anchor_weight)
+    n = float(x.size)
+    n_lo, n_hi = float(a_lo.size), float(a_hi.size)
+    total_mass = n + lam * (n_lo + n_hi)
+
+    w = np.array([init.w_lo, init.w_hi], dtype=np.float64)
+    mu = np.array([init.mu_lo, init.mu_hi], dtype=np.float64)
+    var = np.array([init.var_lo, init.var_hi], dtype=np.float64)
+
+    pooled = np.concatenate([x, a_lo, a_hi])
+    var_floor = max(1e-12, _ANCHOR_VAR_FLOOR_FRAC * float(np.var(pooled)))
+    var = np.maximum(var, var_floor)
+
+    sum_a_lo, sum_a_hi = float(a_lo.sum()), float(a_hi.sum())
+
+    for _ in range(max_iter):
+        # E-step over the free sample only (anchors are clamped one-hot).
+        # Log-domain: log w_c - 0.5*log(2*pi*var_c) - (x-mu_c)^2 / (2*var_c).
+        log_p = (
+            np.log(np.maximum(w, 1e-300))[None, :]
+            - 0.5 * np.log(2.0 * math.pi * var)[None, :]
+            - (x[:, None] - mu[None, :]) ** 2 / (2.0 * var[None, :])
+        )
+        log_p -= log_p.max(axis=1, keepdims=True)
+        r = np.exp(log_p)
+        r /= r.sum(axis=1, keepdims=True)
+
+        # M-step with the anchors folded in at weight ``lam`` each.
+        m_lo = float(r[:, 0].sum()) + lam * n_lo
+        m_hi = float(r[:, 1].sum()) + lam * n_hi
+        if not (m_lo > 0.0 and m_hi > 0.0):
+            return None
+        mu_new = np.array(
+            [
+                (float(r[:, 0] @ x) + lam * sum_a_lo) / m_lo,
+                (float(r[:, 1] @ x) + lam * sum_a_hi) / m_hi,
+            ]
+        )
+        var_new = np.array(
+            [
+                (float(r[:, 0] @ (x - mu_new[0]) ** 2) + lam * float(((a_lo - mu_new[0]) ** 2).sum())) / m_lo,
+                (float(r[:, 1] @ (x - mu_new[1]) ** 2) + lam * float(((a_hi - mu_new[1]) ** 2).sum())) / m_hi,
+            ]
+        )
+        var_new = np.maximum(var_new, var_floor)
+        w_new = np.array([m_lo, m_hi]) / total_mass
+
+        if not (np.all(np.isfinite(mu_new)) and np.all(np.isfinite(var_new)) and np.all(np.isfinite(w_new))):
+            return None
+        delta = max(
+            float(np.max(np.abs(mu_new - mu))),
+            float(np.max(np.abs(var_new - var))),
+            float(np.max(np.abs(w_new - w))),
+        )
+        mu, var, w = mu_new, var_new, w_new
+        if delta < tol:
+            break
+
+    return GmmFit1D(
+        w_lo=float(w[0]),
+        mu_lo=float(mu[0]),
+        var_lo=float(var[0]),
+        w_hi=float(w[1]),
+        mu_hi=float(mu[1]),
+        var_hi=float(var[1]),
+    )
+
+
+def fit_anchored_score_gmm(
+    arr: np.ndarray,
+    anchor_scores: "list[float] | np.ndarray",
+    anchor_labels: "list[float] | np.ndarray",
+    *,
+    anchor_weight: float = ANCHOR_WEIGHT_DEFAULT,
+    max_iter: int = 200,
+    tol: float = 1e-8,
+) -> tuple[GmmFit1D | None, str]:
+    """Fit the label-anchored 2-component mixture (issue #2852).
+
+    *arr* is the (possibly :func:`gmm_fit_array`-subsampled) haystack score
+    sample; *anchor_scores* / *anchor_labels* are the voted items' scores and
+    binary labels (1.0 Good -> high component, else low).  Initialised from the
+    **unanchored** :func:`fit_score_gmm` fit (deterministic, seed-42 EM), then
+    refined by anchored EM (see :func:`_anchored_em`).
+
+    Returns ``(fit, provenance)``.  On success the provenance is ``"anchored"``
+    and the fit's components are class-identified by construction (``hi`` is
+    the Good-anchored component).  On failure the fit is ``None`` and the
+    provenance names the reason (``"no_anchors"``, ``"too_few_scores"``,
+    ``"unanchored_init_failed"``, ``"em_failed"``, ``"inverted_means"``,
+    ``"component_collapse"``) - the caller decides the fallback policy
+    (:func:`anchored_gmm_fit` falls back to the unanchored fit, never to 0.5).
+
+    Anchors force a component ordering rather than inherit one: if the labelled
+    scores contradict the population modes (Good votes living in the low mode),
+    the anchored means invert or a component collapses, and that is reported as
+    a degeneracy instead of silently shipping a backwards cut.
+    """
+    x = np.asarray(arr, dtype=np.float64).ravel()
+    a = np.asarray(anchor_scores, dtype=np.float64).ravel()
+    z = np.asarray(anchor_labels, dtype=np.float64).ravel()
+    if x.size < 2:
+        return None, "too_few_scores"
+    if a.size == 0 or a.size != z.size:
+        return None, "no_anchors"
+    if not (anchor_weight > 0.0):
+        return None, "no_anchors"
+
+    init = fit_score_gmm(x)
+    if init is None:
+        return None, "unanchored_init_failed"
+
+    a_hi = a[z == 1.0]
+    a_lo = a[z != 1.0]
+    fit = _anchored_em(x, a_lo, a_hi, init, anchor_weight, max_iter, tol)
+    if fit is None:
+        return None, "em_failed"
+    if not (fit.mu_hi > fit.mu_lo):
+        return None, "inverted_means"
+    if fit.w_lo < _ANCHOR_MIN_WEIGHT or fit.w_hi < _ANCHOR_MIN_WEIGHT:
+        return None, "component_collapse"
+    return fit, "anchored"
+
+
+def anchored_gmm_fit(
+    all_scores: "list[float] | np.ndarray",
+    anchor_scores: "list[float] | np.ndarray",
+    anchor_labels: "list[float] | np.ndarray",
+    *,
+    anchor_weight: float = ANCHOR_WEIGHT_DEFAULT,
+) -> tuple[GmmFit1D | None, str]:
+    """Production-shaped anchored fit with the #2852 fallback policy applied.
+
+    Subsamples via :func:`gmm_fit_array`, attempts the anchored fit, and on any
+    anchored degeneracy falls back to the **unanchored** GMM fit of the same
+    sample - never to 0.5.  Returns ``(fit, provenance)`` where provenance is
+    ``"anchored"`` or ``"unanchored:<reason>"``; the fit is ``None`` only when
+    the unanchored fit fails too (provenance ``"gmm_failed:<reason>"``, caller
+    falls back to its median rule).
+    """
+    arr = gmm_fit_array(all_scores)
+    fit, provenance = fit_anchored_score_gmm(arr, anchor_scores, anchor_labels, anchor_weight=anchor_weight)
+    if fit is not None:
+        return fit, provenance
+    fallback = fit_score_gmm(arr)
+    if fallback is not None:
+        return fallback, f"unanchored:{provenance}"
+    return None, f"gmm_failed:{provenance}"
+
+
+def gmm_cut_from_fit(fit: GmmFit1D, rule: str, fpr_weight: float = 1.0, fnr_weight: float = 1.0) -> tuple[float, int]:
+    """Apply a named cut *rule* to *fit*; ``(cut, fell_back_to_midpoint)``.
+
+    ``"mid"`` is the production midpoint; ``"rate"`` is the rate-optimal
+    crossing at the given cost weights (see :meth:`GmmFit1D.rate_crossing`),
+    falling back to the midpoint - flagged - when the crossing has no root on
+    this fit.  Shared by the anchored-threshold eval variants so every arm
+    falls back exactly the way production would.
+    """
+    if rule == "mid":
+        return fit.midpoint(), 0
+    if rule == "rate":
+        cut = fit.rate_crossing(fpr_weight, fnr_weight)
+        if cut is None or not math.isfinite(cut):
+            return fit.midpoint(), 1
+        return cut, 0
+    raise ValueError(f"unknown cut rule {rule!r}; expected 'mid' or 'rate'")
+
+
+def rank_transfer(
+    cut: float, source_scores: "list[float] | np.ndarray", target_scores: "list[float] | np.ndarray"
+) -> float:
+    """Carry *cut* from one score distribution to another as a quantile.
+
+    Reads the empirical quantile of *cut* in *source_scores* (the fraction of
+    source scores strictly below it) and realizes that quantile on
+    *target_scores* via linear interpolation.  A cut is a point on a score
+    *scale*; two models scoring the same haystack are related by an
+    approximately monotone map, and a quantile is invariant under any monotone
+    map - so this is the scale-transfer step that lets a cut measured on a fold
+    model's distribution be applied to the final model's (deficit 2 of
+    ``docs/plans/population-anchored-calibration.md``).
+    """
+    src = np.sort(np.asarray(source_scores, dtype=np.float64).ravel())
+    tgt = np.asarray(target_scores, dtype=np.float64).ravel()
+    if src.size == 0 or tgt.size == 0:
+        return float(cut)
+    q = float(np.searchsorted(src, cut, side="left")) / float(src.size)
+    return float(np.quantile(tgt, min(1.0, max(0.0, q))))
+
+
+def fold_anchored_gmm_threshold(
+    fold_haystack_scores: "list[np.ndarray]",
+    fold_anchor_orderings: list[tuple[list[float], list[float]]],
+    final_scores: "list[float] | np.ndarray",
+    *,
+    anchor_weight: float = ANCHOR_WEIGHT_DEFAULT,
+    cut_rule: str = "mid",
+    combine: str = "qmean",
+    fpr_weight: float = 1.0,
+    fnr_weight: float = 1.0,
+) -> tuple[float, str]:
+    """The fold-anchored ("cross-LabeledGMM") mixture threshold (#2852 comment).
+
+    Per calibration fold *k*: fit the anchored mixture on the **fold model's**
+    haystack scores (``fold_haystack_scores[k]``) with anchors from that fold's
+    *held-out* labelled scores (``fold_anchor_orderings[k]``, the same
+    ``(scores, labels)`` orderings the conformal rule pools).  Anchors and
+    population then share one scale and the anchors are honest - the labelled
+    items were not in that fold model's training set, so their scores carry no
+    train-set optimism.  Each fold's cut is carried to the final model by
+    :func:`rank_transfer` (as a quantile of the fold's haystack distribution,
+    realized on *final_scores*), and the folds are combined in **quantile**
+    space (``combine="qmean"`` / ``"qmedian"``) so no cross-scale averaging of
+    raw cuts ever happens.
+
+    Degeneracy policy per the issue: a fold whose anchored fit degenerates
+    falls back to that fold's unanchored GMM fit; if every fold fails both
+    fits, the final model's own unanchored GMM midpoint is returned (and its
+    median if even that fails) - never 0.5.  Returns ``(threshold,
+    provenance)`` with provenance ``"fold_anchored[a/k]"`` (*a* folds anchored
+    of *k* used) or ``"fold_fallback_final_unanchored"`` /
+    ``"fold_fallback_final_median"`` on the terminal fallbacks.
+    """
+    final_arr = gmm_fit_array(final_scores)
+    quantiles: list[float] = []
+    n_anchored = 0
+    for hay, (a_scores, a_labels) in zip(fold_haystack_scores, fold_anchor_orderings, strict=True):
+        arr = gmm_fit_array(hay)
+        fit, provenance = fit_anchored_score_gmm(arr, a_scores, a_labels, anchor_weight=anchor_weight)
+        if fit is None:
+            fit = fit_score_gmm(arr)
+            if fit is None:
+                continue
+        elif provenance == "anchored":
+            n_anchored += 1
+        cut, _fell_back = gmm_cut_from_fit(fit, cut_rule, fpr_weight, fnr_weight)
+        src = np.sort(arr)
+        quantiles.append(float(np.searchsorted(src, cut, side="left")) / float(src.size))
+
+    if not quantiles or final_arr.size == 0:
+        fallback_fit = fit_score_gmm(final_arr) if final_arr.size >= 2 else None
+        if fallback_fit is not None:
+            return fallback_fit.midpoint(), "fold_fallback_final_unanchored"
+        if final_arr.size:
+            return float(np.median(final_arr)), "fold_fallback_final_median"
+        return 0.5, "fold_fallback_final_median"
+
+    if combine == "qmean":
+        q = float(np.mean(quantiles))
+    elif combine == "qmedian":
+        q = float(np.median(quantiles))
+    else:
+        raise ValueError(f"unknown fold combine {combine!r}; expected 'qmean' or 'qmedian'")
+    threshold = float(np.quantile(final_arr, min(1.0, max(0.0, q))))
+    return threshold, f"fold_anchored[{n_anchored}/{len(quantiles)}]"
+
+
 def calculate_gmm_threshold(scores: list[float]) -> float:
     """Use a Gaussian Mixture Model to find a threshold between two score distributions.
 
@@ -761,6 +1069,7 @@ def _compute_fold_orderings_grouped(
     calibration_fraction: float,
     hidden_dim: int | None,
     score_rows_by_group: dict | None = None,
+    model_sink: list | None = None,
 ) -> tuple[list[tuple[list[float], list[float]]], float | None]:
     """Bag-aware variant of :func:`compute_fold_orderings`.
 
@@ -778,6 +1087,8 @@ def _compute_fold_orderings_grouped(
     )
     if fallback is not None:
         return [], fallback
+    if model_sink is not None:
+        model_sink.extend(model for model, _cal in folds)
 
     orderings: list[tuple[list[float], list[float]]] = []
     for model, cal_groups in folds:
@@ -800,6 +1111,7 @@ def compute_grouped_fold_node_scores(
     calibration_fraction: float = 0.5,
     hidden_dim: int | None = None,
     score_rows_by_group: dict | None = None,
+    model_sink: list | None = None,
 ) -> tuple[list[tuple[list[np.ndarray], list[float]]], float | None]:
     """Bag-aware calibration folds, returning each held-out group's node scores.
 
@@ -813,12 +1125,19 @@ def compute_grouped_fold_node_scores(
     Returns ``(fold_node_data, fallback)`` where *fold_node_data* is a list, one
     entry per fold, of ``(group_node_scores, group_labels)`` - *group_node_scores*
     being a list of 1-D float arrays (one per held-out calibration group).
+
+    *model_sink*, when given, receives each trained fold model in fold order -
+    the #2852 fold-anchored eval arm scores the haystack with the same fold
+    models the orderings came from, so the anchors and the population it fits
+    share one score scale without a retrain.
     """
     folds, fallback, X_np, rows_by_group, label_by_group = _grouped_folds(
         X_list, y_list, input_dim, groups, rng, calibrate_count, calibration_fraction, hidden_dim
     )
     if fallback is not None:
         return [], fallback
+    if model_sink is not None:
+        model_sink.extend(model for model, _cal in folds)
 
     fold_node_data: list[tuple[list[np.ndarray], list[float]]] = []
     for model, cal_groups in folds:
@@ -838,6 +1157,7 @@ def compute_fold_orderings(
     hidden_dim: int | None = None,
     groups: list | None = None,
     score_rows_by_group: dict | None = None,
+    model_sink: list | None = None,
 ) -> tuple[list[tuple[list[float], list[float]]], float | None]:
     """Train the K calibration folds and return their held-out orderings.
 
@@ -877,6 +1197,10 @@ def compute_fold_orderings(
     (:func:`vtscore.detectors.training.inference_score_rows`); ``None`` keeps
     the "collapse over the training rows" behaviour for callers that have no
     inference geometry to offer.
+
+    *model_sink*, when given, receives each trained fold model in fold order
+    (see :func:`compute_grouped_fold_node_scores`); production callers pass
+    nothing and the models stay fold-local as before.
     """
     if groups is not None:
         return _compute_fold_orderings_grouped(
@@ -889,6 +1213,7 @@ def compute_fold_orderings(
             calibration_fraction=calibration_fraction,
             hidden_dim=hidden_dim,
             score_rows_by_group=score_rows_by_group,
+            model_sink=model_sink,
         )
     n = len(X_list)
     if n < 4:
@@ -933,6 +1258,8 @@ def compute_fold_orderings(
         X_cal = torch.tensor(X_np[cal_idx], dtype=torch.float32)
 
         model = train_model(X_train, y_train, input_dim, hidden_dim=hidden_dim)
+        if model_sink is not None:
+            model_sink.append(model)
 
         with torch.no_grad():
             from vtscore.utils.scores import sigmoid_to_finite_scores  # noqa: PLC0415
