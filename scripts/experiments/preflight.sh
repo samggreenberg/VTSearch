@@ -65,15 +65,27 @@ fi
 # --- 2. Free space on the REAL mount ----------------------------------------
 # `df -h /exp` reported 394G free while the actual home, /exp/$USER, was its own
 # 50G mount at 100%.  Cells died mid-write for hours on that misread.
-MOUNT=$(df -P "$EXP" 2>/dev/null | awk 'NR==2 {print $6}')
-AVAIL_GB=$(df -PBG "$EXP" 2>/dev/null | awk 'NR==2 {gsub(/G/,"",$4); print $4}')
+# A fresh study's dir does not exist yet - that is the normal case - so stat the
+# nearest existing ancestor, which is on the same filesystem.
+STAT_PATH="$EXP"
+while [[ ! -e "$STAT_PATH" && "$STAT_PATH" != "/" ]]; do
+  STAT_PATH=$(dirname "$STAT_PATH")
+done
+MOUNT=$(df -P "$STAT_PATH" 2>/dev/null | awk 'NR==2 {print $6}')
+AVAIL_GB=$(df -PBG "$STAT_PATH" 2>/dev/null | awk 'NR==2 {gsub(/G/,"",$4); print $4}')
 if [[ -z "$AVAIL_GB" ]]; then
-  say_fail "could not stat $EXP"
+  say_fail "could not stat $STAT_PATH"
 else
   if [[ "$AVAIL_GB" -lt "$NEED_GB" ]]; then
     say_fail "only ${AVAIL_GB}G free on $MOUNT (want >= ${NEED_GB}G)"
   else
     say_ok "${AVAIL_GB}G free on $MOUNT (the mount that actually holds $EXP)"
+    # The mistake this guards against: reading a *parent* mount's free space.
+    # /exp showed 394G while /exp/$USER was its own 50G mount at 100%.
+    parent_mount=$(df -P "$(dirname "$STAT_PATH")" 2>/dev/null | awk 'NR==2 {print $6}')
+    if [[ -n "$parent_mount" && "$parent_mount" != "$MOUNT" ]]; then
+      echo "        note: $(dirname "$STAT_PATH") is a DIFFERENT mount ($parent_mount) - its free space is irrelevant"
+    fi
   fi
 fi
 
