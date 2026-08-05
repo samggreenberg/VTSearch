@@ -322,6 +322,68 @@ def band_curve(df: pd.DataFrame, baseline: str = BASELINE) -> pd.DataFrame:
     return pd.DataFrame(out)
 
 
+#: Positive-count bands.  Votes are what a user spends; **positives** are what
+#: the conformal cut actually learns from, and at realistic prevalence the two
+#: diverge hard - 300 votes buys a median of ~13 positives.  Banding on votes
+#: alone therefore cannot distinguish "the learned cut has converged" from "the
+#: user clicked a lot and still has almost no positives".
+POSITIVE_BANDS: tuple[tuple[str, int, int], ...] = (
+    ("1-3", 1, 3),
+    ("4-6", 4, 6),
+    ("7-10", 7, 10),
+    ("11-15", 11, 15),
+    ("16-25", 16, 25),
+    ("26+", 26, 10_000),
+)
+
+
+def positive_band_curve(df: pd.DataFrame, baseline: str = BASELINE) -> pd.DataFrame:
+    """Paired cost delta vs *baseline* banded by **positive** count.
+
+    The convergence argument for the learned cut is about labelled positives,
+    not clicks: the conformal rule needs both tails of the score distribution
+    and the positive tail is the scarce one.  This is the axis on which the
+    x-cal cut should be seen catching up, and the axis whose slope says how far
+    away the crossover is.
+    """
+    from scipy import stats  # noqa: PLC0415
+
+    keys = ["mode", "dataset", "embedder", "style", "category", "seed"]
+    out = []
+    for band, lo, hi in POSITIVE_BANDS:
+        w = df[(df.n_good >= lo) & (df.n_good <= hi)]
+        if w.empty:
+            continue
+        cells = w.groupby([*keys, "schedule"], as_index=False)["cost"].mean()
+        base = cells[cells.schedule == baseline].set_index(keys)
+        if base.empty:
+            continue
+        for (mode, sched), grp in cells.groupby(["mode", "schedule"]):
+            if sched == baseline:
+                continue
+            g = grp.set_index(keys)
+            shared = g.index.intersection(base.index)
+            d = (g.loc[shared, "cost"] - base.loc[shared, "cost"]).to_numpy(dtype=float)
+            d = d[np.isfinite(d)]
+            if len(d) < 5:
+                continue
+            try:
+                p = float(stats.wilcoxon(d).pvalue) if np.any(d != 0) else 1.0
+            except ValueError:
+                p = 1.0
+            out.append(
+                {
+                    "mode": mode,
+                    "band": band,
+                    "schedule": sched,
+                    "n_cells": int(len(d)),
+                    "d_cost": float(np.mean(d)),
+                    "p_wilcoxon": p,
+                }
+            )
+    return pd.DataFrame(out)
+
+
 def promotion_list(deltas: pd.DataFrame, top_n: int = 3) -> list[str]:
     """The pre-registered phase-2 arm set: top *top_n* per mode + fixed anchors.
 
@@ -446,6 +508,36 @@ def write_report(path: Path, mode: str, deltas: pd.DataFrame, extra: dict) -> No
                     cells.append("-" if pd.isna(v) else f"{v:+.4f} ({int(n)})")
                 body.append(f"| {sched} | " + " | ".join(cells) + " |")
             body.append("")
+    pbands = extra.pop("_positive_bands", None)
+    if pbands is not None and not pbands.empty:
+        body += [
+            "## Cost vs POSITIVE count",
+            "",
+            "Votes are what the user spends; positives are what the conformal cut learns from, "
+            "and at realistic prevalence 300 votes buys only ~13 positives. This is the axis the "
+            "learned cut should be seen converging on.",
+            "",
+        ]
+        for mode in ("region", "binary"):
+            g = pbands[pbands["mode"] == mode]
+            if g.empty:
+                continue
+            piv = g.pivot_table(index="schedule", columns="band", values="d_cost")
+            cnt = g.pivot_table(index="schedule", columns="band", values="n_cells")
+            order = [b for b, _lo, _hi in POSITIVE_BANDS if b in piv.columns]
+            body += [
+                f"### {mode.capitalize()} voting",
+                "",
+                "| schedule | " + " | ".join(order) + " |",
+                "|---" * (len(order) + 1) + "|",
+            ]
+            for sched in piv.index:
+                cells = []
+                for b in order:
+                    v, n = piv.loc[sched, b], cnt.loc[sched, b]
+                    cells.append("-" if pd.isna(v) else f"{v:+.4f} ({int(n)})")
+                body.append(f"| {sched} | " + " | ".join(cells) + " |")
+            body.append("")
     decomp = extra.pop("_decomposition", None)
     if decomp is not None and not decomp.empty:
         body += [
@@ -550,6 +642,10 @@ def main(argv: list[str] | None = None) -> int:
         if not bands.empty:
             bands.to_csv(results / "ab_bands.csv", index=False)
             extra["_bands"] = bands
+        pos_bands = positive_band_curve(df)
+        if not pos_bands.empty:
+            pos_bands.to_csv(results / "ab_positive_bands.csv", index=False)
+            extra["_positive_bands"] = pos_bands
         past = past_ramp_effect(df)
         if not past.empty:
             past.to_csv(results / "ab_past_ramp.csv", index=False)
