@@ -305,6 +305,11 @@ _SCHEDULES: tuple[BlendSchedule, ...] = (
     WeightSchedule("rare", "Ramp on the rarer class (1→8)", lo=1, hi=8, stat="rare"),
     WeightSchedule("pos", "Ramp on the positive count (1→8)", lo=1, hi=8, stat="good"),
     # --- family D: never hand off completely ---
+    # `slow_cap50` is the synthesis the #2841 long run implies: `slow` won the
+    # early window by holding more GMM than `cap50` does there, then collapsed
+    # past 40 labels because that is where it becomes pure x-cal.  Keep its
+    # gentler ramp, cap it so it never hands over.
+    WeightSchedule("slow_cap50", "Slow ramp to 40, capped at half GMM", lo=6, hi=40, cap=0.5),
     WeightSchedule("cap80", "Production ramp, but keep 20% GMM forever", lo=6, hi=20, cap=0.8),
     WeightSchedule("cap50", "Production ramp, but keep 50% GMM forever", lo=6, hi=20, cap=0.5),
     # --- family F: cap, then hand over (issue #2841 follow-up) ---
