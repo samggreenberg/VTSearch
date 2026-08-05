@@ -137,6 +137,20 @@ PY
   echo "$j"
 }
 
+# Gate the launch on the mechanically checkable mistakes (see
+# scripts/experiments/preflight.sh and LESSONS.md).  PREFLIGHT_SKIP=1 for a
+# deliberate resume, which legitimately expects existing cells.
+PREFLIGHT="$WT/scripts/experiments/preflight.sh"
+if [[ "${PREFLIGHT_SKIP:-0}" != "1" && -x "$PREFLIGHT" ]]; then
+  PF_ARMS=""
+  [[ "$MODE" == "ab" ]] && PF_ARMS="--arms $(IFS=,; echo "$*")"
+  # shellcheck disable=SC2086
+  bash "$PREFLIGHT" --exp "$CALIB_EXP" $PF_ARMS ${PREFLIGHT_ARGS:-} || {
+    echo "launch aborted by preflight; PREFLIGHT_SKIP=1 to override, or --warn-only via PREFLIGHT_ARGS" >&2
+    exit 1
+  }
+fi
+
 case "$MODE" in
   screen)
     RESULTS="$CALIB_EXP/results-screen"
