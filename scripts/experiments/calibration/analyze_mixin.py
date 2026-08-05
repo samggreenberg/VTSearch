@@ -257,6 +257,71 @@ def past_ramp_effect(df: pd.DataFrame, baseline: str = BASELINE) -> pd.DataFrame
     return paired_vs_baseline(cells, baseline)
 
 
+#: Vote-count bands the long-horizon analysis reports separately.  The whole
+#: point of the follow-up is that a single averaged number hides a crossover:
+#: an inconsistent estimator (the GMM midpoint, which reads no labels) can beat
+#: a consistent one (the conformal cut) early and must lose to it eventually, so
+#: the question is *where*, not *whether*.
+VOTE_BANDS: tuple[tuple[str, int, int], ...] = (
+    ("7-20", 7, 20),
+    ("21-50", 21, 50),
+    ("51-100", 51, 100),
+    ("101-200", 101, 200),
+    ("201-300", 201, 300),
+    ("301+", 301, 10_000),
+)
+
+
+def band_curve(df: pd.DataFrame, baseline: str = BASELINE) -> pd.DataFrame:
+    """Paired cost delta vs *baseline* within each vote band.
+
+    Cells are re-paired *inside* each band, so a schedule that only wins early
+    and a schedule that only wins late are both visible instead of averaging
+    into one indistinguishable number.  ``n_cells`` shrinks in the later bands
+    as shallow categories run out of pool - read a band with few cells as
+    underpowered rather than as a null.
+    """
+    from scipy import stats  # noqa: PLC0415
+
+    keys = ["mode", "dataset", "embedder", "style", "category", "seed"]
+    out = []
+    for band, lo, hi in VOTE_BANDS:
+        cells = cell_means(df, lo=lo, hi=hi)
+        if cells.empty:
+            continue
+        base = cells[cells.schedule == baseline].set_index(keys)
+        if base.empty:
+            continue
+        for (mode, sched), grp in cells.groupby(["mode", "schedule"]):
+            if sched == baseline:
+                continue
+            g = grp.set_index(keys)
+            shared = g.index.intersection(base.index)
+            if len(shared) < 3:
+                continue
+            a, b = g.loc[shared], base.loc[shared]
+            d = (a["cost"] - b["cost"]).to_numpy(dtype=float)
+            d = d[np.isfinite(d)]
+            if len(d) < 3:
+                continue
+            try:
+                p = float(stats.wilcoxon(d).pvalue) if np.any(d != 0) else 1.0
+            except ValueError:
+                p = 1.0
+            out.append(
+                {
+                    "mode": mode,
+                    "band": band,
+                    "schedule": sched,
+                    "n_cells": int(len(d)),
+                    "d_cost": float(np.mean(d)),
+                    "pct_improved": float(np.mean(d < 0) * 100),
+                    "p_wilcoxon": p,
+                }
+            )
+    return pd.DataFrame(out)
+
+
 def promotion_list(deltas: pd.DataFrame, top_n: int = 3) -> list[str]:
     """The pre-registered phase-2 arm set: top *top_n* per mode + fixed anchors.
 
@@ -354,6 +419,33 @@ def write_report(path: Path, mode: str, deltas: pd.DataFrame, extra: dict) -> No
             _fmt_generic(sens, "binary"),
             "",
         ]
+    bands = extra.pop("_bands", None)
+    if bands is not None and not bands.empty:
+        body += ["## Cost vs vote count (does x-cal ever overtake the blend?)", ""]
+        for mode in ("region", "binary"):
+            g = bands[bands["mode"] == mode]
+            if g.empty:
+                continue
+            piv = g.pivot_table(index="schedule", columns="band", values="d_cost")
+            cnt = g.pivot_table(index="schedule", columns="band", values="n_cells")
+            order = [b for b, _lo, _hi in VOTE_BANDS if b in piv.columns]
+            piv, cnt = piv[order], cnt[order]
+            body += [
+                f"### {mode.capitalize()} voting",
+                "",
+                "`d_cost` vs the baseline within each band (negative = beats it). "
+                "Cell counts thin out in the late bands as categories exhaust their pool.",
+                "",
+                "| schedule | " + " | ".join(order) + " |",
+                "|---" * (len(order) + 1) + "|",
+            ]
+            for sched in piv.index:
+                cells = []
+                for b in order:
+                    v, n = piv.loc[sched, b], cnt.loc[sched, b]
+                    cells.append("-" if pd.isna(v) else f"{v:+.4f} ({int(n)})")
+                body.append(f"| {sched} | " + " | ".join(cells) + " |")
+            body.append("")
     decomp = extra.pop("_decomposition", None)
     if decomp is not None and not decomp.empty:
         body += [
@@ -454,6 +546,10 @@ def main(argv: list[str] | None = None) -> int:
         if not decomp.empty:
             decomp.to_csv(results / "ab_decomposition.csv", index=False)
             extra["_decomposition"] = decomp
+        bands = band_curve(df)
+        if not bands.empty:
+            bands.to_csv(results / "ab_bands.csv", index=False)
+            extra["_bands"] = bands
         past = past_ramp_effect(df)
         if not past.empty:
             past.to_csv(results / "ab_past_ramp.csv", index=False)

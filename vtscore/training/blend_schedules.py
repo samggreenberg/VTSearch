@@ -179,6 +179,41 @@ _SHAPES: dict[str, Callable[[float], float]] = {
 
 
 @dataclass(frozen=True)
+class CappedThenReleaseSchedule(BlendSchedule):
+    """Hold a permanent GMM share for a while, then hand over completely.
+
+    The cap family (:class:`WeightSchedule` with ``cap < 1``) never hands over,
+    which cannot be right in the limit: the GMM midpoint is an **inconsistent**
+    estimator of the decision cut - it reads no labels, so its error floors out
+    at whatever its two-component symmetry assumption gets wrong, no matter how
+    much data arrives - whereas the cross-calibration cut is consistent and
+    keeps tightening.  Asymptotically, pure x-cal must win.
+
+    So the real question is not *whether* to hand over but *when*, and this
+    schedule makes that an arm: hold ``cap`` through the early ramp, then ramp
+    the rest of the way to full trust over ``[release_lo, release_hi]``.
+    ``cap50``'s apparent "never hand over" verdict was measured over 30 votes,
+    which never reached the regime where the handoff should pay.
+
+    The weight is the max of the two ramps, so it is monotone by construction
+    and reduces to the capped schedule below ``release_lo``.
+    """
+
+    name: str
+    description: str
+    lo: float = 6.0
+    hi: float = 20.0
+    cap: float = 0.5
+    release_lo: float = 50.0
+    release_hi: float = 200.0
+
+    def weight(self, ctx: BlendContext) -> float:
+        held = min(self.cap, _ramp(ctx.n_labels, self.lo, self.hi))
+        released = _ramp(ctx.n_labels, self.release_lo, self.release_hi)
+        return max(held, released)
+
+
+@dataclass(frozen=True)
 class CorridorSchedule(BlendSchedule):
     """Bound the x-cal cut instead of averaging it away.
 
@@ -272,6 +307,19 @@ _SCHEDULES: tuple[BlendSchedule, ...] = (
     # --- family D: never hand off completely ---
     WeightSchedule("cap80", "Production ramp, but keep 20% GMM forever", lo=6, hi=20, cap=0.8),
     WeightSchedule("cap50", "Production ramp, but keep 50% GMM forever", lo=6, hi=20, cap=0.5),
+    # --- family F: cap, then hand over (issue #2841 follow-up) ---
+    # The cap family's "never hand over" was measured over 30 votes, which never
+    # reaches the regime where the consistent estimator should overtake the
+    # inconsistent one.  These bracket the handoff point.
+    CappedThenReleaseSchedule(
+        "cap50_release_early", "Half GMM, then full x-cal over 30->100 labels", release_lo=30, release_hi=100
+    ),
+    CappedThenReleaseSchedule(
+        "cap50_release", "Half GMM, then full x-cal over 50->200 labels", release_lo=50, release_hi=200
+    ),
+    CappedThenReleaseSchedule(
+        "cap50_release_late", "Half GMM, then full x-cal over 150->400 labels", release_lo=150, release_hi=400
+    ),
     # --- family E: bound the x-cal cut instead of averaging it ---
     CorridorSchedule("corridor", "Clamp x-cal between the component means", ramped=False),
     CorridorSchedule("corridor_ramp", "Corridor opening from the midpoint over 6→20", ramped=True),

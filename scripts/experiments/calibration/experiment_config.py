@@ -104,6 +104,14 @@ def _schedule_variants() -> list[str]:
 
 SCHEDULE_VARIANTS = _schedule_variants()
 
+#: Minimum positives a category must have **in the simulation half** to be kept.
+#: A long-horizon run (#2841 follow-up: does pure x-cal ever overtake the blend?)
+#: is bounded by positives, not pool size: once autopilot has exhausted them,
+#: every further vote is a negative and the conformal positive-quantile stops
+#: improving, so the tail of the curve would measure nothing.  0 disables the
+#: filter, which is the behaviour of every run before the follow-up.
+MIN_SIM_POSITIVES = int(os.environ.get("CALIB_MIN_SIM_POSITIVES", "0"))
+
 # --- Category-selection parameters (copied from the Max-Patch runner) ---
 _MIN_CATEGORY_COUNT = int(os.environ.get("CALIB_MIN_CAT_COUNT", "20"))
 N_CATEGORIES = int(os.environ.get("CALIB_N_CATEGORIES", "6"))  # prevalence-spread count (Caltech)
