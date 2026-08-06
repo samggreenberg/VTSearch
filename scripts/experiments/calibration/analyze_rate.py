@@ -368,7 +368,9 @@ def plateau(cells: pd.DataFrame, arm_meta: pd.DataFrame, agg: Path) -> pd.DataFr
                 "plateau_lo": min(tied),
                 "plateau_hi": max(tied),
                 "n_cells": int(len(wide)),
-                "p_by_kappa": json.dumps({f"{k:g}": (None if not np.isfinite(p) else round(p, 5)) for k, p in pvals.items()}),
+                "p_by_kappa": json.dumps(
+                    {f"{k:g}": (None if not np.isfinite(p) else round(p, 5)) for k, p in pvals.items()}
+                ),
             }
         )
     out = pd.DataFrame(rows)
@@ -760,13 +762,9 @@ def main() -> int:
     summary = {
         "n_cells_files": int(v.groupby(["env", "category", "seed"], observed=True).ngroups),
         "environments": envs.to_dict("records"),
-        "pooled_deep_best": (
-            head.loc[head["d_regret"].idxmin()].to_dict() if not head.empty else None
-        ),
+        "pooled_deep_best": (head.loc[head["d_regret"].idxmin()].to_dict() if not head.empty else None),
         "plateau_pooled_deep": plats[plats["scope"] == "pooled_deep"].drop(columns=["p_by_kappa"]).to_dict("records"),
-        "per_env_deep_argmin": plats[plats["scope"] == "per_env_deep"]
-        .drop(columns=["p_by_kappa"])
-        .to_dict("records"),
+        "per_env_deep_argmin": plats[plats["scope"] == "per_env_deep"].drop(columns=["p_by_kappa"]).to_dict("records"),
     }
     (results / "rate_summary.json").write_text(json.dumps(summary, indent=2, default=str))
 
@@ -782,7 +780,10 @@ def main() -> int:
             "curve_deep": curve_deep,
             "controls": controls,
             "by_window": by_window,
-            "shipped": shipped[shipped["family"].isin(["fold_anchored", "label_anchored"]) | shipped["arm"].isin(["xcal_only", "rank_transfer", "sched:pure_gmm"])],
+            "shipped": shipped[
+                shipped["family"].isin(["fold_anchored", "label_anchored"])
+                | shipped["arm"].isin(["xcal_only", "rank_transfer", "sched:pure_gmm"])
+            ],
             "stability": stability[stability["family"].isin(["fold_anchored", "label_anchored"])]
             .groupby(["env", "family", "rule", "kappa"], observed=True)["mean_abs_dthr"]
             .mean()

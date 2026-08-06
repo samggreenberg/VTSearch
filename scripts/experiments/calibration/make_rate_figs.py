@@ -110,12 +110,11 @@ def kappa_curve_svg(curve: pd.DataFrame, plateau: pd.DataFrame) -> str:
         )
         g += step
     p.append(
-        f'<text x="14" y="{T + 4}" font-size="11.5" fill="var(--ink-sec)" text-anchor="start">'
-        f'Δ regret vs x-cal</text>'
+        f'<text x="14" y="{T + 4}" font-size="11.5" fill="var(--ink-sec)" text-anchor="start">Δ regret vs x-cal</text>'
     )
     p.append(
         f'<text x="14" y="{T + 20}" font-size="10.5" fill="var(--ink-muted)" text-anchor="start">'
-        f'(lower is better)</text>'
+        f"(lower is better)</text>"
     )
     # series
     legend_y = T + 46
@@ -130,28 +129,22 @@ def kappa_curve_svg(curve: pd.DataFrame, plateau: pd.DataFrame) -> str:
             f'stroke-linejoin="round" stroke-linecap="round"{dash}/>'
         )
         best = s.loc[s["d_regret"].idxmin()]
-        p.append(
-            f'<circle cx="{px(best.kappa):.1f}" cy="{py(best.d_regret):.1f}" r="4" fill="{colour}"/>'
-        )
+        p.append(f'<circle cx="{px(best.kappa):.1f}" cy="{py(best.d_regret):.1f}" r="4" fill="{colour}"/>')
         for r in s.itertuples():
-            p.append(
-                f'<circle cx="{px(r.kappa):.1f}" cy="{py(r.d_regret):.1f}" r="2" fill="{colour}" opacity="0.55"/>'
-            )
+            p.append(f'<circle cx="{px(r.kappa):.1f}" cy="{py(r.d_regret):.1f}" r="2" fill="{colour}" opacity="0.55"/>')
         p.append(
             f'<line x1="{W - R + 16}" y1="{legend_y - 4}" x2="{W - R + 44}" y2="{legend_y - 4}" '
             f'stroke="{colour}" stroke-width="2.2"{dash}/>'
         )
-        p.append(
-            f'<text x="{W - R + 50}" y="{legend_y}" font-size="12" fill="var(--ink-sec)">{esc(label)}</text>'
-        )
+        p.append(f'<text x="{W - R + 50}" y="{legend_y}" font-size="12" fill="var(--ink-sec)">{esc(label)}</text>')
         p.append(
             f'<text x="{W - R + 50}" y="{legend_y + 15}" font-size="11" fill="var(--ink-muted)">'
-            f'best κ={best.kappa:g} · {best.d_regret:+.4f}</text>'
+            f"best κ={best.kappa:g} · {best.d_regret:+.4f}</text>"
         )
         legend_y += 44
     return (
         f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Paired regret against pure cross-calibration '
-        f'as a function of anchor mass kappa, for the fold-anchored and label-anchored families under the '
+        f"as a function of anchor mass kappa, for the fold-anchored and label-anchored families under the "
         f'mid and rate cut rules.">' + "".join(p) + "</svg>"
     )
 
@@ -232,8 +225,8 @@ def env_small_multiples_svg(curve: pd.DataFrame, envs: pd.DataFrame) -> str:
             f'text-anchor="end">{y0 + pad:+.02f}</text>'
         )
     p.append(
-        f'<text x="8" y="14" font-size="11" fill="var(--ink-muted)">fold-anchored · rate — Δ regret vs x-cal, '
-        f'deep regime; panels ordered by fit population N</text>'
+        '<text x="8" y="14" font-size="11" fill="var(--ink-muted)">fold-anchored · mid — Δ regret vs x-cal, '
+        "deep regime; panels ordered by fit population N</text>"
     )
     return (
         f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Small multiples of the fold-anchored midpoint '
@@ -248,9 +241,7 @@ def main() -> int:
     curve = pd.read_csv(AGG / "rate_curve.csv")
     envs = pd.read_csv(AGG / "rate_environments.csv")
     deep = curve[curve["window"].str.replace("le_", "", regex=False).astype(int) >= 100]
-    per_env = (
-        deep.groupby(["env", "family", "rule", "kappa"], observed=True)["d_regret"].mean().reset_index()
-    )
+    per_env = deep.groupby(["env", "family", "rule", "kappa"], observed=True)["d_regret"].mean().reset_index()
     (OUT / "fig_kappa_curve.svg").write_text(kappa_curve_svg(pooled, plateau))
     (OUT / "fig_kappa_envs.svg").write_text(env_small_multiples_svg(per_env, envs))
     common.log(f"wrote {OUT}/fig_kappa_curve.svg and {OUT}/fig_kappa_envs.svg")
