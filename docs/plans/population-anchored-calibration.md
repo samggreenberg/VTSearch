@@ -26,8 +26,6 @@ folds.
 
 <!-- item-sep -->
 
-- [ ] #2852 — Label-anchored mixture threshold as an eval variant (Opus 4.8)
-
 <!-- item-sep -->
 
 - [ ] #2853 — Deep-vote calibration harness: checkpoints to 300+, paired
