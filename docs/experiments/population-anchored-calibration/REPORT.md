@@ -25,8 +25,8 @@ Two runs:
 > environments by `κ=0.3, mid`, and the shipped path applies to binary-voting
 > detectors, where it is *worse* than the `cap50` blend it replaced. PR #2863
 > ("delete the `safe_thresholds` setting; the fused threshold is
-> unconditional") is open and is directly contraindicated by §"Against the
-> blend that actually ships".
+> unconditional") is open and is directly contraindicated by *Against the
+> blend that actually ships*, below.
 
 Visual report with mechanism figures:
 <https://claude.ai/code/artifact/6bd39c84-5946-4dd8-ba80-334a88428920>
@@ -67,7 +67,7 @@ where the shipped path is worse than the blend it replaced.**
 
 Hypothesis verdicts at the new setting: **H1 ✓ · H2 ✓ (region) / ✗ (binary) ·
 H3 ✓ vs x-cal, ✗ vs the incumbent · H4 ✓ on binary, ✓ from 51 votes on region**
-— see §7.
+— see *Stability (H3) and the FNR budget (H4)*.
 
 ## Take-aways
 
@@ -114,9 +114,12 @@ H3 ✓ vs x-cal, ✗ vs the incumbent · H4 ✓ on binary, ✓ from 51 votes on 
   (all `inverted_means`). The fold fallback rate is **U-shaped in κ** — 0.118%
   at κ=0.01, minimum **0.059% at κ=0.5**, 0.180% at κ=3 — so the accuracy
   optimum and the numerical-stability optimum coincide.
-- **`qmedian` is still unanswered.** `calibrate_count=2` ⇒ two folds ⇒ qmean
-  and qmedian are byte-identical. Run B dropped qmedian rather than pay for a
-  duplicate arm; the question needs a folds sweep, which this run did not do.
+- **`qmedian` is now answered, and it loses.** A K=4 addendum (92 cells,
+  0 failures) un-degenerates the combine comparison that two folds made
+  impossible: `qmean` beats `qmedian` at every κ, indistinguishably at the
+  recommended κ=0.3 (p=0.90) and significantly from κ=1 up. Keep `qmean`.
+  Four folds also beat two at all 16 grid points by a uniform −0.008, but no
+  single comparison is significant and the contrast cannot be paired.
 
 ## Why this experiment exists
 
@@ -203,7 +206,7 @@ linear head, safe thresholds ON, 384 cells, 5.97M metric rows.
 | Environments | `visual_genome_m × dinov3_patch × max_patch` (region) · `visual_genome_m × siglip × whole_image` (region) · `coco_val × siglip` (binary) · `coco_val × siglip2` (binary) · `caltech101_m × siglip` (binary) · `caltech101_m × siglip_l` (binary) |
 | Anchor mass κ | 0.01 · 0.03 · 0.1 · 0.3 · 0.5 · 1 · 2 · 3 |
 | Cut rules | `mid` · `rate` |
-| Fold combine | `qmean` only (qmedian is byte-identical at 2 folds) |
+| Fold combine | `qmean` only (qmedian is byte-identical at 2 folds; the K=4 addendum below tests both) |
 | Estimators | `anchored_w{κ}_{rule}` · `fold_anchored_w{κ}_{rule}_qmean` · `rank_transfer` |
 | Controls | `xcal_only` · `pooled_mid` · counterfactual schedule rows `prod`, `slow_cap50`, `cap50`, `slow`, `pure_gmm`, `pure_xcal` |
 | Trajectory | pinned to `prod` (the 6→20 ramp), i.e. run A's trajectory generator |
@@ -435,6 +438,54 @@ deep-regime recall trade is real and small: at 201–300 votes on region voting
 the recommended arm gives up 0.027 FNR against `slow_cap50` and takes 0.058
 FPR back, for −0.031 net cost.
 
+### Fold count and the combine rule (addendum, SLURM 470106)
+
+`calibrate_count` was a hard-coded constant, which is precisely why the
+qmean/qmedian question had gone unanswered through two runs: at two folds the
+two arms are byte-identical. Making it an env knob (default unchanged) and
+re-running VG × siglip at **K=4**, 92 cells, 0 failures, answers both halves of
+the last pre-registered open item.
+
+**The combine rule barely matters, and where it does, production's `qmean`
+is right.** Paired within the K=4 run (both arms re-cut the same per-step fold
+fits, so this *is* a paired contrast), `qmean` beats `qmedian` at every κ:
+
+| κ | 0.01 | 0.1 | 0.3 | 0.5 | 1 | 2 | 3 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| qmedian − qmean (`mid`) | +0.0005 | +0.0005 | +0.0003 | +0.0002 | +0.0005 | +0.0009 | +0.0011 |
+| p | 0.48 | 0.13 | 0.90 | 0.84 | 0.033 | 0.0005 | 2e-5 |
+
+At the recommended κ=0.3 the two are indistinguishable (p=0.90); the gap only
+becomes significant at κ≥1 and grows with κ. That is the same mechanism as
+everywhere else in this report — the combine only has something to disagree
+about once the anchors have enough authority to move the per-fold cuts apart.
+**Keep `qmean`.**
+
+**More folds helps, but not measurably.** K=4 is nominally better than K=2 at
+**every one of the 16 (κ, rule) grid points**, by a very stable −0.008:
+
+| κ | 0.01 | 0.1 | 0.3 | 0.5 | 1 | 3 |
+|---|---:|---:|---:|---:|---:|---:|
+| K=4 (`mid`) | −0.0662 | −0.0709 | −0.0745 | −0.0753 | −0.0751 | −0.0725 |
+| K=2 (`mid`) | −0.0583 | −0.0630 | −0.0669 | −0.0676 | −0.0666 | −0.0634 |
+| difference | −0.0079 | −0.0079 | −0.0076 | −0.0077 | −0.0085 | −0.0092 |
+
+**But no single comparison is significant** (Mann-Whitney p = 0.14–0.34), and
+it cannot be made paired: changing K changes the splits, the per-fold models
+and therefore the trajectory, so the two runs are different experiments sharing
+a design. The uniform sign is suggestive rather than conclusive — the 16 points
+are cut from the same 268 cells and are strongly correlated, so a sign test
+over them would badly overstate the evidence. The honest summary is: **no
+detectable fold-count effect; if it is real it is worth about as much as
+getting κ right, and it costs one extra haystack scoring pass per step.**
+
+Two supporting observations from the same run. The argmin is **κ=0.5 under both
+fold counts and both rules**, with κ=0.3 and κ=1 within 0.001 of it — the
+flat-bottom finding survives the fold count, and this environment's K=2 argmin
+reproduces the main run's per-environment table exactly. And `rank_transfer`
+improves from −0.030 to −0.035 with more folds, which is what a better-pooled
+fold quantile should do.
+
 ### Estimator provenance
 
 Over 1,738,576 fold-arm rows: **99.900%** fully anchored (`fold_anchored[2/2]`),
@@ -480,10 +531,11 @@ now plants a fold fallback so the classifier is exercised.)*
   for the κ-vs-γ question and as a low-positive stress case; its per-arm
   differences are mostly inside noise and its argmins should not be read as
   optima.
-- **`qmedian` remains untested** (2 folds ⇒ identical to `qmean`), and the
-  folds ∈ {2,4} half of the pre-registered follow-up was **not** run —
-  `calibrate_count` is a fixed constant in the harness, not an env knob, and
-  changing it changes the trajectory, so it needs its own A/B.
+- **The folds addendum is one environment and an unpaired contrast.** VG ×
+  siglip only, and K=4-vs-K=2 compares two trajectories rather than two arms —
+  each run's own `Δ vs xcal_only` is what makes the comparison meaningful at
+  all, and it still has no significant cell. Treat the −0.008 as a direction,
+  not a number.
 - **Counterfactual schedule rows cannot show acquisition feedback** (#2841's
   screen caveat). The region-voting margins are threshold-rule differences on a
   `prod`-driven trajectory.
@@ -531,9 +583,13 @@ now plants a fold fallback so the classifier is exercised.)*
    fixed M, or M/n_good given the positives result — is a one-line change to
    `anchored_gmm_fit`'s caller and would plausibly recover the ~0.009 that the
    constant-κ compromise gives up at both ends.
-5. Still open from run A: `qmedian` / folds ∈ {2,4}; the MLP head; and
-   reconciling #2799's selection-feedback attribution (which stops at 30 votes)
-   with the population term still paying at 300.
+5. **`qmean` is confirmed; folds is a maybe.** The addendum closes the
+   combine question in production's favour. A properly powered folds A/B (more
+   environments, more seeds, paired seeds where possible) is worth it only if
+   −0.008 for an extra scoring pass per step looks like a good trade.
+6. Still open from run A: the MLP head, and reconciling #2799's
+   selection-feedback attribution (which stops at 30 votes) with the population
+   term still paying at 300.
 
 ## Reproduction
 
@@ -555,6 +611,11 @@ with 5.4G peak RSS. 384 cells in 1h51m wall, 0 failures.
   `cells/task_*.csv`, `figs/*.svg`.
 - Analyzers: `analyze_rate.py` (+ `selftest_analyze_rate.py`, planted-answer,
   passed before use), `make_rate_figs.py`.
+
+**Folds addendum.** Same worktree; `launch_folds_2861.sh`
+(`CALIB_CALIBRATE_COUNT=4`, VG × siglip, same κ grid, `qmean,qmedian`). Cells
+array **470106**, 92/92, 0 failures. Results
+`/exp/sgreenberg/anchor-folds-2861/results/`; analysis `analyze_folds.py`.
 
 **Run A.** Worktree `/exp/sgreenberg/projects/vts-anchored-2852` @ dev
 `0a54f0d7`, `launch_anchored.sh` knobs, prepare reused from
