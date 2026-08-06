@@ -130,6 +130,23 @@ def _fabricate(results: Path, rng: np.random.Generator) -> None:
 
                     emit("xcal_only", 0.0, 0.05)
                     emit("pooled_mid", 0.005, 0.05)
+                    # Counterfactual schedule rows: the shipped blend, planted
+                    # halfway between x-cal and the fusion arms, so the
+                    # "vs shipped schedule" table has a known answer too.
+                    for sched, edge in (("slow_cap50", -0.04), ("cap50", -0.04), ("pure_gmm", -0.03)):
+                        rows.append(
+                            {
+                                **base,
+                                "gmm_variant": "",
+                                "schedule": sched,
+                                "threshold": walk,
+                                "cost": 0.2 + xcal_regret + (edge if deep else 0.0),
+                                "regret": xcal_regret + (edge if deep else 0.0),
+                                "fpr": 0.05,
+                                "fnr": 0.12,
+                                "threshold_provenance": "gmm_blend",
+                            }
+                        )
                     emit("rank_transfer", -0.02 if deep else 0.0, 0.02)
                     for kappa in KAPPAS:
                         f = (_fold_edge(kappa) + cell_bias) if deep else 0.0
@@ -205,6 +222,14 @@ def main() -> int:
         assert set(gam["best_kappa"]) <= set(FLAT), gam.to_dict("records")
         assert gam["n_fit"].nunique() == len(ENVS), gam.to_dict("records")
         assert gam["gamma_at_ref"].max() / gam["gamma_at_ref"].min() > 3, gam.to_dict("records")
+
+        # --- vs the shipped blend, with the right control per voting mode ---
+        ship = pd.read_csv(results / "agg" / "rate_vs_shipped_schedule.csv")
+        assert set(ship["control"]) == {"sched:slow_cap50", "sched:cap50"}, set(ship["control"])
+        best = ship[ship["arm"] == f"fold_anchored_w{FLAT[0]:g}_rate_qmean"]
+        assert len(best) == len(ENVS), best.to_dict("records")
+        # planted: fusion -0.08 vs xcal, shipped blend -0.04 vs xcal
+        assert (best["d_regret"] - (-0.04)).abs().max() < 0.01, best.to_dict("records")
 
         assert (results / "REPORT_rate.md").exists()
 

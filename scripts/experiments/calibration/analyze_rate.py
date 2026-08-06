@@ -478,6 +478,51 @@ def controls_table(cells: pd.DataFrame, agg: Path) -> pd.DataFrame:
     return out
 
 
+def vs_shipped_schedule(v: pd.DataFrame, arm_meta: pd.DataFrame, agg: Path) -> pd.DataFrame:
+    """Deep paired contrast against **today's shipped blend**, per environment.
+
+    #2860 could only compare fusion to the 6->20 ramp, because PR #2849's
+    per-mode schedules (`slow_cap50` for region voting, `cap50` for binary)
+    merged after its run base.  This run scores both as counterfactual rows on
+    the same trajectory, so the comparison the earlier report had to leave open
+    is a plain paired difference here.
+
+    Caveat carried from #2841: a counterfactual schedule row re-cuts *this*
+    trajectory, so it cannot show what different acquisition would have done.
+    It bounds the threshold-rule difference, not the whole-system difference.
+    """
+    rows = []
+    for env, g in v.groupby("env", observed=True):
+        ds = env.split("/")[0]
+        control = "sched:slow_cap50" if cfg.REGION_VOTING_BY_DATASET.get(ds, False) else "sched:cap50"
+        if control not in set(g["gmm_variant"]):
+            continue
+        paired = paired_vs_control(g, control)
+        if paired.empty:
+            continue
+        cells = to_cells(paired)
+        cells = cells[cells["window"].astype(str).str.replace("le_", "", regex=False).astype(int) >= DEEP_MIN]
+        for name, k in cells.groupby("gmm_variant", observed=True):
+            rows.append(
+                {
+                    "env": env,
+                    "control": control,
+                    "arm": name,
+                    "d_regret": float(k["d_regret"].mean()),
+                    "n_cells": int(len(k)),
+                    "p": _wilcox_p(k["d_regret"].to_numpy()),
+                }
+            )
+    if not rows:
+        out = pd.DataFrame(columns=["env", "control", "arm", "d_regret", "n_cells", "p", "family", "kappa", "rule"])
+        out.to_csv(agg / "rate_vs_shipped_schedule.csv", index=False)
+        return out
+    out = pd.DataFrame(rows).merge(arm_meta.rename(columns={"gmm_variant": "arm"}), on="arm", how="left")
+    out = out.sort_values(["env", "d_regret"])
+    out.to_csv(agg / "rate_vs_shipped_schedule.csv", index=False)
+    return out
+
+
 def stability_by_kappa(v: pd.DataFrame, arm_meta: pd.DataFrame, agg: Path) -> pd.DataFrame:
     """H3 as a function of kappa: step-to-step |delta threshold| past 20 votes."""
     keys = ["env", "category", "seed", "gmm_variant"]
@@ -587,6 +632,10 @@ def write_report(results: Path, parts: dict) -> None:
         "",
         _md(parts["controls"]),
         "",
+        "## Deep paired contrast vs **today's shipped blend** (`slow_cap50` region / `cap50` binary)",
+        "",
+        _md(parts["shipped"]),
+        "",
         "## Threshold stability by kappa (|delta threshold| per step, votes > 20)",
         "",
         _md(parts["stability"]),
@@ -636,6 +685,7 @@ def main() -> int:
     plats = plateau(cells, arm_meta, agg)
     gamma = gamma_test(plats, envs, agg)
     controls = controls_table(cells, agg)
+    shipped = vs_shipped_schedule(v, arm_meta, agg)
     stability = stability_by_kappa(v, arm_meta, agg)
     fnr = fnr_by_kappa(v, arm_meta, agg)
     prov = provenance_by_kappa(v, arm_meta, agg)
@@ -665,6 +715,7 @@ def main() -> int:
             "gamma": gamma,
             "curve_deep": curve_deep,
             "controls": controls,
+            "shipped": shipped[shipped["family"].isin(["fold_anchored", "label_anchored"]) | shipped["arm"].isin(["xcal_only", "rank_transfer", "sched:pure_gmm"])],
             "stability": stability[stability["family"].isin(["fold_anchored", "label_anchored"])]
             .groupby(["env", "family", "rule", "kappa"], observed=True)["mean_abs_dthr"]
             .mean()
