@@ -156,8 +156,12 @@ oracle cut, step-to-step threshold delta, estimator path taken.
 
 <!-- item-sep -->
 
-- **Run the deep-regime sweep + write the report.** Owner-gated on compute;
-  verdict flows through the pre-registered decision rules above.
+- **Boundary sweep before adoption.** κ ∈ {0.1, 0.3, 1} × folds ∈ {2, 4},
+  fold-anchored arms only, plus the `slow_cap50` blend as a control arm: the
+  2026-08-05 run's winner (`fold_anchored κ=1 rate` — see
+  `docs/experiments/population-anchored-calibration/REPORT.md`) sits at the κ
+  grid edge, 2 folds degenerate the qmean/qmedian combine comparison, and the
+  run's blend control predates the #2841 `slow_cap50` schedule.
 
 <!-- item-sep -->
 
