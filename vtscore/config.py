@@ -382,7 +382,6 @@ class CoreConfig:
     dataset_max_age_days: int | None
 
     # Per-user settings (stored under each user's data dir)
-    safe_thresholds: bool
     calibrate_count: int
     calibration_fraction: float
     enrich_descriptions: bool

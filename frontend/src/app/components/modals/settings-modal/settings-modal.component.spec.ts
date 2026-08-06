@@ -16,7 +16,6 @@ describe('SettingsModalComponent', () => {
     theme: 'dark',
     show_animations: 'os',
     enrich_descriptions: false,
-    safe_thresholds: false,
     calibrate_count: 50,
     calibration_fraction: 0.5,
     autopilot_top_greens: 3,

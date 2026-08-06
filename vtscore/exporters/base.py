@@ -104,6 +104,15 @@ class LabelsetExporter(PluginBase):
     #: Leave empty if the exporter needs no configuration.
     fields: list[PluginField]
 
+    #: When ``True``, this exporter's :meth:`export` returns an ``"open_url"``
+    #: key and the frontend opens that URL in a new browser tab.  Declaring it
+    #: is what lets the Export modal label the button "Open in <name>" *before*
+    #: the export runs; the frontend still honours an ``open_url`` from an
+    #: exporter that leaves this ``False`` (e.g. a delivery exporter whose
+    #: remote happens to hand back a permalink), it just can't advertise it up
+    #: front.  See :meth:`export` for the response contract.
+    opens_url: bool = False
+
     def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
         """Perform the export and return a status dict.
 
@@ -132,12 +141,52 @@ class LabelsetExporter(PluginBase):
             human-readable confirmation string.  It may also carry arbitrary
             extra keys (e.g. ``"filepath"`` for file-based exporters).
 
+            Two extra keys are understood by the frontend rather than merely
+            passed through:
+
+            ``"display_results"``
+                The GUI exporter's pass-through of the results dict, rendered
+                in the Auto-Detect Results modal.
+
+            ``"open_url"``
+                An ``http(s)`` URL the browser opens in a new tab.  This is how
+                an exporter hands the user off to a third-party site that has
+                no ingest API: format the labelset into the site's own URL
+                (query string, fragment, path) and return it.  It also fits a
+                delivery exporter whose remote returns a permalink to what was
+                just uploaded.  Exporters that always return one should also
+                set :attr:`opens_url` so the button can say so beforehand.
+
+                The route re-validates the URL with
+                :func:`vtscore.security.url_validation.validate_browser_url`
+                (scheme allowlist — deliberately *not* the SSRF guard, since
+                the browser makes the request and a ``localhost`` viewer is a
+                legitimate target) and fails the export if it doesn't pass, so
+                a plugin can never push a ``javascript:`` URL to the frontend.
+
+                Anything encoded into the URL is visible to the target site and
+                lands in the user's browser history; keep it to identifiers.
+
         Raises:
             NotImplementedError: If the subclass has not implemented this.
             Exception: Any exception propagates to the route handler, which
                 returns it as a 500 JSON error.
         """
         raise NotImplementedError(f"{type(self).__name__}.export() is not implemented")
+
+    # ------------------------------------------------------------------
+    # Serialisation
+    # ------------------------------------------------------------------
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialise exporter metadata, adding the exporter-only flags.
+
+        :attr:`opens_url` rides along so ``GET /api/exporters`` tells the
+        frontend which exporters end in a new browser tab.  It is declared
+        here rather than on :class:`~vtscore.plugins.PluginBase` because no
+        other plugin kind has anywhere to open a URL.
+        """
+        return {**super().to_dict(), "opens_url": self.opens_url}
 
     # ------------------------------------------------------------------
     # CLI support

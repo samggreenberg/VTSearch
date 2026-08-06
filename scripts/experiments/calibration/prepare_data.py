@@ -148,6 +148,22 @@ def _prepare_pair(ds: str, emb_name: str, info: dict) -> None:
 
     cats = _category_counts(medias)
     selected, sel_report = cfg.select_categories(medias, cats)
+    if cfg.MIN_SIM_POSITIVES > 0:
+        # Keep only categories deep enough to sustain a long horizon.  The
+        # simulation set is SIM_FRACTION of the medias, so a category's usable
+        # positives are its count scaled by that fraction.
+        kept, dropped = [], []
+        for c in selected:
+            n_sim_pos = int(cats.get(c, 0) * cfg.SIM_FRACTION)
+            (kept if n_sim_pos >= cfg.MIN_SIM_POSITIVES else dropped).append((c, n_sim_pos))
+        sel_report["min_sim_positives"] = cfg.MIN_SIM_POSITIVES
+        sel_report["dropped_too_shallow"] = sorted(dropped, key=lambda kv: kv[1])
+        sel_report["kept_sim_positives"] = dict(sorted(kept, key=lambda kv: -kv[1]))
+        selected = sorted(c for c, _ in kept)
+        common.log(
+            f"  deep-category filter (>= {cfg.MIN_SIM_POSITIVES} sim positives): "
+            f"kept {len(kept)}, dropped {len(dropped)}"
+        )
     dim = int(len(media_embedding(next(iter(medias.values()))))) if medias else None
     n_patch = sum(1 for m in medias.values() if m.get("patch_grid") is not None)
     common.log(

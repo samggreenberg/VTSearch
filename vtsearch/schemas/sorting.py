@@ -18,9 +18,6 @@ Covers the routes in ``vtsearch/routes/sorting.py``:
 * ``GET  /api/inclusion``                     -> :class:`InclusionResponseSchema`
 * ``POST /api/inclusion``                     -> :class:`InclusionRequestSchema` ->
                                                 :class:`InclusionResponseSchema`
-* ``GET  /api/safe-thresholds``               -> :class:`SafeThresholdsResponseSchema`
-* ``POST /api/safe-thresholds``               -> :class:`SafeThresholdsRequestSchema` ->
-                                                :class:`SafeThresholdsResponseSchema`
 * ``POST /api/example-sort``                  (multipart upload) ->
                                                 :class:`SortResponseSchema`
 * ``POST /api/label-file-sort``               (multipart upload) ->
@@ -271,42 +268,6 @@ class InclusionRequestSchema(Schema):
 
 
 # ---------------------------------------------------------------------------
-# /api/safe-thresholds
-# ---------------------------------------------------------------------------
-
-
-class SafeThresholdsResponseSchema(Schema):
-    """Response for ``GET|POST /api/safe-thresholds``."""
-
-    safe_thresholds = fields.Boolean(required=True)
-
-
-def _validate_bool(value):
-    """Reject non-boolean values for boolean fields.
-
-    Restricting ``fields.Boolean.truthy / falsy`` to ``{True} / {False}``
-    isn't enough on its own; Python treats ``1 == True`` and ``0 == False``
-    when checking set membership, so numeric inputs sneak through. A
-    plain ``isinstance(value, bool)`` check is the only way to require
-    strictly-typed booleans.
-    """
-    if not isinstance(value, bool):
-        raise ValidationError("Must be a boolean.")
-
-
-class SafeThresholdsRequestSchema(Schema):
-    """Body for ``POST /api/safe-thresholds``.
-
-    Declared as ``fields.Raw`` + a custom validator to preserve the
-    pre-migration "must be a boolean" behavior; string forms
-    (``"yes"`` / ``"no"`` / ``"true"``) and numeric forms (``0`` / ``1``)
-    are rejected as 422.
-    """
-
-    safe_thresholds = fields.Raw(required=True, validate=_validate_bool)
-
-
-# ---------------------------------------------------------------------------
 # /api/label-file-sort (multipart)
 # ---------------------------------------------------------------------------
 
@@ -361,8 +322,6 @@ __all__ = [
     "LearnedSortResponseSchema",
     "LearnedSortResultQuerySchema",
     "OkResponseSchema",
-    "SafeThresholdsRequestSchema",
-    "SafeThresholdsResponseSchema",
     "SeedFromExamplesRequestSchema",
     "SeedFromExamplesResponseSchema",
     "SortPageQuerySchema",

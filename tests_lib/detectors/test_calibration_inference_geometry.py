@@ -291,7 +291,7 @@ class TestCalibrationCacheKey:
 
     def test_cached_orderings_are_not_served_across_a_geometry_change(self):
         from vtscore.state.core import DetectorContext
-        from vtscore.training.thresholds import cross_calibration_threshold_cached
+        from vtscore.training.thresholds import calibration_folds_cached
 
         rng = np.random.default_rng(12)
         X = [_unit(rng.normal(0, 1, DIM)) for _ in range(4)]
@@ -303,11 +303,10 @@ class TestCalibrationCacheKey:
         det = DetectorContext("d1")
 
         def _call(rows):
-            return cross_calibration_threshold_cached(
+            return calibration_folds_cached(
                 X,
                 y,
                 DIM,
-                0,
                 calibrate_count=1,
                 calibration_fraction=0.5,
                 hidden_dim=8,

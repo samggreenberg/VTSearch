@@ -194,10 +194,6 @@
             <input type="checkbox" [ngModel]="settings().enrich_descriptions" (ngModelChange)="onToggle('enrich_descriptions', $event)" />
             Enrich descriptions
           </label>
-          <label class="checkbox-row" title="Soften the detector's cutoff when it has only a few examples, so it's less aggressive.">
-            <input type="checkbox" [ngModel]="settings().safe_thresholds" (ngModelChange)="onToggle('safe_thresholds', $event)" />
-            Safe thresholds
-          </label>
           <div class="form-group">
             <label class="form-label" for="setting-calibrate-count" title="Number of items to check when tuning the detector's cutoff after training">Tuning count</label>
             <input id="setting-calibrate-count" type="number" class="form-input" [ngModel]="settings().calibrate_count" (ngModelChange)="onNumberChange('calibrate_count', $event)" min="0" title="Number of items to check when tuning the cutoff" />

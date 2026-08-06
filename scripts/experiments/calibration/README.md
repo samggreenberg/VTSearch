@@ -1,4 +1,4 @@
-# Calibration study runner (issues #2781, #2799)
+# Calibration study runner (issues #2781, #2799, #2836)
 
 Measures **calibration regret** — the extra `FPR + FNR` cost the trained
 (cross-calibrated conformal) threshold pays versus the *oracle* threshold for the
@@ -33,12 +33,34 @@ its own recalibrated threshold, tagged in the `pool_variant` column.
    deliverables, writes `results/summary.json`, `results/agg/*.csv`,
    `results/figures/*.png`, and a `results/REPORT.md` draft.
 
+Under `CALIB_SAFE_THRESHOLDS=1` each step also emits one row per **cut variant**
+(`gmm_variant`; `_SAFE_GMM_VARIANTS`) and a per-(step, geometry) **cut
+decomposition** frame (`_CUT_DIAGNOSTIC_COLUMNS`) to `task_<idx>__cutdiag.csv`.
+Two alternative analyzers read those: `analyze_safe.py` (the #2799 safe-on/off
+question) and `analyze_cut.py` (the #2836 question of *which* cut and *why*).
+
+`theory_bench.py` is standalone and needs no dataset: it scores the same cut
+rules against a generative model of region voting whose exact rate-optimal cut is
+computable, so it can attribute a rule's error to the loss, the fitted family, or
+the sample size. Run it with `python theory_bench.py --reps 40`.
+
 ## Running on the Grid
 
 ```bash
 cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
 bash launch_all.sh          # reuse-symlink -> prepare (GPU) -> cells -> analyze
+bash launch_safe.sh         # the #2799 safe-threshold sizing, analyze_safe.py
+bash launch_cut.sh          # the #2836 cut-rule study: theory bench + analyze_cut.py
+bash launch_anchored.sh     # the #2852 anchored-mixture study, analyze_anchored.py
 ```
+
+Both study launchers are thin wrappers over `launch_all.sh` that flip the
+pre-registered knobs and point `CALIB_EXP` somewhere the other studies' outputs
+are not.
+
+Each analyzer has a self-test that runs it on fabricated cells with a planted
+answer, so a sign error is caught before an overnight run rather than after:
+`python selftest_analyze_ab.py`, `python selftest_analyze_cut.py`.
 
 `launch_all.sh` points `VTSEARCH_DATA_DIR` at the Max-Patch datadir so the shared
 embeddings pickles and demo data are read in place (the `siglip_l` pickles land
@@ -65,3 +87,29 @@ every step then emits one extra row per safe-threshold GMM variant
 `analyze.py`. Results land under `/exp/$USER/calibration-safe`, reusing the
 shared Max-Patch pickles/crops in place. Design and pre-registered decision
 rules: `docs/plans/safe-threshold-gmm-experiment.md`.
+
+## Anchored-mixture study (issue #2852)
+
+```bash
+cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
+bash launch_anchored.sh  # safe+anchored ON, VG only, 300 votes (deep regime), 4 seeds
+```
+
+`launch_anchored.sh` additionally sets `CALIB_ANCHORED=1`: every step then
+emits one row per anchored-mixture arm — the label-anchored family
+(`anchored_w{W}_{rule}`: anchored EM on the final model's haystack scores with
+the voted items' scores clamped to their labelled component), the fold-anchored
+"cross-LabeledGMM" family (`fold_anchored_w{W}_{rule}_{combine}`: per-fold
+anchored fits on honest held-out anchors, rank-transferred back to the final
+scale), and the `rank_transfer` attribution arm — all step-paired against the
+`pooled_mid` (shipped blend) and `xcal_only` controls. The sweep grid is
+`CALIB_ANCHORED_WEIGHTS` × `CALIB_ANCHORED_RULES` ×
+`CALIB_ANCHORED_FOLD_COMBINES` (see `experiment_config.py`). Analyzer:
+`analyze_anchored.py` (H1–H4 verdicts + paired tables); self-test:
+`python selftest_analyze_anchored.py`. Results land under
+`/exp/$USER/calibration-anchored`. Design and pre-registered decision rules:
+`docs/plans/population-anchored-calibration.md`.
+
+Cost note: the fold-anchored arms score the sim set once per calibration fold
+per step (`calibrate_count=2` → two extra scoring passes); disable them with
+`CALIB_ANCHORED_FOLD_ARMS=0` for a cheap label-anchored-only run.

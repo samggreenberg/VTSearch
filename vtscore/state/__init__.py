@@ -206,8 +206,8 @@ _setting_persisters: dict[str, Callable[[Any], None]] = {}
 def register_setting_persister(key: str, fn: Callable[[Any], None]) -> None:
     """Install the persistence callback for setting *key*.
 
-    Recognised keys: ``inclusion``, ``calibrate_count``, ``calibration_fraction``,
-    ``safe_thresholds``.  Called by ``vtsearch/shim`` at app startup.
+    Recognised keys: ``inclusion``, ``calibrate_count``, ``calibration_fraction``.
+    Called by ``vtsearch/shim`` at app startup.
     """
     _setting_persisters[key] = fn
 
@@ -294,20 +294,5 @@ def set_calibration_fraction(value: float) -> None:
     """Set the calibration fraction.  Persistence delegated to the registered hook."""
     changed = value != get_calibration_fraction()
     _persist_setting("calibration_fraction", value)
-    if changed:
-        _core.invalidate_loaded_detector_models()
-
-
-def get_safe_thresholds() -> bool:
-    """Return whether safe-thresholds blending is enabled."""
-    from vtscore.config import CoreConfig
-
-    return CoreConfig.from_settings().safe_thresholds
-
-
-def set_safe_thresholds(value: bool) -> None:
-    """Set the safe-thresholds flag.  Persistence delegated to the registered hook."""
-    changed = value != get_safe_thresholds()
-    _persist_setting("safe_thresholds", value)
     if changed:
         _core.invalidate_loaded_detector_models()

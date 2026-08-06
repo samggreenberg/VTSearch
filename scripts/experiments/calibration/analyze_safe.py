@@ -59,7 +59,7 @@ def _md(df: pd.DataFrame) -> str:
 
 
 def load_cells(cells_dir: Path) -> pd.DataFrame:
-    files = sorted(p for p in cells_dir.glob("task_*.csv") if "__sweep" not in p.name)
+    files = sorted(p for p in cells_dir.glob("task_*.csv") if "__sweep" not in p.name and "__cutdiag" not in p.name)
     if not files:
         return pd.DataFrame()
     df = pd.concat([pd.read_csv(p) for p in files], ignore_index=True)

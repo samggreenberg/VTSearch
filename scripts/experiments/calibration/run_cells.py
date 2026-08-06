@@ -86,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     from vtscore.eval.patch_styles import resolve_style
     from vtscore.eval.voting_iterations import (
         _CALIBRATION_COLUMNS,
+        _CUT_DIAGNOSTIC_COLUMNS,
         _INCLUSION_SWEEP_COLUMNS,
         simulate_voting_iterations,
     )
@@ -104,12 +105,14 @@ def main(argv: list[str] | None = None) -> int:
 
     all_rows: list[dict] = []
     all_sweep: list[dict] = []
+    all_cutdiag: list[dict] = []
     for style in styles:
         seed_scores = None
         if crop_vec is not None:
             seed_scores = resolve_style(style).exemplar_sims(medias, crop_vec)
         variants = cfg.REPOOL_VARIANTS if style == cfg.REPOOL_STYLE else []
         sweep_local: list[dict] = []
+        cutdiag_local: list[dict] = []
         rows = simulate_voting_iterations(
             medias,
             target_category=cat,
@@ -131,15 +134,29 @@ def main(argv: list[str] | None = None) -> int:
             repool_topk=cfg.REPOOL_TOPK,
             inclusion_sweep_ks=cfg.INCLUSION_SWEEP_KS,
             sweep_sink=sweep_local,
+            blend_schedule=cfg.BLEND_SCHEDULE,
+            schedule_variants=cfg.SCHEDULE_VARIANTS,
+            cut_diag_sink=cutdiag_local,
+            anchored_thresholds=cfg.ANCHORED,
+            anchored_weights=cfg.ANCHORED_WEIGHTS,
+            anchored_rules=cfg.ANCHORED_RULES,
+            anchored_fold_arms=cfg.ANCHORED_FOLD_ARMS,
+            anchored_fold_combines=cfg.ANCHORED_FOLD_COMBINES,
         )
         for r in rows:
             r["embedder"] = emb
             r["exemplar_id"] = exemplar_id if exemplar_id is not None else -1
         for sr in sweep_local:
             sr["embedder"] = emb
+        for dr in cutdiag_local:
+            dr["embedder"] = emb
         all_rows.extend(rows)
         all_sweep.extend(sweep_local)
-        common.log(f"  style={style}: {len(rows)} rows, {len(sweep_local)} sweep rows")
+        all_cutdiag.extend(cutdiag_local)
+        common.log(
+            f"  style={style}: {len(rows)} rows, {len(sweep_local)} sweep rows, "
+            f"{len(cutdiag_local)} cut-diagnostic rows"
+        )
 
     outdir = common.Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
@@ -149,7 +166,14 @@ def main(argv: list[str] | None = None) -> int:
     sweep_cols = [*_INCLUSION_SWEEP_COLUMNS, "embedder"]
     sweep_out = outdir / f"task_{idx:04d}__sweep.csv"
     pd.DataFrame(all_sweep, columns=pd.Index(sweep_cols)).to_csv(sweep_out, index=False)
-    common.log(f"wrote {len(all_rows)} rows to {out} and {len(all_sweep)} sweep rows to {sweep_out}")
+    # The #2836 cut-decomposition frame (one row per step per fit geometry).
+    cutdiag_cols = [*_CUT_DIAGNOSTIC_COLUMNS, "embedder"]
+    cutdiag_out = outdir / f"task_{idx:04d}__cutdiag.csv"
+    pd.DataFrame(all_cutdiag, columns=pd.Index(cutdiag_cols)).to_csv(cutdiag_out, index=False)
+    common.log(
+        f"wrote {len(all_rows)} rows to {out}, {len(all_sweep)} sweep rows to {sweep_out}, "
+        f"and {len(all_cutdiag)} cut-diagnostic rows to {cutdiag_out}"
+    )
     return 0
 
 

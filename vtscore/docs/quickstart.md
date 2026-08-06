@@ -46,7 +46,6 @@ def _build() -> CoreConfig:
         saved_datasets_dir=DATA / "datasets",
         detectors_dir=DATA / "detectors",
         inclusion=0,
-        safe_thresholds=False,
         calibrate_count=2,
         calibration_fraction=0.5,
         enrich_descriptions=False,

@@ -5,8 +5,8 @@ autodetect-results dict and deliver it somewhere - a file on disk, an
 HTTP webhook, an email, a Holder package. Every exporter is one
 subclass of `LabelsetExporter` plus a module-level `EXPORTER` sentinel,
 discovered by the standard `vtscore.plugins` registry. The package
-ships six built-ins (`server_json_file`, `server_csv_file`, `webhook`,
-`email_smtp`, `gui`, `holder`) and external code adds more by either
+ships seven built-ins (`server_json_file`, `server_csv_file`, `webhook`,
+`email_smtp`, `gui`, `holder`, `open_url`) and external code adds more by either
 dropping a module under `vtscore/exporters/<name>/` or declaring an
 entry point in the `vtscore.exporters` group.
 
@@ -56,7 +56,7 @@ from vtscore.exporters import get_exporter, list_exporters
 
 exporter = get_exporter("server_json_file")
 print([e.name for e in list_exporters()])
-# ['email_smtp', 'gui', 'holder', 'server_csv_file', 'server_json_file', 'webhook']
+# ['email_smtp', 'gui', 'holder', 'open_url', 'server_csv_file', 'server_json_file', 'webhook']
 ```
 
 `get_exporter(name)` returns `None` when the name is unknown - it does
@@ -145,6 +145,45 @@ arbitrary extra keys (`"filepath"` for file-based exporters,
 …). The route handler renders the message back to the user; the extra
 keys are passed through unchanged.
 
+Two extra keys are *interpreted* by the frontend rather than merely
+passed through:
+
+| Key | Effect |
+|-----|--------|
+| `"display_results"` | The results dict is rendered in the Auto-Detect Results modal. Used by `gui`. |
+| `"open_url"` | An `http(s)` URL the browser opens in a new tab. |
+
+### `open_url`: handing the user off to another site
+
+An exporter can end by sending the user somewhere instead of (or as well
+as) delivering the labelset. That is how a third-party site with **no
+ingest API** receives a selection: you can't POST to it, but you can link
+into it, because its viewer takes identifiers in the query string. Format
+the labelset into that site's own URL and return it as `"open_url"`; the
+Export modal opens it in a new tab.
+
+It also fits a delivery exporter whose remote hands back a permalink to
+what was just uploaded - return the permalink and the user lands on it.
+
+Two things to know when returning one:
+
+- **Set `opens_url = True`** on the exporter class if it *always* returns
+  a URL. The flag rides `GET /api/exporters` and is what lets the button
+  read "Open Labelset in `<name>`" *before* the export runs. An
+  `open_url` from an exporter that leaves the flag `False` still opens;
+  it just can't be advertised up front.
+- **The route re-validates the URL** with
+  `vtscore.security.url_validation.validate_browser_url` and fails the
+  export (500) if it doesn't pass, so no plugin can push a `javascript:`
+  URL into the browser. That guard is a *scheme allowlist*, deliberately
+  not the `validate_url` SSRF guard: the browser makes this request, not
+  the server, so `http://localhost:9000/viewer` is a legitimate target
+  and resolving the host would buy nothing. See
+  [`security`](security.md#browser-url-validation).
+
+Whatever you encode into the URL is visible to the destination site and
+lands in the user's browser history, so keep it to identifiers.
+
 ### CLI variant
 
 `LabelsetExporter.export_cli(results, field_values)` defaults to
@@ -172,6 +211,7 @@ Field semantics - `field_type` literals, `dynamic_options`,
 | `server_json_file` | Writes a JSON file to the server filesystem | Atomic write via tmp + rename; supports `{YYYYMMDD-HHMMSS}` / `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` / `{detector_name}` / `{username}` template variables in the path; default path under `DATA_DIR` |
 | `server_csv_file` | Writes a CSV file to the server filesystem | Atomic write; auto-detects which optional clip columns (`clip_start`, `clip_end`, `clip_box`) are present; cells beginning with `=`/`+`/`-`/`@`/`\t`/`\r` are quote-prefixed to defeat formula injection |
 | `webhook` | `POST`s the results dict as JSON to a URL | Optional `Authorization` header (`password` field), 30s timeout, redirects disabled, URL validated by `vtscore.security.validate_url` (SSRF guard) |
+| `open_url` | Formats the labelset into a URL and returns it as `open_url` for the browser to open in a new tab | `opens_url = True`. No network call server-side; substitutes `{ids}` / `{count}` into a user-supplied template, URL-encoding the joined identifiers. Truncates to `max_items` (reported in the message) and refuses a URL over ~2000 characters |
 | `email_smtp` | Sends an email via direct MX delivery | Resolves the recipient domain's MX record (`dnspython`), connects on port 25, sends a multipart plain+HTML summary. Requires a sender domain you control |
 | `gui` | Displays results in the browser (GUI) or prints to stdout (CLI) | `hidden_from_picker = True`. The default exporter for the web UI's autodetect modal; in CLI mode `export_cli()` prints origin + name of each Good hit |
 | `holder` | Creates a new Holder package with Good/Bad folders | `hidden_from_picker = True` until the Holder API client lands. Only labels carrying a `contentID` (typically from a ReCaller import) are written; everything else is silently skipped |

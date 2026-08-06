@@ -379,9 +379,6 @@
             },
             "type": "object"
           },
-          "safe_thresholds": {
-            "type": "boolean"
-          },
           "saved_datasets_dir": {
             "readOnly": true,
             "type": "string"
@@ -3323,6 +3320,9 @@
           "name": {
             "type": "string"
           },
+          "opens_url": {
+            "type": "boolean"
+          },
           "ui_mode": {
             "type": "string"
           }
@@ -3334,6 +3334,7 @@
           "hidden_from_picker",
           "icon",
           "name",
+          "opens_url",
           "ui_mode"
         ],
         "type": "object"
@@ -5419,6 +5420,9 @@
           "message": {
             "type": "string"
           },
+          "open_url": {
+            "type": "string"
+          },
           "success": {
             "type": "boolean"
           }
@@ -5470,28 +5474,6 @@
         },
         "required": [
           "success"
-        ],
-        "type": "object"
-      },
-      "SafeThresholdsRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "safe_thresholds": {}
-        },
-        "required": [
-          "safe_thresholds"
-        ],
-        "type": "object"
-      },
-      "SafeThresholdsResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "safe_thresholds": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "safe_thresholds"
         ],
         "type": "object"
       },
@@ -5758,9 +5740,6 @@
           "panel_pct_right": {},
           "popup_metadata_shown": {},
           "popup_preview_size": {},
-          "safe_thresholds": {
-            "type": "boolean"
-          },
           "saved_datasets_dir": {
             "type": "string"
           },
@@ -13751,7 +13730,7 @@
     },
     "/api/find/stats": {
       "get": {
-        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and sweeps the\ncalibrated threshold across inclusion -10..10 (from the cached fold\norderings) for false-positive / false-negative counts at every cutoff.\nPure read; no new state.  See docs/plans/find-verification-workflow.md.",
+        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and sweeps the\ncalibrated threshold across inclusion -10..10 (re-cutting the cached\nestimator behind the current cutoff) for false-positive / false-negative\ncounts at every stop.\nPure read; no new state.  See docs/plans/find-verification-workflow.md.",
         "operationId": "find_stats",
         "responses": {
           "200": {
@@ -15410,65 +15389,6 @@
           }
         }
       ]
-    },
-    "/api/safe-thresholds": {
-      "get": {
-        "operationId": "get_safe_thresholds_route",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SafeThresholdsResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Get the current Safe Thresholds setting.",
-        "tags": [
-          "sorting"
-        ]
-      },
-      "post": {
-        "operationId": "set_safe_thresholds_route",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SafeThresholdsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SafeThresholdsResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Set the Safe Thresholds setting.",
-        "tags": [
-          "sorting"
-        ]
-      }
     },
     "/api/server-media-files": {
       "get": {

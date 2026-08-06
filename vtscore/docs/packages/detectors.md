@@ -140,12 +140,13 @@ every detector route:
    `calculate_cross_calibration_threshold` (respects `calibrate_count`
    and `calibration_fraction` settings).
 2. Full-data model via `train_model` (respects `inclusion`).
-3. Optional safe-threshold blend via `calculate_safe_threshold` when
-   `get_safe_thresholds()` is on and a media snapshot is provided.
+3. The fold-anchored population threshold whenever a media snapshot is
+   provided (the haystack the mixture is fitted on).  Without one, the
+   cross-calibration cut ships alone.
 
 Returns `(model, threshold)`. Today this function consults
 `vtsearch.state` to read `get_inclusion`, `get_calibrate_count`,
-`get_calibration_fraction`, and `get_safe_thresholds` - a Phase 3 seam.
+and `get_calibration_fraction` - a Phase 3 seam.
 Library consumers running outside an app should pass these via
 `CoreConfig` (the existing `state` shims read from there already).
 
@@ -170,9 +171,14 @@ The function is the per-vote hot path:
   is pooled on the fly via
   `vtscore.media.patch_embed.box_to_vote_vector` - image-level voting
   on a patch-aware media gets the same vector as in v1.
-- Below 6 labels the cross-cal trainings are skipped (threshold defaults
-  to 0.5) because the safe-threshold blend would discard the result
-  anyway.
+- Where the mix-in schedule puts zero weight on the cross-cal cut (with
+  the production schedule, at 6 labels or fewer) the cross-cal trainings
+  are skipped, because the blend would discard the result anyway. The
+  condition is asked of the schedule (`xcal_is_discarded`) rather than
+  hard-coded, so changing the schedule carries its own skip. The
+  placeholder left behind is `NO_GOOD_THRESHOLD` on every path: it is
+  normally discarded, but a degenerate GMM makes the blend fall back to
+  it, and "admit nothing" is the safe reading of "never computed".
 - `_score_all_media` (line 187) takes one of two paths. Region-aware
   datasets flatten all `(media, region)` vectors into one tensor, run
   a single forward pass, and max-pool per media so the winning region
@@ -188,7 +194,6 @@ results, threshold, model = train_and_score(
     good_votes={1: None, 5: None},
     bad_votes={2: None, 7: None},
     inclusion_value=0,
-    safe_thresholds=False,
     calibrate_count=2,
     calibration_fraction=0.5,
 )

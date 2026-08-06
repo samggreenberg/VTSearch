@@ -193,12 +193,19 @@ It biases the BCE loss toward predicting more positives (positive
 +10]`; 0 means class-balanced. Each step doubles the class weight in
 that direction.
 
-### What's the "safe threshold" mode?
+### How is the decision threshold chosen?
 
-When `safe_thresholds=True`, the library blends the cross-calibration
-threshold with a more conservative GMM-derived fallback. Useful when
-you're scoring noisy data and would rather miss a hit than over-include
-false positives. See `vtscore/training/thresholds.py:calculate_safe_threshold`.
+By fusing the labels with the haystack's own score distribution rather
+than picking between them. Per calibration fold, a 2-component mixture
+is fitted to that fold model's scores over the whole collection with the
+fold's *held-out* votes clamped to their labeled component; each fold's
+midpoint cut is carried to the final model as a quantile and the
+folds are averaged in quantile space. See
+`vtscore/training/thresholds.py:fold_anchored_gmm_threshold`. It is
+unconditional - there used to be a `safe_thresholds` toggle, but the
+fused estimator measured better at every label count, so the toggle was
+removed. `calculate_safe_threshold` remains the fallback for label sets
+too small to form calibration folds.
 
 ### Why is `train_and_threshold` calling `vtsearch.state`?
 

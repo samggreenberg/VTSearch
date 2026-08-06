@@ -178,6 +178,11 @@ max-complexity = 10
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
+# Ruff >= 0.16 format-checks fenced code blocks inside Markdown by default,
+# which flags ~41 docs files whose snippets are display prose (aligned
+# comments, elided bodies), not runnable modules. Keep the format gate
+# scoped to real Python sources.
+exclude = ["*.md"]
 
 [tool.deptry]
 # scripts/ and tests/ pull in dev-only deps; data/ and frontend/ aren't Python.

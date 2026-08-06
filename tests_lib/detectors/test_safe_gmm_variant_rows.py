@@ -1,12 +1,16 @@
-"""Tests for the safe-threshold GMM variant rows in the eval harness (issue #2799).
+"""Tests for the safe-threshold cut variant rows in the eval harness (#2799, #2836).
 
 With ``safe_thresholds=True`` and ``emit_calibration_metrics=True`` the harness
-emits one extra metric row per GMM variant at every trainable step - the #2799
-measurement arms.  The load-bearing invariant is that the ``pooled_mid``
-variant (pooled fit, midpoint-of-means, sigmoid space - i.e. exactly what
-production computes since the #2833 revert) reproduces the base row's blended
-threshold bit-for-bit, so the study measures the shipped code and every other
-variant differs from it along exactly one named axis.
+emits one extra metric row per cut variant at every trainable step - the #2799
+and #2836 measurement arms - plus a per-(step, geometry) decomposition frame
+into ``cut_diag_sink``.  The load-bearing invariant is that the arm at the
+*production* estimator settings reproduces the base row's threshold
+bit-for-bit, so the study measures the shipped code and every other variant
+differs from it along exactly one named axis.  Since the population-anchored
+adoption that arm is the fold-anchored fit at the shipped constants
+(:data:`~vtscore.training.thresholds.FOLD_ANCHOR_WEIGHT` etc., today κ=0.3 with
+the midpoint cut and the quantile mean); the ``pooled_*`` family now measures
+the retired schedule blend.
 """
 
 from __future__ import annotations
@@ -15,17 +19,24 @@ import numpy as np
 
 from vtscore.eval.voting_iterations import (
     _CALIBRATION_COLUMNS,
+    _CUT_DIAGNOSTIC_COLUMNS,
+    _ORACLE_VARIANTS,
     _SAFE_GMM_VARIANTS,
     simulate_voting_iterations,
 )
+from vtscore.training.thresholds import FOLD_ANCHOR_COMBINE, FOLD_ANCHOR_CUT_RULE, FOLD_ANCHOR_WEIGHT
 
 # Reuse the synthetic planted-patch dataset builders from the Max-Patch tests.
 from .test_max_patch_style import _planted_dataset
 
-_VARIANT_NAMES = {name for name, _fit, _cut, _space in _SAFE_GMM_VARIANTS}
+_VARIANT_NAMES = {name for name, _fit, _rule in _SAFE_GMM_VARIANTS}
+#: Variants that must appear at every trainable step.  The label-reading
+#: diagnostics may legitimately have no cut on a given fit (no root, or a step
+#: with one class in the sim set) and are emitted only when they do.
+_ALWAYS_EMITTED = _VARIANT_NAMES - set(_ORACLE_VARIANTS)
 
 
-def _run_safe(style, seed=0, max_steps=16):
+def _run_safe(style, seed=0, max_steps=16, diag_sink=None, **kw):
     medias, _ = _planted_dataset(n_per_cat=40, seed=seed)
     return simulate_voting_iterations(
         medias,
@@ -38,6 +49,8 @@ def _run_safe(style, seed=0, max_steps=16):
         max_steps=max_steps,
         style=style,
         emit_calibration_metrics=True,
+        cut_diag_sink=diag_sink,
+        **kw,
     )
 
 
@@ -49,7 +62,8 @@ class TestSafeGmmVariantRows:
         for r in rows:
             by_step.setdefault(r["t"], set()).add(r["gmm_variant"])
         for variants_at_t in by_step.values():
-            assert variants_at_t == {"", *_VARIANT_NAMES}
+            assert _ALWAYS_EMITTED | {""} <= variants_at_t
+            assert variants_at_t <= {"", *_VARIANT_NAMES}
 
     def test_columns_and_tags(self):
         rows = _run_safe("max_patch")
@@ -58,22 +72,42 @@ class TestSafeGmmVariantRows:
         base = [r for r in rows if r["gmm_variant"] == ""]
         variant = [r for r in rows if r["gmm_variant"] != ""]
         assert base and variant
-        # The production operating point is the base row; its provenance is the
-        # blend tag, and it records the pre-blend conformal cut alongside.
+        # The production operating point is the base row; its provenance names
+        # the shipped estimator (the fold-anchored fit, or the blend fallback
+        # when no fold produced one), and it records the pre-fusion conformal
+        # cut alongside.
         for r in base:
-            assert r["threshold_provenance"] == "gmm_blend"
+            assert r["threshold_provenance"].startswith("fold_anchored[") or r["threshold_provenance"] == "gmm_blend"
             assert np.isfinite(r["xcal_threshold"])
         for r in variant:
             assert r["pool_variant"] == "max"
             assert 0.0 <= r["blend_weight"] <= 1.0 or np.isnan(r["blend_weight"])
 
-    def test_pooled_mid_reproduces_production_blend(self):
-        rows = _run_safe("max_patch")
+    def test_production_anchored_arm_reproduces_the_shipped_threshold(self):
+        """The harness must not deviate from the app at the shipped settings.
+
+        The arm named by the ``FOLD_ANCHOR_*`` constants *is* the production
+        estimator, so its threshold has to equal the base row's - the value the
+        step actually shipped - at every step.  Reading the arm's settings off
+        those constants rather than restating them is what keeps this honest
+        when the shipped operating point moves (κ=1/``rate`` → κ=0.3/``mid``).
+        """
+        rows = _run_safe(
+            "max_patch",
+            anchored_thresholds=True,
+            anchored_weights=[FOLD_ANCHOR_WEIGHT],
+            anchored_rules=[FOLD_ANCHOR_CUT_RULE],
+            anchored_fold_combines=[FOLD_ANCHOR_COMBINE],
+        )
+        arm_name = f"fold_anchored_w{FOLD_ANCHOR_WEIGHT:g}_{FOLD_ANCHOR_CUT_RULE}_{FOLD_ANCHOR_COMBINE}"
         base = {r["t"]: r for r in rows if r["gmm_variant"] == ""}
-        pm = {r["t"]: r for r in rows if r["gmm_variant"] == "pooled_mid"}
-        assert set(base) == set(pm)
-        for t, b in base.items():
-            assert pm[t]["threshold"] == b["threshold"], f"step {t}: variant diverged from production"
+        prod = {r["t"]: r for r in rows if r["gmm_variant"] == arm_name}
+        assert prod, "the production anchored arm emitted no rows"
+        for t, arm in prod.items():
+            if base[t]["threshold_provenance"] == "gmm_blend":
+                continue  # the step fell back to the blend; the arm is not it
+            assert arm["threshold"] == base[t]["threshold"], f"step {t}: harness diverged from the app"
+            assert arm["threshold_provenance"] == base[t]["threshold_provenance"]
 
     def test_xcal_only_is_the_unblended_cut(self):
         rows = _run_safe("max_patch")
@@ -110,6 +144,7 @@ class TestSafeGmmVariantRows:
         for variants in by_step.values():
             assert variants["image_mid"]["gmm_cut"] == variants["pooled_mid"]["gmm_cut"]
             assert variants["image_cross"]["gmm_cut"] == variants["pooled_cross"]["gmm_cut"]
+            assert variants["image_priorfree"]["gmm_cut"] == variants["pooled_priorfree"]["gmm_cut"]
 
     def test_no_variant_rows_without_safe_thresholds(self):
         medias, _ = _planted_dataset(n_per_cat=40, seed=0)
@@ -129,3 +164,41 @@ class TestSafeGmmVariantRows:
         assert all(r["gmm_variant"] == "" for r in rows)
         # Without the blend the recorded xcal threshold is the threshold itself.
         assert all(r["xcal_threshold"] == r["threshold"] for r in rows)
+
+
+class TestCutDiagnosticFrame:
+    """The #2836 decomposition side frame."""
+
+    def test_one_row_per_step_per_geometry_with_the_declared_columns(self):
+        diag: list[dict] = []
+        rows = _run_safe("max_patch", diag_sink=diag)
+        assert diag, "no cut-diagnostic rows produced"
+        steps = {r["t"] for r in rows if r["gmm_variant"] == ""}
+        for t in steps:
+            assert {d["geometry"] for d in diag if d["t"] == t} == {"pooled", "image"}
+        for d in diag:
+            assert set(_CUT_DIAGNOSTIC_COLUMNS).issubset(d.keys())
+
+    def test_cuts_agree_with_the_variant_rows(self):
+        """The frame is a second view of the same fit, not a second fit."""
+        diag: list[dict] = []
+        rows = _run_safe("max_patch", diag_sink=diag)
+        pooled = {d["t"]: d for d in diag if d["geometry"] == "pooled"}
+        for r in rows:
+            if r["gmm_variant"] not in ("pooled_mid", "pooled_cross", "pooled_priorfree"):
+                continue
+            rule = r["gmm_variant"].removeprefix("pooled_")
+            if r["cut_fallback"]:
+                continue  # the row reports the midpoint it fell back to
+            assert r["gmm_cut"] == pooled[r["t"]][f"tau_{rule}"]
+
+    def test_prevalence_is_a_fraction(self):
+        diag: list[dict] = []
+        _run_safe("max_patch", diag_sink=diag)
+        for d in diag:
+            assert 0.0 <= d["sim_prevalence"] <= 1.0
+            assert d["sim_n"] > 0
+
+    def test_no_diagnostic_rows_without_a_sink(self):
+        rows = _run_safe("max_patch")
+        assert rows  # the run still works with cut_diag_sink=None

@@ -86,21 +86,6 @@ describe('SortingApiService', () => {
     req.flush({ inclusion: 5 });
   });
 
-  it('getSafeThresholds should GET', () => {
-    service.getSafeThresholds().subscribe(data => expect(data.safe_thresholds).toBe(true));
-    const req = httpMock.expectOne('/api/safe-thresholds');
-    expect(req.request.method).toBe('GET');
-    req.flush({ safe_thresholds: true });
-  });
-
-  it('setSafeThresholds should POST', () => {
-    service.setSafeThresholds(false).subscribe();
-    const req = httpMock.expectOne('/api/safe-thresholds');
-    expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({ safe_thresholds: false });
-    req.flush({ safe_thresholds: false });
-  });
-
   it('exportLabels should GET', () => {
     service.exportLabels().subscribe(data => expect(data.labels).toBeDefined());
     const req = httpMock.expectOne('/api/labels/export');

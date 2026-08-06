@@ -29,12 +29,21 @@ DATASETS = os.environ.get("CALIB_DATASETS", "visual_genome_m,caltech101_m").spli
 DATASET_EMBEDDERS: dict[str, list[str]] = {
     "visual_genome_m": os.environ.get("CALIB_VG_EMBEDDERS", "siglip,siglip_l,dinov3_patch").split(","),
     "caltech101_m": os.environ.get("CALIB_CALTECH_EMBEDDERS", "siglip,siglip_l").split(","),
+    # COCO-2017-val, assembled from the #2790 sweep cache by
+    # ``build_coco_pickle.py`` (issue #2841).  Whole-image embedders only: that
+    # cache holds each image's whole vector and its HAC region vectors but not
+    # the raw patch grid, so no region-voting style can be built from it.
+    "coco_val": os.environ.get("CALIB_COCO_EMBEDDERS", "siglip,siglip2").split(","),
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
+#: COCO *is* boxed, but its cached vectors cannot feed a patch style (see above),
+#: so it runs as a second binary-voting dataset - which is exactly the axis
+#: #2841 asks about separately from region voting.
 REGION_VOTING_BY_DATASET: dict[str, bool] = {
     "visual_genome_m": True,
     "caltech101_m": False,
+    "coco_val": False,
 }
 
 # --- Styles per embedder kind ---
@@ -57,7 +66,12 @@ EXEMPLAR_CANDIDATES = int(os.environ.get("CALIB_EXEMPLAR_CANDIDATES", "8"))
 # --- Production-faithful fixed choices (pre-registered) ---
 INCLUSION = 0
 SIM_FRACTION = 0.5
-CALIBRATE_COUNT = 2
+#: Number of cross-calibration folds.  Production is 2, which is why it was a
+#: constant - but 2 folds make the fold-anchored ``qmean``/``qmedian`` combine
+#: arms byte-identical, so the combine question cannot be asked without moving
+#: it.  Changing this changes the *trajectory* (different splits, different
+#: per-fold models), so a folds contrast is a run-level A/B, not a paired arm.
+CALIBRATE_COUNT = int(os.environ.get("CALIB_CALIBRATE_COUNT", "2"))
 CALIBRATION_FRACTION = 0.5
 #: The #2781 study pre-registered safe_thresholds OFF (conformal path only);
 #: the #2799 safe-threshold GMM study flips this on via CALIB_SAFE_THRESHOLDS=1
@@ -65,12 +79,68 @@ CALIBRATION_FRACTION = 0.5
 SAFE_THRESHOLDS = os.environ.get("CALIB_SAFE_THRESHOLDS", "0") == "1"
 MEDIA_TYPE = "image"
 
+#: The #2852 anchored-mixture study (design + pre-registered decision rules:
+#: ``docs/plans/population-anchored-calibration.md``) flips this on via
+#: ``CALIB_ANCHORED=1``; every step then additionally emits the label-anchored,
+#: fold-anchored ("cross-LabeledGMM"), and rank-transfer arm rows.  Requires
+#: ``CALIB_SAFE_THRESHOLDS=1`` (the anchored arms ride the variant-row path).
+ANCHORED = os.environ.get("CALIB_ANCHORED", "0") == "1"
+#: Anchor-weight grid: each labelled score counts as this many haystack scores
+#: in the anchored EM.  Log-spaced from "one label = one haystack point" to
+#: "labels dominate the fit" - the fusion knob the sweep exists to place.
+ANCHORED_WEIGHTS = [float(w) for w in os.environ.get("CALIB_ANCHORED_WEIGHTS", "1,3,10,30,100").split(",") if w]
+#: Cut rules re-cutting each anchored fit: production midpoint, and the
+#: rate-optimal crossing (well-founded on an anchored fit, where the
+#: components *are* the classes - the #2836 identification term is gone).
+ANCHORED_RULES = [r for r in os.environ.get("CALIB_ANCHORED_RULES", "mid,rate").split(",") if r]
+#: Fold-anchored + rank-transfer arms cost one sim-set scoring pass per
+#: calibration fold per step; disable to keep only the cheap final-model arms.
+ANCHORED_FOLD_ARMS = os.environ.get("CALIB_ANCHORED_FOLD_ARMS", "1") == "1"
+#: How the fold arms combine per-fold cuts in quantile space.
+ANCHORED_FOLD_COMBINES = [c for c in os.environ.get("CALIB_ANCHORED_FOLD_COMBINES", "qmean,qmedian").split(",") if c]
+#: Vote-count checkpoints the anchored analyzer windows on (the plan's deep
+#: regime; each window is (previous checkpoint, checkpoint]).
+ANCHORED_CHECKPOINTS = [
+    int(c) for c in os.environ.get("CALIB_ANCHORED_CHECKPOINTS", "20,50,100,200,300").split(",") if c
+]
+
 #: Which torch head each step trains (``vtscore.eval.voting_iterations.HEADS``).
 #: #2781 ran the harness's historical auto-sized MLP; the #2799 safe-threshold
 #: study runs ``linear`` — the head the live detector actually trains since
 #: #2790/#2809 — because its question ("should safe_thresholds be forced on for
 #: every VTSearch user?") is only answerable on the shipped head.
 HEAD = os.environ.get("CALIB_HEAD", "mlp")
+
+#: Which safe-threshold mix-in schedule the run *lives* under (issue #2841).
+#: This steers the trajectory - the blended threshold feeds Autopilot's Hard
+#: pick - so an A/B between schedules needs one full run per value here.
+BLEND_SCHEDULE = os.environ.get("CALIB_BLEND_SCHEDULE") or None
+
+
+#: Extra schedules to score *counterfactually* on this run's trajectory, one
+#: metric row each (tagged ``schedule``).  Free relative to the simulation, but
+#: blind to acquisition feedback - the screen, not the verdict.  ``"all"``
+#: expands to the whole registry.
+def _schedule_variants() -> list[str]:
+    raw = os.environ.get("CALIB_SCHEDULE_VARIANTS", "").strip()
+    if not raw:
+        return []
+    if raw == "all":
+        from vtscore.training.blend_schedules import schedule_names  # noqa: PLC0415
+
+        return schedule_names()
+    return [s.strip() for s in raw.split(",") if s.strip()]
+
+
+SCHEDULE_VARIANTS = _schedule_variants()
+
+#: Minimum positives a category must have **in the simulation half** to be kept.
+#: A long-horizon run (#2841 follow-up: does pure x-cal ever overtake the blend?)
+#: is bounded by positives, not pool size: once autopilot has exhausted them,
+#: every further vote is a negative and the conformal positive-quantile stops
+#: improving, so the tail of the curve would measure nothing.  0 disables the
+#: filter, which is the behaviour of every run before the follow-up.
+MIN_SIM_POSITIVES = int(os.environ.get("CALIB_MIN_SIM_POSITIVES", "0"))
 
 # --- Category-selection parameters (copied from the Max-Patch runner) ---
 _MIN_CATEGORY_COUNT = int(os.environ.get("CALIB_MIN_CAT_COUNT", "20"))

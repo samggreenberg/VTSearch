@@ -793,16 +793,27 @@ class DetectorContext:
         "cached_labelset_media_type",  # str
         # Sync source
         "labelset_source",  # dict | None: {"source_name": "...", "field_values": {...}}
-        # Calibration fold-orderings cache.  Holds ``(key, (orderings,
-        # fallback))`` where *key* is a deterministic fingerprint of the
+        # Calibration folds cache.  Holds ``(key, CalibrationFolds)`` where
+        # *key* is a deterministic fingerprint of the
         # **inclusion-independent** calibration inputs (training vectors,
-        # labels, calibrate_count, calibration_fraction, hidden_dim) and
-        # *orderings* are the per-fold held-out ``(scores, labels)``.  Because
+        # labels, calibrate_count, calibration_fraction, hidden_dim) and the
+        # payload carries the per-fold held-out ``(scores, labels)``, the
+        # fallback sentinel, and the trained fold models.  Because
         # inclusion is deliberately absent from *key*, an Inclusion change hits
         # the cache and only re-runs the cheap quantile rule (no fold refit);
         # a label/embedder change rotates *key* and falls through to a fresh
         # calibration.  See docs/plans/find-verification-workflow.md.
-        "calibration_cache",  # tuple[Any, tuple[list, float | None]] | None
+        "calibration_cache",  # tuple[Any, CalibrationFolds] | None
+        # The fold-anchored population estimator behind the current threshold
+        # (``FoldAnchoredCut``), or None when the estimator degenerated.  Under
+        # the shipped midpoint cut re-cutting it is inclusion-independent (see
+        # ``FOLD_ANCHOR_CUT_RULE`` and issue #2865), but it is still the
+        # estimator to re-cut.  Written on every retrain that computes a safe
+        # threshold; read by ``recompute_detector_thresholds_for_inclusion``
+        # and the Find Stats sweep so both re-cut the *shipped* estimator
+        # instead of the raw cross-calibration one.  Holds fitted Gaussians and
+        # sorted score samples - process-scoped, never serialised.
+        "anchored_cut_cache",  # FoldAnchoredCut | None
     )
 
     def __init__(
@@ -868,7 +879,8 @@ class DetectorContext:
         self.cached_labelset_media_type: str = ""
         # Sync source
         self.labelset_source: dict[str, Any] | None = None
-        self.calibration_cache: tuple[Any, tuple[list, float | None]] | None = None
+        self.calibration_cache: tuple[Any, Any] | None = None
+        self.anchored_cut_cache: Any = None  # FoldAnchoredCut | None
 
 
 # ---------------------------------------------------------------------------
@@ -1113,6 +1125,7 @@ class _RequestMissingDetectorContext(DetectorContext):
         object.__setattr__(self, "cached_labelset_media_type", "")
         object.__setattr__(self, "labelset_source", None)
         object.__setattr__(self, "calibration_cache", None)
+        object.__setattr__(self, "anchored_cut_cache", None)
 
     def __setattr__(self, name: str, value: Any) -> None:
         raise _frozen_mutation_error("detector")
@@ -1274,7 +1287,7 @@ def invalidate_loaded_detector_models() -> None:
     """Drop the cached MLP and threshold on every loaded detector context.
 
     Called by the setters of training-relevant settings (``inclusion``,
-    ``safe_thresholds``, ``calibrate_count``, ``calibration_fraction``) so
+    ``calibrate_count``, ``calibration_fraction``) so
     the next consumer that would otherwise short-circuit on the cached
     ``det_ctx.model`` / ``det_ctx.threshold`` (``/api/find-label``,
     ``/api/find``, ``/api/auto-detect``) retrains under the new setting.
@@ -1298,34 +1311,33 @@ def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
     the next training pass computes the threshold under the new inclusion.
     See docs/plans/find-verification-workflow.md.
 
-    **Safe-threshold blend is deliberately NOT reapplied here.**  With
-    safe-thresholds on and 6 <= n < 20 labels, a *fresh* retrain stores the
-    cross-calibration cutoff blended with a GMM cutoff (see
-    :func:`vtscore.training.thresholds.calculate_safe_threshold`'s linear ramp).
-    The fold-ordering cache holds only the raw cross-calibration orderings - not
-    the GMM component - so a slide re-derives the **raw** cross-calibration
-    aggregate and drops the blend.  This is intentional (comprehensive-audit-
-    2026-07 open follow-up #1, resolved "skip blend on slides"): the slide is a
-    cheap re-threshold over cached orderings, not a re-blend, so the caller need
-    not carry the extra GMM/label-count state a faithful re-blend would require.
-    Consequences: below the ramp floor (n < 6) the cache is cleared and the
-    slide is a no-op (threshold stays the pure-GMM value), and at n >= 20 the
-    blend is already pure cross-calibration so the slide matches a fresh retrain
-    exactly; only the 6..19 window diverges, trading a small threshold shift on
-    the first slide for a stateless recompute.
+    **The safe threshold is re-derived faithfully.**  With safe thresholds on,
+    a fresh retrain stores the fold-anchored population cut
+    (:func:`vtscore.training.thresholds.fold_anchored_gmm_threshold`), and the
+    fitted estimator is parked on ``ctx.anchored_cut_cache``.  Re-cutting it at
+    a new inclusion is arithmetic on the already-fitted Gaussians, so a slide
+    reproduces exactly what a retrain at that inclusion would have stored -
+    without touching the model or re-scoring the haystack.  Detectors with no
+    anchored cut (safe thresholds off, or a degenerate fit that fell back to
+    the blend) slide on the raw cross-calibration rule over the cached fold
+    orderings, as they always have.
     """
     from vtscore.training.thresholds import threshold_from_fold_orderings
 
     with _state_lock:
         for ctx in _detector_contexts.values():
+            cut = ctx.anchored_cut_cache
+            if cut is not None:
+                ctx.threshold = cut.threshold_at(inclusion_value)
+                continue
             cache = ctx.calibration_cache
             if cache is None:
                 continue
-            orderings, fallback = cache[1]
-            if fallback is not None:
-                ctx.threshold = fallback
-            elif orderings:
-                ctx.threshold = threshold_from_fold_orderings(orderings, inclusion_value)
+            folds = cache[1]
+            if folds.fallback is not None:
+                ctx.threshold = folds.fallback
+            elif folds.orderings:
+                ctx.threshold = threshold_from_fold_orderings(folds.orderings, inclusion_value)
 
 
 # ---------------------------------------------------------------------------

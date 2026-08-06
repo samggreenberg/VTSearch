@@ -44,7 +44,6 @@ python -m vtscore.eval [OPTIONS]
 | `--plot-dir DIR` | Save visualisation PNGs to DIR | none |
 | `--no-plot` | Disable plot generation | off |
 | `--enrich-descriptions` | Use enriched (wrapper-averaged) text embeddings for text-sort | off |
-| `--safe-thresholds` | Blend cross-calibration threshold with GMM for robustness | off |
 | `--calibrate-count K` | Number of random Train/Calibrate splits for threshold calibration | `2` |
 | `--calibration-fraction F` | Fraction of training data reserved for calibration | `0.5` |
 | `--embedder NAME` | Build each demo dataset with this embedder (empty = media-type default) | `` |
@@ -61,7 +60,7 @@ python -m vtscore.eval --mode text --datasets caltech101_s caltech256_a --output
 python -m vtscore.eval --mode learned --train-fraction 0.7 --seed 123 --plot-dir eval_output
 
 # Learned sort with safe thresholds and calibration tuning
-python -m vtscore.eval --mode learned --safe-thresholds --calibrate-count 4 --plot-dir eval_output
+python -m vtscore.eval --mode learned --calibrate-count 4 --plot-dir eval_output
 
 # Region voting on Visual Genome: re-embed with a patch embedder, then have
 # each Good vote use the object's ground-truth box instead of the whole image.

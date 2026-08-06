@@ -133,7 +133,7 @@ with override_detector_context(other_ctx):
 `vtscore.config.CoreConfig` is a dataclass holding every settings knob the
 library actually reads:
 
-- ML knobs: `safe_thresholds`, `calibrate_count`, `calibration_fraction`,
+- ML knobs: `calibrate_count`, `calibration_fraction`,
   `enrich_descriptions`, `inclusion`, `autopilot_goal_diversity`.
 - Filesystem knobs: `data_dir`, `saved_datasets_dir`, `detectors_dir`.
 - Concurrency knobs: `max_concurrent_dataset_downloads`,
@@ -157,7 +157,6 @@ config = CoreConfig(
     saved_datasets_dir=Path("/var/lib/myapp/datasets"),
     detectors_dir=Path("/var/lib/myapp/detectors"),
     inclusion=0,
-    safe_thresholds=False,
     calibrate_count=2,
     calibration_fraction=0.5,
     max_concurrent_dataset_downloads=2,

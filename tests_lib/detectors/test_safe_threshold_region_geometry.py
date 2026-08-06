@@ -1,16 +1,16 @@
-"""``train_and_threshold``'s safe-threshold GMM must be fitted on inference geometry.
+"""``train_and_threshold``'s population estimator must see inference geometry.
 
-The blended threshold this function returns is later compared against the
+The safe threshold this function returns is later compared against the
 per-media scores ``score_media_with_model`` produces - which, on a patch
 dataset, are **region max-pooled** (~24 region rows collapsed to their max).
-Fitting the GMM on the one image-level vector per media instead put the fitted
+Fitting on the one image-level vector per media instead put the fitted
 component means systematically below the distribution the cut is applied to
-(the region max is >= the whole-image region's own score), biasing the midpoint
-low and over-including on region-voting detectors.
+(the region max is >= the whole-image region's own score), biasing the cut low
+and over-including on region-voting detectors.
 
-These tests pin that the GMM sees exactly the scores inference computes: the
-pooled distribution on a region dataset, and the unchanged embedding-matrix
-distribution on a plain single-vector dataset.
+These tests pin that the fold-anchored mixture is realized on exactly the
+scores inference computes: the pooled distribution on a region dataset, and the
+unchanged embedding-matrix distribution on a plain single-vector dataset.
 """
 
 from __future__ import annotations
@@ -19,8 +19,7 @@ import numpy as np
 import pytest
 import torch
 
-import vtscore.state as core_state
-import vtscore.training as training_pkg
+import vtscore.training.thresholds as thresholds_mod
 from vtscore.detectors.training import _score_all_media, train_and_threshold
 from vtscore.embedding.matrix import get_embedding_matrix_for_snap
 from vtscore.media.patch_embed import RegionVector
@@ -39,17 +38,15 @@ def _unit(vec: np.ndarray) -> np.ndarray:
 
 @pytest.fixture
 def captured_gmm_scores(monkeypatch):
-    """Turn safe-thresholds on and record the scores the GMM blend is fitted on."""
-    monkeypatch.setattr(core_state, "get_safe_thresholds", lambda: True)
-
+    """Record the final score distribution the cut is realized on."""
     seen: list[list[float]] = []
-    real = training_pkg.calculate_safe_threshold
+    real = thresholds_mod.fit_fold_anchored_cut
 
-    def _spy(xcal_threshold, all_scores, n_labels):
-        seen.append([float(s) for s in all_scores])
-        return real(xcal_threshold, all_scores, n_labels)
+    def _spy(fold_haystacks, fold_orderings, final_scores, **kwargs):
+        seen.append([float(s) for s in final_scores])
+        return real(fold_haystacks, fold_orderings, final_scores, **kwargs)
 
-    monkeypatch.setattr(training_pkg, "calculate_safe_threshold", _spy)
+    monkeypatch.setattr(thresholds_mod, "fit_fold_anchored_cut", _spy)
     return seen
 
 

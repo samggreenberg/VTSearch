@@ -76,4 +76,7 @@ it rather than re-simulating the vote order.
   thing, and weights estimated from tens of votes are high-variance. Revisit
   only if a genuinely exploitative labeling flow ships — the study's `toplist`
   arm (greedy top-of-sort, excess growing to 0.410) shows what that failure
-  looks like and would be the trigger.
+  looks like and would be the trigger. A cheaper sibling that needs no weight
+  estimation — *partitioning* calibration by recorded vote provenance — is
+  scoped and pre-registered in
+  [`provenance-partitioned-calibration.md`](provenance-partitioned-calibration.md).

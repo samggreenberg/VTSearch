@@ -227,3 +227,82 @@ class TestWebhookExporterSSRF:
                     {"url": "https://example.com/hook"},
                 )
         assert result["status_code"] == 200
+
+
+# ---------------------------------------------------------------------------
+# validate_browser_url – the scheme guard for URLs the *browser* opens
+# ---------------------------------------------------------------------------
+
+
+class TestValidateBrowserUrl:
+    """The browser-URL guard is a scheme allowlist, not an SSRF guard.
+
+    ``open_url`` is fetched by the user's browser, never by the server, so
+    private hosts are legitimate targets and resolving them would buy nothing.
+    What it must stop is a scheme that executes rather than navigates.
+    """
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "javascript:alert(1)",
+            "JavaScript:alert(1)",
+            "data:text/html,<script>alert(1)</script>",
+            "file:///etc/passwd",
+            "ftp://example.com/x",
+            "example.com/no-scheme",
+        ],
+    )
+    def test_rejects_non_http_schemes(self, url):
+        from vtscore.security.url_validation import validate_browser_url
+
+        with pytest.raises(ValueError, match="http or https"):
+            validate_browser_url(url)
+
+    def test_rejects_missing_hostname(self):
+        from vtscore.security.url_validation import validate_browser_url
+
+        with pytest.raises(ValueError, match="hostname"):
+            validate_browser_url("https:///path")
+
+    def test_rejects_empty(self):
+        from vtscore.security.url_validation import validate_browser_url
+
+        with pytest.raises(ValueError, match="empty"):
+            validate_browser_url("   ")
+
+    @pytest.mark.parametrize("url", ["https://ex ample.com/a", "https://example.com/a\nb", "https://example.com/a\tb"])
+    def test_rejects_whitespace_and_control_characters(self, url):
+        from vtscore.security.url_validation import validate_browser_url
+
+        with pytest.raises(ValueError, match="whitespace or control"):
+            validate_browser_url(url)
+
+    def test_accepts_public_https(self):
+        from vtscore.security.url_validation import validate_browser_url
+
+        assert validate_browser_url("https://example.com/r?ids=a,b") == "https://example.com/r?ids=a,b"
+
+    def test_strips_surrounding_whitespace(self):
+        from vtscore.security.url_validation import validate_browser_url
+
+        assert validate_browser_url("  https://example.com/r  ") == "https://example.com/r"
+
+    def test_allows_localhost_unlike_the_ssrf_guard(self):
+        """A local companion viewer is a legitimate target for the browser."""
+        from vtscore.security.url_validation import validate_browser_url
+
+        assert validate_browser_url("http://localhost:9000/viewer") == "http://localhost:9000/viewer"
+
+    def test_allows_private_lan_host(self):
+        from vtscore.security.url_validation import validate_browser_url
+
+        assert validate_browser_url("http://192.168.1.20/review") == "http://192.168.1.20/review"
+
+    def test_makes_no_dns_query(self):
+        """No name resolution happens — nothing here talks to the network."""
+        from vtscore.security.url_validation import validate_browser_url
+
+        with mock.patch("vtscore.security.url_validation.socket.getaddrinfo") as mock_gai:
+            validate_browser_url("https://example.com/r")
+        mock_gai.assert_not_called()

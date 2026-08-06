@@ -41,7 +41,7 @@ The library only requires explicit setup when you want to:
 
 - Read **configuration** (`CoreConfig.from_settings()`)
 - Resolve the **active context** from a request
-- **Persist** detector settings (`set_inclusion`, `set_safe_thresholds`,
+- **Persist** detector settings (`set_inclusion`, `set_calibrate_count`,
   etc.) back to your settings store
 - Register **app-side plugins** alongside the library's built-ins
 
@@ -66,7 +66,6 @@ def _build_core_config() -> CoreConfig:
         saved_datasets_dir=Path("/var/lib/myapp/data/datasets"),
         detectors_dir=Path("/var/lib/myapp/data/detectors"),
         inclusion=0,
-        safe_thresholds=False,
         calibrate_count=2,
         calibration_fraction=0.5,
         enrich_descriptions=False,
@@ -125,7 +124,7 @@ the `override_*_context()` context managers) directly.
 ### Hook 3: `register_setting_persister`
 
 The `vtscore.state` package exposes setter functions like
-`set_inclusion(value)` and `set_safe_thresholds(value)`. By default,
+`set_inclusion(value)` and `set_calibrate_count(value)`. By default,
 those update only the in-memory cache. If you want them to persist to
 your settings store, install a persister per key:
 
@@ -135,11 +134,11 @@ from vtscore.state import register_setting_persister
 def _persist_inclusion(value: int) -> None:
     my_settings_store["inclusion"] = value
 
-def _persist_safe_thresholds(value: bool) -> None:
-    my_settings_store["safe_thresholds"] = value
+def _persist_calibrate_count(value: int) -> None:
+    my_settings_store["calibrate_count"] = value
 
 register_setting_persister("inclusion", _persist_inclusion)
-register_setting_persister("safe_thresholds", _persist_safe_thresholds)
+register_setting_persister("calibrate_count", _persist_calibrate_count)
 ```
 
 If you don't install persisters, library code can still call
@@ -166,7 +165,7 @@ register_core_config_builder(lambda: CoreConfig(
     data_dir=Path("/tmp/myapp"),
     saved_datasets_dir=Path("/tmp/myapp/datasets"),
     detectors_dir=Path("/tmp/myapp/detectors"),
-    inclusion=0, safe_thresholds=False,
+    inclusion=0,
     calibrate_count=2, calibration_fraction=0.5,
     enrich_descriptions=False, autopilot_goal_diversity=0.5,
     max_concurrent_dataset_downloads=1,
@@ -211,7 +210,6 @@ register_core_config_builder(lambda: CoreConfig(
     saved_datasets_dir=settings.saved_datasets_dir,
     detectors_dir=settings.detectors_dir,
     inclusion=settings.inclusion,
-    safe_thresholds=settings.safe_thresholds,
     calibrate_count=settings.calibrate_count,
     calibration_fraction=settings.calibration_fraction,
     enrich_descriptions=settings.enrich_descriptions,
@@ -232,7 +230,7 @@ register_detector_context_resolver(
 
 # Hook 3: per-key persisters
 register_setting_persister("inclusion", lambda v: settings.update("inclusion", v))
-register_setting_persister("safe_thresholds", lambda v: settings.update("safe_thresholds", v))
+register_setting_persister("calibrate_count", lambda v: settings.update("calibrate_count", v))
 
 
 app = FastAPI()
