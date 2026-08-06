@@ -478,6 +478,39 @@ def controls_table(cells: pd.DataFrame, agg: Path) -> pd.DataFrame:
     return out
 
 
+def kappa_by_window(cells: pd.DataFrame, arm_meta: pd.DataFrame, agg: Path) -> pd.DataFrame:
+    """Argmin kappa per vote window, pooled over environments.
+
+    Worth a table of its own because the theory predicts movement: the labels'
+    share of the fit is ``gamma = kappa*n/(kappa*n+N)``, so at a fixed kappa the
+    anchors have almost no authority when n is small.  If the shallow windows
+    prefer a *larger* kappa than the deep ones, a single constant kappa is a
+    compromise between regimes rather than one right answer.
+    """
+    c = cells.merge(arm_meta, on="gmm_variant", how="left")
+    c = c[c["family"].isin(["fold_anchored", "label_anchored"])]
+    rows = []
+    for (fam, rule, window), g in c.groupby(["family", "rule", "window"], observed=True):
+        means = g.groupby("kappa", observed=True)["d_regret"].mean()
+        if means.empty:
+            continue
+        rows.append(
+            {
+                "family": fam,
+                "rule": rule,
+                "window": str(window),
+                "best_kappa": float(means.idxmin()),
+                "best_d_regret": float(means.min()),
+                "d_regret_at_1": float(means.get(1.0, np.nan)),
+                "spread": float(means.max() - means.min()),
+                "n_cells": int(g.groupby(CELL_KEYS, observed=True).ngroups),
+            }
+        )
+    out = pd.DataFrame(rows).sort_values(["family", "rule", "window"])
+    out.to_csv(agg / "rate_kappa_by_window.csv", index=False)
+    return out
+
+
 def vs_shipped_schedule(v: pd.DataFrame, arm_meta: pd.DataFrame, agg: Path) -> pd.DataFrame:
     """Deep paired contrast against **today's shipped blend**, per environment.
 
@@ -632,6 +665,10 @@ def write_report(results: Path, parts: dict) -> None:
         "",
         _md(parts["controls"]),
         "",
+        "## Argmin kappa by vote window (pooled over environments)",
+        "",
+        _md(parts["by_window"]),
+        "",
         "## Deep paired contrast vs **today's shipped blend** (`slow_cap50` region / `cap50` binary)",
         "",
         _md(parts["shipped"]),
@@ -685,6 +722,7 @@ def main() -> int:
     plats = plateau(cells, arm_meta, agg)
     gamma = gamma_test(plats, envs, agg)
     controls = controls_table(cells, agg)
+    by_window = kappa_by_window(cells, arm_meta, agg)
     shipped = vs_shipped_schedule(v, arm_meta, agg)
     stability = stability_by_kappa(v, arm_meta, agg)
     fnr = fnr_by_kappa(v, arm_meta, agg)
@@ -715,6 +753,7 @@ def main() -> int:
             "gamma": gamma,
             "curve_deep": curve_deep,
             "controls": controls,
+            "by_window": by_window,
             "shipped": shipped[shipped["family"].isin(["fold_anchored", "label_anchored"]) | shipped["arm"].isin(["xcal_only", "rank_transfer", "sched:pure_gmm"])],
             "stability": stability[stability["family"].isin(["fold_anchored", "label_anchored"])]
             .groupby(["env", "family", "rule", "kappa"], observed=True)["mean_abs_dthr"]
