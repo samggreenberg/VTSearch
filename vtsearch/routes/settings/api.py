@@ -31,7 +31,6 @@ from vtsearch.schemas.settings import AppSettingsSchema, SettingsUpdateSchema
 from vtsearch.state import (
     set_calibrate_count as _state_set_calibrate_count,
     set_calibration_fraction as _state_set_calibration_fraction,
-    set_safe_thresholds as _state_set_safe_thresholds,
 )
 
 settings_bp = Blueprint(
@@ -309,7 +308,6 @@ _CUSTOM_SETTERS: dict[str, Callable[[Any], None]] = {
 # override the plain ``settings.set_<key>`` accessor the table would
 # otherwise pick up.
 _STATE_TIER_SETTERS: dict[str, Callable[[Any], Any]] = {
-    "safe_thresholds": _state_set_safe_thresholds,
     "calibrate_count": _state_set_calibrate_count,
     "calibration_fraction": _state_set_calibration_fraction,
 }

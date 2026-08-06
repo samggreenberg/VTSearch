@@ -1,6 +1,6 @@
-"""An inclusion slide re-derives the *shipped* safe threshold, faithfully.
+"""An inclusion slide re-derives the *shipped* threshold, faithfully.
 
-With safe thresholds ON the shipped cutoff is the fold-anchored population cut
+The shipped cutoff is the fold-anchored population cut
 (``fold_anchored_gmm_threshold``), not the cross-calibration quantile.  The
 fitted estimator is parked on ``DetectorContext.anchored_cut_cache``, so
 ``recompute_detector_thresholds_for_inclusion`` can re-cut it at the new
@@ -54,9 +54,7 @@ class TestInclusionSlideRecutsTheAnchoredEstimator:
         bad = {cid: None for cid in range(504, 508)}
 
         det_ctx = DetectorContext(detector_id="det-slide-anchored", media_type="audio")
-        _results, at_zero, model = train_and_score(
-            clips, good, bad, inclusion_value=0, safe_thresholds=True, det_ctx=det_ctx
-        )
+        _results, at_zero, model = train_and_score(clips, good, bad, inclusion_value=0, det_ctx=det_ctx)
         assert model is not None
         assert det_ctx.anchored_cut_cache is not None, (
             "safe-on training must park the fitted estimator so a slide can re-cut it"
@@ -64,9 +62,7 @@ class TestInclusionSlideRecutsTheAnchoredEstimator:
 
         # What a fresh retrain at inclusion 4 stores, on its own context.
         retrained_ctx = DetectorContext(detector_id="det-slide-anchored-4", media_type="audio")
-        _r2, at_four, _m2 = train_and_score(
-            clips, good, bad, inclusion_value=4, safe_thresholds=True, det_ctx=retrained_ctx
-        )
+        _r2, at_four, _m2 = train_and_score(clips, good, bad, inclusion_value=4, det_ctx=retrained_ctx)
 
         # Drive the slide path exactly as the route does: the trained threshold
         # is stored on the (registered) context, then the slider fires recompute.
@@ -90,9 +86,7 @@ class TestInclusionSlideRecutsTheAnchoredEstimator:
         bad = {cid: None for cid in range(604, 608)}
 
         det_ctx = DetectorContext(detector_id="det-slide-monotone", media_type="audio")
-        _results, threshold, model = train_and_score(
-            clips, good, bad, inclusion_value=0, safe_thresholds=True, det_ctx=det_ctx
-        )
+        _results, threshold, model = train_and_score(clips, good, bad, inclusion_value=0, det_ctx=det_ctx)
         assert model is not None
         det_ctx.threshold = threshold
         register_detector_context(det_ctx)
@@ -103,20 +97,20 @@ class TestInclusionSlideRecutsTheAnchoredEstimator:
             seen.append(det_ctx.threshold)
         assert all(b <= a + 1e-12 for a, b in zip(seen, seen[1:], strict=False)), seen
 
-    def test_safe_off_still_slides_on_the_conformal_rule(self):
-        """No population estimator without safe thresholds: the slide falls back
-        to re-thresholding the cached fold orderings, as it always has."""
+    def test_without_an_estimator_the_slide_falls_back_to_the_conformal_rule(self):
+        """A detector whose population fit degenerated (no cached estimator)
+        still slides, by re-thresholding the cached fold orderings."""
         rng = np.random.default_rng(11)
         clips = _clips(rng, range(700, 720))
         good = {cid: None for cid in range(700, 704)}
         bad = {cid: None for cid in range(704, 708)}
 
-        det_ctx = DetectorContext(detector_id="det-slide-safe-off", media_type="audio")
-        _results, threshold, model = train_and_score(
-            clips, good, bad, inclusion_value=0, safe_thresholds=False, det_ctx=det_ctx
-        )
+        det_ctx = DetectorContext(detector_id="det-slide-no-estimator", media_type="audio")
+        _results, threshold, model = train_and_score(clips, good, bad, inclusion_value=0, det_ctx=det_ctx)
         assert model is not None
-        assert det_ctx.anchored_cut_cache is None
+        # Stand in for the degenerate-fit case, where the training pass parks
+        # no estimator and the threshold came from the fallback blend.
+        det_ctx.anchored_cut_cache = None
 
         det_ctx.threshold = threshold
         register_detector_context(det_ctx)

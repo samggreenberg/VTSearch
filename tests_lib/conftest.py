@@ -59,7 +59,6 @@ def _lib_default_core_config(_settings_path=None):
         max_concurrent_dataset_embeddings=1,
         autofind_detectors=(),
         dataset_max_age_days=None,
-        safe_thresholds=False,
         calibrate_count=10,
         calibration_fraction=0.1,
         enrich_descriptions=False,

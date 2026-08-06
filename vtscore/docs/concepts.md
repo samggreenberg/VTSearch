@@ -218,8 +218,13 @@ Thresholding (`vtscore/training/thresholds.py`):
   [-10, +10]` maps to quantiles of the calibration score distributions
   (positive values buy a smaller false-negative budget, halving per
   step; negative values walk toward only the surest matches).
-- `calculate_safe_threshold` blends in a conservative fallback when the
-  user has `safe_thresholds=True`.
+- `fold_anchored_gmm_threshold` is the shipped cut: a semi-supervised
+  mixture fitted per calibration fold on that fold model's haystack
+  scores, anchored on its held-out labels, rank-transferred back to the
+  final model's scale. Unconditional - there is no setting for it.
+- `calculate_safe_threshold` blends the conformal cut with a plain GMM
+  cut on a label-count schedule; the fallback for label sets too small
+  to form calibration folds.
 - `calculate_gmm_threshold` is a 2-component GMM midpoint, used as the
   ultimate fallback when cross-cal can't converge.
 

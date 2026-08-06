@@ -110,7 +110,6 @@ def eval_learned_sort(
     queries: list[EvalQuery],
     train_fraction: float = 0.5,
     seed: int = 42,
-    safe_thresholds: bool = False,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
     start_time: float | None = None,
@@ -132,8 +131,6 @@ def eval_learned_sort(
         queries: List of :class:`EvalQuery` (one per category to test).
         train_fraction: Fraction of medias to use for training (rest for test).
         seed: Random seed for reproducible splits.
-        safe_thresholds: When ``True``, blend the cross-calibration threshold
-            with a GMM-based threshold for robustness with small label counts.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for
@@ -201,7 +198,6 @@ def eval_learned_sort(
             medias,
             good_votes,
             bad_votes,
-            safe_thresholds=safe_thresholds,
             calibrate_count=calibrate_count,
             calibration_fraction=calibration_fraction,
             vote_region_boxes=vote_region_boxes,
@@ -239,7 +235,6 @@ def run_eval(
     train_fraction: float = 0.5,
     seed: int = 42,
     enrich: bool = False,
-    safe_thresholds: bool = False,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
     embedder_name: str = "",
@@ -260,8 +255,6 @@ def run_eval(
         seed: Random seed.
         enrich: If ``True``, use enriched (wrapper-averaged) text embeddings
             for text-sort evaluation.
-        safe_thresholds: When ``True``, blend the cross-calibration threshold
-            with a GMM-based threshold in learned-sort evaluation.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for
@@ -346,7 +339,6 @@ def run_eval(
                 queries,
                 train_fraction,
                 seed,
-                safe_thresholds=safe_thresholds,
                 calibrate_count=calibrate_count,
                 calibration_fraction=calibration_fraction,
                 start_time=start_time,

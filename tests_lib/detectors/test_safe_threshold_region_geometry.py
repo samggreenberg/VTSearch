@@ -19,7 +19,6 @@ import numpy as np
 import pytest
 import torch
 
-import vtscore.state as core_state
 import vtscore.training.thresholds as thresholds_mod
 from vtscore.detectors.training import _score_all_media, train_and_threshold
 from vtscore.embedding.matrix import get_embedding_matrix_for_snap
@@ -39,9 +38,7 @@ def _unit(vec: np.ndarray) -> np.ndarray:
 
 @pytest.fixture
 def captured_gmm_scores(monkeypatch):
-    """Turn safe-thresholds on and record the final distribution the cut lands on."""
-    monkeypatch.setattr(core_state, "get_safe_thresholds", lambda: True)
-
+    """Record the final score distribution the cut is realized on."""
     seen: list[list[float]] = []
     real = thresholds_mod.fit_fold_anchored_cut
 

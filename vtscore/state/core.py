@@ -1285,7 +1285,7 @@ def invalidate_loaded_detector_models() -> None:
     """Drop the cached MLP and threshold on every loaded detector context.
 
     Called by the setters of training-relevant settings (``inclusion``,
-    ``safe_thresholds``, ``calibrate_count``, ``calibration_fraction``) so
+    ``calibrate_count``, ``calibration_fraction``) so
     the next consumer that would otherwise short-circuit on the cached
     ``det_ctx.model`` / ``det_ctx.threshold`` (``/api/find-label``,
     ``/api/find``, ``/api/auto-detect``) retrains under the new setting.

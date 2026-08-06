@@ -60,12 +60,6 @@ class TestInvalidRequestBodies:
         resp = client.post("/api/inclusion", json={})
         assert resp.status_code == 422
 
-    def test_safe_thresholds_with_empty_json(self, client):
-        # Marshmallow-validated route: missing required ``safe_thresholds`` →
-        # 422 with the standard ``errors`` envelope.
-        resp = client.post("/api/safe-thresholds", json={})
-        assert resp.status_code == 422
-
     def test_labels_import_with_null_body(self, client):
         resp = client.post(
             "/api/labels/import",
@@ -212,19 +206,6 @@ class TestTypeMismatches:
         # too; even though ``bool`` is a subclass of ``int`` in Python,
         # strict mode treats the two as different JSON types.
         resp = client.post("/api/inclusion", json={"inclusion": True})
-        assert resp.status_code == 422
-
-    def test_safe_thresholds_string_value(self, client):
-        # Marshmallow-validated route: string-form booleans (``"yes"`` /
-        # ``"no"`` / ``"true"`` / ``"1"``) are rejected by the
-        # truthy/falsy-restricted Boolean field → 422.
-        resp = client.post("/api/safe-thresholds", json={"safe_thresholds": "yes"})
-        assert resp.status_code == 422
-
-    def test_safe_thresholds_number_value(self, client):
-        # Marshmallow-validated route: numeric ``1`` / ``0`` are rejected
-        # by the truthy/falsy-restricted Boolean field → 422.
-        resp = client.post("/api/safe-thresholds", json={"safe_thresholds": 1})
         assert resp.status_code == 422
 
     def test_settings_volume_string(self, client):

@@ -7,6 +7,13 @@ best mix-in curve.
 
 **Status: machinery built and verified; Phase 1 (screen) launching.**
 
+> **The stakes shrank.** Since the population-anchored adoption, the blend is no
+> longer the shipped combiner - the fold-anchored estimator is (see
+> [`docs/ML.md`](../ML.md)). The schedule now decides the threshold only for
+> label sets too small to form calibration folds, and there is no longer a
+> `safe_thresholds` setting to turn any of it off. Re-scope this search to that
+> window before spending more compute on it.
+
 <!-- item-sep -->
 
 ## Pre-registration (written before the screen was launched)

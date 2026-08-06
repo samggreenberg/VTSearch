@@ -169,9 +169,9 @@ data, build the synthetic `good_votes` / `bad_votes` dicts, call
 `train_and_score` from [`vtscore.detectors`](detectors.md), and
 measure accuracy / precision / recall / F1 on the held-out test set
 using the cross-calibrated threshold. Returns a list of
-`LearnedSortMetrics`. Honours `safe_thresholds`, `calibrate_count`,
-and `calibration_fraction` exactly the way the production training
-path does.
+`LearnedSortMetrics`. Honours `calibrate_count` and
+`calibration_fraction` exactly the way the production training path
+does, and takes its threshold from the same shipped estimator.
 
 ```python
 from vtscore.eval.runner import eval_text_sort, eval_learned_sort
@@ -209,7 +209,6 @@ Args:
 | `train_fraction`          | Train/test split for learned-sort (default 0.5)               |
 | `seed`                    | Random seed (default 42)                                      |
 | `enrich`                  | Use wrapper-averaged text embeddings (default False)          |
-| `safe_thresholds`         | Blend cross-cal threshold with GMM (default False)            |
 | `calibrate_count`         | Cross-cal folds (default 2)                                   |
 | `calibration_fraction`    | Cross-cal calibrate split (default 0.5)                       |
 
@@ -276,10 +275,11 @@ on (they sum to `t`). Autopilot seeds goods before bads, so the first
 scored step carries the initial goods plus a single bad; carry these
 counts through so analysis can weight rows by sample size.
 
-Honours the same threshold knobs as the runner. When
-`safe_thresholds=True`, the GMM blend uses scores over the simulation
-set only (not the test set) so test scores don't leak into
-calibration.
+Honours the same threshold knobs as the runner. The population
+estimator is fitted over the simulation set only (not the test set) so
+test scores can't leak into calibration.  `safe_thresholds` defaults to
+`True` here - matching the app, which has no switch for it - and
+`False` runs the no-fusion control arm.
 
 ### `run_voting_iterations_eval(dataset_clips, seeds, categories=None, ...)`
 
@@ -374,7 +374,6 @@ Notable flags:
 | `--train-fraction F`     | Learned-sort split ratio                                     |
 | `--seed N`               | Random seed                                                  |
 | `--enrich-descriptions`  | Wrapper-averaged text embeddings                             |
-| `--safe-thresholds`      | Blend cross-cal threshold with GMM                           |
 | `--calibrate-count K`    | Cross-cal folds                                              |
 | `--calibration-fraction F` | Cross-cal calibration split                                |
 | `--output FILE`          | Write JSON results to `FILE`                                 |
@@ -422,5 +421,5 @@ matplotlib is not in the library's core dependencies - installing
   that calls `load_demo_dataset` - programmatic consumers are
   expected to load their own data.
 - **No Flask, no settings.** Every threshold knob (`inclusion`,
-  `safe_thresholds`, `calibrate_count`, `calibration_fraction`,
-  `sim_fraction`) is a function argument, not a global lookup.
+  `calibrate_count`, `calibration_fraction`, `sim_fraction`) is a
+  function argument, not a global lookup.

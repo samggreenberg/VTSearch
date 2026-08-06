@@ -4,8 +4,8 @@ Migrated to ``flask_smorest`` so the routes are described in
 ``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
 
 Schema-level validation failures (missing required ``text`` / ``job_id`` /
-``examples`` / ``inclusion`` / ``safe_thresholds``; type-mismatched
-``inclusion`` / ``safe_thresholds`` values) surface as 422 with the
+``examples`` / ``inclusion``; type-mismatched ``inclusion``
+values) surface as 422 with the
 standard ``errors`` envelope. Handler-level rejects (empty / whitespace
 ``text``, no votes, no medias, bad files in the multipart routes, etc.)
 keep their HTTP codes (400 / 404 / 500) with the standard ``message``
@@ -45,8 +45,6 @@ from vtsearch.schemas.sorting import (
     LearnedSortResponseSchema,
     LearnedSortResultQuerySchema,
     OkResponseSchema,
-    SafeThresholdsRequestSchema,
-    SafeThresholdsResponseSchema,
     SeedFromExamplesRequestSchema,
     SeedFromExamplesResponseSchema,
     SortPageQuerySchema,
@@ -67,12 +65,10 @@ from vtsearch.state import (
     get_coverage_atlas,
     get_inclusion,
     get_learned_scores,
-    get_safe_thresholds,
     get_textsort_suggestions,
     get_vote_click_times,
     good_votes,
     set_inclusion,
-    set_safe_thresholds,
     snapshot_medias,
     vote_region_boxes,
 )
@@ -402,7 +398,6 @@ def learned_sort(body: dict):
     _validate_learned_sort_inputs(labelset, good_snapshot, bad_snapshot)
 
     inclusion_value = get_inclusion()
-    safe_thresholds_value = get_safe_thresholds()
     calibrate_count_value = get_calibrate_count()
     calibration_fraction_value = get_calibration_fraction()
     region_boxes_snapshot = dict(vote_region_boxes)
@@ -416,7 +411,6 @@ def learned_sort(body: dict):
         bad=bad_snapshot,
         region_boxes_snapshot=region_boxes_snapshot,
         inclusion_value=inclusion_value,
-        safe_thresholds_value=safe_thresholds_value,
         calibrate_count_value=calibrate_count_value,
         calibration_fraction_value=calibration_fraction_value,
     )
@@ -439,7 +433,6 @@ def learned_sort(body: dict):
             bad=bad_snapshot,
             region_boxes_snapshot=region_boxes_snapshot,
             inclusion_value=inclusion_value,
-            safe_thresholds_value=safe_thresholds_value,
             calibrate_count_value=calibrate_count_value,
             calibration_fraction_value=calibration_fraction_value,
         )
@@ -680,22 +673,6 @@ def _active_detector_threshold() -> float | None:
     if det_ctx is _empty_detector_context:
         return None
     return getattr(det_ctx, "threshold", None)
-
-
-@sorting_bp.route("/api/safe-thresholds", methods=["GET"])
-@sorting_bp.response(200, SafeThresholdsResponseSchema)
-def get_safe_thresholds_route():
-    """Get the current Safe Thresholds setting."""
-    return {"safe_thresholds": get_safe_thresholds()}
-
-
-@sorting_bp.route("/api/safe-thresholds", methods=["POST"])
-@sorting_bp.arguments(SafeThresholdsRequestSchema)
-@sorting_bp.response(200, SafeThresholdsResponseSchema)
-def set_safe_thresholds_route(body: dict):
-    """Set the Safe Thresholds setting."""
-    set_safe_thresholds(body["safe_thresholds"])
-    return {"safe_thresholds": get_safe_thresholds()}
 
 
 def _example_sort_from_paths(file_paths: list[Path]) -> tuple:

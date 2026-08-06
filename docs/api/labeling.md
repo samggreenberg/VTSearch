@@ -27,22 +27,6 @@ Value is clamped to the range -10 to +10.
 
 → `{"inclusion": 3}`
 
-### Get / set safe thresholds
-
-```
-GET /api/safe-thresholds
-```
-
-→ `{"safe_thresholds": false}`
-
-```
-POST /api/safe-thresholds
-```
-
-**Body:** `{"safe_thresholds": true}`
-
-→ `{"safe_thresholds": true}`
-
 ---
 
 ## Labeling Progress

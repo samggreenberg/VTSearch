@@ -508,8 +508,7 @@ def _no_signpost_pipeline(monkeypatch):
 def isolated_settings(tmp_path, monkeypatch):
     """Redirect both settings tiers to a temp directory for each test.
 
-    Without this, tests that write settings (inclusion, safe_thresholds,
-    volume, etc.) would mutate the shared ``data/settings.json`` and the
+    Without this, tests that write settings (inclusion, volume, etc.) would mutate the shared ``data/settings.json`` and the
     per-user files under ``data/<user>/user_settings.json``, leaking
     values into subsequent tests that lazy-load from those files.
 

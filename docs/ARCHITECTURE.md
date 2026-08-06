@@ -607,7 +607,7 @@ tiers.  **Server tier** (shared, `data/settings.json`): `saved_datasets_dir`,
 `detectors_dir`, `max_concurrent_*`, `hidden_plugins`, `semantic_only`,
 `solo_media_type`, `browse_signpost_vocab`.
 **Per-user tier** (`<user_data_dir>/user_settings.json`): everything else;
-`volume`, `theme`, `inclusion`, `enrich_descriptions`, `safe_thresholds`,
+`volume`, `theme`, `inclusion`, `enrich_descriptions`,
 `calibrate_count`, `calibration_fraction`, `audio_playing`, `show_animations`,
 `show_metadata`, `grid_icon_size_*`, `focus_mode_*`,
 `panel_pct_*`, `autopilot_*`, `settings_source`,

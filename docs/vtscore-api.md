@@ -549,13 +549,18 @@ def calculate_cross_calibration_threshold(
 ) -> float:
     """Stratified k-fold cross-validation; return the median optimal threshold."""
 
-def cross_calibration_threshold_cached(key: Hashable, *fn_args, **fn_kwargs) -> float:
-    """Memoised wrapper around calculate_cross_calibration_threshold. Used during
-    interactive sorting to avoid recomputing on every vote."""
+def calibration_folds_cached(key: Hashable, *fn_args, **fn_kwargs) -> CalibrationFolds:
+    """Memoised fold training (orderings + fold models). Used during interactive
+    sorting to avoid retraining the folds on every vote."""
+
+def fold_anchored_gmm_threshold(fold_haystack_scores, fold_anchor_orderings,
+                                final_scores, inclusion_value=0) -> tuple[float, str]:
+    """The shipped cut: per-fold semi-supervised mixtures anchored on held-out
+    labels, combined in quantile space on the final model's distribution."""
 
 def calculate_safe_threshold(scores: np.ndarray, y: np.ndarray) -> float:
-    """Blend the cross-cal threshold with a conservative fallback; used when the
-    safe_thresholds user pref is on."""
+    """Blend the cross-cal threshold with a plain GMM cut on a label-count
+    schedule; the fallback when no calibration folds can be formed."""
 ```
 
 ### SVM (prototype)
@@ -935,7 +940,7 @@ The following names appear in `vtsearch.state` today but are app-side concerns a
 
 - `medias`, `good_votes`, `bad_votes`, `label_history`, `vote_click_times`,
   `find_initial_labels`, `last_learned_scores`, `textsort_suggestions`, `inclusion`,
-  `dataset_display_name`, `safe_thresholds`, `calibrate_count`, `calibration_fraction`,
+  `dataset_display_name`, `calibrate_count`, `calibration_fraction`,
   `enrich_descriptions`; these are `_ProxyDict` / `_ProxyList` objects that read
   `flask.g`. They stay in the app as a thin shim that delegates to library contexts.
 - `autofind_detectors`, `autorun_extractors`, `autorun_localizers` and their CRUD
@@ -947,8 +952,8 @@ The following names appear in `vtsearch.state` today but are app-side concerns a
   the list of which ones to apply on load. Phase 3 wires the resolved list
   through as an explicit argument to whichever library entry point needs it.
 - `get_inclusion`, `set_inclusion`, `get_calibrate_count`, `set_calibrate_count`,
-  `get_calibration_fraction`, `set_calibration_fraction`, `get_safe_thresholds`,
-  `set_safe_thresholds`, `get_dataset_display_name`, `set_dataset_display_name`,
+  `get_calibration_fraction`, `set_calibration_fraction`,
+  `get_dataset_display_name`, `set_dataset_display_name`,
   `add_autorun_extractor`/`add_autorun_localizer` etc.; each of these wraps a
   `vtsearch.settings.get_*` / `set_*` accessor. The library never persists user prefs;
   it accepts the relevant value through a `CoreConfig` or a context field.

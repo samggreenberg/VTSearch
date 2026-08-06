@@ -16,7 +16,6 @@ GET /api/settings
   "theme": "dark",
   "inclusion": 0,
   "enrich_descriptions": false,
-  "safe_thresholds": false,
   "calibrate_count": 2,
   "calibration_fraction": 0.5,
   "audio_playing": true,
@@ -59,7 +58,7 @@ PUT /api/settings
 
 Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
 `"highviz"`), `inclusion` (int, -10 to +10), `enrich_descriptions` (bool),
-`safe_thresholds` (bool), `calibrate_count` (int), `calibration_fraction`
+`calibrate_count` (int), `calibration_fraction`
 (number), `audio_playing` (bool), `show_animations` (`"show"` / `"hide"` /
 `"os"`), `show_metadata` (bool),
 `focus_mode_left` (dict), `focus_mode_right` (dict), `grid_icon_size_left`
