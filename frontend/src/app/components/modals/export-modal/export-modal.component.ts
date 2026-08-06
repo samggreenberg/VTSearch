@@ -578,21 +578,27 @@ export class ExportModalComponent implements OnInit {
           // third-party site with no ingest API gets the selection (#2855).
           const openUrl = ExportModalComponent.safeExternalUrl(response?.open_url);
           const opened = openUrl ? this.openExternal(openUrl) : false;
+          const plural = labelCount === 1 ? '' : 's';
+
+          // Three toast shapes: opened a tab, tried and got blocked, or a
+          // plain delivery export. The popup blocker fires when the response
+          // lands outside the click's task, so say why nothing happened
+          // rather than leaving the user staring at an unchanged screen.
+          let message = `Exported ${labelCount.toLocaleString()} label${plural} to ${exporterLabel}`;
+          let detail = fieldValues['filepath'] ? `Destination: ${fieldValues['filepath']}` : undefined;
+          if (openUrl) {
+            message = opened
+              ? `Opened ${labelCount.toLocaleString()} label${plural} in ${exporterLabel}`
+              : message;
+            detail = opened ? undefined : 'Your browser blocked the new tab.';
+          }
+
           // The parent closes the modal on `exported`, so the inline status
           // above is never seen. Fire a toast that outlives the modal so the
           // user gets confirmation the export actually succeeded (issue #2217).
           this.toast.success({
-            message: opened
-              ? `Opened ${labelCount.toLocaleString()} label${labelCount === 1 ? '' : 's'} in ${exporterLabel}`
-              : `Exported ${labelCount.toLocaleString()} label${labelCount === 1 ? '' : 's'} to ${exporterLabel}`,
-            detail: openUrl
-              ? // The popup blocker fires when the response lands outside the
-                // click's task, so say why nothing happened rather than
-                // leaving the user staring at an unchanged screen.
-                (opened ? undefined : 'Your browser blocked the new tab.')
-              : fieldValues['filepath']
-                ? `Destination: ${fieldValues['filepath']}`
-                : undefined,
+            message,
+            detail,
             // The action button click *is* a user gesture, so this always gets
             // through — it doubles as the blocked-popup escape hatch and as a
             // way to reopen a tab the user closed by accident.
