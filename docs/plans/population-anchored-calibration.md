@@ -161,11 +161,15 @@ oracle cut, step-to-step threshold delta, estimator path taken.
   interior at `fold_anchored κ=0.3 mid`, and fusion beats the shipped blend on
   region voting only — see
   `docs/experiments/population-anchored-calibration/REPORT.md`. **Still open:**
-  folds ∈ {2, 4} (`calibrate_count` is a harness constant, so it needs its own
-  A/B, and it un-degenerates the qmean/qmedian comparison); a `κ ∝ 1/n`
+  a `κ ∝ 1/n`
   total-anchor-mass variant, which the per-window κ* trend (3 → 0.1 from 20 to
   300 votes) says should beat any constant; and the positive-count gate for when
-  to use fusion at all. Two of its findings are regressions against what
+  to use fusion at all. A K=4 addendum (SLURM 470106) closed the combine
+  question in production's favour — `qmean` beats `qmedian` at every κ,
+  indistinguishably at κ=0.3 — and found four folds nominally better than two
+  at all 16 grid points by −0.008, with no significant cell; `calibrate_count`
+  is now the `CALIB_CALIBRATE_COUNT` env knob (default unchanged).
+  Two of its findings are regressions against what
   PR #2861 shipped: the wrong (κ, rule) constant, and applying the fused
   threshold to binary voting where it loses to `cap50`.
 
