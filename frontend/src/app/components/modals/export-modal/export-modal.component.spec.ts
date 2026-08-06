@@ -44,7 +44,7 @@ describe('ExportModalComponent', () => {
   // `rxResource`, whose loaders run in a root effect rather than during
   // `detectChanges()`; tick to issue the GETs (the labels read also waits for
   // `ngOnInit` to set the input-derived filter), then settle before asserting.
-  async function flushInit(): Promise<void> {
+  async function flushInit(exporters: unknown[] = mockExporters): Promise<void> {
     // Zoneless + rxResource: TestBed.tick() runs ngOnInit and the resource
     // loader effects to issue the GETs. whenStable() can't be used — a loading
     // rxResource holds the app unstable — so the rxResource specs drive CD with
@@ -55,7 +55,7 @@ describe('ExportModalComponent', () => {
     // to let all three become pending before flushing.
     await settleResource();
     httpMock.expectOne('/api/dataset/status').flush({ display_name: 'My Dataset' });
-    httpMock.expectOne('/api/exporters').flush(mockExporters);
+    httpMock.expectOne('/api/exporters').flush(exporters);
     httpMock.expectOne((r) => r.url === '/api/labels/export').flush(mockLabels);
     await settleResource();
   }
@@ -157,6 +157,96 @@ describe('ExportModalComponent', () => {
     httpMock.expectOne('/api/exporters/export').flush({ success: true });
     expect(successSpy).toHaveBeenCalledTimes(1);
     expect(successSpy.mock.calls[0][0].message).toBe('Exported 2 labels to Server JSON');
+  });
+
+  // An exporter can return an `open_url` for the browser to open in a new tab,
+  // which is how a third-party site with no ingest API receives the labelset
+  // (issue #2855).
+  describe('open_url handling', () => {
+    const openUrlExporter = {
+      name: 'open_url',
+      display_name: 'Open in Website',
+      opens_url: true,
+      fields: [],
+    };
+
+    /** Stub `window.open`, returning *handle* as the opened window. */
+    function stubWindowOpen(handle: unknown) {
+      return vi.spyOn(window, 'open').mockReturnValue(handle as Window);
+    }
+
+    // `window` outlives the TestBed, so a spy left installed on it carries its
+    // call log into the next test and makes "was never called" assertions pass
+    // or fail on the previous test's calls.
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('opens the returned URL in a new tab, severing the opener handle', async () => {
+      await flushInit();
+      const openSpy = stubWindowOpen({});
+      component.startExporter(openUrlExporter as never);
+      httpMock
+        .expectOne('/api/exporters/export')
+        .flush({ success: true, open_url: 'https://example.com/r?ids=a' });
+      expect(openSpy).toHaveBeenCalledWith('https://example.com/r?ids=a', '_blank', 'noopener');
+    });
+
+    it('offers an Open action on the toast so a blocked popup is recoverable', async () => {
+      await flushInit();
+      // `window.open` returning null is what a popup blocker looks like.
+      const openSpy = stubWindowOpen(null);
+      const successSpy = vi.spyOn(TestBed.inject(ToastService), 'success');
+      component.startExporter(openUrlExporter as never);
+      httpMock
+        .expectOne('/api/exporters/export')
+        .flush({ success: true, open_url: 'https://example.com/r' });
+
+      const toast = successSpy.mock.calls[0][0];
+      expect(toast.detail).toContain('blocked');
+      expect(toast.action?.label).toBe('Open');
+      // The action's click is a real user gesture, so this one gets through.
+      openSpy.mockReturnValue({} as Window);
+      toast.action!.onClick();
+      expect(openSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('reports an opened tab rather than an export in the toast message', async () => {
+      await flushInit();
+      stubWindowOpen({});
+      const successSpy = vi.spyOn(TestBed.inject(ToastService), 'success');
+      component.labelFilter = 'good'; // two matching labels in the fixture
+      component.startExporter(openUrlExporter as never);
+      httpMock
+        .expectOne('/api/exporters/export')
+        .flush({ success: true, open_url: 'https://example.com/r' });
+      expect(successSpy.mock.calls[0][0].message).toBe('Opened 2 labels in Open in Website');
+    });
+
+    it.each(['javascript:alert(1)', 'data:text/html,x', 'file:///etc/passwd', '/relative'])(
+      'refuses to open a %s URL even if the server sent one',
+      async (url) => {
+        await flushInit();
+        const openSpy = stubWindowOpen({});
+        component.startExporter(openUrlExporter as never);
+        httpMock.expectOne('/api/exporters/export').flush({ success: true, open_url: url });
+        expect(openSpy).not.toHaveBeenCalled();
+      },
+    );
+
+    it('leaves a response without an open_url alone', async () => {
+      await flushInit();
+      const openSpy = stubWindowOpen({});
+      component.startExporter(mockExporters[0] as never);
+      httpMock.expectOne('/api/exporters/export').flush({ success: true });
+      expect(openSpy).not.toHaveBeenCalled();
+    });
+
+    it('labels the action button with the destination site', async () => {
+      await flushInit([openUrlExporter]);
+      component.selectExporterTab(openUrlExporter as never);
+      expect(component.activeTabAction).toBe('Open Labelset in Open in Website');
+    });
   });
 
   it('seeds formValues from field defaults and carries field_values on the POST', async () => {

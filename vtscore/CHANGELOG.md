@@ -10,7 +10,21 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ## [Unreleased]
 
-_No changes yet._
+### Added
+
+- **`LabelsetExporter.opens_url`** and the `"open_url"` response key - an
+  exporter can return an `http(s)` URL for the frontend to open in a new
+  browser tab, which is how a third-party site with no ingest API receives a
+  labelset. Setting `opens_url = True` advertises it on `to_dict()` so the UI
+  can label the button before the export runs.
+- **`vtscore.security.url_validation.validate_browser_url`** - scheme
+  allowlist for URLs the *user's browser* opens. Deliberately not the
+  `validate_url` SSRF guard: no server-side request is made, so private hosts
+  are legitimate targets and only the scheme is dangerous.
+- **`open_url` exporter** - formats the labelset into a user-supplied URL
+  template (`{ids}`, `{count}`), URL-encoding the joined identifiers,
+  truncating to `max_items`, and refusing a URL past the ~2000-character
+  practical limit.
 
 ## [0.1.0] - Initial release
 

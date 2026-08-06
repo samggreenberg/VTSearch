@@ -16,6 +16,8 @@ the load pipeline that calls these helpers during dataset import.
 
 - [Path validation](#path-validation)
 - [URL validation](#url-validation)
+  - [`validate_url` (SSRF guard)](#validate_url-ssrf-guard)
+  - [Browser-URL validation](#browser-url-validation)
 - [Pickle safety](#pickle-safety)
 - [Why no `find_class` shim is needed](#why-no-find_class-shim-is-needed)
 
@@ -101,8 +103,14 @@ itself - if you need it after a glob, pass each result through
 
 ## URL validation
 
-`vtscore/security/url_validation.py` exposes one function for SSRF
-protection on outbound HTTP requests:
+`vtscore/security/url_validation.py` exposes two guards. They look
+similar and defend against different things, so pick by **who makes the
+request**: `validate_url` for URLs *the server* fetches, and
+`validate_browser_url` for URLs *the user's browser* opens.
+
+### `validate_url` (SSRF guard)
+
+For SSRF protection on outbound HTTP requests:
 
 ```python
 def validate_url(url: str) -> str:
@@ -137,6 +145,43 @@ validate_url("http://169.254.169.254/latest/meta-data/") # raises ValueError
 validate_url("file:///etc/passwd")                       # raises ValueError
 validate_url("https://10.0.0.1/")                        # raises ValueError
 ```
+
+### Browser-URL validation
+
+```python
+def validate_browser_url(url: str) -> str:
+    """Raises ValueError if the URL is empty, contains whitespace or
+    control characters, uses a non-HTTP(S) scheme, or has no hostname."""
+```
+
+Used for the `open_url` an exporter can return so the frontend opens a
+third-party page in a new tab (see
+[`exporters`](exporters.md#open_url-handing-the-user-off-to-another-site)).
+
+This is deliberately **not** the SSRF guard. The fetch is made by the
+user's browser, not by us, so no server-side request exists to forge:
+resolving the hostname and refusing private IPs would block a perfectly
+reasonable `http://localhost:9000/viewer` companion app while buying no
+protection at all. What it enforces instead is the part that *is*
+dangerous once a string reaches `window.open` - the scheme. Only `http`
+and `https` pass; `javascript:`, `data:`, `file:` are rejected. Embedded
+whitespace and control characters are rejected too, since they let a URL
+render as one target while resolving to another.
+
+It makes no network call, so it is also free to run on every export.
+
+```python
+from vtscore.security.url_validation import validate_browser_url
+
+validate_browser_url("https://example.com/r?ids=a,b")  # -> original URL
+validate_browser_url("http://localhost:9000/viewer")   # -> allowed (browser-side)
+validate_browser_url("javascript:alert(1)")            # raises ValueError
+validate_browser_url("https://exa mple.com/")          # raises ValueError
+```
+
+The frontend re-checks the scheme before calling `window.open`, and
+opens with `noopener` so the destination can't navigate the VTSearch tab
+(reverse tabnabbing).
 
 **Caveat:** DNS rebinding attacks are not addressed. A hostname that
 resolves to a public IP at validation time and a private IP at fetch
