@@ -1122,6 +1122,12 @@ def validate_url(url: str) -> str:
     """SSRF guard for outbound HTTP. Rejects private IPs, link-local, and metadata
     endpoints. Returns the validated URL."""
 
+def validate_browser_url(url: str) -> str:
+    """Scheme allowlist for URLs the *user's browser* opens (an exporter's
+    `open_url`). Rejects non-HTTP(S) schemes, whitespace/control characters, and
+    missing hostnames — but not private hosts, since no server-side request is
+    made. Returns the stripped URL."""
+
 class RestrictedUnpickler(pickle.Unpickler):
     """Allowlist-based unpickler used for every untrusted pickle load."""
 

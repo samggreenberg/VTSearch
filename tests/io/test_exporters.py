@@ -954,6 +954,87 @@ def _stream_records():
     yield "dog_bark", {"id": 4, "filename": "b4.wav", "category": "c", "score": 0.2, "label": "bad"}
 
 
+class TestOpenUrlResponseKey:
+    """``open_url`` round-trips to the frontend, but only if it's openable.
+
+    The frontend hands the value to ``window.open``, so the route re-validates
+    it no matter what the plugin claims — an exporter is the one place a
+    ``javascript:`` URL could otherwise be injected into the browser.
+    """
+
+    def test_open_url_exporter_is_listed_with_the_flag(self, client):
+        entries = {e["name"]: e for e in client.get("/api/exporters").get_json()}
+        assert entries["open_url"]["opens_url"] is True
+
+    def test_other_exporters_report_the_flag_as_false(self, client):
+        entries = {e["name"]: e for e in client.get("/api/exporters").get_json()}
+        assert entries["server_json_file"]["opens_url"] is False
+
+    def test_export_returns_the_formatted_url(self, client):
+        res = client.post(
+            "/api/exporters/export",
+            json={
+                "exporter_name": "open_url",
+                "field_values": {"url_template": "https://example.com/review?ids={ids}"},
+                "results": {"labels": [{"md5": "aaa1"}, {"md5": "bbb2"}]},
+            },
+        )
+        assert res.status_code == 200
+        assert res.get_json()["open_url"] == "https://example.com/review?ids=aaa1%2Cbbb2"
+
+    def test_unusable_template_returns_400(self, client):
+        res = client.post(
+            "/api/exporters/export",
+            json={
+                "exporter_name": "open_url",
+                "field_values": {"url_template": "javascript:alert(1)"},
+                "results": {"labels": [{"md5": "aaa1"}]},
+            },
+        )
+        assert res.status_code == 400
+
+    def test_route_rejects_an_exporter_that_returns_a_javascript_url(self, client):
+        """Defence in depth: the route re-validates whatever the plugin returns."""
+        from vtscore.exporters import get_exporter
+
+        exporter = get_exporter("gui")
+        with patch.object(
+            type(exporter),
+            "export",
+            return_value={"message": "done", "open_url": "javascript:alert(1)"},
+        ):
+            res = client.post(
+                "/api/exporters/export",
+                json={"exporter_name": "gui", "field_values": {}, "results": EMPTY_RESULTS},
+            )
+        assert res.status_code == 500
+        assert "open_url" in res.get_json()["message"]
+
+    def test_route_passes_through_a_localhost_url(self, client):
+        """The browser makes this request, so a local viewer is a valid target."""
+        from vtscore.exporters import get_exporter
+
+        exporter = get_exporter("gui")
+        with patch.object(
+            type(exporter),
+            "export",
+            return_value={"message": "done", "open_url": "http://localhost:9000/viewer"},
+        ):
+            res = client.post(
+                "/api/exporters/export",
+                json={"exporter_name": "gui", "field_values": {}, "results": EMPTY_RESULTS},
+            )
+        assert res.status_code == 200
+        assert res.get_json()["open_url"] == "http://localhost:9000/viewer"
+
+    def test_exports_without_a_url_omit_the_key(self, client):
+        res = client.post(
+            "/api/exporters/export",
+            json={"exporter_name": "gui", "field_values": {}, "results": EMPTY_RESULTS},
+        )
+        assert "open_url" not in res.get_json()
+
+
 class TestStreamingExportSupport:
     def test_streaming_exporters_advertise_support(self):
         from vtscore.exporters import get_exporter

@@ -13,7 +13,7 @@ GET /api/exporters
 ```
 
 → JSON array of exporter objects, each with `name`, `display_name`,
-`description`, and `fields`.
+`description`, `fields`, and `opens_url` (see below).
 
 ### Run export
 
@@ -34,7 +34,16 @@ POST /api/exporters/export
 → `{"success": true, "message": "...", ...}`
 
 Available built-in exporters: `server_json_file`, `server_csv_file`, `webhook`,
-`email_smtp`, `gui`.
+`email_smtp`, `gui`, `open_url`.
+
+**`open_url`** — an exporter may return an `open_url` key, an `http(s)` URL the
+frontend opens in a new browser tab. It is how a third-party site with no ingest
+API receives a labelset: the exporter formats the selection into that site's own
+URL. The handler re-validates the URL against a scheme allowlist
+(`vtscore.security.url_validation.validate_browser_url`) and returns 500 if it
+fails, so no plugin can push a `javascript:` URL to the browser. An exporter that
+*always* returns one sets `opens_url: true` in its `GET /api/exporters` entry, so
+the UI can label the button before the export runs.
 
 **Streaming support** (CLI `--autodetect --stream-results` for sources larger
 than RAM): `server_json_file` (NDJSON), `server_csv_file`, and `gui` write hits
