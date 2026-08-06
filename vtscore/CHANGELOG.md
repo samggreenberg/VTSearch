@@ -17,10 +17,13 @@ instead, since every commit on `dev` is effectively a new app release.)
   fold model's scores over the whole collection with the fold's *held-out*
   labels clamped to their component; each fold's cut is carried to the final
   model as a quantile and the folds are combined in quantile space. Anchor mass
-  is 0.3 (each vote counts as three tenths of a haystack point) and the cut is
-  the midpoint between the fitted component means — the interior optimum of a
-  six-environment κ sweep. Because the midpoint ignores the cost weights, the
-  fused threshold does not currently vary with the Inclusion knob. The
+  is 0.3 (each vote counts as three tenths of a haystack point) and the cut
+  rule is `mid_tilt`: at Inclusion 0 the midpoint between the fitted component
+  means — the interior optimum of a six-environment κ sweep — and away from 0
+  that midpoint's combined quantile shifted by the rate-optimal cut's own
+  displacement from its inclusion-0 position, so the fused threshold answers
+  the Inclusion knob monotonically while reproducing the measured midpoint arm
+  exactly where it was measured. The
   label-count-scheduled blend (`calculate_safe_threshold`) is now only the
   fallback for label sets too small to form calibration folds.
 - **`gmm_cut_from_fit(rule="rate")` clamps instead of falling back to the

@@ -412,7 +412,7 @@ def _safe_threshold_for_step(
     Scores the simulation set (the harness's haystack) with the final model and
     with each calibration fold model, then cuts via
     :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold` at the
-    production defaults (κ=0.3, midpoint rule, quantile-mean combine).  This is the
+    production defaults (the ``FOLD_ANCHOR_*`` constants).  This is the
     estimator :func:`vtscore.detectors.training._safe_threshold` ships, called
     with the same arguments, so the harness's baseline arm cannot drift from
     the app's behaviour - the paired ``*_variant`` rows are where deliberate
@@ -985,6 +985,12 @@ def _anchored_variant_rows(
         if fit is None:
             continue
         for rule in rules:
+            if rule == "mid_tilt":
+                # Fold-level rule, defined in fold-quantile space: a single
+                # label-anchored fit has no folds to tilt across.  The fold
+                # family below sweeps it; here it is skipped rather than fed to
+                # gmm_cut_from_fit, which (correctly) rejects it.
+                continue
             cut, fell_back = gmm_cut_from_fit(fit, rule, wf, wn)
             emit(f"anchored_w{weight:g}_{rule}", cut, provenance, fell_back)
 
@@ -1883,8 +1889,12 @@ def simulate_voting_iterations(  # noqa: C901
             :data:`_ANCHORED_WEIGHTS`).  Each labelled score counts as this
             many haystack scores in the anchored EM's M-step.
         anchored_rules: Cut rules applied to each anchored fit (default
-            :data:`_ANCHORED_RULES`): ``"mid"`` (production midpoint) and/or
-            ``"rate"`` (rate-optimal crossing at the live inclusion weights).
+            :data:`_ANCHORED_RULES`): ``"mid"`` (plain midpoint), ``"rate"``
+            (rate-optimal crossing at the live inclusion weights), and/or
+            ``"mid_tilt"`` (the shipped rule: midpoint anchored at inclusion 0,
+            rate tilt away from it).  ``"mid_tilt"`` is defined in
+            fold-quantile space, so it applies to the fold-anchored family
+            only; the label-anchored family skips it.
         anchored_fold_arms: Include the fold-anchored + rank-transfer arms
             (default ``True``); ``False`` keeps only the cheap label-anchored
             family (no per-fold scoring passes).

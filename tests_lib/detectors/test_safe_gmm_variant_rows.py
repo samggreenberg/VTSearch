@@ -9,8 +9,8 @@ bit-for-bit, so the study measures the shipped code and every other variant
 differs from it along exactly one named axis.  Since the population-anchored
 adoption that arm is the fold-anchored fit at the shipped constants
 (:data:`~vtscore.training.thresholds.FOLD_ANCHOR_WEIGHT` etc., today κ=0.3 with
-the midpoint cut and the quantile mean); the ``pooled_*`` family now measures
-the retired schedule blend.
+the ``mid_tilt`` cut and the quantile mean); the ``pooled_*`` family now
+measures the retired schedule blend.
 """
 
 from __future__ import annotations
@@ -90,7 +90,8 @@ class TestSafeGmmVariantRows:
         estimator, so its threshold has to equal the base row's - the value the
         step actually shipped - at every step.  Reading the arm's settings off
         those constants rather than restating them is what keeps this honest
-        when the shipped operating point moves (κ=1/``rate`` → κ=0.3/``mid``).
+        when the shipped operating point moves (κ=1/``rate`` → κ=0.3/``mid`` →
+        κ=0.3/``mid_tilt``).
         """
         rows = _run_safe(
             "max_patch",
@@ -103,6 +104,9 @@ class TestSafeGmmVariantRows:
         base = {r["t"]: r for r in rows if r["gmm_variant"] == ""}
         prod = {r["t"]: r for r in rows if r["gmm_variant"] == arm_name}
         assert prod, "the production anchored arm emitted no rows"
+        # ``mid_tilt`` is a fold-level rule: the label-anchored family must
+        # skip it rather than crash on it, so no ``anchored_w*`` arm exists.
+        assert not any(r["gmm_variant"].startswith("anchored_w") for r in rows)
         for t, arm in prod.items():
             if base[t]["threshold_provenance"] == "gmm_blend":
                 continue  # the step fell back to the blend; the arm is not it
