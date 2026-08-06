@@ -6,8 +6,8 @@ same CSV the tables come from.
 
   fig_kappa_curve.svg   - the pooled deep-regime kappa curve, four series
                           (fold/label x rate/mid), with the tied plateau shaded
-  fig_kappa_envs.svg    - small multiples: the fold-anchored `rate` curve in
-                          each environment, on a shared y scale
+  fig_kappa_envs.svg    - small multiples: the fold-anchored `mid` curve (the
+                          recommended rule) in each environment, shared y scale
 
 Usage: python make_rate_figs.py [outdir]
 """
@@ -58,9 +58,10 @@ def kappa_curve_svg(curve: pd.DataFrame, plateau: pd.DataFrame) -> str:
         return T + (v - y0) / (y1 - y0) * (H - T - B)
 
     p: list[str] = []
-    # plateau band for the headline series
+    # Plateau band for the RECOMMENDED series (fold-anchored, midpoint cut) -
+    # shading a different arm's plateau would quietly mislabel the figure.
     row = plateau[
-        (plateau["scope"] == "pooled_deep") & (plateau["family"] == "fold_anchored") & (plateau["rule"] == "rate")
+        (plateau["scope"] == "pooled_deep") & (plateau["family"] == "fold_anchored") & (plateau["rule"] == "mid")
     ]
     if not row.empty:
         lo, hi = float(row["plateau_lo"].iloc[0]), float(row["plateau_hi"].iloc[0])
@@ -70,7 +71,7 @@ def kappa_curve_svg(curve: pd.DataFrame, plateau: pd.DataFrame) -> str:
         )
         p.append(
             f'<text x="{(px(lo) + px(hi)) / 2:.1f}" y="{T + 14}" font-size="11" fill="var(--s1)" '
-            f'text-anchor="middle" font-weight="600">statistically tied with the best</text>'
+            f'text-anchor="middle" font-weight="600">tied with the best (fold · mid)</text>'
         )
     # zero line (= pure cross-calibration)
     if y0 <= 0 <= y1:
@@ -165,7 +166,7 @@ def _nice_step(span: float) -> float:
 
 
 def env_small_multiples_svg(curve: pd.DataFrame, envs: pd.DataFrame) -> str:
-    s = curve[(curve["family"] == "fold_anchored") & (curve["rule"] == "rate")]
+    s = curve[(curve["family"] == "fold_anchored") & (curve["rule"] == "mid")]
     names = list(envs.sort_values("n_fit")["env"])
     names = [n for n in names if n in set(s["env"])]
     if not names:
@@ -235,7 +236,7 @@ def env_small_multiples_svg(curve: pd.DataFrame, envs: pd.DataFrame) -> str:
         f'deep regime; panels ordered by fit population N</text>'
     )
     return (
-        f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Small multiples of the fold-anchored rate '
+        f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="Small multiples of the fold-anchored midpoint '
         f'kappa curve, one panel per environment, ordered by fit population size.">' + "".join(p) + "</svg>"
     )
 

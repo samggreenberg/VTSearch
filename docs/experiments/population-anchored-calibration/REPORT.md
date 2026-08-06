@@ -1,13 +1,14 @@
 # Population-anchored calibration: fusing the haystack into the trained threshold
 
-**Issues #2852 / #2853 / #2861 · design pre-registered in
-`docs/plans/population-anchored-calibration.md` · code PR #2857**
+**Issues #2852 / #2853 · design pre-registered in
+`docs/plans/population-anchored-calibration.md` · estimators PR #2857 ·
+shipped by PR #2861 · reports PR #2860 (run A) and PR #2864 (run B)**
 
 Two runs:
 
 | | Run A — the deep-regime run | Run B — the anchor-mass sweep |
 |---|---|---|
-| Reported in | PR #2860 | this revision |
+| Reported in | PR #2860 | PR #2864 (this revision) |
 | Date | 2026-08-05 | 2026-08-06 |
 | Base | dev `0a54f0d7` | dev `7fbde84e` |
 | Cells | 184/184, 0 failures (SLURM 468311 → 468312) | 384/384, 0 failures (SLURM 468874) |
@@ -15,14 +16,28 @@ Two runs:
 | Anchor mass κ | 1 · 3 · 10 · 30 · 100 | **0.01 · 0.03 · 0.1 · 0.3 · 0.5 · 1 · 2 · 3** |
 | Blend control | the 6→20 ramp (production at that base) | **`slow_cap50` / `cap50`** — what actually ships today |
 
+> **Run A's recommendation shipped before run B finished.** PR #2861 merged
+> `fold_anchored κ=1 rate` as the production threshold at 23:30 EDT on
+> 2026-08-05, an hour into run B's cell array. Everything below that reads like
+> "if adopting" in run A's voice is therefore a statement about **code that is
+> now on dev**, and two of run B's findings are regressions against it rather
+> than choices about it: the shipped κ and cut rule are beaten in 6/6
+> environments by `κ=0.3, mid`, and the shipped path applies to binary-voting
+> detectors, where it is *worse* than the `cap50` blend it replaced. PR #2863
+> ("delete the `safe_thresholds` setting; the fused threshold is
+> unconditional") is open and is directly contraindicated by §"Against the
+> blend that actually ships".
+
 Visual report with mechanism figures:
 <https://claude.ai/code/artifact/6bd39c84-5946-4dd8-ba80-334a88428920>
 
 ## BLUF
 
-**Run A's winner sat on the bottom edge of its κ grid. Run B extended the grid
-two decades down and the optimum is interior — but it is not where run A left
-it, and the recommendation changes twice over.**
+**Run A's winner sat on the bottom edge of its κ grid, and it shipped (PR
+#2861) before run B finished. Run B extended the grid two decades down across
+six environments: the optimum is interior, it is not where run A left it, and
+the shipped setting is beaten in every environment measured — including two
+where the shipped path is worse than the blend it replaced.**
 
 1. **The setting moves from `κ=1, rate` to `κ=0.3, mid`.** Pooled over six
    environments in the deep regime, `fold_anchored κ=0.3 mid` cuts paired
@@ -35,13 +50,16 @@ it, and the recommendation changes twice over.**
    Per-environment optima span κ 0.03–0.5 among the four environments where
    fusion does anything at all, and the tied plateaus overlap at κ=0.3 in three
    of the four. Within a decade the curve is nearly flat; outside it, it is not.
-3. **The bigger finding is that the *win* does not transfer.** Measured against
-   the blend that ships today rather than the ramp run A had to use, fusion is
-   a clear win on **region voting** (−0.026 to −0.032 vs `slow_cap50`), a
-   **statistical dead heat** on COCO binary voting (−0.0004, n.s.), and a small
-   **loss** on the 838-image caltech101 set (+0.003 to +0.009 — `cap50` beats
-   every fusion arm there). Run A's "adopt it as *the* production threshold
-   path" was measured on the two environments where it works.
+3. **The bigger finding is that the *win* does not transfer — and PR #2861
+   shipped it everywhere.** Measured against the blend that ships today rather
+   than the ramp run A had to use, fusion is a clear win on **region voting**
+   (−0.026 to −0.032 vs `slow_cap50`), a **statistical dead heat** on COCO
+   binary voting (−0.0004, n.s.), and a small **loss** on the 838-image
+   caltech101 set (+0.003 to +0.009 — `cap50` beats every fusion arm there).
+   The shipped `κ=1 rate` is worse than `cap50` on *both* binary environments
+   (+0.0063 pooled), so binary-voting detectors currently have a slightly worse
+   threshold than they had before #2861. Run A's "adopt it as *the* production
+   threshold path" was measured on the two environments where it works.
 4. **κ\* falls monotonically as votes accumulate** — argmin 3 → 3 → 1 → 0.3 →
    0.1 across the 20/50/100/200/300-vote windows. A constant κ is therefore a
    compromise across regimes, and the property that motivated κ (the labels'
@@ -440,7 +458,17 @@ now plants a fold fallback so the classifier is exercised.)*
 
 ## Caveats & open threads
 
-- **The two runs are not on the same code.** Run B is on dev `7fbde84e`, run A
+- **Run B predates the ship PR, and #2861 moved two things under it.** The
+  run's base is `7fbde84e`; #2861 merged after it. Two changes matter for
+  reading these numbers across that boundary. (a) The shipped `rate` cut
+  was redefined as a monotone supremum rather than a density-crossing
+  root; #2861 states the two agree wherever a crossing exists **including
+  at every equal-weight cut**, and run B scored everything at inclusion 0,
+  so the `rate` arm here is the shipped rule. (b) #2861 made fold
+  calibration run at every label count, where it used to be skipped
+  wherever the schedule zeroed the x-cal cut — that changes trajectories
+  below ~6 votes, so the 2–20 window is the least transferable one here.
+- **The two runs are not on the same code either.** Run B is on dev `7fbde84e`, run A
   on `0a54f0d7`; PR #2849 changed the derived `<6 votes` x-cal skip in between,
   and the trajectories genuinely diverge (matched cells differ in their vote
   sequences). Run A's κ ∈ {10, 30, 100} points therefore **cannot** be spliced
@@ -469,20 +497,29 @@ now plants a fold fallback so the classifier is exercised.)*
 
 ## Recommendation & next steps
 
-1. **If adopting, adopt `fold_anchored κ=0.3, mid` — not run A's
-   `κ=1, rate`** — and adopt it **for region voting**, where it beats today's
-   shipped `slow_cap50` by −0.026 (p=2e-9 and p=3e-8 in the two region
-   environments). It is the best single global setting measured, it wins
-   head-to-head against the run-A recommendation in 6/6 environments, and it is
-   the only fusion arm that does not regress binary voting. (`anchored κ=0.3
-   rate` measures 0.003 better on region and costs K fewer scoring passes; take
-   it only if that cost matters, and pin κ hard if you do.)
-2. **Do not switch binary voting to fusion on this evidence.** It is a dead
-   heat with `cap50` on COCO and a loss on caltech101. Keep `cap50` there. If
-   one path is wanted everywhere, the honest framing is "fusion for region
-   voting, `cap50` for binary" — which mirrors the per-mode split #2841 already
-   shipped, for the same underlying reason (low positive counts want spread
-   control, not a better-located cut).
+1. **Change the shipped constant from `κ=1, rate` to `κ=0.3, mid`.** PR #2861
+   shipped run A's recommendation; this is a one-line change to the same code
+   path, and it wins head-to-head in 6/6 environments (pooled −0.0045,
+   p<1e-4). It is also the best single global setting measured — worst-case
+   distance from any environment's own optimum 0.0067, against 0.0102 for what
+   shipped. On region voting it beats `slow_cap50` by −0.026 (p=2e-9 and
+   p=3e-8 in the two region environments). (`anchored κ=0.3 rate` measures
+   0.003 better on region still, and needs no per-fold scoring pass at all;
+   take it only if that cost matters, and pin κ hard if you do — that family
+   is a trap above κ≈1.)
+2. **Scope the shipped path to region voting — this is a live regression.** PR
+   #2861 made the fused threshold the cutoff for *every* detector with safe
+   thresholds on, including binary-voting ones. Measured against the `cap50`
+   blend it replaced there, the shipped `κ=1 rate` is **+0.0063 worse** on
+   COCO and worse still on caltech101 (+0.008 / +0.003 by environment); even
+   the best fusion setting, `κ=0.3 mid`, only reaches a dead heat (−0.0004,
+   n.s.). Binary-voting users are getting a slightly worse threshold than they
+   had before #2861. Restore `cap50` for that mode — which mirrors the
+   per-mode split #2841 already shipped, for the same underlying reason: low
+   positive counts want spread control, not a better-located cut. **PR #2863**
+   ("delete the `safe_thresholds` setting; the fused threshold is
+   unconditional") should be held until this is resolved; it would make the
+   regression unconditional too.
 3. **Gate on positives, not on dataset size.** The effect scales with the
    number of *positive* anchors (24 → −0.093, 8 → −0.019, 7 → −0.068, 3 →
    −0.002). A production gate of the form "use fusion once the fold anchors

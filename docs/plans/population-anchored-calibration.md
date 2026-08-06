@@ -156,7 +156,7 @@ oracle cut, step-to-step threshold delta, estimator path taken.
 
 <!-- item-sep -->
 
-- **DONE — boundary sweep (#2861, 2026-08-06).** κ ∈ {0.01 … 3} × 6
+- **DONE — boundary sweep (run B, PR #2864, 2026-08-06).** κ ∈ {0.01 … 3} × 6
   environments, with `slow_cap50`/`cap50` scored as control arms. The optimum is
   interior at `fold_anchored κ=0.3 mid`, and fusion beats the shipped blend on
   region voting only — see
@@ -165,7 +165,9 @@ oracle cut, step-to-step threshold delta, estimator path taken.
   A/B, and it un-degenerates the qmean/qmedian comparison); a `κ ∝ 1/n`
   total-anchor-mass variant, which the per-window κ* trend (3 → 0.1 from 20 to
   300 votes) says should beat any constant; and the positive-count gate for when
-  to use fusion at all.
+  to use fusion at all. Two of its findings are regressions against what
+  PR #2861 shipped: the wrong (κ, rule) constant, and applying the fused
+  threshold to binary voting where it loses to `cap50`.
 
 <!-- item-sep -->
 
