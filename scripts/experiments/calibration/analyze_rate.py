@@ -402,6 +402,7 @@ def env_table(df: pd.DataFrame, results: Path, agg: Path) -> pd.DataFrame:
     for env, g in df.groupby("env", observed=True):
         ds, emb, style = env.split("/")
         n_med = medias.get((ds, emb), 0)
+        deep = g[g["window_hi"].fillna(0).astype(int) >= DEEP_MIN]
         rows.append(
             {
                 "env": env,
@@ -415,6 +416,12 @@ def env_table(df: pd.DataFrame, results: Path, agg: Path) -> pd.DataFrame:
                 "seeds": int(g["seed"].nunique()),
                 "max_votes": int(g["n_votes"].max()),
                 "median_prevalence": float(g["realized_prevalence"].median()),
+                # What the anchors actually consist of in the deep regime.  The
+                # Good component is anchored by the POSITIVE votes alone, so a
+                # regime with three positives at 150 votes is a different
+                # estimation problem from one with fifty, at identical kappa.
+                "deep_n_votes": float(deep["n_votes"].median()) if not deep.empty else float("nan"),
+                "deep_n_good": float(deep["n_good"].median()) if not deep.empty else float("nan"),
             }
         )
     out = pd.DataFrame(rows).sort_values("env")
@@ -431,20 +438,23 @@ def gamma_test(plateaus: pd.DataFrame, envs: pd.DataFrame, agg: Path, n_ref: int
     the tuned constant transfers as-is.
     """
     p = plateaus[(plateaus["scope"] == "per_env_deep") & (plateaus["family"] == "fold_anchored")]
-    j = p.merge(envs[["env", "n_fit", "dataset", "embedder", "region_voting"]], on="env", how="left")
-    j["gamma_at_ref"] = j["best_kappa"] * n_ref / (j["best_kappa"] * n_ref + j["n_fit"])
+    cols = ["env", "n_fit", "dataset", "embedder", "region_voting", "deep_n_votes", "deep_n_good"]
+    j = p.merge(envs[cols], on="env", how="left")
+    # gamma at each environment's own median deep vote count, not a nominal one.
+    n = j["deep_n_votes"].fillna(n_ref)
+    j["gamma_at_deep"] = j["best_kappa"] * n / (j["best_kappa"] * n + j["n_fit"])
     out = j[
         [
             "env",
             "rule",
-            "dataset",
-            "embedder",
             "region_voting",
             "n_fit",
+            "deep_n_votes",
+            "deep_n_good",
             "best_kappa",
             "plateau",
             "best_d_regret",
-            "gamma_at_ref",
+            "gamma_at_deep",
         ]
     ].sort_values(["rule", "n_fit"])
     out.to_csv(agg / "rate_gamma_test.csv", index=False)
@@ -651,9 +661,13 @@ def write_report(results: Path, parts: dict) -> None:
         "",
         "## Is kappa* or gamma* the invariant?",
         "",
-        "`gamma_at_ref` is the share of the mixture fit that comes from labels at",
-        "150 votes, `kappa*n/(kappa*n+N)`.  A constant kappa* across a 5x span of N",
-        "means the per-anchor mass transfers and the share does not.",
+        "`gamma_at_deep` is the share of the mixture fit that comes from labels at",
+        "each environment's own median deep vote count, `kappa*n/(kappa*n+N)`.",
+        "A constant kappa* across a wide span of N means the per-anchor mass is what",
+        "transfers; a constant gamma* instead means the label *share* is.",
+        "`deep_n_good` is there because the Good component is anchored by the",
+        "positive votes alone - two environments at the same n can be very",
+        "different estimation problems.",
         "",
         _md(parts["gamma"]),
         "",

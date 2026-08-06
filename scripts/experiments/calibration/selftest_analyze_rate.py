@@ -15,7 +15,7 @@ What is planted:
 * a monotone-worsening label-anchored curve (the #2860 "dishonest anchors"
   shape), so family separation is exercised;
 * two environments whose fit populations differ 5x, so the kappa-vs-gamma table
-  must report the same ``best_kappa`` with different ``gamma_at_ref``;
+  must report the same ``best_kappa`` with different ``gamma_at_deep``;
 * a flat region around the optimum wide enough that the plateau must contain
   more than the argmin alone, and a far-away kappa that must be excluded.
 
@@ -221,7 +221,7 @@ def main() -> int:
         gam = gam[gam["rule"] == "rate"]
         assert set(gam["best_kappa"]) <= set(FLAT), gam.to_dict("records")
         assert gam["n_fit"].nunique() == len(ENVS), gam.to_dict("records")
-        assert gam["gamma_at_ref"].max() / gam["gamma_at_ref"].min() > 3, gam.to_dict("records")
+        assert gam["gamma_at_deep"].max() / gam["gamma_at_deep"].min() > 3, gam.to_dict("records")
 
         # --- vs the shipped blend, with the right control per voting mode ---
         ship = pd.read_csv(results / "agg" / "rate_vs_shipped_schedule.csv")
