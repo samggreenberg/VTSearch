@@ -29,15 +29,17 @@ import numpy as np
 
 
 def inclusion_weights(inclusion: int) -> tuple[float, float]:
-    """``(fpr_weight, fnr_weight)`` for an inclusion value (mirror of the harness).
+    """``(fpr_weight, fnr_weight)`` for an inclusion value.
 
-    Kept here (rather than imported) so this module stays torch-free and
-    self-contained for unit testing; it is identical to
-    :func:`vtscore.eval.voting_iterations._inclusion_weights`.
+    Re-exported from :func:`vtscore.training.thresholds.inclusion_cost_weights`
+    - the one definition the shipped threshold rule reads too, so a measured
+    cost can never price inclusion differently from the cut being measured.
+    (``vtscore.training.thresholds`` is torch-free at import, so this module
+    stays importable for unit testing without torch.)
     """
-    if inclusion >= 0:
-        return 1.0, 2.0**inclusion
-    return 2.0 ** (-inclusion), 1.0
+    from vtscore.training.thresholds import inclusion_cost_weights
+
+    return inclusion_cost_weights(inclusion)
 
 
 def operating_cost(

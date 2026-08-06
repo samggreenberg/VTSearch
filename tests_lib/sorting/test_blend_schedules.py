@@ -29,7 +29,6 @@ from vtscore.training.thresholds import (
     calculate_safe_threshold,
     fit_gmm_threshold,
     safe_blend_weight,
-    xcal_is_discarded,
 )
 
 
@@ -199,36 +198,6 @@ class TestCorridorFamily:
         inverted = GmmFit1D(w_lo=0.5, mu_lo=0.8, var_lo=0.01, w_hi=0.5, mu_hi=0.2, var_hi=0.01)
         out = blend_gmm_threshold(0.01, 0.5, _ctx(30), schedule="corridor", fit=inverted)
         assert out == pytest.approx(0.2)
-
-
-class TestSkipDerivation:
-    """The fold-calibration skip must follow the schedule, not a magic number."""
-
-    def test_the_old_ramp_discards_xcal_below_its_floor(self):
-        assert xcal_is_discarded(_ctx(5), "prod")
-        assert xcal_is_discarded(_ctx(6), "prod")
-        assert not xcal_is_discarded(_ctx(7), "prod")
-
-    def test_the_shipped_schedules_also_discard_it_below_six(self):
-        """Both shipped curves keep the old pure-GMM floor, so the fold-training
-        skip still applies where it always did."""
-        for name in PRODUCTION_SCHEDULE_BY_MODE.values():
-            assert xcal_is_discarded(_ctx(6), name)
-            assert not xcal_is_discarded(_ctx(7), name)
-
-    def test_a_schedule_that_trusts_xcal_early_stops_the_skip(self):
-        """The #2841 fidelity fix: before it, the app hard-coded "< 6 votes" and
-        would have blended a placeholder against a schedule like this one."""
-        assert not xcal_is_discarded(_ctx(3), "early")
-        assert not xcal_is_discarded(_ctx(3), "pure_xcal")
-
-    def test_pure_gmm_always_skips(self):
-        for n in (0, 6, 20, 500):
-            assert xcal_is_discarded(_ctx(n), "pure_gmm")
-
-    def test_unramped_corridor_never_skips_because_it_reads_xcal(self):
-        for n in (0, 6, 20):
-            assert not xcal_is_discarded(_ctx(n), "corridor")
 
 
 class TestFitGmmThreshold:

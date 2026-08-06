@@ -16,8 +16,11 @@ from vtscore.training.thresholds import (
     calculate_cross_calibration_threshold,
     calculate_gmm_threshold,
     calculate_safe_threshold,
+    calibration_folds,
+    calibration_folds_cached,
     conformal_threshold,
-    cross_calibration_threshold_cached,
+    fold_anchored_gmm_threshold,
+    threshold_from_folds,
 )
 
 __all__ = [
@@ -27,6 +30,9 @@ __all__ = [
     "calculate_gmm_threshold",
     "conformal_threshold",
     "calculate_cross_calibration_threshold",
-    "cross_calibration_threshold_cached",
+    "calibration_folds",
+    "calibration_folds_cached",
+    "threshold_from_folds",
+    "fold_anchored_gmm_threshold",
     "calculate_safe_threshold",
 ]

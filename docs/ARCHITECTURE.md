@@ -96,7 +96,7 @@ VTSearch/
 │   │
 │   ├── training/                   Generic learned-sort primitives (no Flask, no state)
 │   │   ├── mlp.py                  build_model, train_model (pure PyTorch)
-│   │   ├── thresholds.py           GMM / cross-calibration / safe-threshold helpers
+│   │   ├── thresholds.py           GMM / cross-calibration / fold-anchored threshold helpers
 │   │   ├── svm.py                  SVM trainer prototype
 │   │   └── region_similarity.py    Region-aware cosine similarity scoring
 │   │

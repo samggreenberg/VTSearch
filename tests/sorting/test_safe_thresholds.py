@@ -284,12 +284,12 @@ class TestTrainingSettingsInvalidateLoadedDetector:
         """With cached fold orderings, an inclusion change re-derives the
         threshold (cheap quantile rule over the cache) without touching the model."""
         from vtsearch.state import get_inclusion, set_inclusion
-        from vtscore.training.thresholds import threshold_from_fold_orderings
+        from vtscore.training.thresholds import CalibrationFolds, threshold_from_fold_orderings
 
         ctx = self._loaded_ctx()
         model_before = ctx.model
         orderings = [([0.9, 0.8, 0.2, 0.1], [1.0, 1.0, 0.0, 0.0])]
-        ctx.calibration_cache = ("k", (orderings, None))
+        ctx.calibration_cache = ("k", CalibrationFolds(orderings, None, []))
         new_incl = get_inclusion() + 3
         set_inclusion(new_incl)
         assert ctx.model is model_before
