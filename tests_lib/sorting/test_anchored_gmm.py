@@ -334,17 +334,19 @@ class TestFoldAnchored:
 
 
 class TestShippedFoldAnchoredDefaults:
-    """The production settings the 2026-08-05 deep-regime run picked.
+    """The production settings the 2026-08-06 anchor-mass sweep picked.
 
     ``docs/experiments/population-anchored-calibration/REPORT.md`` recommends
-    ``fold_anchored κ=1, rate cut``; these pin the constants and the call
-    defaults together so a change to either is deliberate rather than a drift
-    between the report and the code.
+    ``fold_anchored κ=0.3, mid cut``: the first run's grid bottomed out at κ=1
+    so its winner sat on the edge, and extending the grid two decades down
+    across six environments moved both the mass *and* the rule.  These pin the
+    constants and the call defaults together so a change to either is
+    deliberate rather than a drift between the report and the code.
     """
 
     def test_constants(self):
-        assert FOLD_ANCHOR_WEIGHT == 1.0
-        assert FOLD_ANCHOR_CUT_RULE == "rate"
+        assert FOLD_ANCHOR_WEIGHT == 0.3
+        assert FOLD_ANCHOR_CUT_RULE == "mid"
         assert FOLD_ANCHOR_COMBINE == "qmean"
 
     def test_the_bare_call_uses_them(self):
@@ -367,10 +369,11 @@ class TestShippedFoldAnchoredDefaults:
 
 
 class TestFoldAnchoredInclusion:
-    """The estimator answers the Inclusion knob, and answers it monotonically."""
+    """How the estimator answers the Inclusion knob - which is: not at all,
+    under the shipped ``mid`` rule, and monotonically under ``rate``."""
 
     @staticmethod
-    def _cut(sd=0.12, mu_lo=0.4, mu_hi=0.6):
+    def _cut(sd=0.12, mu_lo=0.4, mu_hi=0.6, cut_rule=FOLD_ANCHOR_CUT_RULE):
         """A fit over *overlapping* modes - the regime a real haystack is in."""
 
         def hay(seed):
@@ -384,12 +387,32 @@ class TestFoldAnchoredInclusion:
                 list(np.concatenate([np.zeros(10), np.ones(10)])),
             )
 
-        cut = fit_fold_anchored_cut([hay(202), hay(203)], [anchors(210), anchors(211)], hay(201))
+        cut = fit_fold_anchored_cut([hay(202), hay(203)], [anchors(210), anchors(211)], hay(201), cut_rule=cut_rule)
         assert cut is not None
         return cut
 
-    def test_thresholds_are_nested_across_the_whole_knob(self):
+    def test_the_shipped_rule_is_inclusion_blind(self):
+        """Pinned as a decision, not left as a surprise.
+
+        Inclusion reaches this estimator *only* as the rate weights the cut
+        rule optimises, and the shipped ``mid`` rule ignores them - so the
+        fused threshold is constant across the whole knob.  That is the
+        accepted cost of shipping the anchor-mass sweep's winner as measured
+        (every arm in both runs ran at inclusion 0, so nothing measured the
+        tilt); issue #2865 owns the inclusion-aware replacement.  When that
+        lands, this test is the one to delete.
+        """
         cuts = [self._cut().threshold_at(k) for k in range(-10, 11)]
+        assert len(set(cuts)) == 1, cuts
+
+    def test_rate_thresholds_are_nested_across_the_whole_knob(self):
+        """The ``rate`` rule still answers the knob, and answers it monotonically.
+
+        Not the shipped rule any more, but it stays in the tree as a harness
+        arm and as the starting point for #2865, so its contract is still
+        worth pinning: raising inclusion can only lower the cut.
+        """
+        cuts = [self._cut(cut_rule="rate").threshold_at(k) for k in range(-10, 11)]
         assert all(b <= a + 1e-12 for a, b in zip(cuts, cuts[1:], strict=False)), cuts
         assert cuts[0] > cuts[-1], "the knob must actually move the line"
 
@@ -402,12 +425,15 @@ class TestFoldAnchoredInclusion:
         media it admits.  That is the same "band the calibration data cannot
         resolve" the conformal rule names; it shrinks as soon as the modes
         overlap (the test above), which is the realistic case.
+
+        Scored against ``rate``, since the shipped ``mid`` rule collapses the
+        range to exactly zero everywhere and would pass this vacuously.
         """
         rng = np.random.default_rng(401)
         final = _bimodal(rng)
         folds = [_bimodal(np.random.default_rng(402 + i)) for i in range(2)]
         anchors = [_anchors_from_modes(np.random.default_rng(410 + i)) for i in range(2)]
-        cut = fit_fold_anchored_cut(folds, [(list(a), list(lbl)) for a, lbl in anchors], final)
+        cut = fit_fold_anchored_cut(folds, [(list(a), list(lbl)) for a, lbl in anchors], final, cut_rule="rate")
         assert cut is not None
         cuts = [cut.threshold_at(k) for k in range(-10, 11)]
         assert all(b <= a + 1e-12 for a, b in zip(cuts, cuts[1:], strict=False))
@@ -430,7 +456,7 @@ class TestFoldAnchoredInclusion:
             one_shot, _p = fold_anchored_gmm_threshold(folds, orderings, final, k)
             assert cut.threshold_at(k) == one_shot
 
-    def test_inclusion_zero_is_the_prior_free_crossing(self):
-        """Inclusion 0 weights the two error rates equally, so the shipped cut
-        is the plain rate crossing the report measured."""
+    def test_inclusion_zero_weights_the_two_error_rates_equally(self):
+        """Inclusion 0 is the neutral point of the knob - which is also the
+        only inclusion either calibration run scored, hence #2865."""
         assert inclusion_cost_weights(0) == (1.0, 1.0)

@@ -628,17 +628,33 @@ def rank_transfer(
     return float(np.quantile(tgt, min(1.0, max(0.0, q))))
 
 
-#: Production anchor mass for the fold-anchored threshold: **κ = 1**, i.e. each
-#: vote counts as *one* haystack point among the ~50k the mixture is fitted on.
-#: The 2026-08-05 deep-regime run swept κ ∈ {1, 3, 10, 30, 100} and performance
-#: degraded monotonically as κ grew - honest anchors matter, anchor *mass* does
-#: not (docs/experiments/population-anchored-calibration/REPORT.md).
-FOLD_ANCHOR_WEIGHT = 1.0
+#: Production anchor mass for the fold-anchored threshold: **κ = 0.3**, i.e.
+#: each vote counts as three tenths of a haystack point among the ~50k the
+#: mixture is fitted on.  The 2026-08-05 deep-regime run swept κ ∈ {1 … 100}
+#: and found performance degrading monotonically as κ grew, leaving the optimum
+#: on the grid's bottom edge; the 2026-08-06 anchor-mass sweep extended the grid
+#: to κ ∈ {0.01 … 3} across six environments and found the optimum **interior**
+#: at κ=0.3 (docs/experiments/population-anchored-calibration/REPORT.md).
+FOLD_ANCHOR_WEIGHT = 0.3
 
-#: Production cut rule for the fold-anchored threshold: the #2836 rate-optimal
-#: crossing, which is the cut the Inclusion knob's rate loss actually asks for.
-#: It beat the midpoint at every κ in the same run.
-FOLD_ANCHOR_CUT_RULE = "rate"
+#: Production cut rule for the fold-anchored threshold: the historical
+#: **midpoint** between the fitted component means.
+#:
+#: The cut rule flips with the anchor mass, and that is the mechanism: ``mid``
+#: ignores the mixture weights while ``rate`` reads them.  At light anchoring
+#: the weights come from the population (right) and ``mid`` wins; heavier
+#: anchoring lets the votes' acquisition-biased prevalence into the weights,
+#: which is what ``rate`` reads.  So ``mid`` peaks at κ=0.3 and ``rate`` at
+#: κ=1, and the two curves cross near κ=1-2 - which is why the first run, whose
+#: grid started at κ=1, saw ``rate`` in front.
+#:
+#: **This makes the fold-anchored threshold inclusion-blind**, because
+#: :func:`gmm_cut_from_fit` reads the Inclusion knob only through ``rate``'s
+#: cost weights.  That is a known, accepted consequence of shipping the
+#: measured winner: every arm in both runs was scored at inclusion 0, so no
+#: measurement covers the tilt.  See issue #2865 for the inclusion-aware cut
+#: rule that is meant to replace this.
+FOLD_ANCHOR_CUT_RULE = "mid"
 
 #: Production fold-combine rule: mean of the per-fold quantiles.  With the
 #: shipped ``calibrate_count=2`` the mean and the median coincide.
@@ -661,6 +677,13 @@ class FoldAnchoredCut:
     scoring pass - so an Inclusion slide reproduces exactly what a fresh
     retrain at that inclusion would have stored (see
     :func:`vtscore.state.core.recompute_detector_thresholds_for_inclusion`).
+
+    Under the shipped :data:`FOLD_ANCHOR_CUT_RULE` (``"mid"``) what a retrain
+    at another inclusion would have stored is *the same threshold*: the
+    midpoint rule ignores the cost weights, so this estimator is currently
+    inclusion-blind.  The re-cut path is kept intact - it costs nothing, it
+    still carries the ``rate`` rule for callers that ask for it, and it is what
+    issue #2865's inclusion-aware rule will slot into.
     """
 
     fits: tuple[GmmFit1D, ...]
@@ -690,10 +713,12 @@ class FoldAnchoredCut:
     def threshold_at(self, inclusion_value: int) -> float:
         """The threshold this estimator cuts at *inclusion_value*.
 
-        The cut rule reads inclusion as the rate weights it optimises
-        (:func:`inclusion_cost_weights`), so raising inclusion tilts the
-        rate-optimal crossing down and admits more - the same direction the
-        conformal rule moves.
+        Inclusion reaches the cut only as the rate weights it optimises
+        (:func:`inclusion_cost_weights`): under ``cut_rule="rate"`` raising
+        inclusion tilts the rate-optimal crossing down and admits more - the
+        same direction the conformal rule moves - while under the shipped
+        ``cut_rule="mid"`` the midpoint ignores the weights and the returned
+        threshold is **constant in inclusion** (issue #2865).
 
         **Monotone by construction**, so the included sets stay nested
         (everything included at ``k`` stays included at ``k + 1``) - the
@@ -776,13 +801,23 @@ def fold_anchored_gmm_threshold(
 ) -> tuple[float, str]:
     """The fold-anchored ("cross-LabeledGMM") mixture threshold (#2852 comment).
 
-    **This is the shipped threshold path** when safe thresholds are on: the
-    2026-08-05 deep-regime run measured it as the best rule this harness has
-    seen (−0.085 paired regret vs pure cross-calibration at 100-300 votes,
-    2.8× steadier, both error rates below x-cal's until 200 votes) and
-    ``docs/experiments/population-anchored-calibration/REPORT.md`` recommends
-    it at the defaults above.  The eval harness calls this same function for
-    its default arm, so a measured baseline cannot drift from the app.
+    **This is the shipped threshold path**: the 2026-08-06 anchor-mass sweep
+    measured it at the defaults above as the best rule this harness has seen,
+    and the best single global setting available - pooled over six environments
+    it cuts −0.0437 paired regret vs pure cross-calibration in the deep regime,
+    it beats the previously shipped ``κ=1, rate`` head to head in 6 of 6
+    environments, and forcing it everywhere leaves each environment within
+    0.0067 of its own optimum.  See
+    ``docs/experiments/population-anchored-calibration/REPORT.md``.  The eval
+    harness calls this same function for its default arm, so a measured
+    baseline cannot drift from the app.
+
+    Two limits of that recommendation are on record rather than fixed here.
+    The gain tracks *positive*-anchor count, so on binary-voting detectors with
+    few positives this only reaches a dead heat with the ``cap50`` blend it
+    replaced (open work in ``docs/plans/population-anchored-calibration.md``),
+    and every arm was scored at inclusion 0, so the shipped ``mid`` rule's
+    inclusion-blindness is unmeasured (issue #2865).
 
     Fits via :func:`fit_fold_anchored_cut`, then carries each fold's cut to the
     final model as a quantile of that fold's haystack distribution

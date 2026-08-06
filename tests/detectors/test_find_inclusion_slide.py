@@ -11,6 +11,14 @@ These tests pin (a) that find-label populates the cache and (b) that a slide
 re-derives the threshold and re-splits the unverified items, with the
 ``/api/votes`` good set (what Browse reads) staying in lock-step with the export
 partition (what Export reads).
+
+**What "re-derives" can be asserted against has changed.** The shipped cut rule
+is now the midpoint between the fitted component means, which ignores the cost
+weights Inclusion arrives as - so the fused threshold is *numerically* constant
+across the knob and "the number moved" can no longer stand in for "the slide
+ran" (issue #2865).  The regression is therefore pinned structurally: the slide
+must land on what the cached estimator says at the new inclusion, which is
+exactly what the skipped-detector bug did not do.
 """
 
 from __future__ import annotations
@@ -60,20 +68,31 @@ def test_find_label_populates_calibration_cache(client):
     assert get_active_detector_context().calibration_cache is not None
 
 
-def test_inclusion_slide_moves_cutoff_and_resplits(client):
+def test_inclusion_slide_recuts_the_estimator_and_resplits(client):
     _run_find(client)
-    inclusive_threshold = get_active_detector_context().threshold
+    ctx = get_active_detector_context()
+    inclusive_threshold = ctx.threshold
     inclusive_good = _votes_good(client)
     assert _export_good(client) == inclusive_good
 
+    # Poison the stored cutoff so a skipped recompute is observable.  The
+    # original bug left the detector untouched; under an inclusion-invariant
+    # cut rule that is indistinguishable from a correct re-derivation unless
+    # the starting value is one no code path would produce.
+    assert ctx.anchored_cut_cache is not None
+    ctx.threshold = -999.0
+
     # Tighten Inclusion WITHOUT re-running find-label (the pure-slide path).
     resp = client.post("/api/inclusion", json={"inclusion": -10}).get_json()
-    exclusive_threshold = get_active_detector_context().threshold
+    exclusive_threshold = ctx.threshold
 
-    # The cutoff actually moved (not a no-op) and the response reports it.
-    assert exclusive_threshold != inclusive_threshold
+    # The slide re-derived the cutoff from the cached estimator rather than
+    # skipping the detector or dropping back to the raw cross-calibration
+    # quantile.
+    assert exclusive_threshold == ctx.anchored_cut_cache.threshold_at(-10)
     assert resp["threshold"] == exclusive_threshold
-    # A more exclusive Inclusion raises the cutoff -> no more positives than before.
+    # A more exclusive Inclusion never *lowers* the cutoff -> no more positives.
+    assert exclusive_threshold >= inclusive_threshold
     exclusive_good = _votes_good(client)
     assert exclusive_good <= inclusive_good
     # Browse (votes) and Export (partition) never diverge.

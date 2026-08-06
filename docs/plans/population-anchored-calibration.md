@@ -1,7 +1,8 @@
 # Population-anchored calibration — fuse the haystack distribution into the trained threshold instead of scheduling it out
 
-**Status:** Adopted; one measurement still owed before the winner's settings can
-be called final.
+**Status:** Adopted at κ=0.3 with the midpoint cut. Two known gaps remain: the
+fused path covers binary voting, where it does not beat the blend it replaced,
+and the midpoint cut is inclusion-blind.
 
 ## Background
 
@@ -13,7 +14,8 @@ tiny sample size, the fold→final scale transfer, and per-retrain variance (non
 of which decay with label count).
 
 The 2026-08-05 deep-regime run measured the candidates and the **fold-anchored
-mixture** ("cross-LabeledGMM") at κ=1 with the rate-optimal cut won — see
+mixture** ("cross-LabeledGMM") won; the 2026-08-06 anchor-mass sweep moved its
+operating point to the interior optimum, **κ=0.3 with the midpoint cut** — see
 [`docs/experiments/population-anchored-calibration/REPORT.md`](../experiments/population-anchored-calibration/REPORT.md)
 for the numbers and
 [`docs/ML.md`](../ML.md) for what production now computes. The schedule blend
@@ -59,9 +61,19 @@ folds.
 
 <!-- item-sep -->
 
-- **Fix the two regressions #2861/#2863 shipped.** Change the constant to
-  `κ=0.3, mid`, and give binary voting a path back to `cap50` — either a
-  voting-mode split (mirroring #2841) or the positive-count gate below.
+- **Give binary voting a path back to `cap50`.** The fused threshold covers
+  binary-voting detectors too, unconditionally since #2863, and there it is at
+  best a dead heat with the `cap50` blend it replaced (−0.0004 n.s. at the
+  shipped `κ=0.3, mid`; the `κ=1, rate` that #2861 shipped was +0.0063 *worse*).
+  Either a voting-mode split (mirroring #2841) or the positive-count gate below.
+  Low positive counts want spread control, not a better-located cut.
+
+<!-- item-sep -->
+
+- [ ] #2865 — Inclusion-aware cut rule: the shipped `mid` cut ignores the cost
+  weights, so the fused threshold no longer varies with the Inclusion knob
+  (Opus 4.8). Subsumes the *"Deeper-than-inclusion-0 evidence for the cut rule"*
+  item below, which is the sweep it needs.
 
 <!-- item-sep -->
 
@@ -79,13 +91,12 @@ folds.
 
 <!-- item-sep -->
 
-- **Deeper-than-inclusion-0 evidence for the cut rule.** The run scored every
+- **Deeper-than-inclusion-0 evidence for the cut rule.** Both runs scored every
   arm at inclusion 0, where the rate cut and the midpoint coincide for
-  equal-variance fits. The shipped rule reads inclusion as its cost weights and
-  is clamped at the inter-mean interval's edges to stay monotone; the clamp's
-  *cost* is unmeasured because no arm ran at a non-zero inclusion. A sweep over
-  inclusion would say whether the rate rule's tilt is worth what it pays at the
-  ends of the knob.
+  equal-variance fits — so the winner was picked on the one inclusion where the
+  rule choice is least consequential, and the `rate` rule's clamp at the
+  inter-mean interval's edges was never priced. A sweep over inclusion is what
+  #2865 needs to choose its replacement rule; run it there rather than alone.
 
 <!-- item-sep -->
 

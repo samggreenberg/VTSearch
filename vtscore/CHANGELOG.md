@@ -15,9 +15,12 @@ instead, since every commit on `dev` is effectively a new app release.)
 - **`fold_anchored_gmm_threshold` is the shipped decision threshold.** Per
   calibration fold, a semi-supervised 2-component mixture is fitted to that
   fold model's scores over the whole collection with the fold's *held-out*
-  labels clamped to their component; each fold's rate-optimal cut is carried to
-  the final model as a quantile and the folds are combined in quantile space.
-  Anchor mass is 1.0 (each vote counts as one haystack point). The
+  labels clamped to their component; each fold's cut is carried to the final
+  model as a quantile and the folds are combined in quantile space. Anchor mass
+  is 0.3 (each vote counts as three tenths of a haystack point) and the cut is
+  the midpoint between the fitted component means — the interior optimum of a
+  six-environment κ sweep. Because the midpoint ignores the cost weights, the
+  fused threshold does not currently vary with the Inclusion knob. The
   label-count-scheduled blend (`calculate_safe_threshold`) is now only the
   fallback for label sets too small to form calibration folds.
 - **`gmm_cut_from_fit(rule="rate")` clamps instead of falling back to the
