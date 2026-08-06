@@ -376,31 +376,66 @@ def selfcheck() -> None:
     common.log("selfcheck passed: sampled rates match the closed form")
 
 
-def _run_one_config(task: tuple[int, tuple[int, float, float, int, str], int]) -> list[dict]:
-    """All reps for one configuration (one worker task)."""
-    cfg_i, (m, sep, prev, n_votes, mode), reps = task
+def _cell_path(outdir: Path, cfg_i: int) -> Path:
+    return outdir / "cells" / f"cfg_{cfg_i:04d}.csv"
+
+
+def _run_one_config(task: tuple[int, tuple[int, float, float, int, str], int, str]) -> str:
+    """All reps for one configuration, written to its own cell file.
+
+    Each configuration checkpoints itself so a killed run resumes instead of
+    losing everything: the sweep is ~30 minutes and a mid-run interruption used
+    to discard 184 of 192 completed configurations.  The cell is written to a
+    temp path and renamed, so a kill during the write cannot leave a truncated
+    file that resume would count as done.
+    """
+    cfg_i, (m, sep, prev, n_votes, mode), reps, out = task
+    path = _cell_path(Path(out), cfg_i)
     rng = np.random.default_rng(np.random.SeedSequence(entropy=22864, spawn_key=(cfg_i,)))
-    return [evaluate_config(rng, m, sep, prev, n_votes, mode) for _ in range(reps)]
+    rows = [evaluate_config(rng, m, sep, prev, n_votes, mode) for _ in range(reps)]
+    tmp = path.with_suffix(".csv.tmp")
+    pd.DataFrame(rows).to_csv(tmp, index=False)
+    tmp.rename(path)
+    return str(path)
 
 
-def run_sweep(reps: int, procs: int, smoke: bool = False) -> pd.DataFrame:
+def run_sweep(reps: int, procs: int, outdir: Path, smoke: bool = False, resume: bool = True) -> pd.DataFrame:
     grid = list(itertools.product(M_VALUES, SEPARATIONS, PREVALENCES, VOTE_COUNTS, VOTE_MODES))
     if smoke:
         grid = [g for g in grid if g[1] == 3.0 and g[2] == 0.02 and g[3] == 100]
-    tasks = [(i, cfg, reps) for i, cfg in enumerate(grid)]
-    common.log(f"kappa bench: {len(grid)} configurations x {reps} reps = {len(grid) * reps} replicates, {procs} procs")
-    rows: list[dict] = []
+    (outdir / "cells").mkdir(parents=True, exist_ok=True)
+
+    # A zero-byte cell is debris from a kill mid-write, not a completed cell.
+    done = {
+        i
+        for i in range(len(grid))
+        if resume and _cell_path(outdir, i).exists() and _cell_path(outdir, i).stat().st_size > 0
+    }
+    for i in range(len(grid)):
+        p = _cell_path(outdir, i)
+        if p.exists() and i not in done:
+            p.unlink()
+    tasks = [(i, cfg, reps, str(outdir)) for i, cfg in enumerate(grid) if i not in done]
+    common.log(
+        f"kappa bench: {len(grid)} configurations x {reps} reps = {len(grid) * reps} replicates, "
+        f"{procs} procs ({len(done)} cells already done, {len(tasks)} to run)"
+    )
+
     if procs <= 1:
         for i, task in enumerate(tasks):
-            rows.extend(_run_one_config(task))
+            _run_one_config(task)
             common.log(f"  {i + 1}/{len(tasks)} configurations")
     else:
         with Pool(procs) as pool:
-            for i, config_rows in enumerate(pool.imap_unordered(_run_one_config, tasks)):
-                rows.extend(config_rows)
+            for i, _ in enumerate(pool.imap_unordered(_run_one_config, tasks)):
                 if (i + 1) % 8 == 0:
                     common.log(f"  {i + 1}/{len(tasks)} configurations")
-    return pd.DataFrame(rows)
+
+    cells = sorted((outdir / "cells").glob("cfg_*.csv"))
+    missing = len(grid) - len(cells)
+    if missing:
+        common.log(f"WARNING: {missing} of {len(grid)} cells missing; analysing the {len(cells)} present")
+    return pd.concat([pd.read_csv(c) for c in cells], ignore_index=True)
 
 
 def _kappa_curve(df: pd.DataFrame, family: str, rule: str) -> pd.DataFrame:
@@ -524,6 +559,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--reps", type=int, default=25, help="replicates per configuration")
     parser.add_argument("--procs", type=int, default=4, help="worker processes")
     parser.add_argument("--smoke", action="store_true", help="tiny grid, for sizing")
+    parser.add_argument("--no-resume", action="store_true", help="re-run every cell instead of reusing cells/")
     parser.add_argument("--out", default=str(common.RESULTS / "theory_kappa"))
     args = parser.parse_args(argv)
 
@@ -531,7 +567,7 @@ def main(argv: list[str] | None = None) -> int:
     outdir.mkdir(parents=True, exist_ok=True)
 
     selfcheck()
-    df = run_sweep(args.reps, args.procs, smoke=args.smoke)
+    df = run_sweep(args.reps, args.procs, outdir, smoke=args.smoke, resume=not args.no_resume)
     df.to_csv(outdir / "kappa_raw.csv", index=False)
     summary = check_predictions(df, outdir)
     (outdir / "kappa_summary.json").write_text(json.dumps(summary, indent=2, default=float))
