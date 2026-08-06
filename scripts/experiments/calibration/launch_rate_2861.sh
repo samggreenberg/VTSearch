@@ -60,16 +60,20 @@ export CALIB_SCHEDULE_VARIANTS=prod,slow_cap50,cap50,slow,pure_gmm,pure_xcal
 export CALIB_MAX_STEPS=300
 export CALIB_N_SEEDS=4
 
-# --- ops: cpu partition (dodges the 4-GPU QOS cap), #2799-proven cell shape.
-# Prior run's peak RSS was 5.4G, so 24G was 4x over-provisioned and memory -
-# not cpu - was capping tasks per node.  12G lets ~40 tasks/node on the big
-# nodes instead of 20.
+# --- ops: cpu partition (dodges the 4-GPU QOS cap).
+# The binding constraint is the `cpu_limit` QOS: cpu=240 and mem=1100000M PER
+# USER.  The #2860 run asked for 4 cpus + 24G a cell, which capped it at 60
+# concurrent tasks - but `sacct -o TotalCPU,Elapsed` on that run shows
+# TotalCPU == Elapsed, i.e. a cell is single-threaded and three of those four
+# cpus did nothing, and its peak RSS was 5.4G, not 24G.  1 cpu + 8G buys 130
+# concurrent instead, which is what lets all 92 long dinov3 cells run in one
+# wave rather than two.
 export CALIB_PARTITION=cpu
 export CALIB_GRES=none
-export CALIB_MEM=12G
-export CALIB_CPUS=4
+export CALIB_MEM=8G
+export CALIB_CPUS=1
 export CALIB_TIME=3:00:00
-export CALIB_CONC=120
+export CALIB_CONC=130
 
 export VTSEARCH_DATA_DIR="$CALIB_EXP/datadir"
 export VTSEARCH_MODELS_DIR="/exp/$USER/max-patch/models"
