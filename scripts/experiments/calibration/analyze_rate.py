@@ -596,10 +596,24 @@ def fnr_by_kappa(v: pd.DataFrame, arm_meta: pd.DataFrame, agg: Path) -> pd.DataF
 
 
 def provenance_by_kappa(v: pd.DataFrame, arm_meta: pd.DataFrame, agg: Path) -> pd.DataFrame:
-    """Does a tiny anchor mass silently turn the anchored fit into a plain one?"""
+    """Does a tiny anchor mass silently turn the anchored fit into a plain one?
+
+    The two families report the path differently and must be classified
+    differently: the label-anchored arms say ``unanchored:<reason>`` when they
+    fall back, but the fold arms say ``fold_anchored[k/K]`` and never contain
+    the word "unanchored" at all - a fallback there is a *k < K* tally.  Reading
+    both with the label family's rule reports a flat 0% fallback for the fold
+    arms, which is wrong and is exactly the kind of silent zero that looks like
+    good news.
+    """
     s = v[v["gmm_variant"].str.startswith(("anchored_w", "fold_anchored_w"))].copy()
+    prov = s["threshold_provenance"].astype(str)
+    tally = prov.str.extract(r"^fold_anchored\[(\d+)/(\d+)\]$")
+    fold_incomplete = tally[0].astype(float) < tally[1].astype(float)
     s["path"] = np.where(
-        s["threshold_provenance"].astype(str).str.contains("unanchored|gmm_failed", regex=True), "fallback", "anchored"
+        fold_incomplete.fillna(False) | prov.str.contains("unanchored|gmm_failed", regex=True),
+        "fallback",
+        "anchored",
     )
     g = (
         s.groupby(["gmm_variant", "path"], observed=True)

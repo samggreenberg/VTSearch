@@ -156,12 +156,16 @@ oracle cut, step-to-step threshold delta, estimator path taken.
 
 <!-- item-sep -->
 
-- **Boundary sweep before adoption.** κ ∈ {0.1, 0.3, 1} × folds ∈ {2, 4},
-  fold-anchored arms only, plus the `slow_cap50` blend as a control arm: the
-  2026-08-05 run's winner (`fold_anchored κ=1 rate` — see
-  `docs/experiments/population-anchored-calibration/REPORT.md`) sits at the κ
-  grid edge, 2 folds degenerate the qmean/qmedian combine comparison, and the
-  run's blend control predates the #2841 `slow_cap50` schedule.
+- **DONE — boundary sweep (#2861, 2026-08-06).** κ ∈ {0.01 … 3} × 6
+  environments, with `slow_cap50`/`cap50` scored as control arms. The optimum is
+  interior at `fold_anchored κ=0.3 mid`, and fusion beats the shipped blend on
+  region voting only — see
+  `docs/experiments/population-anchored-calibration/REPORT.md`. **Still open:**
+  folds ∈ {2, 4} (`calibrate_count` is a harness constant, so it needs its own
+  A/B, and it un-degenerates the qmean/qmedian comparison); a `κ ∝ 1/n`
+  total-anchor-mass variant, which the per-window κ* trend (3 → 0.1 from 20 to
+  300 votes) says should beat any constant; and the positive-count gate for when
+  to use fusion at all.
 
 <!-- item-sep -->
 

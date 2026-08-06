@@ -53,6 +53,20 @@ CURVATURE = 0.05
 NOISE = 0.004
 
 
+def _prov(name: str, t: int) -> str:
+    """Provenance strings shaped like the harness's own, incl. a fold fallback.
+
+    Every 50th step one fold degenerates, so the analyzer's fold-arm fallback
+    classifier has something to find; reading fold arms with the label family's
+    "unanchored" rule would report 0% here and the test would catch it.
+    """
+    if name.startswith("fold_anchored_"):
+        return "fold_anchored[1/2]" if t % 50 == 0 else "fold_anchored[2/2]"
+    if name.startswith("anchored_w"):
+        return "unanchored:inverted_means" if t % 100 == 0 else "anchored"
+    return name
+
+
 def _fold_edge(kappa: float) -> float:
     lo, hi = (math.log10(k) for k in FLAT)
     x = math.log10(kappa)
@@ -124,7 +138,7 @@ def _fabricate(results: Path, rng: np.random.Generator) -> None:
                                 "regret": regret,
                                 "fpr": 0.05,
                                 "fnr": 0.12 + max(edge, -0.1),
-                                "threshold_provenance": "anchored" if "anchored" in name else name,
+                                "threshold_provenance": _prov(name, t),
                             }
                         )
 
@@ -230,6 +244,14 @@ def main() -> int:
         assert len(best) == len(ENVS), best.to_dict("records")
         # planted: fusion -0.08 vs xcal, shipped blend -0.04 vs xcal
         assert (best["d_regret"] - (-0.04)).abs().max() < 0.01, best.to_dict("records")
+
+        # --- provenance: both families classified by their own convention --
+        prov = pd.read_csv(results / "agg" / "rate_provenance.csv")
+        fold = prov[prov["family"] == "fold_anchored"]["fallback_rate"]
+        lab = prov[prov["family"] == "label_anchored"]["fallback_rate"]
+        # planted: 1 step in 50 for fold arms, 1 in 100 for label arms
+        assert (fold - 0.02).abs().max() < 0.005, prov.to_dict("records")
+        assert (lab - 0.01).abs().max() < 0.005, prov.to_dict("records")
 
         assert (results / "REPORT_rate.md").exists()
 
