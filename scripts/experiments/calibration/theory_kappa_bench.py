@@ -54,17 +54,32 @@ Every cut is inverted through the final head and scored on the **closed-form
 true loss**, so excess is measured against the exact optimum with no held-out
 sample noise.
 
-Pre-registered predictions (checked and printed by :func:`check_predictions`):
+Pre-registered predictions (checked and printed by :func:`check_predictions`).
+Run 1 (2400 replicates, m x {2,3} separation) already **refuted P1 and P4**;
+they are kept unchanged so the second run scores the same stated predictions
+rather than ones retrofitted to the first run's answer:
 
 * **P1** - the fusion advantage (``xcal_only`` excess minus best fold-anchored
   excess) grows with ``m`` and is smallest at ``m = 1``.
+  *Run 1: REFUTED* - flat in ``m`` (0.032 / 0.034 / 0.030).  Pooling moves
+  which κ wins, not the size of the prize.
 * **P2** - the κ curve is flat at ``m = 1``; at ``m >= 6`` it has an interior
   optimum whose argmin falls as the vote count grows.
+  *Run 1: PARTIAL* - argmin falls with votes at both ``m`` (reproducing
+  #2864's finding 3 with no acquisition feedback), and is 1-2 decades lower
+  at ``m = 24`` than at ``m = 1`` at every vote count - but it is censored at
+  the grid's bottom edge, which is why :data:`KAPPAS` now reaches 0.001.
 * **P3** - across configurations, the fusion advantage tracks the true-loss
   curvature ``L''(tau*)`` (curvature as the mediating variable, also ordering
   configurations *within* each ``m``).
+  *Run 1: WEAK* (r = 0.17), unreadable while the argmin is censored.
 * **P4** - threshold-adjacent ("hard") vote acquisition shifts κ* down
   relative to random votes at high ``m``.
+  *Run 1: REFUTED, and inverted* - hard votes moved κ* **up** (to 3-10) at
+  every ``m``.  Coherent under the ``mid`` rule, which never reads the
+  mixture weights that acquisition bias corrupts: boundary-adjacent labels
+  are highly informative about where the boundary is.  This suggests #2864's
+  acquisition-bias mechanism is specific to the weight-reading ``rate`` rule.
 
 Usage: ``python theory_kappa_bench.py [--reps 25] [--procs 4] [--smoke]``
 """
