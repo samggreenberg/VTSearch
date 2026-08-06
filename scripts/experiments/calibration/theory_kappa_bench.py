@@ -42,6 +42,9 @@ Arms (all production code paths from :mod:`vtscore.training.thresholds`):
   repairs scale transfer only.
 * ``unanchored_{mid,rate}`` - :func:`fit_score_gmm` on the final head's sim
   scores: the κ -> 0 population-only limit.
+* ``blend_{cap50,slow_cap50}`` - :func:`blend_gmm_threshold` on the shipped
+  per-mode schedules: the pre-#2861 production blends the real data ranks
+  fusion against (``cap50`` beats fusion on binary voting there).
 * ``fold_w{κ}_{mid,rate}`` - :func:`fold_anchored_gmm_threshold`, the shipped
   fusion estimator, per anchor mass κ.
 * ``label_w{κ}_{mid,rate}`` - :func:`anchored_gmm_fit` anchoring on the final
@@ -81,8 +84,10 @@ common.setup_env()
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
+from vtscore.training.blend_schedules import BlendContext  # noqa: E402
 from vtscore.training.thresholds import (  # noqa: E402
     anchored_gmm_fit,
+    blend_gmm_threshold,
     conformal_threshold,
     fit_score_gmm,
     fold_anchored_gmm_threshold,
@@ -94,8 +99,13 @@ from vtscore.training.thresholds import (  # noqa: E402
 #: Region counts. 1 = the whole-image (binary-voting) control; 24 ~ the
 #: production patch grid's usable region count (matches theory_bench).
 M_VALUES: tuple[int, ...] = (1, 6, 24)
-#: Class separation in per-region logit units.
-SEPARATIONS: tuple[float, ...] = (2.0, 3.0)
+#: Class separation in per-region logit units.  2-3 are overlap-heavy (the
+#: region-voting regime); 4-5 are near-separable - the analog of the real
+#: *binary* environments, whose x-cal FNR runs 0.04-0.06.  The real #2864
+#: design confounds pooling with achieved separation (its region environments
+#: are also its overlappy ones); crossing m with separation is what lets this
+#: bench split them.
+SEPARATIONS: tuple[float, ...] = (2.0, 3.0, 4.0, 5.0)
 #: Positive-class prevalence of the sim population.
 PREVALENCES: tuple[float, ...] = (0.02, 0.05)
 #: Sim-set (haystack) size - the real fit populations were 419-2476.
@@ -105,13 +115,17 @@ VOTE_COUNTS: tuple[int, ...] = (20, 50, 100, 300)
 #: Fraction of votes that are positive (~ the deep-regime environments'
 #: 7-24 positives per ~176 votes).
 POS_VOTE_FRAC: float = 0.1
-#: Vote acquisition modes: iid class samples vs threshold-adjacent picks
-#: (Autopilot's Hard phase, modelled as nearest-to-tau* from a 5x pool).
+#: Vote acquisition modes: iid class samples vs Autopilot-like mixed
+#: acquisition (half iid, half nearest-tau* from a 5x pool - the Hard phase is
+#: only one of Autopilot's phases; an all-hard vote set makes ~half the 1-D
+#: heads degenerate at 20 votes, a selection bias run 1 of this bench hit).
 VOTE_MODES: tuple[str, ...] = ("random", "hard")
 HARD_POOL_FACTOR: int = 5
-#: Anchor masses. Spans #2864's grid and extends one decade up to keep the
-#: label-anchored trap visible.
-KAPPAS: tuple[float, ...] = (0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0)
+HARD_FRACTION: float = 0.5
+#: Anchor masses. Spans #2864's grid, extended one decade up (the
+#: label-anchored trap) and one down (at 300 votes the argmin fell to run 1's
+#: bottom edge).
+KAPPAS: tuple[float, ...] = (0.001, 0.003, 0.01, 0.03, 0.1, 0.3, 1.0, 3.0, 10.0)
 RULES: tuple[str, ...] = ("mid", "rate")
 #: Calibration folds, matching production's ``calibrate_count``.
 N_FOLDS: int = 2
@@ -191,20 +205,25 @@ def sample_votes(
 ) -> tuple[np.ndarray, np.ndarray]:
     """``(raw vote logits, labels)`` under an acquisition *mode*.
 
-    ``random`` draws each class iid.  ``hard`` draws a :data:`HARD_POOL_FACTOR`
-    times larger pool per class and keeps the votes nearest the true optimum -
-    a stateless stand-in for Autopilot's Hard phase, which samples items
-    adjacent to the current threshold.
+    ``random`` draws each class iid.  ``hard`` draws :data:`HARD_FRACTION` of
+    each class as the nearest-to-tau* picks from a :data:`HARD_POOL_FACTOR`
+    times larger pool (Autopilot's Hard phase) and the rest iid (its other
+    phases) - a stateless stand-in for threshold-adjacent acquisition.
     """
     n_pos = max(2, round(POS_VOTE_FRAC * n_votes))
     n_neg = n_votes - n_pos
-    pos = _class_logits(rng, n_pos * (HARD_POOL_FACTOR if mode == "hard" else 1), m, mu_good, positive=True)
-    neg = _class_logits(rng, n_neg * (HARD_POOL_FACTOR if mode == "hard" else 1), m, mu_good, positive=False)
-    if mode == "hard":
-        pos = pos[np.argsort(np.abs(pos - tau_star_logit))[:n_pos]]
-        neg = neg[np.argsort(np.abs(neg - tau_star_logit))[:n_neg]]
-    elif mode != "random":
-        raise ValueError(f"unknown vote mode {mode!r}")
+
+    def draw(n: int, positive: bool) -> np.ndarray:
+        if mode == "random":
+            return _class_logits(rng, n, m, mu_good, positive)
+        if mode != "hard":
+            raise ValueError(f"unknown vote mode {mode!r}")
+        n_hard = round(HARD_FRACTION * n)
+        pool = _class_logits(rng, max(n_hard, 1) * HARD_POOL_FACTOR, m, mu_good, positive)
+        hard = pool[np.argsort(np.abs(pool - tau_star_logit))[:n_hard]]
+        return np.concatenate([hard, _class_logits(rng, n - n_hard, m, mu_good, positive)])
+
+    pos, neg = draw(n_pos, positive=True), draw(n_neg, positive=False)
     return np.concatenate([pos, neg]), np.concatenate([np.ones(n_pos), np.zeros(n_neg)])
 
 
@@ -306,6 +325,19 @@ def evaluate_config(
     for rule in RULES:
         score(f"unanchored_{rule}", gmm_cut_from_fit(fit, rule, FPR_WEIGHT, FNR_WEIGHT)[0] if fit else float("nan"))
 
+    # The shipped pre-fusion blends (#2841/#2849): conformal x-cal averaged
+    # with the unanchored mid cut on the per-mode schedule.  ``cap50`` is what
+    # binary voting had before #2861 - the arm the real data says fusion loses
+    # to there - and ``slow_cap50`` its region counterpart.
+    if fit is not None:
+        ctx = BlendContext(n_labels=n_votes, n_good=int(vote_labels.sum()), n_bad=int((1.0 - vote_labels).sum()))
+        mid_cut = gmm_cut_from_fit(fit, "mid", FPR_WEIGHT, FNR_WEIGHT)[0]
+        for schedule in ("cap50", "slow_cap50"):
+            score(f"blend_{schedule}", blend_gmm_threshold(xcal, mid_cut, ctx, schedule=schedule))
+    else:
+        row["excess_blend_cap50"] = float("nan")
+        row["excess_blend_slow_cap50"] = float("nan")
+
     anchor_scores = _head_scores(final, vote_logits).tolist()
     for kappa in KAPPAS:
         for rule in RULES:
@@ -401,6 +433,8 @@ def check_predictions(df: pd.DataFrame, outdir: Path) -> dict:
         "excess_conformal_true_scale",
         "excess_unanchored_mid",
         "excess_unanchored_rate",
+        "excess_blend_cap50",
+        "excess_blend_slow_cap50",
     ]
     label_cols = [f"excess_label_w{k:g}_{r}" for k in KAPPAS for r in RULES]
 
@@ -455,6 +489,20 @@ def check_predictions(df: pd.DataFrame, outdir: Path) -> dict:
         if col in big
     }
 
+    # The real-data mode split, reproduced or not: fusion-vs-blend by
+    # separation (random votes, pooled m/prev/n).  The #2864 ranking to match:
+    # blend ahead of fusion on near-separable ("binary") configs, fusion ahead
+    # where classes overlap ("region").
+    ranking_by_separation = {}
+    for sep in SEPARATIONS:
+        sub = rnd_cfg[rnd_cfg["separation"] == sep]
+        ranking_by_separation[f"{sep:g}"] = {
+            "xcal_only": float(sub["excess_xcal_only"].mean()),
+            "blend_cap50": float(sub["excess_blend_cap50"].mean()),
+            "fold_w0.3_mid": float(sub["excess_fold_w0.3_mid"].mean()),
+            "best_fold": float(sub["best_fold"].mean()),
+        }
+
     fallback_rate = {f"{k:g}": float(df[f"fold_fallback_w{k:g}"].mean()) for k in KAPPAS}
     return {
         "n_replicates": int(n_total),
@@ -465,6 +513,7 @@ def check_predictions(df: pd.DataFrame, outdir: Path) -> dict:
         "p3_curvature_advantage_corr": p3_corr,
         "p3_within_m_rank_corr": p3_within,
         "p4_argmin_kappa_by_mode": p4,
+        "ranking_by_separation": ranking_by_separation,
         "decomposition_at_max_m_random": decomposition,
         "fold_fallback_rate_by_kappa": fallback_rate,
     }
