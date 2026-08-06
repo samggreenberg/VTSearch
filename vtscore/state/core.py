@@ -805,10 +805,10 @@ class DetectorContext:
         # calibration.  See docs/plans/find-verification-workflow.md.
         "calibration_cache",  # tuple[Any, CalibrationFolds] | None
         # The fold-anchored population estimator behind the current threshold
-        # (``FoldAnchoredCut``), or None when the estimator degenerated.  Under
-        # the shipped midpoint cut re-cutting it is inclusion-independent (see
-        # ``FOLD_ANCHOR_CUT_RULE`` and issue #2865), but it is still the
-        # estimator to re-cut.  Written on every retrain that computes a safe
+        # (``FoldAnchoredCut``), or None when the estimator degenerated.  A
+        # re-cut answers Inclusion: the shipped ``mid_tilt`` rule anchors the
+        # measured midpoint cut at inclusion 0 and tilts monotonically away
+        # from it (issue #2865).  Written on every retrain that computes a safe
         # threshold; read by ``recompute_detector_thresholds_for_inclusion``
         # and the Find Stats sweep so both re-cut the *shipped* estimator
         # instead of the raw cross-calibration one.  Holds fitted Gaussians and

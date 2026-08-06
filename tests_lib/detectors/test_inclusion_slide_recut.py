@@ -96,6 +96,11 @@ class TestInclusionSlideRecutsTheAnchoredEstimator:
             recompute_detector_thresholds_for_inclusion(k)
             seen.append(det_ctx.threshold)
         assert all(b <= a + 1e-12 for a, b in zip(seen, seen[1:], strict=False)), seen
+        # ...and the knob actually moves the cutoff, not merely fails to rise.
+        # A constant satisfies monotonicity, which is exactly how the
+        # inclusion-blind midpoint cut slipped past this test; the shipped
+        # ``mid_tilt`` rule answers the knob (issue #2865).
+        assert seen[0] > seen[-1], seen
 
     def test_without_an_estimator_the_slide_falls_back_to_the_conformal_rule(self):
         """A detector whose population fit degenerated (no cached estimator)

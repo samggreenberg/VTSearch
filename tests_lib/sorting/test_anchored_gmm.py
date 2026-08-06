@@ -339,14 +339,17 @@ class TestShippedFoldAnchoredDefaults:
     ``docs/experiments/population-anchored-calibration/REPORT.md`` recommends
     ``fold_anchored κ=0.3, mid cut``: the first run's grid bottomed out at κ=1
     so its winner sat on the edge, and extending the grid two decades down
-    across six environments moved both the mass *and* the rule.  These pin the
+    across six environments moved both the mass *and* the rule.  The shipped
+    rule is ``mid_tilt`` - the measured midpoint anchored at inclusion 0, with
+    the rate rule's displacement as the Inclusion tilt (issue #2865) - so at
+    inclusion 0 it *is* the recommended arm, bit for bit.  These pin the
     constants and the call defaults together so a change to either is
     deliberate rather than a drift between the report and the code.
     """
 
     def test_constants(self):
         assert FOLD_ANCHOR_WEIGHT == 0.3
-        assert FOLD_ANCHOR_CUT_RULE == "mid"
+        assert FOLD_ANCHOR_CUT_RULE == "mid_tilt"
         assert FOLD_ANCHOR_COMBINE == "qmean"
 
     def test_the_bare_call_uses_them(self):
@@ -369,8 +372,10 @@ class TestShippedFoldAnchoredDefaults:
 
 
 class TestFoldAnchoredInclusion:
-    """How the estimator answers the Inclusion knob - which is: not at all,
-    under the shipped ``mid`` rule, and monotonically under ``rate``."""
+    """How the estimator answers the Inclusion knob: monotonically under the
+    shipped ``mid_tilt`` rule (anchored bit-for-bit to the measured midpoint
+    at inclusion 0, issue #2865) and under ``rate``; not at all under plain
+    ``mid``."""
 
     @staticmethod
     def _cut(sd=0.12, mu_lo=0.4, mu_hi=0.6, cut_rule=FOLD_ANCHOR_CUT_RULE):
@@ -391,26 +396,37 @@ class TestFoldAnchoredInclusion:
         assert cut is not None
         return cut
 
-    def test_the_shipped_rule_is_inclusion_blind(self):
-        """Pinned as a decision, not left as a surprise.
+    def test_the_shipped_rule_reproduces_mid_exactly_at_inclusion_zero(self):
+        """#2865's anchoring contract: at inclusion 0 the tilt term is
+        identically zero (both rate quantiles are the same computation on the
+        same fits), so the shipped ``mid_tilt`` rule is bit-for-bit the plain
+        ``mid`` arm - the one operating point either calibration run actually
+        scored."""
+        assert self._cut().threshold_at(0) == self._cut(cut_rule="mid").threshold_at(0)
 
-        Inclusion reaches this estimator *only* as the rate weights the cut
-        rule optimises, and the shipped ``mid`` rule ignores them - so the
-        fused threshold is constant across the whole knob.  That is the
-        accepted cost of shipping the anchor-mass sweep's winner as measured
-        (every arm in both runs ran at inclusion 0, so nothing measured the
-        tilt); issue #2865 owns the inclusion-aware replacement.  When that
-        lands, this test is the one to delete.
-        """
+    def test_the_shipped_rule_answers_the_knob_and_stays_nested(self):
+        """Raising inclusion never raises the cut, and the knob actually moves
+        the line across its range - the assertion the inclusion-blind ``mid``
+        rule could not pass (issue #2865)."""
         cuts = [self._cut().threshold_at(k) for k in range(-10, 11)]
+        assert all(b <= a + 1e-12 for a, b in zip(cuts, cuts[1:], strict=False)), cuts
+        assert cuts[0] > cuts[-1], "the knob must actually move the line"
+
+    def test_plain_mid_is_inclusion_blind(self):
+        """The property that motivated #2865, pinned on the rule that has it:
+        the bare midpoint ignores the cost weights, so a ``mid``-rule estimator
+        is constant across the whole knob.  ``mid`` stays in the tree as a
+        harness arm and as ``mid_tilt``'s inclusion-0 anchor."""
+        cuts = [self._cut(cut_rule="mid").threshold_at(k) for k in range(-10, 11)]
         assert len(set(cuts)) == 1, cuts
 
     def test_rate_thresholds_are_nested_across_the_whole_knob(self):
         """The ``rate`` rule still answers the knob, and answers it monotonically.
 
-        Not the shipped rule any more, but it stays in the tree as a harness
-        arm and as the starting point for #2865, so its contract is still
-        worth pinning: raising inclusion can only lower the cut.
+        Not the shipped rule on its own any more, but it is the donor of
+        ``mid_tilt``'s tilt (and a harness arm), so its contract is what the
+        shipped rule's monotonicity is inherited from: raising inclusion can
+        only lower the cut.
         """
         cuts = [self._cut(cut_rule="rate").threshold_at(k) for k in range(-10, 11)]
         assert all(b <= a + 1e-12 for a, b in zip(cuts, cuts[1:], strict=False)), cuts
@@ -426,8 +442,9 @@ class TestFoldAnchoredInclusion:
         resolve" the conformal rule names; it shrinks as soon as the modes
         overlap (the test above), which is the realistic case.
 
-        Scored against ``rate``, since the shipped ``mid`` rule collapses the
-        range to exactly zero everywhere and would pass this vacuously.
+        Scored against ``rate``, whose tilt is exactly the shift the shipped
+        ``mid_tilt`` rule applies - so a knob range this small under ``rate``
+        bounds the shipped rule's realized range on the same haystack too.
         """
         rng = np.random.default_rng(401)
         final = _bimodal(rng)

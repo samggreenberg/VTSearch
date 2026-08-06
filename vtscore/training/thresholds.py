@@ -595,6 +595,12 @@ def gmm_cut_from_fit(fit: GmmFit1D, rule: str, fpr_weight: float = 1.0, fnr_weig
     flag marks the degenerate cases it decided by clamping to an edge.  The
     value is the stationary point wherever one exists, so this is the rule the
     #2836 / #2852 measurements scored.
+
+    ``"mid_tilt"`` (the shipped fold-level rule, :data:`FOLD_ANCHOR_CUT_RULE`)
+    is deliberately *not* accepted here: it is defined in fold-quantile space
+    over a :class:`FoldAnchoredCut`'s combined folds
+    (:meth:`FoldAnchoredCut._quantile_at`), so it has no per-fit, score-space
+    form for this function to apply.
     """
     if rule == "mid":
         return fit.midpoint(), 0
@@ -637,24 +643,29 @@ def rank_transfer(
 #: at κ=0.3 (docs/experiments/population-anchored-calibration/REPORT.md).
 FOLD_ANCHOR_WEIGHT = 0.3
 
-#: Production cut rule for the fold-anchored threshold: the historical
-#: **midpoint** between the fitted component means.
+#: Production cut rule for the fold-anchored threshold: the **midpoint
+#: anchored at inclusion 0, tilted by the rate rule** (issue #2865).
 #:
-#: The cut rule flips with the anchor mass, and that is the mechanism: ``mid``
-#: ignores the mixture weights while ``rate`` reads them.  At light anchoring
-#: the weights come from the population (right) and ``mid`` wins; heavier
-#: anchoring lets the votes' acquisition-biased prevalence into the weights,
-#: which is what ``rate`` reads.  So ``mid`` peaks at κ=0.3 and ``rate`` at
-#: κ=1, and the two curves cross near κ=1-2 - which is why the first run, whose
-#: grid started at κ=1, saw ``rate`` in front.
+#: The anchor-mass sweep picked the plain midpoint at κ=0.3, and the mechanism
+#: is that ``mid`` ignores the mixture weights while ``rate`` reads them: at
+#: light anchoring the weights carry the votes' acquisition-biased prevalence
+#: out of proportion to their honesty, so the rule that never looks at them
+#: wins.  But every arm of both calibration runs was scored at inclusion 0,
+#: and a bare midpoint also ignores the *cost* weights the Inclusion knob
+#: arrives as - shipping it verbatim made the knob a no-op for every detector
+#: with usable folds.
 #:
-#: **This makes the fold-anchored threshold inclusion-blind**, because
-#: :func:`gmm_cut_from_fit` reads the Inclusion knob only through ``rate``'s
-#: cost weights.  That is a known, accepted consequence of shipping the
-#: measured winner: every arm in both runs was scored at inclusion 0, so no
-#: measurement covers the tilt.  See issue #2865 for the inclusion-aware cut
-#: rule that is meant to replace this.
-FOLD_ANCHOR_CUT_RULE = "mid"
+#: ``mid_tilt`` keeps the measured winner exactly where it was measured and
+#: restores the knob everywhere else.  In fold-quantile space,
+#: ``q(k) = q_mid + (q_rate(k) - q_rate(0))``: the midpoint's combined fold
+#: quantile, shifted by however far the rate-optimal cut's own quantile moves
+#: from its inclusion-0 position (see :meth:`FoldAnchoredCut._quantile_at`).
+#: At inclusion 0 the shift is identically zero, so the threshold is
+#: bit-for-bit the measured ``κ=0.3, mid`` arm; away from 0 it inherits
+#: ``rate``'s monotone tilt without inheriting ``rate``'s weight-biased
+#: *location*.  The tilt itself is still unmeasured - issue #2865's inclusion
+#: sweep is what prices it.
+FOLD_ANCHOR_CUT_RULE = "mid_tilt"
 
 #: Production fold-combine rule: mean of the per-fold quantiles.  With the
 #: shipped ``calibrate_count=2`` the mean and the median coincide.
@@ -678,12 +689,11 @@ class FoldAnchoredCut:
     retrain at that inclusion would have stored (see
     :func:`vtscore.state.core.recompute_detector_thresholds_for_inclusion`).
 
-    Under the shipped :data:`FOLD_ANCHOR_CUT_RULE` (``"mid"``) what a retrain
-    at another inclusion would have stored is *the same threshold*: the
-    midpoint rule ignores the cost weights, so this estimator is currently
-    inclusion-blind.  The re-cut path is kept intact - it costs nothing, it
-    still carries the ``rate`` rule for callers that ask for it, and it is what
-    issue #2865's inclusion-aware rule will slot into.
+    Under the shipped :data:`FOLD_ANCHOR_CUT_RULE` (``"mid_tilt"``) a re-cut
+    answers the knob: inclusion 0 reproduces the measured midpoint cut
+    bit-for-bit, and every other inclusion shifts the midpoint's combined
+    quantile by the rate rule's own displacement from *its* inclusion-0
+    position (issue #2865; see :meth:`_quantile_at`).
     """
 
     fits: tuple[GmmFit1D, ...]
@@ -698,11 +708,11 @@ class FoldAnchoredCut:
         """``"fold_anchored[a/k]"`` - *a* of the *k* used folds fitted anchored."""
         return f"fold_anchored[{self.n_anchored}/{len(self.fits)}]"
 
-    def _quantile_at(self, fpr_weight: float, fnr_weight: float) -> float:
-        """Combined fold quantile at these cost weights."""
+    def _combined_fold_quantile(self, rule: str, fpr_weight: float, fnr_weight: float) -> float:
+        """Combined fold quantile of *rule*'s per-fold cuts at these cost weights."""
         quantiles = []
         for fit, src in zip(self.fits, self.fold_haystacks, strict=True):
-            cut, _fell_back = gmm_cut_from_fit(fit, self.cut_rule, fpr_weight, fnr_weight)
+            cut, _fell_back = gmm_cut_from_fit(fit, rule, fpr_weight, fnr_weight)
             quantiles.append(float(np.searchsorted(src, cut, side="left")) / float(src.size))
         if self.combine == "qmean":
             return float(np.mean(quantiles))
@@ -710,15 +720,43 @@ class FoldAnchoredCut:
             return float(np.median(quantiles))
         raise ValueError(f"unknown fold combine {self.combine!r}; expected 'qmean' or 'qmedian'")
 
+    def _quantile_at(self, fpr_weight: float, fnr_weight: float) -> float:
+        """Combined fold quantile at these cost weights, under ``cut_rule``.
+
+        ``"mid"`` and ``"rate"`` are per-fit rules (:func:`gmm_cut_from_fit`)
+        read straight through.  ``"mid_tilt"`` is composed here rather than per
+        fit because it is defined in fold-quantile space:
+        ``q = q_mid + (q_rate(weights) - q_rate(equal weights))``.  At equal
+        cost weights - inclusion 0 - the parenthesised shift is *identically*
+        zero (both terms are the same computation on the same fits), so the
+        rule is bit-for-bit the plain midpoint exactly where the calibration
+        runs measured it.  Elsewhere it moves the admitted fraction by however
+        much the rate-optimal cut would have moved its own, so it inherits
+        ``rate``'s monotonicity in the cost ratio without inheriting ``rate``'s
+        weight-biased inclusion-0 location.  A fold too degenerate for a rate
+        cut contributes a zero shift (its ``rate`` cut falls back to the
+        midpoint at every weight), degrading that fold to plain ``mid`` rather
+        than poisoning the tilt.
+        """
+        if self.cut_rule == "mid_tilt":
+            q_mid = self._combined_fold_quantile("mid", 1.0, 1.0)
+            q_rate = self._combined_fold_quantile("rate", fpr_weight, fnr_weight)
+            q_rate_zero = self._combined_fold_quantile("rate", *inclusion_cost_weights(0))
+            return q_mid + (q_rate - q_rate_zero)
+        return self._combined_fold_quantile(self.cut_rule, fpr_weight, fnr_weight)
+
     def threshold_at(self, inclusion_value: int) -> float:
         """The threshold this estimator cuts at *inclusion_value*.
 
         Inclusion reaches the cut only as the rate weights it optimises
-        (:func:`inclusion_cost_weights`): under ``cut_rule="rate"`` raising
-        inclusion tilts the rate-optimal crossing down and admits more - the
-        same direction the conformal rule moves - while under the shipped
-        ``cut_rule="mid"`` the midpoint ignores the weights and the returned
-        threshold is **constant in inclusion** (issue #2865).
+        (:func:`inclusion_cost_weights`).  Under the shipped ``"mid_tilt"``
+        rule the midpoint's combined quantile is shifted by the rate rule's
+        displacement from its own inclusion-0 position (see
+        :meth:`_quantile_at`), so raising inclusion lowers the threshold and
+        admits more - the same direction the conformal rule moves - while
+        inclusion 0 remains exactly the measured midpoint cut.  ``"rate"``
+        tilts the crossing itself; plain ``"mid"`` ignores the weights and is
+        constant in inclusion.
 
         **Monotone by construction**, so the included sets stay nested
         (everything included at ``k`` stays included at ``k + 1``) - the
@@ -727,7 +765,9 @@ class FoldAnchoredCut:
         the cost weights (:func:`gmm_cut_from_fit`, clamped at the interval
         edges rather than abandoned so the exits stay monotone too), the
         empirical quantile of that cut in its fold's haystack, the mean/median
-        across folds, and realizing a quantile on the final haystack.
+        across folds, the ``mid_tilt`` composition (a constant plus a
+        monotone-in-inclusion shift), and realizing a quantile on the final
+        haystack.
         """
         if self.final_haystack.size == 0:
             return 0.5
@@ -815,9 +855,11 @@ def fold_anchored_gmm_threshold(
     Two limits of that recommendation are on record rather than fixed here.
     The gain tracks *positive*-anchor count, so on binary-voting detectors with
     few positives this only reaches a dead heat with the ``cap50`` blend it
-    replaced (open work in ``docs/plans/population-anchored-calibration.md``),
-    and every arm was scored at inclusion 0, so the shipped ``mid`` rule's
-    inclusion-blindness is unmeasured (issue #2865).
+    replaced (open work in ``docs/plans/population-anchored-calibration.md``).
+    And every arm was scored at inclusion 0 - which the shipped ``mid_tilt``
+    rule reproduces bit-for-bit while restoring the Inclusion tilt away from
+    it; the tilt itself is the part issue #2865's inclusion sweep still owes a
+    measurement.
 
     Fits via :func:`fit_fold_anchored_cut`, then carries each fold's cut to the
     final model as a quantile of that fold's haystack distribution
