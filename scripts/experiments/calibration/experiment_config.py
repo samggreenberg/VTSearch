@@ -66,7 +66,12 @@ EXEMPLAR_CANDIDATES = int(os.environ.get("CALIB_EXEMPLAR_CANDIDATES", "8"))
 # --- Production-faithful fixed choices (pre-registered) ---
 INCLUSION = 0
 SIM_FRACTION = 0.5
-CALIBRATE_COUNT = 2
+#: Number of cross-calibration folds.  Production is 2, which is why it was a
+#: constant - but 2 folds make the fold-anchored ``qmean``/``qmedian`` combine
+#: arms byte-identical, so the combine question cannot be asked without moving
+#: it.  Changing this changes the *trajectory* (different splits, different
+#: per-fold models), so a folds contrast is a run-level A/B, not a paired arm.
+CALIBRATE_COUNT = int(os.environ.get("CALIB_CALIBRATE_COUNT", "2"))
 CALIBRATION_FRACTION = 0.5
 #: The #2781 study pre-registered safe_thresholds OFF (conformal path only);
 #: the #2799 safe-threshold GMM study flips this on via CALIB_SAFE_THRESHOLDS=1
