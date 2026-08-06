@@ -125,6 +125,15 @@ def test_wholeimage_base_threshold_is_byte_identical():
 
 
 def _run_emit(style, seed=0, variants=("topk", "pnorm")):
+    """Emit the #2781 calibration frame on the **no-fusion control arm**.
+
+    These tests pin the re-pooling plumbing and the conformal provenance
+    ladder, both of which live upstream of the threshold estimator.  Running
+    them with ``safe_thresholds=False`` keeps the base row's provenance the
+    conformal one and keeps the safe-variant row family out of the frame; the
+    shipped fused configuration is covered by ``test_safe_gmm_variant_rows`` and
+    ``test_anchored_variant_rows``.
+    """
     medias, _ = _planted_dataset(n_per_cat=40, seed=seed)
     sweep: list = []
     rows = simulate_voting_iterations(
@@ -134,6 +143,7 @@ def _run_emit(style, seed=0, variants=("topk", "pnorm")):
         dataset_name="planted",
         inclusion=0,
         region_voting=True,
+        safe_thresholds=False,
         max_steps=18,
         style=style,
         emit_calibration_metrics=True,

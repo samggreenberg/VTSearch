@@ -788,7 +788,6 @@ def labelset_train_and_score(
     media_type: str,
     clips_dict: dict[int, dict[str, Any]],
     inclusion_value: int = 0,
-    safe_thresholds: bool = False,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
 ) -> tuple[list[dict[str, Any]], float, Any | None]:
@@ -800,7 +799,7 @@ def labelset_train_and_score(
     then defers the threshold → train → score → format tail to the shared
     :func:`~vtscore.detectors.training._train_and_score_xy` core, so the two
     pipelines stay in lock-step (region-aware scoring, NaN sanitisation,
-    safe-threshold blending).  Scoring is still scoped to the active
+    population-fused thresholding).  Scoring is still scoped to the active
     dataset's media, since that is what the user is sorting in the UI.
     """
     from vtscore.detectors.training import _train_and_score_xy
@@ -812,7 +811,6 @@ def labelset_train_and_score(
         y_list,
         clips_dict,
         inclusion_value=inclusion_value,
-        safe_thresholds=safe_thresholds,
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
         det_ctx=det_ctx,

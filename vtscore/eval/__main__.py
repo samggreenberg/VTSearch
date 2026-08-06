@@ -104,11 +104,6 @@ def main() -> None:
         help="Use enriched (wrapper-averaged) text embeddings for text-sort evaluation.",
     )
     parser.add_argument(
-        "--safe-thresholds",
-        action="store_true",
-        help="Blend cross-calibration threshold with GMM for robustness with few labels.",
-    )
-    parser.add_argument(
         "--calibrate-count",
         type=int,
         default=2,
@@ -164,7 +159,6 @@ def main() -> None:
         train_fraction=args.train_fraction,
         seed=args.seed,
         enrich=args.enrich_descriptions,
-        safe_thresholds=args.safe_thresholds,
         calibrate_count=args.calibrate_count,
         calibration_fraction=args.calibration_fraction,
         embedder_name=args.embedder,

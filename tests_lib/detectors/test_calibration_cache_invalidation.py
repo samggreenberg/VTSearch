@@ -71,7 +71,7 @@ class TestCalibrationCacheStaysHonestAtSmallLabelCounts:
 
         good = {300: None, 301: None}
         bad = {302: None, 303: None}
-        _results, _threshold, model = train_and_score(clips, good, bad, safe_thresholds=True, det_ctx=det_ctx)
+        _results, _threshold, model = train_and_score(clips, good, bad, det_ctx=det_ctx)
 
         assert model is not None
         assert det_ctx.calibration_cache is not None
@@ -93,12 +93,12 @@ class TestCalibrationCacheStaysHonestAtSmallLabelCounts:
         assert det_ctx.calibration_cache is not None, "training caches fold orderings for the inclusion slide"
 
 
-class TestSafeOffSmallLabelSetCrossCalibrates:
-    """#8: with safe-thresholds off, the vote/labelset path cross-calibrates at
-    4-5 labels instead of hard-coding 0.5 - so it agrees with the Find path
-    (``train_and_threshold``) for the same user state."""
+class TestSmallLabelSetCrossCalibrates:
+    """#8: the vote/labelset path cross-calibrates at 4-5 labels instead of
+    hard-coding 0.5 - so it agrees with the Find path (``train_and_threshold``)
+    for the same user state."""
 
-    def test_safe_off_five_labels_stores_the_calibrated_aggregate(self):
+    def test_five_labels_calibrate_and_feed_the_population_fit(self):
         from vtscore.training.thresholds import threshold_from_fold_orderings
 
         rng = np.random.default_rng(11)
@@ -107,9 +107,7 @@ class TestSafeOffSmallLabelSetCrossCalibrates:
 
         good = {400: None, 401: None}
         bad = {402: None, 403: None, 404: None}  # 5 labels < 6
-        _results, threshold, model = train_and_score(
-            clips, good, bad, inclusion_value=0, safe_thresholds=False, det_ctx=det_ctx
-        )
+        _results, threshold, model = train_and_score(clips, good, bad, inclusion_value=0, det_ctx=det_ctx)
 
         assert model is not None
         # Real fold orderings were computed and cached (the <6 skip is gone for
@@ -117,8 +115,11 @@ class TestSafeOffSmallLabelSetCrossCalibrates:
         assert det_ctx.calibration_cache is not None
         _key, folds = det_ctx.calibration_cache
         assert folds.fallback is None and folds.orderings, (
-            "safe-thresholds-off below 6 labels must cross-calibrate, not hard-code 0.5"
+            "below 6 labels the path must cross-calibrate, not hard-code 0.5"
         )
-        # The stored cutoff is exactly the aggregate over those cached orderings
-        # at the active inclusion - the value the Find path uses for this state.
-        assert threshold == threshold_from_fold_orderings(folds.orderings, 0)
+        # Those folds feed the shipped fold-anchored cut, so the stored cutoff
+        # is the population estimator's - not the raw conformal aggregate, and
+        # emphatically not the 0.5 this path used to hard-code.
+        assert det_ctx.anchored_cut_cache is not None
+        assert threshold == det_ctx.anchored_cut_cache.threshold_at(0)
+        assert threshold != threshold_from_fold_orderings(folds.orderings, 0)

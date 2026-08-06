@@ -140,12 +140,13 @@ every detector route:
    `calculate_cross_calibration_threshold` (respects `calibrate_count`
    and `calibration_fraction` settings).
 2. Full-data model via `train_model` (respects `inclusion`).
-3. Optional safe-threshold blend via `calculate_safe_threshold` when
-   `get_safe_thresholds()` is on and a media snapshot is provided.
+3. The fold-anchored population threshold whenever a media snapshot is
+   provided (the haystack the mixture is fitted on).  Without one, the
+   cross-calibration cut ships alone.
 
 Returns `(model, threshold)`. Today this function consults
 `vtsearch.state` to read `get_inclusion`, `get_calibrate_count`,
-`get_calibration_fraction`, and `get_safe_thresholds` - a Phase 3 seam.
+and `get_calibration_fraction` - a Phase 3 seam.
 Library consumers running outside an app should pass these via
 `CoreConfig` (the existing `state` shims read from there already).
 
@@ -193,7 +194,6 @@ results, threshold, model = train_and_score(
     good_votes={1: None, 5: None},
     bad_votes={2: None, 7: None},
     inclusion_value=0,
-    safe_thresholds=False,
     calibrate_count=2,
     calibration_fraction=0.5,
 )

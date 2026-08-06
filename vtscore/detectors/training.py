@@ -1,7 +1,7 @@
 """Detector training helpers: validate, train, threshold, serialise.
 
-Consolidates the repeated train → calibrate → safe-threshold → serialise
-pipeline used by detector route handlers and test helpers.
+Consolidates the repeated train → calibrate → fuse → serialise pipeline used
+by detector route handlers and test helpers.
 
 This module also holds the vote-aware detector training entry points -
 :func:`train_and_score` (online, called every time the user toggles a
@@ -99,7 +99,7 @@ def _flood_context(
     Returns ``(n_votes, cal_groups, sample_weights)``:
 
     * ``n_votes`` - the number of distinct bags (votes/images); the unit the
-      hidden-layer width and the safe-threshold ramp should size on, so region
+      hidden-layer width and the fallback blend's ramp should size on, so region
       flooding (many rows per Bad vote) doesn't inflate either.
     * ``cal_groups`` - *groups* when flooding actually occurred (a bag holds
       more than one row), else ``None`` so the calibrator takes its historical
@@ -127,7 +127,7 @@ def _flood_context(
 
 
 def _blend_schedule_for_snap(snap: dict | None) -> str:
-    """The safe-threshold mix-in schedule these medias should be blended under.
+    """The fallback mix-in schedule these medias should be blended under.
 
     #2841 measured the two voting modes separately and they want different
     curves, so the schedule is resolved per training call rather than being one
@@ -143,7 +143,7 @@ def _blend_schedule_for_snap(snap: dict | None) -> str:
     return production_schedule_for(region_voting=_patch_embedder_for_snap(snap) is not None)
 
 
-def _safe_threshold(
+def _fused_threshold(
     xcal_threshold: float,
     folds: Any,
     clips_dict: dict[int, dict[str, Any]],
@@ -154,7 +154,7 @@ def _safe_threshold(
     schedule: str,
     det_ctx: Any = None,
 ) -> float:
-    """The shipped safe threshold: the fold-anchored cut, blend as fallback.
+    """The shipped threshold: the fold-anchored cut, schedule blend as fallback.
 
     Scores the haystack (*clips_dict*) through each calibration fold model, so
     each fold's anchored mixture is fitted on that fold model's own score scale
@@ -255,14 +255,16 @@ def train_and_threshold(
 
     This is the canonical training pipeline used by all detector routes:
 
-    1. Cross-calibration threshold (respects ``calibrate_count`` /
-       ``calibration_fraction`` settings).
+    1. K-fold calibration (respects ``calibrate_count`` /
+       ``calibration_fraction`` settings), giving both the cross-calibration
+       cut and the fold models.
     2. Full-data model training (respects ``inclusion`` setting).
-    3. Optional safe-threshold blending when ``get_safe_thresholds()`` is
-       enabled and *snap* is provided.  The GMM half of that blend is fitted
-       on the per-media scores :func:`_score_all_media` produces - region
-       max-pooled on a patch dataset - so it sees the distribution the
-       threshold will actually cut.
+    3. The fold-anchored population threshold whenever *snap* is provided -
+       see :func:`_safe_threshold`.  It is fitted on the per-media scores
+       :func:`_score_all_media` produces - region max-pooled on a patch
+       dataset - so it sees the distribution the threshold will actually cut.
+       Without a *snap* there is no haystack to fuse and the cross-calibration
+       cut ships alone.
 
     ``inclusion`` is read from ``get_inclusion()``, which resolves to the
     *active detector context's* inclusion (seeded from the user's settings
@@ -272,9 +274,11 @@ def train_and_threshold(
     Args:
         X_list: Embedding vectors (list of numpy arrays).
         y_list: Binary labels (1.0 = good, 0.0 = bad).
-        snap: Optional media snapshot for safe-threshold scoring.
+        snap: Optional media snapshot - the haystack the population
+            estimator is fitted on.  Without it the threshold is the plain
+            cross-calibration cut.
         embedder_name: The detector's primary embedder, used so the
-            safe-threshold scoring pass reads vectors from the same space the
+            haystack scoring pass reads vectors from the same space the
             ``X_list`` were built in.  ``None`` falls back to the dataset score
             precedence for *snap* (the pre-per-detector behaviour).
         det_ctx: When provided, the inclusion-independent K fold orderings are
@@ -300,7 +304,6 @@ def train_and_threshold(
         get_calibrate_count,
         get_calibration_fraction,
         get_inclusion,
-        get_safe_thresholds,
     )
     from vtscore.training import (
         calibration_folds,
@@ -329,13 +332,12 @@ def train_and_threshold(
     # final model actually has.
     hidden_dim = LINEAR_HEAD
 
-    safe = bool(get_safe_thresholds() and snap)
     inclusion = get_inclusion()
     blend_ctx = BlendContext.from_labels(y_list, cal_groups)
-    # The calibration folds are computed at *every* label count now.  The
-    # pre-fusion path skipped them below the blend schedule's floor, where the
-    # schedule discarded the cross-cal cut anyway; the fold-anchored estimator
-    # that replaced the schedule needs the fold *models* (it anchors on their
+    # The calibration folds are computed at *every* label count.  The pre-fusion
+    # path skipped them below the blend schedule's floor, where the schedule
+    # discarded the cross-cal cut anyway; the fold-anchored estimator that
+    # replaced the schedule needs the fold *models* (it anchors on their
     # held-out scores), so there is nothing left to skip.  Two extra linear-head
     # fits at 4-5 votes is the whole cost.
     if det_ctx is not None:
@@ -371,10 +373,7 @@ def train_and_threshold(
     else:
         model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
 
-    if safe:
-        # `safe` is only True when `snap` is truthy (see assignment above),
-        # so the narrowing is real even though pyright can't track it.
-        assert snap is not None
+    if snap:
         # Fit the population estimator on the *inference* score distribution.
         # `_score_all_media` is the same call scoring makes
         # (`score_media_with_model`), so on a patch dataset the mixture sees the
@@ -389,7 +388,7 @@ def train_and_threshold(
         # Mirrors `_train_and_score_xy` and
         # `eval.voting_iterations._safe_threshold_for_step`.
         _all_ids, all_scores, _best_region = _score_all_media(model, snap, embedder_name)
-        threshold = _safe_threshold(
+        threshold = _fused_threshold(
             threshold,
             folds,
             snap,
@@ -737,7 +736,6 @@ def _train_and_score_xy(
     clips_dict: dict[int, dict[str, Any]],
     *,
     inclusion_value: int,
-    safe_thresholds: bool,
     calibrate_count: int,
     calibration_fraction: float,
     det_ctx: Any,
@@ -753,10 +751,10 @@ def _train_and_score_xy(
     tail lives here once.
 
     The head is the linear (logistic) one at every label count, so region
-    flooding can't inflate its capacity; the safe-threshold label count is
-    still sized from the **vote** count (distinct *groups*) rather than the row
-    count, so flooding - which turns one Bad vote into many leaf rows - doesn't
-    shift the small-count threshold ramp.  When *groups*
+    flooding can't inflate its capacity; the threshold's label count is still
+    sized from the **vote** count (distinct *groups*) rather than the row count,
+    so flooding - which turns one Bad vote into many leaf rows - doesn't shift
+    the fallback blend's small-count ramp.  When *groups*
     reveals at least one multi-row bag (flooding actually happened), the
     calibration split, fold fits, and final fit all run **bag-aware**
     (grouped fold split, per-bag loss weights), and each calibration bag
@@ -797,13 +795,12 @@ def _train_and_score_xy(
     # Linear (logistic) production head - see train_and_threshold for why.
     hidden_dim = LINEAR_HEAD
 
-    # K-fold calibration runs at every label count, safe thresholds on or off:
-    # with them off the cross-cal cut *is* the detector's threshold, and with
-    # them on the fold-anchored estimator anchors on the fold models' held-out
-    # scores, so their models are an input rather than something to skip.  (The
-    # pre-fusion path skipped the fold fits below the blend schedule's floor,
-    # where the schedule multiplied the cross-cal cut by zero; the schedule is
-    # no longer what combines the two estimators.)
+    # K-fold calibration runs at every label count: the fold-anchored estimator
+    # anchors on the fold models' held-out scores, so their models are an input
+    # rather than something to skip.  (The pre-fusion path skipped the fold fits
+    # below the blend schedule's floor, where the schedule multiplied the
+    # cross-cal cut by zero; the schedule is no longer what combines the two
+    # estimators.)
     folds = calibration_folds_cached(
         X_list,
         y_list,
@@ -828,22 +825,19 @@ def _train_and_score_xy(
 
     all_ids, scores, best_region = _score_all_media(model, clips_dict, score_emb)
 
-    if safe_thresholds:
-        # The label counts feeding the fallback blend are votes, not flooded
-        # rows, so its small-count ramp is unmoved by region flooding.
-        threshold = _safe_threshold(
-            threshold,
-            folds,
-            clips_dict,
-            score_emb,
-            scores,
-            inclusion_value,
-            blend_ctx,
-            _blend_schedule_for_snap(clips_dict),
-            det_ctx=det_ctx,
-        )
-    elif det_ctx is not None:
-        det_ctx.anchored_cut_cache = None
+    # The label counts feeding the fallback blend are votes, not flooded rows,
+    # so its small-count ramp is unmoved by region flooding.
+    threshold = _fused_threshold(
+        threshold,
+        folds,
+        clips_dict,
+        score_emb,
+        scores,
+        inclusion_value,
+        blend_ctx,
+        _blend_schedule_for_snap(clips_dict),
+        det_ctx=det_ctx,
+    )
 
     results = _format_results(all_ids, scores, best_region, clips_dict)
     return results, threshold, model
@@ -854,7 +848,6 @@ def train_and_score(
     good_votes: dict[int, None],
     bad_votes: dict[int, None],
     inclusion_value: int = 0,
-    safe_thresholds: bool = False,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
     vote_region_boxes: dict[int, tuple[float, float, float, float]] | None = None,
@@ -874,8 +867,6 @@ def train_and_score(
         bad_votes: Dict whose keys are media IDs labelled as bad (values are ``None``).
         inclusion_value: Integer in ``[-10, 10]`` passed to the training and
             threshold-finding functions to control the inclusion/exclusion bias.
-        safe_thresholds: When ``True``, blend the cross-calibration threshold with
-            a GMM-based threshold for robustness when few labels are available.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for calibration
@@ -896,8 +887,9 @@ def train_and_score(
 
         - ``results`` is a list of ``{"id": int, "score": float}`` dicts, sorted
           by score in descending order (highest confidence first).
-        - ``threshold`` is the decision boundary as a float (cross-calibrated,
-          or blended with GMM when ``safe_thresholds`` is ``True``).
+        - ``threshold`` is the decision boundary as a float: the fold-anchored
+          population cut fitted on ``clips_dict``'s score distribution (see
+          :func:`_fused_threshold`).
         - ``model`` is the trained ``nn.Sequential`` model (``None`` when
           training was not possible).
     """
@@ -910,7 +902,6 @@ def train_and_score(
         y_list,
         clips_dict,
         inclusion_value=inclusion_value,
-        safe_thresholds=safe_thresholds,
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
         det_ctx=det_ctx,
@@ -1050,9 +1041,9 @@ def train_detector_from_origins(
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
 
-    # Real cross-calibration at every label count (the load-time counterpart
-    # has no safe-threshold blend to discard the result), matching the
-    # vote/labelset and Find paths with safe-thresholds off.  The trainer
+    # Plain cross-calibration: this load-time path re-derives a detector from
+    # saved origins and has no haystack to fuse against, so there is no
+    # population estimator to fit and the conformal cut ships alone.  The trainer
     # degrades gracefully below 4 labels / <2-per-class via its own 0.5
     # fallback, so no separate small-label short-circuit is needed here.
     threshold = calculate_cross_calibration_threshold(

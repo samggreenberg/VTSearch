@@ -126,7 +126,6 @@ def build_learned_sort_signature(
     bad,
     region_boxes_snapshot,
     inclusion_value,
-    safe_thresholds_value,
     calibrate_count_value,
     calibration_fraction_value,
 ):
@@ -151,7 +150,6 @@ def build_learned_sort_signature(
         tuple(sorted(snap.keys())),
         labels_sig,
         inclusion_value,
-        safe_thresholds_value,
         calibrate_count_value,
         calibration_fraction_value,
     )
@@ -168,7 +166,6 @@ def run_learned_sort(
     bad,
     region_boxes_snapshot,
     inclusion_value,
-    safe_thresholds_value,
     calibrate_count_value,
     calibration_fraction_value,
 ):
@@ -200,7 +197,6 @@ def run_learned_sort(
                 media_type=det_media_type,
                 clips_dict=snap,
                 inclusion_value=inclusion_value,
-                safe_thresholds=safe_thresholds_value,
                 calibrate_count=calibrate_count_value,
                 calibration_fraction=calibration_fraction_value,
             )
@@ -210,7 +206,6 @@ def run_learned_sort(
                 dict(good),
                 dict(bad),
                 inclusion_value,
-                safe_thresholds=safe_thresholds_value,
                 calibrate_count=calibrate_count_value,
                 calibration_fraction=calibration_fraction_value,
                 vote_region_boxes=region_boxes_snapshot,

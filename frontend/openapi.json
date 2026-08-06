@@ -379,9 +379,6 @@
             },
             "type": "object"
           },
-          "safe_thresholds": {
-            "type": "boolean"
-          },
           "saved_datasets_dir": {
             "readOnly": true,
             "type": "string"
@@ -5480,28 +5477,6 @@
         ],
         "type": "object"
       },
-      "SafeThresholdsRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "safe_thresholds": {}
-        },
-        "required": [
-          "safe_thresholds"
-        ],
-        "type": "object"
-      },
-      "SafeThresholdsResponse": {
-        "additionalProperties": false,
-        "properties": {
-          "safe_thresholds": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "safe_thresholds"
-        ],
-        "type": "object"
-      },
       "SeedFromExamplesRequest": {
         "additionalProperties": false,
         "properties": {
@@ -5765,9 +5740,6 @@
           "panel_pct_right": {},
           "popup_metadata_shown": {},
           "popup_preview_size": {},
-          "safe_thresholds": {
-            "type": "boolean"
-          },
           "saved_datasets_dir": {
             "type": "string"
           },
@@ -15417,65 +15389,6 @@
           }
         }
       ]
-    },
-    "/api/safe-thresholds": {
-      "get": {
-        "operationId": "get_safe_thresholds_route",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SafeThresholdsResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Get the current Safe Thresholds setting.",
-        "tags": [
-          "sorting"
-        ]
-      },
-      "post": {
-        "operationId": "set_safe_thresholds_route",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SafeThresholdsRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SafeThresholdsResponse"
-                }
-              }
-            },
-            "description": "OK"
-          },
-          "422": {
-            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
-          },
-          "default": {
-            "$ref": "#/components/responses/DEFAULT_ERROR"
-          }
-        },
-        "summary": "Set the Safe Thresholds setting.",
-        "tags": [
-          "sorting"
-        ]
-      }
     },
     "/api/server-media-files": {
       "get": {

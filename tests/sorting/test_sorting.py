@@ -328,16 +328,14 @@ class TestTrainModelEpochs:
 class TestCalibrationAtTinyLabelCounts:
     """Calibration runs at every label count, safe thresholds on or off.
 
-    With ``safe_thresholds=False`` the cross-cal threshold *is* what the
-    detector uses.  With ``safe_thresholds=True`` the shipped fold-anchored
-    estimator anchors on the fold models' held-out scores, so the folds are an
-    *input* to it - the pre-fusion skip below the blend schedule's floor (where
-    the schedule multiplied the cross-cal cut by zero) has nothing left to
-    save."""
+    The shipped fold-anchored estimator anchors on the fold models' held-out
+    scores, so the folds are an *input* to it - the pre-fusion skip below the
+    blend schedule's floor (where the schedule multiplied the cross-cal cut by
+    zero) has nothing left to save."""
 
     def test_calibrates_when_safe_and_under_six_labels(self):
-        """With safe_thresholds=True and n_labels<6, the fold trainings run:
-        the fold-anchored estimator needs their models."""
+        """Below 6 labels the fold trainings run: the fold-anchored estimator
+        needs their models."""
         from vtscore.detectors import training as detector_training
         from vtscore.training import thresholds
 
@@ -353,15 +351,13 @@ class TestCalibrationAtTinyLabelCounts:
                 app_module.medias,
                 app_module.good_votes,
                 app_module.bad_votes,
-                safe_thresholds=True,
             )
         assert patched.call_count == 1
         assert 0.0 <= threshold <= 1.0
 
     def test_calibrates_when_safe_off_and_under_six_labels(self):
-        """With safe_thresholds=False and n_labels<6, cross-calibration now
-        runs: the threshold is the value the detector uses, so both training
-        entry points agree instead of one hard-coding 0.5."""
+        """Below 6 labels cross-calibration runs, so both training entry
+        points agree instead of one hard-coding 0.5."""
         from vtscore.detectors import training as detector_training
         from vtscore.training import thresholds
 
@@ -377,7 +373,6 @@ class TestCalibrationAtTinyLabelCounts:
                 app_module.medias,
                 app_module.good_votes,
                 app_module.bad_votes,
-                safe_thresholds=False,
             )
         assert patched.call_count == 1
 
@@ -400,7 +395,6 @@ class TestCalibrationAtTinyLabelCounts:
                 app_module.medias,
                 app_module.good_votes,
                 app_module.bad_votes,
-                safe_thresholds=True,
             )
         assert patched.call_count == 1
 
@@ -422,7 +416,6 @@ class TestCalibrationAtTinyLabelCounts:
                 app_module.medias,
                 app_module.good_votes,
                 app_module.bad_votes,
-                safe_thresholds=True,
             )
         assert patched.call_count == 1
 

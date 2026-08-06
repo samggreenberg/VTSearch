@@ -1759,7 +1759,7 @@ def simulate_voting_iterations(  # noqa: C901
     dataset_name: str = "",
     inclusion: int = 0,
     sim_fraction: float = 0.5,
-    safe_thresholds: bool = False,
+    safe_thresholds: bool = True,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
     region_voting: bool = False,
@@ -1829,8 +1829,12 @@ def simulate_voting_iterations(  # noqa: C901
             fewer than :data:`_MIN_PREVALENCE_POSITIVES` positives, to keep the
             test-set FNR estimable.
         sim_fraction: Fraction of medias used for simulated voting.
-        safe_thresholds: When ``True``, blend the cross-calibration threshold
-            with a GMM-based threshold for robustness with small label counts.
+        safe_thresholds: The shipped threshold path - fuse the haystack score
+            distribution into the trained cut (the fold-anchored estimator, see
+            :func:`vtscore.training.thresholds.fold_anchored_gmm_threshold`).
+            **On by default, matching the app**, which has no switch for it.
+            Set ``False`` only to run the no-fusion control arm: pure
+            cross-calibration, which the app can no longer produce.
             Under ``emit_calibration_metrics`` with a *style*, each step
             additionally emits one metric row per safe-threshold cut variant
             (:data:`_SAFE_GMM_VARIANTS`, tagged in the ``gmm_variant`` column) -
@@ -2299,7 +2303,7 @@ def run_voting_iterations_eval(
     categories: Optional[dict[str, list[str]]] = None,
     inclusion: int = 0,
     sim_fraction: float = 0.5,
-    safe_thresholds: bool = False,
+    safe_thresholds: bool = True,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
     region_voting: bool = False,
@@ -2325,7 +2329,8 @@ def run_voting_iterations_eval(
             all unique categories in that dataset are used.
         inclusion: Inclusion setting in ``[-10, 10]``.
         sim_fraction: Fraction of medias reserved for simulated voting.
-        safe_thresholds: When ``True``, blend thresholds with GMM
+        safe_thresholds: The shipped fused threshold path; on by default,
+            matching the app.  ``False`` is the no-fusion control arm.
             (see :func:`simulate_voting_iterations`).
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
@@ -2427,7 +2432,7 @@ def run_voting_iterations_eval_from_pickles(
     categories: Optional[dict[str, list[str]]] = None,
     inclusion: int = 0,
     sim_fraction: float = 0.5,
-    safe_thresholds: bool = False,
+    safe_thresholds: bool = True,
     calibrate_count: int = 2,
     calibration_fraction: float = 0.5,
     region_voting: bool = False,
@@ -2448,7 +2453,8 @@ def run_voting_iterations_eval_from_pickles(
         categories: Optional category filter (see :func:`run_voting_iterations_eval`).
         inclusion: Inclusion setting in ``[-10, 10]``.
         sim_fraction: Fraction of medias for simulation.
-        safe_thresholds: When ``True``, blend thresholds with GMM.
+        safe_thresholds: The shipped fused threshold path; on by default,
+            matching the app.  ``False`` is the no-fusion control arm.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for
