@@ -7,8 +7,10 @@ into ``cut_diag_sink``.  The load-bearing invariant is that the arm at the
 *production* estimator settings reproduces the base row's threshold
 bit-for-bit, so the study measures the shipped code and every other variant
 differs from it along exactly one named axis.  Since the population-anchored
-adoption that arm is ``fold_anchored_w1_rate_qmean`` (κ=1, rate cut, quantile
-mean); the ``pooled_*`` family now measures the retired schedule blend.
+adoption that arm is the fold-anchored fit at the shipped constants
+(:data:`~vtscore.training.thresholds.FOLD_ANCHOR_WEIGHT` etc., today κ=0.3 with
+the midpoint cut and the quantile mean); the ``pooled_*`` family now measures
+the retired schedule blend.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from vtscore.eval.voting_iterations import (
     _SAFE_GMM_VARIANTS,
     simulate_voting_iterations,
 )
+from vtscore.training.thresholds import FOLD_ANCHOR_COMBINE, FOLD_ANCHOR_CUT_RULE, FOLD_ANCHOR_WEIGHT
 
 # Reuse the synthetic planted-patch dataset builders from the Max-Patch tests.
 from .test_max_patch_style import _planted_dataset
@@ -83,19 +86,22 @@ class TestSafeGmmVariantRows:
     def test_production_anchored_arm_reproduces_the_shipped_threshold(self):
         """The harness must not deviate from the app at the shipped settings.
 
-        The ``fold_anchored_w1_rate_qmean`` arm is the production estimator
-        (κ=1, rate cut, quantile mean), so its threshold has to equal the base
-        row's - the value the step actually shipped - at every step.
+        The arm named by the ``FOLD_ANCHOR_*`` constants *is* the production
+        estimator, so its threshold has to equal the base row's - the value the
+        step actually shipped - at every step.  Reading the arm's settings off
+        those constants rather than restating them is what keeps this honest
+        when the shipped operating point moves (κ=1/``rate`` → κ=0.3/``mid``).
         """
         rows = _run_safe(
             "max_patch",
             anchored_thresholds=True,
-            anchored_weights=[1.0],
-            anchored_rules=["rate"],
-            anchored_fold_combines=["qmean"],
+            anchored_weights=[FOLD_ANCHOR_WEIGHT],
+            anchored_rules=[FOLD_ANCHOR_CUT_RULE],
+            anchored_fold_combines=[FOLD_ANCHOR_COMBINE],
         )
+        arm_name = f"fold_anchored_w{FOLD_ANCHOR_WEIGHT:g}_{FOLD_ANCHOR_CUT_RULE}_{FOLD_ANCHOR_COMBINE}"
         base = {r["t"]: r for r in rows if r["gmm_variant"] == ""}
-        prod = {r["t"]: r for r in rows if r["gmm_variant"] == "fold_anchored_w1_rate_qmean"}
+        prod = {r["t"]: r for r in rows if r["gmm_variant"] == arm_name}
         assert prod, "the production anchored arm emitted no rows"
         for t, arm in prod.items():
             if base[t]["threshold_provenance"] == "gmm_blend":

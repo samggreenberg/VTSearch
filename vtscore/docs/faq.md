@@ -199,7 +199,7 @@ By fusing the labels with the haystack's own score distribution rather
 than picking between them. Per calibration fold, a 2-component mixture
 is fitted to that fold model's scores over the whole collection with the
 fold's *held-out* votes clamped to their labeled component; each fold's
-rate-optimal cut is carried to the final model as a quantile and the
+midpoint cut is carried to the final model as a quantile and the
 folds are averaged in quantile space. See
 `vtscore/training/thresholds.py:fold_anchored_gmm_threshold`. It is
 unconditional - there used to be a `safe_thresholds` toggle, but the

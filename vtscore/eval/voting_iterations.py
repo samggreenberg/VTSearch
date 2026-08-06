@@ -412,7 +412,7 @@ def _safe_threshold_for_step(
     Scores the simulation set (the harness's haystack) with the final model and
     with each calibration fold model, then cuts via
     :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold` at the
-    production defaults (κ=1, rate rule, quantile-mean combine).  This is the
+    production defaults (κ=0.3, midpoint rule, quantile-mean combine).  This is the
     estimator :func:`vtscore.detectors.training._safe_threshold` ships, called
     with the same arguments, so the harness's baseline arm cannot drift from
     the app's behaviour - the paired ``*_variant`` rows are where deliberate
