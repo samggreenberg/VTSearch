@@ -3323,6 +3323,9 @@
           "name": {
             "type": "string"
           },
+          "opens_url": {
+            "type": "boolean"
+          },
           "ui_mode": {
             "type": "string"
           }
@@ -3334,6 +3337,7 @@
           "hidden_from_picker",
           "icon",
           "name",
+          "opens_url",
           "ui_mode"
         ],
         "type": "object"
@@ -5417,6 +5421,9 @@
         "properties": {
           "display_results": {},
           "message": {
+            "type": "string"
+          },
+          "open_url": {
             "type": "string"
           },
           "success": {

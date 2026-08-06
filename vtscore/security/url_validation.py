@@ -1,7 +1,17 @@
-"""URL validation utilities to prevent SSRF (Server-Side Request Forgery).
+"""URL validation utilities.
 
-Provides :func:`validate_url` which resolves the hostname and rejects URLs
-that point to private/internal network addresses.
+Two guards live here, and they defend against different things:
+
+* :func:`validate_url` — the SSRF guard for URLs **the server fetches**.  It
+  resolves the hostname and rejects private/internal network addresses.
+* :func:`validate_browser_url` — the scheme guard for URLs **the user's
+  browser opens**.  No name resolution, no private-IP rejection; the request
+  never leaves the user's machine, so a LAN or ``localhost`` viewer is a
+  legitimate target.  What it does reject is a non-``http(s)`` scheme
+  (``javascript:``, ``data:``, ``file:``), which is the actual attack surface
+  when a URL is handed to the frontend to open.
+
+Pick by *who makes the request*, not by where the string came from.
 """
 
 from __future__ import annotations
@@ -54,3 +64,40 @@ def validate_url(url: str) -> str:
             )
 
     return url
+
+
+def validate_browser_url(url: str) -> str:
+    """Validate a URL that the **user's browser** will open, and return it stripped.
+
+    Used for the ``open_url`` an exporter can return so the frontend opens a
+    third-party page in a new tab (see
+    :meth:`vtscore.exporters.base.LabelsetExporter.export`).  The fetch is made
+    by the browser, not by us, so this is deliberately *not*
+    :func:`validate_url`: resolving the host and refusing private IPs would
+    block a perfectly reasonable ``http://localhost:9000/viewer`` companion app
+    while buying no protection, because no server-side request is ever made.
+
+    What it does enforce is the part that is actually dangerous when a string
+    reaches ``window.open`` — the scheme.  Only ``http`` and ``https`` pass;
+    ``javascript:``, ``data:``, ``file:`` and friends are rejected.  Embedded
+    whitespace and control characters are rejected too, since they let a URL
+    render as one target while resolving to another.
+
+    Raises:
+        ValueError: If *url* is empty, contains whitespace/control characters,
+            uses a non-HTTP(S) scheme, or has no hostname.
+    """
+    cleaned = url.strip()
+    if not cleaned:
+        raise ValueError("URL is empty.")
+
+    if any(ch.isspace() or ord(ch) < 0x20 or ord(ch) == 0x7F for ch in cleaned):
+        raise ValueError("URL must not contain whitespace or control characters.")
+
+    parsed = urlparse(cleaned)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"URL must use http or https scheme, got: {parsed.scheme!r}")
+    if not parsed.hostname:
+        raise ValueError("URL must contain a hostname.")
+
+    return cleaned

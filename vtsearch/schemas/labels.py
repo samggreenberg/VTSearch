@@ -228,7 +228,15 @@ class _PluginEntrySchema(Schema):
 
 
 class ExporterEntrySchema(_PluginEntrySchema):
-    """One entry in ``GET /api/exporters``."""
+    """One entry in ``GET /api/exporters``.
+
+    Adds the exporter-only ``opens_url`` flag (see
+    :attr:`vtscore.exporters.base.LabelsetExporter.opens_url`), which tells the
+    frontend this exporter ends in a new browser tab so the button can say so
+    before the export runs.
+    """
+
+    opens_url = fields.Boolean(required=True)
 
 
 class RunExportRequestSchema(Schema):
@@ -251,11 +259,16 @@ class RunExportResponseSchema(Schema):
     only ``success`` and ``message`` are always present, and the rest
     are documented optionals. ``display_results`` is the GUI exporter's
     pass-through of the auto-detect results dict (or LabelSet).
+    ``open_url`` is an ``http(s)`` URL the frontend opens in a new tab
+    (see :meth:`vtscore.exporters.base.LabelsetExporter.export`); the
+    handler has already run it through
+    :func:`~vtscore.security.url_validation.validate_browser_url`.
     """
 
     success = fields.Boolean(required=True)
     message = fields.String()
     display_results = fields.Raw()
+    open_url = fields.String()
 
 
 class LabelImporterEntrySchema(_PluginEntrySchema):
