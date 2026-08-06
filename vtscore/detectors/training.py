@@ -143,6 +143,71 @@ def _blend_schedule_for_snap(snap: dict | None) -> str:
     return production_schedule_for(region_voting=_patch_embedder_for_snap(snap) is not None)
 
 
+def _safe_threshold(
+    xcal_threshold: float,
+    folds: Any,
+    clips_dict: dict[int, dict[str, Any]],
+    score_emb: str | None,
+    final_scores: list[float],
+    inclusion_value: int,
+    blend_ctx: Any,
+    schedule: str,
+    det_ctx: Any = None,
+) -> float:
+    """The shipped safe threshold: the fold-anchored cut, blend as fallback.
+
+    Scores the haystack (*clips_dict*) through each calibration fold model, so
+    each fold's anchored mixture is fitted on that fold model's own score scale
+    with that fold's *held-out* votes as anchors, then carries the per-fold cuts
+    to the final model in quantile space
+    (:func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold`).  This is
+    the estimator the 2026-08-05 deep-regime run picked over both pure
+    cross-calibration and the schedule-blended GMM - see
+    ``docs/experiments/population-anchored-calibration/REPORT.md``.
+
+    The extra scoring passes (one per fold) are the estimator's whole marginal
+    cost.  Production trains the *linear* head, so a pass is a matrix multiply
+    and the cost is trivial; a heavier head would want measuring first.
+
+    Falls back to the schedule blend
+    (:func:`~vtscore.training.thresholds.calculate_safe_threshold`) when there
+    are no usable folds - the "dataset too small to fit the population
+    estimator" case of the plan's decision rule 1.  The x-cal side of that
+    blend is then :data:`~vtscore.training.thresholds.NO_GOOD_THRESHOLD`
+    ("we never computed a cut, so admit nothing"), which is what the pre-fusion
+    pure-GMM branch fed it.
+
+    When *det_ctx* is given, the fitted estimator is parked on
+    ``det_ctx.anchored_cut_cache`` so an Inclusion slide can re-cut it without
+    refitting or re-scoring anything (see
+    :func:`vtscore.state.core.recompute_detector_thresholds_for_inclusion`).
+    """
+    from vtscore.training.thresholds import (  # noqa: PLC0415
+        NO_GOOD_THRESHOLD,
+        calculate_safe_threshold,
+        fit_fold_anchored_cut,
+    )
+
+    cut = None
+    if folds.fallback is None:
+        n_folds = min(len(folds.models), len(folds.orderings))
+        fold_haystacks = []
+        for model in folds.models[:n_folds]:
+            _ids, scores, _best = _score_all_media(model, clips_dict, score_emb)
+            fold_haystacks.append(np.asarray(scores, dtype=np.float64))
+        cut = fit_fold_anchored_cut(fold_haystacks, folds.orderings[:n_folds], final_scores)
+
+    if det_ctx is not None:
+        det_ctx.anchored_cut_cache = cut
+
+    if cut is not None:
+        threshold = cut.threshold_at(inclusion_value)
+        if np.isfinite(threshold):
+            return threshold
+    xcal = NO_GOOD_THRESHOLD if folds.fallback is not None else xcal_threshold
+    return calculate_safe_threshold(xcal, final_scores, blend_ctx, schedule=schedule)
+
+
 def _calibration_score_rows(
     groups: list | None,
     cal_groups: list | None,
@@ -238,17 +303,13 @@ def train_and_threshold(
         get_safe_thresholds,
     )
     from vtscore.training import (
-        calculate_cross_calibration_threshold,
-        calculate_safe_threshold,
+        calibration_folds,
+        calibration_folds_cached,
+        threshold_from_folds,
         train_model,
     )
     from vtscore.training.blend_schedules import BlendContext
     from vtscore.training.mlp import LINEAR_HEAD
-    from vtscore.training.thresholds import (
-        NO_GOOD_THRESHOLD,
-        cross_calibration_threshold_cached,
-        xcal_is_discarded,
-    )
 
     X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
@@ -269,31 +330,22 @@ def train_and_threshold(
     hidden_dim = LINEAR_HEAD
 
     safe = bool(get_safe_thresholds() and snap)
+    inclusion = get_inclusion()
     blend_ctx = BlendContext.from_labels(y_list, cal_groups)
-    # Where the schedule discards the cross-cal output entirely (pure GMM),
-    # don't pay for the fold trainings.  The condition is asked of the schedule
-    # rather than hard-coded at "< 6 votes" so that changing the schedule
-    # (#2841) cannot leave this skip behind blending against a placeholder.
-    # Safe-thresholds OFF falls through to real cross-calibration at every
-    # label count.
-    if safe and xcal_is_discarded(blend_ctx, _blend_schedule_for_snap(snap)):
-        threshold = NO_GOOD_THRESHOLD
-        # This branch never recomputes the fold orderings, so drop any stale
-        # cache from a previous ≥6-label training - otherwise a later
-        # inclusion slide (`recompute_detector_thresholds_for_inclusion`)
-        # re-thresholds against orderings for the old label set/model.
-        # Mirrors the same guard in :func:`_train_and_score_xy`.
-        if det_ctx is not None:
-            det_ctx.calibration_cache = None
-    elif det_ctx is not None:
-        # Cache the K fold orderings on the context so an Inclusion slide can
-        # re-derive the cutoff without a no-op (the find-label / detector-load
-        # paths land here; without the cache the slide can't move the line).
-        threshold = cross_calibration_threshold_cached(
+    # The calibration folds are computed at *every* label count now.  The
+    # pre-fusion path skipped them below the blend schedule's floor, where the
+    # schedule discarded the cross-cal cut anyway; the fold-anchored estimator
+    # that replaced the schedule needs the fold *models* (it anchors on their
+    # held-out scores), so there is nothing left to skip.  Two extra linear-head
+    # fits at 4-5 votes is the whole cost.
+    if det_ctx is not None:
+        # Cache the K folds on the context so an Inclusion slide can re-derive
+        # the cutoff without a no-op (the find-label / detector-load paths land
+        # here; without the cache the slide can't move the line).
+        folds = calibration_folds_cached(
             X_list,
             y_list,
             input_dim,
-            get_inclusion(),
             calibrate_count=get_calibrate_count(),
             calibration_fraction=get_calibration_fraction(),
             hidden_dim=hidden_dim,
@@ -302,17 +354,17 @@ def train_and_threshold(
             score_rows_by_group=cal_score_rows,
         )
     else:
-        threshold = calculate_cross_calibration_threshold(
+        folds = calibration_folds(
             X_list,
             y_list,
             input_dim,
-            get_inclusion(),
             calibrate_count=get_calibrate_count(),
             calibration_fraction=get_calibration_fraction(),
             hidden_dim=hidden_dim,
             groups=cal_groups,
             score_rows_by_group=cal_score_rows,
         )
+    threshold = threshold_from_folds(folds, inclusion)
 
     if sample_weights is not None:
         model = train_model(X, y, input_dim, hidden_dim=hidden_dim, sample_weights=sample_weights)
@@ -323,24 +375,34 @@ def train_and_threshold(
         # `safe` is only True when `snap` is truthy (see assignment above),
         # so the narrowing is real even though pyright can't track it.
         assert snap is not None
-        # Fit the GMM on the *inference* score distribution.  `_score_all_media`
-        # is the same call scoring makes (`score_media_with_model`), so on a
-        # patch dataset the GMM sees the region max-pooled per-media scores the
-        # threshold will actually cut.  Scoring the image-level embedding matrix
-        # instead fitted the GMM on a systematically lower distribution (the
-        # region max is ≥ the single image-level row), biasing the midpoint cut
-        # low → over-inclusion on region-voting detectors.  Plain single-vector
-        # datasets take `_score_all_media`'s embedding-matrix fallback, so their
-        # behaviour is unchanged.  *embedder_name* is forwarded as-is (not
-        # pre-resolved) so the region-vs-plain gating matches inference exactly.
+        # Fit the population estimator on the *inference* score distribution.
+        # `_score_all_media` is the same call scoring makes
+        # (`score_media_with_model`), so on a patch dataset the mixture sees the
+        # region max-pooled per-media scores the threshold will actually cut.
+        # Scoring the image-level embedding matrix instead fitted it on a
+        # systematically lower distribution (the region max is ≥ the single
+        # image-level row), biasing the cut low → over-inclusion on
+        # region-voting detectors.  Plain single-vector datasets take
+        # `_score_all_media`'s embedding-matrix fallback, so their behaviour is
+        # unchanged.  *embedder_name* is forwarded as-is (not pre-resolved) so
+        # the region-vs-plain gating matches inference exactly.
         # Mirrors `_train_and_score_xy` and
-        # `eval.voting_iterations._blend_safe_threshold`.
+        # `eval.voting_iterations._safe_threshold_for_step`.
         _all_ids, all_scores, _best_region = _score_all_media(model, snap, embedder_name)
-        # The GMM blend is applied only on a *fresh* retrain: the fold-ordering
-        # cache above stores the raw cross-cal orderings, so a later inclusion
-        # slide re-derives the unblended cutoff (intentional - see
-        # recompute_detector_thresholds_for_inclusion).
-        threshold = calculate_safe_threshold(threshold, all_scores, blend_ctx, schedule=_blend_schedule_for_snap(snap))
+        threshold = _safe_threshold(
+            threshold,
+            folds,
+            snap,
+            embedder_name,
+            all_scores,
+            inclusion,
+            blend_ctx,
+            _blend_schedule_for_snap(snap),
+            det_ctx=det_ctx,
+        )
+    elif det_ctx is not None:
+        # Safe thresholds off: no population estimator to re-cut on a slide.
+        det_ctx.anchored_cut_cache = None
 
     return model, threshold
 
@@ -709,10 +771,8 @@ def _train_and_score_xy(
     from vtscore.training.mlp import LINEAR_HEAD, train_model  # noqa: PLC0415
     from vtscore.training.blend_schedules import BlendContext  # noqa: PLC0415
     from vtscore.training.thresholds import (  # noqa: PLC0415
-        NO_GOOD_THRESHOLD,
-        calculate_safe_threshold,
-        cross_calibration_threshold_cached,
-        xcal_is_discarded,
+        calibration_folds_cached,
+        threshold_from_folds,
     )
 
     num_good = sum(1 for v in y_list if v == 1.0)
@@ -737,44 +797,25 @@ def _train_and_score_xy(
     # Linear (logistic) production head - see train_and_threshold for why.
     hidden_dim = LINEAR_HEAD
 
-    # Skip k-fold calibration *only* where safe-thresholds is on and the
-    # schedule discards the calibrated value entirely (pure GMM): there the two
-    # 200-epoch fold fits would be pure waste.  Asking the schedule instead of
-    # hard-coding "< 6 votes" (#2841) keeps the skip honest when the schedule
-    # changes.  With safe-thresholds OFF the cross-cal threshold is what the
-    # detector actually uses, so it is computed for every label count - this is
-    # what keeps the vote/labelset path agreeing with the Find path
-    # (:func:`train_and_threshold`), which has always cross-calibrated below 6
-    # labels when safe-thresholds is off.
-    #
-    # The placeholder is ``NO_GOOD_THRESHOLD``, matching the Find path.  It is
-    # normally discarded by the pure-GMM blend, but *not* when the GMM fit
-    # degenerates to non-finite: ``blend_gmm_threshold`` then falls back to this
-    # value, and before #2841 the two paths disagreed on it (Find admitted
-    # nothing, the vote path admitted everything scoring ≥ 0.5).  Admitting
-    # nothing is the safe reading of "we never computed a threshold".
-    if safe_thresholds and xcal_is_discarded(blend_ctx, _blend_schedule_for_snap(clips_dict)):
-        threshold = NO_GOOD_THRESHOLD
-        # Drop any fold-ordering cache from a previous ≥6-label training:
-        # this branch neither reads nor rewrites it, and a later inclusion
-        # slide (`recompute_detector_thresholds_for_inclusion`) trusts any
-        # non-None cache - re-thresholding against orderings computed for
-        # the *old* label set/model.
-        if det_ctx is not None:
-            det_ctx.calibration_cache = None
-    else:
-        threshold = cross_calibration_threshold_cached(
-            X_list,
-            y_list,
-            input_dim,
-            inclusion_value,
-            calibrate_count=calibrate_count,
-            calibration_fraction=calibration_fraction,
-            hidden_dim=hidden_dim,
-            det_ctx=det_ctx,
-            groups=cal_groups,
-            score_rows_by_group=cal_score_rows,
-        )
+    # K-fold calibration runs at every label count, safe thresholds on or off:
+    # with them off the cross-cal cut *is* the detector's threshold, and with
+    # them on the fold-anchored estimator anchors on the fold models' held-out
+    # scores, so their models are an input rather than something to skip.  (The
+    # pre-fusion path skipped the fold fits below the blend schedule's floor,
+    # where the schedule multiplied the cross-cal cut by zero; the schedule is
+    # no longer what combines the two estimators.)
+    folds = calibration_folds_cached(
+        X_list,
+        y_list,
+        input_dim,
+        calibrate_count=calibrate_count,
+        calibration_fraction=calibration_fraction,
+        hidden_dim=hidden_dim,
+        det_ctx=det_ctx,
+        groups=cal_groups,
+        score_rows_by_group=cal_score_rows,
+    )
+    threshold = threshold_from_folds(folds, inclusion_value)
 
     # A Good vote trains on one region (the snapped box); a Bad vote trains on
     # its whole leaf set (region flooding), per-bag weighted so a rejected
@@ -788,13 +829,21 @@ def _train_and_score_xy(
     all_ids, scores, best_region = _score_all_media(model, clips_dict, score_emb)
 
     if safe_thresholds:
-        # Blend applies on this fresh retrain only; the cached fold orderings
-        # are raw cross-cal, so an inclusion slide re-derives the unblended
-        # cutoff (see recompute_detector_thresholds_for_inclusion).  The label
-        # counts are votes, not flooded rows, so the small-count ramp is unmoved.
-        threshold = calculate_safe_threshold(
-            threshold, scores, blend_ctx, schedule=_blend_schedule_for_snap(clips_dict)
+        # The label counts feeding the fallback blend are votes, not flooded
+        # rows, so its small-count ramp is unmoved by region flooding.
+        threshold = _safe_threshold(
+            threshold,
+            folds,
+            clips_dict,
+            score_emb,
+            scores,
+            inclusion_value,
+            blend_ctx,
+            _blend_schedule_for_snap(clips_dict),
+            det_ctx=det_ctx,
         )
+    elif det_ctx is not None:
+        det_ctx.anchored_cut_cache = None
 
     results = _format_results(all_ids, scores, best_region, clips_dict)
     return results, threshold, model

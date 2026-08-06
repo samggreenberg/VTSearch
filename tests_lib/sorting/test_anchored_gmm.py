@@ -12,13 +12,18 @@ import numpy as np
 import pytest
 
 from vtscore.training.thresholds import (
+    FOLD_ANCHOR_COMBINE,
+    FOLD_ANCHOR_CUT_RULE,
+    FOLD_ANCHOR_WEIGHT,
     GmmFit1D,
     anchored_gmm_fit,
     fit_anchored_score_gmm,
+    fit_fold_anchored_cut,
     fit_score_gmm,
     fold_anchored_gmm_threshold,
     gmm_cut_from_fit,
     gmm_fit_array,
+    inclusion_cost_weights,
     rank_transfer,
 )
 
@@ -172,15 +177,71 @@ class TestCutFromFit:
         # midpoint (see GmmFit1D.rate_crossing).
         assert abs(cut - self._FIT.midpoint()) < 1e-9
 
-    def test_rate_without_root_falls_back_flagged(self):
+    def test_rate_without_root_clamps_toward_the_costlier_error(self):
         # The rate rule divides the mixture weights back out, so only extreme
         # COST weights can push the root outside (mu_lo, mu_hi): with a huge
-        # FPR weight and wide components no cut between the means is
-        # rate-optimal, and the rule must fall back to the midpoint and say so.
+        # FPR weight and wide components the Bad component still out-densities
+        # the Good one all the way to ``mu_hi``, so the sup - the highest score
+        # Bad still owns - is the top edge.  Clamping there (rather than
+        # snapping back to the midpoint) is what keeps the rule monotone.
         fit = GmmFit1D(w_lo=0.7, mu_lo=0.2, var_lo=0.04, w_hi=0.3, mu_hi=0.8, var_hi=0.04)
-        cut, fell_back = gmm_cut_from_fit(fit, "rate", 1e6, 1.0)
-        assert fell_back == 1
-        assert cut == fit.midpoint()
+        cut, clamped = gmm_cut_from_fit(fit, "rate", 1e6, 1.0)
+        assert clamped == 1
+        assert cut == fit.mu_hi
+
+        cut, clamped = gmm_cut_from_fit(fit, "rate", 1.0, 1e6)
+        assert clamped == 1
+        assert cut == fit.mu_lo
+
+    def test_rate_is_monotone_non_increasing_across_the_inclusion_knob(self):
+        """The knob's nesting contract, at the level of a single fit.
+
+        Swept over a wide spread of fit geometries - including the wide-Good
+        shapes where the interior root enters and leaves the interval
+        non-monotonically, which a midpoint fallback got wrong - so the clamp,
+        the two-root case, and the ordinary crossing are all exercised.
+        """
+        rng = np.random.default_rng(2860)
+        for _ in range(2000):
+            w_lo = float(rng.uniform(0.05, 0.95))
+            mu_lo = float(rng.uniform(0.0, 0.5))
+            fit = GmmFit1D(
+                w_lo=w_lo,
+                mu_lo=mu_lo,
+                var_lo=float(rng.uniform(1e-5, 0.05)),
+                w_hi=1.0 - w_lo,
+                mu_hi=mu_lo + float(rng.uniform(0.01, 0.5)),
+                var_hi=float(rng.uniform(1e-5, 0.05)),
+            )
+            cuts = [gmm_cut_from_fit(fit, "rate", *inclusion_cost_weights(k))[0] for k in range(-10, 11)]
+            assert all(b <= a + 1e-9 for a, b in zip(cuts, cuts[1:], strict=False)), (fit, cuts)
+
+    def test_rate_agrees_with_the_stationary_point_where_one_exists(self):
+        """The clamp only decides the degenerate cases; elsewhere the shipped
+        cut is exactly ``rate_crossing`` - the rule #2836/#2852 measured."""
+        rng = np.random.default_rng(2861)
+        seen = 0
+        for _ in range(500):
+            w_lo = float(rng.uniform(0.2, 0.8))
+            mu_lo = float(rng.uniform(0.0, 0.4))
+            fit = GmmFit1D(
+                w_lo=w_lo,
+                mu_lo=mu_lo,
+                var_lo=float(rng.uniform(1e-3, 0.02)),
+                w_hi=1.0 - w_lo,
+                mu_hi=mu_lo + float(rng.uniform(0.2, 0.5)),
+                var_hi=float(rng.uniform(1e-3, 0.02)),
+            )
+            for k in (-3, 0, 3):
+                wf, wn = inclusion_cost_weights(k)
+                root = fit.rate_crossing(wf, wn)
+                cut, clamped = gmm_cut_from_fit(fit, "rate", wf, wn)
+                if root is None:
+                    continue
+                seen += 1
+                assert clamped == 0
+                assert cut == pytest.approx(root, abs=1e-12)
+        assert seen > 100, "the sweep never produced an interior crossing"
 
     def test_unknown_rule_raises(self):
         with pytest.raises(ValueError, match="unknown cut rule"):
@@ -270,3 +331,106 @@ class TestFoldAnchored:
         a, lbl = _anchors_from_modes(np.random.default_rng(93))
         with pytest.raises(ValueError, match="unknown fold combine"):
             fold_anchored_gmm_threshold([fold], [(list(a), list(lbl))], final, combine="bogus")
+
+
+class TestShippedFoldAnchoredDefaults:
+    """The production settings the 2026-08-05 deep-regime run picked.
+
+    ``docs/experiments/population-anchored-calibration/REPORT.md`` recommends
+    ``fold_anchored κ=1, rate cut``; these pin the constants and the call
+    defaults together so a change to either is deliberate rather than a drift
+    between the report and the code.
+    """
+
+    def test_constants(self):
+        assert FOLD_ANCHOR_WEIGHT == 1.0
+        assert FOLD_ANCHOR_CUT_RULE == "rate"
+        assert FOLD_ANCHOR_COMBINE == "qmean"
+
+    def test_the_bare_call_uses_them(self):
+        rng = np.random.default_rng(101)
+        final = _bimodal(rng)
+        fold = _bimodal(np.random.default_rng(102))
+        a, lbl = _anchors_from_modes(np.random.default_rng(103))
+        orderings = [(list(a), list(lbl))]
+        default, _p = fold_anchored_gmm_threshold([fold], orderings, final)
+        explicit, _p2 = fold_anchored_gmm_threshold(
+            [fold],
+            orderings,
+            final,
+            0,
+            anchor_weight=FOLD_ANCHOR_WEIGHT,
+            cut_rule=FOLD_ANCHOR_CUT_RULE,
+            combine=FOLD_ANCHOR_COMBINE,
+        )
+        assert default == explicit
+
+
+class TestFoldAnchoredInclusion:
+    """The estimator answers the Inclusion knob, and answers it monotonically."""
+
+    @staticmethod
+    def _cut(sd=0.12, mu_lo=0.4, mu_hi=0.6):
+        """A fit over *overlapping* modes - the regime a real haystack is in."""
+
+        def hay(seed):
+            r = np.random.default_rng(seed)
+            return np.concatenate([r.normal(mu_lo, sd, 1400), r.normal(mu_hi, sd, 600)])
+
+        def anchors(seed):
+            r = np.random.default_rng(seed)
+            return (
+                list(np.concatenate([r.normal(mu_lo, sd, 10), r.normal(mu_hi, sd, 10)])),
+                list(np.concatenate([np.zeros(10), np.ones(10)])),
+            )
+
+        cut = fit_fold_anchored_cut([hay(202), hay(203)], [anchors(210), anchors(211)], hay(201))
+        assert cut is not None
+        return cut
+
+    def test_thresholds_are_nested_across_the_whole_knob(self):
+        cuts = [self._cut().threshold_at(k) for k in range(-10, 11)]
+        assert all(b <= a + 1e-12 for a, b in zip(cuts, cuts[1:], strict=False)), cuts
+        assert cuts[0] > cuts[-1], "the knob must actually move the line"
+
+    def test_a_cleanly_separated_haystack_leaves_the_knob_little_room(self):
+        """Known property, pinned so it is a decision rather than a surprise.
+
+        The cut is carried to the final model as a *quantile*, and inside an
+        empty band between two well-separated modes every cut has the same
+        empirical quantile - so inclusion moves the cut but not the set of
+        media it admits.  That is the same "band the calibration data cannot
+        resolve" the conformal rule names; it shrinks as soon as the modes
+        overlap (the test above), which is the realistic case.
+        """
+        rng = np.random.default_rng(401)
+        final = _bimodal(rng)
+        folds = [_bimodal(np.random.default_rng(402 + i)) for i in range(2)]
+        anchors = [_anchors_from_modes(np.random.default_rng(410 + i)) for i in range(2)]
+        cut = fit_fold_anchored_cut(folds, [(list(a), list(lbl)) for a, lbl in anchors], final)
+        assert cut is not None
+        cuts = [cut.threshold_at(k) for k in range(-10, 11)]
+        assert all(b <= a + 1e-12 for a, b in zip(cuts, cuts[1:], strict=False))
+        assert max(cuts) - min(cuts) < 0.05
+
+    def test_recut_matches_a_fresh_one_shot_call(self):
+        """Re-cutting a cached fit is the same answer as fitting from scratch.
+
+        This is what lets an Inclusion slide skip the EM and the scoring passes
+        without diverging from a retrain at that inclusion.
+        """
+        rng = np.random.default_rng(301)
+        final = _bimodal(rng)
+        folds = [_bimodal(np.random.default_rng(302 + i)) for i in range(2)]
+        anchors = [_anchors_from_modes(np.random.default_rng(310 + i)) for i in range(2)]
+        orderings = [(list(a), list(lbl)) for a, lbl in anchors]
+        cut = fit_fold_anchored_cut(folds, orderings, final)
+        assert cut is not None
+        for k in (-7, -1, 0, 3, 9):
+            one_shot, _p = fold_anchored_gmm_threshold(folds, orderings, final, k)
+            assert cut.threshold_at(k) == one_shot
+
+    def test_inclusion_zero_is_the_prior_free_crossing(self):
+        """Inclusion 0 weights the two error rates equally, so the shipped cut
+        is the plain rate crossing the report measured."""
+        assert inclusion_cost_weights(0) == (1.0, 1.0)

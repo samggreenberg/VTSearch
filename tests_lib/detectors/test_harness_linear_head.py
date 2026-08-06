@@ -68,7 +68,7 @@ def test_linear_head_reaches_the_final_model_and_the_calibration_folds(style, mo
         return real_train(X, y, input_dim, **kw)
 
     monkeypatch.setattr(vi, "train_model", spy_train)
-    for name in ("calculate_cross_calibration_threshold", "compute_grouped_fold_node_scores"):
+    for name in ("calibration_folds", "compute_grouped_fold_node_scores"):
         real = getattr(vi, name)
 
         def spy_calib(*args, _real=real, **kw):

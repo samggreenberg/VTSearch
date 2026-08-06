@@ -12,7 +12,7 @@ from __future__ import annotations
 import hashlib
 import math
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -35,6 +35,12 @@ CONFORMAL_BASE_BUDGET = 0.25
 # only the region scoring above the 75th percentile of held-out positives is
 # included - "just the most confident matches".
 CONFORMAL_QPOS_MAX = 0.75
+
+# Bounds of the Inclusion knob.  Every threshold rule keyed on inclusion is
+# defined over this closed range, and every sweep of it (the UI slider's stops,
+# the Find Stats chart) runs over exactly these values.
+INCLUSION_MIN = -10
+INCLUSION_MAX = 10
 
 # Above this many scores, fit the GMM on a random subsample instead of the full
 # set. A 2-component, 1-D GMM only needs to recover the two clusters' means and
@@ -64,6 +70,26 @@ def classify_threshold_provenance(fallback: float | None) -> str:
     if fallback == 0.5:
         return "too_few_default"
     return "unknown"
+
+
+def inclusion_cost_weights(inclusion_value: int) -> tuple[float, float]:
+    """``(fpr_weight, fnr_weight)`` - the rate loss the Inclusion knob names.
+
+    Inclusion is defined as a trade-off between the two error *rates*:
+    ``cost = fpr_weight * FPR + fnr_weight * FNR``.  Each ``+1`` step doubles
+    the price of a miss (matching :func:`conformal_threshold`'s halving
+    false-negative budget) and each ``-1`` step doubles the price of a false
+    alarm, so the knob means the same thing to every rule that reads it - the
+    conformal quantile, the rate-optimal GMM cut
+    (:meth:`GmmFit1D.rate_crossing`), and the eval harness's scoring.
+
+    This is the single definition; :mod:`vtscore.eval.calibration_metrics` and
+    :mod:`vtscore.eval.voting_iterations` delegate here so a measured arm and
+    the shipped path can never disagree about what an inclusion value costs.
+    """
+    if inclusion_value >= 0:
+        return 1.0, 2.0**inclusion_value
+    return 2.0 ** (-inclusion_value), 1.0
 
 
 def _quadratic_roots(a: float, b: float, c: float) -> list[float]:
@@ -165,6 +191,70 @@ def _weighted_gaussian_crossing(
     if not inside:
         return None
     return mu_lo + max(inside)
+
+
+def _rate_cut_in_interval(
+    w_lo: float,
+    mu_lo: float,
+    var_lo: float,
+    w_hi: float,
+    mu_hi: float,
+    var_hi: float,
+    *,
+    lam: float,
+) -> tuple[float, int]:
+    """The rate-optimal cut, taken as a **sup** so it is monotone in *lam*.
+
+    ``(cut, clamped)``.  Defines the cut as
+
+        ``sup { x in [mu_lo, mu_hi] : w_lo*N_lo(x) >= lam*w_hi*N_hi(x) }``
+
+    - the highest score at which the Bad component still out-densities the Good
+    one under the cost tilt - with ``sup {} = mu_lo``.  Raising *lam* (pricing
+    misses higher, i.e. raising Inclusion) shrinks that set pointwise, so the
+    sup can only fall: the rule is **monotone in the cost ratio by
+    construction**, which is what the Inclusion knob's nesting contract needs.
+
+    Where the densities genuinely cross inside the interval this returns
+    exactly :func:`_weighted_gaussian_crossing`'s root, so the shipped cut is
+    the stationary point of the rate loss wherever one exists.  The sup framing
+    only decides the *degenerate* cases, and it decides them in the direction
+    the loss actually wants: Bad dominating all the way to ``mu_hi`` clamps to
+    ``mu_hi`` (``clamped=1``), Good dominating from ``mu_lo`` up clamps to
+    ``mu_lo``.  Picking the interval's *midpoint* in those cases instead - the
+    obvious-looking fallback - is what broke monotonicity: with a Good
+    component wider than the Bad one the root enters and leaves the interval
+    non-monotonically, and a midpoint fallback let a *more* exclusive inclusion
+    cut *lower* than a less exclusive one.
+
+    Returns the midpoint (flagged) for a fit too degenerate to express a
+    boundary at all: non-positive weights/variances or non-ordered means.
+    """
+    mid = (mu_lo + mu_hi) / 2.0
+    if not (w_lo > 0.0 and w_hi > 0.0 and var_lo > 0.0 and var_hi > 0.0 and lam > 0.0):
+        return mid, 1
+    if not (mu_hi > mu_lo):
+        return mid, 1
+
+    # Same shifted quadratic as ``_weighted_gaussian_crossing`` (u = x - mu_lo,
+    # interval (0, d)): ``g(u) > 0`` means the Bad component owns that score.
+    d = mu_hi - mu_lo
+    offset = math.log(w_lo / (lam * w_hi)) + 0.5 * math.log(var_hi / var_lo)
+    a = 0.5 / var_hi - 0.5 / var_lo
+    b = -d / var_hi
+    c = 0.5 * d * d / var_hi + offset
+
+    # g(d), in closed form (the same value as ``a d^2 + b d + c``, without the
+    # cancellation): Bad still ahead at the Good mean means the whole interval
+    # belongs to Bad, so the sup is the top edge.
+    if offset - 0.5 * d * d / var_lo >= 0.0:
+        return mu_hi, 1
+
+    inside = [u for u in _quadratic_roots(a, b, c) if math.isfinite(u) and 0.0 <= u < d]
+    if not inside:
+        # g < 0 across the whole interval: Good owns it from mu_lo up.
+        return mu_lo, 1
+    return mu_lo + max(inside), 0
 
 
 @dataclass(frozen=True)
@@ -494,21 +584,25 @@ def anchored_gmm_fit(
 
 
 def gmm_cut_from_fit(fit: GmmFit1D, rule: str, fpr_weight: float = 1.0, fnr_weight: float = 1.0) -> tuple[float, int]:
-    """Apply a named cut *rule* to *fit*; ``(cut, fell_back_to_midpoint)``.
+    """Apply a named cut *rule* to *fit*; ``(cut, no_interior_stationary_point)``.
 
-    ``"mid"`` is the production midpoint; ``"rate"`` is the rate-optimal
-    crossing at the given cost weights (see :meth:`GmmFit1D.rate_crossing`),
-    falling back to the midpoint - flagged - when the crossing has no root on
-    this fit.  Shared by the anchored-threshold eval variants so every arm
-    falls back exactly the way production would.
+    ``"mid"`` is the historical midpoint; ``"rate"`` is the rate-optimal
+    crossing at the given cost weights (see :meth:`GmmFit1D.rate_crossing`).
+
+    ``"rate"`` goes through :func:`_rate_cut_in_interval`, which reads the cut
+    as a **sup** rather than a bare root so it stays monotone in the cost ratio
+    even on fits where the root enters and leaves the inter-mean interval; the
+    flag marks the degenerate cases it decided by clamping to an edge.  The
+    value is the stationary point wherever one exists, so this is the rule the
+    #2836 / #2852 measurements scored.
     """
     if rule == "mid":
         return fit.midpoint(), 0
     if rule == "rate":
-        cut = fit.rate_crossing(fpr_weight, fnr_weight)
-        if cut is None or not math.isfinite(cut):
+        if not (fpr_weight > 0.0 and fnr_weight > 0.0 and fit.w_hi > 0.0):
             return fit.midpoint(), 1
-        return cut, 0
+        lam = (fnr_weight / fpr_weight) * (fit.w_lo / fit.w_hi)
+        return _rate_cut_in_interval(fit.w_lo, fit.mu_lo, fit.var_lo, fit.w_hi, fit.mu_hi, fit.var_hi, lam=lam)
     raise ValueError(f"unknown cut rule {rule!r}; expected 'mid' or 'rate'")
 
 
@@ -534,18 +628,98 @@ def rank_transfer(
     return float(np.quantile(tgt, min(1.0, max(0.0, q))))
 
 
-def fold_anchored_gmm_threshold(
+#: Production anchor mass for the fold-anchored threshold: **κ = 1**, i.e. each
+#: vote counts as *one* haystack point among the ~50k the mixture is fitted on.
+#: The 2026-08-05 deep-regime run swept κ ∈ {1, 3, 10, 30, 100} and performance
+#: degraded monotonically as κ grew - honest anchors matter, anchor *mass* does
+#: not (docs/experiments/population-anchored-calibration/REPORT.md).
+FOLD_ANCHOR_WEIGHT = 1.0
+
+#: Production cut rule for the fold-anchored threshold: the #2836 rate-optimal
+#: crossing, which is the cut the Inclusion knob's rate loss actually asks for.
+#: It beat the midpoint at every κ in the same run.
+FOLD_ANCHOR_CUT_RULE = "rate"
+
+#: Production fold-combine rule: mean of the per-fold quantiles.  With the
+#: shipped ``calibrate_count=2`` the mean and the median coincide.
+FOLD_ANCHOR_COMBINE = "qmean"
+
+
+@dataclass(frozen=True, eq=False)
+class FoldAnchoredCut:
+    """A fitted fold-anchored ("cross-LabeledGMM") estimator, ready to re-cut.
+
+    Holds everything the threshold depends on *except* inclusion: the per-fold
+    anchored mixtures, each fold's sorted haystack sample (to read a cut's
+    quantile in the scale it was measured on), and the final model's sorted
+    haystack sample (to realize the combined quantile on the scale the
+    threshold is applied on).
+
+    Splitting the fit from the cut is what makes the Inclusion knob cheap
+    *and* faithful under this estimator: re-cutting at another inclusion is
+    arithmetic on the fitted Gaussians plus two array lookups - no EM, no
+    scoring pass - so an Inclusion slide reproduces exactly what a fresh
+    retrain at that inclusion would have stored (see
+    :func:`vtscore.state.core.recompute_detector_thresholds_for_inclusion`).
+    """
+
+    fits: tuple[GmmFit1D, ...]
+    fold_haystacks: tuple[np.ndarray, ...]
+    final_haystack: np.ndarray
+    n_anchored: int
+    cut_rule: str = FOLD_ANCHOR_CUT_RULE
+    combine: str = FOLD_ANCHOR_COMBINE
+
+    @property
+    def provenance(self) -> str:
+        """``"fold_anchored[a/k]"`` - *a* of the *k* used folds fitted anchored."""
+        return f"fold_anchored[{self.n_anchored}/{len(self.fits)}]"
+
+    def _quantile_at(self, fpr_weight: float, fnr_weight: float) -> float:
+        """Combined fold quantile at these cost weights."""
+        quantiles = []
+        for fit, src in zip(self.fits, self.fold_haystacks, strict=True):
+            cut, _fell_back = gmm_cut_from_fit(fit, self.cut_rule, fpr_weight, fnr_weight)
+            quantiles.append(float(np.searchsorted(src, cut, side="left")) / float(src.size))
+        if self.combine == "qmean":
+            return float(np.mean(quantiles))
+        if self.combine == "qmedian":
+            return float(np.median(quantiles))
+        raise ValueError(f"unknown fold combine {self.combine!r}; expected 'qmean' or 'qmedian'")
+
+    def threshold_at(self, inclusion_value: int) -> float:
+        """The threshold this estimator cuts at *inclusion_value*.
+
+        The cut rule reads inclusion as the rate weights it optimises
+        (:func:`inclusion_cost_weights`), so raising inclusion tilts the
+        rate-optimal crossing down and admits more - the same direction the
+        conformal rule moves.
+
+        **Monotone by construction**, so the included sets stay nested
+        (everything included at ``k`` stays included at ``k + 1``) - the
+        contract that makes "cut off at Inclusion 1, verify up to Inclusion 4"
+        well defined.  Every link in the chain is monotone: the per-fold cut in
+        the cost weights (:func:`gmm_cut_from_fit`, clamped at the interval
+        edges rather than abandoned so the exits stay monotone too), the
+        empirical quantile of that cut in its fold's haystack, the mean/median
+        across folds, and realizing a quantile on the final haystack.
+        """
+        if self.final_haystack.size == 0:
+            return 0.5
+        q = self._quantile_at(*inclusion_cost_weights(inclusion_value))
+        return float(np.quantile(self.final_haystack, min(1.0, max(0.0, q))))
+
+
+def fit_fold_anchored_cut(
     fold_haystack_scores: "list[np.ndarray]",
     fold_anchor_orderings: list[tuple[list[float], list[float]]],
     final_scores: "list[float] | np.ndarray",
     *,
-    anchor_weight: float = ANCHOR_WEIGHT_DEFAULT,
-    cut_rule: str = "mid",
-    combine: str = "qmean",
-    fpr_weight: float = 1.0,
-    fnr_weight: float = 1.0,
-) -> tuple[float, str]:
-    """The fold-anchored ("cross-LabeledGMM") mixture threshold (#2852 comment).
+    anchor_weight: float = FOLD_ANCHOR_WEIGHT,
+    cut_rule: str = FOLD_ANCHOR_CUT_RULE,
+    combine: str = FOLD_ANCHOR_COMBINE,
+) -> FoldAnchoredCut | None:
+    """Fit the fold-anchored mixtures; ``None`` when no fold yielded a fit.
 
     Per calibration fold *k*: fit the anchored mixture on the **fold model's**
     haystack scores (``fold_haystack_scores[k]``) with anchors from that fold's
@@ -553,22 +727,19 @@ def fold_anchored_gmm_threshold(
     ``(scores, labels)`` orderings the conformal rule pools).  Anchors and
     population then share one scale and the anchors are honest - the labelled
     items were not in that fold model's training set, so their scores carry no
-    train-set optimism.  Each fold's cut is carried to the final model by
-    :func:`rank_transfer` (as a quantile of the fold's haystack distribution,
-    realized on *final_scores*), and the folds are combined in **quantile**
-    space (``combine="qmean"`` / ``"qmedian"``) so no cross-scale averaging of
-    raw cuts ever happens.
+    train-set optimism.
 
-    Degeneracy policy per the issue: a fold whose anchored fit degenerates
-    falls back to that fold's unanchored GMM fit; if every fold fails both
-    fits, the final model's own unanchored GMM midpoint is returned (and its
-    median if even that fails) - never 0.5.  Returns ``(threshold,
-    provenance)`` with provenance ``"fold_anchored[a/k]"`` (*a* folds anchored
-    of *k* used) or ``"fold_fallback_final_unanchored"`` /
-    ``"fold_fallback_final_median"`` on the terminal fallbacks.
+    A fold whose anchored fit degenerates falls back to that fold's
+    **unanchored** GMM fit; a fold that fails both is dropped.  ``None`` means
+    every fold failed (or there were none), leaving the terminal fallback to
+    the caller - :func:`fold_anchored_gmm_threshold` cuts the final model's own
+    distribution instead, never 0.5.
     """
     final_arr = gmm_fit_array(final_scores)
-    quantiles: list[float] = []
+    if final_arr.size == 0:
+        return None
+    fits: list[GmmFit1D] = []
+    haystacks: list[np.ndarray] = []
     n_anchored = 0
     for hay, (a_scores, a_labels) in zip(fold_haystack_scores, fold_anchor_orderings, strict=True):
         arr = gmm_fit_array(hay)
@@ -579,26 +750,74 @@ def fold_anchored_gmm_threshold(
                 continue
         elif provenance == "anchored":
             n_anchored += 1
-        cut, _fell_back = gmm_cut_from_fit(fit, cut_rule, fpr_weight, fnr_weight)
-        src = np.sort(arr)
-        quantiles.append(float(np.searchsorted(src, cut, side="left")) / float(src.size))
+        fits.append(fit)
+        haystacks.append(np.sort(arr))
+    if not fits:
+        return None
+    return FoldAnchoredCut(
+        fits=tuple(fits),
+        fold_haystacks=tuple(haystacks),
+        final_haystack=np.sort(final_arr),
+        n_anchored=n_anchored,
+        cut_rule=cut_rule,
+        combine=combine,
+    )
 
-    if not quantiles or final_arr.size == 0:
-        fallback_fit = fit_score_gmm(final_arr) if final_arr.size >= 2 else None
-        if fallback_fit is not None:
-            return fallback_fit.midpoint(), "fold_fallback_final_unanchored"
-        if final_arr.size:
-            return float(np.median(final_arr)), "fold_fallback_final_median"
-        return 0.5, "fold_fallback_final_median"
 
-    if combine == "qmean":
-        q = float(np.mean(quantiles))
-    elif combine == "qmedian":
-        q = float(np.median(quantiles))
-    else:
-        raise ValueError(f"unknown fold combine {combine!r}; expected 'qmean' or 'qmedian'")
-    threshold = float(np.quantile(final_arr, min(1.0, max(0.0, q))))
-    return threshold, f"fold_anchored[{n_anchored}/{len(quantiles)}]"
+def fold_anchored_gmm_threshold(
+    fold_haystack_scores: "list[np.ndarray]",
+    fold_anchor_orderings: list[tuple[list[float], list[float]]],
+    final_scores: "list[float] | np.ndarray",
+    inclusion_value: int = 0,
+    *,
+    anchor_weight: float = FOLD_ANCHOR_WEIGHT,
+    cut_rule: str = FOLD_ANCHOR_CUT_RULE,
+    combine: str = FOLD_ANCHOR_COMBINE,
+) -> tuple[float, str]:
+    """The fold-anchored ("cross-LabeledGMM") mixture threshold (#2852 comment).
+
+    **This is the shipped threshold path** when safe thresholds are on: the
+    2026-08-05 deep-regime run measured it as the best rule this harness has
+    seen (−0.085 paired regret vs pure cross-calibration at 100-300 votes,
+    2.8× steadier, both error rates below x-cal's until 200 votes) and
+    ``docs/experiments/population-anchored-calibration/REPORT.md`` recommends
+    it at the defaults above.  The eval harness calls this same function for
+    its default arm, so a measured baseline cannot drift from the app.
+
+    Fits via :func:`fit_fold_anchored_cut`, then carries each fold's cut to the
+    final model as a quantile of that fold's haystack distribution
+    (:func:`rank_transfer`'s argument: two models scoring the same haystack are
+    related by an approximately monotone map, and quantiles are invariant under
+    monotone maps), combines the folds in **quantile** space so no cross-scale
+    averaging of raw cuts ever happens, and realizes the result on
+    *final_scores*.
+
+    Degeneracy policy per the issue: a fold whose anchored fit degenerates
+    falls back to that fold's unanchored GMM fit; if every fold fails both
+    fits, the final model's own unanchored GMM midpoint is returned (and its
+    median if even that fails) - never 0.5.  Returns ``(threshold,
+    provenance)`` with provenance ``"fold_anchored[a/k]"`` (*a* folds anchored
+    of *k* used) or ``"fold_fallback_final_unanchored"`` /
+    ``"fold_fallback_final_median"`` on the terminal fallbacks.
+    """
+    cut = fit_fold_anchored_cut(
+        fold_haystack_scores,
+        fold_anchor_orderings,
+        final_scores,
+        anchor_weight=anchor_weight,
+        cut_rule=cut_rule,
+        combine=combine,
+    )
+    if cut is not None:
+        return cut.threshold_at(inclusion_value), cut.provenance
+
+    final_arr = gmm_fit_array(final_scores)
+    fallback_fit = fit_score_gmm(final_arr) if final_arr.size >= 2 else None
+    if fallback_fit is not None:
+        return fallback_fit.midpoint(), "fold_fallback_final_unanchored"
+    if final_arr.size:
+        return float(np.median(final_arr)), "fold_fallback_final_median"
+    return 0.5, "fold_fallback_final_median"
 
 
 def calculate_gmm_threshold(scores: list[float]) -> float:
@@ -700,11 +919,55 @@ def _calibration_cache_key(
     )
 
 
-def cross_calibration_threshold_cached(
+class CalibrationFolds(NamedTuple):
+    """The K calibration folds: held-out orderings, fallback sentinel, models.
+
+    *orderings* are the per-fold ``(scores, labels)`` the conformal rule pools;
+    *fallback* is the sentinel threshold to return outright when calibration
+    was impossible (``None`` when the folds are real); *models* are the trained
+    fold models in fold order, which the fold-anchored threshold
+    (:func:`fold_anchored_gmm_threshold`) scores the haystack with so the
+    anchors and the population it fits share one scale.
+    """
+
+    orderings: list[tuple[list[float], list[float]]]
+    fallback: float | None
+    models: list
+
+
+def calibration_folds(
     X_list: list,
     y_list: list[float],
     input_dim: int,
-    inclusion_value: int,
+    *,
+    calibrate_count: int,
+    calibration_fraction: float,
+    hidden_dim: int,
+    rng: "np.random.RandomState | None" = None,
+    groups: list | None = None,
+    score_rows_by_group: dict | None = None,
+) -> CalibrationFolds:
+    """Train the K calibration folds, keeping their models (uncached)."""
+    models: list = []
+    orderings, fallback = compute_fold_orderings(
+        X_list,
+        y_list,
+        input_dim,
+        rng=rng,
+        calibrate_count=calibrate_count,
+        calibration_fraction=calibration_fraction,
+        hidden_dim=hidden_dim,
+        groups=groups,
+        score_rows_by_group=score_rows_by_group,
+        model_sink=models,
+    )
+    return CalibrationFolds(orderings, fallback, models)
+
+
+def calibration_folds_cached(
+    X_list: list,
+    y_list: list[float],
+    input_dim: int,
     *,
     calibrate_count: int,
     calibration_fraction: float,
@@ -712,23 +975,27 @@ def cross_calibration_threshold_cached(
     det_ctx: Any = None,
     groups: list | None = None,
     score_rows_by_group: dict | None = None,
-) -> float:
-    """Memoized wrapper around :func:`calculate_cross_calibration_threshold`.
+) -> CalibrationFolds:
+    """Memoized :func:`calibration_folds` keyed on the calibration inputs.
 
-    When *det_ctx* is provided, caches the inclusion-independent **fold
-    orderings** on ``det_ctx.calibration_cache`` as ``(key, (orderings,
-    fallback))`` and reuses them whenever the (labels, calibrate settings)
-    key matches.  This is the common case during interactive sorting: the
-    user toggles ``inclusion`` or loads a new media item, the labels stay the
-    same, and the only work left is re-running the cheap conformal quantile
-    rule over the cached orderings - no ~200-epoch fold fits.
+    When *det_ctx* is provided, caches the inclusion-independent folds on
+    ``det_ctx.calibration_cache`` as ``(key, folds)`` and reuses them whenever
+    the (labels, calibrate settings) key matches.  This is the common case
+    during interactive sorting: the user toggles ``inclusion`` or loads a new
+    media item, the labels stay the same, and the only work left is re-running
+    the cheap threshold rule over the cached folds - no ~200-epoch fold fits.
 
     A real label change produces a different cache key and falls through to a
     fresh calibration - no explicit invalidation needed.  *score_rows_by_group*
     (see :func:`compute_fold_orderings`) enters the key too, so a change in the
     rows a bag is scored over can never be served from a stale ordering.
+
+    The trained fold *models* are cached alongside the orderings because the
+    shipped threshold needs them on every retrain, cache hit or miss: the
+    fold-anchored estimator scores the haystack through each fold model.  They
+    are process-scoped in-memory state like ``DetectorContext.model`` and are
+    never serialised.
     """
-    payload: tuple[list[tuple[list[float], list[float]]], float | None] | None = None
     key = None
     if det_ctx is not None:
         key = _calibration_cache_key(
@@ -742,28 +1009,29 @@ def cross_calibration_threshold_cached(
         )
         cached = getattr(det_ctx, "calibration_cache", None)
         if cached is not None and cached[0] == key:
-            payload = cached[1]
+            return cached[1]
 
-    if payload is None:
-        rng = np.random.RandomState(42)
-        payload = compute_fold_orderings(
-            X_list,
-            y_list,
-            input_dim,
-            rng=rng,
-            calibrate_count=calibrate_count,
-            calibration_fraction=calibration_fraction,
-            hidden_dim=hidden_dim,
-            groups=groups,
-            score_rows_by_group=score_rows_by_group,
-        )
-        if det_ctx is not None and key is not None:
-            det_ctx.calibration_cache = (key, payload)
+    folds = calibration_folds(
+        X_list,
+        y_list,
+        input_dim,
+        calibrate_count=calibrate_count,
+        calibration_fraction=calibration_fraction,
+        hidden_dim=hidden_dim,
+        rng=np.random.RandomState(42),
+        groups=groups,
+        score_rows_by_group=score_rows_by_group,
+    )
+    if det_ctx is not None and key is not None:
+        det_ctx.calibration_cache = (key, folds)
+    return folds
 
-    orderings, fallback = payload
-    if fallback is not None:
-        return fallback
-    return threshold_from_fold_orderings(orderings, inclusion_value)
+
+def threshold_from_folds(folds: CalibrationFolds, inclusion_value: int) -> float:
+    """The cross-calibration threshold *folds* implies at *inclusion_value*."""
+    if folds.fallback is not None:
+        return folds.fallback
+    return threshold_from_fold_orderings(folds.orderings, inclusion_value)
 
 
 def conformal_threshold(
@@ -1416,6 +1684,14 @@ def calculate_safe_threshold(
     is the historical ramp: pure GMM at ≤6 labels, pure x-cal at ≥20, linear
     between.
 
+    **No longer the shipped safe threshold.**  The 2026-08-05 population-
+    anchored run (docs/experiments/population-anchored-calibration/REPORT.md)
+    retired the schedule in favour of *fusing* the two estimators rather than
+    averaging them as rivals: :func:`fold_anchored_gmm_threshold` is the
+    production path now.  This blend survives as its fallback, for the label
+    counts too small to form calibration folds at all (where it degenerates to
+    the pure GMM cut anyway) and for the harness arms that still measure it.
+
     Args:
         xcal_threshold: The cross-calibrated threshold.
         all_scores: Model output scores for all medias (used for GMM fitting).
@@ -1452,20 +1728,6 @@ def safe_blend_weight(ctx: "BlendContext | int", schedule: "str | BlendSchedule 
     """The weight the schedule puts on the **x-cal** cut; 0 means pure GMM."""
     sched = schedule if isinstance(schedule, BlendSchedule) else get_schedule(schedule)
     return sched.weight(_as_context(ctx))
-
-
-def xcal_is_discarded(ctx: "BlendContext | int", schedule: "str | BlendSchedule | None" = None) -> bool:
-    """Whether the schedule throws the x-cal cut away entirely at these counts.
-
-    The training paths use this to skip the fold calibration - two 200-epoch
-    model fits - whose output would be multiplied by zero anyway.  Deriving the
-    skip from the schedule (rather than hard-coding "< 6 labels", which is what
-    both app paths did before #2841) is what keeps the skip correct when the
-    schedule changes: a schedule that trusts x-cal from the first label now
-    automatically stops the skip instead of silently blending against a
-    placeholder.
-    """
-    return safe_blend_weight(ctx, schedule) <= 0.0
 
 
 def blend_gmm_threshold(

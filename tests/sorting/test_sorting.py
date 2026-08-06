@@ -326,20 +326,18 @@ class TestTrainModelEpochs:
 
 
 class TestCalibrationAtTinyLabelCounts:
-    """Below the safe-threshold ramp floor (6 labels), calibration runs only
-    when its output is actually used.
+    """Calibration runs at every label count, safe thresholds on or off.
 
-    With ``safe_thresholds=True`` the calibrated value is discarded by the
-    pure-GMM blend (label_weight=0), so the two 200-epoch fold trainings are
-    skipped as pure waste.  With ``safe_thresholds=False`` the cross-cal
-    threshold *is* what the detector uses, so it is computed at every label
-    count - keeping the vote/labelset path consistent with the Find path
-    (``train_and_threshold``), which has always cross-calibrated below 6 when
-    safe-thresholds is off."""
+    With ``safe_thresholds=False`` the cross-cal threshold *is* what the
+    detector uses.  With ``safe_thresholds=True`` the shipped fold-anchored
+    estimator anchors on the fold models' held-out scores, so the folds are an
+    *input* to it - the pre-fusion skip below the blend schedule's floor (where
+    the schedule multiplied the cross-cal cut by zero) has nothing left to
+    save."""
 
-    def test_skips_calibration_when_safe_and_under_six_labels(self):
-        """With safe_thresholds=True and n_labels<6, the fold trainings must
-        not run; their output is entirely discarded by the blender."""
+    def test_calibrates_when_safe_and_under_six_labels(self):
+        """With safe_thresholds=True and n_labels<6, the fold trainings run:
+        the fold-anchored estimator needs their models."""
         from vtscore.detectors import training as detector_training
         from vtscore.training import thresholds
 
@@ -349,7 +347,7 @@ class TestCalibrationAtTinyLabelCounts:
         with unittest.mock.patch.object(
             thresholds,
             "compute_fold_orderings",
-            side_effect=AssertionError("calibration should be skipped when safe & tiny"),
+            wraps=thresholds.compute_fold_orderings,
         ) as patched:
             _, threshold, _model = detector_training.train_and_score(
                 app_module.medias,
@@ -357,7 +355,7 @@ class TestCalibrationAtTinyLabelCounts:
                 app_module.bad_votes,
                 safe_thresholds=True,
             )
-        patched.assert_not_called()
+        assert patched.call_count == 1
         assert 0.0 <= threshold <= 1.0
 
     def test_calibrates_when_safe_off_and_under_six_labels(self):
@@ -383,16 +381,9 @@ class TestCalibrationAtTinyLabelCounts:
             )
         assert patched.call_count == 1
 
-    def test_skips_calibration_at_exactly_the_ramp_floor(self):
-        """At exactly 6 labels the production ramp's x-cal weight is still 0, so
-        the fold trainings are discarded here too.
-
-        The skip used to be hard-coded at ``n_votes < 6`` and so paid for two
-        200-epoch fold fits at exactly 6 that the blender then multiplied by
-        zero.  Deriving it from the schedule (#2841) closes that off-by-one; the
-        threshold is unchanged because the x-cal value never reached it.  No
-        user sees the difference either way: the app's first trained-detector
-        step is at 7 votes.
+    def test_calibrates_at_exactly_the_old_ramp_floor(self):
+        """At exactly 6 labels - the old ramp's last zero-weight step - the fold
+        trainings run too.  The old schedule-derived skip is gone entirely.
         """
         from vtscore.detectors import training as detector_training
         from vtscore.training import thresholds
@@ -403,7 +394,7 @@ class TestCalibrationAtTinyLabelCounts:
         with unittest.mock.patch.object(
             thresholds,
             "compute_fold_orderings",
-            side_effect=AssertionError("weight is 0 at the floor; calibration is waste"),
+            wraps=thresholds.compute_fold_orderings,
         ) as patched:
             detector_training.train_and_score(
                 app_module.medias,
@@ -411,14 +402,11 @@ class TestCalibrationAtTinyLabelCounts:
                 app_module.bad_votes,
                 safe_thresholds=True,
             )
-        patched.assert_not_called()
+        assert patched.call_count == 1
 
     def test_still_calibrates_once_the_ramp_leaves_zero(self):
-        """At 7 labels the x-cal weight is nonzero, so calibration must run.
-
-        7 is also the app's first trained-detector step, so this is the first
-        label count at which the blend has any user-visible effect at all.
-        """
+        """At 7 labels - the app's first trained-detector step - calibration
+        must run, as it does at every other count."""
         from vtscore.detectors import training as detector_training
         from vtscore.training import thresholds
 

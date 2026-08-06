@@ -194,7 +194,7 @@
             <input type="checkbox" [ngModel]="settings().enrich_descriptions" (ngModelChange)="onToggle('enrich_descriptions', $event)" />
             Enrich descriptions
           </label>
-          <label class="checkbox-row" title="Soften the detector's cutoff when it has only a few examples, so it's less aggressive.">
+          <label class="checkbox-row" title="Place the detector's cutoff using the whole collection's score distribution, not just your examples. Steadier and more accurate at every number of votes.">
             <input type="checkbox" [ngModel]="settings().safe_thresholds" (ngModelChange)="onToggle('safe_thresholds', $event)" />
             Safe thresholds
           </label>
