@@ -10,7 +10,65 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ## [Unreleased]
 
-_No changes yet._
+### Changed
+
+- **`fold_anchored_gmm_threshold` is the shipped decision threshold.** Per
+  calibration fold, a semi-supervised 2-component mixture is fitted to that
+  fold model's scores over the whole collection with the fold's *held-out*
+  labels clamped to their component; each fold's rate-optimal cut is carried to
+  the final model as a quantile and the folds are combined in quantile space.
+  Anchor mass is 1.0 (each vote counts as one haystack point). The
+  label-count-scheduled blend (`calculate_safe_threshold`) is now only the
+  fallback for label sets too small to form calibration folds.
+- **`gmm_cut_from_fit(rule="rate")` clamps instead of falling back to the
+  midpoint** when the density crossing has no root between the component means.
+  The cut is read as the highest score at which the low component still
+  out-densities the high one under the cost tilt, which makes it monotone in
+  the Inclusion knob (and so keeps the included sets nested). It equals the old
+  root wherever a crossing exists, including at every equal-weight cut.
+- **`vtscore.eval` defaults `safe_thresholds=True`**, matching the app; `False`
+  is the no-fusion control arm. `eval_learned_sort` / `run_eval` lost the
+  parameter entirely - they delegate to the production trainer, which has no
+  such mode.
+
+### Removed
+
+- **`CoreConfig.safe_thresholds`**, `vtscore.state.get_safe_thresholds` /
+  `set_safe_thresholds`, and the `safe_thresholds` parameter of
+  `train_and_score`, `labelset_train_and_score`, and `run_learned_sort`. The
+  fused threshold measured better than the alternative at every label count, so
+  the switch was deleted rather than kept as a way to opt into a worse cut.
+  **Breaking:** construct `CoreConfig` without the field, and drop the keyword
+  from any `train_and_score` call.
+- **`vtscore.training.thresholds.xcal_is_discarded`** - it existed to skip the
+  fold training where the blend schedule zeroed the cross-cal cut, and the
+  fold-anchored estimator needs those fold models at every label count.
+- **`cross_calibration_threshold_cached`** - superseded by
+  `calibration_folds_cached`, which returns the fold models alongside the
+  orderings (plus `threshold_from_folds` for the cross-calibration cut).
+
+### Added
+
+- **`FoldAnchoredCut`** / **`fit_fold_anchored_cut`** - the fitted estimator,
+  split from the cut so a new Inclusion value can be re-cut arithmetically
+  without refitting or re-scoring.
+- **`inclusion_cost_weights`** - the single definition of what an Inclusion
+  value costs in `(fpr_weight, fnr_weight)`, read by both the shipped threshold
+  rule and the eval harness.
+
+- **`LabelsetExporter.opens_url`** and the `"open_url"` response key - an
+  exporter can return an `http(s)` URL for the frontend to open in a new
+  browser tab, which is how a third-party site with no ingest API receives a
+  labelset. Setting `opens_url = True` advertises it on `to_dict()` so the UI
+  can label the button before the export runs.
+- **`vtscore.security.url_validation.validate_browser_url`** - scheme
+  allowlist for URLs the *user's browser* opens. Deliberately not the
+  `validate_url` SSRF guard: no server-side request is made, so private hosts
+  are legitimate targets and only the scheme is dangerous.
+- **`open_url` exporter** - formats the labelset into a user-supplied URL
+  template (`{ids}`, `{count}`), URL-encoding the joined identifiers,
+  truncating to `max_items`, and refusing a URL past the ~2000-character
+  practical limit.
 
 ## [0.1.0] - Initial release
 

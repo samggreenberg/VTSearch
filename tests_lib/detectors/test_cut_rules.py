@@ -117,6 +117,13 @@ class TestRateOptimalCut:
         assert _root(fit.rate_crossing(1.0, 4.0)) < base
         assert _root(fit.rate_crossing(4.0, 1.0)) > base
 
+    def test_inclusion_weights_are_the_production_definition(self):
+        """The harness must price inclusion the way the shipped rule reads it."""
+        from vtscore.training.thresholds import inclusion_cost_weights
+
+        for k in range(-10, 11):
+            assert inclusion_weights(k) == inclusion_cost_weights(k)
+
     def test_rate_crossing_matches_inclusion_weights(self):
         """Inclusion 0 is (1, 1), so the knob's neutral setting *is* prior-free."""
         wf, wn = inclusion_weights(0)

@@ -1,147 +1,24 @@
 # Population-anchored calibration — fuse the haystack distribution into the trained threshold instead of scheduling it out
 
-**Status:** Design (pre-registered). Estimators and harness first (#2852, #2853);
-any production change is gated on the decision rules below.
+**Status:** Adopted; one measurement still owed before the winner's settings can
+be called final.
 
 ## Background
 
-The shipped threshold treats the GMM (population) cut and the cross-calibration
-(labeled) cut as **rivals on a hand-tuned schedule**: `calculate_safe_threshold`
-ramps GMM weight from 1 at 6 labels to 0 at 20, after which pure x-cal ships.
-Three results say that framing is wrong:
+The threshold used to treat the GMM (population) cut and the cross-calibration
+(labeled) cut as **rivals on a hand-tuned schedule** — `calculate_safe_threshold`
+ramping GMM weight down as labels accumulated. Three structural deficits of the
+conformal cut motivated replacing that framing with a *fusion*: the quantile's
+tiny sample size, the fold→final scale transfer, and per-retrain variance (none
+of which decay with label count).
 
-- An ongoing owner-side experiment finds the naive GMM threshold **still
-  competitive with x-cal at ~300 votes** — 15× past the ramp's expiry, and the
-  experiment ended there, so plausibly beyond. The safe-thresholds study
-  ([`docs/experiments/safe-thresholds/REPORT.md`](../experiments/safe-thresholds/REPORT.md),
-  #2799) had already measured safe-ON still winning past the ramp at its
-  30-vote horizon, attributing the residual to selection feedback; its scope
-  note excludes the deeper regime this contradicts.
-- The selection-bias study
-  ([`docs/experiments/inclusion-knob/SELECTION-BIAS.md`](../experiments/inclusion-knob/SELECTION-BIAS.md))
-  cleared the *labels* of blame under Autopilot: vote-collection bias is
-  conservative and converges. Whatever keeps x-cal from beating an
-  unsupervised bimodality assumption at 300 labels, it is not label quality.
-- The residual-violation analysis there and the #2790 instability work point at
-  the same three structural deficits, none of which decay with label count:
-
-  1. **Sample size.** The conformal FN cap is a low quantile over tens of
-     held-out positives; the GMM fits on up to 50k scores from the whole
-     haystack. An order statistic over dozens of points carries irreducible
-     noise a population-scale fit doesn't have.
-  2. **Scale transfer.** The x-cal cut is measured on **fold models'** score
-     scales (half the votes) but applied to the **final model's** scores — S3
-     in [`threshold-stability-experiment.md`](threshold-stability-experiment.md).
-     The GMM has no transfer step: it is fitted on the exact distribution
-     being cut.
-  3. **Per-retrain variance.** Fold splits and fold fits redraw every vote; the
-     x-cal cut is a fresh noisy estimate each step, while a 250k-score GMM
-     barely moves. Part of "GMM helps" is "GMM is a stabilizer."
-
-**The reframe:** labels and haystack hold complementary information — labels
-know *which quantile matters and which side is which*; the haystack knows
-*where that lives on the final model's actual score scale*. They should feed
-one estimator, not two rivals averaged on a label-count schedule.
-
-## Candidate estimators
-
-- **Rank-transfer.** Compute the conformal cut on the fold orderings as today,
-  carry it over as a **quantile** of the pooled fold scores, and realize that
-  quantile on the final model's full population score distribution. Labels pick
-  the operating point; the haystack supplies the scale. Kills deficit 2
-  exactly. Already specified as the `rank-transfer-k2` arm of
-  [`threshold-stability-experiment.md`](threshold-stability-experiment.md)
-  (there as an S3 diagnostic; here as a production candidate).
-- **Label-anchored mixture** (#2852). Fit the 2-component mixture on the full
-  haystack scores with the voted items' component responsibilities anchored to
-  their labels. Population-scale sample size and native scale at every label
-  count (GMM's strengths) with the "hope the modes are Good and Bad" failure
-  mode removed (x-cal's strength). Replaces the ramp with an implicit,
-  data-driven label/population weighting. Falls back to the unanchored GMM on
-  degenerate fits, never to 0.5.
-- **Fold-anchored mixture** (refinement of #2852). The label-anchored mixture
-  as specced anchors on the **final model's** scores of the labeled items — but
-  those items were in the final model's training set, so their scores are
-  optimistically separated, and the anchors sit artificially deep in their
-  components exactly when labels are few (the regime the estimator exists
-  for). The repair: per fold, fit the anchored mixture on the **fold model's**
-  haystack scores with anchors from that fold's *held-out* labeled scores —
-  anchors and population now share one scale and the anchors are honest — then
-  carry each fold's cut back to the final model as a quantile of the fold's
-  haystack distribution realized on the final model's haystack distribution
-  (rank-transfer per fold), and combine across folds. Kills the train-anchor
-  bias and deficit 2 in one move. Cost: a haystack scoring pass per fold model
-  (cheap at linear-head/small-MLP scale, but not free like the final-model
-  variant, which reuses scores that already exist).
-- **Never-expiring blend** (control). The shipped blend with a permanent GMM
-  floor weight instead of the 20-label expiry. Not a fusion — kept as the
-  cheapest possible fix and as the arm that tests whether *any* scheduling
-  tweak suffices before adopting a new estimator.
-
-## Pre-registered experiment
-
-**Harness:** #2853 — the `scripts/experiments/calibration/` + 
-`vtscore/eval/voting_iterations` machinery, checkpoints extended to
-{20, 50, 100, 200, 300} votes, with every candidate rule run as a
-**within-step paired variant** (the `_SAFE_GMM_VARIANTS` pattern) so arms see
-identical models, votes, and steps.
-
-**Arms:** pure x-cal (status quo past 20) · shipped safe-blend ·
-never-expiring blend · rank-transfer · label-anchored mixture ·
-fold-anchored mixture.
-
-**Metrics per step, paired:** inclusion-weighted cost, FNR/FPR, regret vs the
-oracle cut, step-to-step threshold delta, estimator path taken.
-
-**Hypotheses.**
-
-- **H1 (the deficit has a name):** at 100–300 votes, at least one fusion arm
-  beats pure x-cal on regret. Which one attributes the deficit: rank-transfer
-  absorbing GMM's late value ⇒ scale transfer (deficit 2) dominated;
-  anchored-mixture winning where rank-transfer doesn't ⇒ quantile sample size
-  (deficit 1) dominated; fold-anchored beating label-anchored ⇒ the
-  train-score anchor bias was material, not just theoretical.
-- **H2 (fusion beats scheduling):** the winning fusion arm beats the
-  never-expiring blend at matched steps — i.e. the ramp's problem is its
-  *form*, not its expiry point.
-- **H3 (stability comes along free):** the winning arm also cuts step-to-step
-  threshold delta vs pure x-cal, since both fusions lean on the slow-moving
-  population distribution.
-- **H4 (no recall regression):** the winning arm's FNR at Inclusion 0 stays
-  within the conformal budget's measured envelope at every checkpoint.
-
-**Decision rules.**
-
-1. A fusion arm satisfies H1 + H4 and beats the shipped blend on regret at
-   both ≤20 and ≥100 votes → adopt it as the production threshold path,
-   retiring the ramp (`calculate_safe_threshold` becomes the fallback for
-   datasets too small to fit the population estimator).
-2. Only the never-expiring blend clears the bar → keep the blend, re-key its
-   schedule (floor weight, or expiry keyed to effective calibration-positive
-   count rather than raw labels), and record that fusion lost.
-3. Nothing beats pure x-cal at depth → the ongoing experiment's GMM result
-   needs reconciling with this harness before any production change; report
-   the contradiction as the headline finding.
-4. Whatever the outcome, write
-   `docs/experiments/population-anchored-calibration/REPORT.md` with the
-   paired tables, and fold the verdict into the safe-thresholds guidance in
-   `docs/ML.md`.
-
-## Relation to other plans
-
-- [`threshold-stability-experiment.md`](threshold-stability-experiment.md)
-  owns rank-transfer as an S3 *diagnostic* on the `evaluation-framework`
-  harness; this plan is where it graduates (or not) to a production candidate.
-  The two measurements are complementary, not duplicated: that one measures
-  temporal stability on the realistic loop, this one measures deep-regime
-  accuracy on paired within-step variants.
-- [`inclusion-calibration-bias.md`](inclusion-calibration-bias.md)'s cold-start
-  item ("interpolating against the population score distribution") is the
-  ≤20-vote special case of the same idea; a winning fusion arm here would
-  subsume it.
-- [`provenance-partitioned-calibration.md`](provenance-partitioned-calibration.md)
-  is orthogonal: it filters *which labels* enter calibration; this plan changes
-  *what the labels are fused with*. Both can ship.
+The 2026-08-05 deep-regime run measured the candidates and the **fold-anchored
+mixture** ("cross-LabeledGMM") at κ=1 with the rate-optimal cut won — see
+[`docs/experiments/population-anchored-calibration/REPORT.md`](../experiments/population-anchored-calibration/REPORT.md)
+for the numbers and
+[`docs/ML.md`](../ML.md) for what production now computes. The schedule blend
+survives only as the fallback for label sets too small to form calibration
+folds.
 
 ## Open work
 
@@ -156,29 +33,83 @@ oracle cut, step-to-step threshold delta, estimator path taken.
 
 <!-- item-sep -->
 
-- **DONE — boundary sweep (run B, PR #2864, 2026-08-06).** κ ∈ {0.01 … 3} × 6
-  environments, with `slow_cap50`/`cap50` scored as control arms. The optimum is
-  interior at `fold_anchored κ=0.3 mid`, and fusion beats the shipped blend on
-  region voting only — see
-  `docs/experiments/population-anchored-calibration/REPORT.md`. **Still open:**
-  a `κ ∝ 1/n`
-  total-anchor-mass variant, which the per-window κ* trend (3 → 0.1 from 20 to
-  300 votes) says should beat any constant; and the positive-count gate for when
-  to use fusion at all. A K=4 addendum (SLURM 470106) closed the combine
-  question in production's favour — `qmean` beats `qmedian` at every κ,
-  indistinguishably at κ=0.3 — and found four folds nominally better than two
-  at all 16 grid points by −0.008, with no significant cell; `calibrate_count`
-  is now the `CALIB_CALIBRATE_COUNT` env knob (default unchanged).
-  Two of its findings are regressions against what
-  PR #2861 shipped: the wrong (κ, rule) constant, and applying the fused
-  threshold to binary voting where it loses to `cap50`.
+- **DONE — boundary sweep + environment generalization (PR #2864, 2026-08-06).**
+  Asked: κ ∈ {0.1, 0.3, 1} × folds ∈ {2, 4} with `slow_cap50` as a control,
+  because the shipped κ=1 sat at the *edge* of the measured grid with
+  performance still improving as κ fell, 2 folds made the qmean/qmedian combine
+  comparison degenerate, and the run's blend control predated #2841.
+  Ran: κ ∈ {0.01 … 3} × {mid, rate} across **six environments** (3 datasets ×
+  4 embedders × both voting modes), with `slow_cap50`/`cap50` scored as
+  counterfactual control rows, plus a K=4 addendum. Came back:
+
+  - The optimum is **interior at `fold_anchored κ=0.3` with the `mid` cut**, not
+    κ=1 with `rate` — better in 6/6 environments, and the best single global
+    setting measured.
+  - "Fusion beats every schedule" is **false**: it beats `slow_cap50` on region
+    voting (−0.026) but is a dead heat on COCO binary voting and a loss on
+    caltech101. The gain tracks *positive-anchor count*. Since the fused path
+    covers binary voting too — unconditionally after #2863 — that is a live
+    regression, not a choice.
+  - `qmean` beats `qmedian` at every κ (indistinguishable at κ=0.3, significant
+    from κ=1 up); four folds are nominally −0.008 better than two at all 16
+    grid points with no significant cell. `calibrate_count` is now the
+    `CALIB_CALIBRATE_COUNT` env knob (default unchanged).
+
+  See `docs/experiments/population-anchored-calibration/REPORT.md`.
 
 <!-- item-sep -->
 
-- **Production adoption (gated on decision rule 1 or 2).** Either the winning
-  fusion estimator replaces the safe-blend path in
-  `vtscore/detectors/training.py` / `thresholds.py`, or the blend's schedule is
-  re-keyed; cache-key and Stats-chart implications included; tests in
-  `tests_lib/detectors/`.
+- **Fix the two regressions #2861/#2863 shipped.** Change the constant to
+  `κ=0.3, mid`, and give binary voting a path back to `cap50` — either a
+  voting-mode split (mirroring #2841) or the positive-count gate below.
 
 <!-- item-sep -->
+
+- **Gate fusion on positive-anchor count.** The effect scales with positives
+  (24 → −0.093, 8 → −0.019, 3 → −0.002), not with dataset size. "Use fusion
+  once the fold anchors hold ≥ k positives, else the blend" is directly
+  supported by the six-environment data; k is not yet estimated.
+
+<!-- item-sep -->
+
+- **Test `κ ∝ 1/n` before pinning any constant.** The per-window argmin falls
+  3 → 0.1 from 20 to 300 votes, so a fixed κ is a compromise costing ~0.008 at
+  each end. A fixed *total* anchor mass (κ = M/n, or M/n_good) is a one-line
+  change to the caller.
+
+<!-- item-sep -->
+
+- **Deeper-than-inclusion-0 evidence for the cut rule.** The run scored every
+  arm at inclusion 0, where the rate cut and the midpoint coincide for
+  equal-variance fits. The shipped rule reads inclusion as its cost weights and
+  is clamped at the inter-mean interval's edges to stay monotone; the clamp's
+  *cost* is unmeasured because no arm ran at a non-zero inclusion. A sweep over
+  inclusion would say whether the rate rule's tilt is worth what it pays at the
+  ends of the knob.
+
+<!-- item-sep -->
+
+- **Inclusion resolution on cleanly separated haystacks.** Because the cut is
+  carried to the final model as a *quantile*, every cut inside an empty band
+  between two well-separated modes realizes to the same threshold — so on a
+  cleanly separated dataset the Inclusion knob moves the cut without moving the
+  admitted set. This is the same "band the calibration data cannot resolve" the
+  conformal rule names, and it shrinks as the modes overlap (the realistic
+  case), but it is worth measuring how often real datasets sit in the flat
+  regime before deciding whether the knob needs a tie-break inside the band.
+
+<!-- item-sep -->
+
+## Relation to other plans
+
+- [`threshold-stability-experiment.md`](threshold-stability-experiment.md)
+  owns rank-transfer as an S3 *diagnostic* on the `evaluation-framework`
+  harness. The two measurements are complementary: that one measures temporal
+  stability on the realistic loop, this one measured deep-regime accuracy on
+  paired within-step variants.
+- [`inclusion-calibration-bias.md`](inclusion-calibration-bias.md)'s cold-start
+  item ("interpolating against the population score distribution") is the
+  ≤20-vote special case of the same idea, now subsumed by the shipped fusion.
+- [`provenance-partitioned-calibration.md`](provenance-partitioned-calibration.md)
+  is orthogonal: it filters *which labels* enter calibration; this plan changed
+  *what the labels are fused with*. Both can ship.

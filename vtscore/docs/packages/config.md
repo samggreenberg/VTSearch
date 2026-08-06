@@ -19,7 +19,7 @@ place library code is allowed to read environment variables directly.
 Library code under `vtscore/` is meant to run with or without the Flask
 app. Before this seam existed, every loader, trainer, and embedder
 reached into `vtsearch.settings` for tunables like `saved_datasets_dir`,
-`calibrate_count`, or `safe_thresholds` - which made the library
+`calibrate_count`, or `calibration_fraction` - which made the library
 impossible to vendor independently. `CoreConfig` is the seam:
 
 - **Library-only consumers** construct a `CoreConfig(...)` directly and
@@ -47,7 +47,6 @@ stale state from a previous run.
 | `max_concurrent_dataset_downloads`| `int`          | server      | Cap on parallel dataset downloads (bandwidth/disk-bound stage).                                  |
 | `max_concurrent_dataset_embeddings`| `int`         | server      | Cap on parallel dataset embedding (CPU/GPU-bound stage).                                         |
 | `autofind_detectors`               | `tuple[str, ...]` | server   | Detector names to train + score automatically on every freshly-loaded dataset.                   |
-| `safe_thresholds`                 | `bool`         | per-user    | When `True`, prefer cross-calibrated thresholds with explicit margin over GMM-fit thresholds.    |
 | `calibrate_count`                 | `int`          | per-user    | Number of fold-training passes used to calibrate the operating threshold. Min 1.                 |
 | `calibration_fraction`            | `float`        | per-user    | Fraction of labels held out per calibration fold. Typical 0.5.                                   |
 | `enrich_descriptions`             | `bool`         | per-user    | When `True`, attach `custom_metadata` from origins to result rows on export.                     |
@@ -72,7 +71,6 @@ config = CoreConfig(
     max_concurrent_dataset_downloads=2,
     max_concurrent_dataset_embeddings=1,
     autofind_detectors=(),
-    safe_thresholds=True,
     calibrate_count=1,
     calibration_fraction=0.5,
     enrich_descriptions=False,

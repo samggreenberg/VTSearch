@@ -425,7 +425,6 @@ and auto-saved on every change. Schema:
   "inclusion": 0,
   "theme": "dark",
   "enrich_descriptions": false,
-  "safe_thresholds": false,
   "calibrate_count": 1,
   "calibration_fraction": 0.5,
   "audio_playing": true,

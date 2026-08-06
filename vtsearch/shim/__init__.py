@@ -140,7 +140,6 @@ def register_app_persistence_hooks() -> None:
     register_setting_persister("inclusion", settings.set_inclusion)
     register_setting_persister("calibrate_count", settings.set_calibrate_count)
     register_setting_persister("calibration_fraction", settings.set_calibration_fraction)
-    register_setting_persister("safe_thresholds", settings.set_safe_thresholds)
 
 
 def build_core_config(settings_path: str | Path | None = None) -> CoreConfig:
@@ -167,7 +166,6 @@ def build_core_config(settings_path: str | Path | None = None) -> CoreConfig:
         max_concurrent_dataset_embeddings=_settings.get_max_concurrent_dataset_embeddings(),
         autofind_detectors=tuple(_settings.get_autofind_detectors()),
         dataset_max_age_days=_settings.get_effective_dataset_max_age_days(),
-        safe_thresholds=_settings.get_safe_thresholds(),
         calibrate_count=_settings.get_calibrate_count(),
         calibration_fraction=_settings.get_calibration_fraction(),
         enrich_descriptions=_settings.get_enrich_descriptions(),

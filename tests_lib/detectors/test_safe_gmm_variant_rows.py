@@ -3,11 +3,12 @@
 With ``safe_thresholds=True`` and ``emit_calibration_metrics=True`` the harness
 emits one extra metric row per cut variant at every trainable step - the #2799
 and #2836 measurement arms - plus a per-(step, geometry) decomposition frame
-into ``cut_diag_sink``.  The load-bearing invariant is that the ``pooled_mid``
-variant (pooled fit, midpoint-of-means - i.e. exactly what production computes
-since the #2833 revert) reproduces the base row's blended threshold
+into ``cut_diag_sink``.  The load-bearing invariant is that the arm at the
+*production* estimator settings reproduces the base row's threshold
 bit-for-bit, so the study measures the shipped code and every other variant
-differs from it along exactly one named axis.
+differs from it along exactly one named axis.  Since the population-anchored
+adoption that arm is ``fold_anchored_w1_rate_qmean`` (κ=1, rate cut, quantile
+mean); the ``pooled_*`` family now measures the retired schedule blend.
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ _VARIANT_NAMES = {name for name, _fit, _rule in _SAFE_GMM_VARIANTS}
 _ALWAYS_EMITTED = _VARIANT_NAMES - set(_ORACLE_VARIANTS)
 
 
-def _run_safe(style, seed=0, max_steps=16, diag_sink=None):
+def _run_safe(style, seed=0, max_steps=16, diag_sink=None, **kw):
     medias, _ = _planted_dataset(n_per_cat=40, seed=seed)
     return simulate_voting_iterations(
         medias,
@@ -46,6 +47,7 @@ def _run_safe(style, seed=0, max_steps=16, diag_sink=None):
         style=style,
         emit_calibration_metrics=True,
         cut_diag_sink=diag_sink,
+        **kw,
     )
 
 
@@ -67,22 +69,39 @@ class TestSafeGmmVariantRows:
         base = [r for r in rows if r["gmm_variant"] == ""]
         variant = [r for r in rows if r["gmm_variant"] != ""]
         assert base and variant
-        # The production operating point is the base row; its provenance is the
-        # blend tag, and it records the pre-blend conformal cut alongside.
+        # The production operating point is the base row; its provenance names
+        # the shipped estimator (the fold-anchored fit, or the blend fallback
+        # when no fold produced one), and it records the pre-fusion conformal
+        # cut alongside.
         for r in base:
-            assert r["threshold_provenance"] == "gmm_blend"
+            assert r["threshold_provenance"].startswith("fold_anchored[") or r["threshold_provenance"] == "gmm_blend"
             assert np.isfinite(r["xcal_threshold"])
         for r in variant:
             assert r["pool_variant"] == "max"
             assert 0.0 <= r["blend_weight"] <= 1.0 or np.isnan(r["blend_weight"])
 
-    def test_pooled_mid_reproduces_production_blend(self):
-        rows = _run_safe("max_patch")
+    def test_production_anchored_arm_reproduces_the_shipped_threshold(self):
+        """The harness must not deviate from the app at the shipped settings.
+
+        The ``fold_anchored_w1_rate_qmean`` arm is the production estimator
+        (κ=1, rate cut, quantile mean), so its threshold has to equal the base
+        row's - the value the step actually shipped - at every step.
+        """
+        rows = _run_safe(
+            "max_patch",
+            anchored_thresholds=True,
+            anchored_weights=[1.0],
+            anchored_rules=["rate"],
+            anchored_fold_combines=["qmean"],
+        )
         base = {r["t"]: r for r in rows if r["gmm_variant"] == ""}
-        pm = {r["t"]: r for r in rows if r["gmm_variant"] == "pooled_mid"}
-        assert set(base) == set(pm)
-        for t, b in base.items():
-            assert pm[t]["threshold"] == b["threshold"], f"step {t}: variant diverged from production"
+        prod = {r["t"]: r for r in rows if r["gmm_variant"] == "fold_anchored_w1_rate_qmean"}
+        assert prod, "the production anchored arm emitted no rows"
+        for t, arm in prod.items():
+            if base[t]["threshold_provenance"] == "gmm_blend":
+                continue  # the step fell back to the blend; the arm is not it
+            assert arm["threshold"] == base[t]["threshold"], f"step {t}: harness diverged from the app"
+            assert arm["threshold_provenance"] == base[t]["threshold_provenance"]
 
     def test_xcal_only_is_the_unblended_cut(self):
         rows = _run_safe("max_patch")

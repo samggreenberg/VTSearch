@@ -97,10 +97,9 @@ class BlendSchedule:
         """The weight on the **x-cal** cut in ``[0, 1]``; 0 means pure GMM.
 
         Combiners that are not weighted averages still define this, because the
-        training path uses ``weight == 0`` to decide whether the expensive fold
-        calibration can be skipped entirely (see
-        :func:`vtscore.training.thresholds.xcal_is_discarded`).  A schedule that
-        always consults the x-cal cut must therefore never return 0.
+        harness's schedule-variant screen reports it per step
+        (:func:`vtscore.eval.voting_iterations._schedule_variant_rows`) and
+        because it is what makes a schedule's shape legible at all.
         """
         raise NotImplementedError
 

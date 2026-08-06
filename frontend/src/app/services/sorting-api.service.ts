@@ -20,7 +20,6 @@ import type { LabelsImportResponse } from '../generated/api-client/models/labels
 import type { LearnedSortCancelResponse } from '../generated/api-client/models/learned-sort-cancel-response';
 import type { LearnedSortResponse } from '../generated/api-client/models/learned-sort-response';
 import type { OkResponse } from '../generated/api-client/models/ok-response';
-import type { SafeThresholdsResponse } from '../generated/api-client/models/safe-thresholds-response';
 import type { ServerMediaListResponse } from '../generated/api-client/models/server-media-list-response';
 import type { ServerMediaUploadResponse } from '../generated/api-client/models/server-media-upload-response';
 import type { SortResponse } from '../generated/api-client/models/sort-response';
@@ -32,8 +31,6 @@ import { setInclusionRoute } from '../generated/api-client/fn/sorting/set-inclus
 import { cancelLearnedSort } from '../generated/api-client/fn/sorting/cancel-learned-sort';
 import { learnedSort } from '../generated/api-client/fn/sorting/learned-sort';
 import { learnedSortResult } from '../generated/api-client/fn/sorting/learned-sort-result';
-import { getSafeThresholdsRoute } from '../generated/api-client/fn/sorting/get-safe-thresholds-route';
-import { setSafeThresholdsRoute } from '../generated/api-client/fn/sorting/set-safe-thresholds-route';
 import { sortClips } from '../generated/api-client/fn/sorting/sort-clips';
 import { sortPage } from '../generated/api-client/fn/sorting/sort-page';
 import type { SortPageResponse } from '../generated/api-client/models/sort-page-response';
@@ -135,16 +132,6 @@ export class SortingApiService {
     return setInclusionRoute(this.http, this.config.rootUrl, { body: { inclusion: value } }).pipe(
       map((r) => r.body),
     );
-  }
-
-  getSafeThresholds(): Observable<SafeThresholdsResponse> {
-    return getSafeThresholdsRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
-  }
-
-  setSafeThresholds(value: boolean): Observable<SafeThresholdsResponse> {
-    return setSafeThresholdsRoute(this.http, this.config.rootUrl, {
-      body: { safe_thresholds: value },
-    }).pipe(map((r) => r.body));
   }
 
   exportLabels(

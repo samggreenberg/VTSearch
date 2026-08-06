@@ -103,7 +103,7 @@ seeds (10, not 3 — variance is the measurand) and classes (5, below).
 | `conformal-k2-med3` | `conformal-k2`, then threshold_t = median of the last 3 raw thresholds | temporal hysteresis (cheapest possible production fix) |
 | `rank-transfer-k2` | `conformal-k2`'s cut converted to a quantile of the pooled fold scores, then applied at that quantile of the **final model's** pool-score distribution | S3 |
 
-All arms keep `--safe-thresholds` on (default), so the GMM blend below 20
+All arms use the shipped fused threshold (there is no switch), so the population fit below 20
 labels is common to every arm. (Fidelity footnote to record, not sweep: the
 whole path blends against *train* scores where production blends against the
 full scored set — only relevant at t < 20.)

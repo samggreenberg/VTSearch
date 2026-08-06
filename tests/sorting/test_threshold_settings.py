@@ -1,13 +1,14 @@
-"""Tests for the Safe Thresholds and Calibration Fraction features.
+"""Tests for the threshold blend fallback and the Calibration Fraction setting.
+
+The schedule blend (``calculate_safe_threshold``) is no longer the shipped
+threshold - the fold-anchored population estimator is, unconditionally, with no
+user setting to turn it off - but the blend is still what runs for label sets
+too small to form calibration folds, so its ramp is still load-bearing.
 
 Covers:
 - calculate_safe_threshold logic (blending, label-count ramp)
-- train_and_score integration with safe_thresholds flag
-- Settings get/set persistence
-- API routes for GET/POST /api/safe-thresholds
-- Learned sort uses safe_thresholds when enabled
-- Detector export uses safe_thresholds when enabled
-- Eval voting_iterations accepts safe_thresholds param
+- train_and_score always fuses the haystack into its threshold
+- Training-setting changes invalidate a loaded detector's cached model
 - Calibration fraction: settings, cross-calibration split, edge cases, API, eval
 """
 
@@ -115,122 +116,31 @@ class TestCalculateSafeThreshold:
         assert safe == pytest.approx(gmm, abs=1e-6)
 
 
-class TestTrainAndScoreWithSafeThresholds:
-    """Integration tests: train_and_score with safe_thresholds flag."""
+class TestTrainAndScoreFusesUnconditionally:
+    """The population estimator is not optional; there is no flag to pass."""
 
-    def test_safe_thresholds_default_is_false(self):
-        """The default value for safe_thresholds should be False."""
+    def test_no_safe_thresholds_parameter_remains(self):
+        """The retired setting must not linger as a dead keyword."""
         import inspect
 
-        sig = inspect.signature(train_and_score)
-        default = sig.parameters["safe_thresholds"].default
-        assert default is False
+        assert "safe_thresholds" not in inspect.signature(train_and_score).parameters
 
-    def test_safe_thresholds_on_returns_valid_threshold(self):
-        """With safe_thresholds=True, threshold is still in [0, 1]."""
+    def test_returns_a_valid_threshold(self):
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        results, threshold, _model = train_and_score(
-            app_module.medias, app_module.good_votes, app_module.bad_votes, safe_thresholds=True
-        )
+        results, threshold, _model = train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
         assert 0.0 <= threshold <= 1.0
         assert len(results) == len(app_module.medias)
 
-    def test_safe_thresholds_can_differ_from_xcal(self):
-        """Safe threshold should differ from x-cal only threshold (at least sometimes).
-
-        With only 6 labels, the safe threshold should lean toward GMM,
-        potentially producing a different value than x-cal alone.
-        """
+    def test_threshold_is_realizable_on_the_haystack_distribution(self):
+        """The shipped cut is realized as a quantile of the scores it will be
+        compared against, so it always lands inside their range - which the raw
+        conformal quantile, measured on fold-model scores, need not."""
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
         app_module.bad_votes.update({k: None for k in [18, 19, 20]})
-        _, _thresh_off, _m1 = train_and_score(
-            app_module.medias, app_module.good_votes, app_module.bad_votes, safe_thresholds=False
-        )
-        _, thresh_on, _m2 = train_and_score(
-            app_module.medias, app_module.good_votes, app_module.bad_votes, safe_thresholds=True
-        )
-        # They CAN be equal but with 6 labels, safe thresholds should blend
-        # We just verify they're both valid; the blending is tested in unit tests
-        assert 0.0 <= thresh_on <= 1.0
-
-
-class TestSafeThresholdsSetting:
-    """Tests for the safe_thresholds setting persistence."""
-
-    def test_default_is_true(self):
-        """On by default since the #2799 A/B (see the setting's own comment)."""
-        from vtsearch import settings
-
-        settings.reset()
-        assert settings.get_safe_thresholds() is True
-
-    def test_set_and_get_true(self):
-        from vtsearch import settings
-
-        settings.set_safe_thresholds(True)
-        assert settings.get_safe_thresholds() is True
-
-    def test_set_and_get_false(self):
-        from vtsearch import settings
-
-        settings.set_safe_thresholds(True)
-        settings.set_safe_thresholds(False)
-        assert settings.get_safe_thresholds() is False
-
-    def test_state_get_reads_from_settings(self):
-        from vtsearch import settings
-        from vtsearch.state import get_safe_thresholds
-
-        settings.set_safe_thresholds(True)
-        assert get_safe_thresholds() is True
-
-        settings.set_safe_thresholds(False)
-        assert get_safe_thresholds() is False
-
-
-class TestSafeThresholdsAPI:
-    """Tests for GET/POST /api/safe-thresholds."""
-
-    def test_get_returns_current_value(self, client):
-        resp = client.get("/api/safe-thresholds")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert "safe_thresholds" in data
-        assert isinstance(data["safe_thresholds"], bool)
-
-    def test_post_sets_value_true(self, client):
-        resp = client.post("/api/safe-thresholds", json={"safe_thresholds": True})
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["safe_thresholds"] is True
-
-    def test_post_sets_value_false(self, client):
-        client.post("/api/safe-thresholds", json={"safe_thresholds": True})
-        resp = client.post("/api/safe-thresholds", json={"safe_thresholds": False})
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["safe_thresholds"] is False
-
-    def test_post_persists_value(self, client):
-        client.post("/api/safe-thresholds", json={"safe_thresholds": True})
-        resp = client.get("/api/safe-thresholds")
-        assert resp.get_json()["safe_thresholds"] is True
-
-    def test_post_non_boolean_returns_422(self, client):
-        # Schema-level validation: the marshmallow
-        # ``SafeThresholdsRequestSchema`` rejects non-boolean values as
-        # 422 with the standard ``errors`` envelope.
-        resp = client.post("/api/safe-thresholds", json={"safe_thresholds": "yes"})
-        assert resp.status_code == 422
-        assert "safe_thresholds" in resp.get_json()["errors"]["json"]
-
-    def test_post_missing_field_returns_422(self, client):
-        # Schema-level validation: missing required ``safe_thresholds`` →
-        # 422 with the standard ``errors`` envelope.
-        resp = client.post("/api/safe-thresholds", json={})
-        assert resp.status_code == 422
-        assert "safe_thresholds" in resp.get_json()["errors"]["json"]
+        results, threshold, _model = train_and_score(app_module.medias, app_module.good_votes, app_module.bad_votes)
+        scores = [r["score"] for r in results]
+        assert min(scores) <= threshold <= max(scores)
 
 
 class TestTrainingSettingsInvalidateLoadedDetector:
@@ -251,23 +161,6 @@ class TestTrainingSettingsInvalidateLoadedDetector:
         register_detector_context(ctx)
         return ctx
 
-    def test_set_safe_thresholds_invalidates_loaded_model(self):
-        from vtsearch.state import get_safe_thresholds, set_safe_thresholds
-
-        ctx = self._loaded_ctx()
-        set_safe_thresholds(not get_safe_thresholds())
-        assert ctx.model is None
-        assert ctx.threshold == 0.5
-
-    def test_set_safe_thresholds_unchanged_keeps_model(self):
-        from vtsearch.state import get_safe_thresholds, set_safe_thresholds
-
-        ctx = self._loaded_ctx()
-        # Set to the current value; no-op, must not invalidate.
-        set_safe_thresholds(get_safe_thresholds())
-        assert ctx.model is not None
-        assert ctx.threshold == 0.73
-
     def test_set_inclusion_preserves_model_no_fold_cache(self):
         """Inclusion is a pure cutoff knob: it no longer drops the model.
         Without cached fold orderings the threshold is left for the next
@@ -284,12 +177,12 @@ class TestTrainingSettingsInvalidateLoadedDetector:
         """With cached fold orderings, an inclusion change re-derives the
         threshold (cheap quantile rule over the cache) without touching the model."""
         from vtsearch.state import get_inclusion, set_inclusion
-        from vtscore.training.thresholds import threshold_from_fold_orderings
+        from vtscore.training.thresholds import CalibrationFolds, threshold_from_fold_orderings
 
         ctx = self._loaded_ctx()
         model_before = ctx.model
         orderings = [([0.9, 0.8, 0.2, 0.1], [1.0, 1.0, 0.0, 0.0])]
-        ctx.calibration_cache = ("k", (orderings, None))
+        ctx.calibration_cache = ("k", CalibrationFolds(orderings, None, []))
         new_incl = get_inclusion() + 3
         set_inclusion(new_incl)
         assert ctx.model is model_before
@@ -312,17 +205,6 @@ class TestTrainingSettingsInvalidateLoadedDetector:
         assert ctx.model is None
         assert ctx.threshold == 0.5
 
-    def test_settings_put_safe_thresholds_invalidates_loaded_model(self, client):
-        ctx = self._loaded_ctx()
-        # PUT through /api/settings routes through vtsearch.state setters
-        # so the invalidation hook fires even on this code path (M7 fix).
-        # The value has to actually *change* to invalidate, and the setting
-        # now defaults to on (#2799), so this turns it off.
-        resp = client.put("/api/settings", json={"safe_thresholds": False})
-        assert resp.status_code == 200
-        assert ctx.model is None
-        assert ctx.threshold == 0.5
-
     def test_settings_put_calibrate_count_invalidates_loaded_model(self, client):
         from vtsearch.state import get_calibrate_count
 
@@ -331,84 +213,6 @@ class TestTrainingSettingsInvalidateLoadedDetector:
         assert resp.status_code == 200
         assert ctx.model is None
         assert ctx.threshold == 0.5
-
-
-class TestSafeThresholdsEval:
-    """Test that eval functions accept safe_thresholds parameter."""
-
-    def _make_clips(self, n=40, dim=16, seed=42):
-        """Build a synthetic medias dict with two categories."""
-        rng = np.random.RandomState(seed)
-        medias = {}
-        for i in range(n):
-            cat = "target" if i < n // 2 else "other"
-            # Make target embeddings cluster in one direction
-            if cat == "target":
-                emb = rng.randn(dim).astype(np.float32) + 1.0
-            else:
-                emb = rng.randn(dim).astype(np.float32) - 1.0
-            medias[i + 1] = {
-                "id": i + 1,
-                "embedder": "e5",
-                "embeddings": {"e5": emb},
-                "category": cat,
-            }
-        return medias
-
-    def test_simulate_voting_iterations_accepts_safe_thresholds(self):
-        from vtscore.eval.voting_iterations import simulate_voting_iterations
-
-        # Plumbing test: a small pool + calibrate_count=1 keeps the per-step
-        # MLP-train/calibrate sweep cheap; the assertion is shape-only.
-        medias = self._make_clips(n=16)
-        rows_off = simulate_voting_iterations(
-            medias,
-            "target",
-            seed=42,
-            safe_thresholds=False,
-            calibrate_count=1,
-        )
-        rows_on = simulate_voting_iterations(
-            medias,
-            "target",
-            seed=42,
-            safe_thresholds=True,
-            calibrate_count=1,
-        )
-        # Both should produce valid results
-        assert len(rows_off) > 0
-        assert len(rows_on) > 0
-        # Each row should have cost, fpr, fnr keys
-        for row in rows_on:
-            assert "cost" in row
-            assert "fpr" in row
-            assert "fnr" in row
-
-    def test_run_voting_iterations_eval_accepts_safe_thresholds(self):
-        from vtscore.eval.voting_iterations import run_voting_iterations_eval
-
-        medias = self._make_clips(n=16)
-        df = run_voting_iterations_eval(
-            {"test": medias},
-            seeds=[42],
-            categories={"test": ["target"]},
-            safe_thresholds=True,
-            calibrate_count=1,
-        )
-        assert len(df) > 0
-        assert "cost" in df.columns
-
-    def test_eval_runner_accepts_safe_thresholds(self):
-        """Verify eval_learned_sort accepts safe_thresholds kwarg."""
-        from vtscore.eval.runner import eval_learned_sort
-        from vtscore.eval.config import EvalQuery
-
-        medias = self._make_clips()
-        queries = [EvalQuery(text="target things", target_category="target")]
-        results = eval_learned_sort(medias, queries, safe_thresholds=True, seed=42)
-        assert len(results) > 0
-        for lm in results:
-            assert 0.0 <= lm.f1 <= 1.0
 
 
 # ======================================================================

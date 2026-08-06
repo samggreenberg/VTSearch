@@ -16,7 +16,9 @@ POST /api/exporters/export
     (missing ``exporter_name``) surface as 422; handler-level rejects
     (unknown exporter, missing plugin field, invalid filepath, plugin
     error) keep their original HTTP codes (404 / 400 / 500) with the
-    standard ``message`` envelope.
+    standard ``message`` envelope. An ``open_url`` in the exporter's
+    outcome is re-validated against the browser-URL scheme allowlist
+    before it reaches the frontend; a URL that fails is a 500.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ import logging
 from flask_smorest import Blueprint, abort
 
 from vtscore.exporters import get_exporter, list_exporters
+from vtscore.security.url_validation import validate_browser_url
 from vtsearch.routes._shared import validate_exporter_field_values
 from vtsearch.schemas.labels import (
     ExporterEntrySchema,
@@ -72,11 +75,24 @@ def run_export(body: dict):
     results: dict = dict(body.get("results") or {})
 
     try:
-        outcome = exporter.export(results, field_values)
+        outcome = dict(exporter.export(results, field_values) or {})
     except ValueError as exc:
         abort(400, message=str(exc))
     except Exception as exc:
         logger.exception("%s.export() failed: %s", type(exporter).__name__, exc)
         abort(500, message=str(exc))
 
-    return {"success": True, **(outcome or {})}
+    if outcome.get("open_url") is not None:
+        # The frontend hands this straight to ``window.open``, so re-validate
+        # here regardless of what the plugin already did: a scheme allowlist is
+        # what stops an exporter (in-tree, third-party entry point, or simply
+        # buggy) from pushing a ``javascript:`` URL into the browser. Not the
+        # SSRF guard — the *browser* fetches this, so a localhost viewer is a
+        # legitimate target and resolving the host would buy nothing.
+        try:
+            outcome["open_url"] = validate_browser_url(str(outcome["open_url"]))
+        except ValueError as exc:
+            logger.error("%s.export() returned an unusable open_url: %s", type(exporter).__name__, exc)
+            abort(500, message=f"Exporter '{exporter_name}' returned an unusable open_url: {exc}")
+
+    return {"success": True, **outcome}

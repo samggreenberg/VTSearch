@@ -258,7 +258,6 @@ class TestSettingsAPI:
         assert data["theme"] == "system"
         assert data["calibrate_count"] == 2
         assert data["calibration_fraction"] == 0.5
-        assert data["safe_thresholds"] is True
         assert isinstance(data["focus_mode_left"], dict)
         for v in data["focus_mode_left"].values():
             assert v == "click"
@@ -303,21 +302,6 @@ class TestSettingsAPI:
         res = client.get("/api/settings/defaults")
         assert res.status_code == 200
         assert res.get_json().get("import_defaults_by_media_type") == {}
-
-    def test_update_safe_thresholds(self, client):
-        res = client.put("/api/settings", json={"safe_thresholds": True})
-        assert res.status_code == 200
-        assert res.get_json()["safe_thresholds"] is True
-
-        # Verify it persisted
-        res2 = client.get("/api/settings")
-        assert res2.get_json()["safe_thresholds"] is True
-
-    def test_update_safe_thresholds_false(self, client):
-        client.put("/api/settings", json={"safe_thresholds": True})
-        res = client.put("/api/settings", json={"safe_thresholds": False})
-        assert res.status_code == 200
-        assert res.get_json()["safe_thresholds"] is False
 
     def test_update_show_metadata(self, client):
         res = client.put("/api/settings", json={"show_metadata": False})

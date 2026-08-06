@@ -28,6 +28,7 @@ and third-party packaging.
 - [Two payload shapes](#two-payload-shapes)
 - [Template-variable interpolation](#template-variable-interpolation)
 - [Server-path and URL validation](#server-path-and-url-validation)
+- [Opening a URL in the browser](#opening-a-url-in-the-browser)
 - [Entry-point registration](#entry-point-registration)
 - [Worked example](#worked-example)
 - [Testing pattern](#testing-pattern)
@@ -49,6 +50,7 @@ Optional overrides:
 | Member | Default | Purpose |
 |--------|---------|---------|
 | `icon: str` | `"📤"` | Emoji rendered in the UI |
+| `opens_url: bool` | `False` | Set `True` when `export()` always returns an `"open_url"` - see [Opening a URL in the browser](#opening-a-url-in-the-browser) |
 | `export_cli(results, field_values)` | delegates to `export()` | Override only when CLI-supplied values need different handling (rare) |
 
 Expose `EXPORTER = YourExporter()` at module level so the registry
@@ -57,7 +59,9 @@ the class.
 
 The return value's `"message"` is shown to the user as confirmation;
 extra keys (`"filepath"`, `"status_code"`, …) are passed through to
-the API response.
+the API response. Two of those keys mean something to the frontend:
+`"display_results"` (rendered in the Auto-Detect Results modal) and
+`"open_url"` (opened in a new browser tab - see below).
 
 ## Two payload shapes
 
@@ -162,6 +166,56 @@ requests.post(url, json=results, timeout=30, allow_redirects=False)
 
 Both helpers are import-clean of Flask, so library-only exporter tests
 can exercise them directly.
+
+## Opening a URL in the browser
+
+Some destinations can't be *delivered* to - a site with a viewer but no
+ingest API. You can still hand the user off to one: format the labelset
+into that site's URL and return it as `"open_url"`, and the Export modal
+opens it in a new tab.
+
+```python
+from urllib.parse import quote
+
+from vtscore.security.url_validation import validate_browser_url
+
+
+class ReviewSiteExporter(LabelsetExporter):
+    name = "review_site"
+    display_name = "Review Site"
+    description = "Open the labelset in the review site."
+    opens_url = True          # lets the button read "Open Labelset in Review Site"
+    fields = []
+
+    def export(self, results: dict, field_values: dict) -> dict:
+        ids = ",".join(e["md5"] for e in results.get("labels", []))
+        url = validate_browser_url(f"https://review.example.com/?ids={quote(ids, safe='')}")
+        return {"message": "Opening the labelset in Review Site.", "open_url": url}
+```
+
+Four things this shape gets right, and that yours should too:
+
+- **`validate_browser_url`, not `validate_url`.** The *browser* makes
+  this request, so the SSRF guard is the wrong tool - it would reject a
+  legitimate `http://localhost:9000/viewer`. The browser guard is a
+  scheme allowlist that stops `javascript:` / `data:` / `file:`. The
+  route re-runs it on whatever you return and fails the export if it
+  doesn't pass, so a mistake here is a broken export, never an injected
+  URL.
+- **Percent-encode anything you splice in.** An id list joined with `,`
+  and dropped raw into a query string breaks on the first identifier
+  containing `&` or `#`.
+- **Cap the length.** URLs stop working somewhere around 2000
+  characters. Truncate deliberately and say so in `"message"` (the
+  built-in `open_url` exporter reports "first 100 of 5,000 item(s)")
+  rather than emitting a URL that silently opens the wrong selection.
+- **Assume the URL is public.** It reaches the destination site's logs
+  and the user's browser history. Identifiers, not content.
+
+Set `opens_url = True` only if you *always* return a URL; the flag is
+what the UI reads to label the button before running anything. An
+exporter that returns one only sometimes (a webhook whose remote hands
+back a permalink) leaves the flag `False` - the URL still opens.
 
 ## Entry-point registration
 

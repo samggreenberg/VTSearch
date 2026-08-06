@@ -320,10 +320,10 @@ class TestProductionCalibrationFidelity:
     Production (`_train_and_score_xy` / `train_and_threshold`) threads a single
     head architecture through both the final model and the calibration folds,
     and always calibrates with a fresh ``RandomState(42)`` (the fixed seed baked
-    into ``cross_calibration_threshold_cached``).  These tests spy on the
-    calibration call to prove the eval does the same, so overlapping the fold
-    split RNG with the per-seed simulation RNG or letting folds auto-size can't
-    silently reintroduce a production mismatch.
+    into ``calibration_folds_cached``).  These tests spy on the calibration call
+    to prove the eval does the same, so overlapping the fold split RNG with the
+    per-seed simulation RNG or letting folds auto-size can't silently
+    reintroduce a production mismatch.
 
     The *head* itself is where the eval's MLP arm and production part ways:
     production trains the linear head (#2790), while this arm keeps the MLP as a
@@ -333,10 +333,10 @@ class TestProductionCalibrationFidelity:
     def _spy_calibration(self, monkeypatch):
         from vtscore.eval import voting_iterations
 
-        real = voting_iterations.calculate_cross_calibration_threshold
+        real = voting_iterations.calibration_folds
         captured: list[dict] = []
 
-        def spy(X_list, y_list, input_dim, inclusion_value=0, *, rng=None, hidden_dim=None, **kw):
+        def spy(X_list, y_list, input_dim, *, rng=None, hidden_dim: int = 0, **kw):
             # get_state() copies without advancing, so recording it here does
             # not perturb the real calibration that runs on the next line.
             captured.append(
@@ -346,9 +346,9 @@ class TestProductionCalibrationFidelity:
                     "mt_key": _mt_key(rng)[1] if rng is not None else None,
                 }
             )
-            return real(X_list, y_list, input_dim, inclusion_value, rng=rng, hidden_dim=hidden_dim, **kw)
+            return real(X_list, y_list, input_dim, rng=rng, hidden_dim=hidden_dim, **kw)
 
-        monkeypatch.setattr(voting_iterations, "calculate_cross_calibration_threshold", spy)
+        monkeypatch.setattr(voting_iterations, "calibration_folds", spy)
         return captured
 
     def test_folds_forced_to_full_data_hidden_dim(self, monkeypatch):

@@ -96,7 +96,7 @@ VTSearch/
 │   │
 │   ├── training/                   Generic learned-sort primitives (no Flask, no state)
 │   │   ├── mlp.py                  build_model, train_model (pure PyTorch)
-│   │   ├── thresholds.py           GMM / cross-calibration / safe-threshold helpers
+│   │   ├── thresholds.py           GMM / cross-calibration / fold-anchored threshold helpers
 │   │   ├── svm.py                  SVM trainer prototype
 │   │   └── region_similarity.py    Region-aware cosine similarity scoring
 │   │
@@ -607,7 +607,7 @@ tiers.  **Server tier** (shared, `data/settings.json`): `saved_datasets_dir`,
 `detectors_dir`, `max_concurrent_*`, `hidden_plugins`, `semantic_only`,
 `solo_media_type`, `browse_signpost_vocab`.
 **Per-user tier** (`<user_data_dir>/user_settings.json`): everything else;
-`volume`, `theme`, `inclusion`, `enrich_descriptions`, `safe_thresholds`,
+`volume`, `theme`, `inclusion`, `enrich_descriptions`,
 `calibrate_count`, `calibration_fraction`, `audio_playing`, `show_animations`,
 `show_metadata`, `grid_icon_size_*`, `focus_mode_*`,
 `panel_pct_*`, `autopilot_*`, `settings_source`,

@@ -41,7 +41,6 @@ def _build_config() -> CoreConfig:
         saved_datasets_dir=WORKDIR / "datasets",
         detectors_dir=WORKDIR / "detectors",
         inclusion=0,
-        safe_thresholds=False,
         calibrate_count=2,
         calibration_fraction=0.5,
         enrich_descriptions=False,

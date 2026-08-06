@@ -97,7 +97,6 @@ def apply_and_retrain(  # noqa: C901
                 get_calibrate_count,
                 get_calibration_fraction,
                 get_inclusion,
-                get_safe_thresholds,
             )
 
             _, new_threshold, new_model = train_and_score(
@@ -105,7 +104,6 @@ def apply_and_retrain(  # noqa: C901
                 proposed_good,
                 proposed_bad,
                 get_inclusion(),
-                safe_thresholds=get_safe_thresholds(),
                 calibrate_count=get_calibrate_count(),
                 calibration_fraction=get_calibration_fraction(),
                 vote_region_boxes=dict(det_ctx.vote_region_boxes),

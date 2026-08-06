@@ -248,23 +248,6 @@ class TestInclusionContract:
         assert data["inclusion"] == 3
 
 
-class TestSafeThresholdsContract:
-    """GET/POST /api/safe-thresholds response shape."""
-
-    def test_get_returns_boolean(self, client):
-        resp = client.get("/api/safe-thresholds")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert "safe_thresholds" in data
-        assert isinstance(data["safe_thresholds"], bool)
-
-    def test_post_returns_boolean(self, client):
-        resp = client.post("/api/safe-thresholds", json={"safe_thresholds": True})
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["safe_thresholds"] is True
-
-
 class TestLabelsExportContract:
     """GET /api/labels/export response shape."""
 
@@ -649,16 +632,6 @@ class TestErrorResponseFormat:
         # ``errors`` dict, not the legacy ``{"error": str}`` shape.
         # Keeping the test name for grep continuity.
         resp = client.post("/api/inclusion", json={"inclusion": "not_a_number"})
-        assert resp.status_code == 422
-        data = resp.get_json()
-        assert "errors" in data
-
-    def test_400_safe_thresholds_error_is_json(self, client):
-        # The sorting blueprint now returns flask-smorest's standard
-        # error envelope: type mismatches surface as 422 with a per-field
-        # ``errors`` dict, not the legacy ``{"error": str}`` shape.
-        # Keeping the test name for grep continuity.
-        resp = client.post("/api/safe-thresholds", json={"safe_thresholds": "not_a_bool"})
         assert resp.status_code == 422
         data = resp.get_json()
         assert "errors" in data

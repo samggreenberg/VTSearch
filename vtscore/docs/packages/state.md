@@ -395,7 +395,7 @@ entries.
 ## Setting-persistence hooks
 
 Some library helpers - `get_inclusion`, `set_inclusion`,
-`set_calibrate_count`, `set_calibration_fraction`, `set_safe_thresholds`
+`set_calibrate_count`, `set_calibration_fraction`
 - read user-pref values that the **app** owns. The library exposes the
 hook surface; the app installs the persistence callbacks. Library-only
 consumers see purely in-memory mutation.
@@ -404,7 +404,7 @@ consumers see purely in-memory mutation.
 # vtscore/state/__init__.py:159
 def register_setting_persister(key: str, fn: Callable[[Any], None]) -> None:
     """Recognised keys: inclusion, calibrate_count,
-    calibration_fraction, safe_thresholds."""
+    calibration_fraction."""
 ```
 
 The app side (`vtsearch/shim/`) wires this at startup:

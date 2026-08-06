@@ -16,17 +16,23 @@ Two runs:
 | Anchor mass κ | 1 · 3 · 10 · 30 · 100 | **0.01 · 0.03 · 0.1 · 0.3 · 0.5 · 1 · 2 · 3** |
 | Blend control | the 6→20 ramp (production at that base) | **`slow_cap50` / `cap50`** — what actually ships today |
 
-> **Run A's recommendation shipped before run B finished.** PR #2861 merged
-> `fold_anchored κ=1 rate` as the production threshold at 23:30 EDT on
-> 2026-08-05, an hour into run B's cell array. Everything below that reads like
-> "if adopting" in run A's voice is therefore a statement about **code that is
-> now on dev**, and two of run B's findings are regressions against it rather
-> than choices about it: the shipped κ and cut rule are beaten in 6/6
-> environments by `κ=0.3, mid`, and the shipped path applies to binary-voting
-> detectors, where it is *worse* than the `cap50` blend it replaced. PR #2863
-> ("delete the `safe_thresholds` setting; the fused threshold is
-> unconditional") is open and is directly contraindicated by *Against the
-> blend that actually ships*, below.
+> **Run A's recommendation shipped before run B finished, and then some.** PR
+> #2861 merged `fold_anchored κ=1 rate` as the production threshold at 23:30
+> EDT on 2026-08-05 — an hour into run B's cell array — and PR #2863 followed,
+> deleting the `safe_thresholds` setting so the fused threshold is now
+> **unconditional**. Everything below that reads like "if adopting" in run A's
+> voice is therefore a statement about **code on dev**, and two of run B's
+> findings are regressions against it rather than choices about it: the shipped
+> κ and cut rule are beaten in 6/6 environments by `κ=0.3, mid`, and the
+> shipped path covers binary-voting detectors, where it is *worse* than the
+> `cap50` blend it replaced — with, after #2863, no way back to that blend.
+>
+> To be fair to #2863: on binary voting the full ranking is `cap50` (best) >
+> fusion at `κ=0.3 mid` (−0.0004, a tie) > fusion at the shipped `κ=1 rate`
+> (+0.0063) > pure cross-calibration (+0.0103). So removing the off-switch is
+> an *improvement* for anyone who had safe thresholds off; the regression is
+> specifically fusion-versus-blend, and it is what the mode split in
+> *Recommendation* 2 exists to fix.
 
 Visual report with mechanism figures:
 <https://claude.ai/code/artifact/6bd39c84-5946-4dd8-ba80-334a88428920>
@@ -387,7 +393,11 @@ fusion beats the shipped blend by a wide, highly significant margin. On binary
 voting the *only* arm that is not worse than `cap50` is `fold_anchored κ=0.3
 mid`, and it is a dead heat (−0.0004, n.s.); run A's winner is +0.0063 *worse*
 there, and on caltech101 alone every fusion arm loses to `cap50` by
-+0.003…+0.025. `cap50` is simply a good estimator in the low-positive regime —
++0.003…+0.025. The full binary ranking is worth stating plainly, because it is
+what makes #2863 a mixed change rather than a simple mistake: `cap50` (best) >
+fusion `κ=0.3 mid` > fusion `κ=1 rate` (shipped) > pure x-cal (worst). Deleting
+the off-switch moved anyone who had it off from the worst option to the third;
+it also removed the route back to the best one. `cap50` is simply a good estimator in the low-positive regime —
 consistent with #2841's finding that caps buy *spread*, which is what a
 threshold estimated from three positives is short of.
 
@@ -568,10 +578,14 @@ now plants a fold fallback so the classifier is exercised.)*
    n.s.). Binary-voting users are getting a slightly worse threshold than they
    had before #2861. Restore `cap50` for that mode — which mirrors the
    per-mode split #2841 already shipped, for the same underlying reason: low
-   positive counts want spread control, not a better-located cut. **PR #2863**
-   ("delete the `safe_thresholds` setting; the fused threshold is
-   unconditional") should be held until this is resolved; it would make the
-   regression unconditional too.
+   positive counts want spread control, not a better-located cut. **PR #2863
+   has since merged**, deleting the `safe_thresholds` setting, so the fused
+   threshold is now unconditional and there is no configuration that gets a
+   binary-voting detector back to the blend. That makes the mode split (or the
+   positive gate in item 3) the only remaining route, and raises its priority
+   from "worth doing" to "the fix". Note the fairness point: #2863 also removed
+   pure cross-calibration as an option, and fusion beats *that* on binary
+   voting by 0.004 — the regression is against the blend, not against x-cal.
 3. **Gate on positives, not on dataset size.** The effect scales with the
    number of *positive* anchors (24 → −0.093, 8 → −0.019, 7 → −0.068, 3 →
    −0.002). A production gate of the form "use fusion once the fold anchors
