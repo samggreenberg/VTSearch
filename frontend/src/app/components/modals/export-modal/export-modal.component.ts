@@ -20,9 +20,8 @@ import {
   ClipboardColumn,
   ClipboardCopyComponent,
 } from '../../clipboard-copy/clipboard-copy.component';
-import { ActiveContextService } from '../../../services/active-context.service';
+import { ActiveDetectorService } from '../../../services/active-detector.service';
 import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
-import { DatasetStateService } from '../../../services/dataset-state.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import { LabelSessionService } from '../../../services/label-session.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
@@ -70,8 +69,7 @@ export class ExportModalComponent implements OnInit {
   private readonly exportersApi = inject(ExportersApiService);
   private readonly labelSession = inject(LabelSessionService);
   private readonly sortingApi = inject(SortingApiService);
-  private readonly activeContext = inject(ActiveContextService);
-  private readonly datasetState = inject(DatasetStateService);
+  private readonly activeDetector = inject(ActiveDetectorService);
   private readonly toast = inject(ToastService);
 
   // Two eager reads (dataset status + exporter list) load on creation; the
@@ -164,6 +162,16 @@ export class ExportModalComponent implements OnInit {
    */
   private static readonly ALWAYS_EXPORT_KEYS = ['origin', 'origin_name'];
 
+  /** Detector/model name from any available source: the parent-supplied name
+   *  (a Dashboard row action exports *that* row's detector, which need not be
+   *  the active one), else the selected detector resolved through the registry
+   *  (typical when this modal opens from the Find view), else the last name
+   *  the label session carried. A signal, not a getter, so a name that lands
+   *  after the modal opened still reaches the default filename below. */
+  readonly effectiveDetectorName = computed(
+    () => this.detectorName() || this.activeDetector.detectorName() || this.labelSession.modelName,
+  );
+
   constructor() {
     // Rebuild the column set when the labels read settles. The checkbox
     // `enabled` state lives on `columns`, so it stays a mutable field rather
@@ -176,19 +184,23 @@ export class ExportModalComponent implements OnInit {
         this.buildColumns();
       }
     });
-  }
 
-  /** Detector/model name from any available source. Falls back to the
-   *  registry entry for the active detector id when the
-   *  parent-supplied name and `labelSession.modelName` are both
-   *  empty (typical when this modal opens from the Find view). */
-  private get effectiveDetectorName(): string {
-    const detectorName = this.detectorName();
-    if (detectorName) return detectorName;
-    if (this.labelSession.modelName) return this.labelSession.modelName;
-    const modelId = this.activeContext.modelId;
-    if (!modelId) return '';
-    return this.datasetState.detectors.find((d) => d.id === modelId)?.name || '';
+    // Re-apply the default filename when a name it is built from arrives late.
+    // `applyDefaultFilename` runs once, at exporter-select time; the detector
+    // registry and the dataset-status read can both settle after that, which
+    // used to leave the filename permanently missing the piece that wasn't
+    // loaded yet (issue #2819). Both sources are signals, so this effect
+    // re-runs when either resolves — and only rewrites the field while it
+    // still holds the value we generated, so a user edit is never clobbered.
+    effect(() => {
+      const detectorName = this.effectiveDetectorName();
+      const datasetName = this.datasetName();
+      const exporter = this.selectedExporter ?? this.activeTabExporter;
+      if (!exporter) return;
+      if (!detectorName && !datasetName) return;
+      if (this.formValues['filepath'] !== this.lastAutoFilename) return;
+      this.applyDefaultFilename(exporter);
+    });
   }
 
   ngOnInit(): void {
@@ -422,7 +434,7 @@ export class ExportModalComponent implements OnInit {
     if (this.labelFilter === 'good') parts.push('Good');
     else if (this.labelFilter === 'bad') parts.push('Bad');
     else if (this.labelFilter === 'corrections') parts.push('Corrections');
-    const detName = this.effectiveDetectorName;
+    const detName = this.effectiveDetectorName();
     if (detName) parts.push(detName);
     const datasetName = this.datasetName();
     if (datasetName) parts.push(datasetName);
@@ -455,6 +467,11 @@ export class ExportModalComponent implements OnInit {
     return '';
   }
 
+  /** The filename this component last auto-filled into `filepath`. Compared
+   *  against the live field value to tell "still ours" from "user-edited"
+   *  before the constructor effect regenerates it. */
+  private lastAutoFilename = '';
+
   /** Apply the dynamic default filename to the filepath form field if present. */
   private applyDefaultFilename(exporter: ExporterEntry): void {
     const filepathField = this.exporterFieldsOf(exporter).find((f) => f.key === 'filepath');
@@ -463,7 +480,9 @@ export class ExportModalComponent implements OnInit {
       // Derive extension from the static default (e.g. ".json", ".csv") or fall back
       const extMatch = staticDefault.match(/\.(\w+)$/);
       const ext = extMatch ? extMatch[1] : 'json';
-      this.formValues['filepath'] = `data/${this.buildDefaultFilename(ext)}`;
+      const filename = `data/${this.buildDefaultFilename(ext)}`;
+      this.formValues['filepath'] = filename;
+      this.lastAutoFilename = filename;
     }
   }
 

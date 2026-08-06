@@ -2,6 +2,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
 import { ExportModalComponent } from './export-modal.component';
+import { ActiveContextService } from '../../../services/active-context.service';
+import { DatasetStateService } from '../../../services/dataset-state.service';
 import { ToastService } from '../../../services/toast.service';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleResource } from '../../../testing/settle-resource';
@@ -293,6 +295,57 @@ describe('ExportModalComponent', () => {
     };
     component.startExporter(exporter as never);
     expect(component.formValues['q']).toBe('');
+  });
+
+  describe('default filename', () => {
+    /** An exporter whose `filepath` field gets the generated default. */
+    const fileExporter = {
+      name: 'server_json_file',
+      display_name: 'Server JSON',
+      fields: [{ key: 'filepath', field_type: 'text', default: 'data/labels.json' }],
+    };
+
+    /** Land a detector registry naming `d1`, as the app-level refresh would. */
+    function flushRegistry(): void {
+      TestBed.inject(DatasetStateService).refresh();
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+      httpMock
+        .expectOne('/api/detectors/registry')
+        .flush({ detectors: [{ id: 'd1', name: 'Birdsong' }] });
+    }
+
+    it('names the parent-supplied detector', async () => {
+      fixture.componentRef.setInput('detectorName', 'Sirens');
+      await flushInit();
+      component.selectExporterTab(fileExporter as never);
+      expect(component.formValues['filepath']).toBe('data/Good-Sirens-My Dataset.json');
+    });
+
+    // The lifecycle gap behind issue #2819: the filename is built once, at
+    // exporter-select time, so a detector registry that resolves afterwards
+    // used to leave the detector out of it permanently.
+    it('backfills the detector name when the registry resolves late', async () => {
+      await flushInit();
+      TestBed.inject(ActiveContextService).setActivePair('ds1', 'd1');
+      component.selectExporterTab(fileExporter as never);
+      expect(component.formValues['filepath']).toBe('data/Good-My Dataset.json');
+
+      flushRegistry();
+      TestBed.tick();
+      expect(component.effectiveDetectorName()).toBe('Birdsong');
+      expect(component.formValues['filepath']).toBe('data/Good-Birdsong-My Dataset.json');
+    });
+
+    it('leaves a user-edited filename alone when the name arrives late', async () => {
+      await flushInit();
+      TestBed.inject(ActiveContextService).setActivePair('ds1', 'd1');
+      component.selectExporterTab(fileExporter as never);
+      component.formValues['filepath'] = 'data/mine.json';
+
+      flushRegistry();
+      TestBed.tick();
+      expect(component.formValues['filepath']).toBe('data/mine.json');
+    });
   });
 
   it('emits closed on close', async () => {
