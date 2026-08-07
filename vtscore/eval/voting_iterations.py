@@ -266,6 +266,14 @@ _CUT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
     "tau_gumbel_any_cross",
     "tau_gumbel_any_priorfree",
     "tau_gumbel_any_rate",
+    # #2881's tail-quantile sweep, one column per swept alpha (in milli-alpha).
+    "tau_tail_a040",
+    "tau_tail_a080",
+    "tau_tail_a110",
+    "tau_tail_a158",
+    "tau_tail_a220",
+    "tau_tail_a300",
+    "tau_tail_a400",
     "tau_supervised",
     "tau_sim_oracle",
     "tau_test_oracle",
@@ -702,6 +710,16 @@ def _operating_metrics(
 #: ("supervised", "sim_oracle") that locate the error rather than compete to
 #: ship.  ``xcal_only`` is the no-blend control: the raw conformal threshold at
 #: the same step.  ``pooled_mid`` must reproduce the production blend exactly.
+#: The ``tail_a*`` sweep is #2881's one-constant rule at seven tail levels - the
+#: fitted Bad component's own quantile rather than a crossing of any kind.
+#:
+#: **The rule names here are the ones in :mod:`vtscore.eval.cut_rules`**, spelled
+#: out rather than derived, because this module is deliberately import-light (no
+#: numpy at import time) and importing the rule tables to build the list would
+#: undo that.  ``test_cut_rules`` asserts the two agree, so the duplication
+#: cannot drift silently - which matters more than usual here, since a rule that
+#: is defined but never emitted produces a table with a missing row rather than
+#: an error.
 #:
 #: The #2798 logit-space variants are gone: #2799 measured them at +0.0006 cost
 #: (dead) and each extra fit costs a step's CPU that the #2836 arms need.
@@ -721,6 +739,13 @@ _SAFE_GMM_VARIANTS: tuple[tuple[str, str, str], ...] = (
     ("pooled_gumbel_any_cross", "pooled", "gumbel_any_cross"),
     ("pooled_gumbel_any_priorfree", "pooled", "gumbel_any_priorfree"),
     ("pooled_gumbel_any_rate", "pooled", "gumbel_any_rate"),
+    ("pooled_tail_a040", "pooled", "tail_a040"),
+    ("pooled_tail_a080", "pooled", "tail_a080"),
+    ("pooled_tail_a110", "pooled", "tail_a110"),
+    ("pooled_tail_a158", "pooled", "tail_a158"),
+    ("pooled_tail_a220", "pooled", "tail_a220"),
+    ("pooled_tail_a300", "pooled", "tail_a300"),
+    ("pooled_tail_a400", "pooled", "tail_a400"),
     ("pooled_supervised", "pooled", "supervised"),
     ("pooled_sim_oracle", "pooled", "sim_oracle"),
 )

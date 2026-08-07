@@ -29,6 +29,12 @@ again without #2836's assumption that the Gumbel is necessarily the *low*
 component; that assumption is what the Gumbel arm's fallback rate turned out to
 be made of (issue #2846).
 
+The ``tail_a*`` rules are a different animal from all of the above: not a
+crossing at any tilt, but the fitted **Bad** component's own upper quantile -
+"cut where alpha of the Bad mass is still above the cut" (issue #2881).  There is
+no ``lam``, no orientation question, and no boundary that might not exist; it is
+one constant against one fitted tail.
+
 **The decomposition.**  A simulation knows the sim set's true labels, so the gap
 between what a rule cuts and where the rate loss is actually minimised can be
 split into named terms rather than reported as one number
@@ -107,12 +113,56 @@ EVT_RULES: tuple[str, ...] = (
     "gumbel_any_priorfree",
     "gumbel_any_rate",
 )
+#: The pre-registered constant for the one-constant tail rule (issue #2881): the
+#: median survival level at which the *true* rate optimum sat in the fitted Gumbel
+#: low component, over #2846's 511 cells.  It is a median over one dataset and one
+#: geometry, which is why the grid below sweeps around it rather than trusting it.
+TAIL_ALPHA_PREREGISTERED: float = 0.158
+#: Tail levels measured, in increasing alpha (so in *decreasing* cut).  Chosen so
+#: the cut moves in near-even steps rather than alpha: for a Gumbel the cut is
+#: ``loc - scale*ln(-ln(1-alpha))``, i.e. logarithmic in alpha, so an evenly
+#: spaced alpha grid would bunch every point on one side of the optimum.  These
+#: seven sit at ``loc + {3.20, 2.48, 2.15, 1.76, 1.39, 1.03, 0.67}*scale`` - even
+#: 0.36-wide steps except the bottom rung, which reaches twice as far to bracket
+#: a genuinely conservative cut without spending two levels down there.
+#:
+#: The grid exists because "the cost curve is flat near 0.158" is the actual
+#: claim the stability finding makes, and a single hardcoded constant cannot test
+#: it.  Only :data:`TAIL_ALPHA_PREREGISTERED` is a ship candidate; the rest are
+#: measured to show the *shape* of the curve.  See ``analyze_cut.SWEEP_ONLY``.
+TAIL_ALPHA_GRID: tuple[float, ...] = (0.04, 0.08, 0.11, TAIL_ALPHA_PREREGISTERED, 0.22, 0.30, 0.40)
+
+
+def tail_alpha_rule(alpha: float) -> str:
+    """Rule name for a tail level, e.g. ``0.158 -> "tail_a158"`` (units: milli-alpha).
+
+    Three digits rather than a decimal point because these names become CSV
+    column values and variant ids, and a ``.`` in either reads as a path
+    separator to half the tooling that touches them.
+    """
+    return f"tail_a{round(alpha * 1000):03d}"
+
+
+#: One rule per swept tail level.  Backed by the same EVT fit as
+#: :data:`EVT_RULES`, but **not** a crossing: it inverts the fitted low
+#: component's survival function instead of looking for a boundary between the
+#: modes.  That is what makes the family worth another run after #2846 - a
+#: quantile exists for every non-degenerate fit, so the 20-25 % midpoint-fallback
+#: rate that diluted every crossing contrast to nothing should collapse to the
+#: EVT fit-failure rate alone.
+TAIL_RULES: tuple[str, ...] = tuple(tail_alpha_rule(a) for a in TAIL_ALPHA_GRID)
+
+#: Every rule read off the EVT fit, so a failed fit can be attributed to all of
+#: them at once.  ``EVT_RULES`` and ``TAIL_RULES`` stay separate above because
+#: they answer different questions and only one of them declines for orientation.
+EVT_FIT_RULES: tuple[str, ...] = (*EVT_RULES, *TAIL_RULES)
+
 #: Label-reading diagnostics.  **Not rules** - they read the sim set's true
 #: labels, so they are upper bounds on what an unsupervised cut could achieve,
 #: reported to locate the error rather than to be shipped.
 ORACLE_RULES: tuple[str, ...] = ("supervised", "sim_oracle")
 
-ALL_RULES: tuple[str, ...] = (*GAUSSIAN_RULES, *EVT_RULES, *ORACLE_RULES)
+ALL_RULES: tuple[str, ...] = (*GAUSSIAN_RULES, *EVT_RULES, *TAIL_RULES, *ORACLE_RULES)
 
 
 def _finite(x: float | None) -> float:
@@ -173,6 +223,38 @@ def evt_cuts(fit: GumbelNormalFit1D, fpr_weight: float, fnr_weight: float) -> tu
     ):
         cuts[name] = float("nan") if cut is None else _from_logit(cut)
         reasons[name] = reason
+    return cuts, reasons
+
+
+def tail_cuts(
+    fit: GumbelNormalFit1D,
+    alphas: tuple[float, ...] = TAIL_ALPHA_GRID,
+) -> tuple[dict[str, float], dict[str, str]]:
+    """``(cuts, reasons)`` for every tail-alpha rule, mapped back to score space.
+
+    Each rule cuts where the fitted **Bad** component still has *alpha* of its
+    mass above the cut - "cut the Bad tail at alpha", one constant, no crossing
+    and no ``lam``.  Solved on the logit axis, where the fit lives, and squashed
+    back, which is sound for a different reason than :func:`evt_cuts`': a crossing
+    survives the change of variable because both sides pick up the same Jacobian
+    and it cancels, whereas a quantile survives because the sigmoid is *monotone*,
+    so it carries a tail probability through unchanged.  Either way the answer is
+    the point solving in score space would have given.
+
+    Nothing here consults the orientation: :meth:`GumbelNormalFit1D.lo_quantile`
+    reads whichever component came out low, so the ``modes_swapped`` axis that
+    #2836 and #2846 spent themselves on simply does not arise.  A rule declines
+    only for a degenerate fit, which is why the reason vocabulary is a two-element
+    subset of :data:`~vtscore.training.evt_mixture.CROSSING_REASONS` rather than
+    the full set.
+    """
+    cuts: dict[str, float] = {}
+    reasons: dict[str, str] = {}
+    for alpha in alphas:
+        cut = fit.lo_quantile(alpha)
+        name = tail_alpha_rule(alpha)
+        cuts[name] = float("nan") if cut is None else _from_logit(cut)
+        reasons[name] = "degenerate_params" if cut is None else "ok"
     return cuts, reasons
 
 
@@ -355,7 +437,7 @@ def decomposition_cuts(
     # A rule whose fit never existed still needs a reason; "the fit failed" is a
     # different diagnosis from "the fit had no crossing" and the two must not be
     # pooled into one fallback count.
-    reasons: dict[str, str] = dict.fromkeys(EVT_RULES, f"fit_{params['evt_fit_fail']}")
+    reasons: dict[str, str] = dict.fromkeys(EVT_FIT_RULES, f"fit_{params['evt_fit_fail']}")
 
     if gmm is not None:
         cuts.update(gaussian_cuts(gmm, fpr_weight, fnr_weight))
@@ -365,8 +447,12 @@ def decomposition_cuts(
         # so it stays a usable fallback for the rules that have no root.
         cuts["mid"] = params["fallback_median"]
     if evt is not None:
-        evt_cut_map, reasons = evt_cuts(evt, fpr_weight, fnr_weight)
+        evt_cut_map, evt_reasons = evt_cuts(evt, fpr_weight, fnr_weight)
         cuts.update(evt_cut_map)
+        reasons.update(evt_reasons)
+        tail_cut_map, tail_reasons = tail_cuts(evt)
+        cuts.update(tail_cut_map)
+        reasons.update(tail_reasons)
 
     sup, sup_stats = supervised_cut(scores, sim_labels, fpr_weight, fnr_weight)
     params.update(sup_stats)
