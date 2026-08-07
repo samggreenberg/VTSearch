@@ -1880,7 +1880,7 @@ def _calibrate_with_details(
     """
     import numpy as np  # noqa: PLC0415
 
-    k_max = max([calibrate_count, *(fold_count_variants or [])])
+    k_max = max(calibrate_count, *(fold_count_variants or [calibrate_count]))
     t_folds = time.monotonic()
     fold_seconds: list[float] = []
 
