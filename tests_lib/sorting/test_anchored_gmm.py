@@ -8,6 +8,8 @@ combiner.  Library tier: pure ``vtscore.training.thresholds``, no app imports.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
@@ -15,6 +17,7 @@ from vtscore.training.thresholds import (
     FOLD_ANCHOR_COMBINE,
     FOLD_ANCHOR_CUT_RULE,
     FOLD_ANCHOR_WEIGHT,
+    FoldAnchoredCut,
     GmmFit1D,
     anchored_gmm_fit,
     fit_anchored_score_gmm,
@@ -177,21 +180,37 @@ class TestCutFromFit:
         # midpoint (see GmmFit1D.rate_crossing).
         assert abs(cut - self._FIT.midpoint()) < 1e-9
 
-    def test_rate_without_root_clamps_toward_the_costlier_error(self):
+    def test_rate_without_root_continues_past_the_costlier_edge(self):
         # The rate rule divides the mixture weights back out, so only extreme
         # COST weights can push the root outside (mu_lo, mu_hi): with a huge
         # FPR weight and wide components the Bad component still out-densities
-        # the Good one all the way to ``mu_hi``, so the sup - the highest score
-        # Bad still owns - is the top edge.  Clamping there (rather than
-        # snapping back to the midpoint) is what keeps the rule monotone.
+        # the Good one all the way to ``mu_hi``.  Returning the bare edge there
+        # made the cut constant in the cost ratio, which flattened the
+        # ``mid_tilt`` quantile over whole bands of the Inclusion slider and
+        # silently collapsed the acquisition offset to a no-op (issue #2896).
+        # The cut now continues past the edge at the rule's first-order slope
+        # - for an equal-variance fit that is *exactly* the interior crossing
+        # line ``mid + var*ln(fpr/fnr)/d`` extended, checked in closed form.
         fit = GmmFit1D(w_lo=0.7, mu_lo=0.2, var_lo=0.04, w_hi=0.3, mu_hi=0.8, var_hi=0.04)
-        cut, clamped = gmm_cut_from_fit(fit, "rate", 1e6, 1.0)
-        assert clamped == 1
-        assert cut == fit.mu_hi
 
-        cut, clamped = gmm_cut_from_fit(fit, "rate", 1.0, 1e6)
-        assert clamped == 1
-        assert cut == fit.mu_lo
+        def line(wf: float, wn: float) -> float:
+            return fit.midpoint() + 0.04 * math.log(wf / wn) / 0.6
+
+        cut, no_root = gmm_cut_from_fit(fit, "rate", 1e6, 1.0)
+        assert no_root == 1
+        assert cut > fit.mu_hi
+        assert cut == pytest.approx(line(1e6, 1.0), rel=1e-12)
+
+        cut, no_root = gmm_cut_from_fit(fit, "rate", 1.0, 1e6)
+        assert no_root == 1
+        assert cut < fit.mu_lo
+        assert cut == pytest.approx(line(1.0, 1e6), rel=1e-12)
+
+        # Strictly monotone *within* the saturated regime - the property the
+        # bare-edge return lacked and the whole point of the continuation.
+        deeper, _ = gmm_cut_from_fit(fit, "rate", 1e8, 1.0)
+        assert deeper > gmm_cut_from_fit(fit, "rate", 1e6, 1.0)[0]
+        assert gmm_cut_from_fit(fit, "rate", 1.0, 1e8)[0] < gmm_cut_from_fit(fit, "rate", 1.0, 1e6)[0]
 
     def test_rate_is_monotone_non_increasing_across_the_inclusion_knob(self):
         """The knob's nesting contract, at the level of a single fit.
@@ -411,6 +430,25 @@ class TestFoldAnchoredInclusion:
         cuts = [self._cut().threshold_at(k) for k in range(-10, 11)]
         assert all(b <= a + 1e-12 for a, b in zip(cuts, cuts[1:], strict=False)), cuts
         assert cuts[0] > cuts[-1], "the knob must actually move the line"
+
+    def test_the_shipped_rule_has_no_interior_plateau(self):
+        """Issue #2896: the tilt must not saturate short of the haystack's support.
+
+        Under the old edge-clamped rate cut, once the density crossing ran off
+        the inter-mean interval the per-fold cut stopped moving, so the
+        composed ``mid_tilt`` quantile was *constant* over whole bands of the
+        knob - and the acquisition offset, mapping ``k`` and ``k - 3`` into the
+        same band, silently collapsed to a no-op.  The estimator here is built
+        by hand rather than fitted so the geometry is exact and independent of
+        process ordering: an equal-variance fit whose crossing exits the
+        interval at ``|k| ~ 6``, over a haystack wide enough that no cut in
+        range reaches its edges.  Every step must strictly move the threshold.
+        """
+        fit = GmmFit1D(w_lo=0.7, mu_lo=0.3, var_lo=0.02, w_hi=0.3, mu_hi=0.7, var_hi=0.02)
+        hay = np.linspace(-0.2, 1.6, 1801)
+        cut = FoldAnchoredCut(fits=(fit,), fold_haystacks=(hay,), final_haystack=hay, n_anchored=1)
+        thr = [cut.threshold_at(k) for k in range(-13, 11)]
+        assert all(b < a for a, b in zip(thr, thr[1:], strict=False)), thr
 
     def test_plain_mid_is_inclusion_blind(self):
         """The property that motivated #2865, pinned on the rule that has it:
