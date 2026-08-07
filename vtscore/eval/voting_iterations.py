@@ -123,6 +123,18 @@ _IDENT_COLUMNS: tuple[str, ...] = (
     "n_bad",
     "phase",
     "app_trained",
+    # --- Acquisition/reporting decoupling (docs/plans/acquisition-inclusion-decoupling.md).
+    #: The threshold handed to the *selector* this step.  Equal to ``threshold``
+    #: unless an acquisition cut is configured.
+    "acq_threshold",
+    #: Where each threshold sits in the **pool** score distribution the selector
+    #: actually ranks - the two are emitted together on purpose.  Autopilot's
+    #: ``hard`` pick works in rank space (:func:`~vtscore.eval.al_strategies.
+    #: _hard_pick_by_index`), so "did the sampling position move, and how far"
+    #: is a question about these two numbers, not about the thresholds.  Without
+    #: them a sign error in the acquisition cut is invisible.
+    "acq_pool_percentile",
+    "report_pool_percentile",
 )
 
 #: Canonical column order for the voting-iterations result frame.  Kept in one
@@ -403,6 +415,22 @@ def _score_sim_set_with_model(
     return sorted(sim_ids), [float(s) for s in scores]
 
 
+def _pool_percentile(pool_scores: dict[int, float], threshold: float) -> float:
+    """Fraction of the *unlabelled pool* scoring below *threshold*.
+
+    The selector's ``hard`` pick works in rank space over the pool, so this - not
+    the threshold's value, and not its percentile in the held-out test scores -
+    is the number that says where the next item comes from.  Returns NaN on an
+    empty pool rather than a misleading 0.0.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    if not pool_scores:
+        return float("nan")
+    arr = np.asarray(list(pool_scores.values()), dtype=np.float64)
+    return round(float((arr < threshold).mean()), 6)
+
+
 def _safe_threshold_for_step(
     threshold: float,
     step: _StepModel,
@@ -433,7 +461,11 @@ def _safe_threshold_for_step(
     land there - their fold models are sklearn estimators, not the torch heads
     the app trains, so there is no production path for them to match.
 
-    Returns ``(threshold, sim_scores, sim_ids, fold_haystacks, provenance)``.
+    Returns ``(threshold, sim_scores, sim_ids, fold_haystacks, provenance, cut)``.
+    The fitted :class:`~vtscore.training.thresholds.FoldAnchoredCut` rides along
+    (``None`` on the blend fallback) so a caller can re-cut the *same* fit at
+    another inclusion without refitting - which is what the acquisition arm of
+    ``docs/plans/acquisition-inclusion-decoupling.md`` does.
     The sim scores ride along so the #2799 / #2836 / #2852 variant rows can
     re-cut the same distribution without a second scoring pass, their media ids
     with them so a variant can attach each score's true label without assuming
@@ -467,9 +499,9 @@ def _safe_threshold_for_step(
     if cut is not None:
         anchored = cut.threshold_at(inclusion)
         if np.isfinite(anchored):
-            return anchored, all_scores, ids, fold_haystacks, cut.provenance
+            return anchored, all_scores, ids, fold_haystacks, cut.provenance, cut
     blended = calculate_safe_threshold(threshold, all_scores, ctx, schedule=schedule)
-    return blended, all_scores, ids, fold_haystacks, "gmm_blend"
+    return blended, all_scores, ids, fold_haystacks, "gmm_blend", None
 
 
 def _evaluate_on_test(
@@ -1818,6 +1850,8 @@ def simulate_voting_iterations(  # noqa: C901
     anchored_rules: Optional[list[str]] = None,
     anchored_fold_arms: bool = True,
     anchored_fold_combines: Optional[list[str]] = None,
+    acq_inclusion: Optional[int] = None,
+    acq_rank_percentile: Optional[float] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -1903,6 +1937,24 @@ def simulate_voting_iterations(  # noqa: C901
             follows the text sort (top items for the initial goods, the sort's
             cutoff for the initial bads); ``None`` (default) means the dataset
             has no text sort, so autopilot seeds from random known-good examples.
+        acq_inclusion: Cut the threshold handed to the **selector** at this
+            inclusion instead of at *inclusion*, leaving reporting and every
+            metric at *inclusion* so arms stay comparable
+            (``docs/plans/acquisition-inclusion-decoupling.md``).  ``None`` -
+            the shipped behaviour, one threshold doing both jobs.
+
+            The direction is the opposite of the intuition from the cost
+            weights, because Autopilot's ``hard`` pick reads the threshold as a
+            **rank position**, not a decision boundary: a *negative* value
+            prices false alarms higher, *raises* the cut, moves it *up* the
+            ranking, and so returns *more* positives.  Requires a fold-anchored
+            cut for the step; steps that fall back to the schedule blend keep
+            the reporting threshold (the blend has no inclusion-aware form).
+        acq_rank_percentile: Alternative acquisition cut - place it at this
+            quantile of the simulation-set score distribution directly, rather
+            than by naming an inclusion.  Mutually exclusive with
+            *acq_inclusion*.  This is the ``rank_pin`` arm: same intent, one
+            fewer indirection.
         anchored_thresholds: When ``True`` (requires ``safe_thresholds``,
             ``emit_calibration_metrics``, and a *style*), each step additionally
             emits one metric row per anchored-mixture arm (issue #2852): the
@@ -1957,6 +2009,14 @@ def simulate_voting_iterations(  # noqa: C901
     # Note: no torch.manual_seed() here - train_model handles its own
     # RNG seeding via fork_rng, keeping it thread-safe.
     start_time = time.monotonic()
+
+    # These are pre-registered experiment knobs, so they are validated beside
+    # the other argument checks rather than deep in the loop: a run that dies
+    # forty minutes in on a typo has held a cluster slot for nothing.
+    if acq_inclusion is not None and acq_rank_percentile is not None:
+        raise ValueError("acq_inclusion and acq_rank_percentile are mutually exclusive")
+    if acq_rank_percentile is not None and not 0.0 <= acq_rank_percentile <= 1.0:
+        raise ValueError(f"acq_rank_percentile must be in [0, 1], got {acq_rank_percentile}")
 
     if head not in HEADS:
         raise ValueError(f"unknown head {head!r}; expected one of {HEADS}")
@@ -2060,6 +2120,11 @@ def simulate_voting_iterations(  # noqa: C901
     pool_labels = {cid: (1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0) for cid in sim_ids}
     step: _StepModel | None = None
     threshold = 0.5
+    #: The selector's threshold.  Tracks ``threshold`` unless an acquisition cut
+    #: is configured; kept as its own name so the two jobs cannot silently
+    #: re-merge (they were one variable, and that is how the #2847 positives
+    #: regression got in).
+    acq_threshold = 0.5
     pool_scores: dict[int, float] = {}
     n_steps = len(pool) if max_steps is None else min(max_steps, len(pool))
 
@@ -2084,7 +2149,9 @@ def simulate_voting_iterations(  # noqa: C901
             labeled=labeled,
             scores=pool_scores,
             model=step,
-            threshold=threshold,
+            # The ONLY consumer that moves.  Reporting, the metric rows and the
+            # phase machine all stay on ``threshold``.
+            threshold=acq_threshold,
             atlas=atlas,
             rng=rng,
             pool_labels=pool_labels,
@@ -2148,7 +2215,7 @@ def simulate_voting_iterations(  # noqa: C901
             # time, so bags and votes coincide here and the counts are the two
             # vote dicts' sizes.
             blend_ctx = BlendContext(n_labels=n_labels, n_good=len(good_votes), n_bad=len(bad_votes))
-            threshold, sim_pooled_scores, sim_pooled_ids, sim_fold_haystacks, safe_provenance = (
+            threshold, sim_pooled_scores, sim_pooled_ids, sim_fold_haystacks, safe_provenance, safe_cut = (
                 _safe_threshold_for_step(
                     threshold,
                     step,
@@ -2163,6 +2230,16 @@ def simulate_voting_iterations(  # noqa: C901
                     schedule=blend_schedule,
                 )
             )
+            # Re-cut the *same* fold-anchored fit for the selector.  O(1) - the
+            # mixture was fitted above; ``threshold_at`` is monotone by
+            # construction, so the arms are nested and ``acq_inclusion=0``
+            # reproduces the reporting cut exactly.
+            if acq_inclusion is not None and safe_cut is not None:
+                cand = safe_cut.threshold_at(acq_inclusion)
+                if np.isfinite(cand):
+                    acq_threshold = float(cand)
+            elif acq_rank_percentile is not None and sim_pooled_scores:
+                acq_threshold = float(np.quantile(np.asarray(sim_pooled_scores, dtype=np.float64), acq_rank_percentile))
             if emit_calibration_metrics:
                 details["pre_blend_provenance"] = details.get("provenance", "conformal")
                 details["provenance"] = safe_provenance
@@ -2170,6 +2247,17 @@ def simulate_voting_iterations(  # noqa: C901
                 details["n_votes"] = n_labels
                 details["n_good"] = len(good_votes)
                 details["n_bad"] = len(bad_votes)
+
+        if not (safe_thresholds and (acq_inclusion is not None or acq_rank_percentile is not None)):
+            # No acquisition cut configured, or no fold-anchored fit to re-cut:
+            # the two jobs coincide, exactly as they do in production today.
+            acq_threshold = threshold
+        elif safe_cut is None and acq_inclusion is not None:
+            # Schedule-blend fallback (~5% of steps, concentrated in the cold
+            # start).  The blend has no inclusion-aware form, so there is
+            # nothing honest to re-cut - do not silently reuse the last step's
+            # acquisition threshold against this step's scores.
+            acq_threshold = threshold
 
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single
@@ -2242,6 +2330,11 @@ def simulate_voting_iterations(  # noqa: C901
             "n_bad": len(bad_votes),
             "phase": flow.phase if flow is not None else "",
             "app_trained": 1 if (flow is None or app_has_detector(flow.phase)) else 0,
+            "acq_threshold": round(float(acq_threshold), 6),
+            # Measured against the pool the selector ranks, not the test set, so
+            # the pair answers "how much did the sampling position move".
+            "acq_pool_percentile": _pool_percentile(pool_scores, acq_threshold),
+            "report_pool_percentile": _pool_percentile(pool_scores, threshold),
         }
         timing_cols = {
             "train_seconds": round(timings["train_seconds"], 6),
