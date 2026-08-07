@@ -102,16 +102,33 @@ def load_arm(arm_dir: Path) -> tuple[pd.DataFrame, dict]:
     """
     files = sorted((arm_dir / "cells").glob("task_*.csv"))
     files = [f for f in files if "__" not in f.name]  # skip __sweep / __cutdiag
-    frames, bad, empty = [], [], []
+    frames, bad, empty, headless = [], [], [], []
     for f in files:
         if f.stat().st_size == 0:
             empty.append(f.name)
             continue
         try:
-            frames.append(pd.read_csv(f))
+            fr = pd.read_csv(f)
         except Exception:  # noqa: BLE001
             bad.append(f.name)
-    prov = {"n_files": len(files), "n_read": len(frames), "unreadable": bad, "zero_byte": empty}
+            continue
+        # A header-only cell is not a failure: the simulator emits a row only
+        # once it has at least one good AND one bad vote, so a rare category
+        # whose 100 votes never turned up a positive legitimately writes none.
+        # That is the extreme of the positive-starvation regime this study is
+        # about, so it is counted and reported rather than silently dropped -
+        # and it differs per arm, which is why paired tests lose those cells.
+        if fr.empty:
+            headless.append(f.name)
+            continue
+        frames.append(fr)
+    prov = {
+        "n_files": len(files),
+        "n_read": len(frames),
+        "unreadable": bad,
+        "zero_byte": empty,
+        "no_positive_found": headless,
+    }
     if not frames:
         return pd.DataFrame(), prov
     df = pd.concat(frames, ignore_index=True)
@@ -293,16 +310,42 @@ def mcnemar_incidence(traj: pd.DataFrame, arm_a: str, arm_b: str, flag: str = "h
 
 
 # --- figures ---------------------------------------------------------------
+#: One distinct hue per seed.  A cycle shorter than the seed count silently
+#: draws two trajectories in the same colour, which reads as one run that
+#: teleports - exactly the artefact this figure exists to rule out.
+SEED_COLORS = (
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#17becf",
+    "#bcbd22",
+    "#7f7f7f",
+)
+
+
 def _plot_category(df: pd.DataFrame, arm: str, category: str, ax) -> None:
     g = df[(df["arm"] == arm) & (df["category"] == category)]
     seeds = sorted(g["seed"].unique())
-    cmap = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2"]
+    if len(seeds) > len(SEED_COLORS):
+        raise SystemExit(f"{len(seeds)} seeds but only {len(SEED_COLORS)} colours - extend SEED_COLORS")
     for i, s in enumerate(seeds):
         gs = g[g["seed"] == s].sort_values("t")
-        c = cmap[i % len(cmap)]
+        c = SEED_COLORS[i]
         ax.plot(gs["t"], gs["cost"], color=c, lw=1.2, label=f"seed {s}")
-        ax.plot(gs["t"], gs["oracle_cost"], color=c, lw=0.9, ls="--", alpha=0.45)
-    ax.set_title(f"{ARM_LABEL.get(arm, arm)}", fontsize=9)
+        ax.plot(gs["t"], gs["oracle_cost"], color=c, lw=0.9, ls="--", alpha=0.4)
+        # Ring the steps the deep rule actually flags, so the eye and the
+        # incidence table are reading the same events.
+        m = (gs["t"] >= WARM_T) & (gs["cost"] >= DEEP_COST) & ((gs["cost"] - gs["oracle_cost"]) >= DEEP_EXCESS)
+        if m.any():
+            ax.scatter(gs["t"][m], gs["cost"][m], s=22, facecolors="none", edgecolors=c, lw=1.1, zorder=5)
+    n_deep = int(
+        ((g["t"] >= WARM_T) & (g["cost"] >= DEEP_COST) & ((g["cost"] - g["oracle_cost"]) >= DEEP_EXCESS)).sum()
+    )
+    ax.set_title(f"{ARM_LABEL.get(arm, arm)}  -  {n_deep} deep-spike steps", fontsize=9)
     ax.set_xlabel("total annotations t")
     ax.set_ylabel("cost (FPR+FNR)")
     ax.grid(alpha=0.25, ls=":")
@@ -331,7 +374,10 @@ def make_figures(df: pd.DataFrame, traj: pd.DataFrame, outdir: Path, category: s
         )
         fig.tight_layout()
         p = outdir / f"fig1_{category}_arms.png"
-        fig.savefig(p, dpi=140)
+        # 100 dpi, not 140: the repo's pre-commit hook rejects files over 500 KB
+        # and the four-panel figure is the only one that comes near it.  Still
+        # ~1300px wide, which is past the artifact's display width.
+        fig.savefig(p, dpi=100)
         plt.close(fig)
         made.append(p.name)
 
@@ -359,7 +405,7 @@ def make_figures(df: pd.DataFrame, traj: pd.DataFrame, outdir: Path, category: s
     axes[0].grid(alpha=0.25, axis="y", ls=":")
 
     data = [traj[traj["arm"] == a]["max_excess_warm"].dropna().to_numpy() for a in order]
-    axes[1].boxplot(data, labels=order, showfliers=True)
+    axes[1].boxplot(data, tick_labels=order, showfliers=True)
     axes[1].set_ylabel("max (cost - oracle_cost), t>=%d" % WARM_T)
     axes[1].set_title("worst-step regret per trajectory", fontsize=9)
     axes[1].tick_params(axis="x", rotation=20, labelsize=8)
@@ -531,13 +577,20 @@ def write_report(summary: dict, spikes: pd.DataFrame, figs: list[str], outdir: P
 
     p = summary["provenance"]
     A("\n## Data read\n")
-    A("| arm | cell files | read | unreadable | zero-byte | base rows |")
-    A("|---|---:|---:|---:|---:|---:|")
+    A("| arm | cell files | trajectories | never found a positive | unreadable | zero-byte | base rows |")
+    A("|---|---:|---:|---:|---:|---:|---:|")
     for arm, v in p.items():
         A(
             f"| `{arm}` | {v.get('n_files', 0)} | {v.get('n_read', 0)} | "
+            f"{len(v.get('no_positive_found', []))} | "
             f"{len(v.get('unreadable', []))} | {len(v.get('zero_byte', []))} | {v.get('n_rows', 0)} |"
         )
+    A(
+        "\n`never found a positive` = 100 votes, zero positives, so the simulator "
+        "never trained and the cell emits no step. Not a failure - the extreme of "
+        "the same positive-starvation regime the spikes live in. These cells differ "
+        "per arm, so the paired tests above drop them.\n"
+    )
 
     if figs:
         A("\n## Figures\n")

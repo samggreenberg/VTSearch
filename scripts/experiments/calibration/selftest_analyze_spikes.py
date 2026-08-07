@@ -117,6 +117,11 @@ def build(root: Path) -> None:
                 (cells / f"task_{idx:04d}__sweep.csv").write_text("junk\n1\n")
                 idx += 1
         (cells / f"task_{idx:04d}.csv").touch()  # zero-byte
+        # Header-only cell: the "100 votes, zero positives" outcome.  Must be
+        # counted as such, not as a trajectory and not as a read failure.
+        _cell(arm, "cat0", 0, deep=False, oracle_spike=False, cold_hump=False).head(0).to_csv(
+            cells / f"task_{idx + 1:04d}.csv", index=False
+        )
 
 
 def main() -> int:
@@ -132,6 +137,10 @@ def main() -> int:
             fails.append(f"base rows {len(df)} != {exp_rows} (variant/sidecar filter wrong)")
         if not all(p["zero_byte"] for p in prov.values()):
             fails.append("zero-byte cell not reported in provenance")
+        if not all(len(p["no_positive_found"]) == 1 for p in prov.values()):
+            fails.append(f"header-only cell miscounted: {[p['no_positive_found'] for p in prov.values()]}")
+        if any(p["unreadable"] for p in prov.values()):
+            fails.append("header-only or zero-byte cell wrongly counted as unreadable")
 
         traj = A.trajectory_stats(df)
         for arm, want in PLANT.items():
