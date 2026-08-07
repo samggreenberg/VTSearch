@@ -27,7 +27,10 @@ strategy.
   neither `topk` nor the sign-corrected `pnorm` (closes only ~21% of the gap)
   recovers it. A calibration rule that models the max-over-N tail directly — or
   a per-node-count threshold — is the remaining lever; measure it against
-  `max_patch`'s trained cost before any production change.
+  `max_patch`'s trained cost before any production change. The
+  `max_patch_hac` / `max_patch_pca_hac` styles (and `build_patch_hac_tree`)
+  survive in `vtscore/eval/patch_styles.py` for exactly this; production itself
+  is tree-free since #2886.
 
 <!-- item-sep -->
 

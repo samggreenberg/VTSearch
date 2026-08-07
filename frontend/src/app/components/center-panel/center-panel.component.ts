@@ -306,10 +306,15 @@ export class CenterPanelComponent implements OnDestroy {
     return this.structuralDataset ? 'Marquee: box the pattern to match' : 'Marquee: draw region';
   }
 
-  /** The focused media's best-match region (the argmax patch region from the
-   *  most recent sort/train), looked up by id from the in-memory sort results.
-   *  ``null`` when the media wasn't scored or carries no region. Passed to the
-   *  image viewer, which draws it only while Highlight is toggled on. */
+  /** The focused media's best-match region from the most recent sort/train,
+   *  looked up by id from the in-memory sort results. On a patch dataset that is
+   *  the winning row of the backend's max-pool: a **single grid cell** of the
+   *  patch grid (~7% of the image's side on a DINOv3 14x14), or the whole image
+   *  when the image-level row won. Structural datasets send the RANSAC inlier
+   *  box instead. ``null`` when the media wasn't scored or carries no region.
+   *  Passed to the image viewer, which draws it only while Highlight is toggled
+   *  on - and which suppresses the whole-image case, so a winning image-level
+   *  row draws no frame. */
   get highlightBox(): RegionBox | null {
     const media = this.media();
     if (!media) return null;
