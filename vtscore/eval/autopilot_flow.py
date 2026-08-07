@@ -22,6 +22,12 @@ per-step model it needs, so it feeds those inputs in directly.  The rules —
 every threshold and constant below — are copied verbatim, and
 ``tests_lib/detectors/test_autopilot_flow.py`` pins them against the sources.
 
+Because this is a copy, it can go stale silently: change a phase trigger in the
+app and the simulated user keeps taking the old route, so every study run after
+that measures a flow nobody takes.  ``scripts/check-eval-app-sync.py`` — a
+``./run-tests.sh`` gate — digests both sources and fails when either moves; see
+"The Eval Default Arm IS the App" in ``docs/EVAL.md``.
+
 The phase ordering the app implements, and the harness therefore reproduces:
 
 1. ``good`` until ``good_target`` positives exist (text sort, take the top).
