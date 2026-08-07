@@ -517,14 +517,12 @@ def _unit(v):
 
 
 def _patch_media(media_id, positive, *, category, with_box=True):
-    """A synthetic patch-embedder media (``patch_grid`` + ``patch_regions``).
+    """A synthetic patch-embedder media (a raw ``patch_grid``).
 
     Positive media have grid cells pointing along ``+e0`` and a ground-truth
     box; negatives point along ``-e0`` and carry no box.  Separable so the MLP
     trains cleanly without flakiness.
     """
-    from vtscore.media.patch_embed import RegionVector
-
     rng = np.random.default_rng(media_id)
     sign = 1.0 if positive else -1.0
     grid = np.zeros((_GRID, _GRID, _PATCH_DIM), dtype=np.float32)
@@ -535,19 +533,12 @@ def _patch_media(media_id, positive, *, category, with_box=True):
             grid[r, c] = _unit(base + rng.standard_normal(_PATCH_DIM).astype(np.float32) * 0.05)
     img_vec = _unit(grid.reshape(-1, _PATCH_DIM).mean(axis=0))
 
-    regions = [RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=img_vec)]
-    for r in range(_GRID):
-        for c in range(_GRID):
-            box = (c / _GRID, r / _GRID, (c + 1) / _GRID, (r + 1) / _GRID)
-            regions.append(RegionVector(box=box, vec=grid[r, c]))
-
     media = {
         "id": media_id,
         "media_type": "image",
         "embedder": "dinov3_patch",
         "embeddings": {"dinov3_patch": img_vec},
         "patch_grid": grid,
-        "patch_regions": regions,
         "category": category,
     }
     if positive and with_box:
@@ -577,19 +568,20 @@ class TestGoodTrainingVec:
         vec = _good_training_vec(media, "apple", region_voting=False)
         np.testing.assert_allclose(vec, media_embedding(media))
 
-    def test_snaps_box_to_region_when_region_voting_on(self):
-        """With a ``patch_regions`` tree present, the simulated region vote
-        snaps the ground-truth box to its nearest region node (the same path
-        the live vote flow takes), not a fresh uniform grid pool."""
-        from vtscore.media.patch_embed import snap_box_to_region
+    def test_takes_the_nearest_patch_when_region_voting_on(self):
+        """With a ``patch_grid`` present, the simulated region vote trains on the
+        raw patch nearest the ground-truth box - the same path the live vote
+        flow takes, not a fresh uniform grid pool."""
+        from vtscore.media.patch_embed import nearest_patch_to_box
 
         media = _patch_media(1, positive=True, category="apple")
         vec = _good_training_vec(media, "apple", region_voting=True)
-        expected = snap_box_to_region(media["patch_regions"], (0.0, 0.0, 2 / 3, 1.0))
-        assert expected is not None
+        expected = nearest_patch_to_box(np.asarray(media["patch_grid"]), (0.0, 0.0, 2 / 3, 1.0))
         np.testing.assert_allclose(vec, expected)
-        # The snapped vector is one of the tree's actual node vectors.
-        assert any(np.allclose(vec, r.vec) for r in media["patch_regions"])
+        # The chosen vector is one of the grid's actual patch vectors, i.e. a
+        # row the scorer max-pools.
+        flat = np.asarray(media["patch_grid"], dtype=np.float32).reshape(-1, _PATCH_DIM)
+        assert any(np.allclose(vec, row) for row in flat)
 
     def test_falls_back_without_patch_grid(self):
         from vtscore.embedding.media_vectors import media_embedding
@@ -622,7 +614,7 @@ class TestRegionVotingSimulate:
 
     def test_baseline_on_patch_data_also_scores_region_aware(self):
         # region_voting=False still works on a patch dataset: Good votes train
-        # whole-image, but scoring max-pools over regions (the live inference).
+        # whole-image, but scoring max-pools over the patch rows (live inference).
         medias = _make_patch_clips(n_per_cat=10)
         rows = simulate_voting_iterations(medias, target_category="apple", seed=0, region_voting=False)
         assert rows

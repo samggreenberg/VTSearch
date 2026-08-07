@@ -523,29 +523,24 @@ class TestEmbedMissingRoutesToPatchForwardBulk:
 
         medias = {i: {"media_type": "image", "embeddings": {}, "media_path": f"/tmp/img_{i}.png"} for i in range(1, 4)}
 
-        with (
-            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
-            mock.patch(
-                "vtscore.media.patch_embed.build_region_tree", return_value=np.zeros((23, 768), dtype=np.float32)
-            ),
-            mock.patch("vtscore.media.patch_embed.to_fp16", side_effect=lambda x: x.astype(np.float16)),
-        ):
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
             embed_missing(medias)
 
         assert emb.patch_forward_bulk.call_count == 1
         sent = emb.patch_forward_bulk.call_args.args[0]
         assert len(sent) == 3
         for m in medias.values():
-            assert m.get("patch_regions") is not None
             assert m.get("patch_grid") is not None
+            # The HAC tree ingest used to build alongside it is gone (#2886).
+            assert m.get("patch_regions") is None
 
-    def test_embed_missing_backfills_patch_regions_for_preembedded(self):
-        """Already-embedded images that lack a region tree still get the patch
+    def test_embed_missing_backfills_patch_grid_for_preembedded(self):
+        """Already-embedded images that lack a patch grid still get the patch
         pass.
 
         Regression: the patch-region pass used to be gated on the image-level
         ``missing`` set, so a dataset that arrived already-embedded (pickle /
-        content-vector importer) but without ``patch_regions`` never ran the
+        content-vector importer) but without ``patch_grid`` never ran the
         patch pass.  The best-match highlight then had no region to draw even
         though the embedder reported ``supports_patch_regions``.
         """
@@ -561,7 +556,7 @@ class TestEmbedMissingRoutesToPatchForwardBulk:
         emb.patch_forward_bulk.return_value = patch_outputs
 
         # Every media already carries an embedding (nothing in the "missing"
-        # set) but no patch_regions yet.
+        # set) but no patch_grid yet.
         medias = {
             i: {
                 "media_type": "image",
@@ -572,13 +567,7 @@ class TestEmbedMissingRoutesToPatchForwardBulk:
             for i in range(1, 3)
         }
 
-        with (
-            mock.patch("vtscore.media.embedders_for_type", return_value=[emb]),
-            mock.patch(
-                "vtscore.media.patch_embed.build_region_tree", return_value=np.zeros((23, 768), dtype=np.float32)
-            ),
-            mock.patch("vtscore.media.patch_embed.to_fp16", side_effect=lambda x: x.astype(np.float16)),
-        ):
+        with mock.patch("vtscore.media.embedders_for_type", return_value=[emb]):
             embed_missing(medias)
 
         # No image-level embedding work (all were embedded already)...
@@ -588,8 +577,9 @@ class TestEmbedMissingRoutesToPatchForwardBulk:
         sent = emb.patch_forward_bulk.call_args.args[0]
         assert len(sent) == 2
         for m in medias.values():
-            assert m.get("patch_regions") is not None
             assert m.get("patch_grid") is not None
+            # The HAC tree ingest used to build alongside it is gone (#2886).
+            assert m.get("patch_regions") is None
 
     def test_backfill_resolves_stored_embedder_over_single_vector_default(self):
         """Reloading a patch dataset with no explicit embedder still back-fills.
@@ -639,10 +629,6 @@ class TestEmbedMissingRoutesToPatchForwardBulk:
         with (
             mock.patch("vtscore.media.get_embedder", side_effect=_get_embedder),
             mock.patch("vtscore.media.embedders_for_type", return_value=[default_single]),
-            mock.patch(
-                "vtscore.media.patch_embed.build_region_tree", return_value=np.zeros((23, 768), dtype=np.float32)
-            ),
-            mock.patch("vtscore.media.patch_embed.to_fp16", side_effect=lambda x: x.astype(np.float16)),
         ):
             # No explicit embedder: must resolve to the stored "fake_patch",
             # not the single-vector default.
@@ -652,5 +638,6 @@ class TestEmbedMissingRoutesToPatchForwardBulk:
         default_single.patch_forward_bulk.assert_not_called()
         assert patch_emb.patch_forward_bulk.call_count == 1
         for m in medias.values():
-            assert m.get("patch_regions") is not None
             assert m.get("patch_grid") is not None
+            # The HAC tree ingest used to build alongside it is gone (#2886).
+            assert m.get("patch_regions") is None

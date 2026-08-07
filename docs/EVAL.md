@@ -324,9 +324,10 @@ region   = run_voting_iterations_eval({"vg": medias}, seeds=[1, 2, 3], region_vo
 
 A Good vote uses the **minimal box covering every annotated instance** of the
 target category (two apples → one box around both); images with no annotated box
-fall back to the whole-image vector. Scoring is region-aware (max-pool over
-regions) in both runs, so the comparison isolates region voting's effect. Region
-voting is a no-op on single-vector datasets (no `patch_grid` to pool).
+fall back to the whole-image vector. Scoring is region-aware (max-pool over the
+image's score rows) in both runs, so the comparison isolates region voting's
+effect. Region voting is a no-op on single-vector datasets (no `patch_grid` to
+sample a patch from).
 
 ### Example: voting iterations from pickle files
 

@@ -297,20 +297,20 @@ def embed_missing(
     # Which items still need *this* embedder's vector.
     missing = _missing_for_embedder(medias, emb, embedder_name)
 
-    # Patch-capable embedders attach a per-image HAC region tree + patch grid
-    # alongside the CLS ``embedding``.  That side-channel must exist for any
-    # image *this* embedder produced but that lacks ``patch_regions`` - not
-    # only the images we embed in this call.  Without it the best-match
-    # highlight, region voting, and region-aware scoring have no region data,
-    # which is exactly what happens to an already-embedded dataset (pickle /
-    # content-vector importer) that never ran the patch pass: the Highlight
-    # toggle shows (the embedder reports the capability) but draws nothing.
-    # Re-deriving from the source file at load keeps ``patch_regions`` an
-    # in-memory artifact, consistent with the no-persisted-vectors rule.
+    # Patch-capable embedders attach the raw per-image patch grid alongside
+    # the CLS ``embedding``.  That side-channel must exist for any image *this*
+    # embedder produced but that lacks ``patch_grid`` - not only the images we
+    # embed in this call.  Without it the best-match highlight, region voting,
+    # and patch-aware scoring have no patch data, which is exactly what happens
+    # to an already-embedded dataset (pickle / content-vector importer) that
+    # never ran the patch pass: the Highlight toggle shows (the embedder reports
+    # the capability) but draws nothing.  Re-deriving from the source file at
+    # load keeps ``patch_grid`` an in-memory artifact, consistent with the
+    # no-persisted-vectors rule.
     patch_capable = getattr(emb, "supports_patch_regions", False) is True
 
     def _needs_patch(m: dict[str, Any]) -> bool:
-        return _needs_side_channel(m, emb.name, "patch_regions")
+        return _needs_side_channel(m, emb.name, "patch_grid")
 
     # Structural embedders (SIFT/VLAD) attach a per-image keypoint+descriptor set
     # alongside the VLAD ``embedding``, on the same back-fill terms as patch
@@ -337,9 +337,9 @@ def embed_missing(
 
     _run_embed_pass(emb, medias, media_type, missing, on_progress, original_cb)
 
-    # Patch-region pass for embedders that support it (DINOv2/v3/EUPE).  Runs
-    # over every patch-capable image still lacking a region tree, including
-    # ones that arrived already-embedded - not just the items embedded above.
+    # Patch-grid pass for embedders that support it (DINOv2/v3/EUPE).  Runs
+    # over every patch-capable image still lacking a grid, including ones that
+    # arrived already-embedded - not just the items embedded above.
     if patch_capable:
         _run_backfill_pass(
             emb,
@@ -349,7 +349,7 @@ def embed_missing(
             original_cb,
             needs=_needs_patch,
             forward=emb.patch_forward_bulk,
-            attach=_attach_patch_regions_to_media,
+            attach=_attach_patch_grid_to_media,
             fail_message="Bulk patch-forward failed for media_type=%s (%d items)",
         )
 
@@ -376,14 +376,20 @@ def embed_missing(
         ensure_embeddings_dict(media)
 
 
-def _attach_patch_regions_to_media(media: dict, patch_out) -> None:
-    """Attach HAC patch-region tree to *media* (mirrors ``loader_folder._attach_patch_regions``)."""
+def _attach_patch_grid_to_media(media: dict, patch_out) -> None:
+    """Attach the raw ``(H, W, D)`` patch grid to *media*, float16.
+
+    That is the *whole* patch side-channel now.  Ingest used to also build a
+    24-node HAC region tree per image here (``build_region_tree(patch_out,
+    k=12, alpha=0.5)``); #2886 dropped it after the Max-Patch study found raw
+    patches beat every tree variant at the operating point, so the payload gets
+    strictly **smaller** - the grid was already being stored alongside the tree
+    - and ingest sheds the tree's ``O(k^3)`` agglomerative merge.  The
+    per-patch saliency ``patch_out`` also carries is not stored: nothing
+    downstream reads it now that leaf pooling is gone.
+    """
     import numpy as np  # noqa: PLC0415
 
-    from vtscore.media.patch_embed import build_region_tree, to_fp16  # noqa: PLC0415
-
-    regions = build_region_tree(patch_out, k=12, alpha=0.5)
-    media["patch_regions"] = to_fp16(regions)
     media["patch_grid"] = patch_out.patch_grid.astype(np.float16, copy=False)
 
 
@@ -495,7 +501,7 @@ def _embed_missing_stage(
     Single-embedder datasets resolve to one name and behave exactly as before;
     a v3 trio (text + patch + structural picks) runs each in turn, so
     ``media["embeddings"]`` carries a per-embedder vector, the patch embedder
-    also populates ``patch_regions`` / ``patch_grid``, and the structural
+    also populates ``patch_grid``, and the structural
     embedder populates ``local_features``.
 
     Progress is routed through :class:`EmbedLoopProgress` so a multi-embedder

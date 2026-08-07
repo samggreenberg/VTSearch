@@ -526,10 +526,10 @@ def _evaluate_on_test(
     threshold-independent ranking metrics ``auroc`` and ``average_precision``,
     which isolate "how good is the ranking" from "how good is the threshold".
 
-    When *region_aware* the test media carry ``patch_regions`` (a patch
-    embedder), so scoring max-pools the MLP over every region of each image -
+    When *region_aware* the test media carry a ``patch_grid`` (a patch
+    embedder), so scoring max-pools the MLP over every score row of each image -
     exactly the live detector's inference for patch datasets (an image scores
-    by its best-matching region).  Otherwise each media is scored by its single
+    by its best-matching row).  Otherwise each media is scored by its single
     whole-image vector through the step's trainer-agnostic ``predict``.
     """
     import numpy as np  # noqa: PLC0415
@@ -1465,7 +1465,17 @@ def _mlp_train_and_calibrate(
 
     Good votes region-pool their ground-truth box when *region_voting* is on
     (and the media supports it); Bad votes always train on the whole-image
-    vector - matching the live detector, where only Yes-votes carry a region.
+    vector.
+
+    **This is the single-vector path.**  Bad votes here are one row because a
+    single-vector media *has* one row - not because the live detector works that
+    way.  On a patch dataset the live detector floods a Bad vote over the
+    image's whole score-row stack, and
+    :func:`simulate_voting_iterations` routes such datasets to the
+    ``max_patch`` style (:func:`_style_train_and_calibrate`) rather than here,
+    so the default arm matches the app.  Do not "restore" whole-image Bad votes
+    on patch data: that trains ~196 rows per rejected image down never while
+    inference max-pools them.
 
     * ``hidden_dim`` comes from the head (sized from the *full* label count on
       the MLP head, 0 on the linear one) and is forced onto the
@@ -1554,8 +1564,9 @@ def _style_train_and_calibrate(
     The detection style (see :mod:`vtscore.eval.patch_styles`) supplies the
     vote-to-vector rules: each Good vote contributes ``style.good_vec`` (given
     the ground-truth box when *region_voting* and the media has one), each Bad
-    vote floods ``style.bad_vecs`` - one row on a whole-image style, the CLS +
-    HAC leaves on ``max_hac``, every raw patch on ``max_patch``.
+    vote floods ``style.bad_vecs`` - one row on a whole-image style, the
+    image-level vector + every raw patch on ``max_patch``, every tree node on
+    the HAC hybrids.
 
     Training and calibration are **bag-aware**, exactly like the production
     vote path (:func:`vtscore.detectors.training._train_and_score_xy`): the
@@ -1884,13 +1895,17 @@ def simulate_voting_iterations(  # noqa: C901
             ``_train_and_score_xy``.  Ignored on the SVM trainers (no torch
             head); recorded in the ``head`` result column.
         style: Optional detection-style name (see
-            :mod:`vtscore.eval.patch_styles`): ``"whole_image"``, ``"max_hac"``,
-            or ``"max_patch"``.  When set (MLP trainer only), the style owns the
+            :mod:`vtscore.eval.patch_styles`): ``"whole_image"``,
+            ``"max_patch"`` (the production geometry), or one of the
+            ``"max_patch_hac"`` hybrids.  When set (MLP trainer only), the style owns the
             vote-to-vector assembly, the test/sim scoring rule, and the
             bag-aware flooding of Bad votes - the Max-Patch experiment arms.
-            ``None`` (default) keeps the historical behaviour byte-for-byte
-            (including its whole-image Bad votes on patch datasets).  Recorded
-            in the ``style`` result column.
+            ``None`` (default) resolves to the **app's** geometry: a patch
+            dataset (any media with a ``patch_grid``) on the MLP trainer gets
+            ``"max_patch"``, everything else keeps the historical single-vector
+            path byte-for-byte.  The *resolved* name is what lands in the
+            ``style`` result column, so a row always says which geometry
+            produced it.
         target_prevalence: When set (e.g. ``0.01`` for the 1%-prevalence rare
             arm), positives across the whole dataset are deterministically
             downsampled — using ``seed`` — to that fraction *before* the
@@ -2036,13 +2051,8 @@ def simulate_voting_iterations(  # noqa: C901
     if head != "mlp" and trainer != "mlp":
         raise ValueError(f"head={head!r} only applies to the torch trainer; got trainer={trainer!r}")
 
-    style_obj: Any = None
-    if style is not None:
-        if trainer != "mlp":
-            raise ValueError(f"detection styles only support the MLP trainer; got trainer={trainer!r}")
-        from vtscore.eval.patch_styles import resolve_style  # noqa: PLC0415
-
-        style_obj = resolve_style(style)
+    if style is not None and trainer != "mlp":
+        raise ValueError(f"detection styles only support the MLP trainer; got trainer={trainer!r}")
 
     prevalence_arm = "natural" if target_prevalence is None else f"rare_{target_prevalence:g}"
     if target_prevalence is not None:
@@ -2064,10 +2074,37 @@ def simulate_voting_iterations(  # noqa: C901
     if not test_pos or not test_neg:
         return []
 
-    # A patch dataset exposes ``patch_regions`` per media; such datasets are
-    # scored region-aware (max-pool over regions) the same way the live
-    # detector scores them, regardless of how the Good votes were assembled.
-    region_aware = any(clips_dict[cid].get("patch_regions") for cid in clips_dict)
+    # A patch dataset exposes a ``patch_grid`` per media; such datasets are
+    # scored region-aware (max-pool over the image's score rows) the same way
+    # the live detector scores them, regardless of how the Good votes were
+    # assembled.
+    region_aware = any(clips_dict[cid].get("patch_grid") is not None for cid in clips_dict)
+
+    # **The default arm must be the app's default.**  On a patch dataset the
+    # live detector floods a Bad vote over the image's whole score-row stack
+    # (``bad_negative_vecs``) and trains/calibrates bag-aware; the style-less
+    # path here trains a Bad vote on one image-level row.  That gap predates
+    # #2886 but MaxPatch widened it from 1-vs-24 to 1-vs-197 rows: the default
+    # arm would train ~196 patch rows per rejected image down never, while
+    # scoring max-pools all of them, so it would systematically under-suppress
+    # and its numbers would not describe the shipped tool.  An eval default that
+    # doesn't match the app default can't be trusted, so a patch dataset
+    # defaults to the ``max_patch`` style - which *is* the production geometry
+    # (its methods delegate to ``pool_box_from_media`` / ``bad_negative_vecs`` /
+    # ``media_score_rows``).  The resolved name is recorded in the ``style``
+    # column, so a result row always says which geometry produced it.
+    #
+    # Single-vector datasets are untouched: no patch grid, no style, and the
+    # historical ``_mlp_train_and_calibrate`` path runs byte-for-byte.  Non-MLP
+    # trainers are untouched too - they have no torch head for a style to drive.
+    if style is None and region_aware and trainer == "mlp":
+        style = "max_patch"
+
+    style_obj: Any = None
+    if style is not None:
+        from vtscore.eval.patch_styles import resolve_style  # noqa: PLC0415
+
+        style_obj = resolve_style(style)
     # Mirror the app's per-mode schedule default (#2841): with no explicit arm, a
     # patch dataset blends under the region schedule and a single-vector one
     # under the binary schedule, exactly as `_blend_schedule_for_snap` decides in
@@ -2505,9 +2542,11 @@ def run_voting_iterations_eval(
             in the ``prevalence_arm`` / ``realized_prevalence`` columns.
         styles: Which detection styles to run per cell (see
             :func:`simulate_voting_iterations`).  ``None`` (default) runs
-            ``[None]`` - the historical style-less behaviour; pass e.g.
-            ``["max_hac", "max_patch"]`` for the Max-Patch experiment arms.
-            Recorded in the ``style`` column (``""`` for the style-less run).
+            ``[None]``, which resolves per dataset to whatever the **app** does
+            - ``max_patch`` on a patch dataset, the single-vector path
+            otherwise; pass e.g. ``["whole_image", "max_patch"]`` to pin the
+            Max-Patch experiment arms explicitly.  The *resolved* name is
+            recorded in the ``style`` column (``""`` only when no style ran).
         autopilot_fidelity: Follow the app's own Autopilot phase machine
             (default ``True``); see :func:`simulate_voting_iterations`.  Pass
             ``False`` to reproduce studies published before the flow was

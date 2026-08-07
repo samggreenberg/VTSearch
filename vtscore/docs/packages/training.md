@@ -349,8 +349,8 @@ zero overhead.
 
 | Function                                              | Behaviour                                                                |
 |-------------------------------------------------------|--------------------------------------------------------------------------|
-| `score_against_query(media, query_vec)` (line 34)     | Returns `(max_cosine_similarity, best_region_box)` for one media. For patch-region media, scores every `RegionVector` and returns the max + its box. For single-vector media, returns the cosine plus `(0.0, 0.0, 1.0, 1.0)`. `(0.0, None)` on zero-norm or missing embedding. |
-| `cosine_sort_with_boxes(snap, query_vec)` (line 92)   | Snapshot-level scorer. Per-snapshot dispatch: patch-region snapshots iterate per media (O(N·K), K≈23); single-vector snapshots use the cached `(N, D)` matrix via `vtscore.embedding.matrix.get_embedding_matrix_for_snap`. Returns `(results_sorted_desc, raw_similarities_in_input_order)`. Result entries are `{"id": cid, "similarity": float, "best_region": [x0, y0, x1, y1]?}`. |
+| `score_against_query(media, query_vec)` (line 34)     | Returns `(max_cosine_similarity, best_region_box)` for one media. For patch media, scores every row of `media_score_rows` (image-level vector + every raw patch) and returns the max + that row's box. For single-vector media, returns the cosine plus `(0.0, 0.0, 1.0, 1.0)`. `(0.0, None)` on zero-norm or missing embedding. |
+| `cosine_sort_with_boxes(snap, query_vec)` (line 92)   | Snapshot-level scorer. Per-snapshot dispatch: patch snapshots use the cached flattened float16 score-row matrix + a chunked matvec and segmented max-pool (K = 1 + H·W, 197 on DINOv3); single-vector snapshots use the cached `(N, D)` matrix via `vtscore.embedding.matrix.get_embedding_matrix_for_snap`. Returns `(results_sorted_desc, raw_similarities_in_input_order)`. Result entries are `{"id": cid, "similarity": float, "best_region": [x0, y0, x1, y1]?}`. |
 
 ```python
 from vtscore.training.region_similarity import cosine_sort_with_boxes

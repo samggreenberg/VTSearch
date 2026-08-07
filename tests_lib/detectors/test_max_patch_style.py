@@ -1,9 +1,17 @@
 """Tests for the Max-Patch experiment detection styles.
 
 Covers the pieces added for ``docs/plans/max-patch-experiment.md``: the
-``nearest_patch_to_box`` helper, the three detection styles in
-:mod:`vtscore.eval.patch_styles` (whole_image / max_hac / max_patch), and the
-``style`` wiring through the voting-iterations harness.
+``nearest_patch_to_box`` helper, the detection styles in
+:mod:`vtscore.eval.patch_styles` (whole_image / max_patch / the two
+raw-patch-leaf HAC hybrids), and the ``style`` wiring through the
+voting-iterations harness.
+
+``max_patch`` is the production geometry as of #2886, so its style tests double
+as production tests: the style delegates to
+:func:`vtscore.detectors.training.pool_box_from_media` /
+:func:`~vtscore.detectors.training.bad_negative_vecs` /
+:func:`vtscore.embedding.matrix.media_score_rows` rather than re-implementing
+them.
 
 Everything runs on small synthetic patch grids - no model downloads.
 """
@@ -16,28 +24,21 @@ import torch
 import torch.nn as nn
 
 from vtscore.eval.patch_styles import (
-    MaxHacStyle,
     MaxPatchHacStyle,
     MaxPatchPcaHacStyle,
     MaxPatchStyle,
     WholeImageStyle,
     build_patch_hac_tree,
     resolve_style,
+    snap_box_to_region,
 )
 from vtscore.eval.voting_iterations import _VOTING_COLUMNS, run_voting_iterations_eval, simulate_voting_iterations
-from vtscore.media.patch_embed import (
-    PatchEmbedOutput,
-    build_region_tree,
-    nearest_patch_to_box,
-    snap_box_to_region,
-    to_fp16,
-)
+from vtscore.media.patch_embed import nearest_patch_to_box
 
 _TIMING_COLS = {"elapsed_seconds", "train_seconds", "xcal_seconds", "pool_score_seconds", "test_score_seconds"}
 
 DIM = 32
 GRID = 4  # 4x4 patch grid
-K = 4  # HAC leaves
 
 
 def _unit(v):
@@ -60,17 +61,18 @@ def _cell_box(row, col):
 
 
 def _patch_media(mid, category, rng, plant_vec=None, plant_cell=None, with_region_label=None):
-    """A synthetic patch-dataset media: CLS vector, fp16 grid, HAC region tree."""
+    """A synthetic patch-dataset media: CLS vector + fp16 raw patch grid.
+
+    That is the whole patch side-channel a real ingest attaches now (#2886); no
+    region tree.
+    """
     grid = _make_grid(rng, plant_vec, plant_cell)
-    saliency = np.full((GRID, GRID), 1.0 / (GRID * GRID), dtype=np.float32)
     cls_vec = _unit(grid.reshape(-1, DIM).mean(axis=0))
-    output = PatchEmbedOutput(cls_vec=cls_vec, patch_grid=grid, patch_saliency=saliency)
     media = {
         "id": mid,
         "category": category,
         "embeddings": {"emb": cls_vec},
         "patch_grid": grid.astype(np.float16),
-        "patch_regions": to_fp16(build_region_tree(output, k=K, alpha=0.5)),
     }
     if with_region_label is not None and plant_cell is not None:
         media["regions"] = [{"box": list(_cell_box(*plant_cell)), "label": with_region_label}]
@@ -190,8 +192,8 @@ class TestMaxPatchStyle:
         media = _patch_media(1, "cat1", rng)
         vecs = MaxPatchStyle().bad_vecs(media)
         # The full-image row leads, then every raw patch: a Bad vote must
-        # suppress the *entire* scoring pool, exactly as ``max_hac`` floods its
-        # CLS node alongside the HAC leaves.
+        # suppress the *entire* scoring pool, or an un-suppressed row survives
+        # to max-pool the image back up at inference.
         assert len(vecs) == GRID * GRID + 1
         np.testing.assert_allclose(vecs[0], media["embeddings"]["emb"], rtol=1e-3)
         flat = np.asarray(media["patch_grid"], dtype=np.float32).reshape(-1, DIM)
@@ -241,14 +243,12 @@ class TestTrainScoreGeometryParity:
     from the *scoring* geometry (each Bad vote floods scoring-geometry rows as
     negatives), calibration measures positives in a geometry inference never
     evaluates, and the threshold lands outside the production score range -
-    perfect ranking, FPR 0, catastrophic FNR.  ``max_hac`` always satisfied
-    this because ``patch_regions[0]`` is the CLS full-image node; ``max_patch``
-    did not until the full-image row was added to its pool.
+    perfect ranking, FPR 0, catastrophic FNR.  ``max_patch`` did not satisfy it
+    until the full-image row was added to its pool, and since #2886 that pool
+    *is* production's, so this class guards the live geometry.
     """
 
-    @pytest.mark.parametrize(
-        "style_cls", [MaxPatchStyle, MaxHacStyle, WholeImageStyle, MaxPatchHacStyle, MaxPatchPcaHacStyle]
-    )
+    @pytest.mark.parametrize("style_cls", [MaxPatchStyle, WholeImageStyle, MaxPatchHacStyle, MaxPatchPcaHacStyle])
     def test_boxless_good_vote_trains_on_a_scored_row(self, style_cls):
         rng = np.random.default_rng(40)
         media = _patch_media(1, "cat0", rng)
@@ -261,9 +261,7 @@ class TestTrainScoreGeometryParity:
             f"not among the {len(rows)} rows this style max-pools at inference"
         )
 
-    @pytest.mark.parametrize(
-        "style_cls", [MaxPatchStyle, MaxHacStyle, WholeImageStyle, MaxPatchHacStyle, MaxPatchPcaHacStyle]
-    )
+    @pytest.mark.parametrize("style_cls", [MaxPatchStyle, WholeImageStyle, MaxPatchHacStyle, MaxPatchPcaHacStyle])
     def test_boxed_good_vote_trains_on_a_scored_row(self, style_cls):
         rng = np.random.default_rng(41)
         media = _patch_media(1, "cat0", rng)
@@ -286,34 +284,27 @@ class TestTrainScoreGeometryParity:
                 f"{style_cls.__name__}: a scored row is never trained down by a Bad vote"
             )
 
-    def test_max_hac_floods_every_scored_row_except_hac_internals(self):
-        """``max_hac``'s flood covers the CLS node and the leaves, but not the
-        HAC **internal** nodes - which it nonetheless max-pools at inference.
+    def test_max_patch_flood_covers_every_scored_row_exactly(self):
+        """MaxPatch closes the #2731 flood/score gap the HAC tree carried.
 
-        That gap is deliberate but *not* because internals are dominated by
-        their leaves - they are renormalised, so they are not (see
-        ``tests_lib/detectors/test_hac_internal_flood_gap.py``).  Flooding them
-        measurably costs ranking instead; see
-        :func:`~vtscore.detectors.training.bad_negative_vecs`.  Either way
-        ``max_hac`` scores rows no Bad vote trains down directly, so the
-        exception is pinned here rather than left silent.
+        Under the old tree a Bad vote floods the CLS node and the leaves but not
+        the internal merge nodes, which inference nonetheless max-pools - a
+        measured exception (internals are renormalised convex-hull points, so
+        they are *not* dominated by their leaves, yet flooding them cost
+        ranking).  MaxPatch has no internals: the flood and the scoring stack
+        are the same function call, so the exception is gone rather than
+        inherited.
         """
         rng = np.random.default_rng(46)
         media = _patch_media(1, "cat1", rng)
-        style = MaxHacStyle()
+        style = MaxPatchStyle()
         flooded = [np.asarray(v, dtype=np.float32) for v in style.bad_vecs(media)]
-        regions = media["patch_regions"]
         rows = style.score_rows(media)
-        assert len(rows) == len(regions)
-        uncovered = [i for i, row in enumerate(rows) if not any(np.allclose(row, f, atol=2e-3) for f in flooded)]
-        assert uncovered, "expected the HAC internals to be uncovered"
-        # Every uncovered row is an internal node; no leaf and not the CLS node.
-        assert all(regions[i].children is not None for i in uncovered)
-        assert 0 not in uncovered
+        assert len(flooded) == len(rows)
+        for row in rows:
+            assert any(np.allclose(row, f, atol=2e-3) for f in flooded)
 
-    @pytest.mark.parametrize(
-        "style_cls", [MaxPatchStyle, MaxHacStyle, WholeImageStyle, MaxPatchHacStyle, MaxPatchPcaHacStyle]
-    )
+    @pytest.mark.parametrize("style_cls", [MaxPatchStyle, WholeImageStyle, MaxPatchHacStyle, MaxPatchPcaHacStyle])
     def test_score_media_is_max_pool_over_score_rows(self, style_cls):
         rng = np.random.default_rng(43)
         media = _patch_media(1, "c", rng)
@@ -331,15 +322,19 @@ class TestTrainScoreGeometryParity:
         assert rows.shape == (GRID * GRID + 1, DIM)
         np.testing.assert_allclose(rows[0], media["embeddings"]["emb"], rtol=1e-3)
 
-    def test_max_hac_score_rows_include_the_cls_node(self):
-        """The structural reason ``max_hac`` never showed the Caltech failure."""
+    def test_max_patch_style_scores_match_the_production_scorer(self):
+        """The style is not a re-implementation: it must equal the live scorer."""
+        from vtscore.detectors.training import score_media_with_model
+
         rng = np.random.default_rng(45)
-        media = _patch_media(1, "c", rng)
-        regions = media["patch_regions"]
-        assert regions[0].children is None
-        assert regions[0].box == (0.0, 0.0, 1.0, 1.0)
-        rows = MaxHacStyle().score_rows(media)
-        np.testing.assert_allclose(rows[0], np.asarray(regions[0].vec, dtype=np.float32), rtol=1e-3)
+        clips = {mid: _patch_media(mid, "c", rng) for mid in (1, 2, 3)}
+        direction = _unit(rng.normal(0, 1, DIM))
+        model = _linear_scorer(direction)
+        style_scores = MaxPatchStyle().score_media(model, clips)
+        prod_scores = {r["id"]: r["score"] for r in score_media_with_model(model, clips)}
+        for mid in clips:
+            # Production rounds to 4 decimals; the style path keeps raw floats.
+            assert style_scores[mid] == pytest.approx(prod_scores[mid], abs=1e-3)
 
 
 class TestMaxPatchHacStyle:
@@ -383,6 +378,24 @@ class TestMaxPatchHacStyle:
         rng = np.random.default_rng(23)
         media = _patch_media(1, "cat0", rng)
         np.testing.assert_allclose(MaxPatchHacStyle().good_vec(media, None), media["embeddings"]["emb"])
+
+    def test_snap_box_to_region_picks_best_iou_node(self):
+        """The experiment-tier box snap moved here when production went tree-free."""
+        rng = np.random.default_rng(24)
+        media = _patch_media(1, "cat0", rng)
+        tree = build_patch_hac_tree(np.asarray(media["patch_grid"], dtype=np.float32), media["embeddings"]["emb"])
+        # A whole-image box has IoU 1 with the CLS node, which no other node beats.
+        whole = snap_box_to_region(tree, (0.0, 0.0, 1.0, 1.0))
+        assert whole is not None
+        np.testing.assert_allclose(whole, _unit(media["embeddings"]["emb"]), atol=3e-3)
+        # A single-cell box lands on that cell's raw-patch leaf.
+        cell = snap_box_to_region(tree, _cell_box(2, 1))
+        assert cell is not None
+        np.testing.assert_allclose(cell, _unit(np.asarray(media["patch_grid"])[2, 1]), atol=3e-3)
+        # A degenerate (zero-area) box falls back to the nearest node centroid.
+        got = snap_box_to_region(tree, (0.3, 0.3, 0.3, 0.3))
+        assert got is not None and abs(float(np.linalg.norm(got)) - 1.0) < 1e-3
+        assert snap_box_to_region([], (0.0, 0.0, 1.0, 1.0)) is None
 
     def test_gridless_media_falls_back(self):
         media = {"id": 1, "category": "c", "embeddings": {"emb": _unit(np.ones(DIM))}}
@@ -567,50 +580,6 @@ class TestCalibrationInInferenceGeometry:
 
 
 # ---------------------------------------------------------------------------
-# MaxHacStyle - production parity
-# ---------------------------------------------------------------------------
-
-
-class TestMaxHacStyle:
-    def test_good_vec_snaps_to_region_node(self):
-        rng = np.random.default_rng(20)
-        media = _patch_media(1, "cat0", rng)
-        box = _cell_box(1, 1)
-        got = MaxHacStyle().good_vec(media, box)
-        expected = snap_box_to_region(media["patch_regions"], box)
-        assert expected is not None
-        np.testing.assert_allclose(got, expected)
-
-    def test_bad_vecs_are_cls_plus_leaves(self):
-        rng = np.random.default_rng(21)
-        media = _patch_media(1, "cat1", rng)
-        vecs = MaxHacStyle().bad_vecs(media)
-        # childless nodes = 1 CLS + K leaves; internals are excluded.
-        assert len(vecs) == K + 1
-
-    def test_score_media_matches_production_scorer(self):
-        from vtscore.detectors.training import score_media_with_model
-
-        rng = np.random.default_rng(22)
-        clips = {mid: _patch_media(mid, "c", rng) for mid in (1, 2, 3)}
-        direction = _unit(rng.normal(0, 1, DIM))
-        model = _linear_scorer(direction)
-        style_scores = MaxHacStyle().score_media(model, clips)
-        prod_scores = {r["id"]: r["score"] for r in score_media_with_model(model, clips)}
-        for mid in clips:
-            # Production rounds to 4 decimals; the style path keeps raw floats.
-            assert style_scores[mid] == pytest.approx(prod_scores[mid], abs=1e-3)
-
-    def test_exemplar_sims_max_over_region_nodes(self):
-        rng = np.random.default_rng(23)
-        media = _patch_media(1, "c", rng)
-        query = _unit(rng.normal(0, 1, DIM))
-        sims = MaxHacStyle().exemplar_sims({1: media}, query)
-        expected = max(float(np.asarray(r.vec, dtype=np.float32) @ query) for r in media["patch_regions"])
-        assert sims[1] == pytest.approx(expected, abs=2e-3)
-
-
-# ---------------------------------------------------------------------------
 # WholeImageStyle
 # ---------------------------------------------------------------------------
 
@@ -630,8 +599,11 @@ class TestWholeImageStyle:
 
     def test_resolve_style_registry(self):
         assert isinstance(resolve_style("whole_image"), WholeImageStyle)
-        assert isinstance(resolve_style("max_hac"), MaxHacStyle)
         assert isinstance(resolve_style("max_patch"), MaxPatchStyle)
+        assert isinstance(resolve_style("max_patch_hac"), MaxPatchHacStyle)
+        # The pre-#2886 production arm is gone along with the tree it delegated to.
+        with pytest.raises(KeyError):
+            resolve_style("max_hac")
         # Fresh instance per call: the matrix memo must not leak across runs.
         assert resolve_style("max_patch") is not resolve_style("max_patch")
         with pytest.raises(KeyError):
@@ -648,7 +620,7 @@ def _drop_timing(rows):
 
 
 class TestStyleVotingSimulation:
-    @pytest.mark.parametrize("style", ["whole_image", "max_hac", "max_patch", "max_patch_hac", "max_patch_pca_hac"])
+    @pytest.mark.parametrize("style", ["whole_image", "max_patch", "max_patch_hac", "max_patch_pca_hac"])
     def test_style_run_produces_learnable_rows(self, style):
         medias, _target = _planted_dataset(n_per_cat=25, seed=7)
         rows = simulate_voting_iterations(
@@ -715,8 +687,38 @@ class TestStyleVotingSimulation:
                 style="max_patch",
             )
 
-    def test_default_run_records_empty_style(self):
+    def test_patch_dataset_defaults_to_the_production_style(self):
+        """The default arm must be the *app's* default, and must say so.
+
+        A style-less run on a patch dataset used to train a Bad vote on one
+        image-level row while scoring max-pooled over the whole stack - leaving
+        ~196 rows per rejected image untrained, so it under-suppressed relative
+        to the live detector.  It now resolves to ``max_patch`` (which delegates
+        to the production vote/score helpers), and the resolved name is recorded
+        so a result row is never ambiguous about its geometry.
+        """
         medias, _ = _planted_dataset(n_per_cat=12, seed=11)
+        rows = simulate_voting_iterations(
+            medias,
+            target_category="cat0",
+            seed=0,
+            dataset_name="synthetic",
+            max_steps=6,
+        )
+        assert rows
+        assert all(r["style"] == "max_patch" for r in rows)
+
+    def test_default_run_on_a_single_vector_dataset_records_empty_style(self):
+        """No patch grid, no style: the historical path is untouched."""
+        rng = np.random.default_rng(11)
+        medias = {
+            mid: {
+                "id": mid,
+                "category": "cat0" if mid % 2 else "cat1",
+                "embeddings": {"emb": _unit(rng.normal(0, 1, DIM))},
+            }
+            for mid in range(1, 25)
+        }
         rows = simulate_voting_iterations(
             medias,
             target_category="cat0",
@@ -727,6 +729,37 @@ class TestStyleVotingSimulation:
         assert rows
         assert all(r["style"] == "" for r in rows)
 
+    def test_default_arm_is_identical_to_an_explicit_max_patch_run(self):
+        """Not just the recorded name - the same trajectory, end to end.
+
+        Bad-vote flooding, bag-aware weighting, and inference-geometry
+        calibration all ride on this equivalence.
+        """
+        medias, _ = _planted_dataset(n_per_cat=15, seed=17)
+        kwargs: dict[str, Any] = dict(
+            target_category="cat0",
+            seed=2,
+            dataset_name="synthetic",
+            region_voting=True,
+            max_steps=8,
+        )
+        default = simulate_voting_iterations(dict(medias), **kwargs)
+        explicit = simulate_voting_iterations(dict(medias), style="max_patch", **kwargs)
+        assert default
+        assert _drop_timing(default) == _drop_timing(explicit)
+
+    def test_default_arm_floods_a_bad_vote_over_every_scored_row(self):
+        """Pinned on the assembled vectors, so a refactor can't quietly restore
+        the 1-row Bad vote on patch data while still recording the name."""
+        from vtscore.detectors.training import bad_negative_vecs
+
+        rng = np.random.default_rng(18)
+        media = _patch_media(1, "cat1", rng)
+        flooded = resolve_style("max_patch").bad_vecs(media)
+        assert len(flooded) == GRID * GRID + 1
+        # ...and that is exactly what the live detector floods.
+        np.testing.assert_array_equal(np.stack(flooded), np.stack(bad_negative_vecs(media)))
+
     def test_eval_wrapper_runs_style_grid(self):
         medias, _ = _planted_dataset(n_per_cat=12, seed=12)
         df = run_voting_iterations_eval(
@@ -735,9 +768,9 @@ class TestStyleVotingSimulation:
             categories={"synthetic": ["cat0"]},
             region_voting=True,
             max_steps=5,
-            styles=["max_hac", "max_patch"],
+            styles=["whole_image", "max_patch"],
         )
-        assert set(df["style"].unique()) == {"max_hac", "max_patch"}
+        assert set(df["style"].unique()) == {"whole_image", "max_patch"}
         assert list(df.columns) == list(_VOTING_COLUMNS)
 
     def test_safe_thresholds_with_style(self):

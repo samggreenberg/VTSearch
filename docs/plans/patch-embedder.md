@@ -17,7 +17,7 @@ Cross-cutting, still open:
 
 <!-- item-sep -->
 
-- **`patch_regions` / `patch_grid` / `local_features` stay singular.** The
+- **`patch_grid` / `local_features` stay singular.** The
   binding allows at most one patch and one structural embedder, so these are
   single-valued (owned by that role's embedder) rather than dict-keyed. Only
   revisit if ">1 patch (or structural) embedder per dataset" ever comes off the
@@ -83,7 +83,7 @@ The point is to **stop forcing the user to choose** between "good text queries"
 exact instance" (SIFT/VLAD structural). The three roles are type-distinct because
 they ride three independent capability flags — `supports_text`,
 `supports_patch_regions`, `supports_geometric_verification` — and each populates its
-own per-media storage (full-image vectors / `patch_regions` + `patch_grid` /
+own per-media storage (full-image vectors / `patch_grid` /
 `local_features`).
 
 ### Schema change
@@ -92,14 +92,13 @@ The on-disk per-media fields become dicts keyed by embedder name:
 
 ```python
 media["embeddings"]     = {"siglip": ndarray, "dinov3_patch": ndarray, "sift_vlad": ndarray}  # fp16, L2-normalised, one entry per bound embedder
-media["patch_regions"]  = [RegionVector, ...]   # the patch embedder's HAC tree (single-valued)
-media["patch_grid"]     = ndarray               # (H, W, D) fp16, the patch embedder's grid
+media["patch_grid"]     = ndarray               # (H, W, D) fp16, the patch embedder's grid (single-valued)
 media["local_features"] = StructuralFeatures(...)  # the structural embedder's keypoints + descriptors (single-valued)
 ```
 
 `media["embeddings"]` is the genuinely multi-valued field (one vector per bound
 embedder, including the structural embedder's Stage-1 VLAD vector).
-`patch_regions` / `patch_grid` / `local_features` stay **single-valued**: the
+`patch_grid` / `local_features` stay **single-valued**: the
 binding allows at most one patch and one structural embedder, so keying them by name
 would be a perpetually ≤1-entry dict.
 
@@ -181,7 +180,7 @@ is the **score** embedder (structural ▸ patch ▸ text) the model was trained 
 
 - **Pickle loaders** run every bound embedder during ingest; each writes its own
   vector into `media["embeddings"]`, the patch embedder additionally writes
-  `patch_regions` / `patch_grid`, the structural embedder writes `local_features`.
+  `patch_grid`, the structural embedder writes `local_features`.
 - **`ConcurrencyGate`** (`load_pipeline.py`) gates embed work; a multi-embedder
   dataset takes proportionally longer, gated under the same `_embed_gate` limit.
 - **Dataset pickle schema version** bumps; old pickles load via the read-time re-key.
@@ -280,8 +279,8 @@ independent of the active detector.
   one resolver, `keying_embedder_for_snap(det_ctx, snap)` (the dataset's concrete
   embedder of the detector's type, else the score precedence), so switching between
   two same-type datasets re-derives the MLP in the new space (SigLIP→CLIP;
-  DinoV2→DinoV3, with region boxes snapped to the new grid's nearest HAC node by
-  `snap_box_to_region`). The frontend gates the same pairs via `embedder_types` on
+  DinoV2→DinoV3, with region boxes resolved to the new grid's nearest raw patch
+  by `nearest_patch_to_box`). The frontend gates the same pairs via `embedder_types` on
   the dataset registry entry and `embedder_type` on the detector entry
   (`utils/context-compat.ts`). Single-embedder datasets are byte-for-byte unchanged.
 

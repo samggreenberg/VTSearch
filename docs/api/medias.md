@@ -340,12 +340,14 @@ Sets the cancel flag on the job; the training loop polls it cooperatively.
 Returns `{"ok": true}` (HTTP 200) even when the job has already finished — the
 contract is "make sure it's no longer running". Unknown `job_id`: HTTP 404.
 
-On patch-region-aware datasets the MLP is max-pooled over each
-image's region tree, and each result carries `"best_region": [x0,
-y0, x1, y1]` for the region whose score won. Region-annotated Good
-votes (`region_box` on `LabeledElement`) pool the user's box from
-the patch grid at training time; Bad votes use a region-aware
-asymmetric loss. See [`docs/plans/patch-embedder.md`](../plans/patch-embedder.md)
+On patch datasets the MLP is max-pooled over each image's score-row
+stack (the image-level vector plus every raw patch of its
+`patch_grid`), and each result carries `"best_region": [x0, y0, x1,
+y1]` for the row whose score won - the whole image when the
+image-level row wins, otherwise the single winning grid cell.
+Region-annotated Good votes (`region_box` on `LabeledElement`) train
+on the raw patch nearest the user's box; Bad votes flood the whole
+stack (a region-aware asymmetric loss). See [`docs/plans/patch-embedder.md`](../plans/patch-embedder.md)
 for the design.
 
 ### Example sort (upload)

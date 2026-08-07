@@ -4,7 +4,7 @@ The demo *cache* pickle written by ``load_demo_dataset`` only round-trips the
 fields declared in each media type's ``pickle_extra_fields`` (for images:
 ``width``/``height``/``thumbnail_bytes``).  It silently drops exactly the
 fields this experiment depends on: the per-patch grid (``patch_grid``), the HAC
-region tree (``patch_regions``), the ground-truth region boxes (``regions``),
+patch grid (``patch_grid``), the ground-truth region boxes (``regions``),
 and the multi-label ``categories`` list.  Copying that pickle would leave every
 arm scoring on the whole-image vector alone — MaxHAC, MaxPatch, and whole_image
 would collapse to one curve.
@@ -13,8 +13,7 @@ So prepare serializes the *in-memory* medias dict (which carries all of the
 above, freshly built by the loader) directly, dropping only the two bulky
 raster fields the cell stage never reads (``media_bytes``, ``thumbnail_bytes``);
 exemplar crops are already pre-computed in prepare, and cell-time scoring works
-purely on vectors.  ``patch_grid`` (fp16 ndarray) and ``patch_regions`` (a list
-of ``RegionVector`` dataclasses) pickle losslessly.
+purely on vectors.  ``patch_grid`` (an fp16 ndarray) pickles losslessly.
 """
 
 from __future__ import annotations

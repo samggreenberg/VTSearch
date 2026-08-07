@@ -1,16 +1,18 @@
-"""Region (patch) scoring path of ``_score_all_media`` + its matrix cache.
+"""Patch scoring path of ``_score_all_media`` + its matrix cache.
 
-DINOv3-style patch datasets expose ``patch_regions`` (a list of
-:class:`RegionVector`s) per media.  Scoring flattens every (media, region)
-pair into one matrix, runs a single MLP forward pass, then max-pools back
-down to one score + winning-region index per media.
+DINOv3-style patch datasets expose a raw ``patch_grid`` per media.  Scoring
+flattens every media's score-row stack - the image-level (CLS) vector plus every
+raw patch, :func:`~vtscore.embedding.matrix.media_score_rows` - into one matrix,
+runs one chunked MLP forward pass, then max-pools back down to one score +
+winning-row index per media.
 
 The matrix used to be rebuilt from scratch on every vote - a
 hundreds-of-thousands-row Python loop plus a multi-GB ``np.stack`` - which,
 running in the background training thread, stalled the next vote's request.
-These tests pin (a) the max-pool / best-region correctness and (b) that the
-flattened matrix is cached on the dataset context and reused until the
-media-id set changes.
+These tests pin (a) the max-pool / best-row correctness, (b) that the flattened
+matrix is cached on the dataset context and reused until the media-id set
+changes, and (c) that it stays float16 - MaxPatch stacks ~8x the rows the old
+HAC tree did, so a float32 matrix would multiply the resident bytes with it.
 """
 
 from __future__ import annotations
@@ -22,32 +24,36 @@ import torch
 import torch.nn as nn
 
 from vtscore.detectors.training import _score_all_media
-from vtscore.embedding.matrix import get_region_matrix_for_snap, invalidate_embedding_matrix
-from vtscore.embedding.media_vectors import media_embedding
-from vtscore.media.patch_embed import RegionVector
+from vtscore.embedding.matrix import (
+    get_region_matrix_for_snap,
+    invalidate_embedding_matrix,
+    media_row_box,
+    media_score_rows,
+)
 from vtscore.state.core import get_active_context
 
 DIM = 8
+GRID = 2  # 2x2 patch grid -> 1 + 4 = 5 score rows per media
 
 
-def _region(rng: np.random.Generator, ri: int) -> RegionVector:
-    """A RegionVector with a deterministic L2-normalised vector."""
-    vec = rng.standard_normal(DIM).astype(np.float32)
-    vec /= np.linalg.norm(vec) + 1e-8
-    return RegionVector(box=(0.0, 0.0, ri / 10.0 + 0.1, 1.0), vec=vec)
+def _unit(vec: np.ndarray) -> np.ndarray:
+    return vec / (np.linalg.norm(vec, axis=-1, keepdims=True) + 1e-8)
 
 
-def _region_media(media_id: int, n_regions: int) -> dict:
+def _grid_media(media_id: int, *, with_grid: bool = True) -> dict:
+    """A synthetic patch media: CLS vector + (optionally) a raw ``patch_grid``."""
     rng = np.random.default_rng(media_id)
-    regions = [_region(rng, ri) for ri in range(n_regions)]
-    return {
+    media = {
         "id": media_id,
         "media_type": "image",
         "embedder": "dinov3_patch",
-        # Image-level embedding is the fallback row for region-less media.
-        "embeddings": {"dinov3_patch": rng.standard_normal(DIM).astype(np.float32)},
-        "patch_regions": regions,
+        # The image-level vector is row 0 of the score stack (and the only row
+        # for a grid-less media).
+        "embeddings": {"dinov3_patch": _unit(rng.standard_normal(DIM).astype(np.float32))},
     }
+    if with_grid:
+        media["patch_grid"] = _unit(rng.standard_normal((GRID, GRID, DIM)).astype(np.float32)).astype(np.float16)
+    return media
 
 
 def _linear_model() -> nn.Module:
@@ -55,13 +61,36 @@ def _linear_model() -> nn.Module:
     return nn.Sequential(nn.Linear(DIM, 1)).eval()
 
 
+class TestScoreRowLayout:
+    def test_row_zero_is_the_image_vector_then_patches_row_major(self):
+        media = _grid_media(1)
+        rows = media_score_rows(media, "dinov3_patch")
+        assert rows is not None
+        assert rows.shape == (1 + GRID * GRID, DIM)
+        np.testing.assert_allclose(rows[0], media["embeddings"]["dinov3_patch"], rtol=1e-3)
+        flat = np.asarray(media["patch_grid"], dtype=np.float32).reshape(-1, DIM)
+        np.testing.assert_allclose(rows[1:], flat, rtol=1e-3)
+
+    def test_row_boxes_invert_the_layout(self):
+        media = _grid_media(1)
+        # Row 0 covers the whole image; rows 1.. are the grid cells row-major.
+        assert media_row_box(media, 0) == [0.0, 0.0, 1.0, 1.0]
+        assert media_row_box(media, 1) == [0.0, 0.0, 0.5, 0.5]
+        assert media_row_box(media, 2) == [0.5, 0.0, 1.0, 0.5]
+        assert media_row_box(media, 3) == [0.0, 0.5, 0.5, 1.0]
+        assert media_row_box(media, 4) == [0.5, 0.5, 1.0, 1.0]
+        # Out of range clamps rather than raising; a grid-less media has no box.
+        assert media_row_box(media, 99) is None
+        assert media_row_box(_grid_media(2, with_grid=False), 0) is None
+
+
 class TestRegionMaxPool:
-    def test_scores_and_best_region_match_manual_pool(self):
-        # Media 1 & 2 carry regions; media 3 has none -> image-level fallback.
+    def test_scores_and_best_row_match_manual_pool(self):
+        # Media 1 & 2 carry grids; media 3 has none -> image-level fallback.
         clips = {
-            1: _region_media(1, 3),
-            2: _region_media(2, 4),
-            3: {**_region_media(3, 0), "patch_regions": []},
+            1: _grid_media(1),
+            2: _grid_media(2),
+            3: _grid_media(3, with_grid=False),
         }
         model = _linear_model()
 
@@ -71,51 +100,37 @@ class TestRegionMaxPool:
 
         # Recompute the expected per-media max-pool independently.
         for idx, cid in enumerate(all_ids):
-            regions = clips[cid]["patch_regions"]
-            if regions:
-                vecs = np.stack([r.vec for r in regions]).astype(np.float32)
-            else:
-                vecs = media_embedding(clips[cid])[None, :].astype(np.float32)
+            vecs = media_score_rows(clips[cid], "dinov3_patch")
             with torch.no_grad():
                 logits = model(torch.from_numpy(vecs)).squeeze(-1)
                 row_scores = torch.sigmoid(logits).numpy()
             expected_best = int(np.argmax(row_scores))
-            assert abs(scores[idx] - float(row_scores.max())) < 1e-6
+            assert abs(scores[idx] - float(row_scores.max())) < 1e-3
             assert best_region[idx] == expected_best
 
-        # The region-less media's winning region is always 0 (its single row).
+        # The grid-less media's winning row is always 0 (its single row).
         assert best_region[2] == 0
 
 
 class TestRegionMatrixFallbackSpace:
-    """A region-less media's fallback row must be the *patch*-space vector.
+    """A grid-less media's fallback row must be the *patch*-space vector.
 
     On a dataset that mixes patch-capable and patch-less media (e.g. two
     datasets combined, or a media type the patch embedder can't process),
-    the primary embedder can differ from the one that produced the region
-    vectors.  Stacking the primary vector alongside patch-space region rows
-    in the same matrix would silently score a region-less media in the wrong
+    the primary embedder can differ from the one that produced the patch
+    vectors.  Stacking the primary vector alongside patch-space rows
+    in the same matrix would silently score a grid-less media in the wrong
     space; the fallback must read the patch embedder's own vector instead.
     """
 
     def test_fallback_row_reads_patch_embedder_not_primary(self):
         rng = np.random.default_rng(0)
-        region_vec = rng.standard_normal(DIM).astype(np.float32)
-        region_vec /= np.linalg.norm(region_vec) + 1e-8
-        primary_vec = rng.standard_normal(DIM).astype(np.float32)
-        primary_vec /= np.linalg.norm(primary_vec) + 1e-8
-        patch_vec = rng.standard_normal(DIM).astype(np.float32)
-        patch_vec /= np.linalg.norm(patch_vec) + 1e-8
+        primary_vec = _unit(rng.standard_normal(DIM).astype(np.float32))
+        patch_vec = _unit(rng.standard_normal(DIM).astype(np.float32))
 
         clips = {
-            1: {
-                "id": 1,
-                "media_type": "image",
-                "embedder": "dinov3_patch",
-                "embeddings": {"dinov3_patch": rng.standard_normal(DIM).astype(np.float32)},
-                "patch_regions": [RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=region_vec)],
-            },
-            # Region-less media bound under a *different* primary embedder
+            1: _grid_media(1),
+            # Grid-less media bound under a *different* primary embedder
             # (e.g. text-capable), but also carries a vector for the patch
             # embedder - the mixed-media-type case.
             2: {
@@ -123,7 +138,6 @@ class TestRegionMatrixFallbackSpace:
                 "media_type": "image",
                 "embedder": "siglip",
                 "embeddings": {"siglip": primary_vec, "dinov3_patch": patch_vec},
-                "patch_regions": None,
             },
         }
 
@@ -131,31 +145,22 @@ class TestRegionMatrixFallbackSpace:
 
         # Media 2's single fallback row is its "dinov3_patch" vector, not its
         # "siglip" primary vector.
-        fallback_row = region_matrix[media_index.tolist().index(1)]
-        np.testing.assert_array_equal(fallback_row, patch_vec)
-        assert not np.array_equal(fallback_row, primary_vec)
+        fallback_row = np.asarray(region_matrix[media_index.tolist().index(1)], dtype=np.float32)
+        np.testing.assert_allclose(fallback_row, patch_vec, atol=1e-3)
+        assert not np.allclose(fallback_row, primary_vec, atol=1e-3)
 
     def test_fallback_row_missing_patch_vector_raises(self):
         rng = np.random.default_rng(1)
-        region_vec = rng.standard_normal(DIM).astype(np.float32)
-        region_vec /= np.linalg.norm(region_vec) + 1e-8
 
         clips = {
-            1: {
-                "id": 1,
-                "media_type": "image",
-                "embedder": "dinov3_patch",
-                "embeddings": {"dinov3_patch": rng.standard_normal(DIM).astype(np.float32)},
-                "patch_regions": [RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=region_vec)],
-            },
-            # Region-less media with no vector at all under the patch
+            1: _grid_media(1),
+            # Grid-less media with no vector at all under the patch
             # embedder - must raise loudly rather than mix in its primary.
             2: {
                 "id": 2,
                 "media_type": "video",
                 "embedder": "siglip",
-                "embeddings": {"siglip": rng.standard_normal(DIM).astype(np.float32)},
-                "patch_regions": None,
+                "embeddings": {"siglip": _unit(rng.standard_normal(DIM).astype(np.float32))},
             },
         }
 
@@ -171,21 +176,26 @@ class TestRegionMatrixFallbackSpace:
 class TestRegionMatrixCache:
     def test_matrix_cached_and_invalidated(self):
         ctx = get_active_context()
-        # Replace the active dataset's medias with region media so the snap
+        # Replace the active dataset's medias with patch media so the snap
         # key set matches the context (the condition for caching).
         ctx.medias.clear()
-        ctx.medias[1] = _region_media(1, 3)
-        ctx.medias[2] = _region_media(2, 2)
+        ctx.medias[1] = _grid_media(1)
+        ctx.medias[2] = _grid_media(2)
         invalidate_embedding_matrix(ctx)
 
         snap = dict(ctx.medias)
         ids1, matrix1, media_idx1, region_idx1 = get_region_matrix_for_snap(snap)
 
-        # 3 + 2 = 5 flattened rows, mapped back to media indices 0/1.
+        # (1 CLS + 4 patches) x 2 medias = 10 flattened rows, mapped back to
+        # media indices 0/1, each numbered 0..4 within its own stack.
+        rows_per_media = 1 + GRID * GRID
         assert ids1 == [1, 2]
-        assert matrix1.shape == (5, DIM)
-        assert media_idx1.tolist() == [0, 0, 0, 1, 1]
-        assert region_idx1.tolist() == [0, 1, 2, 0, 1]
+        assert matrix1.shape == (2 * rows_per_media, DIM)
+        # Kept float16 (the grid's own dtype): MaxPatch stacks ~8x the rows the
+        # HAC tree did, so upcasting here would multiply the resident bytes too.
+        assert matrix1.dtype == np.float16
+        assert media_idx1.tolist() == [0] * rows_per_media + [1] * rows_per_media
+        assert region_idx1.tolist() == list(range(rows_per_media)) * 2
 
         # Second call reuses the very same cached arrays (no rebuild).
         _ids2, matrix2, media_idx2, _region_idx2 = get_region_matrix_for_snap(dict(ctx.medias))

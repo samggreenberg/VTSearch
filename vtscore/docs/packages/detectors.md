@@ -168,8 +168,8 @@ The function is the per-vote hot path:
 - `_build_vote_tensors` (line 142) gathers training vectors from
   `good_votes` / `bad_votes`. When a vote on an image has a `region_box`
   and the source media has a stored `patch_grid`, the training vector
-  is pooled on the fly via
-  `vtscore.media.patch_embed.box_to_vote_vector` - image-level voting
+  is resolved on the fly via
+  `vtscore.media.patch_embed.nearest_patch_to_box` - image-level voting
   on a patch-aware media gets the same vector as in v1.
 - Where the mix-in schedule puts zero weight on the cross-cal cut (with
   the production schedule, at 6 labels or fewer) the cross-cal trainings

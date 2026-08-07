@@ -3,7 +3,7 @@
 Identical in spirit to the Max-Patch runner's ``_cells_io``: the demo *cache*
 pickle written by ``load_demo_dataset`` only round-trips each media type's
 ``pickle_extra_fields`` and silently drops the fields this experiment depends on
-(``patch_grid``, ``patch_regions``, ``regions``, multi-label ``categories``).  So
+(``patch_grid``, ``regions``, multi-label ``categories``).  So
 prepare serializes the *in-memory* medias dict directly, dropping only the two
 bulky raster fields the cell stage never reads.  The resulting pickles are
 byte-compatible with the Max-Patch runner's, so its ``visual_genome_m__*.pkl``

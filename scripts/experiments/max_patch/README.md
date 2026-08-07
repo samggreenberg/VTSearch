@@ -12,29 +12,36 @@ simulation via `simulate_voting_iterations(style=...)`.
 
 | Embedder | Styles |
 |---|---|
-| `dinov2_patch` | `max_hac`, `max_patch`, `whole_image` (CLS control) |
-| `dinov3_patch` | `max_hac`, `max_patch`, `whole_image` (CLS control) |
+| `dinov2_patch` | `max_patch`, `max_patch_hac`, `max_patch_pca_hac`, `whole_image` (CLS control) |
+| `dinov3_patch` | same |
 | `siglip` | `whole_image` (standard baseline) |
 
-- **max_hac** — production pipeline: Good region-votes snap to the nearest HAC
-  region-tree node, Bad votes flood the CLS + HAC leaves, images score by
-  max-pooling the MLP over all ~2K region nodes.
-- **max_patch** — no tree: Good region-votes train on the *single raw patch*
-  nearest the voted box, Bad votes flood *every* raw patch (bag-weighted so a
-  rejected image still counts once), images score by max-pooling the MLP over
-  all H×W raw patches.
+- **max_patch** — the production pipeline (adopted in #2886): Good region-votes
+  train on the *single raw patch* nearest the voted box, Bad votes flood the
+  image-level vector + *every* raw patch (bag-weighted so a rejected image still
+  counts once), images score by max-pooling the MLP over that same stack.
+- **max_patch_hac** / **max_patch_pca_hac** — raw-patch-leaf HAC trees: snap a
+  Good vote to the best-matching node, flood / max-pool every node. The PCA
+  variant only changes the merge *ordering*.
 - **whole_image** — single global vector for votes and scores.
+
+> **`max_hac` is no longer runnable.** The original study's production arm
+> (K-means-pooled HAC leaves, snap-to-node Good votes, CLS+leaf floods)
+> delegated to production code that #2886 deleted when it adopted MaxPatch, so
+> the arm was dropped from the grid rather than reimplemented. Its published
+> numbers are in `docs/experiments/max-patch/REPORT.md`, and `analyze.py` still
+> labels `max_hac` rows found in archived result CSVs.
 
 **Startup sort**: each cell's exemplar is a cropped positive (ground-truth box,
 pre-embedded at prepare time); its full-image embedding is scored against the
-dataset *in each style's own geometry* (whole-image cosine / max over region
-nodes / max over patches) and the Autopilot seed phase votes down that ranking.
+dataset *in each style's own geometry* (whole-image cosine / max over patches /
+max over tree nodes) and the Autopilot seed phase votes down that ranking.
 
 ## What each stage does
 
 | Stage | Script | Output |
 |---|---|---|
-| 0 · prepare | `prepare_data.py` | Per-(dataset, embedder) pickles under `$VTSEARCH_DATA_DIR/embeddings/<ds>__<emb>.pkl` (with `patch_grid`/`patch_regions` for the DINOs), exemplar-crop vectors under `results/crops/`, and `prepare_info.json` (counts, selected categories, embed timings). |
+| 0 · prepare | `prepare_data.py` | Per-(dataset, embedder) pickles under `$VTSEARCH_DATA_DIR/embeddings/<ds>__<emb>.pkl` (with `patch_grid` for the DINOs), exemplar-crop vectors under `results/crops/`, and `prepare_info.json` (counts, selected categories, embed timings). |
 | 1 · cells | `run_cells.py` | `results/cells/task_<i>.csv` — one SLURM-array task per `(dataset, embedder, category, seed)`, all styles inside. Per-step cost/FPR/FNR/AUROC/AP + train/score timings. |
 | 2 · report | `summarize.py` | `results/REPORT.md` + `results/figures/` (deterministic from the CSVs). |
 
@@ -90,7 +97,7 @@ object rather than a union over scattered instances.
 |---|---|---|
 | `MAXPATCH_DATASETS` | `visual_genome_m,openlogo_a,caltech101_m` | Demo datasets |
 | `MAXPATCH_EMBEDDERS` | `dinov2_patch,dinov3_patch,siglip` | Embedders |
-| `MAXPATCH_PATCH_STYLES` | `max_hac,max_patch,whole_image` | Styles run on patch embedders |
+| `MAXPATCH_PATCH_STYLES` | `max_patch,max_patch_hac,max_patch_pca_hac,whole_image` | Styles run on patch embedders |
 | `MAXPATCH_N_PER_BAND` | `6` | Categories per scale band (boxed datasets) |
 | `MAXPATCH_MAX_VOTED_AREA` | `0.80` | Drop categories whose median voted box exceeds this |
 | `MAXPATCH_N_CATEGORIES` | `6` | Categories for **boxless** datasets (spanning common→rare) |

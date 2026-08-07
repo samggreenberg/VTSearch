@@ -146,33 +146,55 @@ Each media type uses a different pretrained model to produce fixed-size embeddin
 
 Each embedder lives in its own `embedder_<name>.py` file inside the media-type package and exposes a module-level `EMBEDDER` sentinel; the default for a given media type is whichever embedder overrides `is_default` to return `True` (exactly one per media type).
 
-Audio, image, and text media types each ship alternative embedders alongside the default. The image variants come in **single/patch pairs**: `_single` embedders produce one CLS-pooled vector per image (cheap, same shape as SigLIP); `_patch` embedders additionally produce a hierarchical HAC region tree (~24 region vectors per image) and the raw patch grid, enabling region-level similarity, region-aware detector scoring, and region voting on yes-votes.  See [`docs/plans/patch-embedder.md`](plans/patch-embedder.md) for the full design.
+Audio, image, and text media types each ship alternative embedders alongside the default. The image variants come in **single/patch pairs**: `_single` embedders produce one CLS-pooled vector per image (cheap, same shape as SigLIP); `_patch` embedders additionally produce the raw `H × W × D` patch grid (196 vectors on a DINOv3 14×14), enabling region-level similarity, region-aware detector scoring, and region voting on yes-votes.  See [`docs/plans/patch-embedder.md`](plans/patch-embedder.md) for the full design.
 
 Embedders carry capability flags consumed by the routes layer and the frontend:
 
 - `supports_text: bool`: whether the embedder can embed text queries. Text-sort returns HTTP 400 + `supports_text: false` when this is false.
-- `supports_patch_regions: bool`: set on the `_patch` variants. Loaders that see this flag populate `media["patch_regions"]` (HAC tree) and `media["patch_grid"]` (raw `H × W × D` fp16) in addition to the embedder's vector in `media["embeddings"]`.
+- `supports_patch_regions: bool`: set on the `_patch` variants. Loaders that see this flag populate `media["patch_grid"]` (raw `H × W × D` fp16) in addition to the embedder's vector in `media["embeddings"]`.
 - `license_notice: Optional[str]`: non-None for embedders with usage restrictions (e.g. EUPE's FAIR Noncommercial Research Licence). Surfaced as a warning chip on the embedder picker.
 
 The **document** media type has no embedding model of its own. Documents (PDF, DOC, PPT) are intended to be converted to other media types (images or text) via media converters in `vtscore/converters/` before embedding.
 
-Embeddings are computed once when a dataset is loaded. The full-image vector lands in each clip's `"embeddings"` dict, keyed by embedder name (`numpy.ndarray` values; read it through the `media_embedding` accessor); patch embedders additionally populate `"patch_regions"` (list of `RegionVector`s, fp16-on-disk / fp32-in-RAM) and `"patch_grid"` (`H × W × D` ndarray, fp16). The detector head trains on these pre-computed vectors, so training is fast (typically < 1 second for 200 epochs on a few hundred labeled examples).
+Embeddings are computed once when a dataset is loaded. The full-image vector lands in each clip's `"embeddings"` dict, keyed by embedder name (`numpy.ndarray` values; read it through the `media_embedding` accessor); patch embedders additionally populate `"patch_grid"` (`H × W × D` fp16 ndarray, re-derived at load — never persisted). The detector head trains on these pre-computed vectors, so training is fast (typically < 1 second for 200 epochs on a few hundred labeled examples).
 
-### Region-aware training on patch-region datasets
+### Region-aware training on patch datasets
 
-Inference max-pools the head over each image's `patch_regions` (an image scores by its **best** region — see `score_media`). Training is shaped to match that scorer, and it is deliberately asymmetric between Good and Bad votes — the multiple-instance-learning treatment of a max-pool bag:
+Every patch media has one **score-row stack** — `media_score_rows` in `vtscore/embedding/matrix.py` — and it is the single definition of the geometry:
 
-- **Good vote** — a positive bag needs only *one* good region, and the user tells us which via an optional `region_box` (drawn by Shift-drag on the focus pane). The box is **snapped to the nearest `patch_regions` node** (max box-IoU, `snap_box_to_region`), so the positive is one of the exact candidates the max-pool will score — not a fresh uniform pool that matches no node. A Good vote with no box falls back to the full-image CLS node.
-- **Bad vote** — a negative bag asserts that *no* region is good, so a Bad vote **floods the image's CLS + HAC-leaf nodes** (the disjoint covering set) as negatives. This trains every leaf down, so the max-pool can't surface a look-alike sub-region of a rejected image.
+| row | vector | box |
+|---|---|---|
+| `0` | the image-level (CLS) vector | whole image |
+| `1 .. H·W` | every raw patch, row-major (`1 + r·W + c` is grid cell `(r, c)`) | that one cell |
 
-  **The internal HAC nodes are scored but never flooded**, and that gap is a measured exception rather than a redundancy claim. `build_hac_tree` renormalises each merged vector (`_l2_normalize(sum_a + sum_b)`), so an internal node is the convex-hull point of its descendants *projected back onto the unit sphere* — a ~1.53× gain on real trees. Under the linear head that scales the logit by the same factor, so an internal node out-scores every one of its own leaves on ~4.7% of node/direction pairs: training the leaves down does **not** pull the internal down with them. Flooding internals anyway was A/B'd over 24 synthetic patch detectors (`scripts/probe_hac_internal_flood.py`) and it *hurts* — paired AP −0.058 ± 0.036 (95% CI, excludes zero; leaves-only wins 19/24 seeds), FPR +0.037 ± 0.045 and FNR −0.010 ± 0.049 both straddling zero. It does close part of the gap (negatives whose winning row is an internal node: 4.6% → 2.7%), but suppressing a rejected image's renormalised mean directions also suppresses the geometry a *positive* image's concept-blob internal lives in, and that costs more than it buys. So the flood stays leaves-only, with the gap pinned by tests rather than papered over (see #2731).
+Inference max-pools the head over that stack (an image scores by its **best** row — see `score_media`). Training is shaped to match, and it is deliberately asymmetric between Good and Bad votes — the multiple-instance-learning treatment of a max-pool bag:
 
-Because flooding turns one Bad vote into many correlated leaf rows, class balance and calibration are **per-bag, not per-row**:
+- **Good vote** — a positive bag needs only *one* good region, and the user tells us which via an optional `region_box` (drawn by Shift-drag on the focus pane). The vote trains on **the raw patch nearest the box** (`nearest_patch_to_box`), which is by construction one of the rows the max-pool will score. A Good vote with no box falls back to the image-level vector — row 0 of the same stack.
+- **Bad vote** — a negative bag asserts that *no* region is good, so a Bad vote **floods the entire stack** (image-level vector + every raw patch) as negatives. This trains every row down, so the max-pool can't surface a look-alike sub-region of a rejected image.
 
-- The final fit is `train_model(..., sample_weights=...)` where each Bad image's leaves share one image's worth of negative mass (`_per_bag_fit_weights`), so a rejected image counts once regardless of leaf count. Good votes weigh `n_bad_bags / n_good`, matching the default inverse-frequency balance but with the *bag* as the unit.
-- Cross-calibration (`compute_fold_orderings(groups=...)`) splits Train/Calibrate **by bag** (a Bad image's leaves never straddle the boundary), sizes fold counts over votes not rows, weights fold fits per-bag, and **max-pools each calibration group to one score** — so the threshold is placed on the per-image score scale the detector actually deploys. Hidden-layer width and the fallback blend's ramp likewise size on vote count.
+**The invariant tying the two together: every vector a vote can train on must also be a row that is scored.** Both bullets above call the same `media_score_rows`, so it holds by construction rather than by two implementations agreeing. It is not cosmetic — an early MaxPatch prototype scored raw patches only, so a *boxless* Good vote trained on the image-level vector, a vector nothing ever scored. The classifier learned to separate "full-image-like" from "raw-patch-like" (every Bad vote floods raw patches), and the calibrated threshold landed in a gap the score distribution never reaches: perfect ranking, zero FPR, catastrophic FNR.
 
-Flooding applies only where scoring is region-aware max-pool: the Learned-sort vote path (`train_and_score`) and the saved-detector labelset path (`labelset_train_and_score` / `train_from_labelset`). Paths that score each image by a single vector — Find cold-detector scoring, label-file sort — score image-level and are intentionally *not* flooded (flooding leaf negatives while scoring one image vector would be a train/score space mismatch). On any dataset whose embedder produces no regions, every bag holds one row and the whole path collapses byte-for-byte to the historical single-vector BCE — fully backward-compatible.
+This geometry (**MaxPatch**) replaced a HAC region tree in #2886. The old pipeline pooled patches into ~12 saliency-weighted k-means leaves, merged them into a 24-node binary tree, snapped Good votes to the best-IoU node, and flooded only the childless nodes. Over 23 scale-band Visual Genome categories × 3 seeds, tree-free MaxPatch beat it on ErrorCost by a paired Δ = −0.064 (Holm p = 0.002) and was best-or-tied-best in *every* scale band, on both halves of the error; the edge is largest on small objects, where a raw patch is a near-pure object sample while the tree's smallest pooled leaf already blends object with context. Dropping the tree also removed the #2731 flood/score gap (internal HAC nodes were scored but never flooded, because renormalised merge vectors are not dominated by their own leaves) — MaxPatch has no internals, so the exception is gone rather than inherited. Ingest gets cheaper and the payload gets *smaller*: the grid was already stored alongside the tree. See [`docs/experiments/max-patch/REPORT.md`](experiments/max-patch/REPORT.md).
+
+**Measured cost of the swap** (DINOv3 14×14, D = 768, CPU):
+
+| | MaxHAC (before) | MaxPatch (now) |
+|---|---|---|
+| ingest, per image | 2.52 ms (k-means leaves + O(k³) merges + fp16 cast) | 0.46 ms (fp16 cast only) |
+| scored rows per image | 24 | 197 |
+| flattened score matrix, per 10k images | ~740 MB float32 | ~3.0 GB float16 |
+| scoring forward pass, per image | ~13 µs | ~110 µs |
+
+So ingest gets ~2 ms/image cheaper (≈21 s per 10k images) and the stored payload gets *smaller* — the grid was already being pickled alongside the tree, so the tree's ~150 MB per 10k images is pure saving. Scoring is where the cost went: ~8× the rows, and a retrain runs three scoring passes (the final model plus one per calibration fold), so a 10k-image collection pays roughly 3 s per vote instead of 0.4 s.
+
+Two things keep that bounded. The flattened matrix is kept **float16** (the grid's own dtype) and upcast chunk-wise by both consumers (`_forward_sigmoid_chunked`, `chunked_row_scores`), so peak float32 memory is `ROW_CHUNK × D × 4` regardless of dataset size; and `_build_region_arrays` allocates the matrix once and fills it in place rather than concatenating per-media blocks, which would hold 2× the matrix at peak. The matrix itself is cached on the `DatasetContext` and rebuilt only when the media-id set changes — never per vote.
+
+Because flooding turns one Bad vote into ~197 correlated rows, class balance and calibration are **per-bag, not per-row**:
+
+- The final fit is `train_model(..., sample_weights=...)` where each Bad image's rows share one image's worth of negative mass (`_per_bag_fit_weights`), so a rejected image counts once regardless of row count. Good votes weigh `n_bad_bags / n_good`, matching the default inverse-frequency balance but with the *bag* as the unit.
+- Cross-calibration (`compute_fold_orderings(groups=...)`) splits Train/Calibrate **by bag** (a Bad image's rows never straddle the boundary), sizes fold counts over votes not rows, weights fold fits per-bag, and **max-pools each calibration group to one score** — so the threshold is placed on the per-image score scale the detector actually deploys. Hidden-layer width and the fallback blend's ramp likewise size on vote count.
+
+Flooding applies only where scoring is region-aware max-pool: the Learned-sort vote path (`train_and_score`) and the saved-detector labelset path (`labelset_train_and_score` / `train_from_labelset`). Paths that score each image by a single vector — Find cold-detector scoring, label-file sort — score image-level and are intentionally *not* flooded (flooding patch negatives while scoring one image vector would be a train/score space mismatch). On any dataset whose embedder produces no patch grid, every bag holds one row and the whole path collapses byte-for-byte to the historical single-vector BCE — fully backward-compatible.
 
 ## Coverage Atlas
 
