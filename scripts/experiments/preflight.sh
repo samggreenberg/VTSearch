@@ -20,17 +20,23 @@ ARMS=""
 NEED_GB="${PREFLIGHT_NEED_GB:-5}"
 WARN_ONLY=0
 REPO="${VTS_REPO:-}"
+REGION_ARM=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --exp) EXP="$2"; shift 2 ;;
     --arms) ARMS="$2"; shift 2 ;;
     --need-gb) NEED_GB="$2"; shift 2 ;;
+    --require-region-voting) REGION_ARM="$2"; shift 2 ;;
     --warn-only) WARN_ONLY=1; shift ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
 done
-[[ -n "$EXP" ]] || { echo "usage: preflight.sh --exp DIR [--arms a,b,c] [--need-gb N]" >&2; exit 2; }
+[[ -n "$EXP" ]] || {
+  echo "usage: preflight.sh --exp DIR [--arms a,b,c] [--need-gb N]" >&2
+  echo "                    [--require-region-voting DATASET:EMBEDDER]" >&2
+  exit 2
+}
 
 FAILED=0
 say_fail() {
@@ -45,20 +51,28 @@ echo "preflight: $EXP"
 # grid's cells as "this arm is already complete" and aborted a whole overnight
 # batch; had it not aborted, two different grids would have been silently mixed
 # in one directory and analysed as one.
+#
+# Arm roots differ by study: the A/B launchers put arms under `results-ab/`, the
+# acquisition and anchor sweeps under `results/`.  Checking only the first meant
+# this check silently passed — did nothing at all — for every study of the second
+# shape, which is the worse failure of the two: a gate that reports "ok" without
+# having looked.
 if [[ -n "$ARMS" ]]; then
   for arm in ${ARMS//,/ }; do
-    cells="$EXP/results-ab/$arm/cells"
-    if [[ -d "$cells" ]]; then
+    seen=0
+    for root in results-ab results; do
+      cells="$EXP/$root/$arm/cells"
+      [[ -d "$cells" ]] || continue
+      seen=1
       n=$(find "$cells" -name 'task_*.csv' ! -name '*sweep*' 2>/dev/null | wc -l)
       if [[ "$n" -gt 0 ]]; then
         say_fail "arm '$arm' already has $n cell files in $cells"
         echo "        -> a fresh study needs its own --exp dir; a resume should pass --warn-only"
       else
-        say_ok "arm '$arm' results dir is empty"
+        say_ok "arm '$arm' results dir is empty ($root/)"
       fi
-    else
-      say_ok "arm '$arm' results dir is new"
-    fi
+    done
+    [[ "$seen" == "1" ]] || say_ok "arm '$arm' results dir is new"
   done
 fi
 
@@ -93,8 +107,10 @@ fi
 # A cell killed mid-write leaves a 0-byte CSV.  It counts as "present" to the
 # resume logic, so it is never re-run, and it crashes or silently shrinks the
 # analysis later.
-if [[ -d "$EXP/results-ab" ]]; then
-  z=$(find "$EXP/results-ab" -name 'task_*.csv' ! -name '*sweep*' -size 0 2>/dev/null | wc -l)
+ZROOTS=()
+for root in results-ab results; do [[ -d "$EXP/$root" ]] && ZROOTS+=("$EXP/$root"); done
+if [[ "${#ZROOTS[@]}" -gt 0 ]]; then
+  z=$(find "${ZROOTS[@]}" -name 'task_*.csv' ! -name '*sweep*' -size 0 2>/dev/null | wc -l)
   if [[ "$z" -gt 0 ]]; then
     say_fail "$z zero-byte cell files present - delete them or they will never be re-run"
   else
@@ -158,6 +174,52 @@ PY
         echo "        -> that is NOT $REPO_REAL; the jobs would measure another checkout"
         echo "        -> source this worktree's gridenv.sh (it creates .shadow and pins VTS_REPO)"
         ;;
+    esac
+  fi
+fi
+
+# --- 6. The environment's PREMISE, not the flag that requests it -------------
+# #2877 ran a whole study on `visual_genome_m x siglip` believing it was region
+# voting.  It was not: `region_voting=True` is a *request*, and the harness
+# silently falls back to whole-image training, whole-image scoring and the
+# binary blend schedule when the medias carry no `patch_grid`.  Nothing was
+# broken, so nothing complained; a report, a PR and a headline recommendation
+# had to be corrected.  A flag you passed is not a property you got.
+#
+# Opt-in, because most studies do not claim region voting — but any study whose
+# *rationale* rests on the scoring geometry ("a max over region nodes") should
+# pass it.  One pickle open, and it either holds or it does not.
+if [[ -n "$REGION_ARM" ]]; then
+  ds="${REGION_ARM%%:*}"; emb="${REGION_ARM##*:}"
+  if [[ -z "$ds" || -z "$emb" || "$ds" == "$REGION_ARM" ]]; then
+    say_fail "--require-region-voting wants DATASET:EMBEDDER, got '$REGION_ARM'"
+  else
+    VERDICT=$(CALIB_EXP="$EXP" python - "$REPO" "$ds" "$emb" <<'PY' 2>&1
+import pathlib, sys
+repo, ds, emb = sys.argv[1], sys.argv[2], sys.argv[3]
+sys.path.insert(0, str(pathlib.Path(repo) / "scripts" / "experiments" / "calibration"))
+import common
+common.setup_env()
+from _cells_io import load_medias
+from vtscore.datasets import loader as _loader
+
+pkl = _loader.EMBEDDINGS_DIR / f"{ds}__{emb}.pkl"
+if not pkl.exists():
+    print(f"MISSING {pkl}")
+    raise SystemExit(0)
+medias = load_medias(pkl)
+n = len(medias)
+grid = sum(1 for m in medias.values() if m.get("patch_grid") is not None)
+print(("HOLDS" if grid == n and n else "FAILS") + f" patch_grid={grid}/{n} {pkl}")
+PY
+)
+    case "$VERDICT" in
+      HOLDS*) say_ok "region-voting premise ${ds} x ${emb}: ${VERDICT#HOLDS }" ;;
+      FAILS*)
+        say_fail "region-voting premise ${ds} x ${emb} does NOT hold: ${VERDICT#FAILS }"
+        echo "        -> region_voting=True would silently run BINARY voting here (see #2877)"
+        ;;
+      *) say_fail "could not check the region-voting premise: $VERDICT" ;;
     esac
   fi
 fi
