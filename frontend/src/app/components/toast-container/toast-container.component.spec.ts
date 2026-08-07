@@ -96,6 +96,70 @@ describe('ToastContainerComponent', () => {
       expect(line().textContent).toContain('4');
     });
 
+    it('drains a progress bar alongside the seconds', async () => {
+      vi.useFakeTimers();
+      toast.success({
+        message: 'Done!',
+        countdown: { label: 'Leaving in', seconds: 4, onExpire: () => {} },
+      });
+      TestBed.tick();
+
+      const bar = () => fixture.nativeElement.querySelector('.toast__countdown-bar');
+      expect(bar().style.width).toBe('100%');
+
+      await vi.advanceTimersByTimeAsync(1000);
+      TestBed.tick();
+      expect(bar().style.width).toBe('75%');
+    });
+
+    it('marks a countdown toast so it can be styled more loudly', async () => {
+      vi.useFakeTimers();
+      toast.success({ message: 'Just news' });
+      toast.success({
+        message: 'Done!',
+        countdown: { label: 'Leaving in', seconds: 4, onExpire: () => {} },
+      });
+      TestBed.tick();
+
+      const toastEls = fixture.nativeElement.querySelectorAll('.toast');
+      expect(toastEls[0].classList).not.toContain('toast--countdown');
+      expect(toastEls[1].classList).toContain('toast--countdown');
+    });
+
+    it('cancelCountdown keeps the message but drops the timer and the escape', async () => {
+      vi.useFakeTimers();
+      const onExpire = vi.fn();
+      const id = toast.success({
+        message: 'Done!',
+        detail: 'original detail',
+        countdown: { label: 'Leaving in', seconds: 5, onExpire },
+        action: { label: 'Stay here', onClick: () => {} },
+      });
+      TestBed.tick();
+
+      toast.cancelCountdown(id, 'Staying put.');
+      TestBed.tick();
+
+      expect(fixture.nativeElement.querySelector('.toast__countdown')).toBeNull();
+      expect(fixture.nativeElement.querySelector('.toast__btn--primary')).toBeNull();
+      expect(fixture.nativeElement.querySelector('.toast__title').textContent).toContain('Done!');
+      expect(fixture.nativeElement.querySelector('.toast__detail').textContent).toContain('Staying put.');
+
+      // The pending action never runs, and the toast falls back to the normal
+      // success auto-dismiss rather than lingering forever.
+      await vi.advanceTimersByTimeAsync(10_000);
+      TestBed.tick();
+      expect(onExpire).not.toHaveBeenCalled();
+      expect(fixture.nativeElement.querySelector('.toast')).toBeNull();
+    });
+
+    it('cancelCountdown is a no-op for a toast that has no countdown', () => {
+      vi.useFakeTimers();
+      const id = toast.success({ message: 'Just news' });
+      toast.cancelCountdown(id, 'ignored');
+      expect(toast.toasts[0].detail).toBeUndefined();
+    });
+
     it('runs the expiry handler once the countdown empties, then drops the toast', async () => {
       vi.useFakeTimers();
       const onExpire = vi.fn();

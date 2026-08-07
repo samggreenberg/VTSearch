@@ -41,11 +41,24 @@ export interface StepDisplay {
 }
 
 /**
- * Seconds the completion toast counts down before returning the user to the
- * Dashboard. Long enough to read the headline and reach the "Stay here"
- * button, short enough that a user who is done doesn't sit waiting.
+ * Seconds the completion toast counts down before returning an *idle* user to
+ * the Dashboard. Long enough to notice the toast, read it, and reach the "Stay
+ * here" button while looking somewhere else on the page; short enough that a
+ * user who is genuinely finished doesn't sit waiting.
+ *
+ * The countdown only ever runs while the user is idle (see
+ * ``armInteractionCancel``), so erring long costs nothing: the moment they do
+ * anything, the return is called off regardless of how much time was left.
  */
-const RETURN_COUNTDOWN_SECONDS = 5;
+const RETURN_COUNTDOWN_SECONDS = 10;
+
+/**
+ * Replaces the toast's detail line once user interaction calls off the pending
+ * auto-return, so the toast the user is looking at states plainly that it is no
+ * longer going to move them.
+ */
+const RETURN_CANCELLED_NOTE =
+  'Staying here — export your detector or keep labeling. Head back to the Dashboard whenever you like.';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -85,10 +98,12 @@ export class AutopilotPanelComponent implements OnInit, OnDestroy {
   readonly toggleCollapse = output<void>();
   readonly refocus = output<void>();
 
-  private completionAlerted = false;
   /** Id of the live completion toast, or ``null`` when none is showing. Kept
    *  so leaving the Train window cancels the pending auto-return. */
   private completionToastId: number | null = null;
+  /** Tears down the document-level interaction listeners that call off a
+   *  pending auto-return, or ``null`` when none are armed. */
+  private disarmInteraction: (() => void) | null = null;
 
   constructor() {
     // Signal inputs don't fire ``ngOnChanges``; this effect replaces the old
@@ -110,7 +125,7 @@ export class AutopilotPanelComponent implements OnInit, OnDestroy {
       const prevPhase = this.autopilotState.state.phase;
       this.autopilotState.checkPhaseTransition(goodVotes.size, badVotes.size, datasetSize);
       const phase = this.autopilotState.state.phase;
-      if (prevPhase !== phase && !this.completionAlerted) {
+      if (prevPhase !== phase && !this.autopilotState.completionAlreadyAnnounced) {
         if (phase === 'done') {
           this.announceCompletion('Done! Your detector is trained.');
         } else if (phase === 'exhausted') {
@@ -199,10 +214,15 @@ export class AutopilotPanelComponent implements OnInit, OnDestroy {
    * A bare "Done!" leaves the user parked in the Train window with no next
    * step, so the toast says where they are being taken and when — and carries
    * a "Stay here" button for the user who wants to keep labeling instead.
-   * Dismissing the toast by any means cancels the return.
+   * Dismissing the toast by any means cancels the return, as does touching
+   * anything else on the page (see ``armInteractionCancel``).
+   *
+   * The offer is made once per autopilot run: the "already announced" flag
+   * lives on ``AutopilotStateService``, so returning to the Train window does
+   * not re-arm a countdown the user has already escaped.
    */
   private announceCompletion(message: string, detail?: string): void {
-    this.completionAlerted = true;
+    this.autopilotState.markCompletionAnnounced();
     this.completionToastId = this.toastService.success({
       message,
       detail,
@@ -215,20 +235,71 @@ export class AutopilotPanelComponent implements OnInit, OnDestroy {
         label: 'Stay here',
         title: 'Stay in the Train window and keep labeling',
         onClick: () => {
+          this.disarmInteractionCancel();
           this.completionToastId = null;
         },
       },
     });
+    this.armInteractionCancel();
+  }
+
+  /**
+   * Make the pending auto-return conditional on the user staying idle.
+   *
+   * Training finishing is not the same thing as the *user* being finished:
+   * someone who goes straight on to export their detector is mid-task, and
+   * navigating out from under them reads as the export being broken rather
+   * than as a redirect they missed. So the countdown only survives while
+   * nothing else is happening — the first click or keystroke anywhere outside
+   * the toast itself calls the return off for good.
+   *
+   * Events from inside the toast stack are excluded so the toast's own "Stay
+   * here" and dismiss buttons keep working normally: cancelling on their
+   * ``pointerdown`` would pull them out of the DOM before the click landed.
+   */
+  private armInteractionCancel(): void {
+    this.disarmInteractionCancel();
+    const onInteract = (ev: Event): void => {
+      const target = ev.target;
+      if (target instanceof Element && target.closest('.toast-stack')) return;
+      this.cancelReturnOnInteraction();
+    };
+    document.addEventListener('pointerdown', onInteract, true);
+    document.addEventListener('keydown', onInteract, true);
+    this.disarmInteraction = () => {
+      document.removeEventListener('pointerdown', onInteract, true);
+      document.removeEventListener('keydown', onInteract, true);
+    };
+  }
+
+  private disarmInteractionCancel(): void {
+    this.disarmInteraction?.();
+    this.disarmInteraction = null;
+  }
+
+  /**
+   * Drop the pending return but keep the toast: the user who just clicked
+   * something may never have read the "Done!" headline, and silently removing
+   * it would lose the one piece of news worth telling them.
+   */
+  private cancelReturnOnInteraction(): void {
+    const id = this.completionToastId;
+    this.disarmInteractionCancel();
+    this.completionToastId = null;
+    if (id === null) return;
+    this.toastService.cancelCountdown(id, RETURN_CANCELLED_NOTE);
   }
 
   private returnToDashboard(): void {
     // Cleared first so the ``ngOnDestroy`` that the navigation triggers does
     // not try to dismiss an already-dismissed toast.
     this.completionToastId = null;
+    this.disarmInteractionCancel();
     void this.router.navigate(['/dashboard']);
   }
 
   private cancelCompletionToast(): void {
+    this.disarmInteractionCancel();
     if (this.completionToastId === null) return;
     this.toastService.dismiss(this.completionToastId);
     this.completionToastId = null;
@@ -236,7 +307,6 @@ export class AutopilotPanelComponent implements OnInit, OnDestroy {
 
   activate(): void {
     if (this.running) return;
-    this.completionAlerted = false;
     this.cancelCompletionToast();
     // Retrain mode: the detector already has good+bad labels (carried over
     // from a previous dataset), so learned sort is available immediately and

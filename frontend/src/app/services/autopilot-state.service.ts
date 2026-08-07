@@ -39,6 +39,19 @@ export class AutopilotStateService {
 
   readonly state$ = this.stateSubject.asObservable();
 
+  /**
+   * Whether the terminal-phase hand-off (the "Done!" toast and its auto-return
+   * countdown) has already fired for the current autopilot run.
+   *
+   * This lives on the service rather than on the panel component on purpose:
+   * the panel is destroyed and rebuilt every time the user leaves and re-enters
+   * the Train window, so a component-scoped flag re-arms the countdown on each
+   * return and keeps yanking a user who has come back precisely because they
+   * wanted to stay. The hand-off is offered once per run; declining it (or
+   * simply coming back) is final.
+   */
+  private completionAnnounced = false;
+
   get state(): AutopilotState {
     return this.stateSubject.value;
   }
@@ -47,8 +60,19 @@ export class AutopilotStateService {
     return this.stateSubject.value.phase !== 'idle';
   }
 
+  /** See {@link completionAnnounced}. */
+  get completionAlreadyAnnounced(): boolean {
+    return this.completionAnnounced;
+  }
+
+  /** Record that the completion hand-off has been offered for this run. */
+  markCompletionAnnounced(): void {
+    this.completionAnnounced = true;
+  }
+
   activate(retrainMode = false): void {
     if (this.running) return;
+    this.completionAnnounced = false;
     this.stateSubject.next({
       ...this.stateSubject.value,
       phase: 'good',
@@ -142,6 +166,7 @@ export class AutopilotStateService {
   }
 
   clear(): void {
+    this.completionAnnounced = false;
     this.stateSubject.next({ ...INITIAL_STATE });
   }
 }
