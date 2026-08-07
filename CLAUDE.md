@@ -161,6 +161,25 @@ The single exception is **dataset pickle files**, which are by design a snapshot
 
 If a feature seems to require persisting a vector or MLP, push back: either re-derive on demand, or change the design.
 
+## The Eval Default Arm IS the App (CRITICAL)
+
+`vtscore.eval` exists to measure **deviations** from the shipped algorithm. That only means something if its **default arm** *is* the shipped algorithm. When the app's algorithm moves and the harness doesn't, every experiment run after that point is measuring a detector nobody uses — and the damage is silent and retroactive, because the numbers still look fine. So: **an app-side algorithm change is not finished until the eval framework has caught up.**
+
+Most of the harness is safe by construction because it **delegates** — `MaxPatchStyle` calls `pool_box_from_media` / `bad_negative_vecs` / `media_score_rows` rather than re-deriving them, so it cannot drift. Prefer delegation over copying every time; it is the only fix that can't rot. Two kinds of code can't delegate, and those are the ones that bite:
+
+- **Ported** — app logic re-implemented in the harness because the original is unreachable (it lives in TypeScript) or unusable (wrapped in interactive, lock-guarded, single-detector caches). `vtscore/eval/autopilot_flow.py` is the whole of this category today.
+- **Default resolution** — where the harness resolves "no explicit arm" to whatever the app currently defaults to (`style=None` → `max_patch` on a patch dataset; `blend_schedule=None` → `production_schedule_for(...)`). When the app's default changes, the harness keeps handing out the old one *under the name "default"*.
+
+**The gate:** `scripts/check-eval-app-sync.py` pins a digest of every mirrored app surface (Python and TypeScript), and `./run-tests.sh` fails when one moves. It tells you which harness code to reconcile. After reconciling — or after confirming nothing is owed — re-pin:
+
+```
+python scripts/check-eval-app-sync.py --update
+```
+
+Digests ignore comments, docstrings, and formatting, so only real logic changes trip it. **Re-pinning without looking at the harness defeats the entire gate**; the digest is a prompt to check, not a checkbox.
+
+**When you add a new mirror** (any new place the harness copies app logic or tracks an app default), add a `Mirror(...)` entry to `MIRRORS` in that script and run `--update`. If the harness *intentionally* differs from the app at that point, put the reason in `divergence=` — the text is printed whenever that mirror trips, so the next person reconciling it knows which differences are deliberate. Named experiment arms (`whole_image`, `max_patch_hac`, …) are supposed to differ and are out of scope; this rule is about the **default** arm only.
+
 ## Fix All Errors (CRITICAL)
 
 When you run a build, typecheck, linter, or test suite, **fix every error and failure you see; not only the ones you introduced**. Do not dismiss errors as "pre-existing", "unrelated to my change", or "not my fault" and move on. Do not announce them and ask the user to triage. The user does not want to scan your output for problems you decided to ignore.
@@ -210,6 +229,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **CLI autodetect**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json>`
 - **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json> --exporter server_json_file --filepath results.json`
 - **CLI autodetect + importer**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings <settings.json>`
+- **Check eval/app sync**: `python scripts/check-eval-app-sync.py` (also a `./run-tests.sh` gate; re-pin with `--update` after reconciling the harness)
 - **Install deps**: `bash scripts/install.sh` (auto-detects CPU vs GPU; pass `cpu`/`gpu` to force, or a `cuXYZ` tag to override the GPU wheel, e.g. `bash scripts/install.sh cu121`)
 - **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
 - **Frontend dev server**: `cd frontend && npm start` (proxies `/api/*` to Flask at localhost:5000)

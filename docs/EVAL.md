@@ -2,6 +2,8 @@
 
 VTSearch includes a built-in evaluation framework that measures how well its sorting methods work on demo datasets. This guide covers how to run evaluations, write custom eval scripts, and interpret the results.
 
+> **The default arm is the shipped algorithm.** Every experiment here is a measured *deviation* from what the app does, which only means something if the un-deviated arm matches the app. Where the harness can't call app code directly it copies it, and those copies are pinned by `scripts/check-eval-app-sync.py` — a `./run-tests.sh` gate that fails when an app-side surface moves. See [The Eval Default Arm IS the App](#the-eval-default-arm-is-the-app) below.
+
 ## Quick start
 
 Run the full evaluation across all demo datasets:
@@ -372,3 +374,44 @@ Both functions:
 - Create the output directory if it doesn't exist.
 - Return a list of `Path` objects pointing to the generated PNGs.
 - Skip chart types that don't apply (e.g., no learned-sort plots if only text-sort was run).
+
+## The Eval Default Arm IS the App
+
+Every experiment in this framework is a *deviation* from the shipped algorithm — a different Good-vote geometry, a different blend schedule, a different acquisition cut. A deviation is only interpretable against a baseline that is the real thing, so the framework's default arm has to be exactly what the app ships. When the app moves and the harness doesn't, the studies don't fail loudly; they keep producing plausible numbers about a detector nobody uses, and everything measured after the drift is quietly devalued.
+
+Three ways the harness relates to the app, in descending order of safety:
+
+| | How | Can it drift? |
+|---|---|---|
+| **Delegated** | The harness calls the app's function. `MaxPatchStyle.good_vec` / `.bad_vecs` / `._rows_for_media` are thin wrappers over `pool_box_from_media`, `bad_negative_vecs`, and `media_score_rows`. | No — by construction. |
+| **Ported** | The app's logic is re-implemented, because the original is unreachable or unusable. `vtscore/eval/autopilot_flow.py` ports the phase machine from `AutopilotStateService.checkPhaseTransition` (TypeScript — nothing to import) and the three indicators from `vtscore.detectors.labeling_progress` (wrapped in an interactive, lock-guarded single-detector cache a simulation can't use). | Yes — a copy goes stale the moment the original moves. |
+| **Default resolution** | The harness resolves "no explicit arm" to whatever the app currently defaults to: `style=None` → `max_patch` on a patch dataset, `blend_schedule=None` → `production_schedule_for(...)`. | Yes — the app changes its default and the harness keeps serving the old one *under the name "default"*. |
+
+Prefer delegation whenever it's possible; it's the only fix that can't rot.
+
+### The drift gate
+
+`scripts/check-eval-app-sync.py` pins a digest of each mirrored app surface — Python symbols by parsing the module, TypeScript blocks by brace-matching an anchor — and `./run-tests.sh` fails when one changes. It parses rather than imports, so it's dependency-free and takes ~0.3s. A failure names the mirror, both sides of it, and what to re-check:
+
+```
+  * autopilot.phase_machine  [ported, changed]
+      app:     frontend/src/app/services/autopilot-state.service.ts::checkPhaseTransition(
+      harness: vtscore/eval/autopilot_flow.py::next_phase
+      The phase ordering and every transition trigger of the simulated Autopilot user. ...
+```
+
+Reconcile the harness side, then re-pin:
+
+```bash
+python scripts/check-eval-app-sync.py --update
+```
+
+Digests ignore comments, docstrings, and formatting (including the magic trailing comma `ruff format` adds when it wraps a line), so only real logic changes trip the gate. Re-pinning without reading the harness defeats the whole thing — the digest is a prompt to check, not a checkbox.
+
+### Adding and diverging
+
+A new mirror is a new `Mirror(...)` entry in `MIRRORS`, plus `--update`. Give it a `note` that says what to re-check when the app moves, not just what the code is.
+
+When the harness *intentionally* differs from the app at a mirror, record why in `divergence=`. That doesn't exempt it from the digest — you still re-pin — but the text prints whenever the mirror trips, so whoever reconciles it next knows which differences are deliberate. The ported indicators use this: they take their histories as arguments rather than reading the app's `_cached_steps`, which is plumbing, not a rule change.
+
+Named experiment arms (`whole_image`, `max_patch_hac`, `max_patch_pca_hac`) are *supposed* to differ from the app — that's what makes them arms. This gate is about the default arm only.
