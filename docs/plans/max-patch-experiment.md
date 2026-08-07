@@ -1,10 +1,10 @@
 # Max-Patch experiment — MaxHAC vs MaxPatch (vs whole-image)
 
-**Status:** Code shipped (styles + harness wiring + GRID runner + tests). A
-first run completed but its Caltech-101 arm measured a harness defect rather
-than MaxPatch (fixed; see #2730 and the correction atop the report), so the
-open work is re-running the study on the Grid and acting on the corrected
-verdict.
+**Status:** Study complete. Verdict — **ship tree-free MaxPatch; drop the HAC
+tree from ingest** — and the numbers behind it are in
+[`docs/experiments/max-patch/REPORT.md`](../experiments/max-patch/REPORT.md).
+The remaining work is acting on that verdict in production (#2886) plus the
+optional arms below.
 
 ## Question
 
@@ -139,26 +139,8 @@ where the two diverge. Anything reasoning about scale must use `voted_area`.
 
 <!-- item-sep -->
 
-- [x] #2730 — **Re-run done (2026-07-29) on the corrected harness, plus a new
-  `max_patch_hac` arm; report at
-  [`docs/experiments/max-patch/REPORT.md`](../experiments/max-patch/REPORT.md).**
-  Verdict: **ship tree-free MaxPatch; drop the HAC tree from ingest.** Over 23
-  scale-band Visual Genome categories × 3 seeds, MaxPatch is the best arm
-  (ErrorCost 0.40 @ t=150), beating production MaxHAC (0.46, Holm p=0.002) at
-  every scale — edge largest on small objects, shrinking as they grow (Spearman
-  ρ=0.50, p=0.016). **MaxPatchHAC** (the new hybrid — a HAC tree whose leaves are
-  the raw patches, so leaves win small targets and merged nodes win large ones)
-  lands between the two: it *ranks* best of any arm (AP 0.49) and recovers real
-  large-object recall, but its ~392-node max-pool over-fires (highest FPR), so it
-  only numerically edges MaxHAC (Δ−0.027, p=0.06 n.s.) and does **not** beat
-  MaxPatch (Δ+0.037 n.s.). All region styles crush whole-image scoring (DINOv3
-  CLS is the worst arm, below SigLIP), so the win is region scoring itself.
-  Caltech-101 was dropped (boxless → cannot judge *region* voting; it was the
-  first run's invalid arm); OpenLogo was unfetchable (cluster HF egress). The
-  scale-band selection filled all four bands (`above_4x` included), so
-  `visual_genome_m` sufficed. If the large-object recall MaxPatchHAC showed is
-  worth chasing, keep the raw-patch tree but pair it with a max-pool-aware
-  threshold / softer pool to tame the false-positive tail.
+- [ ] #2886 — Adopt MaxPatch as the region-vote strategy and drop the HAC region
+  tree from ingest (Opus 4.8)
 
 <!-- item-sep -->
 
