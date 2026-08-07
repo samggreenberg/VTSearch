@@ -385,13 +385,13 @@ class TestMaxPatchHacStyle:
         media = _patch_media(1, "cat0", rng)
         tree = build_patch_hac_tree(np.asarray(media["patch_grid"], dtype=np.float32), media["embeddings"]["emb"])
         # A whole-image box has IoU 1 with the CLS node, which no other node beats.
-        np.testing.assert_allclose(
-            snap_box_to_region(tree, (0.0, 0.0, 1.0, 1.0)), _unit(media["embeddings"]["emb"]), atol=3e-3
-        )
+        whole = snap_box_to_region(tree, (0.0, 0.0, 1.0, 1.0))
+        assert whole is not None
+        np.testing.assert_allclose(whole, _unit(media["embeddings"]["emb"]), atol=3e-3)
         # A single-cell box lands on that cell's raw-patch leaf.
-        np.testing.assert_allclose(
-            snap_box_to_region(tree, _cell_box(2, 1)), _unit(np.asarray(media["patch_grid"])[2, 1]), atol=3e-3
-        )
+        cell = snap_box_to_region(tree, _cell_box(2, 1))
+        assert cell is not None
+        np.testing.assert_allclose(cell, _unit(np.asarray(media["patch_grid"])[2, 1]), atol=3e-3)
         # A degenerate (zero-area) box falls back to the nearest node centroid.
         got = snap_box_to_region(tree, (0.3, 0.3, 0.3, 0.3))
         assert got is not None and abs(float(np.linalg.norm(got)) - 1.0) < 1e-3

@@ -954,6 +954,7 @@ class TestRegionAwareTraining:
 
         media = self._media_with_patch_grid(0.99, cid=7)
         rows = media_score_rows(media, "siglip")
+        assert rows is not None
         for box in [(0.02, 0.02, 0.48, 0.48), (0.5, 0.5, 1.0, 1.0), (0.0, 0.0, 1.0, 1.0), None]:
             vec = _training_vec_for_vote(media, box)
             assert any(np.allclose(row, vec, atol=1e-6) for row in rows), f"box {box} trains outside the score stack"

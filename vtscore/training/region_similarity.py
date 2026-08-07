@@ -68,7 +68,9 @@ def score_against_query(
             sims = rows.astype(np.float32, copy=False) @ np.asarray(query_vec, dtype=np.float32)
             best_row = int(np.argmax(sims))
             box = media_row_box(media, best_row)
-            return float(sims[best_row]), (tuple(box) if box is not None else None)
+            if box is None:
+                return float(sims[best_row]), None
+            return float(sims[best_row]), (box[0], box[1], box[2], box[3])
 
     from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 

@@ -65,6 +65,7 @@ class TestScoreRowLayout:
     def test_row_zero_is_the_image_vector_then_patches_row_major(self):
         media = _grid_media(1)
         rows = media_score_rows(media, "dinov3_patch")
+        assert rows is not None
         assert rows.shape == (1 + GRID * GRID, DIM)
         np.testing.assert_allclose(rows[0], media["embeddings"]["dinov3_patch"], rtol=1e-3)
         flat = np.asarray(media["patch_grid"], dtype=np.float32).reshape(-1, DIM)
