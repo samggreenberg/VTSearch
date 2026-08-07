@@ -2298,6 +2298,28 @@ def simulate_voting_iterations(  # noqa: C901
     # assembled.
     region_aware = any(clips_dict[cid].get("patch_grid") is not None for cid in clips_dict)
 
+    # `region_voting` is a request, not a guarantee: `_good_training_vec` pools
+    # the ground-truth box only when the media carries a stored `patch_grid`,
+    # and falls back to the whole-image embedding otherwise - which is the same
+    # condition `region_aware` above tests.  On a single-vector embedder that
+    # fallback fires for EVERY vote, so the run is plain binary voting under a
+    # flag that says otherwise, and it scores whole-image and blends under the
+    # binary schedule too.  None of that shows up in the output: #2877 shipped a
+    # report calling `visual_genome_m x siglip` a region-voting environment
+    # before anyone checked, because the dataset is boxed and the harness config
+    # said "region voting" next to its name.  Say so loudly.
+    if region_voting and not region_aware:
+        import warnings  # noqa: PLC0415
+
+        warnings.warn(
+            "region_voting=True but no media carries a patch_grid, so every Good "
+            "vote falls back to its whole-image embedding: this run is BINARY "
+            "voting. Region voting needs a patch embedder (e.g. dinov3_patch). "
+            "See docs/experiments/acquisition-inclusion/REPORT_SECOND_ENVIRONMENT.md.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+
     # **The default arm must be the app's default.**  On a patch dataset the
     # live detector floods a Bad vote over the image's whole score-row stack
     # (``bad_negative_vecs``) and trains/calibrates bag-aware; the style-less

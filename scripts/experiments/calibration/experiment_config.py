@@ -5,10 +5,18 @@ on.  See ``docs/plans/calibration-experiment.md`` for the design.
 
 Arms (each an ``(embedder, style)`` pair):
 
-* ``visual_genome_m`` (region voting; ground-truth boxes):
+* ``visual_genome_m`` (boxed; ground-truth regions):
   ``siglip`` / ``siglip_l`` × ``whole_image`` (row-wise conformal), and
   ``dinov3_patch`` × {``max_patch``, ``max_patch_pca_hac``} (grouped bag
-  calibration).  The raw-patch tree arm additionally re-pools its own per-node
+  calibration).
+
+  **Only the ``dinov3_patch`` arms actually region-vote.** Region voting needs a
+  stored ``patch_grid`` to pool the dragged box and ``patch_regions`` to
+  max-pool at scoring time; the single-vector embedders have neither, so
+  :data:`REGION_VOTING_BY_DATASET` degrades to whole-image training *and*
+  whole-image scoring for them, and they blend under the **binary** schedule.
+  This docstring previously called the whole set "region voting", which is how
+  #2877 came to report a binary-voting environment as a region-voting one.  The raw-patch tree arm additionally re-pools its own per-node
   scores under ``topk`` and ``pnorm`` (remedial variants, emitted as extra rows).
 * ``caltech101_m`` (binary voting; boxless): ``siglip`` / ``siglip_l`` ×
   ``whole_image`` only — the ordinary row-wise conformal path most users hit.
@@ -40,6 +48,12 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
 #: COCO *is* boxed, but its cached vectors cannot feed a patch style (see above),
 #: so it runs as a second binary-voting dataset - which is exactly the axis
 #: #2841 asks about separately from region voting.
+#:
+#: NOTE: this flag is necessary but **not sufficient**.  It is per-*dataset*,
+#: while whether region voting actually happens is per-*embedder*: a boxed
+#: dataset paired with a single-vector embedder silently runs as binary voting
+#: (no ``patch_grid`` to pool, no ``patch_regions`` to max-pool).
+#: ``simulate_voting_iterations`` now warns when that combination is requested.
 REGION_VOTING_BY_DATASET: dict[str, bool] = {
     "visual_genome_m": True,
     "caltech101_m": False,
