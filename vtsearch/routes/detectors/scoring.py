@@ -991,4 +991,19 @@ def _run_autofind_export(response: dict) -> dict | None:
     for key, value in outcome.items():
         if key != "message":
             status[key] = value
+
+    # An `open_url` reaches the browser, so it gets the same scheme allowlist
+    # `POST /api/exporters/export` applies - a plugin must not be able to push
+    # a `javascript:` URL to the frontend from here either. Unlike that route
+    # this one drops the bad URL instead of failing: the export already
+    # happened, and the scored results must survive a cosmetic field.
+    if status.get("open_url") is not None:
+        from vtscore.security.url_validation import validate_browser_url  # noqa: PLC0415
+
+        try:
+            status["open_url"] = validate_browser_url(str(status["open_url"]))
+        except ValueError as exc:
+            logger.error("Auto-Find exporter %r returned an unusable open_url: %s", exporter_name, exc)
+            del status["open_url"]
+            status["message"] = f"{status['message']} (the exporter returned an unusable URL, so nothing will open)"
     return status

@@ -6264,6 +6264,10 @@
             "description": "Human-readable outcome; present on success.",
             "type": "string"
           },
+          "open_url": {
+            "description": "An ``http(s)`` URL the exporter formatted for the browser to open, offered as a link in the Auto-Detect Results modal. Declared rather than left to the pass-through below because the frontend acts on it.",
+            "type": "string"
+          },
           "success": {
             "type": "boolean"
           }

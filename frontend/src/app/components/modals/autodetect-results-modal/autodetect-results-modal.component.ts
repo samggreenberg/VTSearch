@@ -16,6 +16,7 @@ import {
 } from '../../../models/api.models';
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 import { IconComponent } from '../../icon/icon.component';
+import { openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -68,6 +69,25 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+  }
+
+  /**
+   * The Auto-Find auto-export's `open_url`, if it returned an openable one.
+   *
+   * An exporter can format the run's results into a third-party site's URL
+   * instead of (or as well as) delivering them somewhere; the same key drives
+   * the Export modal. Surfaced as an "Open" button rather than opened on
+   * arrival, because these results land from an async response and a popup
+   * blocker would swallow an unprompted `window.open()`.
+   */
+  autoExportUrl(): string | null {
+    const status = this.data().auto_export;
+    return status?.success ? safeExternalUrl(status.open_url) : null;
+  }
+
+  /** Open the auto-export's URL in a new tab (the click is the user gesture). */
+  openExternal(url: string): void {
+    openExternalUrl(url);
   }
 
   get allHits(): AutoDetectHit[] {

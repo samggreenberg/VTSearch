@@ -28,6 +28,7 @@ import { SortingApiService } from '../../../services/sorting-api.service';
 import type { LabelFilter } from '../../../services/sorting-api.service';
 import { ToastService } from '../../../services/toast.service';
 import { ImporterField } from '../../../models/api.models';
+import { openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 import type { LabeledElement } from '../../../generated/api-client/models/labeled-element';
 
@@ -595,8 +596,8 @@ export class ExportModalComponent implements OnInit {
           // An exporter can hand back a URL for the browser to open instead of
           // (or as well as) delivering the labelset somewhere — that's how a
           // third-party site with no ingest API gets the selection (#2855).
-          const openUrl = ExportModalComponent.safeExternalUrl(response?.open_url);
-          const opened = openUrl ? this.openExternal(openUrl) : false;
+          const openUrl = safeExternalUrl(response?.open_url);
+          const opened = openUrl ? openExternalUrl(openUrl) : false;
           const plural = labelCount === 1 ? '' : 's';
 
           // Three toast shapes: opened a tab, tried and got blocked, or a
@@ -622,7 +623,7 @@ export class ExportModalComponent implements OnInit {
             // through — it doubles as the blocked-popup escape hatch and as a
             // way to reopen a tab the user closed by accident.
             action: openUrl
-              ? { label: 'Open', title: openUrl, onClick: () => this.openExternal(openUrl) }
+              ? { label: 'Open', title: openUrl, onClick: () => openExternalUrl(openUrl) }
               : undefined,
             dedupKey: 'export-labels-success',
           });
@@ -634,35 +635,6 @@ export class ExportModalComponent implements OnInit {
           this.submitting.set(false);
         },
       });
-  }
-
-  /**
-   * Narrow an exporter-supplied `open_url` to something safe to hand to
-   * `window.open`, or `null`.
-   *
-   * The server already ran this through `validate_browser_url`, so this is the
-   * second half of a belt-and-braces pair: the check that matters is the
-   * scheme, and it costs one regex to make the frontend independently
-   * unable to navigate to a `javascript:` or `data:` URL — a class of bug that
-   * only ever shows up once someone's plugin is already in the wild.
-   */
-  private static safeExternalUrl(url: unknown): string | null {
-    if (typeof url !== 'string') return null;
-    const trimmed = url.trim();
-    return /^https?:\/\/\S+$/i.test(trimmed) ? trimmed : null;
-  }
-
-  /**
-   * Open *url* in a new tab, reporting whether the tab actually opened.
-   *
-   * `noopener` severs the new page's `window.opener` handle so a third-party
-   * site can't navigate the VTSearch tab out from under the user (reverse
-   * tabnabbing). A `null` return means the popup blocker ate it, which is the
-   * normal outcome when the call happens after an async response rather than
-   * inside the click handler.
-   */
-  private openExternal(url: string): boolean {
-    return window.open(url, '_blank', 'noopener') !== null;
   }
 
   /** Map an exporter's emoji icon to an SVG icon type. */

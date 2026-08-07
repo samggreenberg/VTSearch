@@ -99,7 +99,17 @@ class TestAcquisitionThresholdIsDecoupled:
             det_ctx.threshold = cut.threshold_at(k)
             acq = detector_acquisition_threshold(det_ctx, k)
             assert acq == cut.threshold_at(k + ACQUISITION_INCLUSION_OFFSET)
-            assert acq > det_ctx.threshold, f"the offset collapsed at reporting inclusion {k}"
+            # Never *below* the reporting line, wherever the slider sits - the
+            # failure an absolute reading would produce.  Not strict, because
+            # the cost weights saturate at the ends of the slider: once the
+            # quantile has hit its ceiling there is no higher cut left to take,
+            # and the offset legitimately lands on the reporting cut itself.
+            assert acq >= det_ctx.threshold, f"the offset inverted at reporting inclusion {k}"
+
+        # ...and it is a real gap rather than a no-op wherever the estimator
+        # still has room to move, which is what was measured.
+        det_ctx.threshold = cut.threshold_at(0)
+        assert detector_acquisition_threshold(det_ctx, 0) > det_ctx.threshold
 
     def test_it_is_monotone_in_inclusion_like_the_reporting_cut(self):
         """Same nesting contract - the acquisition cut is the same estimator."""
