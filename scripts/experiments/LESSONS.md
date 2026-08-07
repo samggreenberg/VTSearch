@@ -207,3 +207,53 @@ baseline is a moving target, because studies here ship things.
 **Still advice:** when a study defines *any* arm as "what production does",
 re-read that definition against `git log` on the path it names. The base row
 covers the threshold; the next study will name something else.
+
+---
+
+## 2026-08-07 — `--gres=none` is not a no-op, and an empty job id is not a launch (#2897)
+
+**What broke.** The fold-count study's screen finished cleanly (208/208 cells,
+0 failures) and its chained A/B stage fired on schedule and picked the right
+arms. Then **both arms failed to submit**, silently, into a log nobody was
+reading:
+
+```
+sbatch: error: --gpus-per-task option requires --tasks specification -n switch
+prepare job:
+sbatch: error: Batch job submission failed: Job dependency problem
+cells launcher job (after prepare):
+```
+
+**Mechanism.** `launch_all.sh`'s prepare stage hardcoded `--partition=gpu` and
+passed `--gres="$GRES"` through literally. Every recent study sets
+`CALIB_GRES=none` because its cells are CPU-only — and `--gres=none` is *not*
+ignored here: the cluster's submit filter rewrites it into a `--gpus-per-task`
+form and then rejects the job for having no `-n`. `--parsable` returns an empty
+string on refusal, so `--dependency=afterok:` got a blank id and the dependent
+launcher failed too, burying the real error two screens up.
+
+**Why the screen didn't hit it.** Only because the screen's prepare was run by
+hand (`srun`) and `launch_cells.sh` was called directly, bypassing
+`launch_all.sh`. The bug had been latent for every study that set
+`CALIB_GRES=none` and used the full chain.
+
+**Cost.** ~40 min. Cheap only because the screen's report had already landed and
+the failure was found by reading the chain log rather than by waiting for
+results that were never coming. Had the A/B been the thing left running
+overnight, it would have been a whole night.
+
+**Now prevented (code):**
+
+1. `launch_all.sh` drops `--gres` entirely when it is `none`/empty (the same
+   `GRES_ARG` shape `launch_cells.sh` already used) and honours
+   `CALIB_PREP_PARTITION` / `CALIB_PARTITION`, so a fully-cached prepare runs on
+   `cpu` where it belongs.
+2. `require_jobid` after **every** `sbatch` in `launch_all.sh`: a non-numeric id
+   aborts immediately with the stage named, instead of letting the failure
+   cascade into a dependency error whose cause has scrolled away.
+
+**Still advice:** the launcher scripts print "confirm each arm came back with a
+numeric job id" — and that instruction was *correct*, and was ignored, because
+the thing reading the output was a batch job. Any check whose only enforcement
+is a human reading a log does not survive being chained. If a stage can be
+chained, its checks have to be code.
