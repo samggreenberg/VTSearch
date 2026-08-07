@@ -123,10 +123,12 @@ on this table. #2875's bench estimate of the recovery ("5 of the ~32 missing
 points") was right in spirit: the ordering guard was rejecting sound fits, but
 most of those fits have no root either way.
 
-> `agg/cut_fallback_reasons.csv` is written over **all 30 steps**, not the ramp
+> `agg/cut_fallback_reasons.csv` was written over **all 30 steps**, not the ramp
 > window — there the same split is 946 `modes_swapped` → 391 crossings + 555
-> `lo_owns_hi_mode` (1 795 → 1 404 fallbacks of 7 365 steps). Don't mix its
-> counts with the ramp-window rates above.
+> `lo_owns_hi_mode` (1 795 → 1 404 fallbacks of 7 365 steps). Don't mix those
+> counts with the ramp-window rates above. *(Fixed since: the table now carries a
+> `window` column and is emitted per window as well as `all_steps`, so a later
+> run cannot make that mistake by reading the file the obvious way.)*
 
 `gumbel_any_cross` is worth noting as the one place the repair makes a variant's
 fallback rate *worse-behaved*: it fires on 2.0 % more steps and loses on them.
@@ -197,9 +199,11 @@ no crossing at all — which is now the only part of the EVT work with a future,
 given that the crossing rules do not clear the plain Gaussian `priorfree`, let
 alone production.
 
-> A reading trap: `summary_cut.json`'s `decisions.tail_alpha_stable: false`
-> refers to the **Gaussian** row (`analyze_cut.py` keys it off
-> `oracle_lo_sf_gauss`). It is not saying the EVT rule is unstable.
+> A reading trap in this run's `summary_cut.json`: `decisions.tail_alpha_stable:
+> false` refers to the **Gaussian** row (`analyze_cut.py` keyed it off
+> `oracle_lo_sf_gauss`). It is not saying the EVT rule is unstable. *(Fixed
+> since: the key is gone, replaced by `tail_alpha_stable_gauss` and
+> `tail_alpha_stable_evt`, each named after the model it judges.)*
 
 ## The decomposition replicates
 

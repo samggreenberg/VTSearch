@@ -153,9 +153,11 @@ a worktree pins *that* worktree at `sys.path[0]`. `preflight.sh` already checked
 that VTS_REPO was set and clean — it just could not check the one thing that was
 wrong, which was that nobody had set it at all.
 
-**Still advice:** after sourcing `gridenv.sh` in a new worktree, print
-`python -c "import vtscore; print(vtscore.__file__)"` once. It is one line and it
-is the only direct evidence that the run measures your branch.
+**Also prevented (code):** `preflight.sh` now resolves `import vtscore` the way a
+job does — through `common.setup_env()` — and fails if the file it lands on is
+not inside `VTS_REPO`. That is the direct evidence the run measures your branch,
+and it is checked rather than remembered. Setting `VTS_REPO` correctly is not the
+same thing: this run had it right and still imported the other checkout.
 
 <!-- entry-sep -->
 
@@ -188,12 +190,20 @@ X beats what we ship". A re-measure that had not looked at the provenance column
 would have republished that claim in good faith. On this cluster a study's
 baseline is a moving target, because studies here ship things.
 
-**Now prevented (code):** `analyze_cut.py`'s `production_blend_sanity` no longer
-just reports `ok: false` — on failure it breaks the mismatch down by
-`threshold_provenance`, so "the harness is broken" and "the incumbent moved" are
-distinguishable at a glance instead of by investigation.
+**Now prevented (code), twice over:**
 
-**Still advice:** when a study's baseline arm is *defined* as "what production
-does", re-read that definition against `git log` on the threshold path before
-trusting any "beats production" line. And prefer pairing against the run's own
-base row, which cannot go stale, over a variant that reconstructs it.
+1. `analyze_cut.py`'s `production_blend_sanity` no longer just reports
+   `ok: false` — on failure it breaks the mismatch down by
+   `threshold_provenance`, so "the harness is broken" and "the incumbent moved"
+   are distinguishable at a glance instead of by investigation.
+2. The ship decision no longer depends on a reconstruction at all.
+   `base_row_contrasts` pairs every rule against **the run's own base row** —
+   the threshold production actually used on that step, whatever it was — and
+   `decisions.beats_production` / `ship_candidate` are computed from that.
+   `beats_midpoint` survives as the historical #2836 contrast and gates nothing.
+   A baseline that is read rather than reconstructed cannot go stale, so the
+   next incumbent can ship without expiring anyone's conclusions.
+
+**Still advice:** when a study defines *any* arm as "what production does",
+re-read that definition against `git log` on the path it names. The base row
+covers the threshold; the next study will name something else.
