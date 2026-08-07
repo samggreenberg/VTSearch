@@ -38,6 +38,15 @@ per-configuration CSV, a phase diagram of the winning rule, and a decomposition
 of every rule's error into misspecification (the same rule fitted on a huge
 sample) versus estimation noise (the shortfall at realistic sample sizes).
 
+**Every rule is scored on every replicate** (issue #2846).  A rule with no root
+on a given fit is scored at the midpoint it would fall back to, exactly as the
+real-data harness does, and ``fired_<rule>`` records that it fell back.  The
+original version wrote NaN instead and let pandas' skip-NaN aggregation drop
+those replicates, which scored the EVT rules only where they applied while
+scoring their competitors everywhere - and the misses are not a random subset,
+they are the hard configurations.  That artefact, not fragility, is most of why
+this bench and the Visual Genome arm reached opposite conclusions in #2836.
+
 Usage: ``python theory_bench.py [--reps 40] [--out DIR]``
 """
 
@@ -92,10 +101,22 @@ RULES: tuple[str, ...] = (
     "priorfree",
     "gumbel_cross",
     "gumbel_priorfree",
+    "gumbel_any_cross",
+    "gumbel_any_priorfree",
     "supervised",
     "sim_oracle",
 )
-CANDIDATE_RULES: tuple[str, ...] = ("mid", "cross", "priorfree", "gumbel_cross", "gumbel_priorfree")
+CANDIDATE_RULES: tuple[str, ...] = (
+    "mid",
+    "cross",
+    "priorfree",
+    "gumbel_cross",
+    "gumbel_priorfree",
+    "gumbel_any_cross",
+    "gumbel_any_priorfree",
+)
+#: Label-reading bounds: no fallback, because they are not rules that could ship.
+ORACLE_RULES: tuple[str, ...] = ("supervised", "sim_oracle")
 
 
 def _sigmoid(x: np.ndarray) -> np.ndarray:
@@ -166,7 +187,7 @@ def evaluate_config(
     tau_star, best_loss = population_optimum(m, mu_good, sd_good)
 
     scores, labels = sample_scores(rng, n, m, prevalence, mu_good, sd_good)
-    cuts, params = decomposition_cuts(scores, labels, FPR_WEIGHT, FNR_WEIGHT)
+    cuts, params, reasons = decomposition_cuts(scores, labels, FPR_WEIGHT, FNR_WEIGHT)
 
     row: dict = {
         "m": m,
@@ -179,6 +200,8 @@ def evaluate_config(
         "best_loss": best_loss,
         "gmm_ok": params["gmm_ok"],
         "evt_ok": params["evt_ok"],
+        "evt_fit_fail": params["evt_fit_fail"],
+        "evt_gumbel_is_low": params["evt_gumbel_is_low"],
         "evt_loglik_gain": params["evt_loglik_gain"],
         "w_lo": params["w_lo"],
         "w_hi": params["w_hi"],
@@ -187,14 +210,44 @@ def evaluate_config(
         "pred_offset_equal_var": params["pred_offset_equal_var"],
         "oracle_lo_sf_gauss": params["oracle_lo_sf_gauss"],
     }
+    # What a rule that has no root on this fit actually costs.  A *shippable*
+    # rule falls back to the midpoint (this is what `_safe_gmm_variant_rows`
+    # does on real data), so that is what its excess loss is on such a replicate.
+    fallback_cut = cuts.get("mid", float("nan"))
+    fallback_excess = float("nan")
+    if np.isfinite(fallback_cut):
+        fallback_excess = float(true_loss(np.array([_logit(float(fallback_cut))]), m, mu_good, sd_good)[0] - best_loss)
+
     for rule in RULES:
         cut = cuts.get(rule, float("nan"))
         row[f"tau_{rule}"] = cut
-        if not np.isfinite(cut):
+        row[f"reason_{rule}"] = reasons.get(rule, "")
+        fired = bool(np.isfinite(cut))
+        row[f"fired_{rule}"] = int(fired)
+        # ``excess_`` is the honest, unconditional cost: the rule's own root
+        # where it has one, the midpoint fallback where it does not.
+        #
+        # The conditional version is kept as ``excess_fired_`` because it answers
+        # a genuinely different question ("how good is this rule *when it
+        # applies*"), but it must never be the headline: pandas skips NaN in
+        # ``mean``/``idxmin``, so scoring only the replicates where a rule fired
+        # silently drops exactly its failures.  That is what made this bench
+        # disagree with the real-data arm in #2836 - the two halves were
+        # reporting different estimands, and the misses are concentrated on the
+        # hard configurations where every rule does badly (issue #2846).
+        if fired:
+            t = _logit(float(cut))
+            e = float(true_loss(np.array([t]), m, mu_good, sd_good)[0] - best_loss)
+            row[f"excess_{rule}"] = e
+            row[f"excess_fired_{rule}"] = e
+        elif rule in ORACLE_RULES:
+            # Label-reading diagnostics are bounds, not rules; they have no
+            # fallback to degrade to, so a miss stays a miss.
             row[f"excess_{rule}"] = float("nan")
-            continue
-        t = _logit(float(cut))
-        row[f"excess_{rule}"] = float(true_loss(np.array([t]), m, mu_good, sd_good)[0] - best_loss)
+            row[f"excess_fired_{rule}"] = float("nan")
+        else:
+            row[f"excess_{rule}"] = fallback_excess
+            row[f"excess_fired_{rule}"] = float("nan")
     # The offset identity, on a fit whose truth we know.
     if np.isfinite(row.get("tau_cross", np.nan)) and np.isfinite(row.get("tau_mid", np.nan)):
         row["actual_offset"] = row["tau_cross"] - row["tau_mid"]
@@ -236,6 +289,7 @@ def population_sweep(seed: int = 20837) -> pd.DataFrame:
 def summarize(df: pd.DataFrame, pop: pd.DataFrame, outdir: Path) -> dict:
     excess_cols = [f"excess_{r}" for r in RULES]
     cand_cols = [f"excess_{r}" for r in CANDIDATE_RULES]
+    fired_cols = [f"fired_{r}" for r in CANDIDATE_RULES]
 
     by_config = df.groupby(["m", "prevalence", "separation", "sd_ratio", "n"])[excess_cols].mean().reset_index()
     by_config["winner"] = by_config[cand_cols].idxmin(axis=1).str.replace("excess_", "", regex=False)
@@ -254,10 +308,32 @@ def summarize(df: pd.DataFrame, pop: pd.DataFrame, outdir: Path) -> dict:
     noise = (finite - pop_by.set_index(keys)[cand_cols]).reset_index()
     noise.to_csv(outdir / "theory_estimation_noise.csv", index=False)
 
+    # How often each rule actually had a root, and - where it did not - which
+    # guard declined.  Without these the excess columns cannot be read: a rule
+    # that fires on half the replicates is half midpoint, whatever it is named.
+    prod = df[(df["m"] == 24) & (df["prevalence"] <= 0.05)]
+    fire = {r: float(df[f"fired_{r}"].mean()) for r in CANDIDATE_RULES}
+    fire_prod = {r: float(prod[f"fired_{r}"].mean()) for r in CANDIDATE_RULES}
+    reasons = {
+        r: {str(k): int(v) for k, v in df.loc[df[f"fired_{r}"] == 0, f"reason_{r}"].value_counts().items()}
+        for r in CANDIDATE_RULES
+        if f"reason_{r}" in df
+    }
+    df.groupby(["m", "prevalence", "separation", "sd_ratio", "n"])[fired_cols].mean().reset_index().to_csv(
+        outdir / "theory_fire_rates.csv", index=False
+    )
+
     winners = by_config["winner"].value_counts(normalize=True).to_dict()
     prod_like = by_config[(by_config["m"] == 24) & (by_config["prevalence"] <= 0.05)]
     return {
         "n_fits": int(len(df)),
+        "fire_rate": fire,
+        "fire_rate_production_like": fire_prod,
+        "decline_reasons": reasons,
+        # Conditional on the rule firing - the #2836 headline, kept only as the
+        # contrast that exposes the selection effect.  Compare each entry against
+        # its ``mean_excess_*`` sibling: the gap is what the misses cost.
+        "mean_excess_when_fired_production_like": {r: float(prod[f"excess_fired_{r}"].mean()) for r in CANDIDATE_RULES},
         "winner_share_overall": {k: float(v) for k, v in winners.items()},
         "winner_share_production_like": {
             k: float(v) for k, v in prod_like["winner"].value_counts(normalize=True).to_dict().items()

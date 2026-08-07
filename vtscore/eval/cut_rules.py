@@ -23,8 +23,11 @@ rule             ``lam``                     minimises
 ===============  ==========================  ===================================
 
 The ``gumbel_*`` rules are the same three tilts against a
-:class:`~vtscore.training.evt_mixture.GumbelNormalFit1D` - a low component with
-the right *shape* for a max over region nodes.
+:class:`~vtscore.training.evt_mixture.GumbelNormalFit1D` - a component with the
+right *shape* for a max over region nodes.  ``gumbel_any_*`` are those three
+again without #2836's assumption that the Gumbel is necessarily the *low*
+component; that assumption is what the Gumbel arm's fallback rate turned out to
+be made of (issue #2846).
 
 **The decomposition.**  A simulation knows the sim set's true labels, so the gap
 between what a rule cuts and where the rate loss is actually minimised can be
@@ -54,7 +57,7 @@ import numpy as np
 from vtscore.eval.calibration_metrics import oracle_cut
 from vtscore.training.evt_mixture import (
     GumbelNormalFit1D,
-    fit_gumbel_normal_mixture,
+    fit_gumbel_normal_mixture_state,
     gaussian_mixture_mean_loglik,
 )
 from vtscore.training.thresholds import GmmFit1D, fit_score_gmm, gmm_fit_array
@@ -88,8 +91,22 @@ def _mean_log_jacobian(x: np.ndarray) -> float:
 
 #: Cut rules backed by the Gaussian mixture, in the order they are reported.
 GAUSSIAN_RULES: tuple[str, ...] = ("mid", "cross", "priorfree", "rate")
-#: Cut rules backed by the Gumbel(low) + Normal(high) mixture.
-EVT_RULES: tuple[str, ...] = ("gumbel_cross", "gumbel_priorfree", "gumbel_rate")
+#: Cut rules backed by the Gumbel + Normal mixture, at the same three tilts.
+#:
+#: The ``gumbel_*`` family is #2836's: it requires the Gumbel to be the *low*
+#: component and declines the fit otherwise.  The ``gumbel_any_*`` family is
+#: #2846's repair, solving in whichever orientation EM converged to.  Both are
+#: measured because the difference between them **is** the #2846 question, and it
+#: has to be answered on real scores rather than on the synthetic bench (which
+#: was what mismeasured it the first time).
+EVT_RULES: tuple[str, ...] = (
+    "gumbel_cross",
+    "gumbel_priorfree",
+    "gumbel_rate",
+    "gumbel_any_cross",
+    "gumbel_any_priorfree",
+    "gumbel_any_rate",
+)
 #: Label-reading diagnostics.  **Not rules** - they read the sim set's true
 #: labels, so they are upper bounds on what an unsupervised cut could achieve,
 #: reported to locate the error rather than to be shipped.
@@ -122,23 +139,35 @@ def gaussian_cuts(fit: GmmFit1D, fpr_weight: float, fnr_weight: float) -> dict[s
     }
 
 
-def evt_cuts(fit: GumbelNormalFit1D, fpr_weight: float, fnr_weight: float) -> dict[str, float]:
-    """Every EVT-family cut from one Gumbel+Normal fit, mapped back to score space.
+def evt_cuts(fit: GumbelNormalFit1D, fpr_weight: float, fnr_weight: float) -> tuple[dict[str, float], dict[str, str]]:
+    """``(cuts, reasons)`` for every EVT-family rule, mapped back to score space.
 
     The fit lives in **logit** space (see :func:`fit_both_mixtures`), but a
     density crossing is invariant under a monotone reparametrisation: both sides
     of ``w_lo*f_lo == lam*w_hi*f_hi`` pick up the same Jacobian, which cancels.
     So the root can be solved on the logit axis and squashed back, and it is the
     same point as solving in score space would have given.
+
+    *reasons* names why each rule produced no cut (one of
+    :data:`~vtscore.training.evt_mixture.CROSSING_REASONS`), which is what makes
+    a fallback auditable rather than invisible — the #2846 diagnosis turned
+    entirely on being able to tell ``modes_swapped`` (the fit is sound, the
+    orientation assumption was not) from ``hi_owns_lo_mode`` (the two components
+    genuinely collapsed onto each other).
     """
-    out = {}
-    for name, cut in (
-        ("gumbel_cross", fit.crossing()),
-        ("gumbel_priorfree", fit.rate_crossing(1.0, 1.0)),
-        ("gumbel_rate", fit.rate_crossing(fpr_weight, fnr_weight)),
+    cuts: dict[str, float] = {}
+    reasons: dict[str, str] = {}
+    for name, (reason, cut) in (
+        ("gumbel_cross", fit.crossing_state()),
+        ("gumbel_priorfree", fit.rate_crossing_state(1.0, 1.0)),
+        ("gumbel_rate", fit.rate_crossing_state(fpr_weight, fnr_weight)),
+        ("gumbel_any_cross", fit.crossing_state(allow_swapped=True)),
+        ("gumbel_any_priorfree", fit.rate_crossing_state(1.0, 1.0, allow_swapped=True)),
+        ("gumbel_any_rate", fit.rate_crossing_state(fpr_weight, fnr_weight, allow_swapped=True)),
     ):
-        out[name] = float("nan") if cut is None else _from_logit(cut)
-    return out
+        cuts[name] = float("nan") if cut is None else _from_logit(cut)
+        reasons[name] = reason
+    return cuts, reasons
 
 
 def supervised_cut(
@@ -236,7 +265,7 @@ def fit_both_mixtures(scores: list[float] | np.ndarray) -> tuple[GmmFit1D | None
     jac = _mean_log_jacobian(arr)
     gmm_logit = fit_score_gmm(u)
     init = None if gmm is None else float(_to_logit(np.array([gmm.midpoint()]))[0])
-    evt = fit_gumbel_normal_mixture(u, init_split=init)
+    evt_fail, evt = fit_gumbel_normal_mixture_state(u, init_split=init)
     nan = float("nan")
     params: dict[str, Any] = {
         "sim_n": float(arr.size),
@@ -244,17 +273,21 @@ def fit_both_mixtures(scores: list[float] | np.ndarray) -> tuple[GmmFit1D | None
         "fallback_median": float(np.median(arr)) if arr.size else nan,
         "gmm_ok": 1 if gmm is not None else 0,
         "evt_ok": 1 if evt is not None else 0,
+        "evt_fit_fail": evt_fail,
+        # 1 when the Gumbel landed on the low mode, which is what #2836 assumed
+        # it always would; the rate at which this is 0 is the #2846 finding.
+        "evt_gumbel_is_low": nan if evt is None else int(evt.gumbel_is_low),
         "w_lo": nan,
         "mu_lo": nan,
         "var_lo": nan,
         "w_hi": nan,
         "mu_hi": nan,
         "var_hi": nan,
-        "evt_w_lo": nan,
-        "evt_loc_lo": nan,
-        "evt_scale_lo": nan,
-        "evt_mu_hi": nan,
-        "evt_var_hi": nan,
+        "evt_w_gumbel": nan,
+        "evt_loc": nan,
+        "evt_scale": nan,
+        "evt_mu": nan,
+        "evt_var": nan,
         "gmm_loglik": nan,
         "gmm_logit_loglik": nan,
         "evt_loglik": nan,
@@ -276,12 +309,15 @@ def fit_both_mixtures(scores: list[float] | np.ndarray) -> tuple[GmmFit1D | None
         )
     if evt is not None:
         # These four are in logit units; the loglik is converted to score space.
+        # Reported per *component* rather than per mode, because which one is the
+        # low mode is an outcome of the fit (``evt_gumbel_is_low``) rather than a
+        # property of the family.
         params.update(
-            evt_w_lo=evt.w_lo,
-            evt_loc_lo=evt.loc_lo,
-            evt_scale_lo=evt.scale_lo,
-            evt_mu_hi=evt.mu_hi,
-            evt_var_hi=evt.var_hi,
+            evt_w_gumbel=evt.w_gumbel,
+            evt_loc=evt.loc,
+            evt_scale=evt.scale,
+            evt_mu=evt.mu,
+            evt_var=evt.var,
             evt_loglik=evt.mean_loglik + jac,
         )
     if gmm is not None and evt is not None:
@@ -294,14 +330,15 @@ def decomposition_cuts(
     sim_labels: np.ndarray,
     fpr_weight: float,
     fnr_weight: float,
-) -> tuple[dict[str, float], dict[str, Any]]:
+) -> tuple[dict[str, float], dict[str, Any], dict[str, str]]:
     """All cut rules plus the label-reading diagnostics, from one sim sample.
 
-    Returns ``(cuts, params)``: *cuts* maps every name in :data:`ALL_RULES` to a
-    score (NaN where that rule has no root on this fit), *params* carries the
-    fitted mixture parameters, the fit-quality comparison, and the supervised
-    class moments - everything the analyzer needs to test the #2836 predictions
-    offline without re-running the simulation.
+    Returns ``(cuts, params, reasons)``: *cuts* maps every name in
+    :data:`ALL_RULES` to a score (NaN where that rule has no root on this fit),
+    *params* carries the fitted mixture parameters, the fit-quality comparison,
+    and the supervised class moments, and *reasons* names why each EVT rule
+    declined to fire - everything the analyzer needs to test the #2836/#2846
+    predictions offline without re-running the simulation.
     """
     # The label-reading rules below index scores against labels, so normalize the
     # caller's sequence once here rather than at each use site.
@@ -309,6 +346,10 @@ def decomposition_cuts(
     gmm, evt, params = fit_both_mixtures(scores)
     nan = float("nan")
     cuts: dict[str, float] = dict.fromkeys(ALL_RULES, nan)
+    # A rule whose fit never existed still needs a reason; "the fit failed" is a
+    # different diagnosis from "the fit had no crossing" and the two must not be
+    # pooled into one fallback count.
+    reasons: dict[str, str] = dict.fromkeys(EVT_RULES, f"fit_{params['evt_fit_fail']}")
 
     if gmm is not None:
         cuts.update(gaussian_cuts(gmm, fpr_weight, fnr_weight))
@@ -318,7 +359,8 @@ def decomposition_cuts(
         # so it stays a usable fallback for the rules that have no root.
         cuts["mid"] = params["fallback_median"]
     if evt is not None:
-        cuts.update(evt_cuts(evt, fpr_weight, fnr_weight))
+        evt_cut_map, reasons = evt_cuts(evt, fpr_weight, fnr_weight)
+        cuts.update(evt_cut_map)
 
     sup, sup_stats = supervised_cut(scores, sim_labels, fpr_weight, fnr_weight)
     params.update(sup_stats)
@@ -339,4 +381,4 @@ def decomposition_cuts(
         if evt is not None:
             # The EVT fit lives on the logit axis, so the tail level is read there.
             params["oracle_lo_sf_evt"] = evt.lo_survival(float(_to_logit(np.array([tau_star]))[0]))
-    return cuts, params
+    return cuts, params, reasons
