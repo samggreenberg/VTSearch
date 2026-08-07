@@ -197,7 +197,8 @@ numbers excluded the ~14 % of fits #2836 discarded. Those fits are now kept and
 "cut the Bad tail at α ≈ 0.16" is still a coherent one-constant rule that needs
 no crossing at all — which is now the only part of the EVT work with a future,
 given that the crossing rules do not clear the plain Gaussian `priorfree`, let
-alone production.
+alone production. Tracked as #2881 — nobody has measured it *as a rule*;
+`oracle_lo_sf_evt` is recorded only diagnostically, at the oracle cut.
 
 > A reading trap in this run's `summary_cut.json`: `decisions.tail_alpha_stable:
 > false` refers to the **Gaussian** row (`analyze_cut.py` keyed it off
