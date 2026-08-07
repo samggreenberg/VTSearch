@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import time
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
@@ -1419,6 +1420,7 @@ def _grouped_folds(
     calibrate_count: int,
     calibration_fraction: float,
     hidden_dim: int | None,
+    seconds_sink: list[float] | None = None,
 ) -> tuple[list[tuple[Any, list]], float | None, np.ndarray, dict, dict]:
     """Train the bag-aware calibration folds; return the trained fold models.
 
@@ -1429,6 +1431,9 @@ def _grouped_folds(
     ``(folds, fallback, X_np, rows_by_group, label_by_group)`` where *folds* is a
     list of ``(model, cal_groups)`` and *fallback* is a sentinel threshold when
     calibration is impossible (empty *folds* then).
+
+    *seconds_sink*, when given, receives each fold's split-and-fit wall clock in
+    fold order — the per-fold marginal cost of ``calibrate_count`` (issue #2897).
     """
     import torch  # noqa: PLC0415
 
@@ -1474,6 +1479,7 @@ def _grouped_folds(
     # ``np.array(list_of_tuples)`` would build a 2-D array and mangle them.
     folds: list[tuple[Any, list]] = []
     for _ in range(max(1, calibrate_count)):
+        t_fold = time.monotonic()
         pos_perm = _rng.permutation(len(pos_groups))
         neg_perm = _rng.permutation(len(neg_groups))
         train_groups = [pos_groups[i] for i in pos_perm[:n_train_pos]] + [neg_groups[i] for i in neg_perm[:n_train_neg]]
@@ -1485,6 +1491,8 @@ def _grouped_folds(
         fold_w = torch.tensor(_per_bag_fit_weights(y_np[train_idx], [grp[i] for i in train_idx]), dtype=torch.float32)
         model = train_model(X_train, y_train, input_dim, hidden_dim=hidden_dim, sample_weights=fold_w)
         folds.append((model, cal_groups))
+        if seconds_sink is not None:
+            seconds_sink.append(time.monotonic() - t_fold)
 
     return folds, None, X_np, rows_by_group, label_by_group
 
@@ -1500,6 +1508,7 @@ def _compute_fold_orderings_grouped(
     hidden_dim: int | None,
     score_rows_by_group: dict | None = None,
     model_sink: list | None = None,
+    seconds_sink: list[float] | None = None,
 ) -> tuple[list[tuple[list[float], list[float]]], float | None]:
     """Bag-aware variant of :func:`compute_fold_orderings`.
 
@@ -1513,7 +1522,7 @@ def _compute_fold_orderings_grouped(
     over - see :func:`compute_fold_orderings`.
     """
     folds, fallback, X_np, rows_by_group, label_by_group = _grouped_folds(
-        X_list, y_list, input_dim, groups, rng, calibrate_count, calibration_fraction, hidden_dim
+        X_list, y_list, input_dim, groups, rng, calibrate_count, calibration_fraction, hidden_dim, seconds_sink
     )
     if fallback is not None:
         return [], fallback
@@ -1542,6 +1551,7 @@ def compute_grouped_fold_node_scores(
     hidden_dim: int | None = None,
     score_rows_by_group: dict | None = None,
     model_sink: list | None = None,
+    seconds_sink: list[float] | None = None,
 ) -> tuple[list[tuple[list[np.ndarray], list[float]]], float | None]:
     """Bag-aware calibration folds, returning each held-out group's node scores.
 
@@ -1562,7 +1572,7 @@ def compute_grouped_fold_node_scores(
     share one score scale without a retrain.
     """
     folds, fallback, X_np, rows_by_group, label_by_group = _grouped_folds(
-        X_list, y_list, input_dim, groups, rng, calibrate_count, calibration_fraction, hidden_dim
+        X_list, y_list, input_dim, groups, rng, calibrate_count, calibration_fraction, hidden_dim, seconds_sink
     )
     if fallback is not None:
         return [], fallback
@@ -1588,6 +1598,7 @@ def compute_fold_orderings(
     groups: list | None = None,
     score_rows_by_group: dict | None = None,
     model_sink: list | None = None,
+    seconds_sink: list[float] | None = None,
 ) -> tuple[list[tuple[list[float], list[float]]], float | None]:
     """Train the K calibration folds and return their held-out orderings.
 
@@ -1630,7 +1641,18 @@ def compute_fold_orderings(
 
     *model_sink*, when given, receives each trained fold model in fold order
     (see :func:`compute_grouped_fold_node_scores`); production callers pass
-    nothing and the models stay fold-local as before.
+    nothing and the models stay fold-local as before.  *seconds_sink* likewise
+    receives each fold's wall clock, which is what makes the *cost* half of the
+    fold-count question (issue #2897) measurable without a second run.
+
+    The folds are **independent repeated splits**, not a partition: every fold
+    re-draws a stratified ``calibration_fraction`` holdout from the same labels,
+    so raising ``calibrate_count`` averages more draws at a *fixed* per-fold
+    calibration size rather than shrinking each holdout.  Two consequences the
+    fold-count study rests on: the per-fold work is flat in K (total cost is
+    linear in K), and the folds at ``calibrate_count=k`` are exactly the first
+    *k* folds at any larger count drawn from the same ``rng`` - the splits are
+    nested, so one run at Kmax yields every smaller K's calibration for free.
     """
     if groups is not None:
         return _compute_fold_orderings_grouped(
@@ -1644,6 +1666,7 @@ def compute_fold_orderings(
             hidden_dim=hidden_dim,
             score_rows_by_group=score_rows_by_group,
             model_sink=model_sink,
+            seconds_sink=seconds_sink,
         )
     n = len(X_list)
     if n < 4:
@@ -1678,6 +1701,7 @@ def compute_fold_orderings(
 
     orderings: list[tuple[list[float], list[float]]] = []
     for _ in range(calibrate_count):
+        t_fold = time.monotonic()
         pos_perm = _rng.permutation(pos_idx)
         neg_perm = _rng.permutation(neg_idx)
         train_idx = np.concatenate([pos_perm[:n_train_pos], neg_perm[:n_train_neg]])
@@ -1702,6 +1726,8 @@ def compute_fold_orderings(
             # leak NaN into JSON responses.
             scores = sigmoid_to_finite_scores(model(X_cal))
         orderings.append((scores, y_np[cal_idx].tolist()))
+        if seconds_sink is not None:
+            seconds_sink.append(time.monotonic() - t_fold)
 
     return orderings, None
 

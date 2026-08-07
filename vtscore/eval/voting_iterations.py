@@ -163,7 +163,9 @@ _VOTING_COLUMNS: tuple[str, ...] = (
 #: Column order for the calibration study's main per-step frame (issue #2781),
 #: emitted only when ``emit_calibration_metrics``.  One row per ``pool_variant``;
 #: under ``safe_thresholds`` additionally one row per safe-threshold GMM variant
-#: (issue #2799), tagged in ``gmm_variant`` (``""`` on every other row).
+#: (issue #2799), tagged in ``gmm_variant`` (``""`` on every other row).  The
+#: fold-count arms (issue #2897) ride the same tag as ``folds_k{K}_{xcal,blend}``
+#: and additionally fill ``fold_count`` / ``fold_seconds`` / ``n_cal_scores``.
 _CALIBRATION_COLUMNS: tuple[str, ...] = (
     *_IDENT_COLUMNS,
     "pool_variant",
@@ -196,6 +198,9 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     "rule_inefficiency",
     "calibration_shift",
     "n_pool_rows",
+    "fold_count",
+    "fold_seconds",
+    "n_cal_scores",
     "train_seconds",
     "xcal_seconds",
     "pool_score_seconds",
@@ -669,6 +674,12 @@ def _operating_metrics(
         "xcal_threshold": _r(float(threshold)),
         "gmm_cut": nan,
         "blend_weight": nan,
+        # Fold-count study columns (issue #2897); only the fold-count arms set
+        # them.  ``n_cal_scores`` is the pooled calibration-set size the
+        # conformal quantile is taken over, which is what K actually buys.
+        "fold_count": nan,
+        "fold_seconds": nan,
+        "n_cal_scores": nan,
         # Cut-rule study columns (issue #2836); only the variant rows set them.
         "cut_fallback": 0,
         "cut_fail_reason": "",
@@ -968,6 +979,120 @@ def _schedule_variant_rows(
         row["gmm_cut"] = _r(gmm_cut)
         row["blend_weight"] = _r(weight)
         rows.append(row)
+    return rows
+
+
+def _fold_count_variant_rows(
+    details: dict[str, Any],
+    base_scores: "np.ndarray",
+    base_labels: "np.ndarray",
+    inclusion: int,
+    n_pool_rows: float,
+    counts: list[int],
+    sim_pooled_scores: list[float] | None,
+    schedule: str | None,
+) -> list[dict[str, Any]]:
+    """One metric row per calibration **fold count** K (issue #2897).
+
+    The study's screen for "does more cross-calibration buy anything, and what
+    does it cost".  It is exact rather than approximate, because the folds are
+    *nested*: :func:`~vtscore.training.thresholds.compute_fold_orderings` draws
+    each fold as an independent stratified split off one ``RandomState(42)``
+    stream, at a per-fold size that does not depend on the count, so the K folds
+    a live ``calibrate_count=K`` run would train are byte-for-byte the first K
+    of the Kmax folds trained here.  Slicing the prefix therefore reproduces
+    each K's threshold exactly, and the arm at ``K == calibrate_count``
+    reproduces this step's own pre-blend conformal cut - the control that
+    licenses the rest of the table.
+
+    Two arms per K, because the fold count and the shipped threshold are
+    different questions:
+
+    * ``folds_k{K}_xcal`` - the raw cross-calibration cut, the thing K is
+      actually a knob on.
+    * ``folds_k{K}_blend`` - that cut after the safe-threshold mix-in the user
+      really gets.  The blend weight depends only on the vote counts, so it is
+      identical across K and this arm isolates how much of K's benefit survives
+      being averaged with the GMM cut.  Emitted only when the step has the
+      pooled sim scores the blend fits.
+
+    ``fold_seconds`` is the calibration wall clock this K would have cost: the
+    measured fit time of its own folds plus the count-independent overhead of
+    the threshold rule.  It is measured inside the Kmax run, so every K's timing
+    shares one machine, one process and one cache state - the *ratios* are the
+    load-bearing part, not the absolute seconds.
+
+    This is the study's screen, not its verdict, for the usual reason (see
+    :func:`_schedule_variant_rows`): K also steers acquisition through the
+    threshold Autopilot's Hard pick ranks around, and a screen that holds the
+    trajectory fixed cannot see the votes a different K would have collected.
+    The live A/B runs exist to measure exactly that.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.training.thresholds import (  # noqa: PLC0415
+        blend_gmm_threshold,
+        fit_gmm_threshold,
+        safe_blend_weight,
+        threshold_from_fold_orderings,
+    )
+
+    fold_data = details.get("fold_count_data")
+    if not fold_data:
+        return []
+    orderings = fold_data["orderings"]
+    seconds = fold_data["seconds"]
+    overhead = float(fold_data.get("overhead_seconds") or 0.0)
+    if not orderings:
+        return []
+
+    ctx = None
+    gmm_cut = gmm_fit = None
+    if sim_pooled_scores:
+        ctx = BlendContext(
+            n_labels=int(details["n_votes"]),
+            n_good=int(details["n_good"]),
+            n_bad=int(details["n_bad"]),
+        )
+        gmm_cut, gmm_fit = fit_gmm_threshold(sim_pooled_scores)
+
+    rows: list[dict[str, Any]] = []
+    for k in counts:
+        if k < 1 or k > len(orderings):
+            continue
+        prefix = orderings[:k]
+        cal_scores = np.array([s for scores, _ in prefix for s in scores])
+        cal_labels = np.array([lb for _, labels_ in prefix for lb in labels_])
+        xcal = threshold_from_fold_orderings(prefix, inclusion)
+        fold_seconds = _r(float(sum(seconds[:k])) + overhead)
+
+        arms: list[tuple[str, float, str, float]] = [("xcal", xcal, "conformal", float("nan"))]
+        if ctx is not None and gmm_cut is not None:
+            weight = safe_blend_weight(ctx, schedule)
+            blended = blend_gmm_threshold(xcal, gmm_cut, ctx, schedule=schedule, fit=gmm_fit)
+            arms.append(("blend", blended, "gmm_blend" if weight < 1.0 else "conformal", weight))
+
+        for arm, threshold, provenance, weight in arms:
+            row = _operating_metrics(
+                base_scores,
+                base_labels,
+                threshold,
+                inclusion,
+                cal_scores,
+                cal_labels,
+                pool_variant="max",
+                provenance=provenance,
+                n_pool_rows=n_pool_rows,
+            )
+            row["gmm_variant"] = f"folds_k{k}_{arm}"
+            row["schedule"] = schedule or ""
+            row["xcal_threshold"] = _r(xcal)
+            row["gmm_cut"] = _r(gmm_cut) if gmm_cut is not None else float("nan")
+            row["blend_weight"] = _r(weight)
+            row["fold_count"] = k
+            row["fold_seconds"] = fold_seconds
+            row["n_cal_scores"] = int(cal_scores.size)
+            rows.append(row)
     return rows
 
 
@@ -1412,6 +1537,7 @@ def _train_and_calibrate(
     head: str = "mlp",
     style_obj: Any = None,
     emit_calibration_metrics: bool = False,
+    fold_count_variants: list[int] | None = None,
 ) -> tuple[_StepModel, float, int, dict[str, float], dict[str, Any]]:
     """Train the step's ranker and calibrate its threshold from the current votes.
 
@@ -1446,6 +1572,7 @@ def _train_and_calibrate(
             calibration_fraction=calibration_fraction,
             head=head,
             emit_calibration_metrics=emit_calibration_metrics,
+            fold_count_variants=fold_count_variants,
         )
     if trainer == "mlp":
         return _mlp_train_and_calibrate(
@@ -1589,6 +1716,7 @@ def _style_train_and_calibrate(
     calibration_fraction: float,
     head: str = "mlp",
     emit_calibration_metrics: bool = False,
+    fold_count_variants: list[int] | None = None,
 ) -> tuple[_StepModel, float, int, dict[str, float], dict[str, Any]]:
     """Style-driven torch path (the Max-Patch experiment arms).
 
@@ -1653,6 +1781,7 @@ def _style_train_and_calibrate(
             hidden_dim=hidden_dim,
             cal_groups=cal_groups,
             score_rows_by_group=score_rows_by_group if cal_groups is not None else None,
+            fold_count_variants=fold_count_variants,
         )
         # Bad-voted bags' inference row stacks: the final model scores these to
         # form the pnorm null (F_neg) at test time (see _calibration_metric_rows).
@@ -1675,6 +1804,13 @@ def _style_train_and_calibrate(
         threshold = threshold_from_folds(folds, inclusion)
         details = {"fold_orderings": folds.orderings, "fold_models": folds.models}
     xcal_seconds = time.monotonic() - t_xcal
+    # Under the #2897 screen this step trained Kmax folds, not ``calibrate_count``
+    # of them.  Bill the reported wall clock for the live count only, so the
+    # baseline row's timing stays the one an uninstrumented run would report; the
+    # per-K costs live in each fold-count arm's own ``fold_seconds``.
+    extra = (details.get("fold_count_data") or {}).get("seconds")
+    if extra:
+        xcal_seconds -= sum(extra[calibrate_count:])
     t_train = time.monotonic()
     if sample_weights is not None:
         model = train_model(X, y, input_dim, hidden_dim=hidden_dim, sample_weights=sample_weights)
@@ -1709,6 +1845,7 @@ def _calibrate_with_details(
     hidden_dim: int | None,
     cal_groups: list | None,
     score_rows_by_group: dict | None,
+    fold_count_variants: list[int] | None = None,
 ) -> tuple[float, dict[str, Any]]:
     """Compute the trained threshold **and** the calibration study's provenance.
 
@@ -1724,13 +1861,41 @@ def _calibrate_with_details(
     * ``fold_node_data`` — per-fold, per-group **node** scores (grouped path
       only), so a remedial pooling variant can recalibrate off the same fold
       models without retraining; ``None`` on the row-wise (whole-image) path.
+    * ``fold_count_data`` — only under *fold_count_variants* (issue #2897): the
+      **full** Kmax fold orderings, their per-fold seconds, and the
+      count-independent overhead, for :func:`_fold_count_variant_rows`.
 
     On the grouped path the fold models are trained once via
     :func:`~vtscore.training.thresholds.compute_grouped_fold_node_scores` and the
     base orderings are the max-pool of the node data, so the threshold is
     identical to what production's grouped calibration produces for this arm.
+
+    *fold_count_variants* raises the number of folds actually trained to
+    ``max(calibrate_count, *variants)`` while leaving everything the step
+    returns computed off the first ``calibrate_count`` of them.  That is exact,
+    not an approximation: the folds are nested (see
+    :func:`~vtscore.training.thresholds.compute_fold_orderings`) and
+    ``train_model`` is seeded per call, so the extra folds cannot perturb the
+    live threshold, the fold models, or the trajectory - they only cost time.
     """
     import numpy as np  # noqa: PLC0415
+
+    k_max = max(calibrate_count, *(fold_count_variants or [calibrate_count]))
+    t_folds = time.monotonic()
+    fold_seconds: list[float] = []
+
+    def _with_fold_data(details: dict[str, Any], orderings: list) -> dict[str, Any]:
+        """Attach the fold-count screen's inputs and trim *details* to K live folds."""
+        if fold_count_variants:
+            details["fold_count_data"] = {
+                "orderings": orderings,
+                "seconds": fold_seconds,
+                # Everything in the calibration wall clock that is *not* a fold
+                # fit (the pooled conformal rule, the node max-pool): paid once
+                # at every K, so it belongs in each arm's cost.
+                "overhead_seconds": max(0.0, (time.monotonic() - t_folds) - sum(fold_seconds)),
+            }
+        return details
 
     # The trained fold models ride along in details["fold_models"] so the
     # #2852 fold-anchored arm can score the haystack on each fold's own scale
@@ -1743,11 +1908,12 @@ def _calibrate_with_details(
             input_dim,
             groups=cal_groups,
             rng=np.random.RandomState(42),
-            calibrate_count=calibrate_count,
+            calibrate_count=k_max,
             calibration_fraction=calibration_fraction,
             hidden_dim=hidden_dim,
             score_rows_by_group=score_rows_by_group,
             model_sink=fold_models,
+            seconds_sink=fold_seconds,
         )
         if fallback is not None:
             return fallback, {
@@ -1758,25 +1924,30 @@ def _calibrate_with_details(
             }
         # Base (max) orderings from the same fold node data -> identical to
         # production's grouped calibration for this arm.
-        fold_orderings = [([float(np.max(b)) for b in blocks], labels) for blocks, labels in fold_node_data]
+        all_orderings = [([float(np.max(b)) for b in blocks], labels) for blocks, labels in fold_node_data]
+        fold_orderings = all_orderings[:calibrate_count]
         threshold = threshold_from_fold_orderings(fold_orderings, inclusion)
-        return threshold, {
-            "provenance": classify_threshold_provenance(None),
-            "fold_orderings": fold_orderings,
-            "fold_node_data": fold_node_data,
-            "fold_models": fold_models,
-        }
+        return threshold, _with_fold_data(
+            {
+                "provenance": classify_threshold_provenance(None),
+                "fold_orderings": fold_orderings,
+                "fold_node_data": fold_node_data[:calibrate_count],
+                "fold_models": fold_models[:calibrate_count],
+            },
+            all_orderings,
+        )
 
     # Row-wise path (whole-image styles): no bag flooding, no node re-pooling.
-    fold_orderings, fallback = compute_fold_orderings(
+    all_orderings, fallback = compute_fold_orderings(
         X_list,
         y_list,
         input_dim,
         rng=np.random.RandomState(42),
-        calibrate_count=calibrate_count,
+        calibrate_count=k_max,
         calibration_fraction=calibration_fraction,
         hidden_dim=hidden_dim,
         model_sink=fold_models,
+        seconds_sink=fold_seconds,
     )
     if fallback is not None:
         return fallback, {
@@ -1785,13 +1956,17 @@ def _calibrate_with_details(
             "fold_node_data": None,
             "fold_models": [],
         }
+    fold_orderings = all_orderings[:calibrate_count]
     threshold = threshold_from_fold_orderings(fold_orderings, inclusion)
-    return threshold, {
-        "provenance": classify_threshold_provenance(None),
-        "fold_orderings": fold_orderings,
-        "fold_node_data": None,
-        "fold_models": fold_models,
-    }
+    return threshold, _with_fold_data(
+        {
+            "provenance": classify_threshold_provenance(None),
+            "fold_orderings": fold_orderings,
+            "fold_node_data": None,
+            "fold_models": fold_models[:calibrate_count],
+        },
+        all_orderings,
+    )
 
 
 def _svm_train_and_calibrate(
@@ -1897,6 +2072,7 @@ def simulate_voting_iterations(  # noqa: C901
     anchored_rules: Optional[list[str]] = None,
     anchored_fold_arms: bool = True,
     anchored_fold_combines: Optional[list[str]] = None,
+    fold_count_variants: Optional[list[int]] = None,
     acq_inclusion_offset: int = ACQUISITION_INCLUSION_OFFSET,
     acq_rank_percentile: Optional[float] = None,
 ) -> list[dict[str, Any]]:
@@ -2034,6 +2210,17 @@ def simulate_voting_iterations(  # noqa: C901
         anchored_fold_combines: How the fold arms combine per-fold cuts in
             quantile space (default :data:`_ANCHORED_FOLD_COMBINES`):
             ``"qmean"`` and/or ``"qmedian"``.
+        fold_count_variants: Calibration fold counts to score counterfactually
+            (issue #2897; requires ``emit_calibration_metrics`` and a *style*).
+            Each step trains ``max(calibrate_count, *variants)`` folds instead of
+            ``calibrate_count`` and emits one ``folds_k{K}_xcal`` row - plus a
+            ``folds_k{K}_blend`` row where the step has a safe-threshold fit -
+            per K, carrying that K's regret and its measured ``fold_seconds``.
+            The folds are nested, so the live threshold and the trajectory are
+            byte-identical to a plain run at ``calibrate_count`` and the arm at
+            ``K == calibrate_count`` reproduces this step's own conformal cut;
+            see :func:`_fold_count_variant_rows`.  Costs ``Kmax - calibrate_count``
+            extra fold fits per step and nothing else.
         autopilot_fidelity: When ``True`` (default) the simulated user follows
             the app's own phase machine
             (:class:`vtscore.eval.autopilot_flow.AutopilotFlow`): no detector is
@@ -2283,6 +2470,7 @@ def simulate_voting_iterations(  # noqa: C901
             head=head,
             style_obj=style_obj,
             emit_calibration_metrics=emit_calibration_metrics,
+            fold_count_variants=fold_count_variants,
         )
 
         # Apply the shipped safe threshold if enabled
@@ -2465,6 +2653,23 @@ def simulate_voting_iterations(  # noqa: C901
                         inclusion,
                         n_pool_rows=metric_rows[0]["n_pool_rows"],
                         schedules=schedule_variants,
+                    )
+                )
+            # The #2897 fold-count arms.  Unlike the arms above these need no
+            # sim scores of their own - they re-cut fold orderings the step
+            # already trained - so they run whether or not safe_thresholds is on;
+            # the pooled sim scores, when present, only add the blended arm.
+            if fold_count_variants:
+                metric_rows.extend(
+                    _fold_count_variant_rows(
+                        details,
+                        base_scores,
+                        base_labels,
+                        inclusion,
+                        n_pool_rows=metric_rows[0]["n_pool_rows"],
+                        counts=fold_count_variants,
+                        sim_pooled_scores=sim_pooled_scores,
+                        schedule=blend_schedule,
                     )
                 )
             # The #2852 anchored-mixture arms, paired against the same test
