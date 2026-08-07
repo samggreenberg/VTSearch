@@ -26,6 +26,15 @@
     <div class="auto-export-status" [class.auto-export-status--error]="!ax.success">
       @if (ax.success) {
         <vt-icon type="check" [size]="14"></vt-icon> Auto-exported via {{ ax.exporter }}{{ ax.message ? ' — ' + ax.message : '' }}
+        <!-- An exporter can format the results into a third-party site's URL
+             and hand it back (#2898). Offered as a click rather than opened
+             automatically: the results arrive from an async response, so a
+             popup blocker would eat an unprompted window.open(). -->
+        @if (autoExportUrl(); as url) {
+          <button type="button" class="btn btn--secondary btn--sm auto-export-open" [title]="url" (click)="openExternal(url)">
+            Open
+          </button>
+        }
       } @else {
         &#9888; Auto-export via {{ ax.exporter }} failed{{ ax.error ? ': ' + ax.error : '' }}
       }

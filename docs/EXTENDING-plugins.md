@@ -1149,6 +1149,47 @@ mid-stream can't leave a half-written file at the destination. See
 | Attribute | Default | Description |
 |-----------|---------|-------------|
 | `icon` | `"📤"` | Emoji shown in the UI |
+| `opens_url` | `False` | Whether this exporter always ends by opening a browser tab — see below |
+
+#### Opening a browser tab (`open_url`)
+
+An exporter doesn't have to *deliver* the labelset anywhere. Return an
+`http(s)` URL under an **`"open_url"`** key and the frontend opens it in a new
+tab — which is how you hand the user off to a third-party site that has a
+viewer but no ingest API: format the selection into that site's own URL and
+return it. A delivery exporter whose remote hands back a permalink returns the
+same key.
+
+```python
+def export(self, results: dict, field_values: dict) -> dict:
+    url = validate_browser_url(f"https://review.example.com/?ids={quote(ids, safe='')}")
+    return {"message": "Opening the labelset in Review Site.", "open_url": url}
+```
+
+Set `opens_url = True` as well **only if you always return a URL**: the flag is
+what lets the Export modal label the button "Open in &lt;name&gt;" *before*
+running anything. An exporter that returns one only sometimes leaves the flag
+`False` — the URL still opens, the button just can't advertise it up front.
+
+What each surface does with the key:
+
+| Surface | Behaviour |
+|---------|-----------|
+| Export modal | Opens a new tab; if the popup blocker eats it, the success toast carries an **Open** action that always gets through |
+| Auto-Find auto-export (`POST /api/auto-detect`) | Offered as an **Open** button on the Auto-Detect Results modal's status line — not opened on arrival, since the response is async and would be blocked |
+| CLI (`--exporter`) | No browser: the URL is printed under the confirmation message, and rides along as an `open_url` field on the `export_complete` event under `--progress-format json` |
+
+Every path re-validates the URL with
+`vtscore.security.url_validation.validate_browser_url` (a scheme allowlist —
+deliberately *not* the SSRF guard, since the browser makes the request and a
+`localhost` viewer is a legitimate target), so a plugin can never push a
+`javascript:` URL to the frontend. Anything you encode into the URL is visible
+to the destination site and lands in the user's browser history, so keep it to
+identifiers, and cap the length: URLs stop working around 2000 characters.
+
+The library-side guide has the full worked example and the encoding/truncation
+pitfalls: [`vtscore/docs/extending/results-exporters.md` § Opening a URL in the
+browser](../vtscore/docs/extending/results-exporters.md#opening-a-url-in-the-browser).
 
 ### How it gets invoked
 

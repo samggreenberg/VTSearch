@@ -83,3 +83,10 @@
     color: var(--color-bad);
   }
 }
+
+// Sits inline after the auto-export confirmation, so it reads as part of that
+// sentence rather than as a second row of chrome.
+.auto-export-open {
+  margin-left: var(--space-sm);
+  vertical-align: baseline;
+}

@@ -236,6 +236,19 @@ python app.py --autodetect --dataset data.pkl --settings settings.json --progres
 The two choices are `text` (default, prose) and `json` (NDJSON events). The
 event schema is defined in `vtscore.cli_progress`.
 
+An exporter can format its results into a URL for a browser to open rather than
+delivering them anywhere (the built-in `open_url` exporter does exactly this).
+There is no browser on the command line, so the URL is printed under the
+exporter's confirmation message, and carried as an `open_url` field on the
+`export_complete` event in JSON mode — enough for a wrapping script to open it:
+
+```bash
+python app.py --autodetect --dataset data.pkl --settings settings.json \
+    --progress-format json --exporter open_url \
+    --url-template 'https://example.com/review?ids={ids}' \
+  | jq -r 'select(.event == "export_complete") | .open_url'
+```
+
 ## Pipeline file
 
 For repeatable runs (cron, CI), put the whole autodetect invocation in a YAML

@@ -693,6 +693,15 @@ class _AutoFindExportStatusSchema(Schema):
     success = fields.Boolean(required=True)
     message = fields.String(metadata={"description": "Human-readable outcome; present on success."})
     error = fields.String(metadata={"description": "Failure reason; present instead of ``message`` on failure."})
+    open_url = fields.String(
+        metadata={
+            "description": (
+                "An ``http(s)`` URL the exporter formatted for the browser to open, "
+                "offered as a link in the Auto-Detect Results modal. Declared rather "
+                "than left to the pass-through below because the frontend acts on it."
+            )
+        }
+    )
 
     class Meta:
         unknown = INCLUDE

@@ -213,14 +213,17 @@ class OpenUrlLabelsetExporter(LabelsetExporter):
         }
 
     def export_cli(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
-        """Print the formatted URL to stdout — there is no browser to open it."""
+        """Return the formatted URL — there is no browser here to open it.
+
+        The CLI prints the ``open_url`` of *any* exporter under the
+        confirmation message, so this doesn't write to stdout itself: doing so
+        would both duplicate that line and put prose in the middle of the
+        NDJSON stream under ``--progress-format json``.
+        """
         url, included, total = self._build_url(results, field_values)
-        if included < total:
-            print(f"Formatted URL (first {included} of {total} item(s)):\n\n  {url}")
-        else:
-            print(f"Formatted URL ({included} item(s)):\n\n  {url}")
+        detail = f"first {included} of {total} item(s)" if included < total else f"{included} item(s)"
         return {
-            "message": f"Printed a URL covering {included} of {total} item(s) to stdout.",
+            "message": f"Formatted a URL covering {detail}.",
             "open_url": url,
             "included_count": included,
             "total_count": total,

@@ -7,6 +7,7 @@ file, and export the results.
 
 from __future__ import annotations
 
+import logging
 import sys
 from pathlib import Path
 from collections.abc import Iterator
@@ -18,6 +19,8 @@ from vtscore import cli_progress
 from vtscore.datasets.loader import apply_custom_metadata_md5, load_dataset_from_pickle
 from vtscore.utils.hits import build_media_hit
 from vtscore.utils.scores import sigmoid_to_finite_scores
+
+logger = logging.getLogger(__name__)
 
 
 def _list_importer_names() -> list[str]:
@@ -474,6 +477,12 @@ def _run_exporter(
     exports the trained classifiers themselves (``needs_trained_detectors``,
     the portable-detector bundle) is handed the *detector_mlps* the pipeline
     trained, via :meth:`LabelsetExporter.export_cli_detectors`.
+
+    An exporter that returns an ``open_url`` gets it surfaced here rather than
+    dropped: there is no browser to open it on the command line, so the URL is
+    printed under the confirmation message (text mode) and carried as a field
+    on the ``export_complete`` event (JSON mode), which is what lets a wrapping
+    script open it itself.
     """
     from vtscore.exporters import get_exporter
 
@@ -489,7 +498,38 @@ def _run_exporter(
     else:
         result = exporter.export_cli(results, field_values)
     message = result.get("message", "Export complete.")
-    cli_progress.emit("export_complete", text=message, message=message)
+
+    open_url = _validated_open_url(result, exporter_name)
+    if open_url is None:
+        cli_progress.emit("export_complete", text=message, message=message)
+    else:
+        cli_progress.emit(
+            "export_complete",
+            text=f"{message}\n\n  {open_url}",
+            message=message,
+            open_url=open_url,
+        )
+
+
+def _validated_open_url(result: dict[str, Any], exporter_name: str) -> str | None:
+    """Return *result*'s ``open_url`` if it is one, else ``None``.
+
+    The same scheme allowlist the HTTP route applies, for the same reason: a
+    plugin should never be able to put a ``javascript:`` URL in front of the
+    user.  A bad one is dropped with a warning rather than raised, because the
+    export itself already succeeded — sinking a completed delivery over a
+    cosmetic field would lose the run.
+    """
+    raw = result.get("open_url")
+    if raw is None:
+        return None
+    from vtscore.security.url_validation import validate_browser_url
+
+    try:
+        return validate_browser_url(str(raw))
+    except ValueError as exc:
+        logger.warning("Exporter %r returned an unusable open_url, ignoring it: %s", exporter_name, exc)
+        return None
 
 
 def _portable_detector_descriptors(detector_mlps: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:

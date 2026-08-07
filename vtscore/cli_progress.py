@@ -16,7 +16,9 @@ Event names emitted today:
 - ``labels_imported`` - one-shot ``--import-labels-into`` finished
   fields: ``detector`` (str), ``applied`` (int), ``skipped`` (int)
 - ``export_complete`` - exporter finished its run
-  fields: ``message`` (str - the exporter's own confirmation text)
+  fields: ``message`` (str - the exporter's own confirmation text),
+  ``open_url`` (str? - only when the exporter returned one; an ``http(s)``
+  URL for the caller to open, since the CLI has no browser of its own)
 - ``progress``       - a tick from the embedding / loading stack
   fields: ``status`` (str), ``message`` (str?), ``current`` (int?),
   ``total`` (int?), ``pct`` (float? - only when total > 0)
