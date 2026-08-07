@@ -300,10 +300,21 @@ successful run) short-circuits and returns the cached `done` payload directly.
 Pass `{"wait": true}` in the body to block until the job finishes and receive
 the result inline (used by tests; the frontend leaves it `false`):
 
-→ `{"results": [{"id": 0, "score": 0.9234}], "threshold": 0.5123}`
+→ `{"results": [{"id": 0, "score": 0.9234}], "threshold": 0.5123, "acq_threshold": 0.6180}`
 
 The `done` payload — whether returned inline (`wait=true`) or via the result
-poll — carries `results` and `threshold`.
+poll — carries `results`, `threshold` and `acq_threshold`.
+
+`threshold` is the **decision line**: the cutoff shown to the user, what
+`above_threshold` counts against, and what Find calls a match. `acq_threshold`
+is the **acquisition cut**, and it is a different number — Autopilot's Hard and
+New picks read a threshold as a *rank position* rather than a boundary, so they
+sample around a cut taken three inclusion steps below the reporting one, which
+places it higher in the ranking. Nothing shown to the user reads it. It is
+`null` on sorts with no detector behind them (`/api/sort`, `/api/example-sort`,
+`/api/label-file-sort`), where a client should fall back to `threshold`. See
+[`docs/ML.md`](../ML.md#threshold-calibration) for the mechanism and the
+measurement behind the offset.
 
 #### Learned sort result (poll)
 
@@ -314,7 +325,7 @@ GET /api/learned-sort/result?job_id=<id>
 Polls a background learned-sort job.
 
 - Running: `{"job_id": "…", "status": "running", "current": N, "total": M}`
-- Done: `{"results": [{"id": 0, "score": 0.9234}], "threshold": 0.5123}`
+- Done: `{"results": [{"id": 0, "score": 0.9234}], "threshold": 0.5123, "acq_threshold": 0.6180}`
 - Cancelled: `{"job_id": "…", "status": "cancelled"}`
 - Job failed: HTTP 500.
 - Unknown `job_id`: HTTP 404.

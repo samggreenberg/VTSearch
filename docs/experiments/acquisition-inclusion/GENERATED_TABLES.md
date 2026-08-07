@@ -1,6 +1,6 @@
 # Acquisition/reporting threshold decoupling — does it buy back the positives?
 
-Design: `docs/plans/acquisition-inclusion-decoupling.md`. Reporting is cut at inclusion 0 in **every** arm; only the selector's cut moves.
+Design: `docs/ML.md` (threshold calibration). Reporting is cut at inclusion 0 in **every** arm; only the selector's cut moves.
 
 
 ## Lever verification — where each arm actually sampled

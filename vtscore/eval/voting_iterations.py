@@ -42,6 +42,8 @@ if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
 
+    from vtscore.training.thresholds import FoldAnchoredCut
+
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, select_next
 from vtscore.eval.autopilot_flow import AutopilotFlow, app_has_detector
@@ -50,6 +52,8 @@ from vtscore.eval.trainers import _cross_calibrated_threshold, _parse_trainer_sp
 from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.mlp import LINEAR_HEAD, _auto_hidden_dim, train_model
 from vtscore.training.thresholds import (
+    ACQUISITION_INCLUSION_OFFSET,
+    acquisition_inclusion,
     anchored_gmm_fit,
     calculate_safe_threshold,
     calibration_folds,
@@ -123,9 +127,10 @@ _IDENT_COLUMNS: tuple[str, ...] = (
     "n_bad",
     "phase",
     "app_trained",
-    # --- Acquisition/reporting decoupling (docs/plans/acquisition-inclusion-decoupling.md).
-    #: The threshold handed to the *selector* this step.  Equal to ``threshold``
-    #: unless an acquisition cut is configured.
+    # --- Acquisition/reporting decoupling (docs/ML.md, threshold calibration).
+    #: The threshold handed to the *selector* this step - cut
+    #: ``acq_inclusion_offset`` inclusion steps below ``threshold``.  Equal to it
+    #: on steps with no fold-anchored fit to re-cut, and at offset 0.
     "acq_threshold",
     #: Where each threshold sits in the **pool** score distribution the selector
     #: actually ranks - the two are emitted together on purpose.  Autopilot's
@@ -443,7 +448,7 @@ def _safe_threshold_for_step(
     inclusion: int,
     style_obj: Any = None,
     schedule: str | None = None,
-) -> tuple[float, list[float], list[int], list[Any], str]:
+) -> tuple[float, list[float], list[int], list[Any], str, "FoldAnchoredCut | None"]:
     """The harness's **shipped** safe threshold - the same rule the app applies.
 
     Scores the simulation set (the harness's haystack) with the final model and
@@ -464,8 +469,8 @@ def _safe_threshold_for_step(
     Returns ``(threshold, sim_scores, sim_ids, fold_haystacks, provenance, cut)``.
     The fitted :class:`~vtscore.training.thresholds.FoldAnchoredCut` rides along
     (``None`` on the blend fallback) so a caller can re-cut the *same* fit at
-    another inclusion without refitting - which is what the acquisition arm of
-    ``docs/plans/acquisition-inclusion-decoupling.md`` does.
+    another inclusion without refitting - which is what the acquisition cut does
+    (``acq_inclusion_offset``; see ``docs/ML.md``, threshold calibration).
     The sim scores ride along so the #2799 / #2836 / #2852 variant rows can
     re-cut the same distribution without a second scoring pass, their media ids
     with them so a variant can attach each score's true label without assuming
@@ -1850,7 +1855,7 @@ def simulate_voting_iterations(  # noqa: C901
     anchored_rules: Optional[list[str]] = None,
     anchored_fold_arms: bool = True,
     anchored_fold_combines: Optional[list[str]] = None,
-    acq_inclusion: Optional[int] = None,
+    acq_inclusion_offset: int = ACQUISITION_INCLUSION_OFFSET,
     acq_rank_percentile: Optional[float] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
@@ -1937,24 +1942,27 @@ def simulate_voting_iterations(  # noqa: C901
             follows the text sort (top items for the initial goods, the sort's
             cutoff for the initial bads); ``None`` (default) means the dataset
             has no text sort, so autopilot seeds from random known-good examples.
-        acq_inclusion: Cut the threshold handed to the **selector** at this
-            inclusion instead of at *inclusion*, leaving reporting and every
-            metric at *inclusion* so arms stay comparable
-            (``docs/plans/acquisition-inclusion-decoupling.md``).  ``None`` -
-            the shipped behaviour, one threshold doing both jobs.
+        acq_inclusion_offset: Cut the threshold handed to the **selector** at
+            ``inclusion + acq_inclusion_offset``, leaving reporting and every
+            metric at *inclusion* so arms stay comparable.  Defaults to
+            :data:`~vtscore.training.thresholds.ACQUISITION_INCLUSION_OFFSET`
+            (-3), **the shipped app behaviour** - the harness matches production
+            here as it does everywhere else, so a baseline arm measures what
+            users get.  Pass ``0`` for the pre-#2876 control, where one threshold
+            did both jobs.
 
             The direction is the opposite of the intuition from the cost
             weights, because Autopilot's ``hard`` pick reads the threshold as a
-            **rank position**, not a decision boundary: a *negative* value
+            **rank position**, not a decision boundary: a *negative* offset
             prices false alarms higher, *raises* the cut, moves it *up* the
             ranking, and so returns *more* positives.  Requires a fold-anchored
             cut for the step; steps that fall back to the schedule blend keep
             the reporting threshold (the blend has no inclusion-aware form).
         acq_rank_percentile: Alternative acquisition cut - place it at this
             quantile of the simulation-set score distribution directly, rather
-            than by naming an inclusion.  Mutually exclusive with
-            *acq_inclusion*.  This is the ``rank_pin`` arm: same intent, one
-            fewer indirection.
+            than by naming an inclusion.  This is the ``rank_pin`` arm: same
+            intent, one fewer indirection.  Requires
+            ``acq_inclusion_offset=0``, since the two name the same cut.
         anchored_thresholds: When ``True`` (requires ``safe_thresholds``,
             ``emit_calibration_metrics``, and a *style*), each step additionally
             emits one metric row per anchored-mixture arm (issue #2852): the
@@ -2013,10 +2021,15 @@ def simulate_voting_iterations(  # noqa: C901
     # These are pre-registered experiment knobs, so they are validated beside
     # the other argument checks rather than deep in the loop: a run that dies
     # forty minutes in on a typo has held a cluster slot for nothing.
-    if acq_inclusion is not None and acq_rank_percentile is not None:
-        raise ValueError("acq_inclusion and acq_rank_percentile are mutually exclusive")
-    if acq_rank_percentile is not None and not 0.0 <= acq_rank_percentile <= 1.0:
-        raise ValueError(f"acq_rank_percentile must be in [0, 1], got {acq_rank_percentile}")
+    if acq_rank_percentile is not None:
+        if acq_inclusion_offset != 0:
+            raise ValueError(
+                "acq_inclusion_offset and acq_rank_percentile are mutually exclusive; "
+                "pass acq_inclusion_offset=0 to run the rank-pinned arm "
+                f"(the default is {ACQUISITION_INCLUSION_OFFSET}, the shipped acquisition cut)"
+            )
+        if not 0.0 <= acq_rank_percentile <= 1.0:
+            raise ValueError(f"acq_rank_percentile must be in [0, 1], got {acq_rank_percentile}")
 
     if head not in HEADS:
         raise ValueError(f"unknown head {head!r}; expected one of {HEADS}")
@@ -2120,8 +2133,8 @@ def simulate_voting_iterations(  # noqa: C901
     pool_labels = {cid: (1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0) for cid in sim_ids}
     step: _StepModel | None = None
     threshold = 0.5
-    #: The selector's threshold.  Tracks ``threshold`` unless an acquisition cut
-    #: is configured; kept as its own name so the two jobs cannot silently
+    #: The selector's threshold - cut ``acq_inclusion_offset`` steps below the
+    #: reporting one.  Kept as its own name so the two jobs cannot silently
     #: re-merge (they were one variable, and that is how the #2847 positives
     #: regression got in).
     acq_threshold = 0.5
@@ -2230,16 +2243,6 @@ def simulate_voting_iterations(  # noqa: C901
                     schedule=blend_schedule,
                 )
             )
-            # Re-cut the *same* fold-anchored fit for the selector.  O(1) - the
-            # mixture was fitted above; ``threshold_at`` is monotone by
-            # construction, so the arms are nested and ``acq_inclusion=0``
-            # reproduces the reporting cut exactly.
-            if acq_inclusion is not None and safe_cut is not None:
-                cand = safe_cut.threshold_at(acq_inclusion)
-                if np.isfinite(cand):
-                    acq_threshold = float(cand)
-            elif acq_rank_percentile is not None and sim_pooled_scores:
-                acq_threshold = float(np.quantile(np.asarray(sim_pooled_scores, dtype=np.float64), acq_rank_percentile))
             if emit_calibration_metrics:
                 details["pre_blend_provenance"] = details.get("provenance", "conformal")
                 details["provenance"] = safe_provenance
@@ -2248,16 +2251,27 @@ def simulate_voting_iterations(  # noqa: C901
                 details["n_good"] = len(good_votes)
                 details["n_bad"] = len(bad_votes)
 
-        if not (safe_thresholds and (acq_inclusion is not None or acq_rank_percentile is not None)):
-            # No acquisition cut configured, or no fold-anchored fit to re-cut:
-            # the two jobs coincide, exactly as they do in production today.
-            acq_threshold = threshold
-        elif safe_cut is None and acq_inclusion is not None:
-            # Schedule-blend fallback (~5% of steps, concentrated in the cold
-            # start).  The blend has no inclusion-aware form, so there is
-            # nothing honest to re-cut - do not silently reuse the last step's
-            # acquisition threshold against this step's scores.
-            acq_threshold = threshold
+        # The selector's cut.  Recomputed from scratch every step - never
+        # carried over - so a step with nothing to re-cut falls back to the
+        # reporting threshold rather than sampling this step's scores against
+        # the last step's cut.
+        acq_threshold = threshold
+        if safe_thresholds:
+            if acq_rank_percentile is not None:
+                if sim_pooled_scores:
+                    acq_threshold = float(
+                        np.quantile(np.asarray(sim_pooled_scores, dtype=np.float64), acq_rank_percentile)
+                    )
+            elif acq_inclusion_offset != 0 and safe_cut is not None:
+                # Re-cut the *same* fold-anchored fit.  O(1) - the mixture was
+                # fitted above; ``threshold_at`` is monotone by construction, so
+                # the arms are nested and offset 0 reproduces the reporting cut
+                # exactly.  ``safe_cut is None`` is the schedule-blend fallback
+                # (~5% of steps, concentrated in the cold start): the blend has
+                # no inclusion-aware form, so there is nothing honest to re-cut.
+                cand = safe_cut.threshold_at(acquisition_inclusion(inclusion, acq_inclusion_offset))
+                if np.isfinite(cand):
+                    acq_threshold = float(cand)
 
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single

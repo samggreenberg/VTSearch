@@ -585,12 +585,26 @@ def windowed_sort_extras(results: list[dict], threshold: float | None) -> dict[s
     }
 
 
-def windowed_sort_response(results: list[dict], threshold: float | None) -> dict[str, Any]:
+def windowed_sort_response(
+    results: list[dict],
+    threshold: float | None,
+    acq_threshold: float | None = None,
+) -> dict[str, Any]:
     """Build a sort-response body, windowing the transmitted ``results``.
 
+    *acq_threshold* is the **acquisition** cut for a detector sort - the rank
+    position Autopilot's Hard / New picks sample around, which since #2876 sits
+    above the reporting ``threshold`` (see
+    :func:`vtscore.state.core.detector_acquisition_threshold`).  Only the learned
+    sort carries one; the text / example / label-file sorts have no detector
+    behind them, so they leave it ``None`` and the client falls back to
+    ``threshold``.  It is deliberately *not* fed to ``windowed_sort_extras``:
+    ``above_threshold`` counts what the user is told matched, which is the
+    reporting cut's job.
+
     Stores the full ranking (so ``/api/sort/page`` can serve any window) and
-    returns ``{results, threshold, sort_token, total, above_threshold,
-    has_more_below}``.  Below :data:`SORT_WINDOW_THRESHOLD` the full list is
+    returns ``{results, threshold, acq_threshold, sort_token, total,
+    above_threshold, has_more_below}``.  Below :data:`SORT_WINDOW_THRESHOLD` the full list is
     transmitted unchanged and ``has_more_below`` is ``False`` — small / medium
     sorts behave exactly as before.  At or above it, only the initial head window
     rides the response and the client pages the rest.
@@ -609,7 +623,13 @@ def windowed_sort_response(results: list[dict], threshold: float | None) -> dict
         end = _cache_mod.initial_window_end(total, extras["above_threshold"])
         window = results[:end]
         has_more = end < total
-    return {"results": window, "threshold": threshold, "has_more_below": has_more, **extras}
+    return {
+        "results": window,
+        "threshold": threshold,
+        "acq_threshold": acq_threshold,
+        "has_more_below": has_more,
+        **extras,
+    }
 
 
 def get_embedder_for_medias(media_dict: dict):

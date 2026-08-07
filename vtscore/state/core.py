@@ -24,6 +24,7 @@ See Phase 3 of ``../docs/architecture.md``.
 
 from __future__ import annotations
 
+import math
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -1299,6 +1300,37 @@ def invalidate_loaded_detector_models() -> None:
         for ctx in _detector_contexts.values():
             ctx.model = None
             ctx.threshold = 0.5
+
+
+def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: int) -> float:
+    """The cut Autopilot's ``hard`` / ``new`` picks should sample around.
+
+    **Not the decision line.**  ``ctx.threshold`` is what the user sees and what
+    Find calls a match; this is a second cut taken from the *same* fitted
+    estimator, :data:`~vtscore.training.thresholds.ACQUISITION_INCLUSION_OFFSET`
+    inclusion steps below it, because the picks read a threshold as a rank
+    position rather than a boundary and so want it further *up* the ranking.
+    Decoupling the two buys 4.5x the positives per 100 votes at lower cost - see
+    ``docs/experiments/acquisition-inclusion/REPORT.md`` (PR #2876).
+
+    Derived on demand rather than stored beside ``ctx.threshold``: there are
+    four places that write a threshold onto a detector context, and a second
+    field would be one more thing for each of them to forget.  Re-cutting is
+    arithmetic on already-fitted Gaussians, so it is cheap enough to do per
+    request.
+
+    Falls back to ``ctx.threshold`` when there is no fold-anchored estimator to
+    re-cut (safe thresholds off, or a degenerate fit that fell back to the
+    schedule blend, which has no inclusion-aware form) - the two jobs coincide
+    there, exactly as they did everywhere before #2876.
+    """
+    cut = ctx.anchored_cut_cache
+    if cut is None:
+        return ctx.threshold
+    from vtscore.training.thresholds import acquisition_inclusion
+
+    candidate = float(cut.threshold_at(acquisition_inclusion(inclusion_value)))
+    return candidate if math.isfinite(candidate) else ctx.threshold
 
 
 def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:

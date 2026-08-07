@@ -4,6 +4,8 @@ All tests use small synthetic datasets with known, well-separated
 embeddings so no real model downloads are needed.
 """
 
+import math
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -190,10 +192,27 @@ class TestSimulateVotingIterations:
         assert len(rows1) == len(rows2)
         # Wall-clock timing columns vary between runs; compare everything else.
         _timing = {"elapsed_seconds", "train_seconds", "xcal_seconds", "pool_score_seconds", "test_score_seconds"}
+
+        def _same(a, b) -> bool:
+            """Value equality that reads NaN as reproducing itself.
+
+            Several columns are deliberately NaN rather than 0.0 where the
+            quantity does not exist (``_pool_percentile`` on an exhausted pool,
+            for one - 0.0 would read as "the cut is at the very top", a real
+            value).  Plain ``==`` calls two identical NaNs different, so a dict
+            comparison would report the *last* step of every run as
+            non-deterministic.
+            """
+            if isinstance(a, float) and isinstance(b, float) and math.isnan(a) and math.isnan(b):
+                return True
+            return bool(a == b)
+
         for r1, r2 in zip(rows1, rows2):
-            r1_cmp = {k: v for k, v in r1.items() if k not in _timing}
-            r2_cmp = {k: v for k, v in r2.items() if k not in _timing}
-            assert r1_cmp == r2_cmp
+            keys1 = sorted(k for k in r1 if k not in _timing)
+            keys2 = sorted(k for k in r2 if k not in _timing)
+            assert keys1 == keys2
+            for k in keys1:
+                assert _same(r1[k], r2[k]), f"column {k!r} differs: {r1[k]!r} != {r2[k]!r}"
 
     def test_different_seeds_differ(self):
         # Overlapping (not separable) categories on purpose: the cost sequence

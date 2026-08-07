@@ -1,4 +1,4 @@
-"""Acquisition/reporting threshold decoupling (docs/plans/acquisition-inclusion-decoupling.md).
+"""Acquisition/reporting threshold decoupling (docs/ML.md, threshold calibration).
 
 The knob exists because Autopilot's ``hard`` pick reads the threshold as a
 **rank position**, not a decision boundary, so the direction that buys positives
@@ -14,7 +14,11 @@ import pytest
 
 from vtscore.eval.voting_iterations import _pool_percentile, simulate_voting_iterations
 
-from vtscore.training.thresholds import fit_fold_anchored_cut
+from vtscore.training.thresholds import (
+    ACQUISITION_INCLUSION_OFFSET,
+    acquisition_inclusion,
+    fit_fold_anchored_cut,
+)
 
 from .test_max_patch_style import _planted_dataset
 
@@ -70,22 +74,48 @@ def test_pool_percentile_is_nan_on_empty_pool_not_zero():
     assert np.isnan(_pool_percentile({}, 0.5))
 
 
-# --- the default is unchanged production ------------------------------------
-def test_default_leaves_the_two_jobs_identical():
-    rows = _run()
-    assert rows, "no steps emitted"
-    for r in rows:
-        assert r["acq_threshold"] == pytest.approx(r["threshold"]), (
-            "with no acquisition cut configured the selector must see the reporting threshold"
-        )
+# --- the default is the shipped acquisition cut -----------------------------
+def test_default_is_the_shipped_offset_not_the_coupled_behaviour():
+    """The harness matches production, and production decoupled the two jobs.
+
+    A default of 0 would silently make every future arm's control the *old*
+    behaviour, so a baseline run would stop measuring what users get.
+    """
+    assert ACQUISITION_INCLUSION_OFFSET == -3
+    rows = [r for r in _run() if r["threshold_provenance"].startswith("fold_anchored")]
+    assert rows, "no fold-anchored steps to check"
+    moved = [r for r in rows if r["acq_threshold"] != r["threshold"]]
+    assert moved, "the default must decouple the selector from the reporting cut"
+    for r in moved:
+        assert r["acq_threshold"] > r["threshold"]
 
 
-def test_acq_inclusion_zero_reproduces_the_reporting_cut():
-    """threshold_at is monotone and anchored, so inclusion 0 is a no-op."""
-    base = _run()
-    zero = _run(acq_inclusion=0)
-    assert [r["threshold"] for r in base] == [r["threshold"] for r in zero]
+def test_offset_zero_is_the_coupled_control():
+    """threshold_at is monotone and anchored, so a zero offset is a no-op."""
+    zero = _run(acq_inclusion_offset=0)
+    assert zero, "no steps emitted"
     assert [r["acq_threshold"] for r in zero] == [r["threshold"] for r in zero]
+
+
+def test_the_offset_is_relative_to_the_reporting_inclusion():
+    """The shipped reading: the *gap* is what was measured, not an absolute cut.
+
+    Read absolutely, ``-3`` would collapse to a no-op at reporting inclusion -3
+    and invert below it - the direction the study's falsification arm ruled out.
+    Relative, the selector stays above the reporting line wherever the user puts
+    the slider.
+    """
+    assert acquisition_inclusion(0) == -3
+    assert acquisition_inclusion(-3) == -6
+    assert acquisition_inclusion(4) == 1
+    assert acquisition_inclusion(0, offset=0) == 0
+
+    rows = [r for r in _run(inclusion=-3) if r["threshold_provenance"].startswith("fold_anchored")]
+    assert rows, "no fold-anchored steps to check"
+    moved = [r for r in rows if r["acq_threshold"] != r["threshold"]]
+    assert moved, "the offset went absolute: at reporting inclusion -3 it became a no-op"
+    for r in moved:
+        assert r["acq_threshold"] > r["threshold"]
 
 
 # --- the direction ----------------------------------------------------------
@@ -97,10 +127,10 @@ def test_negative_acq_inclusion_raises_the_cut_and_moves_it_up_the_ranking(k):
     sits further UP the descending ranking -> the ``hard`` pick samples nearer
     the top.  If this ever flips, the experiment's whole premise is inverted.
     """
-    rows = [r for r in _run(acq_inclusion=k) if r["threshold_provenance"].startswith("fold_anchored")]
+    rows = [r for r in _run(acq_inclusion_offset=k) if r["threshold_provenance"].startswith("fold_anchored")]
     assert rows, "no fold-anchored steps to check"
     moved = [r for r in rows if r["acq_threshold"] != r["threshold"]]
-    assert moved, f"acq_inclusion={k} never moved the acquisition threshold"
+    assert moved, f"acq_inclusion_offset={k} never moved the acquisition threshold"
     for r in moved:
         assert r["acq_threshold"] > r["threshold"], f"k={k} lowered the cut; direction is inverted"
         # Skip steps where the pool ran dry: `_pool_percentile` returns NaN
@@ -113,9 +143,9 @@ def test_negative_acq_inclusion_raises_the_cut_and_moves_it_up_the_ranking(k):
 
 def test_positive_acq_inclusion_moves_the_other_way():
     """The falsification arm of the run must actually falsify."""
-    rows = [r for r in _run(acq_inclusion=2) if r["threshold_provenance"].startswith("fold_anchored")]
+    rows = [r for r in _run(acq_inclusion_offset=2) if r["threshold_provenance"].startswith("fold_anchored")]
     moved = [r for r in rows if r["acq_threshold"] != r["threshold"]]
-    assert moved, "acq_inclusion=+2 never moved the acquisition threshold"
+    assert moved, "acq_inclusion_offset=+2 never moved the acquisition threshold"
     for r in moved:
         assert r["acq_threshold"] < r["threshold"], "positive inclusion must LOWER the cut"
 
@@ -152,7 +182,7 @@ def test_reporting_columns_are_cut_at_inclusion_zero_regardless(k):
     - the reported threshold is never the acquisition one - rather than equality
     against the control run.
     """
-    for r in _run(acq_inclusion=k):
+    for r in _run(acq_inclusion_offset=k):
         if r["acq_threshold"] != r["threshold"]:
             # `threshold_percentile` is the reporting cut's position in the TEST
             # scores; it must track `threshold`, not `acq_threshold`.
@@ -162,7 +192,7 @@ def test_reporting_columns_are_cut_at_inclusion_zero_regardless(k):
 
 def test_blend_fallback_steps_keep_the_reporting_threshold():
     """No fold-anchored fit -> nothing honest to re-cut, and no stale carry-over."""
-    rows = _run(acq_inclusion=-2)
+    rows = _run(acq_inclusion_offset=-2)
     fallback = [r for r in rows if not r["threshold_provenance"].startswith("fold_anchored")]
     assert fallback, "expected some cold-start blend/conformal steps"
     for r in fallback:
@@ -171,8 +201,8 @@ def test_blend_fallback_steps_keep_the_reporting_threshold():
 
 # --- the rank-pin arm -------------------------------------------------------
 def test_rank_percentile_arm_moves_the_cut_and_is_monotone():
-    lo = _run(acq_rank_percentile=0.80)
-    hi = _run(acq_rank_percentile=0.98)
+    lo = _run(acq_inclusion_offset=0, acq_rank_percentile=0.80)
+    hi = _run(acq_inclusion_offset=0, acq_rank_percentile=0.98)
     n = min(len(lo), len(hi))
     pairs = [(lo[i]["acq_threshold"], hi[i]["acq_threshold"]) for i in range(n)]
     differing = [(a, b) for a, b in pairs if a != b]
@@ -183,10 +213,21 @@ def test_rank_percentile_arm_moves_the_cut_and_is_monotone():
 
 def test_the_two_knobs_are_mutually_exclusive():
     with pytest.raises(ValueError, match="mutually exclusive"):
-        _run(acq_inclusion=-2, acq_rank_percentile=0.9)
+        _run(acq_inclusion_offset=-2, acq_rank_percentile=0.9)
+
+
+def test_rank_pin_must_disable_the_default_offset_explicitly():
+    """The default is a real cut now, so a bare rank-pin arm is ambiguous.
+
+    Silently letting the percentile win would mean a run whose config names two
+    acquisition cuts quietly measures one of them - the sort of thing that only
+    surfaces as an unexplained arm months later.
+    """
+    with pytest.raises(ValueError, match="acq_inclusion_offset=0"):
+        _run(acq_rank_percentile=0.9)
 
 
 @pytest.mark.parametrize("bad", [-0.1, 1.5])
 def test_rank_percentile_is_range_checked(bad):
     with pytest.raises(ValueError, match=r"\[0, 1\]"):
-        _run(acq_rank_percentile=bad)
+        _run(acq_inclusion_offset=0, acq_rank_percentile=bad)

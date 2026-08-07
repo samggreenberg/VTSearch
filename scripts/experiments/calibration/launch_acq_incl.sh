@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Acquisition/reporting threshold decoupling — docs/plans/acquisition-inclusion-decoupling.md
+# Acquisition/reporting threshold decoupling — docs/experiments/acquisition-inclusion/REPORT.md
 #
 # #2847 (PR #2873) found today's fused threshold finds HALF as many positives as
 # the conformal path it replaced (median 9 -> 4 per 100 votes, p=1e-20) while
@@ -74,27 +74,31 @@ if [[ -x "$WT/scripts/experiments/preflight.sh" ]]; then
   }
 fi
 
-# arm -> "ACQ_INCLUSION ACQ_RANK_PERCENTILE"  ("-" = unset)
+# arm -> "ACQ_INCLUSION_OFFSET ACQ_RANK_PERCENTILE"  ("-" = unset)
+#
+# The offset is relative to CALIB_INCLUSION, which this grid holds at 0, so every
+# arm below is the same cut it was when the study ran.  `prod` now has to name
+# its 0 explicitly: the default is -3, the shipped acquisition cut.
 declare -A ARMS=(
-  [prod]="- -"
+  [prod]="0 -"
   [acq_m1]="-1 -"
   [acq_m2]="-2 -"
   [acq_m3]="-3 -"
   [acq_m4]="-4 -"
   [acq_p2]="2 -"
-  [rank_pin]="- 0.959"
+  [rank_pin]="0 0.959"
 )
 
 for arm in prod acq_m1 acq_m2 acq_m3 acq_m4 acq_p2 rank_pin; do
   read -r inc pct <<<"${ARMS[$arm]}"
-  export CALIB_ACQ_INCLUSION=""
+  export CALIB_ACQ_INCLUSION_OFFSET=""
   export CALIB_ACQ_RANK_PERCENTILE=""
-  [[ "$inc" != "-" ]] && export CALIB_ACQ_INCLUSION="$inc"
+  [[ "$inc" != "-" ]] && export CALIB_ACQ_INCLUSION_OFFSET="$inc"
   [[ "$pct" != "-" ]] && export CALIB_ACQ_RANK_PERCENTILE="$pct"
   export CALIB_RESULTS="$CALIB_EXP/results/$arm"
   mkdir -p "$CALIB_RESULTS/cells"
   ln -sfn "$CALIB_EXP/results/prepare_info.json" "$CALIB_RESULTS/prepare_info.json"
   ln -sfn "$CALIB_EXP/results/crops" "$CALIB_RESULTS/crops"
-  echo "=== arm $arm (acq_inclusion='${CALIB_ACQ_INCLUSION}' acq_rank_percentile='${CALIB_ACQ_RANK_PERCENTILE}')"
+  echo "=== arm $arm (acq_inclusion_offset='${CALIB_ACQ_INCLUSION_OFFSET}' acq_rank_percentile='${CALIB_ACQ_RANK_PERCENTILE}')"
   bash "$HERE/launch_cells.sh" || echo "ARM $arm SUBMIT FAILED" >&2
 done

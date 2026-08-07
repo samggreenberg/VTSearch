@@ -73,6 +73,11 @@ _WINDOW_META_FIELDS = {
     # True when ``results`` is a head window and more rows follow (page them via
     # /api/sort/page). False when the full ranking was transmitted.
     "has_more_below": fields.Boolean(required=False),
+    # The rank position Autopilot's Hard / New picks sample around, which since
+    # #2876 sits *above* the reporting ``threshold`` - the two cuts do different
+    # jobs (see vtscore.state.core.detector_acquisition_threshold).  ``None`` on
+    # sorts with no detector behind them; the client falls back to ``threshold``.
+    "acq_threshold": fields.Float(required=False, allow_none=True),
 }
 
 
@@ -85,6 +90,7 @@ class SortResponseSchema(Schema):
     total = _WINDOW_META_FIELDS["total"]
     above_threshold = _WINDOW_META_FIELDS["above_threshold"]
     has_more_below = _WINDOW_META_FIELDS["has_more_below"]
+    acq_threshold = _WINDOW_META_FIELDS["acq_threshold"]
 
 
 class SortPageQuerySchema(Schema):
@@ -165,6 +171,9 @@ class LearnedSortResponseSchema(Schema):
     sort_token = fields.String(required=False)
     above_threshold = fields.Integer(required=False)
     has_more_below = fields.Boolean(required=False)
+    # The acquisition cut Autopilot samples around; this is the only sort with a
+    # detector behind it, so the only one that carries one.
+    acq_threshold = _WINDOW_META_FIELDS["acq_threshold"]
 
 
 class LearnedSortCancelResponseSchema(Schema):
@@ -283,6 +292,7 @@ class LabelFileSortResponseSchema(Schema):
     total = _WINDOW_META_FIELDS["total"]
     above_threshold = _WINDOW_META_FIELDS["above_threshold"]
     has_more_below = _WINDOW_META_FIELDS["has_more_below"]
+    acq_threshold = _WINDOW_META_FIELDS["acq_threshold"]
 
 
 # ---------------------------------------------------------------------------
