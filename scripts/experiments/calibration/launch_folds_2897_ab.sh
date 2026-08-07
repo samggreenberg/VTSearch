@@ -34,7 +34,12 @@ for K in "$@"; do
   # its own results dir.  Sharing one would interleave two grids' cells under
   # indistinguishable task indices and there would be no way to separate them
   # afterwards.
-  export CALIB_EXP="/exp/$USER/calibration-folds-2897-ab-k$K"
+  #
+  # CALIB_AB_BASE picks the parent.  It is not cosmetic: /exp/$USER is a 50 G
+  # quota that these studies keep filling, and an arm that runs out of disk
+  # loses its *late* steps - the ones the saturation question lives in.  Point
+  # it at a roomy mount and the arms land there instead.
+  export CALIB_EXP="${CALIB_AB_BASE:-/exp/$USER}/calibration-folds-2897-ab-k$K"
   export CALIB_RESULTS="$CALIB_EXP/results"
 
   # The arm LIVES at K: the acquisition feedback the screen cannot see is the
