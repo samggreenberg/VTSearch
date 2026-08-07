@@ -126,10 +126,16 @@ def _finite(x: float | None) -> float:
 def gaussian_cuts(fit: GmmFit1D, fpr_weight: float, fnr_weight: float) -> dict[str, float]:
     """Every Gaussian-family cut from one fit.  NaN where the rule has no root.
 
-    No midpoint fallback is applied here: the caller decides whether a missing
-    root means "fall back to the midpoint" (what a shippable rule must do) or
-    "record a miss" (what the measurement wants).  Conflating the two would
-    silently score the midpoint under another rule's name.
+    No fallback is applied here: the caller decides whether a missing root means
+    "substitute something shippable" or "record a miss" (what the measurement
+    wants).  Conflating the two would silently score a fallback under another
+    rule's name.  Note the two answers have genuinely diverged - production's
+    ``rate`` rule (:func:`~vtscore.training.thresholds.gmm_cut_from_fit`) neither
+    returns the midpoint nor declines here: it continues past the inter-mean
+    interval at the rule's own first-order slope, so it never stops moving with
+    the cost tilt.  This function keeps reporting NaN because the decomposition
+    is measuring *where the stationary point sits*, and "there is none" is the
+    honest answer to that question.
     """
     return {
         "mid": _finite(fit.midpoint()),
