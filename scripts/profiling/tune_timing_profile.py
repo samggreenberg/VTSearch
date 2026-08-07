@@ -31,8 +31,9 @@ against datasets and detectors you name::
 By default ``--drive`` runs only the **read-only** families: opening a dataset,
 text search, and Find. The rest mutate state — loading a detector seeds example
 votes, train-and-score *overwrites the active dataset's labels*, promote creates
-a dataset, and an import writes one — so they need ``--allow-mutating`` and
-should be pointed at a scratch ``--data-dir``, never at live user data.
+a dataset, an import writes one, and a staging import leaves a pkl behind — so
+they need ``--allow-mutating`` and should be pointed at a scratch ``--data-dir``,
+never at live user data.
 
 Both modes end the same way: the fit runs, the profile is written, and a coverage
 report says exactly which task families got measured and which fell back to the
@@ -73,7 +74,12 @@ _MUTATING_TASKS = {
     "train_and_score": "OVERWRITES every label in the active dataset (replace_all)",
     "dataset_promote": "creates new datasets in the registry",
     "dataset_load": "imports demo datasets, downloading and writing them",
+    "dataset_stage": "imports demo datasets into staging pkls (no registry entry)",
 }
+
+#: Families driven from ``--demo`` ids rather than from registry datasets, so a
+#: sweep of only these needs no ``--datasets``.
+_DEMO_DRIVEN_TASKS = frozenset({"dataset_load", "dataset_stage"})
 
 #: How long to wait for one background task before giving up on the cell.
 _TASK_TIMEOUT_S = 3600
@@ -113,7 +119,7 @@ def _parse_args() -> argparse.Namespace:
     )
     ap.add_argument("--datasets", default="", help="comma list of registry dataset ids or names")
     ap.add_argument("--detectors", default="", help="comma list of registry detector ids or names")
-    ap.add_argument("--demo", default="", help="comma list of demo dataset ids for dataset_load")
+    ap.add_argument("--demo", default="", help="comma list of demo dataset ids for dataset_load / dataset_stage")
     ap.add_argument(
         "--queries",
         default="a person,an outdoor scene,music",
@@ -355,6 +361,32 @@ def drive_dataset_load(demo_ids: list[str], reps: int) -> None:
             _wait_for_task(loading_tasks, task_id, f"demo {demo_id}")
 
 
+def drive_dataset_stage(demo_ids: list[str], reps: int) -> None:
+    """Measure staging demo datasets (acquire, embed, serialize; no registry)."""
+    from vtscore.concurrency.progress import loading_tasks  # noqa: PLC0415
+    from vtscore.datasets.config import DEMO_DATASETS  # noqa: PLC0415
+    from vtscore.datasets.importers import get_importer  # noqa: PLC0415
+    from vtscore.datasets.load_pipeline import STAGING_DIR, _stage_importer_in_background  # noqa: PLC0415
+
+    if not demo_ids:
+        _log("SKIPPED dataset_stage: no --demo ids given")
+        return
+    importer = get_importer("demo")
+    for demo_id in demo_ids:
+        info = DEMO_DATASETS.get(demo_id)
+        if info is None:
+            _log(f"SKIPPED demo {demo_id}: unknown demo dataset")
+            continue
+        for rep in range(reps):
+            _log(f"dataset_stage {demo_id} rep {rep + 1}/{reps}")
+            task_id = _stage_importer_in_background(
+                importer,
+                {"name": demo_id, "media_type": info.get("media_type", ""), "embedder": ""},
+            )
+            _wait_for_task(loading_tasks, task_id, f"staging demo {demo_id}")
+    _log(f"NOTE: dataset_stage left staged pkls in {STAGING_DIR}; delete them when done.")
+
+
 def run_drivers(args: argparse.Namespace, tasks: list[str]) -> None:
     """Dispatch each requested family's driver against the resolved inputs."""
     import app as app_module  # noqa: PLC0415 - wires Flask + every plugin registry
@@ -362,7 +394,7 @@ def run_drivers(args: argparse.Namespace, tasks: list[str]) -> None:
     app_module.app.config["TESTING"] = True
     datasets = _resolve_datasets(_split(args.datasets))
     detectors = _resolve_detectors(_split(args.detectors))
-    if not datasets and tasks != ["dataset_load"]:
+    if not datasets and not set(tasks) <= _DEMO_DRIVEN_TASKS:
         _log("nothing to drive: no datasets matched. Load or name at least one registry dataset.")
     with app_module.app.test_client() as client:
         if "dataset_open" in tasks:
@@ -379,6 +411,8 @@ def run_drivers(args: argparse.Namespace, tasks: list[str]) -> None:
             drive_dataset_promote(client, datasets, args.reps)
     if "dataset_load" in tasks:
         drive_dataset_load(_split(args.demo), args.reps)
+    if "dataset_stage" in tasks:
+        drive_dataset_stage(_split(args.demo), args.reps)
 
 
 # ---------------------------------------------------------------------------

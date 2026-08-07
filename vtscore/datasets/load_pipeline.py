@@ -57,7 +57,7 @@ from vtscore.datasets.stages.finalize import (
 from vtscore.datasets.stages.projection import _build_projection_stage, _maybe_signpost_texts_stage
 from vtscore.datasets.stages.registry import _register_and_migrate
 from vtscore.datasets.thumbnail_warm import start_archive_thumbnail_warm
-from vtscore.timing import record_task
+from vtscore.timing import record_task, step_weights
 
 
 # Two independent gates control how many dataset loads can run concurrently
@@ -773,6 +773,10 @@ def _demo_load_hints(importer, field_values: dict) -> tuple[str, int | None, flo
 
 STAGING_DIR = DATA_DIR / "staging"
 
+#: Task family and step count for a staging import (see vtscore.timing.tasks).
+_STAGE_TASK = "dataset_stage"
+_TOTAL_STAGE_STEPS = 3  # acquire, embed, serialize
+
 
 def _stage_importer_in_background(importer, field_values: dict, label: str = "") -> str:
     """Run *importer*.run() in a daemon thread, saving the result to a staging pkl.
@@ -801,14 +805,25 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
 
     task_id = f"_staging_{uuid4().hex[:8]}"
     display_name = label or importer.resolve_display_name(field_values)
+    staged_media_type = _normalize_media_type(field_values.get("media_type", ""))
+    staged_embedder = field_values.get("embedder", "") or ""
     tracker = loading_tasks.create_task(
         task_id,
         display_name,
-        media_type=_normalize_media_type(field_values.get("media_type", "")),
-        embedder=field_values.get("embedder", "") or "",
+        media_type=staged_media_type,
+        embedder=staged_embedder,
         extra_fields={"staging_result": None},
+        step_weights=step_weights(_STAGE_TASK, media_type=staged_media_type, embedder=staged_embedder),
     )
-    tracker.update("loading", "Preparing dataset…", 0, 0)
+    # Staging reports the same step structure every other long-running family
+    # does, which is what earns it a whole-job bar and an ETA — and what lets the
+    # timing recorder below label each measured duration with the phase it
+    # belongs to. The importer's own progress calls come through stepless, and
+    # the tracker keeps the last step it was told, so stamping the boundaries
+    # here is enough.
+    timing_recorder = record_task(tracker, _STAGE_TASK, media_type=staged_media_type, embedder=staged_embedder)
+    timing_recorder.start()
+    tracker.update("loading", "Preparing dataset…", 0, 0, step=1, total_steps=_TOTAL_STAGE_STEPS)
 
     def stage_task():
         from vtsearch.auth import thread_user  # noqa: PLC0415
@@ -821,6 +836,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 temp_medias: dict = {}
                 importer.run(field_values, temp_medias)
                 apply_custom_metadata_md5(temp_medias)
+                tracker.update("embedding", "Embedding…", 0, 0, step=2, total_steps=_TOTAL_STAGE_STEPS)
                 embed_missing(temp_medias, field_values.get("embedder", "") or "", on_progress=tracker.update)
                 from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 
@@ -833,8 +849,10 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 first = next(iter(temp_medias.values()))
                 media_type = first.get("media_type", "audio")
                 count = len(temp_medias)
+                timing_recorder.set_scale(n=count)
                 name = label or importer.resolve_display_name(field_values)
 
+                tracker.update("loading", "Writing staged file…", 0, 0, step=3, total_steps=_TOTAL_STAGE_STEPS)
                 data_bytes = export_dataset_to_file(temp_medias)
                 del temp_medias
                 gc.collect()
@@ -850,6 +868,8 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                     f"Staged: {name} ({count} medias)",
                     100,
                     100,
+                    step=_TOTAL_STAGE_STEPS,
+                    total_steps=_TOTAL_STAGE_STEPS,
                     staging_result={"path": str(staging_path), "name": name, "count": count, "media_type": media_type},
                 )
             except ImportError as e:
@@ -876,6 +896,10 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 error_msg = str(e) or repr(e) or "Unknown error during staging"
                 tracker.update("idle", "", 0, 0, error=error_msg)
             finally:
+                # Every branch above parks the tracker at "idle", setting
+                # ``error`` when it failed — which is what says whether these
+                # phase timings describe a staging run worth fitting.
+                timing_recorder.finish(ok=not tracker.get().get("error"))
                 clear_thread_progress()
                 loading_tasks.mark_finished(task_id)
 

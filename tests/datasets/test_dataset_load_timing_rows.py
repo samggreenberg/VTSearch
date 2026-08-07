@@ -10,6 +10,11 @@ These tests drive a real load through ``_run_origin_load_in_background`` on the
 calling thread and assert the rows land — and that they land in a shape the
 fitter accepts, since rows the fitter rejects are as useless as rows never
 written.
+
+Staging imports (``_stage_importer_in_background``, the combine flow's half of
+an import) are covered too, under their own ``dataset_stage`` family: they stop
+before dedup, the coverage atlas, and the registry write, so recording them as
+``dataset_load`` would teach the fit that finalize is free.
 """
 
 from __future__ import annotations
@@ -148,5 +153,96 @@ class TestDatasetLoadRecordsTimingRows:
         monkeypatch.delenv(RECORD_ENV_VAR, raising=False)
 
         _run_load(tmp_path)
+
+        assert not sink.exists()
+
+
+class _StubImporter:
+    """The smallest thing ``_stage_importer_in_background`` will accept."""
+
+    fields: list = []
+
+    def __init__(self, run=None):
+        self._run = run or _fake_load
+
+    def run(self, field_values, target_medias, **kwargs):
+        self._run(target_medias)
+
+    def resolve_display_name(self, field_values):
+        return "stub staging import"
+
+
+def _run_staging(tmp_path, monkeypatch, run=None) -> str:
+    """Stage one import synchronously, leaving its pkl under *tmp_path*."""
+    from vtscore.datasets import load_pipeline
+    from vtscore.datasets.load_pipeline import _stage_importer_in_background
+
+    monkeypatch.setattr(load_pipeline, "STAGING_DIR", tmp_path / "staging")
+    with mock.patch(
+        "vtscore.datasets.load_pipeline.threading.Thread",
+        side_effect=_sync_thread_factory(),
+    ):
+        return _stage_importer_in_background(
+            _StubImporter(run),
+            {"media_type": "audio", "embedder": "clap"},
+        )
+
+
+class TestStagingImportRecordsTimingRows:
+    """The staging half of an import records under its own task family."""
+
+    def test_staging_import_appends_rows(self, isolated_settings, tmp_path, monkeypatch):
+        sink = tmp_path / "timings.jsonl"
+        monkeypatch.setenv(RECORD_ENV_VAR, str(sink))
+
+        _run_staging(tmp_path, monkeypatch)
+
+        assert sink.exists(), "a staging import with the recorder armed must write rows"
+        rows = load_rows([str(sink)])
+        assert rows
+        assert {r["task"] for r in rows} == {"dataset_stage"}
+
+    def test_rows_cover_the_staging_steps_and_survive_the_fitter(self, isolated_settings, tmp_path, monkeypatch):
+        sink = tmp_path / "timings.jsonl"
+        monkeypatch.setenv(RECORD_ENV_VAR, str(sink))
+
+        _run_staging(tmp_path, monkeypatch)
+
+        rows = load_rows([str(sink)])
+        assert {r["step"] for r in rows} == {"acquire", "embed", "serialize"}
+        assert all(r["ok"] and r["complete"] for r in rows)
+        assert all(r["n"] == 1 for r in rows), "the staged item count must ride along as the scale variable"
+        assert all(r["media_type"] == "audio" and r["embedder"] == "clap" for r in rows)
+        assert all(normalize_row(r) is not None for r in rows)
+
+    def test_staging_is_not_recorded_as_a_dataset_load(self, isolated_settings, tmp_path, monkeypatch):
+        """Staging skips dedup, the atlas, and the registry write, so folding it
+        into ``dataset_load`` would fit a finalize phase that never ran."""
+        sink = tmp_path / "timings.jsonl"
+        monkeypatch.setenv(RECORD_ENV_VAR, str(sink))
+
+        _run_staging(tmp_path, monkeypatch)
+
+        assert "dataset_load" not in {r["task"] for r in load_rows([str(sink)])}
+
+    def test_failed_staging_is_marked_not_ok(self, isolated_settings, tmp_path, monkeypatch):
+        sink = tmp_path / "timings.jsonl"
+        monkeypatch.setenv(RECORD_ENV_VAR, str(sink))
+
+        def _boom(target_medias):
+            raise RuntimeError("importer exploded")
+
+        _run_staging(tmp_path, monkeypatch, run=_boom)
+
+        rows = load_rows([str(sink)])
+        assert rows, "even a failed staging run should record what it measured"
+        assert all(not r["ok"] for r in rows)
+        assert all(normalize_row(r) is None for r in rows)
+
+    def test_disarmed_recorder_writes_nothing(self, isolated_settings, tmp_path, monkeypatch):
+        sink = tmp_path / "timings.jsonl"
+        monkeypatch.delenv(RECORD_ENV_VAR, raising=False)
+
+        _run_staging(tmp_path, monkeypatch)
 
         assert not sink.exists()

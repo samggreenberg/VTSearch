@@ -126,6 +126,19 @@ TASKS: dict[str, TaskSpec] = {
         "media items in the promoted subset",
         (6.0, 3.5, 0.5),
     ),
+    # Staging an import: run the importer, embed what it produced, serialize the
+    # result to a staging pkl. Deliberately *not* modelled as a ``dataset_load``:
+    # staging stops before dedup, the coverage atlas, and the registry write (a
+    # later promote pays those), so folding its runs into the load fit would
+    # teach that finalize is free. No byte-scaled phases here — the staging path
+    # is never told an archive size, so a per-MB rate would have nothing to
+    # divide by.
+    "dataset_stage": _linear(
+        "dataset_stage",
+        ("acquire", "embed", "serialize"),
+        "media items staged",
+        (0.30, 0.60, 0.10),
+    ),
     # Loading a saved detector: read its labelset, pull the label examples back
     # into the active dataset, retrain the MLP. Training dominates; the other
     # two are quick I/O.
