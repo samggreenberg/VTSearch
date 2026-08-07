@@ -240,7 +240,7 @@ def _weighted_gaussian_crossing(
     return mu_lo + max(inside)
 
 
-def _rate_cut_in_interval(
+def _rate_cut(
     w_lo: float,
     mu_lo: float,
     var_lo: float,
@@ -250,29 +250,47 @@ def _rate_cut_in_interval(
     *,
     lam: float,
 ) -> tuple[float, int]:
-    """The rate-optimal cut, taken as a **sup** so it is monotone in *lam*.
+    """The rate-optimal cut: a **sup** over the inter-mean interval, continued
+    past the edges at the rule's own first-order slope so it is **strictly**
+    monotone in *lam* everywhere.
 
-    ``(cut, clamped)``.  Defines the cut as
+    ``(cut, no_interior_stationary_point)``.  Inside the interval the cut is
 
         ``sup { x in [mu_lo, mu_hi] : w_lo*N_lo(x) >= lam*w_hi*N_hi(x) }``
 
     - the highest score at which the Bad component still out-densities the Good
-    one under the cost tilt - with ``sup {} = mu_lo``.  Raising *lam* (pricing
-    misses higher, i.e. raising Inclusion) shrinks that set pointwise, so the
-    sup can only fall: the rule is **monotone in the cost ratio by
-    construction**, which is what the Inclusion knob's nesting contract needs.
+    one under the cost tilt.  Raising *lam* (pricing misses higher, i.e.
+    raising Inclusion) shrinks that set pointwise, so the sup can only fall:
+    the rule is **monotone in the cost ratio by construction**, which is what
+    the Inclusion knob's nesting contract needs.  Where the densities genuinely
+    cross inside the interval this returns exactly
+    :func:`_weighted_gaussian_crossing`'s root, so the shipped cut is the
+    stationary point of the rate loss wherever one exists.  Picking the
+    interval's *midpoint* when no root exists instead - the obvious-looking
+    fallback - is what broke monotonicity: with a Good component wider than the
+    Bad one the root enters and leaves the interval non-monotonically, and a
+    midpoint fallback let a *more* exclusive inclusion cut *lower* than a less
+    exclusive one.
 
-    Where the densities genuinely cross inside the interval this returns
-    exactly :func:`_weighted_gaussian_crossing`'s root, so the shipped cut is
-    the stationary point of the rate loss wherever one exists.  The sup framing
-    only decides the *degenerate* cases, and it decides them in the direction
-    the loss actually wants: Bad dominating all the way to ``mu_hi`` clamps to
-    ``mu_hi`` (``clamped=1``), Good dominating from ``mu_lo`` up clamps to
-    ``mu_lo``.  Picking the interval's *midpoint* in those cases instead - the
-    obvious-looking fallback - is what broke monotonicity: with a Good
-    component wider than the Bad one the root enters and leaves the interval
-    non-monotonically, and a midpoint fallback let a *more* exclusive inclusion
-    cut *lower* than a less exclusive one.
+    **Past the edges the cut keeps moving** (issue #2896).  Returning the bare
+    edge once the crossing runs off the interval - the previous behaviour -
+    made the cut *constant* in *lam* there, and that flat step propagated all
+    the way up: the composed ``mid_tilt`` quantile plateaued over whole bands
+    of the Inclusion slider, and the acquisition offset
+    (:data:`ACQUISITION_INCLUSION_OFFSET`), which lives entirely inside such a
+    band whenever the tilt saturates, silently collapsed to a no-op - Autopilot
+    degraded to sampling at the reporting line with nothing surfacing it.  So
+    when Bad still out-densities Good at ``mu_hi`` the cut continues *above*
+    the Good mean, and when Good owns the whole interval it continues *below*
+    the Bad mean, each by the log-cost excess beyond the edge times ``var/d``
+    (the mixture-weighted variance over the mean gap) - the exact slope of the
+    equal-variance crossing (:meth:`GmmFit1D.equal_var_offset`), so for
+    equal-variance fits the continuation extends the interior crossing line
+    *seamlessly*, and for unequal variances it is the rule's own first-order
+    slope.  The continuation is strictly decreasing in ``ln(lam)`` and stays on
+    the far side of its edge, so overall monotonicity is preserved; the only
+    plateau left downstream is the honest one, where the cut runs off the end
+    of the haystack's support and the empirical quantile pins at 0 or 1.
 
     Returns the midpoint (flagged) for a fit too degenerate to express a
     boundary at all: non-positive weights/variances or non-ordered means.
@@ -291,16 +309,27 @@ def _rate_cut_in_interval(
     b = -d / var_hi
     c = 0.5 * d * d / var_hi + offset
 
+    # Slope of the out-of-interval continuation: the equal-variance crossing
+    # moves by var/d per nat of log-cost, evaluated at the mixture-weighted
+    # variance (the same variance ``equal_var_offset`` uses).
+    slope = (w_lo * var_lo + w_hi * var_hi) / d
+
     # g(d), in closed form (the same value as ``a d^2 + b d + c``, without the
     # cancellation): Bad still ahead at the Good mean means the whole interval
-    # belongs to Bad, so the sup is the top edge.
-    if offset - 0.5 * d * d / var_lo >= 0.0:
-        return mu_hi, 1
+    # belongs to Bad.  The excess is the log-cost margin by which it is still
+    # ahead - 0 exactly when the crossing sits at ``mu_hi``, growing linearly
+    # as ``lam`` falls - so the continuation leaves the edge without a step.
+    excess = offset - 0.5 * d * d / var_lo
+    if excess >= 0.0:
+        return mu_hi + slope * excess, 1
 
     inside = [u for u in _quadratic_roots(a, b, c) if math.isfinite(u) and 0.0 <= u < d]
     if not inside:
-        # g < 0 across the whole interval: Good owns it from mu_lo up.
-        return mu_lo, 1
+        # g < 0 across the whole interval: Good owns it from mu_lo up.  Here
+        # ``c = g(0) <= 0`` (a positive g(0) with g(d) < 0 forces a root
+        # inside), and ``-c`` is the log-cost margin by which Good is ahead at
+        # the Bad mean - the mirror-image continuation below ``mu_lo``.
+        return mu_lo - slope * max(0.0, -c), 1
     return mu_lo + max(inside), 0
 
 
@@ -636,12 +665,13 @@ def gmm_cut_from_fit(fit: GmmFit1D, rule: str, fpr_weight: float = 1.0, fnr_weig
     ``"mid"`` is the historical midpoint; ``"rate"`` is the rate-optimal
     crossing at the given cost weights (see :meth:`GmmFit1D.rate_crossing`).
 
-    ``"rate"`` goes through :func:`_rate_cut_in_interval`, which reads the cut
-    as a **sup** rather than a bare root so it stays monotone in the cost ratio
-    even on fits where the root enters and leaves the inter-mean interval; the
-    flag marks the degenerate cases it decided by clamping to an edge.  The
-    value is the stationary point wherever one exists, so this is the rule the
-    #2836 / #2852 measurements scored.
+    ``"rate"`` goes through :func:`_rate_cut`, which reads the cut as a
+    **sup** rather than a bare root so it stays monotone in the cost ratio
+    even on fits where the root enters and leaves the inter-mean interval, and
+    continues past the interval edges at the rule's first-order slope so it
+    never flattens (issue #2896); the flag marks the cases with no interior
+    stationary point.  The value is the stationary point wherever one exists,
+    so this is the rule the #2836 / #2852 measurements scored.
 
     ``"mid_tilt"`` (the shipped fold-level rule, :data:`FOLD_ANCHOR_CUT_RULE`)
     is deliberately *not* accepted here: it is defined in fold-quantile space
@@ -655,7 +685,7 @@ def gmm_cut_from_fit(fit: GmmFit1D, rule: str, fpr_weight: float = 1.0, fnr_weig
         if not (fpr_weight > 0.0 and fnr_weight > 0.0 and fit.w_hi > 0.0):
             return fit.midpoint(), 1
         lam = (fnr_weight / fpr_weight) * (fit.w_lo / fit.w_hi)
-        return _rate_cut_in_interval(fit.w_lo, fit.mu_lo, fit.var_lo, fit.w_hi, fit.mu_hi, fit.var_hi, lam=lam)
+        return _rate_cut(fit.w_lo, fit.mu_lo, fit.var_lo, fit.w_hi, fit.mu_hi, fit.var_hi, lam=lam)
     raise ValueError(f"unknown cut rule {rule!r}; expected 'mid' or 'rate'")
 
 
@@ -809,12 +839,18 @@ class FoldAnchoredCut:
         (everything included at ``k`` stays included at ``k + 1``) - the
         contract that makes "cut off at Inclusion 1, verify up to Inclusion 4"
         well defined.  Every link in the chain is monotone: the per-fold cut in
-        the cost weights (:func:`gmm_cut_from_fit`, clamped at the interval
-        edges rather than abandoned so the exits stay monotone too), the
+        the cost weights (:func:`gmm_cut_from_fit`, continued past the
+        inter-mean interval at its first-order slope rather than clamped, so
+        the exits stay monotone *and strictly moving* - issue #2896), the
         empirical quantile of that cut in its fold's haystack, the mean/median
         across folds, the ``mid_tilt`` composition (a constant plus a
         monotone-in-inclusion shift), and realizing a quantile on the final
-        haystack.
+        haystack.  The only plateau in the chain is the honest boundary where
+        a cut runs off its haystack's support and the quantile pins at 0 or 1
+        - crucially, the acquisition offset
+        (:data:`ACQUISITION_INCLUSION_OFFSET`) therefore stays a real gap
+        across the slider instead of silently collapsing wherever the tilt
+        used to saturate.
         """
         if self.final_haystack.size == 0:
             return 0.5

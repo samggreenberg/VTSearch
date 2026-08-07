@@ -578,11 +578,18 @@ def evt_evidence(diag: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
 def fallback_reasons(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
     """Why each rule declined to fire, per arm per variant (issue #2846).
 
-    ``cut_fallback`` says a rule degraded to the midpoint; this says *which*
+    ``cut_fallback`` says a rule declined to fire on that fit; this says *which*
     guard sent it there, which is the whole difference between "the fit was
     sound but oriented the other way" (repairable, and what ``gumbel_any_*``
     repairs) and "the two components collapsed onto each other" (a statement
     about that step's score distribution, which no solver can fix).
+
+    What the flag means depends on which family emitted the row: for the
+    ``_SAFE_GMM_VARIANTS`` arms it is "degraded to that fit's midpoint", while
+    for the label-anchored arms it is the production rule's own "no interior
+    stationary point" flag, where the cut is continued past the component mean
+    rather than replaced.  The flag fires on the same fits either way, so rates
+    and filters are comparable; the substituted *value* is not.
 
     Emitted **per window**, plus an ``all_steps`` row set.  Every other table
     here is windowed, so a bare all-steps count invited exactly the mistake

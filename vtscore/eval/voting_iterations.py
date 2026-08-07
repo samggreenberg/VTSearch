@@ -757,9 +757,15 @@ def _safe_gmm_variant_rows(
     raw column and the ship comparison on the blended one.
 
     A rule whose root does not exist on a given fit falls back to that fit's
-    midpoint - production's own fallback - and is flagged in ``cut_fallback`` so
-    the analyzer can exclude fallen-back steps from a rule's own contrast rather
-    than silently scoring the midpoint under another name.  For the EVT rules
+    midpoint and is flagged in ``cut_fallback`` so the analyzer can exclude
+    fallen-back steps from a rule's own contrast rather than silently scoring
+    the midpoint under another name.  **The midpoint is this family's fallback,
+    not production's** - the shipped ``rate`` rule
+    (:func:`~vtscore.training.thresholds.gmm_cut_from_fit`) continues past the
+    inter-mean interval at its own first-order slope instead, so on the fits
+    where this flag fires these arms are measuring a different rule than the
+    app runs.  The fold-anchored family below calls the production function
+    directly and so does not have that gap.  For the EVT rules
     ``cut_fail_reason`` additionally names *which* guard declined, because the
     repairs those guards want are different and the counts alone cannot tell them
     apart (issue #2846).  The oracle variants do not fall back; they emit NaN cuts
