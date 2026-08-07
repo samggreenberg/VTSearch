@@ -79,6 +79,14 @@ JUMP_DELTA = float(os.environ.get("SPIKE_JUMP_DELTA", "0.15"))
 
 OUT = Path(os.environ.get("SPIKE_OUT", str(common.EXP / "analysis")))
 
+#: Figure resolution.  These are read at full width in the report and the
+#: published artifact, and the four-panel comparison only works if a single
+#: spike is legible against its neighbours - so they are rendered at print
+#: density rather than screen density.  The repo's ``check-added-large-files``
+#: cap was raised to 2 MB to accommodate them (it exists to keep datasets and
+#: model weights out of git, not to ration figure quality).
+FIG_DPI = int(os.environ.get("SPIKE_FIG_DPI", "200"))
+
 
 # --- loading ---------------------------------------------------------------
 def _blank(s: pd.Series) -> pd.Series:
@@ -374,10 +382,7 @@ def make_figures(df: pd.DataFrame, traj: pd.DataFrame, outdir: Path, category: s
         )
         fig.tight_layout()
         p = outdir / f"fig1_{category}_arms.png"
-        # 100 dpi, not 140: the repo's pre-commit hook rejects files over 500 KB
-        # and the four-panel figure is the only one that comes near it.  Still
-        # ~1300px wide, which is past the artifact's display width.
-        fig.savefig(p, dpi=100)
+        fig.savefig(p, dpi=FIG_DPI)
         plt.close(fig)
         made.append(p.name)
 
@@ -389,7 +394,7 @@ def make_figures(df: pd.DataFrame, traj: pd.DataFrame, outdir: Path, category: s
         ax.set_title(f"coco: {category} - cost vs t, TODAY'S PRODUCTION (linear + fold-anchored)")
         fig.tight_layout()
         p = outdir / f"fig2_{category}_production.png"
-        fig.savefig(p, dpi=140)
+        fig.savefig(p, dpi=FIG_DPI)
         plt.close(fig)
         made.append(p.name)
 
@@ -428,7 +433,7 @@ def make_figures(df: pd.DataFrame, traj: pd.DataFrame, outdir: Path, category: s
 
     fig.tight_layout()
     p = outdir / "fig3_incidence_and_magnitude.png"
-    fig.savefig(p, dpi=140)
+    fig.savefig(p, dpi=FIG_DPI)
     plt.close(fig)
     made.append(p.name)
     return made

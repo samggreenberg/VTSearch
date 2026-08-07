@@ -15,7 +15,9 @@ today's production stack (linear head, fold-anchored GMM cut at κ=0.3) does so
 in **12.2%**, and once steps whose *ranking* was already hopeless are excluded,
 in **5.4%** — a **7.7× reduction** in the phenomenon the issue is actually
 about. The oracle stays smooth in every arm, which is what makes this a
-threshold story rather than a ranking one.
+threshold story rather than a ranking one. Independently corroborated: #2847's
+**own command on its own branch** still deep-spikes in 35% of runs when given
+enough seeds.
 
 Three things to keep straight, all of which cut against a victory lap:
 
@@ -55,8 +57,9 @@ a harness that never showed the phenomenon. So the run is a 2×2:
 `simulate_voting_iterations` with the old head and the fusion switched off — not
 the code MatthewELucio ran. The causal claim it licenses is therefore
 within-codebase: *holding the harness fixed, turning these two knobs back on is
-what removes the spikes.* See "The literal rerun" below for what happened when I
-tried the historical route instead.
+what removes the spikes.* The historical route corroborates it independently —
+see "The literal rerun" below, where #2847's own command on its own branch
+spikes in 35% of runs.
 
 ### Grid
 
@@ -99,9 +102,13 @@ Paired against the control at the `(category, seed)` cell:
 | `D_lin_fused` | 58.5% → **12.2%** | 71 | 3 | 7.2e-18 | **−0.117** | <1e-5 |
 
 **The threshold is the bigger lever.** Switching the threshold alone (A→B) takes
-incidence from 58.5% to 26.5%; switching the head alone (A→C) only reaches
-46.3%. Together they reach 12.2% — the two effects compose roughly
-multiplicatively rather than one masking the other.
+incidence from 58.5% to 26.5% — a factor of 0.45; switching the head alone (A→C)
+only reaches 46.3%, a factor of 0.79. Together they reach 12.2%, which is
+*better* than the two marginal factors would predict on their own (0.45 × 0.79 ×
+58.5% = 21.0%, observed 12.2%). So the two changes are not redundant and neither
+is masking the other — the fused threshold appears to be more robust
+specifically on the runs where the linear head has already stabilised the
+scores.
 
 **The ranking never was the problem, and still isn't.** Max oracle jump is flat
 across all four arms (0.025–0.036) while max cost jump falls 0.135 → 0.052.
@@ -137,6 +144,12 @@ production panel decays smoothly from the cold start to ~0.10 with the oracle at
 
 ![fig3](figures/fig3_incidence_and_magnitude.png)
 
+![fig0](figures/fig0_literal_repro_n20.png)
+
+*#2847's exact command on `evaluation-framework` HEAD at 20 seeds: 7 of 20 runs
+deep-spike (rings), against an oracle whose warm-window median is 0.046. The
+five seeds the issue's `--iterations 5` runs are all in the quiet majority.*
+
 ### Where it is still bad
 
 | category | A | C | B | D |
@@ -160,34 +173,43 @@ positives in 100 votes**, so they never trained and emit no steps. They are
 excluded from all 147-trajectory counts above and are the same regime, taken to
 its limit.
 
-## The literal rerun — and what it can and cannot say
+## The literal rerun — it reproduces, and the near-miss is the lesson
 
 I also reran **#2847's exact command** on `evaluation-framework` (HEAD
-`8f526819`), which is where `scripts/sod/sweep.py` lives. It was cheap: the
-feature cache at `/exp/sgreenberg/threshold-stability/cache` already holds
-`coco/siglip2/whole` regions for all 4952 images and 92 `cat` exemplars, so it
-ran on CPU in 289s.
+`8f526819`), where `scripts/sod/sweep.py` lives. It was cheap: the feature cache
+at `/exp/sgreenberg/threshold-stability/cache` already holds `coco/siglip2/whole`
+regions for all 4952 images and 92 `cat` exemplars, so it runs on CPU in ~5
+minutes.
 
-The rerun starts at *exactly* the figure's operating point — cost 0.0688, oracle
-0.0301, flat through the pre-training prefix, which is the 0.069/0.030 flat
-segment at the left edge of the issue's plot. Same split, same class, same test
-set. But it produces **zero deep spikes** across all five seeds (worst
-warm-window cost 0.199 against the figure's 0.68), and so does a second run with
-`--no-safe-thresholds`, i.e. the bare conformal path with the blend switched off
-(worst 0.213).
+At the issue's own `--iterations 5` it produced **zero** deep spikes — worst
+warm-window cost 0.199 — and so did a second run with `--no-safe-thresholds`
+(worst 0.213). Taken at face value that reads as "the branch already fixed
+itself," and I nearly wrote it up that way.
 
-**But five seeds cannot answer this.** Arm A's per-run deep-spike incidence on
-`cat` is 25% (2 of 8 seeds), so a five-seed run has a
-`1 - 0.75^5 = 76%` chance of showing at least one spiking run — which means
-seeing zero has probability 0.24 under "nothing changed". That is not evidence
-of a difference; it is an underpowered check that happened to come up empty
-twice. A 20-seed rerun (`P(zero) = 0.75^20 = 0.003` under the same rate) is
-running to settle it, and this section will be updated with its result.
+**It is a sampling artefact.** At 20 seeds the same command deep-spikes in
+**7 of 20 runs (35%)**, with worst-step costs of 1.00, 1.00, 0.50, 0.44 and 0.39
+against an oracle whose warm-window median is 0.046. Seeds 0–4 — precisely the
+five that `--iterations 5` runs — happen to be the quiet ones.
 
-What the rerun *does* establish, regardless of power: the sod harness on
-`evaluation-framework` still runs, still reproduces the figure's starting
-operating point exactly, and is cheap to re-run from the warm cache — so
-MatthewELucio can settle this on his own branch in five minutes.
+| seeds run | runs with a deep spike | worst warm cost |
+|---|---:|---:|
+| 0–4 (the issue's command) | 0 / 5 | 0.199 |
+| 0–4, blend off | 0 / 5 | 0.213 |
+| **0–19** | **7 / 20 (35%)** | **1.00** |
+
+35% is the same rate as the figure in the issue, which spikes in 2 of its 5
+seeds, and the same character. **The old path reproduces.** That is an
+independent confirmation of what arm A asserts — from a different harness, a
+different branch and a different split — and it is the strongest single piece of
+support for the main result.
+
+> **The methodological point is worth keeping.** A five-seed check has only a
+> 76% chance of catching a phenomenon that hits 25% of runs; seeing zero has
+> probability 0.24 under "nothing changed". A clean five-seed run is not
+> evidence of a fix. Two of them in a row are not either — they are correlated,
+> because they share the same five seeds. Anyone re-running #2847's command to
+> check whether something helped should raise `--iterations` first; at 20 seeds
+> the same null has probability 0.003.
 
 ## Why the sod harness could not be pointed at dev
 
