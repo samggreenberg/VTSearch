@@ -352,7 +352,7 @@ describe('AutopilotPanelComponent', () => {
       expect(t.message).toContain('Done!');
       expect(t.countdown).toBeTruthy();
       expect(t.countdown!.label).toContain('Dashboard');
-      expect(t.countdown!.remaining).toBe(5);
+      expect(t.countdown!.remaining).toBe(10);
       expect(t.action!.label).toBe('Stay here');
     });
 
@@ -361,7 +361,7 @@ describe('AutopilotPanelComponent', () => {
       reachDone();
 
       await vi.advanceTimersByTimeAsync(2000);
-      expect(toasts.toasts[0].countdown!.remaining).toBe(3);
+      expect(toasts.toasts[0].countdown!.remaining).toBe(8);
     });
 
     it('navigates to the Dashboard when the countdown runs out', async () => {
@@ -370,13 +370,117 @@ describe('AutopilotPanelComponent', () => {
       const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
       reachDone();
 
-      await vi.advanceTimersByTimeAsync(4000);
+      await vi.advanceTimersByTimeAsync(9000);
       expect(navigate).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(1000);
       expect(navigate).toHaveBeenCalledWith(['/dashboard']);
       // The toast is gone by the time the view changes.
+      expect(navigate).toHaveBeenCalledTimes(1);
       expect(toasts.toasts.length).toBe(0);
+    });
+
+    it('calls off the return as soon as the user clicks anything', async () => {
+      vi.useFakeTimers();
+      const router = TestBed.inject(Router);
+      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+      reachDone();
+
+      // The reported bug: the user goes straight on to export their detector
+      // and the redirect fires mid-click, looking like a broken export.
+      document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('calls off the return on a keystroke too', async () => {
+      vi.useFakeTimers();
+      const router = TestBed.inject(Router);
+      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+      reachDone();
+
+      document.body.dispatchEvent(new Event('keydown', { bubbles: true }));
+      await vi.advanceTimersByTimeAsync(30_000);
+
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('keeps the news on screen when interaction cancels the return', async () => {
+      vi.useFakeTimers();
+      reachDone();
+
+      document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+
+      // The "Done!" headline survives — just without the countdown, the escape
+      // button, and any suggestion the user is about to be moved.
+      const [t] = toasts.toasts;
+      expect(t.message).toContain('Done!');
+      expect(t.countdown).toBeUndefined();
+      expect(t.action).toBeUndefined();
+      expect(t.detail).toContain('Staying here');
+
+      // ...and it then clears itself on the ordinary success timer.
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(toasts.toasts.length).toBe(0);
+    });
+
+    it('leaves the toast alone when the interaction is with the toast itself', async () => {
+      vi.useFakeTimers();
+      reachDone();
+
+      // The toast stack lives outside this fixture, so stand in for it with an
+      // element carrying the class the guard looks for.
+      const stack = document.createElement('div');
+      stack.className = 'toast-stack';
+      const btn = document.createElement('button');
+      stack.appendChild(btn);
+      document.body.appendChild(stack);
+      try {
+        btn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+        expect(toasts.toasts[0].countdown).toBeTruthy();
+      } finally {
+        document.body.removeChild(stack);
+      }
+    });
+
+    it('does not re-arm the countdown when the user returns to the Train window', async () => {
+      vi.useFakeTimers();
+      const router = TestBed.inject(Router);
+      const navigate = vi.spyOn(router, 'navigate').mockResolvedValue(true);
+      reachDone();
+      expect(toasts.toasts.length).toBe(1);
+
+      // Leaving drops the toast; the autopilot run itself keeps going.
+      fixture.destroy();
+      expect(toasts.toasts.length).toBe(0);
+
+      // Coming back rebuilds the panel. The hand-off was already offered once,
+      // so it must not start counting down again — that is what made the
+      // redirect feel like it was chasing the user around.
+      const revisit = TestBed.createComponent(AutopilotPanelComponent);
+      revisit.componentRef.setInput('goodVotes', new Set([1, 2, 3, 4, 5]));
+      revisit.componentRef.setInput('badVotes', new Set([11, 12, 13, 14, 15]));
+      revisit.componentRef.setInput('labelingStatus', ALL_GREEN);
+      TestBed.tick();
+
+      expect(toasts.toasts.length).toBe(0);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(navigate).not.toHaveBeenCalled();
+    });
+
+    it('offers the hand-off again on a genuinely new autopilot run', async () => {
+      vi.useFakeTimers();
+      reachDone();
+      expect(toasts.toasts.length).toBe(1);
+      toasts.dismissAll();
+
+      // Stopping and restarting autopilot is a new run, not a return visit.
+      component.deactivate();
+      component.activate();
+      reachDone();
+
+      expect(toasts.toasts[0].countdown!.remaining).toBe(10);
     });
 
     it('stays in the Train window when the escape button is used', async () => {
@@ -390,7 +494,7 @@ describe('AutopilotPanelComponent', () => {
       t.action!.onClick();
       toasts.dismiss(t.id);
 
-      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(30_000);
       expect(navigate).not.toHaveBeenCalled();
     });
 
@@ -419,9 +523,9 @@ describe('AutopilotPanelComponent', () => {
       TestBed.tick();
       expect(component.state.phase).toBe('exhausted');
       expect(toasts.toasts[0].message).toContain('Done!');
-      expect(toasts.toasts[0].countdown!.remaining).toBe(5);
+      expect(toasts.toasts[0].countdown!.remaining).toBe(10);
 
-      await vi.advanceTimersByTimeAsync(5000);
+      await vi.advanceTimersByTimeAsync(10_000);
       expect(navigate).toHaveBeenCalledWith(['/dashboard']);
     });
   });
