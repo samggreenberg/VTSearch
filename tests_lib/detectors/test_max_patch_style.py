@@ -687,7 +687,16 @@ class TestStyleVotingSimulation:
                 style="max_patch",
             )
 
-    def test_default_run_records_empty_style(self):
+    def test_patch_dataset_defaults_to_the_production_style(self):
+        """The default arm must be the *app's* default, and must say so.
+
+        A style-less run on a patch dataset used to train a Bad vote on one
+        image-level row while scoring max-pooled over the whole stack - leaving
+        ~196 rows per rejected image untrained, so it under-suppressed relative
+        to the live detector.  It now resolves to ``max_patch`` (which delegates
+        to the production vote/score helpers), and the resolved name is recorded
+        so a result row is never ambiguous about its geometry.
+        """
         medias, _ = _planted_dataset(n_per_cat=12, seed=11)
         rows = simulate_voting_iterations(
             medias,
@@ -697,7 +706,59 @@ class TestStyleVotingSimulation:
             max_steps=6,
         )
         assert rows
+        assert all(r["style"] == "max_patch" for r in rows)
+
+    def test_default_run_on_a_single_vector_dataset_records_empty_style(self):
+        """No patch grid, no style: the historical path is untouched."""
+        rng = np.random.default_rng(11)
+        medias = {
+            mid: {
+                "id": mid,
+                "category": "cat0" if mid % 2 else "cat1",
+                "embeddings": {"emb": _unit(rng.normal(0, 1, DIM))},
+            }
+            for mid in range(1, 25)
+        }
+        rows = simulate_voting_iterations(
+            medias,
+            target_category="cat0",
+            seed=0,
+            dataset_name="synthetic",
+            max_steps=6,
+        )
+        assert rows
         assert all(r["style"] == "" for r in rows)
+
+    def test_default_arm_is_identical_to_an_explicit_max_patch_run(self):
+        """Not just the recorded name - the same trajectory, end to end.
+
+        Bad-vote flooding, bag-aware weighting, and inference-geometry
+        calibration all ride on this equivalence.
+        """
+        medias, _ = _planted_dataset(n_per_cat=15, seed=17)
+        kwargs: dict[str, Any] = dict(
+            target_category="cat0",
+            seed=2,
+            dataset_name="synthetic",
+            region_voting=True,
+            max_steps=8,
+        )
+        default = simulate_voting_iterations(dict(medias), **kwargs)
+        explicit = simulate_voting_iterations(dict(medias), style="max_patch", **kwargs)
+        assert default
+        assert _drop_timing(default) == _drop_timing(explicit)
+
+    def test_default_arm_floods_a_bad_vote_over_every_scored_row(self):
+        """Pinned on the assembled vectors, so a refactor can't quietly restore
+        the 1-row Bad vote on patch data while still recording the name."""
+        from vtscore.detectors.training import bad_negative_vecs
+
+        rng = np.random.default_rng(18)
+        media = _patch_media(1, "cat1", rng)
+        flooded = resolve_style("max_patch").bad_vecs(media)
+        assert len(flooded) == GRID * GRID + 1
+        # ...and that is exactly what the live detector floods.
+        np.testing.assert_array_equal(np.stack(flooded), np.stack(bad_negative_vecs(media)))
 
     def test_eval_wrapper_runs_style_grid(self):
         medias, _ = _planted_dataset(n_per_cat=12, seed=12)

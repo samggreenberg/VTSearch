@@ -163,23 +163,23 @@ where the two diverge. Anything reasoning about scale must use `voted_area`.
   vector under every style (matching the existing harness); only training and
   test scoring differ per style.  This keeps vote-order differences
   attributable to the trained model, not to a different acquisition rule.
-- `simulate_voting_iterations` with `style=None` retains its historical
-  behaviour of *not* flooding Bad votes on patch datasets (it predates region
-  flooding).  The style path is the production-faithful one; the default path
-  is left untouched for reproducibility of earlier studies.
+- ~~`simulate_voting_iterations` with `style=None` does not flood Bad votes on
+  patch datasets.~~ **Fixed in #2886.** `style=None` now *resolves* to the app's
+  geometry rather than being a third thing: a patch dataset on the MLP trainer
+  gets `max_patch` (whose methods delegate to `pool_box_from_media` /
+  `bad_negative_vecs` / `media_score_rows`), and the resolved name is what lands
+  in the `style` result column. Single-vector datasets and the non-MLP trainers
+  keep the historical path byte-for-byte.
 
-  Its other two legs *do* track production, because they delegate rather than
-  re-implement: the Good vote goes through `pool_box_from_media` (so it is the
-  nearest raw patch since #2886) and test/sim scoring goes through
-  `score_media_with_model` (so it max-pools the full `media_score_rows` stack).
-  Only the Bad vote is hardcoded to one image-level row.  **#2886 widened that
-  one divergence considerably**: the default path trains a Bad vote on 1 row
-  while scoring over ~197, where before it was 1 against ~24.  The
-  train/score *invariant* still holds — the image-level vector is row 0 of the
-  stack — but ~196 patch rows per rejected image are never trained down while
-  inference max-pools them, so expect the `style=None` arm to under-suppress on
-  patch datasets more than it used to.  Prefer `style="max_patch"` for anything
-  meant to reflect the live tool.
+  The old carve-out was justified as "left untouched for reproducibility of
+  earlier studies", and that justification did not survive #2886: two of the
+  default path's three legs delegate to production, so its Good vote and its
+  scoring *already* moved to MaxPatch geometry with the app. Freezing only the
+  Bad vote didn't preserve the historical harness — it produced an incoherent
+  hybrid (MaxPatch Good votes + MaxPatch scoring + pre-flood Bad votes) that
+  matched neither the old production nor the new one, and that trained ~196 rows
+  per rejected image down never while inference max-pooled them. An eval default
+  that doesn't match the app default can't be trusted, so it is gone.
 - The style path calibrates in **inference geometry** (each bag collapses over
   `style.score_rows`), which the production vote / labelset paths now do too
   (each bag collapses over its full `media_score_rows` stack), so the harness
