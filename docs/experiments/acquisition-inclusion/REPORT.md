@@ -158,17 +158,21 @@ and they beat the constant 18 to 6.
    is probably an improvement for the user, but it is a change to what the
    interface implies, and the #2847 regression this run fixes got in precisely
    as an unnoticed side effect of a change made for another reason.
-4. ~~**Run the generalisation check.**~~ **Done — and it did not transfer.
-   See [`REPORT_REGION_VOTING.md`](REPORT_REGION_VOTING.md) (issue #2877).** On
-   `visual_genome_m × siglip` region voting the *mechanism* reproduces exactly:
-   the lever moves further (+0.121 vs +0.058), positives go 6 → 12, the
-   falsifier falsifies, and the adaptive ramp is identical. But `-3` **fails
-   this ship rule there** — cost CI [+0.003, +0.022] against a +0.01 tolerance —
-   because aggressive acquisition sharpens the *top* of the ranking (AP +0.012,
-   p<1e-5) while degrading its *global* separability (oracle cost +0.015), and
-   reported cost follows the second. Only `k=-1` passes. #2861's warning was
-   right; the recommendation is now to gate the offset by voting mode rather
-   than ship one global value.
+4. **Run the generalisation check.** Attempted in #2877 and it **did not
+   measure region voting** — see
+   [`REPORT_SECOND_ENVIRONMENT.md`](REPORT_SECOND_ENVIRONMENT.md). The
+   pre-registered arm `visual_genome_m × siglip` has no `patch_grid`, so
+   `region_voting=True` silently fell back to whole-image training, whole-image
+   scoring and the binary blend schedule: it is a second *binary* environment.
+   **The region-voting check still needs running, on `dinov3_patch`.**
+
+   What that run does establish is that `-3` **fails this ship rule in another
+   binary environment** — cost CI [+0.003, +0.022] against a +0.01 tolerance,
+   with only `k=-1` passing — because aggressive acquisition sharpens the *top*
+   of the ranking (AP +0.012, p<1e-5) while degrading its *global* separability
+   (oracle cost +0.015), and reported cost follows the second. So `-3` is
+   over-fitted to `coco_val × siglip2` specifically, not to binary voting as a
+   class.
 
 ## Figures
 
