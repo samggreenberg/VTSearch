@@ -22,7 +22,6 @@ import torch
 import vtscore.training.thresholds as thresholds_mod
 from vtscore.detectors.training import _score_all_media, train_and_threshold
 from vtscore.embedding.matrix import get_embedding_matrix_for_snap
-from vtscore.media.patch_embed import RegionVector
 
 DIM = 8
 N_MEDIA = 20
@@ -71,11 +70,11 @@ def _image_level_scores(model, snap, embedder_name):
 
 class TestRegionDatasetFitsPooledScores:
     def _snap(self, rng: np.random.Generator, good_proto: np.ndarray) -> dict[int, dict]:
-        """Media whose region tree is ``[whole-image root, a good-like sub-region]``.
+        """Media whose score rows are ``[image-level row, a good-like patch, ...]``.
 
-        The root region carries the media's own image-level vector, so the
-        pooled score is by construction >= the image-level score - exactly the
-        one-sided bias the old fit suffered from.
+        Row 0 of the MaxPatch stack is the media's own image-level vector, so
+        the pooled score is by construction >= the image-level score - exactly
+        the one-sided bias the old fit suffered from.
         """
         snap: dict[int, dict] = {}
         for cid in range(ID_BASE + 1, ID_BASE + N_MEDIA + 1):
@@ -86,10 +85,10 @@ class TestRegionDatasetFitsPooledScores:
                 "media_type": "image",
                 "embedder": "dinov3_patch",
                 "embeddings": {"dinov3_patch": image_vec},
-                "patch_regions": [
-                    RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=image_vec),
-                    RegionVector(box=(0.25, 0.25, 0.75, 0.75), vec=hot_vec),
-                ],
+                # Score rows are [image_vec, hot_vec, ...]: a 1x2 patch grid
+                # whose first cell is the "hot" region and whose second repeats
+                # the image vector, so the max-pool has something to find.
+                "patch_grid": np.stack([hot_vec, image_vec])[None, :, :].astype(np.float16),
             }
         return snap
 
@@ -111,9 +110,12 @@ class TestRegionDatasetFitsPooledScores:
 
         # ...and it is a genuinely different distribution from the image-level
         # one the GMM used to be fitted on: never lower, sometimes higher.
+        # The tolerance is float16, not float64: the flattened score matrix is
+        # stored in the patch grid's own dtype, so row 0 is the fp16-rounded
+        # image vector while ``_image_level_scores`` reads the float32 one.
         image_ids, image_level = _image_level_scores(model, snap, "dinov3_patch")
         assert image_ids == pooled_ids
-        assert np.all(fitted >= image_level - 1e-9)
+        assert np.all(fitted >= image_level - 1e-3)
         assert np.any(fitted > image_level + 1e-6), (
             "the region max-pool must lift at least one media's score above its "
             "image-level score, otherwise this fixture proves nothing"

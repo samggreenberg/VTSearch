@@ -37,7 +37,6 @@ from vtscore.embedding.binding import (
     embedder_type,
     keying_embedder_for_snap,
 )
-from vtscore.media.patch_embed import RegionVector
 
 DIM = 4
 
@@ -59,7 +58,7 @@ def _dual_snap() -> dict[int, dict]:
             "media_type": "image",
             "embedder": "dinov3_patch",
             "embeddings": {"siglip": _basis(cid), "dinov3_patch": _basis(0)},
-            "patch_regions": [RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=_basis(3))],
+            "patch_grid": _basis(3)[None, None, :].astype(np.float16),
         }
     return snap
 
