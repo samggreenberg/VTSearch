@@ -40,21 +40,33 @@
 # `prod` MUST name its 0 explicitly: the default is -3, so a launcher copied
 # from a pre-#2878 template would run seven arms of the same thing.
 #
-# SEED COUNT IS FIXED AT 24 AND NEVER CHANGED.  A cell's array index is
-# `category_index * N_SEEDS + seed`, so moving the seed count remaps every
-# index and makes earlier cells unresumable.  Pinning it at the maximum this
-# study could need lets a seed SUBSET be run as an array index subset
-# (`--seeds N` below), so the pilot's cells are the final grid's cells rather
-# than being thrown away.  #2877's lesson was to re-derive n from a pilot; this
-# is that, without paying for the pilot twice.
+# SEED COUNT IS DECLARED AT 48 AND NEVER CHANGED — the study RUNS 24.
+#
+# A cell's array index is `category_index * N_SEEDS + seed`, so moving the seed
+# count remaps every index and makes every earlier cell unresumable.  #2877's
+# lesson was to re-derive n from a pilot rather than inherit a seed count, but
+# the sizing input (the paired SD on `final_cost`) is not knowable until cells
+# exist, and a pilot big enough to measure it is most of the run.
+#
+# So the seed count is declared at the largest value this study could ever need
+# and a seed RANGE is run as an array index subset (`--seeds 24`, `--seeds
+# 24-47`).  24 seeds x 23 categories = 552 pairs, against the n≈473 #2877
+# derived for a ±0.010 half-width at its SD of 0.111.  If the realized SD here
+# is larger and the CI comes back too wide to certify, the top-up is
+# `--seeds 24-47` and every cell already on disk still counts — the mistake
+# #2877 could not undo becomes a second submission.
+#
+# A seed's trajectory does not depend on the declared count: `seed` is passed
+# to the simulator directly and the exemplar is `candidates[seed % len]`.  Only
+# the index mapping moves, which is exactly what this pins.
 #
 # Prepare is REUSED (no GPU stage): the dinov3_patch pickle and exemplar crops
 # from the #2861 anchor-rate run, so the categories are the same 23.
 #
 # Usage:
-#   bash launch_acq_region_2905.sh                 # all 7 arms, all 24 seeds
-#   bash launch_acq_region_2905.sh --seeds 4       # seeds 0-3 of every arm
-#   bash launch_acq_region_2905.sh --seeds 4 --arms prod,acq_m3   # the pilot
+#   bash launch_acq_region_2905.sh --seeds 24                  # the study
+#   bash launch_acq_region_2905.sh --seeds 24-47               # the top-up
+#   bash launch_acq_region_2905.sh --seeds 2 --arms prod,acq_m3  # a smoke pair
 set -uo pipefail
 
 SEEDS_TO_RUN=""
@@ -82,7 +94,7 @@ export CALIB_PATCH_STYLES=max_patch
 export CALIB_REPOOL_VARIANTS=
 export CALIB_SCHEDULE_VARIANTS=
 export CALIB_MAX_STEPS=100
-export CALIB_N_SEEDS=24
+export CALIB_N_SEEDS=48   # DECLARED; see the header. The study runs --seeds 24.
 export CALIB_HEAD=linear
 export CALIB_SAFE_THRESHOLDS=1
 export CALIB_ANCHORED=0
@@ -139,15 +151,25 @@ NCAT=$(( N / CALIB_N_SEEDS ))
 
 # A seed subset is an array index subset: index = category*N_SEEDS + seed.
 if [[ -n "$SEEDS_TO_RUN" ]]; then
+  if [[ "$SEEDS_TO_RUN" == *-* ]]; then
+    SLO="${SEEDS_TO_RUN%%-*}"; SHI="${SEEDS_TO_RUN##*-}"
+  else
+    SLO=0; SHI=$(( SEEDS_TO_RUN - 1 ))
+  fi
+  if (( SLO < 0 || SHI >= CALIB_N_SEEDS || SLO > SHI )); then
+    echo "ERROR: --seeds $SEEDS_TO_RUN is outside 0..$((CALIB_N_SEEDS-1))" >&2; exit 2
+  fi
   spec=""
   for ((c = 0; c < NCAT; c++)); do
-    lo=$(( c * CALIB_N_SEEDS )); hi=$(( lo + SEEDS_TO_RUN - 1 ))
+    lo=$(( c * CALIB_N_SEEDS + SLO )); hi=$(( c * CALIB_N_SEEDS + SHI ))
     spec+="${spec:+,}${lo}-${hi}"
   done
   ARRAY_SPEC="$spec"
-  echo "cells: $NCAT categories x $SEEDS_TO_RUN of $CALIB_N_SEEDS seeds = $(( NCAT * SEEDS_TO_RUN )) per arm"
+  NPER=$(( NCAT * (SHI - SLO + 1) ))
+  echo "cells: $NCAT categories x seeds ${SLO}..${SHI} (of $CALIB_N_SEEDS declared) = $NPER per arm"
 else
   ARRAY_SPEC="0-$((N-1))"
+  NPER="$N"
   echo "cells: $NCAT categories x $CALIB_N_SEEDS seeds = $N per arm"
 fi
 
