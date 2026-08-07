@@ -142,8 +142,10 @@ if [[ -x "$WT/scripts/experiments/preflight.sh" ]]; then
 fi
 
 # --- how many cells, and which ---------------------------------------------
+# Count against the shared prepare dir: the per-arm dirs do not have their
+# prepare_info.json symlink until the arm loop below creates it.
 N=$(cd "$HERE" && source "$WT/gridenv.sh" >/dev/null 2>&1; \
-    export CALIB_RESULTS="$RESULTS_ROOT/prod"; python run_cells.py --print-cells 2>/dev/null | tail -1)
+    export CALIB_RESULTS="$CALIB_EXP/results"; python run_cells.py --print-cells 2>/dev/null | tail -1)
 if ! [[ "$N" =~ ^[0-9]+$ ]] || [[ "$N" -eq 0 ]]; then
   echo "ERROR: could not determine cell count (got '$N')" >&2; exit 1
 fi
