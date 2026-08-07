@@ -7,7 +7,9 @@ geometry, carrying the fitted mixture parameters and the whole decomposition
 chain).  Produces two independent things:
 
 **Which cut wins** — paired within-step contrasts between every shippable rule
-and the production midpoint, on the blended threshold (what a user gets) *and*
+and (a) the run's own production row, which is what "beats what we ship" means
+and cannot go stale, and (b) the production midpoint, which is #2836's baseline
+and did go stale (#2846).  Both on the blended threshold (what a user gets) *and*
 on the raw cut (what the rule is worth before the conformal blend damps it).
 
 **Why** — the four-term decomposition of today's error, per step:
@@ -66,8 +68,31 @@ SHIPPABLE: tuple[str, ...] = (
 #: Label-reading diagnostics — bounds and decomposition anchors, never candidates.
 ORACLE_VARIANTS: tuple[str, ...] = ("pooled_supervised", "pooled_sim_oracle")
 
-#: The incumbent every candidate is measured against (production since #2833).
+#: Deliberately not ship candidates: ``xcal_only`` is the no-blend control, and
+#: the ``image_*`` family is the single-vector geometry arm, measured for
+#: comparison rather than to ship.  Anything in the cells that is in *none* of
+#: these three sets is a rule someone added to ``_SAFE_GMM_VARIANTS`` without
+#: telling the analyzer, and :func:`unclassified_variants` says so — see there
+#: for why that has to be loud rather than silent.
+NON_CANDIDATES: tuple[str, ...] = ("xcal_only",)
+NON_CANDIDATE_PREFIXES: tuple[str, ...] = ("image_",)
+
+#: The variant that *reconstructs* the production rule of #2836's era.  Kept as
+#: the historical contrast, but it is a reconstruction and reconstructions go
+#: stale: by #2846's re-measure production had moved to the fold-anchored
+#: threshold and this rule reproduced it on 16 % of steps.  See ``BASE_ROW``.
 INCUMBENT = "pooled_mid"
+
+#: The run's *own* production row — no cut variant, the pooled max geometry the
+#: app ships — identified by ``(pool_variant, gmm_variant)``.  Pairing against
+#: this is what "does the rule beat what we ship" actually means, and unlike
+#: ``INCUMBENT`` it cannot expire when the app changes its threshold (#2846).
+BASE_ROW: tuple[str, str] = ("max", "")
+
+#: Metrics the base row shares with a cut variant.  It has no ``gmm_cut`` and no
+#: raw (unblended) cut of its own, so the rule-quality columns are meaningless
+#: here; the blended cost *is* the ship number.
+BASE_METRICS: tuple[str, ...] = ("cost", "fpr", "fnr")
 
 #: Decomposition terms: name -> (tau_a, tau_b); each is ``tau_a - tau_b``, and
 #: consecutive terms telescope to ``tau_cross - tau_test_oracle``.
@@ -123,6 +148,26 @@ def load_cutdiag(cells_dir: Path) -> pd.DataFrame:
     return df
 
 
+def unclassified_variants(df: pd.DataFrame) -> list[str]:
+    """Cut variants present in the cells that this analyzer does not classify.
+
+    ``SHIPPABLE`` is an allowlist, and the ship decision, both contrast tables
+    and the oracle-distance tie-break all read through it.  So a rule added to
+    ``_SAFE_GMM_VARIANTS`` but not added here does not fail — it is *silently
+    omitted from the verdict* while still appearing in the window means, which
+    is the exact shape of wrong table this study line keeps producing.  #2881
+    will add a ``tail_alpha`` rule; this makes forgetting it a visible event
+    rather than a missing row nobody counts.
+    """
+    known = {*SHIPPABLE, *ORACLE_VARIANTS, *NON_CANDIDATES}
+    present = {str(v) for v in df["gmm_variant"].unique() if str(v) != ""}
+    unknown = sorted(v for v in present - known if not any(v.startswith(p) for p in NON_CANDIDATE_PREFIXES))
+    if unknown:
+        common.log(f"WARNING: {len(unknown)} variant(s) not classified by this analyzer: {', '.join(unknown)}")
+        common.log("         -> add them to SHIPPABLE (or NON_CANDIDATES); until then they cannot win or ship")
+    return unknown
+
+
 def production_blend_sanity(df: pd.DataFrame) -> dict:
     """``pooled_mid`` must reproduce the production blended cut bit-for-bit.
 
@@ -171,16 +216,12 @@ def production_blend_sanity(df: pd.DataFrame) -> dict:
 # ------------------------------------------------------------------
 
 
-def _paired_cells(v: pd.DataFrame, a: str, b: str, lo: int, hi: int, metric_cols: list[str]) -> pd.DataFrame:
-    """Per-(arm, category, seed) mean deltas of ``a - b`` on identical steps in [lo, hi].
+def _pair_frames(va: pd.DataFrame, vb: pd.DataFrame, metric_cols: list[str]) -> pd.DataFrame:
+    """Per-(arm, category, seed) mean deltas of ``va - vb`` on identical steps.
 
     The t axis is collapsed first so the test's units are independent cells
     rather than autocorrelated steps within one trajectory.
     """
-    keys = ["arm", "category", "seed", "t"]
-    w = v[(v["n_votes"] >= lo) & (v["n_votes"] <= hi)]
-    va = w[w["gmm_variant"] == a].set_index(keys)[metric_cols]
-    vb = w[w["gmm_variant"] == b].set_index(keys)[metric_cols]
     j = va.join(vb, how="inner", lsuffix="_a", rsuffix="_b")
     if j.empty:
         return pd.DataFrame()
@@ -188,6 +229,29 @@ def _paired_cells(v: pd.DataFrame, a: str, b: str, lo: int, hi: int, metric_cols
         j[f"d_{col}"] = j[f"{col}_a"] - j[f"{col}_b"]
     j = j.reset_index()
     return j.groupby(["arm", "category", "seed"])[[f"d_{c}" for c in metric_cols]].mean().reset_index()
+
+
+def _window(v: pd.DataFrame, lo: int, hi: int) -> pd.DataFrame:
+    return v[(v["n_votes"] >= lo) & (v["n_votes"] <= hi)]
+
+
+def _paired_cells(v: pd.DataFrame, a: str, b: str, lo: int, hi: int, metric_cols: list[str]) -> pd.DataFrame:
+    """:func:`_pair_frames` between two cut variants over the window [lo, hi]."""
+    keys = ["arm", "category", "seed", "t"]
+    w = _window(v, lo, hi)
+    va = w[w["gmm_variant"] == a].set_index(keys)[metric_cols]
+    vb = w[w["gmm_variant"] == b].set_index(keys)[metric_cols]
+    return _pair_frames(va, vb, metric_cols)
+
+
+def _paired_cells_vs_base(v: pd.DataFrame, a: str, lo: int, hi: int, metric_cols: list[str]) -> pd.DataFrame:
+    """:func:`_pair_frames` between a cut variant and the run's own base row."""
+    keys = ["arm", "category", "seed", "t"]
+    w = _window(v, lo, hi)
+    pool, gmm = BASE_ROW
+    va = w[w["gmm_variant"] == a].set_index(keys)[metric_cols]
+    vb = w[(w["pool_variant"] == pool) & (w["gmm_variant"] == gmm)].set_index(keys)[metric_cols]
+    return _pair_frames(va, vb, metric_cols)
 
 
 def window_table(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
@@ -257,6 +321,55 @@ def rule_contrasts(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
                 rows.append(entry)
     tbl = pd.DataFrame(rows)
     tbl.to_csv(agg_dir / "cut_contrasts.csv", index=False)
+    return tbl
+
+
+def base_row_contrasts(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
+    """Every rule against **the threshold the run actually used**, per window per arm.
+
+    :func:`rule_contrasts` answers "does this rule beat the midpoint".  That was
+    the same question as "does it beat what we ship" only for as long as the app
+    computed the midpoint, and #2846 found out the hard way that it had stopped:
+    ``pooled_mid`` was still bit-for-bit correct, production had simply moved to
+    the fold-anchored threshold, and every "beats the shipped midpoint" line in
+    the study silently stopped meaning what it said.
+
+    The base row cannot go stale, because it is not a reconstruction — it is the
+    step's own outcome under whatever production did that day.  ``base_provenance``
+    records which path that was, so a contrast is never read without knowing what
+    it was against.
+    """
+    metrics = list(BASE_METRICS)
+    pool, gmm = BASE_ROW
+    has_prov = "threshold_provenance" in df
+    rows = []
+    for wname, (lo, hi) in WINDOWS.items():
+        for cand in (*SHIPPABLE, *ORACLE_VARIANTS):
+            for arm, sub in df.groupby("arm"):
+                cells = _paired_cells_vs_base(sub, cand, lo, hi, metrics)
+                if cells.empty:
+                    continue
+                base = _window(sub, lo, hi)
+                base = base[(base["pool_variant"] == pool) & (base["gmm_variant"] == gmm)]
+                prov = base["threshold_provenance"].fillna("").astype(str) if has_prov else pd.Series(dtype=str)
+                entry: dict = {
+                    "window": wname,
+                    "variant": cand,
+                    "vs": "base_row",
+                    "arm": arm,
+                    "n_cells": int(len(cells)),
+                    "base_provenance": "|".join(sorted(prov.unique())) if len(prov) else "",
+                }
+                for col in metrics:
+                    vals = cells[f"d_{col}"].to_numpy(dtype=float)
+                    vals = vals[np.isfinite(vals)]
+                    entry[f"mean_d_{col}"] = float(np.mean(vals)) if vals.size else float("nan")
+                    entry[f"p_d_{col}"] = _wilcoxon(vals) if vals.size else None
+                    if col == "cost":
+                        entry["frac_cells_improved"] = float(np.mean(vals < 0)) if vals.size else float("nan")
+                rows.append(entry)
+    tbl = pd.DataFrame(rows)
+    tbl.to_csv(agg_dir / "cut_contrasts_vs_base.csv", index=False)
     return tbl
 
 
@@ -470,23 +583,38 @@ def fallback_reasons(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
     sound but oriented the other way" (repairable, and what ``gumbel_any_*``
     repairs) and "the two components collapsed onto each other" (a statement
     about that step's score distribution, which no solver can fix).
+
+    Emitted **per window**, plus an ``all_steps`` row set.  Every other table
+    here is windowed, so a bare all-steps count invited exactly the mistake
+    #2846's report had to warn about in prose: reading these counts next to a
+    ramp-window fallback *rate* and treating them as the same population.
     """
     if "cut_fail_reason" not in df:
         return pd.DataFrame()
     fell = df[(df["cut_fallback"] == 1) & (df["cut_fail_reason"].astype(str) != "")]
     if fell.empty:
         return pd.DataFrame()
-    g = (
-        fell.groupby(["arm", "gmm_variant", "cut_fail_reason"])
-        .size()
-        .reset_index(name="n_steps")
-        .sort_values(["arm", "gmm_variant", "n_steps"], ascending=[True, True, False])
-    )
-    # Share within each (arm, variant), so a reason is readable without joining
-    # back to that variant's own step count.
-    g["share_of_fallbacks"] = g["n_steps"] / g.groupby(["arm", "gmm_variant"])["n_steps"].transform("sum")
-    g.to_csv(agg_dir / "cut_fallback_reasons.csv", index=False)
-    return g
+    out = []
+    for wname, sub in (
+        ("all_steps", fell),
+        *((wname, _window(fell, lo, hi)) for wname, (lo, hi) in WINDOWS.items()),
+    ):
+        if sub.empty:
+            continue
+        g = (
+            sub.groupby(["arm", "gmm_variant", "cut_fail_reason"])
+            .size()
+            .reset_index(name="n_steps")
+            .sort_values(["arm", "gmm_variant", "n_steps"], ascending=[True, True, False])
+        )
+        # Share within each (arm, variant), so a reason is readable without joining
+        # back to that variant's own step count.
+        g["share_of_fallbacks"] = g["n_steps"] / g.groupby(["arm", "gmm_variant"])["n_steps"].transform("sum")
+        g.insert(0, "window", wname)
+        out.append(g)
+    tbl = pd.concat(out, ignore_index=True) if out else pd.DataFrame()
+    tbl.to_csv(agg_dir / "cut_fallback_reasons.csv", index=False)
+    return tbl
 
 
 def tail_alpha_stability(diag: pd.DataFrame, agg_dir: Path) -> dict:
@@ -556,22 +684,48 @@ def estimator_variance(diag: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
 # ------------------------------------------------------------------
 
 
-def decisions(contrasts: pd.DataFrame, gaps: pd.DataFrame, costs: pd.DataFrame, alpha: dict) -> dict:
+def _wins(row: pd.Series | None) -> bool:
+    """Significantly cheaper, on the pre-registered two-sided 5 % bar."""
+    if row is None:
+        return False
+    p = row["p_d_cost"]
+    return bool(p is not None and np.isfinite(float(p)) and float(p) < 0.05 and float(row["mean_d_cost"]) < 0)
+
+
+def _ramp_prod(tbl: pd.DataFrame, variants: tuple[str, ...] | None = None) -> pd.DataFrame:
+    """The production arm's ramp window, optionally restricted to *variants*."""
+    if tbl.empty:
+        return tbl
+    sel = (tbl["window"] == "ramp_6_20") & (tbl["arm"].str.contains(PRODUCTION_ARM_SUBSTR))
+    if variants is not None:
+        sel &= tbl["variant"].isin(variants)
+    return tbl[sel]
+
+
+def decisions(
+    contrasts: pd.DataFrame,
+    base_contrasts: pd.DataFrame,
+    gaps: pd.DataFrame,
+    costs: pd.DataFrame,
+    alpha: dict,
+) -> dict:
     """The issue's pre-registered decision rules, evaluated.
 
     Ship the rule that is closest to the oracle cut **and** wins on cost on the
     production arm's ramp window, provided it does not regress the single-vector
     arm.  Anything else is a negative result with a named cause.
+
+    "Wins on cost" is judged against the **run's own base row**, not against
+    ``pooled_mid``: #2846 shipped a new production threshold mid-study and the
+    midpoint contrast quietly became a comparison with a rule nobody runs.
+    ``beats_midpoint`` is still reported, as the historical #2836 contrast, but
+    it no longer gates the ship decision.
     """
     out: dict = {}
     if contrasts.empty:
         return {"error": "no contrasts"}
 
-    prod = contrasts[
-        (contrasts["window"] == "ramp_6_20")
-        & (contrasts["arm"].str.contains(PRODUCTION_ARM_SUBSTR))
-        & (contrasts["variant"].isin(SHIPPABLE))
-    ]
+    prod = _ramp_prod(contrasts, SHIPPABLE)
     if prod.empty:
         return {"error": "no production-arm contrasts"}
 
@@ -584,9 +738,43 @@ def decisions(contrasts: pd.DataFrame, gaps: pd.DataFrame, costs: pd.DataFrame, 
         "p_raw": None if best["p_d_raw_cut_cost"] is None else float(best["p_d_raw_cut_cost"]),
         "frac_cells_improved": float(best["frac_cells_improved"]),
     }
-    out["beats_midpoint"] = bool(
-        best["p_d_cost"] is not None and float(best["p_d_cost"]) < 0.05 and float(best["mean_d_cost"]) < 0
-    )
+    out["beats_midpoint"] = _wins(best)
+
+    # --- Against what production actually did -------------------------------
+    prod_base = _ramp_prod(base_contrasts, SHIPPABLE)
+    cand = None
+    out["best_vs_production"] = None
+    out["beats_production"] = False
+    if not prod_base.empty:
+        cand = prod_base.sort_values("mean_d_cost").iloc[0]
+        out["best_vs_production"] = {
+            "variant": str(cand["variant"]),
+            "mean_d_cost": float(cand["mean_d_cost"]),
+            "p": None if cand["p_d_cost"] is None else float(cand["p_d_cost"]),
+            "frac_cells_improved": float(cand["frac_cells_improved"]),
+            "base_provenance": str(cand["base_provenance"]),
+        }
+        out["beats_production"] = _wins(cand)
+
+    # Is there anything left on this axis at all?  `pooled_sim_oracle` is the
+    # empirical rate-loss minimiser over the sim scores *read with true labels*,
+    # with no parametric form at all, so it bounds every rule that picks a
+    # threshold from that sim set - Gaussian crossing, Gumbel crossing, and the
+    # one-constant tail quantile of #2881 alike.  If *it* cannot beat production,
+    # no unsupervised member of that set will, and the next study belongs on the
+    # fit rather than the cut (#2846's closing finding, mechanised here so a
+    # later run is told rather than having to rediscover it by hand).
+    oracle_row = _ramp_prod(base_contrasts)
+    oracle_row = oracle_row[oracle_row["variant"] == "pooled_sim_oracle"]
+    out["family_headroom"] = None
+    out["family_headroom_exhausted"] = None
+    if not oracle_row.empty:
+        o = oracle_row.iloc[0]
+        out["family_headroom"] = {
+            "mean_d_cost": float(o["mean_d_cost"]),
+            "p": None if o["p_d_cost"] is None else float(o["p_d_cost"]),
+        }
+        out["family_headroom_exhausted"] = not _wins(o)
 
     # Closest to the oracle cut, among shippable rules, same arm and window.
     gp = gaps[
@@ -608,11 +796,18 @@ def decisions(contrasts: pd.DataFrame, gaps: pd.DataFrame, costs: pd.DataFrame, 
         out["closest_to_oracle_tied"] = tied
         out["closest_to_oracle"] = tied[0]
 
-    # Does the winner regress the single-vector arm the cosine/text sort uses?
-    ctrl = contrasts[
-        (contrasts["window"] == "ramp_6_20")
-        & (contrasts["arm"].str.contains(CONTROL_ARM_SUBSTR))
-        & (contrasts["variant"] == best["variant"])
+    # The ship candidate is the one that beats *production*; the midpoint winner
+    # is only the candidate when there is no base row to pair against.
+    ship_candidate = str((cand if cand is not None else best)["variant"])
+    out["ship_candidate"] = ship_candidate
+
+    # Does the candidate regress the single-vector arm the cosine/text sort uses?
+    # Measured against the same baseline as the ship test, for the same reason.
+    ctrl_tbl = base_contrasts if cand is not None else contrasts
+    ctrl = ctrl_tbl[
+        (ctrl_tbl["window"] == "ramp_6_20")
+        & (ctrl_tbl["arm"].str.contains(CONTROL_ARM_SUBSTR))
+        & (ctrl_tbl["variant"] == ship_candidate)
     ]
     out["control_arm_delta"] = None if ctrl.empty else float(ctrl.iloc[0]["mean_d_cost"])
     out["regresses_control"] = bool(
@@ -622,8 +817,8 @@ def decisions(contrasts: pd.DataFrame, gaps: pd.DataFrame, costs: pd.DataFrame, 
         and float(ctrl.iloc[0]["p_d_cost"]) < 0.05
     )
     out["ship"] = bool(
-        out["beats_midpoint"]
-        and out["best_by_cost"]["variant"] in out["closest_to_oracle_tied"]
+        (out["beats_production"] if cand is not None else out["beats_midpoint"])
+        and ship_candidate in out["closest_to_oracle_tied"]
         and not out["regresses_control"]
     )
 
@@ -642,7 +837,12 @@ def decisions(contrasts: pd.DataFrame, gaps: pd.DataFrame, costs: pd.DataFrame, 
                 out["error_terms_cost"] = terms
     # The leading hypothesis is confirmed only if the prior/loss term dominates.
     out["leading_hypothesis_confirmed"] = out["dominant_error_term"] == "prior_loss"
-    out["tail_alpha_stable"] = bool(alpha.get("oracle_lo_sf_gauss", {}).get("stable", False))
+    # One key per tail model, named after it.  The old single `tail_alpha_stable`
+    # was keyed off the Gaussian row alone, so a reader who found it `false` next
+    # to a passing EVT row concluded the EVT rule was unstable - which is the
+    # opposite of what that table says (#2846 had to spend a paragraph on it).
+    out["tail_alpha_stable_gauss"] = bool(alpha.get("oracle_lo_sf_gauss", {}).get("stable", False))
+    out["tail_alpha_stable_evt"] = bool(alpha.get("oracle_lo_sf_evt", {}).get("stable", False))
     return out
 
 
@@ -726,7 +926,8 @@ def write_report(summary: dict, tables: dict, report_path: Path) -> None:
     lines.append("```")
     for title, key in (
         ("Window means by (arm, variant)", "window"),
-        ("Rule contrasts vs the midpoint", "contrasts"),
+        ("Rule contrasts vs the run's own production row", "base_contrasts"),
+        ("Rule contrasts vs the midpoint (the #2836 baseline)", "contrasts"),
         ("Distance to the oracle cut", "gaps"),
         ("Decomposition (threshold units)", "decomposition"),
         ("Decomposition (excess-cost units)", "cost_decomposition"),
@@ -776,9 +977,11 @@ def main() -> int:
     if diag.empty:
         common.log("WARNING: no __cutdiag frames; the decomposition half will be empty")
 
+    unknown = unclassified_variants(df)
     sanity = production_blend_sanity(df)
     window = window_table(df, agg_dir)
     contrasts = rule_contrasts(df, agg_dir)
+    base_contrasts = base_row_contrasts(df, agg_dir)
     gaps = oracle_distance(df, agg_dir)
     decomp = decomposition_table(diag, agg_dir) if not diag.empty else pd.DataFrame()
     costs = cost_decomposition(df, agg_dir)
@@ -787,7 +990,11 @@ def main() -> int:
     why = fallback_reasons(df, agg_dir)
     alpha = tail_alpha_stability(diag, agg_dir) if not diag.empty else {}
     est_var = estimator_variance(diag, agg_dir) if not diag.empty else pd.DataFrame()
-    dec = decisions(contrasts, gaps, costs, alpha)
+    dec = decisions(contrasts, base_contrasts, gaps, costs, alpha)
+    # Carried in the decisions block, not only in the log: this is the one place
+    # a reader checks before believing a verdict, and the verdict is exactly what
+    # an unclassified rule is missing from.
+    dec["unclassified_variants"] = unknown
     figs = make_figures(df, diag, fig_dir) if not diag.empty else []
 
     summary = {
@@ -795,6 +1002,7 @@ def main() -> int:
         "n_diag_rows": int(len(diag)),
         "n_cells": int(df[["dataset", "embedder", "category", "seed"]].drop_duplicates().shape[0]),
         "windows": {k: list(v) for k, v in WINDOWS.items()},
+        "unclassified_variants": unknown,
         "sanity": sanity,
         "decisions": dec,
         "offsets": offsets,
@@ -806,6 +1014,7 @@ def main() -> int:
         summary,
         {
             "window": window,
+            "base_contrasts": base_contrasts,
             "contrasts": contrasts,
             "gaps": gaps,
             "decomposition": decomp,
