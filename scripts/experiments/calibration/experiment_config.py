@@ -104,6 +104,23 @@ ANCHORED_CHECKPOINTS = [
     int(c) for c in os.environ.get("CALIB_ANCHORED_CHECKPOINTS", "20,50,100,200,300").split(",") if c
 ]
 
+#: Calibration fold counts to score **counterfactually** at every step (issue
+#: #2897), on top of whatever :data:`CALIBRATE_COUNT` the run lives under.
+#: Empty (the default) = off, and every other study runs exactly as before.
+#:
+#: This is nearly free per *K* relative to what it buys, and exact rather than
+#: approximate, because the folds are nested: each is an independent stratified
+#: draw off one ``RandomState(42)`` at a size that does not depend on the count,
+#: so the K folds a live ``calibrate_count=K`` run would train are the first K of
+#: the Kmax folds this run trains.  One run therefore measures every K's regret
+#: *and* every K's wall clock, paired within the step - which is why the fold
+#: count, alone among the knobs here, does not need one full run per value to be
+#: screened.  It still needs the A/B runs to close: K also steers acquisition.
+#:
+#: Cost: ``max(FOLD_COUNTS) - CALIBRATE_COUNT`` extra fold fits per step, so the
+#: grid's *maximum* sets the price, not its length.  Size it from a real cell.
+FOLD_COUNTS = [int(k) for k in os.environ.get("CALIB_FOLD_COUNTS", "").split(",") if k.strip()]
+
 #: Which torch head each step trains (``vtscore.eval.voting_iterations.HEADS``).
 #: #2781 ran the harness's historical auto-sized MLP; the #2799 safe-threshold
 #: study runs ``linear`` — the head the live detector actually trains since
