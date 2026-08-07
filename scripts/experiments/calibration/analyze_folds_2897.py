@@ -227,7 +227,30 @@ def paired_vs_baseline(v: pd.DataFrame, agg: Path) -> pd.DataFrame:
                         "p_wilcoxon": p,
                     }
                 )
-    t = pd.DataFrame(rows).sort_values(["voting", "arm", "window", "k"])
+    # A run carrying only the baseline count has nothing to contrast against
+    # itself, so `rows` is empty and the frame has no columns to sort by.  That
+    # is the *control* arm of the live A/B (`CALIB_FOLD_COUNTS="2,$K"` collapses
+    # to a single value at K=2), not a broken run - its cells are perfectly good
+    # and the cross-arm analysis reads them directly.  Return the empty shape
+    # rather than dying on KeyError: 'voting'.
+    cols = [
+        "voting",
+        "arm",
+        "window",
+        "k",
+        "n_cells",
+        "n_steps",
+        "d_regret",
+        "d_rule_inefficiency",
+        "d_calibration_shift",
+        "d_seconds",
+        "regret_per_extra_second",
+        "win_rate",
+        "p_wilcoxon",
+    ]
+    t = pd.DataFrame(rows, columns=cols) if not rows else pd.DataFrame(rows)
+    if rows:
+        t = t.sort_values(["voting", "arm", "window", "k"])
     t.to_csv(agg / "folds_paired_vs_k2.csv", index=False)
     return t
 
