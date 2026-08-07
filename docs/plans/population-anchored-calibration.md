@@ -1,8 +1,9 @@
 # Population-anchored calibration — fuse the haystack distribution into the trained threshold instead of scheduling it out
 
-**Status:** Adopted at κ=0.3 with the midpoint cut. Two known gaps remain: the
-fused path covers binary voting, where it does not beat the blend it replaced,
-and the midpoint cut is inclusion-blind.
+**Status:** Adopted at κ=0.3 with the `mid_tilt` cut (the measured midpoint at
+inclusion 0, rate-rule tilt away from it). Two known gaps remain: the fused
+path covers binary voting, where it does not beat the blend it replaced, and
+the inclusion tilt is unmeasured away from inclusion 0.
 
 ## Background
 
@@ -68,10 +69,11 @@ folds.
 
 <!-- item-sep -->
 
-- [ ] #2865 — Inclusion-aware cut rule: the shipped `mid` cut ignores the cost
-  weights, so the fused threshold no longer varies with the Inclusion knob
-  (Opus 4.8). Subsumes the *"Deeper-than-inclusion-0 evidence for the cut rule"*
-  item below, which is the sweep it needs.
+- [ ] #2865 — Inclusion-aware cut rule: `mid_tilt` (the issue's candidate 1)
+  is implemented and shipped; the inclusion sweep that prices the tilt against
+  the other candidates is still owed (Opus 4.8). Subsumes the
+  *"Deeper-than-inclusion-0 evidence for the cut rule"* item below, which is
+  the sweep it needs.
 
 <!-- item-sep -->
 

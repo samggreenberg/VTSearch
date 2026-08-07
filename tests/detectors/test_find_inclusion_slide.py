@@ -12,13 +12,13 @@ re-derives the threshold and re-splits the unverified items, with the
 ``/api/votes`` good set (what Browse reads) staying in lock-step with the export
 partition (what Export reads).
 
-**What "re-derives" can be asserted against has changed.** The shipped cut rule
-is now the midpoint between the fitted component means, which ignores the cost
-weights Inclusion arrives as - so the fused threshold is *numerically* constant
-across the knob and "the number moved" can no longer stand in for "the slide
-ran" (issue #2865).  The regression is therefore pinned structurally: the slide
-must land on what the cached estimator says at the new inclusion, which is
-exactly what the skipped-detector bug did not do.
+**The regression is pinned twice, structurally and behaviourally.** The stored
+cutoff is poisoned before the slide so a skipped recompute is observable no
+matter what the cut rule returns, and the slide must land on exactly what the
+cached estimator says at the new inclusion.  On top of that, the shipped
+``mid_tilt`` rule answers the knob again (issue #2865; the interim midpoint
+rule was numerically constant across it), so "the number moved" is back as a
+meaningful assertion and the full-range slide must strictly raise the cutoff.
 """
 
 from __future__ import annotations
@@ -75,10 +75,10 @@ def test_inclusion_slide_recuts_the_estimator_and_resplits(client):
     inclusive_good = _votes_good(client)
     assert _export_good(client) == inclusive_good
 
-    # Poison the stored cutoff so a skipped recompute is observable.  The
-    # original bug left the detector untouched; under an inclusion-invariant
-    # cut rule that is indistinguishable from a correct re-derivation unless
-    # the starting value is one no code path would produce.
+    # Poison the stored cutoff so a skipped recompute is observable no matter
+    # what the cut rule returns.  The original bug left the detector
+    # untouched, which an inclusion-invariant rule (or a small realized tilt)
+    # could mask unless the starting value is one no code path would produce.
     assert ctx.anchored_cut_cache is not None
     ctx.threshold = -999.0
 
@@ -91,8 +91,10 @@ def test_inclusion_slide_recuts_the_estimator_and_resplits(client):
     # quantile.
     assert exclusive_threshold == ctx.anchored_cut_cache.threshold_at(-10)
     assert resp["threshold"] == exclusive_threshold
-    # A more exclusive Inclusion never *lowers* the cutoff -> no more positives.
-    assert exclusive_threshold >= inclusive_threshold
+    # A more exclusive Inclusion raises the cutoff -> no more positives.  The
+    # full-range slide (10 -> -10) must move the number, not just fail to
+    # lower it: mid_tilt answers the knob (issue #2865).
+    assert exclusive_threshold > inclusive_threshold
     exclusive_good = _votes_good(client)
     assert exclusive_good <= inclusive_good
     # Browse (votes) and Export (partition) never diverge.

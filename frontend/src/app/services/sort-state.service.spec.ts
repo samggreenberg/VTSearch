@@ -78,6 +78,57 @@ describe('SortStateService', () => {
     expect(service.aboveThreshold).toBe(640);
   });
 
+  it('acqThreshold carries the acquisition cut when the sort supplies one', () => {
+    service.setSortWindow({
+      items: [{ id: 1, score: 0.9 }],
+      threshold: 0.5,
+      acqThreshold: 0.72,
+      total: 1,
+      hasMore: false,
+      token: null,
+      aboveThreshold: 1,
+    });
+    // The two jobs are separate: Autopilot's Hard/New picks sample around the
+    // acquisition cut while everything the user sees stays on `threshold`.
+    expect(service.acqThreshold).toBe(0.72);
+    expect(service.threshold).toBe(0.5);
+    expect(service.aboveThreshold).toBe(1); // counted against the reporting cut
+  });
+
+  it('acqThreshold falls back to the reporting threshold when absent', () => {
+    // Text / example sorts have no detector behind them, and the load-sort
+    // restore path carries no window metadata, so the picks keep the behaviour
+    // they had before the two cuts were split.
+    service.setSortWindow({
+      items: [{ id: 1, score: 0.9 }],
+      threshold: 0.5,
+      total: 1,
+      hasMore: false,
+      token: null,
+      aboveThreshold: 1,
+    });
+    expect(service.acqThreshold).toBe(0.5);
+
+    service.setSortResults([{ id: 1, score: 0.9 }], 0.4);
+    expect(service.acqThreshold).toBe(0.4);
+  });
+
+  it('setSortResults clears a stale acquisition cut', () => {
+    service.setSortWindow({
+      items: [{ id: 1, score: 0.9 }],
+      threshold: 0.5,
+      acqThreshold: 0.72,
+      total: 1,
+      hasMore: false,
+      token: null,
+      aboveThreshold: 1,
+    });
+    // A later sort with no acquisition cut must not keep sampling around the
+    // previous detector's one, over a ranking it no longer describes.
+    service.setSortResults([{ id: 2, score: 0.3 }], 0.2);
+    expect(service.acqThreshold).toBe(0.2);
+  });
+
   it('appendSortItems grows the loaded window and updates hasMore', () => {
     service.setSortWindow({
       items: [{ id: 1, score: 0.9 }],

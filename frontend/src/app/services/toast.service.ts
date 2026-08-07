@@ -218,6 +218,40 @@ export class ToastService {
   }
 
   /**
+   * Call off a toast's pending countdown *without* dismissing the toast.
+   *
+   * The countdown line and the escape action disappear and ``onExpire`` never
+   * runs; what stays is an ordinary notification carrying the original
+   * headline, which then auto-dismisses on the usual timer. Pass ``note`` to
+   * replace the detail line with an explanation of why the pending action was
+   * called off.
+   *
+   * This is the hook for cancelling from *outside* the toast: the countdown's
+   * own buttons already cancel by dismissing, but a caller that watches the
+   * page behind the toast (e.g. "the user started clicking things, so don't
+   * navigate away from under them") wants to drop the timer while leaving the
+   * message the user may not have read yet.
+   */
+  cancelCountdown(id: number, note?: string): void {
+    const list = this.toastsSubject.value;
+    const idx = list.findIndex((t) => t.id === id);
+    if (idx < 0 || !list[idx].countdown) return;
+    this.clearTimer(id);
+    const next = list.slice();
+    next[idx] = {
+      ...list[idx],
+      countdown: undefined,
+      action: undefined,
+      detail: note ?? list[idx].detail,
+    };
+    this.toastsSubject.next(next);
+    this.autoDismissTimers.set(
+      id,
+      setTimeout(() => this.dismiss(id), SUCCESS_AUTO_DISMISS_MS),
+    );
+  }
+
+  /**
    * Advance one countdown by a second. Emits a replacement toast object each
    * tick so ``OnPush`` renderers repaint the remaining seconds. At zero the
    * toast is dismissed *before* ``onExpire`` runs, so a handler that navigates

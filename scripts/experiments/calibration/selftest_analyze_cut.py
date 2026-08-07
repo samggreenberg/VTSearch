@@ -13,7 +13,12 @@ they come back out:
 * the decomposition telescopes and names the term that was actually planted as
   dominant;
 * a rule whose *blended* cost wins while its *raw cut* does not is reported as
-  such, since that is the trap the plan pre-registers.
+  such, since that is the trap the plan pre-registers;
+* the ship test is decided against the run's **own base row**, not against the
+  ``pooled_mid`` reconstruction of it — the two are planted apart here, exactly
+  as #2846 found them in the field, and the ship gate must follow the base row;
+* fallback reasons are windowed, so an out-of-ramp fallback cannot be read as a
+  ramp-window one.
 
 Usage::
 
@@ -52,6 +57,25 @@ ARMS = [("dinov3_patch", "max_patch"), ("siglip", "whole_image")]
 WINNER = "pooled_priorfree"
 INCUMBENT = "pooled_mid"
 
+#: #2846's field condition, planted: on half the cells production no longer takes
+#: the blended-GMM path that ``pooled_mid`` reconstructs, and the path it takes
+#: instead is *cheaper* than the planted winner.  So the midpoint contrast says
+#: ship and the base-row contrast says do not, and the analyzer has to follow the
+#: base row.  Keyed on seed parity, which also gives the fidelity check the exact
+#: 1:1 provenance partition the re-measure found.
+ANCHORED_SEEDS = {2, 3}
+PROD_EDGE = -0.10
+#: A fallback planted **outside** the ramp window: the windowed reasons table
+#: must not report it inside one.
+FALLBACK_VARIANT = "pooled_gumbel_priorfree"
+FALLBACK_REASON = "modes_swapped"
+FALLBACK_STEPS = [t for t in range(2, 31) if t >= 21]
+#: A rule present in the cells that the analyzer's ``SHIPPABLE`` allowlist does
+#: not know about.  Planted deliberately: the allowlist gates the ship decision,
+#: so an unlisted rule is omitted from the verdict while still showing up in the
+#: window means, and that omission has to be loud.
+UNKNOWN_VARIANT = "pooled_not_a_known_rule"
+
 
 def _ident(cat: str, seed: int, t: int, embedder: str, style: str) -> dict:
     n_votes = t
@@ -80,6 +104,11 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
     cells = root / "cells"
     cells.mkdir(parents=True, exist_ok=True)
     variants = [name for name, _f, _r in _SAFE_GMM_VARIANTS]
+    # A rule the analyzer has never heard of, standing in for the next one added
+    # to `_SAFE_GMM_VARIANTS` without a matching `SHIPPABLE` entry (#2881's
+    # `tail_alpha` is the one actually coming).  It must not be able to slip
+    # through unnoticed.
+    variants.append(UNKNOWN_VARIANT)
 
     idx = 0
     for embedder, style in ARMS:
@@ -97,30 +126,40 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                     # the correlation the analyzer reports is still computable.
                     jitter = 0.01 * rng.standard_normal()
 
-                    # The base (production) row, and the variant that must match it.
+                    # The base (production) row, and the variant that reconstructs
+                    # it - which on the anchored cells it no longer does.
+                    anchored = seed in ANCHORED_SEEDS
                     threshold = 0.55
                     for variant in ["", *variants]:
+                        is_base = variant == ""
                         effect = RAMP_EFFECT if (variant == WINNER and in_ramp) else 0.0
+                        if is_base and anchored:
+                            effect = PROD_EDGE
                         # The blended and raw columns move together here except
                         # for the decoy, which wins only after blending.
                         decoy = variant == "pooled_gumbel_cross" and in_ramp
                         raw_cost = _CHAIN_RAW_COST.get(variant, base_cost) + (0.02 if decoy else 0.0)
+                        fell = variant == FALLBACK_VARIANT and t in FALLBACK_STEPS
                         row = dict(ident)
                         row.update(
                             pool_variant="max",
                             gmm_variant=variant,
-                            threshold=threshold,
-                            threshold_provenance="gmm_blend",
+                            threshold=threshold - (0.02 if (is_base and anchored) else 0.0),
+                            threshold_provenance="fold_anchored[k0.3]" if anchored else "gmm_blend",
                             degenerate=0,
                             threshold_percentile=0.9,
                             xcal_threshold=0.52,
                             gmm_cut=oracle_threshold + (0.0 if variant == WINNER else 0.05),
                             blend_weight=0.5,
-                            cut_fallback=0,
+                            cut_fallback=1 if fell else 0,
+                            cut_fail_reason=FALLBACK_REASON if fell else "",
                             raw_cut_cost=raw_cost,
                             raw_cut_fpr=0.1,
                             raw_cut_fnr=0.2,
-                            cost=base_cost + effect + (RAMP_EFFECT if decoy else 0.0),
+                            # Half the winner's edge: enough to win on the blended
+                            # column, small enough that no argmin is a tie (which
+                            # a tie-break would then have to resolve arbitrarily).
+                            cost=base_cost + effect + (RAMP_EFFECT / 2 if decoy else 0.0),
                             fpr=0.1,
                             fnr=0.2,
                             auroc=0.9,
@@ -173,11 +212,13 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                             # identity check has something exact to recover.
                             pred_offset_equal_var=PLANTED_TERMS["prior_loss"] + jitter,
                             evt_ok=1,
-                            evt_w_lo=0.95,
-                            evt_loc_lo=-1.0,
-                            evt_scale_lo=0.5,
-                            evt_mu_hi=1.5,
-                            evt_var_hi=0.5,
+                            evt_fit_fail="ok",
+                            evt_gumbel_is_low=1,
+                            evt_w_gumbel=0.95,
+                            evt_loc=-1.0,
+                            evt_scale=0.5,
+                            evt_mu=1.5,
+                            evt_var=0.5,
                             evt_loglik=1.1 if geometry == "pooled" else 1.0,
                             evt_loglik_gain=0.1 if geometry == "pooled" else 0.0,
                             s_mu_neg=0.30,
@@ -192,6 +233,9 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                             tau_gumbel_cross=tau_cross,
                             tau_gumbel_priorfree=tau_priorfree,
                             tau_gumbel_rate=tau_priorfree,
+                            tau_gumbel_any_cross=tau_cross,
+                            tau_gumbel_any_priorfree=tau_priorfree,
+                            tau_gumbel_any_rate=tau_priorfree,
                             tau_supervised=tau_supervised,
                             tau_sim_oracle=tau_sim_oracle,
                             tau_test_oracle=tau_test_oracle,
@@ -264,6 +308,83 @@ def main() -> int:
         ok &= _check("winner chosen", dec["best_by_cost"]["variant"] == WINNER, str(dec["best_by_cost"]["variant"]))
         ok &= _check("beats the incumbent", bool(dec["beats_midpoint"]))
         ok &= _check("closest to the oracle cut", dec["closest_to_oracle"] == WINNER, str(dec["closest_to_oracle"]))
+
+        # --- The baseline that cannot go stale (#2846) ------------------------
+        base = pd.read_csv(root / "agg" / "cut_contrasts_vs_base.csv")
+        bprod = base[
+            (base["arm"].str.contains("dinov3_patch/max_patch"))
+            & (base["window"] == "ramp_6_20")
+            & (base["variant"] == WINNER)
+        ]
+        # Half the cells are anchored (production PROD_EDGE cheaper than the
+        # midpoint), half are not, so the winner's edge over production is the
+        # average of RAMP_EFFECT and RAMP_EFFECT - PROD_EDGE.
+        expected = RAMP_EFFECT - PROD_EDGE * len(ANCHORED_SEEDS) / len(SEEDS)
+        ok &= _check("winner paired against the run's own base row", len(bprod) == 1)
+        if len(bprod) == 1:
+            ok &= _check(
+                "base-row delta reflects the shipped threshold, not the midpoint",
+                abs(float(bprod.iloc[0]["mean_d_cost"]) - expected) < 1e-6,
+                f"{float(bprod.iloc[0]['mean_d_cost']):.5f} vs {expected}",
+            )
+            ok &= _check(
+                "base row records which production path it was",
+                "fold_anchored[k0.3]" in str(bprod.iloc[0]["base_provenance"]),
+                str(bprod.iloc[0]["base_provenance"]),
+            )
+        ok &= _check("ship candidate is chosen vs production", dec["ship_candidate"] == WINNER)
+        ok &= _check("does not beat what production actually ships", not dec["beats_production"])
+        ok &= _check(
+            "a stale-baseline win alone does not ship",
+            dec["beats_midpoint"] and not dec["ship"],
+        )
+        ok &= _check("family headroom reported", dec["family_headroom"] is not None)
+        ok &= _check("no headroom left on this axis", bool(dec["family_headroom_exhausted"]))
+
+        # A rule the allowlist does not know about is named, not dropped in silence.
+        ok &= _check(
+            "an unclassified rule is reported in the verdict",
+            dec["unclassified_variants"] == [UNKNOWN_VARIANT],
+            str(dec["unclassified_variants"]),
+        )
+        ok &= _check(
+            "the image geometry arm and the no-blend control are not flagged",
+            not [v for v in dec["unclassified_variants"] if v.startswith("image_") or v == "xcal_only"],
+        )
+
+        # A failed fidelity check must say *why*: harness bug or shipped incumbent.
+        sanity = summary["sanity"]
+        prov = sanity.get("by_provenance", {})
+        ok &= _check(
+            "fidelity failure is broken down by production path",
+            not sanity["ok"]
+            and prov.get("gmm_blend", {}).get("n_mismatched") == 0
+            and prov.get("fold_anchored[k0.3]", {}).get("n_mismatched", 0) > 0,
+            str(prov),
+        )
+
+        # Both tail models named, so neither can be read as the other.
+        ok &= _check(
+            "tail stability is reported per tail model",
+            "tail_alpha_stable" not in dec and {"tail_alpha_stable_gauss", "tail_alpha_stable_evt"} <= set(dec),
+        )
+
+        # Fallback reasons are windowed: the planted fallback sits outside the ramp.
+        reasons = pd.read_csv(root / "agg" / "cut_fallback_reasons.csv")
+        planted = reasons[
+            (reasons["arm"].str.contains("dinov3_patch/max_patch")) & (reasons["gmm_variant"] == FALLBACK_VARIANT)
+        ]
+        n_expected = len(FALLBACK_STEPS) * len(CATEGORIES) * len(SEEDS)
+        all_steps = planted[planted["window"] == "all_steps"]
+        ok &= _check(
+            "fallbacks counted over all steps",
+            len(all_steps) == 1 and int(all_steps.iloc[0]["n_steps"]) == n_expected,
+            f"{None if all_steps.empty else int(all_steps.iloc[0]['n_steps'])} vs {n_expected}",
+        )
+        ok &= _check(
+            "an out-of-ramp fallback is not reported inside the ramp",
+            planted[planted["window"] == "ramp_6_20"].empty,
+        )
 
         # The decoy wins on the blended column but not on the raw cut; the
         # analyzer must expose both so it cannot be shipped on the wrong one.

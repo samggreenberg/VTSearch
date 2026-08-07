@@ -61,6 +61,14 @@
       border-color: var(--color-good);
     }
   }
+
+  // A toast that is about to *do* something (navigate, discard) is not the same
+  // class of message as "here is some news", so it carries more weight: a wider
+  // accent edge and a deeper shadow lift it off the page behind it.
+  &.toast--countdown {
+    border-left-width: 6px;
+    box-shadow: var(--shadow-lg);
+  }
 }
 
 @keyframes toast-slide-in {
@@ -104,15 +112,37 @@
 // Live "this is about to happen" line, e.g. "Taking you back to the Dashboard
 // in 3…". Ticks once a second, so the seconds sit in a tabular-numeral span to
 // stop the trailing ellipsis jittering as the digit changes.
+//
+// Set at body size rather than the --font-xs used by .toast__detail: a line
+// that announces the page is about to navigate out from under the user has to
+// out-shout the message it sits below, or it reads as decoration and the
+// navigation lands as a bug.
 .toast__countdown {
-  margin-top: var(--space-2xs);
+  margin-top: var(--space-xs);
   color: var(--text-primary);
-  font-size: var(--font-xs);
+  font-size: var(--font-md);
+  font-weight: var(--weight-medium);
 }
 
 .toast__countdown-seconds {
   font-variant-numeric: tabular-nums;
   font-weight: var(--weight-semibold);
+}
+
+.toast__countdown-track {
+  margin-top: var(--space-2xs);
+  height: 4px;
+  border-radius: var(--radius-sm);
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+
+.toast__countdown-bar {
+  height: 100%;
+  background: var(--color-good);
+  // Matches the one-second tick, so the bar slides continuously instead of
+  // stepping — motion in the corner of the eye is what gets noticed.
+  transition: width 1s linear;
 }
 
 .toast__actions {

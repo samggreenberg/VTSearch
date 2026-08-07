@@ -37,7 +37,12 @@ repos:
       - id: check-json
       - id: check-merge-conflict
       - id: check-added-large-files
-        args: ["--maxkb=500"]
+        # 2 MB, not the default 500 KB.  This hook exists to keep datasets and
+        # model weights out of git; report figures are rendered at print density
+        # (200 dpi) and a multi-panel comparison runs ~1 MB, which the old cap
+        # rejected - pushing studies to downsample their evidence to satisfy a
+        # guard aimed at something else entirely.
+        args: ["--maxkb=2000"]
 
   - repo: https://github.com/codespell-project/codespell
     rev: v2.4.2

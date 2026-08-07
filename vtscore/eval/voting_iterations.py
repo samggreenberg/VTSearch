@@ -42,6 +42,8 @@ if TYPE_CHECKING:
     import numpy as np
     import pandas as pd
 
+    from vtscore.training.thresholds import FoldAnchoredCut
+
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, select_next
 from vtscore.eval.autopilot_flow import AutopilotFlow, app_has_detector
@@ -50,6 +52,8 @@ from vtscore.eval.trainers import _cross_calibrated_threshold, _parse_trainer_sp
 from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.mlp import LINEAR_HEAD, _auto_hidden_dim, train_model
 from vtscore.training.thresholds import (
+    ACQUISITION_INCLUSION_OFFSET,
+    acquisition_inclusion,
     anchored_gmm_fit,
     calculate_safe_threshold,
     calibration_folds,
@@ -123,6 +127,19 @@ _IDENT_COLUMNS: tuple[str, ...] = (
     "n_bad",
     "phase",
     "app_trained",
+    # --- Acquisition/reporting decoupling (docs/ML.md, threshold calibration).
+    #: The threshold handed to the *selector* this step - cut
+    #: ``acq_inclusion_offset`` inclusion steps below ``threshold``.  Equal to it
+    #: on steps with no fold-anchored fit to re-cut, and at offset 0.
+    "acq_threshold",
+    #: Where each threshold sits in the **pool** score distribution the selector
+    #: actually ranks - the two are emitted together on purpose.  Autopilot's
+    #: ``hard`` pick works in rank space (:func:`~vtscore.eval.al_strategies.
+    #: _hard_pick_by_index`), so "did the sampling position move, and how far"
+    #: is a question about these two numbers, not about the thresholds.  Without
+    #: them a sign error in the acquisition cut is invisible.
+    "acq_pool_percentile",
+    "report_pool_percentile",
 )
 
 #: Canonical column order for the voting-iterations result frame.  Kept in one
@@ -160,6 +177,7 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     "gmm_cut",
     "blend_weight",
     "cut_fallback",
+    "cut_fail_reason",
     "raw_cut_cost",
     "raw_cut_fpr",
     "raw_cut_fnr",
@@ -214,16 +232,21 @@ _CUT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
     "gmm_loglik",
     "pred_offset_equal_var",
     "gmm_logit_loglik",
-    # Fitted Gumbel(low) + Normal(high) mixture.  Its component parameters are in
-    # LOGIT units (that is where the extreme-value limit lives and where it is
-    # fitted); its log likelihood is converted back to score space so the two
-    # families are directly comparable.
+    # Fitted Gumbel + Normal mixture.  Its component parameters are in LOGIT
+    # units (that is where the extreme-value limit lives and where it is fitted);
+    # its log likelihood is converted back to score space so the two families are
+    # directly comparable.  Reported per component, with ``evt_gumbel_is_low``
+    # saying which mode the Gumbel landed on - #2836 assumed that was always the
+    # low one and threw away every fit that said otherwise, which #2846 measured
+    # at 14 % of production-like fits.
     "evt_ok",
-    "evt_w_lo",
-    "evt_loc_lo",
-    "evt_scale_lo",
-    "evt_mu_hi",
-    "evt_var_hi",
+    "evt_fit_fail",
+    "evt_gumbel_is_low",
+    "evt_w_gumbel",
+    "evt_loc",
+    "evt_scale",
+    "evt_mu",
+    "evt_var",
     "evt_loglik",
     "evt_loglik_gain",
     # Label-supervised class moments (diagnostic only).
@@ -240,6 +263,9 @@ _CUT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
     "tau_gumbel_cross",
     "tau_gumbel_priorfree",
     "tau_gumbel_rate",
+    "tau_gumbel_any_cross",
+    "tau_gumbel_any_priorfree",
+    "tau_gumbel_any_rate",
     "tau_supervised",
     "tau_sim_oracle",
     "tau_test_oracle",
@@ -394,6 +420,22 @@ def _score_sim_set_with_model(
     return sorted(sim_ids), [float(s) for s in scores]
 
 
+def _pool_percentile(pool_scores: dict[int, float], threshold: float) -> float:
+    """Fraction of the *unlabelled pool* scoring below *threshold*.
+
+    The selector's ``hard`` pick works in rank space over the pool, so this - not
+    the threshold's value, and not its percentile in the held-out test scores -
+    is the number that says where the next item comes from.  Returns NaN on an
+    empty pool rather than a misleading 0.0.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    if not pool_scores:
+        return float("nan")
+    arr = np.asarray(list(pool_scores.values()), dtype=np.float64)
+    return round(float((arr < threshold).mean()), 6)
+
+
 def _safe_threshold_for_step(
     threshold: float,
     step: _StepModel,
@@ -406,13 +448,13 @@ def _safe_threshold_for_step(
     inclusion: int,
     style_obj: Any = None,
     schedule: str | None = None,
-) -> tuple[float, list[float], list[int], list[Any], str]:
+) -> tuple[float, list[float], list[int], list[Any], str, "FoldAnchoredCut | None"]:
     """The harness's **shipped** safe threshold - the same rule the app applies.
 
     Scores the simulation set (the harness's haystack) with the final model and
     with each calibration fold model, then cuts via
     :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold` at the
-    production defaults (κ=0.3, midpoint rule, quantile-mean combine).  This is the
+    production defaults (the ``FOLD_ANCHOR_*`` constants).  This is the
     estimator :func:`vtscore.detectors.training._safe_threshold` ships, called
     with the same arguments, so the harness's baseline arm cannot drift from
     the app's behaviour - the paired ``*_variant`` rows are where deliberate
@@ -424,7 +466,11 @@ def _safe_threshold_for_step(
     land there - their fold models are sklearn estimators, not the torch heads
     the app trains, so there is no production path for them to match.
 
-    Returns ``(threshold, sim_scores, sim_ids, fold_haystacks, provenance)``.
+    Returns ``(threshold, sim_scores, sim_ids, fold_haystacks, provenance, cut)``.
+    The fitted :class:`~vtscore.training.thresholds.FoldAnchoredCut` rides along
+    (``None`` on the blend fallback) so a caller can re-cut the *same* fit at
+    another inclusion without refitting - which is what the acquisition cut does
+    (``acq_inclusion_offset``; see ``docs/ML.md``, threshold calibration).
     The sim scores ride along so the #2799 / #2836 / #2852 variant rows can
     re-cut the same distribution without a second scoring pass, their media ids
     with them so a variant can attach each score's true label without assuming
@@ -458,9 +504,9 @@ def _safe_threshold_for_step(
     if cut is not None:
         anchored = cut.threshold_at(inclusion)
         if np.isfinite(anchored):
-            return anchored, all_scores, ids, fold_haystacks, cut.provenance
+            return anchored, all_scores, ids, fold_haystacks, cut.provenance, cut
     blended = calculate_safe_threshold(threshold, all_scores, ctx, schedule=schedule)
-    return blended, all_scores, ids, fold_haystacks, "gmm_blend"
+    return blended, all_scores, ids, fold_haystacks, "gmm_blend", None
 
 
 def _evaluate_on_test(
@@ -617,6 +663,7 @@ def _operating_metrics(
         "blend_weight": nan,
         # Cut-rule study columns (issue #2836); only the variant rows set them.
         "cut_fallback": 0,
+        "cut_fail_reason": "",
         "raw_cut_cost": nan,
         "raw_cut_fpr": nan,
         "raw_cut_fnr": nan,
@@ -649,11 +696,12 @@ def _operating_metrics(
 #: ``rule`` names a cut in :mod:`vtscore.eval.cut_rules` - the ``lam``-tilt
 #: family over the Gaussian mixture ("mid" is production; "cross" is #2798's
 #: count-optimal crossing, reverted by #2833; "priorfree"/"rate" are #2836's
-#: rate-optimal tilts), the same tilts over a Gumbel-low mixture ("gumbel_*"),
-#: and the two label-reading diagnostics ("supervised", "sim_oracle") that locate
-#: the error rather than compete to ship.  ``xcal_only`` is the no-blend control:
-#: the raw conformal threshold at the same step.  ``pooled_mid`` must reproduce
-#: the production blend exactly.
+#: rate-optimal tilts), the same tilts over a Gumbel-low mixture ("gumbel_*") and
+#: over one whose Gumbel may land on either mode ("gumbel_any_*", #2846's repair
+#: to the first family's fallback rate), and the two label-reading diagnostics
+#: ("supervised", "sim_oracle") that locate the error rather than compete to
+#: ship.  ``xcal_only`` is the no-blend control: the raw conformal threshold at
+#: the same step.  ``pooled_mid`` must reproduce the production blend exactly.
 #:
 #: The #2798 logit-space variants are gone: #2799 measured them at +0.0006 cost
 #: (dead) and each extra fit costs a step's CPU that the #2836 arms need.
@@ -670,6 +718,9 @@ _SAFE_GMM_VARIANTS: tuple[tuple[str, str, str], ...] = (
     ("pooled_gumbel_cross", "pooled", "gumbel_cross"),
     ("pooled_gumbel_priorfree", "pooled", "gumbel_priorfree"),
     ("pooled_gumbel_rate", "pooled", "gumbel_rate"),
+    ("pooled_gumbel_any_cross", "pooled", "gumbel_any_cross"),
+    ("pooled_gumbel_any_priorfree", "pooled", "gumbel_any_priorfree"),
+    ("pooled_gumbel_any_rate", "pooled", "gumbel_any_rate"),
     ("pooled_supervised", "pooled", "supervised"),
     ("pooled_sim_oracle", "pooled", "sim_oracle"),
 )
@@ -708,8 +759,11 @@ def _safe_gmm_variant_rows(
     A rule whose root does not exist on a given fit falls back to that fit's
     midpoint - production's own fallback - and is flagged in ``cut_fallback`` so
     the analyzer can exclude fallen-back steps from a rule's own contrast rather
-    than silently scoring the midpoint under another name.  The oracle variants
-    do not fall back; they emit NaN cuts and are dropped by the analyzer's joins.
+    than silently scoring the midpoint under another name.  For the EVT rules
+    ``cut_fail_reason`` additionally names *which* guard declined, because the
+    repairs those guards want are different and the counts alone cannot tell them
+    apart (issue #2846).  The oracle variants do not fall back; they emit NaN cuts
+    and are dropped by the analyzer's joins.
 
     Returns ``(variant_rows, diagnostic_rows)``; the diagnostic rows carry the
     fitted mixture parameters and every cut in the decomposition chain, one row
@@ -732,6 +786,7 @@ def _safe_gmm_variant_rows(
 
     # One fit pass per geometry; every rule below reads these.
     cuts_by_geometry: dict[str, dict[str, float]] = {}
+    reasons_by_geometry: dict[str, dict[str, str]] = {}
     diag_rows: list[dict[str, Any]] = []
     geometries = sorted({fit for _n, fit, _r in _SAFE_GMM_VARIANTS if fit})
     for geometry in geometries:
@@ -741,11 +796,14 @@ def _safe_gmm_variant_rows(
             # Mirrors calculate_gmm_threshold's "too few scores" default so the
             # production-blend sanity check holds at every step.
             cuts_by_geometry[geometry] = dict.fromkeys((r for _n, f, r in _SAFE_GMM_VARIANTS if f == geometry), 0.5)
+            reasons_by_geometry[geometry] = {}
             continue
-        cuts, params = decomposition_cuts(scores, labels, wf, wn)
+        cuts, params, reasons = decomposition_cuts(scores, labels, wf, wn)
         cuts_by_geometry[geometry] = cuts
+        reasons_by_geometry[geometry] = reasons
         diag = {"geometry": geometry, "sim_prevalence": _r(float(np.mean(labels))) if len(labels) else nan}
-        diag.update({k: _r(float(v)) for k, v in params.items()})
+        # ``evt_fit_fail`` is a reason string; everything else in params is numeric.
+        diag.update({k: v if isinstance(v, str) else _r(float(v)) for k, v in params.items()})
         diag.update({f"tau_{name}": _r(float(value)) for name, value in cuts.items()})
         diag["tau_test_oracle"] = nan  # filled below, once the test oracle is known
         diag_rows.append(diag)
@@ -759,6 +817,7 @@ def _safe_gmm_variant_rows(
     rows: list[dict[str, Any]] = []
     for name, geometry, rule in _SAFE_GMM_VARIANTS:
         fallback = 0
+        fail_reason = ""
         if name == "xcal_only":
             threshold = xcal
             gmm_cut = nan
@@ -768,6 +827,10 @@ def _safe_gmm_variant_rows(
             if not np.isfinite(gmm_cut) and name not in _ORACLE_VARIANTS:
                 gmm_cut = cuts_by_geometry[geometry].get("mid", nan)
                 fallback = 1
+                # Empty for the Gaussian rules, which have no reason vocabulary;
+                # the EVT rules name the guard that declined so a fallback can be
+                # attributed rather than merely counted (issue #2846).
+                fail_reason = reasons_by_geometry[geometry].get(rule, "")
             threshold = blend_gmm_threshold(xcal, gmm_cut, ctx, schedule=schedule) if np.isfinite(gmm_cut) else nan
             provenance = "gmm_blend"
         if not np.isfinite(threshold):
@@ -789,6 +852,7 @@ def _safe_gmm_variant_rows(
         row["gmm_cut"] = _r(gmm_cut)
         row["blend_weight"] = _r(weight)
         row["cut_fallback"] = fallback
+        row["cut_fail_reason"] = fail_reason
         if np.isfinite(gmm_cut):
             raw_cost, raw_fpr, raw_fnr = operating_cost(base_scores, base_labels, gmm_cut, wf, wn)
             row["raw_cut_cost"] = _r(raw_cost)
@@ -985,6 +1049,12 @@ def _anchored_variant_rows(
         if fit is None:
             continue
         for rule in rules:
+            if rule == "mid_tilt":
+                # Fold-level rule, defined in fold-quantile space: a single
+                # label-anchored fit has no folds to tilt across.  The fold
+                # family below sweeps it; here it is skipped rather than fed to
+                # gmm_cut_from_fit, which (correctly) rejects it.
+                continue
             cut, fell_back = gmm_cut_from_fit(fit, rule, wf, wn)
             emit(f"anchored_w{weight:g}_{rule}", cut, provenance, fell_back)
 
@@ -1785,6 +1855,8 @@ def simulate_voting_iterations(  # noqa: C901
     anchored_rules: Optional[list[str]] = None,
     anchored_fold_arms: bool = True,
     anchored_fold_combines: Optional[list[str]] = None,
+    acq_inclusion_offset: int = ACQUISITION_INCLUSION_OFFSET,
+    acq_rank_percentile: Optional[float] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -1870,6 +1942,27 @@ def simulate_voting_iterations(  # noqa: C901
             follows the text sort (top items for the initial goods, the sort's
             cutoff for the initial bads); ``None`` (default) means the dataset
             has no text sort, so autopilot seeds from random known-good examples.
+        acq_inclusion_offset: Cut the threshold handed to the **selector** at
+            ``inclusion + acq_inclusion_offset``, leaving reporting and every
+            metric at *inclusion* so arms stay comparable.  Defaults to
+            :data:`~vtscore.training.thresholds.ACQUISITION_INCLUSION_OFFSET`
+            (-3), **the shipped app behaviour** - the harness matches production
+            here as it does everywhere else, so a baseline arm measures what
+            users get.  Pass ``0`` for the pre-#2876 control, where one threshold
+            did both jobs.
+
+            The direction is the opposite of the intuition from the cost
+            weights, because Autopilot's ``hard`` pick reads the threshold as a
+            **rank position**, not a decision boundary: a *negative* offset
+            prices false alarms higher, *raises* the cut, moves it *up* the
+            ranking, and so returns *more* positives.  Requires a fold-anchored
+            cut for the step; steps that fall back to the schedule blend keep
+            the reporting threshold (the blend has no inclusion-aware form).
+        acq_rank_percentile: Alternative acquisition cut - place it at this
+            quantile of the simulation-set score distribution directly, rather
+            than by naming an inclusion.  This is the ``rank_pin`` arm: same
+            intent, one fewer indirection.  Requires
+            ``acq_inclusion_offset=0``, since the two name the same cut.
         anchored_thresholds: When ``True`` (requires ``safe_thresholds``,
             ``emit_calibration_metrics``, and a *style*), each step additionally
             emits one metric row per anchored-mixture arm (issue #2852): the
@@ -1883,8 +1976,12 @@ def simulate_voting_iterations(  # noqa: C901
             :data:`_ANCHORED_WEIGHTS`).  Each labelled score counts as this
             many haystack scores in the anchored EM's M-step.
         anchored_rules: Cut rules applied to each anchored fit (default
-            :data:`_ANCHORED_RULES`): ``"mid"`` (production midpoint) and/or
-            ``"rate"`` (rate-optimal crossing at the live inclusion weights).
+            :data:`_ANCHORED_RULES`): ``"mid"`` (plain midpoint), ``"rate"``
+            (rate-optimal crossing at the live inclusion weights), and/or
+            ``"mid_tilt"`` (the shipped rule: midpoint anchored at inclusion 0,
+            rate tilt away from it).  ``"mid_tilt"`` is defined in
+            fold-quantile space, so it applies to the fold-anchored family
+            only; the label-anchored family skips it.
         anchored_fold_arms: Include the fold-anchored + rank-transfer arms
             (default ``True``); ``False`` keeps only the cheap label-anchored
             family (no per-fold scoring passes).
@@ -1920,6 +2017,19 @@ def simulate_voting_iterations(  # noqa: C901
     # Note: no torch.manual_seed() here - train_model handles its own
     # RNG seeding via fork_rng, keeping it thread-safe.
     start_time = time.monotonic()
+
+    # These are pre-registered experiment knobs, so they are validated beside
+    # the other argument checks rather than deep in the loop: a run that dies
+    # forty minutes in on a typo has held a cluster slot for nothing.
+    if acq_rank_percentile is not None:
+        if acq_inclusion_offset != 0:
+            raise ValueError(
+                "acq_inclusion_offset and acq_rank_percentile are mutually exclusive; "
+                "pass acq_inclusion_offset=0 to run the rank-pinned arm "
+                f"(the default is {ACQUISITION_INCLUSION_OFFSET}, the shipped acquisition cut)"
+            )
+        if not 0.0 <= acq_rank_percentile <= 1.0:
+            raise ValueError(f"acq_rank_percentile must be in [0, 1], got {acq_rank_percentile}")
 
     if head not in HEADS:
         raise ValueError(f"unknown head {head!r}; expected one of {HEADS}")
@@ -2023,6 +2133,11 @@ def simulate_voting_iterations(  # noqa: C901
     pool_labels = {cid: (1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0) for cid in sim_ids}
     step: _StepModel | None = None
     threshold = 0.5
+    #: The selector's threshold - cut ``acq_inclusion_offset`` steps below the
+    #: reporting one.  Kept as its own name so the two jobs cannot silently
+    #: re-merge (they were one variable, and that is how the #2847 positives
+    #: regression got in).
+    acq_threshold = 0.5
     pool_scores: dict[int, float] = {}
     n_steps = len(pool) if max_steps is None else min(max_steps, len(pool))
 
@@ -2047,7 +2162,9 @@ def simulate_voting_iterations(  # noqa: C901
             labeled=labeled,
             scores=pool_scores,
             model=step,
-            threshold=threshold,
+            # The ONLY consumer that moves.  Reporting, the metric rows and the
+            # phase machine all stay on ``threshold``.
+            threshold=acq_threshold,
             atlas=atlas,
             rng=rng,
             pool_labels=pool_labels,
@@ -2111,7 +2228,7 @@ def simulate_voting_iterations(  # noqa: C901
             # time, so bags and votes coincide here and the counts are the two
             # vote dicts' sizes.
             blend_ctx = BlendContext(n_labels=n_labels, n_good=len(good_votes), n_bad=len(bad_votes))
-            threshold, sim_pooled_scores, sim_pooled_ids, sim_fold_haystacks, safe_provenance = (
+            threshold, sim_pooled_scores, sim_pooled_ids, sim_fold_haystacks, safe_provenance, safe_cut = (
                 _safe_threshold_for_step(
                     threshold,
                     step,
@@ -2133,6 +2250,28 @@ def simulate_voting_iterations(  # noqa: C901
                 details["n_votes"] = n_labels
                 details["n_good"] = len(good_votes)
                 details["n_bad"] = len(bad_votes)
+
+        # The selector's cut.  Recomputed from scratch every step - never
+        # carried over - so a step with nothing to re-cut falls back to the
+        # reporting threshold rather than sampling this step's scores against
+        # the last step's cut.
+        acq_threshold = threshold
+        if safe_thresholds:
+            if acq_rank_percentile is not None:
+                if sim_pooled_scores:
+                    acq_threshold = float(
+                        np.quantile(np.asarray(sim_pooled_scores, dtype=np.float64), acq_rank_percentile)
+                    )
+            elif acq_inclusion_offset != 0 and safe_cut is not None:
+                # Re-cut the *same* fold-anchored fit.  O(1) - the mixture was
+                # fitted above; ``threshold_at`` is monotone by construction, so
+                # the arms are nested and offset 0 reproduces the reporting cut
+                # exactly.  ``safe_cut is None`` is the schedule-blend fallback
+                # (~5% of steps, concentrated in the cold start): the blend has
+                # no inclusion-aware form, so there is nothing honest to re-cut.
+                cand = safe_cut.threshold_at(acquisition_inclusion(inclusion, acq_inclusion_offset))
+                if np.isfinite(cand):
+                    acq_threshold = float(cand)
 
         # Evaluate on the held-out test set.  The calibration study (#2781)
         # emits one row per pooling (base + remedial) instead of the single
@@ -2205,6 +2344,11 @@ def simulate_voting_iterations(  # noqa: C901
             "n_bad": len(bad_votes),
             "phase": flow.phase if flow is not None else "",
             "app_trained": 1 if (flow is None or app_has_detector(flow.phase)) else 0,
+            "acq_threshold": round(float(acq_threshold), 6),
+            # Measured against the pool the selector ranks, not the test set, so
+            # the pair answers "how much did the sampling position move".
+            "acq_pool_percentile": _pool_percentile(pool_scores, acq_threshold),
+            "report_pool_percentile": _pool_percentile(pool_scores, threshold),
         }
         timing_cols = {
             "train_seconds": round(timings["train_seconds"], 6),

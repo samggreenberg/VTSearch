@@ -128,6 +128,40 @@ else
   fi
 fi
 
+# --- 5. …and the checkout `import vtscore` ACTUALLY resolves to --------------
+# VTS_REPO being right is not the same as the import being right.  #2846 launched
+# from a fresh worktree with a correct VTS_REPO and correct PYTHONPATH and still
+# imported the shared vts-calib checkout, via the venv's editable-install finder
+# (the `.shadow` shim that neutralises it is untracked, so a new worktree has
+# none).  That run only noticed because the branch had *added* a symbol; a branch
+# that merely changes behaviour would have produced a clean, plausible, wrong
+# table.  So resolve the import the way a job does - through common.setup_env() -
+# and check where it landed.
+if [[ -n "$REPO" && -d "$REPO/vtscore" ]]; then
+  RESOLVED=$(CALIB_EXP="$EXP" python - "$REPO" <<'PY' 2>/dev/null
+import pathlib, sys
+sys.path.insert(0, str(pathlib.Path(sys.argv[1]) / "scripts" / "experiments" / "calibration"))
+import common
+common.setup_env()
+import vtscore
+print(pathlib.Path(vtscore.__file__).resolve())
+PY
+)
+  if [[ -z "$RESOLVED" ]]; then
+    say_fail "could not resolve 'import vtscore' - is the venv active (source gridenv.sh)?"
+  else
+    REPO_REAL=$(cd "$REPO" && pwd -P)
+    case "$RESOLVED" in
+      "$REPO_REAL"/*) say_ok "import vtscore -> $RESOLVED" ;;
+      *)
+        say_fail "import vtscore resolves to $RESOLVED"
+        echo "        -> that is NOT $REPO_REAL; the jobs would measure another checkout"
+        echo "        -> source this worktree's gridenv.sh (it creates .shadow and pins VTS_REPO)"
+        ;;
+    esac
+  fi
+fi
+
 echo
 if [[ "$FAILED" == "1" ]]; then
   echo "PREFLIGHT FAILED - fix the above before launching (or --warn-only if deliberate)"

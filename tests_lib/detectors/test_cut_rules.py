@@ -17,6 +17,7 @@ import pytest
 from vtscore.eval.calibration_metrics import inclusion_weights, operating_cost
 from vtscore.eval.cut_rules import (
     ALL_RULES,
+    EVT_RULES,
     decomposition_cuts,
     gaussian_cuts,
     sim_oracle_cut,
@@ -199,7 +200,7 @@ class TestDecomposition:
     def test_every_rule_is_reported(self):
         rng = np.random.default_rng(7)
         scores, labels = self._sample(rng)
-        cuts, params = decomposition_cuts(scores, labels, 1.0, 1.0)
+        cuts, params, _reasons = decomposition_cuts(scores, labels, 1.0, 1.0)
         assert set(cuts) == set(ALL_RULES)
         assert params["gmm_ok"] == 1
         assert params["sim_n"] == pytest.approx(len(scores))
@@ -208,7 +209,7 @@ class TestDecomposition:
         """The four terms must sum to the total error of today's cut."""
         rng = np.random.default_rng(8)
         scores, labels = self._sample(rng)
-        cuts, _params = decomposition_cuts(scores, labels, 1.0, 1.0)
+        cuts, _params, _reasons = decomposition_cuts(scores, labels, 1.0, 1.0)
         chain = ["cross", "priorfree", "supervised", "sim_oracle"]
         assert all(math.isfinite(cuts[name]) for name in chain), cuts
         terms = [cuts[a] - cuts[b] for a, b in zip(chain[:-1], chain[1:], strict=True)]
@@ -218,13 +219,13 @@ class TestDecomposition:
         """The predicted direction: the repaired rule moves toward the negatives."""
         rng = np.random.default_rng(9)
         scores, labels = self._sample(rng, prevalence=0.02)
-        cuts, _params = decomposition_cuts(scores, labels, 1.0, 1.0)
+        cuts, _params, _reasons = decomposition_cuts(scores, labels, 1.0, 1.0)
         assert cuts["priorfree"] < cuts["cross"]
 
     def test_oracle_tail_level_is_a_probability(self):
         rng = np.random.default_rng(10)
         scores, labels = self._sample(rng)
-        _cuts, params = decomposition_cuts(scores, labels, 1.0, 1.0)
+        _cuts, params, _reasons = decomposition_cuts(scores, labels, 1.0, 1.0)
         assert 0.0 <= params["oracle_lo_sf_gauss"] <= 1.0
 
     def test_missing_rules_are_nan_not_silently_the_midpoint(self):
@@ -240,3 +241,29 @@ class TestDecomposition:
         assert math.isnan(cuts["cross"])
         assert math.isnan(cuts["priorfree"])
         assert not math.isnan(cuts["mid"])
+
+    def test_every_evt_rule_carries_a_reason(self):
+        """A rule that declines must say why, whether or not the fit existed (#2846)."""
+        rng = np.random.default_rng(11)
+        scores, labels = self._sample(rng)
+        _cuts, _params, reasons = decomposition_cuts(scores, labels, 1.0, 1.0)
+        assert set(reasons) == set(EVT_RULES)
+        assert all(r for r in reasons.values()), reasons
+
+    def test_an_unfittable_sample_reports_a_fit_reason_not_a_crossing_one(self):
+        """ "The fit failed" and "the fit had no crossing" are different diagnoses."""
+        scores = np.array([0.5, 0.5, 0.5])
+        labels = np.array([0.0, 0.0, 1.0])
+        _cuts, params, reasons = decomposition_cuts(scores, labels, 1.0, 1.0)
+        assert params["evt_ok"] == 0
+        assert all(r.startswith("fit_") for r in reasons.values()), reasons
+
+    def test_the_two_gumbel_families_are_reported_separately(self):
+        """``gumbel_*`` keeps #2836's orientation guard; ``gumbel_any_*`` drops it.
+
+        If these ever collapse into the same numbers the re-measurement cannot
+        attribute a difference to the repair, which is the entire point of
+        carrying both.
+        """
+        assert {"gumbel_priorfree", "gumbel_any_priorfree"} <= set(EVT_RULES)
+        assert set(EVT_RULES) <= set(ALL_RULES)

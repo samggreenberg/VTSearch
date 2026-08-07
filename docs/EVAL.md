@@ -249,6 +249,19 @@ Two columns make this visible in the output:
 
 Metrics are still recorded at every trainable step in both modes — fidelity changes the *vote order* and the `app_trained` flag, not measurement coverage.
 
+#### The acquisition cut (`acq_inclusion_offset`, default `-3`)
+
+The selector and the metrics read **different thresholds**. Reporting and every emitted metric stay at `inclusion`; the threshold handed to the picks is re-cut at `inclusion + acq_inclusion_offset` from the same fold-anchored fit. This mirrors production, which decoupled the two jobs in PR #2876 — see [`docs/ML.md`](ML.md#threshold-calibration) for the mechanism and the measured effect.
+
+The default is the shipped `-3`, **not** `0`, so an unconfigured run measures what users actually get. Pass `acq_inclusion_offset=0` for the pre-#2876 control where one threshold did both jobs; that is also the value the study's `prod` arm ran at. Note that this changes what a re-run of any *pre-#2876* study measures: those runs were all implicitly at offset 0, so reproducing one byte-for-byte means passing it explicitly, the same way `autopilot_fidelity=False` reproduces the pre-fidelity harness.
+
+Three columns make the lever verifiable rather than assumed, all measured in the **pool** distribution the selector ranks:
+
+- **`acq_threshold`** — the cut the picks actually saw that step (equal to `threshold` on steps with no fold-anchored fit to re-cut, ~5% of steps, concentrated in the cold start — the schedule blend has no inclusion-aware form).
+- **`acq_pool_percentile`** / **`report_pool_percentile`** — where the two cuts sat in the ranking.
+
+The direction is counter-intuitive (negative offset → *higher* cut → *more* positives, because the pick reads the threshold as a rank position), so a sign error would otherwise look exactly like the lever not working. `acq_rank_percentile` is the alternative parameterisation — pin the cut at a fixed quantile of the simulation-set scores — and it requires `acq_inclusion_offset=0`, since the two name the same cut. It is measured and **worse**; it exists as an arm, not as an option.
+
 Pass `autopilot_fidelity=False` to reproduce studies published before the flow was aligned (the Max-Patch, MLP-vs-SVM, and Inclusion-knob reports); that path is byte-for-byte the old behaviour. New studies should leave it on.
 
 ```python

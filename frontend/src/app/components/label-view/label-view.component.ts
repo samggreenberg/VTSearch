@@ -596,6 +596,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private applySortWindow(response: {
     results?: Array<Record<string, unknown>>;
     threshold?: number;
+    acq_threshold?: number | null;
     total?: number;
     above_threshold?: number;
     has_more_below?: boolean;
@@ -610,6 +611,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortState.setSortWindow({
       items,
       threshold,
+      acqThreshold: response.acq_threshold ?? null,
       total: response.total ?? items.length,
       hasMore: response.has_more_below ?? false,
       token: response.sort_token ?? null,
@@ -833,7 +835,10 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       ? Object.fromEntries(sortOrder.map((s) => [String(s.id), s.score]))
       : undefined;
     this.sortingApi
-      .getCoverageAtlasNext(scores, this.sortState.threshold ?? undefined)
+      // The New pick reads the threshold as a sampling position too (it steers
+      // the atlas probe by a node's median score), so it takes the acquisition
+      // cut alongside the Hard pick.
+      .getCoverageAtlasNext(scores, this.sortState.acqThreshold ?? undefined)
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (response) => {
@@ -1354,8 +1359,11 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (this.sortState.selectMode === 'top') {
       const next = sortOrder.find((s) => !isVoted(s.id));
       if (next) this.mediaState.selectMedia(next.id);
-    } else if (this.sortState.selectMode === 'hard' && this.sortState.threshold !== null) {
-      const threshold = this.sortState.threshold!;
+    } else if (this.sortState.selectMode === 'hard' && this.sortState.acqThreshold !== null) {
+      // The *acquisition* cut, not the decision line: this reads the threshold
+      // as a rank position, which is why it wants one further up the ranking
+      // than the one the user is shown (#2876).
+      const threshold = this.sortState.acqThreshold!;
       // Find the index where the threshold falls in the sorted (descending) list.
       // This is the first position whose score is at or below the threshold.
       let thresholdIndex = sortOrder.length;

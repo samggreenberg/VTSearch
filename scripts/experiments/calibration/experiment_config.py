@@ -134,6 +134,41 @@ def _schedule_variants() -> list[str]:
 
 SCHEDULE_VARIANTS = _schedule_variants()
 
+
+def _opt_int(name: str) -> int | None:
+    raw = os.environ.get(name, "").strip()
+    return int(raw) if raw else None
+
+
+def _opt_float(name: str) -> float | None:
+    raw = os.environ.get(name, "").strip()
+    return float(raw) if raw else None
+
+
+#: Acquisition-side cut, as an **offset** from :data:`INCLUSION`.  The threshold
+#: does two unrelated jobs - it is the reported decision line *and* the rank
+#: position Autopilot's ``hard`` pick samples around.  This knob moves only the
+#: second; reporting and every metric stay at :data:`INCLUSION`, so the arms
+#: remain comparable.
+#:
+#: Direction is the opposite of the intuition from the cost weights, because the
+#: pick reads the threshold as a **rank position**: a *negative* offset raises
+#: the cut, moves it *up* the ranking, and returns *more* positives.
+#:
+#: Unset = the shipped default (-3, the interior optimum PR #2876 measured), so
+#: an unconfigured run measures what users get.  ``0`` is the pre-#2876 control,
+#: one threshold doing both jobs.
+ACQ_INCLUSION_OFFSET = _opt_int("CALIB_ACQ_INCLUSION_OFFSET")
+if ACQ_INCLUSION_OFFSET is None:
+    from vtscore.training.thresholds import ACQUISITION_INCLUSION_OFFSET
+
+    ACQ_INCLUSION_OFFSET = ACQUISITION_INCLUSION_OFFSET
+
+#: The ``rank_pin`` arm: place the acquisition cut at this quantile of the
+#: simulation-set scores directly, rather than by naming an inclusion.  Requires
+#: ``CALIB_ACQ_INCLUSION_OFFSET=0``; the two name the same cut.
+ACQ_RANK_PERCENTILE = _opt_float("CALIB_ACQ_RANK_PERCENTILE")
+
 #: Minimum positives a category must have **in the simulation half** to be kept.
 #: A long-horizon run (#2841 follow-up: does pure x-cal ever overtake the blend?)
 #: is bounded by positives, not pool size: once autopilot has exhausted them,

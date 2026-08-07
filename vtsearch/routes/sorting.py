@@ -323,7 +323,8 @@ def _learned_sort_done_payload(job) -> dict:
     ``job.result`` is the windowed response body produced by
     :func:`windowed_sort_response` in the job target, so the window metadata
     (``sort_token`` / ``total`` / ``above_threshold`` / ``has_more_below``)
-    rides straight through to the client.
+    rides straight through to the client, as does the ``acq_threshold`` the
+    Autopilot picks sample around.
     """
     result = job.result or {}
     return {
@@ -331,6 +332,7 @@ def _learned_sort_done_payload(job) -> dict:
         "status": "done",
         "results": result.get("results", []),
         "threshold": result.get("threshold", 0.0),
+        "acq_threshold": result.get("acq_threshold"),
         "sort_token": result.get("sort_token"),
         "total": result.get("total"),
         "above_threshold": result.get("above_threshold"),
@@ -376,7 +378,11 @@ def learned_sort(body: dict):
         resolve_active_labelset,
         run_learned_sort,
     )
-    from vtscore.state.core import get_active_context, get_active_detector_context
+    from vtscore.state.core import (
+        detector_acquisition_threshold,
+        get_active_context,
+        get_active_detector_context,
+    )
 
     wait = body["wait"]
 
@@ -436,7 +442,12 @@ def learned_sort(body: dict):
             calibrate_count_value=calibrate_count_value,
             calibration_fraction_value=calibration_fraction_value,
         )
-        job.result = windowed_sort_response(results, round(threshold, 4))
+        # The acquisition cut is read *inside* the job's dataset/detector
+        # context, after training parked the fitted estimator on ``det_ctx`` -
+        # this is the only sort with a detector behind it, so the only one that
+        # carries one.
+        acq = detector_acquisition_threshold(det_ctx, inclusion_value)
+        job.result = windowed_sort_response(results, round(threshold, 4), round(acq, 4))
 
     job = learned_sort_jobs.start(
         signature,

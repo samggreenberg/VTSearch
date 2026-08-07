@@ -4243,6 +4243,10 @@
           "above_threshold": {
             "type": "integer"
           },
+          "acq_threshold": {
+            "nullable": true,
+            "type": "number"
+          },
           "has_more_below": {
             "type": "boolean"
           },
@@ -4522,6 +4526,10 @@
         "properties": {
           "above_threshold": {
             "type": "integer"
+          },
+          "acq_threshold": {
+            "nullable": true,
+            "type": "number"
           },
           "current": {
             "type": "integer"
@@ -5826,6 +5834,10 @@
         "properties": {
           "above_threshold": {
             "type": "integer"
+          },
+          "acq_threshold": {
+            "nullable": true,
+            "type": "number"
           },
           "has_more_below": {
             "type": "boolean"

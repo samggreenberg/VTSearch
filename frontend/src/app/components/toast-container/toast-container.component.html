@@ -14,7 +14,12 @@
       </div>
     }
     @for (t of toasts; track trackById($index, t)) {
-    <div class="toast" [class.toast--success]="t.level === 'success'" role="alert">
+    <div
+      class="toast"
+      [class.toast--success]="t.level === 'success'"
+      [class.toast--countdown]="!!t.countdown"
+      role="alert"
+    >
       <div class="toast__main">
         @if (t.level === 'success') {
           <svg class="toast__icon" aria-hidden="true" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -37,6 +42,12 @@
                  screen reader; the toast's role="alert" already read the line once. -->
             <div class="toast__countdown" aria-live="off">
               {{ cd.label }} <span class="toast__countdown-seconds">{{ cd.remaining }}</span>&hellip;
+            </div>
+            <!-- Draining bar: the countdown's second-by-second text is easy to
+                 miss when the user's attention is elsewhere on the page, so the
+                 same information is also carried by a moving shape. -->
+            <div class="toast__countdown-track" aria-hidden="true">
+              <div class="toast__countdown-bar" [style.width.%]="(cd.remaining / cd.total) * 100"></div>
             </div>
           }
         </div>
