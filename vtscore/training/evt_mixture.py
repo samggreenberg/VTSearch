@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from statistics import NormalDist
 
 import numpy as np
 
@@ -321,6 +322,41 @@ class GumbelNormalFit1D:
         if self.var <= 0.0:
             return float("nan")
         return float(0.5 * math.erfc((x - self.mu) / math.sqrt(2.0 * self.var)))
+
+    def lo_quantile(self, alpha: float) -> float | None:
+        """The ``x`` where :meth:`lo_survival` equals *alpha*; ``None`` if there is none.
+
+        The exact inverse of :meth:`lo_survival`, and deliberately its immediate
+        neighbour: the two branch on ``gumbel_is_low`` the same way, and a
+        quantile that read the Gumbel's tail off a fit whose low component is the
+        *Normal* would be wrong in the silent, plausible way this study line keeps
+        producing.  Both branches are closed form, so there is no bracket to get
+        wrong and no bisection to converge:
+
+        * Gumbel low — ``S(x) = 1 - exp(-exp(-z))``, ``z = (x - loc)/scale``, so
+          ``x = loc - scale*ln(-ln(1 - alpha))``.  At ``alpha = 0.158`` that is
+          ``loc + 1.761*scale``.
+        * Normal low (the swapped fit) — ``S(x) = Phi((mu - x)/sd)``, so
+          ``x = mu + sd*Phi^-1(1 - alpha)``.
+
+        Unlike a crossing, this always exists for a non-degenerate fit: a tail
+        quantile needs no Bad-then-Good boundary between the modes, which is the
+        entire reason the one-constant rule is worth measuring after the crossing
+        family's fallback rate sank it (issues #2846, #2881).  The units are the
+        fit's own — logit space, wherever the caller fitted it — so the caller
+        maps back exactly as it does for a crossing.
+        """
+        if not (0.0 < alpha < 1.0):
+            return None
+        if self.gumbel_is_low:
+            if not (self.scale > 0.0 and math.isfinite(self.loc)):
+                return None
+            x = self.loc - self.scale * math.log(-math.log1p(-alpha))
+        else:
+            if not (self.var > 0.0 and math.isfinite(self.mu)):
+                return None
+            x = self.mu + math.sqrt(self.var) * NormalDist().inv_cdf(1.0 - alpha)
+        return x if math.isfinite(x) else None
 
 
 #: Why the EM fit produced nothing.  ``"ok"`` means it produced a fit.

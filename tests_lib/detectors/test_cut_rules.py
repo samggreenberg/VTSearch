@@ -17,12 +17,19 @@ import pytest
 from vtscore.eval.calibration_metrics import inclusion_weights, operating_cost
 from vtscore.eval.cut_rules import (
     ALL_RULES,
+    EVT_FIT_RULES,
     EVT_RULES,
+    TAIL_ALPHA_GRID,
+    TAIL_ALPHA_PREREGISTERED,
+    TAIL_RULES,
     decomposition_cuts,
     gaussian_cuts,
     sim_oracle_cut,
     supervised_cut,
+    tail_alpha_rule,
+    tail_cuts,
 )
+from vtscore.training.evt_mixture import GumbelNormalFit1D
 from vtscore.training.thresholds import GmmFit1D, _weighted_gaussian_crossing
 
 
@@ -247,7 +254,7 @@ class TestDecomposition:
         rng = np.random.default_rng(11)
         scores, labels = self._sample(rng)
         _cuts, _params, reasons = decomposition_cuts(scores, labels, 1.0, 1.0)
-        assert set(reasons) == set(EVT_RULES)
+        assert set(reasons) == set(EVT_FIT_RULES)
         assert all(r for r in reasons.values()), reasons
 
     def test_an_unfittable_sample_reports_a_fit_reason_not_a_crossing_one(self):
@@ -267,3 +274,124 @@ class TestDecomposition:
         """
         assert {"gumbel_priorfree", "gumbel_any_priorfree"} <= set(EVT_RULES)
         assert set(EVT_RULES) <= set(ALL_RULES)
+
+
+class TestTailAlphaRule:
+    """#2881's one-constant rule: the fitted Bad component's own upper quantile.
+
+    Closed form in both orientations, so these check the arithmetic against the
+    definition (``lo_survival`` at the returned cut must be ``alpha``) rather than
+    against a golden number - which also means the two directions cannot drift
+    apart without a failure here.
+    """
+
+    def _evt(self, *, swapped=False) -> GumbelNormalFit1D:
+        """A well-separated fit, with the Gumbel on the low or the high mode."""
+        if swapped:
+            # Normal below, Gumbel above -> `lo_quantile` must read the Normal.
+            return GumbelNormalFit1D(w_gumbel=0.1, loc=2.0, scale=0.4, w_normal=0.9, mu=-2.0, var=0.5, mean_loglik=0.0)
+        return GumbelNormalFit1D(w_gumbel=0.9, loc=-2.0, scale=0.4, w_normal=0.1, mu=2.0, var=0.5, mean_loglik=0.0)
+
+    @pytest.mark.parametrize("swapped", [False, True])
+    @pytest.mark.parametrize("alpha", [0.01, 0.04, 0.158, 0.4, 0.9])
+    def test_quantile_inverts_the_survival_function(self, alpha, swapped):
+        fit = self._evt(swapped=swapped)
+        x = fit.lo_quantile(alpha)
+        assert x is not None
+        assert fit.lo_survival(x) == pytest.approx(alpha, abs=1e-12)
+
+    def test_gumbel_branch_matches_the_closed_form(self):
+        """``x = loc - scale*ln(-ln(1-alpha))``; at 0.158 that is ``loc + 1.761*scale``."""
+        fit = self._evt()
+        x = fit.lo_quantile(TAIL_ALPHA_PREREGISTERED)
+        assert x is not None
+        offset = (x - fit.loc) / fit.scale
+        assert offset == pytest.approx(-math.log(-math.log1p(-TAIL_ALPHA_PREREGISTERED)), rel=1e-12)
+        assert offset == pytest.approx(1.7604, abs=1e-4)
+
+    def test_swapped_fit_reads_the_normal_not_the_gumbel(self):
+        """The one thing this rule can still get wrong, and the reason it branches.
+
+        A quantile taken off the Gumbel when the Normal is the low component
+        would be a plausible number from the wrong component - silent, and on the
+        wrong end of the axis.
+        """
+        fit = self._evt(swapped=True)
+        x = fit.lo_quantile(TAIL_ALPHA_PREREGISTERED)
+        assert x is not None
+        assert fit.mu < x < fit.loc  # the Normal's upper tail, below the Gumbel's mode
+        # A Normal's median is its mean, which the Gumbel branch would miss by
+        # ``loc + 0.3665*scale`` - a plausible number from the wrong component.
+        assert fit.lo_quantile(0.5) == pytest.approx(fit.mu, abs=1e-12)
+
+    def test_higher_alpha_cuts_lower(self):
+        """More Bad mass left above the cut means a cut further down the axis."""
+        fit = self._evt()
+        raw = [fit.lo_quantile(a) for a in TAIL_ALPHA_GRID]
+        assert all(c is not None for c in raw)
+        cuts = [c for c in raw if c is not None]
+        assert cuts == sorted(cuts, reverse=True)
+
+    def test_alpha_outside_the_unit_interval_is_declined(self):
+        fit = self._evt()
+        assert fit.lo_quantile(0.0) is None
+        assert fit.lo_quantile(1.0) is None
+        assert fit.lo_quantile(-0.1) is None
+
+    def test_the_rule_needs_no_crossing_to_exist(self):
+        """The whole reason this family is worth a run after #2846.
+
+        On a fit whose modes have collapsed onto each other every crossing rule
+        declines, and the crossing family degrades to the midpoint.  A tail
+        quantile is still perfectly well defined there.
+        """
+        fit = GumbelNormalFit1D(w_gumbel=0.9, loc=0.0, scale=0.4, w_normal=0.1, mu=0.02, var=4.0, mean_loglik=0.0)
+        assert fit.crossing_state(allow_swapped=True)[0] != "ok"
+        cuts, reasons = tail_cuts(fit)
+        assert set(reasons.values()) == {"ok"}
+        assert all(math.isfinite(c) for c in cuts.values()), cuts
+
+    def test_rule_names_are_stable_and_sorted_by_alpha(self):
+        assert tail_alpha_rule(0.158) == "tail_a158"
+        assert tail_alpha_rule(0.04) == "tail_a040"
+        assert TAIL_RULES == tuple(tail_alpha_rule(a) for a in TAIL_ALPHA_GRID)
+        assert list(TAIL_ALPHA_GRID) == sorted(TAIL_ALPHA_GRID)
+        assert TAIL_ALPHA_PREREGISTERED in TAIL_ALPHA_GRID
+
+    def test_tail_cuts_are_reported_in_score_space(self):
+        """The fit is on the logit axis; the cuts a rule ships are scores."""
+        fit = self._evt()
+        cuts, _reasons = tail_cuts(fit)
+        assert all(0.0 < c < 1.0 for c in cuts.values()), cuts
+
+
+class TestRuleWiring:
+    """A rule that exists but is never emitted produces a missing row, not an error.
+
+    #2884 made an *unclassified* variant loud in the analyzer.  This is the other
+    half, one layer down: a rule defined in :mod:`vtscore.eval.cut_rules` but not
+    wired into the harness never reaches the analyzer at all, so there is nothing
+    for it to classify.  Both lists are spelled out by hand in
+    ``voting_iterations`` (which is deliberately import-light), so these
+    assertions are what keeps the duplication honest.
+    """
+
+    def test_every_rule_is_emitted_as_a_pooled_variant(self):
+        from vtscore.eval.voting_iterations import _SAFE_GMM_VARIANTS
+
+        names = {name for name, _f, _r in _SAFE_GMM_VARIANTS}
+        missing = sorted(f"pooled_{r}" for r in ALL_RULES if f"pooled_{r}" not in names)
+        assert not missing, f"defined in cut_rules but never emitted by the harness: {missing}"
+
+    def test_every_rule_has_a_diagnostic_column(self):
+        from vtscore.eval.voting_iterations import _CUT_DIAGNOSTIC_COLUMNS
+
+        missing = sorted(f"tau_{r}" for r in ALL_RULES if f"tau_{r}" not in _CUT_DIAGNOSTIC_COLUMNS)
+        assert not missing, f"cut emitted with no column to write it to: {missing}"
+
+    def test_pooled_variant_rules_all_exist(self):
+        """And the converse: a variant naming a rule that was renamed or removed."""
+        from vtscore.eval.voting_iterations import _SAFE_GMM_VARIANTS
+
+        unknown = sorted({rule for _n, _f, rule in _SAFE_GMM_VARIANTS if rule and rule not in ALL_RULES})
+        assert not unknown, f"harness emits variants for rules that do not exist: {unknown}"
