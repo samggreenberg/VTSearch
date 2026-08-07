@@ -176,7 +176,18 @@ Inference max-pools the head over that stack (an image scores by its **best** ro
 
 This geometry (**MaxPatch**) replaced a HAC region tree in #2886. The old pipeline pooled patches into ~12 saliency-weighted k-means leaves, merged them into a 24-node binary tree, snapped Good votes to the best-IoU node, and flooded only the childless nodes. Over 23 scale-band Visual Genome categories × 3 seeds, tree-free MaxPatch beat it on ErrorCost by a paired Δ = −0.064 (Holm p = 0.002) and was best-or-tied-best in *every* scale band, on both halves of the error; the edge is largest on small objects, where a raw patch is a near-pure object sample while the tree's smallest pooled leaf already blends object with context. Dropping the tree also removed the #2731 flood/score gap (internal HAC nodes were scored but never flooded, because renormalised merge vectors are not dominated by their own leaves) — MaxPatch has no internals, so the exception is gone rather than inherited. Ingest gets cheaper and the payload gets *smaller*: the grid was already stored alongside the tree. See [`docs/experiments/max-patch/REPORT.md`](experiments/max-patch/REPORT.md).
 
-Scoring cost went the other way: ~197 rows per image instead of ~24. The flattened matrix is therefore kept **float16** (the grid's own dtype) and upcast chunk-wise by both consumers (`_forward_sigmoid_chunked`, `chunked_row_scores`), so peak float32 memory stays bounded regardless of dataset size.
+**Measured cost of the swap** (DINOv3 14×14, D = 768, CPU):
+
+| | MaxHAC (before) | MaxPatch (now) |
+|---|---|---|
+| ingest, per image | 2.52 ms (k-means leaves + O(k³) merges + fp16 cast) | 0.46 ms (fp16 cast only) |
+| scored rows per image | 24 | 197 |
+| flattened score matrix, per 10k images | ~740 MB float32 | ~3.0 GB float16 |
+| scoring forward pass, per image | ~13 µs | ~110 µs |
+
+So ingest gets ~2 ms/image cheaper (≈21 s per 10k images) and the stored payload gets *smaller* — the grid was already being pickled alongside the tree, so the tree's ~150 MB per 10k images is pure saving. Scoring is where the cost went: ~8× the rows, and a retrain runs three scoring passes (the final model plus one per calibration fold), so a 10k-image collection pays roughly 3 s per vote instead of 0.4 s.
+
+Two things keep that bounded. The flattened matrix is kept **float16** (the grid's own dtype) and upcast chunk-wise by both consumers (`_forward_sigmoid_chunked`, `chunked_row_scores`), so peak float32 memory is `ROW_CHUNK × D × 4` regardless of dataset size; and `_build_region_arrays` allocates the matrix once and fills it in place rather than concatenating per-media blocks, which would hold 2× the matrix at peak. The matrix itself is cached on the `DatasetContext` and rebuilt only when the media-id set changes — never per vote.
 
 Because flooding turns one Bad vote into ~197 correlated rows, class balance and calibration are **per-bag, not per-row**:
 

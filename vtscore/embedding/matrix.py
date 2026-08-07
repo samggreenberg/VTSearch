@@ -503,29 +503,48 @@ def _build_region_arrays(
     consumers upcast chunk-wise (:func:`chunked_row_scores`,
     :func:`vtscore.detectors.training._forward_sigmoid_chunked`) so peak
     float32 memory stays bounded regardless of dataset size.
+
+    The build is two-pass - count rows from the grid *shapes*, allocate once,
+    then fill - rather than stacking per-media blocks and concatenating.  A
+    concatenate holds the blocks and the result alive at the same moment, i.e.
+    2x the matrix at peak, which at MaxPatch's row count is gigabytes on a
+    large collection.  The per-media temporary is one image's rows (~300 KB).
     """
     patch_embedder_name = _patch_embedder_for_region_snap(snap)
-    blocks: list[np.ndarray] = []
-    media_index_per_row: list[np.ndarray] = []
-    region_index_per_row: list[np.ndarray] = []
+
+    # Pass 1: row counts, read off the grid shape without materialising rows.
+    # ``_require_embedding`` here is what makes the count trustworthy - it
+    # guarantees every media contributes its image-level row 0, so a grid-bearing
+    # media is exactly ``1 + H*W`` rows.  A media with no resolvable vector
+    # raises loudly, naming the cid, instead of silently short-stacking.
+    counts = np.empty(len(sorted_ids), dtype=np.int64)
     for mi, cid in enumerate(sorted_ids):
         media = snap[cid]
-        rows = media_score_rows(media, patch_embedder_name, dtype=np.float16)
-        if rows is None:
-            # Raises naming the offending cid - same loud failure the plain
-            # embedding-matrix builder gives for a vector-less media.
-            _require_embedding(cid, media, patch_embedder_name)
-            raise AssertionError("unreachable")  # pragma: no cover
-        n_rows = rows.shape[0]
-        blocks.append(rows)
-        media_index_per_row.append(np.full(n_rows, mi, dtype=np.int64))
-        region_index_per_row.append(np.arange(n_rows, dtype=np.int64))
-    region_matrix = np.concatenate(blocks, axis=0).astype(np.float16, copy=False)
-    return (
-        region_matrix,
-        np.concatenate(media_index_per_row),
-        np.concatenate(region_index_per_row),
-    )
+        _require_embedding(cid, media, patch_embedder_name)
+        grid = media.get("patch_grid")
+        if grid is None:
+            counts[mi] = 1
+        else:
+            shape = np.asarray(grid).shape
+            counts[mi] = 1 + int(shape[0]) * int(shape[1])
+    starts = np.zeros(len(sorted_ids), dtype=np.int64)
+    np.cumsum(counts[:-1], out=starts[1:])
+    total = int(counts.sum())
+
+    # Pass 2: allocate once and fill each media's slice in place.
+    first = media_score_rows(snap[sorted_ids[0]], patch_embedder_name, dtype=np.float16)
+    assert first is not None  # guaranteed by the _require_embedding pass above
+    region_matrix = np.empty((total, int(first.shape[1])), dtype=np.float16)
+    region_matrix[: first.shape[0]] = first
+    for mi, cid in enumerate(sorted_ids[1:], start=1):
+        rows = media_score_rows(snap[cid], patch_embedder_name, dtype=np.float16)
+        assert rows is not None
+        start = int(starts[mi])
+        region_matrix[start : start + rows.shape[0]] = rows
+
+    media_index_per_row = np.repeat(np.arange(len(sorted_ids), dtype=np.int64), counts)
+    region_index_per_row = np.arange(total, dtype=np.int64) - np.repeat(starts, counts)
+    return region_matrix, media_index_per_row, region_index_per_row
 
 
 def get_region_matrix_for_snap(
