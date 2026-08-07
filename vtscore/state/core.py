@@ -749,19 +749,20 @@ class DetectorContext:
         "label_local_features",  # str → StructuralFeatures
         # Region-flooded negatives for the labelset's Bad elements on patch
         # datasets: str → list[np.ndarray], keyed by stable_element_id, holding
-        # the element's CLS + HAC-leaf vectors so a saved detector re-sorted
-        # cross-dataset floods the same leaf negatives the live vote path does.
+        # the element's image-level vector + every raw patch so a saved detector
+        # re-sorted cross-dataset floods the same rows the live vote path does.
         # In-memory only, re-derived from origins, never persisted; cleared on
         # embedder switch alongside ``label_embeddings``.
         "label_negative_regions",
-        # Full region-node stacks for the labelset's elements on patch datasets:
-        # str → list[np.ndarray], keyed by stable_element_id, holding *every*
-        # ``patch_regions`` vector (CLS + HAC internals + leaves) - the rows the
-        # scorer max-pools that element's media over.  Lets threshold
-        # calibration collapse a Good bag and a Bad bag the same way inference
-        # collapses any image, instead of comparing a max-over-1 against a
-        # max-over-13.  In-memory only, re-derived from origins, never
-        # persisted; cleared on embedder switch alongside ``label_embeddings``.
+        # Full score-row stacks for the labelset's elements on patch datasets:
+        # str → list[np.ndarray], keyed by stable_element_id, holding the
+        # image-level vector + every raw patch - the rows the scorer max-pools
+        # that element's media over (identical to the flood above under
+        # MaxPatch).  Lets threshold calibration collapse a Good bag and a Bad
+        # bag the same way inference collapses any image, instead of comparing
+        # a max-over-1 against a max-over-197.  In-memory only, re-derived from
+        # origins, never persisted; cleared on embedder switch alongside
+        # ``label_embeddings``.
         "label_score_regions",
         "model",  # nn.Sequential | None (current trained MLP)
         # Structural (SIFT/VLAD) detectors carry a *second* learned object next

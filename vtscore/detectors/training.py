@@ -132,8 +132,8 @@ def _blend_schedule_for_snap(snap: dict | None) -> str:
     #2841 measured the two voting modes separately and they want different
     curves, so the schedule is resolved per training call rather than being one
     global constant.  The mode follows the *scoring* geometry, not how the user
-    happened to vote: a patch dataset always scores by max-pooling over regions
-    (see :func:`_score_all_media`), which is exactly the ``region`` arm of the
+    happened to vote: a patch dataset always scores by max-pooling over its raw
+    patches (see :func:`_score_all_media`), which is exactly the ``region`` arm of the
     study, while a single-vector dataset is the ``binary`` arm.
     """
     from vtscore.training.blend_schedules import production_schedule_for  # noqa: PLC0415
@@ -217,17 +217,17 @@ def _calibration_score_rows(
 
     Calibration collapses each held-out bag with ``max``.  Left to the training
     rows that is an unfair comparison on a patch dataset: a Good vote holds one
-    row while a Bad vote holds its ~13 flooded leaves, and ``max`` over 13 draws
-    beats ``max`` over 1 with no signal at all - so the cut lands high and the
-    detector over-rejects true matches.  Handing the calibrator each voted
-    image's *scoring* stack (all ~24 region nodes, exactly what
+    row while a Bad vote holds its ~197 flooded patches, and ``max`` over 197
+    draws beats ``max`` over 1 with no signal at all - so the cut lands high and
+    the detector over-rejects true matches.  Handing the calibrator each voted
+    image's *scoring* stack (all ~197 rows, exactly what
     :func:`_score_all_media` max-pools) puts both classes in the geometry
     inference actually uses.
 
     Coverage is **all-or-nothing**: unless every bag has a stack this returns
     ``None`` and the calibrator keeps pooling over the training rows.  Partial
     coverage is worse than none - a Good bag left on its 1 training row while
-    the Bad bags widen from 13 rows to 24 would deepen the very bias this
+    the Bad bags stay at their full row count would deepen the very bias this
     corrects - so an unresolvable media declines the correction rather than
     skewing it.
 
@@ -422,15 +422,30 @@ def pool_box_from_media(
 ) -> np.ndarray | None:
     """Return the region training vector for *media*, or ``None``.
 
-    When *region_box* is set, snap it to the media's nearest ``patch_regions``
-    node via :func:`vtscore.media.patch_embed.snap_box_to_region` and return
-    that node's vector - i.e. train on the exact sub-image suggestion the MLP
-    max-pools over at inference, so the Good vote is a fair representative of
-    what the detector will actually score.  Falls back to a uniform pool of
-    the raw ``patch_grid`` (:func:`box_to_vote_vector`) only when the media
-    carries a grid but no region tree, and to ``None`` (the caller then uses
-    the image-level ``embedding``) for legacy single-vector embedders and
-    patch datasets that predate region storage.  Patch-embedder v2.
+    **MaxPatch Good-vote rule.**  When *region_box* is set and the media
+    carries a ``patch_grid``, return the single raw patch vector nearest the
+    box (:func:`vtscore.media.patch_embed.nearest_patch_to_box`) - one of the
+    very rows :func:`vtscore.embedding.matrix.media_score_rows` will score the
+    image over, so the Good vote is a fair representative of what the detector
+    actually evaluates.  Returns ``None`` (the caller then uses the image-level
+    ``embedding``, which is row 0 of that same stack) for a boxless vote and
+    for legacy single-vector embedders that carry no grid.
+
+    This replaced the HAC snap-to-node rule in #2886: over 23 scale-band Visual
+    Genome categories the raw patch beat the tree's best-IoU node on both
+    halves of the error at every scale band, and by the largest margin exactly
+    where the hypothesis said it would - below leaf scale, where the tree's
+    smallest pooled candidate already blends object with context while a raw
+    patch is a near-pure object sample.  See
+    ``docs/experiments/max-patch/REPORT.md``.
+
+    Note the drawn box's width and height are discarded in essentially every
+    case: ``nearest_patch_to_box`` collapses to "the patch nearest the box
+    centre" unless the box is thinner than one cell.  That is the shipped
+    design and what the study measured, not an oversight - the natural 4-DOF
+    alternative (mean of the patches inside the box) is a per-vote amalgam that
+    can never be a per-image scored row, so it breaks the train/score
+    invariant by construction.
 
     Shared by the in-dataset vote path (:func:`_training_vec_for_vote`) and
     the cross-dataset labelset path
@@ -439,20 +454,12 @@ def pool_box_from_media(
     if region_box is None:
         return None
 
-    regions = media.get("patch_regions")
-    if regions:
-        from vtscore.media.patch_embed import snap_box_to_region  # noqa: PLC0415
-
-        snapped = snap_box_to_region(regions, region_box)
-        if snapped is not None:
-            return snapped
-
     grid = media.get("patch_grid")
     if grid is None:
         return None
-    from vtscore.media.patch_embed import box_to_vote_vector  # noqa: PLC0415
+    from vtscore.media.patch_embed import nearest_patch_to_box  # noqa: PLC0415
 
-    return box_to_vote_vector(np.asarray(grid), region_box)
+    return nearest_patch_to_box(np.asarray(grid), region_box)
 
 
 def _training_vec_for_vote(
@@ -479,48 +486,35 @@ def bad_negative_vecs(
 ) -> list[np.ndarray]:
     """Negative training vectors contributed by one Bad vote on *media*.
 
-    On **patch** media (carrying a ``patch_regions`` tree) a Bad vote floods
-    every region node with no children - the CLS full-image node plus the HAC
-    leaves, the disjoint set that tiles the image - as negatives.  This is the
-    multiple-instance-learning treatment of a rejected image: since inference
-    scores an image by its **best** region (max-pool), a Bad vote asserts that
-    *no* region of it should score high, so we train every leaf down.
+    On **patch** media (carrying a ``patch_grid``) a Bad vote floods the
+    image-level vector plus **every raw patch** - i.e. exactly
+    :func:`vtscore.embedding.matrix.media_score_rows`, the same ~197 rows
+    :func:`_score_all_media` max-pools.  This is the multiple-instance-learning
+    treatment of a rejected image: since inference scores an image by its
+    **best** row, a Bad vote asserts that *no* row of it should score high, so
+    every row is trained down.
 
-    Internal HAC nodes (``children`` set) are **not** flooded, even though
-    :func:`_score_all_media` max-pools them.  This is a deliberate, measured
-    exception, not a redundancy claim: an internal node is *not* dominated by
-    its leaves.  :func:`~vtscore.media.patch_embed.build_hac_tree` sets
-    ``merged_vec = _l2_normalize(sum_a + sum_b)``, so the merged vector is the
-    convex-hull point of its descendants **renormalised back to the unit
-    sphere** - a gain of ``1 / ||mean(descendant leaf vecs)||``, ~1.53x on real
-    trees.  Under the linear production head that scales the logit by the same
-    factor, so an internal node can and does out-score every one of its own
-    leaves (~4.7% of node/direction pairs).
+    The flood and the scoring stack are **the same function call**, which is
+    the point.  Under the old HAC tree they were deliberately different - the
+    flood covered the CLS node and the leaves but skipped the internal merge
+    nodes, a measured exception (#2731) forced by internals being renormalised
+    convex-hull points that are not dominated by their own leaves.  MaxPatch
+    has no internals, so the gap closes and every scored row is a flooded row.
 
-    Flooding them anyway was A/B'd over 24 synthetic patch detectors
-    (``scripts/probe_hac_internal_flood.py``) and it **hurts**: paired AP
-    -0.058 ± 0.036 (95% CI, excludes zero; the leaves-only arm wins 19 of 24
-    seeds), while FPR (+0.037 ± 0.045) and FNR (-0.010 ± 0.049) both straddle
-    zero.  It does buy back some of the gap - the share of negatives whose
-    winning row is an internal node falls 4.6% → 2.7% - but suppressing a
-    rejected image's renormalised mean directions also suppresses the geometry
-    a *positive* image's concept-blob internal lives in, and that costs more
-    than it buys.  So the flood stays leaves-only, and the gap stays pinned by
-    ``test_max_hac_floods_every_scored_row_except_hac_internals`` and
-    ``tests_lib/detectors/test_hac_internal_flood_gap.py`` rather than papered
-    over.  See #2731.
+    All ~197 rows share one bag id in :func:`_build_vote_xy`, so a rejected
+    image still counts as **one** vote for weighting, splitting, and the
+    threshold's small-count ramp.
 
     Non-patch media contribute a single image-level vector, exactly as before,
     so every legacy single-vector dataset is byte-for-byte unchanged.
     """
+    from vtscore.embedding.matrix import media_score_rows  # noqa: PLC0415
     from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 
-    regions = media.get("patch_regions")
-    if regions:
-        leaves = [np.asarray(r.vec, dtype=np.float32) for r in regions if r.children is None]
-        if leaves:
-            return leaves
-    return [media_embedding(media, embedder_name)]
+    rows = media_score_rows(media, embedder_name)
+    if rows is None:
+        return [media_embedding(media, embedder_name)]
+    return list(rows)
 
 
 def inference_score_rows(
@@ -529,25 +523,20 @@ def inference_score_rows(
 ) -> np.ndarray | None:
     """The row stack *media* is max-pooled over at inference, or ``None``.
 
-    Mirrors :func:`vtscore.embedding.matrix._build_region_arrays`, the matrix
-    :func:`_score_all_media` scores: a patch media contributes **every**
-    ``patch_regions`` node - CLS, HAC internals, and HAC leaves alike, ~24 rows
-    - and a region-less media contributes its single image-level vector.
+    A thin alias for :func:`vtscore.embedding.matrix.media_score_rows` - the
+    same rows :func:`vtscore.embedding.matrix._build_region_arrays` flattens
+    into the matrix :func:`_score_all_media` scores: image-level vector + every
+    raw patch on a patch media (~197 rows), a single image-level vector on a
+    grid-less one.
 
     Used to calibrate in inference geometry: a voted image's bag must collapse
-    over the same rows the scorer will pool, not over the (Good: 1, Bad: ~13)
+    over the same rows the scorer will pool, not over the (Good: 1, Bad: ~197)
     rows the fold model happened to train on.  See
     :func:`_calibration_score_rows`.
     """
-    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+    from vtscore.embedding.matrix import media_score_rows  # noqa: PLC0415
 
-    regions = media.get("patch_regions")
-    if regions:
-        return np.stack([np.asarray(r.vec, dtype=np.float32) for r in regions])
-    emb = media_embedding(media, embedder_name)
-    if emb is None:
-        return None
-    return np.asarray(emb, dtype=np.float32).reshape(1, -1)
+    return media_score_rows(media, embedder_name)
 
 
 def _build_vote_xy(
@@ -559,13 +548,14 @@ def _build_vote_xy(
 ) -> tuple[list[np.ndarray], list[float], list, dict]:
     """Build ``(X_list, y_list, groups, score_rows)`` from filtered votes.
 
-    Good votes that designated a region are region-pooled via
+    Good votes that designated a region train on the nearest raw patch via
     :func:`_training_vec_for_vote` (one row each).  Bad votes are expanded by
     :func:`bad_negative_vecs`: one row per image-level vector on a legacy
-    dataset, or one row per region leaf on a patch dataset (region flooding).
+    dataset, or the image-level vector + every raw patch on a patch dataset
+    (region flooding).
 
     ``groups`` carries one bag id per row - ``("g", cid)`` for a Good vote,
-    ``("b", cid)`` shared across all of a Bad vote's flooded leaf rows - so the
+    ``("b", cid)`` shared across all of a Bad vote's ~197 flooded rows - so the
     downstream trainer/calibrator can balance and split by **image**, not by
     row.  On a legacy dataset every bag holds exactly one row, so ``groups`` is
     1:1 with the rows and the whole path collapses to the pre-flood behaviour.
@@ -574,10 +564,10 @@ def _build_vote_xy(
 
     ``score_rows`` maps each bag id to the row stack that voted image is
     *scored* over at inference (:func:`inference_score_rows`) - the whole
-    ~24-node region tree on a patch media - so calibration can collapse a Good
+    ~197-row patch stack on a patch media - so calibration can collapse a Good
     bag and a Bad bag the same way :func:`_score_all_media` collapses any
     image.  Without it a Good bag is a max over its 1 training row against a
-    Bad bag's max over ~13, and the calibrated cut lands high.
+    Bad bag's max over ~197, and the calibrated cut lands high.
 
     *embedder_name* is the detector's primary embedder; when ``None`` the
     dataset score precedence for *clips_dict* is used (the pre-per-detector
@@ -586,13 +576,19 @@ def _build_vote_xy(
     """
     if embedder_name is None:
         embedder_name = _score_embedder_for_snap(clips_dict)
+    # The image-level row of a patch stack belongs to the *patch-slot* embedder
+    # (the space the grid lives in), which is what the scoring matrix reads -
+    # see ``matrix._patch_embedder_for_region_snap``.  On a single-embedder
+    # patch dataset this is the score embedder anyway; on a text+patch dataset
+    # it keeps the flooded / calibrated rows out of the text space.
+    row_embedder = _patch_embedder_for_snap(clips_dict) or embedder_name
     X_list: list[np.ndarray] = []
     y_list: list[float] = []
     groups: list = []
     score_rows: dict = {}
 
     def _record_score_rows(group: tuple, cid: int) -> None:
-        rows = inference_score_rows(clips_dict[cid], embedder_name)
+        rows = inference_score_rows(clips_dict[cid], row_embedder)
         if rows is not None:
             score_rows[group] = rows
 
@@ -604,12 +600,42 @@ def _build_vote_xy(
             _record_score_rows(("g", cid), cid)
     for cid in bad_votes:
         if cid in clips_dict:
-            for vec in bad_negative_vecs(clips_dict[cid], embedder_name):
+            for vec in bad_negative_vecs(clips_dict[cid], row_embedder):
                 X_list.append(vec)
                 y_list.append(0.0)
                 groups.append(("b", cid))
             _record_score_rows(("b", cid), cid)
     return X_list, y_list, groups, score_rows
+
+
+def _forward_sigmoid_chunked(model: nn.Sequential, matrix: np.ndarray) -> np.ndarray:
+    """``sigmoid(model(matrix))`` as float64, upcasting a float16 matrix chunk-wise.
+
+    The flattened patch matrix is stored float16 (see
+    :func:`vtscore.embedding.matrix._build_region_arrays`); torch has no
+    float16 CPU linear kernel and a whole-matrix upcast would allocate a
+    float32 copy twice the size of the matrix - gigabytes on a large patch
+    dataset, where MaxPatch already stacks ~197 rows per image.  Chunking
+    bounds that copy at ``ROW_CHUNK`` rows.
+
+    :func:`~vtscore.utils.scores.sigmoid_to_finite_array` replaces NaN/±Inf
+    with the ``NON_FINITE_SCORE_SENTINEL`` (-1.0) so a destabilised MLP cannot
+    leak non-finite floats into the JSON response.  The downstream segmented
+    max-pool then incidentally drops sentinels in favour of any real score (in
+    ``[0, 1]``) for the same media.
+    """
+    import torch  # noqa: PLC0415
+
+    from vtscore.embedding.matrix import ROW_CHUNK  # noqa: PLC0415
+
+    device = next(model.parameters()).device
+    out = np.empty(matrix.shape[0], dtype=np.float64)
+    with torch.no_grad():
+        for start in range(0, matrix.shape[0], ROW_CHUNK):
+            block = np.ascontiguousarray(matrix[start : start + ROW_CHUNK])
+            chunk = torch.from_numpy(block).to(device=device, dtype=torch.float32)
+            out[start : start + chunk.shape[0]] = sigmoid_to_finite_array(model(chunk))
+    return out
 
 
 def _score_all_media(
@@ -619,24 +645,23 @@ def _score_all_media(
 ) -> tuple[list[int], list[float], list[int]]:
     """Score every media in *clips_dict* with the trained detector head.
 
-    Region-aware datasets (those whose media expose ``patch_regions``)
-    are scored by flattening all (media, region) vectors into one tensor,
-    running a single forward pass, then max-pooling per media - so the
-    winning region's index can be surfaced for UI overlays.  Plain
-    datasets fall back to the cached embedding matrix.
+    Patch datasets (those whose media expose a ``patch_grid``) are scored by
+    flattening every media's :func:`vtscore.embedding.matrix.media_score_rows`
+    stack - image-level vector + all ``H*W`` raw patches - into one matrix,
+    running one chunked forward pass, then max-pooling per media, so the
+    winning row's index can be surfaced for UI overlays.  Plain datasets fall
+    back to the cached embedding matrix.
 
     *embedder_name* is the detector's primary embedder (the space the MLP was
-    trained in).  When it is given, region max-pooling is used **only** if that
+    trained in).  When it is given, patch max-pooling is used **only** if that
     primary is the dataset's patch-slot embedder - a detector scoring in the
     text or structural space of a multi-embedder dataset must score against
-    that space's full-image vectors, not the patch tree.  When ``None`` (the
-    pre-per-detector behaviour) any media carrying ``patch_regions`` takes the
-    region path, matching the dataset-level score precedence.
+    that space's full-image vectors, not the patch grid.  When ``None`` (the
+    pre-per-detector behaviour) any media carrying a ``patch_grid`` takes the
+    patch path, matching the dataset-level score precedence.
 
-    Returns ``(all_ids, scores_per_media, best_region_index_per_media)``.
+    Returns ``(all_ids, scores_per_media, best_row_index_per_media)``.
     """
-    import torch  # noqa: PLC0415
-
     from vtscore.embedding.matrix import (  # noqa: PLC0415
         get_embedding_matrix_for_snap,
         get_region_matrix_for_snap,
@@ -644,17 +669,17 @@ def _score_all_media(
     )
 
     resolved = embedder_name if embedder_name is not None else _score_embedder_for_snap(clips_dict)
-    has_regions = any(clips_dict[cid].get("patch_regions") for cid in clips_dict)
+    has_regions = any(clips_dict[cid].get("patch_grid") is not None for cid in clips_dict)
     if has_regions and embedder_name is not None:
-        # Explicit per-detector primary: region-pool only when scoring in the
-        # patch space (the patch tree lives in the patch embedder's vectors).
+        # Explicit per-detector primary: patch-pool only when scoring in the
+        # patch space (the grid lives in the patch embedder's vectors).
         patch = _patch_embedder_for_snap(clips_dict)
         has_regions = patch is not None and resolved == patch
     if has_regions:
-        # One row per (media, region) pair, built once and cached on the
-        # dataset context (the region vectors never change between votes -
+        # One row per (media, score row) pair, built once and cached on the
+        # dataset context (the patch vectors never change between votes -
         # only the MLP weights do), so online retraining no longer rebuilds
-        # a multi-hundred-thousand-row matrix on every vote.
+        # a multi-million-row matrix on every vote.
         all_ids, X_np, media_index_per_row, region_index_per_row = get_region_matrix_for_snap(clips_dict)
     else:
         all_ids, X_np = get_embedding_matrix_for_snap(clips_dict, resolved)
@@ -665,15 +690,7 @@ def _score_all_media(
     if not all_ids:
         return [], [], []
 
-    with torch.no_grad():
-        X_all = torch.from_numpy(X_np).to(next(model.parameters()).device)
-        # ``sigmoid_to_finite_scores`` replaces NaN/±Inf with the
-        # ``NON_FINITE_SCORE_SENTINEL`` (-1.0) so a destabilised MLP cannot
-        # leak non-finite floats into the JSON response. The downstream
-        # segmented max-pool then incidentally drops sentinels in favour of
-        # any real score (in ``[0, 1]``) for the same media.
-        flat_scores = sigmoid_to_finite_array(model(X_all)).astype(np.float64, copy=False)
-
+    flat_scores = _forward_sigmoid_chunked(model, X_np)
     scores, best_region = segmented_max_pool(flat_scores, media_index_per_row, region_index_per_row, len(all_ids))
     return all_ids, scores, best_region
 
@@ -688,9 +705,12 @@ def _format_results(
 
     Raw float scores are used for sorting so tiny differences still
     affect ordering; only the response ``score`` field is rounded.
-    Region-aware media gain a ``best_region`` key holding the winning
-    region's box.
+    Patch media gain a ``best_region`` key holding the winning row's box - the
+    whole image for row 0, a single grid cell otherwise
+    (:func:`vtscore.embedding.matrix.media_row_box`).
     """
+    from vtscore.embedding.matrix import media_row_box  # noqa: PLC0415
+
     paired = sorted(
         zip(all_ids, scores, best_region, strict=True),
         key=lambda t: t[1],
@@ -699,10 +719,9 @@ def _format_results(
     results: list[dict[str, Any]] = []
     for cid, s, bri in paired:
         entry: dict[str, Any] = {"id": cid, "score": round(s, 4)}
-        media = clips_dict[cid]
-        regions = media.get("patch_regions")
-        if regions and 0 <= bri < len(regions):
-            entry["best_region"] = list(regions[bri].box)
+        box = media_row_box(clips_dict[cid], bri)
+        if box is not None:
+            entry["best_region"] = box
         results.append(entry)
     return results
 
@@ -788,7 +807,7 @@ def _train_and_score_xy(
     input_dim = X.shape[1]
 
     # Bag-aware setup (region flooding): size on votes not rows, split/weight
-    # per bag when a Bad vote flooded its leaf set; a no-op on legacy datasets.
+    # per bag when a Bad vote flooded its patch stack; a no-op on legacy datasets.
     _n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
     cal_score_rows = _calibration_score_rows(groups, cal_groups, score_rows)
     blend_ctx = BlendContext.from_labels(y_list, cal_groups)
@@ -814,10 +833,11 @@ def _train_and_score_xy(
     )
     threshold = threshold_from_folds(folds, inclusion_value)
 
-    # A Good vote trains on one region (the snapped box); a Bad vote trains on
-    # its whole leaf set (region flooding), per-bag weighted so a rejected
-    # image counts once.  On a legacy dataset there are no per-bag weights, so
-    # the call stays identical to the historical one-vector-per-media fit.
+    # A Good vote trains on one row (the raw patch nearest the drawn box); a
+    # Bad vote trains on the image's whole score-row stack (region flooding),
+    # per-bag weighted so a rejected image counts once.  On a legacy dataset
+    # there are no per-bag weights, so the call stays identical to the
+    # historical one-vector-per-media fit.
     if sample_weights is not None:
         model = train_model(X, y, input_dim, hidden_dim=hidden_dim, sample_weights=sample_weights)
     else:
@@ -874,13 +894,11 @@ def train_and_score(
             20% Calibrate.
         vote_region_boxes: Optional ``media_id -> (x0, y0, x1, y1)`` map from
             yes-votes that designated a region.  When set and the source
-            media carries a ``patch_regions`` tree, the box is snapped to its
-            nearest region node (:func:`vtscore.media.patch_embed.snap_box_to_region`)
-            and that node's vector trains the vote, instead of
-            ``media["embeddings"]``.  Falls back to a uniform patch-grid pool,
-            then to the full-image vector, when the media lacks a region tree /
-            patch grid (legacy datasets, single-vector embedders) or the box is
-            missing.  Patch-embedder v2.
+            media carries a ``patch_grid``, the raw patch nearest the box
+            (:func:`vtscore.media.patch_embed.nearest_patch_to_box`) trains the
+            vote instead of ``media["embeddings"]``.  Falls back to the
+            full-image vector when the media lacks a patch grid (legacy
+            datasets, single-vector embedders) or the box is missing.
 
     Returns:
         A tuple ``(results, threshold, model)`` where:

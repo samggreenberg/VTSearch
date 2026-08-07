@@ -343,7 +343,7 @@ def invalidate_embedding_matrix(ctx: "DatasetContext") -> None:
     """Drop the cached matrices on *ctx*; next access rebuilds them.
 
     Clears both the per-media embedding matrix and the flattened
-    per-region matrix (used by patch-region scoring), since both are keyed
+    per-score-row matrix (used by patch scoring), since both are keyed
     on ``media_revision`` and become stale together when the dataset's media
     change.  Also bumps ``media_revision`` so this stands in as the explicit
     "vectors changed in place" signal at the embed / clip stages: an
@@ -369,96 +369,181 @@ def invalidate_embedding_matrix(ctx: "DatasetContext") -> None:
 
 
 def _patch_embedder_for_region_snap(snap: dict[int, dict[str, Any]]) -> str | None:
-    """Return the patch-slot embedder name that produced *snap*'s region rows.
+    """Return the patch-slot embedder name that produced *snap*'s patch grids.
 
-    Derived from a media that actually carries ``patch_regions`` (rather than
-    just the first media in the dict, which may be a region-less item that
+    Derived from a media that actually carries a ``patch_grid`` (rather than
+    just the first media in the dict, which may be a grid-less item that
     never had a vector for the patch embedder at all - the mixed-media-type
     case).  That media's own bound embedder names are role-typed via
     :func:`~vtscore.embedding.binding.derive_binding_from_names`; the patch
-    slot is the space the region vectors live in.  Returns ``None`` when no
-    media in *snap* has regions, or when the region-bearing media's embedders
+    slot is the space the patch vectors live in.  Returns ``None`` when no
+    media in *snap* has a grid, or when the grid-bearing media's embedders
     don't role-type to a patch slot (unexpected; the fallback path then keeps
     the pre-fix behaviour of reading the primary vector).
     """
     from vtscore.embedding.binding import derive_binding_from_names  # noqa: PLC0415
 
     for media in snap.values():
-        if media.get("patch_regions"):
+        if media.get("patch_grid") is not None:
             _text, patch, _structural = derive_binding_from_names(media_embedder_names(media))
             return patch
     return None
+
+
+def media_score_rows(
+    media: dict[str, Any],
+    embedder_name: str | None = None,
+    *,
+    dtype: Any = np.float32,
+) -> np.ndarray | None:
+    """The row stack *media* is max-pooled over at inference, or ``None``.
+
+    **The single definition of MaxPatch scoring geometry.**  Every path that
+    needs "the candidate vectors of this image" goes through here - the
+    flattened scoring matrix (:func:`_build_region_arrays`), a Bad vote's
+    negative flood (:func:`vtscore.detectors.training.bad_negative_vecs`), and
+    the per-bag stacks threshold calibration collapses
+    (:func:`vtscore.detectors.training.inference_score_rows`) - so the
+    train/score invariant holds by construction rather than by three
+    implementations agreeing:
+
+        Every vector a vote can train on must also be a row that is scored.
+
+    Layout, for a patch media carrying an ``(H, W, D)`` ``patch_grid``:
+
+    * **row 0** - the image-level (CLS) vector, box ``(0, 0, 1, 1)``.  It is
+      load-bearing, not decoration: a *boxless* Good vote trains on the
+      image-level vector (:func:`~vtscore.detectors.training._training_vec_for_vote`),
+      so without this row that vote would train on a vector nothing ever
+      scores.  Dropping it produced perfect ranking with catastrophic FNR when
+      the Max-Patch style was first prototyped - see
+      :mod:`vtscore.eval.patch_styles`.
+    * **rows 1 .. H*W** - every raw patch vector, row-major
+      (``1 + r*W + c`` is grid cell ``(r, c)``).  :func:`patch_row_box` is the
+      inverse map back to a box.
+
+    A media with no ``patch_grid`` contributes its single image-level vector,
+    so a legacy single-vector dataset is one row per media exactly as before.
+
+    *embedder_name* selects which bound embedder supplies the image-level row;
+    on a patch dataset that must be the **patch-slot** embedder (the space the
+    grid lives in), which callers resolve once per snapshot via
+    :func:`_patch_embedder_for_region_snap`.  Returns ``None`` only when the
+    media has neither a grid nor a resolvable vector.
+    """
+    grid = media.get("patch_grid")
+    emb = media_embedding(media, embedder_name)
+    if grid is None:
+        if emb is None:
+            return None
+        return np.asarray(emb, dtype=dtype).reshape(1, -1)
+    arr = np.asarray(grid, dtype=dtype)
+    flat = arr.reshape(-1, arr.shape[-1])
+    if emb is None:
+        return flat
+    return np.concatenate([np.asarray(emb, dtype=dtype).reshape(1, -1), flat], axis=0)
+
+
+def media_row_box(media: dict[str, Any], row_index: int) -> list[float] | None:
+    """The box of *media*'s score row *row_index*, or ``None`` for a grid-less media.
+
+    Turns the winner of a segmented max-pool back into the rectangle the
+    gallery / image viewer outlines.  ``None`` (no overlay) for a media with no
+    ``patch_grid``: its only row is the whole image, which the viewer suppresses
+    anyway, and a single-vector dataset never showed a best-region box.
+    """
+    from vtscore.media.patch_embed import patch_row_box  # noqa: PLC0415
+
+    grid = media.get("patch_grid")
+    if grid is None:
+        return None
+    arr = np.asarray(grid)
+    if arr.ndim != 3:
+        return None
+    height, width = int(arr.shape[0]), int(arr.shape[1])
+    if not 0 <= row_index <= height * width:
+        return None
+    return list(patch_row_box(int(row_index), height, width))
 
 
 def _build_region_arrays(
     snap: dict,
     sorted_ids: list[int],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Flatten every media's ``patch_regions`` into one ``(R, D)`` matrix.
+    """Flatten every media's :func:`media_score_rows` stack into one ``(R, D)`` matrix.
 
     Returns ``(region_matrix, media_index_per_row, region_index_per_row)``:
 
-    * ``region_matrix`` - ``(R, D)`` float32, one row per (media, region) pair.
+    * ``region_matrix`` - ``(R, D)`` **float16**, one row per (media, row) pair.
     * ``media_index_per_row`` - ``int64 (R,)``, the index into *sorted_ids*
       that each row belongs to.  Non-decreasing and contiguous per media.
-    * ``region_index_per_row`` - ``int64 (R,)``, the region's index within its
-      media's ``patch_regions`` list (the winning value surfaces as the UI's
-      best-match overlay).
+    * ``region_index_per_row`` - ``int64 (R,)``, the row's index within its
+      media's :func:`media_score_rows` stack: ``0`` = whole image, ``1..H*W`` =
+      raw patch cells row-major.  The winning value surfaces as the UI's
+      best-match overlay via :func:`media_row_box`.
 
-    Media that expose no ``patch_regions`` contribute a single row (region
-    index 0) so every media has at least one row - keeping the downstream
-    segmented max-pool free of empty groups.  That fallback row is read from
-    the *patch-slot* embedder shared by the rest of the snapshot's region rows
+    Media that expose no ``patch_grid`` contribute a single row (index 0) so
+    every media has at least one row - keeping the downstream segmented
+    max-pool free of empty groups.  That fallback row is read from the
+    *patch-slot* embedder shared by the rest of the snapshot's patch rows
     (:func:`_patch_embedder_for_region_snap`), not unconditionally the primary
     vector: on a dataset that mixes patch-capable and patch-less media (e.g. a
     combined dataset, or a media type the patch embedder can't process), the
-    primary can be a different embedder than the one that produced the region
+    primary can be a different embedder than the one that produced the patch
     vectors, and stacking its vector alongside them would silently mix
-    embedding spaces in one matrix.  If the region-less media has no vector
-    under that patch embedder either, :func:`_require_embedding` raises rather
-    than falling back further - a loud, locatable failure instead of a
-    silently meaningless score.
+    embedding spaces in one matrix.  If the grid-less media has no vector under
+    that patch embedder either, :func:`_require_embedding` raises rather than
+    falling back further - a loud, locatable failure instead of a silently
+    meaningless score.
+
+    **Dtype is float16, not float32.**  MaxPatch scores ~197 rows per image
+    where the old HAC tree scored ~24, so a float32 matrix would be ~8x the
+    bytes of the tree's.  The grid is already stored float16, so keeping the
+    flattened stack in that dtype holds the blow-up to the row count alone;
+    consumers upcast chunk-wise (:func:`chunked_row_scores`,
+    :func:`vtscore.detectors.training._forward_sigmoid_chunked`) so peak
+    float32 memory stays bounded regardless of dataset size.
     """
     patch_embedder_name = _patch_embedder_for_region_snap(snap)
-    flat_vecs: list[np.ndarray] = []
-    media_index_per_row: list[int] = []
-    region_index_per_row: list[int] = []
+    blocks: list[np.ndarray] = []
+    media_index_per_row: list[np.ndarray] = []
+    region_index_per_row: list[np.ndarray] = []
     for mi, cid in enumerate(sorted_ids):
         media = snap[cid]
-        regions = media.get("patch_regions")
-        if regions:
-            for ri, r in enumerate(regions):
-                flat_vecs.append(np.asarray(r.vec, dtype=np.float32))
-                media_index_per_row.append(mi)
-                region_index_per_row.append(ri)
-        else:
-            flat_vecs.append(np.asarray(_require_embedding(cid, media, patch_embedder_name), dtype=np.float32))
-            media_index_per_row.append(mi)
-            region_index_per_row.append(0)
-    region_matrix = np.stack(flat_vecs).astype(np.float32, copy=False)
+        rows = media_score_rows(media, patch_embedder_name, dtype=np.float16)
+        if rows is None:
+            # Raises naming the offending cid - same loud failure the plain
+            # embedding-matrix builder gives for a vector-less media.
+            _require_embedding(cid, media, patch_embedder_name)
+            raise AssertionError("unreachable")  # pragma: no cover
+        n_rows = rows.shape[0]
+        blocks.append(rows)
+        media_index_per_row.append(np.full(n_rows, mi, dtype=np.int64))
+        region_index_per_row.append(np.arange(n_rows, dtype=np.int64))
+    region_matrix = np.concatenate(blocks, axis=0).astype(np.float16, copy=False)
     return (
         region_matrix,
-        np.asarray(media_index_per_row, dtype=np.int64),
-        np.asarray(region_index_per_row, dtype=np.int64),
+        np.concatenate(media_index_per_row),
+        np.concatenate(region_index_per_row),
     )
 
 
 def get_region_matrix_for_snap(
     snap: dict,
 ) -> tuple[list[int], np.ndarray, np.ndarray, np.ndarray]:
-    """Return the cached flattened region matrix for *snap*.
+    """Return the cached flattened score-row matrix for *snap*.
 
     Returns ``(sorted_ids, region_matrix, media_index_per_row,
     region_index_per_row)`` - see :func:`_build_region_arrays` for the
-    array shapes.  When *snap*'s key set matches the active
+    array shapes and dtype.  When *snap*'s key set matches the active
     :class:`DatasetContext`'s medias (the common per-vote case), the matrix
     is built once and cached on the context, then reused across subsequent
-    votes; only the MLP weights change between votes, never the region
+    votes; only the MLP weights change between votes, never the patch
     vectors, so the cache is valid until the media-id set changes.  A
     cross-dataset / subset *snap* builds fresh without populating the cache.
 
     Returns empty arrays when *snap* is empty.  Raises ``ValueError`` if a
-    region-less media has ``embedding=None``.
+    grid-less media has ``embedding=None``.
     """
     from vtscore.state.core import get_active_context
 
@@ -505,6 +590,29 @@ def get_region_matrix_for_snap(
                 ctx._region_media_index = media_index
                 ctx._region_index_per_row = region_index
     return list(sorted_ids), region_matrix, media_index, region_index
+
+
+#: Rows per chunk when upcasting a float16 score matrix for numpy/torch math.
+#: Bounds peak float32 memory at ~``ROW_CHUNK * D * 4`` bytes regardless of how
+#: many rows the dataset has.
+ROW_CHUNK = 65_536
+
+
+def chunked_row_scores(matrix: np.ndarray, query_vec: np.ndarray) -> np.ndarray:
+    """``matrix @ query_vec`` as float64, upcasting a float16 matrix chunk-wise.
+
+    The region matrix is stored float16 (see :func:`_build_region_arrays`).
+    numpy's float16 BLAS path is both slow and lossy, and a whole-matrix
+    ``.astype(np.float32)`` would allocate a second copy twice the size of the
+    matrix itself - on a large patch dataset that is gigabytes.  Chunking keeps
+    the upcast bounded while producing exactly the float32 dot product.
+    """
+    out = np.empty(matrix.shape[0], dtype=np.float64)
+    q = np.asarray(query_vec, dtype=np.float32)
+    for start in range(0, matrix.shape[0], ROW_CHUNK):
+        chunk = np.asarray(matrix[start : start + ROW_CHUNK], dtype=np.float32)
+        out[start : start + chunk.shape[0]] = chunk @ q
+    return out
 
 
 def segmented_max_pool(

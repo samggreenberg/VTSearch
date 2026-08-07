@@ -8,16 +8,23 @@ Arms
 ----
 Every arm is an ``(embedder, style)`` pair:
 
-* ``dinov2_patch`` x {``max_hac``, ``max_patch``, ``whole_image``}
-* ``dinov3_patch`` x {``max_hac``, ``max_patch``, ``whole_image``}
+* ``dinov2_patch`` x {``max_patch``, ``max_patch_hac``, ``max_patch_pca_hac``,
+  ``whole_image``}
+* ``dinov3_patch`` x {same}
 * ``siglip``       x {``whole_image``}
 
-``max_hac`` is today's production patch pipeline (HAC region tree, snap-to-node
-Good votes, leaf-flood Bad votes, region max-pool scoring).  ``max_patch`` is
-the tree-free alternative under test (nearest-patch Good votes, all-patch Bad
-flood, raw-patch max-pool scoring).  ``whole_image`` on the DINO embedders is a
-CLS-only control that isolates "does *any* patch machinery help over the plain
-global vector?"; on SigLIP it is the standard single-vector baseline.
+``max_patch`` is the tree-free geometry the study picked and #2886 shipped
+(nearest-patch Good votes, all-patch Bad flood, raw-patch max-pool scoring).
+The ``max_patch_hac`` pair are the raw-patch-leaf tree hybrids.  ``whole_image``
+on the DINO embedders is a CLS-only control that isolates "does *any* patch
+machinery help over the plain global vector?"; on SigLIP it is the standard
+single-vector baseline.
+
+**The ``max_hac`` arm the study ran against is gone.**  It was a delegation to
+the production HAC region tree, which #2886 deleted when it adopted MaxPatch, so
+the arm cannot be re-run from this tree; its published numbers live in
+``docs/experiments/max-patch/REPORT.md`` and ``analyze.py`` still labels
+``max_hac`` rows found in archived result CSVs.
 """
 
 from __future__ import annotations
@@ -35,7 +42,7 @@ EMBEDDERS = os.environ.get("MAXPATCH_EMBEDDERS", "dinov2_patch,dinov3_patch,sigl
 
 # --- Styles per embedder kind ---
 PATCH_STYLES = os.environ.get(
-    "MAXPATCH_PATCH_STYLES", "max_hac,max_patch,max_patch_hac,max_patch_pca_hac,whole_image"
+    "MAXPATCH_PATCH_STYLES", "max_patch,max_patch_hac,max_patch_pca_hac,whole_image"
 ).split(",")
 SINGLE_STYLES = ["whole_image"]
 

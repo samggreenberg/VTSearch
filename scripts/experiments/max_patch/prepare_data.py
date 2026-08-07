@@ -2,7 +2,7 @@
 
 For every embedder in the grid, each dataset is loaded and embedded through
 ``load_demo_dataset`` (which also attaches the patch side-channels -
-``patch_grid`` + ``patch_regions`` - for patch-capable embedders), then the
+``patch_grid`` - for patch-capable embedders), then the
 demo cache pickle is copied to a per-(dataset, embedder) name so the three
 embedders don't evict each other from the single demo cache slot.  Array tasks
 load these warm pickles directly.
@@ -151,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
                     # load_demo_dataset attaches the CLS vector but not the
                     # patch-region side-channels; run the same patch back-fill
                     # the app runs at dataset creation so patch_grid /
-                    # patch_regions exist to persist (embed_missing is a no-op
+                    # patch grids exist to persist (embed_missing is a no-op
                     # for the already-present CLS vectors and only does the
                     # patch pass for this patch-capable embedder).
                     from vtscore.datasets.stages.embedding import embed_missing  # noqa: PLC0415
@@ -167,7 +167,7 @@ def main(argv: list[str] | None = None) -> int:
                 continue
 
             # Serialize the in-memory medias (which carry patch_grid /
-            # patch_regions / regions / categories) directly.  The demo *cache*
+            # patch_grid / regions / categories) directly.  The demo *cache*
             # pickle drops those fields (see _cells_io), so a copy would leave
             # every style scoring on the whole-image vector alone.
             from _cells_io import dump_medias  # noqa: PLC0415

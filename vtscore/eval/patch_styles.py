@@ -4,59 +4,69 @@ The voting-iterations harness (:mod:`vtscore.eval.voting_iterations`) can run
 each simulated detector under a named **detection style** - the bundle of rules
 that decides (a) which vector a Good vote trains on, (b) which vector(s) a Bad
 vote trains on, (c) how a trained MLP scores an image at inference, and (d) how
-a cropped exemplar seeds the startup sort.  Three styles exist:
+a cropped exemplar seeds the startup sort.  The styles are:
 
 * ``whole_image`` - the classic single-vector pipeline (SigLIP et al.): every
   vote and every score uses the image-level embedding; region boxes are
   ignored.  The baseline arm.
 
-* ``max_hac`` - the production patch pipeline: a Good region-vote snaps to the
-  nearest HAC region-tree node (:func:`vtscore.media.patch_embed.snap_box_to_region`),
-  a Bad vote floods the CLS node + HAC leaves as negatives
-  (:func:`vtscore.detectors.training.bad_negative_vecs`), and an image scores
-  by max-pooling the MLP over every region node - exactly what the live
-  detector does on a patch dataset.
-
-* ``max_patch`` - the HAC-free alternative under test: a Good region-vote
-  trains on the **single raw patch** closest to the voted box
+* ``max_patch`` - **the production patch pipeline**: a Good region-vote trains
+  on the **single raw patch** closest to the voted box
   (:func:`vtscore.media.patch_embed.nearest_patch_to_box`), a Bad vote floods
   the full-image vector + **every raw patch** of the image as negatives, and an
   image scores by max-pooling the MLP over the full-image vector plus all
   ``H x W`` raw patch vectors.  No region tree is consulted at any point.
 
+* ``max_patch_hac`` / ``max_patch_pca_hac`` - the raw-patch-leaf HAC hybrids.
+  These build a per-image binary tree whose leaves are the raw patches
+  (:func:`build_patch_hac_tree`), snap a Good vote to the best-matching node,
+  and flood / max-pool over every node.  They lost the Max-Patch study at the
+  operating point despite ranking best, and the calibration study pinned that
+  on calibration rather than geometry - the open "max-pool-aware calibration"
+  follow-up in ``docs/plans/calibration-experiment.md`` is why they are still
+  here.
+
+The ``max_hac`` arm (the pre-#2886 production pipeline: K-means-pooled HAC
+leaves, snap-to-node Good votes, CLS+leaf floods) is **gone**.  It lost the
+study - ``docs/experiments/max-patch/REPORT.md`` - and production no longer
+carries the tree it delegated to, so the arm could only have been kept alive by
+re-implementing the very code the study told us to delete.  Its numbers live in
+the report.
+
 Each style also maps a *query vector* (e.g. the full-image embedding of a
 cropped exemplar) to per-image similarities for the Autopilot seed phase:
-whole-image cosine, max-over-region-nodes cosine, and max-over-patches cosine
+whole-image cosine, max-over-patches cosine, and max-over-tree-nodes cosine
 respectively.
 
 **Every vector a style can train a vote on must also be a row that style
-scores over.**  ``max_hac`` gets this for free: ``patch_regions[0]`` is the
-CLS full-image node (``children=None``), so it is both flooded by
-:func:`~vtscore.detectors.training.bad_negative_vecs` and pooled at inference,
-and a *boxless* Good vote - which falls back to the image-level vector - trains
-in a geometry inference actually evaluates.  ``max_patch`` originally scored raw
-patches only, so a boxless Good vote trained on a vector that was never scored;
-the classifier then separated "full-image-like" from "raw-patch-like" (every Bad
-vote floods raw patches as negatives) and the calibrated threshold landed in a
-gap the production score distribution never reaches - perfect ranking, zero FPR,
-catastrophic FNR.  The full-image row in :meth:`MaxPatchStyle.score_rows` (and
-its matching negative in :meth:`MaxPatchStyle.bad_vecs`) closes that hole.
+scores over.**  ``max_patch`` originally scored raw patches only, so a *boxless*
+Good vote - which falls back to the image-level vector - trained on a vector
+that was never scored; the classifier then separated "full-image-like" from
+"raw-patch-like" (every Bad vote floods raw patches as negatives) and the
+calibrated threshold landed in a gap the production score distribution never
+reaches - perfect ranking, zero FPR, catastrophic FNR.  The full-image row in
+:meth:`MaxPatchStyle.score_rows` (and its matching negative in
+:meth:`MaxPatchStyle.bad_vecs`) closes that hole.  The tree styles get the same
+property from their CLS node.
 
 Styles are **stateful per run**: :func:`resolve_style` returns a fresh instance
 whose flattened score matrices are memoised per media-id set, so repeated
 per-step scoring of the same test/sim split doesn't rebuild a multi-hundred-
 thousand-row matrix 150 times.  Do not share one instance across datasets.
 
-This is experiment-tier code: the production vote/score paths in
-:mod:`vtscore.detectors.training` are the source of truth for ``max_hac``, and
-this module reuses them directly rather than re-implementing.
+This is experiment-tier code.  ``max_patch`` mirrors the production vote/score
+geometry in :mod:`vtscore.detectors.training` +
+:mod:`vtscore.embedding.matrix`; the HAC node type and box-snap rule below are
+experiment-only and live here rather than in :mod:`vtscore.media.patch_embed`,
+which is now tree-free.
 """
 
 from __future__ import annotations
 
 import os
 
-from typing import TYPE_CHECKING, Any, Optional
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:
     import numpy as np
@@ -97,6 +107,129 @@ def _segment_max(flat: "np.ndarray", seg_starts: "np.ndarray") -> "np.ndarray":
     import numpy as np  # noqa: PLC0415
 
     return np.maximum.reduceat(flat, seg_starts)
+
+
+# ---------------------------------------------------------------------------
+# Experiment-tier region tree (raw-patch-leaf HAC)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RegionVector:
+    """One node of an experiment-tier per-image region tree.
+
+    Production is tree-free (#2886), so this type - and the tree builder and
+    box-snap rule below - live here rather than in
+    :mod:`vtscore.media.patch_embed`.  Only :func:`build_patch_hac_tree` and
+    the two ``max_patch_hac`` styles construct them.
+
+    The flat node list follows the convention: index 0 is the CLS whole-image
+    node (``children = None``), then the raw-patch leaves (``children = None``),
+    then the internal merge nodes whose ``children`` index earlier entries.
+    """
+
+    box: tuple[float, float, float, float]
+    """Normalised image coordinates ``(x0, y0, x1, y1)``, each in ``[0, 1]``."""
+
+    vec: "np.ndarray"
+    """L2-normalised vector for this region, shape ``(D,)``."""
+
+    children: Optional[tuple[int, int]] = None
+    """Indices of the two children when this is an internal merge node."""
+
+
+def snap_box_to_region(
+    regions: list[RegionVector],
+    box: tuple[float, float, float, float],
+) -> "Optional[np.ndarray]":
+    """Snap a user-drawn *box* to the tree node it best matches.
+
+    Returns the L2-normalised (float32) vector of the node with the highest box
+    IoU against *box* - i.e. one of the very candidates the style max-pools over
+    at inference, so a Good region-vote trains in scoring geometry.
+
+    When every IoU is zero (a degenerate zero-area drawn box), falls back to the
+    node whose centroid is nearest the drawn box's centre.  The CLS whole-image
+    node overlaps any in-bounds box, so a whole-image box collapses to the CLS
+    vector (an image-level Good vote).  Returns ``None`` when *regions* is
+    empty.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    if not regions:
+        return None
+
+    x0, y0, x1, y1 = (float(v) for v in box)
+    dx0, dx1 = min(x0, x1), max(x0, x1)
+    dy0, dy1 = min(y0, y1), max(y0, y1)
+    d_area = max(0.0, dx1 - dx0) * max(0.0, dy1 - dy0)
+
+    best_idx = 0
+    best_iou = -1.0
+    for idx, r in enumerate(regions):
+        rx0, ry0, rx1, ry1 = r.box
+        inter_w = max(0.0, min(dx1, rx1) - max(dx0, rx0))
+        inter_h = max(0.0, min(dy1, ry1) - max(dy0, ry0))
+        inter = inter_w * inter_h
+        r_area = max(0.0, rx1 - rx0) * max(0.0, ry1 - ry0)
+        union = d_area + r_area - inter
+        iou = inter / union if union > 0.0 else 0.0
+        if iou > best_iou:
+            best_iou = iou
+            best_idx = idx
+
+    if best_iou <= 0.0:
+        dcx, dcy = 0.5 * (dx0 + dx1), 0.5 * (dy0 + dy1)
+        best_idx = min(
+            range(len(regions)),
+            key=lambda i: (
+                (0.5 * (regions[i].box[0] + regions[i].box[2]) - dcx) ** 2
+                + (0.5 * (regions[i].box[1] + regions[i].box[3]) - dcy) ** 2
+            ),
+        )
+
+    # Node vectors are stored L2-normalised, but re-normalise defensively: a
+    # float16 round-trip can drift the norm off 1.0 on upcast.
+    return _unit(np.asarray(regions[best_idx].vec, dtype=np.float32))
+
+
+def _fit_pca_projector(
+    patch_grid: "np.ndarray",
+    n_components: int,
+) -> "Optional[Callable[[np.ndarray], np.ndarray]]":
+    """Fit a per-image PCA on the patch grid and return a vec→reduced-vec projector.
+
+    Fits :class:`sklearn.decomposition.PCA` on *this image's* flattened patch
+    vectors ``(H*W, D)``.  The returned callable projects any original-space
+    ``(D,)`` vector - or an ``(N, D)`` batch, in one ``pca.transform`` call -
+    into the fitted ``k``-dim space and L2-normalises it, so it can be dropped
+    into the cosine half of a HAC merge affinity to decide tree *topology* in a
+    denoised space while the stored node vectors stay full-dim.
+    ``n_components`` is clamped to ``min(n_components, H*W, D)``; returns
+    ``None`` (caller falls back to the full-dim cosine) when ``k < 1``.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    height, width, dim = patch_grid.shape
+    n_samples = height * width
+    k = min(int(n_components), n_samples, dim)
+    if k < 1:
+        return None
+    from sklearn.decomposition import PCA  # noqa: PLC0415
+
+    matrix = patch_grid.reshape(n_samples, dim).astype(np.float32, copy=False)
+    pca = PCA(n_components=k)
+    pca.fit(matrix)
+
+    def project(vec: "np.ndarray") -> "np.ndarray":
+        arr = np.asarray(vec, dtype=np.float32)
+        if arr.ndim == 1:
+            return _unit(pca.transform(arr[None, :])[0])
+        reduced = pca.transform(arr)
+        norms = np.linalg.norm(reduced, axis=1, keepdims=True)
+        return reduced / np.where(norms > 1e-12, norms, 1.0)
+
+    return project
 
 
 class WholeImageStyle:
@@ -162,7 +295,7 @@ class _FlattenedStyle:
 
     Subclasses provide :meth:`_rows_for_media` - the per-image stack of
     candidate vectors an image is max-pooled over (region-tree nodes for
-    ``max_hac``, raw patches for ``max_patch``).  The flattened
+    tree nodes for the HAC hybrids, raw patches for ``max_patch``).  The flattened
     ``(rows, seg_starts, ids)`` arrays are memoised per media-id set: region
     and patch vectors never change during a run, only the MLP weights do.
     """
@@ -173,7 +306,7 @@ class _FlattenedStyle:
         self._matrix_cache: dict[frozenset[int], tuple[list[int], Any, Any]] = {}
 
     def _rows_for_media(self, media: dict[str, Any]) -> "np.ndarray":
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover - abstract hook
 
     def score_rows(self, media: dict[str, Any]) -> "np.ndarray":
         """The rows this style max-pools over when scoring *media* at inference.
@@ -245,81 +378,52 @@ class _FlattenedStyle:
         return {cid: float(s) for cid, s in zip(ids, pooled, strict=True)}
 
 
-class MaxHacStyle(_FlattenedStyle):
-    """The production patch pipeline: HAC snap / leaf flood / region max-pool."""
+class MaxPatchStyle(_FlattenedStyle):
+    """The production pipeline: nearest patch / all-patch flood / patch max-pool.
 
-    name = "max_hac"
+    Delegates every geometry decision to the production helpers so the harness
+    and the live detector cannot drift: :func:`~vtscore.detectors.training.pool_box_from_media`
+    for the Good vote and :func:`~vtscore.embedding.matrix.media_score_rows` for
+    the flood / scoring stack.
+    """
+
+    name = "max_patch"
 
     def good_vec(self, media: dict[str, Any], box: Optional[tuple[float, float, float, float]]) -> "np.ndarray":
         from vtscore.detectors.training import pool_box_from_media  # noqa: PLC0415
 
         pooled = pool_box_from_media(media, box)
+        # Image-level Good vote (or a grid-less media): the CLS/full-image
+        # vector - the only image-level representative available.
         return pooled if pooled is not None else media_embedding(media)
 
     def bad_vecs(self, media: dict[str, Any]) -> list["np.ndarray"]:
+        """The full-image vector plus every raw patch, as negatives.
+
+        The full-image row is load-bearing: a Bad vote asserts that *no* row of
+        this image should score high, and :meth:`_rows_for_media` max-pools the
+        full-image row at inference.  Leaving it out would hand every image an
+        un-suppressed scoring row.
+        """
         from vtscore.detectors.training import bad_negative_vecs  # noqa: PLC0415
 
         return bad_negative_vecs(media)
 
     def _rows_for_media(self, media: dict[str, Any]) -> "np.ndarray":
-        import numpy as np  # noqa: PLC0415
-
-        regions = media.get("patch_regions")
-        if regions:
-            return np.stack([np.asarray(r.vec, dtype=np.float16) for r in regions])
-        return np.asarray(media_embedding(media), dtype=np.float16)[None, :]
-
-
-class MaxPatchStyle(_FlattenedStyle):
-    """The HAC-free alternative: nearest patch / all-patch flood / patch max-pool."""
-
-    name = "max_patch"
-
-    def good_vec(self, media: dict[str, Any], box: Optional[tuple[float, float, float, float]]) -> "np.ndarray":
-        import numpy as np  # noqa: PLC0415
-
-        grid = media.get("patch_grid")
-        if box is not None and grid is not None:
-            from vtscore.media.patch_embed import nearest_patch_to_box  # noqa: PLC0415
-
-            return nearest_patch_to_box(np.asarray(grid), box)
-        # Image-level Good vote (or a grid-less media): the CLS/full-image
-        # vector - the only image-level representative available.
-        return media_embedding(media)
-
-    def bad_vecs(self, media: dict[str, Any]) -> list["np.ndarray"]:
-        """The full-image vector plus every raw patch, as negatives.
-
-        The full-image row is included for the same reason ``max_hac`` floods
-        the CLS node: a Bad vote asserts that *no* row of this image should
-        score high, and :meth:`_rows_for_media` max-pools the full-image row at
-        inference.  Leaving it out would hand every image an un-suppressed
-        scoring row.
-        """
-        import numpy as np  # noqa: PLC0415
-
-        grid = media.get("patch_grid")
-        if grid is None:
-            return [media_embedding(media)]
-        flat = np.asarray(grid, dtype=np.float32).reshape(-1, np.asarray(grid).shape[-1])
-        return [np.asarray(media_embedding(media), dtype=np.float32), *flat]
-
-    def _rows_for_media(self, media: dict[str, Any]) -> "np.ndarray":
         """The full-image vector stacked above every raw patch.
 
-        Row 0 is the image-level (CLS) vector - the ``max_hac`` tree carries the
-        same node at ``patch_regions[0]``, and without it a boxless Good vote
+        Row 0 is the image-level (CLS) vector; without it a boxless Good vote
         (:meth:`good_vec` with ``box=None``) would train on a vector this
         scorer never evaluates.  See the module docstring.
         """
         import numpy as np  # noqa: PLC0415
 
-        cls_row = np.asarray(media_embedding(media), dtype=np.float16)[None, :]
-        grid = media.get("patch_grid")
-        if grid is None:
-            return cls_row
-        arr = np.asarray(grid, dtype=np.float16)
-        return np.concatenate([cls_row, arr.reshape(-1, arr.shape[-1])], axis=0)
+        from vtscore.embedding.matrix import media_score_rows  # noqa: PLC0415
+
+        rows = media_score_rows(media, dtype=np.float16)
+        if rows is None:  # pragma: no cover - a media with no vector at all
+            raise ValueError(f"media {media.get('id')!r} has no scoring rows")
+        return rows
 
 
 def build_patch_hac_tree(
@@ -331,17 +435,16 @@ def build_patch_hac_tree(
 ) -> list:
     """Binary HAC tree with the **raw patches as leaves** - the MaxPatchHAC tree.
 
-    Where the production tree (:func:`vtscore.media.patch_embed.build_region_tree`)
-    K-means-pools patches into ~12 leaves *before* merging, this keeps every one
+    Where the pre-#2886 production tree K-means-pooled patches into ~12 leaves
+    *before* merging, this keeps every one
     of the ``H*W`` raw patches as its own leaf and agglomeratively merges them
     (blended cosine + spatial distance, average linkage) into progressively
     larger region nodes.  The tree therefore carries candidates at every scale
     from a single patch (which wins on small targets, like ``max_patch``) up to
-    the whole image (which wins on large targets, like ``max_hac``) at only ~2x
+    the whole image (which wins on large targets) at only ~2x
     the node count of the raw patches (``2*H*W - 1`` tree nodes + the CLS node).
 
-    Returns a :class:`~vtscore.media.patch_embed.RegionVector` list in the same
-    layout convention as ``build_region_tree``: index 0 is the CLS whole-image
+    Returns a :class:`RegionVector` list: index 0 is the CLS whole-image
     node (when *cls_vec* is given), then the raw-patch leaves, then the internal
     merge nodes whose ``children`` index earlier entries in the list.  Internal
     node vectors are the L2-normalised **uniform** mean of their member patches
@@ -351,8 +454,6 @@ def build_patch_hac_tree(
     import numpy as np  # noqa: PLC0415
     from scipy.cluster.hierarchy import linkage  # noqa: PLC0415
     from scipy.spatial.distance import squareform  # noqa: PLC0415
-
-    from vtscore.media.patch_embed import RegionVector  # noqa: PLC0415
 
     grid = np.asarray(patch_grid, dtype=np.float32)
     height, width, dim = grid.shape
@@ -372,8 +473,6 @@ def build_patch_hac_tree(
         # full-dim, so scoring is unchanged. pca_dims=None is the raw path.
         sim = patches
         if pca_dims:
-            from vtscore.media.patch_embed import _fit_pca_projector  # noqa: PLC0415
-
             project = _fit_pca_projector(grid, int(pca_dims))
             if project is not None:
                 sim = project(patches)  # one batched transform, not n per-vector calls
@@ -388,9 +487,7 @@ def build_patch_hac_tree(
 
     sums = [patches[i].copy() for i in range(n)]
     boxes = list(leaf_boxes)
-    nodes = [
-        RegionVector(box=leaf_boxes[i], vec=patches[i], children=None, cell_mask=None, weight=1.0) for i in range(n)
-    ]
+    nodes = [RegionVector(box=leaf_boxes[i], vec=patches[i], children=None) for i in range(n)]
     for merge in linkage_matrix:
         a, b = int(merge[0]), int(merge[1])
         total = sums[a] + sums[b]
@@ -405,8 +502,6 @@ def build_patch_hac_tree(
                 box=box,
                 vec=vec.astype(np.float32),
                 children=(a, b),
-                cell_mask=None,
-                weight=nodes[a].weight + nodes[b].weight,
             )
         )
 
@@ -416,8 +511,6 @@ def build_patch_hac_tree(
         box=(0.0, 0.0, 1.0, 1.0),
         vec=_unit(np.asarray(cls_vec, dtype=np.float32)),
         children=None,
-        cell_mask=None,
-        weight=0.0,
     )
     out = [full]
     for node in nodes:
@@ -425,9 +518,7 @@ def build_patch_hac_tree(
             out.append(node)
         else:
             ci, cj = node.children
-            out.append(
-                RegionVector(box=node.box, vec=node.vec, children=(ci + 1, cj + 1), cell_mask=None, weight=node.weight)
-            )
+            out.append(RegionVector(box=node.box, vec=node.vec, children=(ci + 1, cj + 1)))
     return out
 
 
@@ -438,7 +529,7 @@ class MaxPatchHacStyle(_FlattenedStyle):
     patches and merges them up a binary tree (:func:`build_patch_hac_tree`), so
     the tree carries candidates at every scale.  A Good region-vote **snaps to
     the tree node whose box best matches** the drawn box (multi-scale, like
-    ``max_hac`` but over a raw-patch-leaved tree); a Bad vote floods **every
+    over a raw-patch-leaved tree); a Bad vote floods **every
     tree node** as a negative - symmetric with inference, which max-pools the
     MLP over every node; an image scores by max-pooling over all nodes.  The
     per-image tree is memoised per media id (it depends only on the frozen
@@ -460,15 +551,11 @@ class MaxPatchHacStyle(_FlattenedStyle):
 
         grid = media.get("patch_grid")
         if grid is None:
-            from vtscore.media.patch_embed import RegionVector  # noqa: PLC0415
-
             tree = [
                 RegionVector(
                     box=(0.0, 0.0, 1.0, 1.0),
                     vec=_unit(np.asarray(media_embedding(media), dtype=np.float32)),
                     children=None,
-                    cell_mask=None,
-                    weight=0.0,
                 )
             ]
         else:
@@ -478,8 +565,6 @@ class MaxPatchHacStyle(_FlattenedStyle):
 
     def good_vec(self, media: dict[str, Any], box: Optional[tuple[float, float, float, float]]) -> "np.ndarray":
         if box is not None and media.get("patch_grid") is not None:
-            from vtscore.media.patch_embed import snap_box_to_region  # noqa: PLC0415
-
             snapped = snap_box_to_region(self._tree(media), box)
             if snapped is not None:
                 return snapped
@@ -520,15 +605,11 @@ class MaxPatchPcaHacStyle(MaxPatchHacStyle):
 
         grid = media.get("patch_grid")
         if grid is None:
-            from vtscore.media.patch_embed import RegionVector  # noqa: PLC0415
-
             tree = [
                 RegionVector(
                     box=(0.0, 0.0, 1.0, 1.0),
                     vec=_unit(np.asarray(media_embedding(media), dtype=np.float32)),
                     children=None,
-                    cell_mask=None,
-                    weight=0.0,
                 )
             ]
         else:
@@ -541,7 +622,6 @@ class MaxPatchPcaHacStyle(MaxPatchHacStyle):
 #: fresh instance so per-run matrix memoisation never leaks across datasets.
 STYLES: dict[str, type] = {
     WholeImageStyle.name: WholeImageStyle,
-    MaxHacStyle.name: MaxHacStyle,
     MaxPatchStyle.name: MaxPatchStyle,
     MaxPatchHacStyle.name: MaxPatchHacStyle,
     MaxPatchPcaHacStyle.name: MaxPatchPcaHacStyle,

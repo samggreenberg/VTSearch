@@ -526,10 +526,10 @@ def _evaluate_on_test(
     threshold-independent ranking metrics ``auroc`` and ``average_precision``,
     which isolate "how good is the ranking" from "how good is the threshold".
 
-    When *region_aware* the test media carry ``patch_regions`` (a patch
-    embedder), so scoring max-pools the MLP over every region of each image -
+    When *region_aware* the test media carry a ``patch_grid`` (a patch
+    embedder), so scoring max-pools the MLP over every score row of each image -
     exactly the live detector's inference for patch datasets (an image scores
-    by its best-matching region).  Otherwise each media is scored by its single
+    by its best-matching row).  Otherwise each media is scored by its single
     whole-image vector through the step's trainer-agnostic ``predict``.
     """
     import numpy as np  # noqa: PLC0415
@@ -1554,8 +1554,9 @@ def _style_train_and_calibrate(
     The detection style (see :mod:`vtscore.eval.patch_styles`) supplies the
     vote-to-vector rules: each Good vote contributes ``style.good_vec`` (given
     the ground-truth box when *region_voting* and the media has one), each Bad
-    vote floods ``style.bad_vecs`` - one row on a whole-image style, the CLS +
-    HAC leaves on ``max_hac``, every raw patch on ``max_patch``.
+    vote floods ``style.bad_vecs`` - one row on a whole-image style, the
+    image-level vector + every raw patch on ``max_patch``, every tree node on
+    the HAC hybrids.
 
     Training and calibration are **bag-aware**, exactly like the production
     vote path (:func:`vtscore.detectors.training._train_and_score_xy`): the
@@ -1884,8 +1885,9 @@ def simulate_voting_iterations(  # noqa: C901
             ``_train_and_score_xy``.  Ignored on the SVM trainers (no torch
             head); recorded in the ``head`` result column.
         style: Optional detection-style name (see
-            :mod:`vtscore.eval.patch_styles`): ``"whole_image"``, ``"max_hac"``,
-            or ``"max_patch"``.  When set (MLP trainer only), the style owns the
+            :mod:`vtscore.eval.patch_styles`): ``"whole_image"``,
+            ``"max_patch"`` (the production geometry), or one of the
+            ``"max_patch_hac"`` hybrids.  When set (MLP trainer only), the style owns the
             vote-to-vector assembly, the test/sim scoring rule, and the
             bag-aware flooding of Bad votes - the Max-Patch experiment arms.
             ``None`` (default) keeps the historical behaviour byte-for-byte
@@ -2064,10 +2066,11 @@ def simulate_voting_iterations(  # noqa: C901
     if not test_pos or not test_neg:
         return []
 
-    # A patch dataset exposes ``patch_regions`` per media; such datasets are
-    # scored region-aware (max-pool over regions) the same way the live
-    # detector scores them, regardless of how the Good votes were assembled.
-    region_aware = any(clips_dict[cid].get("patch_regions") for cid in clips_dict)
+    # A patch dataset exposes a ``patch_grid`` per media; such datasets are
+    # scored region-aware (max-pool over the image's score rows) the same way
+    # the live detector scores them, regardless of how the Good votes were
+    # assembled.
+    region_aware = any(clips_dict[cid].get("patch_grid") is not None for cid in clips_dict)
     # Mirror the app's per-mode schedule default (#2841): with no explicit arm, a
     # patch dataset blends under the region schedule and a single-vector one
     # under the binary schedule, exactly as `_blend_schedule_for_snap` decides in
@@ -2506,7 +2509,7 @@ def run_voting_iterations_eval(
         styles: Which detection styles to run per cell (see
             :func:`simulate_voting_iterations`).  ``None`` (default) runs
             ``[None]`` - the historical style-less behaviour; pass e.g.
-            ``["max_hac", "max_patch"]`` for the Max-Patch experiment arms.
+            ``["whole_image", "max_patch"]`` for the Max-Patch experiment arms.
             Recorded in the ``style`` column (``""`` for the style-less run).
         autopilot_fidelity: Follow the app's own Autopilot phase machine
             (default ``True``); see :func:`simulate_voting_iterations`.  Pass
