@@ -22,7 +22,12 @@ Two studies pin down why the HAC tree lost and where the remaining headroom is:
   worse; sign-corrected `pnorm` closed only ~21% of the gap.
 
 So ~0.1 ErrorCost of measured headroom is locked behind the *pooling /
-threshold*, not behind node vectorization. #2890 asks whether ROI Align can
+threshold*, not behind node vectorization. **Caveat:** both studies (Jul
+29–31) predate the rebuilt threshold stack (fold-anchored cross-LabeledGMM
+fused threshold, blend schedules, conformal inclusion, acquisition at
+inclusion −3, all Aug 1–7); #2895 reruns the region-style comparison on
+today's stack and re-prices this headroom. Run it first — the residual regret
+it measures is this experiment's motivation. #2890 asks whether ROI Align can
 convert a node (set of patches) into something scoreable, and whether the
 scorer engine could accept sets directly. The investigation's conclusion: the
 promising half is the **engine** — a learned set-pooling (attention-MIL)
@@ -105,6 +110,12 @@ doesn't matter at the operating point.
   to R×R and dilute, the k-means-leaf failure in another guise).
 
 ## Open work
+
+<!-- item-sep -->
+
+- [ ] #2895 — Rerun the region-style study on today's threshold stack (Opus
+  4.8; prerequisite — its residual-regret measurement is this experiment's
+  motivation)
 
 <!-- item-sep -->
 
