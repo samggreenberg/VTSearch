@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     common.log(
         f"cell {idx}/{len(cells)}: dataset={ds} embedder={emb} category={cat} seed={seed} "
         f"styles={styles} head={cfg.HEAD} safe_thresholds={cfg.SAFE_THRESHOLDS} "
-        f"acq_inclusion={cfg.ACQ_INCLUSION} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE}"
+        f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE}"
     )
 
     import pandas as pd
@@ -143,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
             anchored_rules=cfg.ANCHORED_RULES,
             anchored_fold_arms=cfg.ANCHORED_FOLD_ARMS,
             anchored_fold_combines=cfg.ANCHORED_FOLD_COMBINES,
-            acq_inclusion=cfg.ACQ_INCLUSION,
+            acq_inclusion_offset=cfg.ACQ_INCLUSION_OFFSET,
             acq_rank_percentile=cfg.ACQ_RANK_PERCENTILE,
         )
         for r in rows:

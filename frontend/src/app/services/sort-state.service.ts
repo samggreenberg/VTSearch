@@ -31,6 +31,13 @@ export class SortStateService {
   private readonly _selectMode = signal<SelectMode>('top');
   private readonly _sortOrder = signal<SortedItem[] | null>(null);
   private readonly _threshold = signal<number | null>(null);
+  // The rank position Autopilot's Hard / New picks sample around. Since #2876
+  // this is a *different* cut from `_threshold`: the decision line the user sees
+  // stays where it is, while acquisition samples further up the ranking, which
+  // buys 4.5x the positives per 100 votes at lower cost. Only the learned sort
+  // carries one; every other sort leaves it null and the picks fall back to
+  // `_threshold`, which is what they always used.
+  private readonly _acqThreshold = signal<number | null>(null);
   private readonly _sortBusy = signal(false);
   private readonly _sortStatus = signal('');
   private readonly _sortProgress = signal(0);
@@ -73,6 +80,16 @@ export class SortStateService {
 
   get threshold(): number | null {
     return this._threshold();
+  }
+
+  /**
+   * The cut Autopilot's Hard / New picks sample around, falling back to the
+   * reporting `threshold` when the sort carried no acquisition cut. Everything
+   * the *user* is shown — the green/red line, the above-threshold count, the
+   * Find verdicts — reads `threshold`, never this.
+   */
+  get acqThreshold(): number | null {
+    return this._acqThreshold() ?? this._threshold();
   }
 
   get sortBusy(): boolean {
@@ -146,6 +163,9 @@ export class SortStateService {
   setSortResults(order: SortedItem[], threshold: number): void {
     this._sortOrder.set(order);
     this._threshold.set(threshold);
+    // No acquisition cut on this path (load-sort restore, tests): the getter
+    // falls back to the reporting threshold.
+    this._acqThreshold.set(null);
     // A plain (non-windowed) result set: the whole ranking is present, so there
     // is nothing more to page. Keeps callers that don't carry window metadata
     // (load-sort, tests) behaving exactly as before.
@@ -164,6 +184,7 @@ export class SortStateService {
   setSortWindow(win: {
     items: SortedItem[];
     threshold: number;
+    acqThreshold?: number | null;
     total: number;
     hasMore: boolean;
     token: string | null;
@@ -171,6 +192,7 @@ export class SortStateService {
   }): void {
     this._sortOrder.set(win.items);
     this._threshold.set(win.threshold);
+    this._acqThreshold.set(win.acqThreshold ?? null);
     this._sortTotal.set(win.total);
     this._sortHasMore.set(win.hasMore);
     this._sortToken.set(win.token);

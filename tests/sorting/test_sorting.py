@@ -632,6 +632,32 @@ class TestLearnedSort:
         ids = {e["id"] for e in data["results"]}
         assert ids == set(range(1, app_module.NUM_MEDIAS + 1))
 
+    def test_publishes_the_acquisition_cut_alongside_the_reporting_one(self, client):
+        """Autopilot's Hard / New picks sample around a *different* cut.
+
+        The picks live in the frontend and read whatever the sort response
+        carries, so if the field goes missing the app silently reverts to the
+        coupled behaviour PR #2876 measured as costing 4.5x the positives - with
+        nothing failing.
+        """
+        app_module.good_votes.update({k: None for k in [1, 2]})
+        app_module.bad_votes.update({k: None for k in [3, 4]})
+        resp = client.post("/api/learned-sort", json={"wait": True})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "acq_threshold" in data
+        # A fold-anchored fit is not guaranteed on this fixture; where there is
+        # one the acquisition cut sits above the decision line, and where there
+        # is not the two coincide.  Never below - that is the falsified
+        # direction.
+        assert data["acq_threshold"] >= data["threshold"]
+
+    def test_text_sort_carries_no_acquisition_cut(self, client):
+        """No detector behind it, so there is nothing to re-cut."""
+        resp = client.post("/api/sort", json={"text": "a sound"})
+        assert resp.status_code == 200
+        assert resp.get_json()["acq_threshold"] is None
+
     def test_only_good_votes_returns_400(self, client):
         app_module.good_votes.update({k: None for k in [1, 2]})
         resp = client.post("/api/learned-sort", json={"wait": True})

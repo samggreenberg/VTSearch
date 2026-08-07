@@ -1,7 +1,7 @@
 """Does decoupling the acquisition cut buy back the positives the fused threshold costs?
 
 Design and pre-registered decision rules:
-``docs/plans/acquisition-inclusion-decoupling.md``.  Background: #2847 / PR #2873
+``docs/ML.md`` (threshold calibration).  Background: #2847 / PR #2873
 found production finds half as many positives as the conformal path it replaced
 (median 9 -> 4 per 100 votes, p=1e-20) with final cost unchanged (p=0.09),
 because one number is both the reported decision line and the rank position
@@ -385,7 +385,7 @@ def write_report(summary: dict, figs: list[str], outdir: Path) -> Path:
     A = L.append
     A("# Acquisition/reporting threshold decoupling — does it buy back the positives?\n")
     A(
-        "Design: `docs/plans/acquisition-inclusion-decoupling.md`. Reporting is cut at "
+        "Design: `docs/ML.md` (threshold calibration). Reporting is cut at "
         "inclusion 0 in **every** arm; only the selector's cut moves.\n"
     )
 

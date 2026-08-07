@@ -92,6 +92,53 @@ def inclusion_cost_weights(inclusion_value: int) -> tuple[float, float]:
     return 2.0 ** (-inclusion_value), 1.0
 
 
+#: How far *below* the reporting inclusion the **acquisition** cut sits.
+#:
+#: The threshold does two unrelated jobs.  Reporting is the decision line the
+#: user sees and every metric is scored at.  Acquisition is what Autopilot's
+#: ``hard`` and ``new`` picks consume - and those read the threshold as a **rank
+#: position** in the descending ranking, not as a decision boundary, so they want
+#: the opposite thing from it.
+#:
+#: The direction is therefore the opposite of the intuition from the cost
+#: weights: a *negative* offset prices false alarms higher, *raises* the cut,
+#: moves it *up* the ranking, and so returns *more* positives.
+#:
+#: ``-3`` is the measured interior optimum
+#: (``docs/experiments/acquisition-inclusion/REPORT.md``, PR #2876): positives
+#: found per 100 votes 4 -> 18, final cost 0.137 -> 0.129 (paired median -0.011,
+#: 95% CI [-0.025, -0.005], p=8e-5), average precision 0.696 -> 0.817, deep-spike
+#: incidence unchanged.  ``-4`` buys one more positive for 0.005 more cost and
+#: nudges spikes up; the falsification arm at ``+2`` made everything worse, which
+#: is what makes the rest interpretable.
+ACQUISITION_INCLUSION_OFFSET = -3
+
+
+def acquisition_inclusion(inclusion_value: int, offset: int = ACQUISITION_INCLUSION_OFFSET) -> int:
+    """The inclusion the **selector's** cut is taken at, given the reporting one.
+
+    One definition, shared by the app and the eval harness, so a measured arm
+    and the shipped path cannot disagree about where acquisition samples - the
+    same discipline :func:`inclusion_cost_weights` follows.  *offset* exists for
+    the harness's arms; production always takes the default.
+
+    An *offset*, not an absolute value.  The run that measured ``-3`` held
+    reporting at inclusion 0, where the two readings coincide; away from 0 only
+    the offset preserves what was measured, because the mechanism is the *gap*
+    between where the line is drawn and where sampling happens.  Reading ``-3``
+    absolutely would collapse the gap to nothing at reporting inclusion -3 and
+    invert it below that - the direction the ``acq_p2`` arm falsified.
+
+    Deliberately unclamped.  The reporting inclusion is clamped to ``[-10, 10]``
+    at the API edge, so this can reach -13; the cost weights are exponential but
+    finite there, and :meth:`FoldAnchoredCut.threshold_at` clamps the quantile it
+    realizes to ``[0, 1]`` anyway.  Clamping here would instead silently switch
+    the mechanism off at the bottom of the slider, which is the failure mode that
+    is hard to notice.
+    """
+    return inclusion_value + offset
+
+
 def _quadratic_roots(a: float, b: float, c: float) -> list[float]:
     """Real roots of ``a*x^2 + b*x + c``, degenerating gracefully to the linear case.
 
