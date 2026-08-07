@@ -160,6 +160,7 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     "gmm_cut",
     "blend_weight",
     "cut_fallback",
+    "cut_fail_reason",
     "raw_cut_cost",
     "raw_cut_fpr",
     "raw_cut_fnr",
@@ -214,16 +215,21 @@ _CUT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
     "gmm_loglik",
     "pred_offset_equal_var",
     "gmm_logit_loglik",
-    # Fitted Gumbel(low) + Normal(high) mixture.  Its component parameters are in
-    # LOGIT units (that is where the extreme-value limit lives and where it is
-    # fitted); its log likelihood is converted back to score space so the two
-    # families are directly comparable.
+    # Fitted Gumbel + Normal mixture.  Its component parameters are in LOGIT
+    # units (that is where the extreme-value limit lives and where it is fitted);
+    # its log likelihood is converted back to score space so the two families are
+    # directly comparable.  Reported per component, with ``evt_gumbel_is_low``
+    # saying which mode the Gumbel landed on - #2836 assumed that was always the
+    # low one and threw away every fit that said otherwise, which #2846 measured
+    # at 14 % of production-like fits.
     "evt_ok",
-    "evt_w_lo",
-    "evt_loc_lo",
-    "evt_scale_lo",
-    "evt_mu_hi",
-    "evt_var_hi",
+    "evt_fit_fail",
+    "evt_gumbel_is_low",
+    "evt_w_gumbel",
+    "evt_loc",
+    "evt_scale",
+    "evt_mu",
+    "evt_var",
     "evt_loglik",
     "evt_loglik_gain",
     # Label-supervised class moments (diagnostic only).
@@ -240,6 +246,9 @@ _CUT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
     "tau_gumbel_cross",
     "tau_gumbel_priorfree",
     "tau_gumbel_rate",
+    "tau_gumbel_any_cross",
+    "tau_gumbel_any_priorfree",
+    "tau_gumbel_any_rate",
     "tau_supervised",
     "tau_sim_oracle",
     "tau_test_oracle",
@@ -617,6 +626,7 @@ def _operating_metrics(
         "blend_weight": nan,
         # Cut-rule study columns (issue #2836); only the variant rows set them.
         "cut_fallback": 0,
+        "cut_fail_reason": "",
         "raw_cut_cost": nan,
         "raw_cut_fpr": nan,
         "raw_cut_fnr": nan,
@@ -649,11 +659,12 @@ def _operating_metrics(
 #: ``rule`` names a cut in :mod:`vtscore.eval.cut_rules` - the ``lam``-tilt
 #: family over the Gaussian mixture ("mid" is production; "cross" is #2798's
 #: count-optimal crossing, reverted by #2833; "priorfree"/"rate" are #2836's
-#: rate-optimal tilts), the same tilts over a Gumbel-low mixture ("gumbel_*"),
-#: and the two label-reading diagnostics ("supervised", "sim_oracle") that locate
-#: the error rather than compete to ship.  ``xcal_only`` is the no-blend control:
-#: the raw conformal threshold at the same step.  ``pooled_mid`` must reproduce
-#: the production blend exactly.
+#: rate-optimal tilts), the same tilts over a Gumbel-low mixture ("gumbel_*") and
+#: over one whose Gumbel may land on either mode ("gumbel_any_*", #2846's repair
+#: to the first family's fallback rate), and the two label-reading diagnostics
+#: ("supervised", "sim_oracle") that locate the error rather than compete to
+#: ship.  ``xcal_only`` is the no-blend control: the raw conformal threshold at
+#: the same step.  ``pooled_mid`` must reproduce the production blend exactly.
 #:
 #: The #2798 logit-space variants are gone: #2799 measured them at +0.0006 cost
 #: (dead) and each extra fit costs a step's CPU that the #2836 arms need.
@@ -670,6 +681,9 @@ _SAFE_GMM_VARIANTS: tuple[tuple[str, str, str], ...] = (
     ("pooled_gumbel_cross", "pooled", "gumbel_cross"),
     ("pooled_gumbel_priorfree", "pooled", "gumbel_priorfree"),
     ("pooled_gumbel_rate", "pooled", "gumbel_rate"),
+    ("pooled_gumbel_any_cross", "pooled", "gumbel_any_cross"),
+    ("pooled_gumbel_any_priorfree", "pooled", "gumbel_any_priorfree"),
+    ("pooled_gumbel_any_rate", "pooled", "gumbel_any_rate"),
     ("pooled_supervised", "pooled", "supervised"),
     ("pooled_sim_oracle", "pooled", "sim_oracle"),
 )
@@ -708,8 +722,11 @@ def _safe_gmm_variant_rows(
     A rule whose root does not exist on a given fit falls back to that fit's
     midpoint - production's own fallback - and is flagged in ``cut_fallback`` so
     the analyzer can exclude fallen-back steps from a rule's own contrast rather
-    than silently scoring the midpoint under another name.  The oracle variants
-    do not fall back; they emit NaN cuts and are dropped by the analyzer's joins.
+    than silently scoring the midpoint under another name.  For the EVT rules
+    ``cut_fail_reason`` additionally names *which* guard declined, because the
+    repairs those guards want are different and the counts alone cannot tell them
+    apart (issue #2846).  The oracle variants do not fall back; they emit NaN cuts
+    and are dropped by the analyzer's joins.
 
     Returns ``(variant_rows, diagnostic_rows)``; the diagnostic rows carry the
     fitted mixture parameters and every cut in the decomposition chain, one row
@@ -732,6 +749,7 @@ def _safe_gmm_variant_rows(
 
     # One fit pass per geometry; every rule below reads these.
     cuts_by_geometry: dict[str, dict[str, float]] = {}
+    reasons_by_geometry: dict[str, dict[str, str]] = {}
     diag_rows: list[dict[str, Any]] = []
     geometries = sorted({fit for _n, fit, _r in _SAFE_GMM_VARIANTS if fit})
     for geometry in geometries:
@@ -741,11 +759,14 @@ def _safe_gmm_variant_rows(
             # Mirrors calculate_gmm_threshold's "too few scores" default so the
             # production-blend sanity check holds at every step.
             cuts_by_geometry[geometry] = dict.fromkeys((r for _n, f, r in _SAFE_GMM_VARIANTS if f == geometry), 0.5)
+            reasons_by_geometry[geometry] = {}
             continue
-        cuts, params = decomposition_cuts(scores, labels, wf, wn)
+        cuts, params, reasons = decomposition_cuts(scores, labels, wf, wn)
         cuts_by_geometry[geometry] = cuts
+        reasons_by_geometry[geometry] = reasons
         diag = {"geometry": geometry, "sim_prevalence": _r(float(np.mean(labels))) if len(labels) else nan}
-        diag.update({k: _r(float(v)) for k, v in params.items()})
+        # ``evt_fit_fail`` is a reason string; everything else in params is numeric.
+        diag.update({k: v if isinstance(v, str) else _r(float(v)) for k, v in params.items()})
         diag.update({f"tau_{name}": _r(float(value)) for name, value in cuts.items()})
         diag["tau_test_oracle"] = nan  # filled below, once the test oracle is known
         diag_rows.append(diag)
@@ -759,6 +780,7 @@ def _safe_gmm_variant_rows(
     rows: list[dict[str, Any]] = []
     for name, geometry, rule in _SAFE_GMM_VARIANTS:
         fallback = 0
+        fail_reason = ""
         if name == "xcal_only":
             threshold = xcal
             gmm_cut = nan
@@ -768,6 +790,10 @@ def _safe_gmm_variant_rows(
             if not np.isfinite(gmm_cut) and name not in _ORACLE_VARIANTS:
                 gmm_cut = cuts_by_geometry[geometry].get("mid", nan)
                 fallback = 1
+                # Empty for the Gaussian rules, which have no reason vocabulary;
+                # the EVT rules name the guard that declined so a fallback can be
+                # attributed rather than merely counted (issue #2846).
+                fail_reason = reasons_by_geometry[geometry].get(rule, "")
             threshold = blend_gmm_threshold(xcal, gmm_cut, ctx, schedule=schedule) if np.isfinite(gmm_cut) else nan
             provenance = "gmm_blend"
         if not np.isfinite(threshold):
@@ -789,6 +815,7 @@ def _safe_gmm_variant_rows(
         row["gmm_cut"] = _r(gmm_cut)
         row["blend_weight"] = _r(weight)
         row["cut_fallback"] = fallback
+        row["cut_fail_reason"] = fail_reason
         if np.isfinite(gmm_cut):
             raw_cost, raw_fpr, raw_fnr = operating_cost(base_scores, base_labels, gmm_cut, wf, wn)
             row["raw_cut_cost"] = _r(raw_cost)

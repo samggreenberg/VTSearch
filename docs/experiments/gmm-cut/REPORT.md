@@ -207,14 +207,20 @@ the most useful number in this study for planning purposes.
   region nodes is an extreme-value statistic". #2798's geometric premise does not
   survive measurement, even though its algebra does.
 
-## The theory bench disagrees with the data, and the fallback rate says why
+## The theory bench disagreed with the data because it was scoring a different thing
+
+> **The bench numbers below are superseded.** The reconciliation this section
+> originally offered — "the crossing is fragile on real scores and reliable in
+> the bench" — was wrong in its second half, and the first half was the wrong
+> diagnosis. See "What #2846 found" immediately after. The table is kept because
+> the corrected numbers are only meaningful against it.
 
 The bench generates scores from a model of region voting whose class-conditionals
 are known in closed form, so each rule's excess loss is measured against **truth**
 rather than a held-out sample (11 520 fits).
 
 In the production-like regime (m = 24, prevalence ≤ 0.05), mean excess true rate
-loss:
+loss **as originally reported**:
 
 | rule | bench | | real data (ramp cost) |
 |---|---|---|---|
@@ -224,18 +230,82 @@ loss:
 | `priorfree` | 0.1883 | | **0.5075 (wins)** |
 | `cross` | 0.2159 | | 0.5156 |
 
-The bench says the *family* is the binding constraint — `priorfree` is
-statistically tied with `mid` there (slightly worse), and only the EVT rules
-help. The real data says the opposite. **The fallback rates reconcile them:** on
-real scores the Gumbel crossing does not exist on **27 %** of steps
-(`gumbel_priorfree`) and **53 %** (`gumbel_cross`), where the rule silently
-degrades to the midpoint. In the bench's clean two-mode samples it essentially
-always exists.
+The real-data fallback rates are sound: the Gumbel crossing does not exist on
+**27 %** of steps (`gumbel_priorfree`) and **53 %** (`gumbel_cross`), where the
+rule silently degrades to the midpoint. What was wrong was the claim that the
+bench's samples are clean enough that the root essentially always exists.
 
-So the EVT rule is better in principle and too fragile in practice. Making that
-fit robust is the single highest-value follow-up — it is worth up to the
-misspecification term (+0.0134), which is comparable to the prior term we just
-banked.
+### What #2846 found
+
+**The bench column is conditional on the rule firing; the real-data column is
+not.** `theory_bench.py` wrote `NaN` for a rule with no root, and every
+aggregation (`groupby.mean`, `idxmin`) skips NaN by default — so the EVT rules
+were scored only on the replicates where they applied, while `mid` and
+`priorfree` were scored on all of them. The real-data harness does the honest
+thing: it falls back to the midpoint and scores that, flagged in `cut_fallback`.
+The two halves were reporting different estimands.
+
+The bench's samples are not clean. Re-running the production-like corner with
+every replicate scored (1 440 fits; `mid` reproduces at 0.1830 and the old
+conditional `gumbel_priorfree` at 0.1129, so this is the same measurement):
+
+| `gumbel_priorfree`, excess true rate loss | |
+|---|---|
+| conditional on firing (the number above) | 0.1129 |
+| **honest, midpoint fallback scored** | **0.1533** |
+| `mid` | 0.1830 |
+
+Roughly **half the bench's margin was survivorship**, and the dropped replicates
+are not a random subset: on them `mid` itself scores 0.2563 against 0.1542 where
+a root exists. The rule fails on exactly the hard steps. The Gumbel rule still
+wins in the bench after the correction — by −0.030 rather than −0.070 — so the
+family argument survives, but weakly enough that it no longer contradicts the
+real-data result on its own.
+
+### Where the missing roots actually come from
+
+Splitting the failures by which guard fired, on the same corner:
+
+| branch | share | what it means |
+|---|---|---|
+| `modes_swapped` (fit rejected) | **14.2 %** | EM put the Gumbel on the **high** mode and `fit_gumbel_normal_mixture` discarded the fit |
+| `hi_owns_lo_mode` | 17.7 % | the two components collapsed onto each other (mode gap 0.141 logits, against 0.607 where a root exists) |
+| `lo_owns_hi_mode` | 2.8 % | the low component's tail swamps the high mode |
+| M-step numerical failure | 0.1 % | — |
+
+So the largest single branch is not the crossing at all — it is the fit's
+*ordering assumption*. #2836 pinned the Gumbel to the low component from the
+region-voting argument, and that premise does not survive the arithmetic: a sim
+set is 95–99 % negatives, so the right-skewed max-pooled bulk **is** the negative
+class, and EM putting the Gumbel on the upper mode is EM preferring the better
+description. (This also explains why prediction (4) failed: the Gumbel is
+capturing right-skew wherever it finds it, not "the max over region nodes".)
+
+### The repair, and one that looked obvious but is not
+
+Between the two modes the log-density difference is monotone —
+`d/dx [log g − log n] = (e^{−z} − 1)/scale + (x − mu)/var`, both terms
+non-positive on `[loc, mu]` — so the existing bisection is exact, a sign change
+at the endpoints is necessary *and* sufficient, and the same solver works in
+either orientation. Measured on the production-like corner:
+
+| | fire rate | excess |
+|---|---|---|
+| today | 68.1 % | 0.1585 |
+| `sup` clamp (what the Gaussian sibling `_rate_cut_in_interval` does) | 100 % | 0.1568 |
+| **keep swapped fits, solve in either orientation** | 73.1 % | **0.1487** |
+
+The Gaussian family's own answer to this problem does **not** transfer: clamping
+is worse than the midpoint fallback on the `hi_owns_lo_mode` bucket (0.2858 vs
+0.2563), which is the larger of the two, and only better on the small
+`lo_owns_hi_mode` one. Dropping the ordering constraint does help, and it is
+principled rather than tuned — but it recovers 5 of the ~32 missing points. The
+rest are genuinely non-bimodal steps, which is a statement about those steps
+rather than about the solver.
+
+All of the above is bench-only. `gumbel_any_*` now runs as a measured variant
+beside the incumbent `gumbel_*`, and `cut_fail_reason` records which guard
+declined, so the next Visual Genome run settles it on real scores.
 
 Estimation noise is *not* the story: finite-sample (n=500) excess minus
 population excess is ≤ 0.015 in magnitude for every rule, and slightly negative.
@@ -252,10 +322,17 @@ cells:
 | Gaussian low component | 0.069 | 4.93 | no |
 | **Gumbel low component** | **0.165** | **2.22** | **yes** |
 
-The EVT *fit* is well-behaved even though the EVT *crossing solve* is fragile —
-which is consistent with the fallback-rate diagnosis above, and makes
+The EVT *fit* is well-behaved even where the EVT *crossing* has no root, which
+is consistent with the #2846 diagnosis above — the largest failure branch was the
+ordering guard rejecting a sound fit, not the fit being bad — and makes
 "cut the Bad tail at alpha ≈ 0.165" a coherent one-constant rule worth testing
-against the shipped winner.
+against the shipped winner. It needs no crossing at all, so it fires wherever the
+fit exists.
+
+Both numbers here were computed over fits that #2836 kept, i.e. excluding the
+~14 % it discarded as swapped. Those now produce fits, and `lo_survival` reads
+whichever component is the low one, so this table needs recomputing on the next
+run before it is leaned on.
 
 ## Scope
 

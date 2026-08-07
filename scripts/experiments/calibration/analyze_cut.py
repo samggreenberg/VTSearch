@@ -59,6 +59,9 @@ SHIPPABLE: tuple[str, ...] = (
     "pooled_gumbel_cross",
     "pooled_gumbel_priorfree",
     "pooled_gumbel_rate",
+    "pooled_gumbel_any_cross",
+    "pooled_gumbel_any_priorfree",
+    "pooled_gumbel_any_rate",
 )
 #: Label-reading diagnostics — bounds and decomposition anchors, never candidates.
 ORACLE_VARIANTS: tuple[str, ...] = ("pooled_supervised", "pooled_sim_oracle")
@@ -419,18 +422,48 @@ def evt_evidence(diag: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
     not a maximum of anything).  A gain that is uniform across geometries would
     mean the Gumbel is just a more flexible shape, not the *right* one.
     """
-    g = (
-        diag.groupby(["arm", "geometry"])
-        .agg(
-            evt_loglik_gain=("evt_loglik_gain", "mean"),
-            frac_evt_better=("evt_loglik_gain", lambda s: float(np.nanmean(np.asarray(s, dtype=float) > 0))),
-            evt_fit_rate=("evt_ok", "mean"),
-            gmm_fit_rate=("gmm_ok", "mean"),
-            n=("evt_ok", "size"),
-        )
-        .reset_index()
-    )
+    aggs = {
+        "evt_loglik_gain": ("evt_loglik_gain", "mean"),
+        "frac_evt_better": ("evt_loglik_gain", lambda s: float(np.nanmean(np.asarray(s, dtype=float) > 0))),
+        "evt_fit_rate": ("evt_ok", "mean"),
+        "gmm_fit_rate": ("gmm_ok", "mean"),
+        "n": ("evt_ok", "size"),
+    }
+    # How often the Gumbel landed on the low mode.  #2836 assumed always and
+    # discarded the rest; #2846 is the question of what that cost.  Absent when
+    # re-analyzing a frame emitted before #2846, which is a supported thing to do
+    # (this study's whole point is comparing against those numbers).
+    if "evt_gumbel_is_low" in diag:
+        aggs["gumbel_is_low_rate"] = ("evt_gumbel_is_low", "mean")
+    g = diag.groupby(["arm", "geometry"]).agg(**aggs).reset_index()
     g.to_csv(agg_dir / "cut_evt_evidence.csv", index=False)
+    return g
+
+
+def fallback_reasons(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
+    """Why each rule declined to fire, per arm per variant (issue #2846).
+
+    ``cut_fallback`` says a rule degraded to the midpoint; this says *which*
+    guard sent it there, which is the whole difference between "the fit was
+    sound but oriented the other way" (repairable, and what ``gumbel_any_*``
+    repairs) and "the two components collapsed onto each other" (a statement
+    about that step's score distribution, which no solver can fix).
+    """
+    if "cut_fail_reason" not in df:
+        return pd.DataFrame()
+    fell = df[(df["cut_fallback"] == 1) & (df["cut_fail_reason"].astype(str) != "")]
+    if fell.empty:
+        return pd.DataFrame()
+    g = (
+        fell.groupby(["arm", "gmm_variant", "cut_fail_reason"])
+        .size()
+        .reset_index(name="n_steps")
+        .sort_values(["arm", "gmm_variant", "n_steps"], ascending=[True, True, False])
+    )
+    # Share within each (arm, variant), so a reason is readable without joining
+    # back to that variant's own step count.
+    g["share_of_fallbacks"] = g["n_steps"] / g.groupby(["arm", "gmm_variant"])["n_steps"].transform("sum")
+    g.to_csv(agg_dir / "cut_fallback_reasons.csv", index=False)
     return g
 
 
@@ -676,6 +709,7 @@ def write_report(summary: dict, tables: dict, report_path: Path) -> None:
         ("Decomposition (threshold units)", "decomposition"),
         ("Decomposition (excess-cost units)", "cost_decomposition"),
         ("Extreme-value evidence", "evt"),
+        ("Why each rule fell back (issue #2846)", "fallback_reasons"),
         ("Estimator variance (within-cell)", "estimator_variance"),
     ):
         tbl = tables.get(key)
@@ -728,6 +762,7 @@ def main() -> int:
     costs = cost_decomposition(df, agg_dir)
     offsets = offset_predictions(diag, df, agg_dir) if not diag.empty else {}
     evt = evt_evidence(diag, agg_dir) if not diag.empty else pd.DataFrame()
+    why = fallback_reasons(df, agg_dir)
     alpha = tail_alpha_stability(diag, agg_dir) if not diag.empty else {}
     est_var = estimator_variance(diag, agg_dir) if not diag.empty else pd.DataFrame()
     dec = decisions(contrasts, gaps, costs, alpha)
@@ -754,6 +789,7 @@ def main() -> int:
             "decomposition": decomp,
             "cost_decomposition": costs,
             "evt": evt,
+            "fallback_reasons": why,
             "estimator_variance": est_var,
         },
         common.RESULTS / "REPORT_CUT.md",
