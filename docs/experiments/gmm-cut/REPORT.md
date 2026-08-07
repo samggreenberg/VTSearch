@@ -43,6 +43,14 @@ over **13 653 steps** (max abs diff 0.0), and `pooled_cross` reproduces #2799's
 headline (+0.0034 here vs +0.0036 there). The harness is measuring the shipped
 code and the same phenomenon.
 
+> **Stale as of 2026-08-07.** That fidelity claim held against the production
+> path *of this run*. Production has since moved to the fold-anchored threshold
+> at κ=0.3 (`d195b004`, `196085b5`, `b03d54e5`), so `pooled_mid` is no longer
+> what the app computes and the check now fails by construction on the steps that
+> take the new path — bit-for-bit exact on the ones that don't. Everything below
+> remains a valid comparison *between cut rules*; nothing below still establishes
+> that a rule beats **what ships**. See `REMEASURE-2846.md`.
+
 ## What the prior-free crossing is
 
 ### The variables
@@ -307,6 +315,17 @@ All of the above is bench-only. `gumbel_any_*` now runs as a measured variant
 beside the incumbent `gumbel_*`, and `cut_fail_reason` records which guard
 declined, so the next Visual Genome run settles it on real scores.
 
+> **Settled 2026-08-07 — and the bench over-sold it again.** On real VG scores
+> the repair cuts the fallback rate 24.9 % → 19.6 % as designed, but changes the
+> cut on only 5.4 % of steps and is worth **−0.0004 (n.s.)** against the bench's
+> −0.010. Where it does fire its sign flips with the tilt: `priorfree` −0.0117
+> (p = 8e−4), `cross` **+0.0219** (p = 0.015). Recommendation is not to promote
+> it. The bench half re-ran at full power on the Grid and reproduced the local
+> probe (`gumbel_priorfree` honest 0.1547, `gumbel_any_priorfree` **0.1468**,
+> `mid` 0.1824) — so the two halves now disagree with the survivorship bug fixed
+> on both sides, which is a statement about the bench's generative model rather
+> than about either measurement. See `REMEASURE-2846.md`.
+
 Estimation noise is *not* the story: finite-sample (n=500) excess minus
 population excess is ≤ 0.015 in magnitude for every rule, and slightly negative.
 Issue hypothesis 3 is refuted.
@@ -333,6 +352,11 @@ Both numbers here were computed over fits that #2836 kept, i.e. excluding the
 ~14 % it discarded as swapped. Those now produce fits, and `lo_survival` reads
 whichever component is the low one, so this table needs recomputing on the next
 run before it is leaned on.
+
+> **Recomputed 2026-08-07 — the finding survives.** With the swapped fits kept,
+> over the same 511 cells: Gaussian median α 0.070, IQR ratio 5.54 (still
+> unstable); Gumbel median α **0.158**, IQR ratio **2.38** (still inside the
+> pre-registered bar of 3). See `REMEASURE-2846.md`.
 
 ## Scope
 

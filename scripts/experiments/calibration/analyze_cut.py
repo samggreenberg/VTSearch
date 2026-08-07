@@ -129,19 +129,41 @@ def production_blend_sanity(df: pd.DataFrame) -> dict:
     The fidelity check that licenses every within-step contrast: if the variant
     the harness *labels* as production does not equal the threshold the run
     actually used, the whole family is being re-cut against the wrong baseline.
+
+    When it fails, the *reason* is usually not a harness bug but the incumbent
+    shipping out from under the study - this is exactly what #2846's re-measure
+    found, where production had moved to the fold-anchored threshold and
+    ``pooled_mid`` was still bit-for-bit correct on every step that took the old
+    path.  Those two diagnoses call for opposite responses, and telling them
+    apart is mechanical, so the breakdown by ``threshold_provenance`` is reported
+    rather than left to whoever reads ``ok: false`` next.
     """
     keys = ["arm", "category", "seed", "t"]
-    base = df[(df["pool_variant"] == "max") & (df["gmm_variant"] == "")].set_index(keys)["threshold"]
+    cols = ["threshold"] + (["threshold_provenance"] if "threshold_provenance" in df else [])
+    base = df[(df["pool_variant"] == "max") & (df["gmm_variant"] == "")].set_index(keys)[cols]
     prod = df[df["gmm_variant"] == INCUMBENT].set_index(keys)["threshold"]
-    joined = base.to_frame("base").join(prod.to_frame("production_variant"), how="inner")
+    joined = base.join(prod.to_frame("production_variant"), how="inner")
     if joined.empty:
         return {"n_steps": 0, "max_abs_diff": None, "ok": None}
-    diff = (joined["base"] - joined["production_variant"]).abs()
-    return {
+    diff = (joined["threshold"] - joined["production_variant"]).abs()
+    out = {
         "n_steps": int(len(joined)),
         "max_abs_diff": float(diff.max()),
         "ok": bool(diff.max() <= 1e-6),  # thresholds are emitted rounded to 6 dp
     }
+    if not out["ok"] and "threshold_provenance" in joined:
+        # Per production code path: which ones `pooled_mid` still reproduces, and
+        # which ones it cannot because the app no longer computes it that way.
+        by = joined.assign(mismatch=diff > 1e-6).groupby(joined["threshold_provenance"].fillna(""))
+        out["by_provenance"] = {
+            str(name): {
+                "n_steps": int(len(g)),
+                "n_mismatched": int(g["mismatch"].sum()),
+                "max_abs_diff": float(diff.loc[g.index].max()),
+            }
+            for name, g in by
+        }
+    return out
 
 
 # ------------------------------------------------------------------
