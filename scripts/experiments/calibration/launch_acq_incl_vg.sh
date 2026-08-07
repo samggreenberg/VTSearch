@@ -49,7 +49,16 @@ export CALIB_EXP="/exp/$USER/acq-vg"
 export CALIB_DATASETS=visual_genome_m
 export CALIB_VG_EMBEDDERS=siglip
 export CALIB_MAX_STEPS=100
-export CALIB_N_SEEDS=${CALIB_N_SEEDS:-8}
+# 24, not #2876's 8.  The issue says to size for the COST contrast rather than
+# the positives one, and 8 seeds is the wrong answer HERE even though it was the
+# right answer on COCO: VG region-voting costs sit near 0.43 instead of 0.137 and
+# are correspondingly noisier, so the 8-seed pilot (kept at results_8seed/) put a
+# 95% CI of [-0.014, +0.019] on the k=-3 cost delta against a ship-rule tolerance
+# of +0.01.  That is a null too wide to certify, and it cannot separate "the
+# offset is free on region voting" from "it costs something" - opposite shipping
+# decisions.  Tripling the seeds is a precision fix on the pre-registered
+# endpoint, NOT a wider arm grid.
+export CALIB_N_SEEDS=${CALIB_N_SEEDS:-24}
 export CALIB_HEAD=linear
 export CALIB_SAFE_THRESHOLDS=1
 export CALIB_ANCHORED=0
@@ -76,7 +85,8 @@ export HF_HOME="/exp/$USER/.cache/huggingface"
 # Analysis is cross-arm and runs once, by hand, after all seven drain.
 export CALIB_ANALYZE=${CALIB_ANALYZE:-noop.py}
 
-mkdir -p "$CALIB_EXP/logs"
+RESULTS_ROOT="${RESULTS_ROOT:-$CALIB_EXP/results}"
+mkdir -p "$CALIB_EXP/logs" "$RESULTS_ROOT"
 
 if [[ ! -f "$CALIB_EXP/results/prepare_info.json" ]]; then
   echo "ERROR: no prepare_info.json at $CALIB_EXP/results" >&2; exit 1
@@ -105,7 +115,7 @@ for arm in prod acq_m1 acq_m2 acq_m3 acq_m4 acq_p2 rank_pin; do
   export CALIB_ACQ_RANK_PERCENTILE=""
   [[ "$inc" != "-" ]] && export CALIB_ACQ_INCLUSION_OFFSET="$inc"
   [[ "$pct" != "-" ]] && export CALIB_ACQ_RANK_PERCENTILE="$pct"
-  export CALIB_RESULTS="$CALIB_EXP/results/$arm"
+  export CALIB_RESULTS="$RESULTS_ROOT/$arm"
   mkdir -p "$CALIB_RESULTS/cells"
   ln -sfn "$CALIB_EXP/results/prepare_info.json" "$CALIB_RESULTS/prepare_info.json"
   ln -sfn "$CALIB_EXP/results/crops" "$CALIB_RESULTS/crops"
