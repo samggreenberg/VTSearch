@@ -158,11 +158,17 @@ and they beat the constant 18 to 6.
    is probably an improvement for the user, but it is a change to what the
    interface implies, and the #2847 regression this run fixes got in precisely
    as an unnoticed side effect of a change made for another reason.
-4. **Run the generalisation check.** The plan pre-registered a second
-   environment (`visual_genome_m × siglip`, region voting) *conditional on this
-   result being positive*. It is. #2861 showed this family of answers does not
-   always transfer between voting modes, and everything here is COCO binary
-   voting in one embedder.
+4. ~~**Run the generalisation check.**~~ **Done — and it did not transfer.
+   See [`REPORT_REGION_VOTING.md`](REPORT_REGION_VOTING.md) (issue #2877).** On
+   `visual_genome_m × siglip` region voting the *mechanism* reproduces exactly:
+   the lever moves further (+0.121 vs +0.058), positives go 6 → 12, the
+   falsifier falsifies, and the adaptive ramp is identical. But `-3` **fails
+   this ship rule there** — cost CI [+0.003, +0.022] against a +0.01 tolerance —
+   because aggressive acquisition sharpens the *top* of the ranking (AP +0.012,
+   p<1e-5) while degrading its *global* separability (oracle cost +0.015), and
+   reported cost follows the second. Only `k=-1` passes. #2861's warning was
+   right; the recommendation is now to gate the offset by voting mode rather
+   than ship one global value.
 
 ## Figures
 
