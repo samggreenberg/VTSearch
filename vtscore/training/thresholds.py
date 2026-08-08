@@ -105,14 +105,40 @@ def inclusion_cost_weights(inclusion_value: int) -> tuple[float, float]:
 #: weights: a *negative* offset prices false alarms higher, *raises* the cut,
 #: moves it *up* the ranking, and so returns *more* positives.
 #:
-#: ``-3`` is the measured interior optimum
-#: (``docs/experiments/acquisition-inclusion/REPORT.md``, PR #2876): positives
-#: found per 100 votes 4 -> 18, final cost 0.137 -> 0.129 (paired median -0.011,
-#: 95% CI [-0.025, -0.005], p=8e-5), average precision 0.696 -> 0.817, deep-spike
-#: incidence unchanged.  ``-4`` buys one more positive for 0.005 more cost and
-#: nudges spikes up; the falsification arm at ``+2`` made everything worse, which
-#: is what makes the rest interpretable.
-ACQUISITION_INCLUSION_OFFSET = -3
+#: ``-1`` is the only value that passes the pre-registered ship rule in **all
+#: three** environments measured, and this constant is deliberately **not** gated
+#: by voting mode.  The history is worth keeping, because the first answer was
+#: bigger and did not survive:
+#:
+#: * ``coco_val x siglip2`` (binary, PR #2876) found an interior optimum at
+#:   ``-3``: positives per 100 votes 4 -> 18, final cost 0.137 -> 0.129 (95% CI
+#:   [-0.025, -0.005]), average precision 0.696 -> 0.817.  #2878 shipped it.
+#: * ``visual_genome_m x siglip`` (binary, PR #2891) **rejected** ``-3``: cost CI
+#:   [+0.003, +0.022] against a +0.01 tolerance.  Only ``-1`` passed.
+#: * ``visual_genome_m x dinov3_patch`` (REGION voting, PR #2905) passes ``-3``
+#:   on the ship rule - but the mechanism ``-3`` was justified by is **absent**
+#:   there.  Paired on the same 536 cells, ``k=-3`` moves average precision
+#:   +0.0283 under binary voting and **+0.0003** under region voting
+#:   (difference-in-differences -0.0281, CI [-0.0361, -0.0202]), while the cost
+#:   side - oracle cost rising as the ranking's tail blurs - is present in both.
+#:
+#: So the disagreement runs along the *environment*, not the voting mode: the
+#: largest split (``-3`` ships on COCO, fails on VG) is **within** binary voting,
+#: which no mode gate can reach.  ``-1`` is the value with no measured harm
+#: anywhere.  Do not raise this without a fourth environment; do not gate it by
+#: mode without evidence that mode - and not label supply - is the axis.
+#:
+#: **The known cost of this conservatism**: on a starved COCO-like environment
+#: ``-1`` finds 6 positives per 100 votes where ``-3`` finds 18.  Under binary
+#: voting the benefit is sharply concentrated in *starved* cells and turns
+#: negative in well-supplied ones (measured on arm-independent axes: AP response
+#: slope -0.0207 on log prevalence, CI [-0.0259, -0.0159]).  A **supply-dependent**
+#: offset - aggressive while positives are scarce, relaxing as they accumulate -
+#: is the way to recover COCO's gain without charging the other environments'
+#: tails, and it subsumes the voting-mode question entirely.
+#:
+#: See ``docs/experiments/acquisition-inclusion/REPORT_REGION_VOTING.md``.
+ACQUISITION_INCLUSION_OFFSET = -1
 
 
 def acquisition_inclusion(inclusion_value: int, offset: int = ACQUISITION_INCLUSION_OFFSET) -> int:
