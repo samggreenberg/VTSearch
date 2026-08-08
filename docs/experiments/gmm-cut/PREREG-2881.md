@@ -150,5 +150,9 @@ it would justify one larger run at α = 0.158 alone.
 - At inclusion 0 the cost weights are (1, 1), so `rate` and `priorfree` are the
   same rule in the comparison tables — as in both prior reports. The tail rules
   have no cost-weight dependence at all, which is a difference worth remembering
-  when reading them next to the tilted ones.
+  when reading them next to the tilted ones. It also means the `*_rate` arms'
+  midpoint substitution (#2900) is not in play: at inclusion 0 those rows are
+  `priorfree` rows, and `priorfree` has no shipped continuation to diverge from.
+  Read `cut_fallback_kind` before carrying any `*_rate` contrast to a non-zero
+  Inclusion run.
 - Every contrast is within-step, so none of it sees acquisition feedback.

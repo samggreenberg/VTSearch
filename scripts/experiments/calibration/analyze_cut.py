@@ -629,29 +629,48 @@ def evt_evidence(diag: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
 
 
 def fallback_reasons(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
-    """Why each rule declined to fire, per arm per variant (issue #2846).
+    """Why each rule declined to fire and what it cut instead, per arm per variant.
 
-    ``cut_fallback`` says a rule declined to fire on that fit; this says *which*
-    guard sent it there, which is the whole difference between "the fit was
-    sound but oriented the other way" (repairable, and what ``gumbel_any_*``
-    repairs) and "the two components collapsed onto each other" (a statement
-    about that step's score distribution, which no solver can fix).
+    Two columns, answering two different questions about the same event
+    (issues #2846, #2900):
 
-    What the flag means depends on which family emitted the row: for the
-    ``_SAFE_GMM_VARIANTS`` arms it is "degraded to that fit's midpoint", while
-    for the label-anchored arms it is the production rule's own "no interior
-    stationary point" flag, where the cut is continued past the component mean
-    rather than replaced.  The flag fires on the same fits either way, so rates
-    and filters are comparable; the substituted *value* is not.
+    ``cut_fail_reason`` is *which guard sent it there* - the whole difference
+    between "the fit was sound but oriented the other way" (repairable, and what
+    ``gumbel_any_*`` repairs) and "the two components collapsed onto each other"
+    (a statement about that step's score distribution, which no solver can fix).
+    Only the EVT rules have a reason vocabulary; the Gaussian ones report ``""``.
+
+    ``cut_fallback_kind`` is *what was substituted*, which is not the same
+    question and does not have the same answer in both families.  For the
+    ``_SAFE_GMM_VARIANTS`` arms it is ``midpoint``: that family compares tilts
+    against each other on one fit, so a rule with no root gets a neutral,
+    rule-independent stand-in.  For the label-anchored arms it is the production
+    rule's own branch - ``continued`` (the cut carried past the component mean
+    at the rule's first-order slope, still moving with the cost tilt) or
+    ``degenerate_midpoint`` (a fit too degenerate to express a boundary at all).
+    The flag fires on the same fits in both families, so ``fallback_rate``
+    aggregates and ``cut_fallback == 0/1`` filters stay comparable across them;
+    the substituted *value* does not, which is what this column exposes.  **A
+    contrast that reads a ``*_rate`` arm as "what the app would have done" must
+    exclude the ``midpoint`` rows**, since on those steps the arm is scoring a
+    stand-in the app never cuts at.
 
     Emitted **per window**, plus an ``all_steps`` row set.  Every other table
     here is windowed, so a bare all-steps count invited exactly the mistake
     #2846's report had to warn about in prose: reading these counts next to a
     ramp-window fallback *rate* and treating them as the same population.
     """
-    if "cut_fail_reason" not in df:
+    has_reason = "cut_fail_reason" in df
+    has_kind = "cut_fallback_kind" in df
+    if not (has_reason or has_kind):
         return pd.DataFrame()
-    fell = df[(df["cut_fallback"] == 1) & (df["cut_fail_reason"].astype(str) != "")]
+    df = df.copy()
+    # A frame emitted before either column existed is still analyzable - this
+    # study's whole point is comparing against those numbers - so fill the
+    # missing side rather than dropping the table.
+    for col in ("cut_fail_reason", "cut_fallback_kind"):
+        df[col] = df[col].fillna("").astype(str) if col in df else ""
+    fell = df[df["cut_fallback"] == 1]
     if fell.empty:
         return pd.DataFrame()
     out = []
@@ -662,7 +681,7 @@ def fallback_reasons(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
         if sub.empty:
             continue
         g = (
-            sub.groupby(["arm", "gmm_variant", "cut_fail_reason"])
+            sub.groupby(["arm", "gmm_variant", "cut_fallback_kind", "cut_fail_reason"])
             .size()
             .reset_index(name="n_steps")
             .sort_values(["arm", "gmm_variant", "n_steps"], ascending=[True, True, False])
@@ -1091,7 +1110,7 @@ def write_report(summary: dict, tables: dict, report_path: Path) -> None:
         ("Decomposition (threshold units)", "decomposition"),
         ("Decomposition (excess-cost units)", "cost_decomposition"),
         ("Extreme-value evidence", "evt"),
-        ("Why each rule fell back (issue #2846)", "fallback_reasons"),
+        ("Why each rule fell back, and to what (issues #2846, #2900)", "fallback_reasons"),
         ("Estimator variance (within-cell)", "estimator_variance"),
     ):
         tbl = tables.get(key)

@@ -66,7 +66,53 @@ from vtscore.training.evt_mixture import (
     fit_gumbel_normal_mixture_state,
     gaussian_mixture_mean_loglik,
 )
-from vtscore.training.thresholds import GmmFit1D, fit_score_gmm, gmm_fit_array
+from vtscore.training.thresholds import (
+    CUT_KIND_CONTINUED,
+    CUT_KIND_DEGENERATE_MIDPOINT,
+    CUT_KIND_INTERIOR,
+    GmmFit1D,
+    fit_score_gmm,
+    gmm_fit_array,
+)
+
+#: ``cut_fallback_kind`` when *this* module's decomposition family substituted
+#: the fit's own midpoint for a rule that has no root (issue #2900).  The
+#: substitution is deliberately **rule-independent**: the family's job is to
+#: compare tilts against each other on one fit, so every rule that misses gets
+#: the same neutral stand-in rather than each rule's own extrapolation.  That is
+#: what keeps ``rate`` comparable to its ``cross``/``priorfree`` siblings - and
+#: at inclusion 0, where the cost weights are ``(1, 1)``, it is what keeps
+#: ``rate`` *identical* to ``priorfree`` by construction, an identity every
+#: report in ``docs/experiments/gmm-cut/`` reads its ``*_rate`` rows through.
+#:
+#: Production does not do this.  It is not a bug on either side; the two answer
+#: different questions, and this value in the emitted rows is what lets an
+#: analyzer tell them apart instead of pooling both under ``cut_fallback == 1``.
+CUT_KIND_MIDPOINT: str = "midpoint"
+
+#: The whole ``cut_fallback_kind`` vocabulary, across both families.  Empty
+#: means the rule found an interior stationary point and nothing was
+#: substituted; the rest name which path produced the cut:
+#:
+#: ================================  =====================  ====================
+#: value                             emitted by             cut is
+#: ================================  =====================  ====================
+#: ``""``                            both                   the rule's own root
+#: ``"midpoint"``                    decomposition family   that fit's midpoint
+#: ``"continued"``                   production rule        continued past an
+#:                                                          inter-mean edge
+#: ``"degenerate_midpoint"``         production rule        that fit's midpoint
+#: ================================  =====================  ====================
+#:
+#: ``"midpoint"`` and ``"degenerate_midpoint"`` are both midpoints but are not
+#: the same event: the first is a measurement policy applied to a sound fit, the
+#: second is a fit too degenerate for any rule to cut.
+CUT_FALLBACK_KINDS: tuple[str, ...] = (
+    CUT_KIND_INTERIOR,
+    CUT_KIND_MIDPOINT,
+    CUT_KIND_CONTINUED,
+    CUT_KIND_DEGENERATE_MIDPOINT,
+)
 
 #: Sigmoid scores are clipped into ``[eps, 1-eps]`` before the logit transform so
 #: saturated scores stay finite.
@@ -185,7 +231,10 @@ def gaussian_cuts(fit: GmmFit1D, fpr_weight: float, fnr_weight: float) -> dict[s
     interval at the rule's own first-order slope, so it never stops moving with
     the cost tilt.  This function keeps reporting NaN because the decomposition
     is measuring *where the stationary point sits*, and "there is none" is the
-    honest answer to that question.
+    honest answer to that question.  The divergence is deliberate and is
+    recorded per row in ``cut_fallback_kind`` (:data:`CUT_KIND_MIDPOINT` vs
+    :data:`CUT_KIND_CONTINUED`), so an analysis that needs the shipped path can
+    exclude the substituted steps rather than mistake them for it (#2900).
     """
     return {
         "mid": _finite(fit.midpoint()),

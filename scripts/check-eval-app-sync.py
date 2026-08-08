@@ -199,6 +199,35 @@ MIRRORS: list[Mirror] = [
             "something else, that condition has to reach the harness too."
         ),
     ),
+    Mirror(
+        id="thresholds.rate_cut_no_root",
+        app="py:vtscore.training.thresholds._rate_cut",
+        harness="vtscore/eval/cut_rules.py::gaussian_cuts",
+        kind="default",
+        note=(
+            "What the 'rate' rule does on a fit whose density crossing has no root between the "
+            "component means. This has moved twice already - midpoint (pre-2026-08-06), bare "
+            "edge, then continued past the edge at the rule's first-order slope (#2896) - and "
+            "each move silently changed what the harness's *_rate arms mean relative to the "
+            "app. Pinned so the next move prompts a decision instead of going unnoticed for "
+            "days, which is exactly how #2900 happened."
+        ),
+        divergence=(
+            "INTENTIONAL, decided in #2900: gaussian_cuts reports NaN and _safe_gmm_variant_rows "
+            "substitutes that fit's MIDPOINT, where production continues past the component "
+            "mean. The decomposition family compares cut rules against each other on one fit, so "
+            "it wants a neutral, rule-independent stand-in - production's continuation exists "
+            "only for 'rate' and would make it incomparable to its cross/priorfree siblings (at "
+            "inclusion 0 it would break the rate == priorfree identity every report in "
+            "docs/experiments/gmm-cut/ relies on). The divergence is recorded per row in "
+            "cut_fallback_kind ('midpoint' vs 'continued'/'degenerate_midpoint'), so an analysis "
+            "that needs the shipped path filters on it. The fold-anchored family calls "
+            "gmm_cut_from_fit directly and is the faithful stand-in for the app. When re-pinning "
+            "this mirror, re-check that the divergence is still the one you want AND that "
+            "cut_fallback still fires on the same fits in both families - the flag being "
+            "comparable is what keeps fallback_rate aggregates joinable across them."
+        ),
+    ),
 ]
 
 

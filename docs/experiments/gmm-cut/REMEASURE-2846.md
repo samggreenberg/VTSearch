@@ -240,7 +240,12 @@ run rules out is one particular way of trying to claim it.
   0 failures, 0 zero-byte outputs; nothing was dropped from the analysis.
 - At inclusion 0 the cost weights are (1, 1), so `rate` and `priorfree` are the
   **same rule** here — every `*_rate` row in the tables above is identical to its
-  `*_priorfree` sibling by construction, not by coincidence.
+  `*_priorfree` sibling by construction, not by coincidence. This is also why
+  the `_SAFE_GMM_VARIANTS` midpoint substitution (#2900), which diverges from
+  the shipped `rate` rule's continuation past the component mean, cannot have
+  moved any number here: these `*_rate` rows are `priorfree` rows, and
+  `priorfree` has no shipped counterpart. It would bite a run at non-zero
+  Inclusion, where `cut_fallback_kind` now separates the substituted steps.
 - Every contrast is within-step, so none of it sees acquisition feedback.
 - **The one result that could flip with more data** is finding 2's `priorfree`
   conditional effect: it is genuine (p = 8e−4 pooled) but it fires on 5 % of

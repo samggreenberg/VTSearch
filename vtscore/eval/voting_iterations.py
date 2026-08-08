@@ -53,6 +53,7 @@ from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.mlp import LINEAR_HEAD, _auto_hidden_dim, train_model
 from vtscore.training.thresholds import (
     ACQUISITION_INCLUSION_OFFSET,
+    CUT_KIND_INTERIOR,
     acquisition_inclusion,
     anchored_gmm_fit,
     calculate_safe_threshold,
@@ -179,6 +180,7 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     "gmm_cut",
     "blend_weight",
     "cut_fallback",
+    "cut_fallback_kind",
     "cut_fail_reason",
     "raw_cut_cost",
     "raw_cut_fpr",
@@ -681,7 +683,11 @@ def _operating_metrics(
         "fold_seconds": nan,
         "n_cal_scores": nan,
         # Cut-rule study columns (issue #2836); only the variant rows set them.
+        # ``cut_fallback_kind`` says *what was substituted* where ``cut_fallback``
+        # only says *that* something was, which the two emitting families answer
+        # differently on the same fits (issue #2900).
         "cut_fallback": 0,
+        "cut_fallback_kind": CUT_KIND_INTERIOR,
         "cut_fail_reason": "",
         "raw_cut_cost": nan,
         "raw_cut_fpr": nan,
@@ -800,8 +806,19 @@ def _safe_gmm_variant_rows(
     (:func:`~vtscore.training.thresholds.gmm_cut_from_fit`) continues past the
     inter-mean interval at its own first-order slope instead, so on the fits
     where this flag fires these arms are measuring a different rule than the
-    app runs.  The fold-anchored family below calls the production function
-    directly and so does not have that gap.  For the EVT rules
+    app runs.  That divergence is **kept on purpose** (issue #2900): this family
+    compares tilts against each other on one fit, and a rule-independent
+    stand-in is what keeps ``rate`` commensurable with the ``cross`` and
+    ``priorfree`` siblings it is differenced against - at inclusion 0 it is what
+    keeps ``rate`` bit-identical to ``priorfree``, which is how every report in
+    ``docs/experiments/gmm-cut/`` reads those rows.  It is no longer *invisible*
+    though: ``cut_fallback_kind`` carries
+    :data:`~vtscore.eval.cut_rules.CUT_KIND_MIDPOINT` on exactly these steps,
+    against the production family's ``continued`` / ``degenerate_midpoint``, so
+    an analysis that wants the shipped path can filter for it instead of reading
+    a substituted midpoint as "what the app would have done".  The fold-anchored
+    family below calls the production function directly and so does not have
+    that gap at all.  For the EVT rules
     ``cut_fail_reason`` additionally names *which* guard declined, because the
     repairs those guards want are different and the counts alone cannot tell them
     apart (issue #2846).  The oracle variants do not fall back; they emit NaN cuts
@@ -814,7 +831,7 @@ def _safe_gmm_variant_rows(
     import numpy as np  # noqa: PLC0415
 
     from vtscore.eval.calibration_metrics import inclusion_weights, operating_cost  # noqa: PLC0415
-    from vtscore.eval.cut_rules import decomposition_cuts  # noqa: PLC0415
+    from vtscore.eval.cut_rules import CUT_KIND_MIDPOINT, decomposition_cuts  # noqa: PLC0415
     from vtscore.training.thresholds import blend_gmm_threshold, safe_blend_weight  # noqa: PLC0415
 
     xcal = float(details["xcal_threshold"])
@@ -859,6 +876,7 @@ def _safe_gmm_variant_rows(
     rows: list[dict[str, Any]] = []
     for name, geometry, rule in _SAFE_GMM_VARIANTS:
         fallback = 0
+        fallback_kind = CUT_KIND_INTERIOR
         fail_reason = ""
         if name == "xcal_only":
             threshold = xcal
@@ -869,6 +887,7 @@ def _safe_gmm_variant_rows(
             if not np.isfinite(gmm_cut) and name not in _ORACLE_VARIANTS:
                 gmm_cut = cuts_by_geometry[geometry].get("mid", nan)
                 fallback = 1
+                fallback_kind = CUT_KIND_MIDPOINT
                 # Empty for the Gaussian rules, which have no reason vocabulary;
                 # the EVT rules name the guard that declined so a fallback can be
                 # attributed rather than merely counted (issue #2846).
@@ -894,6 +913,7 @@ def _safe_gmm_variant_rows(
         row["gmm_cut"] = _r(gmm_cut)
         row["blend_weight"] = _r(weight)
         row["cut_fallback"] = fallback
+        row["cut_fallback_kind"] = fallback_kind
         row["cut_fail_reason"] = fail_reason
         if np.isfinite(gmm_cut):
             raw_cost, raw_fpr, raw_fnr = operating_cost(base_scores, base_labels, gmm_cut, wf, wn)
@@ -1174,7 +1194,13 @@ def _anchored_variant_rows(
 
     rows: list[dict[str, Any]] = []
 
-    def emit(name: str, threshold: float, provenance: str, cut_fallback: int) -> None:
+    def emit(name: str, threshold: float, provenance: str, cut_kind: str) -> None:
+        """Record one anchored arm.  *cut_kind* is the production rule's own
+        ``cut_fallback_kind`` (:func:`~vtscore.training.thresholds.gmm_cut_from_fit`),
+        so these rows say ``continued`` / ``degenerate_midpoint`` where the
+        decomposition family says ``midpoint`` - the two substitute different
+        values on the same fits (issue #2900).
+        """
         if not np.isfinite(threshold):
             return
         row = _operating_metrics(
@@ -1192,7 +1218,8 @@ def _anchored_variant_rows(
         row["xcal_threshold"] = _r(xcal)
         row["gmm_cut"] = _r(threshold)
         row["blend_weight"] = nan
-        row["cut_fallback"] = cut_fallback
+        row["cut_fallback"] = int(bool(cut_kind))
+        row["cut_fallback_kind"] = cut_kind
         raw_cost, raw_fpr, raw_fnr = operating_cost(base_scores, base_labels, threshold, wf, wn)
         row["raw_cut_cost"] = _r(raw_cost)
         row["raw_cut_fpr"] = _r(raw_fpr)
@@ -1211,8 +1238,8 @@ def _anchored_variant_rows(
                 # family below sweeps it; here it is skipped rather than fed to
                 # gmm_cut_from_fit, which (correctly) rejects it.
                 continue
-            cut, fell_back = gmm_cut_from_fit(fit, rule, wf, wn)
-            emit(f"anchored_w{weight:g}_{rule}", cut, provenance, fell_back)
+            cut, cut_kind = gmm_cut_from_fit(fit, rule, wf, wn)
+            emit(f"anchored_w{weight:g}_{rule}", cut, provenance, cut_kind)
 
     # --- Fold-anchored family + the rank-transfer attribution arm. ---
     if fold_anchored and fold_haystacks and fold_orderings:
@@ -1232,7 +1259,7 @@ def _anchored_variant_rows(
 
 
 def _emit_fold_anchored_rows(
-    emit: Callable[[str, float, str, int], None],
+    emit: Callable[[str, float, str, str], None],
     xcal: float,
     fold_haystacks: list,
     fold_orderings: list[tuple[list[float], list[float]]],
@@ -1255,6 +1282,14 @@ def _emit_fold_anchored_rows(
     :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold` the app
     ships; the grid *is* the deviation under test, so the arm at the production
     (κ, rule, combine) reproduces the shipped cut exactly.
+
+    These rows carry no ``cut_fallback_kind``: a fold-anchored threshold is
+    composed from one per-fit cut *per fold* in quantile space, so there is no
+    single fit whose fallback branch the row could name.  A per-fold breakdown
+    would be a different column with a different unit of observation, and the
+    ``mid_tilt`` rule the app ships already degrades a rate-less fold to plain
+    ``mid`` rather than to a substituted value (see
+    :meth:`~vtscore.training.thresholds.FoldAnchoredCut._quantile_at`).
     """
     import numpy as np  # noqa: PLC0415
 
@@ -1265,7 +1300,7 @@ def _emit_fold_anchored_rows(
         "rank_transfer",
         rank_transfer(xcal, np.concatenate(fold_hay), final_scores),
         "rank_transfer",
-        0,
+        CUT_KIND_INTERIOR,
     )
     for weight in weights:
         for rule in rules:
@@ -1279,7 +1314,7 @@ def _emit_fold_anchored_rows(
                     cut_rule=rule,
                     combine=combine,
                 )
-                emit(f"fold_anchored_w{weight:g}_{rule}_{combine}", threshold, provenance, 0)
+                emit(f"fold_anchored_w{weight:g}_{rule}_{combine}", threshold, provenance, CUT_KIND_INTERIOR)
 
 
 def _calibration_metric_rows(
