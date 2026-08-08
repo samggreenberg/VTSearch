@@ -135,7 +135,7 @@ def inclusion_cost_weights(inclusion_value: int) -> tuple[float, float]:
 #: slope -0.0207 on log prevalence, CI [-0.0259, -0.0159]).  A **supply-dependent**
 #: offset - aggressive while positives are scarce, relaxing as they accumulate -
 #: is the way to recover COCO's gain without charging the other environments'
-#: tails, and it subsumes the voting-mode question entirely.
+#: tails, and it subsumes the voting-mode question entirely (#2910).
 #:
 #: See ``docs/experiments/acquisition-inclusion/REPORT_REGION_VOTING.md``.
 ACQUISITION_INCLUSION_OFFSET = -1

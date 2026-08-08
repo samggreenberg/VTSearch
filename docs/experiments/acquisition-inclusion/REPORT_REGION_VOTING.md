@@ -244,7 +244,7 @@ binary voting the benefit is sharply concentrated in starved cells and turns
 its own positive count at run time. An offset that is aggressive while starved
 and relaxes as positives accumulate would capture COCO's 4.5× gain without
 charging VG's tail — and it subsumes the mode question, since mode only ever
-entered through supply. Filed as the follow-up.
+entered through supply. Filed as **#2910**.
 
 ## If the gate is built anyway — the implementation the issue proposed is wrong
 
