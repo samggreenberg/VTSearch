@@ -239,6 +239,11 @@ def build_summary(traj: pd.DataFrame, prov: dict) -> dict:
             "final_cost": _paired(traj, "final_cost", arm),
             "mean_cost_warm": _paired(traj, "mean_cost_warm", arm),
             "final_oracle_cost": _paired(traj, "final_oracle_cost", arm),
+            # Average precision is what separates "the extra labels taught the
+            # model something" from "they were redundant" - the plan's H2. It was
+            # only ever read as a marginal median, which cannot answer that; the
+            # #2877 region-voting run is where the two readings come apart.
+            "final_ap": _paired(traj, "final_ap", arm),
             "deep_incidence": _mcnemar(traj, arm, "has_deep"),
             "genuine_incidence": _mcnemar(traj, arm, "has_genuine"),
         }
@@ -439,7 +444,7 @@ def write_report(summary: dict, figs: list[str], outdir: Path) -> Path:
         c = summary["contrasts_vs_control"].get(arm)
         if not c:
             continue
-        for metric in ("positives_100", "final_cost", "mean_cost_warm", "final_oracle_cost"):
+        for metric in ("positives_100", "final_cost", "mean_cost_warm", "final_oracle_cost", "final_ap"):
             r = c[metric]
             if not r.get("n_pairs"):
                 continue
