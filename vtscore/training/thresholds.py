@@ -241,6 +241,22 @@ def _weighted_gaussian_crossing(
     return mu_lo + max(inside)
 
 
+#: ``cut_fallback_kind`` when the rule found an interior stationary point, i.e.
+#: nothing was substituted or continued and the cut *is* the root.
+CUT_KIND_INTERIOR: str = ""
+#: ``cut_fallback_kind`` when the crossing ran off the inter-mean interval and
+#: the cut was continued past that edge at the rule's own first-order slope.
+#: The cut still moves with the cost tilt; it is simply no longer a stationary
+#: point of the rate loss.
+CUT_KIND_CONTINUED: str = "continued"
+#: ``cut_fallback_kind`` when the fit is too degenerate to express a boundary at
+#: all (non-positive weights/variances, non-ordered means) and the rule returned
+#: the plain midpoint.  Distinct from :data:`CUT_KIND_CONTINUED` because the cut
+#: is then *constant* in the cost tilt - the failure mode issue #2896 removed
+#: everywhere it could be removed.
+CUT_KIND_DEGENERATE_MIDPOINT: str = "degenerate_midpoint"
+
+
 def _rate_cut(
     w_lo: float,
     mu_lo: float,
@@ -250,12 +266,18 @@ def _rate_cut(
     var_hi: float,
     *,
     lam: float,
-) -> tuple[float, int]:
+) -> tuple[float, str]:
     """The rate-optimal cut: a **sup** over the inter-mean interval, continued
     past the edges at the rule's own first-order slope so it is **strictly**
     monotone in *lam* everywhere.
 
-    ``(cut, no_interior_stationary_point)``.  Inside the interval the cut is
+    ``(cut, kind)``, where *kind* is one of :data:`CUT_KIND_INTERIOR`,
+    :data:`CUT_KIND_CONTINUED` or :data:`CUT_KIND_DEGENERATE_MIDPOINT` - empty
+    exactly when an interior stationary point existed, so ``bool(kind)`` is the
+    "no interior stationary point" flag, and the non-empty values say *how* the
+    cut was produced instead.  The distinction matters to anything auditing the
+    rule: a continued cut still answers the Inclusion knob, a degenerate
+    midpoint does not (issue #2900).  Inside the interval the cut is
 
         ``sup { x in [mu_lo, mu_hi] : w_lo*N_lo(x) >= lam*w_hi*N_hi(x) }``
 
@@ -298,9 +320,9 @@ def _rate_cut(
     """
     mid = (mu_lo + mu_hi) / 2.0
     if not (w_lo > 0.0 and w_hi > 0.0 and var_lo > 0.0 and var_hi > 0.0 and lam > 0.0):
-        return mid, 1
+        return mid, CUT_KIND_DEGENERATE_MIDPOINT
     if not (mu_hi > mu_lo):
-        return mid, 1
+        return mid, CUT_KIND_DEGENERATE_MIDPOINT
 
     # Same shifted quadratic as ``_weighted_gaussian_crossing`` (u = x - mu_lo,
     # interval (0, d)): ``g(u) > 0`` means the Bad component owns that score.
@@ -322,7 +344,7 @@ def _rate_cut(
     # as ``lam`` falls - so the continuation leaves the edge without a step.
     excess = offset - 0.5 * d * d / var_lo
     if excess >= 0.0:
-        return mu_hi + slope * excess, 1
+        return mu_hi + slope * excess, CUT_KIND_CONTINUED
 
     inside = [u for u in _quadratic_roots(a, b, c) if math.isfinite(u) and 0.0 <= u < d]
     if not inside:
@@ -330,8 +352,8 @@ def _rate_cut(
         # ``c = g(0) <= 0`` (a positive g(0) with g(d) < 0 forces a root
         # inside), and ``-c`` is the log-cost margin by which Good is ahead at
         # the Bad mean - the mirror-image continuation below ``mu_lo``.
-        return mu_lo - slope * max(0.0, -c), 1
-    return mu_lo + max(inside), 0
+        return mu_lo - slope * max(0.0, -c), CUT_KIND_CONTINUED
+    return mu_lo + max(inside), CUT_KIND_INTERIOR
 
 
 @dataclass(frozen=True)
@@ -660,8 +682,13 @@ def anchored_gmm_fit(
     return None, f"gmm_failed:{provenance}"
 
 
-def gmm_cut_from_fit(fit: GmmFit1D, rule: str, fpr_weight: float = 1.0, fnr_weight: float = 1.0) -> tuple[float, int]:
-    """Apply a named cut *rule* to *fit*; ``(cut, no_interior_stationary_point)``.
+def gmm_cut_from_fit(fit: GmmFit1D, rule: str, fpr_weight: float = 1.0, fnr_weight: float = 1.0) -> tuple[float, str]:
+    """Apply a named cut *rule* to *fit*; ``(cut, kind)``.
+
+    *kind* is the ``cut_fallback_kind`` vocabulary above - empty exactly when
+    the rule found an interior stationary point, so ``bool(kind)`` is the "no
+    interior stationary point" flag and the value names *how* the cut was
+    produced otherwise.
 
     ``"mid"`` is the historical midpoint; ``"rate"`` is the rate-optimal
     crossing at the given cost weights (see :meth:`GmmFit1D.rate_crossing`).
@@ -670,9 +697,12 @@ def gmm_cut_from_fit(fit: GmmFit1D, rule: str, fpr_weight: float = 1.0, fnr_weig
     **sup** rather than a bare root so it stays monotone in the cost ratio
     even on fits where the root enters and leaves the inter-mean interval, and
     continues past the interval edges at the rule's first-order slope so it
-    never flattens (issue #2896); the flag marks the cases with no interior
+    never flattens (issue #2896); the kind marks the cases with no interior
     stationary point.  The value is the stationary point wherever one exists,
     so this is the rule the #2836 / #2852 measurements scored.
+
+    ``"mid"`` never reports a kind: the midpoint of two means is defined for
+    every fit, so it has no fallback branch to distinguish.
 
     ``"mid_tilt"`` (the shipped fold-level rule, :data:`FOLD_ANCHOR_CUT_RULE`)
     is deliberately *not* accepted here: it is defined in fold-quantile space
@@ -681,10 +711,10 @@ def gmm_cut_from_fit(fit: GmmFit1D, rule: str, fpr_weight: float = 1.0, fnr_weig
     form for this function to apply.
     """
     if rule == "mid":
-        return fit.midpoint(), 0
+        return fit.midpoint(), CUT_KIND_INTERIOR
     if rule == "rate":
         if not (fpr_weight > 0.0 and fnr_weight > 0.0 and fit.w_hi > 0.0):
-            return fit.midpoint(), 1
+            return fit.midpoint(), CUT_KIND_DEGENERATE_MIDPOINT
         lam = (fnr_weight / fpr_weight) * (fit.w_lo / fit.w_hi)
         return _rate_cut(fit.w_lo, fit.mu_lo, fit.var_lo, fit.w_hi, fit.mu_hi, fit.var_hi, lam=lam)
     raise ValueError(f"unknown cut rule {rule!r}; expected 'mid' or 'rate'")
@@ -790,7 +820,7 @@ class FoldAnchoredCut:
         """Combined fold quantile of *rule*'s per-fold cuts at these cost weights."""
         quantiles = []
         for fit, src in zip(self.fits, self.fold_haystacks, strict=True):
-            cut, _fell_back = gmm_cut_from_fit(fit, rule, fpr_weight, fnr_weight)
+            cut, _kind = gmm_cut_from_fit(fit, rule, fpr_weight, fnr_weight)
             quantiles.append(float(np.searchsorted(src, cut, side="left")) / float(src.size))
         if self.combine == "qmean":
             return float(np.mean(quantiles))

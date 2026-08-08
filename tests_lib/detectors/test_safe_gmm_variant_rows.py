@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from vtscore.eval.cut_rules import CUT_KIND_MIDPOINT
 from vtscore.eval.voting_iterations import (
     _CALIBRATION_COLUMNS,
     _CUT_DIAGNOSTIC_COLUMNS,
@@ -24,7 +25,12 @@ from vtscore.eval.voting_iterations import (
     _SAFE_GMM_VARIANTS,
     simulate_voting_iterations,
 )
-from vtscore.training.thresholds import FOLD_ANCHOR_COMBINE, FOLD_ANCHOR_CUT_RULE, FOLD_ANCHOR_WEIGHT
+from vtscore.training.thresholds import (
+    CUT_KIND_INTERIOR,
+    FOLD_ANCHOR_COMBINE,
+    FOLD_ANCHOR_CUT_RULE,
+    FOLD_ANCHOR_WEIGHT,
+)
 
 # Reuse the synthetic planted-patch dataset builders from the Max-Patch tests.
 from .test_max_patch_style import _planted_dataset
@@ -195,6 +201,40 @@ class TestCutDiagnosticFrame:
             if r["cut_fallback"]:
                 continue  # the row reports the midpoint it fell back to
             assert r["gmm_cut"] == pooled[r["t"]][f"tau_{rule}"]
+
+    def test_a_fallen_back_row_names_the_midpoint_it_substituted(self):
+        """The divergence from production is kept, but it is no longer invisible.
+
+        This family substitutes the fit's own midpoint - a neutral,
+        rule-independent stand-in, which is what keeps ``rate`` commensurable
+        with the ``cross``/``priorfree`` siblings it is differenced against.
+        Production's ``rate`` continues past the component mean instead, so on
+        exactly these steps the arm is *not* a stand-in for the app.  The row
+        has to say which of the two it is, or an analysis that reads a
+        ``*_rate`` arm as "what the app would have done" is silently wrong on
+        them (issue #2900).
+        """
+        diag: list[dict] = []
+        rows = _run_safe("max_patch", diag_sink=diag)
+        pooled = {d["t"]: d for d in diag if d["geometry"] == "pooled"}
+        seen_fallback = 0
+        for r in rows:
+            if r["gmm_variant"] in ("xcal_only", *_ORACLE_VARIANTS) or not r["gmm_variant"].startswith(
+                ("pooled_", "image_")
+            ):
+                continue
+            kind = r["cut_fallback_kind"]
+            # This family has exactly two outcomes: the rule's own cut, or the
+            # midpoint.  It never continues, and it never reports production's
+            # degenerate branch.
+            assert kind in (CUT_KIND_INTERIOR, CUT_KIND_MIDPOINT), (r["gmm_variant"], kind)
+            assert r["cut_fallback"] == int(bool(kind))
+            if kind == CUT_KIND_MIDPOINT and r["gmm_variant"].startswith("pooled_"):
+                seen_fallback += 1
+                # The substituted value really is that fit's midpoint, not the
+                # rule's own extrapolation.
+                assert r["gmm_cut"] == pooled[r["t"]]["tau_mid"]
+        assert seen_fallback, "no rule fell back; the substitution path went unexercised"
 
     def test_prevalence_is_a_fraction(self):
         diag: list[dict] = []

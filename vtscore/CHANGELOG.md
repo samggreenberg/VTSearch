@@ -44,6 +44,16 @@ instead, since every commit on `dev` is effectively a new app release.)
   is the no-fusion control arm. `eval_learned_sort` / `run_eval` lost the
   parameter entirely - they delegate to the production trainer, which has no
   such mode.
+- **`gmm_cut_from_fit` returns `(cut, kind)` instead of `(cut, flag)`**, where
+  *kind* is one of `CUT_KIND_INTERIOR` (`""`), `CUT_KIND_CONTINUED` or
+  `CUT_KIND_DEGENERATE_MIDPOINT`. It is empty exactly when the old flag was 0,
+  so `bool(kind)` is the previous "no interior stationary point" boolean; the
+  non-empty values distinguish a cut *continued* past a component mean (still
+  moving with the cost tilt, still the rate rule) from a fit too degenerate to
+  express a boundary at all (a midpoint, constant in the tilt). Those two were
+  indistinguishable before, which made a fallback countable but not
+  attributable. **Breaking:** a caller comparing the second element to `0`/`1`
+  should compare to `""` or wrap in `bool()`.
 
 ### Removed
 

@@ -371,3 +371,16 @@ pre-vote and deterministic). At inclusion 0 the cost weights are (1, 1), so
 untested at non-zero Inclusion and needs its own trajectory arm. Every contrast
 is within-step, so none of this can see selection feedback; #2799 showed that
 effect is real and worth ~0.02 on its own, so the shipped gain is a lower bound.
+
+The `pooled_*` / `image_*` arms substitute the fit's own **midpoint** for a rule
+with no root, where the shipped `rate` rule continues past the component mean
+instead. That divergence is deliberate (#2900) — a rule-independent stand-in is
+what makes the tilts comparable to each other — and it does not touch any number
+above: at inclusion 0 these `*_rate` rows *are* the `*_priorfree` rows, and
+`priorfree` has no shipped counterpart to diverge from in the first place. It
+would matter to a future run at non-zero Inclusion, where a `*_rate` arm read as
+"what the app would have done" is wrong on the fallen-back steps. Runs from
+2026-08-08 onward carry `cut_fallback_kind` per row (`midpoint` here vs
+`continued` / `degenerate_midpoint` on the anchored arms) so those steps can be
+excluded; on this run's frames the column is absent and the family name is the
+only signal.
