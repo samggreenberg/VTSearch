@@ -568,6 +568,76 @@ def intercept_weight_loading_progress(callback: ProgressCallback, label: str = "
             setattr(obj, attr, orig)
 
 
+#: Key under which an embedder instance stashes its :class:`_ProgressSlot`.
+_PROGRESS_SLOT_KEY = "_progress_slot"
+
+
+class _ProgressSlot:
+    """Per-embedder progress state: a process-wide default + a per-thread override.
+
+    *default* is what :func:`vtscore.media.set_progress_callback` wires in once
+    at startup (the host application's progress sink); every thread sees it.
+    *local* carries the per-thread override installed by
+    :meth:`MediaEmbedder.progress_scope` (or a plain ``emb._on_progress = cb``
+    assignment) for the duration of one embed / model-load pass.
+    """
+
+    __slots__ = ("default", "local")
+
+    def __init__(self, default: ProgressCallback) -> None:
+        self.default = default
+        self.local = threading.local()
+
+
+def _progress_slot(emb: "MediaEmbedder") -> _ProgressSlot:
+    """Return *emb*'s :class:`_ProgressSlot`, creating it on first use.
+
+    Created lazily (rather than in ``__init__``) so an embedder subclass that
+    never calls ``super().__init__()`` still gets one.  ``dict.setdefault`` is
+    atomic under the GIL, so two threads racing to create the slot agree on a
+    single winner instead of one silently discarding the other's callback.
+    """
+    state = vars(emb)
+    slot = state.get(_PROGRESS_SLOT_KEY)
+    if slot is None:
+        slot = state.setdefault(_PROGRESS_SLOT_KEY, _ProgressSlot(_noop_progress))
+    return slot
+
+
+class _ThreadLocalProgress:
+    """Data descriptor backing :attr:`MediaEmbedder._on_progress`.
+
+    Embedders are process-wide singletons (``vtscore.media._embedder_registry``),
+    so a plain instance attribute made the progress callback shared mutable
+    state: two concurrent dataset loads on the same embedder would each assign
+    their own tracker callback, and the second assignment re-routed the *first*
+    load's still-running ``embed_media_bulk`` into the second load's tracker.
+    That mis-drew the progress bar and — because tracker callbacks call
+    ``check_cancelled()`` — let cancelling one load raise ``CancelledError``
+    inside the other's embed pass, aborting the wrong dataset.  Each pass's
+    ``finally`` then restored a callback captured before the other's assignment,
+    silencing whichever load was still running.
+
+    Reads and writes are therefore scoped to the calling thread: a write only
+    ever redirects the progress of embed / model-load calls made *by that
+    thread*, which is exactly what every save-and-restore call site wants.  A
+    thread that never assigned anything reads the process-wide default
+    (:meth:`MediaEmbedder.set_default_progress_callback`), so background work
+    with no explicit callback — the smart-preload thread, say — still reports
+    into the host application's progress sink.
+    """
+
+    def __get__(self, obj: "MediaEmbedder | None", objtype: type | None = None) -> Any:
+        if obj is None:
+            return self
+        slot = _progress_slot(obj)
+        cb = getattr(slot.local, "cb", None)
+        return slot.default if cb is None else cb
+
+    def __set__(self, obj: "MediaEmbedder", value: ProgressCallback | None) -> None:
+        _progress_slot(obj).local.cb = value
+
+
 class MediaEmbedder(ABC):
     """Abstract base class for media embedders.
 
@@ -592,12 +662,44 @@ class MediaEmbedder(ABC):
     # embedder type.
     _embed_lock = threading.Lock()
 
+    #: Progress sink for this embedder's model loads and bulk passes.  Reads
+    #: and writes are **per-thread** over a process-wide default; see
+    #: :class:`_ThreadLocalProgress` for why, and prefer :meth:`progress_scope`
+    #: over assigning it directly.
+    _on_progress: ProgressCallback = _ThreadLocalProgress()  # type: ignore[assignment]
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         cls._model_load_lock = threading.Lock()
 
-    def __init__(self) -> None:
-        self._on_progress: ProgressCallback = _noop_progress
+    def set_default_progress_callback(self, callback: ProgressCallback) -> None:
+        """Set the process-wide fallback progress sink for this embedder.
+
+        This is the callback every thread sees when it has not installed a
+        :meth:`progress_scope` of its own; :func:`vtscore.media.set_progress_callback`
+        calls it once at application startup.  Unlike assigning
+        :attr:`_on_progress` (which is thread-scoped by design), this is
+        deliberately visible across threads.
+        """
+        _progress_slot(self).default = callback
+
+    @contextlib.contextmanager
+    def progress_scope(self, callback: ProgressCallback):
+        """Route this embedder's progress to *callback* for the calling thread.
+
+        Restores whatever the calling thread had installed before (usually
+        nothing, meaning the process-wide default) on exit, including on
+        exception.  Other threads are unaffected for the whole scope, so two
+        concurrent dataset loads sharing this singleton embedder each keep
+        their own tracker.
+        """
+        slot = _progress_slot(self)
+        prev = getattr(slot.local, "cb", None)
+        slot.local.cb = callback
+        try:
+            yield
+        finally:
+            slot.local.cb = prev
 
     # ------------------------------------------------------------------
     # Identity

@@ -199,3 +199,36 @@ def setup_trainable_model_in_registry(name, good_ids, bad_ids, snap, media_type=
 
     entry = register_detector(name=name, media_type=media_type, num_training=len(labelset))
     return entry["id"]
+
+
+# ---------------------------------------------------------------------------
+# Mock embedder helpers
+# ---------------------------------------------------------------------------
+
+
+def wire_mock_progress_scope(emb):
+    """Give a ``MagicMock`` embedder a working ``progress_scope``.
+
+    Production code redirects an embedder's progress through
+    :meth:`~vtscore.media.embedder.MediaEmbedder.progress_scope` (thread-scoped,
+    so concurrent dataset loads sharing the singleton embedder can't cross
+    wires).  A bare ``MagicMock`` answers that call with another mock that
+    enters and exits without ever touching ``_on_progress``, so a mock whose
+    bulk/load hook reads ``self._on_progress`` would see its own stub instead of
+    the caller's tracker.  This installs the real set-then-restore contract.
+
+    Returns *emb* so it can wrap a factory call.
+    """
+    import contextlib  # noqa: PLC0415
+
+    @contextlib.contextmanager
+    def _scope(callback):
+        prev = emb._on_progress
+        emb._on_progress = callback
+        try:
+            yield
+        finally:
+            emb._on_progress = prev
+
+    emb.progress_scope = _scope
+    return emb

@@ -571,12 +571,8 @@ class TextMediaType(MediaType):
         # skip_embedding in load_demo_dataset).
         if not skip_embedding and getattr(embedder, "_model", None) is None:
             on_progress("loading", "Loading text embedding model…", 0, 0)
-            original_cb = embedder._on_progress
-            embedder._on_progress = on_progress
-            try:
+            with embedder.progress_scope(on_progress):
                 embedder.load_models()
-            finally:
-                embedder._on_progress = original_cb
 
         clip_id = max(clips.keys(), default=0) + 1
         total = len(selected_texts)

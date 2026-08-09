@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 import torch
 import torch.nn as nn
 
+from helpers import wire_mock_progress_scope
 from vtscore.media.embedder import (
     _hub_metadata_preflight,
     hf_token,
@@ -290,6 +291,7 @@ class TestPreloadConsoleOutput:
         mock_emb = MagicMock()
         mock_emb.name = "clap"
         mock_emb._on_progress = lambda *a, **kw: None
+        wire_mock_progress_scope(mock_emb)
 
         def fake_load_models():
             mock_emb._on_progress("loading", "Loading CLAP model weights...", 0, 0)
