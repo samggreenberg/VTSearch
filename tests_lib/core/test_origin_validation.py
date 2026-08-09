@@ -44,9 +44,7 @@ class TestMultiUserConfinement:
     def test_url_params_are_exempt(self, confined_base):
         # URLs are re-validated by validate_url at fetch time; the path
         # check must not spuriously reject them in multi-user mode.
-        confine_origin_params(
-            {"importer": "url_download", "params": {"url": "https://media.example.test/a.wav"}}
-        )
+        confine_origin_params({"importer": "url_download", "params": {"url": "https://media.example.test/a.wav"}})
 
     def test_pathless_params_ignored(self, confined_base):
         confine_origin_params({"importer": "example_media", "params": {"filename": "abc.wav"}})
