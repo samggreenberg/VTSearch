@@ -1115,7 +1115,14 @@ def get_file_access_base_dir() -> Path | None:
 
 def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) -> Path:
     """Resolve `filepath_str`. When `base_dir` is given, assert it stays inside
-    `base_dir` (raises on escape); when None, the path is unrestricted."""
+    `base_dir` (raises on escape); when None, the path is unrestricted.
+    Use the *returned* path — under confinement a relative input resolves
+    against `base_dir`, but a consumer would resolve it against the CWD."""
+
+def confine_server_filepath(filepath_str: str, base_dir: Path | None) -> str:
+    """Validate and return the path string to forward/store, so validation and
+    consumption share one anchor. Confined: the approved absolute path.
+    Unconfined (`base_dir=None`): the input verbatim."""
 
 def sanitize_template_value(value: str) -> str:
     """Sanitise a value before substituting it into a filesystem-path template."""

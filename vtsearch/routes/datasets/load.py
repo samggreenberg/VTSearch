@@ -478,7 +478,10 @@ def load_dataset_folder(body: dict):
         abort(400, message="No folder path provided")
 
     try:
-        _paths.validate_server_filepath(str(folder_path), base_dir=_paths.get_file_access_base_dir())
+        # Consume the *approved* path, not the raw string: under multi-user
+        # confinement a relative path is checked against the user's data dir
+        # but would be read relative to the process CWD.
+        folder_path = _paths.confine_server_filepath(str(folder_path), _paths.get_file_access_base_dir())
     except ValueError as exc:
         abort(400, message=str(exc))
 
@@ -532,14 +535,22 @@ def _load_from_origin(source: dict):
     if field_values is None:
         abort(400, message=f"Cannot reload from {importer_name} origin")
 
-    # Validate any server file paths in the field values
+    # Validate any server file paths in the field values.  Values for the
+    # importer's declared path fields are additionally *rewritten* to the
+    # approved path so the importer resolves them against the same anchor the
+    # check used (see ``confine_server_filepath``); the remaining slash-bearing
+    # values are only checked, since the heuristic also sweeps up non-path
+    # strings (URLs and the like) that must not be turned into filesystem paths.
     _base = _paths.get_file_access_base_dir()
-    for key, val in field_values.items():
+    _path_field_keys = {f.key for f in importer.fields if f.field_type in ("server_path", "folder")}
+    for key, val in list(field_values.items()):
         if isinstance(val, str) and ("/" in val or "\\" in val):
             try:
-                _paths.validate_server_filepath(val, base_dir=_base)
+                confined = _paths.confine_server_filepath(val, _base)
             except ValueError as exc:
                 abort(400, message=str(exc))
+            if key in _path_field_keys:
+                field_values[key] = confined
 
     task_id = _run_importer_in_background(importer, field_values)
     return {"ok": True, "message": "Loading started", "task_id": str(task_id) if task_id else ""}

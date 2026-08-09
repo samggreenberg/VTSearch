@@ -9,6 +9,13 @@ originally user-supplied parameters.  Before an externally-supplied origin
 is used, its path-like params must pass the same per-user confinement the
 ingress applies.
 
+The check hands back a *confined copy* of the origin rather than a bare
+pass/fail, because under confinement the validator anchors a relative path
+at the user's data dir while the media source would anchor it at the process
+CWD — so consuming the raw params would read a different path than the one
+approved.  See
+:func:`~vtscore.security.path_validation.confine_server_filepath`.
+
 URL-valued params are deliberately *not* path-checked here: they are
 re-validated with :func:`~vtscore.security.url_validation.validate_url` at
 fetch time by the URL-backed sources (and the downloader re-checks every
@@ -21,36 +28,49 @@ from __future__ import annotations
 from typing import Any
 
 
-def check_origin_param_confinement(origin: Any) -> None:
-    """Raise :class:`ValueError` if a path-like origin param escapes the user's allowed dir.
+def confine_origin_params(origin: Any) -> Any:
+    """Return *origin* with its path-like params replaced by approved paths.
 
-    Recurses into ``dupe_set``-style ``members`` so a nested member origin
-    cannot smuggle an unvalidated path.  A no-op in single-user mode, where
-    the base dir is unrestricted (see
-    :func:`~vtscore.security.path_validation.get_file_access_base_dir`).
+    Raises :class:`ValueError` if a path-like origin param escapes the user's
+    allowed dir.  Recurses into ``dupe_set``-style ``members`` so a nested
+    member origin cannot smuggle an unvalidated path.  Non-dict input is
+    returned unchanged.
+
+    The input is never mutated — a saved detector example keeps the origin it
+    was written with, while the caller gets the canonical form to resolve.
+    In single-user mode the base dir is unrestricted (see
+    :func:`~vtscore.security.path_validation.get_file_access_base_dir`), so
+    every param comes back verbatim.
     """
     from vtscore.security.path_validation import get_file_access_base_dir
 
-    _check(origin, get_file_access_base_dir())
+    return _confined(origin, get_file_access_base_dir())
 
 
-def _check(origin: Any, base_dir: Any) -> None:
+def _confined(origin: Any, base_dir: Any) -> Any:
     if not isinstance(origin, dict):
-        return
+        return origin
 
-    from vtscore.security.path_validation import validate_server_filepath
+    from vtscore.security.path_validation import confine_server_filepath
+
+    confined = dict(origin)
 
     params = origin.get("params")
     if isinstance(params, dict):
-        for val in params.values():
+        new_params = dict(params)
+        for key, val in params.items():
             if not isinstance(val, str) or ("/" not in val and "\\" not in val):
                 continue
             if val.startswith(("http://", "https://")):
                 continue  # re-validated by validate_url at fetch time
-            validate_server_filepath(val, base_dir=base_dir)
+            new_params[key] = confine_server_filepath(val, base_dir)
+        confined["params"] = new_params
 
     members = origin.get("members")
     if isinstance(members, list):
-        for member in members:
-            if isinstance(member, dict):
-                _check(member.get("origin"), base_dir)
+        confined["members"] = [
+            {**m, "origin": _confined(m["origin"], base_dir)} if isinstance(m, dict) and "origin" in m else m
+            for m in members
+        ]
+
+    return confined

@@ -287,22 +287,24 @@ def example_sort_server(body: dict):
         abort(500, message=f"Example sort failed: {format_exception_detail(exc)}")
 
 
-def _validate_origin_param_confinement(origin: dict) -> None:
-    """Abort 400 if a path-like origin param escapes the user's allowed dir.
+def _confine_origin_params(origin: dict) -> dict:
+    """Return *origin* with approved paths, or abort 400 if one escapes.
 
     The origin dict comes verbatim from the request body, so any path-like
     param must pass the same confinement check ``_load_from_origin`` applies
     before it can point a filesystem-backed source (server_folder,
-    server_files) outside the user's allowed directory.  A no-op in
-    single-user mode, where the base dir is unrestricted.  URL params are
-    exempt from the path check: the URL-backed sources re-run
-    ``validate_url`` at fetch time (see
+    server_files) outside the user's allowed directory.  The returned copy
+    carries the paths the check approved, so a relative param cannot be
+    validated against the user's data dir and then read relative to the
+    process CWD.  A no-op in single-user mode, where the base dir is
+    unrestricted.  URL params are exempt from the path check: the URL-backed
+    sources re-run ``validate_url`` at fetch time (see
     :mod:`vtscore.security.origin_validation`).
     """
-    from vtscore.security.origin_validation import check_origin_param_confinement
+    from vtscore.security.origin_validation import confine_origin_params
 
     try:
-        check_origin_param_confinement(origin)
+        return confine_origin_params(origin)
     except ValueError as exc:
         abort(400, message=str(exc))
 
@@ -339,7 +341,7 @@ def example_sort_origin(body: dict):
     if not snapshot_medias():
         abort(400, message="No medias loaded")
 
-    _validate_origin_param_confinement(origin)
+    origin = _confine_origin_params(origin)
 
     from vtscore.datasets.sources import get_source_for_origin
 
