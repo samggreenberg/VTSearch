@@ -7,7 +7,7 @@ and symlinked folder import.
 from __future__ import annotations
 
 
-from helpers import make_raw_wav_bytes as _make_wav_bytes
+from tests_lib.helpers import make_raw_wav_bytes as _make_wav_bytes
 
 
 class TestSymlinkedImporterDiscovery:

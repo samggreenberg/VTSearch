@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 
 import app as app_module
-from helpers import make_dataset_file as _make_dataset_file
+from tests.helpers import make_dataset_file as _make_dataset_file
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 

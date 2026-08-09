@@ -14,7 +14,7 @@ See docs/plans/find-verification-workflow.md.
 from __future__ import annotations
 
 import app as app_module
-from helpers import setup_trainable_model_in_registry
+from tests.helpers import setup_trainable_model_in_registry
 from tests import load_detector_and_wait
 from vtscore.detectors.dataset_sync import reset_mtime_cache_for_tests
 from vtscore.detectors.store import _detector_path, _read_detector, _write_detector

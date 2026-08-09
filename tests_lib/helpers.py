@@ -172,12 +172,14 @@ def make_video_media(media_id: int, embedding_dim: int = 512) -> dict:
     }
 
 
-def setup_trainable_model_in_registry(name, good_ids, bad_ids, snap, media_type="audio"):
+def setup_trainable_model_in_registry(name, good_ids, bad_ids, snap, media_type="audio", embedder_type=""):
     """Build a detector on disk + register it.  Returns its registry id.
 
     Writes ``<get_detectors_dir()>/<name>.json`` with a labelset built
     from *good_ids* and *bad_ids* using *snap* as the medias source, and
-    registers the model so ``/api/detectors/registry`` lists it.
+    registers the model so ``/api/detectors/registry`` lists it.  *embedder_type*
+    locks the detector's embedder type (``"semantic"``, ``"patch_semantic"``,
+    ``"structural"``); left empty (default) for a legacy/typeless detector.
     """
     from vtscore.datasets.labelset import LabelSet  # noqa: PLC0415
     from vtscore.detectors.registry import register_detector  # noqa: PLC0415
@@ -195,6 +197,8 @@ def setup_trainable_model_in_registry(name, good_ids, bad_ids, snap, media_type=
         "examples": [],
         "labelset": labelset.to_dict(),
     }
+    if embedder_type:
+        data["embedder_type"] = embedder_type
     _write_detector(_detector_path(name), data)
 
     entry = register_detector(name=name, media_type=media_type, num_training=len(labelset))

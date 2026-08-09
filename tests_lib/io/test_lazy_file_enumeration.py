@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from helpers import make_wav_bytes as _make_wav_bytes
+from tests_lib.helpers import make_wav_bytes as _make_wav_bytes
 
 
 def _make_wav_files(folder: Path, n: int, prefix: str = "clip") -> None:

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import numpy as np
 
-from helpers import make_raw_wav_bytes as _make_wav_bytes
+from tests_lib.helpers import make_raw_wav_bytes as _make_wav_bytes
 from vtscore.embedding.media_vectors import media_embedding
 
 
