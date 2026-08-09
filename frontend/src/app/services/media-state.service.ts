@@ -73,9 +73,19 @@ export class MediaStateService {
     this.metadataCache.ensureLoaded([id]);
   }
 
-  /** Fetch (or refetch) the dataset media stubs. No-op while a fetch is in flight. */
+  /**
+   * Fetch (or refetch) the dataset media stubs.
+   *
+   * Always restarts the loader, even mid-flight. An in-flight request carries
+   * the `X-Dataset-Id` header of the pair that was active when it was
+   * dispatched, so on a rapid A->B->C pair switch its response is the *wrong*
+   * dataset's id list; skipping the refetch would leave that stale list
+   * rendered against the new pair forever (nothing else re-fetches). Bumping
+   * `loadCount` changes the resource request, which makes `rxResource`
+   * unsubscribe from the stale stream (cancelling the request) and re-run the
+   * loader with the current headers.
+   */
   loadMedias(): void {
-    if (this.resource.isLoading()) return;
     this.loadCount.update((n) => n + 1);
   }
 
