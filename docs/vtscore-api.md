@@ -1115,7 +1115,14 @@ def get_file_access_base_dir() -> Path | None:
 
 def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) -> Path:
     """Resolve `filepath_str`. When `base_dir` is given, assert it stays inside
-    `base_dir` (raises on escape); when None, the path is unrestricted."""
+    `base_dir` (raises on escape); when None, the path is unrestricted.
+    Use the *returned* path — under confinement a relative input resolves
+    against `base_dir`, but a consumer would resolve it against the CWD."""
+
+def confine_server_filepath(filepath_str: str, base_dir: Path | None) -> str:
+    """Validate and return the path string to forward/store, so validation and
+    consumption share one anchor. Confined: the approved absolute path.
+    Unconfined (`base_dir=None`): the input verbatim."""
 
 def media_file_read_roots() -> list[Path] | None:
     """Roots a media's own file reference may be read from: the user's data dir plus
@@ -1136,7 +1143,18 @@ def glob_top_level(root: Path, pattern: str) -> list[Path]: ...
 
 def validate_url(url: str) -> str:
     """SSRF guard for outbound HTTP. Rejects private IPs, link-local, and metadata
-    endpoints. Returns the validated URL."""
+    endpoints. Returns the validated URL. A name-level check only — pair it with
+    `guarded_session` so the address the socket reaches is checked too."""
+
+class BlockedAddressError(ValueError):
+    """Raised when a connection's peer turns out to be a private/internal address."""
+
+def guarded_session() -> requests.Session:
+    """A Session whose every new socket has its peer address re-checked against the
+    private/internal blocklist (raising `BlockedAddressError`), closing the
+    DNS-rebinding window where the connect-time lookup returns a different address
+    than the one `validate_url` vetted. Proxied requests are exempt (the peer is the
+    proxy). Every server-side fetch of a user-influenced URL must run on one."""
 
 def open_validated_stream(
     session: requests.Session,
@@ -1147,12 +1165,14 @@ def open_validated_stream(
 ) -> requests.Response:
     """Stream an *already-validated* URL with allow_redirects=False, re-running
     validate_url on every hop so a public URL can't 302 to an internal host.
-    `headers_for_url` is recomputed per hop so host-scoped credentials aren't
-    replayed to a redirect target. Caller closes the returned response."""
+    Pass a `guarded_session`. `headers_for_url` is recomputed per hop so
+    host-scoped credentials aren't replayed to a redirect target. Caller closes
+    the returned response."""
 
 def fetch_validated_url(url: str, *, timeout: tuple[float, float] = (10, 30)) -> bytes:
-    """validate_url + open_validated_stream + raise_for_status, returning the whole
-    body. The fetch primitive for byte-wanting callers (e.g. a media's media_url)."""
+    """validate_url + guarded_session + open_validated_stream + raise_for_status,
+    returning the whole body. The fetch primitive for byte-wanting callers (e.g. a
+    media's media_url)."""
 
 def validate_browser_url(url: str) -> str:
     """Scheme allowlist for URLs the *user's browser* opens (an exporter's

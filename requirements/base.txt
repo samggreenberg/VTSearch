@@ -14,5 +14,6 @@
 # Transitive-dep security pin (not imported directly; required to keep
 # `pip-audit` clean in `run-tests.sh`). Drop the line if the version
 # pulled by requests/huggingface-hub already satisfies the constraint.
-urllib3>=2.7.0  # CVE-2026-44431, CVE-2026-44432
+# (urllib3's own pin lives in `[project.dependencies]` — we import it
+# directly for the SSRF guard's peer-checking transport adapter.)
 idna>=3.15  # CVE-2026-45409

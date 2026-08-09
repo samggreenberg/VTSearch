@@ -20,7 +20,12 @@ from vtscore.concurrency.memory_budget import cap_workers_by_memory
 from vtscore.concurrency.progress import CancelledError, find_progress, update_find_progress
 from vtscore.detectors.model_loading import resolve_or_train_detector
 from vtscore.embedding.media_vectors import EMBEDDINGS_KEY
-from vtsearch.routes._shared import require_dataset_header, require_detector_header
+from vtsearch.routes._shared import (
+    find_idle,
+    find_idle_on_crash,
+    require_dataset_header,
+    require_detector_header,
+)
 from vtsearch.schemas.detectors import (
     AutoDetectRequestSchema,
     AutoDetectResponseSchema,
@@ -124,7 +129,7 @@ def _abort_if_find_cancelled() -> None:
     a cancel takes effect at the next stage boundary.
     """
     if find_progress.is_cancelled:
-        update_find_progress("idle", "", step=None, total_steps=None)
+        find_idle()
         abort(409, message="Find cancelled")
 
 
@@ -179,20 +184,21 @@ def find_label(body: dict):
 
     d = reg_get_detector(detector_id)
     if d is None:
-        update_find_progress("idle", "")
+        find_idle()
         abort(404, message=f"Detector '{detector_id}' not found")
 
     snap = snapshot_medias()
     if not snap:
-        update_find_progress("idle", "")
+        find_idle()
         abort(400, message="No medias loaded")
 
     media_type = d.get("media_type", "") or next(iter(snap.values())).get("media_type", "image")
 
     # Both the train and score steps scale with the active dataset, so the bar
     # can be paced against its real size instead of a fixed guess. Every exit
-    # below — success and abort alike — parks the tracker at "idle", which is
-    # what closes the recorder.
+    # below — success, abort, and unexpected crash alike — parks the tracker at
+    # "idle", which is what closes the recorder. The crash case is the guard's
+    # job (see :func:`find_idle_on_crash`).
     from vtscore import timing  # noqa: PLC0415
 
     score_embedder = next(iter(snap.values())).get("embedder", "")
@@ -208,192 +214,195 @@ def find_label(body: dict):
     )
     recorder.start()
     recorder.set_scale(n=len(snap))
-    det_path = _detector_path(d["name"])
-    det_data = _read_detector(det_path)
+    with find_idle_on_crash(recorder):
+        det_path = _detector_path(d["name"])
+        det_data = _read_detector(det_path)
 
-    # Type gate: the active dataset must bind an embedder of the detector's
-    # locked type before we spend a train/score in the wrong space.
-    if not _dataset_supplies_detector_type(det_data, snap):
-        update_find_progress("idle", "")
-        abort(409, message=_type_incompatible_message(det_data))
+        # Type gate: the active dataset must bind an embedder of the detector's
+        # locked type before we spend a train/score in the wrong space.
+        if not _dataset_supplies_detector_type(det_data, snap):
+            find_idle()
+            abort(409, message=_type_incompatible_message(det_data))
 
-    _abort_if_find_cancelled()
-    mlp, threshold, diagnostic = resolve_or_train_detector(
-        detector_id,
-        det_data,
-        media_type,
-        snap,
-        progress_step=2,
-        progress_total_steps=_FIND_LABEL_STEPS,
-    )
-    if mlp is None:
-        update_find_progress("idle", "")
-        if diagnostic is not None:
-            error_msg = (
-                f"Detector '{d['name']}' could not be trained: "
-                f"{diagnostic['total_labels']} training labels found, "
-                f"{diagnostic['md5_matched']} matched current dataset by MD5, "
-                f"{diagnostic['needed_resolution']} needed origin resolution, "
-                f"{diagnostic['resolved_from_origin']} resolved successfully, "
-                f"{diagnostic['failed_resolution']} failed to resolve. "
-                f"Has good={diagnostic['has_good']}, has bad={diagnostic['has_bad']}."
-            )
-            if diagnostic.get("sample_failures"):
-                first = diagnostic["sample_failures"][0]
-                error_msg += (
-                    f" First failure: importer={first['origin'].get('importer', '?') if first['origin'] else 'None'}, "
-                    f"origin_name={first['origin_name']!r}, "
-                    f"params={first['origin'].get('params', {}) if first['origin'] else '{}'}"
+        _abort_if_find_cancelled()
+        mlp, threshold, diagnostic = resolve_or_train_detector(
+            detector_id,
+            det_data,
+            media_type,
+            snap,
+            progress_step=2,
+            progress_total_steps=_FIND_LABEL_STEPS,
+        )
+        if mlp is None:
+            find_idle()
+            if diagnostic is not None:
+                error_msg = (
+                    f"Detector '{d['name']}' could not be trained: "
+                    f"{diagnostic['total_labels']} training labels found, "
+                    f"{diagnostic['md5_matched']} matched current dataset by MD5, "
+                    f"{diagnostic['needed_resolution']} needed origin resolution, "
+                    f"{diagnostic['resolved_from_origin']} resolved successfully, "
+                    f"{diagnostic['failed_resolution']} failed to resolve. "
+                    f"Has good={diagnostic['has_good']}, has bad={diagnostic['has_bad']}."
                 )
-            if diagnostic.get("hint"):
-                error_msg += f" Hint: {diagnostic['hint']}"
-            failed = diagnostic["failed_resolution"]
-            total = diagnostic["total_labels"]
-            mt = diagnostic.get("media_type", "items")
-            mt_plural = mt + "s" if mt and not mt.endswith("s") else mt
-            abort(
-                400,
-                message=error_msg,
-                resolution_diagnostic=diagnostic,
-                warning=(f"{failed} of your {total} {mt_plural} could not be resolved from their original files."),
-            )
-        abort(400, message=f"Detector '{d['name']}' has no labels for scoring")
+                if diagnostic.get("sample_failures"):
+                    first = diagnostic["sample_failures"][0]
+                    error_msg += (
+                        f" First failure: importer={first['origin'].get('importer', '?') if first['origin'] else 'None'}, "
+                        f"origin_name={first['origin_name']!r}, "
+                        f"params={first['origin'].get('params', {}) if first['origin'] else '{}'}"
+                    )
+                if diagnostic.get("hint"):
+                    error_msg += f" Hint: {diagnostic['hint']}"
+                failed = diagnostic["failed_resolution"]
+                total = diagnostic["total_labels"]
+                mt = diagnostic.get("media_type", "items")
+                mt_plural = mt + "s" if mt and not mt.endswith("s") else mt
+                abort(
+                    400,
+                    message=error_msg,
+                    resolution_diagnostic=diagnostic,
+                    warning=(f"{failed} of your {total} {mt_plural} could not be resolved from their original files."),
+                )
+            abort(400, message=f"Detector '{d['name']}' has no labels for scoring")
 
-    n_total = len(snap)
-    update_find_progress(
-        "running",
-        f"Scoring {n_total} items…",
-        current=0,
-        total=n_total,
-        step=3,
-        total_steps=_FIND_LABEL_STEPS,
-    )
+        n_total = len(snap)
+        update_find_progress(
+            "running",
+            f"Scoring {n_total} items…",
+            current=0,
+            total=n_total,
+            step=3,
+            total_steps=_FIND_LABEL_STEPS,
+        )
 
-    # Region-aware scoring: for patch datasets (DINOv2/v3, EUPE) this
-    # max-pools over each media's region vectors and surfaces the winning
-    # region's box as ``best_region`` so the gallery thumbnails and focus-view
-    # Highlight overlay can outline it - matching the learned-sort path.  Plain
-    # single-vector datasets take the cached embedding-matrix path inside and
-    # gain no ``best_region`` field.
-    from types import SimpleNamespace
+        # Region-aware scoring: for patch datasets (DINOv2/v3, EUPE) this
+        # max-pools over each media's region vectors and surfaces the winning
+        # region's box as ``best_region`` so the gallery thumbnails and focus-view
+        # Highlight overlay can outline it - matching the learned-sort path.  Plain
+        # single-vector datasets take the cached embedding-matrix path inside and
+        # gain no ``best_region`` field.
+        from types import SimpleNamespace
 
-    from vtscore.detectors.training import score_media_with_model
-    from vtscore.embedding.binding import keying_embedder_for_snap
+        from vtscore.detectors.training import score_media_with_model
+        from vtscore.embedding.binding import keying_embedder_for_snap
 
-    # Score in the same space the MLP was trained in: the concrete embedder of
-    # the detector's locked type this dataset supplies, else the dataset score
-    # precedence (keying_embedder_for_snap) - matching resolve_or_train_detector's
-    # cold path and the learned-sort cache-space marker.
-    _abort_if_find_cancelled()
-    score_emb = keying_embedder_for_snap(SimpleNamespace(embedder_type=_detector_type(det_data)), snap)
-    results = score_media_with_model(mlp, snap, embedder_name=score_emb or None)
-    update_find_progress(
-        "running",
-        f"Scoring {n_total} items…",
-        current=n_total,
-        total=n_total,
-        step=3,
-        total_steps=_FIND_LABEL_STEPS,
-    )
+        # Score in the same space the MLP was trained in: the concrete embedder of
+        # the detector's locked type this dataset supplies, else the dataset score
+        # precedence (keying_embedder_for_snap) - matching resolve_or_train_detector's
+        # cold path and the learned-sort cache-space marker.
+        _abort_if_find_cancelled()
+        score_emb = keying_embedder_for_snap(SimpleNamespace(embedder_type=_detector_type(det_data)), snap)
+        results = score_media_with_model(mlp, snap, embedder_name=score_emb or None)
+        update_find_progress(
+            "running",
+            f"Scoring {n_total} items…",
+            current=n_total,
+            total=n_total,
+            step=3,
+            total_steps=_FIND_LABEL_STEPS,
+        )
 
-    # Stage-2 structural re-rank for a saved structural (SIFT/VLAD) detector:
-    # geometrically verify the VLAD shortlist against the detector's RegionYes
-    # templates and re-rank by the match-statistic verification classifier.
-    # This is the Find counterpart to the re-rank already wired into the
-    # vote-driven (``train_and_score``) and learned-sort (``labelset_train_and_score``)
-    # paths, so a pre-trained structural detector verifies in Find too instead of
-    # stopping at the coarse VLAD retrieval.  A no-op for every non-structural
-    # detector (gated on the active snapshot carrying ``local_features``).  See
-    # docs/plans/structural-embedder.md.
-    from vtscore.datasets.labelset import LabelSet
-    from vtscore.detectors.labelset_training import maybe_labelset_structural_rerank
-    from vtscore.state.core import get_active_detector_context
+        # Stage-2 structural re-rank for a saved structural (SIFT/VLAD) detector:
+        # geometrically verify the VLAD shortlist against the detector's RegionYes
+        # templates and re-rank by the match-statistic verification classifier.
+        # This is the Find counterpart to the re-rank already wired into the
+        # vote-driven (``train_and_score``) and learned-sort (``labelset_train_and_score``)
+        # paths, so a pre-trained structural detector verifies in Find too instead of
+        # stopping at the coarse VLAD retrieval.  A no-op for every non-structural
+        # detector (gated on the active snapshot carrying ``local_features``).  See
+        # docs/plans/structural-embedder.md.
+        from vtscore.datasets.labelset import LabelSet
+        from vtscore.detectors.labelset_training import maybe_labelset_structural_rerank
+        from vtscore.state.core import get_active_detector_context
 
-    labelset = LabelSet.from_dict((det_data or {}).get("labelset") or {})
-    results, threshold = maybe_labelset_structural_rerank(
-        get_active_detector_context(), labelset, results, threshold, snap
-    )
-    # Store the final (post-rerank) cutoff on the context so server-side reads of
-    # the Find cutoff — the work-queue / boundary-walk endpoints, Inclusion
-    # re-thresholding — agree with the labels this pass just applied. A no-op for
-    # the non-structural path (threshold unchanged), authoritative for the
-    # structural one.
-    get_active_detector_context().threshold = threshold
+        labelset = LabelSet.from_dict((det_data or {}).get("labelset") or {})
+        results, threshold = maybe_labelset_structural_rerank(
+            get_active_detector_context(), labelset, results, threshold, snap
+        )
+        # Store the final (post-rerank) cutoff on the context so server-side reads of
+        # the Find cutoff — the work-queue / boundary-walk endpoints, Inclusion
+        # re-thresholding — agree with the labels this pass just applied. A no-op for
+        # the non-structural path (threshold unchanged), authoritative for the
+        # structural one.
+        get_active_detector_context().threshold = threshold
 
-    _abort_if_find_cancelled()
-    update_find_progress(
-        "running",
-        f"Applying labels to {n_total} items…",
-        current=0,
-        total=n_total,
-        step=4,
-        total_steps=_FIND_LABEL_STEPS,
-    )
-    label_pairs = []
-    for entry in results:
-        label_pairs.append((entry["id"], "good" if entry["score"] >= threshold else "bad"))
-    # Items the human already verified keep their vote: a re-score (the normal
-    # fold-corrections -> retrain -> re-score loop) must not silently invert a
-    # recorded human decision while still counting it as verified (issue #2928).
-    # Everything else adopts this pass's call.
-    apply_labels_bulk_with_click_time(label_pairs, replace_all=True, record_achievement=False, preserve_verified=True)
+        _abort_if_find_cancelled()
+        update_find_progress(
+            "running",
+            f"Applying labels to {n_total} items…",
+            current=0,
+            total=n_total,
+            step=4,
+            total_steps=_FIND_LABEL_STEPS,
+        )
+        label_pairs = []
+        for entry in results:
+            label_pairs.append((entry["id"], "good" if entry["score"] >= threshold else "bad"))
+        # Items the human already verified keep their vote: a re-score (the normal
+        # fold-corrections -> retrain -> re-score loop) must not silently invert a
+        # recorded human decision while still counting it as verified (issue #2928).
+        # Everything else adopts this pass's call.
+        apply_labels_bulk_with_click_time(
+            label_pairs, replace_all=True, record_achievement=False, preserve_verified=True
+        )
 
-    # The detector's own call for *every* item, verified ones included: this is
-    # the evaluation baseline Stats crosses the adopted labels against, so a
-    # verified item the retrained detector now disagrees with reads as a
-    # correction rather than vanishing.
-    set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
-    # Freeze the single-pass scores so the cutoff (Inclusion) re-thresholds
-    # without re-scoring, and the Stats FP/FN sweep can read them.
-    set_find_scores({entry["id"]: entry["score"] for entry in results})
+        # The detector's own call for *every* item, verified ones included: this is
+        # the evaluation baseline Stats crosses the adopted labels against, so a
+        # verified item the retrained detector now disagrees with reads as a
+        # correction rather than vanishing.
+        set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
+        # Freeze the single-pass scores so the cutoff (Inclusion) re-thresholds
+        # without re-scoring, and the Stats FP/FN sweep can read them.
+        set_find_scores({entry["id"]: entry["score"] for entry in results})
 
-    from vtscore.detectors.registry import set_find_mode
+        from vtscore.detectors.registry import set_find_mode
 
-    set_find_mode(True)
+        set_find_mode(True)
 
-    det_ctx = get_active_detector_context()
-    # A fresh scoring pass IS the current evaluation, so any "stale" flag left by
-    # a prior corrections-to-detector fold no longer applies.
-    det_ctx.find_eval_stale = False
-    # The counts the client shows are the labels this pass *adopted*, which is
-    # the threshold split everywhere except the verified items that held their
-    # human vote.  ``replace_all`` left exactly this label set behind, so the
-    # vote dicts are the count.
-    good_count = len(det_ctx.good_votes)
-    bad_count = len(det_ctx.bad_votes)
+        det_ctx = get_active_detector_context()
+        # A fresh scoring pass IS the current evaluation, so any "stale" flag left by
+        # a prior corrections-to-detector fold no longer applies.
+        det_ctx.find_eval_stale = False
+        # The counts the client shows are the labels this pass *adopted*, which is
+        # the threshold split everywhere except the verified items that held their
+        # human vote.  ``replace_all`` left exactly this label set behind, so the
+        # vote dicts are the count.
+        good_count = len(det_ctx.good_votes)
+        bad_count = len(det_ctx.bad_votes)
 
-    from vtscore.labels.sync import sync_to_labelset_source
+        from vtscore.labels.sync import sync_to_labelset_source
 
-    sync_to_labelset_source()
+        sync_to_labelset_source()
 
-    update_find_progress(
-        "idle",
-        "Done",
-        current=n_total,
-        total=n_total,
-        step=_FIND_LABEL_STEPS,
-        total_steps=_FIND_LABEL_STEPS,
-    )
+        update_find_progress(
+            "idle",
+            "Done",
+            current=n_total,
+            total=n_total,
+            step=_FIND_LABEL_STEPS,
+            total_steps=_FIND_LABEL_STEPS,
+        )
 
-    from vtsearch.achievements import record_find
+        from vtsearch.achievements import record_find
 
-    record_find(n_total)
+        record_find(n_total)
 
-    # Find is not yet windowed: its "just sit and vote" boundary walk and the
-    # Browse / To Dataset / Export bulk actions still read the full client-side
-    # ranking, so find-label returns the whole ``results`` list. The server-side
-    # replacements those flows will switch to already exist
-    # (``/api/find/queue-ids``, ``/api/find/boundary-next``); wiring the Find
-    # frontend onto them + windowing this response is the remaining slice (see
-    # docs/plans/scalability.md S3/S17/S19).
-    return {
-        "ok": True,
-        "results": results,
-        "threshold": round(threshold, 4),
-        "good_count": good_count,
-        "bad_count": bad_count,
-        "detector_name": d.get("name", ""),
-    }
+        # Find is not yet windowed: its "just sit and vote" boundary walk and the
+        # Browse / To Dataset / Export bulk actions still read the full client-side
+        # ranking, so find-label returns the whole ``results`` list. The server-side
+        # replacements those flows will switch to already exist
+        # (``/api/find/queue-ids``, ``/api/find/boundary-next``); wiring the Find
+        # frontend onto them + windowing this response is the remaining slice (see
+        # docs/plans/scalability.md S3/S17/S19).
+        return {
+            "ok": True,
+            "results": results,
+            "threshold": round(threshold, 4),
+            "good_count": good_count,
+            "bad_count": bad_count,
+            "detector_name": d.get("name", ""),
+        }
 
 
 def _resolve_autofind_names(body: dict, media_type: str) -> list[str]:
@@ -523,7 +532,7 @@ def _collect_auto_detect_results(futures: list, results: dict[str, dict]) -> Non
     except CancelledError:
         for f in futures:
             f.cancel()
-        update_find_progress("idle", "", step=None, total_steps=None)
+        find_idle()
         abort(409, message="Find cancelled")
 
 
@@ -933,20 +942,26 @@ def auto_detect(body: dict):
         max_workers=min(len(detectors_to_run), 8),
     )
     results: dict[str, dict] = {}
-    with ThreadPoolExecutor(max_workers=worker_cap) as pool:
-        futures = [
-            pool.submit(
-                _score_detector_for_auto_detect,
-                name,
-                data,
-                entry,
-                media_type,
-                snap,
-                *matrices[det_embedders[name]],
-            )
-            for name, data, entry in detectors_to_run
-        ]
-        _collect_auto_detect_results(futures, results)
+    # A cold detector's train writes "running" to the shared tracker from inside
+    # the workers (``resolve_or_train_detector``), so this route owns parking it
+    # again — on the way out of a crash via the guard, and on the ordinary path
+    # below.  Cancellation parks it in ``_collect_auto_detect_results``.
+    with find_idle_on_crash():
+        with ThreadPoolExecutor(max_workers=worker_cap) as pool:
+            futures = [
+                pool.submit(
+                    _score_detector_for_auto_detect,
+                    name,
+                    data,
+                    entry,
+                    media_type,
+                    snap,
+                    *matrices[det_embedders[name]],
+                )
+                for name, data, entry in detectors_to_run
+            ]
+            _collect_auto_detect_results(futures, results)
+        find_idle()
 
     if results:
         from vtsearch.achievements import record_find  # noqa: PLC0415

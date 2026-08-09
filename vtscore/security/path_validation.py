@@ -57,7 +57,12 @@ def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) ->
     Returns
     -------
     Path
-        The resolved, canonicalised path.
+        The resolved, canonicalised path.  Callers must **use** this result
+        rather than the raw input: under confinement the two disagree for
+        relative paths, and consuming the raw string reopens the escape this
+        function exists to close.  Callers that need a string (to forward
+        into ``field_values`` / an origin) should prefer
+        :func:`confine_server_filepath`, which picks the right one.
 
     Raises
     ------
@@ -84,6 +89,35 @@ def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) ->
             f"The given path resolves outside the allowed directory. Paths must be within '{base_dir.resolve()}'."
         ) from None
     return resolved
+
+
+def confine_server_filepath(filepath_str: str, base_dir: Path | None) -> str:
+    """Validate *filepath_str* and return the path string callers must consume.
+
+    :func:`validate_server_filepath` resolves a **relative** path against
+    *base_dir* before its containment check, but every consumer of a stored
+    path string resolves it against the process **CWD**.  Discarding the
+    validator's return value therefore validates one path and then reads a
+    different one: a user confined to ``data/bob`` who submits
+    ``"data/alice"`` passes the check (``data/bob/data/alice`` is inside the
+    base dir) and is then handed ``CWD/data/alice`` — another user's subtree.
+
+    This wrapper closes that gap by handing back the canonical path the check
+    actually approved, so validation and use share a single anchor.  Callers
+    must store / forward the returned string rather than the raw input.
+
+    When *base_dir* is ``None`` (single-user / no-auth; see
+    :func:`get_file_access_base_dir`) the two anchors are already the same —
+    both CWD — so the input is returned verbatim.  That keeps relative paths
+    relative in stored origins, which stay portable across checkouts.
+
+    Raises
+    ------
+    ValueError
+        If *base_dir* is given and the resolved path escapes it.
+    """
+    resolved = validate_server_filepath(filepath_str, base_dir=base_dir)
+    return filepath_str if base_dir is None else str(resolved)
 
 
 def media_file_read_roots() -> list[Path] | None:

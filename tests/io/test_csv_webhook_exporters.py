@@ -690,7 +690,7 @@ class TestWebhookExporterExport:
         mock_resp.raise_for_status.return_value = None
 
         with (
-            mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
+            mock.patch("requests.Session.post", return_value=mock_resp) as mock_post,
         ):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
@@ -711,7 +711,7 @@ class TestWebhookExporterExport:
         mock_resp.raise_for_status.return_value = None
 
         with (
-            mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
+            mock.patch("requests.Session.post", return_value=mock_resp) as mock_post,
         ):
             exp.export(results, {"url": "https://example.com/hook", "auth_header": "Bearer my-token"})
 
@@ -729,7 +729,7 @@ class TestWebhookExporterExport:
         mock_resp.raise_for_status.return_value = None
 
         with (
-            mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
+            mock.patch("requests.Session.post", return_value=mock_resp) as mock_post,
         ):
             exp.export(results, {"url": "https://example.com/hook", "auth_header": ""})
 
@@ -745,7 +745,7 @@ class TestWebhookExporterExport:
         mock_resp = mock.MagicMock()
         mock_resp.raise_for_status.side_effect = Exception("500 Server Error")
 
-        with mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("requests.Session.post", return_value=mock_resp):
             with pytest.raises(Exception, match="500 Server Error"):
                 exp.export(results, {"url": "https://example.com/hook"})
 
@@ -759,7 +759,7 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("requests.Session.post", return_value=mock_resp):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert "3 hit(s)" in result["message"]
@@ -775,7 +775,7 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 201
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("requests.Session.post", return_value=mock_resp):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert result["status_code"] == 201
@@ -793,7 +793,7 @@ class TestWebhookExporterIntegration:
 
         with (
             mock.patch("vtscore.security.url_validation.validate_url"),
-            mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp),
+            mock.patch("requests.Session.post", return_value=mock_resp),
         ):
             _run_exporter("webhook", {"url": "https://example.com/hook"}, results)
 
@@ -894,26 +894,28 @@ class TestFilepathTemplateExpansion:
 
     def test_username_template_expands(self, tmp_path):
         """The {username} template substitutes get_current_user(), sanitised."""
+        from vtsearch.auth import thread_user
         from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
         from vtscore.plugins.normalize import normalize_field_values
 
         exp = ServerJsonLabelsetExporter()
         template = str(tmp_path / "{username}.json")
 
-        with mock.patch("vtsearch.auth.get_current_user", return_value="alice"):
+        with thread_user("alice"):
             exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
 
         assert (tmp_path / "alice.json").exists()
 
     def test_username_template_sanitises_path_separators(self, tmp_path):
         """A malicious username with ``/`` cannot escape the parent directory."""
+        from vtsearch.auth import thread_user
         from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
         from vtscore.plugins.normalize import normalize_field_values
 
         exp = ServerJsonLabelsetExporter()
         template = str(tmp_path / "{username}.json")
 
-        with mock.patch("vtsearch.auth.get_current_user", return_value="../evil"):
+        with thread_user("../evil"):
             exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
 
         # ``/`` and ``..`` are replaced with ``_``, so the result stays inside tmp_path.

@@ -12,15 +12,27 @@ Phase 7 of ``../vtscore/docs/architecture.md``.
 
 from __future__ import annotations
 
-from pathlib import Path
-from unittest.mock import patch
+# Must run before ANY other import in this file: under ``-n auto`` the xdist
+# workers are separate processes that inherit the environment but not the
+# controller's ``sys.meta_path``, and this conftest is the first thing a
+# worker imports.  Installing the Flask blocker here is what makes
+# ``./run-tests.sh vtscore-clean`` actually cover the library code (the
+# controller-side install in ``scripts/check-vtscore-clean.py`` would
+# otherwise only see this file's own imports).  No-op unless the gate set
+# ``VTSEARCH_BLOCK_FLASK``.
+from tests_lib.flask_blocker import install_if_requested as _install_flask_blocker
 
-import numpy as np
-import os
-import pytest
+_install_flask_blocker()
 
-import vtscore.config as config
-from vtscore.utils.hashing import content_md5
+from pathlib import Path  # noqa: E402
+from unittest.mock import patch  # noqa: E402
+
+import numpy as np  # noqa: E402
+import os  # noqa: E402
+import pytest  # noqa: E402
+
+import vtscore.config as config  # noqa: E402
+from vtscore.utils.hashing import content_md5  # noqa: E402
 
 
 _NON_GROUP_DIRS = {"tests_lib", "fixtures", "__pycache__"}

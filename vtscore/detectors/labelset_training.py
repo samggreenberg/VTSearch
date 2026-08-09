@@ -129,9 +129,25 @@ def _patch_output_from_file(
 def _embedder_supports_patch_regions(embedder_name: str) -> bool:
     """Whether *embedder_name* produces a patch grid at all.
 
-    Gates the score-row resolution below: on a legacy single-vector detector
-    there is no grid to re-derive, so probing every element's origin file would
-    be pure I/O for a guaranteed ``None``.
+    This is the labelset tier's patch gate - the counterpart of
+    :func:`~vtscore.detectors.training._scores_in_patch_space`, phrased against
+    the detector's own embedder because the cross-dataset branch has no snap to
+    resolve a patch slot from.  It answers "does this detector score in a patch
+    space?", and *every* patch behaviour on this path hangs off it: the raw-patch
+    pool under a Good element's ``region_box``, a Bad element's flooded
+    negatives, and the calibration score-row stacks.
+
+    Two things it buys:
+
+    * On a legacy single-vector detector there is no grid to re-derive, so
+      probing every element's origin file would be pure I/O for a guaranteed
+      ``None``.
+    * On a **multi-embedder** dataset it keeps a detector locked to the text or
+      structural space off the patch grid entirely.  That detector is scored
+      against its own space's full-image vectors
+      (:func:`~vtscore.detectors.training._score_all_media`), so reading the
+      media's stored ``patch_grid`` - which lives in the *patch* embedder's
+      space - would train it on vectors from an unrelated space.
     """
     if not embedder_name:
         return False
@@ -255,6 +271,7 @@ def _resolve_uncached_embedding(
     *,
     media_type: str,
     embedder_name: str,
+    patch_capable: bool,
     lookups: tuple[dict[str, list[int]], dict[str, list[int]], dict[str, list[int]]] | None = None,
 ) -> np.ndarray | None:
     """Produce a training vector for *elem*, not consulting the cache.
@@ -264,6 +281,13 @@ def _resolve_uncached_embedding(
     ``region_box`` when the element carries one).
     Falls back to the cross-dataset path - resolve via the importer and embed
     freshly.  Returns ``None`` when neither path produces a vector.
+
+    *patch_capable* (:func:`_embedder_supports_patch_regions`) gates the
+    raw-patch pool: a detector that doesn't score in a patch space trains on the
+    image-level vector of its own space even when the media carries a grid,
+    because the grid's vectors belong to the dataset's *patch* embedder.  The
+    cross-dataset branch is already gated the same way inside
+    :func:`_patch_output_from_file`.
 
     *lookups* is the pre-built ``build_media_lookup`` triple for *snap*; loop
     callers pass it so the cid resolution doesn't rebuild the tables per element.
@@ -275,7 +299,7 @@ def _resolve_uncached_embedding(
         cid = resolve_current_dataset_cid(elem, lookups)
         if cid is not None and cid in snap:
             media = snap[cid]
-            pooled = pool_box_from_media(media, elem.region_box)
+            pooled = pool_box_from_media(media, elem.region_box) if patch_capable else None
             # Read the in-dataset vector from the detector's primary space (the
             # same space the cross-dataset path embeds into), not the media's
             # generic primary - they diverge on a multi-embedder dataset.
@@ -372,12 +396,21 @@ def _cache_region_vectors(
     rows, so the two caches are fed from one resolution, cached so re-sorts
     don't re-resolve.
 
-    The resolution is skipped entirely on a legacy single-vector detector
-    (*patch_capable* is ``False``, where it would return ``None`` anyway), so no
-    origin file is probed for a grid that cannot exist.
+    The resolution is skipped entirely unless the detector scores in a patch
+    space (*patch_capable*; see :func:`_embedder_supports_patch_regions`).  On a
+    legacy single-vector detector it would return ``None`` anyway, so no origin
+    file is probed for a grid that cannot exist.  On a multi-embedder dataset
+    the skip is load-bearing: a semantic- or structural-locked detector is
+    scored against its own space's full-image vectors, so flooding it with the
+    dataset's patch grid would train it on a different embedding space (and
+    blow up at ``np.stack`` outright when the two dimensions differ).  Both
+    caches stay empty, and :func:`build_xy_from_labelset` falls back to the
+    single image-level vector per element.
     """
+    if not patch_capable:
+        return
     wants_negatives = elem.label == "bad" and eid not in neg_cache
-    wants_score_rows = patch_capable and elem.label in ("good", "bad") and eid not in score_cache
+    wants_score_rows = elem.label in ("good", "bad") and eid not in score_cache
     if not (wants_negatives or wants_score_rows):
         return
     rows = _resolve_score_rows(elem, snap, media_type=media_type, embedder_name=embedder_name, lookups=lookups)
@@ -458,7 +491,12 @@ def populate_label_embeddings(
             continue
 
         emb = _resolve_uncached_embedding(
-            elem, snap, media_type=media_type, embedder_name=embedder_name, lookups=lookups
+            elem,
+            snap,
+            media_type=media_type,
+            embedder_name=embedder_name,
+            patch_capable=patch_capable,
+            lookups=lookups,
         )
         if emb is not None:
             cache[eid] = emb

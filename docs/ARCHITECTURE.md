@@ -444,9 +444,18 @@ No Flask, no global state, no progress dependency (silent no-op by
 default).  To get progress reporting, set a callback before loading:
 
 ```python
-embedder._on_progress = lambda status, msg, cur, tot: print(f"{msg} ({cur}/{tot})")
-embedder.load_models()
+with embedder.progress_scope(lambda status, msg, cur, tot: print(f"{msg} ({cur}/{tot})")):
+    embedder.load_models()
 ```
+
+Embedders are process-wide singletons, so `_on_progress` is **thread-scoped**:
+`progress_scope()` (and a bare `embedder._on_progress = cb` assignment) only
+redirects progress for calls made on the *calling* thread, and a thread that set
+nothing reads the process-wide default wired in by
+`vtscore.media.set_progress_callback()`.  That is what lets two concurrent
+dataset loads share one embedder without their trackers crossing — a mis-routed
+callback would not merely mis-draw a bar, since trackers call `check_cancelled()`
+and would abort the wrong load.
 
 ### The plugin systems
 
@@ -713,7 +722,14 @@ OAuth, LDAP, or any auth scheme without modifying route code.
 The `before_request` middleware in `app.py` populates `g.user` on every
 request via the active provider's `get_user()`. Routes access the current
 user via `get_current_user()`. Outside a Flask request context (CLI,
-background threads) it falls back to `"default"`.
+background threads) it falls back to the thread-local set by
+`thread_user(...)`, then to `"default"`.
+
+The resolution itself lives in `vtscore.state.current_user` so library
+code can ask "who is this for?" without Flask; `vtsearch/auth/` registers
+the `g.user` reader through `register_request_user_resolver()` at import
+time and re-exports `get_current_user` / `thread_user` / `set_thread_user`
+/ `get_thread_user` unchanged.
 
 ### Ownership tracking
 

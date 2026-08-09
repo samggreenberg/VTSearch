@@ -444,10 +444,12 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
         scaled = min(total_clips, int(current * len(embed_indices) / max(1, total)))
         on_progress(scaled, total_clips, "embedding")
 
-    original_cb = embedder._on_progress
-    embedder._on_progress = _clip_progress
     try:
-        vectors = embedder.embed_media_bulk(embed_inputs)
+        # Thread-scoped so a concurrent dataset load sharing this singleton
+        # embedder keeps reporting into its own tracker (see
+        # ``MediaEmbedder.progress_scope``).
+        with embedder.progress_scope(_clip_progress):
+            vectors = embedder.embed_media_bulk(embed_inputs)
     except Exception:
         import logging as _logging
 
@@ -455,8 +457,6 @@ def _fixup_clip_md5_and_embeddings(  # noqa: C901
             "Bulk clip re-embed failed for media_type=%s (%d clips)", media_type, len(embed_indices)
         )
         return
-    finally:
-        embedder._on_progress = original_cb
 
     for slot, vec in zip(embed_indices, vectors):
         if vec is not None:

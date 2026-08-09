@@ -876,7 +876,16 @@ DATASOURCE_IMPORTER = PastebinDataSourceImporter()
 `fetch()` receives the validated + normalized form values (text stripped;
 `url` / `server_path` fields already passed the shared SSRF /
 path-traversal validators — see `vtscore/plugins/normalize.py`). `file`
-fields arrive as `UploadedFile` objects. Raise `ValueError` for bad user
+fields arrive as `UploadedFile` objects.
+
+That up-front `url` check vets a *hostname*, so it is only half the guard:
+issue the actual fetch on a
+`vtscore.security.url_validation.guarded_session()` (or go through
+`fetch_validated_url` / `download_file_with_progress`, which already do).
+A bare `requests.get` resolves the hostname a second time at connect time,
+and a DNS server the attacker controls gets to answer that lookup with
+`127.0.0.1`; the guarded session rejects the connection by peer address, so
+the name it was validated under stops mattering. Raise `ValueError` for bad user
 input (surfaced as a 400); any other exception is reported as an upstream
 failure (502). The returned `FetchedMediaItem.filename` should keep the
 source's real extension — it drives media-type inference downstream.

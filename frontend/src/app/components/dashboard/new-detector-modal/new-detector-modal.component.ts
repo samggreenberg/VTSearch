@@ -839,6 +839,11 @@ export class NewDetectorModalComponent implements OnInit {
   /** Submit the typed demo-relative path. Server validates and returns
    *  the materialised filename for the example sort. */
   submitDemoTypedPath(): void {
+    // The path input stays enabled during the request, so Enter can re-fire
+    // this and materialise the same example twice (duplicate rows collide the
+    // @for track key). The Load button's [disabled] alone isn't enough.
+    if (this.demoFileLoading()) return;
+
     const raw = (this.demoTypedPath || '').trim();
     if (!raw) return;
     this.demoFileLoading.set(true);
@@ -1097,6 +1102,8 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   submitTrained(): void {
+    if (this.submitting()) return;
+
     const trimmedName = this.name().trim();
     if (!trimmedName) {
       this.error.set('Name is required');
@@ -1185,6 +1192,11 @@ export class NewDetectorModalComponent implements OnInit {
   // --- Submit ---
 
   submit(): void {
+    // The footer button's [disabled] isn't the only way in: the text-example
+    // and name inputs fire this on Enter while a POST is in flight, and a
+    // second registerDetector would create a duplicate detector.
+    if (this.submitting()) return;
+
     if (this.tab === 'trained') {
       this.submitTrained();
       return;

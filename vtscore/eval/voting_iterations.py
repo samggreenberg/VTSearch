@@ -54,6 +54,7 @@ from vtscore.training.mlp import LINEAR_HEAD, _auto_hidden_dim, train_model
 from vtscore.training.thresholds import (
     ACQUISITION_INCLUSION_OFFSET,
     CUT_KIND_INTERIOR,
+    NO_GOOD_THRESHOLD,
     acquisition_inclusion,
     anchored_gmm_fit,
     calculate_safe_threshold,
@@ -462,6 +463,35 @@ def _pool_percentile(pool_scores: dict[int, float], threshold: float) -> float:
     return round(float((arr < threshold).mean()), 6)
 
 
+def _blend_xcal_input(threshold: float, details: dict[str, Any]) -> float:
+    """The x-cal side of the schedule blend, with the app's sentinel substitution.
+
+    When the fold computation could not calibrate at all it returns a *sentinel*
+    rather than a cut - ``0.5`` on the too-few-labels / fewer-than-two-per-class
+    paths, :data:`~vtscore.training.thresholds.NO_GOOD_THRESHOLD` when the split
+    itself is degenerate (see
+    :func:`~vtscore.training.thresholds.compute_fold_orderings`).  Production
+    does **not** blend whichever sentinel came back: ``_fused_threshold`` feeds
+    the blend ``NO_GOOD_THRESHOLD`` ("we never computed a cut, so admit
+    nothing") whenever ``folds.fallback is not None``, regardless of the
+    sentinel's value.  This applies that same substitution, so the harness's
+    shipped-threshold arm blends what the app blends.
+
+    It matters exactly in the cold start: the production schedules ramp from
+    ``lo=6`` labels, so a step past that with one class still under two votes -
+    the rare-class starvation the autopilot flow reaches whenever the Bad phase
+    keeps surfacing positives - carries real weight on the x-cal side, and
+    ``2.0`` vs ``0.5`` moves both the recorded operating point and the
+    acquisition cut.
+
+    *details* carries ``fold_fallback`` on every torch path (``None`` when the
+    folds are real).  The SVM arms carry no fold fallback at all - their
+    threshold comes from the trainer-agnostic port, which has no production
+    counterpart to mirror - so they blend their own returned value unchanged.
+    """
+    return NO_GOOD_THRESHOLD if details.get("fold_fallback") is not None else threshold
+
+
 def _safe_threshold_for_step(
     threshold: float,
     step: _StepModel,
@@ -488,9 +518,12 @@ def _safe_threshold_for_step(
 
     Falls back to the schedule blend
     (:func:`~vtscore.training.thresholds.calculate_safe_threshold`) exactly
-    where production does: no usable calibration folds.  The SVM arms always
-    land there - their fold models are sklearn estimators, not the torch heads
-    the app trains, so there is no production path for them to match.
+    where production does: no usable calibration folds.  The blend's x-cal side
+    carries production's sentinel substitution (see :func:`_blend_xcal_input`) -
+    a step whose folds fell back blends ``NO_GOOD_THRESHOLD``, not whichever
+    sentinel the fold rule returned.  The SVM arms always land on the blend -
+    their fold models are sklearn estimators, not the torch heads the app
+    trains, so there is no production path for them to match.
 
     Returns ``(threshold, sim_scores, sim_ids, fold_haystacks, provenance, cut)``.
     The fitted :class:`~vtscore.training.thresholds.FoldAnchoredCut` rides along
@@ -531,7 +564,7 @@ def _safe_threshold_for_step(
         anchored = cut.threshold_at(inclusion)
         if np.isfinite(anchored):
             return anchored, all_scores, ids, fold_haystacks, cut.provenance, cut
-    blended = calculate_safe_threshold(threshold, all_scores, ctx, schedule=schedule)
+    blended = calculate_safe_threshold(_blend_xcal_input(threshold, details), all_scores, ctx, schedule=schedule)
     return blended, all_scores, ids, fold_haystacks, "gmm_blend", None
 
 
@@ -736,8 +769,11 @@ def _operating_metrics(
 #: over one whose Gumbel may land on either mode ("gumbel_any_*", #2846's repair
 #: to the first family's fallback rate), and the two label-reading diagnostics
 #: ("supervised", "sim_oracle") that locate the error rather than compete to
-#: ship.  ``xcal_only`` is the no-blend control: the raw conformal threshold at
-#: the same step.  ``pooled_mid`` must reproduce the production blend exactly.
+#: ship.  ``xcal_only`` is the no-blend control: the conformal threshold at the
+#: same step, or - on a step whose folds fell back - the same sentinel the
+#: shipped blend feeds its x-cal side (:func:`_blend_xcal_input`), so the
+#: control is the blend's own input with the mix-in removed rather than a cut
+#: nobody computed.  ``pooled_mid`` must reproduce the production blend exactly.
 #: The ``tail_a*`` sweep is #2881's one-constant rule at seven tail levels - the
 #: fitted Bad component's own quantile rather than a crossing of any kind.
 #:
@@ -1488,20 +1524,56 @@ def _score_pool(
     step: _StepModel,
     pool_ids: list[int],
     clips_dict: dict[int, dict[str, Any]],
+    *,
+    region_aware: bool = False,
+    style_obj: Any = None,
+    sim_clips: dict[int, dict[str, Any]] | None = None,
+    sim_scored: tuple[list[int], list[float]] | None = None,
 ) -> dict[int, float]:
     """Return ``{pool_id: score}`` for the current model over the pool.
 
-    Scores each pool item by its single whole-image vector - the fast path the
-    acquisition strategies rank uncertainty over.  This intentionally uses the
-    whole-image embedding even for patch datasets (where *test* scoring
-    max-pools over regions): acquisition only needs a monotone uncertainty
-    signal to order the pool, and the whole-image score is a cheap, adequate
-    proxy for that ordering.
+    **In the same score space the thresholds are cut in** (issue #2943).  That
+    is not a refinement, it is a correctness requirement: the Hard pick locates
+    its cutoff with the *absolute* comparison ``ranking[cid] <= threshold``
+    (:func:`~vtscore.eval.al_strategies._hard_pick_by_index`), so a ranking and
+    a cut that live in different spaces put the cutoff index in the wrong place.
+    On a patch dataset the reporting/acquisition cuts are fitted on the style's
+    region max-pooled scores, and a max over ~197 patch rows stochastically
+    dominates the single whole-image row - so scoring the pool whole-image would
+    depress every pool score relative to the cut and drag the cutoff index
+    systematically toward the top of the ranking.  The app has no such gap: its
+    learned sort ranks the very same pooled scores its threshold cuts.
+
+    Three paths, mirroring :func:`_evaluate_on_test` / :func:`_score_sim_set_with_model`:
+
+    * *sim_scored* - the ``(ids, scores)`` the safe-threshold step already
+      computed over the whole simulation set, in exactly this geometry.  The
+      pool is a subset of that set, so restricting it is free and removes the
+      scoring pass entirely.
+    * a *style_obj* / *region_aware* dataset with no such scores (the
+      ``safe_thresholds=False`` control arm) - score through the style.  The
+      **full** sim set is scored rather than just the pool: the style memoises
+      its flattened patch matrix per media-id set, and the pool loses an item
+      every step, so scoring the shrinking pool would re-flatten from scratch
+      each step *and* leak a cache entry per step.
+    * everything else (single-vector datasets, the SVM arms) - the trainer-
+      agnostic whole-image ``predict``, which is already the threshold's space.
     """
     import numpy as np  # noqa: PLC0415
 
     if not pool_ids:
         return {}
+    if sim_scored is not None:
+        ids, scores = sim_scored
+        pool_set = set(pool_ids)
+        return {cid: float(s) for cid, s in zip(ids, scores, strict=True) if cid in pool_set}
+    if (style_obj is not None or region_aware) and sim_clips:
+        assert step.torch_model is not None
+        pool_set = set(pool_ids)
+        ids, scores = _score_sim_set_with_model(
+            step.torch_model, region_aware, sim_clips, None, sorted(sim_clips), style_obj
+        )
+        return {cid: float(s) for cid, s in zip(ids, scores, strict=True) if cid in pool_set}
     embs = np.array([media_embedding(clips_dict[cid]) for cid in pool_ids])
     scores = np.asarray(step.predict(embs)).ravel().tolist()
     return dict(zip(pool_ids, scores, strict=True))
@@ -1758,7 +1830,14 @@ def _mlp_train_and_calibrate(
         backend="torch-cuda" if device.startswith("cuda") else "torch-cpu",
         device=device,
     )
-    details = {"fold_orderings": folds.orderings, "fold_models": folds.models}
+    details = {
+        "fold_orderings": folds.orderings,
+        "fold_models": folds.models,
+        # Which sentinel (if any) the fold rule returned: the blend's x-cal side
+        # is NO_GOOD_THRESHOLD whenever this is set, as production's does
+        # (see :func:`_blend_xcal_input`).
+        "fold_fallback": folds.fallback,
+    }
     return step, threshold, n_labels, {"train_seconds": train_seconds, "xcal_seconds": xcal_seconds}, details
 
 
@@ -1862,7 +1941,11 @@ def _style_train_and_calibrate(
             score_rows_by_group=score_rows_by_group if cal_groups is not None else None,
         )
         threshold = threshold_from_folds(folds, inclusion)
-        details = {"fold_orderings": folds.orderings, "fold_models": folds.models}
+        details = {
+            "fold_orderings": folds.orderings,
+            "fold_models": folds.models,
+            "fold_fallback": folds.fallback,
+        }
     xcal_seconds = time.monotonic() - t_xcal
     # Under the #2897 screen this step trained Kmax folds, not ``calibrate_count``
     # of them.  Bill the reported wall clock for the live count only, so the
@@ -1921,6 +2004,10 @@ def _calibrate_with_details(
     * ``fold_node_data`` — per-fold, per-group **node** scores (grouped path
       only), so a remedial pooling variant can recalibrate off the same fold
       models without retraining; ``None`` on the row-wise (whole-image) path.
+    * ``fold_fallback`` — the sentinel the fold rule returned, or ``None`` when
+      the folds are real.  The shipped blend substitutes ``NO_GOOD_THRESHOLD``
+      for the x-cal side whenever this is set, as production does (see
+      :func:`_blend_xcal_input`).
     * ``fold_count_data`` — only under *fold_count_variants* (issue #2897): the
       **full** Kmax fold orderings, their per-fold seconds, and the
       count-independent overhead, for :func:`_fold_count_variant_rows`.
@@ -1981,6 +2068,7 @@ def _calibrate_with_details(
                 "fold_orderings": [],
                 "fold_node_data": None,
                 "fold_models": [],
+                "fold_fallback": fallback,
             }
         # Base (max) orderings from the same fold node data -> identical to
         # production's grouped calibration for this arm.
@@ -1993,6 +2081,7 @@ def _calibrate_with_details(
                 "fold_orderings": fold_orderings,
                 "fold_node_data": fold_node_data[:calibrate_count],
                 "fold_models": fold_models[:calibrate_count],
+                "fold_fallback": None,
             },
             all_orderings,
         )
@@ -2015,6 +2104,7 @@ def _calibrate_with_details(
             "fold_orderings": [],
             "fold_node_data": None,
             "fold_models": [],
+            "fold_fallback": fallback,
         }
     fold_orderings = all_orderings[:calibrate_count]
     threshold = threshold_from_fold_orderings(fold_orderings, inclusion)
@@ -2024,6 +2114,7 @@ def _calibrate_with_details(
             "fold_orderings": fold_orderings,
             "fold_node_data": None,
             "fold_models": fold_models[:calibrate_count],
+            "fold_fallback": None,
         },
         all_orderings,
     )
@@ -2451,9 +2542,12 @@ def simulate_voting_iterations(  # noqa: C901
     # sim-set snapshot and score it per-step via region max-pool (to match how
     # the test set is scored); single-vector datasets pre-stack whole-image
     # embeddings once.
+    # The snapshot is built for every region-aware / styled run, not only the
+    # safe-threshold ones: the pool scorer needs it too, and it is a dict of
+    # references to media already in memory.
     sim_clips: dict[int, dict[str, Any]] | None = None
     X_all_clips: Any = None
-    if safe_thresholds and (region_aware or style_obj is not None):
+    if region_aware or style_obj is not None:
         sim_clips = {cid: clips_dict[cid] for cid in sim_ids}
     elif safe_thresholds:
         gmm_clip_embs = np.array([media_embedding(clips_dict[cid]) for cid in sorted(sim_ids)])
@@ -2575,7 +2669,11 @@ def simulate_voting_iterations(  # noqa: C901
         sim_pooled_ids: list[int] = []
         sim_fold_haystacks: list[Any] = []
         if safe_thresholds:
-            xcal_threshold = threshold
+            # The x-cal side of the blend, not the raw fold return: a step whose
+            # folds fell back blends NO_GOOD_THRESHOLD (see _blend_xcal_input),
+            # and the variant families below re-blend this same input, so their
+            # rows stay paired with the shipped one.
+            xcal_threshold = _blend_xcal_input(threshold, details)
             # Vote-level class counts, so the fallback blend's schedule can ramp
             # on the rarer class (#2841).  The harness votes one media at a
             # time, so bags and votes coincide here and the counts are the two
@@ -2659,9 +2757,20 @@ def simulate_voting_iterations(  # noqa: C901
         test_score_seconds = time.monotonic() - t_test
 
         # Score the remaining pool with the fresh model so the next step's
-        # autopilot Hard pick can rank it.
+        # autopilot Hard pick can rank it - in the geometry the cut it will be
+        # compared against was fitted in (#2943).  The safe-threshold path has
+        # already scored the whole sim set that way, so hand those scores over
+        # rather than paying for a second pass.
         t_pool = time.monotonic()
-        pool_scores = _score_pool(step, pool, clips_dict)
+        pool_scores = _score_pool(
+            step,
+            pool,
+            clips_dict,
+            region_aware=region_aware,
+            style_obj=style_obj,
+            sim_clips=sim_clips,
+            sim_scored=(sim_pooled_ids, sim_pooled_scores) if sim_pooled_scores else None,
+        )
         pool_score_seconds = time.monotonic() - t_pool
 
         # Advance the app's phase machine on this step's model: the Smart

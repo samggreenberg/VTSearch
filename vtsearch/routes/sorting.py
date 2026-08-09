@@ -182,11 +182,12 @@ def _load_embedder_with_progress(snap=None):
     """Load the embedding model, forwarding its load progress to step 1 of the bar.
 
     If the model is already loaded this is a no-op.  A lock serialises
-    concurrent callers so that only one request touches ``_on_progress``
-    at a time, preventing the save/restore from trampling another
-    request's callback.  The model-load ``cur``/``tot`` is reported as the
-    within-step progress of step 1, so the unified bar animates during the
-    load instead of parking at a step floor.
+    concurrent callers so only one request drives the load and the others
+    return early once it is warm (``_on_progress`` itself is thread-scoped —
+    see ``MediaEmbedder.progress_scope`` — so the save/restore below can no
+    longer trample another request's callback).  The model-load ``cur``/``tot``
+    is reported as the within-step progress of step 1, so the unified bar
+    animates during the load instead of parking at a step floor.
 
     *snap* threads in an already-taken medias snapshot to avoid re-copying the
     medias dict under ``_state_lock``; when ``None`` a fresh snapshot is taken.
@@ -878,9 +879,11 @@ def _embed_external_labels(labels: list[dict], emb) -> tuple[list, list[float], 
             skipped += 1
             continue
 
-        media_path = Path(raw_path)
         try:
-            _paths.validate_server_filepath(str(media_path), base_dir=file_base)
+            # Embed the approved path, not the raw one: under confinement the
+            # check anchors a relative path at the user's data dir while
+            # ``Path(...)`` would anchor it at the process CWD.
+            media_path = Path(_paths.confine_server_filepath(str(raw_path), file_base))
         except ValueError:
             skipped += 1
             continue

@@ -1,15 +1,20 @@
 """Webhook exporter – POSTs auto-detect results to an arbitrary URL.
 
 Requires only ``requests``, which is already a core dependency.
+
+The target URL is user-supplied, so every POST goes out on a
+:func:`~vtscore.security.url_validation.guarded_session`: the framework's
+``field_type="url"`` normalize pass rejects internal hosts up front, and the
+guarded session re-checks the peer address each socket actually reaches so a
+rebinding DNS answer cannot redirect the payload at an internal service.
 """
 
 from __future__ import annotations
 
 from typing import Any, Iterator
 
-import requests
-
 from vtscore.exporters.base import PluginField, LabelsetExporter, resolve_stream_batch_size
+from vtscore.security.url_validation import guarded_session
 
 
 class WebhookLabelsetExporter(LabelsetExporter):
@@ -65,8 +70,9 @@ class WebhookLabelsetExporter(LabelsetExporter):
         url = field_values["url"]
         headers = self._headers(field_values)
 
-        resp = requests.post(url, json=results, headers=headers, timeout=30, allow_redirects=False)
-        resp.raise_for_status()
+        with guarded_session() as session:
+            resp = session.post(url, json=results, headers=headers, timeout=30, allow_redirects=False)
+            resp.raise_for_status()
 
         if "labels" in results:
             total_items = len(results.get("labels", []))
@@ -116,24 +122,28 @@ class WebhookLabelsetExporter(LabelsetExporter):
         total_hits = 0
         batches = 0
 
-        def _post(hits: list[dict[str, Any]]) -> None:
-            nonlocal batches
-            payload = {**meta, "batch_index": batches, "hits": hits}
-            resp = requests.post(url, json=payload, headers=headers, timeout=30, allow_redirects=False)
-            resp.raise_for_status()
-            batches += 1
+        # One session for the whole run so connections are reused across
+        # batches; each new socket it opens is still peer-checked.
+        with guarded_session() as session:
 
-        batch: list[dict[str, Any]] = []
-        for detector_name, hit in records:
-            batch.append({"detector": detector_name, **hit})
-            total_hits += 1
-            if len(batch) >= batch_size:
+            def _post(hits: list[dict[str, Any]]) -> None:
+                nonlocal batches
+                payload = {**meta, "batch_index": batches, "hits": hits}
+                resp = session.post(url, json=payload, headers=headers, timeout=30, allow_redirects=False)
+                resp.raise_for_status()
+                batches += 1
+
+            batch: list[dict[str, Any]] = []
+            for detector_name, hit in records:
+                batch.append({"detector": detector_name, **hit})
+                total_hits += 1
+                if len(batch) >= batch_size:
+                    _post(batch)
+                    batch = []
+            # Flush the trailing partial batch; also fire once for an empty run
+            # so the receiver always gets at least one POST.
+            if batch or batches == 0:
                 _post(batch)
-                batch = []
-        # Flush the trailing partial batch; also fire once for an empty run so
-        # the receiver always gets at least one POST.
-        if batch or batches == 0:
-            _post(batch)
 
         return {
             "message": (f"Streamed {total_hits} hit(s) to {url} in {batches} batch(es)."),
