@@ -518,14 +518,12 @@ def preload_predicted_embedders(
         try:
             emb = get_embedder(emb_name)
             print(f"  Preloading {emb_name} embedder...", flush=True)
-            original_cb = emb._on_progress
-            console_cb = _make_console_progress(original_cb)
-            emb._on_progress = console_cb
+            console_cb = _make_console_progress(emb._on_progress)
             try:
-                emb.load_models()
+                with emb.progress_scope(console_cb):
+                    emb.load_models()
             finally:
                 console_cb.flush()  # type: ignore[attr-defined]
-                emb._on_progress = original_cb
             preloaded.append(emb_name)
         except Exception as exc:
             print(f"  Warning: failed to preload {emb_name}: {exc}", flush=True)

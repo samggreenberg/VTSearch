@@ -174,14 +174,16 @@ def _run_embed_pass(
     media_type: str,
     missing: list[tuple[int, dict[str, Any]]],
     on_progress: Callable[[str, str, int, int], None],
-    original_cb,
 ) -> None:
     """Bulk-embed the *missing* items and attach each non-``None`` vector.
 
     Announces progress, routes the embedder's callback through *on_progress*
-    (restoring *original_cb* afterward), and on a bulk-embed failure logs and
-    attaches nothing (items stay at ``None`` for the drop-none stage).  Items
-    whose media vanished from *medias* during the call are skipped.
+    for the duration of the call (via the thread-scoped
+    :meth:`~vtscore.media.embedder.MediaEmbedder.progress_scope`, so a
+    concurrent load on this singleton embedder keeps its own tracker), and on a
+    bulk-embed failure logs and attaches nothing (items stay at ``None`` for the
+    drop-none stage).  Items whose media vanished from *medias* during the call
+    are skipped.
     """
     if not missing:
         return
@@ -189,14 +191,12 @@ def _run_embed_pass(
     on_progress("embedding", f"Embedding {total} item(s)…", 0, total)
 
     inputs = [m for _, m in missing]
-    emb._on_progress = on_progress
     try:
-        vectors = emb.embed_media_bulk(inputs)
+        with emb.progress_scope(on_progress):
+            vectors = emb.embed_media_bulk(inputs)
     except Exception:
         logging.getLogger(__name__).exception("Bulk embed failed for media_type=%s (%d items)", media_type, total)
         vectors = None
-    finally:
-        emb._on_progress = original_cb
 
     if vectors is None:
         return
@@ -215,7 +215,6 @@ def _run_backfill_pass(
     medias: dict[int, dict[str, Any]],
     media_type: str,
     on_progress: Callable[[str, str, int, int], None],
-    original_cb,
     *,
     needs: Callable[[dict[str, Any]], bool],
     forward: Callable[[list[dict[str, Any]]], list],
@@ -225,23 +224,22 @@ def _run_backfill_pass(
     """Run one side-channel back-fill pass over every media still needing it.
 
     Filters *medias* by *needs*, bulk-forwards them through *forward* (routing
-    progress through *on_progress* and restoring *original_cb* afterward), and
-    attaches each non-``None`` output via *attach*.  On a *forward* failure the
-    pass logs *fail_message* and attaches nothing (every output is treated as
-    ``None``).  Runs over every matching media, including ones that arrived
+    progress through *on_progress* for the duration of the call, scoped to this
+    thread so a concurrent load keeps its own tracker), and attaches each
+    non-``None`` output via *attach*.  On a *forward* failure the pass logs
+    *fail_message* and attaches nothing (every output is treated as ``None``).
+    Runs over every matching media, including ones that arrived
     already-embedded — not only the items embedded in this load.
     """
     inputs = [m for m in medias.values() if needs(m)]
     if not inputs:
         return
-    emb._on_progress = on_progress
     try:
-        outputs = forward(inputs)
+        with emb.progress_scope(on_progress):
+            outputs = forward(inputs)
     except Exception:
         logging.getLogger(__name__).exception(fail_message, media_type, len(inputs))
         outputs = [None] * len(inputs)
-    finally:
-        emb._on_progress = original_cb
 
     for media, out in zip(inputs, outputs):
         if out is None:
@@ -333,9 +331,7 @@ def embed_missing(
 
     _ensure_model_loaded(emb, on_progress)
 
-    original_cb = emb._on_progress
-
-    _run_embed_pass(emb, medias, media_type, missing, on_progress, original_cb)
+    _run_embed_pass(emb, medias, media_type, missing, on_progress)
 
     # Patch-grid pass for embedders that support it (DINOv2/v3/EUPE).  Runs
     # over every patch-capable image still lacking a grid, including ones that
@@ -346,7 +342,6 @@ def embed_missing(
             medias,
             media_type,
             on_progress,
-            original_cb,
             needs=_needs_patch,
             forward=emb.patch_forward_bulk,
             attach=_attach_patch_grid_to_media,
@@ -362,7 +357,6 @@ def embed_missing(
             medias,
             media_type,
             on_progress,
-            original_cb,
             needs=_needs_local_features,
             forward=emb.local_features_forward_bulk,
             attach=lambda media, feats: media.__setitem__("local_features", feats.compact()),

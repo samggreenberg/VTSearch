@@ -123,13 +123,14 @@ def _apply_dir(key: str, value: str, setter) -> None:
     if not value or not value.strip():
         abort(400, message=f"{key} must be a non-empty string")
 
-    base = _paths.get_file_access_base_dir()
-    if base is not None:
-        try:
-            _paths.validate_server_filepath(value.strip(), base_dir=base)
-        except ValueError as exc:
-            abort(400, message=str(exc))
-    setter(value.strip())
+    # Persist the approved path: under multi-user confinement a relative dir is
+    # checked against the user's data dir but would later be opened relative to
+    # the process CWD.  Unconfined (single-user) values are stored verbatim.
+    try:
+        value = _paths.confine_server_filepath(value.strip(), _paths.get_file_access_base_dir())
+    except ValueError as exc:
+        abort(400, message=str(exc))
+    setter(value)
 
 
 #: Schema fields declared as dicts (``browse_*``, the per-media-type

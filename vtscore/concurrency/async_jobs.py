@@ -236,7 +236,7 @@ class JobManager:
         """
         # Capture the user that triggered this start() so background work
         # touching per-user settings resolves to the right user.
-        from vtsearch.auth import get_current_user
+        from vtscore.state.current_user import get_current_user
 
         current_user = get_current_user()
 
@@ -313,7 +313,7 @@ class JobManager:
     def _run(self, job: AsyncJob, target: Callable[[AsyncJob], Any]) -> None:
         from contextlib import ExitStack
 
-        from vtsearch.auth import thread_user
+        from vtscore.state.current_user import thread_user
         from vtscore.state.core import (
             get_context,
             get_detector_context,

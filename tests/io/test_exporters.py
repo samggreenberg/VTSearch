@@ -1199,7 +1199,7 @@ class TestWebhookStreaming:
     def test_batches_hits_into_separate_posts(self):
         from vtscore.exporters import get_exporter
 
-        with patch("vtscore.exporters.webhook.requests.post", return_value=self._mock_post()) as mock_post:
+        with patch("requests.Session.post", return_value=self._mock_post()) as mock_post:
             res = get_exporter("webhook").export_cli_streaming(
                 _STREAM_HEADER, _stream_records(), {"url": "https://ex.com/hook", "batch_size": 2}
             )
@@ -1220,7 +1220,7 @@ class TestWebhookStreaming:
     def test_auth_header_forwarded(self):
         from vtscore.exporters import get_exporter
 
-        with patch("vtscore.exporters.webhook.requests.post", return_value=self._mock_post()) as mock_post:
+        with patch("requests.Session.post", return_value=self._mock_post()) as mock_post:
             get_exporter("webhook").export_cli_streaming(
                 _STREAM_HEADER,
                 _stream_records(),
@@ -1232,7 +1232,7 @@ class TestWebhookStreaming:
     def test_empty_run_still_posts_once(self):
         from vtscore.exporters import get_exporter
 
-        with patch("vtscore.exporters.webhook.requests.post", return_value=self._mock_post()) as mock_post:
+        with patch("requests.Session.post", return_value=self._mock_post()) as mock_post:
             res = get_exporter("webhook").export_cli_streaming(_STREAM_HEADER, iter([]), {"url": "https://ex.com/hook"})
 
         assert mock_post.call_count == 1
@@ -1243,7 +1243,7 @@ class TestWebhookStreaming:
     def test_default_batch_size_sends_single_post(self):
         from vtscore.exporters import get_exporter
 
-        with patch("vtscore.exporters.webhook.requests.post", return_value=self._mock_post()) as mock_post:
+        with patch("requests.Session.post", return_value=self._mock_post()) as mock_post:
             get_exporter("webhook").export_cli_streaming(
                 _STREAM_HEADER, _stream_records(), {"url": "https://ex.com/hook"}
             )

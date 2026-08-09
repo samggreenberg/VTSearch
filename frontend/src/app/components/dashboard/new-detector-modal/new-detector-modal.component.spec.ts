@@ -575,6 +575,47 @@ describe('NewDetectorModalComponent', () => {
     httpMock.expectOne('/api/detectors/registry/load').flush({ ok: true });
     expect(component.created.emit).toHaveBeenCalledWith('d0');
   });
+
+  // --- Double-submit guards (#2941) ---
+
+  it('ignores a second submit while the register POST is in flight', () => {
+    component.name.set('Dog Barks');
+    component.mediaType.set('audio');
+    component.pendingText.set('dog barking sounds');
+
+    // Enter in the text field, then Enter again (or in the name field) before
+    // the first POST resolves.
+    component.submit();
+    component.submit();
+
+    // One detector, not two.
+    const req = httpMock.expectOne('/api/detectors/registry');
+    req.flush({ ok: true, detector: { id: '123' } });
+  });
+
+  it('ignores a second Trained submit while the from-labelset POST is in flight', () => {
+    submitTrained();
+    component.submit();
+
+    const req = httpMock.expectOne('/api/detectors/registry/from-labelset/server_json_file');
+    req.flush({ ok: true, detector: { id: 'd1' }, ingest_task_id: '' });
+    httpMock.expectOne('/api/detectors/registry/load').flush({ ok: true });
+  });
+
+  it('ignores a second demo-path load while the select POST is in flight', () => {
+    component.mediaType.set('audio');
+    component.demoFileBrowseSource = 'demo:gtzan';
+    component.demoTypedPath = 'blues/blues.00000.wav';
+
+    component.submitDemoTypedPath();
+    component.submitDemoTypedPath();
+
+    // One materialisation, so one example row — a duplicate would collide the
+    // @for track key on example.value.
+    const req = httpMock.expectOne('/api/browse-media-files/select');
+    req.flush({ ok: true, filename: 'ex.wav', original_name: 'blues.00000.wav' });
+    expect(component.mediaExamples().length).toBe(1);
+  });
 });
 
 describe('NewDetectorModalComponent with defaultMediaType', () => {

@@ -37,20 +37,37 @@ def _to_pcm_wav(wav_bytes: bytes) -> bytes:
     return buf.getvalue()
 
 
+def _checked_wav(wf: wave.Wave_read) -> wave.Wave_read:
+    """Return *wf* if its header is usable, else close it and raise.
+
+    stdlib ``wave`` happily accepts a fmt chunk declaring a sample rate of 0,
+    so a corrupt or truncated header can open cleanly and then blow up with a
+    ``ZeroDivisionError`` in :func:`_wav_duration` (or a ``wave.Error`` from
+    ``setframerate`` in :func:`_wav_slice`).  Reject it up front as a decode
+    failure so callers hit the same graceful-degradation path as any other
+    undecodable payload.
+    """
+    if wf.getframerate() <= 0:
+        wf.close()
+        raise AudioDecodeError("WAV header declares a non-positive sample rate")
+    return wf
+
+
 def _open_wav(wav_bytes: bytes) -> wave.Wave_read:
     """Open WAV bytes for reading, tolerating non-PCM formats.
 
     Falls back to re-encoding via :func:`_to_pcm_wav` when stdlib ``wave``
-    can't parse the container (e.g. ``WAVE_FORMAT_EXTENSIBLE``).  Raises
-    :class:`AudioDecodeError` when neither path can decode the bytes (corrupt
-    or unsupported payload) so callers can degrade gracefully.
+    can't parse the container (e.g. ``WAVE_FORMAT_EXTENSIBLE``) or parses it
+    into an unusable header.  Raises :class:`AudioDecodeError` when neither
+    path can decode the bytes (corrupt or unsupported payload) so callers can
+    degrade gracefully.
     """
     try:
-        return wave.open(io.BytesIO(wav_bytes), "rb")
-    except (wave.Error, EOFError):
+        return _checked_wav(wave.open(io.BytesIO(wav_bytes), "rb"))
+    except (wave.Error, EOFError, AudioDecodeError):
         pass
     try:
-        return wave.open(io.BytesIO(_to_pcm_wav(wav_bytes)), "rb")
+        return _checked_wav(wave.open(io.BytesIO(_to_pcm_wav(wav_bytes)), "rb"))
     except Exception as exc:  # soundfile LibsndfileError, wave.Error, EOFError, ...
         raise AudioDecodeError("could not decode audio bytes") from exc
 

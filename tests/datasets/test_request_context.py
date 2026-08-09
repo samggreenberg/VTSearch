@@ -500,6 +500,41 @@ class TestRequestMissingSentinel:
             with pytest.raises(RequestMissingContextError):
                 ctx.click_counter = 5
 
+    def test_projection_meta_reads_sentinel_as_idle(self, client):
+        """``GET /api/projection/meta`` with no ``X-Dataset-Id`` reads
+        ``ctx._pyramids`` on the dataset sentinel.
+
+        Those slots were missing from the sentinel's hand-maintained slot
+        list, so the read raised ``AttributeError`` → 500 on exactly the
+        dropped-header path the sentinel exists to serve (issue #2933).
+        The documented behaviour is an empty-context read.
+        """
+        from vtscore.state.core import set_thread_dataset_context
+
+        set_thread_dataset_context(None)
+
+        resp = client.get("/api/projection/meta")
+        assert resp.status_code == 200
+        assert resp.get_json()["status"] == "idle"
+
+        resp = client.get("/api/projection/meta?subset=1")
+        assert resp.status_code == 200
+        assert resp.get_json()["status"] == "idle"
+
+    def test_projection_labels_reads_sentinel_as_idle(self, client):
+        """Same for ``GET /api/projection/labels``, which reads
+        ``ctx._pyramids`` / ``ctx._subset_pyramids``."""
+        from vtscore.state.core import set_thread_dataset_context
+
+        set_thread_dataset_context(None)
+
+        for url in ("/api/projection/labels", "/api/projection/labels?subset=1"):
+            resp = client.get(url)
+            assert resp.status_code == 200
+            body = resp.get_json()
+            assert body["status"] == "idle"
+            assert body["labels"] == []
+
     def test_vote_endpoint_returns_4xx_without_dataset_header(self, client):
         """``POST /api/medias/<id>/vote`` does not silently 200 when the
         request didn't identify a dataset/detector and nothing's pinned

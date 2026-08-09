@@ -295,13 +295,13 @@ class TestServerFileSettingsSource:
         with pytest.raises(ValueError, match="is required"):
             src.load({"filepath": ""})
 
-    def test_username_template_resolution(self, tmp_path, monkeypatch):
+    def test_username_template_resolution(self, tmp_path):
+        from vtsearch.auth import thread_user
         from vtsearch.settings_io.sources import get_settings_source
 
-        monkeypatch.setattr("vtsearch.auth.get_current_user", lambda: "alice")
-
         src = get_settings_source("server_json_file")
-        result = src._normalize({"filepath": str(tmp_path / "{username}.settings.json")})["filepath"]
+        with thread_user("alice"):
+            result = src._normalize({"filepath": str(tmp_path / "{username}.settings.json")})["filepath"]
         assert "alice.settings.json" in result
         assert "{username}" not in result
 

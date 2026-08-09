@@ -276,6 +276,26 @@ def test_auto_depth_terminates_on_coincident_points():
         assert cells[0].count == 10
 
 
+@pytest.mark.parametrize("bin_shape", BIN_SHAPES)
+def test_auto_depth_resolves_tight_cluster_beside_coincident_pile(bin_shape):
+    # A dominant pile of exact duplicates must not mask a smaller-but-separable
+    # cluster: the halving that fails to split the pile leaves both the cell
+    # count and the max count unchanged, and the co-location guard used to read
+    # that stagnation off the densest cell alone.  Every multi-point cell has to
+    # be coincident before the descent may stop.
+    coords = np.array(
+        [[0.0, 0.0]] * 5 + [[100.0, 0.0], [103.0, 0.0], [106.0, 0.0]],
+        dtype=np.float32,
+    )
+    pyr = build_pyramid(_projection(coords), bin_shape=bin_shape)
+    deepest = max(lm.level for lm in pyr.levels)
+    counts = sorted(c.count for (lvl, _, _), t in pyr.tiles.items() if lvl == deepest for c in t.cells)
+    # The three spread-out points land in their own cells; only the 5 exact
+    # duplicates stay merged (no radius can ever separate those).
+    assert counts == [1, 1, 1, 5]
+    assert len(pyr.levels) <= max_useful_levels(coords.shape[0])
+
+
 # --- Bin shape (hex vs square) -------------------------------------------------
 
 

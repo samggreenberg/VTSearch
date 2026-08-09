@@ -524,7 +524,7 @@ class PluginBase:
         field-type-driven security validation such as
         :func:`~vtscore.security.url_validation.validate_url` for
         ``url`` fields and
-        :func:`~vtscore.security.path_validation.validate_server_filepath`
+        :func:`~vtscore.security.path_validation.confine_server_filepath`
         for ``server_path`` fields) so CLI invocations get the same
         guarantees the HTTP path does.  Required-field rejection is
         delegated to the normalize pass so the two ingress points raise
@@ -674,7 +674,13 @@ class PluginRegistry(Generic[T]):
         self._tombstones: dict[str, EntryPointTombstone] = {}
         self._discovered = False
         self._discovering = False
-        self._lock = threading.Lock()
+        #: Re-entrant by design: a module scanned during :meth:`_discover` may
+        #: call :meth:`get` / :meth:`list` on this same registry at import
+        #: time, on the discovering thread.  An ``RLock`` lets that call back
+        #: in so the ``_discovering`` guard in :meth:`_ensure_discovered` can
+        #: hand it the partial registry; a plain ``Lock`` would deadlock the
+        #: process before the guard was ever reached.
+        self._lock = threading.RLock()
         if eager:
             self._ensure_discovered()
 
@@ -831,12 +837,16 @@ class PluginRegistry(Generic[T]):
             return
         with self._lock:
             if not self._discovered:
-                # Guard against re-entrant discovery.  When discover_modules
-                # is True, importing a sibling module may trigger get()/list()
-                # on this registry before discovery finishes (e.g. runner.py
-                # importing from its own package's __init__).  In that case
-                # we return early with a partial registry; the ongoing
-                # discovery will complete shortly and fill in the rest.
+                # Guard against re-entrant discovery on the discovering
+                # thread.  When discover_modules is True, importing a sibling
+                # module may trigger get()/list() on this registry before
+                # discovery finishes (e.g. runner.py importing from its own
+                # package's __init__).  ``self._lock`` is an RLock precisely
+                # so that call re-enters here instead of deadlocking; we
+                # return early with a partial registry, and the ongoing
+                # discovery completes shortly and fills in the rest.  Other
+                # threads never see _discovering True: they block on the
+                # RLock until discovery is done and _discovered is set.
                 if self._discovering:
                     return
                 self._discovering = True

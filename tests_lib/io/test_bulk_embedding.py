@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 
 from tests_lib.helpers import make_raw_wav_bytes as _make_wav_bytes
+from tests_lib.helpers import wire_mock_progress_scope
 from vtscore.embedding.media_vectors import media_embedding
 
 
@@ -37,7 +38,7 @@ def _make_bulk_embedder(embed_return_dim: int = 3):
         return [np.full(embed_return_dim, float(i), dtype=np.float32) for i, _ in enumerate(medias)]
 
     emb.embed_media_bulk.side_effect = _bulk
-    return emb
+    return wire_mock_progress_scope(emb)
 
 
 def _make_media_type_for_audio():

@@ -82,7 +82,7 @@ def sync_to_labelset_source() -> None:
     detector, if no detector is active, or if a ``sync_from`` import is
     currently in progress (re-checked at execution time, not here).
     """
-    from vtsearch.auth import get_current_user
+    from vtscore.state.current_user import get_current_user
     from vtscore.state.core import get_active_context, get_active_detector_context
 
     detector_ctx = get_active_detector_context()
@@ -127,7 +127,7 @@ def _run_pending_sync(detector_id: str) -> None:
 
 def _push_with_thread_context(entry: _PendingSync) -> None:
     """Scope thread-local user / dataset / detector context, run the push, restore."""
-    from vtsearch.auth import thread_user
+    from vtscore.state.current_user import thread_user
     from vtscore.state.core import thread_dataset_context, thread_detector_context
 
     with (
