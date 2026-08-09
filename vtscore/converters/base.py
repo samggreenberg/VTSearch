@@ -4,9 +4,31 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any
 
 from vtscore.plugins import PluginBase, PluginField
+
+
+def resolve_media_bytes(media: dict[str, Any]) -> bytes | None:
+    """Read raw bytes from ``media_bytes`` or, failing that, ``media_path``.
+
+    Every binary-input converter needs this: the source media dict carries
+    inline ``media_bytes`` in full-import mode, but reference (*thin*) mode
+    hands the converter only ``{filename, media_path}`` (see
+    :func:`vtscore.converters.runner._run_converter_on_source`), so a
+    converter that reads ``media_bytes`` alone silently produces nothing for
+    every thin import.  Returns ``None`` when neither source yields bytes.
+    """
+    media_bytes = media.get("media_bytes")
+    if media_bytes is not None:
+        return media_bytes
+    media_path = media.get("media_path")
+    if media_path:
+        path = Path(media_path)
+        if path.exists():
+            return path.read_bytes()
+    return None
 
 
 class MediaConverter(PluginBase, ABC):
