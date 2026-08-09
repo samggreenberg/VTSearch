@@ -588,7 +588,7 @@ def _authenticate_cli_user(args, parser) -> None:
     if args.user:
         from vtscore.config import DATA_DIR
 
-        from vtsearch.auth import ApiKeyLoginProvider, set_thread_user
+        from vtsearch.auth import ApiKeyLoginProvider, set_login_provider, set_thread_user
 
         if not args.api_key:
             parser.error("--user requires --api-key <key> to authenticate against data/api_keys.json")
@@ -603,6 +603,14 @@ def _authenticate_cli_user(args, parser) -> None:
         _authed = _provider.get_user(_req)
         if _authed != args.user:
             parser.error(f"--api-key authenticates as {_authed!r}, not --user {args.user!r}")
+        # Activate the provider process-wide, not just for the auth check: it is
+        # what get_user_data_dir() consults to resolve per-user paths. Without
+        # this the default provider stays installed and ignores the username, so
+        # data/<user>/user_settings.json would silently read (and write) through
+        # to the default user's flat file -- i.e. the wrong Auto-Find list and
+        # exporter config, under the right username. Mirrors _run_server's
+        # --login api_key setup so a CLI run resolves paths identically.
+        set_login_provider(_provider)
         set_thread_user(args.user)
         cli_progress.emit(
             "authenticated_user",

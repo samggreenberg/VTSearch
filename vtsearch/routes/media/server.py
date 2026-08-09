@@ -291,8 +291,8 @@ def _confine_origin_params(origin: dict) -> dict:
     """Return *origin* with approved paths, or abort 400 if one escapes.
 
     The origin dict comes verbatim from the request body, so any path-like
-    param must pass the same confinement check ``_load_from_origin`` applies
-    before it can point a filesystem-backed source (server_folder,
+    params must pass the same confinement check ``_load_from_origin``
+    applies before they can point a filesystem-backed source (server_folder,
     server_files) outside the user's allowed directory.  The returned copy
     carries the paths the check approved, so a relative param cannot be
     validated against the user's data dir and then read relative to the

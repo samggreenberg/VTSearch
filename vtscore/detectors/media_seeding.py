@@ -49,11 +49,11 @@ def _real_example_origin(ex: dict[str, Any]) -> dict[str, Any] | None:
     ``origin`` key and fall back to the sentinel.
 
     Security: the origin comes from a detector JSON / request body, so its
-    path-like params must pass the same per-user confinement the ingress
-    applies; an origin that fails the check is discarded (sentinel
-    fallback).  The *confined* copy is returned so the seeded media resolves
-    the path the check approved rather than one anchored at the process CWD.
-    URL params are re-validated by the url_download source at fetch time
+    params must pass the same per-user confinement the ingress applies; an
+    origin that fails the check is discarded (sentinel fallback).  The
+    *confined* copy is returned so the seeded media resolves the path the
+    check approved rather than one anchored at the process CWD.  URL params
+    are re-validated by the url_download source at fetch time
     (``validate_url`` plus per-redirect-hop checks in the downloader).
     """
     origin = ex.get("origin")

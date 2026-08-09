@@ -424,6 +424,13 @@ in this priority order:
 2. `media_path`; local file on disk (thin mode with local files).
 3. `media_url`; remote URL (fetched on demand).
 
+The `media_url` fetch goes through the project's SSRF guard
+(`vtscore.security.url_validation.fetch_validated_url`), so it must be a
+publicly routable `http(s)` URL and every redirect hop is re-checked.  A
+`file://` or private-network URL fetches nothing and resolves to `None` /
+`""`; a URL-backed importer that needs a local file should set
+`media_path` instead.
+
 In thin mode, URL-backed importers can skip downloading entirely: set
 `media_bytes=None`, `media_path=None`, and `media_url="https://..."`.
 Embeddings and MD5 can come from external services, so sorting and scoring

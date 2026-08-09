@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, inject, input, OnDestroy, OnInit, output, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, ElementRef, inject, input, OnDestroy, OnInit, output, signal, viewChild } from '@angular/core';
 
 import { Subject, takeUntil, timer, switchMap, filter, take } from 'rxjs';
 import { ModalComponent } from '../../modal/modal.component';
@@ -36,18 +36,35 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   // Optional query: the canvas only renders in the results `@else` branch.
   readonly chartCanvas = viewChild<ElementRef<HTMLCanvasElement>>('chartCanvas');
 
-  analyzing = true;
-  analysisProgress = 0;
-  chartData: ErrorCostPoint[] | StabilityPoint[] | DiversityPoint[] = [];
-  emptyHistory = false;
+  // Signals, not plain fields: the app is zoneless and this component is
+  // OnPush, and every one of these is written from an HTTP/SSE subscribe
+  // callback. This component emits no output on the data path either, so
+  // plain fields froze the modal on "Loading indicator history…" forever.
+  readonly analyzing = signal(true);
+  readonly analysisProgress = signal(0);
+  readonly chartData = signal<ErrorCostPoint[] | StabilityPoint[] | DiversityPoint[]>([]);
+  readonly emptyHistory = signal(false);
   /** True once we've fallen back to the async train-and-score job, which
    *  swaps the brief "loading" line for a real progress bar + Cancel. */
-  runningJob = false;
+  readonly runningJob = signal(false);
   /** Job id of the in-flight eval train-and-score run. Set once the
    *  backend hands back a job envelope; consumed by ``onCancel``. */
   private currentJobId: string | null = null;
 
   private destroy$ = new Subject<void>();
+
+  constructor() {
+    // The canvas lives in the results `@else` branch, so it only exists one
+    // render pass after `chartData` lands. Keying the draw on the viewChild
+    // signal *and* the data means the chart paints exactly when the canvas
+    // materialises, rather than racing it on a fixed timeout.
+    effect(() => {
+      const canvas = this.chartCanvas()?.nativeElement;
+      const data = this.chartData();
+      if (!canvas || data.length === 0) return;
+      this.renderChart(canvas, data);
+    });
+  }
 
   get title(): string {
     switch (this.metric()) {
@@ -75,7 +92,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   }
 
   private loadCachedHistory(): void {
-    this.analyzing = true;
+    this.analyzing.set(true);
     this.sortingApi
       .getIndicatorScoreHistory(this.metric())
       .pipe(takeUntil(this.destroy$))
@@ -89,12 +106,11 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
             this.runAnalysis();
             return;
           }
-          this.analyzing = false;
-          this.chartData = (res.history || []) as ErrorCostPoint[] | StabilityPoint[] | DiversityPoint[];
-          this.emptyHistory = this.chartData.length === 0;
-          if (!this.emptyHistory) {
-            setTimeout(() => this.renderChart(), 50);
-          }
+          this.analyzing.set(false);
+          this.chartData.set(
+            (res.history || []) as ErrorCostPoint[] | StabilityPoint[] | DiversityPoint[],
+          );
+          this.emptyHistory.set(this.chartData().length === 0);
         },
         // A failed cached read is not fatal: the job path recomputes the
         // series from scratch, so fall back rather than showing "no history".
@@ -103,9 +119,9 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
   }
 
   private runAnalysis(): void {
-    this.analyzing = true;
-    this.runningJob = true;
-    this.analysisProgress = 0;
+    this.analyzing.set(true);
+    this.runningJob.set(true);
+    this.analysisProgress.set(0);
 
     // Progress comes from the `eval` SSE channel on /api/events. Use a
     // dedicated notifier to stop watching once the bar reaches 100%: the
@@ -120,7 +136,7 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
       .subscribe({
         next: (res) => {
           if (res.total > 0) {
-            this.analysisProgress = Math.round((res.progress / res.total) * 100);
+            this.analysisProgress.set(Math.round((res.progress / res.total) * 100));
           }
           if (res.done) {
             stopWatchingProgress$.next();
@@ -145,11 +161,11 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
             this.currentJobId = res.job_id;
             this.pollEvalJob(res.job_id);
           } else {
-            this.analyzing = false;
+            this.analyzing.set(false);
           }
         },
         error: () => {
-          this.analyzing = false;
+          this.analyzing.set(false);
         },
       });
   }
@@ -168,12 +184,12 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
           if (res.status === 'done') {
             this.applyEvalResult(res);
           } else {
-            this.analyzing = false;
+            this.analyzing.set(false);
           }
         },
         error: () => {
           this.currentJobId = null;
-          this.analyzing = false;
+          this.analyzing.set(false);
         },
       });
   }
@@ -192,44 +208,41 @@ export class ProgressModalComponent implements OnInit, OnDestroy {
     if (jobId) {
       this.sortingApi.cancelEvalTrainAndScore(jobId).pipe(takeUntil(this.destroy$)).subscribe();
     }
-    this.analyzing = false;
+    this.analyzing.set(false);
     this.close();
   }
 
   private applyEvalResult(res: EvalTrainAndScoreResponse): void {
-    this.analyzing = false;
-    this.runningJob = false;
+    this.analyzing.set(false);
+    this.runningJob.set(false);
     if (this.metric() === 'smart') {
-      this.chartData = (res.error_cost || []) as ErrorCostPoint[];
+      this.chartData.set((res.error_cost || []) as ErrorCostPoint[]);
     } else if (this.metric() === 'stable') {
-      this.chartData = (res.stability || []) as StabilityPoint[];
+      this.chartData.set((res.stability || []) as StabilityPoint[]);
     } else {
-      this.chartData = (res.diversity || []) as DiversityPoint[];
+      this.chartData.set((res.diversity || []) as DiversityPoint[]);
     }
     // Same empty-state handling as the cached path: a job that legitimately
     // produces no points (too little history) shows the explanatory message
     // rather than an empty set of axes.
-    this.emptyHistory = this.chartData.length === 0;
-    if (!this.emptyHistory) {
-      setTimeout(() => this.renderChart(), 50);
-    }
+    this.emptyHistory.set(this.chartData().length === 0);
   }
 
-  private renderChart(): void {
-    const chartCanvas = this.chartCanvas();
-    if (!chartCanvas) return;
-    const canvas = chartCanvas.nativeElement;
+  private renderChart(
+    canvas: HTMLCanvasElement,
+    data: ErrorCostPoint[] | StabilityPoint[] | DiversityPoint[],
+  ): void {
     switch (this.metric()) {
       case 'smart':
-        this.chartsService.renderErrorCostChart(canvas, this.chartData as ErrorCostPoint[]);
+        this.chartsService.renderErrorCostChart(canvas, data as ErrorCostPoint[]);
         break;
       case 'stable':
-        this.chartsService.renderStabilityChart(canvas, this.chartData as StabilityPoint[]);
+        this.chartsService.renderStabilityChart(canvas, data as StabilityPoint[]);
         break;
       case 'diverse':
         this.chartsService.renderDiversityChart(
           canvas,
-          this.chartData as DiversityPoint[],
+          data as DiversityPoint[],
           this.settingsState.settingsSignal()?.autopilot_goal_diversity ?? 40,
         );
         break;

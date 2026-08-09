@@ -611,3 +611,29 @@ class TestExampleSortOriginConfinement:
             assert resp.status_code == 404, resp.get_json()
         finally:
             set_login_provider(original)
+
+    @pytest.mark.parametrize("token", ["..", ".", "~"])
+    def test_separator_free_traversal_token_rejected_multi_user(self, client, tmp_path, token):
+        """Issue #2918: the confinement check used to validate a param only
+        when it contained a path separator, so ``..`` / ``.`` / ``~`` slipped
+        through and built a ``LocalFolderSource`` rooted at (the parent of)
+        the process CWD."""
+        from vtsearch.auth import get_login_provider, set_login_provider
+
+        user_dir = tmp_path / "alice"
+        user_dir.mkdir()
+
+        original = get_login_provider()
+        try:
+            set_login_provider(self._multi_user_provider(user_dir))
+            resp = client.post(
+                "/api/example-sort-origin",
+                json={
+                    "origin": {"importer": "server_folder", "params": {"path": token}},
+                    "key": "app.py",
+                },
+            )
+            assert resp.status_code == 400, resp.get_json()
+            assert "must be within" in resp.get_json()["message"]
+        finally:
+            set_login_provider(original)

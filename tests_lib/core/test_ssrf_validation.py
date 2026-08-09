@@ -1,16 +1,19 @@
 """Tests for SSRF URL validation.
 
 Verifies that :func:`vtscore.security.url_validation.validate_url` blocks
-requests to private/internal network addresses while allowing public URLs.
-Also verifies that the HTTP archive importer and webhook exporter both
-call the validator.
+requests to private/internal network addresses while allowing public URLs,
+that :func:`~vtscore.security.url_validation.open_validated_stream` re-checks
+every redirect hop, and that the HTTP archive importer, the webhook exporter,
+and the ``media_url`` media fetch all go through the guard.
 """
 
 from __future__ import annotations
 
+from typing import cast
 from unittest import mock
 
 import pytest
+import requests
 
 from vtscore.security.url_validation import validate_url
 
@@ -144,6 +147,274 @@ class TestValidateUrlPrivateIPs:
         ):
             with pytest.raises(ValueError, match="private/internal"):
                 validate_url("http://dual-homed.example/")
+
+
+# ---------------------------------------------------------------------------
+# open_validated_stream – per-hop redirect revalidation
+# ---------------------------------------------------------------------------
+
+
+class _FakeResponse:
+    """Minimal stand-in for a streamed ``requests.Response``."""
+
+    def __init__(self, status_code: int, location: str | None = None, body: bytes = b""):
+        self.status_code = status_code
+        self.headers = {"Location": location} if location else {}
+        self.content = body
+        self.closed = False
+
+    @property
+    def is_redirect(self) -> bool:
+        return 300 <= self.status_code < 400 and "Location" in self.headers
+
+    @property
+    def is_permanent_redirect(self) -> bool:
+        return self.status_code in (301, 308) and "Location" in self.headers
+
+    def close(self):
+        self.closed = True
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+        return False
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"status {self.status_code}")
+
+
+class _FakeSession:
+    """Session that replays a scripted chain of responses and records hops."""
+
+    def __init__(self, responses):
+        self._responses = list(responses)
+        self.hops: list[tuple[str, dict]] = []
+
+    def get(self, url, **kwargs):
+        self.hops.append((url, kwargs.get("headers") or {}))
+        if self._responses:
+            return self._responses.pop(0)
+        return _FakeResponse(200, body=b"end")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def as_session(self) -> requests.Session:
+        """Typed view for the duck-typed ``session`` parameter.
+
+        ``open_validated_stream`` only ever calls ``.get()``, but its signature
+        names the real class; this keeps the fake usable without widening the
+        production annotation to a bespoke protocol.
+        """
+        return cast(requests.Session, self)
+
+
+class TestOpenValidatedStream:
+    """A one-time up-front check is not enough: each hop is re-resolved."""
+
+    def _resolve(self, ip):
+        return mock.patch(
+            "vtscore.security.url_validation.socket.getaddrinfo",
+            return_value=[(2, 1, 0, "", (ip, 0))],
+        )
+
+    def test_redirect_to_internal_host_is_rejected(self):
+        from vtscore.security.url_validation import open_validated_stream
+
+        session = _FakeSession([_FakeResponse(302, location="http://169.254.169.254/latest/meta-data/")])
+        with self._resolve("169.254.169.254"):
+            with pytest.raises(ValueError, match="private/internal"):
+                open_validated_stream(session.as_session(), "https://public.example/media.wav")
+        # Only the first hop was ever issued; the internal target was not fetched.
+        assert [hop for hop, _ in session.hops] == ["https://public.example/media.wav"]
+
+    def test_redirect_to_non_http_scheme_is_rejected(self):
+        from vtscore.security.url_validation import open_validated_stream
+
+        session = _FakeSession([_FakeResponse(302, location="file:///etc/passwd")])
+        with pytest.raises(ValueError, match="http or https"):
+            open_validated_stream(session.as_session(), "https://public.example/media.wav")
+
+    def test_follows_a_public_redirect_chain(self):
+        from vtscore.security.url_validation import open_validated_stream
+
+        session = _FakeSession(
+            [
+                _FakeResponse(302, location="https://cdn.example/final.wav"),
+                _FakeResponse(200, body=b"payload"),
+            ]
+        )
+        with self._resolve("93.184.216.34"):
+            response = open_validated_stream(session.as_session(), "https://public.example/media.wav")
+        assert response.content == b"payload"
+        assert [hop for hop, _ in session.hops] == [
+            "https://public.example/media.wav",
+            "https://cdn.example/final.wav",
+        ]
+
+    def test_relative_location_is_resolved_against_the_current_hop(self):
+        from vtscore.security.url_validation import open_validated_stream
+
+        session = _FakeSession([_FakeResponse(302, location="/elsewhere.wav"), _FakeResponse(200, body=b"ok")])
+        with self._resolve("93.184.216.34"):
+            open_validated_stream(session.as_session(), "https://public.example/a/media.wav")
+        assert session.hops[1][0] == "https://public.example/elsewhere.wav"
+
+    def test_headers_are_recomputed_per_hop(self):
+        """Credentials scoped to one host must not be replayed to the next."""
+        from vtscore.security.url_validation import open_validated_stream
+
+        session = _FakeSession([_FakeResponse(302, location="https://cdn.example/final.wav"), _FakeResponse(200)])
+        with self._resolve("93.184.216.34"):
+            open_validated_stream(
+                session.as_session(),
+                "https://public.example/media.wav",
+                headers_for_url=lambda u: {"Authorization": "secret"} if "public.example" in u else {},
+            )
+        assert session.hops[0][1] == {"Authorization": "secret"}
+        assert session.hops[1][1] == {}
+
+    def test_gives_up_past_the_redirect_cap(self):
+        from vtscore.security.url_validation import MAX_REDIRECTS, open_validated_stream
+
+        session = _FakeSession(
+            [_FakeResponse(302, location=f"https://h{i}.example/x") for i in range(MAX_REDIRECTS + 2)]
+        )
+        with self._resolve("93.184.216.34"):
+            with pytest.raises(requests.TooManyRedirects):
+                open_validated_stream(session.as_session(), "https://public.example/media.wav")
+
+    def test_does_not_validate_the_first_url(self):
+        """The caller owns the up-front check; this covers only the hops after it."""
+        from vtscore.security.url_validation import open_validated_stream
+
+        session = _FakeSession([_FakeResponse(200, body=b"ok")])
+        with mock.patch("vtscore.security.url_validation.socket.getaddrinfo") as mock_gai:
+            open_validated_stream(session.as_session(), "https://public.example/media.wav")
+        mock_gai.assert_not_called()
+
+
+class TestFetchValidatedUrl:
+    def test_rejects_file_scheme_before_any_request(self):
+        from vtscore.security.url_validation import fetch_validated_url
+
+        with mock.patch("vtscore.security.url_validation.requests.Session") as mock_session:
+            with pytest.raises(ValueError, match="http or https"):
+                fetch_validated_url("file:///etc/passwd")
+        mock_session.assert_not_called()
+
+    def test_rejects_internal_host_before_any_request(self):
+        from vtscore.security.url_validation import fetch_validated_url
+
+        with mock.patch(
+            "vtscore.security.url_validation.socket.getaddrinfo",
+            return_value=[(2, 1, 0, "", ("127.0.0.1", 0))],
+        ):
+            with mock.patch("vtscore.security.url_validation.requests.Session") as mock_session:
+                with pytest.raises(ValueError, match="private/internal"):
+                    fetch_validated_url("http://localhost:5000/api/settings")
+        mock_session.assert_not_called()
+
+    def test_returns_body_for_a_public_url(self):
+        from vtscore.security.url_validation import fetch_validated_url
+
+        session = _FakeSession([_FakeResponse(200, body=b"media-bytes")])
+        with mock.patch(
+            "vtscore.security.url_validation.socket.getaddrinfo",
+            return_value=[(2, 1, 0, "", ("93.184.216.34", 0))],
+        ):
+            with mock.patch("vtscore.security.url_validation.requests.Session", return_value=session):
+                assert fetch_validated_url("https://public.example/m.wav") == b"media-bytes"
+
+    def test_raises_on_error_status(self):
+        from vtscore.security.url_validation import fetch_validated_url
+
+        session = _FakeSession([_FakeResponse(404)])
+        with mock.patch(
+            "vtscore.security.url_validation.socket.getaddrinfo",
+            return_value=[(2, 1, 0, "", ("93.184.216.34", 0))],
+        ):
+            with mock.patch("vtscore.security.url_validation.requests.Session", return_value=session):
+                with pytest.raises(requests.HTTPError):
+                    fetch_validated_url("https://public.example/missing.wav")
+
+
+# ---------------------------------------------------------------------------
+# media_url – SSRF protection integration
+# ---------------------------------------------------------------------------
+
+
+class TestMediaUrlSSRF:
+    """``media_url`` rides along on a media dict that can come from a loaded
+    pickle, and whatever it fetches is served straight back to the requester.
+    It must not be able to name a local file or an internal service.
+    """
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "file:///etc/passwd",
+            "file://localhost/etc/shadow",
+            "ftp://evil.example/creds",
+            "/etc/passwd",
+        ],
+    )
+    def test_non_http_media_url_fetches_nothing(self, url):
+        from vtscore.media.base import _fetch_media_url
+
+        with mock.patch("vtscore.security.url_validation.requests.Session") as mock_session:
+            assert _fetch_media_url(url) is None
+        mock_session.assert_not_called()
+
+    @pytest.mark.parametrize("ip", ["127.0.0.1", "169.254.169.254", "10.0.0.5", "192.168.1.1"])
+    def test_internal_media_url_fetches_nothing(self, ip):
+        from vtscore.media.base import _fetch_media_url
+
+        with mock.patch(
+            "vtscore.security.url_validation.socket.getaddrinfo",
+            return_value=[(2, 1, 0, "", (ip, 0))],
+        ):
+            with mock.patch("vtscore.security.url_validation.requests.Session") as mock_session:
+                assert _fetch_media_url(f"http://{ip}/latest/meta-data/") is None
+        mock_session.assert_not_called()
+
+    def test_public_media_url_still_fetches(self):
+        from vtscore.media.base import _fetch_media_url
+
+        session = _FakeSession([_FakeResponse(200, body=b"remote-media")])
+        with mock.patch(
+            "vtscore.security.url_validation.socket.getaddrinfo",
+            return_value=[(2, 1, 0, "", ("93.184.216.34", 0))],
+        ):
+            with mock.patch("vtscore.security.url_validation.requests.Session", return_value=session):
+                assert _fetch_media_url("https://pullwrest.example/media/123") == b"remote-media"
+
+    def test_resolve_media_bytes_refuses_a_file_url(self, tmp_path):
+        """End-to-end: a pickled ``file://`` media_url must not read the disk."""
+        from vtscore.media.audio.media_type import AudioMediaType
+
+        secret = tmp_path / "secret.txt"
+        secret.write_bytes(b"top-secret")
+
+        mt = AudioMediaType()
+        media = {"media_bytes": None, "media_path": None, "media_url": secret.as_uri()}
+        assert mt._resolve_media_bytes(media) is None
+
+    def test_resolve_media_string_refuses_a_file_url(self, tmp_path):
+        from vtscore.media.text.media_type import TextMediaType
+
+        secret = tmp_path / "secret.txt"
+        secret.write_text("top-secret")
+
+        mt = TextMediaType()
+        media = {"media_string": None, "media_path": None, "media_url": secret.as_uri()}
+        assert mt._resolve_media_string(media) == ""
 
 
 # ---------------------------------------------------------------------------
