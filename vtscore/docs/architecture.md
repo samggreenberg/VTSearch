@@ -328,7 +328,7 @@ never the reverse.
 └─────────────────────────────────────────────┘
 ```
 
-The app uses four categories of hooks to inject app-side behaviour into
+The app uses five categories of hooks to inject app-side behaviour into
 the library without the library knowing:
 
 1. **Context resolvers** - `register_dataset_context_resolver`,
@@ -344,9 +344,26 @@ the library without the library knowing:
    *request-scoped* user; `vtsearch/auth/` wires it to `flask.g.user` at
    import time. Below it sit the thread-local (`thread_user`) and the
    `"default"` fallback, both Flask-free.
+5. **Achievement recorders** -
+   `vtscore.achievements_hooks.register_achievement_recorder(event, fn)`
+   for the `vote` / `dataset_load` / `detector_import` / `find` events the
+   library raises. The counters are per-user settings state, so the
+   recording itself lives in `vtsearch.achievements`. Wired in
+   `vtsearch/shim/`.
 
 If you're embedding `vtscore` in your own application, you'll typically
 install your own variants of these hooks. None of them is required -
-the library has working defaults for all four (no context, no
+the library has working defaults for all five (no context, no
 `from_settings()` builder, no app-side plugin families, every user is
-`"default"`).
+`"default"`, and achievement events that no-op).
+
+**The dependency direction is enforced by a test.**
+`tests_lib/core/test_library_layering.py` walks the AST of every
+`vtscore` module and fails on any `import vtsearch`, at any nesting
+depth. Lazy function-level imports were how the rule kept breaking: the
+module still imported cleanly and the inverted dependency only bit at
+call time, in exactly the Flask-free deployment the tier exists for. A
+short allowlist there carries the remaining imports with their rationale
+(two optional `try`/`except`-guarded ones, plus `security/path_validation.py`,
+which still reaches for the `LoginProvider` abstraction); add a hook
+rather than a sixth category.

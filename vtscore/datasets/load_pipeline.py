@@ -105,13 +105,12 @@ def clear_dataset():
 def _get_embedder_for_medias(media_dict: dict):
     """Resolve the embedder for *media_dict*.
 
-    Imported lazily to avoid a circular dependency: this module sits under
-    ``vtscore.datasets`` but ``vtsearch.routes._shared`` lives in the
-    routes layer, which itself imports from this module.
+    Imported lazily to keep this module's import graph shallow;
+    ``vtscore.media`` pulls in the whole media-plugin discovery pass.
     """
-    from vtsearch.routes._shared import get_embedder_for_medias as _impl
+    from vtscore.media import embedder_for_medias  # noqa: PLC0415
 
-    return _impl(media_dict)
+    return embedder_for_medias(media_dict)
 
 
 def _parse_bool(value: Any) -> bool:
@@ -580,9 +579,9 @@ def _run_origin_load_in_background(
                     # save above necessarily predates the pass.
                     start_archive_thumbnail_warm(ctx)
 
-                    from vtsearch.achievements import record_dataset_load  # noqa: PLC0415
+                    from vtscore.achievements_hooks import record_achievement  # noqa: PLC0415
 
-                    record_dataset_load(str(origin.get("importer", "")))
+                    record_achievement("dataset_load", str(origin.get("importer", "")))
                 except Exception as exc:
                     _handle_load_failure(exc, context_id, tracker, registry_entry_id=registry_entry_id)
                 finally:

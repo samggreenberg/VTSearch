@@ -59,6 +59,7 @@ VTSearch/
 │
 ├── vtscore/                        Library tier; no Flask dependency
 │   ├── config.py                   Constants (sample rates, paths, model IDs)
+│   ├── achievements_hooks.py       Achievement-event seam; app installs the recorders
 │   ├── cli.py                      CLI autodetect workflow
 │   ├── cli_pipeline.py             Pipeline YAML loader
 │   ├── cli_progress.py             CLI progress bars
@@ -213,8 +214,9 @@ VTSearch/
 │   ├── port_preflight.py           Startup port-collision detection / single-instance lock
 │   │                               (CLI-only; not used by the WSGI app object)
 │   │
-│   ├── auth/                       LoginProvider ABC, DefaultLoginProvider, get_current_user(),
-│   │                               get_user_data_dir()
+│   ├── auth/                       LoginProvider ABC, DefaultLoginProvider, get_user_data_dir()
+│   │                               (get_current_user() / thread_user() are re-exported from
+│   │                               vtscore.state.current_user, which owns the thread-local)
 │   │
 │   ├── state/                      App-tier state shim; re-exports vtscore.state.* and adds
 │   │                               proxy view (medias, good_votes, bad_votes, …) from state_proxies.py
@@ -223,7 +225,8 @@ VTSearch/
 │   │                               (checks flask.g, falls back to thread-local)
 │   │
 │   ├── shim/                       Flask glue: context resolvers, persistence hooks,
-│   │                               CoreConfig builder, app-only plugin families
+│   │                               achievement recorders, CoreConfig builder,
+│   │                               app-only plugin families
 │   │
 │   ├── schemas/                    Marshmallow schemas for API serialisation
 │   │

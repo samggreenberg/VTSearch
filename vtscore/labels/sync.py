@@ -353,8 +353,8 @@ def sync_from_labelset_source(detector_id: str | None = None) -> list[dict[str, 
             _syncing = False
 
     if applied_any:
-        from vtsearch.achievements import record_detector_import
+        from vtscore.achievements_hooks import record_achievement
 
-        record_detector_import(ctx.detector_id)
+        record_achievement("detector_import", ctx.detector_id)
 
     return labels

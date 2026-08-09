@@ -301,15 +301,19 @@ def _record_vote_locked(count_streak: bool = True) -> None:
     wrong detector).  Establishes the lock order ``_state_lock → _settings_lock``;
     no code path takes the locks in the reverse order.
 
-    *count_streak* is forwarded to :func:`record_vote`: pass False for bulk /
+    *count_streak* is forwarded to the app's recorder: pass False for bulk /
     non-individual vote applications so they credit every other achievement but
     do not inflate the Marathoner ``vote_streak`` (which counts consecutive
     *individual* hand-clicks).
+
+    The achievement system is app-tier, so the credit goes through the
+    :mod:`vtscore.achievements_hooks` seam; with no app wired up this is a
+    no-op.
     """
-    from vtsearch.achievements import record_vote  # noqa: PLC0415
+    from vtscore.achievements_hooks import record_achievement  # noqa: PLC0415
 
     det_ctx = get_active_detector_context()
-    record_vote(det_ctx.detector_id, media_type=det_ctx.media_type, count_streak=count_streak)
+    record_achievement("vote", det_ctx.detector_id, media_type=det_ctx.media_type, count_streak=count_streak)
 
 
 def _current_label_locked(ctx, media_id: int) -> str:

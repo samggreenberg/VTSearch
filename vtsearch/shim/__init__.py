@@ -142,6 +142,48 @@ def register_app_persistence_hooks() -> None:
     register_setting_persister("calibration_fraction", settings.set_calibration_fraction)
 
 
+def register_app_achievement_recorders() -> None:
+    """Wire the library's achievement events to :mod:`vtsearch.achievements`.
+
+    The achievement counters live in the current user's ``vtsearch.settings``
+    file, so the recording functions are app-tier - but the events they
+    count (a vote landing, a dataset load completing, a detector import, a
+    find run) are raised from inside :mod:`vtscore`.  The library dispatches
+    them through :func:`vtscore.achievements_hooks.record_achievement`; this
+    installs the app-side recorders.  Without them the events are no-ops,
+    which is what a library-only consumer wants.
+
+    Each recorder imports ``vtsearch.achievements`` lazily so app startup
+    doesn't pull the settings stack in through this wiring.
+    """
+    from vtscore.achievements_hooks import register_achievement_recorder
+
+    def _record_vote(*args: Any, **kwargs: Any) -> None:
+        from vtsearch.achievements import record_vote
+
+        record_vote(*args, **kwargs)
+
+    def _record_dataset_load(*args: Any, **kwargs: Any) -> None:
+        from vtsearch.achievements import record_dataset_load
+
+        record_dataset_load(*args, **kwargs)
+
+    def _record_detector_import(*args: Any, **kwargs: Any) -> None:
+        from vtsearch.achievements import record_detector_import
+
+        record_detector_import(*args, **kwargs)
+
+    def _record_find(*args: Any, **kwargs: Any) -> None:
+        from vtsearch.achievements import record_find
+
+        record_find(*args, **kwargs)
+
+    register_achievement_recorder("vote", _record_vote)
+    register_achievement_recorder("dataset_load", _record_dataset_load)
+    register_achievement_recorder("detector_import", _record_detector_import)
+    register_achievement_recorder("find", _record_find)
+
+
 def build_core_config(settings_path: str | Path | None = None) -> CoreConfig:
     """Snapshot ``vtsearch.settings`` into a :class:`CoreConfig`.
 
@@ -230,6 +272,7 @@ def register_app_plugin_families() -> None:
 
 __all__ = [
     "build_core_config",
+    "register_app_achievement_recorders",
     "register_app_config_builder",
     "register_app_persistence_hooks",
     "register_app_plugin_families",
