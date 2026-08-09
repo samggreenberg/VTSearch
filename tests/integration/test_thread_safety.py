@@ -549,6 +549,196 @@ class TestSlowSettingsIODoesNotBlockOthers:
         assert not errors, f"Threads raised: {errors!r}"
 
 
+def _settings_lock_free_for_other_threads(timeout: float = 3.0) -> bool:
+    """Report whether a *different* thread can take ``_settings_lock`` right now.
+
+    ``_settings_lock`` is an ``RLock``, so the calling thread can always
+    re-acquire it and can't tell whether it already owns it.  Probing from a
+    fresh thread is what makes "is this lock held across the call?"
+    observable.
+    """
+    result: list[bool] = []
+
+    def probe():
+        got = _settings_mod._settings_lock.acquire(timeout=timeout)
+        result.append(got)
+        if got:
+            _settings_mod._settings_lock.release()
+
+    t = threading.Thread(target=probe, daemon=True)
+    t.start()
+    t.join(timeout + 2)
+    return bool(result) and result[0]
+
+
+class TestGettersDoNotHoldSettingsLockAcrossFileIO:
+    """Regression for the AB-BA deadlock in issue #2913.
+
+    The canonical lock order is **file lock -> settings lock**.  Every
+    settings *getter* used to do the reverse: ``with _settings_lock:
+    _read_value(key)``, and ``_read_value`` calls ``_ensure_server_loaded`` /
+    ``_ensure_user_loaded``, which on a cold cache take the cross-process
+    ``file_lock`` (and on a due sync the per-user sync lock plus, via the
+    setters ``_apply_settings`` invokes, ``file_lock`` again).  A concurrent
+    writer taking ``file_lock`` then ``settings_lock`` deadlocked against it,
+    permanently freezing the single-worker gunicorn deployment.
+
+    The tests below assert the invariant directly: while a settings read is
+    inside ``file_lock`` (or inside a settings source's ``load()``), an
+    unrelated thread must still be able to take ``_settings_lock``.
+    """
+
+    def _record_lock_state_inside_file_lock(self, monkeypatch) -> list[bool]:
+        """Instrument ``file_lock`` to probe ``_settings_lock`` on every entry."""
+        import contextlib
+
+        observations: list[bool] = []
+        real_file_lock = _settings_store_mod.file_lock
+
+        @contextlib.contextmanager
+        def probing_file_lock(path):
+            with real_file_lock(path):
+                observations.append(_settings_lock_free_for_other_threads())
+                yield
+
+        monkeypatch.setattr(_settings_store_mod, "file_lock", probing_file_lock)
+        return observations
+
+    def test_cold_scalar_getter_does_not_hold_settings_lock(self, monkeypatch, isolated_settings, tmp_path):
+        """A user-tier getter on a cold cache must not hold the lock across file I/O."""
+        _settings_mod.set_user_data_dir_override(tmp_path)
+        try:
+            _settings_mod.reset()  # cold server + user caches
+            observations = self._record_lock_state_inside_file_lock(monkeypatch)
+
+            _settings_mod.get_volume()
+
+            assert observations, "the cold read never entered file_lock; the test no longer exercises the path"
+            assert all(observations), "a getter held _settings_lock inside file_lock; issue #2913 has regressed"
+        finally:
+            _settings_mod.set_user_data_dir_override(None)
+
+    def test_cold_per_side_getter_does_not_hold_settings_lock(self, monkeypatch, isolated_settings, tmp_path):
+        """``_get_dict`` (the per-media-type per-side getters) has the same shape."""
+        _settings_mod.set_user_data_dir_override(tmp_path)
+        try:
+            _settings_mod.reset()
+            observations = self._record_lock_state_inside_file_lock(monkeypatch)
+
+            _settings_mod.get_grid_icon_size_left()
+
+            assert observations, "the cold read never entered file_lock"
+            assert all(observations), "_get_dict held _settings_lock inside file_lock; issue #2913 has regressed"
+        finally:
+            _settings_mod.set_user_data_dir_override(None)
+
+    def test_cold_dir_getter_does_not_hold_settings_lock(self, monkeypatch, isolated_settings, tmp_path):
+        """``_get_dir`` (server-tier directory settings) has the same shape."""
+        _settings_mod.set_user_data_dir_override(tmp_path)
+        try:
+            _settings_mod.reset()
+            observations = self._record_lock_state_inside_file_lock(monkeypatch)
+
+            _settings_mod.get_saved_datasets_dir()
+
+            assert observations, "the cold read never entered file_lock"
+            assert all(observations), "_get_dir held _settings_lock inside file_lock; issue #2913 has regressed"
+        finally:
+            _settings_mod.set_user_data_dir_override(None)
+
+    def test_getter_does_not_hold_settings_lock_across_source_load(
+        self, monkeypatch, isolated_settings, tmp_path
+    ):
+        """With a settings source configured, the sync fires *inside* a getter.
+
+        The source's ``load()`` is network/file I/O of unbounded duration, and
+        the setters it feeds re-enter ``file_lock``.  Holding the global
+        settings lock across it both deadlocks (issue #2913) and stalls every
+        other user's settings reads.
+        """
+        import json
+
+        from vtsearch.settings_io.sources.server_json_file import ServerFileSettingsSource
+
+        _settings_mod.set_user_data_dir_override(tmp_path)
+        try:
+            source_file = tmp_path / "source.settings.json"
+            source_file.write_text(json.dumps({"volume": 0.25}))
+            _settings_mod.set_settings_source_config(
+                {"source_name": "server_json_file", "field_values": {"filepath": str(source_file)}}
+            )
+
+            observations: list[bool] = []
+            real_do_load = ServerFileSettingsSource._do_load
+
+            def probing_do_load(self, field_values):
+                observations.append(_settings_lock_free_for_other_threads())
+                return real_do_load(self, field_values)
+
+            monkeypatch.setattr(ServerFileSettingsSource, "_do_load", probing_do_load)
+
+            # Force a real sync-from-source pass on the next read: drop the
+            # in-memory sync state *and* the on-disk dedup marker (which would
+            # otherwise let ``_adopt_sync_marker_if_current`` skip the load).
+            _settings_mod._sync_state.pop("default", None)
+            _settings_store_mod._sync_marker_path(_settings_mod._user_settings_path("default")).unlink(
+                missing_ok=True
+            )
+
+            _settings_mod.get_theme()
+
+            assert observations, "the getter never ran a sync-from-source load"
+            assert all(observations), "a getter held _settings_lock across source.load(); issue #2913 has regressed"
+        finally:
+            _settings_mod.set_user_data_dir_override(None)
+
+    def test_concurrent_cold_readers_and_writers_do_not_deadlock(self, isolated_settings, tmp_path):
+        """The end-to-end shape from the issue: cold readers racing writers.
+
+        Threads are daemons and joined with a timeout so a regression fails
+        the test instead of hanging the suite forever.
+        """
+        _settings_mod.set_user_data_dir_override(tmp_path)
+        try:
+            _settings_mod.reset()
+            errors: list[BaseException] = []
+            start = threading.Barrier(8)
+
+            def reader():
+                try:
+                    start.wait(timeout=10)
+                    for _ in range(20):
+                        _settings_mod.get_volume()
+                        _settings_mod.get_saved_datasets_dir()
+                except BaseException as exc:  # pragma: no cover - surfaced via errors
+                    errors.append(exc)
+
+            def writer(value):
+                try:
+                    start.wait(timeout=10)
+                    for _ in range(20):
+                        _settings_mod.set_theme(value)
+                except BaseException as exc:  # pragma: no cover - surfaced via errors
+                    errors.append(exc)
+
+            themes = ["light", "dark"]
+            threads = []
+            for i in range(8):
+                if i % 2 == 0:
+                    threads.append(threading.Thread(target=reader, daemon=True))
+                else:
+                    threads.append(threading.Thread(target=writer, args=(themes[i % len(themes)],), daemon=True))
+            for th in threads:
+                th.start()
+            for th in threads:
+                th.join(timeout=30)
+            alive = [th for th in threads if th.is_alive()]
+            assert not alive, f"{len(alive)} thread(s) deadlocked; issue #2913 has regressed"
+            assert not errors, f"Threads raised: {errors!r}"
+        finally:
+            _settings_mod.set_user_data_dir_override(None)
+
+
 class TestProgressLock:
     """Verify that _progress_lock exists and is an RLock."""
 

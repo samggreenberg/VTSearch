@@ -343,9 +343,16 @@ class UserSettingsStore:
         from the deployment default rather than the user's own key.
 
         Reads the user cache under ``settings_lock``; the caller is
-        responsible for having loaded it (every sync path does). Safe to call
-        while already holding ``settings_lock`` (it is reentrant) and while
-        holding the per-user sync lock.
+        responsible for having loaded it (every sync path does).
+
+        **Must not be called while holding ``settings_lock``.** The
+        deployment-default read goes through a server-tier settings
+        accessor, which calls :meth:`ensure_server_loaded` and so may take
+        the server ``file_lock`` on a cold cache - holding ``settings_lock``
+        across that inverts the canonical file_lock -> settings_lock order.
+        The lock is reentrant, so the inversion would not be caught locally;
+        it would deadlock against a concurrent writer. Holding the per-user
+        sync lock is fine.
         """
         with self._lock:
             user_cfg = self._user_caches.get(username, {}).get("settings_source")
@@ -432,9 +439,20 @@ class UserSettingsStore:
             # Re-entrance guard: a setter inside ``_apply_settings`` re-enters
             # this function while the outer call holds the sync lock.  Skip
             # the sync path so we don't recurse or fire another peek probe.
+            # This is a same-thread guard (the thread running the import is
+            # the one that set the flag), so checking it here - before the
+            # lock is dropped below - still catches every re-entry.
             if username in self._syncing:
                 return cache
-            cfg, _inherited = self.resolve_settings_source(username)
+
+        # ``resolve_settings_source`` reads the deployment default through a
+        # server-tier accessor, so it runs *outside* ``settings_lock`` to keep
+        # the canonical file_lock -> settings_lock order.
+        cfg, _inherited = self.resolve_settings_source(username)
+        with self._lock:
+            # Re-read: a concurrent writer may have swapped the cache dict
+            # while the lock was released.
+            cache = self._user_caches.get(username, cache)
             if cfg is None:
                 return cache
             state = self._sync_state.get(username)
@@ -470,11 +488,14 @@ class UserSettingsStore:
         Refreshes ``last_check_monotonic`` on the no-sync paths so the
         freshness probe is rate-limited even when state is being mutated.
         """
-        with self._lock:
-            state = self._sync_state.get(username)
-            cache_cfg, _inherited = self.resolve_settings_source(username)
+        # Resolved outside ``settings_lock``: the resolver reads the
+        # deployment default through a server-tier accessor (file lock on a
+        # cold cache).
+        cache_cfg, _inherited = self.resolve_settings_source(username)
         if cache_cfg is None:
             return False
+        with self._lock:
+            state = self._sync_state.get(username)
 
         now = time.monotonic()
 
@@ -588,12 +609,14 @@ class UserSettingsStore:
         (``last_sync_succeeded`` stays ``False``) so the slow path retries
         once the rate-limit window elapses.
         """
-        with self._lock:
-            cache_cfg, _inherited = self.resolve_settings_source(username)
-            state = self._sync_state.setdefault(username, UserSyncState())
-            dirty_snapshot = set(state.dirty_keys)
+        # Resolved outside ``settings_lock`` (see
+        # :meth:`resolve_settings_source`).
+        cache_cfg, _inherited = self.resolve_settings_source(username)
         if cache_cfg is None:
             return
+        with self._lock:
+            state = self._sync_state.setdefault(username, UserSyncState())
+            dirty_snapshot = set(state.dirty_keys)
 
         from vtsearch.settings_io.sources import get_settings_source
 
