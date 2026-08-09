@@ -524,7 +524,7 @@ class PluginBase:
         field-type-driven security validation such as
         :func:`~vtscore.security.url_validation.validate_url` for
         ``url`` fields and
-        :func:`~vtscore.security.path_validation.validate_server_filepath`
+        :func:`~vtscore.security.path_validation.confine_server_filepath`
         for ``server_path`` fields) so CLI invocations get the same
         guarantees the HTTP path does.  Required-field rejection is
         delegated to the normalize pass so the two ingress points raise

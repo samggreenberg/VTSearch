@@ -17,12 +17,11 @@ approved.  See
 :func:`~vtscore.security.path_validation.confine_server_filepath`.
 
 Origin params are untyped, so path-like values are recognised by carrying a
-path separator.  A separator-free param (``{"filename": "abc.wav"}``) is left
-alone — it cannot be told apart from an ordinary scalar like a demo-dataset
-name or a media type, and confining it would rewrite non-paths into absolute
-paths.  Such a value can still be resolved against the CWD by its consumer,
-but it addresses a file in the process's working directory, not another
-user's subtree; closing that last gap wants typed origin params.
+path separator.  A separator-free param (``{"filename": "abc.wav"}``) is
+neither checked nor confined: it cannot be told apart from an ordinary scalar
+like a demo-dataset name or a media type, and rewriting one into an absolute
+path would corrupt it.  That blind spot is tracked in issue #2918 and wants
+typed origin params to close properly.
 
 URL-valued params are deliberately *not* path-checked here: they are
 re-validated with :func:`~vtscore.security.url_validation.validate_url` at
