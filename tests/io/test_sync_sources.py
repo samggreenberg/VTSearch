@@ -298,7 +298,7 @@ class TestServerFileSettingsSource:
     def test_username_template_resolution(self, tmp_path, monkeypatch):
         from vtsearch.settings_io.sources import get_settings_source
 
-        monkeypatch.setattr("vtsearch.auth.get_current_user", lambda: "alice")
+        monkeypatch.setattr("vtscore.user.get_current_user", lambda: "alice")
 
         src = get_settings_source("server_json_file")
         result = src._normalize({"filepath": str(tmp_path / "{username}.settings.json")})["filepath"]

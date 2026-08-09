@@ -36,9 +36,7 @@ _ALLOWED: dict[str, str] = {
         "the LoginProvider abstraction still lives in vtsearch.auth; confinement "
         "falls back to unrestricted single-user behaviour without it"
     ),
-    "embedding/loader.py": (
-        "optional transformers logging bridge, wrapped in try/except Exception"
-    ),
+    "embedding/loader.py": ("optional transformers logging bridge, wrapped in try/except Exception"),
 }
 
 

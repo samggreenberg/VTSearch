@@ -900,7 +900,7 @@ class TestFilepathTemplateExpansion:
         exp = ServerJsonLabelsetExporter()
         template = str(tmp_path / "{username}.json")
 
-        with mock.patch("vtsearch.auth.get_current_user", return_value="alice"):
+        with mock.patch("vtscore.user.get_current_user", return_value="alice"):
             exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
 
         assert (tmp_path / "alice.json").exists()
@@ -913,7 +913,7 @@ class TestFilepathTemplateExpansion:
         exp = ServerJsonLabelsetExporter()
         template = str(tmp_path / "{username}.json")
 
-        with mock.patch("vtsearch.auth.get_current_user", return_value="../evil"):
+        with mock.patch("vtscore.user.get_current_user", return_value="../evil"):
             exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
 
         # ``/`` and ``..`` are replaced with ``_``, so the result stays inside tmp_path.
