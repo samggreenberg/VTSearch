@@ -26,6 +26,15 @@ from vtscore.training.blend_schedules import BlendContext, BlendSchedule, get_sc
 # stored on ``DetectorContext.threshold`` and break every comparison.
 NO_GOOD_THRESHOLD = 2.0
 
+# Seed of the Train/Calibrate fold splits when a caller passes no ``rng``.
+# The splits must be reproducible: the same labelset has to yield the same fold
+# models, hence the same conformal threshold, hence the same Good/Bad verdicts
+# on every run and every reload of a detector.  Falling back to the *global*
+# ``np.random`` would break that twice over - the splits would differ run to
+# run, and the request/background threads that run Find scoring would mutate
+# shared global RNG state, making results order-dependent under concurrency.
+CALIBRATION_SPLIT_SEED = 42
+
 # False-negative budget of the conformal inclusion rule at inclusion 0; each
 # +1 step of inclusion halves it (see :func:`conformal_threshold`).  0.25 means
 # the default cutoff may sacrifice at most ~25% of true matches to the
@@ -1079,7 +1088,8 @@ def _calibration_cache_key(
     """Build a deterministic cache key for the calibration **fold orderings**.
 
     The orderings (per-fold held-out scores + labels) are a deterministic
-    function of these inputs (RNG seeded with 42 at every cached call site)
+    function of these inputs (the split RNG is seeded with
+    :data:`CALIBRATION_SPLIT_SEED` whether or not the caller supplies one)
     and are **inclusion-independent** - ``inclusion`` is deliberately *not* in
     the key, so an Inclusion change hits the cache and only re-runs the cheap
     conformal quantile rule.  The key encodes a hash of the raw training vectors (not
@@ -1138,7 +1148,13 @@ def calibration_folds(
     groups: list | None = None,
     score_rows_by_group: dict | None = None,
 ) -> CalibrationFolds:
-    """Train the K calibration folds, keeping their models (uncached)."""
+    """Train the K calibration folds, keeping their models (uncached).
+
+    Deterministic without a caller-supplied *rng*: the splits then come from a
+    fresh ``RandomState(CALIBRATION_SPLIT_SEED)``, matching
+    :func:`calibration_folds_cached`, so an uncached call (``det_ctx is None``)
+    and a cached one produce the same folds for the same labelset.
+    """
     models: list = []
     orderings, fallback = compute_fold_orderings(
         X_list,
@@ -1209,7 +1225,7 @@ def calibration_folds_cached(
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
         hidden_dim=hidden_dim,
-        rng=np.random.RandomState(42),
+        rng=np.random.RandomState(CALIBRATION_SPLIT_SEED),
         groups=groups,
         score_rows_by_group=score_rows_by_group,
     )
@@ -1469,7 +1485,7 @@ def _grouped_folds(
 
     from vtscore.training.mlp import train_model  # noqa: PLC0415
 
-    _rng = rng if rng is not None else np.random
+    _rng = rng if rng is not None else np.random.RandomState(CALIBRATION_SPLIT_SEED)
     X_np = np.array(X_list)
     y_np = np.array(y_list)
     grp = list(groups)
@@ -1702,7 +1718,7 @@ def compute_fold_orderings(
     if n < 4:
         return [], 0.5
 
-    _rng = rng if rng is not None else np.random
+    _rng = rng if rng is not None else np.random.RandomState(CALIBRATION_SPLIT_SEED)
     X_np = np.array(X_list)
     y_np = np.array(y_list)
 
@@ -1828,8 +1844,10 @@ def calculate_cross_calibration_threshold(
             are inclusion-independent), so the same fold scores can be
             re-thresholded at any inclusion - see
             docs/plans/find-verification-workflow.md.
-        rng: Optional seeded RandomState for reproducible splits. Falls back
-            to the global ``np.random`` state when ``None``.
+        rng: Optional RandomState for the Train/Calibrate splits.  When
+            ``None`` a fresh ``RandomState(CALIBRATION_SPLIT_SEED)`` is used,
+            so the splits are reproducible and the global ``np.random`` state
+            is never read or advanced.
         calibrate_count: Number of random Train/Calibrate splits (default 2).
         calibration_fraction: Fraction of data used for calibration in each
             split (default 0.5).  For example, 0.2 means 80% Train / 20%
