@@ -15,16 +15,14 @@ import uuid
 import zipfile
 from pathlib import Path
 from typing import Callable, Literal, Optional
-from urllib.parse import urljoin
 
 import requests
 
 from vtscore.config import DATA_DIR
 from vtscore.security.archive import safe_tar_extract
 from vtscore.security.hf_auth import GatedResourceError, auth_header_for_url
-from vtscore.security.url_validation import validate_url
+from vtscore.security.url_validation import open_validated_stream, validate_url
 
-_MAX_REDIRECTS = 10
 # Statuses that mean "this resource is gated / needs credentials we don't have".
 # These are surfaced as a short, actionable GatedResourceError rather than a
 # raw HTTPError, and are never retried (retrying without auth can't succeed).
@@ -274,79 +272,21 @@ def _request_headers(url: str, headers: Optional[dict]) -> dict:
 
 
 def _open_validated_stream(session: requests.Session, url: str, headers: Optional[dict] = None) -> requests.Response:
-    """GET *url* as a stream, following redirects manually so every hop is
-    re-checked by :func:`validate_url`.
+    """GET *url* as a stream with every redirect hop re-checked for SSRF.
 
-    We follow redirects by hand (``allow_redirects=False``) so a public URL
-    cannot redirect to an internal host (SSRF), bypassing the up-front check
-    callers performed. The ``(connect, read)`` timeout fails fast on an
-    unresponsive host and aborts if the server stalls for 60s mid-stream.
+    A thin binding of :func:`~vtscore.security.url_validation.open_validated_stream`
+    to the downloader's needs: caller *headers* merged with a HuggingFace bearer
+    token recomputed per hop, so the token follows a redirect only to another
+    Hub host and never to a presigned CDN / Xet target.  Callers validate *url*
+    itself up front; this covers the hops after it.
 
     Returns the final, non-redirect response; the caller owns closing it.
     """
-    current_url = url
-    response = session.get(
-        current_url,
-        stream=True,
-        timeout=(10, 60),
-        allow_redirects=False,
-        headers=_request_headers(current_url, headers),
+    return open_validated_stream(
+        session,
+        url,
+        headers_for_url=lambda hop: _request_headers(hop, headers),
     )
-    redirects = 0
-    while response.is_redirect or response.is_permanent_redirect:
-        if redirects >= _MAX_REDIRECTS:
-            response.close()
-            raise requests.TooManyRedirects(f"Exceeded {_MAX_REDIRECTS} redirects following {url}")
-        location = response.headers.get("Location")
-        if not location:
-            break
-        next_url = urljoin(current_url, location)
-        validate_url(next_url)
-        response.close()
-        current_url = next_url
-        response = session.get(
-            current_url,
-            stream=True,
-            timeout=(10, 60),
-            allow_redirects=False,
-            headers=_request_headers(current_url, headers),
-        )
-        redirects += 1
-    return response
-
-
-def fetch_url_bytes(url: str) -> bytes:
-    """GET *url* into memory under the same SSRF policy as a file download.
-
-    The in-memory twin of :func:`download_file_with_progress`, for callers that
-    want a small payload (a URL-backed media's content) rather than a file on
-    disk.  It runs :func:`~vtscore.security.url_validation.validate_url` up
-    front — which is what confines the fetch to ``http(s)`` and refuses
-    private/internal hosts — and then goes through
-    :func:`_open_validated_stream`, so every redirect hop is re-checked and no
-    public URL can bounce the request onto an internal one.
-
-    Use this instead of :func:`urllib.request.urlopen` for anything whose URL
-    came from outside the server: urllib's default opener also services
-    ``file://`` and ``ftp://``, which turns a fetch into an arbitrary local
-    file read.
-
-    Raises:
-        ValueError: If *url* fails the SSRF guard (bad scheme, no hostname,
-            private/internal address).
-        requests.HTTPError: If the server returns an error status.
-    """
-    validate_url(url)
-    session = requests.Session()
-    try:
-        response = _open_validated_stream(session, url)
-        try:
-            response.raise_for_status()
-            return response.content
-        finally:
-            response.close()
-    finally:
-        session.close()
 
 
 def _total_size_from_headers(response: requests.Response, downloaded: int, expected_size: int) -> int:

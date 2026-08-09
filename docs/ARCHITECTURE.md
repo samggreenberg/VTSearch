@@ -749,7 +749,7 @@ Each clip dict includes two provenance fields:
 |-------|------|-------------|
 | `origin` | `dict \| None` | Serialised `Origin` (e.g. `{"importer": "server_folder", "params": {"path": "/data"}}`) |
 | `origin_name` | `str` | Unique name within the origin (typically the filename) |
-| `media_url` | `str \| None` | Remote URL for lazy-fetching media bytes (e.g. PullWrest URL). Used as fallback when `media_bytes` and `media_path` are both absent |
+| `media_url` | `str \| None` | Remote URL for lazy-fetching media bytes (e.g. PullWrest URL). Used as fallback when `media_bytes` and `media_path` are both absent. Fetched only through the SSRF guard (`fetch_validated_url`): publicly routable `http(s)` only, every redirect hop re-checked |
 
 ### Origin class (`vtscore/datasets/origin.py`)
 
@@ -850,11 +850,8 @@ archive-member archive path) therefore goes through
 mode confines it to the current user's data dir plus the shared `DATA_DIR`
 (where demo datasets extract) and returns `None` otherwise, so the caller serves
 nothing. In single-user / no-auth mode it is a pass-through, matching
-`get_file_access_base_dir`. `media_url` gets the matching treatment on the
-network side: it is fetched through
-`vtscore.datasets.downloader.fetch_url_bytes`, which applies `validate_url` and
-re-checks every redirect hop, so a pickled `file:///etc/passwd` or an internal
-address is refused rather than read and served back.
+`get_file_access_base_dir`. The network-side twin of that guard is
+`fetch_validated_url`, which `media_url` fetches go through for the same reason.
 
 Clippers on reference parents transiently hydrate the parent's bytes from its
 source file (tagging it with `_lazy_source`), clip as normal, then re-lazify

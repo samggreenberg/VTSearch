@@ -8,6 +8,7 @@ import {
   FolderBrowserListing,
 } from './folder-browser.component';
 import { provideZoneless } from '../../testing/zoneless-testbed';
+import { settleZoneless } from '../../testing/settle-resource';
 
 /** Build a listing, defaulting the arrays to empty. */
 function listing(overrides: Partial<FolderBrowserListing> = {}): FolderBrowserListing {
@@ -79,28 +80,28 @@ describe('FolderBrowserComponent', () => {
 
     expect(requestedPaths).toEqual(['']);
     // Directories come first (sorted), then files (sorted).
-    expect(component.rows.map(r => r.name)).toEqual(['alpha', 'beta', 'a.txt', 'z.txt']);
-    expect(component.rows.map(r => r.kind)).toEqual(['dir', 'dir', 'file', 'file']);
-    expect(component.loading).toBe(false);
-    expect(component.rootPath).toBe('/srv');
+    expect(component.rows().map(r => r.name)).toEqual(['alpha', 'beta', 'a.txt', 'z.txt']);
+    expect(component.rows().map(r => r.kind)).toEqual(['dir', 'dir', 'file', 'file']);
+    expect(component.loading()).toBe(false);
+    expect(component.rootPath()).toBe('/srv');
   });
 
   it('honours a non-empty initialPath input', () => {
     init({ initialPath: 'music/rock' });
     expect(requestedPaths).toEqual(['music/rock']);
-    expect(component.currentPath).toBe('music/rock');
+    expect(component.currentPath()).toBe('music/rock');
   });
 
   it('omits files when showFiles is false', () => {
     defaultListing = listing({ directories: [dir('d')], files: [file('f.txt')] });
     init({ showFiles: false });
-    expect(component.rows.map(r => r.kind)).toEqual(['dir']);
+    expect(component.rows().map(r => r.kind)).toEqual(['dir']);
   });
 
   it('falls back to the requested path when the listing omits currentPath', () => {
     listings['deep/dir'] = listing({ directories: [] });
     init({ initialPath: 'deep/dir' });
-    expect(component.currentPath).toBe('deep/dir');
+    expect(component.currentPath()).toBe('deep/dir');
   });
 
   it('emits pathChange with the resolved path and rootPath', () => {
@@ -129,6 +130,48 @@ describe('FolderBrowserComponent', () => {
   });
 
   // ------------------------------------------------------------------
+  // Zoneless repaint canaries
+  // ------------------------------------------------------------------
+  //
+  // The listings above resolve synchronously (`of(...)`), so their callbacks
+  // run inside an existing CD pass and cannot detect staleness. These two
+  // drive an *asynchronous* browse and assert on the rendered DOM without a
+  // manual `detectChanges()` — the state must repaint on its own, since the
+  // only usage-independent trigger (`pathChange`) is not bound by every parent
+  // and `loadError` is bound by none.
+
+  it('repaints the listing after an async browse resolves (zoneless canary)', async () => {
+    const subject = new Subject<FolderBrowserListing>();
+    fixture.componentRef.setInput('browse', () => subject.asObservable());
+    fixture.componentRef.setInput('autoFocus', false);
+    await fixture.whenStable();
+    expect(fixture.nativeElement.textContent).toContain('Loading…');
+
+    subject.next(listing({ directories: [dir('alpha')], files: [file('a.txt')] }));
+    await settleZoneless(fixture);
+
+    expect(fixture.nativeElement.textContent).not.toContain('Loading…');
+    const names = Array.from(
+      fixture.nativeElement.querySelectorAll('.vfb-row .vfb-name') as NodeListOf<HTMLElement>,
+    ).map((el) => el.textContent?.trim());
+    expect(names).toEqual(['alpha', 'a.txt']);
+  });
+
+  it('repaints the inline error after an async browse fails (zoneless canary)', async () => {
+    const subject = new Subject<FolderBrowserListing>();
+    fixture.componentRef.setInput('browse', () => subject.asObservable());
+    fixture.componentRef.setInput('autoFocus', false);
+    await fixture.whenStable();
+
+    subject.error({ error: { message: 'boom' } });
+    await settleZoneless(fixture);
+
+    const err = fixture.nativeElement.querySelector('.vfb-error') as HTMLElement | null;
+    expect(err?.textContent?.trim()).toBe('boom');
+    expect(fixture.nativeElement.textContent).not.toContain('Loading…');
+  });
+
+  // ------------------------------------------------------------------
   // Errors
   // ------------------------------------------------------------------
 
@@ -140,9 +183,9 @@ describe('FolderBrowserComponent', () => {
     component.loadError.subscribe(e => (emitted = e));
     fixture.detectChanges();
 
-    expect(component.error).toBe('boom');
-    expect(component.rows).toEqual([]);
-    expect(component.loading).toBe(false);
+    expect(component.error()).toBe('boom');
+    expect(component.rows()).toEqual([]);
+    expect(component.loading()).toBe(false);
     expect(emitted).toBe(err);
   });
 
@@ -157,7 +200,7 @@ describe('FolderBrowserComponent', () => {
       fixture.componentRef.setInput('browse', () => throwError(() => err));
       fixture.componentRef.setInput('autoFocus', false);
       component.reload();
-      expect(component.error).toBe(expected);
+      expect(component.error()).toBe(expected);
     }
   });
 
@@ -281,27 +324,27 @@ describe('FolderBrowserComponent', () => {
       files: [file('a.txt'), file('b.txt')],
     });
     init();
-    expect(component.sortDir).toBe('asc');
+    expect(component.sortDir()).toBe('asc');
 
     component.setSort('name'); // same key -> flip to desc
-    expect(component.sortDir).toBe('desc');
+    expect(component.sortDir()).toBe('desc');
     // Dirs stay grouped above files even when descending.
-    expect(component.rows.map(r => r.name)).toEqual(['beta', 'alpha', 'b.txt', 'a.txt']);
+    expect(component.rows().map(r => r.name)).toEqual(['beta', 'alpha', 'b.txt', 'a.txt']);
   });
 
   it('setSort switching keys resets direction to asc', () => {
     init();
     component.setSort('name');
-    expect(component.sortDir).toBe('desc');
+    expect(component.sortDir()).toBe('desc');
     component.setSort('modified');
-    expect(component.sortKey).toBe('modified');
-    expect(component.sortDir).toBe('asc');
+    expect(component.sortKey()).toBe('modified');
+    expect(component.sortDir()).toBe('asc');
   });
 
   it('sorts names numerically (natural order)', () => {
     defaultListing = listing({ directories: [dir('item10'), dir('item2'), dir('item1')] });
     init();
-    expect(component.rows.map(r => r.name)).toEqual(['item1', 'item2', 'item10']);
+    expect(component.rows().map(r => r.name)).toEqual(['item1', 'item2', 'item10']);
   });
 
   it('sorts files by size', () => {
@@ -310,7 +353,7 @@ describe('FolderBrowserComponent', () => {
     });
     init();
     component.setSort('size');
-    expect(component.rows.map(r => r.name)).toEqual(['small', 'big']);
+    expect(component.rows().map(r => r.name)).toEqual(['small', 'big']);
   });
 
   it('sorts by modified date', () => {
@@ -322,7 +365,7 @@ describe('FolderBrowserComponent', () => {
     });
     init();
     component.setSort('modified');
-    expect(component.rows.map(r => r.name)).toEqual(['older', 'newer']);
+    expect(component.rows().map(r => r.name)).toEqual(['older', 'newer']);
   });
 
   it('sortIndicator shows an arrow only for the active key', () => {
@@ -341,11 +384,11 @@ describe('FolderBrowserComponent', () => {
     defaultListing = listing({ directories: [dir('a'), dir('b')] });
     init();
     component.selectRow(-1);
-    expect(component.selectedIndex).toBe(-1);
+    expect(component.selectedIndex()).toBe(-1);
     component.selectRow(5);
-    expect(component.selectedIndex).toBe(-1);
+    expect(component.selectedIndex()).toBe(-1);
     component.selectRow(1);
-    expect(component.selectedIndex).toBe(1);
+    expect(component.selectedIndex()).toBe(1);
   });
 
   it('resets the selection after a sort', () => {
@@ -353,7 +396,7 @@ describe('FolderBrowserComponent', () => {
     init();
     component.selectRow(1);
     component.setSort('name');
-    expect(component.selectedIndex).toBe(-1);
+    expect(component.selectedIndex()).toBe(-1);
   });
 
   // ------------------------------------------------------------------
@@ -370,24 +413,24 @@ describe('FolderBrowserComponent', () => {
     defaultListing = listing({ directories: [dir('a'), dir('b'), dir('c')] });
     init();
     press('ArrowDown');
-    expect(component.selectedIndex).toBe(0);
+    expect(component.selectedIndex()).toBe(0);
     press('ArrowDown');
-    expect(component.selectedIndex).toBe(1);
+    expect(component.selectedIndex()).toBe(1);
     press('ArrowUp');
-    expect(component.selectedIndex).toBe(0);
+    expect(component.selectedIndex()).toBe(0);
     // From no selection, ArrowUp lands on the last row.
-    component.selectedIndex = -1;
+    component.selectedIndex.set(-1);
     press('ArrowUp');
-    expect(component.selectedIndex).toBe(2);
+    expect(component.selectedIndex()).toBe(2);
   });
 
   it('Home and End jump to the first and last rows', () => {
     defaultListing = listing({ directories: [dir('a'), dir('b'), dir('c')] });
     init();
     press('End');
-    expect(component.selectedIndex).toBe(2);
+    expect(component.selectedIndex()).toBe(2);
     press('Home');
-    expect(component.selectedIndex).toBe(0);
+    expect(component.selectedIndex()).toBe(0);
   });
 
   it('Enter activates the selected row', () => {
@@ -417,17 +460,17 @@ describe('FolderBrowserComponent', () => {
   it('ignores keys while loading', () => {
     defaultListing = listing({ directories: [dir('a')] });
     init();
-    component.loading = true;
-    component.selectedIndex = -1;
+    component.loading.set(true);
+    component.selectedIndex.set(-1);
     press('ArrowDown');
-    expect(component.selectedIndex).toBe(-1);
+    expect(component.selectedIndex()).toBe(-1);
   });
 
   it('type-ahead jumps to the first row matching the typed prefix', () => {
     defaultListing = listing({ directories: [dir('apple'), dir('banana'), dir('cherry')] });
     init();
     press('b');
-    expect(component.rows[component.selectedIndex].name).toBe('banana');
+    expect(component.rows()[component.selectedIndex()].name).toBe('banana');
   });
 
   it('type-ahead cycles through rows sharing a prefix once the buffer resets', () => {
@@ -438,13 +481,13 @@ describe('FolderBrowserComponent', () => {
       defaultListing = listing({ directories: [dir('ball'), dir('bat'), dir('bell')] });
       init();
       press('b');
-      const first = component.selectedIndex;
+      const first = component.selectedIndex();
       vi.advanceTimersByTime(900); // clear the type-ahead buffer
       press('b');
-      const second = component.selectedIndex;
+      const second = component.selectedIndex();
       expect(second).not.toBe(first);
-      expect(component.rows[first].name.startsWith('b')).toBe(true);
-      expect(component.rows[second].name.startsWith('b')).toBe(true);
+      expect(component.rows()[first].name.startsWith('b')).toBe(true);
+      expect(component.rows()[second].name.startsWith('b')).toBe(true);
     } finally {
       vi.useRealTimers();
     }

@@ -52,19 +52,23 @@ def _fetch_media_url(url: str) -> bytes | None:
     neither ``media_bytes`` nor ``media_path`` are available (e.g. for
     URL-backed media from PullWrest).
 
-    The URL rides in on the media, which for a dataset pickle means it is
-    externally supplied, so this fetch is subject to the project's SSRF policy
-    exactly like the ``url_download`` source: only public ``http(s)`` targets,
-    every redirect hop re-checked.  Both are enforced by
-    :func:`~vtscore.datasets.downloader.core.fetch_url_bytes`, which is why
-    this must not open the URL itself — a bare ``urllib`` opener also services
-    ``file://`` and ``ftp://``, and a ``media_url`` of ``file:///etc/passwd``
-    would then be read off the server and served to the requester.
+    A ``media_url`` is **not** trusted input.  It rides along on a media dict
+    that can arrive from a loaded pickle
+    (``vtscore.datasets.loader_pickle._restore_media_url``), and whatever this
+    returns is served straight back to the requester by the media routes.  It
+    therefore goes through
+    :func:`~vtscore.security.url_validation.fetch_validated_url`, the same SSRF
+    guard the URL-backed dataset sources and the downloader use: only publicly
+    routable ``http(s)`` URLs, with every redirect hop re-checked.  That is what
+    keeps a ``file:///etc/passwd`` or ``http://169.254.169.254/…`` media_url
+    from turning a media fetch into an arbitrary file read or an internal
+    network probe — ``urllib.request.urlopen``, which this used to call, services
+    ``file://`` and ``ftp://`` out of the box and would have obliged.
     """
-    from vtscore.datasets.downloader.core import fetch_url_bytes  # noqa: PLC0415
+    from vtscore.security.url_validation import fetch_validated_url  # noqa: PLC0415
 
     try:
-        return fetch_url_bytes(url)
+        return fetch_validated_url(url)
     except Exception:
         logger = logging.getLogger(__name__)
         logger.warning("Failed to fetch media_url: %s", url, exc_info=True)
@@ -610,7 +614,8 @@ class MediaType(ABC):
            sliced/cropped from the source on demand (see
            :mod:`vtscore.media.lazy_clip`).
         3. ``media_path`` - local file on disk (thin mode).
-        4. ``media_url`` - remote URL (URL-backed media, e.g. PullWrest).
+        4. ``media_url`` - remote URL (URL-backed media, e.g. PullWrest),
+           fetched only through the SSRF guard in :func:`_fetch_media_url`.
         """
         media_bytes = media.get("media_bytes")
         if media_bytes is not None:

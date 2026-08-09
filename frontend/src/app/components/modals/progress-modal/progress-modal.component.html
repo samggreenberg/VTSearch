@@ -1,20 +1,20 @@
 <vt-modal [title]="title" [open]="true" (closed)="onCancel()">
-  @if (analyzing) {
+  @if (analyzing()) {
     <div class="analysis-loading">
-      @if (!runningJob) {
+      @if (!runningJob()) {
         <p aria-live="polite">Loading indicator history…</p>
       } @else {
         <vt-job-progress
           aria-live="polite"
           header="Training detectors over label history"
-          [eta]="analysisProgress + '%'"
-          [bar]="{ value: analysisProgress, max: 100, indeterminate: false }"
+          [eta]="analysisProgress() + '%'"
+          [bar]="{ value: analysisProgress(), max: 100, indeterminate: false }"
           cancelTitle="Cancel the running analysis"
           (cancel)="onCancel()"
         />
       }
     </div>
-  } @else if (emptyHistory) {
+  } @else if (emptyHistory()) {
     <div class="analysis-loading">
       <p>No score history available yet. Label more items to build up history.</p>
     </div>

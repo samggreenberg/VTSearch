@@ -424,19 +424,18 @@ in this priority order:
 2. `media_path`; local file on disk (thin mode with local files).
 3. `media_url`; remote URL (fetched on demand).
 
+The `media_url` fetch goes through the project's SSRF guard
+(`vtscore.security.url_validation.fetch_validated_url`), so it must be a
+publicly routable `http(s)` URL and every redirect hop is re-checked.  A
+`file://` or private-network URL fetches nothing and resolves to `None` /
+`""`; a URL-backed importer that needs a local file should set
+`media_path` instead.
+
 In thin mode, URL-backed importers can skip downloading entirely: set
 `media_bytes=None`, `media_path=None`, and `media_url="https://..."`.
 Embeddings and MD5 can come from external services, so sorting and scoring
 work without ever downloading the actual media.  Bytes are fetched lazily
 only when the UI needs to display or play the media.
-
-The lazy fetch goes through `vtscore.datasets.downloader.fetch_url_bytes`, so
-`media_url` is held to the same SSRF policy as every other server-side fetch:
-**public `http(s)` only**, with each redirect hop re-validated.  A `file://`,
-`ftp://`, or private/internal-address URL resolves to nothing rather than being
-read off the server (it would otherwise be served straight back to whoever
-requested the media).  If your importer needs to serve bytes that live on the
-server itself, set `media_path` — not a `file://` `media_url`.
 
 ### Direct media dict construction
 

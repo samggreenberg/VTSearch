@@ -288,11 +288,11 @@ def example_sort_server(body: dict):
 
 
 def _validate_origin_param_confinement(origin: dict) -> None:
-    """Abort 400 if a path-like origin param escapes the user's allowed dir.
+    """Abort 400 if an origin param escapes the user's allowed dir.
 
-    The origin dict comes verbatim from the request body, so any path-like
-    param must pass the same confinement check ``_load_from_origin`` applies
-    before it can point a filesystem-backed source (server_folder,
+    The origin dict comes verbatim from the request body, so its params
+    must pass the same confinement check ``_load_from_origin`` applies
+    before they can point a filesystem-backed source (server_folder,
     server_files) outside the user's allowed directory.  A no-op in
     single-user mode, where the base dir is unrestricted.  URL params are
     exempt from the path check: the URL-backed sources re-run

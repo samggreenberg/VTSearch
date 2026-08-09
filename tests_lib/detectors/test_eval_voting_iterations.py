@@ -13,7 +13,9 @@ import pytest
 from vtscore.eval.voting_iterations import (
     _good_training_vec,
     _inclusion_weights,
+    _labelset_error_costs,
     _split_media_ids,
+    _StepModel,
     run_voting_iterations_eval,
     simulate_voting_iterations,
 )
@@ -123,6 +125,66 @@ class TestSplitClipIds:
         sim2, test2 = _split_media_ids(medias, 0.5, rng2)
         assert sim1 == sim2
         assert test1 == test2
+
+
+class TestLabelsetErrorCosts:
+    """The Smart indicator's input: every recent model, one current labelset.
+
+    Mirrors ``labeling_progress._eval_cached_models``.  A frozen per-step cost
+    (the pre-#2923 behavior) confounds model improvement with labelset growth,
+    which biases the simulated user out of the Hard phase early.
+    """
+
+    @staticmethod
+    def _clips(scores):
+        """One 1-D media per ``{media_id: value}`` entry; value IS the embedding."""
+        return {cid: {"id": cid, "embeddings": {"emb": np.array([v], np.float32)}} for cid, v in scores.items()}
+
+    @staticmethod
+    def _model(bias):
+        """A ranker whose score is the embedding value plus *bias*."""
+        return _StepModel(
+            predict=lambda embs, b=bias: np.asarray(embs, dtype=np.float64).ravel() + b,
+            torch_model=None,
+            backend="test",
+            device="cpu",
+        )
+
+    def test_returns_one_cost_per_model_in_window_order(self):
+        clips = self._clips({1: 1.0, 2: 1.0, 3: 0.0, 4: 0.0})
+        good, bad = {1: None, 2: None}, {3: None, 4: None}
+        # bias 0: perfect at threshold 0.5.  bias -1: everything below the cut,
+        # so both positives are missed (fnr 1.0).  bias +1: everything above,
+        # so both negatives are false positives (fpr 1.0).
+        window = [(self._model(-1.0), 0.5), (self._model(0.0), 0.5), (self._model(1.0), 0.5)]
+        costs = _labelset_error_costs(window, good, bad, clips, 0)
+        assert costs == [1.0, 0.0, 1.0]
+
+    def test_inclusion_weights_the_two_error_kinds(self):
+        clips = self._clips({1: 1.0, 2: 1.0, 3: 0.0, 4: 0.0})
+        good, bad = {1: None, 2: None}, {3: None, 4: None}
+        # inclusion 2 => fnr weight 4, fpr weight 1.
+        window = [(self._model(-1.0), 0.5), (self._model(1.0), 0.5)]
+        assert _labelset_error_costs(window, good, bad, clips, 2) == [4.0, 1.0]
+
+    def test_old_models_are_re_scored_against_the_grown_labelset(self):
+        """The regression's whole point: a fixed model's cost must move."""
+        clips = self._clips({1: 1.0, 2: 1.0, 3: 0.0, 4: 0.0, 5: 0.6})
+        model = self._model(0.0)
+        window = [(model, 0.5)]
+        before = _labelset_error_costs(window, {1: None, 2: None}, {3: None, 4: None}, clips, 0)
+        # Media 5 is a freshly voted boundary negative this model gets wrong -
+        # exactly the item autopilot's Hard phase goes looking for.
+        after = _labelset_error_costs(window, {1: None, 2: None}, {3: None, 4: None, 5: None}, clips, 0)
+        assert before == [0.0]
+        assert after == [1 / 3]
+
+    def test_empty_without_models_or_without_both_classes(self):
+        clips = self._clips({1: 1.0, 3: 0.0})
+        window = [(self._model(0.0), 0.5)]
+        assert _labelset_error_costs([], {1: None}, {3: None}, clips, 0) == []
+        assert _labelset_error_costs(window, {}, {3: None}, clips, 0) == []
+        assert _labelset_error_costs(window, {1: None}, {}, clips, 0) == []
 
 
 # ------------------------------------------------------------------

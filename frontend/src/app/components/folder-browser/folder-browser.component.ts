@@ -9,6 +9,7 @@ import {
   input,
   OnDestroy,
   output,
+  signal,
   untracked,
   viewChild,
 } from '@angular/core';
@@ -130,14 +131,21 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
    *  way.  The component also shows an inline error message. */
   readonly loadError = output<unknown>();
 
-  rows: Row[] = [];
-  currentPath = '';
-  rootPath = '';
-  loading = false;
-  error = '';
-  selectedIndex = -1;
-  sortKey: SortKey = 'name';
-  sortDir: SortDir = 'asc';
+  // Signals, not plain fields: the app is zoneless and this component is
+  // OnPush, so every one of these is written from the async `browse()`
+  // subscribe callbacks — nothing else would schedule a repaint. (The success
+  // path used to limp along on `pathChange.emit()`, which only marks the view
+  // dirty when the parent actually binds that output; `vt-file-browser` binds
+  // only `(confirm)`, so it stalled on "Loading…". The error path had no
+  // trigger at all.)
+  readonly rows = signal<Row[]>([]);
+  readonly currentPath = signal('');
+  readonly rootPath = signal('');
+  readonly loading = signal(false);
+  readonly error = signal('');
+  readonly selectedIndex = signal(-1);
+  readonly sortKey = signal<SortKey>('name');
+  readonly sortDir = signal<SortDir>('asc');
 
   private typeaheadBuf = '';
   private typeaheadTimer: ReturnType<typeof setTimeout> | null = null;
@@ -174,8 +182,8 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
   // ------------------------------------------------------------------
 
   private loadDirectory(path: string): void {
-    this.loading = true;
-    this.error = '';
+    this.loading.set(true);
+    this.error.set('');
     this.currentSub?.unsubscribe();
     this.currentSub = this.browse()(path).subscribe({
       next: (res) => {
@@ -194,18 +202,18 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
             size_bytes: f.size_bytes,
           });
         }
-        this.rows = this.sortRows(rows, this.sortKey, this.sortDir);
-        this.currentPath = res.currentPath ?? path;
-        this.rootPath = res.rootPath ?? '';
-        this.selectedIndex = -1;
-        this.loading = false;
-        this.pathChange.emit({ path: this.currentPath, rootPath: this.rootPath });
+        this.rows.set(this.sortRows(rows, this.sortKey(), this.sortDir()));
+        this.currentPath.set(res.currentPath ?? path);
+        this.rootPath.set(res.rootPath ?? '');
+        this.selectedIndex.set(-1);
+        this.loading.set(false);
+        this.pathChange.emit({ path: this.currentPath(), rootPath: this.rootPath() });
       },
       error: (err) => {
         const msg = (err && err.error && err.error.message) || (err && err.error && err.error.error) || 'Could not browse this folder.';
-        this.error = typeof msg === 'string' ? msg : 'Could not browse this folder.';
-        this.loading = false;
-        this.rows = [];
+        this.error.set(typeof msg === 'string' ? msg : 'Could not browse this folder.');
+        this.loading.set(false);
+        this.rows.set([]);
         this.loadError.emit(err);
       },
     });
@@ -214,7 +222,7 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
   /** Re-load the current directory (e.g. after the caller changed a
    *  filter that affects the listing). */
   reload(): void {
-    this.loadDirectory(this.currentPath);
+    this.loadDirectory(this.currentPath());
   }
 
   // ------------------------------------------------------------------
@@ -222,7 +230,8 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
   // ------------------------------------------------------------------
 
   get breadcrumbs(): string[] {
-    return this.currentPath ? this.currentPath.split('/').filter(Boolean) : [];
+    const path = this.currentPath();
+    return path ? path.split('/').filter(Boolean) : [];
   }
 
   navigateRoot(): void {
@@ -230,7 +239,7 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
   }
 
   navigateBreadcrumb(index: number): void {
-    const parts = this.currentPath.split('/').filter(Boolean);
+    const parts = this.currentPath().split('/').filter(Boolean);
     this.loadDirectory(parts.slice(0, index + 1).join('/'));
   }
 
@@ -249,20 +258,22 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
   }
 
   goUp(): void {
-    if (!this.currentPath) return;
-    const parts = this.currentPath.split('/').filter(Boolean);
+    if (!this.currentPath()) return;
+    const parts = this.currentPath().split('/').filter(Boolean);
     parts.pop();
     this.loadDirectory(parts.join('/'));
   }
 
   get absolutePath(): string {
-    if (!this.rootPath) return '';
-    if (!this.currentPath) return this.rootPath;
+    const root = this.rootPath();
+    const current = this.currentPath();
+    if (!root) return '';
+    if (!current) return root;
     // When the root is the filesystem root ("/"), joining with "/" would
     // produce a leading "//". Treat "/" as a special case so the absolute
     // path stays well-formed.
-    if (this.rootPath === '/') return '/' + this.currentPath;
-    return this.rootPath + '/' + this.currentPath;
+    if (root === '/') return '/' + current;
+    return root + '/' + current;
   }
 
   // ------------------------------------------------------------------
@@ -270,8 +281,8 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
   // ------------------------------------------------------------------
 
   selectRow(index: number): void {
-    if (index < 0 || index >= this.rows.length) return;
-    this.selectedIndex = index;
+    if (index < 0 || index >= this.rows().length) return;
+    this.selectedIndex.set(index);
   }
 
   onRowDblClick(row: Row): void {
@@ -283,14 +294,14 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
   // ------------------------------------------------------------------
 
   setSort(key: SortKey): void {
-    if (this.sortKey === key) {
-      this.sortDir = this.sortDir === 'asc' ? 'desc' : 'asc';
+    if (this.sortKey() === key) {
+      this.sortDir.set(this.sortDir() === 'asc' ? 'desc' : 'asc');
     } else {
-      this.sortKey = key;
-      this.sortDir = 'asc';
+      this.sortKey.set(key);
+      this.sortDir.set('asc');
     }
-    this.rows = this.sortRows(this.rows, this.sortKey, this.sortDir);
-    this.selectedIndex = -1;
+    this.rows.set(this.sortRows(this.rows(), this.sortKey(), this.sortDir()));
+    this.selectedIndex.set(-1);
   }
 
   private sortRows(rows: Row[], key: SortKey, dir: SortDir): Row[] {
@@ -317,8 +328,8 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
   }
 
   sortIndicator(key: SortKey): string {
-    if (this.sortKey !== key) return '';
-    return this.sortDir === 'asc' ? '▲' : '▼';
+    if (this.sortKey() !== key) return '';
+    return this.sortDir() === 'asc' ? '▲' : '▼';
   }
 
   // ------------------------------------------------------------------
@@ -327,7 +338,7 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
 
   @HostListener('keydown', ['$event'])
   onKeyDown(e: KeyboardEvent): void {
-    if (this.loading) return;
+    if (this.loading()) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       this.moveSelection(1);
@@ -340,17 +351,17 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
     }
     if (e.key === 'Home') {
       e.preventDefault();
-      if (this.rows.length > 0) this.selectRow(0);
+      if (this.rows().length > 0) this.selectRow(0);
       return;
     }
     if (e.key === 'End') {
       e.preventDefault();
-      if (this.rows.length > 0) this.selectRow(this.rows.length - 1);
+      if (this.rows().length > 0) this.selectRow(this.rows().length - 1);
       return;
     }
     if (e.key === 'Enter') {
       e.preventDefault();
-      if (this.selectedIndex >= 0) this.enter(this.rows[this.selectedIndex]);
+      if (this.selectedIndex() >= 0) this.enter(this.rows()[this.selectedIndex()]);
       return;
     }
     if (e.key === 'Backspace' || (e.key === 'ArrowUp' && e.altKey)) {
@@ -367,11 +378,12 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
   }
 
   private moveSelection(delta: number): void {
-    if (this.rows.length === 0) return;
-    let i = this.selectedIndex + delta;
-    if (this.selectedIndex < 0) i = delta > 0 ? 0 : this.rows.length - 1;
+    const rows = this.rows();
+    if (rows.length === 0) return;
+    let i = this.selectedIndex() + delta;
+    if (this.selectedIndex() < 0) i = delta > 0 ? 0 : rows.length - 1;
     if (i < 0) i = 0;
-    if (i >= this.rows.length) i = this.rows.length - 1;
+    if (i >= rows.length) i = rows.length - 1;
     this.selectRow(i);
     this.scrollSelectionIntoView();
   }
@@ -379,7 +391,7 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
   private scrollSelectionIntoView(): void {
     const list = this.listEl()?.nativeElement;
     if (!list) return;
-    const row = list.querySelectorAll('.vfb-row')[this.selectedIndex] as HTMLElement | undefined;
+    const row = list.querySelectorAll('.vfb-row')[this.selectedIndex()] as HTMLElement | undefined;
     row?.scrollIntoView({ block: 'nearest' });
   }
 
@@ -391,12 +403,13 @@ export class FolderBrowserComponent implements OnDestroy, AfterViewInit {
       this.typeaheadTimer = null;
     }, TYPEAHEAD_RESET_MS);
     const needle = this.typeaheadBuf;
+    const rows = this.rows();
     // Search starting from the row after the current selection so
     // repeated presses cycle through matches.
-    const start = this.selectedIndex >= 0 ? this.selectedIndex : 0;
-    for (let off = 0; off < this.rows.length; off++) {
-      const idx = (start + off + (needle.length === 1 ? 1 : 0)) % this.rows.length;
-      if (this.rows[idx].name.toLowerCase().startsWith(needle)) {
+    const start = this.selectedIndex() >= 0 ? this.selectedIndex() : 0;
+    for (let off = 0; off < rows.length; off++) {
+      const idx = (start + off + (needle.length === 1 ? 1 : 0)) % rows.length;
+      if (rows[idx].name.toLowerCase().startsWith(needle)) {
         this.selectRow(idx);
         this.scrollSelectionIntoView();
         return;

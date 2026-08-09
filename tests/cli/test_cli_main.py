@@ -443,6 +443,8 @@ class TestCliUserAuth:
         import vtsearch.auth as auth_mod
 
         class _FakeProvider:
+            name = "api_key"
+
             def __init__(self, keys_file=None):
                 pass
 
@@ -453,12 +455,53 @@ class TestCliUserAuth:
                 return "alice"
 
         set_users = []
+        provs = []
         monkeypatch.setattr(auth_mod, "ApiKeyLoginProvider", _FakeProvider)
         monkeypatch.setattr(auth_mod, "set_thread_user", lambda u: set_users.append(u))
+        monkeypatch.setattr(auth_mod, "set_login_provider", lambda p: provs.append(p))
 
         parser = cli_main._build_parser()
         cli_main._authenticate_cli_user(argparse.Namespace(user="alice", api_key="key"), parser)
         assert set_users == ["alice"]
+        # The authenticated provider must be installed process-wide, not merely
+        # used for the key check: get_user_data_dir() consults it to resolve
+        # data/<user>/user_settings.json.
+        assert [type(p) for p in provs] == [_FakeProvider]
+
+    def test_authenticate_installs_provider_so_user_dir_resolves(self, monkeypatch):
+        """After --user auth, get_user_data_dir() resolves per-user paths."""
+        import argparse
+
+        import vtsearch.auth as auth_mod
+
+        class _FakeProvider(auth_mod.LoginProvider):
+            name = "api_key"
+
+            def __init__(self, keys_file=None):
+                pass
+
+            def is_authenticated(self, req):
+                return True
+
+            def get_user(self, req):
+                return "alice"
+
+            def get_user_data_dir(self, username, base_dir):
+                return base_dir / username
+
+        monkeypatch.setattr(auth_mod, "ApiKeyLoginProvider", _FakeProvider)
+        from vtscore.config import DATA_DIR
+
+        original = auth_mod.get_login_provider()
+        try:
+            parser = cli_main._build_parser()
+            cli_main._authenticate_cli_user(argparse.Namespace(user="alice", api_key="key"), parser)
+            assert auth_mod.get_user_data_dir("alice") == DATA_DIR / "alice"
+            # Resolution also works off the thread-local user set by the CLI.
+            assert auth_mod.get_user_data_dir() == DATA_DIR / "alice"
+        finally:
+            auth_mod.set_login_provider(original)
+            auth_mod.set_thread_user(None)
 
     def test_authenticate_wrong_user_errors(self, monkeypatch, capsys):
         import argparse

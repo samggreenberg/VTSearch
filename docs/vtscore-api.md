@@ -228,14 +228,7 @@ def download_file_with_progress(
     *,
     progress: ProgressCallback | None = None,
 ) -> Path:
-    """HTTP GET with chunked streaming and progress events. Used by every download_*.
-    Applies validate_url up front and re-checks every redirect hop."""
-
-def fetch_url_bytes(url: str) -> bytes:
-    """In-memory twin of the above, for small payloads (a URL-backed media's bytes).
-    Same SSRF policy: public http(s) only, every redirect hop re-validated. Use this
-    instead of urllib.request.urlopen, whose default opener also services file:// and
-    ftp://."""
+    """HTTP GET with chunked streaming and progress events. Used by every download_*."""
 
 def download_esc50(dest_dir: Path, *, progress=None) -> Path: ...
 def download_cifar10(dest_dir: Path, *, progress=None) -> Path: ...
@@ -1144,6 +1137,22 @@ def glob_top_level(root: Path, pattern: str) -> list[Path]: ...
 def validate_url(url: str) -> str:
     """SSRF guard for outbound HTTP. Rejects private IPs, link-local, and metadata
     endpoints. Returns the validated URL."""
+
+def open_validated_stream(
+    session: requests.Session,
+    url: str,
+    *,
+    headers_for_url: Callable[[str], dict] | None = None,
+    timeout: tuple[float, float] = (10, 60),
+) -> requests.Response:
+    """Stream an *already-validated* URL with allow_redirects=False, re-running
+    validate_url on every hop so a public URL can't 302 to an internal host.
+    `headers_for_url` is recomputed per hop so host-scoped credentials aren't
+    replayed to a redirect target. Caller closes the returned response."""
+
+def fetch_validated_url(url: str, *, timeout: tuple[float, float] = (10, 30)) -> bytes:
+    """validate_url + open_validated_stream + raise_for_status, returning the whole
+    body. The fetch primitive for byte-wanting callers (e.g. a media's media_url)."""
 
 def validate_browser_url(url: str) -> str:
     """Scheme allowlist for URLs the *user's browser* opens (an exporter's
