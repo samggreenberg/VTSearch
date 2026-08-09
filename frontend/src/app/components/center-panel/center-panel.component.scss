@@ -45,27 +45,8 @@
   justify-content: center;
 }
 
-@keyframes swipe-right {
-  from { transform: translateX(0); opacity: 1; }
-  to { transform: translateX(120%); opacity: 0; }
-}
-
-@keyframes swipe-left {
-  from { transform: translateX(0); opacity: 1; }
-  to { transform: translateX(-120%); opacity: 0; }
-}
-
-.swipe-right {
-  animation: swipe-right 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
-}
-
-.swipe-left {
-  animation: swipe-left 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
-}
-
-.swipe-hidden {
-  opacity: 0;
-}
+// The `swipe-right` / `swipe-left` vote-swipe animation lives in
+// `_components.scss` (shared with the audio player's waveform wrapper).
 
 // Image view controls (outside swipe wrapper so they stay fixed during swipe)
 .image-view-controls {

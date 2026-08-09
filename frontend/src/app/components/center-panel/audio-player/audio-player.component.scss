@@ -12,27 +12,9 @@
   justify-content: center;
 }
 
-@keyframes swipe-right {
-  from { transform: translateX(0); opacity: 1; }
-  to { transform: translateX(120%); opacity: 0; }
-}
-
-@keyframes swipe-left {
-  from { transform: translateX(0); opacity: 1; }
-  to { transform: translateX(-120%); opacity: 0; }
-}
-
-.swipe-right {
-  animation: swipe-right 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
-}
-
-.swipe-left {
-  animation: swipe-left 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
-}
-
-.swipe-hidden {
-  opacity: 0;
-}
+// The `swipe-right` / `swipe-left` vote-swipe animation applied to
+// `.waveform-swipe-wrapper` lives in `_components.scss`, shared with the
+// center panel that hands this component its `swipeClass`.
 
 // Positioned container so the playhead can be absolutely overlaid on the
 // waveform. `cursor: pointer` advertises that the waveform is click-to-seek.

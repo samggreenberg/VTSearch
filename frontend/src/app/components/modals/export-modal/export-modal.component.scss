@@ -202,14 +202,6 @@
   border-bottom: none;
 }
 
-// --- Export action buttons (detector section) ---
-
-.export-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-md);
-}
-
 // --- Export tabs ---
 
 .export-tabs {
@@ -307,15 +299,4 @@
   .status-text, .error-text {
     margin-top: var(--space-md);
   }
-}
-
-.required {
-  color: var(--color-bad);
-}
-
-.form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-md);
-  margin-top: var(--space-md);
 }
