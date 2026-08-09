@@ -18,7 +18,7 @@ rejected.
 
 ---
 
-## Filed issues (62)
+## Filed issues (24 still open; 38 shipped in the 2026-08-09 release)
 
 Severity and recommended implementer model in parentheses. Bodies — failure
 scenario, suggested fix, verifier's confirmation — live in the issues; this list
@@ -26,46 +26,28 @@ carries pointers only.
 
 ### Flask API layer
 
-- [ ] #2912 — Detector registry routes lack name-collision guards: rename destroys another detector's labelset; create allows duplicate names sharing one file (high, Sonnet 5)
-- [ ] #2924 — /api/auto-detect 500s with KeyError when no detector resolves to the dataset's default score embedder (medium, Sonnet 5)
-- [ ] #2949 — Unexpected exceptions leave the shared find/sort progress tracker stuck at 'running' (low, Sonnet 5)
-- [ ] #2953 — PUT /api/settings applies keys non-atomically: a 400 mid-loop leaves earlier keys committed (low, Sonnet 5)
-- [ ] #2954 — HTTP suffix Range requests (bytes=-N) are served as the full file with a 206 (low, Haiku 4.5)
 - [ ] #2956 — media_generic error message reads nonexistent 'type' key, always printing None (low, Haiku 4.5)
 
 ### App core (settings, auth, CLI)
 
-- [ ] #2913 — AB-BA deadlock: settings getters call ensure-loaded (file lock) while holding _settings_lock, inverting the canonical lock order (high, Opus 4.8)
-- [ ] #2925 — CLI `--autodetect --user` authenticates the user but never installs the ApiKey provider, so per-user settings resolve to the wrong file (medium, Sonnet 5)
 - [ ] #2930 — TrivialLoginProvider trusts unvalidated session usernames; with the default secret key this enables path traversal out of DATA_DIR (medium, Opus 4.8)
 - [ ] #2955 — Dirty-key marking happens after the file write, letting a concurrent auto-sync clobber a just-written setting (low, Opus 4.8)
 
 ### State & concurrency
 
-- [ ] #2928 — Find re-scoring pass overwrites human-verified votes with machine labels while keeping them marked verified (medium, Opus 4.8)
 - [ ] #2931 — JobManager.start() hard-requires Flask via vtsearch.auth; ./run-tests.sh vtscore-clean gate currently fails (medium, Opus 4.8)
-- [ ] #2933 — Request-missing sentinel contexts missing 13 slots; reads raise AttributeError (500) instead of behaving as empty (medium, Sonnet 5)
 - [ ] #2958 — Background threads iterate live ctx.medias without _state_lock; concurrent media add kills the pass (low, Sonnet 5)
 - [ ] #2960 — SSE tracker channels never re-emitted: a dropped terminal frame leaves the client's progress bar stuck (low, Sonnet 5)
 
 ### Training & detectors
 
-- [ ] #2914 — Labeling-progress cache is process-global but all its inputs are per-(dataset, detector) — switching between two loaded detectors mixes their state (high, Opus 4.8)
-- [ ] #2934 — Uncached threshold paths draw fold splits from unseeded global np.random — thresholds are nondeterministic run-to-run (medium, Sonnet 5)
-- [ ] #2935 — _build_vote_xy floods Bad votes with patch-space rows even when the detector scores in a different (text/structural) space (medium, Opus 4.8)
-- [ ] #2938 — _cache_region_vectors: wants_negatives is not gated on patch_capable, contradicting its docstring — repeated origin-file I/O per sort and cross-space flooded negatives on the labelset path (medium, Opus 4.8)
 
 ### Media & embedding
 
-- [ ] #2915 — Image2Face converter silently produces zero faces for path-only (thin/reference) media (high, Sonnet 5)
-- [ ] #2932 — Unsynchronised global monkey-patching of tqdm/torch during concurrent model loads can permanently corrupt process state (medium, Opus 4.8)
-- [ ] #2939 — Corrupt WAV with zero sample-rate header aborts the entire dataset load instead of degrading gracefully (medium, Sonnet 5)
 - [ ] #2957 — video2audio ffmpeg invocation omits the stdin guard every other ffmpeg call site applies (low, Haiku 4.5)
 
 ### Datasets & IO
 
-- [ ] #2937 — Concurrent dataset loads race on the shared embedder singleton's _on_progress slot (medium, Opus 4.8)
-- [ ] #2942 — Folder loaders still use the inverted progress-interval formula fixed in the pickle loader (medium, Haiku 4.5)
 - [ ] #2959 — CSV label export → import round-trip corrupts values starting with -, +, @, = (sanitizer never stripped) (low, Sonnet 5)
 - [ ] #2961 — Full-mode pickle load aborts entirely on one non-UTF-8 companion text file (low, Sonnet 5)
 - [ ] #2962 — ingest _build_media_data shares one origin dict by reference across all ingested medias in a group (low, Sonnet 5)
@@ -73,38 +55,23 @@ carries pointers only.
 
 ### Eval harness
 
-- [ ] #2916 — Default arm trains the retired auto-sized MLP head, not the shipped linear head (high, Opus 4.8)
-- [ ] #2923 — Smart indicator regresses over stale per-step costs instead of re-scoring recent models against the current labelset (high, Opus 4.8)
-- [ ] #2936 — Calibration-fallback steps blend the fallback sentinel instead of NO_GOOD_THRESHOLD, diverging from _fused_threshold (medium, Opus 4.8)
-- [ ] #2943 — Acquisition threshold is cut in pooled-score space but applied to whole-image pool scores on patch datasets (medium, Opus 4.8)
 
 ### Projection, plugins & security utils
 
-- [ ] #2917 — Multi-user path confinement validated against base_dir but consumed relative to CWD (relative paths escape) (high, Opus 4.8)
-- [ ] #2918 — Origin confinement check skips separator-free values, letting ".." / "." bypass the per-user boundary (high, Opus 4.8)
 - [ ] #2940 — PluginRegistry re-entrant discovery deadlocks; the _discovering guard is dead code behind a non-reentrant Lock (medium, Opus 4.8)
-- [ ] #2945 — Adaptive pyramid descent stops early when only the densest cell is co-located, leaving other separable cells unresolved (medium, Opus 4.8)
 - [ ] #2964 — hexbin edge correction compares distances in anisotropic units, assigning ~2% of boundary points to a hexagon that doesn't contain them (low, Sonnet 5)
 
 ### Frontend — browse surface
 
-- [ ] #2927 — Late tile response from a previous projection permanently poisons the new projection's tile cache (high, Opus 4.8)
 - [ ] #2966 — Hover state is not re-resolved when a drag pan ends, so the lifted bin / preview / right-click target go stale (low, Sonnet 5)
 - [ ] #2967 — Cells are identified by (q,r) without pyramid level: pinned/hover enlarge can target the wrong bin and the hover preview goes stale across a level-crossing zoom (low, Sonnet 5)
 
 ### Frontend — dashboard & modals
 
-- [ ] #2919 — Zoneless change detection: plain-field mutations never repaint (folder browser stuck on Loading, login freezes on failure, progress-modal charts never render, Combine Detectors error hidden) (high, Sonnet 5)
-- [ ] #2941 — Enter key bypasses the submitting guard in New Detector modal — double submit creates duplicate detectors (medium, Haiku 4.5)
-- [ ] #2947 — Bulk dataset delete does not clear the active context, unlike single-row delete and both detector delete paths (medium, Sonnet 5)
 - [ ] #2965 — Dynamic plugin-field option fetches have no cancellation/ordering guard — stale responses clobber the current form (low, Sonnet 5)
 
 ### Frontend — services & views
 
-- [ ] #2921 — Stale find-label scoring response from a previous pair overwrites the new pair's results after a context switch (high, Sonnet 5)
-- [ ] #2922 — Find-mode undo/redo captures previousPolarity from flood-filled piles, so undo mislabels and redo un-verifies (high, Opus 4.8)
-- [ ] #2944 — MediaStateService.loadMedias() silently drops reloads while a fetch is in flight, leaving the old dataset's media list after a rapid pair switch (medium, Sonnet 5)
-- [ ] #2948 — pollLearnedSortJob uses the timer+switchMap poll pattern the repo already identified as freeze-prone (issue #2572) (medium, Sonnet 5)
 - [ ] #2968 — castVote's 180ms animation timeout re-reads this.media(), emitting mediaVoted with whatever item is selected by then (low, Sonnet 5)
 - [ ] #2970 — SortStateService.clear() forgets _acqThreshold (and has no production callers) (low, Haiku 4.5)
 - [ ] #2973 — Rapid inclusion-slider changes in Find have no response-ordering guard; a stale threshold can win (low, Sonnet 5)
@@ -116,15 +83,10 @@ carries pointers only.
 
 ### Security
 
-- [ ] #2926 — SSRF + arbitrary local file disclosure via unvalidated media_url (file:// / internal http fetched with urllib.urlopen) (high, Opus 4.8)
-- [ ] #3003 — Arbitrary local file disclosure via unconfined media_path from an externally-supplied pickle (medium, Opus 4.8)
 - [ ] #2946 — No server-side authentication enforcement: is_authenticated / login_required are never checked, so every endpoint is reachable unauthenticated (medium, Opus 4.8)
-- [ ] #2950 — SSRF DNS-rebinding window: validate_url resolves-and-checks, then the fetch re-resolves the hostname (medium, Opus 4.8)
 
 ### Tests & tooling
 
-- [ ] #2929 — vtscore-clean gate is defeated by xdist: Flask blocker only installed in the master process (high, Opus 4.8)
-- [ ] #2952 — tests_lib/helpers.py is dead code: pythonpath ordering makes tests/helpers.py win for ALL tests (medium, Sonnet 5)
 - [ ] #2971 — run-tests.sh timeout re-exec breaks `bash run-tests.sh` invocation with a confusing error (low, Sonnet 5)
 - [ ] #2974 — Dead always-false guard in tests_lib pytest_unconfigure checks the inifile for 'tests/conftest' (low, Haiku 4.5)
 - [ ] #2975 — run-tests.sh coverage comment promises `--cov` as first arg but the code only reads VTSEARCH_COVERAGE (low, Haiku 4.5)
