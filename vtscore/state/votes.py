@@ -638,7 +638,8 @@ def apply_labels_bulk_with_click_time(
     replace_all: bool = False,
     *,
     record_achievement: bool = True,
-) -> None:
+    preserve_verified: bool = False,
+) -> set[int]:
     """Apply many labels in a single lock acquisition (for find-label scoring).
 
     Each entry is ``(media_id, label)`` where *label* is ``"good"`` or
@@ -656,7 +657,25 @@ def apply_labels_bulk_with_click_time(
     outside *labels* are cleared first.  This is what ``/api/find-label``
     wants: a detector trained on Dataset A holds Dataset A's media IDs in
     its DetectorContext, and switching to Dataset B must not leak those
-    stale IDs into Dataset B's right-scroll Goods/Bads.
+    stale IDs into Dataset B's right-scroll Goods/Bads.  Any ``verified_ids``
+    entry outside *labels* goes with them: a verified marker whose vote was
+    just dropped would keep inflating ``verified_count`` and the verified
+    partitions for an item this label set no longer covers.
+
+    Set *preserve_verified* to ``True`` when the labels are a detector's
+    machine calls over a live Find session (``/api/find-label``).  Ids in
+    ``verified_ids`` are then left exactly as they are - vote, click-time,
+    region box, history - and returned instead of being overwritten, because
+    the human already ruled on them and a re-score must not silently invert a
+    recorded decision while still presenting it as human-verified (issue
+    #2928).  The fold-corrections -> retrain -> re-score loop re-runs this path
+    on purpose, so without the guard every verified item the retrained detector
+    now scores on the other side of the cutoff would flip to the machine's call
+    and stay marked verified.
+
+    Returns:
+        The ids skipped because they were verified (empty unless
+        *preserve_verified* is set).
     """
     import time as _time
 
@@ -666,6 +685,7 @@ def apply_labels_bulk_with_click_time(
         bad_votes = ctx.bad_votes
         vote_click_times = ctx.vote_click_times
         vote_region_boxes = ctx.vote_region_boxes
+        verified_ids = ctx.verified_ids
         label_history = ctx.label_history
         atlas = get_active_context().coverage_atlas
         if replace_all:
@@ -678,8 +698,17 @@ def apply_labels_bulk_with_click_time(
                 vote_click_times.pop(cid, None)
             for cid in [c for c in vote_region_boxes if c not in kept]:
                 vote_region_boxes.pop(cid, None)
+            for cid in [c for c in verified_ids if c not in kept]:
+                verified_ids.pop(cid, None)
             ctx.find_initial_labels.clear()
+        preserved: set[int] = set()
         for media_id, label in labels:
+            if preserve_verified and media_id in verified_ids:
+                # The human's call stands, click-time and all.  Its machine
+                # label still reaches ``find_initial_labels`` via the caller,
+                # so a disagreement shows up as a correction in Stats.
+                preserved.add(media_id)
+                continue
             if label == "good":
                 already = media_id in good_votes
                 bad_votes.pop(media_id, None)
@@ -699,3 +728,4 @@ def apply_labels_bulk_with_click_time(
             if not already and record_achievement:
                 # Bulk batch: never contributes to the individual-effort streak.
                 _record_vote_locked(count_streak=False)
+        return preserved
