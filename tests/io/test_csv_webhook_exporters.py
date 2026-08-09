@@ -894,26 +894,28 @@ class TestFilepathTemplateExpansion:
 
     def test_username_template_expands(self, tmp_path):
         """The {username} template substitutes get_current_user(), sanitised."""
+        from vtsearch.auth import thread_user
         from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
         from vtscore.plugins.normalize import normalize_field_values
 
         exp = ServerJsonLabelsetExporter()
         template = str(tmp_path / "{username}.json")
 
-        with mock.patch("vtsearch.auth.get_current_user", return_value="alice"):
+        with thread_user("alice"):
             exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
 
         assert (tmp_path / "alice.json").exists()
 
     def test_username_template_sanitises_path_separators(self, tmp_path):
         """A malicious username with ``/`` cannot escape the parent directory."""
+        from vtsearch.auth import thread_user
         from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
         from vtscore.plugins.normalize import normalize_field_values
 
         exp = ServerJsonLabelsetExporter()
         template = str(tmp_path / "{username}.json")
 
-        with mock.patch("vtsearch.auth.get_current_user", return_value="../evil"):
+        with thread_user("../evil"):
             exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
 
         # ``/`` and ``..`` are replaced with ``_``, so the result stays inside tmp_path.

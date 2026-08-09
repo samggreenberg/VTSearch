@@ -78,8 +78,8 @@ def _resolve_template_var(name: str) -> str:
         return ctx.name if name == "detector_name" else ctx.detector_id
 
     if name == "username":
-        # Lazy import: ``vtscore.plugins`` is library-tier and must not
-        # take a hard dependency on ``vtsearch.auth`` at import time.
+        # Lazy import: keeps ``vtscore.plugins`` from pulling in the whole
+        # ``vtscore.state`` package (contexts, votes, coverage) at import time.
         from vtscore.state.current_user import get_current_user  # noqa: PLC0415
 
         return get_current_user() or "default"
