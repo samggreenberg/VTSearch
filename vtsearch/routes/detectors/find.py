@@ -21,7 +21,7 @@ from vtscore.concurrency.progress import CancelledError, find_progress, update_f
 from vtscore.detectors.training import train_and_threshold
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.utils.scores import sigmoid_to_finite_scores
-from vtsearch.routes._shared import require_detector_header
+from vtsearch.routes._shared import find_idle, find_idle_on_crash, require_detector_header
 from vtsearch.schemas.detectors import (
     FindBoundaryNextQuerySchema,
     FindBoundaryNextResponseSchema,
@@ -164,7 +164,7 @@ def find_check_labels(body: dict):
 
 def _abort_find(code: int, message: str) -> NoReturn:
     """Reset find_progress to idle and abort with *code* / *message*."""
-    update_find_progress("idle", "", step=None, total_steps=None)
+    find_idle()
     abort(code, message=message)
     raise RuntimeError("unreachable (abort() raises)")  # for type narrowing
 
@@ -641,69 +641,68 @@ def multi_find(body: dict):
     find_progress.set_step_weights(
         timing.step_weights(_FIND_TASK, media_type=find_media_type, embedder=find_embedder, n=n_scored)
     )
-    # Every exit below — success, cancel, and abort alike — parks the tracker at
-    # "idle", which is what closes the recorder.
+    # Every exit below — success, cancel, abort, and unexpected crash alike —
+    # parks the tracker at "idle", which is what closes the recorder.  The
+    # crash case is the guard's job (see :func:`find_idle_on_crash`).
     recorder = timing.record_task(
         find_progress, _FIND_TASK, media_type=find_media_type, embedder=find_embedder, auto_finish=True
     )
     recorder.start()
     recorder.set_scale(n=n_scored)
 
-    detectors = _resolve_find_detectors(detector_ids)
-    detector_configs = _build_detector_configs(detectors)
-    detector_names = [dc["name"] for dc in detector_configs]
+    with find_idle_on_crash(recorder):
+        detectors = _resolve_find_detectors(detector_ids)
+        detector_configs = _build_detector_configs(detectors)
+        detector_names = [dc["name"] for dc in detector_configs]
 
-    all_results: list[dict] = []
-    all_negative_results: list[dict] = []
-    detected_media_type = ""
-    total_scoring_units = 0
-    scored_units = 0
+        all_results: list[dict] = []
+        all_negative_results: list[dict] = []
+        detected_media_type = ""
+        total_scoring_units = 0
+        scored_units = 0
 
-    try:
-        for di, ds in enumerate(datasets):
-            find_progress.check_cancelled()
-            ds_label = f'Loading dataset "{ds["name"]}"…'
-            update_find_progress(
-                "running",
-                ds_label,
-                current=di,
-                total=len(datasets),
-                step=2,
-                total_steps=_FIND_STEPS,
-            )
+        try:
+            for di, ds in enumerate(datasets):
+                find_progress.check_cancelled()
+                ds_label = f'Loading dataset "{ds["name"]}"…'
+                update_find_progress(
+                    "running",
+                    ds_label,
+                    current=di,
+                    total=len(datasets),
+                    step=2,
+                    total_steps=_FIND_STEPS,
+                )
 
-            positives, negatives, scored_units, added_units, ds_media_type = _score_dataset(
-                ds,
-                detector_configs,
-                scored_units,
-                total_scoring_units,
-            )
-            all_results.extend(positives)
-            all_negative_results.extend(negatives)
-            total_scoring_units += added_units
-            if not detected_media_type and ds_media_type:
-                detected_media_type = ds_media_type
-    except CancelledError:
-        # A cancelled run's phase timings describe a partial job, so they are
-        # recorded as not-ok and the fit drops them.
-        recorder.finish(ok=False)
-        _abort_find(409, "Find cancelled")
-    except Exception:
-        recorder.finish(ok=False)
-        raise
+                positives, negatives, scored_units, added_units, ds_media_type = _score_dataset(
+                    ds,
+                    detector_configs,
+                    scored_units,
+                    total_scoring_units,
+                )
+                all_results.extend(positives)
+                all_negative_results.extend(negatives)
+                total_scoring_units += added_units
+                if not detected_media_type and ds_media_type:
+                    detected_media_type = ds_media_type
+        except CancelledError:
+            # A cancelled run's phase timings describe a partial job, so they are
+            # recorded as not-ok and the fit drops them.
+            recorder.finish(ok=False)
+            _abort_find(409, "Find cancelled")
 
-    update_find_progress("idle", "", step=None, total_steps=None)
+        find_idle()
 
-    return {
-        "results": all_results,
-        "negative_results": all_negative_results,
-        "datasets": [ds["name"] for ds in datasets],
-        "detectors": detector_names,
-        "media_type": detected_media_type,
-        "multiple_datasets": len(datasets) > 1,
-        "multiple_detectors": len(detector_configs) > 1,
-        "total_hits": len(all_results),
-    }
+        return {
+            "results": all_results,
+            "negative_results": all_negative_results,
+            "datasets": [ds["name"] for ds in datasets],
+            "detectors": detector_names,
+            "media_type": detected_media_type,
+            "multiple_datasets": len(datasets) > 1,
+            "multiple_detectors": len(detector_configs) > 1,
+            "total_hits": len(all_results),
+        }
 
 
 @detector_find_bp.route("/api/find/cancel", methods=["POST"])
