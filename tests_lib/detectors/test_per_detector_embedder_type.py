@@ -14,6 +14,10 @@ These cover the pure resolvers that route training/scoring through that choice:
   layer (delegates to keying).
 * ``_score_all_media`` region gating - region max-pool only when the detector
   scores in the dataset's *patch* slot.
+* ``_build_vote_xy`` / ``populate_label_embeddings`` **training** gating - the
+  Bad-vote flood and the Good-vote region pool are gated the same way, so a
+  detector scoring in a non-patch space never trains on rows it will never be
+  scored over (#2935).
 * ``resolve_detector_embedder_type`` - create-time resolution: an explicit type
   (the user's declared intent) is accepted regardless of the active dataset's
   bound embedders; an empty request auto-resolves a single-type dataset and is
@@ -29,7 +33,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from vtscore.detectors.training import _score_all_media, detector_score_embedder
+from vtscore.detectors.training import (
+    _build_vote_xy,
+    _score_all_media,
+    detector_score_embedder,
+)
 from vtscore.embedding.binding import (
     dataset_supplied_types,
     detector_dataset_compatible,
@@ -65,6 +73,31 @@ def _dual_snap() -> dict[int, dict]:
 
 def _det(embedder_type: str = "") -> SimpleNamespace:
     return SimpleNamespace(embedder_type=embedder_type, embedder="")
+
+
+def _ragged_snap() -> dict[int, dict]:
+    """A dual-embedder snap whose two spaces have **different** dimensions.
+
+    siglip is 4-d, the dinov3 patch slot (and its grid) 6-d, so mixing rows
+    from the two spaces into one ``X_list`` cannot be papered over - it raises
+    at ``np.stack``.  Both medias carry an md5 so the labelset path can resolve
+    them in-dataset.
+    """
+    snap: dict[int, dict] = {}
+    for cid in (1, 2):
+        semantic = np.zeros(DIM, dtype=np.float32)
+        semantic[cid] = 1.0
+        patch = np.zeros(6, dtype=np.float32)
+        patch[cid] = 1.0
+        snap[cid] = {
+            "id": cid,
+            "md5": f"md5-{cid}",
+            "media_type": "image",
+            "embedder": "dinov3_patch",
+            "embeddings": {"siglip": semantic, "dinov3_patch": patch},
+            "patch_grid": np.zeros((1, 2, 6), dtype=np.float16),
+        }
+    return snap
 
 
 class TestEmbedderTypeTaxonomy:
@@ -185,6 +218,106 @@ class TestRegionGating:
         all_ids, scores, _best = _score_all_media(model, snap)
         assert set(all_ids) == {1, 2}
         assert abs(scores[0] - scores[1]) < 1e-6
+
+
+class TestVoteTrainingGating:
+    """``_build_vote_xy`` trains under the gate ``_score_all_media`` scores under.
+
+    Regression for #2935: the training side used to flood every Bad vote with
+    the media's patch stack (and pool a boxed Good vote out of the grid)
+    regardless of which space the detector actually scores in, so a
+    semantic-locked detector on a text+patch dataset trained on patch-space
+    vectors it would never be scored over.
+    """
+
+    def test_semantic_detector_gets_one_negative_row_per_bad_vote(self):
+        snap = _dual_snap()
+        X, y, groups, score_rows = _build_vote_xy(snap, {1: None}, {2: None}, {}, "siglip")
+        # No flood: one row per vote, each a siglip image-level vector.
+        assert y == [1.0, 0.0]
+        assert groups == [("g", 1), ("b", 2)]
+        np.testing.assert_allclose(X[0], _basis(1))
+        np.testing.assert_allclose(X[1], _basis(2))
+        # The recorded calibration stacks are the rows the scorer pools for a
+        # siglip detector: the single full-image row, not the patch grid.
+        assert set(score_rows) == {("g", 1), ("b", 2)}
+        for rows in score_rows.values():
+            assert rows.shape == (1, DIM)
+
+    def test_patch_detector_still_floods(self):
+        snap = _dual_snap()
+        X, y, groups, score_rows = _build_vote_xy(snap, {1: None}, {2: None}, {}, "dinov3_patch")
+        # Image-level row + the grid's single cell = 2 negative rows, one bag.
+        assert y == [1.0, 0.0, 0.0]
+        assert groups == [("g", 1), ("b", 2), ("b", 2)]
+        assert len(X) == 3
+        assert score_rows[("b", 2)].shape == (2, DIM)
+
+    def test_none_embedder_keeps_dataset_precedence(self):
+        # The pre-per-detector path: any media with a grid floods, matching
+        # ``_score_all_media(model, snap)`` with no explicit primary.
+        snap = _dual_snap()
+        _X, y, groups, _rows = _build_vote_xy(snap, {1: None}, {2: None}, {}, None)
+        assert y == [1.0, 0.0, 0.0]
+        assert groups == [("g", 1), ("b", 2), ("b", 2)]
+
+    def test_semantic_detector_ignores_a_region_box(self):
+        # The box designates a patch of the *patch* embedder's grid; a siglip
+        # detector has no such row, so it trains on its own image-level vector.
+        snap = _dual_snap()
+        X, _y, _groups, _rows = _build_vote_xy(snap, {1: None}, {2: None}, {1: (0.0, 0.0, 0.5, 0.5)}, "siglip")
+        np.testing.assert_allclose(X[0], _basis(1))
+
+    def test_ragged_spaces_no_longer_blow_up_at_stack(self):
+        # Pre-fix this mixed 4-d Good row with 6-d flooded Bad rows, so the
+        # trainer's ``np.stack`` raised ValueError and every learned sort 500'd.
+        snap = _ragged_snap()
+        X, y, groups, _rows = _build_vote_xy(snap, {1: None}, {2: None}, {1: (0.0, 0.0, 0.5, 0.5)}, "siglip")
+        assert y == [1.0, 0.0]
+        assert groups == [("g", 1), ("b", 2)]
+        assert np.stack(X).shape == (2, DIM)
+
+
+class TestLabelsetTrainingGating:
+    """The labelset (load-time / cross-dataset) path is gated identically.
+
+    ``populate_label_embeddings`` resolves each element in-dataset when it can;
+    without the gate a semantic detector's Bad element read the media's stored
+    ``patch_grid`` - the patch embedder's space - into its negative cache.
+    """
+
+    def _labelset(self):
+        from vtscore.datasets.labelset import LabeledElement, LabelSet
+
+        good = LabeledElement(md5="md5-1", label="good")
+        bad = LabeledElement(md5="md5-2", label="bad")
+        return LabelSet([good, bad]), good, bad
+
+    def _populate(self, embedder_type: str):
+        from vtscore.detectors.labelset_elements import stable_element_id
+        from vtscore.detectors.labelset_training import populate_label_embeddings
+        from vtscore.state.core import DetectorContext
+
+        snap = _ragged_snap()
+        labelset, good, bad = self._labelset()
+        det_ctx = DetectorContext("d-2935")
+        det_ctx.embedder_type = embedder_type
+        populate_label_embeddings(det_ctx, labelset, media_type="image", snap=snap)
+        return det_ctx, stable_element_id(good), stable_element_id(bad)
+
+    def test_semantic_detector_caches_no_patch_rows(self):
+        det_ctx, gid, bid = self._populate("semantic")
+        assert det_ctx.label_negative_regions == {}
+        assert det_ctx.label_score_regions == {}
+        # Both labels are the dataset's siglip vectors, so training stacks.
+        assert det_ctx.label_embeddings[gid].shape == (DIM,)
+        assert det_ctx.label_embeddings[bid].shape == (DIM,)
+
+    def test_patch_detector_still_caches_the_flood(self):
+        det_ctx, _gid, bid = self._populate("patch_semantic")
+        # Image-level row + the grid's 2 cells, in the 6-d patch space.
+        assert len(det_ctx.label_negative_regions[bid]) == 3
+        assert det_ctx.label_negative_regions[bid][0].shape == (6,)
 
 
 class TestResolveDetectorEmbedderType:
