@@ -80,7 +80,7 @@ def _resolve_template_var(name: str) -> str:
     if name == "username":
         # Lazy import: ``vtscore.plugins`` is library-tier and must not
         # take a hard dependency on ``vtsearch.auth`` at import time.
-        from vtsearch.auth import get_current_user  # noqa: PLC0415
+        from vtscore.state.current_user import get_current_user  # noqa: PLC0415
 
         return get_current_user() or "default"
 
