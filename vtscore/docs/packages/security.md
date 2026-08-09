@@ -17,6 +17,7 @@ the load pipeline that calls these helpers during dataset import.
 - [Path validation](#path-validation)
 - [URL validation](#url-validation)
   - [`validate_url` (SSRF guard)](#validate_url-ssrf-guard)
+  - [Fetching: `open_validated_stream` / `fetch_validated_url`](#fetching-open_validated_stream--fetch_validated_url)
   - [Browser-URL validation](#browser-url-validation)
 - [Pickle safety](#pickle-safety)
 - [Why no `find_class` shim is needed](#why-no-find_class-shim-is-needed)
@@ -108,6 +109,12 @@ similar and defend against different things, so pick by **who makes the
 request**: `validate_url` for URLs *the server* fetches, and
 `validate_browser_url` for URLs *the user's browser* opens.
 
+Alongside them sit the two fetch primitives every server-side fetch is
+meant to go through, `open_validated_stream` and `fetch_validated_url`.
+A single up-front `validate_url` is not enough on its own - a public URL
+can `302` to an internal host - so the redirect chain has to be walked by
+hand with each hop re-checked.
+
 ### `validate_url` (SSRF guard)
 
 For SSRF protection on outbound HTTP requests:
@@ -145,6 +152,41 @@ validate_url("http://169.254.169.254/latest/meta-data/") # raises ValueError
 validate_url("file:///etc/passwd")                       # raises ValueError
 validate_url("https://10.0.0.1/")                        # raises ValueError
 ```
+
+### Fetching: `open_validated_stream` / `fetch_validated_url`
+
+```python
+def open_validated_stream(session, url, *, headers_for_url=None,
+                          timeout=(10, 60)) -> requests.Response:
+    """GET an already-validated url with allow_redirects=False, re-running
+    validate_url on every hop.  Returns the final response; caller closes."""
+
+def fetch_validated_url(url: str, *, timeout=(10, 30)) -> bytes:
+    """validate_url + open_validated_stream + raise_for_status, returning
+    the whole body."""
+```
+
+`open_validated_stream` deliberately does **not** validate its first URL:
+the caller owns that check, and this covers only the hops the caller
+cannot see. That split is what lets the resuming downloader validate once
+and then retry a partial transfer without paying a fresh DNS resolve per
+attempt (and without a transient resolver failure turning a retryable
+connection error into a hard `ValueError`). `headers_for_url` is
+recomputed per hop, so a credential scoped to one host - the HuggingFace
+bearer token, say - is never replayed to a redirect target on another.
+
+`fetch_validated_url` is the whole-body convenience wrapper for fetch
+sites that want bytes rather than a stream to spool to disk. It is what
+`vtscore.media.base._fetch_media_url` calls, so a media's `media_url` -
+which can arrive verbatim from a loaded pickle and whose bytes are served
+straight back to the requester - cannot name `file:///etc/passwd` or an
+internal service. (It previously used `urllib.request.urlopen`, whose
+default opener services `file://` and `ftp://` and obliged.)
+
+Users of these primitives: the dataset downloader
+(`vtscore/datasets/downloader/core.py`) and the `media_url` fallback in
+`vtscore/media/base.py`. A new outbound fetch belongs here too rather
+than reaching for `requests.get` / `urlopen` directly.
 
 ### Browser-URL validation
 
