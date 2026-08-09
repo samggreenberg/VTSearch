@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { AuthService } from '../../services/auth.service';
@@ -18,25 +18,30 @@ export class LoginComponent {
   readonly loggedIn = output<void>();
 
   username = '';
-  error = '';
-  busy = false;
+  // Signals, not plain fields: the app is zoneless and this component is
+  // OnPush, so the async login callbacks are the only writers and nothing else
+  // would schedule a repaint. On a failed login that left the form bricked —
+  // the input and the submit button stayed `[disabled]="busy"` with no
+  // remaining listener to mark the view dirty.
+  readonly error = signal('');
+  readonly busy = signal(false);
 
   submit(): void {
     const name = this.username.trim();
     if (!name) {
-      this.error = 'Please enter a username.';
+      this.error.set('Please enter a username.');
       return;
     }
-    this.busy = true;
-    this.error = '';
+    this.busy.set(true);
+    this.error.set('');
     this.auth.login(name).subscribe({
       next: () => {
-        this.busy = false;
+        this.busy.set(false);
         this.loggedIn.emit();
       },
       error: (err) => {
-        this.busy = false;
-        this.error = apiErrorMessage(err, 'Login failed.');
+        this.busy.set(false);
+        this.error.set(apiErrorMessage(err, 'Login failed.'));
       },
     });
   }

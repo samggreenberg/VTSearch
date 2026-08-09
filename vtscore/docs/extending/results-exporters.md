@@ -217,6 +217,14 @@ what the UI reads to label the button before running anything. An
 exporter that returns one only sometimes (a webhook whose remote hands
 back a permalink) leaves the flag `False` - the URL still opens.
 
+**You don't need an `export_cli` override for this.** The CLI has no
+browser, so it surfaces the `open_url` your `export()` returned rather
+than dropping it: printed under the confirmation message in text mode,
+and carried as an `open_url` field on the `export_complete` event under
+`--progress-format json`, where a wrapping script can open it. Don't
+`print()` the URL yourself - that duplicates the line and puts prose in
+the middle of the NDJSON stream.
+
 ## Entry-point registration
 
 In-tree:

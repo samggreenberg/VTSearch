@@ -2,6 +2,8 @@
 
 VTSearch includes a built-in evaluation framework that measures how well its sorting methods work on demo datasets. This guide covers how to run evaluations, write custom eval scripts, and interpret the results.
 
+> **The default arm is the shipped algorithm.** Every experiment here is a measured *deviation* from what the app does, which only means something if the un-deviated arm matches the app. Where the harness can't call app code directly it copies it, and those copies are pinned by `scripts/check-eval-app-sync.py` — a `./run-tests.sh` gate that fails when an app-side surface moves. See [The Eval Default Arm IS the App](#the-eval-default-arm-is-the-app) below.
+
 ## Quick start
 
 Run the full evaluation across all demo datasets:
@@ -260,6 +262,8 @@ Three columns make the lever verifiable rather than assumed, all measured in the
 - **`acq_threshold`** — the cut the picks actually saw that step (equal to `threshold` on steps with no fold-anchored fit to re-cut, ~5% of steps, concentrated in the cold start — the schedule blend has no inclusion-aware form).
 - **`acq_pool_percentile`** / **`report_pool_percentile`** — where the two cuts sat in the ranking.
 
+The pool is scored in **the same geometry the cuts are fitted in** — the style's region max-pool on a patch dataset, the whole-image vector on a single-vector one — because the Hard pick locates its cutoff by comparing scores against the threshold *absolutely*, so a ranking and a cut in different spaces put the cutoff index in the wrong place. Before #2943 the pool was scored whole-image while every cut was fitted on pooled scores; since a max over ~197 patch rows dominates the single whole-image row, the whole pool sat below the cut, both percentiles pinned at `1.0` on every patch step, and the simulated picks came from systematically higher-ranked items than the app's. Patch-dataset studies published before that fix — including the #2876 acquisition-inclusion report — measured that mismatch.
+
 The direction is counter-intuitive (negative offset → *higher* cut → *more* positives, because the pick reads the threshold as a rank position), so a sign error would otherwise look exactly like the lever not working. `acq_rank_percentile` is the alternative parameterisation — pin the cut at a fixed quantile of the simulation-set scores — and it requires `acq_inclusion_offset=0`, since the two name the same cut. It is measured and **worse**; it exists as an arm, not as an option.
 
 Pass `autopilot_fidelity=False` to reproduce studies published before the flow was aligned (the Max-Patch, MLP-vs-SVM, and Inclusion-knob reports); that path is byte-for-byte the old behaviour. New studies should leave it on.
@@ -324,9 +328,10 @@ region   = run_voting_iterations_eval({"vg": medias}, seeds=[1, 2, 3], region_vo
 
 A Good vote uses the **minimal box covering every annotated instance** of the
 target category (two apples → one box around both); images with no annotated box
-fall back to the whole-image vector. Scoring is region-aware (max-pool over
-regions) in both runs, so the comparison isolates region voting's effect. Region
-voting is a no-op on single-vector datasets (no `patch_grid` to pool).
+fall back to the whole-image vector. Scoring is region-aware (max-pool over the
+image's score rows) in both runs, so the comparison isolates region voting's
+effect. Region voting is a no-op on single-vector datasets (no `patch_grid` to
+sample a patch from).
 
 ### Example: voting iterations from pickle files
 
@@ -371,3 +376,44 @@ Both functions:
 - Create the output directory if it doesn't exist.
 - Return a list of `Path` objects pointing to the generated PNGs.
 - Skip chart types that don't apply (e.g., no learned-sort plots if only text-sort was run).
+
+## The Eval Default Arm IS the App
+
+Every experiment in this framework is a *deviation* from the shipped algorithm — a different Good-vote geometry, a different blend schedule, a different acquisition cut. A deviation is only interpretable against a baseline that is the real thing, so the framework's default arm has to be exactly what the app ships. When the app moves and the harness doesn't, the studies don't fail loudly; they keep producing plausible numbers about a detector nobody uses, and everything measured after the drift is quietly devalued.
+
+Three ways the harness relates to the app, in descending order of safety:
+
+| | How | Can it drift? |
+|---|---|---|
+| **Delegated** | The harness calls the app's function. `MaxPatchStyle.good_vec` / `.bad_vecs` / `._rows_for_media` are thin wrappers over `pool_box_from_media`, `bad_negative_vecs`, and `media_score_rows`. | No — by construction. |
+| **Ported** | The app's logic is re-implemented, because the original is unreachable or unusable. `vtscore/eval/autopilot_flow.py` ports the phase machine from `AutopilotStateService.checkPhaseTransition` (TypeScript — nothing to import) and the three indicators from `vtscore.detectors.labeling_progress` (wrapped in an interactive, lock-guarded single-detector cache a simulation can't use). | Yes — a copy goes stale the moment the original moves. |
+| **Default resolution** | The harness resolves "no explicit arm" to whatever the app currently defaults to: `style=None` → `max_patch` on a patch dataset, `blend_schedule=None` → `production_schedule_for(...)`. | Yes — the app changes its default and the harness keeps serving the old one *under the name "default"*. |
+
+Prefer delegation whenever it's possible; it's the only fix that can't rot.
+
+### The drift gate
+
+`scripts/check-eval-app-sync.py` pins a digest of each mirrored app surface — Python symbols by parsing the module, TypeScript blocks by brace-matching an anchor — and `./run-tests.sh` fails when one changes. It parses rather than imports, so it's dependency-free and takes ~0.3s. A failure names the mirror, both sides of it, and what to re-check:
+
+```
+  * autopilot.phase_machine  [ported, changed]
+      app:     frontend/src/app/services/autopilot-state.service.ts::checkPhaseTransition(
+      harness: vtscore/eval/autopilot_flow.py::next_phase
+      The phase ordering and every transition trigger of the simulated Autopilot user. ...
+```
+
+Reconcile the harness side, then re-pin:
+
+```bash
+python scripts/check-eval-app-sync.py --update
+```
+
+Digests ignore comments, docstrings, and formatting (including the magic trailing comma `ruff format` adds when it wraps a line), so only real logic changes trip the gate. Re-pinning without reading the harness defeats the whole thing — the digest is a prompt to check, not a checkbox.
+
+### Adding and diverging
+
+A new mirror is a new `Mirror(...)` entry in `MIRRORS`, plus `--update`. Give it a `note` that says what to re-check when the app moves, not just what the code is.
+
+When the harness *intentionally* differs from the app at a mirror, record why in `divergence=`. That doesn't exempt it from the digest — you still re-pin — but the text prints whenever the mirror trips, so whoever reconciles it next knows which differences are deliberate. The ported indicators use this: they take their histories as arguments rather than reading the app's `_cached_steps`, which is plumbing, not a rule change.
+
+Named experiment arms (`whole_image`, `max_patch_hac`, `max_patch_pca_hac`) are *supposed* to differ from the app — that's what makes them arms. This gate is about the default arm only.

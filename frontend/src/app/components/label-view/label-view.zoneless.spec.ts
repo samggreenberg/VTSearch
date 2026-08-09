@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { HttpTestingController } from '@angular/common/http/testing';
+import { HttpTestingController, TestRequest } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 
 import { LabelViewComponent } from './label-view.component';
@@ -9,6 +9,7 @@ import { LabelSessionService } from '../../services/label-session.service';
 import { VoteStateService } from '../../services/vote-state.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { AutopilotStateService } from '../../services/autopilot-state.service';
+import { ActiveContextService } from '../../services/active-context.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
@@ -847,5 +848,194 @@ describe('LabelViewComponent', () => {
     freshFixture.componentInstance.ngOnDestroy();
     httpMock.match(() => true);
     freshFixture.destroy();
+  });
+
+  // Issue #2921: sort work started for one (dataset, detector) pair must not
+  // apply its results into whatever pair is active when it finally settles.
+  // Detector scoring and learned-sort training both run for minutes, so a
+  // context switch mid-run used to leave the old subscription live, calling
+  // `applySortWindow` — and then auto-selecting an id that need not exist in
+  // the new dataset — against the new pair.
+  describe('pair-switch supersession', () => {
+    /** Seed an active pair *before* ngOnInit so the `pair$` replay is the
+     *  subscription's skipped first emission rather than a spurious reload. */
+    function seedPair(): ActiveContextService {
+      const activeContext = TestBed.inject(ActiveContextService);
+      activeContext.setActivePair('ds1', 'det1');
+      return activeContext;
+    }
+
+    /** The detector-registry read the switch fires off `modelId$` needs its
+     *  real shape; the catch-all `[]` drain elsewhere would break its handler. */
+    function flushDetectorRegistry(): void {
+      httpMock
+        .match((req) => req.url.startsWith('/api/detectors'))
+        .forEach((req) => req.flush({ detectors: [] }));
+    }
+
+    it('cancels an in-flight detector scoring run when the active pair changes', () => {
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+
+      component.onModelSelected('det1');
+      const staleScore = httpMock.expectOne('/api/find-label');
+      expect(component.sortState.sortBusy).toBe(true);
+
+      activeContext.setActivePair('ds2', 'det2');
+      flushDetectorRegistry();
+
+      // Aborted client-side, so the old pair's ranking can never be installed.
+      expect(staleScore.cancelled).toBe(true);
+      // That subscription carries no `finalize`, so `reloadForNewPair` resets
+      // the busy flag itself — otherwise the overlay would hang forever.
+      expect(component.sortState.sortBusy).toBe(false);
+      expect(component.sortState.sortOrder ?? []).toEqual([]);
+    });
+
+    it('stops polling a learned-sort job when the active pair changes', async () => {
+      const activeContext = seedPair();
+      flushInitialRequests();
+      flushDetectorRegistry();
+
+      component.voteState.loadVotes();
+      httpMock
+        .expectOne('/api/votes')
+        .flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} });
+
+      component.onLearnedSort();
+      httpMock.expectOne('/api/learned-sort').flush({ status: 'running', job_id: 'job-1' });
+
+      // Positive control: the adaptivePoll job poll is genuinely running.
+      await new Promise<void>((resolve) => setTimeout(resolve, 300));
+      const firstPoll = httpMock.match((req) => req.url.startsWith('/api/learned-sort/result'));
+      expect(firstPoll.length).toBe(1);
+      firstPoll[0].flush({ status: 'running' });
+
+      activeContext.setActivePair('ds2', 'det2');
+      // Drain the reload's own requests so they can't be mistaken for a poll.
+      // The two whose handlers read into the body need their real shape; a
+      // bare `[]` from the catch-all would throw inside them.
+      flushDetectorRegistry();
+      httpMock.match('/api/labeling-status').forEach((req) =>
+        req.flush({
+          good_count: 0,
+          bad_count: 0,
+          total_count: 0,
+          smart: { status: 'green' },
+          stable: { status: 'green' },
+          span: { status: 'green' },
+        }),
+      );
+      httpMock.match(() => true).forEach((req) => {
+        if (!req.cancelled) req.flush([]);
+      });
+
+      // The poll is torn down with the pair it belonged to: no further result
+      // reads, so the finished job can never rank the new pair.
+      await new Promise<void>((resolve) => setTimeout(resolve, 800));
+      httpMock.expectNone((req) => req.url.startsWith('/api/learned-sort/result'));
+      expect(component.sortState.sortBusy).toBe(false);
+    });
+  });
+
+  // Issue #2948: the learned-sort result poll used `timer(200, 500)` +
+  // `switchMap`, so every 500ms tick aborted the in-flight GET. A backend
+  // slower than the interval — exactly the case while an MLP training job is
+  // hogging the process — had every read cancelled, never saw a non-running
+  // status, and left the panel on 'Training…' with `sortBusy` stuck true. One
+  // transient HTTP error was also fatal, reporting 'Training failed' for a job
+  // still running server-side.
+  describe('learned-sort job polling', () => {
+    /** Kick a learned-sort run off and leave it `running`, with the result poll
+     *  live and its first read in flight. */
+    function startRunningJob(): void {
+      flushInitialRequests();
+      component.voteState.loadVotes();
+      httpMock
+        .expectOne('/api/votes')
+        .flush({ good: [1], bad: [2], click_times: {}, learned_scores: {} });
+
+      component.onLearnedSort();
+      httpMock.expectOne('/api/learned-sort').flush({ status: 'running', job_id: 'job-1' });
+    }
+
+    /** Result-poll reads issued since the last call (matching consumes them,
+     *  so an empty result means "no *new* read was issued"). */
+    function resultPolls(): TestRequest[] {
+      return httpMock.match((req) => req.url.startsWith('/api/learned-sort/result'));
+    }
+
+    it('never cancels a result read that outlives the poll interval', async () => {
+      startRunningJob();
+      const first = resultPolls();
+      expect(first.length).toBe(1);
+
+      // Well past the 500ms fast cadence. The read is still alive (nothing
+      // aborted it) and no second read piled up behind it: adaptivePoll waits
+      // for each poll to finish before scheduling the next.
+      await new Promise<void>((resolve) => setTimeout(resolve, 1500));
+      expect(first[0].cancelled).toBe(false);
+      expect(resultPolls().length).toBe(0);
+
+      // The slow answer lands and ranks normally — under the old poll it never
+      // could, because it was cancelled a second into its life.
+      first[0].flush({
+        status: 'done',
+        results: [{ id: 1, score: 0.8 }, { id: 2, score: 0.2 }],
+        threshold: 0.5,
+      });
+      expect(component.sortState.sortBusy).toBe(false);
+      expect(component.sortState.sortStatus).toBe('');
+      expect(component.sortState.sortOrder!.length).toBe(2);
+    });
+
+    it('rides out a transient poll failure instead of failing the run', async () => {
+      startRunningJob();
+      const first = resultPolls();
+      expect(first.length).toBe(1);
+
+      // A network-level failure: the job is untouched server-side, so the run
+      // must stay busy rather than report failure.
+      first[0].error(new ProgressEvent('error'));
+      expect(component.sortState.sortBusy).toBe(true);
+      expect(component.sortState.sortStatus).toBe('Training…');
+
+      // The poll keeps ticking and the run completes on the next read.
+      await new Promise<void>((resolve) => setTimeout(resolve, 700));
+      const second = resultPolls();
+      expect(second.length).toBe(1);
+      second[0].flush({ status: 'done', results: [{ id: 1, score: 0.8 }], threshold: 0.5 });
+      expect(component.sortState.sortBusy).toBe(false);
+      expect(component.sortState.sortStatus).toBe('');
+    });
+
+    it('ends the run when the result endpoint reports the job errored', () => {
+      startRunningJob();
+      // 500 is how the endpoint reports a failed job (there is no `error`
+      // status in a 200 body), so it is terminal, not a blip to ride out.
+      resultPolls()[0].flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+
+      expect(component.sortState.sortBusy).toBe(false);
+      expect(component.sortState.sortStatus).toBe('Training failed');
+    });
+
+    it('ends the run when the job is no longer known to the backend', () => {
+      startRunningJob();
+      // 404 means the job was evicted or never existed; polling it forever
+      // would just spin the panel.
+      resultPolls()[0].flush({ error: 'Not Found' }, { status: 404, statusText: 'Not Found' });
+
+      expect(component.sortState.sortBusy).toBe(false);
+      expect(component.sortState.sortStatus).toBe('Training job expired');
+    });
+
+    it('reports a cancelled job', () => {
+      startRunningJob();
+      resultPolls()[0].flush({ status: 'cancelled' });
+
+      expect(component.sortState.sortBusy).toBe(false);
+      expect(component.sortState.sortStatus).toBe('Cancelled');
+    });
   });
 });

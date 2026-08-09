@@ -569,8 +569,9 @@ python scripts/profiling/tune_timing_profile.py --drive \
 By default `--drive` runs only the read-only families (opening a dataset, text
 search, Find). The others mutate state — loading a detector seeds example votes,
 **train-and-score overwrites the active dataset's labels**, promote creates a
-dataset, an import writes one — so they require `--allow-mutating` and should be
-pointed at a scratch `--data-dir`, never at live user data.
+dataset, an import writes one, a staging import leaves a pkl behind — so they
+require `--allow-mutating` and should be pointed at a scratch `--data-dir`, never
+at live user data.
 
 Either way the script ends by printing a coverage report naming which task
 families got measured and which fell back to the defaults, so a thin sweep is

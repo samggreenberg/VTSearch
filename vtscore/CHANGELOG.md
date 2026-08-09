@@ -26,16 +26,34 @@ instead, since every commit on `dev` is effectively a new app release.)
   exactly where it was measured. The
   label-count-scheduled blend (`calculate_safe_threshold`) is now only the
   fallback for label sets too small to form calibration folds.
-- **`gmm_cut_from_fit(rule="rate")` clamps instead of falling back to the
-  midpoint** when the density crossing has no root between the component means.
-  The cut is read as the highest score at which the low component still
-  out-densities the high one under the cost tilt, which makes it monotone in
-  the Inclusion knob (and so keeps the included sets nested). It equals the old
-  root wherever a crossing exists, including at every equal-weight cut.
+- **`gmm_cut_from_fit(rule="rate")` continues past the component means instead
+  of falling back to the midpoint** when the density crossing has no root
+  between them. The cut is read as the highest score at which the low component
+  still out-densities the high one under the cost tilt, which makes it monotone
+  in the Inclusion knob (and so keeps the included sets nested); it equals the
+  old root wherever a crossing exists, including at every equal-weight cut.
+  Once the crossing runs off the inter-mean interval the cut keeps moving,
+  continuing past the edge by the log-cost excess times the mixture-weighted
+  variance over the mean gap - the equal-variance crossing's own slope, so for
+  equal-variance fits the continuation extends the interior crossing line
+  seamlessly. Returning the bare edge there (the first form of this change)
+  made the cut *constant* in the cost ratio, which flattened the composed
+  `mid_tilt` quantile over whole bands of the Inclusion knob and silently
+  collapsed the acquisition offset to a no-op inside them.
 - **`vtscore.eval` defaults `safe_thresholds=True`**, matching the app; `False`
   is the no-fusion control arm. `eval_learned_sort` / `run_eval` lost the
   parameter entirely - they delegate to the production trainer, which has no
   such mode.
+- **`gmm_cut_from_fit` returns `(cut, kind)` instead of `(cut, flag)`**, where
+  *kind* is one of `CUT_KIND_INTERIOR` (`""`), `CUT_KIND_CONTINUED` or
+  `CUT_KIND_DEGENERATE_MIDPOINT`. It is empty exactly when the old flag was 0,
+  so `bool(kind)` is the previous "no interior stationary point" boolean; the
+  non-empty values distinguish a cut *continued* past a component mean (still
+  moving with the cost tilt, still the rate rule) from a fit too degenerate to
+  express a boundary at all (a midpoint, constant in the tilt). Those two were
+  indistinguishable before, which made a fallback countable but not
+  attributable. **Breaking:** a caller comparing the second element to `0`/`1`
+  should compare to `""` or wrap in `bool()`.
 
 ### Removed
 
@@ -55,6 +73,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.state.current_user`** - Flask-free resolution of "who is this
+  work for": a pluggable request-user resolver
+  (`register_request_user_resolver`), the `thread_user` thread-local scope
+  background jobs use to inherit a requester's identity, and the `"default"`
+  fallback. Library code that needs a username now calls
+  `vtscore.state.current_user.get_current_user()` instead of importing
+  `vtsearch.auth`, which made `JobManager.start()` (and label sync, dataset
+  loading, exporters, plugin templating) hard-require Flask at call time.
+  `vtsearch.auth` re-exports every name, so there is still exactly one
+  thread-local behind the app.
 - **`FoldAnchoredCut`** / **`fit_fold_anchored_cut`** - the fitted estimator,
   split from the cut so a new Inclusion value can be re-cut arithmetically
   without refitting or re-scoring.

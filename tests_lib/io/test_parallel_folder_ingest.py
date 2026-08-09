@@ -22,7 +22,7 @@ import pytest
 import vtscore.datasets.loader_folder as lf
 from vtscore.concurrency.progress import CancelledError
 from vtscore.datasets.loader import load_dataset_from_folder, load_dataset_from_folder_chunked
-from helpers import make_wav_bytes as _make_wav_bytes
+from tests_lib.helpers import make_wav_bytes as _make_wav_bytes
 
 # Comfortably above _PARALLEL_MIN_FILES (64) so the pool actually engages.
 _N_FILES = 130

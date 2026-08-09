@@ -25,6 +25,11 @@ three falsifiable predictions the issue pre-registers: that the realised
 ``cross - mid`` offset matches its closed form, that the per-step cost penalty
 scales with that offset, and that the prior-free crossing beats both incumbents.
 
+**The tail sweep** (#2881) rides along in both halves: ``tail_alpha_stability``
+says where the oracle cut sits in the fitted Bad tail, and ``tail_alpha_curve``
+says what it costs to aim there, as a function of the one constant.  Its
+pre-registration is ``docs/experiments/gmm-cut/PREREG-2881.md``.
+
 Writes ``results/summary_cut.json``, ``results/agg/cut_*.csv``,
 ``results/figures/cut_*.png`` and a ``results/REPORT_CUT.md`` draft.
 """
@@ -32,6 +37,7 @@ Writes ``results/summary_cut.json``, ``results/agg/cut_*.csv``,
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import common
@@ -40,6 +46,8 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+
+from vtscore.eval.cut_rules import TAIL_ALPHA_PREREGISTERED, TAIL_RULES  # noqa: E402
 
 #: Vote-count windows (inclusive).  Below 6 votes the blend is pure GMM (total
 #: authority, but #2799 showed the app shows no trained detector before 7 votes);
@@ -51,6 +59,13 @@ PRODUCTION_ARM_SUBSTR = "dinov3_patch/max_patch"
 #: The single-vector arm a winner must not regress (``calculate_gmm_threshold``
 #: also backs the cosine/text sort, which has no region max-pool).
 CONTROL_ARM_SUBSTR = "whole_image"
+
+#: #2881's tail-quantile sweep, as cell-variant names.  Imported rather than
+#: respelled: the analyzer's allowlist going out of step with the rule table is
+#: the exact failure ``unclassified_variants`` exists to shout about, and a rule
+#: family that arrives seven at a time is where a hand-maintained list would
+#: first lose one.
+TAIL_VARIANTS: tuple[str, ...] = tuple(f"pooled_{r}" for r in TAIL_RULES)
 
 #: Rules that could actually ship: unsupervised, computable from the sim scores.
 SHIPPABLE: tuple[str, ...] = (
@@ -64,9 +79,39 @@ SHIPPABLE: tuple[str, ...] = (
     "pooled_gumbel_any_cross",
     "pooled_gumbel_any_priorfree",
     "pooled_gumbel_any_rate",
+    *TAIL_VARIANTS,
 )
+
+#: Measured and reported, but **not eligible to be the ship candidate**.
+#:
+#: The tail sweep varies one free parameter, so handing all seven levels to a
+#: 5 %-bar ship gate would be seven shots at it — and the sweep would then
+#: "win" on this run at whatever alpha the noise favoured, which is precisely the
+#: wrong-but-plausible result that has cost this study line two runs already.
+#: The pre-registered constant (0.158, #2846's median over 511 cells) is the only
+#: tail level that can ship; the other six exist to show the *shape* of the cost
+#: curve in alpha, which is the actual claim the stability finding makes.  If the
+#: curve turns out to peak somewhere else entirely, that is a finding for the
+#: next pre-registration, not a rule to ship off this run.
+SWEEP_ONLY: tuple[str, ...] = tuple(
+    v for v in TAIL_VARIANTS if v != f"pooled_tail_a{round(TAIL_ALPHA_PREREGISTERED * 1000):03d}"
+)
+#: What the ship decision, the oracle-distance tie-break and ``best_by_cost`` read.
+SHIP_ELIGIBLE: tuple[str, ...] = tuple(v for v in SHIPPABLE if v not in SWEEP_ONLY)
+
 #: Label-reading diagnostics — bounds and decomposition anchors, never candidates.
 ORACLE_VARIANTS: tuple[str, ...] = ("pooled_supervised", "pooled_sim_oracle")
+
+#: ``pooled_tail_a158`` -> ``0.158``.  Parsed from the *data's* variant names
+#: rather than read off the imported grid, so re-analyzing an older run whose
+#: sweep used different levels still labels its own curve correctly.
+_TAIL_RE = re.compile(r"^pooled_tail_a(\d{3})$")
+
+
+def tail_alpha_of(variant: str) -> float | None:
+    m = _TAIL_RE.match(str(variant))
+    return int(m.group(1)) / 1000.0 if m else None
+
 
 #: Deliberately not ship candidates: ``xcal_only`` is the no-blend control, and
 #: the ``image_*`` family is the single-vector geometry arm, measured for
@@ -155,9 +200,10 @@ def unclassified_variants(df: pd.DataFrame) -> list[str]:
     and the oracle-distance tie-break all read through it.  So a rule added to
     ``_SAFE_GMM_VARIANTS`` but not added here does not fail — it is *silently
     omitted from the verdict* while still appearing in the window means, which
-    is the exact shape of wrong table this study line keeps producing.  #2881
-    will add a ``tail_alpha`` rule; this makes forgetting it a visible event
-    rather than a missing row nobody counts.
+    is the exact shape of wrong table this study line keeps producing.  #2881's
+    ``tail_a*`` family was the seven-at-a-time case this was built for; it now
+    imports its own names from the rule table, which is stronger than a warning,
+    but the warning stays for the next rule added by hand.
     """
     known = {*SHIPPABLE, *ORACLE_VARIANTS, *NON_CANDIDATES}
     present = {str(v) for v in df["gmm_variant"].unique() if str(v) != ""}
@@ -233,6 +279,23 @@ def _pair_frames(va: pd.DataFrame, vb: pd.DataFrame, metric_cols: list[str]) -> 
 
 def _window(v: pd.DataFrame, lo: int, hi: int) -> pd.DataFrame:
     return v[(v["n_votes"] >= lo) & (v["n_votes"] <= hi)]
+
+
+def _fill_metric(entry: dict, col: str, series: pd.Series) -> None:
+    """Write one metric's mean / SEM / p (and cost's improved-cell share) into *entry*.
+
+    The SEM is over **cells**, matching the pairing unit, and is what makes "these
+    two rules are indistinguishable" a statement rather than an impression - the
+    alpha sweep in :func:`tail_alpha_curve` needs exactly that to say whether its
+    cost curve is flat near the optimum or a knife-edge.
+    """
+    vals = series.to_numpy(dtype=float)
+    vals = vals[np.isfinite(vals)]
+    entry[f"mean_d_{col}"] = float(np.mean(vals)) if vals.size else float("nan")
+    entry[f"sem_d_{col}"] = float(np.std(vals, ddof=1) / np.sqrt(vals.size)) if vals.size > 1 else float("nan")
+    entry[f"p_d_{col}"] = _wilcoxon(vals) if vals.size else None
+    if col == "cost":
+        entry["frac_cells_improved"] = float(np.mean(vals < 0)) if vals.size else float("nan")
 
 
 def _paired_cells(v: pd.DataFrame, a: str, b: str, lo: int, hi: int, metric_cols: list[str]) -> pd.DataFrame:
@@ -312,12 +375,7 @@ def rule_contrasts(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
                     "n_cells": int(len(cells)),
                 }
                 for col in metrics:
-                    vals = cells[f"d_{col}"].to_numpy(dtype=float)
-                    vals = vals[np.isfinite(vals)]
-                    entry[f"mean_d_{col}"] = float(np.mean(vals)) if vals.size else float("nan")
-                    entry[f"p_d_{col}"] = _wilcoxon(vals) if vals.size else None
-                    if col == "cost":
-                        entry["frac_cells_improved"] = float(np.mean(vals < 0)) if vals.size else float("nan")
+                    _fill_metric(entry, col, cells[f"d_{col}"])
                 rows.append(entry)
     tbl = pd.DataFrame(rows)
     tbl.to_csv(agg_dir / "cut_contrasts.csv", index=False)
@@ -361,12 +419,7 @@ def base_row_contrasts(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
                     "base_provenance": "|".join(sorted(prov.unique())) if len(prov) else "",
                 }
                 for col in metrics:
-                    vals = cells[f"d_{col}"].to_numpy(dtype=float)
-                    vals = vals[np.isfinite(vals)]
-                    entry[f"mean_d_{col}"] = float(np.mean(vals)) if vals.size else float("nan")
-                    entry[f"p_d_{col}"] = _wilcoxon(vals) if vals.size else None
-                    if col == "cost":
-                        entry["frac_cells_improved"] = float(np.mean(vals < 0)) if vals.size else float("nan")
+                    _fill_metric(entry, col, cells[f"d_{col}"])
                 rows.append(entry)
     tbl = pd.DataFrame(rows)
     tbl.to_csv(agg_dir / "cut_contrasts_vs_base.csv", index=False)
@@ -576,22 +629,48 @@ def evt_evidence(diag: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
 
 
 def fallback_reasons(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
-    """Why each rule declined to fire, per arm per variant (issue #2846).
+    """Why each rule declined to fire and what it cut instead, per arm per variant.
 
-    ``cut_fallback`` says a rule degraded to the midpoint; this says *which*
-    guard sent it there, which is the whole difference between "the fit was
-    sound but oriented the other way" (repairable, and what ``gumbel_any_*``
-    repairs) and "the two components collapsed onto each other" (a statement
-    about that step's score distribution, which no solver can fix).
+    Two columns, answering two different questions about the same event
+    (issues #2846, #2900):
+
+    ``cut_fail_reason`` is *which guard sent it there* - the whole difference
+    between "the fit was sound but oriented the other way" (repairable, and what
+    ``gumbel_any_*`` repairs) and "the two components collapsed onto each other"
+    (a statement about that step's score distribution, which no solver can fix).
+    Only the EVT rules have a reason vocabulary; the Gaussian ones report ``""``.
+
+    ``cut_fallback_kind`` is *what was substituted*, which is not the same
+    question and does not have the same answer in both families.  For the
+    ``_SAFE_GMM_VARIANTS`` arms it is ``midpoint``: that family compares tilts
+    against each other on one fit, so a rule with no root gets a neutral,
+    rule-independent stand-in.  For the label-anchored arms it is the production
+    rule's own branch - ``continued`` (the cut carried past the component mean
+    at the rule's first-order slope, still moving with the cost tilt) or
+    ``degenerate_midpoint`` (a fit too degenerate to express a boundary at all).
+    The flag fires on the same fits in both families, so ``fallback_rate``
+    aggregates and ``cut_fallback == 0/1`` filters stay comparable across them;
+    the substituted *value* does not, which is what this column exposes.  **A
+    contrast that reads a ``*_rate`` arm as "what the app would have done" must
+    exclude the ``midpoint`` rows**, since on those steps the arm is scoring a
+    stand-in the app never cuts at.
 
     Emitted **per window**, plus an ``all_steps`` row set.  Every other table
     here is windowed, so a bare all-steps count invited exactly the mistake
     #2846's report had to warn about in prose: reading these counts next to a
     ramp-window fallback *rate* and treating them as the same population.
     """
-    if "cut_fail_reason" not in df:
+    has_reason = "cut_fail_reason" in df
+    has_kind = "cut_fallback_kind" in df
+    if not (has_reason or has_kind):
         return pd.DataFrame()
-    fell = df[(df["cut_fallback"] == 1) & (df["cut_fail_reason"].astype(str) != "")]
+    df = df.copy()
+    # A frame emitted before either column existed is still analyzable - this
+    # study's whole point is comparing against those numbers - so fill the
+    # missing side rather than dropping the table.
+    for col in ("cut_fail_reason", "cut_fallback_kind"):
+        df[col] = df[col].fillna("").astype(str) if col in df else ""
+    fell = df[df["cut_fallback"] == 1]
     if fell.empty:
         return pd.DataFrame()
     out = []
@@ -602,7 +681,7 @@ def fallback_reasons(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
         if sub.empty:
             continue
         g = (
-            sub.groupby(["arm", "gmm_variant", "cut_fail_reason"])
+            sub.groupby(["arm", "gmm_variant", "cut_fallback_kind", "cut_fail_reason"])
             .size()
             .reset_index(name="n_steps")
             .sort_values(["arm", "gmm_variant", "n_steps"], ascending=[True, True, False])
@@ -648,6 +727,84 @@ def tail_alpha_stability(diag: pd.DataFrame, agg_dir: Path) -> dict:
         }
         out[col]["stable"] = bool(out[col].get("iqr_ratio", float("inf")) < 3.0)
     (agg_dir / "cut_tail_alpha.json").write_text(json.dumps(out, indent=2, default=float))
+    return out
+
+
+def tail_alpha_curve(base_contrasts: pd.DataFrame, agg_dir: Path) -> dict:
+    """#2881's sweep: the cost of "cut the Bad tail at alpha", as a function of alpha.
+
+    :func:`tail_alpha_stability` says the *oracle* cut sits at a stable survival
+    level of the fitted Gumbel low component (median 0.158, IQR ratio 2.38 over
+    511 cells).  That is a statement about where the optimum *is*, not about what
+    it costs to aim there, and the two come apart if the cost curve is steep:
+    a constant calibrated on a median is only transferable if being off by a
+    factor of ~1.5 in alpha is cheap.  So the claim being tested here is
+    **flatness**, and it needs the curve, not the argmin.
+
+    Read against the run's own base row (production), production arm, ramp
+    window — the only baseline that means "beats what we ship" (#2846).
+
+    ``flat_alphas`` are the levels whose cost is within one standard error of the
+    best level's; ``flat_alpha_ratio`` is how wide a band in alpha that spans.
+    The pre-registered bar is a factor of 2: a constant that can be wrong by 2x
+    and still land inside the noise will transfer to another dataset, and one
+    that cannot is a number fitted to this run.
+    """
+    out: dict = {"n_levels": 0, "preregistered_alpha": TAIL_ALPHA_PREREGISTERED}
+    if base_contrasts.empty:
+        return out
+    prod = _ramp_prod(base_contrasts)
+    rows = []
+    for _i, r in prod.iterrows():
+        alpha = tail_alpha_of(r["variant"])
+        if alpha is None:
+            continue
+        rows.append(
+            {
+                "alpha": alpha,
+                "variant": str(r["variant"]),
+                "ship_eligible": str(r["variant"]) not in SWEEP_ONLY,
+                "mean_d_cost": float(r["mean_d_cost"]),
+                "sem_d_cost": float(r["sem_d_cost"]),
+                "p_d_cost": None if r["p_d_cost"] is None else float(r["p_d_cost"]),
+                "frac_cells_improved": float(r["frac_cells_improved"]),
+                "n_cells": int(r["n_cells"]),
+                "base_provenance": str(r["base_provenance"]),
+            }
+        )
+    if not rows:
+        return out
+    curve = pd.DataFrame(rows).sort_values("alpha").reset_index(drop=True)
+    curve.to_csv(agg_dir / "cut_tail_alpha_curve.csv", index=False)
+
+    best = curve.loc[curve["mean_d_cost"].idxmin()]
+    # One SEM of the *best* level: the band inside which another level is not
+    # distinguishable from it.  A NaN SEM (one cell) leaves the band empty rather
+    # than swallowing the whole curve.
+    band = float(best["sem_d_cost"])
+    flat = curve[curve["mean_d_cost"] <= float(best["mean_d_cost"]) + band] if np.isfinite(band) else curve.iloc[[]]
+    prereg = curve[np.isclose(curve["alpha"], TAIL_ALPHA_PREREGISTERED)]
+
+    out.update(
+        n_levels=int(len(curve)),
+        curve=curve.to_dict("records"),
+        best_alpha=float(best["alpha"]),
+        best_mean_d_cost=float(best["mean_d_cost"]),
+        flat_alphas=[float(a) for a in flat["alpha"]],
+        flat_alpha_ratio=(float(flat["alpha"].max() / flat["alpha"].min()) if len(flat) else float("nan")),
+        preregistered=None if prereg.empty else prereg.iloc[0].to_dict(),
+    )
+    # The transferability claim, pre-registered at 2x.
+    out["curve_is_flat"] = bool(np.isfinite(out["flat_alpha_ratio"]) and out["flat_alpha_ratio"] >= 2.0)
+    # Is #2846's median still where this run's optimum is?  Membership in the
+    # flat band, not equality with the argmin: "0.158 is indistinguishable from
+    # the best level here" is the transferability claim, and demanding it be the
+    # exact argmin would fail on noise alone.  If it falls *outside* the band that
+    # is a real finding - the constant does not carry across runs - which is the
+    # same conclusion as a steep curve, by another route.
+    out["preregistered_in_flat_band"] = bool(
+        not prereg.empty and float(prereg.iloc[0]["alpha"]) in set(out["flat_alphas"])
+    )
     return out
 
 
@@ -708,6 +865,7 @@ def decisions(
     gaps: pd.DataFrame,
     costs: pd.DataFrame,
     alpha: dict,
+    tail_curve: dict,
 ) -> dict:
     """The issue's pre-registered decision rules, evaluated.
 
@@ -720,12 +878,17 @@ def decisions(
     midpoint contrast quietly became a comparison with a rule nobody runs.
     ``beats_midpoint`` is still reported, as the historical #2836 contrast, but
     it no longer gates the ship decision.
+
+    Every candidate here is drawn from ``SHIP_ELIGIBLE``, not ``SHIPPABLE``: the
+    swept tail levels are measured but cannot win the gate, because a sweep over
+    a free parameter would otherwise get one shot per level at a 5 % bar.  See
+    ``SWEEP_ONLY``.
     """
     out: dict = {}
     if contrasts.empty:
         return {"error": "no contrasts"}
 
-    prod = _ramp_prod(contrasts, SHIPPABLE)
+    prod = _ramp_prod(contrasts, SHIP_ELIGIBLE)
     if prod.empty:
         return {"error": "no production-arm contrasts"}
 
@@ -741,7 +904,7 @@ def decisions(
     out["beats_midpoint"] = _wins(best)
 
     # --- Against what production actually did -------------------------------
-    prod_base = _ramp_prod(base_contrasts, SHIPPABLE)
+    prod_base = _ramp_prod(base_contrasts, SHIP_ELIGIBLE)
     cand = None
     out["best_vs_production"] = None
     out["beats_production"] = False
@@ -780,7 +943,7 @@ def decisions(
     gp = gaps[
         (gaps["window"] == "ramp_6_20")
         & (gaps["arm"].str.contains(PRODUCTION_ARM_SUBSTR))
-        & (gaps["gmm_variant"].isin(SHIPPABLE))
+        & (gaps["gmm_variant"].isin(SHIP_ELIGIBLE))
     ]
     # Several rules in this family are *aliases* rather than competitors - at
     # inclusion 0 the cost weights are (1, 1), so `rate` reduces to `priorfree`
@@ -843,6 +1006,17 @@ def decisions(
     # opposite of what that table says (#2846 had to spend a paragraph on it).
     out["tail_alpha_stable_gauss"] = bool(alpha.get("oracle_lo_sf_gauss", {}).get("stable", False))
     out["tail_alpha_stable_evt"] = bool(alpha.get("oracle_lo_sf_evt", {}).get("stable", False))
+
+    # #2881: the tail rule *as a rule*, plus what its sweep says about whether the
+    # one constant transfers.  Named separately from the ship gate above because
+    # only one level is eligible for it - a flat curve is evidence for the rule's
+    # premise, not a licence to ship whichever level came out lowest.
+    out["sweep_only_variants"] = list(SWEEP_ONLY)
+    out["tail_alpha_curve"] = {
+        k: tail_curve.get(k) for k in ("n_levels", "best_alpha", "best_mean_d_cost", "flat_alphas", "flat_alpha_ratio")
+    }
+    out["tail_curve_is_flat"] = tail_curve.get("curve_is_flat")
+    out["tail_preregistered_alpha_in_flat_band"] = tail_curve.get("preregistered_in_flat_band")
     return out
 
 
@@ -857,7 +1031,11 @@ def make_figures(df: pd.DataFrame, diag: pd.DataFrame, fig_dir: Path) -> list[st
         return []
     saved = []
 
-    v = df[df["gmm_variant"].isin((*SHIPPABLE, *ORACLE_VARIANTS))]
+    # The swept tail levels are left off these line plots: seven near-identical
+    # curves would cost the legend its legibility and say nothing the alpha curve
+    # in `cut_tail_alpha_curve.csv` does not say better.  The pre-registered level
+    # is a ship candidate and stays.
+    v = df[df["gmm_variant"].isin((*SHIP_ELIGIBLE, *ORACLE_VARIANTS))]
     for metric in ("cost", "raw_cut_cost"):
         curves = v.groupby(["arm", "gmm_variant", "n_votes"])[metric].mean().reset_index()
         n_arms = max(1, curves["arm"].nunique())
@@ -932,7 +1110,7 @@ def write_report(summary: dict, tables: dict, report_path: Path) -> None:
         ("Decomposition (threshold units)", "decomposition"),
         ("Decomposition (excess-cost units)", "cost_decomposition"),
         ("Extreme-value evidence", "evt"),
-        ("Why each rule fell back (issue #2846)", "fallback_reasons"),
+        ("Why each rule fell back, and to what (issues #2846, #2900)", "fallback_reasons"),
         ("Estimator variance (within-cell)", "estimator_variance"),
     ):
         tbl = tables.get(key)
@@ -955,6 +1133,19 @@ def write_report(summary: dict, tables: dict, report_path: Path) -> None:
     lines.append(json.dumps(summary["tail_alpha"], indent=2, default=float))
     lines.append("```")
     lines.append("")
+    curve = summary.get("tail_alpha_curve") or {}
+    if curve.get("curve"):
+        lines.append("## The tail rule as a rule: cost vs alpha (issue #2881)")
+        lines.append("")
+        lines.append("Production arm, ramp 6-20, paired against the run's own base row.")
+        lines.append("Only the pre-registered level is a ship candidate; the rest show the curve's shape.")
+        lines.append("")
+        lines.append(_md(pd.DataFrame(curve["curve"])))
+        lines.append("")
+        lines.append("```json")
+        lines.append(json.dumps({k: v for k, v in curve.items() if k != "curve"}, indent=2, default=float))
+        lines.append("```")
+        lines.append("")
     report_path.write_text("\n".join(lines))
     common.log(f"wrote {report_path}")
 
@@ -989,8 +1180,9 @@ def main() -> int:
     evt = evt_evidence(diag, agg_dir) if not diag.empty else pd.DataFrame()
     why = fallback_reasons(df, agg_dir)
     alpha = tail_alpha_stability(diag, agg_dir) if not diag.empty else {}
+    tail_curve = tail_alpha_curve(base_contrasts, agg_dir)
     est_var = estimator_variance(diag, agg_dir) if not diag.empty else pd.DataFrame()
-    dec = decisions(contrasts, base_contrasts, gaps, costs, alpha)
+    dec = decisions(contrasts, base_contrasts, gaps, costs, alpha, tail_curve)
     # Carried in the decisions block, not only in the log: this is the one place
     # a reader checks before believing a verdict, and the verdict is exactly what
     # an unclassified rule is missing from.
@@ -1007,6 +1199,7 @@ def main() -> int:
         "decisions": dec,
         "offsets": offsets,
         "tail_alpha": alpha,
+        "tail_alpha_curve": tail_curve,
         "figures": figs,
     }
     (common.RESULTS / "summary_cut.json").write_text(json.dumps(summary, indent=2, default=float))

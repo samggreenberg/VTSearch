@@ -1,7 +1,8 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
 
-import { Subject, timer, Subscription, pairwise } from 'rxjs';
-import { takeUntil, switchMap, filter, take } from 'rxjs/operators';
+import { HttpErrorResponse } from '@angular/common/http';
+import { Subject, Subscription, of, pairwise, throwError } from 'rxjs';
+import { takeUntil, catchError, filter, take, tap } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -156,6 +157,24 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   readonly CENTER_MIN = 100;
   readonly DIVIDER_TOTAL = 16; // 2 × 8px dividers
   private destroy$ = new Subject<void>();
+  /**
+   * Fires whenever the active (dataset, detector) pair changes — and on
+   * destroy. Every request whose response writes *pair-scoped* state (the sort
+   * window, the inclusion slider, the dataset name, the selected media) is
+   * piped through `takeUntil(this.pairScope$)` rather than `destroy$`, so the
+   * work started for the pair we're leaving is torn down the instant the pair
+   * switches.
+   *
+   * Without it, a detector-scoring POST or a learned-sort job poll outlives the
+   * switch and calls `applySortWindow` into whatever pair happens to be active
+   * when it finally settles — installing the previous pair's ranking and
+   * threshold, then auto-selecting an id that may not exist in the new dataset.
+   * `takeUntil` also aborts the stale request client-side. NOTE: subscriptions
+   * started from `modelId$` (which emits *before* `pair$`) must stay on
+   * `destroy$`, or `reloadForNewPair`'s teardown would kill the request they
+   * just issued for the new pair.
+   */
+  private pairScope$ = new Subject<void>();
   private statusPolling$: Subscription | null = null;
   private scoringProgressPoll$: Subscription | null = null;
   private learnedSortPending = false;
@@ -164,6 +183,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  ``applyLearnedSortResult`` / the error/cancel paths. Used by the
    *  Cancel button on the sort progress bar to target the right job. */
   private currentLearnedSortJobId: string | null = null;
+  /** Consecutive *transient* learned-sort result-poll failures tolerated before
+   *  the run is declared failed. Roughly 10s–40s of unbroken failures at the
+   *  poll's 500ms–2000ms cadence: long enough to ride out a backend blip,
+   *  short enough that a genuinely unreachable server does not leave the panel
+   *  spinning on 'Training…'. Terminal statuses (404/500) end the run at once
+   *  and never consume this budget. */
+  private readonly POLL_ERROR_LIMIT = 20;
   /** Set by `reloadForNewPair` when the user was in `learned` sort mode at the
    *  time of a pair switch: a constructor effect watches the labelset counts and
    *  re-fires `onLearnedSort` once, after the reloaded votes make both classes
@@ -283,7 +309,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.loadVotes();
     this.loadSettings();
     this.startStatusPolling();
-    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.pairScope$)).subscribe({
       next: (status) => { this.datasetName.set(status.display_name || ''); },
     });
 
@@ -351,6 +377,15 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  and starts a fresh job otherwise; either way the user lands on
    *  learned-sorted content without a manual mode toggle. */
   private reloadForNewPair(): void {
+    // Supersede the pair we're leaving *first*: every in-flight request scoped
+    // to it dies here, before any of the new pair's state is installed, so no
+    // late scoring/learned-sort response can `applySortWindow` into the new
+    // context. Those subscriptions carry no `finalize`, so the busy flag and
+    // the scoring progress feed they own are reset explicitly below.
+    this.pairScope$.next();
+    this.stopScoringProgressPoll();
+    this.currentLearnedSortJobId = null;
+    this.sortState.setSortBusy(false);
     this.pendingRehydrateLearned = false;
     this.sortState.setSortResults([], 0);
     this.sortState.setSortStatus('');
@@ -359,7 +394,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.pendingSnapOnLoad = true;
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
-    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.pairScope$)).subscribe({
       next: (status) => { this.datasetName.set(status.display_name || ''); },
     });
     // Re-seed the slider for the detector we just switched to.
@@ -376,6 +411,8 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.cancelAutoPop('right');
     this.cancelSnapOnLoad();
     if (this.animatePopTimer) clearTimeout(this.animatePopTimer);
+    this.pairScope$.next();
+    this.pairScope$.complete();
     this.destroy$.next();
     this.destroy$.complete();
     this.voteState.stopPolling();
@@ -631,7 +668,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const offset = this.sortState.sortOrder?.length ?? 0;
     this.sortingApi
       .getSortPage(token, offset, 200)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntil(this.pairScope$))
       .subscribe({
         next: (page) => {
           const items = (page.results ?? []).map((r) => ({
@@ -650,7 +687,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortState.setTextQuery(text);
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Sorting…');
-    this.sortingApi.sort({ text }).pipe(takeUntil(this.destroy$)).subscribe({
+    this.sortingApi.sort({ text }).pipe(takeUntil(this.pairScope$)).subscribe({
       next: (response) => {
         this.applySortWindow(response);
         this.sortState.setSortBusy(false);
@@ -668,7 +705,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (!this.voteState.learnedSortAvailable) return;
     this.sortState.setSortBusy(true);
     this.sortState.setSortStatus('Training…');
-    this.sortingApi.learnedSort().pipe(takeUntil(this.destroy$)).subscribe({
+    this.sortingApi.learnedSort().pipe(takeUntil(this.pairScope$)).subscribe({
       next: (response) => {
         if (response.status === 'done') {
           this.applyLearnedSortResult(response, autoSelect);
@@ -687,33 +724,76 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
+  /**
+   * Poll a running learned-sort job until it settles.
+   *
+   * Uses {@link adaptivePoll}, not the `timer(200, 500)` + `switchMap` pattern
+   * this once had: `switchMap` aborted the in-flight result GET on every tick,
+   * so a backend that needed longer than the interval to answer — exactly the
+   * situation while an MLP training job is hogging the process — had *every*
+   * read cancelled, never saw a non-running status, and left the panel stuck
+   * on 'Training…' with `sortBusy` true forever. That is the pathology
+   * documented in `adaptive-poll.ts` (issue #2572) that the labeling-status
+   * poll above was already migrated off; this poll was left behind.
+   *
+   * Poll failures are no longer fatal either. The result endpoint reports two
+   * genuine terminal states by HTTP status code — 404 (job evicted or unknown)
+   * and 500 (the job itself errored) — so those still end the run, but any
+   * other failure (a network blip, a proxy 502/503) is transient and costs
+   * only that tick, until {@link POLL_ERROR_LIMIT} consecutive failures say
+   * the backend is really gone. Previously a single transient error tore the
+   * poll down and reported 'Training failed' for a job still running
+   * server-side.
+   */
   private pollLearnedSortJob(jobId: string, autoSelect: boolean): void {
-    timer(200, 500)
+    let consecutiveErrors = 0;
+    const settledWith = (error: string): LearnedSortResponse => ({
+      job_id: jobId,
+      status: 'error',
+      error,
+    });
+
+    adaptivePoll<LearnedSortResponse>(
+      () =>
+        this.sortingApi.getLearnedSortResult(jobId).pipe(
+          tap(() => (consecutiveErrors = 0)),
+          catchError((err: unknown) => {
+            const status = err instanceof HttpErrorResponse ? err.status : 0;
+            if (status === 404) return of(settledWith('Training job expired'));
+            if (status === 500) return of(settledWith('Training failed'));
+            consecutiveErrors += 1;
+            if (consecutiveErrors >= this.POLL_ERROR_LIMIT) {
+              return of(settledWith('Training failed'));
+            }
+            // Re-throw so adaptivePoll absorbs it: this tick is skipped and the
+            // next one scheduled as usual, rather than the poll tearing down.
+            return throwError(() => err);
+          }),
+        ),
+      { fastMs: 500, slowMs: 2000 },
+    )
       .pipe(
-        takeUntil(this.destroy$),
-        switchMap(() => this.sortingApi.getLearnedSortResult(jobId)),
+        // Pair-scoped: a training job can outlive the pair it was started for,
+        // and its result must not be applied to whatever pair is active when it
+        // finally settles (see `pairScope$`).
+        takeUntil(this.pairScope$),
         filter((res) => res.status !== 'running'),
         take(1),
       )
-      .subscribe({
-        next: (res) => {
-          if (res.status === 'done') {
-            this.applyLearnedSortResult(res, autoSelect);
-          } else if (res.status === 'cancelled') {
-            this.currentLearnedSortJobId = null;
-            this.sortState.setSortBusy(false);
-            this.sortState.setSortStatus('Cancelled');
-          } else {
-            this.currentLearnedSortJobId = null;
-            this.sortState.setSortBusy(false);
-            this.sortState.setSortStatus(res.error || 'Training failed');
-          }
-        },
-        error: () => {
+      // No `error` handler: adaptivePoll never errors — a request failure is
+      // either absorbed above or converted into a terminal `error` status.
+      .subscribe((res) => {
+        if (res.status === 'done') {
+          this.applyLearnedSortResult(res, autoSelect);
+        } else if (res.status === 'cancelled') {
           this.currentLearnedSortJobId = null;
           this.sortState.setSortBusy(false);
-          this.sortState.setSortStatus('Training failed');
-        },
+          this.sortState.setSortStatus('Cancelled');
+        } else {
+          this.currentLearnedSortJobId = null;
+          this.sortState.setSortBusy(false);
+          this.sortState.setSortStatus(res.error || 'Training failed');
+        }
       });
   }
 
@@ -785,7 +865,9 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
     this.startScoringProgressPoll();
 
-    this.detectorsFindApi.findLabel({ detector_id: modelId }).pipe(takeUntil(this.destroy$)).subscribe({
+    // Pair-scoped: scoring runs for minutes on a large dataset, so a pair switch
+    // mid-run must kill this before it ranks the new pair with old scores.
+    this.detectorsFindApi.findLabel({ detector_id: modelId }).pipe(takeUntil(this.pairScope$)).subscribe({
       next: (raw) => {
         const response = raw as {
           results: { id: number; score: number; best_region?: number[] }[];
@@ -839,7 +921,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
       // the atlas probe by a node's median score), so it takes the acquisition
       // cut alongside the Hard pick.
       .getCoverageAtlasNext(scores, this.sortState.acqThreshold ?? undefined)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntil(this.pairScope$))
       .subscribe({
         next: (response) => {
           if (response.id !== null) {
@@ -863,13 +945,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private seedInclusion(): void {
     this.sortingApi
       .getInclusion()
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntil(this.pairScope$))
       .subscribe({ next: (resp) => this.sortState.setInclusion(resp.inclusion) });
   }
 
   onInclusionChange(value: number): void {
     this.sortState.setInclusion(value);
-    this.sortingApi.setInclusion(value).pipe(takeUntil(this.destroy$)).subscribe();
+    this.sortingApi.setInclusion(value).pipe(takeUntil(this.pairScope$)).subscribe();
     this.autoSelectNext();
     if (this.sortState.sortMode === 'learned' && this.voteState.learnedSortAvailable) {
       this.scheduleLearnedSort(false);
@@ -942,7 +1024,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortState.setSortStatus('Sorting by example…');
     this.sortingApi
       .exampleSortById({ media_id: mediaId, crop_params: cropParams })
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntil(this.pairScope$))
       .subscribe({
         next: (response) => {
           this.sortState.setSortMode('load');
@@ -1035,7 +1117,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
     this.voteState
       .submitToggleVoteAndRecord(event.id, event.vote, this.mediaDisplayName(event.id))
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntil(this.pairScope$))
       .subscribe({
         next: () => {
           this.onMediaVoted(event);
@@ -1180,7 +1262,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     if (filenames.length > 0) {
       this.sortState.setSortBusy(true);
       this.sortState.setSortStatus(filenames.length > 1 ? 'Sorting by examples…' : 'Sorting by example…');
-      this.sortingApi.exampleSortServer({ filenames }).pipe(takeUntil(this.destroy$)).subscribe({
+      this.sortingApi.exampleSortServer({ filenames }).pipe(takeUntil(this.pairScope$)).subscribe({
         next: (response) => {
           this.applySortWindow(response);
           this.sortState.setSortBusy(false);

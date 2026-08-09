@@ -243,20 +243,45 @@ class TestAutopilotFlow:
 
     def test_records_flip_rates_between_consecutive_steps(self):
         flow = AutopilotFlow()
-        flow.record_step(0.4, {1: 1, 2: 0, 3: 1})
+        flow.record_step([0.4], {1: 1, 2: 0, 3: 1})
         assert flow.stability == []  # nothing to compare the first step against
-        flow.record_step(0.3, {1: 0, 2: 0, 3: 1})  # id 1 flipped
+        flow.record_step([0.4, 0.3], {1: 0, 2: 0, 3: 1})  # id 1 flipped
         assert flow.stability == [{"num_flips": 1, "num_unlabeled": 3}]
 
     def test_ignores_steps_with_no_model(self):
         flow = AutopilotFlow()
         flow.record_step(None, None)
-        assert flow.error_costs == []
+        assert flow.recent_error_costs == []
         assert flow.stability == []
+
+    def test_smart_window_is_replaced_not_accumulated(self):
+        """Each step re-scores the whole window; costs must never pile up.
+
+        The app's ``_eval_cached_models`` returns one cost per *cached model*
+        against the current labelset, so a step's window is the new truth about
+        every model in it - appending would regress over stale (model_t,
+        labelset_t) pairs and confound model change with labelset growth
+        (issue #2923).
+        """
+        flow = AutopilotFlow()
+        flow.record_step([0.5, 0.4, 0.3], None)
+        assert flow.recent_error_costs == [0.5, 0.4, 0.3]
+        # Re-scoring the same three models against a grown labelset moved every
+        # point, and added the fourth model's.
+        flow.record_step([0.44, 0.36, 0.28, 0.26], None)
+        assert flow.recent_error_costs == [0.44, 0.36, 0.28, 0.26]
+
+    def test_empty_window_leaves_smart_short_of_points(self):
+        """No usable eval set reads as "not enough points", as in the app."""
+        flow = AutopilotFlow()
+        flow.record_step([0.3, 0.2, 0.1], None)
+        flow.record_step([], None)
+        assert flow.recent_error_costs == []
+        assert smart_status(flow.recent_error_costs, 9, 9) == "yellow"
 
     def test_span_drives_the_new_to_done_transition(self):
         flow = AutopilotFlow()
-        flow.error_costs = [0.3] * 4
+        flow.recent_error_costs = [0.3] * 4
         flow.stability = [{"num_flips": 0, "num_unlabeled": 1000}] * 6
         assert flow.update(9, 9, 500, {"level": 0, "depth": 100}) == "new"
         assert flow.update(9, 9, 500, {"level": 40, "depth": 100}) == "done"

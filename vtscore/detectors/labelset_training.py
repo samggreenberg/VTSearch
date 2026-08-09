@@ -82,24 +82,22 @@ def _detector_embedder(det_ctx, snap: dict[int, dict[str, Any]] | None) -> str:
     return keying_embedder_for_snap(det_ctx, snap)
 
 
-def _region_tree_from_file(
+def _patch_output_from_file(
     file_path: Path,
     *,
     media_type: str,
     embedder_name: str,
 ):
-    """Rebuild a media's ``patch_regions`` tree from its file, or ``None``.
+    """Re-derive a media's :class:`PatchEmbedOutput` from its file, or ``None``.
 
-    Resolves the embedder (the detector's, else the media type's default),
-    runs :meth:`MediaEmbedder.patch_forward`, and builds the region tree with
-    the same ``k``/``alpha`` defaults ingest uses.  Returns ``None`` when the
+    Resolves the embedder (the detector's, else the media type's default) and
+    runs :meth:`MediaEmbedder.patch_forward`.  Returns ``None`` when the
     embedder doesn't support patch regions or the forward pass produces no
-    output.  Shared by the Good-vote snap path and the Bad-vote leaf-flood
-    path so both rebuild the identical tree cross-dataset.
+    output.  Shared by the Good-vote nearest-patch path and the Bad-vote flood
+    path so both see the identical grid cross-dataset.
     """
     from vtscore.media import embedders_for_type, get_embedder
     from vtscore.media.embedder import media_from_path
-    from vtscore.media.patch_embed import build_region_tree
 
     embedder = None
     if embedder_name:
@@ -125,33 +123,31 @@ def _region_tree_from_file(
             exc_info=True,
         )
         return None
-    if output is None:
-        return None
-    return build_region_tree(output)
-
-
-def _leaves_from_regions(regions) -> list[np.ndarray] | None:
-    """CLS + HAC-leaf vectors (``children is None``) from a ``patch_regions`` list.
-
-    The disjoint set a Bad vote floods as negatives - the full-image node plus
-    the leaves.  Internal HAC nodes are deliberately left out even though they
-    are scored; see :func:`~vtscore.detectors.training.bad_negative_vecs` for
-    why (they are renormalised, so *not* dominated by their leaves, but
-    flooding them measurably costs ranking).  Returns ``None`` for an
-    empty/leafless list.
-    """
-    if not regions:
-        return None
-    leaves = [np.asarray(r.vec, dtype=np.float32) for r in regions if getattr(r, "children", None) is None]
-    return leaves or None
+    return output
 
 
 def _embedder_supports_patch_regions(embedder_name: str) -> bool:
-    """Whether *embedder_name* produces a ``patch_regions`` tree at all.
+    """Whether *embedder_name* produces a patch grid at all.
 
-    Gates the region-stack resolution below: on a legacy single-vector detector
-    there is no tree to rebuild, so probing every element's origin file would be
-    pure I/O for a guaranteed ``None``.
+    This is the labelset tier's patch gate - the counterpart of
+    :func:`~vtscore.detectors.training._scores_in_patch_space`, phrased against
+    the detector's own embedder because the cross-dataset branch has no snap to
+    resolve a patch slot from.  It answers "does this detector score in a patch
+    space?", and *every* patch behaviour on this path hangs off it: the raw-patch
+    pool under a Good element's ``region_box``, a Bad element's flooded
+    negatives, and the calibration score-row stacks.
+
+    Two things it buys:
+
+    * On a legacy single-vector detector there is no grid to re-derive, so
+      probing every element's origin file would be pure I/O for a guaranteed
+      ``None``.
+    * On a **multi-embedder** dataset it keeps a detector locked to the text or
+      structural space off the patch grid entirely.  That detector is scored
+      against its own space's full-image vectors
+      (:func:`~vtscore.detectors.training._score_all_media`), so reading the
+      media's stored ``patch_grid`` - which lives in the *patch* embedder's
+      space - would train it on vectors from an unrelated space.
     """
     if not embedder_name:
         return False
@@ -171,30 +167,30 @@ def _patch_pooled_from_file(
     embedder_name: str,
     region_box: tuple[float, float, float, float],
 ) -> np.ndarray | None:
-    """Run ``patch_forward`` on *file_path* and snap *region_box* to a node.
+    """Run ``patch_forward`` on *file_path* and take the patch nearest *region_box*.
 
-    Mirrors the in-dataset region path (``pool_box_from_media`` →
-    :func:`snap_box_to_region`) for the cross-dataset case: rebuild the region
-    tree via :func:`_region_tree_from_file` and snap the user-drawn box to its
-    nearest node - so a Good region-vote trains on the exact sub-image
-    suggestion the MLP will max-pool over on the new dataset.  Returns ``None``
-    when the tree can't be built, so the caller can fall back to an image-level
+    Mirrors the in-dataset path (:func:`~vtscore.detectors.training.pool_box_from_media`
+    → :func:`nearest_patch_to_box`) for the cross-dataset case: re-derive the
+    patch grid via :func:`_patch_output_from_file` and pick the raw patch under
+    the user-drawn box - so a Good region-vote trains on one of the very rows
+    the MLP will max-pool over on the new dataset.  Returns ``None`` when the
+    grid can't be rebuilt, so the caller can fall back to an image-level
     embedding.
     """
-    from vtscore.media.patch_embed import snap_box_to_region
+    from vtscore.media.patch_embed import nearest_patch_to_box
 
-    regions = _region_tree_from_file(file_path, media_type=media_type, embedder_name=embedder_name)
-    if regions is None:
+    output = _patch_output_from_file(file_path, media_type=media_type, embedder_name=embedder_name)
+    if output is None:
         return None
-    return snap_box_to_region(regions, region_box)
+    return nearest_patch_to_box(np.asarray(output.patch_grid), region_box)
 
 
 def _embed_one(elem: LabeledElement, *, media_type: str, embedder_name: str) -> np.ndarray | None:
     """Resolve *elem*'s origin file and embed it.  Returns ``None`` on failure.
 
     When *elem* carries a ``region_box`` and the active embedder supports
-    patch regions, the resolved file is patch-forwarded and the box is
-    snapped to its nearest region node via :func:`snap_box_to_region` so the
+    patch regions, the resolved file is patch-forwarded and the raw patch under
+    the box is taken via :func:`nearest_patch_to_box` so the
     user's region-level training intent survives a dataset switch.  Logs a
     warning and falls
     back to a full-file embedding when the patch path is unavailable -
@@ -259,7 +255,7 @@ def _maybe_clear_cache_on_embedder_switch(det_ctx, embedder_name: str) -> None:
     if det_ctx.embedder and embedder_name and det_ctx.embedder != embedder_name:
         det_ctx.label_embeddings.clear()
         det_ctx.label_embedding_regions.clear()
-        # Flooded leaf negatives and the region scoring stacks live in the old
+        # Flooded patch negatives and the region scoring stacks live in the old
         # embedder's space too.
         det_ctx.label_negative_regions.clear()
         det_ctx.label_score_regions.clear()
@@ -275,15 +271,23 @@ def _resolve_uncached_embedding(
     *,
     media_type: str,
     embedder_name: str,
+    patch_capable: bool,
     lookups: tuple[dict[str, list[int]], dict[str, list[int]], dict[str, list[int]]] | None = None,
 ) -> np.ndarray | None:
     """Produce a training vector for *elem*, not consulting the cache.
 
     Tries the in-dataset path first: when *elem* resolves to a cid in the
-    active *snap*, reuse the stored embedding (snapping the ``region_box`` to
-    the media's nearest ``patch_regions`` node when the element carries one).
+    active *snap*, reuse the stored embedding (taking the raw patch under the
+    ``region_box`` when the element carries one).
     Falls back to the cross-dataset path - resolve via the importer and embed
     freshly.  Returns ``None`` when neither path produces a vector.
+
+    *patch_capable* (:func:`_embedder_supports_patch_regions`) gates the
+    raw-patch pool: a detector that doesn't score in a patch space trains on the
+    image-level vector of its own space even when the media carries a grid,
+    because the grid's vectors belong to the dataset's *patch* embedder.  The
+    cross-dataset branch is already gated the same way inside
+    :func:`_patch_output_from_file`.
 
     *lookups* is the pre-built ``build_media_lookup`` triple for *snap*; loop
     callers pass it so the cid resolution doesn't rebuild the tables per element.
@@ -295,7 +299,7 @@ def _resolve_uncached_embedding(
         cid = resolve_current_dataset_cid(elem, lookups)
         if cid is not None and cid in snap:
             media = snap[cid]
-            pooled = pool_box_from_media(media, elem.region_box)
+            pooled = pool_box_from_media(media, elem.region_box) if patch_capable else None
             # Read the in-dataset vector from the detector's primary space (the
             # same space the cross-dataset path embeds into), not the media's
             # generic primary - they diverge on a multi-embedder dataset.
@@ -303,9 +307,9 @@ def _resolve_uncached_embedding(
             if emb is not None:
                 return np.asarray(emb)
 
-    # Cross-dataset path: ``_embed_one`` rebuilds the region tree on the
+    # Cross-dataset path: ``_embed_one`` re-derives the patch grid on the
     # resolved file when ``elem.region_box`` is set and the embedder
-    # supports patch regions, then snaps via ``snap_box_to_region`` so
+    # supports patch regions, then takes the nearest raw patch so
     # region votes survive a dataset switch.  When the patch path isn't
     # available (legacy single-vector embedder, clipper-bearing origin,
     # failed forward pass) it logs a warning and returns the image-level
@@ -314,45 +318,45 @@ def _resolve_uncached_embedding(
     return np.asarray(emb) if emb is not None else None
 
 
-def _all_region_vecs(regions) -> list[np.ndarray] | None:
-    """Every node's vector from a ``patch_regions`` list - the scoring stack.
-
-    The rows :func:`vtscore.detectors.training._score_all_media` max-pools an
-    image over: CLS, HAC internals, and HAC leaves alike (a superset of the
-    leaf set a Bad vote floods).  Returns ``None`` for an empty/absent list.
-    """
-    if not regions:
-        return None
-    return [np.asarray(r.vec, dtype=np.float32) for r in regions]
-
-
-def _resolve_region_nodes(
+def _resolve_score_rows(
     elem: LabeledElement,
     snap: dict[int, dict[str, Any]] | None,
     *,
     media_type: str,
     embedder_name: str,
     lookups: tuple[dict[str, list[int]], dict[str, list[int]], dict[str, list[int]]] | None = None,
-):
-    """The ``patch_regions`` tree behind *elem*, or ``None``.
+) -> list[np.ndarray] | None:
+    """*elem*'s MaxPatch score-row stack (image-level vector + every raw patch), or ``None``.
 
-    In-dataset: read the resolved media's stored tree (no I/O).
-    Cross-dataset: rebuild it from the origin file via
-    :func:`_region_tree_from_file`.  Returns ``None`` for non-patch
+    In-dataset: read the resolved media's stored ``patch_grid`` (no I/O), via
+    the same :func:`~vtscore.embedding.matrix.media_score_rows` the scorer
+    uses.  Cross-dataset: re-derive the grid from the origin file via
+    :func:`_patch_output_from_file`.  Returns ``None`` for non-patch
     datasets/elements (and clipper-bearing origins, whose patch grid we can't
     reconstruct) so the callers fall back to their image-level behaviour - a
     single negative for a Bad element, the training row as the scoring row.
+
+    One resolution answers both questions the caller has, because under
+    MaxPatch the rows a Bad vote floods and the rows the scorer max-pools are
+    *the same rows*.  (Under the old HAC tree they differed: the flood skipped
+    the internal merge nodes - see
+    :func:`~vtscore.detectors.training.bad_negative_vecs`.)
 
     *lookups* is the pre-built ``build_media_lookup`` triple for *snap*; loop
     callers pass it so the cid resolution doesn't rebuild the tables per element.
     """
     from vtscore.detectors.labelset_elements import resolve_current_dataset_cid
     from vtscore.detectors.resolver import resolve_file_context
+    from vtscore.embedding.matrix import media_score_rows
 
     if snap:
         cid = resolve_current_dataset_cid(elem, lookups)
         if cid is not None and cid in snap:
-            return snap[cid].get("patch_regions") or None
+            media = snap[cid]
+            if media.get("patch_grid") is None:
+                return None
+            rows = media_score_rows(media, embedder_name or None)
+            return list(rows) if rows is not None else None
 
     origin = elem.origin or {}
     params = origin.get("params", {}) if isinstance(origin, dict) else {}
@@ -362,7 +366,12 @@ def _resolve_region_nodes(
     with resolve_file_context(elem.origin, elem.origin_name, elem.filename) as file_path:
         if file_path is None:
             return None
-        return _region_tree_from_file(file_path, media_type=media_type, embedder_name=embedder_name)
+        output = _patch_output_from_file(file_path, media_type=media_type, embedder_name=embedder_name)
+    if output is None:
+        return None
+    grid = np.asarray(output.patch_grid, dtype=np.float32)
+    cls_row = np.asarray(output.cls_vec, dtype=np.float32).reshape(1, -1)
+    return list(np.concatenate([cls_row, grid.reshape(-1, grid.shape[-1])], axis=0))
 
 
 def _cache_region_vectors(
@@ -377,32 +386,40 @@ def _cache_region_vectors(
     score_cache: dict[str, list[np.ndarray]],
     patch_capable: bool,
 ) -> None:
-    """Top up *elem*'s two region caches from a single tree resolution.
+    """Top up *elem*'s two region caches from a single grid resolution.
 
-    A patch element's ``patch_regions`` tree feeds both: the CLS + leaf
-    negatives a Bad element floods (the cross-dataset counterpart of
-    :func:`~vtscore.detectors.training.bad_negative_vecs`), and the full node
-    stack the *scorer* max-pools that image over - which threshold calibration
-    collapses every bag, Good and Bad alike, over.  Resolved once per element
-    and cached so re-sorts don't re-resolve.
+    A patch element's score-row stack feeds both: the negatives a Bad element
+    floods (the cross-dataset counterpart of
+    :func:`~vtscore.detectors.training.bad_negative_vecs`), and the rows the
+    *scorer* max-pools that image over - which threshold calibration collapses
+    every bag, Good and Bad alike, over.  Under MaxPatch those are the same
+    rows, so the two caches are fed from one resolution, cached so re-sorts
+    don't re-resolve.
 
-    The scoring stack is skipped entirely on a legacy single-vector detector
-    (*patch_capable* is ``False``, where the resolution would return ``None``
-    anyway), so no origin file is probed for a tree that cannot exist.
+    The resolution is skipped entirely unless the detector scores in a patch
+    space (*patch_capable*; see :func:`_embedder_supports_patch_regions`).  On a
+    legacy single-vector detector it would return ``None`` anyway, so no origin
+    file is probed for a grid that cannot exist.  On a multi-embedder dataset
+    the skip is load-bearing: a semantic- or structural-locked detector is
+    scored against its own space's full-image vectors, so flooding it with the
+    dataset's patch grid would train it on a different embedding space (and
+    blow up at ``np.stack`` outright when the two dimensions differ).  Both
+    caches stay empty, and :func:`build_xy_from_labelset` falls back to the
+    single image-level vector per element.
     """
+    if not patch_capable:
+        return
     wants_negatives = elem.label == "bad" and eid not in neg_cache
-    wants_score_rows = patch_capable and elem.label in ("good", "bad") and eid not in score_cache
+    wants_score_rows = elem.label in ("good", "bad") and eid not in score_cache
     if not (wants_negatives or wants_score_rows):
         return
-    regions = _resolve_region_nodes(elem, snap, media_type=media_type, embedder_name=embedder_name, lookups=lookups)
+    rows = _resolve_score_rows(elem, snap, media_type=media_type, embedder_name=embedder_name, lookups=lookups)
+    if rows is None:
+        return
     if wants_negatives:
-        leaves = _leaves_from_regions(regions)
-        if leaves is not None:
-            neg_cache[eid] = leaves
+        neg_cache[eid] = rows
     if wants_score_rows:
-        rows = _all_region_vecs(regions)
-        if rows is not None:
-            score_cache[eid] = rows
+        score_cache[eid] = rows
 
 
 def populate_label_embeddings(
@@ -474,7 +491,12 @@ def populate_label_embeddings(
             continue
 
         emb = _resolve_uncached_embedding(
-            elem, snap, media_type=media_type, embedder_name=embedder_name, lookups=lookups
+            elem,
+            snap,
+            media_type=media_type,
+            embedder_name=embedder_name,
+            patch_capable=patch_capable,
+            lookups=lookups,
         )
         if emb is not None:
             cache[eid] = emb
@@ -502,7 +524,7 @@ def build_xy_from_labelset(
     """Build ``(X_list, y_list, groups, score_rows)`` from *det_ctx*'s caches.
 
     A Good element contributes its single cached vector.  A Bad element on a
-    patch dataset contributes its flooded CLS + leaf negatives (cached in
+    patch dataset contributes its flooded image-level + raw-patch negatives (cached in
     ``label_negative_regions`` by :func:`populate_label_embeddings`); on a
     legacy dataset it contributes its single image-level vector, as before.
     ``groups`` carries one bag id per row - ``("g"/"b", element_id)`` - so the
@@ -510,7 +532,7 @@ def build_xy_from_labelset(
     nothing floods, every bag holds one row and the downstream path is
     byte-for-byte the pre-flood behaviour.
 
-    ``score_rows`` maps each bag id to the full region-node stack that element's
+    ``score_rows`` maps each bag id to the full score-row stack that element's
     media is *scored* over at inference (``label_score_regions``), so threshold
     calibration collapses a Good bag exactly the way it collapses a Bad bag and
     the way the scorer collapses any image - see
@@ -537,9 +559,9 @@ def build_xy_from_labelset(
             continue
         eid = stable_element_id(elem)
         if elem.label == "bad":
-            leaves = neg_cache.get(eid)
-            if leaves:
-                for vec in leaves:
+            flooded = neg_cache.get(eid)
+            if flooded:
+                for vec in flooded:
                     X_list.append(vec)
                     y_list.append(0.0)
                     groups.append(("b", eid))

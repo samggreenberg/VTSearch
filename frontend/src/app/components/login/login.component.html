@@ -17,13 +17,13 @@
         autofocus
         autocomplete="username"
         maxlength="64"
-        [disabled]="busy"
+        [disabled]="busy()"
       >
-      @if (error) {
-        <p class="login-error">{{ error }}</p>
+      @if (error()) {
+        <p class="login-error">{{ error() }}</p>
       }
-      <button type="submit" [disabled]="busy" title="Log in to VTSearch">
-        {{ busy ? 'Logging in…' : 'Log in' }}
+      <button type="submit" [disabled]="busy()" title="Log in to VTSearch">
+        {{ busy() ? 'Logging in…' : 'Log in' }}
       </button>
     </form>
   </div>

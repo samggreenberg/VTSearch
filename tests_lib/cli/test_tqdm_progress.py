@@ -5,6 +5,9 @@ callback during model loading, and that tqdm behaviour is fully restored
 after the context manager exits.
 """
 
+import io
+import threading
+
 import pytest
 import tqdm.auto
 import tqdm.std
@@ -188,6 +191,84 @@ class TestInterceptTqdmProgress:
             bar.close()
 
         assert all(s == "loading" for s in calls)
+
+
+class TestConcurrentTqdmInterception:
+    """Two embedders can load at once; interception must survive that."""
+
+    def test_interleaved_sessions_keep_progress_separate_and_restore(self):
+        """Overlapping sessions must not corrupt tqdm for the rest of the process.
+
+        Model loading is serialised per embedder *class*, so two embedders can
+        be inside ``intercept_tqdm_progress`` simultaneously.  With naive
+        save/patch/restore the second entrant saves the *patched* functions as
+        its originals, and the ordering below (A enters, B enters, A exits, B
+        exits) leaves ``tqdm.std.tqdm.__init__`` permanently bound to A's dead
+        closure — so every later bar in the process is forwarded to A's stale
+        callback.
+        """
+        a_calls: list[tuple] = []
+        b_calls: list[tuple] = []
+        errors: list[BaseException] = []
+
+        a_entered = threading.Event()
+        b_entered = threading.Event()
+        a_bar_done = threading.Event()
+        b_bar_done = threading.Event()
+        a_exited = threading.Event()
+
+        def run_bar(desc: str, total: int) -> None:
+            bar = tqdm.auto.tqdm(total=total, desc=desc)
+            bar.update(total)
+            bar.close()
+
+        def thread_a() -> None:
+            try:
+                with intercept_tqdm_progress(lambda *c: a_calls.append(c)):
+                    a_entered.set()
+                    assert b_entered.wait(timeout=10)
+                    run_bar("A", 100)
+                    a_bar_done.set()
+                    assert b_bar_done.wait(timeout=10)
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+            finally:
+                a_entered.set()
+                a_bar_done.set()
+                a_exited.set()
+
+        def thread_b() -> None:
+            try:
+                assert a_entered.wait(timeout=10)
+                with intercept_tqdm_progress(lambda *c: b_calls.append(c)):
+                    b_entered.set()
+                    run_bar("B", 200)
+                    b_bar_done.set()
+                    assert a_exited.wait(timeout=10)
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+            finally:
+                b_entered.set()
+                b_bar_done.set()
+
+        threads = [threading.Thread(target=thread_a), threading.Thread(target=thread_b)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+            assert not t.is_alive()
+        assert errors == []
+
+        # Each session saw only its own bar, not the other thread's.
+        assert a_calls and all(c[1] == "A" and c[3] == 100 for c in a_calls)
+        assert b_calls and all(c[1] == "B" and c[3] == 200 for c in b_calls)
+
+        # Both sessions are gone: a fresh bar must reach neither callback.
+        before = (len(a_calls), len(b_calls))
+        bar = tqdm.auto.tqdm(total=7, desc="After", file=io.StringIO())
+        bar.update(7)
+        bar.close()
+        assert (len(a_calls), len(b_calls)) == before
 
 
 class TestProgressTrackerUpdate:

@@ -734,7 +734,7 @@ class TestFindProgress:
 
         import numpy as np
 
-        from helpers import setup_trainable_model_in_registry
+        from tests.helpers import setup_trainable_model_in_registry
         from vtscore.concurrency.progress import find_progress
 
         # Create a dataset pkl with three items whose md5s match a labelset.

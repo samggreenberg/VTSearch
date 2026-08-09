@@ -75,6 +75,34 @@ class TestArchiveMemberVideo:
         assert resp.status_code == 416
         assert resp.headers["Content-Range"] == f"bytes */{len(VIDEO_BYTES)}"
 
+    def test_suffix_range_serves_only_the_tail(self, client, tmp_path):
+        # "bytes=-N" asks for the last N bytes (how some players find an MP4
+        # moov atom); serving the whole member would defeat the streamed read.
+        archive = _make_shard(tmp_path)
+        _inject(archive, "clip.mp4", "video", "clip.mp4")
+        total = len(VIDEO_BYTES)
+        resp = client.get(f"/api/medias/{_MEDIA_ID}/video", headers={"Range": "bytes=-40"})
+        assert resp.status_code == 206
+        assert resp.data == VIDEO_BYTES[-40:]
+        assert resp.headers["Content-Range"] == f"bytes {total - 40}-{total - 1}/{total}"
+        assert resp.headers["Content-Length"] == "40"
+
+    def test_oversized_suffix_range_serves_whole_member(self, client, tmp_path):
+        archive = _make_shard(tmp_path)
+        _inject(archive, "clip.mp4", "video", "clip.mp4")
+        total = len(VIDEO_BYTES)
+        resp = client.get(f"/api/medias/{_MEDIA_ID}/video", headers={"Range": f"bytes=-{total + 100}"})
+        assert resp.status_code == 206
+        assert resp.data == VIDEO_BYTES
+        assert resp.headers["Content-Range"] == f"bytes 0-{total - 1}/{total}"
+
+    def test_zero_length_suffix_range_returns_416(self, client, tmp_path):
+        archive = _make_shard(tmp_path)
+        _inject(archive, "clip.mp4", "video", "clip.mp4")
+        resp = client.get(f"/api/medias/{_MEDIA_ID}/video", headers={"Range": "bytes=-0"})
+        assert resp.status_code == 416
+        assert resp.headers["Content-Range"] == f"bytes */{len(VIDEO_BYTES)}"
+
     def test_missing_member_falls_through_to_404(self, client, tmp_path):
         archive = _make_shard(tmp_path)
         _inject(archive, "not_present.mp4", "video", "not_present.mp4")

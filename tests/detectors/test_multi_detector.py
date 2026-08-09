@@ -281,11 +281,7 @@ class TestModelLoadEndpoints:
     """Test the multi-loaded model API endpoints."""
 
     def _register_trainable_model(self, client, name):
-        """Helper: create detector + register in model registry."""
-        client.post(
-            "/api/detectors",
-            json={"name": name, "media_type": "audio", "text_query": "test"},
-        )
+        """Helper: register a detector in the model registry."""
         res = client.post(
             "/api/detectors/registry",
             json={
@@ -530,3 +526,144 @@ class TestLabelingStatusResetOnDetectorSwitch:
         # With 0 good and 0 bad votes the indicators must NOT be green
         assert data["smart"]["status"] == "red", f"smart should be red with 0 votes, got {data['smart']['status']}"
         assert data["stable"]["status"] == "red", f"stable should be red with 0 votes, got {data['stable']['status']}"
+
+
+# ---------------------------------------------------------------------------
+# Progress-cache identity across *already loaded* detectors (issue #2914)
+# ---------------------------------------------------------------------------
+
+
+class TestProgressCacheKeyedByDetector:
+    """The per-step progress cache is a single module-global slot, but every
+    input it is built from resolves per-(dataset, detector).
+
+    Switching the UI between two detectors that are *both already loaded* goes
+    through neither ``register_detector_context`` nor
+    ``unregister_detector_context``, so those clears do not cover it.  Without
+    an identity stamp the length-only freshness gates replay one detector's
+    history on top of another's accumulated label sets, or serve one detector's
+    models as another's Smart / Stable indicators.
+    """
+
+    @staticmethod
+    def _load(*det_ids: str) -> None:
+        """Register every named detector, leaving them all loaded.
+
+        Done up front so the later switches go through neither register nor
+        unregister - i.e. exactly the path whose cache clears are missing.
+        """
+        from vtscore.state.core import DetectorContext, register_detector_context
+
+        for det_id in det_ids:
+            register_detector_context(DetectorContext(det_id, name=det_id, media_type="audio"))
+
+    @staticmethod
+    def _activate(det_id: str) -> None:
+        """Make an already-loaded detector the active one (no register/unregister)."""
+        from vtscore.state.core import get_detector_context, set_thread_detector_context
+
+        ctx = get_detector_context(det_id)
+        assert ctx is not None
+        set_thread_detector_context(ctx)
+
+    def test_switch_between_loaded_detectors_does_not_merge_label_sets(self, client):
+        """Re-selecting an already-loaded detector must rebuild its own cache,
+        not append its remaining history onto the other detector's ID sets."""
+        from vtsearch.state import apply_label, label_history, medias
+        from vtscore.detectors.labeling_progress import (
+            _cache_bad_ids,
+            _cache_good_ids,
+            _cached_steps,
+            _ensure_cache,
+            _progress_lock,
+        )
+
+        a_good, a_bad = [1, 2, 3, 4, 5], [16, 17, 18, 19, 20]
+        b_good, b_bad = [6, 7], [14, 15]
+
+        self._load("det_key_a", "det_key_b")
+
+        # --- Detector A: 10 votes, cache advanced to 10 steps ---
+        self._activate("det_key_a")
+        for mid in a_good:
+            apply_label(mid, "good")
+        for mid in a_bad:
+            apply_label(mid, "bad")
+        with _progress_lock:
+            _ensure_cache(medias, label_history, 0)
+            assert len(_cached_steps) == 10
+
+        # --- Detector B: 4 votes.  Its shorter history must not be read as
+        # "the cache is ahead"; the cache belongs to A and has to be dropped. ---
+        self._activate("det_key_b")
+        for mid in b_good:
+            apply_label(mid, "good")
+        for mid in b_bad:
+            apply_label(mid, "bad")
+        with _progress_lock:
+            _ensure_cache(medias, label_history, 0)
+            assert len(_cached_steps) == 4, "cache must be rebuilt for B, not reused from A"
+            assert _cache_good_ids == set(b_good)
+            assert _cache_bad_ids == set(b_bad)
+
+        # --- Back to A: replaying steps 4..9 on top of B's ID sets would train
+        # the appended steps on a merged A+B labelset. ---
+        self._activate("det_key_a")
+        with _progress_lock:
+            _ensure_cache(medias, label_history, 0)
+            assert len(_cached_steps) == 10
+            assert _cache_good_ids == set(a_good), "A's cache must not carry B's good votes"
+            assert _cache_bad_ids == set(a_bad), "A's cache must not carry B's bad votes"
+            for step in _cached_steps:
+                assert not (set(step["good_ids"]) & set(b_good)), "B's votes leaked into A's steps"
+                assert not (set(step["bad_ids"]) & set(b_bad)), "B's votes leaked into A's steps"
+
+    def test_status_cache_not_fresh_for_a_different_detector(self, client):
+        """A cache built for A must never be reported fresh for B, whose own
+        (shorter) history it has never seen."""
+        from vtsearch.state import apply_label, label_history, medias
+        from vtscore.detectors.labeling_progress import (
+            _ensure_cache,
+            _progress_lock,
+            is_status_cache_fresh,
+        )
+
+        self._load("det_fresh_a", "det_fresh_b")
+        self._activate("det_fresh_a")
+        for mid in [1, 2, 3, 4, 5]:
+            apply_label(mid, "good")
+        for mid in [16, 17, 18, 19, 20]:
+            apply_label(mid, "bad")
+        with _progress_lock:
+            _ensure_cache(medias, label_history, 0)
+        assert is_status_cache_fresh(label_history, 0)
+
+        # B has a strictly shorter history, so a length-only gate would call
+        # A's 10-step cache "fresh" for B and serve A's models as B's status.
+        self._activate("det_fresh_b")
+        apply_label(6, "good")
+        apply_label(15, "bad")
+        assert not is_status_cache_fresh(label_history, 0)
+
+    def test_status_snapshot_not_served_across_detectors(self, client):
+        """``stale_labeling_status`` must not hand B the Smart / Stable
+        indicators computed for A."""
+        from vtsearch.state import apply_label, bad_votes, good_votes, label_history, medias
+        from vtscore.detectors.labeling_progress import compute_labeling_status, stale_labeling_status
+
+        self._load("det_snap_a", "det_snap_b")
+        self._activate("det_snap_a")
+        for mid in [1, 2, 3, 4, 5]:
+            apply_label(mid, "good")
+        for mid in [16, 17, 18, 19, 20]:
+            apply_label(mid, "bad")
+        status_a = compute_labeling_status(medias, label_history, good_votes, bad_votes, 0)
+        assert status_a["smart"]["status"] != "red", "A should have a real (non-placeholder) Smart status"
+
+        # B has no votes at all: its stale poll must fall back to the transient
+        # "computing" placeholder rather than reusing A's snapshot.
+        self._activate("det_snap_b")
+        assert len(good_votes) == 0 and len(bad_votes) == 0
+        stale = stale_labeling_status(good_votes, bad_votes, None)
+        assert stale["smart"]["reason"] == "Computing indicators..."
+        assert stale["stable"]["reason"] == "Computing indicators..."

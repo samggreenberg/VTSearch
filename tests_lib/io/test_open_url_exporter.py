@@ -7,10 +7,14 @@ template is rejected: an unusable scheme and a URL past the length limit.
 
 from __future__ import annotations
 
+import json
+from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 
+from vtscore import cli_progress
+from vtscore.cli import _run_exporter
 from vtscore.exporters import get_exporter
 from vtscore.exporters.open_url import MAX_URL_LENGTH, OpenUrlLabelsetExporter
 
@@ -41,6 +45,16 @@ AUTODETECT_RESULTS = {
 def _ids_param(url: str, key: str = "ids") -> str:
     """Return the decoded value of *key* from *url*'s query string."""
     return parse_qs(urlparse(url).query)[key][0]
+
+
+def _stub_gui_cli_export(outcome: dict):
+    """Make the ``gui`` exporter's CLI export return *outcome*.
+
+    Patches the **class**, not the registry's singleton instance: an
+    instance-level patch leaves a shadowing attribute behind on undo, which
+    then swallows the class-level patches other exporter tests use.
+    """
+    return patch.object(type(get_exporter("gui")), "export_cli", return_value=outcome)
 
 
 @pytest.fixture
@@ -194,13 +208,64 @@ class TestRejection:
 
 
 class TestCliExport:
-    def test_prints_the_url(self, exporter, capsys):
-        out = exporter.export_cli(LABELSET, {"url_template": "https://example.com/r?ids={ids}"})
-        assert out["open_url"] in capsys.readouterr().out
+    """The CLI variant returns the URL; ``vtscore.cli`` is what surfaces it.
 
-    def test_reports_truncation_on_stdout(self, exporter, capsys):
-        exporter.export_cli(
+    Writing to stdout here would both duplicate that line and corrupt the
+    NDJSON stream under ``--progress-format json``, so these assert silence.
+    """
+
+    def test_returns_the_url(self, exporter):
+        out = exporter.export_cli(LABELSET, {"url_template": "https://example.com/r?ids={ids}"})
+        assert _ids_param(out["open_url"]) == "aaa1,bbb2,ccc3"
+
+    def test_reports_truncation_in_the_message(self, exporter):
+        out = exporter.export_cli(
             LABELSET,
             {"url_template": "https://example.com/r?ids={ids}", "max_items": "1"},
         )
-        assert "first 1 of 3" in capsys.readouterr().out
+        assert "first 1 of 3" in out["message"]
+
+    def test_writes_nothing_to_stdout(self, exporter, capsys):
+        exporter.export_cli(LABELSET, {"url_template": "https://example.com/r?ids={ids}"})
+        assert capsys.readouterr().out == ""
+
+
+class TestCliSurfacesOpenUrl:
+    """``_run_exporter`` reports an ``open_url`` instead of dropping it.
+
+    There is no browser on the command line, so the URL has to reach the
+    operator (text mode) or the wrapping script (JSON mode) some other way.
+    This is what makes the capability usable from *any* exporter, not just the
+    built-in one (issue #2898).
+    """
+
+    TEMPLATE = {"url_template": "https://example.com/r?ids={ids}"}
+
+    def test_prints_the_url_under_the_message(self, capsys):
+        _run_exporter("open_url", dict(self.TEMPLATE), LABELSET)
+        out = capsys.readouterr().out
+        assert "Formatted a URL covering 3 item(s)." in out
+        assert "https://example.com/r?ids=aaa1%2Cbbb2%2Cccc3" in out
+
+    def test_carries_the_url_on_the_json_event(self, capsys):
+        cli_progress.set_format("json")
+        _run_exporter("open_url", dict(self.TEMPLATE), LABELSET)
+        lines = [ln for ln in capsys.readouterr().out.splitlines() if ln.strip()]
+        assert len(lines) == 1, "the URL must not be printed as prose alongside the NDJSON event"
+        event = json.loads(lines[0])
+        assert event["event"] == "export_complete"
+        assert _ids_param(event["open_url"]) == "aaa1,bbb2,ccc3"
+
+    def test_exporters_without_a_url_are_unchanged(self, capsys):
+        with _stub_gui_cli_export({"message": "Wrote it."}):
+            _run_exporter("gui", {}, LABELSET)
+        assert capsys.readouterr().out == "Wrote it.\n"
+
+    def test_unusable_url_is_dropped_rather_than_shown(self, capsys):
+        """A plugin must not be able to put a ``javascript:`` URL in front of
+        the user — but the export itself already ran, so it isn't failed."""
+        with _stub_gui_cli_export({"message": "Wrote it.", "open_url": "javascript:alert(1)"}):
+            _run_exporter("gui", {}, LABELSET)
+        out = capsys.readouterr().out
+        assert "javascript:" not in out
+        assert "Wrote it." in out

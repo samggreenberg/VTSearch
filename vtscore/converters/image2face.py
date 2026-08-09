@@ -18,7 +18,7 @@ from __future__ import annotations
 import io
 from typing import Any, Optional
 
-from vtscore.converters.base import MediaConverter
+from vtscore.converters.base import MediaConverter, resolve_media_bytes
 from vtscore.plugins import PluginField
 
 
@@ -177,16 +177,11 @@ class Image2FaceMediaConverter(MediaConverter):
     # ------------------------------------------------------------------
 
     def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-        from vtscore.media.embedder import media_from_path  # noqa: PLC0415
         from vtscore.media.image.decode import decode_bounded_rgb  # noqa: PLC0415
 
         threshold, padding, min_size = self._resolve_params(params)
 
-        media_bytes = media.get("media_bytes")
-        if media_bytes is None:
-            media_path = media.get("media_path")
-            if media_path:
-                media_bytes = media_from_path(media_path).get("media_bytes")
+        media_bytes = resolve_media_bytes(media)
         if not media_bytes:
             return []
         try:

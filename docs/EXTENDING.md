@@ -57,6 +57,23 @@ class MyProvider(LoginProvider):
         return base_data_dir / username
 ```
 
+**Validate any username you didn't construct yourself.** A username returned
+by `get_user()` becomes a path component (`data/<username>/`) *and* the
+confinement root for server-file path validation, which resolves `..` away
+instead of rejecting it. Screen client-supplied values with
+`vtsearch.auth.is_safe_username()` and fall back to `"anonymous"`:
+
+```python
+from vtsearch.auth import is_safe_username
+
+def get_user(self, request) -> str:
+    username = request.headers.get("X-User", "anonymous")
+    return username if is_safe_username(username) else "anonymous"
+```
+
+This applies regardless of how strong your authentication is — it is a
+filesystem-hygiene check, not an authentication one.
+
 ### How it works
 
 1. `set_login_provider(provider)` is called once at startup (in `app.py`).
@@ -142,6 +159,7 @@ See [EXTENDING-plugins.md § Adding a Results Exporter](EXTENDING-plugins.md#add
 - [ ] Create `vtscore/exporters/<name>/__init__.py`
 - [ ] Subclass `LabelsetExporter`, set `name`, `display_name`, `description`, `fields`
 - [ ] Implement `export(self, results, field_values)`: return a dict with a `"message"` key
+- [ ] To send the user to a web page instead of (or as well as) delivering the labelset, return an `"open_url"` and set `opens_url = True` if you always return one — see [Opening a browser tab](EXTENDING-plugins.md#opening-a-browser-tab-open_url)
 - [ ] Expose `EXPORTER = YourExporter()` at module level
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install
 - [ ] Test: start the app and check `GET /api/exporters` includes your exporter

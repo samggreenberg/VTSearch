@@ -396,7 +396,7 @@ class TestServerFilesNpzRunsEndToEnd:
     def test_npz_vectors_are_used_instead_of_embedder(self, tmp_path):
         """When the npz supplies a vector for a file, the resulting media's
         embedding is exactly that vector (the embedder is bypassed)."""
-        from helpers import make_raw_wav_bytes
+        from tests.helpers import make_raw_wav_bytes
 
         src_a = tmp_path / "src_a.wav"
         src_b = tmp_path / "src_b.wav"
@@ -434,7 +434,7 @@ class TestServerFilesNpzRunsEndToEnd:
 
     def test_npz_embedder_name_stored_in_media_and_origin(self, tmp_path):
         """Embedder name from the NPZ is recorded on media['embedder'] and origin params."""
-        from helpers import make_raw_wav_bytes
+        from tests.helpers import make_raw_wav_bytes
 
         src = tmp_path / "clip.wav"
         src.write_bytes(make_raw_wav_bytes())
@@ -461,7 +461,7 @@ class TestServerFilesNpzRunsEndToEnd:
     def test_unregistered_npz_embedder_name_raises_at_import(self, tmp_path):
         """An NPZ embedder name VTSearch can't route is rejected up front, with
         the valid options listed, rather than silently disabling text search."""
-        from helpers import make_raw_wav_bytes
+        from tests.helpers import make_raw_wav_bytes
 
         src = tmp_path / "clip.wav"
         src.write_bytes(make_raw_wav_bytes())
@@ -487,7 +487,7 @@ class TestServerFilesNpzRunsEndToEnd:
         assert medias == {}
 
     def test_npz_per_key_layout_is_accepted(self, tmp_path):
-        from helpers import make_raw_wav_bytes
+        from tests.helpers import make_raw_wav_bytes
 
         src = tmp_path / "only.wav"
         src.write_bytes(make_raw_wav_bytes())
@@ -517,7 +517,7 @@ class TestServerFilesNpzRunsEndToEnd:
 
 class TestServerFilesMultiVectorsEndToEnd:
     def _write_wavs(self, tmp_path):
-        from helpers import make_raw_wav_bytes
+        from tests.helpers import make_raw_wav_bytes
 
         src_a = tmp_path / "src_a.wav"
         src_b = tmp_path / "src_b.wav"

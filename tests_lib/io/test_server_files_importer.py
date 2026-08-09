@@ -296,7 +296,7 @@ class TestRunEndToEnd:
     ``embedding=None`` for the framework ``embed_missing`` stage."""
 
     def test_run_imports_listed_files_and_rewrites_origin(self, tmp_path):
-        from helpers import make_raw_wav_bytes
+        from tests_lib.helpers import make_raw_wav_bytes
 
         # Stage two real wav files plus a paths.txt referencing them.
         src_a = tmp_path / "src_a.wav"
@@ -332,7 +332,7 @@ class TestRunWithSymlinkEntries:
     """End-to-end: list entries that are symlinks (file or folder) work."""
 
     def test_run_imports_through_symlinked_directory_entry(self, tmp_path):
-        from helpers import make_raw_wav_bytes
+        from tests_lib.helpers import make_raw_wav_bytes
 
         real_dir = tmp_path / "real_dir"
         real_dir.mkdir()
@@ -360,7 +360,7 @@ class TestRunWithSymlinkEntries:
         assert origin_names == {str(a.resolve()), str(b.resolve())}
 
     def test_run_imports_through_symlinked_file_entry(self, tmp_path):
-        from helpers import make_raw_wav_bytes
+        from tests_lib.helpers import make_raw_wav_bytes
 
         real = tmp_path / "real.wav"
         real.write_bytes(make_raw_wav_bytes())
@@ -387,7 +387,7 @@ class TestRunChunked:
         assert ServerFilesDatasetImporter().supports_chunked is True
 
     def test_run_chunked_yields_in_chunk_size(self, tmp_path):
-        from helpers import make_raw_wav_bytes
+        from tests_lib.helpers import make_raw_wav_bytes
 
         # Four structurally-distinct WAVs so dedup doesn't collapse them.
         srcs = []
@@ -431,7 +431,7 @@ class TestRunChunked:
             )
 
     def test_run_chunked_cleans_up_staging_dir(self, tmp_path, monkeypatch):
-        from helpers import make_raw_wav_bytes
+        from tests_lib.helpers import make_raw_wav_bytes
 
         src = tmp_path / "only.wav"
         src.write_bytes(make_raw_wav_bytes())

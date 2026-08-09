@@ -2,16 +2,15 @@
 
 ``cosine_sort_with_boxes`` / ``score_against_query`` gained an
 ``embedder_name`` (which bound embedder's vectors to score against) and a
-``region_aware`` gate (the per-region max-pool is valid only when the query
-was embedded by the embedder that owns ``patch_regions``).  These cover the
+``region_aware`` gate (the per-patch max-pool is valid only when the query
+was embedded by the embedder that owns ``patch_grid``).  These cover the
 dual-embedder dataset where a text query must score against the text
 embedder's full-image vectors even though the medias also carry a *patch*
-embedder's region trees.
+embedder's patch grids.
 """
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 
 import numpy as np
 
@@ -35,7 +34,7 @@ def _dual_snap() -> dict[int, dict]:
             "embedder": "dinov3_patch",  # the recorded primary
             "embedding": _basis(0),
             "embeddings": {"siglip": _basis(cid), "dinov3_patch": _basis(0)},
-            "patch_regions": [SimpleNamespace(vec=_basis(3), box=(0.0, 0.0, 1.0, 1.0))],
+            "patch_grid": _basis(3)[None, None, :].astype(np.float16),
         }
     return snap
 
@@ -43,8 +42,8 @@ def _dual_snap() -> dict[int, dict]:
 class TestScoreAgainstQueryEmbedderName:
     def test_named_embedder_selects_that_full_image_vector(self):
         media = _dual_snap()[1]
-        # Drop patch_regions to exercise the single-vector branch.
-        media = {k: v for k, v in media.items() if k != "patch_regions"}
+        # Drop the patch grid to exercise the single-vector branch.
+        media = {k: v for k, v in media.items() if k != "patch_grid"}
         # siglip vector is e1 -> matches a query of e1, not the dinov3 e0.
         sim, box = score_against_query(media, _basis(1), "siglip")
         assert sim == 1.0

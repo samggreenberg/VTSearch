@@ -158,11 +158,28 @@ and they beat the constant 18 to 6.
    is probably an improvement for the user, but it is a change to what the
    interface implies, and the #2847 regression this run fixes got in precisely
    as an unnoticed side effect of a change made for another reason.
-4. **Run the generalisation check.** The plan pre-registered a second
-   environment (`visual_genome_m × siglip`, region voting) *conditional on this
-   result being positive*. It is. #2861 showed this family of answers does not
-   always transfer between voting modes, and everything here is COCO binary
-   voting in one embedder.
+4. **Run the generalisation check.** Attempted in #2877 and it **did not
+   measure region voting** — see
+   [`REPORT_SECOND_ENVIRONMENT.md`](REPORT_SECOND_ENVIRONMENT.md). The
+   pre-registered arm `visual_genome_m × siglip` has no `patch_grid`, so
+   `region_voting=True` silently fell back to whole-image training, whole-image
+   scoring and the binary blend schedule: it is a second *binary* environment.
+   **The region-voting check still needs running, on `dinov3_patch`.** Wait for
+   #2943 before running it: until that fix the harness scored the acquisition
+   pool by each media's whole-image vector while cutting the threshold on the
+   style's region max-pooled scores, which on a patch dataset put the whole pool
+   below the cut (`acq_pool_percentile` pinned at `1.0`) and made the lever
+   unmeasurable — the one thing this study is about. Both published environments
+   are `siglip`/`siglip2` with no `patch_grid`, so they scored and cut in the
+   same whole-image space and their numbers are unaffected.
+
+   What that run does establish is that `-3` **fails this ship rule in another
+   binary environment** — cost CI [+0.003, +0.022] against a +0.01 tolerance,
+   with only `k=-1` passing — because aggressive acquisition sharpens the *top*
+   of the ranking (AP +0.012, p<1e-5) while degrading its *global* separability
+   (oracle cost +0.015), and reported cost follows the second. So `-3` is
+   over-fitted to `coco_val × siglip2` specifically, not to binary voting as a
+   class.
 
 ## Figures
 

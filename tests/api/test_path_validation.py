@@ -12,7 +12,11 @@ from pathlib import Path
 
 import pytest
 
-from vtscore.security.path_validation import get_file_access_base_dir, validate_server_filepath
+from vtscore.security.path_validation import (
+    confine_server_filepath,
+    get_file_access_base_dir,
+    validate_server_filepath,
+)
 
 
 class TestValidateServerFilepath:
@@ -73,6 +77,38 @@ class TestValidateServerFilepath:
             pytest.skip("Cannot create symlinks in this environment")
         with pytest.raises(ValueError, match="must be within"):
             validate_server_filepath("escape_link/passwd", base_dir=tmp_path)
+
+
+class TestConfineServerFilepath:
+    """``confine_server_filepath`` hands back the path the check approved.
+
+    Issue #2917: ``validate_server_filepath`` anchors a *relative* path at
+    ``base_dir`` while every consumer anchors it at the process CWD, so a
+    validate-then-discard call site checks one path and reads another.
+    """
+
+    def test_confined_relative_becomes_the_approved_absolute(self, tmp_path):
+        result = confine_server_filepath("sub/file.json", tmp_path)
+        assert result == str((tmp_path / "sub" / "file.json").resolve())
+        assert Path(result).is_absolute()
+
+    def test_confined_absolute_is_canonicalised(self, tmp_path):
+        target = tmp_path / "sub" / ".." / "file.json"
+        assert confine_server_filepath(str(target), tmp_path) == str((tmp_path / "file.json").resolve())
+
+    def test_confined_escape_still_raises(self, tmp_path):
+        with pytest.raises(ValueError, match="must be within"):
+            confine_server_filepath("../../etc/passwd", tmp_path)
+
+    def test_unconfined_returns_the_input_verbatim(self):
+        """base_dir=None: both anchors are already the CWD, so relative
+        paths stay relative (keeping stored origins portable)."""
+        assert confine_server_filepath("data/sounds", None) == "data/sounds"
+        assert confine_server_filepath("/etc/passwd", None) == "/etc/passwd"
+
+    def test_idempotent(self, tmp_path):
+        once = confine_server_filepath("sub/file.json", tmp_path)
+        assert confine_server_filepath(once, tmp_path) == once
 
 
 class TestFolderFieldValidation:
@@ -376,6 +412,131 @@ class TestMultiUserFileRestriction:
             set_login_provider(original)
 
 
+class TestRelativePathCannotStrayFromTheApprovedAnchor:
+    """Issue #2917: a relative path used to be validated against the user's
+    data dir and then consumed relative to the process CWD, so user Bob could
+    submit ``data/alice`` — ``data/bob/data/alice`` passes the containment
+    check — and have the importer read ``CWD/data/alice`` instead.  Every
+    ingress must now forward the path the check approved.
+    """
+
+    def _use_multi_user(self, user_dir):
+        """Install a multi-user provider confined to *user_dir*; return the previous one."""
+        from vtsearch.auth import LoginProvider, get_login_provider, set_login_provider
+
+        class MultiUserProvider(LoginProvider):
+            name = "multi"
+
+            def get_user(self, request):
+                return "bob"
+
+            def is_authenticated(self, request):
+                return True
+
+            def get_user_data_dir(self, username, base_data_dir):
+                return user_dir
+
+        original = get_login_provider()
+        set_login_provider(MultiUserProvider())
+        return original
+
+    def test_normalize_rewrites_relative_folder_to_the_approved_path(self, tmp_path):
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.plugins.normalize import normalize_field_values
+        from vtsearch.auth import set_login_provider
+
+        user_dir = tmp_path / "bob"
+        user_dir.mkdir()
+        original = self._use_multi_user(user_dir)
+        try:
+            imp = ServerFolderDatasetImporter()
+            out = normalize_field_values(imp, {"path": "data/alice", "media_type": "image"})
+            # Not the raw string: the importer would have resolved that against
+            # the CWD, i.e. a directory the check never approved.
+            assert out["path"] == str((user_dir / "data" / "alice").resolve())
+        finally:
+            set_login_provider(original)
+
+    def test_load_folder_route_forwards_the_approved_path(self, client, tmp_path, monkeypatch):
+        import vtsearch.routes.datasets.load as load_mod
+        from vtsearch.auth import set_login_provider
+
+        user_dir = tmp_path / "bob"
+        (user_dir / "sounds").mkdir(parents=True)
+
+        captured: dict = {}
+        monkeypatch.setattr(
+            load_mod,
+            "_run_importer_in_background",
+            lambda importer, field_values: captured.update(field_values) or "task",
+        )
+
+        original = self._use_multi_user(user_dir)
+        try:
+            resp = client.post("/api/dataset/load-folder", json={"path": "sounds", "media_type": "audio"})
+            assert resp.status_code == 200, resp.get_json()
+            assert captured["path"] == str((user_dir / "sounds").resolve())
+        finally:
+            set_login_provider(original)
+
+    def test_combine_route_forwards_the_approved_paths(self, client, tmp_path, monkeypatch):
+        import vtsearch.routes.datasets.staging as staging_mod
+        from vtsearch.auth import set_login_provider
+
+        user_dir = tmp_path / "bob"
+        user_dir.mkdir()
+        for name in ("a.pkl", "b.pkl"):
+            (user_dir / name).write_bytes(b"")
+
+        captured: dict = {}
+        monkeypatch.setattr(
+            staging_mod,
+            "_run_importer_in_background",
+            lambda importer, field_values: captured.update(field_values) or "task",
+        )
+
+        original = self._use_multi_user(user_dir)
+        try:
+            resp = client.post("/api/dataset/combine", json={"datasets": ["a.pkl", "b.pkl"]})
+            assert resp.status_code == 200, resp.get_json()
+            assert captured["datasets"] == [
+                str((user_dir / "a.pkl").resolve()),
+                str((user_dir / "b.pkl").resolve()),
+            ]
+        finally:
+            set_login_provider(original)
+
+    def test_settings_dir_persists_the_approved_path(self, client, tmp_path):
+        from vtsearch.auth import set_login_provider
+
+        user_dir = tmp_path / "bob"
+        user_dir.mkdir()
+        original = self._use_multi_user(user_dir)
+        try:
+            resp = client.put("/api/settings", json={"saved_datasets_dir": "my_datasets"})
+            assert resp.status_code == 200, resp.get_json()
+            resp = client.get("/api/settings")
+            assert resp.get_json()["saved_datasets_dir"] == str((user_dir / "my_datasets").resolve())
+        finally:
+            set_login_provider(original)
+
+    def test_single_user_keeps_relative_paths_relative(self, tmp_path):
+        """Unconfined mode has one anchor already, so nothing is rewritten and
+        stored origins stay portable across checkouts."""
+        from vtscore.datasets.importers.server_folder import ServerFolderDatasetImporter
+        from vtscore.plugins.normalize import normalize_field_values
+        from vtsearch.auth import DefaultLoginProvider, get_login_provider, set_login_provider
+
+        original = get_login_provider()
+        try:
+            set_login_provider(DefaultLoginProvider())
+            imp = ServerFolderDatasetImporter()
+            out = normalize_field_values(imp, {"path": "data/sounds", "media_type": "image"})
+            assert out["path"] == "data/sounds"
+        finally:
+            set_login_provider(original)
+
+
 class TestExampleSortOriginConfinement:
     """Ninth audit pass: ``POST /api/example-sort-origin`` takes the origin
     dict verbatim from the request body, so in multi-user mode any path-like
@@ -448,5 +609,31 @@ class TestExampleSortOriginConfinement:
             # 404 (file not found) proves validation passed; the old 400
             # confinement message must not appear.
             assert resp.status_code == 404, resp.get_json()
+        finally:
+            set_login_provider(original)
+
+    @pytest.mark.parametrize("token", ["..", ".", "~"])
+    def test_separator_free_traversal_token_rejected_multi_user(self, client, tmp_path, token):
+        """Issue #2918: the confinement check used to validate a param only
+        when it contained a path separator, so ``..`` / ``.`` / ``~`` slipped
+        through and built a ``LocalFolderSource`` rooted at (the parent of)
+        the process CWD."""
+        from vtsearch.auth import get_login_provider, set_login_provider
+
+        user_dir = tmp_path / "alice"
+        user_dir.mkdir()
+
+        original = get_login_provider()
+        try:
+            set_login_provider(self._multi_user_provider(user_dir))
+            resp = client.post(
+                "/api/example-sort-origin",
+                json={
+                    "origin": {"importer": "server_folder", "params": {"path": token}},
+                    "key": "app.py",
+                },
+            )
+            assert resp.status_code == 400, resp.get_json()
+            assert "must be within" in resp.get_json()["message"]
         finally:
             set_login_provider(original)

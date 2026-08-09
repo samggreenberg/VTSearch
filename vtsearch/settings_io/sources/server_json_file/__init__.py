@@ -2,7 +2,7 @@
 
 Loads settings from, and saves settings to, a JSON file on the server
 filesystem.  The ``filepath`` field supports a ``{username}`` template
-that is resolved at runtime via :func:`~vtsearch.auth.get_current_user`.
+that is resolved at runtime via :func:`~vtscore.state.current_user.get_current_user`.
 """
 
 from __future__ import annotations

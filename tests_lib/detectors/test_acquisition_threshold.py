@@ -18,7 +18,7 @@ import numpy as np
 
 from vtscore.detectors.training import train_and_score
 from vtscore.state.core import DetectorContext, detector_acquisition_threshold
-from vtscore.training.thresholds import ACQUISITION_INCLUSION_OFFSET
+from vtscore.training.thresholds import ACQUISITION_INCLUSION_OFFSET, FoldAnchoredCut, GmmFit1D
 
 DIM = 8
 
@@ -79,15 +79,37 @@ class TestAcquisitionThresholdIsDecoupled:
         Read absolutely, ``-3`` would become a no-op at reporting inclusion -3
         and invert below it.  Read as an offset, the selector stays above the
         reporting line wherever the user puts the slider.
+
+        The estimator is built by hand rather than trained (issue #2896): a
+        trained fit's saturation edge depends on ambient torch RNG state, so a
+        strict ``>`` at deep-negative inclusions held or failed with process
+        ordering.  This geometry is exact and order-independent: an
+        equal-variance fit whose rate crossing runs off the inter-mean
+        interval at ``|k| ~ 6``, so k in {-10, -6} exercise the continuation
+        regime where the edge-clamped cut used to collapse the offset to a
+        no-op, over a haystack wide enough that no cut in range reaches its
+        edges.
         """
-        det_ctx = _trained(7, "det-acq-relative")
-        cut = det_ctx.anchored_cut_cache
-        assert cut is not None
-        for k in (-6, -3, 0, 3):
+        fit = GmmFit1D(w_lo=0.7, mu_lo=0.3, var_lo=0.02, w_hi=0.3, mu_hi=0.7, var_hi=0.02)
+        hay = np.linspace(-0.2, 1.6, 1801)
+        cut = FoldAnchoredCut(fits=(fit,), fold_haystacks=(hay,), final_haystack=hay, n_anchored=1)
+        det_ctx = DetectorContext(detector_id="det-acq-relative", media_type="audio")
+        det_ctx.anchored_cut_cache = cut
+        for k in (-10, -6, -3, 0, 3, 10):
             det_ctx.threshold = cut.threshold_at(k)
             acq = detector_acquisition_threshold(det_ctx, k)
             assert acq == cut.threshold_at(k + ACQUISITION_INCLUSION_OFFSET)
-            assert acq > det_ctx.threshold, f"the offset collapsed at reporting inclusion {k}"
+            # Never *below* the reporting line, wherever the slider sits - the
+            # failure an absolute reading would produce.  Not strict, because
+            # the cost weights saturate at the ends of the slider: once the
+            # quantile has hit its ceiling there is no higher cut left to take,
+            # and the offset legitimately lands on the reporting cut itself.
+            assert acq >= det_ctx.threshold, f"the offset inverted at reporting inclusion {k}"
+
+        # ...and it is a real gap rather than a no-op wherever the estimator
+        # still has room to move, which is what was measured.
+        det_ctx.threshold = cut.threshold_at(0)
+        assert detector_acquisition_threshold(det_ctx, 0) > det_ctx.threshold
 
     def test_it_is_monotone_in_inclusion_like_the_reporting_cut(self):
         """Same nesting contract - the acquisition cut is the same estimator."""

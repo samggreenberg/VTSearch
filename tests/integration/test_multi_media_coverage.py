@@ -17,7 +17,7 @@ import io
 
 import numpy as np
 
-from helpers import (
+from tests.helpers import (
     make_image_media,
     make_text_media,
     make_video_media,

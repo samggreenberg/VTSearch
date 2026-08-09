@@ -207,3 +207,149 @@ baseline is a moving target, because studies here ship things.
 **Still advice:** when a study defines *any* arm as "what production does",
 re-read that definition against `git log` on the path it names. The base row
 covers the threshold; the next study will name something else.
+
+<!-- entry-sep -->
+
+## 2026-08-07 — an 8-seed grid could not answer the question it was run to answer (#2877)
+
+**What happened.** The VG region-voting generalisation check reused #2876's
+sizing verbatim — 8 seeds, which on COCO had been comfortable — and drained
+clean: 1288/1288 cells, no failures. It reproduced the mechanism perfectly. It
+also put a 95% CI of **[−0.014, +0.019]** on the decision endpoint against a
+pre-registered tolerance of **+0.01**. That interval contains "the offset is
+free, keep it global" *and* "the offset costs something, gate it" — **opposite
+shipping decisions**. The run had measured nothing decision-relevant.
+
+**Why the transplanted sizing failed.** Sizing does not travel with an arm
+table; it travels with the *endpoint's variance in that environment*. VG
+region-voting costs sit near 0.43 where COCO's sit near 0.137, and the paired
+per-cell SD is correspondingly larger (0.111). At that SD, a ±0.010 half-width
+needs **n≈473**; 8 seeds × 23 categories delivered 180. The *positives* endpoint
+was hugely over-powered at the same n in both environments, which is exactly how
+this hides — the run looks healthy because the endpoint you can see moving is
+the one that was never binding.
+
+**Cost.** ~55 minutes of cpu-partition time to rerun at 24 seeds (n=540), which
+put the CI at [+0.003, +0.022] and made the answer unambiguous. Cheap only
+because these cells are single-threaded and GPU-free.
+
+**Still only advice (no control).** When porting a study to a new environment,
+**re-derive n from a pilot's observed SD on the decision endpoint** before
+running the full grid — do not inherit the seed count along with the arm table.
+One arm's worth of pilot is enough to compute it: `n = (1.96·SD/half_width)²`.
+And report the CI on the decision endpoint even when the ship rule passes, so a
+wide null is never mistaken for a tight one. (`analyze_acq.py` already refuses to
+read a p-value as a null for this reason; the gap was that nothing checked
+whether the *design* could produce a usable interval.)
+
+**Prevented, separately — smoke on a representative cell, not on cell 0.** The
+first smoke ran array index 0 and wrote **zero rows**, which looks exactly like
+a broken harness. It was not: rows are only emitted from the first positive
+onward, and index 0 was `bag`/seed 0, whose first positive arrives at vote 106 —
+the worst of 92 cells, where the median is vote 3. Fifteen minutes went to
+confirming the harness was fine. Cell 0 is the alphabetically-first category at
+seed 0, which is a biased draw, not a neutral one; and "0 rows" is a legitimate
+outcome in a starved environment, so it cannot be treated as a failure signal on
+its own. Smoke a mid-grid index, and check the row count against a known-good
+run of the same environment before concluding anything.
+
+<!-- entry-sep -->
+
+## 2026-08-07 — a study reported an environment it never ran (#2877)
+
+**What happened.** #2877 pre-registered `visual_genome_m × siglip` as the
+**region-voting** generalisation check for the acquisition cut, and justified
+the whole exercise on region voting's scoring geometry: *"a media's score is a
+max over ~24 region-node scores, so the Bad mode is an extreme-value
+statistic."* The harness takes `region_voting=True` for that arm, the run
+drained clean, the analysis was careful, and a report went out describing a
+region-voting result. **That arm does not region-vote.**
+
+`region_voting` is a *request*, not a guarantee. `_good_training_vec` pools the
+dragged ground-truth box only when the media carries a stored `patch_grid`, and
+silently falls back to the whole-image embedding otherwise. `siglip` is a
+single-vector embedder: no `patch_grid`, no `patch_regions`. So the run trained
+on whole-image vectors (verified: the region-voting vector is **byte-identical**
+to the whole-image vector on 200/200 medias carrying a box), scored whole-image
+(`region_aware=False`), and blended under **`cap50`** — the *binary* schedule.
+It was a second **binary**-voting environment throughout.
+
+**Why it survived every check.** Nothing was broken, so nothing complained. The
+dataset really is boxed; the flag really was set; `REGION_VOTING_BY_DATASET` is
+keyed by **dataset** while whether region voting happens is a property of the
+**embedder**, and the two only coincide for patch embedders. The harness's own
+config docstring called the whole VG block "region voting", so the mislabel was
+inherited rather than invented, and it had been sitting there across several
+studies.
+
+**Cost.** A published report, a PR and an issue comment all had to be corrected,
+including a headline recommendation ("gate the offset by voting mode") that the
+run could not support — both environments were binary. The measurement itself
+survived intact; only what it was evidence *about* changed. It would have been
+far worse merged: a voting-mode conditional shipped on evidence from two
+binary-voting runs.
+
+**Now prevented (code, not advice):** `simulate_voting_iterations` warns when
+`region_voting=True` is requested and no media carries a `patch_grid`, naming
+the consequence ("this run is BINARY voting"). `experiment_config.py`'s
+docstring now says which VG arms actually region-vote and which silently do not.
+
+**Still advice — a flag you passed is not a property you got.** When an
+experiment's *rationale* rests on a mechanism ("max over region nodes",
+"grouped calibration", "patch geometry"), verify the mechanism is present in the
+data before running, not the flag that requests it. One line is enough:
+`any(m.get("patch_grid") is not None for m in medias.values())`. The general
+form: **assert the premise, not the parameter.** A silent fallback is designed
+to keep a run working, which is exactly why it will not tell you the run changed
+meaning. This is a sibling of the #2846 lesson — there a worktree silently ran
+another checkout's code; here a config silently ran another environment's
+geometry.
+
+<!-- entry-sep -->
+
+## 2026-08-07 — a signal that something else can satisfy (#2897)
+
+**Cost:** ~40 min of run time, and one wrong "it's finished" told to the owner.
+
+**What broke.** Three times in one study I waited on a signal that something
+*other than the thing I was waiting for* could satisfy.
+
+1. **An empty job id read as a launch.** `launch_all.sh`'s prepare stage
+   hardcoded `--partition=gpu` and passed `--gres="$GRES"` through literally.
+   Every recent study sets `CALIB_GRES=none` for CPU-only cells — and
+   `--gres=none` is not ignored here: the submit filter rewrites it into a
+   `--gpus-per-task` form and rejects the job for having no `-n`. `--parsable`
+   returns an **empty string** on refusal, so `--dependency=afterok:` got a blank
+   id and the dependent launcher failed too, burying the real error. **Both live
+   A/B arms silently failed to launch** into a log nobody was reading. Latent for
+   every study using the full chain with `CALIB_GRES=none`; the screen escaped
+   only because its prepare had been run by hand.
+2. **A stale file read as completion.** Completion was armed as "does
+   `STATUS.md` exist" — but an earlier stage had already written one. The watcher
+   fired 18 seconds later and I reported the study complete about an hour early,
+   with 126 jobs still queued.
+3. **A degenerate arm read as a broken one.** The A/B builds
+   `CALIB_FOLD_COUNTS="2,$K"`, which at K=2 collapses to a single value, so the
+   *control* arm's analyze died with `KeyError: 'voting'` — a traceback where the
+   honest answer was "nothing to contrast".
+
+**Now prevented (code):**
+
+1. `launch_all.sh` drops `--gres` when it is `none`/empty (the `GRES_ARG` shape
+   `launch_cells.sh` already used) and honours `CALIB_PREP_PARTITION` /
+   `CALIB_PARTITION`; `require_jobid` after **every** `sbatch` aborts on a
+   non-numeric id, naming the stage.
+2. `analyze_folds_2897.py` returns the empty shape for a baseline-only arm.
+
+**Still advice — the shape of the mistake, which no single check covers.**
+Prefer a signal that *cannot* pre-exist: a terminal job state, or a marker
+written only by the stage you are waiting for. Before arming any wait, ask what
+else could satisfy it. And note the launchers already printed "confirm each arm
+came back with a numeric job id": that instruction was correct and was ignored,
+because the thing reading the output was a batch job. **A check whose only
+enforcement is a human reading a log does not survive being chained** — if a
+stage can be chained, its checks have to be code.
+
+*(This study also re-hit the #2877 premise trap above: `visual_genome_m ×
+siglip` carries no `patch_grid`, so its `region_voting=True` is a silent no-op.
+The one-line assertion recommended there is what caught it.)*

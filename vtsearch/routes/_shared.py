@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import io
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import wraps
 from typing import TYPE_CHECKING, Any, Callable
 
 from flask import g, jsonify, make_response, request, send_file
 from flask_smorest import abort
 from marshmallow import ValidationError
+from werkzeug.exceptions import HTTPException
 
+from vtscore.concurrency.progress import update_find_progress
 from vtscore.utils.hashing import content_md5, new_md5
 
 if TYPE_CHECKING:
@@ -167,6 +171,47 @@ def require_dataset_header(fn: Callable) -> Callable:
         return fn(*args, **kwargs)
 
     return wrapper
+
+
+def find_idle() -> None:
+    """Park the shared ``find_progress`` tracker at idle, clearing the step frame.
+
+    The find-side sibling of ``vtsearch.routes.sorting._sort_idle``. Every
+    scoring route (``/api/find``, ``/api/find-label``, ``/api/auto-detect``)
+    reports through the one process-wide ``find_progress`` singleton and pushes
+    it to every SSE client, so whichever route ran last owns leaving it parked
+    at ``"idle"``.
+    """
+    update_find_progress("idle", "", step=None, total_steps=None)
+
+
+@contextmanager
+def find_idle_on_crash(recorder: Any = None) -> Iterator[None]:
+    """Park ``find_progress`` at idle when the wrapped body dies unexpectedly.
+
+    Every *anticipated* exit from a scoring route resets the tracker itself:
+    ``_abort_find``, ``_abort_if_find_cancelled``, and the success path all end
+    with an idle update. An unhandled exception (say an embedding-dimension
+    mismatch raising ``RuntimeError`` mid-scoring) takes none of those paths, so
+    without this guard the request 500s through the global error handler while
+    the shared singleton stays at ``"running"`` on whatever step it died on —
+    broadcast to every SSE client, and only cleared by the next Find.
+
+    *recorder* (a :func:`vtscore.timing.record_task` handle, when the route runs
+    one) is closed first, as a failed run: the idle update would otherwise trip
+    its ``auto_finish`` hook and bank a crashed run's partial phase timings as a
+    good cost sample.  ``abort()`` is left alone — it already parked the tracker
+    and closed the recorder, and flask-smorest renders its envelope unchanged.
+    """
+    try:
+        yield
+    except HTTPException:
+        raise
+    except Exception:
+        if recorder is not None:
+            recorder.finish(ok=False)
+        find_idle()
+        raise
 
 
 def error_response(error: str, status: int, detail: Any | None = None, **extra: Any):
@@ -635,25 +680,15 @@ def windowed_sort_response(
 def get_embedder_for_medias(media_dict: dict):
     """Return the appropriate embedder for the given medias, or ``None``.
 
-    Looks up the ``"embedder"`` name stored on the first media entry; falls
-    back to the default embedder for the detected ``"type"``.
+    Thin alias for :func:`vtscore.media.embedder_for_medias`, kept so route
+    code can keep importing it from here.  The implementation moved to the
+    library tier because the dataset-load pipeline needs it too, and
+    reaching back into ``vtsearch.routes`` for it made a library code path
+    hard-require Flask (issue #2931).
     """
-    if not media_dict:
-        return None
-    first = next(iter(media_dict.values()))
-    embedder_name = first.get("embedder", "")
-    media_type = first.get("media_type", "audio")
+    from vtscore.media import embedder_for_medias  # noqa: PLC0415
 
-    from vtscore.media import embedders_for_type, get_embedder  # noqa: PLC0415
-
-    if embedder_name:
-        try:
-            return get_embedder(embedder_name)
-        except KeyError:
-            pass
-
-    avail = embedders_for_type(media_type)
-    return avail[0] if avail else None
+    return embedder_for_medias(media_dict)
 
 
 #: Message used by both Semantic-lock guards below, so the API surfaces one

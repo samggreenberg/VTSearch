@@ -22,6 +22,12 @@ per-step model it needs, so it feeds those inputs in directly.  The rules —
 every threshold and constant below — are copied verbatim, and
 ``tests_lib/detectors/test_autopilot_flow.py`` pins them against the sources.
 
+Because this is a copy, it can go stale silently: change a phase trigger in the
+app and the simulated user keeps taking the old route, so every study run after
+that measures a flow nobody takes.  ``scripts/check-eval-app-sync.py`` — a
+``./run-tests.sh`` gate — digests both sources and fails when either moves; see
+"The Eval Default Arm IS the App" in ``docs/EVAL.md``.
+
 The phase ordering the app implements, and the harness therefore reproduces:
 
 1. ``good`` until ``good_target`` positives exist (text sort, take the top).
@@ -206,10 +212,18 @@ def app_has_detector(phase: str) -> bool:
 class AutopilotFlow:
     """Per-trajectory phase state for one simulated Autopilot session.
 
-    Accumulates the two histories the indicators need — per-step error costs
-    (Smart) and per-step prediction-flip counts (Stable) — and recomputes the
-    phase after every vote.  The atlas span is read from the harness's atlas,
-    which it labels in lock-step with the votes.
+    Holds the two inputs the indicators need — the Smart window of error costs
+    and the accumulated per-step prediction-flip counts (Stable) — and
+    recomputes the phase after every vote.  The atlas span is read from the
+    harness's atlas, which it labels in lock-step with the votes.
+
+    Note the asymmetry between the two, which is the app's: Stable's flip counts
+    are a genuine history (each entry compares two consecutive models and can
+    never be recomputed later), whereas Smart's costs are *not* a history at
+    all.  The app re-scores its last :data:`SMART_WINDOW` cached models against
+    the current labelset on every poll, so the whole window is replaced each
+    step; accumulating one frozen ``(model_t, labelset_t)`` cost per step would
+    confound model improvement with labelset growth (issue #2923).
     """
 
     def __init__(self, *, good_target: int = GOOD_TARGET, bad_target: int = BAD_TARGET, span_green: int | None = None):
@@ -217,20 +231,27 @@ class AutopilotFlow:
         self.bad_target = bad_target
         self.span_green = SPAN_GREEN_DEFAULT if span_green is None else span_green
         self.phase: Phase = "good"
-        self.error_costs: list[float] = []
+        #: The most recent Smart window: the last :data:`SMART_WINDOW` models'
+        #: costs, all against the *current* labelset.  Replaced, never appended.
+        self.recent_error_costs: list[float] = []
         self.stability: list[dict[str, Any]] = []
         self._prev_predictions: Optional[dict[int, int]] = None
 
-    def record_step(self, error_cost: float | None, predictions: dict[int, int] | None) -> None:
-        """Fold one step's model into the Smart / Stable histories.
+    def record_step(self, error_costs: list[float] | None, predictions: dict[int, int] | None) -> None:
+        """Fold one step's model into the Smart / Stable inputs.
 
-        *error_cost* is that step's weighted FPR/FNR on the current labelset
-        (``None`` when no model was trained).  *predictions* maps each still-
-        unlabeled pool id to its predicted class, from which the flip count
-        against the previous step is derived.
+        *error_costs* is the freshly re-scored Smart window — the weighted
+        FPR/FNR of each of the last :data:`SMART_WINDOW` models against the
+        current labelset, oldest first — and replaces the previous window.
+        ``None`` means no model was trained this step, leaving the window as it
+        stands; an empty list means there was nothing usable to score against
+        (either vote class empty), which the app also reports as an empty
+        window.  *predictions* maps each still-unlabeled pool id to its
+        predicted class, from which the flip count against the previous step is
+        derived.
         """
-        if error_cost is not None:
-            self.error_costs.append(error_cost)
+        if error_costs is not None:
+            self.recent_error_costs = list(error_costs)
         if predictions is None:
             return
         if self._prev_predictions is not None:
@@ -241,7 +262,7 @@ class AutopilotFlow:
 
     def update(self, good_count: int, bad_count: int, remaining_unlabeled: float, span: dict[str, Any] | None) -> Phase:
         """Recompute and return the phase after a vote."""
-        smart = smart_status(self.error_costs, good_count, bad_count)
+        smart = smart_status(self.recent_error_costs, good_count, bad_count)
         stable = stable_status(self.stability, good_count, bad_count)
         sp: Status = span_status(int(span["level"]), int(span["depth"]), self.span_green) if span is not None else "red"
         self.phase = next_phase(

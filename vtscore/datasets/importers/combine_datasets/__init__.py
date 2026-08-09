@@ -58,7 +58,7 @@ def _apply_keep_embedders(
       "dropped" type leaves no vector behind and a "re-embed" loser is removed
       (the pipeline's embed stage then fills the kept winner on media that lack
       it, since ``media_embedding(m, winner)`` is now ``None``);
-    * patch side-channels (``patch_regions`` / ``patch_grid``) are cleared unless
+    * the patch side-channel (``patch_grid``) is cleared unless
       the media's own patch embedder is the kept one, and ``local_features``
       unless its structural embedder is the kept one — a mismatch means the
       side-channel belongs to a stripped embedder and is re-derived (or left
@@ -82,7 +82,6 @@ def _apply_keep_embedders(
                 del embs[name]
 
     if orig_patch != kept_patch:
-        media.pop("patch_regions", None)
         media.pop("patch_grid", None)
     if orig_structural != kept_structural:
         media.pop("local_features", None)

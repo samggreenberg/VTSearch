@@ -130,4 +130,57 @@ describe('AutoDetectResultsModalComponent', () => {
     const rows = el.querySelectorAll('.results-table tbody tr');
     expect(rows.length).toBe(2); // good hits by default
   });
+
+  // An Auto-Find auto-export can format the run into a third-party site's URL
+  // rather than delivering it anywhere (#2898). It's offered as a click, not
+  // opened on arrival: these results land from an async response, where an
+  // unprompted window.open() is what popup blockers exist to stop.
+  describe('auto-export open_url', () => {
+    function withAutoExport(auto_export: Record<string, unknown>): void {
+      fixture.componentRef.setInput('data', { ...mockData, auto_export } as any);
+    }
+
+    it('offers an Open button for an openable URL', async () => {
+      withAutoExport({ exporter: 'open_url', success: true, open_url: 'https://example.com/r?ids=a' });
+      await flushInit();
+      const btn = fixture.nativeElement.querySelector('.auto-export-open') as HTMLButtonElement;
+      expect(btn).toBeTruthy();
+      expect(btn.getAttribute('title')).toBe('https://example.com/r?ids=a');
+    });
+
+    it('opens the URL in a new tab when clicked, never handing over the opener', async () => {
+      withAutoExport({ exporter: 'open_url', success: true, open_url: 'https://example.com/r' });
+      await flushInit();
+      const open = vi.spyOn(window, 'open').mockReturnValue(null);
+      (fixture.nativeElement.querySelector('.auto-export-open') as HTMLButtonElement).click();
+      expect(open).toHaveBeenCalledWith('https://example.com/r', '_blank', 'noopener');
+      open.mockRestore();
+    });
+
+    it('does not open anything on arrival', async () => {
+      const open = vi.spyOn(window, 'open').mockReturnValue(null);
+      withAutoExport({ exporter: 'open_url', success: true, open_url: 'https://example.com/r' });
+      await flushInit();
+      expect(open).not.toHaveBeenCalled();
+      open.mockRestore();
+    });
+
+    it('ignores a URL the browser must not navigate to', async () => {
+      withAutoExport({ exporter: 'evil', success: true, open_url: 'javascript:alert(1)' });
+      await flushInit();
+      expect(component.autoExportUrl()).toBeNull();
+      expect(fixture.nativeElement.querySelector('.auto-export-open')).toBeNull();
+    });
+
+    it('offers nothing for a failed export or a plain delivery', async () => {
+      withAutoExport({ exporter: 'open_url', success: false, open_url: 'https://example.com/r' });
+      await flushInit();
+      expect(component.autoExportUrl()).toBeNull();
+
+      withAutoExport({ exporter: 'server_json_file', success: true, message: 'Wrote it.' });
+      await settleZoneless(fixture);
+      expect(component.autoExportUrl()).toBeNull();
+      expect(fixture.nativeElement.querySelector('.auto-export-open')).toBeNull();
+    });
+  });
 });

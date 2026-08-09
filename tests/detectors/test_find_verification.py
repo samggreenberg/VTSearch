@@ -5,6 +5,7 @@ Covers:
 - the ``verified`` array on ``GET /api/votes``
 - ``label_filter=unverified`` / ``verified`` export partitioning
 - ``GET /api/find/stats`` (2x2 confusion + FP/FN inclusion sweep)
+- verified votes surviving a re-score (issue #2928)
 - a live Find session surviving a detector-file write (issue #2786)
 
 See docs/plans/find-verification-workflow.md.
@@ -13,7 +14,7 @@ See docs/plans/find-verification-workflow.md.
 from __future__ import annotations
 
 import app as app_module
-from helpers import setup_trainable_model_in_registry
+from tests.helpers import setup_trainable_model_in_registry
 from tests import load_detector_and_wait
 from vtscore.detectors.dataset_sync import reset_mtime_cache_for_tests
 from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
@@ -346,6 +347,99 @@ class TestCorrectionsToDetector:
         assert resp.status_code == 200, resp.get_json()
         assert get_active_detector_context().find_eval_stale is False
         assert client.get("/api/find/stats").get_json()["stale"] is False
+
+
+class TestReScoreKeepsVerifiedVotes:
+    """Re-scoring must not overwrite a human-verified vote (#2928).
+
+    ``POST /api/find-label`` re-applies the detector's call to every item, and
+    the fold-corrections -> retrain -> re-score loop re-runs it on purpose.  The
+    bulk apply used to reassign *every* vote from the new threshold split while
+    nothing cleared ``verified_ids``, so an item the human had ruled on came
+    back carrying the machine's opposite label - excluded from the work queue,
+    counted in ``verified_count``, and pinned there by the Inclusion
+    re-threshold - i.e. the human's decision silently inverted while still
+    presented as human-verified.
+    """
+
+    DETECTOR = "rescore-verified"
+
+    def _setup_find(self, client):
+        detector_id = setup_trainable_model_in_registry(
+            self.DETECTOR,
+            good_ids=[1, 2, 3],
+            bad_ids=[18, 19, 20],
+            snap=snapshot_medias(),
+        )
+        load_detector_and_wait(client, detector_id)
+        resp = client.post("/api/find-label", json={"detector_id": detector_id})
+        assert resp.status_code == 200, resp.get_json()
+        return detector_id, resp.get_json()
+
+    def _rescue_lowest_scored(self, client, data):
+        """Verify the detector's most confident Bad as Good; return its id.
+
+        The lowest-scored item stays below the cutoff on any re-score, so the
+        machine's call on the next pass reliably disagrees with the human's.
+        """
+        lowest = min(data["results"], key=lambda r: r["score"])
+        assert lowest["score"] < data["threshold"]
+        cid = lowest["id"]
+        assert client.post(f"/api/medias/{cid}/vote", json={"target": "good"}).status_code == 200
+        ctx = get_active_detector_context()
+        assert cid in ctx.verified_ids and cid in ctx.good_votes
+        return cid
+
+    def test_verified_vote_survives_a_re_score(self, client):
+        detector_id, data = self._setup_find(client)
+        cid = self._rescue_lowest_scored(client, data)
+        click_before = get_active_detector_context().vote_click_times[cid]
+
+        assert client.post("/api/find-label", json={"detector_id": detector_id}).status_code == 200
+
+        ctx = get_active_detector_context()
+        assert cid in ctx.good_votes, "the re-score overwrote the human's vote"
+        assert cid not in ctx.bad_votes
+        assert cid in ctx.verified_ids, "the item lost its verified marker"
+        assert ctx.vote_click_times[cid] == click_before, "the human's click-time was re-stamped"
+
+    def test_re_score_still_relabels_unverified_items(self, client):
+        """The guard is narrow: everything unverified adopts the new pass."""
+        detector_id, data = self._setup_find(client)
+        self._rescue_lowest_scored(client, data)
+
+        resp = client.post("/api/find-label", json={"detector_id": detector_id})
+        assert resp.status_code == 200, resp.get_json()
+        fresh = resp.get_json()
+        ctx = get_active_detector_context()
+        for entry in fresh["results"]:
+            if entry["id"] in ctx.verified_ids:
+                continue
+            assert (entry["id"] in ctx.good_votes) == (entry["score"] >= fresh["threshold"])
+
+    def test_re_score_reports_the_adopted_counts(self, client):
+        """``good_count`` / ``bad_count`` describe the labels actually applied."""
+        detector_id, data = self._setup_find(client)
+        self._rescue_lowest_scored(client, data)
+
+        body = client.post("/api/find-label", json={"detector_id": detector_id}).get_json()
+        ctx = get_active_detector_context()
+        assert body["good_count"] == len(ctx.good_votes)
+        assert body["bad_count"] == len(ctx.bad_votes)
+
+    def test_disagreement_reads_as_a_correction_in_stats(self, client):
+        """The machine's call still seeds the eval baseline, so a held human
+        vote the re-scored detector disagrees with shows up as a correction
+        rather than quietly agreeing with itself."""
+        detector_id, data = self._setup_find(client)
+        cid = self._rescue_lowest_scored(client, data)
+
+        assert client.post("/api/find-label", json={"detector_id": detector_id}).status_code == 200
+
+        assert get_active_detector_context().find_initial_labels[cid] == "bad"
+        stats = client.get("/api/find/stats").get_json()
+        assert stats["rescued_false_neg"] >= 1
+        assert stats["corrections"] >= 1
 
 
 class TestFindSessionSurvivesDetectorFileWrite:

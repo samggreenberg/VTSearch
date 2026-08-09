@@ -15,8 +15,10 @@ the load pipeline that calls these helpers during dataset import.
 ## Contents
 
 - [Path validation](#path-validation)
+  - [Media-carried file references](#media_file_read_roots-and-resolve_media_file_pathfilepath_str)
 - [URL validation](#url-validation)
   - [`validate_url` (SSRF guard)](#validate_url-ssrf-guard)
+  - [Fetching: `open_validated_stream` / `fetch_validated_url`](#fetching-open_validated_stream--fetch_validated_url)
   - [Browser-URL validation](#browser-url-validation)
 - [Pickle safety](#pickle-safety)
 - [Why no `find_class` shim is needed](#why-no-find_class-shim-is-needed)
@@ -25,14 +27,16 @@ the load pipeline that calls these helpers during dataset import.
 
 ## Path validation
 
-`vtscore/security/path_validation.py` exposes four helpers used by every
-server-file importer / exporter and every server-path field on a plugin
-form.
+`vtscore/security/path_validation.py` exposes the helpers used by every
+server-file importer / exporter, every server-path field on a plugin
+form, and every serve-time read of a path that arrived *on a media*.
 
 | Function | Description |
 |----------|-------------|
 | `get_file_access_base_dir() -> Path \| None` | Resolve the per-user base directory; `None` (unrestricted) in single-user mode |
 | `validate_server_filepath(filepath_str, base_dir=None) -> Path` | Resolve and (when `base_dir` is given) assert containment; raises on escape |
+| `media_file_read_roots() -> list[Path] \| None` | Roots a media-carried file reference may be read from; `None` (unrestricted) in single-user mode |
+| `resolve_media_file_path(filepath_str) -> Path \| None` | Confine a media-carried file reference; `None` (rather than a raise) when it escapes |
 | `sanitize_template_value(value) -> str` | Replace path separators / `..` tokens with `_` |
 | `rglob_follow_symlinks(root, pattern) -> list[Path]` | `Path.rglob`-equivalent that descends into symlinked directories |
 | `glob_top_level(root, pattern) -> list[Path]` | Non-recursive variant; direct children of `root` only |
@@ -66,6 +70,41 @@ is called (follows symlinks, normalises `..`), and
 `ValueError`, the path escaped and we re-raise. Symlinks are followed
 during resolution, so a symlinked file inside `base_dir` whose target is
 outside is rejected.
+
+### `media_file_read_roots()` and `resolve_media_file_path(filepath_str)`
+
+`validate_server_filepath` guards paths the *user* just typed. A media
+carries paths of its own - `media_path`, a lazy clip's source path, an
+archive-member archive path - and those are equally untrusted, because
+they are copied verbatim out of a loaded dataset pickle and whatever they
+point at is served straight back to the requester. They are the
+filesystem twin of the `media_url` SSRF hole, so they get a matching
+guard, and every serve-time read goes through it:
+
+```python
+from vtscore.security.path_validation import resolve_media_file_path
+
+path = resolve_media_file_path(media["media_path"])
+if path is not None and path.exists():
+    return path.read_bytes()      # None -> serve nothing, no request-time raise
+```
+
+`media_file_read_roots()` decides what "inside" means. In single-user
+mode it returns `None` and `resolve_media_file_path` is a pass-through,
+matching `get_file_access_base_dir`. In multi-user mode the allowed roots
+are the user's data dir **plus** `DATA_DIR`: demo datasets extract into
+the shared dir as *siblings* of the per-user dirs
+(`data/ESC-50-master/audio`), so confining to `data/<username>/` alone
+would make every thin demo dataset unservable. The boundary this draws is
+"inside the app's data tree" - enough to stop `/etc/shadow` and every
+other server file, but it does leave a crafted reference able to name
+another user's subtree, since user dirs are siblings under `DATA_DIR` and
+there is no way to enumerate them.
+
+Unlike `validate_server_filepath` it returns `None` instead of raising:
+these are serve-time reads inside a resolution chain, and falling through
+to the next step is the right behaviour for a reference that shouldn't be
+honoured.
 
 ### `sanitize_template_value(value)`
 
@@ -108,6 +147,12 @@ similar and defend against different things, so pick by **who makes the
 request**: `validate_url` for URLs *the server* fetches, and
 `validate_browser_url` for URLs *the user's browser* opens.
 
+Alongside them sit the two fetch primitives every server-side fetch is
+meant to go through, `open_validated_stream` and `fetch_validated_url`.
+A single up-front `validate_url` is not enough on its own - a public URL
+can `302` to an internal host - so the redirect chain has to be walked by
+hand with each hop re-checked.
+
 ### `validate_url` (SSRF guard)
 
 For SSRF protection on outbound HTTP requests:
@@ -145,6 +190,41 @@ validate_url("http://169.254.169.254/latest/meta-data/") # raises ValueError
 validate_url("file:///etc/passwd")                       # raises ValueError
 validate_url("https://10.0.0.1/")                        # raises ValueError
 ```
+
+### Fetching: `open_validated_stream` / `fetch_validated_url`
+
+```python
+def open_validated_stream(session, url, *, headers_for_url=None,
+                          timeout=(10, 60)) -> requests.Response:
+    """GET an already-validated url with allow_redirects=False, re-running
+    validate_url on every hop.  Returns the final response; caller closes."""
+
+def fetch_validated_url(url: str, *, timeout=(10, 30)) -> bytes:
+    """validate_url + open_validated_stream + raise_for_status, returning
+    the whole body."""
+```
+
+`open_validated_stream` deliberately does **not** validate its first URL:
+the caller owns that check, and this covers only the hops the caller
+cannot see. That split is what lets the resuming downloader validate once
+and then retry a partial transfer without paying a fresh DNS resolve per
+attempt (and without a transient resolver failure turning a retryable
+connection error into a hard `ValueError`). `headers_for_url` is
+recomputed per hop, so a credential scoped to one host - the HuggingFace
+bearer token, say - is never replayed to a redirect target on another.
+
+`fetch_validated_url` is the whole-body convenience wrapper for fetch
+sites that want bytes rather than a stream to spool to disk. It is what
+`vtscore.media.base._fetch_media_url` calls, so a media's `media_url` -
+which can arrive verbatim from a loaded pickle and whose bytes are served
+straight back to the requester - cannot name `file:///etc/passwd` or an
+internal service. (It previously used `urllib.request.urlopen`, whose
+default opener services `file://` and `ftp://` and obliged.)
+
+Users of these primitives: the dataset downloader
+(`vtscore/datasets/downloader/core.py`) and the `media_url` fallback in
+`vtscore/media/base.py`. A new outbound fetch belongs here too rather
+than reaching for `requests.get` / `urlopen` directly.
 
 ### Browser-URL validation
 

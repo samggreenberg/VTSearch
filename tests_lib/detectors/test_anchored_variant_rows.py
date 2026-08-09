@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import numpy as np
 
+from vtscore.eval.cut_rules import CUT_KIND_MIDPOINT
 from vtscore.eval.voting_iterations import _CALIBRATION_COLUMNS, simulate_voting_iterations
+from vtscore.training.thresholds import CUT_KIND_CONTINUED, CUT_KIND_DEGENERATE_MIDPOINT, CUT_KIND_INTERIOR
 
 # Reuse the synthetic planted-patch dataset builders from the Max-Patch tests.
 from .test_max_patch_style import _planted_dataset
@@ -85,6 +87,25 @@ class TestAnchoredVariantRows:
             assert r["threshold_provenance"].startswith(("fold_anchored[", "fold_fallback"))
         for r in rank:
             assert r["threshold_provenance"] == "rank_transfer"
+
+    def test_the_fallback_kind_is_productions_own_never_the_decomposition_stand_in(self):
+        """These arms call the shipped rule, so their fallbacks are production's.
+
+        The ``_SAFE_GMM_VARIANTS`` family substitutes that fit's *midpoint* for a
+        rule with no root; production instead continues past the component mean.
+        Both set ``cut_fallback``, which is why the flag alone cannot tell an
+        analysis which of the two it is looking at (issue #2900) - so no
+        production-path row may ever claim the decomposition family's kind.
+        """
+        rows = [r for r in _run() if r["gmm_variant"].startswith(("anchored", "fold_anchored", "rank"))]
+        assert rows
+        for r in rows:
+            kind = r["cut_fallback_kind"]
+            assert kind in (CUT_KIND_INTERIOR, CUT_KIND_CONTINUED, CUT_KIND_DEGENERATE_MIDPOINT), kind
+            assert kind != CUT_KIND_MIDPOINT
+            # ``bool(kind)`` must stay exactly the flag, or fallback *rates*
+            # computed across the two families stop being comparable.
+            assert r["cut_fallback"] == int(bool(kind))
 
     def test_fold_arms_can_be_disabled(self):
         rows = _run(fold_arms=False)

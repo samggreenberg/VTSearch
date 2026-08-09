@@ -59,6 +59,7 @@ VTSearch/
 │
 ├── vtscore/                        Library tier; no Flask dependency
 │   ├── config.py                   Constants (sample rates, paths, model IDs)
+│   ├── achievements_hooks.py       Achievement-event seam; app installs the recorders
 │   ├── cli.py                      CLI autodetect workflow
 │   ├── cli_pipeline.py             Pipeline YAML loader
 │   ├── cli_progress.py             CLI progress bars
@@ -213,8 +214,9 @@ VTSearch/
 │   ├── port_preflight.py           Startup port-collision detection / single-instance lock
 │   │                               (CLI-only; not used by the WSGI app object)
 │   │
-│   ├── auth/                       LoginProvider ABC, DefaultLoginProvider, get_current_user(),
-│   │                               get_user_data_dir()
+│   ├── auth/                       LoginProvider ABC, DefaultLoginProvider, get_user_data_dir()
+│   │                               (get_current_user() / thread_user() are re-exported from
+│   │                               vtscore.state.current_user, which owns the thread-local)
 │   │
 │   ├── state/                      App-tier state shim; re-exports vtscore.state.* and adds
 │   │                               proxy view (medias, good_votes, bad_votes, …) from state_proxies.py
@@ -223,7 +225,8 @@ VTSearch/
 │   │                               (checks flask.g, falls back to thread-local)
 │   │
 │   ├── shim/                       Flask glue: context resolvers, persistence hooks,
-│   │                               CoreConfig builder, app-only plugin families
+│   │                               achievement recorders, CoreConfig builder,
+│   │                               app-only plugin families
 │   │
 │   ├── schemas/                    Marshmallow schemas for API serialisation
 │   │
@@ -444,9 +447,18 @@ No Flask, no global state, no progress dependency (silent no-op by
 default).  To get progress reporting, set a callback before loading:
 
 ```python
-embedder._on_progress = lambda status, msg, cur, tot: print(f"{msg} ({cur}/{tot})")
-embedder.load_models()
+with embedder.progress_scope(lambda status, msg, cur, tot: print(f"{msg} ({cur}/{tot})")):
+    embedder.load_models()
 ```
+
+Embedders are process-wide singletons, so `_on_progress` is **thread-scoped**:
+`progress_scope()` (and a bare `embedder._on_progress = cb` assignment) only
+redirects progress for calls made on the *calling* thread, and a thread that set
+nothing reads the process-wide default wired in by
+`vtscore.media.set_progress_callback()`.  That is what lets two concurrent
+dataset loads share one embedder without their trackers crossing — a mis-routed
+callback would not merely mis-draw a bar, since trackers call `check_cancelled()`
+and would abort the wrong load.
 
 ### The plugin systems
 
@@ -713,7 +725,14 @@ OAuth, LDAP, or any auth scheme without modifying route code.
 The `before_request` middleware in `app.py` populates `g.user` on every
 request via the active provider's `get_user()`. Routes access the current
 user via `get_current_user()`. Outside a Flask request context (CLI,
-background threads) it falls back to `"default"`.
+background threads) it falls back to the thread-local set by
+`thread_user(...)`, then to `"default"`.
+
+The resolution itself lives in `vtscore.state.current_user` so library
+code can ask "who is this for?" without Flask; `vtsearch/auth/` registers
+the `g.user` reader through `register_request_user_resolver()` at import
+time and re-exports `get_current_user` / `thread_user` / `set_thread_user`
+/ `get_thread_user` unchanged.
 
 ### Ownership tracking
 
@@ -749,7 +768,7 @@ Each clip dict includes two provenance fields:
 |-------|------|-------------|
 | `origin` | `dict \| None` | Serialised `Origin` (e.g. `{"importer": "server_folder", "params": {"path": "/data"}}`) |
 | `origin_name` | `str` | Unique name within the origin (typically the filename) |
-| `media_url` | `str \| None` | Remote URL for lazy-fetching media bytes (e.g. PullWrest URL). Used as fallback when `media_bytes` and `media_path` are both absent |
+| `media_url` | `str \| None` | Remote URL for lazy-fetching media bytes (e.g. PullWrest URL). Used as fallback when `media_bytes` and `media_path` are both absent. Fetched only through the SSRF guard (`fetch_validated_url`): publicly routable `http(s)` only, every redirect hop re-checked |
 
 ### Origin class (`vtscore/datasets/origin.py`)
 
@@ -841,6 +860,17 @@ therefore **depends on its source files staying put** — moving/deleting them
 drops the affected medias on reopen (same as a missing companion file today).
 Browser-upload importers (`local_folder`, `local_files`) stage into a temp dir
 that's deleted after import, so this option is not offered there.
+
+Because those references travel *inside the pickle*, they are externally
+supplied data on any deployment that lets users load datasets. Every read of a
+media-carried file reference (`media_path`, a lazy clip's source path, an
+archive-member archive path) therefore goes through
+`vtscore.security.path_validation.resolve_media_file_path`, which in multi-user
+mode confines it to the current user's data dir plus the shared `DATA_DIR`
+(where demo datasets extract) and returns `None` otherwise, so the caller serves
+nothing. In single-user / no-auth mode it is a pass-through, matching
+`get_file_access_base_dir`. The network-side twin of that guard is
+`fetch_validated_url`, which `media_url` fetches go through for the same reason.
 
 Clippers on reference parents transiently hydrate the parent's bytes from its
 source file (tagging it with `_lazy_source`), clip as normal, then re-lazify

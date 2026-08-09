@@ -147,14 +147,20 @@ def combine_datasets_route(body: dict):
     name = str(body.get("name", "") or "").strip()
     resolutions = body.get("resolutions") or {}
 
+    # Carry the *approved* paths forward rather than the raw strings: under
+    # multi-user confinement a relative path is checked against the user's
+    # data dir but would be opened relative to the process CWD.
     _base = _paths.get_file_access_base_dir()
+    confined_paths: list[str] = []
     for p in dataset_paths:
         try:
-            _paths.validate_server_filepath(str(p), base_dir=_base)
+            confined = _paths.confine_server_filepath(str(p), _base)
         except ValueError as exc:
             abort(400, message=str(exc))
-        if not Path(p).exists():
+        if not Path(confined).exists():
             abort(400, message=f"File not found: {p}")
+        confined_paths.append(confined)
+    dataset_paths = confined_paths
 
     importer = get_importer("combine_datasets")
     if importer is None:

@@ -79,18 +79,6 @@
   }
 }
 
-.missing-view {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-lg);
-}
-
-.missing-info {
-  font-size: var(--font-lg);
-  color: var(--text-primary);
-  line-height: 1.5;
-}
-
 .btn-add-bad {
   flex: 1;
   padding: var(--space-md) var(--space-lg);

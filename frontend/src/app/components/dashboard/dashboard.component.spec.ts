@@ -637,6 +637,65 @@ describe('DashboardComponent', () => {
     httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
   });
 
+  it('clears the active context when the bulk delete removes the active dataset', async () => {
+    const datasets = [
+      { id: 'd1', name: 'Active', media_type: 'audio' },
+      { id: 'd2', name: 'Other', media_type: 'audio' },
+    ];
+    flushInitialRequests(datasets);
+
+    const activeCtx = TestBed.inject(ActiveContextService);
+    activeCtx.setActivePair('d1', '');
+    component.selectedDatasetIds.add('d1');
+    component.selectedDatasetIds.add('d2');
+
+    vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(true));
+
+    await component.deleteSelectedDatasets();
+
+    for (const req of httpMock.match((r) => r.method === 'DELETE')) {
+      req.flush({});
+    }
+
+    // The deleted dataset must not linger as the interceptor's X-Dataset-Id.
+    expect(activeCtx.datasetId).toBe('');
+    expect(activeCtx.intentDatasetId).toBe('');
+    expect(component.selectedDatasetIds.size).toBe(0);
+
+    // Each delete triggers a registry refresh; drain them.
+    for (const req of httpMock.match('/api/datasets/registry')) {
+      if (!req.cancelled) req.flush({ datasets: [] });
+    }
+    for (const req of httpMock.match('/api/detectors/registry')) {
+      if (!req.cancelled) req.flush({ detectors: [] });
+    }
+  });
+
+  it('leaves the active context alone when the bulk delete spares the active dataset', async () => {
+    const datasets = [
+      { id: 'd1', name: 'Active', media_type: 'audio' },
+      { id: 'd2', name: 'Other', media_type: 'audio' },
+    ];
+    flushInitialRequests(datasets);
+
+    const activeCtx = TestBed.inject(ActiveContextService);
+    activeCtx.setActivePair('d1', 'm1');
+    component.selectedDatasetIds.clear();
+    component.selectedDatasetIds.add('d2');
+
+    vi.spyOn(component['dialog'], 'confirmDestructive').mockReturnValue(Promise.resolve(true));
+
+    await component.deleteSelectedDatasets();
+
+    httpMock.expectOne('/api/datasets/registry/d2').flush({});
+
+    expect(activeCtx.datasetId).toBe('d1');
+    expect(activeCtx.modelId).toBe('m1');
+
+    httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+    httpMock.expectOne('/api/detectors/registry').flush({ detectors: [] });
+  });
+
   it('should open and close importer modal via NewThingFlowsService', () => {
     flushInitialRequests();
     const flows = TestBed.inject(NewThingFlowsService);

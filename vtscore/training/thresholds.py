@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import time
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
@@ -24,6 +25,15 @@ from vtscore.training.blend_schedules import BlendContext, BlendSchedule, get_sc
 # downstream blends - ``0.0 * inf`` evaluates to NaN, which would then be
 # stored on ``DetectorContext.threshold`` and break every comparison.
 NO_GOOD_THRESHOLD = 2.0
+
+# Seed of the Train/Calibrate fold splits when a caller passes no ``rng``.
+# The splits must be reproducible: the same labelset has to yield the same fold
+# models, hence the same conformal threshold, hence the same Good/Bad verdicts
+# on every run and every reload of a detector.  Falling back to the *global*
+# ``np.random`` would break that twice over - the splits would differ run to
+# run, and the request/background threads that run Find scoring would mutate
+# shared global RNG state, making results order-dependent under concurrency.
+CALIBRATION_SPLIT_SEED = 42
 
 # False-negative budget of the conformal inclusion rule at inclusion 0; each
 # +1 step of inclusion halves it (see :func:`conformal_threshold`).  0.25 means
@@ -240,7 +250,23 @@ def _weighted_gaussian_crossing(
     return mu_lo + max(inside)
 
 
-def _rate_cut_in_interval(
+#: ``cut_fallback_kind`` when the rule found an interior stationary point, i.e.
+#: nothing was substituted or continued and the cut *is* the root.
+CUT_KIND_INTERIOR: str = ""
+#: ``cut_fallback_kind`` when the crossing ran off the inter-mean interval and
+#: the cut was continued past that edge at the rule's own first-order slope.
+#: The cut still moves with the cost tilt; it is simply no longer a stationary
+#: point of the rate loss.
+CUT_KIND_CONTINUED: str = "continued"
+#: ``cut_fallback_kind`` when the fit is too degenerate to express a boundary at
+#: all (non-positive weights/variances, non-ordered means) and the rule returned
+#: the plain midpoint.  Distinct from :data:`CUT_KIND_CONTINUED` because the cut
+#: is then *constant* in the cost tilt - the failure mode issue #2896 removed
+#: everywhere it could be removed.
+CUT_KIND_DEGENERATE_MIDPOINT: str = "degenerate_midpoint"
+
+
+def _rate_cut(
     w_lo: float,
     mu_lo: float,
     var_lo: float,
@@ -249,39 +275,63 @@ def _rate_cut_in_interval(
     var_hi: float,
     *,
     lam: float,
-) -> tuple[float, int]:
-    """The rate-optimal cut, taken as a **sup** so it is monotone in *lam*.
+) -> tuple[float, str]:
+    """The rate-optimal cut: a **sup** over the inter-mean interval, continued
+    past the edges at the rule's own first-order slope so it is **strictly**
+    monotone in *lam* everywhere.
 
-    ``(cut, clamped)``.  Defines the cut as
+    ``(cut, kind)``, where *kind* is one of :data:`CUT_KIND_INTERIOR`,
+    :data:`CUT_KIND_CONTINUED` or :data:`CUT_KIND_DEGENERATE_MIDPOINT` - empty
+    exactly when an interior stationary point existed, so ``bool(kind)`` is the
+    "no interior stationary point" flag, and the non-empty values say *how* the
+    cut was produced instead.  The distinction matters to anything auditing the
+    rule: a continued cut still answers the Inclusion knob, a degenerate
+    midpoint does not (issue #2900).  Inside the interval the cut is
 
         ``sup { x in [mu_lo, mu_hi] : w_lo*N_lo(x) >= lam*w_hi*N_hi(x) }``
 
     - the highest score at which the Bad component still out-densities the Good
-    one under the cost tilt - with ``sup {} = mu_lo``.  Raising *lam* (pricing
-    misses higher, i.e. raising Inclusion) shrinks that set pointwise, so the
-    sup can only fall: the rule is **monotone in the cost ratio by
-    construction**, which is what the Inclusion knob's nesting contract needs.
+    one under the cost tilt.  Raising *lam* (pricing misses higher, i.e.
+    raising Inclusion) shrinks that set pointwise, so the sup can only fall:
+    the rule is **monotone in the cost ratio by construction**, which is what
+    the Inclusion knob's nesting contract needs.  Where the densities genuinely
+    cross inside the interval this returns exactly
+    :func:`_weighted_gaussian_crossing`'s root, so the shipped cut is the
+    stationary point of the rate loss wherever one exists.  Picking the
+    interval's *midpoint* when no root exists instead - the obvious-looking
+    fallback - is what broke monotonicity: with a Good component wider than the
+    Bad one the root enters and leaves the interval non-monotonically, and a
+    midpoint fallback let a *more* exclusive inclusion cut *lower* than a less
+    exclusive one.
 
-    Where the densities genuinely cross inside the interval this returns
-    exactly :func:`_weighted_gaussian_crossing`'s root, so the shipped cut is
-    the stationary point of the rate loss wherever one exists.  The sup framing
-    only decides the *degenerate* cases, and it decides them in the direction
-    the loss actually wants: Bad dominating all the way to ``mu_hi`` clamps to
-    ``mu_hi`` (``clamped=1``), Good dominating from ``mu_lo`` up clamps to
-    ``mu_lo``.  Picking the interval's *midpoint* in those cases instead - the
-    obvious-looking fallback - is what broke monotonicity: with a Good
-    component wider than the Bad one the root enters and leaves the interval
-    non-monotonically, and a midpoint fallback let a *more* exclusive inclusion
-    cut *lower* than a less exclusive one.
+    **Past the edges the cut keeps moving** (issue #2896).  Returning the bare
+    edge once the crossing runs off the interval - the previous behaviour -
+    made the cut *constant* in *lam* there, and that flat step propagated all
+    the way up: the composed ``mid_tilt`` quantile plateaued over whole bands
+    of the Inclusion slider, and the acquisition offset
+    (:data:`ACQUISITION_INCLUSION_OFFSET`), which lives entirely inside such a
+    band whenever the tilt saturates, silently collapsed to a no-op - Autopilot
+    degraded to sampling at the reporting line with nothing surfacing it.  So
+    when Bad still out-densities Good at ``mu_hi`` the cut continues *above*
+    the Good mean, and when Good owns the whole interval it continues *below*
+    the Bad mean, each by the log-cost excess beyond the edge times ``var/d``
+    (the mixture-weighted variance over the mean gap) - the exact slope of the
+    equal-variance crossing (:meth:`GmmFit1D.equal_var_offset`), so for
+    equal-variance fits the continuation extends the interior crossing line
+    *seamlessly*, and for unequal variances it is the rule's own first-order
+    slope.  The continuation is strictly decreasing in ``ln(lam)`` and stays on
+    the far side of its edge, so overall monotonicity is preserved; the only
+    plateau left downstream is the honest one, where the cut runs off the end
+    of the haystack's support and the empirical quantile pins at 0 or 1.
 
     Returns the midpoint (flagged) for a fit too degenerate to express a
     boundary at all: non-positive weights/variances or non-ordered means.
     """
     mid = (mu_lo + mu_hi) / 2.0
     if not (w_lo > 0.0 and w_hi > 0.0 and var_lo > 0.0 and var_hi > 0.0 and lam > 0.0):
-        return mid, 1
+        return mid, CUT_KIND_DEGENERATE_MIDPOINT
     if not (mu_hi > mu_lo):
-        return mid, 1
+        return mid, CUT_KIND_DEGENERATE_MIDPOINT
 
     # Same shifted quadratic as ``_weighted_gaussian_crossing`` (u = x - mu_lo,
     # interval (0, d)): ``g(u) > 0`` means the Bad component owns that score.
@@ -291,17 +341,28 @@ def _rate_cut_in_interval(
     b = -d / var_hi
     c = 0.5 * d * d / var_hi + offset
 
+    # Slope of the out-of-interval continuation: the equal-variance crossing
+    # moves by var/d per nat of log-cost, evaluated at the mixture-weighted
+    # variance (the same variance ``equal_var_offset`` uses).
+    slope = (w_lo * var_lo + w_hi * var_hi) / d
+
     # g(d), in closed form (the same value as ``a d^2 + b d + c``, without the
     # cancellation): Bad still ahead at the Good mean means the whole interval
-    # belongs to Bad, so the sup is the top edge.
-    if offset - 0.5 * d * d / var_lo >= 0.0:
-        return mu_hi, 1
+    # belongs to Bad.  The excess is the log-cost margin by which it is still
+    # ahead - 0 exactly when the crossing sits at ``mu_hi``, growing linearly
+    # as ``lam`` falls - so the continuation leaves the edge without a step.
+    excess = offset - 0.5 * d * d / var_lo
+    if excess >= 0.0:
+        return mu_hi + slope * excess, CUT_KIND_CONTINUED
 
     inside = [u for u in _quadratic_roots(a, b, c) if math.isfinite(u) and 0.0 <= u < d]
     if not inside:
-        # g < 0 across the whole interval: Good owns it from mu_lo up.
-        return mu_lo, 1
-    return mu_lo + max(inside), 0
+        # g < 0 across the whole interval: Good owns it from mu_lo up.  Here
+        # ``c = g(0) <= 0`` (a positive g(0) with g(d) < 0 forces a root
+        # inside), and ``-c`` is the log-cost margin by which Good is ahead at
+        # the Bad mean - the mirror-image continuation below ``mu_lo``.
+        return mu_lo - slope * max(0.0, -c), CUT_KIND_CONTINUED
+    return mu_lo + max(inside), CUT_KIND_INTERIOR
 
 
 @dataclass(frozen=True)
@@ -630,18 +691,27 @@ def anchored_gmm_fit(
     return None, f"gmm_failed:{provenance}"
 
 
-def gmm_cut_from_fit(fit: GmmFit1D, rule: str, fpr_weight: float = 1.0, fnr_weight: float = 1.0) -> tuple[float, int]:
-    """Apply a named cut *rule* to *fit*; ``(cut, no_interior_stationary_point)``.
+def gmm_cut_from_fit(fit: GmmFit1D, rule: str, fpr_weight: float = 1.0, fnr_weight: float = 1.0) -> tuple[float, str]:
+    """Apply a named cut *rule* to *fit*; ``(cut, kind)``.
+
+    *kind* is the ``cut_fallback_kind`` vocabulary above - empty exactly when
+    the rule found an interior stationary point, so ``bool(kind)`` is the "no
+    interior stationary point" flag and the value names *how* the cut was
+    produced otherwise.
 
     ``"mid"`` is the historical midpoint; ``"rate"`` is the rate-optimal
     crossing at the given cost weights (see :meth:`GmmFit1D.rate_crossing`).
 
-    ``"rate"`` goes through :func:`_rate_cut_in_interval`, which reads the cut
-    as a **sup** rather than a bare root so it stays monotone in the cost ratio
-    even on fits where the root enters and leaves the inter-mean interval; the
-    flag marks the degenerate cases it decided by clamping to an edge.  The
-    value is the stationary point wherever one exists, so this is the rule the
-    #2836 / #2852 measurements scored.
+    ``"rate"`` goes through :func:`_rate_cut`, which reads the cut as a
+    **sup** rather than a bare root so it stays monotone in the cost ratio
+    even on fits where the root enters and leaves the inter-mean interval, and
+    continues past the interval edges at the rule's first-order slope so it
+    never flattens (issue #2896); the kind marks the cases with no interior
+    stationary point.  The value is the stationary point wherever one exists,
+    so this is the rule the #2836 / #2852 measurements scored.
+
+    ``"mid"`` never reports a kind: the midpoint of two means is defined for
+    every fit, so it has no fallback branch to distinguish.
 
     ``"mid_tilt"`` (the shipped fold-level rule, :data:`FOLD_ANCHOR_CUT_RULE`)
     is deliberately *not* accepted here: it is defined in fold-quantile space
@@ -650,12 +720,12 @@ def gmm_cut_from_fit(fit: GmmFit1D, rule: str, fpr_weight: float = 1.0, fnr_weig
     form for this function to apply.
     """
     if rule == "mid":
-        return fit.midpoint(), 0
+        return fit.midpoint(), CUT_KIND_INTERIOR
     if rule == "rate":
         if not (fpr_weight > 0.0 and fnr_weight > 0.0 and fit.w_hi > 0.0):
-            return fit.midpoint(), 1
+            return fit.midpoint(), CUT_KIND_DEGENERATE_MIDPOINT
         lam = (fnr_weight / fpr_weight) * (fit.w_lo / fit.w_hi)
-        return _rate_cut_in_interval(fit.w_lo, fit.mu_lo, fit.var_lo, fit.w_hi, fit.mu_hi, fit.var_hi, lam=lam)
+        return _rate_cut(fit.w_lo, fit.mu_lo, fit.var_lo, fit.w_hi, fit.mu_hi, fit.var_hi, lam=lam)
     raise ValueError(f"unknown cut rule {rule!r}; expected 'mid' or 'rate'")
 
 
@@ -759,7 +829,7 @@ class FoldAnchoredCut:
         """Combined fold quantile of *rule*'s per-fold cuts at these cost weights."""
         quantiles = []
         for fit, src in zip(self.fits, self.fold_haystacks, strict=True):
-            cut, _fell_back = gmm_cut_from_fit(fit, rule, fpr_weight, fnr_weight)
+            cut, _kind = gmm_cut_from_fit(fit, rule, fpr_weight, fnr_weight)
             quantiles.append(float(np.searchsorted(src, cut, side="left")) / float(src.size))
         if self.combine == "qmean":
             return float(np.mean(quantiles))
@@ -809,12 +879,18 @@ class FoldAnchoredCut:
         (everything included at ``k`` stays included at ``k + 1``) - the
         contract that makes "cut off at Inclusion 1, verify up to Inclusion 4"
         well defined.  Every link in the chain is monotone: the per-fold cut in
-        the cost weights (:func:`gmm_cut_from_fit`, clamped at the interval
-        edges rather than abandoned so the exits stay monotone too), the
+        the cost weights (:func:`gmm_cut_from_fit`, continued past the
+        inter-mean interval at its first-order slope rather than clamped, so
+        the exits stay monotone *and strictly moving* - issue #2896), the
         empirical quantile of that cut in its fold's haystack, the mean/median
         across folds, the ``mid_tilt`` composition (a constant plus a
         monotone-in-inclusion shift), and realizing a quantile on the final
-        haystack.
+        haystack.  The only plateau in the chain is the honest boundary where
+        a cut runs off its haystack's support and the quantile pins at 0 or 1
+        - crucially, the acquisition offset
+        (:data:`ACQUISITION_INCLUSION_OFFSET`) therefore stays a real gap
+        across the slider instead of silently collapsing wherever the tilt
+        used to saturate.
         """
         if self.final_haystack.size == 0:
             return 0.5
@@ -1012,7 +1088,8 @@ def _calibration_cache_key(
     """Build a deterministic cache key for the calibration **fold orderings**.
 
     The orderings (per-fold held-out scores + labels) are a deterministic
-    function of these inputs (RNG seeded with 42 at every cached call site)
+    function of these inputs (the split RNG is seeded with
+    :data:`CALIBRATION_SPLIT_SEED` whether or not the caller supplies one)
     and are **inclusion-independent** - ``inclusion`` is deliberately *not* in
     the key, so an Inclusion change hits the cache and only re-runs the cheap
     conformal quantile rule.  The key encodes a hash of the raw training vectors (not
@@ -1071,7 +1148,13 @@ def calibration_folds(
     groups: list | None = None,
     score_rows_by_group: dict | None = None,
 ) -> CalibrationFolds:
-    """Train the K calibration folds, keeping their models (uncached)."""
+    """Train the K calibration folds, keeping their models (uncached).
+
+    Deterministic without a caller-supplied *rng*: the splits then come from a
+    fresh ``RandomState(CALIBRATION_SPLIT_SEED)``, matching
+    :func:`calibration_folds_cached`, so an uncached call (``det_ctx is None``)
+    and a cached one produce the same folds for the same labelset.
+    """
     models: list = []
     orderings, fallback = compute_fold_orderings(
         X_list,
@@ -1142,7 +1225,7 @@ def calibration_folds_cached(
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
         hidden_dim=hidden_dim,
-        rng=np.random.RandomState(42),
+        rng=np.random.RandomState(CALIBRATION_SPLIT_SEED),
         groups=groups,
         score_rows_by_group=score_rows_by_group,
     )
@@ -1383,6 +1466,7 @@ def _grouped_folds(
     calibrate_count: int,
     calibration_fraction: float,
     hidden_dim: int | None,
+    seconds_sink: list[float] | None = None,
 ) -> tuple[list[tuple[Any, list]], float | None, np.ndarray, dict, dict]:
     """Train the bag-aware calibration folds; return the trained fold models.
 
@@ -1393,12 +1477,15 @@ def _grouped_folds(
     ``(folds, fallback, X_np, rows_by_group, label_by_group)`` where *folds* is a
     list of ``(model, cal_groups)`` and *fallback* is a sentinel threshold when
     calibration is impossible (empty *folds* then).
+
+    *seconds_sink*, when given, receives each fold's split-and-fit wall clock in
+    fold order — the per-fold marginal cost of ``calibrate_count`` (issue #2897).
     """
     import torch  # noqa: PLC0415
 
     from vtscore.training.mlp import train_model  # noqa: PLC0415
 
-    _rng = rng if rng is not None else np.random
+    _rng = rng if rng is not None else np.random.RandomState(CALIBRATION_SPLIT_SEED)
     X_np = np.array(X_list)
     y_np = np.array(y_list)
     grp = list(groups)
@@ -1438,6 +1525,7 @@ def _grouped_folds(
     # ``np.array(list_of_tuples)`` would build a 2-D array and mangle them.
     folds: list[tuple[Any, list]] = []
     for _ in range(max(1, calibrate_count)):
+        t_fold = time.monotonic()
         pos_perm = _rng.permutation(len(pos_groups))
         neg_perm = _rng.permutation(len(neg_groups))
         train_groups = [pos_groups[i] for i in pos_perm[:n_train_pos]] + [neg_groups[i] for i in neg_perm[:n_train_neg]]
@@ -1449,6 +1537,8 @@ def _grouped_folds(
         fold_w = torch.tensor(_per_bag_fit_weights(y_np[train_idx], [grp[i] for i in train_idx]), dtype=torch.float32)
         model = train_model(X_train, y_train, input_dim, hidden_dim=hidden_dim, sample_weights=fold_w)
         folds.append((model, cal_groups))
+        if seconds_sink is not None:
+            seconds_sink.append(time.monotonic() - t_fold)
 
     return folds, None, X_np, rows_by_group, label_by_group
 
@@ -1464,6 +1554,7 @@ def _compute_fold_orderings_grouped(
     hidden_dim: int | None,
     score_rows_by_group: dict | None = None,
     model_sink: list | None = None,
+    seconds_sink: list[float] | None = None,
 ) -> tuple[list[tuple[list[float], list[float]]], float | None]:
     """Bag-aware variant of :func:`compute_fold_orderings`.
 
@@ -1477,7 +1568,7 @@ def _compute_fold_orderings_grouped(
     over - see :func:`compute_fold_orderings`.
     """
     folds, fallback, X_np, rows_by_group, label_by_group = _grouped_folds(
-        X_list, y_list, input_dim, groups, rng, calibrate_count, calibration_fraction, hidden_dim
+        X_list, y_list, input_dim, groups, rng, calibrate_count, calibration_fraction, hidden_dim, seconds_sink
     )
     if fallback is not None:
         return [], fallback
@@ -1506,6 +1597,7 @@ def compute_grouped_fold_node_scores(
     hidden_dim: int | None = None,
     score_rows_by_group: dict | None = None,
     model_sink: list | None = None,
+    seconds_sink: list[float] | None = None,
 ) -> tuple[list[tuple[list[np.ndarray], list[float]]], float | None]:
     """Bag-aware calibration folds, returning each held-out group's node scores.
 
@@ -1526,7 +1618,7 @@ def compute_grouped_fold_node_scores(
     share one score scale without a retrain.
     """
     folds, fallback, X_np, rows_by_group, label_by_group = _grouped_folds(
-        X_list, y_list, input_dim, groups, rng, calibrate_count, calibration_fraction, hidden_dim
+        X_list, y_list, input_dim, groups, rng, calibrate_count, calibration_fraction, hidden_dim, seconds_sink
     )
     if fallback is not None:
         return [], fallback
@@ -1552,6 +1644,7 @@ def compute_fold_orderings(
     groups: list | None = None,
     score_rows_by_group: dict | None = None,
     model_sink: list | None = None,
+    seconds_sink: list[float] | None = None,
 ) -> tuple[list[tuple[list[float], list[float]]], float | None]:
     """Train the K calibration folds and return their held-out orderings.
 
@@ -1594,7 +1687,18 @@ def compute_fold_orderings(
 
     *model_sink*, when given, receives each trained fold model in fold order
     (see :func:`compute_grouped_fold_node_scores`); production callers pass
-    nothing and the models stay fold-local as before.
+    nothing and the models stay fold-local as before.  *seconds_sink* likewise
+    receives each fold's wall clock, which is what makes the *cost* half of the
+    fold-count question (issue #2897) measurable without a second run.
+
+    The folds are **independent repeated splits**, not a partition: every fold
+    re-draws a stratified ``calibration_fraction`` holdout from the same labels,
+    so raising ``calibrate_count`` averages more draws at a *fixed* per-fold
+    calibration size rather than shrinking each holdout.  Two consequences the
+    fold-count study rests on: the per-fold work is flat in K (total cost is
+    linear in K), and the folds at ``calibrate_count=k`` are exactly the first
+    *k* folds at any larger count drawn from the same ``rng`` - the splits are
+    nested, so one run at Kmax yields every smaller K's calibration for free.
     """
     if groups is not None:
         return _compute_fold_orderings_grouped(
@@ -1608,12 +1712,13 @@ def compute_fold_orderings(
             hidden_dim=hidden_dim,
             score_rows_by_group=score_rows_by_group,
             model_sink=model_sink,
+            seconds_sink=seconds_sink,
         )
     n = len(X_list)
     if n < 4:
         return [], 0.5
 
-    _rng = rng if rng is not None else np.random
+    _rng = rng if rng is not None else np.random.RandomState(CALIBRATION_SPLIT_SEED)
     X_np = np.array(X_list)
     y_np = np.array(y_list)
 
@@ -1642,6 +1747,7 @@ def compute_fold_orderings(
 
     orderings: list[tuple[list[float], list[float]]] = []
     for _ in range(calibrate_count):
+        t_fold = time.monotonic()
         pos_perm = _rng.permutation(pos_idx)
         neg_perm = _rng.permutation(neg_idx)
         train_idx = np.concatenate([pos_perm[:n_train_pos], neg_perm[:n_train_neg]])
@@ -1666,6 +1772,8 @@ def compute_fold_orderings(
             # leak NaN into JSON responses.
             scores = sigmoid_to_finite_scores(model(X_cal))
         orderings.append((scores, y_np[cal_idx].tolist()))
+        if seconds_sink is not None:
+            seconds_sink.append(time.monotonic() - t_fold)
 
     return orderings, None
 
@@ -1736,8 +1844,10 @@ def calculate_cross_calibration_threshold(
             are inclusion-independent), so the same fold scores can be
             re-thresholded at any inclusion - see
             docs/plans/find-verification-workflow.md.
-        rng: Optional seeded RandomState for reproducible splits. Falls back
-            to the global ``np.random`` state when ``None``.
+        rng: Optional RandomState for the Train/Calibrate splits.  When
+            ``None`` a fresh ``RandomState(CALIBRATION_SPLIT_SEED)`` is used,
+            so the splits are reproducible and the global ``np.random`` state
+            is never read or advanced.
         calibrate_count: Number of random Train/Calibrate splits (default 2).
         calibration_fraction: Fraction of data used for calibration in each
             split (default 0.5).  For example, 0.2 means 80% Train / 20%

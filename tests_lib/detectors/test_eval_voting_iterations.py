@@ -13,7 +13,9 @@ import pytest
 from vtscore.eval.voting_iterations import (
     _good_training_vec,
     _inclusion_weights,
+    _labelset_error_costs,
     _split_media_ids,
+    _StepModel,
     run_voting_iterations_eval,
     simulate_voting_iterations,
 )
@@ -123,6 +125,66 @@ class TestSplitClipIds:
         sim2, test2 = _split_media_ids(medias, 0.5, rng2)
         assert sim1 == sim2
         assert test1 == test2
+
+
+class TestLabelsetErrorCosts:
+    """The Smart indicator's input: every recent model, one current labelset.
+
+    Mirrors ``labeling_progress._eval_cached_models``.  A frozen per-step cost
+    (the pre-#2923 behavior) confounds model improvement with labelset growth,
+    which biases the simulated user out of the Hard phase early.
+    """
+
+    @staticmethod
+    def _clips(scores):
+        """One 1-D media per ``{media_id: value}`` entry; value IS the embedding."""
+        return {cid: {"id": cid, "embeddings": {"emb": np.array([v], np.float32)}} for cid, v in scores.items()}
+
+    @staticmethod
+    def _model(bias):
+        """A ranker whose score is the embedding value plus *bias*."""
+        return _StepModel(
+            predict=lambda embs, b=bias: np.asarray(embs, dtype=np.float64).ravel() + b,
+            torch_model=None,
+            backend="test",
+            device="cpu",
+        )
+
+    def test_returns_one_cost_per_model_in_window_order(self):
+        clips = self._clips({1: 1.0, 2: 1.0, 3: 0.0, 4: 0.0})
+        good, bad = {1: None, 2: None}, {3: None, 4: None}
+        # bias 0: perfect at threshold 0.5.  bias -1: everything below the cut,
+        # so both positives are missed (fnr 1.0).  bias +1: everything above,
+        # so both negatives are false positives (fpr 1.0).
+        window = [(self._model(-1.0), 0.5), (self._model(0.0), 0.5), (self._model(1.0), 0.5)]
+        costs = _labelset_error_costs(window, good, bad, clips, 0)
+        assert costs == [1.0, 0.0, 1.0]
+
+    def test_inclusion_weights_the_two_error_kinds(self):
+        clips = self._clips({1: 1.0, 2: 1.0, 3: 0.0, 4: 0.0})
+        good, bad = {1: None, 2: None}, {3: None, 4: None}
+        # inclusion 2 => fnr weight 4, fpr weight 1.
+        window = [(self._model(-1.0), 0.5), (self._model(1.0), 0.5)]
+        assert _labelset_error_costs(window, good, bad, clips, 2) == [4.0, 1.0]
+
+    def test_old_models_are_re_scored_against_the_grown_labelset(self):
+        """The regression's whole point: a fixed model's cost must move."""
+        clips = self._clips({1: 1.0, 2: 1.0, 3: 0.0, 4: 0.0, 5: 0.6})
+        model = self._model(0.0)
+        window = [(model, 0.5)]
+        before = _labelset_error_costs(window, {1: None, 2: None}, {3: None, 4: None}, clips, 0)
+        # Media 5 is a freshly voted boundary negative this model gets wrong -
+        # exactly the item autopilot's Hard phase goes looking for.
+        after = _labelset_error_costs(window, {1: None, 2: None}, {3: None, 4: None, 5: None}, clips, 0)
+        assert before == [0.0]
+        assert after == [1 / 3]
+
+    def test_empty_without_models_or_without_both_classes(self):
+        clips = self._clips({1: 1.0, 3: 0.0})
+        window = [(self._model(0.0), 0.5)]
+        assert _labelset_error_costs([], {1: None}, {3: None}, clips, 0) == []
+        assert _labelset_error_costs(window, {}, {3: None}, clips, 0) == []
+        assert _labelset_error_costs(window, {1: None}, {}, clips, 0) == []
 
 
 # ------------------------------------------------------------------
@@ -344,9 +406,10 @@ class TestProductionCalibrationFidelity:
     per-seed simulation RNG or letting folds auto-size can't silently
     reintroduce a production mismatch.
 
-    The *head* itself is where the eval's MLP arm and production part ways:
-    production trains the linear head (#2790), while this arm keeps the MLP as a
-    sweep candidate, so the width asserted below is the arm's own auto-sizing.
+    The *head* is threaded the same way whichever arm runs: the default arm
+    trains production's linear head (#2790/#2916) and ``head="mlp"`` the legacy
+    auto-sized one, and in both cases the folds must take the final model's
+    width rather than sizing themselves from their own smaller split.
     """
 
     def _spy_calibration(self, monkeypatch):
@@ -370,18 +433,20 @@ class TestProductionCalibrationFidelity:
         monkeypatch.setattr(voting_iterations, "calibration_folds", spy)
         return captured
 
-    def test_folds_forced_to_full_data_hidden_dim(self, monkeypatch):
-        from vtscore.training.mlp import _auto_hidden_dim
+    @pytest.mark.parametrize("head", [None, "mlp"])
+    def test_folds_forced_to_full_data_hidden_dim(self, head, monkeypatch):
+        from vtscore.eval.voting_iterations import PRODUCTION_HEAD, _resolve_hidden_dim
 
         captured = self._spy_calibration(monkeypatch)
         medias = _make_separable_clips(n_per_cat=10)
-        simulate_voting_iterations(medias, "alpha", seed=42)
+        simulate_voting_iterations(medias, "alpha", seed=42, head=head)
 
         assert captured  # at least one calibrated step
         for c in captured:
             # The fold models must be sized from the full label count for the
-            # step, not auto-sized per fold (hidden_dim=None).
-            assert c["hidden_dim"] == _auto_hidden_dim(c["n"])
+            # step, not auto-sized per fold (hidden_dim=None) - on the default
+            # (production) arm and on the legacy MLP arm alike.
+            assert c["hidden_dim"] == _resolve_hidden_dim(head or PRODUCTION_HEAD, c["n"])
 
     def test_folds_calibrate_with_fixed_random_state_42(self, monkeypatch):
         captured = self._spy_calibration(monkeypatch)
@@ -517,14 +582,12 @@ def _unit(v):
 
 
 def _patch_media(media_id, positive, *, category, with_box=True):
-    """A synthetic patch-embedder media (``patch_grid`` + ``patch_regions``).
+    """A synthetic patch-embedder media (a raw ``patch_grid``).
 
     Positive media have grid cells pointing along ``+e0`` and a ground-truth
     box; negatives point along ``-e0`` and carry no box.  Separable so the MLP
     trains cleanly without flakiness.
     """
-    from vtscore.media.patch_embed import RegionVector
-
     rng = np.random.default_rng(media_id)
     sign = 1.0 if positive else -1.0
     grid = np.zeros((_GRID, _GRID, _PATCH_DIM), dtype=np.float32)
@@ -535,19 +598,12 @@ def _patch_media(media_id, positive, *, category, with_box=True):
             grid[r, c] = _unit(base + rng.standard_normal(_PATCH_DIM).astype(np.float32) * 0.05)
     img_vec = _unit(grid.reshape(-1, _PATCH_DIM).mean(axis=0))
 
-    regions = [RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=img_vec)]
-    for r in range(_GRID):
-        for c in range(_GRID):
-            box = (c / _GRID, r / _GRID, (c + 1) / _GRID, (r + 1) / _GRID)
-            regions.append(RegionVector(box=box, vec=grid[r, c]))
-
     media = {
         "id": media_id,
         "media_type": "image",
         "embedder": "dinov3_patch",
         "embeddings": {"dinov3_patch": img_vec},
         "patch_grid": grid,
-        "patch_regions": regions,
         "category": category,
     }
     if positive and with_box:
@@ -577,19 +633,20 @@ class TestGoodTrainingVec:
         vec = _good_training_vec(media, "apple", region_voting=False)
         np.testing.assert_allclose(vec, media_embedding(media))
 
-    def test_snaps_box_to_region_when_region_voting_on(self):
-        """With a ``patch_regions`` tree present, the simulated region vote
-        snaps the ground-truth box to its nearest region node (the same path
-        the live vote flow takes), not a fresh uniform grid pool."""
-        from vtscore.media.patch_embed import snap_box_to_region
+    def test_takes_the_nearest_patch_when_region_voting_on(self):
+        """With a ``patch_grid`` present, the simulated region vote trains on the
+        raw patch nearest the ground-truth box - the same path the live vote
+        flow takes, not a fresh uniform grid pool."""
+        from vtscore.media.patch_embed import nearest_patch_to_box
 
         media = _patch_media(1, positive=True, category="apple")
         vec = _good_training_vec(media, "apple", region_voting=True)
-        expected = snap_box_to_region(media["patch_regions"], (0.0, 0.0, 2 / 3, 1.0))
-        assert expected is not None
+        expected = nearest_patch_to_box(np.asarray(media["patch_grid"]), (0.0, 0.0, 2 / 3, 1.0))
         np.testing.assert_allclose(vec, expected)
-        # The snapped vector is one of the tree's actual node vectors.
-        assert any(np.allclose(vec, r.vec) for r in media["patch_regions"])
+        # The chosen vector is one of the grid's actual patch vectors, i.e. a
+        # row the scorer max-pools.
+        flat = np.asarray(media["patch_grid"], dtype=np.float32).reshape(-1, _PATCH_DIM)
+        assert any(np.allclose(vec, row) for row in flat)
 
     def test_falls_back_without_patch_grid(self):
         from vtscore.embedding.media_vectors import media_embedding
@@ -622,7 +679,7 @@ class TestRegionVotingSimulate:
 
     def test_baseline_on_patch_data_also_scores_region_aware(self):
         # region_voting=False still works on a patch dataset: Good votes train
-        # whole-image, but scoring max-pools over regions (the live inference).
+        # whole-image, but scoring max-pools over the patch rows (live inference).
         medias = _make_patch_clips(n_per_cat=10)
         rows = simulate_voting_iterations(medias, target_category="apple", seed=0, region_voting=False)
         assert rows

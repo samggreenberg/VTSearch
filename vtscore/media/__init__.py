@@ -295,6 +295,32 @@ def all_embedders_dict() -> list[dict]:
     return [e.to_dict() for e in _embedder_registry.values()]
 
 
+def embedder_for_medias(media_dict: dict) -> "MediaEmbedder | None":
+    """Return the appropriate embedder for the given medias, or ``None``.
+
+    Looks up the ``"embedder"`` name stored on the first media entry; falls
+    back to the default embedder for the detected ``"type"``.
+
+    Lives here (rather than in the routes layer that first grew it) so the
+    dataset-load pipeline can resolve an embedder without importing
+    ``vtsearch.routes`` - which would drag Flask into a library code path.
+    """
+    if not media_dict:
+        return None
+    first = next(iter(media_dict.values()))
+    embedder_name = first.get("embedder", "")
+    media_type = first.get("media_type", "audio")
+
+    if embedder_name:
+        try:
+            return get_embedder(embedder_name)
+        except KeyError:
+            pass
+
+    avail = embedders_for_type(media_type)
+    return avail[0] if avail else None
+
+
 # ------------------------------------------------------------------
 # Auto-discover media types, embedders, and clippers
 # ------------------------------------------------------------------
@@ -411,11 +437,17 @@ def set_progress_callback(callback: "ProgressCallback") -> None:
 
     Call this once at application startup to wire media types and embedders
     into whatever progress reporting mechanism the host application uses.
+
+    Embedders go through :meth:`~vtscore.media.embedder.MediaEmbedder.set_default_progress_callback`
+    rather than a plain ``_on_progress`` assignment: that attribute is
+    thread-scoped (so concurrent dataset loads can't trample each other's
+    tracker), whereas this startup wiring is a process-wide default every
+    thread must see.
     """
     for mt in _registry.values():
         mt._on_progress = callback
     for emb in _embedder_registry.values():
-        emb._on_progress = callback
+        emb.set_default_progress_callback(callback)
 
 
 __all__ = [

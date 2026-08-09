@@ -436,23 +436,52 @@ def _read_value(key: str) -> Any:
 
     Routes to the server tier or the current user's tier based on *key*.
     The caller is responsible for casting/coercion.
+
+    Takes ``_settings_lock`` itself, and *only* around the cache-dict
+    reads. The ``_ensure_*_loaded`` calls run outside it because they take
+    the cross-process ``file_lock`` on a cold cache (and the per-user sync
+    RLock plus, via ``_apply_settings``'s setters, ``file_lock`` again on a
+    due sync), and the canonical order is file_lock → settings_lock.
+    Callers must therefore **not** hold ``_settings_lock`` when calling
+    this - doing so inverts the order and deadlocks against any concurrent
+    writer (see ``ensure_server_loaded``'s docstring). Keeping the lock out
+    of the ensure calls also means a slow ``source.load()`` no longer
+    stalls every other settings read.
+
+    The caches are re-read from the store *after* the ensure calls rather
+    than using their return values, because a concurrent writer replaces
+    the cache dict wholesale (``mutate_*_locked``) - the returned dict can
+    be the pre-write one.
     """
     if key in _SERVER_KEYS:
-        return _ensure_server_loaded().get(key, _server_defaults()[key])
+        _ensure_server_loaded()
+        with _settings_lock:
+            server_cache = _store.server_cache or {}
+            if key in server_cache:
+                return server_cache[key]
+        return _server_defaults()[key]
     from vtsearch.auth import get_current_user
 
     username = get_current_user()
-    user_cache = _ensure_user_loaded(username)
-    if key in user_cache:
-        return user_cache[key]
+    _ensure_user_loaded(username)
     # Default-user read-through: the single-user GUI and the CLI ``--settings``
     # flat file carry these Auto-Find keys in the server settings file. Honor
     # them for the built-in "default" user when not set in its own file, so
     # those workflows keep working without making the setting truly server-wide.
-    if username == "default" and key in _DEFAULT_USER_FALLBACK_KEYS:
-        server_cache = _ensure_server_loaded()
-        if key in server_cache:
-            return server_cache[key]
+    # ``_ensure_user_loaded`` already loaded the server tier, so this is a
+    # cache hit - it stays outside the lock anyway so the cold path can never
+    # invert the order.
+    fallback_to_server = username == "default" and key in _DEFAULT_USER_FALLBACK_KEYS
+    if fallback_to_server:
+        _ensure_server_loaded()
+    with _settings_lock:
+        user_cache = _user_caches.get(username, {})
+        if key in user_cache:
+            return user_cache[key]
+        if fallback_to_server:
+            server_cache = _store.server_cache or {}
+            if key in server_cache:
+                return server_cache[key]
     return _user_defaults().get(key)
 
 
@@ -657,8 +686,11 @@ def _validate_field(model: type, key: str, value: Any) -> Any:
 
 def _make_scalar_accessors(model: type, key: str):
     def getter():
-        with _settings_lock:
-            raw = _read_value(key)
+        # ``_read_value`` takes ``_settings_lock`` itself, around the cache
+        # read only. Wrapping the call in the lock here would put the
+        # ensure-loaded file/sync locks underneath it and invert the
+        # canonical file_lock → settings_lock order.
+        raw = _read_value(key)
         try:
             return _validate_field(model, key, raw)
         except ValueError:
@@ -666,18 +698,22 @@ def _make_scalar_accessors(model: type, key: str):
             # never see partially-typed garbage.
             return model.model_fields[key].get_default(call_default_factory=True)
 
+    def validate(value):
+        return _validate_field(model, key, value)
+
     def setter(value):
         # Lock acquisition is delegated to ``_write_value`` →
         # ``_mutate_*_locked``, which takes ``_file_lock`` first and
         # then ``_settings_lock``. Acquiring ``_settings_lock`` here
         # would invert the order and risk an AB-BA deadlock with paths
         # that enter ``_mutate_*_locked`` directly.
-        coerced = _validate_field(model, key, value)
+        coerced = validate(value)
         _write_value(key, coerced)
 
     getter.__name__ = f"get_{key}"
     setter.__name__ = f"set_{key}"
-    return getter, setter
+    validate.__name__ = f"validate_{key}"
+    return getter, setter, validate
 
 
 # Generate accessors for every field in both models. The ``autofind_detectors``
@@ -697,11 +733,12 @@ for _model in (ServerSettings, UserSettings):
     for _field_name in _model.model_fields:
         if _field_name in _SKIP_AUTOGEN or _field_name in _PER_SIDE_KEYS:
             continue
-        _g, _s = _make_scalar_accessors(_model, _field_name)
+        _g, _s, _v = _make_scalar_accessors(_model, _field_name)
         globals()[f"get_{_field_name}"] = _g
         globals()[f"set_{_field_name}"] = _s
+        globals()[f"validate_{_field_name}"] = _v
 
-del _model, _field_name, _g, _s
+del _model, _field_name, _g, _s, _v
 
 
 # -------------------------------------------------------------------
@@ -773,8 +810,9 @@ def _make_per_side_setting(  # noqa: C901
     def _get_dict(key: str) -> dict[str, Any]:
         side = key[len(key_base) + 1 :]
         default_val = defaults.get(side, next(iter(defaults.values())))
-        with _settings_lock:
-            raw = _read_value(key)
+        # Unlocked: ``_read_value`` locks its own cache read (see
+        # ``_make_scalar_accessors.getter``).
+        raw = _read_value(key)
         types = _valid_media_types()
         if not isinstance(raw, dict):
             return {tid: default_val for tid in types}
@@ -795,7 +833,7 @@ def _make_per_side_setting(  # noqa: C901
             result[tid] = v
         return result
 
-    def _set_dict(key: str, value) -> None:
+    def _validate_dict(key: str, value) -> dict[str, Any]:
         valid_types = _valid_media_types()
 
         # Scalar expansion: "grid" → {"audio": "grid", "image": "grid", ...}
@@ -813,10 +851,12 @@ def _make_per_side_setting(  # noqa: C901
             if tid not in valid_types:
                 raise ValueError(f"Invalid media type: {tid!r}")
             coerced[tid] = _validate_entry(v, key, tid)
+        return coerced
 
+    def _set_dict(key: str, value) -> None:
         # Locks are taken inside ``_write_value`` in the canonical
         # order (file_lock → settings_lock); see ``_make_scalar_accessors.setter``.
-        _write_value(key, coerced)
+        _write_value(key, _validate_dict(key, value))
 
     def get_left():
         return _get_dict(f"{key_base}_left")
@@ -830,33 +870,80 @@ def _make_per_side_setting(  # noqa: C901
     def set_right(value):
         _set_dict(f"{key_base}_right", value)
 
+    def validate_left(value):
+        return _validate_dict(f"{key_base}_left", value)
+
+    def validate_right(value):
+        return _validate_dict(f"{key_base}_right", value)
+
     get_left.__name__ = f"get_{key_base}_left"
     get_right.__name__ = f"get_{key_base}_right"
     set_left.__name__ = f"set_{key_base}_left"
     set_right.__name__ = f"set_{key_base}_right"
-    return get_left, get_right, set_left, set_right
+    validate_left.__name__ = f"validate_{key_base}_left"
+    validate_right.__name__ = f"validate_{key_base}_right"
+    return get_left, get_right, set_left, set_right, validate_left, validate_right
 
 
-get_grid_icon_size_left, get_grid_icon_size_right, set_grid_icon_size_left, set_grid_icon_size_right = (
-    _make_per_side_setting(
-        "grid_icon_size",
-        {"left": _GRID_ICON_SIZE_DEFAULT, "right": _GRID_ICON_SIZE_DEFAULT},
-        valid_values=VALID_GRID_ICON_SIZES,
-        normalize=str.upper,
-    )
+(
+    get_grid_icon_size_left,
+    get_grid_icon_size_right,
+    set_grid_icon_size_left,
+    set_grid_icon_size_right,
+    validate_grid_icon_size_left,
+    validate_grid_icon_size_right,
+) = _make_per_side_setting(
+    "grid_icon_size",
+    {"left": _GRID_ICON_SIZE_DEFAULT, "right": _GRID_ICON_SIZE_DEFAULT},
+    valid_values=VALID_GRID_ICON_SIZES,
+    normalize=str.upper,
 )
 
-get_focus_mode_left, get_focus_mode_right, set_focus_mode_left, set_focus_mode_right = _make_per_side_setting(
+(
+    get_focus_mode_left,
+    get_focus_mode_right,
+    set_focus_mode_left,
+    set_focus_mode_right,
+    validate_focus_mode_left,
+    validate_focus_mode_right,
+) = _make_per_side_setting(
     "focus_mode",
     _FOCUS_MODE_DEFAULTS,
     valid_values=VALID_FOCUS_MODES,
 )
 
-get_panel_pct_left, get_panel_pct_right, set_panel_pct_left, set_panel_pct_right = _make_per_side_setting(
+(
+    get_panel_pct_left,
+    get_panel_pct_right,
+    set_panel_pct_left,
+    set_panel_pct_right,
+    validate_panel_pct_left,
+    validate_panel_pct_right,
+) = _make_per_side_setting(
     "panel_pct",
     _PANEL_PX_DEFAULTS,
     value_type="int",
 )
+
+
+def validate_setting(key: str, value: Any) -> Any:
+    """Return the value ``set_{key}`` would persist, **without** writing it.
+
+    Runs exactly the coercion ``set_{key}`` runs before it touches the store
+    -- the per-field pydantic adapter for a scalar setting, the per-media-type
+    entry check for a per-side one -- and raises the same
+    :class:`ValueError` / :class:`TypeError` on bad input.
+
+    ``PUT /api/settings`` uses this to validate a whole multi-key body up
+    front, so a bad key can no longer 400 the request *after* earlier keys
+    in the same body have already been committed. Keys with no dedicated
+    validator (the directory paths, which are validated at the route layer
+    against the file-access base dir) pass through unchanged.
+    """
+    validator = globals().get(f"validate_{key}")
+    if validator is None:
+        return value
+    return validator(value)
 
 
 def get_last_embedder_for_media_type(media_type: str) -> str:
@@ -1152,10 +1239,14 @@ def get_autofind_detectors() -> list[str]:
     return list(raw) if isinstance(raw, list) else []
 
 
+def validate_autofind_detectors(value: list[str]) -> list[str]:
+    """Return the deduped Auto-Find detector list, without persisting it."""
+    return list(dict.fromkeys(value))  # dedupe, preserve order
+
+
 def set_autofind_detectors(value: list[str]) -> None:
     """Set and persist the current user's full Auto-Find detector list."""
-    deduped = list(dict.fromkeys(value))  # dedupe, preserve order
-    _write_value("autofind_detectors", deduped)
+    _write_value("autofind_detectors", validate_autofind_detectors(value))
 
 
 def add_autofind_detector(name: str) -> None:
@@ -1342,9 +1433,15 @@ def filter_semantic_only_embedder_dicts(embedder_dicts: Iterable[dict[str, Any]]
 
 
 def _get_dir(key: str) -> Path:
-    """Return a server-tier directory path setting as a :class:`~pathlib.Path`."""
+    """Return a server-tier directory path setting as a :class:`~pathlib.Path`.
+
+    ``_ensure_server_loaded`` runs outside ``_settings_lock`` (it takes the
+    server ``file_lock`` on a cold cache); only the cache read is locked.
+    """
+    _ensure_server_loaded()
     with _settings_lock:
-        raw = _ensure_server_loaded().get(key, _server_defaults()[key])
+        server_cache = _store.server_cache or {}
+        raw = server_cache.get(key, _server_defaults()[key])
     return Path(raw)
 
 

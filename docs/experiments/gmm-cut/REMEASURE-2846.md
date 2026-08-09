@@ -197,7 +197,10 @@ numbers excluded the ~14 % of fits #2836 discarded. Those fits are now kept and
 "cut the Bad tail at α ≈ 0.16" is still a coherent one-constant rule that needs
 no crossing at all — which is now the only part of the EVT work with a future,
 given that the crossing rules do not clear the plain Gaussian `priorfree`, let
-alone production.
+alone production. Tracked as #2881 — nobody has measured it *as a rule*;
+`oracle_lo_sf_evt` is recorded only diagnostically, at the oracle cut. *(The rule
+and its α sweep now exist, and the run is pre-registered in `PREREG-2881.md` —
+including the prediction that it lands inside the noise and closes this line.)*
 
 > A reading trap in this run's `summary_cut.json`: `decisions.tail_alpha_stable:
 > false` refers to the **Gaussian** row (`analyze_cut.py` keyed it off
@@ -237,7 +240,12 @@ run rules out is one particular way of trying to claim it.
   0 failures, 0 zero-byte outputs; nothing was dropped from the analysis.
 - At inclusion 0 the cost weights are (1, 1), so `rate` and `priorfree` are the
   **same rule** here — every `*_rate` row in the tables above is identical to its
-  `*_priorfree` sibling by construction, not by coincidence.
+  `*_priorfree` sibling by construction, not by coincidence. This is also why
+  the `_SAFE_GMM_VARIANTS` midpoint substitution (#2900), which diverges from
+  the shipped `rate` rule's continuation past the component mean, cannot have
+  moved any number here: these `*_rate` rows are `priorfree` rows, and
+  `priorfree` has no shipped counterpart. It would bite a run at non-zero
+  Inclusion, where `cut_fallback_kind` now separates the substituted steps.
 - Every contrast is within-step, so none of it sees acquisition feedback.
 - **The one result that could flip with more data** is finding 2's `priorfree`
   conditional effect: it is genuine (p = 8e−4 pooled) but it fires on 5 % of

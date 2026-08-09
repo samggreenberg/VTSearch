@@ -14,20 +14,18 @@ import logging
 import re
 import threading
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from vtscore.state.current_user import (
+    get_current_user as get_current_user,
+    get_thread_user as get_thread_user,
+    register_request_user_resolver,
+    set_thread_user as set_thread_user,
+    thread_user as thread_user,
+)
 
-# Thread-local fallback used when no Flask request context is available.
-# Background threads spawned by request handlers should use the
-# :func:`thread_user` context manager to propagate the user that triggered
-# them (it snapshots and restores the prior value automatically); tests
-# can use the bare :func:`set_thread_user` setter to pin or clear a user
-# without a request context.
-_thread_local = threading.local()
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -122,6 +120,38 @@ class DefaultLoginProvider(LoginProvider):
 
 
 # ---------------------------------------------------------------------------
+# Username validation
+# ---------------------------------------------------------------------------
+
+
+# Usernames are used as data-directory names (data/<user>/...) so they must
+# not contain path separators or traversal segments.  Note that the character
+# class alone is not sufficient: it admits "." and "..", which *are* traversal
+# segments, so :func:`is_safe_username` rejects those explicitly.
+_VALID_USERNAME = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def is_safe_username(username: Any) -> bool:
+    """Return ``True`` if *username* is safe to use as a path component.
+
+    A username reaches the filesystem in two places, so a bad one is not
+    merely a mislabelled request:
+
+    * ``get_user_data_dir()`` builds ``DATA_DIR / username`` for per-user
+      settings, which are written with ``mkdir(parents=True)``.
+    * The same directory is the confinement root handed to
+      :func:`~vtscore.security.path_validation.validate_server_filepath`,
+      which compares against ``base_dir.resolve()`` — so ``..`` segments in
+      the root are *collapsed* rather than rejected, silently widening the
+      sandbox for every server-file importer and exporter.
+
+    Providers must therefore validate any username they did not construct
+    themselves, whatever their authentication strength.
+    """
+    return isinstance(username, str) and bool(_VALID_USERNAME.match(username)) and username.strip(".") != ""
+
+
+# ---------------------------------------------------------------------------
 # TrivialLoginProvider - cookie-based, no password
 # ---------------------------------------------------------------------------
 
@@ -133,6 +163,14 @@ class TrivialLoginProvider(LoginProvider):
     ``POST /api/auth/login``.  The server stores the name in a
     signed Flask session cookie.  Completely insecure; useful only
     for testing multi-user features locally.
+
+    "Insecure" here means **no isolation between users**: anyone may claim
+    any username, and impersonating another user is a feature, not a bug.
+    It does *not* mean the username escapes ``DATA_DIR``.  The cookie is
+    only integrity-protected by ``app.secret_key``, so a client that knows
+    the key can put an arbitrary string in it — hence :meth:`get_user`
+    re-validates on the way out, even though the login route already
+    validates on the way in.  See :func:`is_safe_username`.
     """
 
     name = "trivial"
@@ -143,17 +181,29 @@ class TrivialLoginProvider(LoginProvider):
         try:
             from flask import session
 
-            return session.get(self._COOKIE_KEY, "anonymous")
+            username = session.get(self._COOKIE_KEY, "anonymous")
         except RuntimeError:
             return "anonymous"
+        if not is_safe_username(username):
+            logger.warning(
+                "TrivialLoginProvider: ignoring unsafe username %r in session cookie; treating request as anonymous",
+                username,
+            )
+            return "anonymous"
+        return username
 
     def is_authenticated(self, request: Any) -> bool:
         try:
             from flask import session
 
-            return self._COOKIE_KEY in session
+            if self._COOKIE_KEY not in session:
+                return False
         except RuntimeError:
             return False
+        # A cookie carrying an unsafe name resolves to "anonymous" above, so
+        # report it as unauthenticated rather than letting ``status_dict``
+        # claim an authenticated session for a user we refused to honour.
+        return is_safe_username(session.get(self._COOKIE_KEY))
 
     def login_required(self) -> bool:
         return True
@@ -165,11 +215,6 @@ class TrivialLoginProvider(LoginProvider):
 # ---------------------------------------------------------------------------
 # ApiKeyLoginProvider - bearer-token, for headless integrations
 # ---------------------------------------------------------------------------
-
-
-# Usernames are used as data-directory names (data/<user>/...) so they must
-# not contain path separators or traversal segments.
-_VALID_USERNAME = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 class ApiKeyLoginProvider(LoginProvider):
@@ -258,9 +303,10 @@ class ApiKeyLoginProvider(LoginProvider):
                     username,
                 )
                 continue
-            if not _VALID_USERNAME.match(username):
+            if not is_safe_username(username):
                 logger.error(
-                    "ApiKeyLoginProvider: skipping key for invalid username %r in %s (must match [A-Za-z0-9._-]+)",
+                    "ApiKeyLoginProvider: skipping key for invalid username %r in %s "
+                    "(must match [A-Za-z0-9._-]+ and not be a '.'/'..' path segment)",
                     username,
                     self._keys_file,
                 )
@@ -326,73 +372,38 @@ def get_login_provider() -> LoginProvider:
     return _login_provider
 
 
-def get_current_user() -> str:
-    """Return the username for the current request.
+# ---------------------------------------------------------------------------
+# Current-user resolution
+# ---------------------------------------------------------------------------
+# The mechanics (thread-local storage, the ``"default"`` fallback) live in
+# ``vtscore.state.current_user`` so library code can resolve a user without
+# importing Flask - see ``../../vtscore/docs/architecture.md`` Phase 2.  All
+# this module adds is the Flask half: read ``g.user`` when a request is in
+# flight.  Registering the resolver at *import* time (rather than from the
+# shim's startup wiring) means any process that has the app tier loaded at
+# all resolves request users correctly, including CLI and test paths that
+# never call ``register_flask_context_resolvers()``.
 
-    Resolution order:
 
-    1. ``g.user`` (set by the ``before_request`` middleware in ``app.py``).
-    2. Thread-local fallback (scoped by the :func:`thread_user` context
-       manager; background threads spawned from a request handler use
-       this).
-    3. ``"default"`` (CLI, tests, threads with no explicit user).
+def _flask_request_user() -> str | None:
+    """Return ``g.user`` when inside a Flask request, else ``None``.
+
+    ``ImportError`` is part of the contract, not defensive padding: the
+    ``vtscore-clean`` gate makes ``flask`` unimportable to prove the
+    library tier runs without it, and this resolver is reachable from
+    library code through :func:`vtscore.state.current_user.get_current_user`.
     """
     try:
         from flask import g
 
         return g.user  # type: ignore[attr-defined]
-    except (AttributeError, RuntimeError):
-        # No Flask request context (CLI mode, background thread, etc.)
-        pass
-    tl_user = getattr(_thread_local, "user", None)
-    if tl_user:
-        return tl_user
-    return "default"
+    except (AttributeError, RuntimeError, ImportError):
+        # No Flask request context (CLI mode, background thread, etc.),
+        # or no Flask at all (library-tier test run).
+        return None
 
 
-def set_thread_user(username: str | None) -> None:
-    """Set the thread-local user for the current thread.
-
-    Prefer :func:`thread_user` (a context manager) for new code, as it saves
-    and restores the prior value automatically, removing the need for a
-    manual ``try/finally`` discipline that is easy to get wrong (and would
-    leak across requests if these threads were ever pooled).
-
-    Pass ``None`` to clear.
-    """
-    _thread_local.user = username
-
-
-def get_thread_user() -> str | None:
-    """Return the thread-local user, or ``None`` if unset."""
-    return getattr(_thread_local, "user", None)
-
-
-@contextmanager
-def thread_user(username: str | None) -> Iterator[None]:
-    """Scope the thread-local user to *username* for the ``with``-block.
-
-    On entry, snapshots the prior thread-local user (if any) and sets it
-    to *username*.  On exit, restores the snapshot, so nested scopes
-    compose correctly and a pooled / reused thread cannot leak identity
-    across jobs even if the inner body raises.
-
-    Use this from background threads (or anywhere outside a Flask request
-    context) that need :func:`get_current_user` to resolve to a specific
-    user::
-
-        request_user = get_current_user()
-
-        def task():
-            with thread_user(request_user):
-                ...  # per-user settings writes resolve correctly here
-    """
-    prev = getattr(_thread_local, "user", None)
-    _thread_local.user = username
-    try:
-        yield
-    finally:
-        _thread_local.user = prev
+register_request_user_resolver(_flask_request_user)
 
 
 def get_user_data_dir(username: str | None = None) -> Path:

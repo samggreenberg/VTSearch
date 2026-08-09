@@ -177,6 +177,49 @@ class _FrozenList(list):  # type: ignore[type-arg]
         raise _frozen_mutation_error(self._kind)
 
 
+def _iter_slots(cls: type) -> Iterator[str]:
+    """Yield every ``__slots__`` name declared anywhere in *cls*'s MRO, once."""
+    seen: set[str] = set()
+    for klass in cls.__mro__:
+        for name in getattr(klass, "__slots__", ()):
+            if name not in seen:
+                seen.add(name)
+                yield name
+
+
+def _freeze_into(sentinel: Any, template: Any, kind: str) -> None:
+    """Copy every slot of *template* onto *sentinel*, freezing its containers.
+
+    The request-missing sentinels are documented to read as *empty*
+    contexts, so they must carry the full slot set of the class they
+    subclass - a subclass with ``__slots__ = ()`` and no ``__getattr__``
+    turns any missed slot into an ``AttributeError`` (a 500 on the exact
+    dropped-header path the sentinel exists to serve).  Hand-maintaining
+    that list drifted twice; instead we build a fresh real context and copy
+    it across, so a newly added slot can never be missed (issue #2933).
+
+    Every ``dict`` / ``list`` value is replaced by a :class:`_FrozenDict` /
+    :class:`_FrozenList` so container mutations raise
+    :class:`RequestMissingContextError` instead of silently landing on the
+    sentinel.  Scalar / ``None`` slots are copied verbatim; the whole
+    sentinel refuses attribute assignment anyway (``__setattr__``), so a
+    write to one of those raises too.
+    """
+    for name in _iter_slots(type(template)):
+        try:
+            value = getattr(template, name)
+        except AttributeError:
+            # A slot the class declares but never initialises: leave it
+            # unset here too, so the sentinel reads exactly like a real
+            # freshly-constructed context.
+            continue
+        if isinstance(value, dict):
+            value = _FrozenDict(kind)
+        elif isinstance(value, list):
+            value = _FrozenList(kind)
+        object.__setattr__(sentinel, name, value)
+
+
 # ---------------------------------------------------------------------------
 # Flask-request predicate hook
 # ---------------------------------------------------------------------------
@@ -749,19 +792,20 @@ class DetectorContext:
         "label_local_features",  # str → StructuralFeatures
         # Region-flooded negatives for the labelset's Bad elements on patch
         # datasets: str → list[np.ndarray], keyed by stable_element_id, holding
-        # the element's CLS + HAC-leaf vectors so a saved detector re-sorted
-        # cross-dataset floods the same leaf negatives the live vote path does.
+        # the element's image-level vector + every raw patch so a saved detector
+        # re-sorted cross-dataset floods the same rows the live vote path does.
         # In-memory only, re-derived from origins, never persisted; cleared on
         # embedder switch alongside ``label_embeddings``.
         "label_negative_regions",
-        # Full region-node stacks for the labelset's elements on patch datasets:
-        # str → list[np.ndarray], keyed by stable_element_id, holding *every*
-        # ``patch_regions`` vector (CLS + HAC internals + leaves) - the rows the
-        # scorer max-pools that element's media over.  Lets threshold
-        # calibration collapse a Good bag and a Bad bag the same way inference
-        # collapses any image, instead of comparing a max-over-1 against a
-        # max-over-13.  In-memory only, re-derived from origins, never
-        # persisted; cleared on embedder switch alongside ``label_embeddings``.
+        # Full score-row stacks for the labelset's elements on patch datasets:
+        # str → list[np.ndarray], keyed by stable_element_id, holding the
+        # image-level vector + every raw patch - the rows the scorer max-pools
+        # that element's media over (identical to the flood above under
+        # MaxPatch).  Lets threshold calibration collapse a Good bag and a Bad
+        # bag the same way inference collapses any image, instead of comparing
+        # a max-over-1 against a max-over-197.  In-memory only, re-derived from
+        # origins, never persisted; cleared on embedder switch alongside
+        # ``label_embeddings``.
         "label_score_regions",
         "model",  # nn.Sequential | None (current trained MLP)
         # Structural (SIFT/VLAD) detectors carry a *second* learned object next
@@ -918,34 +962,16 @@ class _RequestMissingDatasetContext(DatasetContext):
     __slots__ = ()
 
     def __init__(self) -> None:
-        # Use object.__setattr__ to bypass our own write guard while
-        # initialising the slot values.
-        object.__setattr__(self, "dataset_id", "__request_missing__")
-        # ``medias`` is a property on the base class; write its backing slot
-        # directly with a frozen dict so every mutation raises.  The revision
+        # Copy every slot from a fresh, real ``DatasetContext`` (containers
+        # frozen on the way in) rather than hand-listing them, so a slot added
+        # to ``DatasetContext`` can never go missing here.  ``medias`` is a
+        # property on the base class; ``_freeze_into`` writes its backing slot
+        # directly with a frozen dict, so every mutation raises.  The revision
         # counter is inert here (a frozen dict never mutates), but the slot
         # must exist for the property / bump machinery not to AttributeError.
-        object.__setattr__(self, "_medias", _FrozenDict("dataset"))
-        object.__setattr__(self, "_media_revision", 0)
-        object.__setattr__(self, "coverage_atlas", None)
-        object.__setattr__(self, "dataset_display_name", None)
-        object.__setattr__(self, "_emb_matrix_ids", None)
-        object.__setattr__(self, "_emb_matrix", None)
-        object.__setattr__(self, "_emb_matrix_revision", None)
-        object.__setattr__(self, "_region_matrix_ids", None)
-        object.__setattr__(self, "_region_matrix", None)
-        object.__setattr__(self, "_region_matrix_revision", None)
-        object.__setattr__(self, "_region_media_index", None)
-        object.__setattr__(self, "_region_index_per_row", None)
-        object.__setattr__(self, "_origin_key_index", None)
-        object.__setattr__(self, "_md5_index", None)
-        object.__setattr__(self, "_name_index", None)
-        object.__setattr__(self, "_lookup_index_revision", None)
-        object.__setattr__(self, "_text_embedder", None)
-        object.__setattr__(self, "_patch_embedder", None)
-        object.__setattr__(self, "_structural_embedder", None)
-        object.__setattr__(self, "_binding_explicit", False)
-        object.__setattr__(self, "merge_near_duplicates", False)
+        _freeze_into(self, DatasetContext(""), "dataset")
+        # Use object.__setattr__ to bypass our own write guard.
+        object.__setattr__(self, "dataset_id", "__request_missing__")
 
     def __setattr__(self, name: str, value: Any) -> None:
         raise _frozen_mutation_error("dataset")
@@ -1091,42 +1117,12 @@ class _RequestMissingDetectorContext(DetectorContext):
     __slots__ = ()
 
     def __init__(self) -> None:
+        # Copy every slot from a fresh, real ``DetectorContext`` (containers
+        # frozen on the way in) rather than hand-listing them, so a slot added
+        # to ``DetectorContext`` can never go missing here.
+        _freeze_into(self, DetectorContext(""), "detector")
+        # Use object.__setattr__ to bypass our own write guard.
         object.__setattr__(self, "detector_id", "__request_missing__")
-        object.__setattr__(self, "name", "")
-        object.__setattr__(self, "media_type", "")
-        object.__setattr__(self, "embedder", "")
-        object.__setattr__(self, "embedder_type", "")
-        object.__setattr__(self, "good_votes", _FrozenDict("detector"))
-        object.__setattr__(self, "bad_votes", _FrozenDict("detector"))
-        object.__setattr__(self, "label_history", _FrozenList("detector"))
-        object.__setattr__(self, "vote_click_times", _FrozenDict("detector"))
-        object.__setattr__(self, "vote_region_boxes", _FrozenDict("detector"))
-        object.__setattr__(self, "click_counter", 0)
-        object.__setattr__(self, "last_learned_scores", _FrozenDict("detector"))
-        object.__setattr__(self, "textsort_suggestions", _FrozenList("detector"))
-        object.__setattr__(self, "find_initial_labels", _FrozenDict("detector"))
-        object.__setattr__(self, "verified_ids", _FrozenDict("detector"))
-        object.__setattr__(self, "find_scores", _FrozenDict("detector"))
-        object.__setattr__(self, "find_eval_stale", False)
-        object.__setattr__(self, "inclusion", None)
-        object.__setattr__(self, "training_medias", _FrozenDict("detector"))
-        object.__setattr__(self, "label_embeddings", _FrozenDict("detector"))
-        object.__setattr__(self, "label_embedding_regions", _FrozenDict("detector"))
-        object.__setattr__(self, "label_local_features", _FrozenDict("detector"))
-        object.__setattr__(self, "label_negative_regions", _FrozenDict("detector"))
-        object.__setattr__(self, "label_score_regions", _FrozenDict("detector"))
-        object.__setattr__(self, "model", None)
-        object.__setattr__(self, "verification_classifier", None)
-        object.__setattr__(self, "threshold", 0.5)
-        object.__setattr__(self, "labelset_good_count", 0)
-        object.__setattr__(self, "labelset_bad_count", 0)
-        object.__setattr__(self, "votes_dataset_id", "")
-        object.__setattr__(self, "cached_labelset", None)
-        object.__setattr__(self, "cached_labelset_mtime", 0.0)
-        object.__setattr__(self, "cached_labelset_media_type", "")
-        object.__setattr__(self, "labelset_source", None)
-        object.__setattr__(self, "calibration_cache", None)
-        object.__setattr__(self, "anchored_cut_cache", None)
 
     def __setattr__(self, name: str, value: Any) -> None:
         raise _frozen_mutation_error("detector")

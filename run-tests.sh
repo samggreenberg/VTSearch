@@ -215,6 +215,20 @@ if ! python scripts/screenshots/wiring-check.py ; then
     exit 1
 fi
 
+# Eval/app sync: the eval framework reproduces a handful of app surfaces it
+# cannot call (the TypeScript autopilot phase machine, the app's default
+# resolution). This gate notices when one of those app surfaces changes, so the
+# eval default arm can't quietly stop being the shipped algorithm. Parses
+# source, imports nothing, ~0.3s.
+echo "Checking eval/app sync..."
+if ! python scripts/check-eval-app-sync.py ; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: eval framework is out of sync with the app"
+    echo "============================================================"
+    exit 1
+fi
+
 # Split arguments into groups and extra pytest args
 TEST_GROUPS=()
 EXTRA_ARGS=()

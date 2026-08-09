@@ -295,11 +295,7 @@ class TestRenameDetector:
         """Renaming a detector should update registry references."""
         from vtscore.detectors.registry import find_by_name, get_detector
 
-        # Create a detector and register it in the model registry
-        client.post(
-            "/api/detectors",
-            json={"name": "Original", "media_type": "audio", "text_query": "test"},
-        )
+        # Register a detector in the model registry
         res = client.post(
             "/api/detectors/registry",
             json={"name": "Original", "media_type": "audio", "text_query": "test"},
@@ -341,15 +337,148 @@ class TestRenameDetector:
         assert res.status_code == 409
 
 
+class TestRegistryNameCollisions:
+    """Two registry entries must never share one labelset file.
+
+    ``_slug`` maps every name onto ``data/detectors/<slug>.json``, so a
+    duplicate name means both detectors read and write the same labels:
+    whichever syncs last wins, and deleting either unlinks the file out
+    from under the survivor.  Both create routes and the rename route
+    refuse the collision up front.
+    """
+
+    def _register(self, client, name, **extra):
+        return client.post(
+            "/api/detectors/registry",
+            json={"name": name, "media_type": "audio", "text_query": "x", **extra},
+        )
+
+    def _labels_of(self, name):
+        from vtscore.detectors.store import _detector_path, _read_detector
+
+        data = _read_detector(_detector_path(name)) or {}
+        return data.get("labelset", {}).get("labels", [])
+
+    def _write_labels(self, name, labels):
+        from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
+
+        path = _detector_path(name)
+        data = _read_detector(path)
+        assert data is not None
+        data["labelset"] = {"labels": labels}
+        _write_detector(path, data)
+
+    def test_register_duplicate_name_conflicts(self, client):
+        from vtscore.detectors.registry import list_detectors
+
+        assert self._register(client, "Dupe").status_code == 201
+        res = self._register(client, "Dupe")
+        assert res.status_code == 409
+        assert "already exists" in res.get_json()["message"]
+        assert [e["name"] for e in list_detectors()] == ["Dupe"]
+
+    def test_register_duplicate_name_preserves_existing_labelset(self, client):
+        """The rejected create must not blank the incumbent's labels."""
+        assert self._register(client, "Keeper").status_code == 201
+        self._write_labels("Keeper", [{"md5": "a" * 32, "label": "good"}])
+
+        assert self._register(client, "Keeper").status_code == 409
+        assert self._labels_of("Keeper") == [{"md5": "a" * 32, "label": "good"}]
+
+    def test_register_slug_collision_conflicts(self, client):
+        """'My Cat' and 'my cat' slug onto the same file, so they collide."""
+        assert self._register(client, "My Cat").status_code == 201
+        assert self._register(client, "my cat").status_code == 409
+
+    def test_register_conflicts_with_unregistered_detector_file(self, client):
+        """A detector file created off-registry still owns its name."""
+        client.post(
+            "/api/detectors",
+            json={"name": "OnDisk", "media_type": "audio", "text_query": "x"},
+        )
+        assert self._register(client, "OnDisk").status_code == 409
+
+    def test_register_conflicts_when_entry_outlives_its_file(self, client):
+        """A registry entry whose file vanished still owns its name."""
+        from vtscore.detectors.store import _detector_path
+
+        assert self._register(client, "Ghost").status_code == 201
+        _detector_path("Ghost").unlink()
+
+        assert self._register(client, "Ghost").status_code == 409
+
+    def test_rename_to_taken_name_conflicts_and_preserves_labelsets(self, client):
+        from vtscore.detectors.registry import get_detector
+
+        a_id = self._register(client, "Det A").get_json()["detector"]["id"]
+        assert self._register(client, "Det B").status_code == 201
+        self._write_labels("Det A", [{"md5": "a" * 32, "label": "good"}])
+        self._write_labels("Det B", [{"md5": "b" * 32, "label": "bad"}])
+
+        res = client.put(f"/api/detectors/registry/{a_id}/rename", json={"name": "Det B"})
+        assert res.status_code == 409
+        assert "already exists" in res.get_json()["message"]
+
+        # Neither detector moved, and neither labelset was overwritten.
+        entry_a = get_detector(a_id)
+        assert entry_a is not None and entry_a["name"] == "Det A"
+        assert self._labels_of("Det A") == [{"md5": "a" * 32, "label": "good"}]
+        assert self._labels_of("Det B") == [{"md5": "b" * 32, "label": "bad"}]
+
+    def test_rename_slug_collision_conflicts(self, client):
+        a_id = self._register(client, "Alpha One").get_json()["detector"]["id"]
+        assert self._register(client, "Beta Two").status_code == 201
+
+        res = client.put(f"/api/detectors/registry/{a_id}/rename", json={"name": "beta two"})
+        assert res.status_code == 409
+
+    def test_rename_conflicts_with_unregistered_detector_file(self, client):
+        detector_id = self._register(client, "Reg Only").get_json()["detector"]["id"]
+        client.post(
+            "/api/detectors",
+            json={"name": "Squatter", "media_type": "audio", "text_query": "x"},
+        )
+
+        res = client.put(f"/api/detectors/registry/{detector_id}/rename", json={"name": "Squatter"})
+        assert res.status_code == 409
+
+    def test_rename_respelling_own_name_allowed(self, client):
+        """A rename that lands on the detector's own file is not a collision."""
+        from vtscore.detectors.registry import get_detector
+
+        detector_id = self._register(client, "Same Slug").get_json()["detector"]["id"]
+        self._write_labels("Same Slug", [{"md5": "c" * 32, "label": "good"}])
+
+        res = client.put(f"/api/detectors/registry/{detector_id}/rename", json={"name": "same slug"})
+        assert res.status_code == 200
+        entry = get_detector(detector_id)
+        assert entry is not None and entry["name"] == "same slug"
+        assert self._labels_of("same slug") == [{"md5": "c" * 32, "label": "good"}]
+
+    def test_rename_to_unchanged_name_allowed(self, client):
+        detector_id = self._register(client, "NoOp").get_json()["detector"]["id"]
+
+        res = client.put(f"/api/detectors/registry/{detector_id}/rename", json={"name": "NoOp"})
+        assert res.status_code == 200
+
+    def test_rename_to_free_name_still_works(self, client):
+        from vtscore.detectors.registry import get_detector
+
+        detector_id = self._register(client, "Before").get_json()["detector"]["id"]
+        self._write_labels("Before", [{"md5": "d" * 32, "label": "bad"}])
+
+        res = client.put(f"/api/detectors/registry/{detector_id}/rename", json={"name": "After"})
+        assert res.status_code == 200
+        entry = get_detector(detector_id)
+        assert entry is not None and entry["name"] == "After"
+        assert self._labels_of("After") == [{"md5": "d" * 32, "label": "bad"}]
+
+
 class TestRenameLabelsetSourceCleanup:
     """Renaming a detector with a {detector_name} labelset source should
     surface the orphaned file path so the user can move it."""
 
     def _create_registered_detector(self, client):
-        client.post(
-            "/api/detectors",
-            json={"name": "Old Name", "media_type": "audio", "text_query": "test"},
-        )
         res = client.post(
             "/api/detectors/registry",
             json={"name": "Old Name", "media_type": "audio", "text_query": "test"},
@@ -852,10 +981,6 @@ class TestDeleteRegisteredModel:
         """Deleting a loaded model should also unload it."""
         from vtscore.detectors.registry import get_detector, is_detector_loaded
 
-        client.post(
-            "/api/detectors",
-            json={"name": "LoadDel", "media_type": "audio", "text_query": "test"},
-        )
         res = client.post(
             "/api/detectors/registry",
             json={"name": "LoadDel", "media_type": "audio", "text_query": "test"},
@@ -1037,12 +1162,7 @@ class TestLoadModelEndpoint:
 
         ids = list(medias.keys())
 
-        # Create two detectors + registry entries.
-        for name in ("ModelA", "ModelB"):
-            client.post(
-                "/api/detectors",
-                json={"name": name, "media_type": "audio", "text_query": "test"},
-            )
+        # Register two detectors.
         res_a = client.post(
             "/api/detectors/registry",
             json={"name": "ModelA", "media_type": "audio", "text_query": "test"},
@@ -1078,11 +1198,7 @@ class TestLoadModelEndpoint:
 
         ids = list(medias.keys())
 
-        # Create model, load it, vote, then save labels.
-        client.post(
-            "/api/detectors",
-            json={"name": "Persist", "media_type": "audio", "text_query": "test"},
-        )
+        # Register a model, load it, vote, then save labels.
         res = client.post(
             "/api/detectors/registry",
             json={"name": "Persist", "media_type": "audio", "text_query": "test"},
@@ -1130,10 +1246,6 @@ class TestLoadModelEndpoint:
         a_bad = a_ids[1]
 
         # Create + load a detector while dataset A is active.
-        client.post(
-            "/api/detectors",
-            json={"name": "CrossDS", "media_type": "audio", "text_query": "test"},
-        )
         res = client.post(
             "/api/detectors/registry",
             json={"name": "CrossDS", "media_type": "audio", "text_query": "test"},
@@ -1203,10 +1315,6 @@ class TestLoadModelEndpoint:
         a_ids = list(medias.keys())
         a_good = a_ids[0]
 
-        client.post(
-            "/api/detectors",
-            json={"name": "StaleFlagDS", "media_type": "audio", "text_query": "test"},
-        )
         res = client.post(
             "/api/detectors/registry",
             json={"name": "StaleFlagDS", "media_type": "audio", "text_query": "test"},
@@ -1349,10 +1457,6 @@ class TestEmbedderMismatchInvalidatesStaleModel:
             pytest.skip("Need at least 2 medias")
 
         # Create and load a detector against dataset A.
-        client.post(
-            "/api/detectors",
-            json={"name": "H5Det", "media_type": "audio", "text_query": "test"},
-        )
         res = client.post(
             "/api/detectors/registry",
             json={"name": "H5Det", "media_type": "audio", "text_query": "test"},
@@ -1431,10 +1535,6 @@ class TestValidatedVoteSnapshot:
             pytest.skip("Need at least 2 medias")
         good_cid, bad_cid = ids[0], ids[1]
 
-        client.post(
-            "/api/detectors",
-            json={"name": "SnapshotTest", "media_type": "audio", "text_query": "test"},
-        )
         res = client.post(
             "/api/detectors/registry",
             json={"name": "SnapshotTest", "media_type": "audio", "text_query": "test"},
@@ -1592,10 +1692,6 @@ class TestRequestMissingDatasetPreservesDetectorState:
         ids = list(medias.keys())
         good_cid, bad_cid = ids[0], ids[1]
 
-        client.post(
-            "/api/detectors",
-            json={"name": "NoDatasetHeaderTest", "media_type": "audio", "text_query": "test"},
-        )
         res = client.post(
             "/api/detectors/registry",
             json={"name": "NoDatasetHeaderTest", "media_type": "audio", "text_query": "test"},
@@ -1641,10 +1737,6 @@ class TestVoteSyncsToLoadedModel:
             pytest.skip("No medias loaded")
 
         # Create and register a detector
-        client.post(
-            "/api/detectors",
-            json={"name": "AutoSync", "media_type": "audio", "text_query": "test"},
-        )
         res = client.post(
             "/api/detectors/registry",
             json={"name": "AutoSync", "media_type": "audio", "text_query": "test"},
@@ -1677,10 +1769,6 @@ class TestVoteSyncsToLoadedModel:
         if not medias:
             pytest.skip("No medias loaded")
 
-        client.post(
-            "/api/detectors",
-            json={"name": "ToggleSync", "media_type": "audio", "text_query": "test"},
-        )
         res = client.post(
             "/api/detectors/registry",
             json={"name": "ToggleSync", "media_type": "audio", "text_query": "test"},
@@ -1726,10 +1814,6 @@ class TestVoteSyncsToLoadedModel:
         if not medias:
             pytest.skip("No medias loaded")
 
-        client.post(
-            "/api/detectors",
-            json={"name": "ImportSync", "media_type": "audio", "text_query": "test"},
-        )
         res = client.post(
             "/api/detectors/registry",
             json={"name": "ImportSync", "media_type": "audio", "text_query": "test"},
@@ -2173,16 +2257,7 @@ class TestSeedVotesFromExamples:
         media = medias[first_id]
         fname = self._create_example_file(media["media_bytes"], "autoload.wav")
 
-        # Create model with a media example
-        client.post(
-            "/api/detectors",
-            json={
-                "name": "AutoSeed",
-                "media_type": "audio",
-                "examples": [{"type": "media", "value": fname}],
-            },
-        )
-        # Register in model registry
+        # Register a model with a media example
         res = client.post(
             "/api/detectors/registry",
             json={
@@ -2207,10 +2282,6 @@ class TestSeedVotesFromExamples:
         """Loading a text-only model should seed 0 examples."""
         from vtsearch.state import good_votes
 
-        client.post(
-            "/api/detectors",
-            json={"name": "TextOnly", "media_type": "audio", "text_query": "dogs"},
-        )
         res = client.post(
             "/api/detectors/registry",
             json={
@@ -2247,17 +2318,13 @@ class TestSeedVotesFromExamples:
             fname = self._create_example_file(medias[cid]["media_bytes"], f"skip_{i}.wav")
             fnames.append(fname)
 
-        examples = [{"type": "media", "value": fn} for fn in fnames]
-        client.post(
-            "/api/detectors",
-            json={"name": "SkipGood", "media_type": "audio", "examples": examples},
-        )
         res = client.post(
             "/api/detectors/registry",
             json={
                 "name": "SkipGood",
                 "media_type": "audio",
                 "text_query": "",
+                "examples": [{"type": "media", "value": fn} for fn in fnames],
             },
         )
         detector_id = res.get_json()["detector"]["id"]
@@ -2278,20 +2345,13 @@ class TestSeedVotesFromExamples:
         original_count = len(medias)
         fname = self._create_example_file(b"novel-load-bytes", "novel_load.wav")
 
-        client.post(
-            "/api/detectors",
-            json={
-                "name": "NovelSeed",
-                "media_type": "audio",
-                "examples": [{"type": "media", "value": fname}],
-            },
-        )
         res = client.post(
             "/api/detectors/registry",
             json={
                 "name": "NovelSeed",
                 "media_type": "audio",
                 "text_query": "",
+                "examples": [{"type": "media", "value": fname}],
             },
         )
         detector_id = res.get_json()["detector"]["id"]
@@ -2737,7 +2797,7 @@ class TestRegisterModelFromLabelset:
         """
         import hashlib
 
-        from helpers import make_wav_file
+        from tests.helpers import make_wav_file
 
         clips_dir = tmp_path / "foreign_clips"
         clips_dir.mkdir()
@@ -2786,7 +2846,7 @@ class TestRegisterModelFromLabelset:
         """No dataset loaded → nothing to ingest into, and the import still succeeds."""
         import hashlib
 
-        from helpers import make_wav_file
+        from tests.helpers import make_wav_file
         from vtsearch.state import clear_all_contexts
 
         clips_dir = tmp_path / "no_dataset_clips"

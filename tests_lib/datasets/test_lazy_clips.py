@@ -23,7 +23,7 @@ from vtscore.datasets.stages import clipper as clipper_stage
 from vtscore.media.audio.clipper import _wav_slice
 from vtscore.media.lazy_clip import _ByteBoundedLRU, clip_recipe, lazy_clip_bytes
 
-from helpers import make_png_bytes, make_wav_bytes
+from tests_lib.helpers import make_png_bytes, make_wav_bytes
 
 
 # ---------------------------------------------------------------------------

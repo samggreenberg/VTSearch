@@ -20,7 +20,7 @@ import zipfile
 
 import pytest
 
-from helpers import make_raw_wav_bytes as _make_wav_bytes
+from tests_lib.helpers import make_raw_wav_bytes as _make_wav_bytes
 from vtscore.embedding.media_vectors import media_embedding, set_media_embedding
 from vtscore.utils.hashing import content_md5
 

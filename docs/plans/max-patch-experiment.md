@@ -1,10 +1,14 @@
 # Max-Patch experiment — MaxHAC vs MaxPatch (vs whole-image)
 
-**Status:** Code shipped (styles + harness wiring + GRID runner + tests). A
-first run completed but its Caltech-101 arm measured a harness defect rather
-than MaxPatch (fixed; see #2730 and the correction atop the report), so the
-open work is re-running the study on the Grid and acting on the corrected
-verdict.
+**Status:** Study complete and its verdict — **ship tree-free MaxPatch; drop the
+HAC tree from ingest** — shipped in #2886. The numbers are in
+[`docs/experiments/max-patch/REPORT.md`](../experiments/max-patch/REPORT.md).
+The remaining work is the optional arms below.
+
+**The `max_hac` arm is no longer runnable.** It delegated to the production HAC
+region tree, which #2886 deleted; the runner grid dropped it rather than
+reimplementing the code the study told us to remove. Its published numbers stand
+in the report, and `analyze.py` still labels `max_hac` rows in archived CSVs.
 
 ## Question
 
@@ -34,16 +38,18 @@ pooled multi-scale regions are doing real work and stay.
 
 Implemented; kept here as the running spec.
 
-- **Styles** (`vtscore/eval/patch_styles.py`): `whole_image`, `max_hac`
+- **Styles** (`vtscore/eval/patch_styles.py`): `whole_image`, `max_patch`
   (delegates to the production `pool_box_from_media` / `bad_negative_vecs` /
-  region max-pool), `max_patch`.  Each style owns vote-vector assembly,
-  image scoring, and exemplar-similarity for the startup sort.
+  `media_score_rows`), and the `max_patch_hac` pair.  Each style owns
+  vote-vector assembly, image scoring, and exemplar-similarity for the startup
+  sort.  The study's `max_hac` arm is gone (see Status).
 - **Harness** (`vtscore/eval/voting_iterations.py`): the Autopilot voting
   simulation takes `style=` (MLP trainer only); training and calibration are
   bag-aware under flooding, matching production.  `style=None` keeps the
   historical harness byte-for-byte.
-- **Arms**: `dinov2_patch` × {max_hac, max_patch, whole_image},
-  `dinov3_patch` × {same}, `siglip` × {whole_image}.  The `whole_image` runs
+- **Arms** (as run): `dinov2_patch` × {max_hac, max_patch, whole_image},
+  `dinov3_patch` × {same, plus the two `max_patch_hac` variants}, `siglip` ×
+  {whole_image}.  The `whole_image` runs
   on the DINO embedders are the CLS-only control ("does patch machinery help
   at all?"); SigLIP is the standard baseline.  DINOv3 weights are HF-gated
   (`HF_TOKEN`).
@@ -139,33 +145,12 @@ where the two diverge. Anything reasoning about scale must use `voted_area`.
 
 <!-- item-sep -->
 
-- [x] #2730 — **Re-run done (2026-07-29) on the corrected harness, plus a new
-  `max_patch_hac` arm; report at
-  [`docs/experiments/max-patch/REPORT.md`](../experiments/max-patch/REPORT.md).**
-  Verdict: **ship tree-free MaxPatch; drop the HAC tree from ingest.** Over 23
-  scale-band Visual Genome categories × 3 seeds, MaxPatch is the best arm
-  (ErrorCost 0.40 @ t=150), beating production MaxHAC (0.46, Holm p=0.002) at
-  every scale — edge largest on small objects, shrinking as they grow (Spearman
-  ρ=0.50, p=0.016). **MaxPatchHAC** (the new hybrid — a HAC tree whose leaves are
-  the raw patches, so leaves win small targets and merged nodes win large ones)
-  lands between the two: it *ranks* best of any arm (AP 0.49) and recovers real
-  large-object recall, but its ~392-node max-pool over-fires (highest FPR), so it
-  only numerically edges MaxHAC (Δ−0.027, p=0.06 n.s.) and does **not** beat
-  MaxPatch (Δ+0.037 n.s.). All region styles crush whole-image scoring (DINOv3
-  CLS is the worst arm, below SigLIP), so the win is region scoring itself.
-  Caltech-101 was dropped (boxless → cannot judge *region* voting; it was the
-  first run's invalid arm); OpenLogo was unfetchable (cluster HF egress). The
-  scale-band selection filled all four bands (`above_4x` included), so
-  `visual_genome_m` sufficed. If the large-object recall MaxPatchHAC showed is
-  worth chasing, keep the raw-patch tree but pair it with a max-pool-aware
-  threshold / softer pool to tame the false-positive tail.
-
-<!-- item-sep -->
-
-- **Optional follow-up arms, only if the rerun is ambiguous** — (a) Good
-  vote = *mean of patches inside the box* instead of the single nearest patch
-  (the other natural reading of "closest patch", better for multi-patch
-  objects); (b) Bad flood = leaves+patches union.
+- **Optional follow-up arm, only if a rerun is ambiguous** — Good vote =
+  *mean of patches inside the box* instead of the single nearest patch (the
+  other natural reading of "closest patch", better for multi-patch objects).
+  Note it violates the train/score invariant by construction: a per-vote amalgam
+  can never be a per-image scored row, so an arm measuring it would have to say
+  what it scores as well as what it trains on.
 
 <!-- item-sep -->
 
@@ -178,11 +163,24 @@ where the two diverge. Anything reasoning about scale must use `voted_area`.
   vector under every style (matching the existing harness); only training and
   test scoring differ per style.  This keeps vote-order differences
   attributable to the trained model, not to a different acquisition rule.
-- `simulate_voting_iterations` with `style=None` retains its historical
-  behaviour of *not* flooding Bad votes on patch datasets (it predates region
-  flooding).  The style path is the production-faithful one; the default path
-  is left untouched for reproducibility of earlier studies.
+- ~~`simulate_voting_iterations` with `style=None` does not flood Bad votes on
+  patch datasets.~~ **Fixed in #2886.** `style=None` now *resolves* to the app's
+  geometry rather than being a third thing: a patch dataset on the MLP trainer
+  gets `max_patch` (whose methods delegate to `pool_box_from_media` /
+  `bad_negative_vecs` / `media_score_rows`), and the resolved name is what lands
+  in the `style` result column. Single-vector datasets and the non-MLP trainers
+  keep the historical path byte-for-byte.
+
+  The old carve-out was justified as "left untouched for reproducibility of
+  earlier studies", and that justification did not survive #2886: two of the
+  default path's three legs delegate to production, so its Good vote and its
+  scoring *already* moved to MaxPatch geometry with the app. Freezing only the
+  Bad vote didn't preserve the historical harness — it produced an incoherent
+  hybrid (MaxPatch Good votes + MaxPatch scoring + pre-flood Bad votes) that
+  matched neither the old production nor the new one, and that trained ~196 rows
+  per rejected image down never while inference max-pooled them. An eval default
+  that doesn't match the app default can't be trusted, so it is gone.
 - The style path calibrates in **inference geometry** (each bag collapses over
   `style.score_rows`), which the production vote / labelset paths now do too
-  (each bag collapses over its full `patch_regions` node stack), so the harness
+  (each bag collapses over its full `media_score_rows` stack), so the harness
   and the live path agree on what a calibration bag scores.

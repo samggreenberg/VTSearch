@@ -113,3 +113,44 @@ scale), and the `rank_transfer` attribution arm — all step-paired against the
 Cost note: the fold-anchored arms score the sim set once per calibration fold
 per step (`calibrate_count=2` → two extra scoring passes); disable them with
 `CALIB_ANCHORED_FOLD_ARMS=0` for a cheap label-anchored-only run.
+
+## Fold-count study (issue #2897)
+
+```bash
+cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
+python selftest_analyze_folds_2897.py   # planted answer; run before the array
+bash launch_folds_2897.sh               # the screen: every K in one run
+bash launch_folds_2897_ab.sh 2 8        # then the live A/B, once K* is named
+```
+
+Re-prices production's `calibrate_count=2`: what does raising the number of
+cross-calibration folds cost in wall clock, and what does it buy in oracle
+regret? Both voting modes, since the calibrators differ (VG region voting runs
+the bag-aware calibrator, Caltech binary voting the row-wise one).
+
+`CALIB_FOLD_COUNTS=1,2,3,4,6,8,16` makes every step train `max(counts)` folds
+and emit one `folds_k{K}_xcal` row per count — plus `folds_k{K}_blend`, the
+shipped threshold after the safe-threshold mix-in — each carrying that K's
+regret and its measured `fold_seconds`. This is cheap and **exact** rather than
+approximate because the folds are nested: each is an independent stratified draw
+off one `RandomState(42)` at a per-fold size that ignores the count, so the K
+folds a live `calibrate_count=K` run trains are the first K of these. Every K is
+therefore paired within the step, the arm at `K == CALIB_CALIBRATE_COUNT`
+reproduces the step's own conformal cut, and the extra folds cannot perturb the
+live trajectory (all three asserted in
+`tests_lib/detectors/test_fold_count_variant_rows.py`).
+
+Price is set by the grid's **maximum**, not its length: `Kmax - calibrate_count`
+extra fold fits per step. Size it from one real cell before submitting.
+
+What the screen cannot see is acquisition feedback — K also steers the rank
+position Autopilot's Hard pick samples around — which is why
+`launch_folds_2897_ab.sh` runs one full simulation per fold count, each living
+at its own K. Pass those arm dirs to the analyzer
+(`python analyze_folds_2897.py /exp/$USER/calibration-folds-2897-ab-k8`) to get
+the `screen_agrees` check. Analyzer: `analyze_folds_2897.py`; design and
+pre-registered decision rules: `docs/plans/calibration-fold-count-experiment.md`.
+
+Not to be confused with the older `analyze_folds.py` / `launch_folds_2861.sh`,
+which moved the fold count to 4 only to unlock the anchored `qmean`/`qmedian`
+combine question — it measures no cost and covers region voting only.

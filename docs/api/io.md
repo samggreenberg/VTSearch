@@ -45,6 +45,13 @@ fails, so no plugin can push a `javascript:` URL to the browser. An exporter tha
 *always* returns one sets `opens_url: true` in its `GET /api/exporters` entry, so
 the UI can label the button before the export runs.
 
+The same key reaches the client from the Auto-Find auto-export block
+(`auto_export.open_url` on `POST /api/auto-detect`), where the Auto-Detect
+Results modal offers it as an **Open** button instead of opening a tab on
+arrival. That path runs the same `validate_browser_url` check, but drops an
+unusable URL and notes it in `message` rather than failing the request: the
+export already happened and the scored results must survive it.
+
 **Streaming support** (CLI `--autodetect --stream-results` for sources larger
 than RAM): `server_json_file` (NDJSON), `server_csv_file`, and `gui` write hits
 incrementally; `webhook` and `email_smtp` deliver in `batch_size`-sized batches

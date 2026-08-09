@@ -46,6 +46,9 @@ if TYPE_CHECKING:
 # and stores the model, threshold, label sets, and stability result for that
 # step.  ``_cache_good_ids`` / ``_cache_bad_ids`` track the running label sets
 # so the next step only needs to apply a single delta.
+#
+# The cache holds exactly one ``(dataset, detector)`` pair at a time, stamped in
+# ``_cache_key``; switching to another pair drops it (see that variable's note).
 
 _cache_inclusion: Optional[int] = None
 _cached_steps: list[dict[str, Any]] = []
@@ -71,6 +74,24 @@ _cache_monitored_set: Optional[set[int]] = None
 # status is never shown after a detector switch / vote clear.
 _status_snapshot: Optional[dict[str, Any]] = None
 
+# Identity of the ``(dataset_id, detector_id)`` pair every cache variable above
+# belongs to, or ``None`` when the cache is empty and belongs to nobody.
+#
+# Every input the cache is built from is resolved *per request* from the
+# ``X-Dataset-Id`` / ``X-Detector-Id`` headers (``label_history``,
+# ``good_votes`` / ``bad_votes`` via the detector context; ``clips_dict`` and
+# the coverage atlas via the dataset context), while the cache itself is a
+# single module-global slot.  Multiple detectors stay loaded at once and the UI
+# switches between them freely - re-selecting an *already loaded* detector never
+# goes through ``register_detector_context`` / ``unregister_detector_context``,
+# so those clears do not cover the switch.  Without an identity stamp the
+# freshness gates (which compare only ``len(_cached_steps)`` to
+# ``len(label_history)``) would replay one detector's history on top of
+# another's accumulated label sets, or serve one detector's models as another's
+# Smart / Stable indicators.  :func:`_bind_cache_identity` stamps this key and
+# drops the cache whenever the active pair changes.
+_cache_key: Optional[tuple[str, str]] = None
+
 # Live models injected by `train_and_score` during sorting.  Keyed by
 # ``(frozenset(good_ids), frozenset(bad_ids))`` so that ``_ensure_cache``
 # can look up the actual model that was used at each label step instead
@@ -79,7 +100,8 @@ _live_models: dict[tuple[frozenset[int], frozenset[int]], tuple[Any, float]] = {
 
 # Reentrant lock protecting all module-level cache variables.
 # RLock is used because public functions call _ensure_cache which may
-# call clear_progress_cache internally when the inclusion value changes.
+# call _clear_cache_data internally (inclusion change, or a rebind onto a
+# different dataset/detector) while already holding the lock.
 _progress_lock = threading.RLock()
 
 # Upper bound on the number of items the per-step stability forward pass
@@ -102,11 +124,36 @@ _STABILITY_MAX_SAMPLES = 50_000
 _CACHE_READ_LOCK_TIMEOUT = 0.25
 
 
-def clear_progress_cache() -> None:
-    """Clear all cached progress data.
+def _active_cache_key() -> tuple[str, str]:
+    """Return ``(dataset_id, detector_id)`` for the current execution context.
 
-    Must be called whenever votes are cleared, medias change, or inclusion
-    is altered so that stale models are not reused.
+    Read *without* acquiring ``_state_lock``: this runs under ``_progress_lock``
+    (see the lock-ordering note at module top), which forbids taking
+    ``_state_lock`` while held.  Neither ``get_active_context()`` nor
+    ``get_active_detector_context()`` takes a lock - both resolve from the
+    request-scoped resolver or a thread-local - so the read is safe.  In the
+    ``/api/labeling-status`` background worker both contexts are bound
+    thread-locally by ``JobManager``, so the worker resolves the same key the
+    request thread did.
+
+    Falls back to ``("", "")`` when resolution fails (e.g. a request naming an
+    unloaded detector, whose resolver raises); such a caller cannot reach a
+    usable ``label_history`` anyway.
+    """
+    try:
+        from vtscore.state.core import get_active_context, get_active_detector_context  # noqa: PLC0415
+
+        return (get_active_context().dataset_id, get_active_detector_context().detector_id)
+    except Exception:
+        return ("", "")
+
+
+def _clear_cache_data() -> None:
+    """Clear every cache variable *except* the identity stamp.
+
+    Used by the in-place rebuilds (an inclusion change) that keep the cache
+    bound to the same ``(dataset, detector)`` pair.  Callers that hand the
+    cache back to nobody should use :func:`clear_progress_cache`.
     """
     global _cache_inclusion, _cache_prev_predictions, _cache_coverage_atlas, _status_snapshot
     global _cache_monitored_ids, _cache_monitored_X, _cache_monitored_set
@@ -129,6 +176,32 @@ def clear_progress_cache() -> None:
         _status_snapshot = None
 
 
+def _bind_cache_identity() -> None:
+    """Drop the cache when the active ``(dataset, detector)`` pair has changed.
+
+    Must be called with ``_progress_lock`` held, at the top of every entry
+    point that reads or writes the module cache, so a poll for detector A can
+    never see state accumulated for detector B (issue #2914).
+    """
+    global _cache_key
+    key = _active_cache_key()
+    if _cache_key is not None and _cache_key != key:
+        _clear_cache_data()
+    _cache_key = key
+
+
+def clear_progress_cache() -> None:
+    """Clear all cached progress data and unbind it from any detector.
+
+    Must be called whenever votes are cleared, medias change, or inclusion
+    is altered so that stale models are not reused.
+    """
+    global _cache_key
+    with _progress_lock:
+        _clear_cache_data()
+        _cache_key = None
+
+
 def invalidate_progress_cache_from(media_id: int) -> None:
     """Truncate the progress cache to just before *media_id* first appeared.
 
@@ -140,6 +213,10 @@ def invalidate_progress_cache_from(media_id: int) -> None:
     """
     global _cache_prev_predictions, _status_snapshot
     with _progress_lock:
+        # A polarity flip on one detector must not truncate another's cache;
+        # rebinding drops a foreign cache outright, leaving nothing to trim.
+        _bind_cache_identity()
+
         # Find the first cached step that includes media_id in its training data.
         truncate_at = None
         for i, step in enumerate(_cached_steps):
@@ -204,6 +281,9 @@ def inject_live_model(
     """
     key = (frozenset(good_votes), frozenset(bad_votes))
     with _progress_lock:
+        # Live models are looked up by labelset alone, so they must not outlive
+        # the detector they were trained for.
+        _bind_cache_identity()
         _live_models[key] = (model, threshold)
 
 
@@ -332,8 +412,9 @@ def _monitored_pool(
     Built once per cache lifetime and memoised.  It used to be rebuilt inside
     every step - an O(N x D) numpy materialisation per label-history step,
     which dominated the cost of advancing the cache.  The pool depends only on
-    *clips_dict*, which cannot change without a ``clear_progress_cache()``,
-    so one build per cache lifetime is sound.
+    *clips_dict*, which cannot change without a ``clear_progress_cache()`` (in
+    place) or a ``_cache_key`` change (a different dataset), so one build per
+    cache lifetime is sound.
     """
     global _cache_monitored_ids, _cache_monitored_X, _cache_monitored_set
 
@@ -519,8 +600,14 @@ def _ensure_cache(
     """
     global _cache_inclusion, _cache_coverage_atlas
 
+    # Drop anything accumulated for a different (dataset, detector) pair before
+    # comparing lengths below: the ``start >= len(label_history)`` gate has no
+    # idea whose history it is looking at (issue #2914).
+    _bind_cache_identity()
+
     if _cache_inclusion is not None and _cache_inclusion != inclusion_value:
-        clear_progress_cache()
+        # Same pair, different inclusion: rebuild in place and keep the stamp.
+        _clear_cache_data()
 
     if _cache_inclusion is None:
         _cache_inclusion = inclusion_value
@@ -939,6 +1026,7 @@ def compute_labeling_status(
 
     with _progress_lock:
         _ensure_cache(clips_dict, label_history, inclusion_value)
+        computed_for = _cache_key
 
         smart = _compute_smart_status(
             clips_dict, label_history, current_good_votes, current_bad_votes, inclusion_value, good, bad, total
@@ -958,9 +1046,14 @@ def compute_labeling_status(
     }
     # Refresh the snapshot the poll route hands back while the cache is behind.
     # Store a copy so a caller that mutates the returned dict (e.g. adding the
-    # ``stale`` flag) doesn't retroactively corrupt the snapshot.
+    # ``stale`` flag) doesn't retroactively corrupt the snapshot.  The lock was
+    # released for the (settings-reading) Span computation above, so another
+    # thread may have rebound the cache to a different detector meanwhile;
+    # publishing this result under that detector's key is exactly the bleed
+    # this cache-keying exists to prevent, so drop it instead.
     with _progress_lock:
-        _status_snapshot = dict(result)
+        if _cache_key == computed_for:
+            _status_snapshot = dict(result)
     return result
 
 
@@ -1019,9 +1112,12 @@ def is_status_cache_fresh(label_history: list[tuple[int, str, float]], inclusion
     A fresh cache means ``compute_labeling_status`` will not retrain any model,
     so the route can compute the status inline instead of deferring to a
     background worker.  A mismatched ``inclusion_value`` counts as not-fresh
-    because :func:`_ensure_cache` would rebuild the cache from scratch.
+    because :func:`_ensure_cache` would rebuild the cache from scratch.  So
+    does a cache belonging to a different ``(dataset, detector)`` pair, which is
+    dropped here rather than length-compared against a history it never saw.
     """
     with _progress_lock:
+        _bind_cache_identity()
         if _cache_inclusion is not None and _cache_inclusion != inclusion_value:
             return False
         return len(_cached_steps) >= len(label_history)
@@ -1067,6 +1163,9 @@ def stale_labeling_status(
     """
     status = _pending_labeling_status(current_good_votes, current_bad_votes, span_info)
     with _progress_lock:
+        # Never hand another detector's last snapshot to this one; rebinding
+        # drops it so the "computing" placeholder shows instead.
+        _bind_cache_identity()
         if _status_snapshot is not None:
             status["smart"] = dict(_status_snapshot["smart"])
             status["stable"] = dict(_status_snapshot["stable"])

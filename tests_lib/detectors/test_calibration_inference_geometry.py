@@ -1,15 +1,15 @@
 """Production threshold calibration runs in inference geometry.
 
 Issue #2731: on a patch dataset ``_build_vote_xy`` gives a Good vote one row
-and a Bad vote its ~13 flooded leaves, and the calibrator collapses each bag
-with ``max``.  ``max`` is an upward-biased order statistic, so 13 draws beat 1
+and a Bad vote its whole flooded stack, and the calibrator collapses each bag
+with ``max``.  ``max`` is an upward-biased order statistic, so ~197 draws beat 1
 with no signal at all - calibration understated what a positive scores relative
 to a negative, while :func:`_score_all_media` scores *every* image as a max over
-all ~24 region nodes.
+its full score-row stack.
 
 The fix hands each bag the row stack the scorer will pool
 (:func:`~vtscore.detectors.training.inference_score_rows`), so both classes are
-max-over-24 exactly as at inference.  These tests pin the wiring, the
+max-over-the-same-width exactly as at inference.  These tests pin the wiring, the
 all-or-nothing coverage rule, the legacy no-op, and the cache-key invalidation.
 """
 
@@ -27,10 +27,9 @@ from vtscore.detectors.training import (
     _score_all_media,
     inference_score_rows,
 )
-from vtscore.media.patch_embed import RegionVector
-
 
 DIM = 8
+GRID = (1, 3)  # 1x3 patch grid -> 1 CLS row + 3 patch rows = 4 score rows
 
 
 def _unit(v):
@@ -39,22 +38,16 @@ def _unit(v):
 
 
 def _patch_media(cid: int, rng) -> dict[str, Any]:
-    """A media with a 4-node region tree: CLS + 2 leaves + 1 internal."""
+    """A media with a 4-row score stack: the CLS vector + a 1x3 patch grid."""
     cls = _unit(rng.standard_normal(DIM))
-    leaf1 = _unit(rng.standard_normal(DIM))
-    leaf2 = _unit(rng.standard_normal(DIM))
+    grid = np.stack([_unit(rng.standard_normal(DIM)) for _ in range(GRID[1])])
     return {
         "id": cid,
         "md5": f"md5-{cid:04x}",
         "media_type": "image",
         "embedder": "dinov3_patch",
         "embeddings": {"dinov3_patch": cls},
-        "patch_regions": [
-            RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=cls, children=None),
-            RegionVector(box=(0.0, 0.0, 0.5, 1.0), vec=leaf1, children=None),
-            RegionVector(box=(0.5, 0.0, 1.0, 1.0), vec=leaf2, children=None),
-            RegionVector(box=(0.0, 0.0, 1.0, 1.0), vec=_unit(leaf1 + leaf2), children=(1, 2)),
-        ],
+        "patch_grid": grid.reshape(*GRID, DIM).astype(np.float16),
     }
 
 
@@ -85,14 +78,24 @@ def _linear_scorer(direction):
 
 
 class TestInferenceScoreRows:
-    def test_patch_media_yields_every_region_node(self):
+    def test_patch_media_yields_the_cls_row_then_every_patch(self):
         media = _patch_media(1, np.random.default_rng(0))
         rows = inference_score_rows(media, "dinov3_patch")
         assert rows is not None
-        # All 4 nodes - internals included, unlike ``bad_negative_vecs``.
         assert rows.shape == (4, DIM)
-        for i, node in enumerate(media["patch_regions"]):
-            np.testing.assert_allclose(rows[i], node.vec)
+        np.testing.assert_allclose(rows[0], media["embeddings"]["dinov3_patch"], rtol=1e-3)
+        flat = np.asarray(media["patch_grid"], dtype=np.float32).reshape(-1, DIM)
+        np.testing.assert_allclose(rows[1:], flat, rtol=1e-3)
+
+    def test_flood_and_scoring_stacks_are_identical(self):
+        """MaxPatch closes the #2731 gap: every scored row is a flooded row."""
+        from vtscore.detectors.training import bad_negative_vecs
+
+        media = _patch_media(1, np.random.default_rng(14))
+        rows = inference_score_rows(media, "dinov3_patch")
+        flooded = np.stack(bad_negative_vecs(media, "dinov3_patch"))
+        assert rows is not None
+        np.testing.assert_array_equal(rows, flooded)
 
     def test_matches_the_rows_score_all_media_pools(self):
         """The stack must be exactly what the scorer max-pools, or calibration
@@ -106,7 +109,7 @@ class TestInferenceScoreRows:
             rows = inference_score_rows(clips[cid], "dinov3_patch")
             with torch.no_grad():
                 pooled = float(torch.sigmoid(model(torch.tensor(rows))).max())
-            assert abs(scored - pooled) < 1e-6
+            assert abs(scored - pooled) < 1e-3
 
     def test_region_less_media_yields_its_single_image_vector(self):
         media = _legacy_media(1, np.random.default_rng(2))
@@ -130,10 +133,11 @@ class TestBuildVoteXyScoreRows:
         clips = {1: _patch_media(1, rng), 2: _patch_media(2, rng)}
         X, y, groups, score_rows = _build_vote_xy(clips, {1: None}, {2: None}, {}, "dinov3_patch")
 
-        # Training is still asymmetric - 1 Good row vs 3 flooded Bad rows...
-        assert y == [1.0, 0.0, 0.0, 0.0]
-        assert len(X) == 4
-        # ...but every bag is *scored* over its full 4-node tree.
+        # Training is still asymmetric - 1 Good row vs the Bad vote's whole
+        # 4-row stack (CLS + 3 patches)...
+        assert y == [1.0, 0.0, 0.0, 0.0, 0.0]
+        assert len(X) == 5
+        # ...but every bag is *scored* over its full 4-row stack.
         assert set(score_rows) == {("g", 1), ("b", 2)}
         assert score_rows[("g", 1)].shape == score_rows[("b", 2)].shape == (4, DIM)
 
@@ -241,9 +245,9 @@ class TestGoodBagNoLongerUnderstated:
         assert all(a >= b - 1e-9 for a, b in zip(after_pos, before_pos, strict=True))
         assert any(a > b + 1e-6 for a, b in zip(after_pos, before_pos, strict=True))
 
-    def test_bad_bags_gain_the_internal_nodes_they_never_flooded(self, monkeypatch):
-        """A Bad vote trains its leaves down but is *scored* over the internals
-        too; calibration now sees those rows."""
+    def test_bad_bags_are_scored_over_their_full_stack(self, monkeypatch):
+        """A bag trained on a subset of its rows is still calibrated over all of
+        them, so widening can only raise its pooled score."""
         import vtscore.training.mlp as mlp_mod
         from vtscore.training.thresholds import _pooled_group_scores
 
@@ -328,7 +332,7 @@ class TestCalibrationCacheKey:
 @pytest.mark.parametrize("embedder", ["dinov3_patch", None])
 def test_score_rows_survive_a_missing_embedder_name(embedder):
     """``_build_vote_xy`` resolves the embedder itself when handed ``None``; the
-    region stack is read off the tree either way."""
+    score-row stack is read off the patch grid either way."""
     rng = np.random.default_rng(13)
     clips = {1: _patch_media(1, rng), 2: _patch_media(2, rng)}
     _X, _y, _groups, score_rows = _build_vote_xy(clips, {1: None}, {2: None}, {}, embedder)

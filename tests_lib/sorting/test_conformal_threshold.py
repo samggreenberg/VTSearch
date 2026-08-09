@@ -314,3 +314,68 @@ class TestEndToEndAcceptance:
             assert hi >= lo
         # ...and strictly more items at +10 than -10 (the knob moves).
         assert sizes[-1] > sizes[0]
+
+
+class TestUnseededFoldSplitsAreDeterministic:
+    """Issue #2934: fold splits must not be drawn from global ``np.random``.
+
+    Several production paths call the calibration trainer with no ``rng``: the
+    uncached ``calibration_folds`` branch of ``train_and_threshold``
+    (``det_ctx is None``, reached from the Find multi-detector check and the
+    label-file sort) and ``train_detector_from_origins``.  If the ``rng is
+    None`` fallback were the global ``np.random``, the same labelset would take
+    different Train/Calibrate splits on every run - different fold models,
+    different conformal threshold, different Good/Bad verdicts near the cut -
+    and would advance shared RNG state from request threads besides.
+    """
+
+    DIM = 16
+
+    def _votes(self, n: int = 16) -> tuple[list[np.ndarray], list[float]]:
+        rng = np.random.default_rng(7)
+        X = [(rng.standard_normal(self.DIM) + (0.6 if i < n // 2 else -0.6)).astype(np.float32) for i in range(n)]
+        y = [1.0 if i < n // 2 else 0.0 for i in range(n)]
+        return X, y
+
+    def _orderings(self, X, y, **kwargs):
+        orderings, fallback = compute_fold_orderings(
+            X, y, self.DIM, calibrate_count=2, calibration_fraction=0.5, **kwargs
+        )
+        assert fallback is None
+        return orderings
+
+    def test_repeated_calls_without_rng_agree(self):
+        """Two rng-free runs over one labelset must produce identical folds."""
+        X, y = self._votes()
+        first = self._orderings(X, y)
+        # Perturb the global RNG between runs: if the splits were drawn from it,
+        # the second run would land on different folds.
+        np.random.seed(99)
+        np.random.random(1000)
+        second = self._orderings(X, y)
+        assert first == second
+
+    def test_matches_an_explicit_seed_42_rng(self):
+        """The rng-free default is the same seed the cached path uses."""
+        X, y = self._votes()
+        assert self._orderings(X, y) == self._orderings(X, y, rng=np.random.RandomState(42))
+
+    def test_global_numpy_random_state_is_untouched(self):
+        """Calibration must not read or advance shared global RNG state."""
+        X, y = self._votes()
+        np.random.seed(1234)
+        expected = np.random.random(8)
+        np.random.seed(1234)
+        self._orderings(X, y)
+        assert np.array_equal(np.random.random(8), expected)
+
+    def test_grouped_path_is_deterministic_too(self):
+        """The bag-aware split (``groups=...``) takes the same seeded default."""
+        X, y = self._votes(20)
+        groups = [f"g{i // 2}" for i in range(len(X))]
+        y = [y[(i // 2) * 2] for i in range(len(X))]  # one label per bag
+        first = self._orderings(X, y, groups=groups)
+        np.random.seed(7)
+        np.random.random(500)
+        second = self._orderings(X, y, groups=groups)
+        assert first == second

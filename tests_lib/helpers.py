@@ -172,12 +172,14 @@ def make_video_media(media_id: int, embedding_dim: int = 512) -> dict:
     }
 
 
-def setup_trainable_model_in_registry(name, good_ids, bad_ids, snap, media_type="audio"):
+def setup_trainable_model_in_registry(name, good_ids, bad_ids, snap, media_type="audio", embedder_type=""):
     """Build a detector on disk + register it.  Returns its registry id.
 
     Writes ``<get_detectors_dir()>/<name>.json`` with a labelset built
     from *good_ids* and *bad_ids* using *snap* as the medias source, and
-    registers the model so ``/api/detectors/registry`` lists it.
+    registers the model so ``/api/detectors/registry`` lists it.  *embedder_type*
+    locks the detector's embedder type (``"semantic"``, ``"patch_semantic"``,
+    ``"structural"``); left empty (default) for a legacy/typeless detector.
     """
     from vtscore.datasets.labelset import LabelSet  # noqa: PLC0415
     from vtscore.detectors.registry import register_detector  # noqa: PLC0415
@@ -195,7 +197,42 @@ def setup_trainable_model_in_registry(name, good_ids, bad_ids, snap, media_type=
         "examples": [],
         "labelset": labelset.to_dict(),
     }
+    if embedder_type:
+        data["embedder_type"] = embedder_type
     _write_detector(_detector_path(name), data)
 
     entry = register_detector(name=name, media_type=media_type, num_training=len(labelset))
     return entry["id"]
+
+
+# ---------------------------------------------------------------------------
+# Mock embedder helpers
+# ---------------------------------------------------------------------------
+
+
+def wire_mock_progress_scope(emb):
+    """Give a ``MagicMock`` embedder a working ``progress_scope``.
+
+    Production code redirects an embedder's progress through
+    :meth:`~vtscore.media.embedder.MediaEmbedder.progress_scope` (thread-scoped,
+    so concurrent dataset loads sharing the singleton embedder can't cross
+    wires).  A bare ``MagicMock`` answers that call with another mock that
+    enters and exits without ever touching ``_on_progress``, so a mock whose
+    bulk/load hook reads ``self._on_progress`` would see its own stub instead of
+    the caller's tracker.  This installs the real set-then-restore contract.
+
+    Returns *emb* so it can wrap a factory call.
+    """
+    import contextlib  # noqa: PLC0415
+
+    @contextlib.contextmanager
+    def _scope(callback):
+        prev = emb._on_progress
+        emb._on_progress = callback
+        try:
+            yield
+        finally:
+            emb._on_progress = prev
+
+    emb.progress_scope = _scope
+    return emb

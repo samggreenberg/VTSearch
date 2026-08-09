@@ -45,7 +45,7 @@ def resolve_export_filepath(filepath: str) -> str:
         filepath = filepath.replace("{detector_name}", sanitize_template_value(ctx.name))
 
     if "{username}" in filepath:
-        from vtsearch.auth import get_current_user
+        from vtscore.state.current_user import get_current_user
         from vtscore.security.path_validation import sanitize_template_value
 
         filepath = filepath.replace("{username}", sanitize_template_value(get_current_user() or "default"))

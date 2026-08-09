@@ -18,7 +18,11 @@ they come back out:
   ``pooled_mid`` reconstruction of it — the two are planted apart here, exactly
   as #2846 found them in the field, and the ship gate must follow the base row;
 * fallback reasons are windowed, so an out-of-ramp fallback cannot be read as a
-  ramp-window one.
+  ramp-window one;
+* the #2881 tail sweep is classified, its cost-vs-alpha curve is recovered, and a
+  swept level that beats production **cannot** become the ship candidate — the
+  sweep varies a free parameter, so letting all seven levels at a 5 % bar would
+  buy a winner out of noise.
 
 Usage::
 
@@ -75,6 +79,32 @@ FALLBACK_STEPS = [t for t in range(2, 31) if t >= 21]
 #: so an unlisted rule is omitted from the verdict while still showing up in the
 #: window means, and that omission has to be loud.
 UNKNOWN_VARIANT = "pooled_not_a_known_rule"
+
+#: #2881's tail sweep, planted as a **knife-edge** curve whose minimum sits at a
+#: level that is not the pre-registered one — and which is cheaper than both
+#: production and the planted winner.  Two things have to come out of this:
+#: the curve's argmin is found (0.30) and reported as *not* flat, and that argmin
+#: is nonetheless **not** the ship candidate, because a sweep over one free
+#: parameter does not get seven shots at the 5 % bar (``analyze_cut.SWEEP_ONLY``).
+#: Per-cell ramp effect, relative to the incumbent midpoint.
+TAIL_EFFECTS: dict[float, float] = {
+    0.04: 0.01,
+    0.08: 0.00,
+    0.11: -0.01,
+    0.158: -0.02,
+    0.22: -0.03,
+    0.30: -0.08,
+    0.40: -0.01,
+}
+TAIL_BEST_ALPHA = 0.30
+TAIL_PREREGISTERED_ALPHA = 0.158
+
+
+def _tail_variant(alpha: float) -> str:
+    return f"pooled_tail_a{round(alpha * 1000):03d}"
+
+
+_TAIL_EFFECT_BY_VARIANT: dict[str, float] = {_tail_variant(a): e for a, e in TAIL_EFFECTS.items()}
 
 
 def _ident(cat: str, seed: int, t: int, embedder: str, style: str) -> dict:
@@ -133,6 +163,8 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                     for variant in ["", *variants]:
                         is_base = variant == ""
                         effect = RAMP_EFFECT if (variant == WINNER and in_ramp) else 0.0
+                        if in_ramp and variant in _TAIL_EFFECT_BY_VARIANT:
+                            effect = _TAIL_EFFECT_BY_VARIANT[variant]
                         if is_base and anchored:
                             effect = PROD_EDGE
                         # The blended and raw columns move together here except
@@ -241,6 +273,12 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                             tau_test_oracle=tau_test_oracle,
                             oracle_lo_sf_gauss=0.02,
                             oracle_lo_sf_evt=0.02,
+                        )
+                        # The tail sweep's cuts descend with alpha, as the rule's
+                        # closed form requires; nothing here reads their values,
+                        # but a frame missing them is not the frame a run emits.
+                        d.update(
+                            {f"tau_tail_a{round(a * 1000):03d}": tau_sim_oracle + 0.10 - 0.2 * a for a in TAIL_EFFECTS}
                         )
                         diag.append(d)
 
@@ -367,6 +405,64 @@ def main() -> int:
         ok &= _check(
             "tail stability is reported per tail model",
             "tail_alpha_stable" not in dec and {"tail_alpha_stable_gauss", "tail_alpha_stable_evt"} <= set(dec),
+        )
+
+        # --- #2881's tail sweep -----------------------------------------------
+        ok &= _check(
+            "the tail sweep is classified, not flagged as unknown",
+            not [v for v in dec["unclassified_variants"] if v.startswith("pooled_tail_")],
+            str(dec["unclassified_variants"]),
+        )
+        curve = summary["tail_alpha_curve"]
+        ok &= _check(
+            "every swept alpha appears on the curve",
+            curve.get("n_levels") == len(TAIL_EFFECTS),
+            f"{curve.get('n_levels')} vs {len(TAIL_EFFECTS)}",
+        )
+        ok &= _check(
+            "the planted curve minimum is found",
+            curve.get("best_alpha") == TAIL_BEST_ALPHA,
+            str(curve.get("best_alpha")),
+        )
+        curve_rows = {round(float(r["alpha"]), 3): r for r in curve.get("curve", [])}
+        # Base row is PROD_EDGE cheaper on half the cells, so the contrast against
+        # production is the planted effect plus half of that edge.
+        expected_prereg = TAIL_EFFECTS[TAIL_PREREGISTERED_ALPHA] - PROD_EDGE * len(ANCHORED_SEEDS) / len(SEEDS)
+        got = curve_rows.get(TAIL_PREREGISTERED_ALPHA, {}).get("mean_d_cost")
+        ok &= _check(
+            "the pre-registered level is paired against production",
+            got is not None and abs(float(got) - expected_prereg) < 1e-6,
+            f"{got} vs {expected_prereg}",
+        )
+        ok &= _check(
+            "only the pre-registered level is ship-eligible",
+            [a for a, r in curve_rows.items() if r["ship_eligible"]] == [TAIL_PREREGISTERED_ALPHA],
+            str([a for a, r in curve_rows.items() if r["ship_eligible"]]),
+        )
+        # The trap: the swept minimum is the cheapest rule in the whole table, and
+        # must still not be what the run proposes to ship.
+        cheapest = base[
+            (base["arm"].str.contains("dinov3_patch/max_patch")) & (base["window"] == "ramp_6_20")
+        ].sort_values("mean_d_cost")
+        ok &= _check(
+            "the swept minimum really is the cheapest rule measured",
+            str(cheapest.iloc[0]["variant"]) == _tail_variant(TAIL_BEST_ALPHA),
+            str(cheapest.iloc[0]["variant"]),
+        )
+        ok &= _check(
+            "a sweep-only level cannot become the ship candidate",
+            dec["ship_candidate"] != _tail_variant(TAIL_BEST_ALPHA),
+            str(dec["ship_candidate"]),
+        )
+        ok &= _check(
+            "sweep-only levels are named in the verdict",
+            _tail_variant(TAIL_BEST_ALPHA) in dec["sweep_only_variants"]
+            and _tail_variant(TAIL_PREREGISTERED_ALPHA) not in dec["sweep_only_variants"],
+        )
+        ok &= _check(
+            "a knife-edge curve is not reported as flat",
+            dec["tail_curve_is_flat"] is False,
+            str(dec["tail_curve_is_flat"]),
         )
 
         # Fallback reasons are windowed: the planted fallback sits outside the ramp.

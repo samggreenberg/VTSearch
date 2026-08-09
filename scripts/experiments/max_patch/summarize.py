@@ -127,8 +127,9 @@ def main() -> int:
     lines.append("# Max-Patch experiment - report")
     lines.append("")
     lines.append(
-        "Arms are `embedder/style`: `max_hac` is the production HAC-tree patch pipeline, "
-        "`max_patch` is the tree-free raw-patch max-pool alternative, `whole_image` is the "
+        "Arms are `embedder/style`: `max_patch` is the production tree-free raw-patch "
+        "max-pool pipeline, `max_patch_hac`/`max_patch_pca_hac` are the raw-patch-leaf tree "
+        "hybrids, `whole_image` is the "
         "single-vector pipeline (the CLS-only control on the DINO embedders; the standard "
         "baseline on SigLIP).  Metrics come from the Autopilot voting simulation "
         "(`vtscore.eval.voting_iterations`): each trajectory votes one item per step, retrains, "
@@ -197,8 +198,9 @@ def main() -> int:
     lines.append("## Reading the results")
     lines.append("")
     lines.append(
-        "- **MaxPatch vs MaxHAC**: compare `*/max_patch` and `*/max_hac` rows per dataset; the "
-        "vote-budget curves show whether one dominates early (few votes) or only asymptotically."
+        "- **Tree vs tree-free**: compare `*/max_patch` against the `*/max_patch_hac` rows per "
+        "dataset; the vote-budget curves show whether one dominates early (few votes) or only "
+        "asymptotically."
     )
     lines.append(
         "- **Does patch machinery pay at all?** Compare both patch styles against the same "

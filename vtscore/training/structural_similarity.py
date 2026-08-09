@@ -395,7 +395,7 @@ def maybe_structural_rerank(
 
     A no-op (returns ``(results, threshold)`` unchanged) for every non-
     structural dataset - gated on ``local_features`` being present, exactly as
-    the patch path gates on ``patch_regions`` - so existing datasets pay zero
+    the patch path gates on ``patch_grid`` - so existing datasets pay zero
     cost and see no behaviour change.  For a structural dataset it builds the
     RegionYes templates, trains (or cold-starts) the verification classifier,
     re-ranks the shortlist, and returns the classifier's decision boundary as

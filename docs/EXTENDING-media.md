@@ -543,7 +543,7 @@ loaded via `spec_from_file_location` so discovery still works.
 
 | Attribute       | Type               | Description                         |
 |-----------------|--------------------|-------------------------------------|
-| `_on_progress`  | `ProgressCallback` | Progress callback (default: no-op). Set via `set_progress_callback()` |
+| `_on_progress`  | `ProgressCallback` | Progress callback (default: no-op). Process-wide default set via `set_progress_callback()`; **reads and writes are per-thread**, so wrap a temporary redirect in `with emb.progress_scope(cb):` rather than saving/restoring by hand. Embedders are singletons — a process-wide swap would cross concurrent loads' progress bars and cancellations. |
 
 ### Built-in embedders
 
@@ -567,7 +567,7 @@ loaded via `spec_from_file_location` so discovery still works.
 | `TextBGEEmbedder` | `bge` | `text` | BGE-base-en-v1.5 (BAAI/bge-base-en-v1.5) | 768 |
 | `VideoXClipEmbedder` | `xclip` | `video` | X-CLIP (microsoft/xclip-base-patch32) | 768 |
 
-The image embedders come in **single/patch pairs**: `_single` slugs expose only the CLS-pooled vector (same shape and cost as SigLIP); `_patch` slugs additionally populate `media["patch_regions"]` (HAC region tree, ~24 vectors per image) and `media["patch_grid"]` (raw `H × W × D` fp16) so the region-similarity, region-aware detector scoring, and region-voting code paths can opt in. Both variants of a backbone share weights via an underscore-prefixed `_<backbone>_shared.py` module that the auto-discovery scan skips.
+The image embedders come in **single/patch pairs**: `_single` slugs expose only the CLS-pooled vector (same shape and cost as SigLIP); `_patch` slugs additionally populate `media["patch_grid"]` (raw `H × W × D` fp16) so the region-similarity, region-aware detector scoring, and region-voting code paths can opt in. Both variants of a backbone share weights via an underscore-prefixed `_<backbone>_shared.py` module that the auto-discovery scan skips.
 
 ### Embedder capability flags
 

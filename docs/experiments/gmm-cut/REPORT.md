@@ -300,13 +300,16 @@ either orientation. Measured on the production-like corner:
 | | fire rate | excess |
 |---|---|---|
 | today | 68.1 % | 0.1585 |
-| `sup` clamp (what the Gaussian sibling `_rate_cut_in_interval` does) | 100 % | 0.1568 |
+| `sup` clamp (what the Gaussian sibling did at the time, in `_rate_cut_in_interval`) | 100 % | 0.1568 |
 | **keep swapped fits, solve in either orientation** | 73.1 % | **0.1487** |
 
 The Gaussian family's own answer to this problem does **not** transfer: clamping
 is worse than the midpoint fallback on the `hi_owns_lo_mode` bucket (0.2858 vs
 0.2563), which is the larger of the two, and only better on the small
-`lo_owns_hi_mode` one. Dropping the ordering constraint does help, and it is
+`lo_owns_hi_mode` one. (The Gaussian sibling has since stopped clamping at the
+edge too — issue #2896 found the flat step deadened the Inclusion knob — and now
+continues past it at the rule's first-order slope. That is a different variant
+from the one measured in this row, and it has not been scored on the EVT family.) Dropping the ordering constraint does help, and it is
 principled rather than tuned — but it recovers 5 of the ~32 missing points. The
 rest are genuinely non-bimodal steps, which is a statement about those steps
 rather than about the solver.
@@ -368,3 +371,16 @@ pre-vote and deterministic). At inclusion 0 the cost weights are (1, 1), so
 untested at non-zero Inclusion and needs its own trajectory arm. Every contrast
 is within-step, so none of this can see selection feedback; #2799 showed that
 effect is real and worth ~0.02 on its own, so the shipped gain is a lower bound.
+
+The `pooled_*` / `image_*` arms substitute the fit's own **midpoint** for a rule
+with no root, where the shipped `rate` rule continues past the component mean
+instead. That divergence is deliberate (#2900) — a rule-independent stand-in is
+what makes the tilts comparable to each other — and it does not touch any number
+above: at inclusion 0 these `*_rate` rows *are* the `*_priorfree` rows, and
+`priorfree` has no shipped counterpart to diverge from in the first place. It
+would matter to a future run at non-zero Inclusion, where a `*_rate` arm read as
+"what the app would have done" is wrong on the fallen-back steps. Runs from
+2026-08-08 onward carry `cut_fallback_kind` per row (`midpoint` here vs
+`continued` / `degenerate_midpoint` on the anchored arms) so those steps can be
+excluded; on this run's frames the column is absent and the family name is the
+only signal.

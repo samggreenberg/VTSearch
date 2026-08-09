@@ -135,6 +135,14 @@ Find verification workflow. If no trained MLP is cached in the detector
 context, it trains on the fly from the detector's labelset (resolving label
 origins as needed).
 
+Items the human has **verified** (see `verified` on [`GET
+/api/votes`](medias.md)) keep their existing vote and click-time: re-scoring is
+the normal fold-corrections → retrain → re-score loop, and it must not invert a
+recorded human decision. Their machine call still seeds `find_initial_labels`,
+so a disagreement surfaces as a correction in Find stats. `good_count` /
+`bad_count` therefore count the labels actually *adopted* — the threshold split
+everywhere except those held votes.
+
 → ```json
 {
   "ok": true,

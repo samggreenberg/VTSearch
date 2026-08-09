@@ -5,10 +5,18 @@ on.  See ``docs/plans/calibration-experiment.md`` for the design.
 
 Arms (each an ``(embedder, style)`` pair):
 
-* ``visual_genome_m`` (region voting; ground-truth boxes):
+* ``visual_genome_m`` (boxed; ground-truth regions):
   ``siglip`` / ``siglip_l`` × ``whole_image`` (row-wise conformal), and
   ``dinov3_patch`` × {``max_patch``, ``max_patch_pca_hac``} (grouped bag
-  calibration).  The raw-patch tree arm additionally re-pools its own per-node
+  calibration).
+
+  **Only the ``dinov3_patch`` arms actually region-vote.** Region voting needs a
+  stored ``patch_grid`` to pool the dragged box and ``patch_regions`` to
+  max-pool at scoring time; the single-vector embedders have neither, so
+  :data:`REGION_VOTING_BY_DATASET` degrades to whole-image training *and*
+  whole-image scoring for them, and they blend under the **binary** schedule.
+  This docstring previously called the whole set "region voting", which is how
+  #2877 came to report a binary-voting environment as a region-voting one.  The raw-patch tree arm additionally re-pools its own per-node
   scores under ``topk`` and ``pnorm`` (remedial variants, emitted as extra rows).
 * ``caltech101_m`` (binary voting; boxless): ``siglip`` / ``siglip_l`` ×
   ``whole_image`` only — the ordinary row-wise conformal path most users hit.
@@ -40,6 +48,12 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
 #: COCO *is* boxed, but its cached vectors cannot feed a patch style (see above),
 #: so it runs as a second binary-voting dataset - which is exactly the axis
 #: #2841 asks about separately from region voting.
+#:
+#: NOTE: this flag is necessary but **not sufficient**.  It is per-*dataset*,
+#: while whether region voting actually happens is per-*embedder*: a boxed
+#: dataset paired with a single-vector embedder silently runs as binary voting
+#: (no ``patch_grid`` to pool, no ``patch_regions`` to max-pool).
+#: ``simulate_voting_iterations`` now warns when that combination is requested.
 REGION_VOTING_BY_DATASET: dict[str, bool] = {
     "visual_genome_m": True,
     "caltech101_m": False,
@@ -104,12 +118,31 @@ ANCHORED_CHECKPOINTS = [
     int(c) for c in os.environ.get("CALIB_ANCHORED_CHECKPOINTS", "20,50,100,200,300").split(",") if c
 ]
 
+#: Calibration fold counts to score **counterfactually** at every step (issue
+#: #2897), on top of whatever :data:`CALIBRATE_COUNT` the run lives under.
+#: Empty (the default) = off, and every other study runs exactly as before.
+#:
+#: This is nearly free per *K* relative to what it buys, and exact rather than
+#: approximate, because the folds are nested: each is an independent stratified
+#: draw off one ``RandomState(42)`` at a size that does not depend on the count,
+#: so the K folds a live ``calibrate_count=K`` run would train are the first K of
+#: the Kmax folds this run trains.  One run therefore measures every K's regret
+#: *and* every K's wall clock, paired within the step - which is why the fold
+#: count, alone among the knobs here, does not need one full run per value to be
+#: screened.  It still needs the A/B runs to close: K also steers acquisition.
+#:
+#: Cost: ``max(FOLD_COUNTS) - CALIBRATE_COUNT`` extra fold fits per step, so the
+#: grid's *maximum* sets the price, not its length.  Size it from a real cell.
+FOLD_COUNTS = [int(k) for k in os.environ.get("CALIB_FOLD_COUNTS", "").split(",") if k.strip()]
+
 #: Which torch head each step trains (``vtscore.eval.voting_iterations.HEADS``).
-#: #2781 ran the harness's historical auto-sized MLP; the #2799 safe-threshold
-#: study runs ``linear`` — the head the live detector actually trains since
-#: #2790/#2809 — because its question ("should safe_thresholds be forced on for
-#: every VTSearch user?") is only answerable on the shipped head.
-HEAD = os.environ.get("CALIB_HEAD", "mlp")
+#: Unset (the default) hands ``head=None`` to the harness, which resolves it to
+#: the head the live detector actually trains — ``linear`` since #2790/#2809.
+#: That is the only setting a study's headline numbers can be read off, because
+#: questions like #2799's ("should safe_thresholds be forced on for every
+#: VTSearch user?") are answerable only on the shipped head.  Set
+#: ``CALIB_HEAD=mlp`` to reproduce the historical auto-sized-MLP arm (#2781).
+HEAD = os.environ.get("CALIB_HEAD") or None
 
 #: Which safe-threshold mix-in schedule the run *lives* under (issue #2841).
 #: This steers the trajectory - the blended threshold feeds Autopilot's Hard
