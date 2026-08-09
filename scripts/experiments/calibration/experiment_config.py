@@ -136,11 +136,13 @@ ANCHORED_CHECKPOINTS = [
 FOLD_COUNTS = [int(k) for k in os.environ.get("CALIB_FOLD_COUNTS", "").split(",") if k.strip()]
 
 #: Which torch head each step trains (``vtscore.eval.voting_iterations.HEADS``).
-#: #2781 ran the harness's historical auto-sized MLP; the #2799 safe-threshold
-#: study runs ``linear`` — the head the live detector actually trains since
-#: #2790/#2809 — because its question ("should safe_thresholds be forced on for
-#: every VTSearch user?") is only answerable on the shipped head.
-HEAD = os.environ.get("CALIB_HEAD", "mlp")
+#: Unset (the default) hands ``head=None`` to the harness, which resolves it to
+#: the head the live detector actually trains — ``linear`` since #2790/#2809.
+#: That is the only setting a study's headline numbers can be read off, because
+#: questions like #2799's ("should safe_thresholds be forced on for every
+#: VTSearch user?") are answerable only on the shipped head.  Set
+#: ``CALIB_HEAD=mlp`` to reproduce the historical auto-sized-MLP arm (#2781).
+HEAD = os.environ.get("CALIB_HEAD") or None
 
 #: Which safe-threshold mix-in schedule the run *lives* under (issue #2841).
 #: This steers the trajectory - the blended threshold feeds Autopilot's Hard
