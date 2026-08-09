@@ -403,15 +403,15 @@ def update_settings(body: dict):
     Only keys present in *body* are applied. Unknown keys are silently
     dropped (per the schema's ``unknown = "exclude"`` policy); type
     errors raise 422 with the standard error envelope; setter-level
-    validation failures (range / one-of / path traversal) raise 400.
-
-    Every key is validated **before** any key is written, because each
-    setter persists immediately: applying as we go meant a body whose
-    third key was invalid returned 400 with its first two keys already
-    committed, leaving the client -- which reasonably reads a 400 as
-    "nothing changed" -- out of sync with the server, with JSON key order
-    silently deciding which writes stuck. Now a 400 means nothing changed.
+    validation failures (range / one-of / path traversal) raise 400 and
+    leave every key in the body unchanged.
     """
+    # Validate the whole body before writing any of it. Each setter
+    # persists immediately, so applying as we went meant a body whose
+    # third key was invalid returned 400 with its first two keys already
+    # committed -- leaving the client, which reasonably reads a 400 as
+    # "nothing changed", out of sync, with JSON key order silently
+    # deciding which writes stuck.
     planned = [entry for entry in (_plan_one_key(key, value) for key, value in body.items()) if entry is not None]
     for write, cleaned in planned:
         write(cleaned)
