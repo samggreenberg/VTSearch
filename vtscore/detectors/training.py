@@ -76,6 +76,33 @@ def _patch_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> str | No
     return patch
 
 
+def _scores_in_patch_space(snap: dict[int, dict[str, Any]] | None, embedder_name: str | None) -> bool:
+    """Whether a detector whose primary is *embedder_name* lives in *snap*'s patch space.
+
+    **The single definition of the patch gate**, so training and scoring cannot
+    disagree about which geometry a detector is in:
+
+    * An explicit primary (the per-detector embedder) is in the patch space
+      **only** when it *is* the snap's patch-slot embedder.  A detector locked to
+      the text or structural space of a multi-embedder dataset scores against
+      that space's full-image vectors (:func:`_score_all_media`), so it must
+      train on those vectors too - flooding it with patch rows would mix two
+      unrelated embedding spaces into one model (or, when their dimensions
+      differ, fail outright at ``np.stack``).
+    * ``None`` (no per-detector primary) keeps the dataset-level score
+      precedence, where any media carrying a ``patch_grid`` takes the patch
+      path - the pre-per-detector behaviour.
+
+    Callers pair this with "does any media actually carry a grid?"; on a
+    grid-less dataset both sides collapse to the single image-level vector
+    regardless.
+    """
+    if embedder_name is None:
+        return True
+    patch = _patch_embedder_for_snap(snap)
+    return patch is not None and embedder_name == patch
+
+
 def validate_good_bad_split(y_list: list[float]) -> tuple[int, int]:
     """Check that *y_list* contains at least one good and one bad label.
 
@@ -539,6 +566,49 @@ def inference_score_rows(
     return media_score_rows(media, embedder_name)
 
 
+def _vote_score_rows(
+    media: dict[str, Any],
+    embedder_name: str | None,
+    row_embedder: str | None,
+    *,
+    patch_rows: bool,
+) -> np.ndarray | None:
+    """The rows the scorer max-pools *media* over, in the detector's own space.
+
+    The patch stack (:func:`inference_score_rows`) when the detector scores in
+    the patch space, else the single image-level row of *embedder_name* - which
+    is exactly what :func:`_score_all_media`'s embedding-matrix fallback scores
+    that media by.  See :func:`_scores_in_patch_space`.
+    """
+    if patch_rows:
+        return inference_score_rows(media, row_embedder)
+    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+
+    vec = media_embedding(media, embedder_name)
+    return None if vec is None else np.asarray(vec, dtype=np.float32).reshape(1, -1)
+
+
+def _vote_negative_vecs(
+    media: dict[str, Any],
+    embedder_name: str | None,
+    row_embedder: str | None,
+    *,
+    patch_rows: bool,
+) -> list[np.ndarray]:
+    """The rows one Bad vote on *media* trains down - the rows the scorer pools.
+
+    The flood (:func:`bad_negative_vecs`) when the detector scores in the patch
+    space, else the one image-level vector of *embedder_name*.  A non-patch
+    detector never max-pools the grid, so flooding it would train the model on
+    rows from another embedding space that nothing ever scores.
+    """
+    if patch_rows:
+        return bad_negative_vecs(media, row_embedder)
+    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+
+    return [media_embedding(media, embedder_name)]
+
+
 def _build_vote_xy(
     clips_dict: dict[int, dict[str, Any]],
     good_votes: dict[int, None],
@@ -573,7 +643,19 @@ def _build_vote_xy(
     dataset score precedence for *clips_dict* is used (the pre-per-detector
     behaviour).  Either way the MLP trains in the same space
     :func:`_score_all_media` scores against.
+
+    All three patch behaviours above - the Good vote's region pool, the Bad
+    vote's flood, and the recorded calibration stack - are gated by
+    :func:`_scores_in_patch_space`, the same gate :func:`_score_all_media`
+    pools under.  A detector locked to the text or structural space of a
+    multi-embedder dataset therefore trains on that space's **full-image**
+    vectors, exactly the rows it will be scored over; without the gate its Bad
+    votes flooded patch-space rows (and its boxed Good votes pooled one) into a
+    model scored in a different space entirely - a ``np.stack`` ValueError when
+    the two dimensions differ, silent garbage negatives when they happen to
+    match.
     """
+    patch_rows = _scores_in_patch_space(clips_dict, embedder_name)
     if embedder_name is None:
         embedder_name = _score_embedder_for_snap(clips_dict)
     # The image-level row of a patch stack belongs to the *patch-slot* embedder
@@ -581,26 +663,27 @@ def _build_vote_xy(
     # see ``matrix._patch_embedder_for_region_snap``.  On a single-embedder
     # patch dataset this is the score embedder anyway; on a text+patch dataset
     # it keeps the flooded / calibrated rows out of the text space.
-    row_embedder = _patch_embedder_for_snap(clips_dict) or embedder_name
+    row_embedder = (_patch_embedder_for_snap(clips_dict) or embedder_name) if patch_rows else embedder_name
     X_list: list[np.ndarray] = []
     y_list: list[float] = []
     groups: list = []
     score_rows: dict = {}
 
     def _record_score_rows(group: tuple, cid: int) -> None:
-        rows = inference_score_rows(clips_dict[cid], row_embedder)
+        rows = _vote_score_rows(clips_dict[cid], embedder_name, row_embedder, patch_rows=patch_rows)
         if rows is not None:
             score_rows[group] = rows
 
     for cid in good_votes:
         if cid in clips_dict:
-            X_list.append(_training_vec_for_vote(clips_dict[cid], region_boxes.get(cid), embedder_name))
+            box = region_boxes.get(cid) if patch_rows else None
+            X_list.append(_training_vec_for_vote(clips_dict[cid], box, embedder_name))
             y_list.append(1.0)
             groups.append(("g", cid))
             _record_score_rows(("g", cid), cid)
     for cid in bad_votes:
         if cid in clips_dict:
-            for vec in bad_negative_vecs(clips_dict[cid], row_embedder):
+            for vec in _vote_negative_vecs(clips_dict[cid], embedder_name, row_embedder, patch_rows=patch_rows):
                 X_list.append(vec)
                 y_list.append(0.0)
                 groups.append(("b", cid))
@@ -669,12 +752,12 @@ def _score_all_media(
     )
 
     resolved = embedder_name if embedder_name is not None else _score_embedder_for_snap(clips_dict)
-    has_regions = any(clips_dict[cid].get("patch_grid") is not None for cid in clips_dict)
-    if has_regions and embedder_name is not None:
-        # Explicit per-detector primary: patch-pool only when scoring in the
-        # patch space (the grid lives in the patch embedder's vectors).
-        patch = _patch_embedder_for_snap(clips_dict)
-        has_regions = patch is not None and resolved == patch
+    # Explicit per-detector primary: patch-pool only when scoring in the patch
+    # space (the grid lives in the patch embedder's vectors).  Same gate
+    # ``_build_vote_xy`` trains under - see :func:`_scores_in_patch_space`.
+    has_regions = any(clips_dict[cid].get("patch_grid") is not None for cid in clips_dict) and _scores_in_patch_space(
+        clips_dict, embedder_name
+    )
     if has_regions:
         # One row per (media, score row) pair, built once and cached on the
         # dataset context (the patch vectors never change between votes -
