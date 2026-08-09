@@ -98,6 +98,55 @@ describe('TileCacheService', () => {
     expect(service.getCached(2, 1, 1)).toBeNull();
   });
 
+  it('drops a tile that arrives after the projection switched', () => {
+    const pending = new Subject<TilePayload>();
+    getTile.mockReturnValueOnce(pending.asObservable());
+    service.setProjectionId('p1');
+    // Fire-and-forget subscriber, exactly like the canvas/minimap draw paths.
+    service.getTile(2, 1, 3)?.subscribe();
+
+    service.setProjectionId('p2');
+    const loaded: TilePayload[] = [];
+    service.tileLoaded$.subscribe((t) => loaded.push(t));
+    // p1's response finally lands, after the switch cleared the cache.
+    pending.next({
+      level: 2,
+      tx: 1,
+      ty: 3,
+      cells: [{ q: 9, r: 9, cx: 1, cy: 1, count: 1, rep_id: 42 }],
+    });
+
+    // p2 must not see p1's cells, and must not be told to redraw for them.
+    expect(service.getCached(2, 1, 3)).toBeNull();
+    expect(loaded).toEqual([]);
+    // The tile is still fetchable for p2 (the stale put did not block it).
+    let fresh: TilePayload | undefined;
+    service.getTile(2, 1, 3)?.subscribe((t) => (fresh = t));
+    expect(fresh).toEqual(payload(2, 1, 3));
+  });
+
+  it('drops a tile that arrives after clear()', () => {
+    const pending = new Subject<TilePayload>();
+    getTile.mockReturnValueOnce(pending.asObservable());
+    service.setProjectionId('p1');
+    service.getTile(1, 0, 0)?.subscribe();
+
+    service.clear();
+    pending.next(payload(1, 0, 0));
+
+    service.setProjectionId('p1');
+    expect(service.getCached(1, 0, 0)).toBeNull();
+  });
+
+  it('keys tiles by subset so the full and subset projections cannot collide', () => {
+    service.setProjectionId('p1');
+    service.getTile(2, 1, 1)?.subscribe();
+    expect(service.getCached(2, 1, 1)).not.toBeNull();
+
+    service.setSubset(true);
+    expect(service.getCached(2, 1, 1)).toBeNull();
+  });
+
   it('getCached returns null for an uncached tile and the tile once cached', () => {
     service.setProjectionId('p1');
     expect(service.getCached(4, 0, 0)).toBeNull();

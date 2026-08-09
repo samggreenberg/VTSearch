@@ -73,9 +73,15 @@ export class TileCacheService {
 
     if (!this.projectionId) return null;
 
+    // Identity of the view this request belongs to, captured now. Subscribers
+    // are fire-and-forget (the canvas and minimap never unsubscribe), so a
+    // response can land long after a projection switch cleared the cache; the
+    // guard below drops it instead of caching another projection's cells.
+    const token = this.viewToken();
     const req$ = this.projectionApi.getTile(level, tx, ty, this.subset, this.cacheToken()).pipe(
       tap((tile) => {
         this.inflight.delete(key);
+        if (this.viewToken() !== token) return;
         this.put(key, tile);
         this.tileLoaded$.next(tile);
       }),
@@ -113,7 +119,19 @@ export class TileCacheService {
   }
 
   private key(level: number, tx: number, ty: number): string {
-    return `${this.contentVersion}:${level}:${tx}:${ty}`;
+    return `${this.viewToken()}:${level}:${tx}:${ty}`;
+  }
+
+  /**
+   * Full identity of what a tile's cells depict: layout (``projectionId``),
+   * membership (``contentVersion``) and which projection the tiles come from
+   * (``subset``). Keying on all three means a tile fetched under one view can
+   * never be read back under another, even if a stale ``put`` slips through —
+   * ``setProjectionId`` resets ``contentVersion`` to 0, so the version alone
+   * collides across projections.
+   */
+  private viewToken(): string {
+    return `${this.projectionId}:${this.contentVersion}:${this.subset ? 's' : 'f'}`;
   }
 
   /** Cache-bust token for the tile URL: ``<projection_id>:<content_version>``. */
