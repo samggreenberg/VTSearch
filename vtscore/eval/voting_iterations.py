@@ -1524,20 +1524,56 @@ def _score_pool(
     step: _StepModel,
     pool_ids: list[int],
     clips_dict: dict[int, dict[str, Any]],
+    *,
+    region_aware: bool = False,
+    style_obj: Any = None,
+    sim_clips: dict[int, dict[str, Any]] | None = None,
+    sim_scored: tuple[list[int], list[float]] | None = None,
 ) -> dict[int, float]:
     """Return ``{pool_id: score}`` for the current model over the pool.
 
-    Scores each pool item by its single whole-image vector - the fast path the
-    acquisition strategies rank uncertainty over.  This intentionally uses the
-    whole-image embedding even for patch datasets (where *test* scoring
-    max-pools over regions): acquisition only needs a monotone uncertainty
-    signal to order the pool, and the whole-image score is a cheap, adequate
-    proxy for that ordering.
+    **In the same score space the thresholds are cut in** (issue #2943).  That
+    is not a refinement, it is a correctness requirement: the Hard pick locates
+    its cutoff with the *absolute* comparison ``ranking[cid] <= threshold``
+    (:func:`~vtscore.eval.al_strategies._hard_pick_by_index`), so a ranking and
+    a cut that live in different spaces put the cutoff index in the wrong place.
+    On a patch dataset the reporting/acquisition cuts are fitted on the style's
+    region max-pooled scores, and a max over ~197 patch rows stochastically
+    dominates the single whole-image row - so scoring the pool whole-image would
+    depress every pool score relative to the cut and drag the cutoff index
+    systematically toward the top of the ranking.  The app has no such gap: its
+    learned sort ranks the very same pooled scores its threshold cuts.
+
+    Three paths, mirroring :func:`_evaluate_on_test` / :func:`_score_sim_set_with_model`:
+
+    * *sim_scored* - the ``(ids, scores)`` the safe-threshold step already
+      computed over the whole simulation set, in exactly this geometry.  The
+      pool is a subset of that set, so restricting it is free and removes the
+      scoring pass entirely.
+    * a *style_obj* / *region_aware* dataset with no such scores (the
+      ``safe_thresholds=False`` control arm) - score through the style.  The
+      **full** sim set is scored rather than just the pool: the style memoises
+      its flattened patch matrix per media-id set, and the pool loses an item
+      every step, so scoring the shrinking pool would re-flatten from scratch
+      each step *and* leak a cache entry per step.
+    * everything else (single-vector datasets, the SVM arms) - the trainer-
+      agnostic whole-image ``predict``, which is already the threshold's space.
     """
     import numpy as np  # noqa: PLC0415
 
     if not pool_ids:
         return {}
+    if sim_scored is not None:
+        ids, scores = sim_scored
+        pool_set = set(pool_ids)
+        return {cid: float(s) for cid, s in zip(ids, scores, strict=True) if cid in pool_set}
+    if (style_obj is not None or region_aware) and sim_clips:
+        assert step.torch_model is not None
+        pool_set = set(pool_ids)
+        ids, scores = _score_sim_set_with_model(
+            step.torch_model, region_aware, sim_clips, None, sorted(sim_clips), style_obj
+        )
+        return {cid: float(s) for cid, s in zip(ids, scores, strict=True) if cid in pool_set}
     embs = np.array([media_embedding(clips_dict[cid]) for cid in pool_ids])
     scores = np.asarray(step.predict(embs)).ravel().tolist()
     return dict(zip(pool_ids, scores, strict=True))
@@ -2506,9 +2542,12 @@ def simulate_voting_iterations(  # noqa: C901
     # sim-set snapshot and score it per-step via region max-pool (to match how
     # the test set is scored); single-vector datasets pre-stack whole-image
     # embeddings once.
+    # The snapshot is built for every region-aware / styled run, not only the
+    # safe-threshold ones: the pool scorer needs it too, and it is a dict of
+    # references to media already in memory.
     sim_clips: dict[int, dict[str, Any]] | None = None
     X_all_clips: Any = None
-    if safe_thresholds and (region_aware or style_obj is not None):
+    if region_aware or style_obj is not None:
         sim_clips = {cid: clips_dict[cid] for cid in sim_ids}
     elif safe_thresholds:
         gmm_clip_embs = np.array([media_embedding(clips_dict[cid]) for cid in sorted(sim_ids)])
@@ -2718,9 +2757,20 @@ def simulate_voting_iterations(  # noqa: C901
         test_score_seconds = time.monotonic() - t_test
 
         # Score the remaining pool with the fresh model so the next step's
-        # autopilot Hard pick can rank it.
+        # autopilot Hard pick can rank it - in the geometry the cut it will be
+        # compared against was fitted in (#2943).  The safe-threshold path has
+        # already scored the whole sim set that way, so hand those scores over
+        # rather than paying for a second pass.
         t_pool = time.monotonic()
-        pool_scores = _score_pool(step, pool, clips_dict)
+        pool_scores = _score_pool(
+            step,
+            pool,
+            clips_dict,
+            region_aware=region_aware,
+            style_obj=style_obj,
+            sim_clips=sim_clips,
+            sim_scored=(sim_pooled_ids, sim_pooled_scores) if sim_pooled_scores else None,
+        )
         pool_score_seconds = time.monotonic() - t_pool
 
         # Advance the app's phase machine on this step's model: the Smart
