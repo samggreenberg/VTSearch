@@ -364,11 +364,10 @@ class TestUnseededFoldSplitsAreDeterministic:
         """Calibration must not read or advance shared global RNG state."""
         X, y = self._votes()
         np.random.seed(1234)
-        before = np.random.get_state()
+        expected = np.random.random(8)
+        np.random.seed(1234)
         self._orderings(X, y)
-        after = np.random.get_state()
-        assert np.array_equal(before[1], after[1])
-        assert before[2:] == after[2:]
+        assert np.array_equal(np.random.random(8), expected)
 
     def test_grouped_path_is_deterministic_too(self):
         """The bag-aware split (``groups=...``) takes the same seeded default."""
