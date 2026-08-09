@@ -5,6 +5,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { Subject } from 'rxjs';
 import { ProgressModalComponent } from './progress-modal.component';
 import { ProgressEventsService } from '../../../services/progress-events.service';
+import { ChartsService } from '../../../services/charts.service';
 import { VotingIterationsResponse } from '../../../models/api.models';
 import { provideZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
@@ -17,15 +18,28 @@ describe('ProgressModalComponent', () => {
   // Controllable stand-in for the `eval` SSE channel so a test can push a
   // "done" progress frame at will.
   let votingIterations$: Subject<VotingIterationsResponse>;
+  // Records every chart the component asks to draw, so a spec can assert the
+  // canvas was actually painted (not merely instantiated).
+  let rendered: { chart: string; canvas: HTMLCanvasElement; points: unknown[] }[];
 
   beforeEach(async () => {
     votingIterations$ = new Subject<VotingIterationsResponse>();
+    rendered = [];
+    const chartsStub = {
+      renderErrorCostChart: (canvas: HTMLCanvasElement, points: unknown[]) =>
+        rendered.push({ chart: 'error-cost', canvas, points }),
+      renderStabilityChart: (canvas: HTMLCanvasElement, points: unknown[]) =>
+        rendered.push({ chart: 'stability', canvas, points }),
+      renderDiversityChart: (canvas: HTMLCanvasElement, points: unknown[]) =>
+        rendered.push({ chart: 'diversity', canvas, points }),
+    };
     await TestBed.configureTestingModule({
       imports: [ProgressModalComponent],
       providers: [
         ...provideZoneless(),
         ...provideHttpTesting(),
         { provide: ProgressEventsService, useValue: { votingIterations$ } },
+        { provide: ChartsService, useValue: chartsStub },
       ],
     }).compileComponents();
 
@@ -299,7 +313,11 @@ describe('ProgressModalComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain('Loading indicator history…');
     // The canvas only exists in the results branch; the render effect draws
     // into it as soon as the viewChild query resolves.
-    expect(fixture.nativeElement.querySelector('canvas')).toBeTruthy();
+    const canvas = fixture.nativeElement.querySelector('canvas') as HTMLCanvasElement;
+    expect(canvas).toBeTruthy();
+    expect(rendered).toEqual([
+      { chart: 'error-cost', canvas, points: [{ num_labels: 5, error_cost: 0.5 }] },
+    ]);
   });
 
   // The job path's progress bar is written from the SSE subscribe, which is
