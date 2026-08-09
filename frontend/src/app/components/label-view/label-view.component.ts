@@ -1,7 +1,8 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, effect, ElementRef, inject, OnDestroy, OnInit, signal, untracked, viewChild } from '@angular/core';
 
-import { Subject, timer, Subscription, pairwise } from 'rxjs';
-import { takeUntil, switchMap, filter, take } from 'rxjs/operators';
+import { HttpErrorResponse } from '@angular/common/http';
+import { Subject, Subscription, of, pairwise, throwError } from 'rxjs';
+import { takeUntil, catchError, filter, take, tap } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -182,6 +183,13 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *  ``applyLearnedSortResult`` / the error/cancel paths. Used by the
    *  Cancel button on the sort progress bar to target the right job. */
   private currentLearnedSortJobId: string | null = null;
+  /** Consecutive *transient* learned-sort result-poll failures tolerated before
+   *  the run is declared failed. Roughly 10s–40s of unbroken failures at the
+   *  poll's 500ms–2000ms cadence: long enough to ride out a backend blip,
+   *  short enough that a genuinely unreachable server does not leave the panel
+   *  spinning on 'Training…'. Terminal statuses (404/500) end the run at once
+   *  and never consume this budget. */
+  private readonly POLL_ERROR_LIMIT = 20;
   /** Set by `reloadForNewPair` when the user was in `learned` sort mode at the
    *  time of a pair switch: a constructor effect watches the labelset counts and
    *  re-fires `onLearnedSort` once, after the reloaded votes make both classes
@@ -716,36 +724,76 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     });
   }
 
+  /**
+   * Poll a running learned-sort job until it settles.
+   *
+   * Uses {@link adaptivePoll}, not the `timer(200, 500)` + `switchMap` pattern
+   * this once had: `switchMap` aborted the in-flight result GET on every tick,
+   * so a backend that needed longer than the interval to answer — exactly the
+   * situation while an MLP training job is hogging the process — had *every*
+   * read cancelled, never saw a non-running status, and left the panel stuck
+   * on 'Training…' with `sortBusy` true forever. That is the pathology
+   * documented in `adaptive-poll.ts` (issue #2572) that the labeling-status
+   * poll above was already migrated off; this poll was left behind.
+   *
+   * Poll failures are no longer fatal either. The result endpoint reports two
+   * genuine terminal states by HTTP status code — 404 (job evicted or unknown)
+   * and 500 (the job itself errored) — so those still end the run, but any
+   * other failure (a network blip, a proxy 502/503) is transient and costs
+   * only that tick, until {@link POLL_ERROR_LIMIT} consecutive failures say
+   * the backend is really gone. Previously a single transient error tore the
+   * poll down and reported 'Training failed' for a job still running
+   * server-side.
+   */
   private pollLearnedSortJob(jobId: string, autoSelect: boolean): void {
-    timer(200, 500)
+    let consecutiveErrors = 0;
+    const settledWith = (error: string): LearnedSortResponse => ({
+      job_id: jobId,
+      status: 'error',
+      error,
+    });
+
+    adaptivePoll<LearnedSortResponse>(
+      () =>
+        this.sortingApi.getLearnedSortResult(jobId).pipe(
+          tap(() => (consecutiveErrors = 0)),
+          catchError((err: unknown) => {
+            const status = err instanceof HttpErrorResponse ? err.status : 0;
+            if (status === 404) return of(settledWith('Training job expired'));
+            if (status === 500) return of(settledWith('Training failed'));
+            consecutiveErrors += 1;
+            if (consecutiveErrors >= this.POLL_ERROR_LIMIT) {
+              return of(settledWith('Training failed'));
+            }
+            // Re-throw so adaptivePoll absorbs it: this tick is skipped and the
+            // next one scheduled as usual, rather than the poll tearing down.
+            return throwError(() => err);
+          }),
+        ),
+      { fastMs: 500, slowMs: 2000 },
+    )
       .pipe(
         // Pair-scoped: a training job can outlive the pair it was started for,
         // and its result must not be applied to whatever pair is active when it
         // finally settles (see `pairScope$`).
         takeUntil(this.pairScope$),
-        switchMap(() => this.sortingApi.getLearnedSortResult(jobId)),
         filter((res) => res.status !== 'running'),
         take(1),
       )
-      .subscribe({
-        next: (res) => {
-          if (res.status === 'done') {
-            this.applyLearnedSortResult(res, autoSelect);
-          } else if (res.status === 'cancelled') {
-            this.currentLearnedSortJobId = null;
-            this.sortState.setSortBusy(false);
-            this.sortState.setSortStatus('Cancelled');
-          } else {
-            this.currentLearnedSortJobId = null;
-            this.sortState.setSortBusy(false);
-            this.sortState.setSortStatus(res.error || 'Training failed');
-          }
-        },
-        error: () => {
+      // No `error` handler: adaptivePoll never errors — a request failure is
+      // either absorbed above or converted into a terminal `error` status.
+      .subscribe((res) => {
+        if (res.status === 'done') {
+          this.applyLearnedSortResult(res, autoSelect);
+        } else if (res.status === 'cancelled') {
           this.currentLearnedSortJobId = null;
           this.sortState.setSortBusy(false);
-          this.sortState.setSortStatus('Training failed');
-        },
+          this.sortState.setSortStatus('Cancelled');
+        } else {
+          this.currentLearnedSortJobId = null;
+          this.sortState.setSortBusy(false);
+          this.sortState.setSortStatus(res.error || 'Training failed');
+        }
       });
   }
 
