@@ -81,10 +81,10 @@ class TestConfinedCopy:
     def test_members_are_confined_too(self, confined_base):
         origin = {
             "importer": "dupe_set",
-            "members": [{"origin": {"importer": "server_file", "params": {"path": "clip.wav"}}}],
+            "members": [{"origin": {"importer": "server_file", "params": {"path": "sounds/clip.wav"}}}],
         }
         out = confine_origin_params(origin)
-        assert out["members"][0]["origin"]["params"]["path"] == str((confined_base / "clip.wav").resolve())
+        assert out["members"][0]["origin"]["params"]["path"] == str((confined_base / "sounds" / "clip.wav").resolve())
 
     def test_url_params_pass_through_unchanged(self, confined_base):
         url = "https://media.example.test/a.wav"

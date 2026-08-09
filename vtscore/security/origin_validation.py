@@ -16,6 +16,14 @@ CWD — so consuming the raw params would read a different path than the one
 approved.  See
 :func:`~vtscore.security.path_validation.confine_server_filepath`.
 
+Origin params are untyped, so path-like values are recognised by carrying a
+path separator.  A separator-free param (``{"filename": "abc.wav"}``) is left
+alone — it cannot be told apart from an ordinary scalar like a demo-dataset
+name or a media type, and confining it would rewrite non-paths into absolute
+paths.  Such a value can still be resolved against the CWD by its consumer,
+but it addresses a file in the process's working directory, not another
+user's subtree; closing that last gap wants typed origin params.
+
 URL-valued params are deliberately *not* path-checked here: they are
 re-validated with :func:`~vtscore.security.url_validation.validate_url` at
 fetch time by the URL-backed sources (and the downloader re-checks every
