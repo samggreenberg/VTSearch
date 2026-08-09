@@ -336,9 +336,7 @@ def find_label(body: dict):
     # fold-corrections -> retrain -> re-score loop) must not silently invert a
     # recorded human decision while still counting it as verified (issue #2928).
     # Everything else adopts this pass's call.
-    apply_labels_bulk_with_click_time(
-        label_pairs, replace_all=True, record_achievement=False, preserve_verified=True
-    )
+    apply_labels_bulk_with_click_time(label_pairs, replace_all=True, record_achievement=False, preserve_verified=True)
 
     # The detector's own call for *every* item, verified ones included: this is
     # the evaluation baseline Stats crosses the adopted labels against, so a

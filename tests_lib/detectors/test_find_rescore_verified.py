@@ -36,9 +36,7 @@ class TestPreserveVerified:
     def test_verified_vote_is_not_overwritten(self):
         # 1 verified-good, 2 unverified-good; the new pass calls both bad.
         _seed_find_session(good={1, 2}, bad=set(), verified={1})
-        apply_labels_bulk_with_click_time(
-            [(1, "bad"), (2, "bad")], replace_all=True, preserve_verified=True
-        )
+        apply_labels_bulk_with_click_time([(1, "bad"), (2, "bad")], replace_all=True, preserve_verified=True)
         ctx = get_active_detector_context()
         assert 1 in ctx.good_votes and 1 not in ctx.bad_votes  # human's call held
         assert 2 in ctx.bad_votes and 2 not in ctx.good_votes  # machine's call adopted
@@ -46,9 +44,7 @@ class TestPreserveVerified:
 
     def test_verified_click_time_is_preserved(self):
         _seed_find_session(good={1, 2}, bad=set(), verified={1})
-        apply_labels_bulk_with_click_time(
-            [(1, "bad"), (2, "bad")], replace_all=True, preserve_verified=True
-        )
+        apply_labels_bulk_with_click_time([(1, "bad"), (2, "bad")], replace_all=True, preserve_verified=True)
         ctx = get_active_detector_context()
         assert ctx.vote_click_times[1] == 101  # untouched
         assert ctx.vote_click_times[2] != 102  # re-stamped by this pass

@@ -633,6 +633,28 @@ def apply_label_with_click_time(media_id: int, label: str) -> None:
         _record_vote_locked(count_streak=False)
 
 
+def _purge_vote_state_outside(ctx: Any, kept: set[int]) -> None:
+    """Drop every vote / click-time / region box / verified marker outside *kept*.
+
+    The ``replace_all`` half of :func:`apply_labels_bulk_with_click_time`.  The
+    verified markers go with the votes they described: a marker whose vote was
+    just cleared would keep inflating ``verified_count`` and the verified
+    export partitions for an item the new label set no longer covers.  Caller
+    must hold ``_state_lock``.
+    """
+    for cid in [c for c in ctx.good_votes if c not in kept]:
+        ctx.good_votes.pop(cid, None)
+    for cid in [c for c in ctx.bad_votes if c not in kept]:
+        ctx.bad_votes.pop(cid, None)
+    for cid in [c for c in ctx.vote_click_times if c not in kept]:
+        ctx.vote_click_times.pop(cid, None)
+    for cid in [c for c in ctx.vote_region_boxes if c not in kept]:
+        ctx.vote_region_boxes.pop(cid, None)
+    for cid in [c for c in ctx.verified_ids if c not in kept]:
+        ctx.verified_ids.pop(cid, None)
+    ctx.find_initial_labels.clear()
+
+
 def apply_labels_bulk_with_click_time(
     labels: list[tuple[int, str]],
     replace_all: bool = False,
@@ -689,18 +711,7 @@ def apply_labels_bulk_with_click_time(
         label_history = ctx.label_history
         atlas = get_active_context().coverage_atlas
         if replace_all:
-            kept = {mid for mid, _ in labels}
-            for cid in [c for c in good_votes if c not in kept]:
-                good_votes.pop(cid, None)
-            for cid in [c for c in bad_votes if c not in kept]:
-                bad_votes.pop(cid, None)
-            for cid in [c for c in vote_click_times if c not in kept]:
-                vote_click_times.pop(cid, None)
-            for cid in [c for c in vote_region_boxes if c not in kept]:
-                vote_region_boxes.pop(cid, None)
-            for cid in [c for c in verified_ids if c not in kept]:
-                verified_ids.pop(cid, None)
-            ctx.find_initial_labels.clear()
+            _purge_vote_state_outside(ctx, {mid for mid, _ in labels})
         preserved: set[int] = set()
         for media_id, label in labels:
             if preserve_verified and media_id in verified_ids:
