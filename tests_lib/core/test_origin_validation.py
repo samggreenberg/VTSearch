@@ -30,6 +30,7 @@ class TestSingleUserMode:
 
         monkeypatch.setattr(paths_mod, "get_file_access_base_dir", lambda: None)
         check_origin_param_confinement({"importer": "server_file", "params": {"path": "/etc/passwd"}})
+        check_origin_param_confinement({"importer": "server_folder", "params": {"path": ".."}})
 
 
 class TestMultiUserConfinement:
@@ -48,8 +49,36 @@ class TestMultiUserConfinement:
             {"importer": "url_download", "params": {"url": "https://media.example.test/a.wav"}}
         )
 
-    def test_pathless_params_ignored(self, confined_base):
+    def test_plain_relative_params_pass(self, confined_base):
+        # Opaque params (a cache filename, a media type, an archive member
+        # key) resolve inside the user's own dir, so validating them is
+        # harmless — the check errs towards validating too much.
         check_origin_param_confinement({"importer": "example_media", "params": {"filename": "abc.wav"}})
+        check_origin_param_confinement(
+            {
+                "importer": "local_archive_member",
+                "params": {"member": "sounds/clip.wav", "media_type": "audio"},
+            }
+        )
+
+    @pytest.mark.parametrize("token", ["..", ".", "~", "~/secrets", "../..", "..\\..", "./data", "a/../.."])
+    def test_separator_free_and_dot_tokens_are_rejected(self, confined_base, token):
+        """Issue #2918: ``..`` / ``.`` / ``~`` carry no path separator, so the
+        old heuristic skipped them entirely and ``LocalFolderSource("..")``
+        got built against the process CWD's parent."""
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            check_origin_param_confinement({"importer": "server_folder", "params": {"path": token}})
+
+    def test_non_string_params_are_ignored(self, confined_base):
+        check_origin_param_confinement(
+            {"importer": "local_archive_member", "params": {"clip_start": 1.5, "thin": True, "n": None}}
+        )
+
+    def test_nested_container_params_are_recursed(self, confined_base):
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            check_origin_param_confinement({"importer": "server_files", "params": {"paths": ["ok.wav", ".."]}})
+        with pytest.raises(ValueError, match="outside the allowed directory"):
+            check_origin_param_confinement({"importer": "custom", "params": {"nested": {"path": "/etc/passwd"}}})
 
     def test_dupe_set_members_are_recursed(self, confined_base):
         origin = {
