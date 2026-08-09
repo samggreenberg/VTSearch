@@ -913,11 +913,17 @@ def auto_detect(body: dict):
         ids, embs = get_embedding_matrix_for_snap(snap, emb)
         matrices[emb] = (ids, torch.from_numpy(embs))
 
-    default_ids, default_X = matrices[default_score]
-    embed_dim = int(default_X.shape[1]) if default_X.ndim > 1 else 0
+    # Size the worker cap off the biggest matrix actually built.  Indexing by
+    # ``default_score`` would KeyError whenever no detector keys to it - the
+    # normal case on a multi-embedder dataset where every Auto-Find detector is
+    # type-locked to a semantic embedder while the score precedence picks the
+    # patch/structural one.  ``matrices`` is never empty here because
+    # ``_compatible_detectors`` aborts 400 when the type gate leaves nothing.
+    cap_rows = max(len(ids) for ids, _X in matrices.values())
+    cap_dim = max(int(X.shape[1]) if X.ndim > 1 else 0 for _ids, X in matrices.values())
     worker_cap = cap_workers_by_memory(
-        len(default_ids),
-        embed_dim,
+        cap_rows,
+        cap_dim,
         max_workers=min(len(detectors_to_run), 8),
     )
     results: dict[str, dict] = {}
@@ -939,7 +945,9 @@ def auto_detect(body: dict):
     if results:
         from vtsearch.achievements import record_find  # noqa: PLC0415
 
-        record_find(len(default_ids) * len(results))
+        # Each detector scored the medias in its own embedder's matrix, so count
+        # them per detector rather than multiplying one matrix's row count out.
+        record_find(sum(len(matrices[det_embedders[name]][0]) for name in results))
 
     response = {
         "media_type": media_type,
