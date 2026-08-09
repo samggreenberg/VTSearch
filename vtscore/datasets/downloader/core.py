@@ -21,7 +21,7 @@ import requests
 from vtscore.config import DATA_DIR
 from vtscore.security.archive import safe_tar_extract
 from vtscore.security.hf_auth import GatedResourceError, auth_header_for_url
-from vtscore.security.url_validation import open_validated_stream, validate_url
+from vtscore.security.url_validation import guarded_session, open_validated_stream, validate_url
 
 # Statuses that mean "this resource is gated / needs credentials we don't have".
 # These are surfaced as a short, actionable GatedResourceError rather than a
@@ -388,7 +388,7 @@ def download_file_with_progress(  # noqa: C901
     if on_progress is None:
         on_progress = _default_progress()
 
-    session = requests.Session()
+    session = guarded_session()
     downloaded = 0  # bytes already on disk at dest_path
     total_size = 0  # full size of the file once known
     # Resume relies on the server honoring Range requests on the *raw* body.
@@ -469,7 +469,7 @@ def fetch_remote_signature(url: str) -> Optional[str]:
     """
     try:
         validate_url(url)
-        session = requests.Session()
+        session = guarded_session()
         response = _open_validated_stream(session, url, headers={"Range": "bytes=0-0"})
     except Exception:
         return None

@@ -690,7 +690,7 @@ class TestWebhookExporterExport:
         mock_resp.raise_for_status.return_value = None
 
         with (
-            mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
+            mock.patch("requests.Session.post", return_value=mock_resp) as mock_post,
         ):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
@@ -711,7 +711,7 @@ class TestWebhookExporterExport:
         mock_resp.raise_for_status.return_value = None
 
         with (
-            mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
+            mock.patch("requests.Session.post", return_value=mock_resp) as mock_post,
         ):
             exp.export(results, {"url": "https://example.com/hook", "auth_header": "Bearer my-token"})
 
@@ -729,7 +729,7 @@ class TestWebhookExporterExport:
         mock_resp.raise_for_status.return_value = None
 
         with (
-            mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp) as mock_post,
+            mock.patch("requests.Session.post", return_value=mock_resp) as mock_post,
         ):
             exp.export(results, {"url": "https://example.com/hook", "auth_header": ""})
 
@@ -745,7 +745,7 @@ class TestWebhookExporterExport:
         mock_resp = mock.MagicMock()
         mock_resp.raise_for_status.side_effect = Exception("500 Server Error")
 
-        with mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("requests.Session.post", return_value=mock_resp):
             with pytest.raises(Exception, match="500 Server Error"):
                 exp.export(results, {"url": "https://example.com/hook"})
 
@@ -759,7 +759,7 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("requests.Session.post", return_value=mock_resp):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert "3 hit(s)" in result["message"]
@@ -775,7 +775,7 @@ class TestWebhookExporterExport:
         mock_resp.status_code = 201
         mock_resp.raise_for_status.return_value = None
 
-        with mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
+        with mock.patch("requests.Session.post", return_value=mock_resp):
             result = exp.export(results, {"url": "https://example.com/hook"})
 
         assert result["status_code"] == 201
@@ -793,7 +793,7 @@ class TestWebhookExporterIntegration:
 
         with (
             mock.patch("vtscore.security.url_validation.validate_url"),
-            mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp),
+            mock.patch("requests.Session.post", return_value=mock_resp),
         ):
             _run_exporter("webhook", {"url": "https://example.com/hook"}, results)
 
