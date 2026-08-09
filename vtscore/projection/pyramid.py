@@ -373,7 +373,7 @@ def _descent_resolved(
     - **Fully resolved:** every cell holds a single clip (``max_count <= 1``), so
       deeper levels would only reproduce this one at finer (wasted) radii.
     - **Co-located:** no progress across a radius halving — neither the cell count
-      nor the densest cell improved — *and* the densest cell's members are
+      nor the densest cell improved — *and* **every** multi-point cell is
       genuinely coincident (zero spatial extent), so a finer radius can never
       separate them.  The coincidence check matters because "no cell split" alone
       does **not** imply co-location: a corner-anchored square cell wider than the
@@ -381,12 +381,21 @@ def _descent_resolved(
       between them.  Only the spread test distinguishes "can't separate" from
       "haven't separated yet"; without it the descent would stop short on tight
       clouds under the square (quadtree) lattice.
+
+      Testing every multi-point cell (rather than only the densest) is what keeps
+      a dominant duplicate pile from masking smaller, still-separable clusters: a
+      halving that neither grows the cell count nor thins the coincident pile
+      leaves both statistics unchanged, and stopping there would strand a merely
+      *tight* secondary cluster above one-clip-per-cell.
     """
     if max_count <= 1:
         return True
     if n_cells == prev_n_cells and max_count == prev_max_count:
-        pile = coords[lc.members[int(np.argmax(lc.counts))]]
-        return float(np.max(pile.max(axis=0) - pile.min(axis=0))) == 0.0
+        for h in np.flatnonzero(lc.counts > 1):
+            pile = coords[lc.members[int(h)]]
+            if float(np.max(pile.max(axis=0) - pile.min(axis=0))) != 0.0:
+                return False
+        return True
     return False
 
 
