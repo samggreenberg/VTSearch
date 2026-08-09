@@ -35,8 +35,8 @@ _ALLOWED: dict[str, str] = {
     ),
     "embedding/loader.py": "optional transformers logging bridge, wrapped in try/except Exception",
     "security/path_validation.py": (
-        "UNGUARDED, tracked separately: the whole LoginProvider abstraction still "
-        "lives in vtsearch.auth, so moving it is its own change rather than a hook"
+        "UNGUARDED, tracked in issue #3042: the whole LoginProvider abstraction "
+        "still lives in vtsearch.auth, so moving it is its own change, not a hook"
     ),
 }
 
