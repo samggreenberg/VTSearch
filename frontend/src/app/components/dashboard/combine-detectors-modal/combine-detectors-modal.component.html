@@ -38,15 +38,15 @@
       Labels that disagree across sources are dropped.
     </p>
 
-    @if (error) {
-      <p class="error-text">{{ error }}</p>
+    @if (error()) {
+      <p class="error-text">{{ error() }}</p>
     }
   </form>
 
   <div modal-footer>
-    <button type="button" class="btn btn--secondary" [disabled]="submitting" (click)="close()" title="Discard and close the dialog">Cancel</button>
+    <button type="button" class="btn btn--secondary" [disabled]="submitting()" (click)="close()" title="Discard and close the dialog">Cancel</button>
     <button type="button" class="btn btn--primary" [disabled]="!canSubmit" (click)="submit()" title="Combine the selected detectors into a new one">
-      {{ submitting ? 'Combining…' : 'Combine' }}
+      {{ submitting() ? 'Combining…' : 'Combine' }}
     </button>
   </div>
 </vt-modal>

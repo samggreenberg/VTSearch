@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input, OnInit, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, OnInit, output, signal } from '@angular/core';
 import { TitleCasePipe } from '@angular/common';
 
 import { FormsModule } from '@angular/forms';
@@ -35,8 +35,12 @@ export class CombineDetectorsModalComponent implements OnInit {
 
   newName = '';
   conflictPolicy: 'drop' = 'drop';
-  submitting = false;
-  error = '';
+  // Signals, mirroring the sibling combine-datasets-modal: written from the
+  // async combine subscribe, which under zoneless + OnPush schedules no
+  // repaint of its own. Plain fields left the modal stuck on "Combining…"
+  // with both buttons disabled and the server error hidden.
+  readonly submitting = signal(false);
+  readonly error = signal('');
 
   rows: SourceRow[] = [];
   totalLabels = 0;
@@ -72,7 +76,7 @@ export class CombineDetectorsModalComponent implements OnInit {
 
   get canSubmit(): boolean {
     return (
-      !this.submitting &&
+      !this.submitting() &&
       this.rows.length >= 2 &&
       !!this.newName.trim() &&
       !this.nameCollision
@@ -83,37 +87,38 @@ export class CombineDetectorsModalComponent implements OnInit {
     if (!this.canSubmit) return;
     const trimmed = this.newName.trim();
     const names = this.rows.map((r) => r.name);
-    this.submitting = true;
-    this.error = '';
+    this.submitting.set(true);
+    this.error.set('');
 
     this.detectorsCrudApi.combine(names, trimmed, this.conflictPolicy).subscribe({
       next: (resp: DetectorCombineResponse) => {
-        this.submitting = false;
+        this.submitting.set(false);
         this.created.emit(resp?.name || trimmed);
       },
       error: (err) => {
-        this.submitting = false;
+        this.submitting.set(false);
         const status = err?.status;
         const serverMsg = apiErrorMessage(err, '');
         if (status === 422) {
-          this.error =
+          this.error.set(
             serverMsg ||
-            'Every label was a conflict; no detector was created. Try fewer or more aligned sources.';
+              'Every label was a conflict; no detector was created. Try fewer or more aligned sources.',
+          );
         } else if (status === 409) {
-          this.error = serverMsg || `A detector named "${trimmed}" already exists.`;
+          this.error.set(serverMsg || `A detector named "${trimmed}" already exists.`);
         } else if (status === 404) {
-          this.error = serverMsg || 'A source detector was not found.';
+          this.error.set(serverMsg || 'A source detector was not found.');
         } else if (status === 400) {
-          this.error = serverMsg || 'Invalid combine request.';
+          this.error.set(serverMsg || 'Invalid combine request.');
         } else {
-          this.error = serverMsg || 'Failed to combine detectors.';
+          this.error.set(serverMsg || 'Failed to combine detectors.');
         }
       },
     });
   }
 
   close(): void {
-    if (this.submitting) return;
+    if (this.submitting()) return;
     this.closed.emit();
   }
 }
