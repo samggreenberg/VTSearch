@@ -46,7 +46,7 @@ if TYPE_CHECKING:
 
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, select_next
-from vtscore.eval.autopilot_flow import AutopilotFlow, app_has_detector
+from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector
 from vtscore.eval.labels import media_is_positive, region_box_for_category
 from vtscore.eval.trainers import _cross_calibrated_threshold, _parse_trainer_spec
 from vtscore.training.blend_schedules import BlendContext
@@ -1496,44 +1496,57 @@ def _score_pool(
     return dict(zip(pool_ids, scores, strict=True))
 
 
-def _labelset_error_cost(
+def _labelset_error_costs(
     model_steps: list[tuple[Any, float]],
     good_votes: dict[int, None],
     bad_votes: dict[int, None],
     clips_dict: dict[int, dict[str, Any]],
     inclusion: int,
-) -> Optional[float]:
-    """Weighted FPR/FNR of the most recent model on the **labelled** set.
+) -> list[float]:
+    """Weighted FPR/FNR of **every** recent model on the current labelled set.
 
-    Feeds the Smart indicator.  Mirrors ``labeling_progress._score_step``: each
-    cached step's model is scored against the current labelset — the only
-    ground truth the app has — so the trend the simulated user reacts to is the
-    one a real user's status panel would show.  Deliberately *not* the held-out
-    test split: those labels must never reach the vote order.
+    Feeds the Smart indicator.  Mirrors ``labeling_progress._eval_cached_models``
+    /``_score_step``: every model in the window is re-scored against the
+    *current* labelset — the only ground truth the app has — with its own cached
+    threshold, so all points of the slope regression share one eval set and the
+    trend isolates model improvement.  Scoring each model against the labelset
+    it was trained on instead would confound model change with labelset growth:
+    autopilot deliberately votes boundary items, which are mispredicted at first
+    and inflate the later costs of a frozen-cost history.
+
+    Deliberately *not* the held-out test split: those labels must never reach
+    the vote order.  Returns ``[]`` when the labelset has no usable eval set
+    (either class empty), matching ``_eval_cached_models``, which leaves the
+    Smart indicator on its "not enough points" branch.
     """
-    if not model_steps:
-        return None
-    step, threshold = model_steps[-1]
-    fpr_weight, fnr_weight = _inclusion_weights(inclusion)
+    import numpy as np  # noqa: PLC0415
 
     ids = list(good_votes) + list(bad_votes)
     labels = [1.0] * len(good_votes) + [0.0] * len(bad_votes)
     total_pos = len(good_votes)
     total_neg = len(bad_votes)
-    if not ids or total_pos == 0 or total_neg == 0:
-        return None
+    if not model_steps or not ids or total_pos == 0 or total_neg == 0:
+        return []
 
-    scores = _score_pool(step, ids, clips_dict)
-    fp = fn = 0
-    for cid, true_label in zip(ids, labels, strict=True):
-        predicted = 1 if scores.get(cid, 0.0) >= threshold else 0
-        if predicted == 1 and true_label == 0.0:
-            fp += 1
-        elif predicted == 0 and true_label == 1.0:
-            fn += 1
-    fpr = fp / total_neg if total_neg > 0 else 0.0
-    fnr = fn / total_pos if total_pos > 0 else 0.0
-    return fpr_weight * fpr + fnr_weight * fnr
+    fpr_weight, fnr_weight = _inclusion_weights(inclusion)
+    # One eval matrix, reused by every model in the window - the app's
+    # ``_build_eval_set`` builds its tensor once for the same reason.
+    embs = np.array([media_embedding(clips_dict[cid]) for cid in ids])
+
+    costs: list[float] = []
+    for step, threshold in model_steps:
+        scores = np.asarray(step.predict(embs)).ravel()
+        fp = fn = 0
+        for score, true_label in zip(scores.tolist(), labels, strict=True):
+            predicted = 1 if score >= threshold else 0
+            if predicted == 1 and true_label == 0.0:
+                fp += 1
+            elif predicted == 0 and true_label == 1.0:
+                fn += 1
+        fpr = fp / total_neg
+        fnr = fn / total_pos
+        costs.append(fpr_weight * fpr + fnr_weight * fnr)
+    return costs
 
 
 def _build_eval_atlas(embeddings: dict[int, np.ndarray], min_node_size: int) -> Any:
@@ -2459,9 +2472,10 @@ def simulate_voting_iterations(  # noqa: C901
     flow: Any = None
     if autopilot_fidelity and strategy == "autopilot":
         flow = AutopilotFlow()
-    # Recent per-step models, kept so the Smart indicator can re-score the last
-    # window of them against the *current* labelset - exactly what the app's
-    # ``_eval_cached_models`` does over its per-step cache.
+    # Recent per-step models (each with the threshold it was calibrated at),
+    # re-scored every step against the *current* labelset so the Smart
+    # indicator's slope regresses over one shared eval set - exactly what the
+    # app's ``_eval_cached_models`` does over its per-step cache.
     recent_steps: list[tuple[Any, float]] = []
 
     for t in range(1, n_steps + 1):
@@ -2629,9 +2643,9 @@ def simulate_voting_iterations(  # noqa: C901
         # over the still-unlabeled pool, Span the atlas's coverage.
         if flow is not None:
             recent_steps.append((step, threshold))
-            del recent_steps[:-10]  # the app regresses over the last 10 steps
+            del recent_steps[:-SMART_WINDOW]  # the app regresses over the last 10 steps
             flow.record_step(
-                _labelset_error_cost(recent_steps, good_votes, bad_votes, clips_dict, inclusion),
+                _labelset_error_costs(recent_steps, good_votes, bad_votes, clips_dict, inclusion),
                 {cid: (1 if s >= threshold else 0) for cid, s in pool_scores.items()},
             )
             flow.update(
