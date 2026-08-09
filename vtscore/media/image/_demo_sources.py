@@ -1009,12 +1009,8 @@ def _collect_openlogo_files(categories, slice_args, on_progress) -> list:
 def _ensure_image_embedder_loaded(embedder, on_progress) -> None:
     if getattr(embedder, "_model", None) is None:
         on_progress("loading", "Loading image embedding model…", 0, 0)
-        original_cb = embedder._on_progress
-        embedder._on_progress = on_progress
-        try:
+        with embedder.progress_scope(on_progress):
             embedder.load_models()
-        finally:
-            embedder._on_progress = original_cb
 
 
 def _synthetic_tile_png(item) -> bytes:

@@ -444,9 +444,18 @@ No Flask, no global state, no progress dependency (silent no-op by
 default).  To get progress reporting, set a callback before loading:
 
 ```python
-embedder._on_progress = lambda status, msg, cur, tot: print(f"{msg} ({cur}/{tot})")
-embedder.load_models()
+with embedder.progress_scope(lambda status, msg, cur, tot: print(f"{msg} ({cur}/{tot})")):
+    embedder.load_models()
 ```
+
+Embedders are process-wide singletons, so `_on_progress` is **thread-scoped**:
+`progress_scope()` (and a bare `embedder._on_progress = cb` assignment) only
+redirects progress for calls made on the *calling* thread, and a thread that set
+nothing reads the process-wide default wired in by
+`vtscore.media.set_progress_callback()`.  That is what lets two concurrent
+dataset loads share one embedder without their trackers crossing — a mis-routed
+callback would not merely mis-draw a bar, since trackers call `check_cancelled()`
+and would abort the wrong load.
 
 ### The plugin systems
 
