@@ -4,7 +4,8 @@
 specialist reviewers over disjoint areas (~118 k lines Python, ~44 k lines
 TypeScript), each reported finding then handed to an independent verifier
 prompted to *refute* it against the code and defaulting to "not real" when
-uncertain. 69 bugs survived that pass; 3 claims were refuted and dropped. The
+uncertain. 69 bugs survived that pass; 3 claims were refuted and dropped, and one
+more (#2972) was withdrawn after a second suite run disproved it. The
 repo's own gates were green throughout (7 860 tests, ruff, format, frontend
 build), so everything below came from reading code, not from a broken build.
 
@@ -17,7 +18,7 @@ rejected.
 
 ---
 
-## Filed issues (63)
+## Filed issues (62)
 
 Severity and recommended implementer model in parentheses. Bodies — failure
 scenario, suggested fix, verifier's confirmation — live in the issues; this list
@@ -124,7 +125,6 @@ carries pointers only.
 - [ ] #2929 — vtscore-clean gate is defeated by xdist: Flask blocker only installed in the master process (high, Opus 4.8)
 - [ ] #2952 — tests_lib/helpers.py is dead code: pythonpath ordering makes tests/helpers.py win for ALL tests (medium, Sonnet 5)
 - [ ] #2971 — run-tests.sh timeout re-exec breaks `bash run-tests.sh` invocation with a confusing error (low, Sonnet 5)
-- [ ] #2972 — Remove stale non-strict xfail markers in tests_lib/cli/test_tqdm_progress.py (consistently xpass) (low, Haiku 4.5)
 - [ ] #2974 — Dead always-false guard in tests_lib pytest_unconfigure checks the inifile for 'tests/conftest' (low, Haiku 4.5)
 - [ ] #2975 — run-tests.sh coverage comment promises `--cov` as first arg but the code only reads VTSEARCH_COVERAGE (low, Haiku 4.5)
 
