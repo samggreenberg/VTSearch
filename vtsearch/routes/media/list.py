@@ -334,6 +334,57 @@ def _audio_member_mimetype(filename: str) -> str:
     return guessed
 
 
+def _parse_range_header(range_header: str, total: int) -> tuple[int, int] | None:
+    """Resolve a ``Range`` header into inclusive ``(start, end)`` byte offsets.
+
+    Returns ``None`` when the requested range is unsatisfiable, which RFC 7233
+    says to answer with a 416.
+
+    Three forms are recognised: ``bytes=START-END``, ``bytes=START-`` ("to the
+    end"), and the **suffix** form ``bytes=-N`` ("the last *N* bytes"), which
+    some players use to read an MP4 ``moov`` atom parked at the tail of the
+    file.  A suffix range must not be mistaken for an unparseable one: falling
+    back to the whole payload would return a 206 containing far more than was
+    asked for, defeating the point of a ranged read straight out of an archive
+    member.  A header that genuinely can't be parsed still degrades to the
+    whole payload.
+    """
+    try:
+        byte_range = range_header.replace("bytes=", "").strip()
+        parts = byte_range.split("-", 1)
+        if parts[0] == "":
+            # Suffix range: the last N bytes.  N larger than the payload
+            # means "the whole thing"; N == 0 requests nothing, which RFC
+            # 7233 makes unsatisfiable.
+            suffix_len = int(parts[1])
+            if suffix_len <= 0:
+                return None
+            start = max(0, total - suffix_len)
+            end = total - 1
+        else:
+            start = int(parts[0])
+            end = int(parts[1]) if parts[1] else total - 1
+    except (ValueError, IndexError):
+        start, end = 0, total - 1
+
+    end = min(end, total - 1)
+    # Reject unsatisfiable ranges (start past EOF, negative, or inverted).
+    if start < 0 or start >= total or start > end:
+        return None
+    return start, end
+
+
+def _unsatisfiable_range_response(total: int, mimetype: str) -> Response:
+    """Build the RFC 7233 416 response for an unsatisfiable ``Range``."""
+    resp = make_response(b"")
+    resp.status_code = 416
+    resp.headers["Content-Range"] = f"bytes */{total}"
+    resp.headers["Content-Length"] = "0"
+    resp.headers["Content-Type"] = mimetype
+    resp.headers["Accept-Ranges"] = "bytes"
+    return resp
+
+
 def _send_streamed_range(total, read_slice, mimetype: str, download_name: str) -> Response:
     """Serve *total* bytes with HTTP Range support, reading only what's asked.
 
@@ -346,22 +397,10 @@ def _send_streamed_range(total, read_slice, mimetype: str, download_name: str) -
     """
     range_header = request.headers.get("Range")
     if range_header:
-        try:
-            byte_range = range_header.replace("bytes=", "").strip()
-            parts = byte_range.split("-", 1)
-            start = int(parts[0])
-            end = int(parts[1]) if parts[1] else total - 1
-        except (ValueError, IndexError):
-            start, end = 0, total - 1
-        end = min(end, total - 1)
-        if start < 0 or start >= total or start > end:
-            resp = make_response(b"")
-            resp.status_code = 416
-            resp.headers["Content-Range"] = f"bytes */{total}"
-            resp.headers["Content-Length"] = "0"
-            resp.headers["Content-Type"] = mimetype
-            resp.headers["Accept-Ranges"] = "bytes"
-            return resp
+        parsed = _parse_range_header(range_header, total)
+        if parsed is None:
+            return _unsatisfiable_range_response(total, mimetype)
+        start, end = parsed
         data = read_slice(start, end - start + 1)
         resp = make_response(data)
         resp.status_code = 206
@@ -429,28 +468,11 @@ def _send_video_bytes(data: bytes, mimetype: str, download_name: str) -> Respons
     range_header = request.headers.get("Range")
 
     if range_header:
-        # Parse "bytes=START-END" (END is optional)
-        try:
-            byte_range = range_header.replace("bytes=", "").strip()
-            parts = byte_range.split("-", 1)
-            start = int(parts[0])
-            end = int(parts[1]) if parts[1] else total - 1
-        except (ValueError, IndexError):
-            start, end = 0, total - 1
-
-        end = min(end, total - 1)
-
-        # Reject unsatisfiable ranges (start past EOF, negative, or
-        # inverted). RFC 7233 requires 416 with Content-Range: bytes */N.
-        if start < 0 or start >= total or start > end:
-            resp = make_response(b"")
-            resp.status_code = 416
-            resp.headers["Content-Range"] = f"bytes */{total}"
-            resp.headers["Content-Length"] = "0"
-            resp.headers["Content-Type"] = mimetype
-            resp.headers["Accept-Ranges"] = "bytes"
-            return resp
-
+        parsed = _parse_range_header(range_header, total)
+        # RFC 7233 requires 416 with Content-Range: bytes */N.
+        if parsed is None:
+            return _unsatisfiable_range_response(total, mimetype)
+        start, end = parsed
         length = end - start + 1
 
         resp = make_response(data[start : end + 1])

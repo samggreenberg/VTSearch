@@ -21,7 +21,7 @@ automatically by flask-smorest.
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, NamedTuple
 
 from flask_smorest import Blueprint, abort
 from marshmallow import fields
@@ -46,6 +46,24 @@ settings_bp = Blueprint(
 # ``_build_scalar_setters``.
 
 
+class _CustomSetter(NamedTuple):
+    """A key whose update needs bespoke validation, split from its write.
+
+    *validate* returns the cleaned value (or aborts 400); *apply* persists
+    an already-cleaned value and must not re-validate. Keeping the two
+    halves separate is what lets :func:`update_settings` check an entire
+    body before committing any of it.
+    """
+
+    validate: Callable[[Any], Any]
+    apply: Callable[[Any], None]
+
+
+def _validate_enable_achievements(value) -> bool:
+    """Coerce the toggle to a bool (the schema already rejects non-booleans)."""
+    return bool(value)
+
+
 def _apply_enable_achievements(value: bool) -> None:
     """Persist the toggle and wipe stored counters when flipping it off.
 
@@ -56,35 +74,40 @@ def _apply_enable_achievements(value: bool) -> None:
     ever opts back in.
     """
     prev = bool(settings.get_enable_achievements())
-    coerced = bool(value)
-    settings.set_enable_achievements(coerced)
-    if prev and not coerced:
+    settings.set_enable_achievements(value)
+    if prev and not value:
         from vtsearch import achievements
 
         achievements.wipe_state()
 
 
-def _apply_inclusion(value) -> None:
+def _validate_inclusion(value) -> int:
+    try:
+        return int(max(-10, min(10, int(value))))
+    except (TypeError, ValueError) as exc:
+        abort(400, message=str(exc))
+
+
+def _apply_inclusion(clamped: int) -> None:
     """``inclusion`` is set via :mod:`vtsearch.state`, not :mod:`settings`."""
     from vtsearch.state import set_inclusion
 
-    clamped = int(max(-10, min(10, int(value))))
     set_inclusion(clamped)
 
 
-def _apply_solo_embedder_per_media_type(value) -> None:
-    """Validate the ``{media_type: embedder}`` map and persist it.
+def _validate_solo_embedder_per_media_type(value) -> dict[str, str] | None:
+    """Validate the ``{media_type: embedder}`` map and return it cleaned.
 
-    ``None`` clears every per-type lock. Otherwise *value* must be a dict
-    mapping registered media-type ids to embedder names that exist for
-    that type (per :func:`vtscore.media.embedders_for_type`). An empty
-    string value is preserved as a **per-type opt-out sentinel**; it
-    overrides the ``--solo-embedder`` CLI fallback for that type. Any
-    other invalid pairing raises 400.
+    ``None`` (which clears every per-type lock) passes through. Otherwise
+    *value* must be a dict mapping registered media-type ids to embedder
+    names that exist for that type (per
+    :func:`vtscore.media.embedders_for_type`). An empty string value is
+    preserved as a **per-type opt-out sentinel**; it overrides the
+    ``--solo-embedder`` CLI fallback for that type. Any other invalid
+    pairing raises 400.
     """
     if value is None:
-        settings.apply_user_solo_embedder_per_media_type(None)
-        return
+        return None
     if not isinstance(value, dict):
         abort(400, message="solo_embedder_per_media_type must be a dict or null")
 
@@ -113,11 +136,11 @@ def _apply_solo_embedder_per_media_type(value) -> None:
                 message=(f"Unknown embedder {emb_name!r} for media type {mt!r}. Valid: {sorted(valid_embedders)}"),
             )
         cleaned[mt] = emb_name
-    settings.apply_user_solo_embedder_per_media_type(cleaned)
+    return cleaned
 
 
-def _apply_dir(key: str, value: str, setter) -> None:
-    """Validate and apply a directory-path setting."""
+def _validate_dir(key: str, value: str) -> str:
+    """Validate a directory-path setting and return the stripped path."""
     import vtscore.security.path_validation as _paths
 
     if not value or not value.strip():
@@ -129,7 +152,7 @@ def _apply_dir(key: str, value: str, setter) -> None:
             _paths.validate_server_filepath(value.strip(), base_dir=base)
         except ValueError as exc:
             abort(400, message=str(exc))
-    setter(value.strip())
+    return value.strip()
 
 
 #: Schema fields declared as dicts (``browse_*``, the per-media-type
@@ -220,31 +243,16 @@ _READ_ONLY_KEYS = frozenset(
 )
 
 
-def _apply_inclusion_guarded(value) -> None:
-    try:
-        _apply_inclusion(value)
-    except (TypeError, ValueError) as exc:
-        abort(400, message=str(exc))
+def _validate_autofind_exporter(value) -> str:
+    """Validate the Auto-Find results exporter name and return it.
 
-
-def _apply_enable_achievements_guarded(value) -> None:
-    try:
-        _apply_enable_achievements(value)
-    except (TypeError, ValueError) as exc:
-        abort(400, message=str(exc))
-
-
-def _apply_autofind_exporter(value) -> None:
-    """Validate the Auto-Find results exporter name and persist it.
-
-    ``""``/``None`` clears auto-export. Any other value must name a
-    registered (pickable) exporter; an unknown name aborts 400. Field
-    values are validated lazily at export time against the chosen
-    plugin's schema, not here.
+    ``""``/``None`` (which clears auto-export) normalises to ``""``. Any
+    other value must name a registered (pickable) exporter; an unknown
+    name aborts 400. Field values are validated lazily at export time
+    against the chosen plugin's schema, not here.
     """
     if value is None or (isinstance(value, str) and not value.strip()):
-        settings.set_autofind_exporter("")
-        return
+        return ""
     if not isinstance(value, str):
         abort(400, message="autofind_exporter must be a string")
     from vtscore.exporters import list_exporters
@@ -253,20 +261,20 @@ def _apply_autofind_exporter(value) -> None:
     valid = {exp.name for exp in list_exporters() if not getattr(exp, "hidden_from_picker", False)}
     if name not in valid:
         abort(400, message=f"Unknown exporter {name!r}. Available: {sorted(valid)}")
-    settings.set_autofind_exporter(name)
+    return name
 
 
-def _apply_autofind_exporter_field_values(value) -> None:
-    """Validate and persist the per-exporter ``{name: {key: value}}`` map.
+def _validate_autofind_exporter_field_values(value) -> dict[str, dict[str, str]]:
+    """Validate the per-exporter ``{name: {key: value}}`` map and clean it.
 
-    ``None`` clears every exporter's stored config. Otherwise the value
-    must be a dict whose entries are themselves ``{str: str}`` dicts;
-    non-string values are coerced to strings so the persisted shape stays
-    flat (exporter fields are always rendered/sent as strings).
+    ``None`` (which clears every exporter's stored config) normalises to
+    ``{}``. Otherwise the value must be a dict whose entries are
+    themselves ``{str: str}`` dicts; non-string values are coerced to
+    strings so the persisted shape stays flat (exporter fields are always
+    rendered/sent as strings).
     """
     if value is None:
-        settings.set_autofind_exporter_field_values({})
-        return
+        return {}
     if not isinstance(value, dict):
         abort(400, message="autofind_exporter_field_values must be a dict")
     cleaned: dict[str, dict[str, str]] = {}
@@ -274,28 +282,28 @@ def _apply_autofind_exporter_field_values(value) -> None:
         if not isinstance(exp_name, str) or not isinstance(fvals, dict):
             abort(400, message="autofind_exporter_field_values must map exporter names to field dicts")
         cleaned[exp_name] = {str(k): "" if v is None else str(v) for k, v in fvals.items()}
-    settings.set_autofind_exporter_field_values(cleaned)
-
-
-def _apply_saved_datasets_dir(value) -> None:
-    _apply_dir("saved_datasets_dir", value, settings.set_saved_datasets_dir)
-
-
-def _apply_detectors_dir(value) -> None:
-    _apply_dir("detectors_dir", value, settings.set_detectors_dir)
+    return cleaned
 
 
 #: Keys with bespoke side-effects (validation against a registry, path
-#: traversal checks, counter wipes, etc.). Each handler raises 400 on
-#: invalid input itself, so the dispatcher just calls and returns.
-_CUSTOM_SETTERS: dict[str, Callable[[Any], None]] = {
-    "inclusion": _apply_inclusion_guarded,
-    "saved_datasets_dir": _apply_saved_datasets_dir,
-    "detectors_dir": _apply_detectors_dir,
-    "enable_achievements": _apply_enable_achievements_guarded,
-    "solo_embedder_per_media_type": _apply_solo_embedder_per_media_type,
-    "autofind_exporter": _apply_autofind_exporter,
-    "autofind_exporter_field_values": _apply_autofind_exporter_field_values,
+#: traversal checks, counter wipes, etc.). Each entry pairs a validator
+#: -- which raises 400 on invalid input and returns the cleaned value --
+#: with the writer that persists it, so a whole PUT body can be validated
+#: before any of it is committed (see :func:`update_settings`).
+_CUSTOM_SETTERS: dict[str, _CustomSetter] = {
+    "inclusion": _CustomSetter(_validate_inclusion, _apply_inclusion),
+    "saved_datasets_dir": _CustomSetter(
+        lambda v: _validate_dir("saved_datasets_dir", v), settings.set_saved_datasets_dir
+    ),
+    "detectors_dir": _CustomSetter(lambda v: _validate_dir("detectors_dir", v), settings.set_detectors_dir),
+    "enable_achievements": _CustomSetter(_validate_enable_achievements, _apply_enable_achievements),
+    "solo_embedder_per_media_type": _CustomSetter(
+        _validate_solo_embedder_per_media_type, settings.apply_user_solo_embedder_per_media_type
+    ),
+    "autofind_exporter": _CustomSetter(_validate_autofind_exporter, settings.set_autofind_exporter),
+    "autofind_exporter_field_values": _CustomSetter(
+        _validate_autofind_exporter_field_values, settings.set_autofind_exporter_field_values
+    ),
 }
 
 
@@ -359,24 +367,28 @@ def _build_scalar_setters() -> dict[str, Callable[[Any], Any]]:
 _SCALAR_SETTERS: dict[str, Callable[[Any], Any]] = _build_scalar_setters()
 
 
-def _apply_one_key(key: str, value) -> None:
-    """Dispatch a single settings update body entry to the right setter.
+def _plan_one_key(key: str, value) -> tuple[Callable[[Any], Any], Any] | None:
+    """Validate one settings-body entry into a ``(writer, cleaned value)`` pair.
 
-    Keeps :func:`update_settings` simple by hosting the per-key
-    branching here. Side effects (path validation, achievement wipe,
-    state-tier setter) are isolated to their helper functions.
+    Returns ``None`` for entries that are no-ops (computed-on-read keys,
+    keys with no wired setter) and aborts 400 on invalid input --
+    **without persisting anything**, so :func:`update_settings` can check a
+    whole body before committing any of it.
+
+    Keeps :func:`update_settings` simple by hosting the per-key branching
+    here. Side effects (path validation, achievement wipe, state-tier
+    setter) are isolated to their helper functions.
     """
     if key in _READ_ONLY_KEYS:
-        return
+        return None
     custom = _CUSTOM_SETTERS.get(key)
     if custom is not None:
-        custom(value)
-        return
+        return custom.apply, custom.validate(value)
     setter = _SCALAR_SETTERS.get(key)
     if setter is None:
-        return
+        return None
     try:
-        setter(value)
+        return setter, settings.validate_setting(key, value)
     except (TypeError, ValueError) as exc:
         abort(400, message=str(exc))
 
@@ -386,15 +398,23 @@ def _apply_one_key(key: str, value) -> None:
 @settings_bp.response(200, AppSettingsSchema)
 @settings_bp.alt_response(400, description="Setter-level validation failure (range, one-of, path traversal).")
 def update_settings(body: dict):
-    """Update one or more settings fields.
+    """Update one or more settings fields, all-or-nothing.
 
     Only keys present in *body* are applied. Unknown keys are silently
     dropped (per the schema's ``unknown = "exclude"`` policy); type
     errors raise 422 with the standard error envelope; setter-level
     validation failures (range / one-of / path traversal) raise 400.
+
+    Every key is validated **before** any key is written, because each
+    setter persists immediately: applying as we go meant a body whose
+    third key was invalid returned 400 with its first two keys already
+    committed, leaving the client -- which reasonably reads a 400 as
+    "nothing changed" -- out of sync with the server, with JSON key order
+    silently deciding which writes stuck. Now a 400 means nothing changed.
     """
-    for key, value in body.items():
-        _apply_one_key(key, value)
+    planned = [entry for entry in (_plan_one_key(key, value) for key, value in body.items()) if entry is not None]
+    for write, cleaned in planned:
+        write(cleaned)
 
     return _with_effective(settings.get_all())
 
