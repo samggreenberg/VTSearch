@@ -545,7 +545,10 @@ The verification view's action buttons let you act on the result:
   into its own new dataset.
 - **Add Corrections to Detector** - fold the items you changed from the
   detector's call back into the detector's examples and retrain it, so
-  the detector gets better at the cases it got wrong.
+  the detector gets better at the cases it got wrong. Running Find again
+  re-scores the dataset with the improved detector; every item you have
+  already verified keeps the call *you* made, so re-scoring never undoes
+  your work.
 - **Stats** - open the results modal: a breakdown of the detector's
   calls plus a chart of how wrong matches and missed matches change as
   you adjust inclusion - the clearest way to see the trade-off the
