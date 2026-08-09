@@ -19,19 +19,43 @@ every server-side URL fetch is meant to go through.  A single up-front
 internal host, so the redirect chain has to be walked by hand with each hop
 re-checked.  Keeping that loop here rather than in one caller is what stops
 the next fetch site from quietly re-introducing a bypass.
+
+Name-based checks have a second, subtler hole: :func:`validate_url` vets the
+addresses a *hostname* resolved to, but the fetch that follows resolves that
+name **again** inside urllib3.  An attacker who runs the authoritative DNS for
+their own hostname can answer the validation lookup with a public IP and the
+connect-time lookup with ``127.0.0.1`` / ``169.254.169.254`` (classic DNS
+rebinding), so passing the name check proves nothing about where the socket
+lands.  :func:`guarded_session` closes that window by re-checking the *peer
+address* of every freshly connected socket, before TLS or any request bytes.
+Server-side fetches must issue their requests on such a session — validating
+the URL and then handing it to a bare :class:`requests.Session` is the hole.
 """
 
 from __future__ import annotations
 
 import ipaddress
 import socket
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import urljoin, urlparse
 
 import requests
+from requests.adapters import DEFAULT_POOLBLOCK, HTTPAdapter
+from urllib3.connection import HTTPConnection, HTTPSConnection
+from urllib3.connectionpool import HTTPConnectionPool, HTTPSConnectionPool
+from urllib3.poolmanager import PoolManager
 
 #: Redirect hops :func:`open_validated_stream` will follow before giving up.
 MAX_REDIRECTS = 10
+
+
+class BlockedAddressError(ValueError):
+    """A socket connected to a private/internal peer address and was dropped.
+
+    Subclasses :class:`ValueError` so every caller that already treats a
+    rejected :func:`validate_url` as a ``ValueError`` handles a rebinding block
+    the same way, without a new except clause.
+    """
 
 
 def _is_private_ip(ip_str: str) -> bool:
@@ -79,6 +103,124 @@ def validate_url(url: str) -> str:
     return url
 
 
+def _reject_internal_peer(conn: HTTPConnection, sock: socket.socket) -> socket.socket:
+    """Return *sock* unless its peer is an internal address, in which case close
+    it and raise :class:`BlockedAddressError`.
+
+    This is the anti-rebinding half of the SSRF guard.  ``validate_url`` vets a
+    *name*; this vets the *address* the kernel actually connected to, which is
+    the only thing an attacker's second DNS answer cannot lie about.
+
+    Failing closed matters here: a socket whose peer we cannot read is a socket
+    we cannot vouch for, so an unreadable ``getpeername`` is treated as a block
+    rather than waved through.
+    """
+    if getattr(conn, "proxy", None) is not None:
+        # Through a proxy the peer *is* the proxy — routinely a private or
+        # loopback address, legitimately so — and the origin hostname is
+        # resolved at the far end where we cannot see it.  Blocking on the
+        # proxy's address would break every proxied deployment while buying
+        # nothing, so the peer check does not apply.
+        return sock
+    try:
+        peer = sock.getpeername()
+        ip_str = str(peer[0]) if peer else ""
+    except OSError:
+        ip_str = ""
+    if not ip_str or _is_private_ip(ip_str):
+        sock.close()
+        raise BlockedAddressError(
+            f"URL points to a private/internal network address ({ip_str or 'unknown'}). "
+            "Only publicly routable URLs are allowed."
+        )
+    return sock
+
+
+class _GuardedHTTPConnection(HTTPConnection):
+    """An ``http://`` connection that vets its peer address once connected.
+
+    The hook is ``_new_conn`` rather than ``connect`` so the check sees the bare
+    TCP socket: for HTTPS that is *before* the handshake leaks the hostname via
+    SNI, and for both schemes before a single request byte is written.
+    """
+
+    def _new_conn(self) -> socket.socket:
+        return _reject_internal_peer(self, super()._new_conn())
+
+
+class _GuardedHTTPSConnection(HTTPSConnection):
+    """The ``https://`` counterpart of :class:`_GuardedHTTPConnection`."""
+
+    def _new_conn(self) -> socket.socket:
+        return _reject_internal_peer(self, super()._new_conn())
+
+
+# ``ConnectionCls`` is annotated as urllib3's ``BaseHTTP[S]Connection``
+# *protocol*, which its own concrete ``HTTP[S]Connection`` does not structurally
+# satisfy (mutable ``host``/``assert_hostname`` are invariant), so assigning any
+# subclass of the concrete class trips reportAssignmentType. urllib3 makes the
+# identical assignment internally; the subclasses below only override
+# ``_new_conn``.
+class _GuardedHTTPConnectionPool(HTTPConnectionPool):
+    ConnectionCls = _GuardedHTTPConnection  # pyright: ignore[reportAssignmentType]
+
+
+class _GuardedHTTPSConnectionPool(HTTPSConnectionPool):
+    ConnectionCls = _GuardedHTTPSConnection  # pyright: ignore[reportAssignmentType]
+
+
+class _GuardedPoolManager(PoolManager):
+    """A pool manager that hands out peer-checking connection pools."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.pool_classes_by_scheme = {
+            "http": _GuardedHTTPConnectionPool,
+            "https": _GuardedHTTPSConnectionPool,
+        }
+
+
+class _GuardedHTTPAdapter(HTTPAdapter):
+    """A ``requests`` transport adapter whose sockets re-check their peer IP."""
+
+    def init_poolmanager(
+        self, connections: int, maxsize: int, block: bool = DEFAULT_POOLBLOCK, **pool_kwargs: Any
+    ) -> None:
+        # Mirrors HTTPAdapter.init_poolmanager, swapping in the guarded manager.
+        # The three attributes it sets are what makes an adapter picklable.
+        self._pool_connections = connections
+        self._pool_maxsize = maxsize
+        self._pool_block = block
+        self.poolmanager = _GuardedPoolManager(
+            num_pools=connections,
+            maxsize=maxsize,
+            block=block,
+            **pool_kwargs,
+        )
+
+
+def guarded_session() -> requests.Session:
+    """Return a :class:`requests.Session` whose every connection is peer-checked.
+
+    The session behaves exactly like a plain one except that each freshly
+    opened socket has its peer address checked against the private/internal
+    blocklist and is dropped — with :class:`BlockedAddressError` — if it landed
+    somewhere internal.  That is what makes the up-front :func:`validate_url`
+    binding: without it, the hostname is resolved a second time at connect
+    time and a rebinding DNS server gets to pick the address that lookup
+    returns.
+
+    Every server-side fetch of a URL the user had any hand in should run on one
+    of these.  Requests routed through an HTTP proxy are exempt (see
+    :func:`_reject_internal_peer`).
+    """
+    session = requests.Session()
+    adapter = _GuardedHTTPAdapter()
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    return session
+
+
 def open_validated_stream(
     session: requests.Session,
     url: str,
@@ -103,7 +245,10 @@ def open_validated_stream(
     ``ValueError``.)
 
     Args:
-        session: The :class:`requests.Session` to issue each hop on.
+        session: The :class:`requests.Session` to issue each hop on.  Pass a
+            :func:`guarded_session`; a bare session re-resolves each hostname
+            at connect time, which is the DNS-rebinding hole the per-hop
+            :func:`validate_url` calls here cannot see.
         url: An already-validated HTTP(S) URL.
         headers_for_url: Optional callable returning the headers to send for a
             given hop's URL.  Recomputed per hop so credentials scoped to one
@@ -114,7 +259,9 @@ def open_validated_stream(
         The final, non-redirect response; the caller owns closing it.
 
     Raises:
-        ValueError: If a redirect hop fails :func:`validate_url`.
+        ValueError: If a redirect hop fails :func:`validate_url`, or (as
+            :class:`BlockedAddressError`) if a hop's socket lands on an
+            internal peer address.
         requests.TooManyRedirects: If the chain exceeds :data:`MAX_REDIRECTS`.
     """
 
@@ -158,15 +305,16 @@ def fetch_validated_url(url: str, *, timeout: tuple[float, float] = (10, 30)) ->
     The whole-body counterpart to :func:`open_validated_stream`, for the fetch
     sites that want bytes rather than a stream to spool to disk (see
     :func:`vtscore.media.base._fetch_media_url`).  Validates *url* up front,
-    re-validates every redirect hop, and raises for a non-2xx status.
+    re-validates every redirect hop, fetches on a :func:`guarded_session` so no
+    hop can rebind onto an internal address, and raises for a non-2xx status.
 
     Raises:
         ValueError: If *url* — or any redirect hop — is not a publicly
-            routable ``http(s)`` URL.
+            routable ``http(s)`` URL, or lands on an internal peer address.
         requests.RequestException: On any transport or HTTP error.
     """
     validate_url(url)
-    with requests.Session() as session:
+    with guarded_session() as session:
         response = open_validated_stream(session, url, timeout=timeout)
         with response:
             response.raise_for_status()
