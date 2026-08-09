@@ -65,9 +65,7 @@ class TestFolderProgressCadence:
         # No override map: files stream lazily, so the total is unknown and the
         # loader falls back to a fixed 200-file interval.
         def run(cb):
-            for _chunk in load_dataset_from_folder_chunked(
-                big_text_folder, "text", 500, on_progress=cb, thin=True
-            ):
+            for _chunk in load_dataset_from_folder_chunked(big_text_folder, "text", 500, on_progress=cb, thin=True):
                 pass
 
         count = _count_progress_calls(run)
