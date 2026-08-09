@@ -458,7 +458,11 @@ class TestMaxPatchPcaHacStyle:
             seed_scores=seed_scores,
         )
         assert rows
-        assert rows[-1]["average_precision"] > 0.7
+        # Well above chance (prevalence 0.5) is the claim.  The bar is loose
+        # because the run now trains the production linear head (#2916), which
+        # on this 12-step toy lands near 0.68 rather than the legacy MLP arm's
+        # ~0.81 - and because the run is mildly sensitive to ambient state.
+        assert rows[-1]["average_precision"] > 0.6
 
 
 # ---------------------------------------------------------------------------
@@ -670,11 +674,12 @@ class TestStyleVotingSimulation:
         )
         # The planted patch is a separable signal: the ranking must sit far
         # above chance (prevalence 0.5) throughout the back half of the run.
-        # The exact values are deterministic (~0.79-0.80) but left slack for
+        # The exact values are deterministic (~0.65-0.77 on the production
+        # linear head this run now defaults to, #2916) but left slack for
         # cross-platform torch numerics.  No monotone-improvement assertion:
         # exemplar seeding makes even the first trainable step strong, and AP
         # wobbles a few points between retrains.
-        assert all(r["average_precision"] > 0.7 for r in rows[len(rows) // 2 :])
+        assert all(r["average_precision"] > 0.6 for r in rows[len(rows) // 2 :])
 
     def test_style_rejects_svm_trainer(self):
         medias, _ = _planted_dataset(n_per_cat=10, seed=10)
