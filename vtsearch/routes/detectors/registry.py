@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 import time
+from pathlib import Path
 
 from flask import jsonify
 from flask_smorest import Blueprint, abort
@@ -73,6 +74,39 @@ detectors_registry_bp = Blueprint(
     __name__,
     description="Register, load, unload, rename, and toggle Auto-Find on detectors.",
 )
+
+
+def _abort_if_name_taken(name: str, *, own_path: Path | None = None, exclude_id: str = "") -> None:
+    """Abort 409 when *name* would collide with an existing detector.
+
+    Two detectors collide as soon as their names resolve to the same labelset
+    file: ``_slug`` lowercases and strips punctuation, so "My Cat" and "my cat"
+    share one ``data/detectors/*.json``.  Sharing a file is never benign —
+    whichever detector writes last destroys the other's labelset, and deleting
+    either one unlinks the file out from under the survivor.
+
+    Both halves are checked because either can outlive the other: the on-disk
+    labelset file (a detector created through the non-registry ``/api/detectors``
+    route has a file but no registry entry) and the registry entries (an entry
+    whose file was deleted still owns the name).
+
+    Args:
+        name: The proposed detector name.
+        own_path: The labelset path the caller already owns, if any.  A rename
+            that only re-spells its own name ("My Cat" -> "my cat") resolves to
+            this same path and is allowed through.
+        exclude_id: Registry id to skip, so a rename doesn't collide with itself.
+    """
+    from vtscore.detectors.registry import list_detectors
+
+    new_path = _detector_path(name)
+    if own_path is not None and new_path == own_path:
+        return
+    if new_path.exists() or any(
+        entry.get("id") != exclude_id and _detector_path(entry.get("name", "")) == new_path
+        for entry in list_detectors()
+    ):
+        abort(409, message=f"A detector named '{name}' already exists")
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +179,7 @@ def list_registered_detectors():
 @detectors_registry_bp.arguments(DetectorRegistryCreateRequestSchema)
 @detectors_registry_bp.response(201, DetectorRegistryCreateResponseSchema)
 @detectors_registry_bp.alt_response(400, description="Empty name after stripping, or media_type is 'any'.")
+@detectors_registry_bp.alt_response(409, description="A detector with this name already exists.")
 def register_detector_route(body: dict):
     """Register a new detector in the detector registry."""
     from vtscore.detectors.registry import register_detector
@@ -167,6 +202,11 @@ def register_detector_route(body: dict):
         abort(400, message=type_err)
     abort_if_semantic_only_type(embedder_type)
 
+    # Two registry entries sharing one labelset file silently overwrite each
+    # other's labels, so a name that is already taken is a hard 409 (matching
+    # the sibling create routes) rather than a reuse of the existing file.
+    _abort_if_name_taken(name)
+
     examples = body.get("examples") or []
     if not examples and text_query:
         examples = [{"type": "text", "value": text_query}]
@@ -177,19 +217,17 @@ def register_detector_route(body: dict):
         # display, Autopilot fallback) see the first media example.
         media_example = next((ex.get("value", "") for ex in examples if ex.get("type") == "media"), "")
 
-    det_path = _detector_path(name)
-    if not det_path.exists():
-        detector_data = {
-            "name": name,
-            "text_query": text_query,
-            "media_example": media_example,
-            "media_type": media_type,
-            "examples": examples,
-            "created_at": time.time(),
-            "embedder_type": embedder_type,
-            "labelset": {"labels": []},
-        }
-        _write_detector(det_path, detector_data)
+    detector_data = {
+        "name": name,
+        "text_query": text_query,
+        "media_example": media_example,
+        "media_type": media_type,
+        "examples": examples,
+        "created_at": time.time(),
+        "embedder_type": embedder_type,
+        "labelset": {"labels": []},
+    }
+    _write_detector(_detector_path(name), detector_data)
 
     entry = register_detector(
         name=name,
@@ -315,9 +353,8 @@ def register_detector_from_labelset(importer_name: str):  # noqa: C901
         abort(400, message=type_err)
     abort_if_semantic_only_type(embedder_type_val)
 
+    _abort_if_name_taken(name)
     det_path = _detector_path(name)
-    if det_path.exists():
-        abort(409, message=f"A detector named '{name}' already exists")
 
     label_entries, err = run_plugin_or_error(importer, "run", field_values)
     if err:
@@ -840,6 +877,7 @@ def cancel_detector_loading_task(task_id: str):
 @detectors_registry_bp.alt_response(400, description="Empty name after stripping.")
 @detectors_registry_bp.alt_response(403, description="Only the detector creator can rename it.")
 @detectors_registry_bp.alt_response(404, description="Detector not found.")
+@detectors_registry_bp.alt_response(409, description="A detector with the new name already exists.")
 def rename_registered_detector(body: dict, detector_id: str):
     """Rename a registered detector and its on-disk labelset file."""
     from vtscore.detectors.labelset_ops import detect_pending_labelset_move
@@ -856,8 +894,13 @@ def rename_registered_detector(body: dict, detector_id: str):
     if not is_detector_owner(detector_id, get_current_user()):
         abort(403, message="Only the detector creator can rename it")
 
-    pending_move: dict[str, str] | None = None
     old_name = entry.get("name", "")
+    # Without this guard the write below would overwrite the target detector's
+    # labelset file and leave both registry entries resolving to it.  A rename
+    # that only re-spells its own name keeps its own file, so it is allowed.
+    _abort_if_name_taken(new_name, own_path=_detector_path(old_name), exclude_id=detector_id)
+
+    pending_move: dict[str, str] | None = None
     if old_name and old_name != new_name:
         old_path = _detector_path(old_name)
         det_data = _read_detector(old_path)

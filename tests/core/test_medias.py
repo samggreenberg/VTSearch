@@ -937,13 +937,9 @@ class TestAddToPile:
         assert inserted_id in app_module.good_votes
 
     def _setup_loaded_detector(self, client, name="H33Detector"):
-        """Create a detector, register it, load it, and return its registry id."""
+        """Register a detector, load it, and return its registry id."""
         from tests import load_detector_and_wait
 
-        client.post(
-            "/api/detectors",
-            json={"name": name, "media_type": "audio", "text_query": "test"},
-        )
         res = client.post(
             "/api/detectors/registry",
             json={"name": name, "media_type": "audio", "text_query": "test"},

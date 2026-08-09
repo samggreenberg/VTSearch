@@ -255,6 +255,11 @@ all of them.
 
 → `{"ok": true, "detector": {...}}` (201)
 
+409 if the name is already taken — by another registry entry, or by a
+detector file created through `POST /api/detectors`. Names are compared by the
+labelset *slug* (lowercased, punctuation collapsed), so "My Cat" and "my cat"
+collide.
+
 ### Register detector from a label importer
 
 ```
@@ -368,6 +373,10 @@ PUT /api/detectors/registry/{detector_id}/rename
 **Body:** `{"name": "New Name"}`
 
 → `{"ok": true, "name": "New Name"}`
+
+409 if the new name is already taken. Names are compared by the labelset
+*slug* (lowercased, punctuation collapsed), so "My Cat" and "my cat" collide;
+re-spelling a detector's own name that way is allowed.
 
 ### Set detector readers
 

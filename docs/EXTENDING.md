@@ -57,6 +57,23 @@ class MyProvider(LoginProvider):
         return base_data_dir / username
 ```
 
+**Validate any username you didn't construct yourself.** A username returned
+by `get_user()` becomes a path component (`data/<username>/`) *and* the
+confinement root for server-file path validation, which resolves `..` away
+instead of rejecting it. Screen client-supplied values with
+`vtsearch.auth.is_safe_username()` and fall back to `"anonymous"`:
+
+```python
+from vtsearch.auth import is_safe_username
+
+def get_user(self, request) -> str:
+    username = request.headers.get("X-User", "anonymous")
+    return username if is_safe_username(username) else "anonymous"
+```
+
+This applies regardless of how strong your authentication is — it is a
+filesystem-hygiene check, not an authentication one.
+
 ### How it works
 
 1. `set_login_provider(provider)` is called once at startup (in `app.py`).

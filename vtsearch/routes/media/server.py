@@ -449,8 +449,10 @@ def _resolve_media_bytes(media: dict) -> bytes | None:
         return media_bytes
     media_path = media.get("media_path")
     if media_path:
-        p = Path(media_path)
-        if p.exists():
+        from vtscore.security.path_validation import resolve_media_file_path  # noqa: PLC0415
+
+        p = resolve_media_file_path(media_path)
+        if p is not None and p.exists():
             return p.read_bytes()
     return None
 

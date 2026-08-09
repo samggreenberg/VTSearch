@@ -842,6 +842,17 @@ drops the affected medias on reopen (same as a missing companion file today).
 Browser-upload importers (`local_folder`, `local_files`) stage into a temp dir
 that's deleted after import, so this option is not offered there.
 
+Because those references travel *inside the pickle*, they are externally
+supplied data on any deployment that lets users load datasets. Every read of a
+media-carried file reference (`media_path`, a lazy clip's source path, an
+archive-member archive path) therefore goes through
+`vtscore.security.path_validation.resolve_media_file_path`, which in multi-user
+mode confines it to the current user's data dir plus the shared `DATA_DIR`
+(where demo datasets extract) and returns `None` otherwise, so the caller serves
+nothing. In single-user / no-auth mode it is a pass-through, matching
+`get_file_access_base_dir`. The network-side twin of that guard is
+`fetch_validated_url`, which `media_url` fetches go through for the same reason.
+
 Clippers on reference parents transiently hydrate the parent's bytes from its
 source file (tagging it with `_lazy_source`), clip as normal, then re-lazify
 the resulting clips back to references (`vtscore/datasets/stages/clipper.py`);

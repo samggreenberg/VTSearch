@@ -8,9 +8,14 @@ for server-file importers and exporters.
 from __future__ import annotations
 
 import fnmatch
+import logging
 import os
 from pathlib import Path
 from typing import Iterator
+
+from vtscore.config import DATA_DIR
+
+logger = logging.getLogger(__name__)
 
 
 def get_file_access_base_dir() -> Path | None:
@@ -113,6 +118,54 @@ def confine_server_filepath(filepath_str: str, base_dir: Path | None) -> str:
     """
     resolved = validate_server_filepath(filepath_str, base_dir=base_dir)
     return filepath_str if base_dir is None else str(resolved)
+
+
+def media_file_read_roots() -> list[Path] | None:
+    """Return the roots a media's own file reference may be read from.
+
+    ``None`` means "no confinement" and is what single-user / no-auth mode
+    returns, matching :func:`get_file_access_base_dir`.
+
+    In multi-user mode the allowed roots are the current user's data dir
+    **and** :data:`~vtscore.config.DATA_DIR`.  The shared data dir has to be in
+    the list because demo datasets download into it as siblings of the per-user
+    dirs (``data/ESC-50-master/audio``, ``data/caltech-101/…``), so a thin demo
+    dataset's ``media_path`` legitimately points outside ``data/<username>/``.
+    That does mean a crafted reference can still name another user's subtree;
+    the boundary this draws is "inside the app's data tree", which is what
+    stops ``/etc/shadow`` and every other server file from being served.
+    """
+    base = get_file_access_base_dir()
+    if base is None:
+        return None
+    return [base, DATA_DIR]
+
+
+def resolve_media_file_path(filepath_str: str) -> Path | None:
+    """Resolve a file reference carried *by a media*, or ``None`` if it escapes.
+
+    ``media_path`` and the archive-member archive path arrive from a dataset
+    pickle, which in a multi-user deployment is attacker-supplied data: the
+    unpickler passes plain strings straight through, so a media can name any
+    server-readable file and the media-serving routes will hand its bytes back
+    to the requester.  Every read of such a reference goes through here first.
+
+    Returns the resolved path when it lands inside one of
+    :func:`media_file_read_roots`, and ``None`` when it does not, so callers
+    fall through to their next resolution step (or serve nothing) instead of
+    raising at request time.  In single-user mode the path is returned
+    unchanged — the lone trusted user may read any server-readable file.
+    """
+    roots = media_file_read_roots()
+    if roots is None:
+        return Path(filepath_str)
+    for root in roots:
+        try:
+            return validate_server_filepath(filepath_str, base_dir=root)
+        except ValueError:
+            continue
+    logger.warning("Refusing to read media file outside the allowed data dirs: %s", filepath_str)
+    return None
 
 
 def sanitize_template_value(value: str) -> str:

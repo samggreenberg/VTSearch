@@ -330,17 +330,18 @@ def find_label(body: dict):
         total_steps=_FIND_LABEL_STEPS,
     )
     label_pairs = []
-    good_count = 0
-    bad_count = 0
     for entry in results:
-        if entry["score"] >= threshold:
-            label_pairs.append((entry["id"], "good"))
-            good_count += 1
-        else:
-            label_pairs.append((entry["id"], "bad"))
-            bad_count += 1
-    apply_labels_bulk_with_click_time(label_pairs, replace_all=True, record_achievement=False)
+        label_pairs.append((entry["id"], "good" if entry["score"] >= threshold else "bad"))
+    # Items the human already verified keep their vote: a re-score (the normal
+    # fold-corrections -> retrain -> re-score loop) must not silently invert a
+    # recorded human decision while still counting it as verified (issue #2928).
+    # Everything else adopts this pass's call.
+    apply_labels_bulk_with_click_time(label_pairs, replace_all=True, record_achievement=False, preserve_verified=True)
 
+    # The detector's own call for *every* item, verified ones included: this is
+    # the evaluation baseline Stats crosses the adopted labels against, so a
+    # verified item the retrained detector now disagrees with reads as a
+    # correction rather than vanishing.
     set_find_initial_labels({mid: lbl for mid, lbl in label_pairs})
     # Freeze the single-pass scores so the cutoff (Inclusion) re-thresholds
     # without re-scoring, and the Stats FP/FN sweep can read them.
@@ -350,11 +351,16 @@ def find_label(body: dict):
 
     set_find_mode(True)
 
+    det_ctx = get_active_detector_context()
     # A fresh scoring pass IS the current evaluation, so any "stale" flag left by
     # a prior corrections-to-detector fold no longer applies.
-    from vtscore.state.core import get_active_detector_context
-
-    get_active_detector_context().find_eval_stale = False
+    det_ctx.find_eval_stale = False
+    # The counts the client shows are the labels this pass *adopted*, which is
+    # the threshold split everywhere except the verified items that held their
+    # human vote.  ``replace_all`` left exactly this label set behind, so the
+    # vote dicts are the count.
+    good_count = len(det_ctx.good_votes)
+    bad_count = len(det_ctx.bad_votes)
 
     from vtscore.labels.sync import sync_to_labelset_source
 

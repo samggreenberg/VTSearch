@@ -99,6 +99,17 @@ class _StepModel:
 #: threads one width through ``_train_and_score_xy``.
 HEADS: tuple[str, ...] = ("mlp", "linear")
 
+#: The head the **app** trains, and therefore the harness's default arm:
+#: ``vtscore.detectors.training.train_and_threshold`` pins ``hidden_dim =
+#: LINEAR_HEAD`` on every production fit.  ``head=None`` resolves to this, the
+#: way ``style=None`` and ``blend_schedule=None`` resolve to the app's geometry
+#: and blend schedule — an eval default that isn't the app default measures a
+#: detector nobody ships (see the "Eval Default Arm IS the App" rule).  If the
+#: shipped head ever changes, move this with it: ``test_harness_linear_head``
+#: pins the two against each other by training the real app pipeline, so the
+#: suite fails rather than letting the default arm drift silently.
+PRODUCTION_HEAD: str = "linear"
+
 
 def _resolve_hidden_dim(head: str, n_votes: int) -> int:
     """Hidden width for *head* at *n_votes* votes (0 = the linear head)."""
@@ -1582,7 +1593,7 @@ def _train_and_calibrate(
     inclusion: int,
     calibrate_count: int,
     calibration_fraction: float,
-    head: str = "mlp",
+    head: str = PRODUCTION_HEAD,
     style_obj: Any = None,
     emit_calibration_metrics: bool = False,
     fold_count_variants: list[int] | None = None,
@@ -1590,9 +1601,9 @@ def _train_and_calibrate(
     """Train the step's ranker and calibrate its threshold from the current votes.
 
     *head* selects the torch head on both torch paths (see :data:`HEADS`):
-    ``"mlp"`` keeps the auto-sized hidden layer, ``"linear"`` trains the
-    production linear head.  It is ignored by the SVM path, which has no torch
-    head at all.
+    ``"linear"`` (the default, :data:`PRODUCTION_HEAD`) trains the head the live
+    detector has, ``"mlp"`` the legacy auto-sized hidden layer.  It is ignored by
+    the SVM path, which has no torch head at all.
 
     Dispatches on *trainer*: ``"mlp"`` runs the production MLP path unchanged
     (see :func:`_mlp_train_and_calibrate`); any ``svm_*`` name runs the SVM path
@@ -1658,15 +1669,16 @@ def _mlp_train_and_calibrate(
     inclusion: int,
     calibrate_count: int,
     calibration_fraction: float,
-    head: str = "mlp",
+    head: str = PRODUCTION_HEAD,
 ) -> tuple[_StepModel, float, int, dict[str, float], dict[str, Any]]:
     """The torch arm — numerically identical to the pre-trainer harness at ``head="mlp"``.
 
-    At ``head="mlp"`` (the default) this is the harness's small-MLP candidate,
-    not the live detector's head: production trains the linear (logistic) head
-    instead (the #2790 finding, see ``vtscore.training.mlp.LINEAR_HEAD``).
-    ``head="linear"`` selects that production head, so the reported cost is the
-    shipped detector's.  Everything *around* the head mirrors the production
+    At ``head="linear"`` (the default, :data:`PRODUCTION_HEAD`) this trains the
+    live detector's head: production pins the linear (logistic) head on every
+    fit (the #2790 finding, see ``vtscore.training.mlp.LINEAR_HEAD``), so the
+    reported thresholds and costs are the shipped detector's.  ``head="mlp"`` is
+    the legacy arm — the harness's small-MLP candidate #2781 measured, which the
+    app no longer ships.  Everything *around* the head mirrors the production
     ``_train_and_score_xy`` / ``train_and_threshold`` pipeline either way:
 
     Good votes region-pool their ground-truth box when *region_voting* is on
@@ -1762,7 +1774,7 @@ def _style_train_and_calibrate(
     inclusion: int,
     calibrate_count: int,
     calibration_fraction: float,
-    head: str = "mlp",
+    head: str = PRODUCTION_HEAD,
     emit_calibration_metrics: bool = False,
     fold_count_variants: list[int] | None = None,
 ) -> tuple[_StepModel, float, int, dict[str, float], dict[str, Any]]:
@@ -2103,7 +2115,7 @@ def simulate_voting_iterations(  # noqa: C901
     atlas_min_node_size: int = 20,
     seed_scores: Optional[dict[int, float]] = None,
     trainer: str = "mlp",
-    head: str = "mlp",
+    head: Optional[str] = None,
     target_prevalence: Optional[float] = None,
     style: Optional[str] = None,
     emit_calibration_metrics: bool = False,
@@ -2141,14 +2153,17 @@ def simulate_voting_iterations(  # noqa: C901
             which model makes *VTSearch* better, and VTSearch's vote order
             depends on the model).
         head: Which torch head the ``"mlp"`` trainer fits at each step (see
-            :data:`HEADS`): ``"mlp"`` (default) keeps the harness's historical
-            auto-sized hidden layer, ``"linear"`` trains the production linear
-            (logistic) head shipped in #2790/#2809 — the head a live VTSearch
-            detector actually has, so a ``"linear"`` run's thresholds and costs
-            are the ones users see.  The head is threaded into the calibration
-            folds as well, mirroring how production threads one width through
-            ``_train_and_score_xy``.  Ignored on the SVM trainers (no torch
-            head); recorded in the ``head`` result column.
+            :data:`HEADS`).  ``None`` (default) resolves to the **app's** head,
+            :data:`PRODUCTION_HEAD` — the linear (logistic) head shipped in
+            #2790/#2809, which a live VTSearch detector actually has, so a
+            default run's thresholds and costs are the ones users see.
+            ``"mlp"`` is the explicitly-named legacy arm: the harness's
+            historical auto-sized hidden layer (#2781), which the app no longer
+            ships.  The head is threaded into the calibration folds as well,
+            mirroring how production threads one width through
+            ``_train_and_score_xy``.  Rejected on the SVM trainers, which have
+            no torch head; the *resolved* name is recorded in the ``head``
+            result column (blank on the SVM trainers).
         style: Optional detection-style name (see
             :mod:`vtscore.eval.patch_styles`): ``"whole_image"``,
             ``"max_patch"`` (the production geometry), or one of the
@@ -2312,10 +2327,21 @@ def simulate_voting_iterations(  # noqa: C901
         if not 0.0 <= acq_rank_percentile <= 1.0:
             raise ValueError(f"acq_rank_percentile must be in [0, 1], got {acq_rank_percentile}")
 
-    if head not in HEADS:
-        raise ValueError(f"unknown head {head!r}; expected one of {HEADS}")
-    if head != "mlp" and trainer != "mlp":
-        raise ValueError(f"head={head!r} only applies to the torch trainer; got trainer={trainer!r}")
+    if head is not None:
+        if head not in HEADS:
+            raise ValueError(f"unknown head {head!r}; expected one of {HEADS}")
+        if trainer != "mlp":
+            raise ValueError(f"head={head!r} only applies to the torch trainer; got trainer={trainer!r}")
+    # **The default arm must be the app's default.**  Production pins the linear
+    # (logistic) head on every fit (``hidden_dim = LINEAR_HEAD`` in
+    # ``vtscore.detectors.training.train_and_threshold``), so an unspecified head
+    # resolves to it — the same way *style* and *blend_schedule* resolve to the
+    # app's geometry and schedule below.  The head sizes the final model *and*
+    # the calibration folds, so it moves the thresholds and, through the vote
+    # order, the whole trajectory: defaulting to the retired auto-sized MLP would
+    # make every unqualified run measure a detector nobody ships.  ``head="mlp"``
+    # stays available as the explicitly-named legacy arm.
+    head = head or PRODUCTION_HEAD
 
     if style is not None and trainer != "mlp":
         raise ValueError(f"detection styles only support the MLP trainer; got trainer={trainer!r}")
@@ -2662,7 +2688,9 @@ def simulate_voting_iterations(  # noqa: C901
             "category": target_category,
             "strategy": strategy,
             "trainer": trainer,
-            "head": head,
+            # Blank on the SVM trainers: they fit no torch head, so naming one
+            # here would attribute the row to an architecture it never trained.
+            "head": head if trainer == "mlp" else "",
             "style": style or "",
             "prevalence_arm": prevalence_arm,
             "realized_prevalence": realized_prevalence,

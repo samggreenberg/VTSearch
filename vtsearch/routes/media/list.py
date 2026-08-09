@@ -26,6 +26,7 @@ from flask_smorest import Blueprint, abort
 from vtscore.embedding.media_vectors import init_embeddings, media_embedder_names
 from vtscore.media.audio.ffmpeg import get_ffmpeg_exe
 from vtscore.media.base import MediaResponse
+from vtscore.security.path_validation import resolve_media_file_path
 from vtscore.utils.hashing import content_md5
 from vtsearch.schemas.media import (
     MediaAddToPileResponseSchema,
@@ -290,8 +291,8 @@ def _resolve_bytes(media: dict) -> bytes | None:
         return media_bytes
     media_path = media.get("media_path")
     if media_path:
-        p = Path(media_path)
-        if p.exists():
+        p = resolve_media_file_path(media_path)
+        if p is not None and p.exists():
             with open(p, "rb") as f:
                 return f.read()
     return None
@@ -404,6 +405,8 @@ def _archive_member_response(
     if ref is None:
         return None
     archive_path, member = ref
+    if resolve_media_file_path(archive_path) is None:
+        return None
     try:
         total = member_size(archive_path, member)
     except (ArchiveMemberError, OSError):
@@ -471,8 +474,8 @@ def _resolve_string(media: dict) -> str | None:
         return media_string
     media_path = media.get("media_path")
     if media_path:
-        p = Path(media_path)
-        if p.exists():
+        p = resolve_media_file_path(media_path)
+        if p is not None and p.exists():
             with open(p, "r", encoding="utf-8") as f:
                 return f.read().strip()
     return None
