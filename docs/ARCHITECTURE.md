@@ -749,7 +749,7 @@ Each clip dict includes two provenance fields:
 |-------|------|-------------|
 | `origin` | `dict \| None` | Serialised `Origin` (e.g. `{"importer": "server_folder", "params": {"path": "/data"}}`) |
 | `origin_name` | `str` | Unique name within the origin (typically the filename) |
-| `media_url` | `str \| None` | Remote URL for lazy-fetching media bytes (e.g. PullWrest URL). Used as fallback when `media_bytes` and `media_path` are both absent |
+| `media_url` | `str \| None` | Remote URL for lazy-fetching media bytes (e.g. PullWrest URL). Used as fallback when `media_bytes` and `media_path` are both absent. Fetched only through the SSRF guard (`fetch_validated_url`): publicly routable `http(s)` only, every redirect hop re-checked |
 
 ### Origin class (`vtscore/datasets/origin.py`)
 

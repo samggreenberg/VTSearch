@@ -117,6 +117,7 @@ carries pointers only.
 ### Security
 
 - [ ] #2926 — SSRF + arbitrary local file disclosure via unvalidated media_url (file:// / internal http fetched with urllib.urlopen) (high, Opus 4.8)
+- [ ] #3003 — Arbitrary local file disclosure via unconfined media_path from an externally-supplied pickle (medium, Opus 4.8)
 - [ ] #2946 — No server-side authentication enforcement: is_authenticated / login_required are never checked, so every endpoint is reachable unauthenticated (medium, Opus 4.8)
 - [ ] #2950 — SSRF DNS-rebinding window: validate_url resolves-and-checks, then the fetch re-resolves the hostname (medium, Opus 4.8)
 
