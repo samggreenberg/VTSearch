@@ -561,6 +561,103 @@ describe('VoteStateService', () => {
     });
   });
 
+  describe('undo / redo under Find mode', () => {
+    /** Flood-fill the piles with a detector presumption and enter Find. */
+    const enterFind = (good: number[], bad: number[], verified: number[]) => {
+      service.loadVotes();
+      httpMock
+        .expectOne('/api/votes')
+        .flush({ good, bad, verified, click_times: {}, learned_scores: {} });
+      service.setFindMode(true);
+    };
+
+    /** What find-view does after a vote lands: mirror the server's verify. */
+    const verifyLikeFindView = (id: number) => {
+      service.setOptimisticVerified(
+        id,
+        service.goodVotes.has(id) || service.badVotes.has(id),
+      );
+    };
+
+    it('undo of a verify-as-bad returns a flood-filled-good item to unverified', () => {
+      // Item 5 is the detector's presumed good, but the human hasn't ruled.
+      enterFind([5], [], []);
+
+      // User clicks Bad: verify-as-bad (not a toggle off the presumption).
+      service.submitToggleVoteAndRecord(5, 'bad', 'foo.wav').subscribe();
+      httpMock
+        .expectOne('/api/medias/5/vote')
+        .flush({ ok: true, state: 'bad', click_time: 1 });
+      verifyLikeFindView(5);
+      expect(service.verifiedIds.has(5)).toBe(true);
+
+      // Cmd-Z must return the item to *unverified*, not record the detector's
+      // flood-filled 'good' as a human label (issue #2922).
+      service.undo();
+      const req = httpMock.expectOne('/api/medias/5/vote');
+      expect(req.request.body).toEqual({ target: 'none' });
+      req.flush({ ok: true, state: 'none', click_time: null });
+
+      // ...and the left/right split follows immediately, without a poll.
+      expect(service.verifiedIds.has(5)).toBe(false);
+    });
+
+    it('redo of a verify-good on a flood-filled-good item re-verifies it', () => {
+      enterFind([5], [], []);
+
+      // User clicks Good on the presumed-good item: verifies it as good.
+      service.submitToggleVoteAndRecord(5, 'good', 'foo.wav').subscribe();
+      httpMock
+        .expectOne('/api/medias/5/vote')
+        .flush({ ok: true, state: 'good', click_time: 1 });
+      verifyLikeFindView(5);
+
+      service.undo();
+      httpMock
+        .expectOne('/api/medias/5/vote')
+        .flush({ ok: true, state: 'none', click_time: null });
+      expect(service.verifiedIds.has(5)).toBe(false);
+
+      // Redo must re-apply the click (verify good), not compute 'none' from a
+      // previousPolarity that was really the detector's presumption.
+      service.redo();
+      const req = httpMock.expectOne('/api/medias/5/vote');
+      expect(req.request.body).toEqual({ target: 'good' });
+      req.flush({ ok: true, state: 'good', click_time: 2 });
+      expect(service.verifiedIds.has(5)).toBe(true);
+    });
+
+    it('undo restores (and re-verifies) a human vote the user toggled off', () => {
+      // Item 5 is a *verified* good: its membership IS a human decision.
+      enterFind([5], [], [5]);
+
+      // Clicking Good again un-votes it, which un-verifies it too.
+      service.submitToggleVoteAndRecord(5, 'good', 'foo.wav').subscribe();
+      const off = httpMock.expectOne('/api/medias/5/vote');
+      expect(off.request.body).toEqual({ target: 'none' });
+      off.flush({ ok: true, state: 'none', click_time: null });
+      verifyLikeFindView(5);
+      expect(service.verifiedIds.has(5)).toBe(false);
+
+      service.undo();
+      const req = httpMock.expectOne('/api/medias/5/vote');
+      expect(req.request.body).toEqual({ target: 'good' });
+      req.flush({ ok: true, state: 'good', click_time: 2 });
+      expect(service.verifiedIds.has(5)).toBe(true);
+    });
+
+    it('leaves the verified set alone outside Find mode', () => {
+      service.recordVote(5, 'good', 'foo.wav');
+      service.applyOptimisticState(5, 'good');
+
+      service.undo();
+      httpMock
+        .expectOne('/api/medias/5/vote')
+        .flush({ ok: true, state: 'none', click_time: null });
+      expect(service.verifiedIds.size).toBe(0);
+    });
+  });
+
   describe('submitToggleVoteAndRecord (the H26 fix surface)', () => {
     it('records the undo entry only after the POST succeeds', () => {
       service.submitToggleVoteAndRecord(5, 'good', 'foo.wav').subscribe();

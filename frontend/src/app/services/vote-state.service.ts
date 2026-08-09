@@ -10,7 +10,10 @@ import { SortingApiService } from './sorting-api.service';
 /**
  * One vote captured for Cmd/Ctrl-Z undo.  `previousPolarity` is the polarity
  * the media had *before* the click that produced this entry, so undo can
- * restore it with a single inverse POST to /api/medias/<id>/vote.
+ * restore it with a single inverse POST to /api/medias/<id>/vote.  It is the
+ * *human* polarity (see {@link VoteStateService.currentState}): in Find mode
+ * an unverified item's flood-filled good/bad membership is the detector's
+ * presumption, not a decision, so it snapshots as `null`.
  */
 export interface UndoEntry {
   mediaId: number;
@@ -251,6 +254,33 @@ export class VoteStateService implements OnDestroy {
   }
 
   /**
+   * Snapshot the polarity and good-vote crop *id* carries before a click, for
+   * the undo stack.  Must be read before the optimistic flip overwrites them.
+   *
+   * The polarity comes from the find-aware {@link currentState}, **not** raw
+   * ``goodVotes`` / ``badVotes`` membership: in Find every item is flood-filled
+   * with the detector's presumption, so an unverified item's membership is not
+   * a human decision.  Snapshotting it as one is what made undo POST the
+   * presumption back as an explicit vote — which the server marks *verified*,
+   * silently writing a label the human never gave — and inverted redo whenever
+   * the clicked direction happened to match the presumption (redo computed
+   * ``'none'`` and un-verified the item the user had just re-verified).
+   * Outside Find this is identical to the raw membership it replaced.
+   */
+  private capturePrevious(id: number): {
+    previousPolarity: 'good' | 'bad' | null;
+    previousRegionBox: number[] | null;
+  } {
+    const state = this.currentState(id);
+    const previousPolarity = state === 'none' ? null : state;
+    const prevBox = this._goodRegionBoxes()[String(id)];
+    return {
+      previousPolarity,
+      previousRegionBox: previousPolarity === 'good' && prevBox ? [...prevBox] : null,
+    };
+  }
+
+  /**
    * Submit a click on a media with the local-view toggle rule.
    *
    * Computes the target from current local state, optimistically applies
@@ -317,16 +347,7 @@ export class VoteStateService implements OnDestroy {
     mediaName: string,
     regionBox?: readonly number[] | null,
   ): Observable<MediaVoteResponse> {
-    const previousPolarity: 'good' | 'bad' | null = this._goodVotes().has(id)
-      ? 'good'
-      : this._badVotes().has(id)
-        ? 'bad'
-        : null;
-    // Snapshot the crop the good vote carried before the click (for undo) and
-    // the crop this click applies (for redo).  Both captured synchronously,
-    // before the optimistic flip clears/overwrites the region-box map.
-    const prevBox = this._goodRegionBoxes()[String(id)];
-    const previousRegionBox = previousPolarity === 'good' && prevBox ? [...prevBox] : null;
+    const { previousPolarity, previousRegionBox } = this.capturePrevious(id);
     const target = this.toggleTargetFor(id, clickedDirection);
     const clickedRegionBox =
       target === 'good' && regionBox && regionBox.length === 4 ? [...regionBox] : null;
@@ -511,13 +532,7 @@ export class VoteStateService implements OnDestroy {
    * are dropped, matching standard editor undo semantics.
    */
   recordVote(mediaId: number, clickedDirection: 'good' | 'bad', mediaName: string): void {
-    const previousPolarity: 'good' | 'bad' | null = this._goodVotes().has(mediaId)
-      ? 'good'
-      : this._badVotes().has(mediaId)
-        ? 'bad'
-        : null;
-    const prevBox = this._goodRegionBoxes()[String(mediaId)];
-    const previousRegionBox = previousPolarity === 'good' && prevBox ? [...prevBox] : null;
+    const { previousPolarity, previousRegionBox } = this.capturePrevious(mediaId);
     this.past.push({
       mediaId,
       clickedDirection,
@@ -531,6 +546,18 @@ export class VoteStateService implements OnDestroy {
     });
     if (this.past.length > UNDO_STACK_MAX) this.past.shift();
     this.future = [];
+  }
+
+  /**
+   * Mirror the verified transition an undo/redo POST triggers server-side, so
+   * the Find left/right split moves with the keystroke instead of lagging a
+   * poll behind.  A vote/redo to good|bad verifies the item; a target of
+   * ``'none'`` un-verifies it (``_mark_verified_if_find_mode``, votes.py).
+   * A no-op outside Find, where nothing is verification-gated.
+   */
+  private mirrorVerified(id: number, target: VoteState): void {
+    if (!this.findMode) return;
+    this.setOptimisticVerified(id, target !== 'none');
   }
 
   canUndo(): boolean {
@@ -559,6 +586,7 @@ export class VoteStateService implements OnDestroy {
     const box = target === 'good' ? entry.previousRegionBox : null;
     this.applyOptimisticState(entry.mediaId, target);
     this.applyOptimisticRegionBox(entry.mediaId, box);
+    this.mirrorVerified(entry.mediaId, target);
     this.mediasApi.vote(entry.mediaId, target, box).subscribe({
       next: (resp) => this.reconcileVoteResponse(entry.mediaId, resp),
       // rollbackOptimistic (not a bare loadVotes): the pending entries set
@@ -583,6 +611,7 @@ export class VoteStateService implements OnDestroy {
     const box = target === 'good' ? entry.clickedRegionBox : null;
     this.applyOptimisticState(entry.mediaId, target);
     this.applyOptimisticRegionBox(entry.mediaId, box);
+    this.mirrorVerified(entry.mediaId, target);
     this.mediasApi.vote(entry.mediaId, target, box).subscribe({
       next: (resp) => this.reconcileVoteResponse(entry.mediaId, resp),
       // See undo(): drop the pending entries before reloading server state.
