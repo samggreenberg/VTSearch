@@ -17,7 +17,7 @@ import unittest.mock as mock
 import numpy as np
 import pytest
 
-from helpers import wire_mock_progress_scope
+from tests_lib.helpers import wire_mock_progress_scope
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.media.audio.audio_generator import generate_wav
 from vtscore.utils.hashing import content_md5

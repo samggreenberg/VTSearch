@@ -23,7 +23,7 @@ meaningful assertion and the full-range slide must strictly raise the cutoff.
 
 from __future__ import annotations
 
-from helpers import setup_trainable_model_in_registry
+from tests.helpers import setup_trainable_model_in_registry
 from tests import load_detector_and_wait
 from vtscore.state.core import get_active_detector_context
 from vtsearch.state import snapshot_medias

@@ -38,7 +38,7 @@ def foreign_labels(tmp_path):
     Returns ``(labels_path, clips_dir)``.  The clips are real files on disk so
     a non-stubbed ingest can actually resolve them.
     """
-    from helpers import make_wav_file
+    from tests.helpers import make_wav_file
 
     clips_dir = tmp_path / "ingest_task_clips"
     clips_dir.mkdir()

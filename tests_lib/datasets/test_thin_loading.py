@@ -19,7 +19,7 @@ from vtscore.embedding.media_vectors import media_embedding
 from vtscore.utils.hashing import content_md5, file_md5
 
 
-from helpers import make_wav_bytes as _make_wav_bytes, make_wav_file as _make_wav_file  # noqa: F401
+from tests_lib.helpers import make_wav_bytes as _make_wav_bytes, make_wav_file as _make_wav_file  # noqa: F401
 
 
 class TestFileMD5:

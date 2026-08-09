@@ -357,7 +357,7 @@ class TestLabelElementThumbnail:
         even though clicking an entry rendered the full image fine.
         """
 
-        from helpers import make_png_bytes
+        from tests.helpers import make_png_bytes
 
         from vtscore.datasets.labelset import LabelSet
         from vtscore.detectors.labelset_elements import stable_element_id

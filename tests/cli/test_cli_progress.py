@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 import app as app_module
-from helpers import make_dataset_file as _make_dataset_file
+from tests.helpers import make_dataset_file as _make_dataset_file
 from vtscore import cli_progress
 
 from vtscore.media.audio.audio_generator import generate_wav

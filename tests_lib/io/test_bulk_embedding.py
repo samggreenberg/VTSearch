@@ -16,8 +16,8 @@ from pathlib import Path
 
 import numpy as np
 
-from helpers import make_raw_wav_bytes as _make_wav_bytes
-from helpers import wire_mock_progress_scope
+from tests_lib.helpers import make_raw_wav_bytes as _make_wav_bytes
+from tests_lib.helpers import wire_mock_progress_scope
 from vtscore.embedding.media_vectors import media_embedding
 
 
