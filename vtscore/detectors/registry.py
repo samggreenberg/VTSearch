@@ -398,10 +398,20 @@ def set_find_mode(enabled: bool = True) -> None:
     No-op when no real detector is active (the empty / request-missing
     sentinel contexts have no labelset to protect).
     """
-    from vtscore.state.core import _state_lock, get_active_detector_context
+    from vtscore.state.core import (
+        _state_lock,
+        get_active_detector_context,
+        is_request_missing_detector_context,
+    )
 
     with _state_lock:
         det_ctx = get_active_detector_context()
+        # The request-missing sentinel carries a truthy placeholder id
+        # ("__request_missing__"), so identify it explicitly rather than
+        # leaning on ``detector_id`` truthiness (which only screens the
+        # empty fallback context).
+        if is_request_missing_detector_context(det_ctx):
+            return
         if det_ctx.detector_id:
             det_ctx.find_mode = enabled
 

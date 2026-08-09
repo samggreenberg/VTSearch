@@ -11,7 +11,7 @@ escape the directory implied by the admin-configured template:
   after today's date (``results_{YYYY}.{MM}.{DD}.csv``).
 * ``{detector_name}`` – the active :class:`DetectorContext`'s ``name``.
 * ``{username}`` – the current request user
-  (see :func:`vtscore.user.get_current_user`).
+  (see :func:`vtsearch.auth.get_current_user`).
 """
 
 from __future__ import annotations
@@ -45,8 +45,8 @@ def resolve_export_filepath(filepath: str) -> str:
         filepath = filepath.replace("{detector_name}", sanitize_template_value(ctx.name))
 
     if "{username}" in filepath:
+        from vtscore.state.current_user import get_current_user
         from vtscore.security.path_validation import sanitize_template_value
-        from vtscore.user import get_current_user
 
         filepath = filepath.replace("{username}", sanitize_template_value(get_current_user() or "default"))
 

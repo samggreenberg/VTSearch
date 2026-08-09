@@ -1,4 +1,4 @@
-"""The library-tier current-user seam (:mod:`vtscore.user`).
+"""The library-tier current-user seam (:mod:`vtscore.state.current_user`).
 
 The app installs a request-user resolver (``flask.g.user``); the library
 falls back to a thread-local, then to ``"default"``.  Background jobs
@@ -13,12 +13,12 @@ import threading
 import pytest
 
 from vtscore.concurrency.async_jobs import JobManager
-from vtscore.user import (
+from vtscore.state.current_user import (
     DEFAULT_USER,
-    _default_request_user_resolver,
     get_current_user,
     get_thread_user,
     register_request_user_resolver,
+    reset_request_user_resolver,
     set_thread_user,
     thread_user,
 )
@@ -28,7 +28,7 @@ from vtscore.user import (
 def _restore_seam():
     """Leave the module-level resolver / thread-local as we found them."""
     yield
-    register_request_user_resolver(_default_request_user_resolver)
+    reset_request_user_resolver()
     set_thread_user(None)
 
 

@@ -23,6 +23,12 @@ dependencies = [
     "werkzeug",
     "numpy",
     "requests",
+    # requests' own transport layer, imported directly by
+    # vtscore.security.url_validation to subclass the connection/pool classes
+    # its SSRF-guarded session mounts (the peer-address recheck that closes the
+    # DNS-rebinding window). The floor is also a CVE pin (CVE-2026-44431,
+    # CVE-2026-44432).
+    "urllib3>=2.7.0",
     "tqdm",
     "scikit-learn",
     # Imported directly by vtscore.embedding.loader for the startup

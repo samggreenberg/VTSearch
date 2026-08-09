@@ -126,6 +126,23 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private readonly CENTER_MIN = 100;
   private readonly DIVIDER_TOTAL = 16; // 2 × 8px dividers
   private destroy$ = new Subject<void>();
+  /**
+   * Fires whenever the active (dataset, detector) pair changes — and on
+   * destroy. Every request whose response writes *pair-scoped* state (the
+   * ranking, the threshold, the inclusion slider, the dataset name, the vote
+   * cache) is piped through `takeUntil(this.pairScope$)` rather than
+   * `destroy$`, so the work started for the pair we're leaving is torn down
+   * the instant the pair switches.
+   *
+   * Without it, a scoring run — minutes long on a large dataset — outlives the
+   * switch: whichever response lands last wins, so the *old* pair's ranking and
+   * threshold get installed into the new context, and `advanceToBoundary()`
+   * selects a media id that may not exist in the new dataset (broken viewer,
+   * image 404s). Even when the old response lands *first*, its `finalize()`
+   * drops the wait overlay and re-enables voting while the new run is still
+   * going. `takeUntil` here also aborts the stale XHR client-side.
+   */
+  private pairScope$ = new Subject<void>();
   private dragging = false;
   private draggingRight = false;
   private boundMouseMove = this.onMouseMove.bind(this);
@@ -218,7 +235,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // The left work queue (ranking minus verified items) is the
     // `unverifiedSortOrder` computed, which tracks sortOrder + verifiedIds.
     this.loadSettings();
-    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.pairScope$)).subscribe({
       next: (status) => { this.datasetName.set(status.display_name || ''); },
     });
 
@@ -258,13 +275,20 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   }
 
   private reloadForNewPair(): void {
+    // Supersede the pair we're leaving *first*: every in-flight request scoped
+    // to it dies here, before any of the new pair's state is installed, so no
+    // late response can write the old ranking/threshold into the new context.
+    // The old scoring run's `finalize()` runs as part of this teardown, which
+    // is why it can't clobber the fresh run started at the bottom of this
+    // method — that run begins after the teardown has already settled.
+    this.pairScope$.next();
     this.sortState.setSortResults([], 0);
     this.sortState.setSortStatus('');
     this.sortState.setSortProgress(0, 0);
     this.voteState.clear();
     this.mediaState.loadMedias();
     this.voteState.loadVotes();
-    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.destroy$)).subscribe({
+    this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.pairScope$)).subscribe({
       next: (status) => { this.datasetName.set(status.display_name || ''); },
     });
     this.seedInclusion();
@@ -275,7 +299,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private seedInclusion(): void {
     this.sortingApi
       .getInclusion()
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntil(this.pairScope$))
       .subscribe({ next: (resp) => this.sortState.setInclusion(resp.inclusion) });
   }
 
@@ -285,6 +309,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.stopProgressPolling();
+    this.pairScope$.next();
+    this.pairScope$.complete();
     this.destroy$.next();
     this.destroy$.complete();
     this.voteState.setFindMode(false);
@@ -368,7 +394,10 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const modelName = this.activeDetector.detectorName() || 'Detector';
     this.detectorsFindApi.findLabel({ detector_id: modelId })
       .pipe(
-        takeUntil(this.destroy$),
+        // Pair-scoped, NOT lifetime-scoped: scoring runs for minutes, so a pair
+        // switch mid-run must kill this subscription before its response can
+        // rank the new pair with the old pair's scores (see `pairScope$`).
+        takeUntil(this.pairScope$),
         finalize(() => {
           this.stopProgressPolling();
           this.sortState.setSortBusy(false);
@@ -509,7 +538,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.sortState.setInclusion(value);
     this.sortingApi
       .setInclusion(value)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntil(this.pairScope$))
       .subscribe({
         next: (resp) => {
           if (resp.threshold != null && this.sortState.sortOrder) {
@@ -528,7 +557,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     const name = m?.filename || m?.origin_name || `#${event.id}`;
     this.voteState
       .submitToggleVoteAndRecord(event.id, event.vote, name)
-      .pipe(takeUntil(this.destroy$))
+      .pipe(takeUntil(this.pairScope$))
       .subscribe({
         next: () => {
           this.onMediaVoted(event);

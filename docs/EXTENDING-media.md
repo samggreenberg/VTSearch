@@ -543,7 +543,7 @@ loaded via `spec_from_file_location` so discovery still works.
 
 | Attribute       | Type               | Description                         |
 |-----------------|--------------------|-------------------------------------|
-| `_on_progress`  | `ProgressCallback` | Progress callback (default: no-op). Set via `set_progress_callback()` |
+| `_on_progress`  | `ProgressCallback` | Progress callback (default: no-op). Process-wide default set via `set_progress_callback()`; **reads and writes are per-thread**, so wrap a temporary redirect in `with emb.progress_scope(cb):` rather than saving/restoring by hand. Embedders are singletons — a process-wide swap would cross concurrent loads' progress bars and cancellations. |
 
 ### Built-in embedders
 

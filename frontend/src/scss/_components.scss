@@ -621,6 +621,34 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   animation: drawer-out-right var(--transition-slow) var(--ease-in-out) forwards;
 }
 
+// --- Vote swipe ---
+//
+// The center panel flings the current media off-screen when the user votes
+// (right for good, left for bad) by setting `swipeClass` to `swipe-right` /
+// `swipe-left`. The audio player relays that same value onto its own waveform
+// wrapper, so both templates need the rules; they live here rather than in
+// either component's stylesheet because `@keyframes` names are global even
+// under emulated encapsulation, and two component-local copies were a name
+// collision waiting to drift apart. `forwards` pins the off-screen end state
+// until the next media replaces the node.
+@keyframes swipe-right {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(120%); opacity: 0; }
+}
+
+@keyframes swipe-left {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-120%); opacity: 0; }
+}
+
+.swipe-right {
+  animation: swipe-right 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.swipe-left {
+  animation: swipe-left 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
 // --- Picker cards ---
 //
 // One shared selectable option card (icon + title + description) for every

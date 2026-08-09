@@ -366,8 +366,184 @@ def _hub_metadata_preflight(args: tuple, kwargs: dict) -> None:
         pass
 
 
+# ----------------------------------------------------------------------
+# Global monkey-patch interception (thread-safe)
+# ----------------------------------------------------------------------
+#
+# Both interception context managers below patch *process-wide* globals: tqdm's
+# class methods, ``torch.load``, ``nn.Module.load_state_dict``, and friends.
+# Model loading is only serialised per embedder *class* (``_model_load_lock`` is
+# created per subclass in ``MediaEmbedder.__init_subclass__``), so two different
+# embedders can be inside these context managers at the same time — a background
+# preload plus a user-triggered embed, say.
+#
+# Naive save/patch/restore corrupts the process in that case: the second entrant
+# saves the *patched* functions as its "originals", and restoring them on exit
+# leaves the globals permanently bound to the first entrant's dead closures, so
+# every later tqdm bar in the process is forwarded to a stale progress callback.
+#
+# ``_InterceptRegistry`` fixes that with reference counting: each patch is
+# installed exactly once (when the first session enters) and removed exactly once
+# (when the last session leaves), all under one re-entrant module-level lock.
+# Patched code then resolves *which* session to report to from the calling
+# thread, so concurrent loads keep their progress separate instead of sharing a
+# single set of counters.
+
+_patch_lock = threading.RLock()
+
+
+class _InterceptRegistry:
+    """Reference-counted, thread-attributed registry of interception sessions.
+
+    :meth:`enter` and :meth:`exit` return whether the caller is responsible for
+    installing / removing the global patches.  :meth:`current` maps the calling
+    thread to a session: its own if it has one (nested sessions resolve
+    innermost-first), otherwise the sole active session when exactly one is
+    active — which keeps events raised on helper threads (e.g. huggingface_hub's
+    parallel download workers) attributed the way they always were.  With
+    several sessions active such events are genuinely ambiguous, so they are
+    dropped rather than misreported into an unrelated load's progress bar.
+    """
+
+    def __init__(self) -> None:
+        self._by_thread: dict[int, list[Any]] = {}
+        self._active: list[Any] = []
+
+    def enter(self, session: Any) -> bool:
+        """Register *session*; return ``True`` if patches must be installed."""
+        with _patch_lock:
+            self._by_thread.setdefault(threading.get_ident(), []).append(session)
+            self._active.append(session)
+            return len(self._active) == 1
+
+    def exit(self, session: Any) -> bool:
+        """Unregister *session*; return ``True`` if patches must be removed."""
+        with _patch_lock:
+            ident = threading.get_ident()
+            stack = self._by_thread.get(ident)
+            if stack is not None:
+                for i, entry in enumerate(stack):
+                    if entry is session:
+                        del stack[i]
+                        break
+                if not stack:
+                    del self._by_thread[ident]
+            for i, entry in enumerate(self._active):
+                if entry is session:
+                    del self._active[i]
+                    break
+            return not self._active
+
+    def current(self) -> Any | None:
+        """Session the calling thread's events belong to, if unambiguous."""
+        with _patch_lock:
+            stack = self._by_thread.get(threading.get_ident())
+            if stack:
+                return stack[-1]
+            if len(self._active) == 1:
+                return self._active[0]
+            return None
+
+
+def _remove_patches(patches: list[tuple]) -> None:
+    """Restore every ``(obj, attr, original)`` triple and empty *patches*."""
+    for obj, attr, orig in patches:
+        setattr(obj, attr, orig)
+    patches.clear()
+
+
+class _DiscardingSink(io.StringIO):
+    """A :class:`io.StringIO` that throws writes away.
+
+    Intercepted bars are redirected here so they never reach the console.  The
+    sink is process-wide and lives for the lifetime of the process, so unlike a
+    per-context buffer it must not accumulate the text written to it.
+    """
+
+    def write(self, s: str) -> int:  # type: ignore[override]
+        return len(s)
+
+
+_tqdm_sink = _DiscardingSink()
+_tqdm_registry = _InterceptRegistry()
+_tqdm_patches: list[tuple] = []
+
+
+class _TqdmSession:
+    """One active :func:`intercept_tqdm_progress` block."""
+
+    def __init__(self, callback: ProgressCallback) -> None:
+        self.callback = callback
+        self.bars: list[Any] = []
+
+    def primary_bar(self) -> Any | None:
+        if not self.bars:
+            return None
+        return max(self.bars, key=lambda b: getattr(b, "total", 0) or 0)
+
+    def report(self, bar: Any) -> None:
+        total = getattr(bar, "total", None)
+        if not total or total <= 0:
+            return
+        current = int(getattr(bar, "n", 0))
+        desc = (getattr(bar, "desc", "") or "Loading…").rstrip(": ")
+        self.callback("loading", desc, current, int(total))
+
+
+def _install_tqdm_patches() -> None:  # noqa: C901
+    """Patch ``tqdm.std.tqdm`` so bars report to the active session."""
+    import tqdm.std  # noqa: PLC0415
+
+    orig_init = tqdm.std.tqdm.__init__
+    orig_update = tqdm.std.tqdm.update
+    orig_close = tqdm.std.tqdm.close
+
+    def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
+        # Redirect every bar created while interception is live, even one we
+        # cannot attribute, so nothing leaks onto the console.
+        session = _tqdm_registry.current()
+        kwargs["file"] = _tqdm_sink
+        orig_init(self, *args, **kwargs)
+        if session is None:
+            return
+        total = getattr(self, "total", None)
+        if total and total > 0 and not getattr(self, "disable", False):
+            self._vt_session = session
+            session.bars.append(self)
+            if session.primary_bar() is self:
+                session.report(self)
+
+    def _patched_update(self: Any, n: int = 1) -> None:
+        orig_update(self, n)
+        session = getattr(self, "_vt_session", None)
+        if session is not None and session.primary_bar() is self:
+            session.report(self)
+
+    def _patched_close(self: Any) -> None:
+        orig_close(self)
+        session = getattr(self, "_vt_session", None)
+        if session is None:
+            return
+        self._vt_session = None
+        for i, bar in enumerate(session.bars):
+            if bar is self:
+                del session.bars[i]
+                break
+
+    tqdm.std.tqdm.__init__ = _patched_init  # type: ignore[assignment]
+    tqdm.std.tqdm.update = _patched_update  # type: ignore[assignment]
+    tqdm.std.tqdm.close = _patched_close  # type: ignore[assignment]
+    _tqdm_patches.extend(
+        [
+            (tqdm.std.tqdm, "__init__", orig_init),
+            (tqdm.std.tqdm, "update", orig_update),
+            (tqdm.std.tqdm, "close", orig_close),
+        ]
+    )
+
+
 @contextlib.contextmanager
-def intercept_tqdm_progress(callback: ProgressCallback) -> Any:  # noqa: C901
+def intercept_tqdm_progress(callback: ProgressCallback) -> Any:
     """Temporarily hook tqdm progress bars to forward updates to *callback*.
 
     HuggingFace ``transformers`` and ``huggingface_hub`` use :mod:`tqdm` for
@@ -382,61 +558,64 @@ def intercept_tqdm_progress(callback: ProgressCallback) -> Any:  # noqa: C901
 
     Only bars with a known *total* are forwarded; indeterminate spinners are
     silently ignored.
+
+    Nesting and concurrent use are safe: the patch is installed once and removed
+    once (see :class:`_InterceptRegistry`), and each bar reports to the session
+    that was active on its creating thread.
     """
-    import tqdm.std
-
-    _orig_init = tqdm.std.tqdm.__init__
-    _orig_update = tqdm.std.tqdm.update
-    _orig_close = tqdm.std.tqdm.close
-
-    _bars: list[tqdm.std.tqdm] = []
-
-    def _primary_bar() -> tqdm.std.tqdm | None:
-        if not _bars:
-            return None
-        return max(_bars, key=lambda b: getattr(b, "total", 0) or 0)
-
-    def _report(bar: tqdm.std.tqdm) -> None:
-        total = getattr(bar, "total", None)
-        if not total or total <= 0:
-            return
-        current = int(getattr(bar, "n", 0))
-        desc = (getattr(bar, "desc", "") or "Loading…").rstrip(": ")
-        callback("loading", desc, current, int(total))
-
-    _sink = io.StringIO()
-
-    def _patched_init(self: Any, *args: Any, **kwargs: Any) -> None:
-        kwargs["file"] = _sink
-        _orig_init(self, *args, **kwargs)
-        total = getattr(self, "total", None)
-        if total and total > 0 and not getattr(self, "disable", False):
-            _bars.append(self)
-            if _primary_bar() is self:
-                _report(self)
-
-    def _patched_update(self: Any, n: int = 1) -> None:
-        _orig_update(self, n)
-        if _primary_bar() is self:
-            _report(self)
-
-    def _patched_close(self: Any) -> None:
-        _orig_close(self)
-        if self in _bars:
-            _bars.remove(self)
-
-    tqdm.std.tqdm.__init__ = _patched_init  # type: ignore[assignment]
-    tqdm.std.tqdm.update = _patched_update  # type: ignore[assignment]
-    tqdm.std.tqdm.close = _patched_close  # type: ignore[assignment]
+    session = _TqdmSession(callback)
+    with _patch_lock:
+        if _tqdm_registry.enter(session):
+            _install_tqdm_patches()
     try:
         yield
     finally:
-        tqdm.std.tqdm.__init__ = _orig_init  # type: ignore[assignment]
-        tqdm.std.tqdm.update = _orig_update  # type: ignore[assignment]
-        tqdm.std.tqdm.close = _orig_close  # type: ignore[assignment]
+        with _patch_lock:
+            for bar in session.bars:
+                with contextlib.suppress(Exception):
+                    bar._vt_session = None
+            session.bars.clear()
+            if _tqdm_registry.exit(session):
+                _remove_patches(_tqdm_patches)
 
 
-def _patch_safetensors_load_file(counter: list[int], total: list[int], report) -> tuple | None:
+_weight_registry = _InterceptRegistry()
+_weight_patches: list[tuple] = []
+
+
+class _WeightSession:
+    """One active :func:`intercept_weight_loading_progress` block."""
+
+    def __init__(self, callback: ProgressCallback, label: str) -> None:
+        self.callback = callback
+        self.label = label
+        self.counter = 0
+        self.total = 0
+        self.active = True
+
+    def report(self) -> None:
+        if self.active and self.total > 0:
+            self.callback("loading", self.label, min(self.counter, self.total), self.total)
+
+
+class _CountingStateDict(dict):
+    """Dict wrapper that counts unique key accesses for a weight session."""
+
+    def __init__(self, source: dict, session: _WeightSession) -> None:
+        super().__init__(source)
+        self._session = session
+        self._seen: set = set()
+
+    def __getitem__(self, key: Any) -> Any:
+        val = super().__getitem__(key)
+        if key not in self._seen:
+            self._seen.add(key)
+            self._session.counter += 1
+            self._session.report()
+        return val
+
+
+def _patch_safetensors_load_file() -> tuple | None:
     """Wrap ``safetensors.torch.load_file`` to count returned tensors."""
     try:
         import safetensors.torch as _st  # noqa: PLC0415
@@ -446,14 +625,16 @@ def _patch_safetensors_load_file(counter: list[int], total: list[int], report) -
 
     def tracked(*a: Any, **kw: Any) -> Any:
         r = orig(*a, **kw)
-        total[0] += len(r)
+        session = _weight_registry.current()
+        if session is not None:
+            session.total += len(r)
         return r
 
     _st.load_file = tracked
     return (_st, "load_file", orig)
 
 
-def _patch_torch_load(counter: list[int], total: list[int], report) -> tuple | None:
+def _patch_torch_load() -> tuple | None:
     """Wrap ``torch.load`` to count tensors in returned state dicts (.bin weights)."""
     try:
         import torch as _torch  # noqa: PLC0415
@@ -463,17 +644,18 @@ def _patch_torch_load(counter: list[int], total: list[int], report) -> tuple | N
 
     def tracked(*a: Any, **kw: Any) -> Any:
         r = orig(*a, **kw)
-        if isinstance(r, dict) and r:
+        session = _weight_registry.current()
+        if session is not None and isinstance(r, dict) and r:
             sample = next(iter(r.values()))
             if isinstance(sample, _torch.Tensor):
-                total[0] += len(r)
+                session.total += len(r)
         return r
 
     _torch.load = tracked
     return (_torch, "load", orig)
 
 
-def _patch_set_module_tensor_to_device(counter: list[int], total: list[int], report) -> tuple | None:
+def _patch_set_module_tensor_to_device() -> tuple | None:
     """Wrap ``set_module_tensor_to_device`` (HF low_cpu_mem_usage path)."""
     try:
         import transformers.modeling_utils as _tm  # noqa: PLC0415
@@ -487,15 +669,17 @@ def _patch_set_module_tensor_to_device(counter: list[int], total: list[int], rep
 
     def tracked(*a: Any, **kw: Any) -> Any:
         r = orig(*a, **kw)
-        counter[0] += 1
-        report()
+        session = _weight_registry.current()
+        if session is not None:
+            session.counter += 1
+            session.report()
         return r
 
     _tm.set_module_tensor_to_device = tracked  # pyright: ignore[reportAttributeAccessIssue]
     return (_tm, "set_module_tensor_to_device", orig)
 
 
-def _patch_load_state_dict(counter: list[int], total: list[int], report) -> tuple | None:
+def _patch_load_state_dict() -> tuple | None:
     """Wrap ``nn.Module.load_state_dict`` (PyTorch / SentenceTransformers path)."""
     try:
         import torch.nn as _nn  # noqa: PLC0415
@@ -503,26 +687,12 @@ def _patch_load_state_dict(counter: list[int], total: list[int], report) -> tupl
         return None
     orig = _nn.Module.load_state_dict
 
-    class _CountingStateDict(dict):
-        """Dict wrapper that counts unique key accesses for progress."""
-
-        def __init__(self, *args: Any, **kwargs: Any) -> None:
-            super().__init__(*args, **kwargs)
-            self._seen: set = set()
-
-        def __getitem__(self, key: Any) -> Any:
-            val = super().__getitem__(key)
-            if key not in self._seen:
-                self._seen.add(key)
-                counter[0] += 1
-                report()
-            return val
-
     def tracked(self_model: Any, state_dict: Any, *a: Any, **kw: Any) -> Any:
-        if isinstance(state_dict, dict) and not isinstance(state_dict, _CountingStateDict):
-            if total[0] == 0:
-                total[0] = len(state_dict)
-            state_dict = _CountingStateDict(state_dict)
+        session = _weight_registry.current()
+        if session is not None and isinstance(state_dict, dict) and not isinstance(state_dict, _CountingStateDict):
+            if session.total == 0:
+                session.total = len(state_dict)
+            state_dict = _CountingStateDict(state_dict, session)
         return orig(self_model, state_dict, *a, **kw)
 
     _nn.Module.load_state_dict = tracked  # type: ignore[assignment]
@@ -542,30 +712,100 @@ def intercept_weight_loading_progress(callback: ProgressCallback, label: str = "
     and report ``(current, total)`` progress via *callback*.  The total is
     discovered by also intercepting ``safetensors.torch.load_file`` and
     ``torch.load`` to count keys in loaded state dicts.
+
+    Nesting and concurrent use are safe: the patches are installed once and
+    removed once (see :class:`_InterceptRegistry`), and each counted tensor is
+    charged to the session active on the calling thread.
     """
-    counter = [0]
-    total = [0]
-
-    def report() -> None:
-        if total[0] > 0:
-            callback("loading", label, min(counter[0], total[0]), total[0])
-
-    patches: list[tuple] = []
-    for installer in (
-        _patch_safetensors_load_file,
-        _patch_torch_load,
-        _patch_set_module_tensor_to_device,
-        _patch_load_state_dict,
-    ):
-        result = installer(counter, total, report)
-        if result is not None:
-            patches.append(result)
-
+    session = _WeightSession(callback, label)
+    with _patch_lock:
+        if _weight_registry.enter(session):
+            for installer in (
+                _patch_safetensors_load_file,
+                _patch_torch_load,
+                _patch_set_module_tensor_to_device,
+                _patch_load_state_dict,
+            ):
+                result = installer()
+                if result is not None:
+                    _weight_patches.append(result)
     try:
         yield
     finally:
-        for obj, attr, orig in patches:
-            setattr(obj, attr, orig)
+        with _patch_lock:
+            session.active = False
+            if _weight_registry.exit(session):
+                _remove_patches(_weight_patches)
+
+
+#: Key under which an embedder instance stashes its :class:`_ProgressSlot`.
+_PROGRESS_SLOT_KEY = "_progress_slot"
+
+
+class _ProgressSlot:
+    """Per-embedder progress state: a process-wide default + a per-thread override.
+
+    *default* is what :func:`vtscore.media.set_progress_callback` wires in once
+    at startup (the host application's progress sink); every thread sees it.
+    *local* carries the per-thread override installed by
+    :meth:`MediaEmbedder.progress_scope` (or a plain ``emb._on_progress = cb``
+    assignment) for the duration of one embed / model-load pass.
+    """
+
+    __slots__ = ("default", "local")
+
+    def __init__(self, default: ProgressCallback) -> None:
+        self.default = default
+        self.local = threading.local()
+
+
+def _progress_slot(emb: "MediaEmbedder") -> _ProgressSlot:
+    """Return *emb*'s :class:`_ProgressSlot`, creating it on first use.
+
+    Created lazily (rather than in ``__init__``) so an embedder subclass that
+    never calls ``super().__init__()`` still gets one.  ``dict.setdefault`` is
+    atomic under the GIL, so two threads racing to create the slot agree on a
+    single winner instead of one silently discarding the other's callback.
+    """
+    state = vars(emb)
+    slot = state.get(_PROGRESS_SLOT_KEY)
+    if slot is None:
+        slot = state.setdefault(_PROGRESS_SLOT_KEY, _ProgressSlot(_noop_progress))
+    return slot
+
+
+class _ThreadLocalProgress:
+    """Data descriptor backing :attr:`MediaEmbedder._on_progress`.
+
+    Embedders are process-wide singletons (``vtscore.media._embedder_registry``),
+    so a plain instance attribute made the progress callback shared mutable
+    state: two concurrent dataset loads on the same embedder would each assign
+    their own tracker callback, and the second assignment re-routed the *first*
+    load's still-running ``embed_media_bulk`` into the second load's tracker.
+    That mis-drew the progress bar and — because tracker callbacks call
+    ``check_cancelled()`` — let cancelling one load raise ``CancelledError``
+    inside the other's embed pass, aborting the wrong dataset.  Each pass's
+    ``finally`` then restored a callback captured before the other's assignment,
+    silencing whichever load was still running.
+
+    Reads and writes are therefore scoped to the calling thread: a write only
+    ever redirects the progress of embed / model-load calls made *by that
+    thread*, which is exactly what every save-and-restore call site wants.  A
+    thread that never assigned anything reads the process-wide default
+    (:meth:`MediaEmbedder.set_default_progress_callback`), so background work
+    with no explicit callback — the smart-preload thread, say — still reports
+    into the host application's progress sink.
+    """
+
+    def __get__(self, obj: "MediaEmbedder | None", objtype: type | None = None) -> Any:
+        if obj is None:
+            return self
+        slot = _progress_slot(obj)
+        cb = getattr(slot.local, "cb", None)
+        return slot.default if cb is None else cb
+
+    def __set__(self, obj: "MediaEmbedder", value: ProgressCallback | None) -> None:
+        _progress_slot(obj).local.cb = value
 
 
 class MediaEmbedder(ABC):
@@ -592,12 +832,44 @@ class MediaEmbedder(ABC):
     # embedder type.
     _embed_lock = threading.Lock()
 
+    #: Progress sink for this embedder's model loads and bulk passes.  Reads
+    #: and writes are **per-thread** over a process-wide default; see
+    #: :class:`_ThreadLocalProgress` for why, and prefer :meth:`progress_scope`
+    #: over assigning it directly.
+    _on_progress: ProgressCallback = _ThreadLocalProgress()  # type: ignore[assignment]
+
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
         cls._model_load_lock = threading.Lock()
 
-    def __init__(self) -> None:
-        self._on_progress: ProgressCallback = _noop_progress
+    def set_default_progress_callback(self, callback: ProgressCallback) -> None:
+        """Set the process-wide fallback progress sink for this embedder.
+
+        This is the callback every thread sees when it has not installed a
+        :meth:`progress_scope` of its own; :func:`vtscore.media.set_progress_callback`
+        calls it once at application startup.  Unlike assigning
+        :attr:`_on_progress` (which is thread-scoped by design), this is
+        deliberately visible across threads.
+        """
+        _progress_slot(self).default = callback
+
+    @contextlib.contextmanager
+    def progress_scope(self, callback: ProgressCallback):
+        """Route this embedder's progress to *callback* for the calling thread.
+
+        Restores whatever the calling thread had installed before (usually
+        nothing, meaning the process-wide default) on exit, including on
+        exception.  Other threads are unaffected for the whole scope, so two
+        concurrent dataset loads sharing this singleton embedder each keep
+        their own tracker.
+        """
+        slot = _progress_slot(self)
+        prev = getattr(slot.local, "cb", None)
+        slot.local.cb = callback
+        try:
+            yield
+        finally:
+            slot.local.cb = prev
 
     # ------------------------------------------------------------------
     # Identity

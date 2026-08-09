@@ -2,14 +2,18 @@
 
 Verifies that :func:`vtscore.security.url_validation.validate_url` blocks
 requests to private/internal network addresses while allowing public URLs,
-that :func:`~vtscore.security.url_validation.open_validated_stream` re-checks
-every redirect hop, and that the HTTP archive importer, the webhook exporter,
-and the ``media_url`` media fetch all go through the guard.
+that :func:`~vtscore.security.url_validation.guarded_session` re-checks the
+peer address each socket actually reaches (so a rebinding DNS answer cannot
+slip past the name check), that
+:func:`~vtscore.security.url_validation.open_validated_stream` re-checks every
+redirect hop, and that the HTTP archive importer, the webhook exporter, and the
+``media_url`` media fetch all go through the guard.
 """
 
 from __future__ import annotations
 
-from typing import cast
+import socket as socket_mod
+from typing import Any, cast
 from unittest import mock
 
 import pytest
@@ -147,6 +151,209 @@ class TestValidateUrlPrivateIPs:
         ):
             with pytest.raises(ValueError, match="private/internal"):
                 validate_url("http://dual-homed.example/")
+
+
+# ---------------------------------------------------------------------------
+# guarded_session – peer-address recheck (DNS rebinding)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def loopback_listener():
+    """A real listening socket on ``127.0.0.1``; yields its port.
+
+    Nothing ever accepts on it - a TCP connect still completes through the
+    listen backlog, which is all the peer check needs to observe an address.
+    """
+    srv = socket_mod.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    try:
+        yield srv.getsockname()[1]
+    finally:
+        srv.close()
+
+
+class TestGuardedSessionPeerCheck:
+    """``validate_url`` vets a *name*; the socket connects to an *address*.
+
+    Between the two lookups an attacker who runs DNS for their own hostname can
+    swap the answer (DNS rebinding), so the name check alone proves nothing.
+    These tests drive the real socket path: the address is never mocked, only
+    the DNS answer ``validate_url`` sees.
+    """
+
+    def _public_dns_answer(self):
+        """Make ``validate_url`` believe any hostname is publicly routable."""
+        return mock.patch(
+            "vtscore.security.url_validation.socket.getaddrinfo",
+            return_value=[(2, 1, 0, "", ("93.184.216.34", 0))],
+        )
+
+    def _session(self):
+        from vtscore.security.url_validation import guarded_session
+
+        session = guarded_session()
+        # Ignore any ambient HTTP(S)_PROXY: a proxied request is peer-checked at
+        # the proxy, which is exactly the case this test must not exercise.
+        session.trust_env = False
+        return session
+
+    def test_rebinding_to_loopback_is_blocked_at_connect(self, loopback_listener):
+        from vtscore.security.url_validation import BlockedAddressError
+
+        url = f"http://localhost:{loopback_listener}/admin"
+        with self._public_dns_answer():
+            # The name check is fooled by the attacker's first DNS answer...
+            assert validate_url(url) == url
+        # ...but the socket lands on 127.0.0.1, and that is what gets checked.
+        with self._session() as session:
+            with pytest.raises(BlockedAddressError, match="private/internal"):
+                session.get(url, timeout=5)
+
+    def test_https_is_blocked_before_the_tls_handshake(self, loopback_listener):
+        """The hook is on the bare socket, so no SNI or request byte is sent."""
+        from vtscore.security.url_validation import BlockedAddressError
+
+        with self._session() as session:
+            with pytest.raises(BlockedAddressError, match="private/internal"):
+                session.get(f"https://localhost:{loopback_listener}/admin", timeout=5)
+
+    def test_a_plain_session_is_not_guarded(self, loopback_listener):
+        """Pins why the guard has to be mounted: a bare session has no check.
+
+        The connect succeeds and the request goes out (there is no server, so it
+        stalls on the read) - the point is that nothing rejects the address.
+        """
+        from vtscore.security.url_validation import BlockedAddressError
+
+        session = requests.Session()
+        session.trust_env = False
+        with session:
+            with pytest.raises(requests.RequestException) as excinfo:
+                session.get(f"http://localhost:{loopback_listener}/admin", timeout=(5, 0.5))
+        assert not isinstance(excinfo.value, BlockedAddressError)
+
+    def test_blocked_error_is_a_value_error(self):
+        """Callers already treat a failed guard as ``ValueError``; keep it so."""
+        from vtscore.security.url_validation import BlockedAddressError
+
+        assert issubclass(BlockedAddressError, ValueError)
+
+
+class _FakeSocket:
+    """Just enough socket for the peer check: an address and a close flag."""
+
+    def __init__(self, peer):
+        self._peer = peer
+        self.closed = False
+
+    def getpeername(self):
+        if self._peer is None:
+            raise OSError("not connected")
+        return self._peer
+
+    def close(self):
+        self.closed = True
+
+
+class _FakeConn:
+    def __init__(self, proxy=None):
+        self.proxy = proxy
+
+
+def _check_peer(peer, proxy=None) -> tuple[_FakeSocket, object]:
+    """Run the peer check over a stubbed socket; return the socket and result."""
+    from vtscore.security.url_validation import _reject_internal_peer
+
+    sock = _FakeSocket(peer)
+    returned = _reject_internal_peer(cast(Any, _FakeConn(proxy)), cast(Any, sock))
+    return sock, returned
+
+
+class TestRejectInternalPeer:
+    """Unit coverage for the peer check itself, socket layer stubbed out."""
+
+    def test_public_peer_passes_through(self):
+        sock, returned = _check_peer(("93.184.216.34", 443))
+        assert returned is sock
+        assert not sock.closed
+
+    @pytest.mark.parametrize(
+        "ip",
+        ["127.0.0.1", "169.254.169.254", "10.0.0.5", "192.168.1.1", "172.16.0.1", "0.0.0.0", "::1"],
+    )
+    def test_internal_peer_is_rejected(self, ip):
+        from vtscore.security.url_validation import BlockedAddressError
+
+        with pytest.raises(BlockedAddressError, match="private/internal"):
+            _check_peer((ip, 80))
+
+    def test_rejected_socket_is_closed(self):
+        """Nothing is left half-open for the caller to accidentally write to."""
+        from vtscore.security.url_validation import BlockedAddressError, _reject_internal_peer
+
+        sock = _FakeSocket(("127.0.0.1", 80))
+        with pytest.raises(BlockedAddressError):
+            _reject_internal_peer(cast(Any, _FakeConn()), cast(Any, sock))
+        assert sock.closed
+
+    def test_unreadable_peer_fails_closed(self):
+        """A socket we cannot read the peer of is a socket we cannot vouch for."""
+        from vtscore.security.url_validation import BlockedAddressError
+
+        with pytest.raises(BlockedAddressError, match="unknown"):
+            _check_peer(None)
+
+    def test_proxied_connection_is_exempt(self):
+        """Through a proxy the peer *is* the proxy, often legitimately private."""
+        sock, returned = _check_peer(("127.0.0.1", 3128), proxy="http://127.0.0.1:3128")
+        assert returned is sock
+        assert not sock.closed
+
+
+class TestGuardedSessionWiring:
+    """The guard is only worth anything if it is actually mounted."""
+
+    def test_both_schemes_get_the_guarded_adapter(self):
+        from vtscore.security.url_validation import _GuardedHTTPAdapter, guarded_session
+
+        with guarded_session() as session:
+            for prefix in ("http://x/", "https://x/"):
+                assert isinstance(session.get_adapter(prefix), _GuardedHTTPAdapter)
+
+    def test_pool_manager_hands_out_guarded_connections(self):
+        from vtscore.security.url_validation import (
+            _GuardedHTTPConnection,
+            _GuardedHTTPSConnection,
+            guarded_session,
+        )
+
+        with guarded_session() as session:
+            manager = session.get_adapter("https://x/").poolmanager  # type: ignore[attr-defined]
+            assert manager.pool_classes_by_scheme["http"].ConnectionCls is _GuardedHTTPConnection
+            assert manager.pool_classes_by_scheme["https"].ConnectionCls is _GuardedHTTPSConnection
+
+    def test_the_downloader_fetches_on_a_guarded_session(self):
+        """A validated URL handed to a bare session is the rebinding hole."""
+        from vtscore.security.url_validation import _GuardedHTTPAdapter
+
+        captured: list[requests.Session] = []
+
+        def fake_stream(session, url, headers=None):
+            captured.append(session)
+            raise requests.ConnectionError("stop here")
+
+        with mock.patch("vtscore.datasets.downloader.core._open_validated_stream", fake_stream):
+            from vtscore.datasets.downloader.core import fetch_remote_signature
+
+            with mock.patch(
+                "vtscore.security.url_validation.socket.getaddrinfo",
+                return_value=[(2, 1, 0, "", ("93.184.216.34", 0))],
+            ):
+                assert fetch_remote_signature("https://public.example/a.zip") is None
+        assert captured, "the downloader never opened a stream"
+        assert isinstance(captured[0].get_adapter("https://x/"), _GuardedHTTPAdapter)
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +511,7 @@ class TestFetchValidatedUrl:
     def test_rejects_file_scheme_before_any_request(self):
         from vtscore.security.url_validation import fetch_validated_url
 
-        with mock.patch("vtscore.security.url_validation.requests.Session") as mock_session:
+        with mock.patch("vtscore.security.url_validation.guarded_session") as mock_session:
             with pytest.raises(ValueError, match="http or https"):
                 fetch_validated_url("file:///etc/passwd")
         mock_session.assert_not_called()
@@ -316,7 +523,7 @@ class TestFetchValidatedUrl:
             "vtscore.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", ("127.0.0.1", 0))],
         ):
-            with mock.patch("vtscore.security.url_validation.requests.Session") as mock_session:
+            with mock.patch("vtscore.security.url_validation.guarded_session") as mock_session:
                 with pytest.raises(ValueError, match="private/internal"):
                     fetch_validated_url("http://localhost:5000/api/settings")
         mock_session.assert_not_called()
@@ -329,7 +536,7 @@ class TestFetchValidatedUrl:
             "vtscore.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", ("93.184.216.34", 0))],
         ):
-            with mock.patch("vtscore.security.url_validation.requests.Session", return_value=session):
+            with mock.patch("vtscore.security.url_validation.guarded_session", return_value=session):
                 assert fetch_validated_url("https://public.example/m.wav") == b"media-bytes"
 
     def test_raises_on_error_status(self):
@@ -340,7 +547,7 @@ class TestFetchValidatedUrl:
             "vtscore.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", ("93.184.216.34", 0))],
         ):
-            with mock.patch("vtscore.security.url_validation.requests.Session", return_value=session):
+            with mock.patch("vtscore.security.url_validation.guarded_session", return_value=session):
                 with pytest.raises(requests.HTTPError):
                     fetch_validated_url("https://public.example/missing.wav")
 
@@ -368,7 +575,7 @@ class TestMediaUrlSSRF:
     def test_non_http_media_url_fetches_nothing(self, url):
         from vtscore.media.base import _fetch_media_url
 
-        with mock.patch("vtscore.security.url_validation.requests.Session") as mock_session:
+        with mock.patch("vtscore.security.url_validation.guarded_session") as mock_session:
             assert _fetch_media_url(url) is None
         mock_session.assert_not_called()
 
@@ -380,7 +587,7 @@ class TestMediaUrlSSRF:
             "vtscore.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", (ip, 0))],
         ):
-            with mock.patch("vtscore.security.url_validation.requests.Session") as mock_session:
+            with mock.patch("vtscore.security.url_validation.guarded_session") as mock_session:
                 assert _fetch_media_url(f"http://{ip}/latest/meta-data/") is None
         mock_session.assert_not_called()
 
@@ -392,7 +599,7 @@ class TestMediaUrlSSRF:
             "vtscore.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", ("93.184.216.34", 0))],
         ):
-            with mock.patch("vtscore.security.url_validation.requests.Session", return_value=session):
+            with mock.patch("vtscore.security.url_validation.guarded_session", return_value=session):
                 assert _fetch_media_url("https://pullwrest.example/media/123") == b"remote-media"
 
     def test_resolve_media_bytes_refuses_a_file_url(self, tmp_path):
@@ -492,7 +699,7 @@ class TestWebhookExporterSSRF:
             "vtscore.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", ("93.184.216.34", 0))],
         ):
-            with mock.patch("vtscore.exporters.webhook.requests.post", return_value=mock_resp):
+            with mock.patch("requests.Session.post", return_value=mock_resp):
                 result = exp.export(
                     {"detectors_run": 0, "results": {}},
                     {"url": "https://example.com/hook"},

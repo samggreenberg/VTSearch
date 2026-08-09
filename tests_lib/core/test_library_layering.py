@@ -72,7 +72,7 @@ class TestVtscoreDoesNotImportVtsearch:
             "vtscore must not import vtsearch (the dependency runs the other way).\n"
             + "\n".join(offenders)
             + "\n\nRoute app-tier behaviour through a registered hook instead - see "
-            "vtscore/user.py and vtscore/achievements_hooks.py for the pattern."
+            "vtscore/state/current_user.py and vtscore/achievements_hooks.py for the pattern."
         )
 
     def test_allowlist_has_no_stale_entries(self):
@@ -95,4 +95,4 @@ class TestJobManagerHasNoAppTierImport:
         """
         source = (_VTSCORE / "concurrency" / "async_jobs.py").read_text(encoding="utf-8")
         assert "vtsearch" not in source
-        assert "from vtscore.user import" in source
+        assert "from vtscore.state.current_user import" in source

@@ -58,13 +58,13 @@ they define the library's interface boundary.
 
 | # | Seam | What used to leak | How the library decouples it |
 |---|------|-------------------|-----|
-| 1 | **Flask** | `flask.g` reads in `state.core` and `detectors.workflow` | Pluggable context resolvers (`register_dataset_context_resolver`, `register_detector_context_resolver`); the Flask wiring lives in `vtsearch/shim/`. |
+| 1 | **Flask** | `flask.g` reads in `state.core` and `detectors.workflow` | Pluggable context resolvers (`register_dataset_context_resolver`, `register_detector_context_resolver`) plus the current-user resolver (`register_request_user_resolver`, backing `vtscore.state.current_user.get_current_user`); the Flask wiring lives in `vtsearch/shim/` and `vtsearch/auth/`. |
 | 2 | **Settings** | Library code read `vtsearch.settings.get_*` directly | `CoreConfig` dataclass carries every knob library code consumes; `CoreConfig.from_settings()` is the bridge the app installs via `register_core_config_builder()`. |
 | 3 | **Global state** | Library code imported the `medias`, `good_votes`, … proxies | `DatasetContext` / `DetectorContext` are the library primitives; the proxies stayed app-side in `vtsearch/state_proxies.py`. |
 | 4 | **Filesystem** | Hardcoded `"data/"` paths scattered around | Every path routes through `vtscore.config.DATA_DIR` (honouring `$VTSEARCH_DATA_DIR`), snapshotted into `CoreConfig.data_dir`. |
 | 5 | **Plugin discovery** | Module scan over `vtsearch.<family>` package paths | Generic `PluginRegistry[T]` walks any package by name + sentinel; library families register under `vtscore.<family>` entry-point groups, app families stay `vtsearch.<family>`. |
 | 6 | **Pickle compatibility** | Risk that old pickles referenced `vtsearch.*` classes | Audit confirmed `safe_pickle_load`'s allowlist already prevents app-class references in any saved artefact. No shim needed. |
-| 7 | **Test suite** | `tests/` reached into Flask, settings, auth | `tests_lib/` mirrors the tree with Flask-free fixtures; `./run-tests.sh vtscore-clean` runs them under a meta-path hook that refuses `flask` / `werkzeug` / `flask_smorest`. |
+| 7 | **Test suite** | `tests/` reached into Flask, settings, auth | `tests_lib/` mirrors the tree with Flask-free fixtures; `./run-tests.sh vtscore-clean` runs them under a meta-path hook that refuses `flask` / `werkzeug` / `flask_smorest`. The hook (`tests_lib/flask_blocker.py`) is re-installed at the top of `tests_lib/conftest.py` in every xdist worker, since `sys.meta_path` is per-process and the workers are what import the code under test. |
 
 If you find code in `vtscore/` that violates one of these seams, it's a bug.
 The grep commands that enforce each seam live in the git history under the
@@ -339,23 +339,23 @@ the library without the library knowing:
    the app contribute `settings_importers`, `settings_exporters`,
    `settings_sources` to the registry that library tools (like
    `python app.py --list-plugins`) enumerate. Wired in `vtsearch/shim/`.
-4. **Request-user resolver** - `vtscore.user.register_request_user_resolver`.
-   Library code that needs the identity behind the work (the job manager
-   replaying a user onto its worker thread, `{username}` in an export
-   path) calls `vtscore.user.get_current_user()`; the app installs a
-   resolver reading `flask.g.user`. Wired in `vtsearch/shim/`.
+4. **Current-user resolver** - `register_request_user_resolver`. Tells
+   `vtscore.state.current_user.get_current_user()` how to read the
+   *request-scoped* user; `vtsearch/auth/` wires it to `flask.g.user` at
+   import time. Below it sit the thread-local (`thread_user`) and the
+   `"default"` fallback, both Flask-free.
 5. **Achievement recorders** -
    `vtscore.achievements_hooks.register_achievement_recorder(event, fn)`
    for the `vote` / `dataset_load` / `detector_import` / `find` events the
    library raises. The counters are per-user settings state, so the
-   recording lives in `vtsearch.achievements`. Wired in `vtsearch/shim/`.
+   recording itself lives in `vtsearch.achievements`. Wired in
+   `vtsearch/shim/`.
 
 If you're embedding `vtscore` in your own application, you'll typically
-install your own variants of these hooks. None of them is required - the
-library has working defaults for all five (no context, no
-`from_settings()` builder, no app-side plugin families, no request user
-- so `get_current_user()` reports `"default"` - and achievement events
-that no-op).
+install your own variants of these hooks. None of them is required -
+the library has working defaults for all five (no context, no
+`from_settings()` builder, no app-side plugin families, every user is
+`"default"`, and achievement events that no-op).
 
 **The dependency direction is enforced by a test.**
 `tests_lib/core/test_library_layering.py` walks the AST of every

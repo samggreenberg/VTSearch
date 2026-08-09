@@ -682,7 +682,12 @@ def load_dataset_from_folder(
     )
 
     medias.clear()
-    _progress_interval = max(1, min(50, total_files // 50)) if total_files > 0 else 1
+    # ~50 updates for the whole loop, whatever the file count.  ``min(50, ...)``
+    # would cap the *interval* at 50 instead of the update count, inverting above
+    # 2500 files: a 300k-file folder would emit 6,000 progress events, each a full
+    # re-serialisation of the task list pushed to every open SSE stream (enough to
+    # back up the per-client 1024-deep queue and start dropping frames).
+    _progress_interval = max(1, total_files // 50) if total_files > 0 else 1
 
     build_specs = [
         (media_id, file_path, file_path.relative_to(folder_path).as_posix())
@@ -803,9 +808,11 @@ def load_dataset_from_folder_chunked(
         total_files = 0  # unknown up front when streaming
         file_iter = _iter_media_files(folder_path, mt, recursive)
 
-    # When the total is known, report progress at ~50 evenly spaced ticks;
-    # when streaming (total unknown) fall back to a fixed file interval.
-    _progress_interval = max(1, min(50, total_files // 50)) if total_files > 0 else 200
+    # When the total is known, report progress at ~50 evenly spaced ticks — cap the
+    # update count, not the interval (see the monolithic loader above for why the
+    # inverted ``min(50, ...)`` form floods SSE streams on large folders); when
+    # streaming (total unknown) fall back to a fixed file interval.
+    _progress_interval = max(1, total_files // 50) if total_files > 0 else 200
 
     media_id = 1
     chunk_index = 0

@@ -18,6 +18,7 @@ from unittest.mock import MagicMock, patch
 import torch
 import torch.nn as nn
 
+from helpers import wire_mock_progress_scope
 from vtscore.media.embedder import (
     _hub_metadata_preflight,
     hf_token,
@@ -290,6 +291,7 @@ class TestPreloadConsoleOutput:
         mock_emb = MagicMock()
         mock_emb.name = "clap"
         mock_emb._on_progress = lambda *a, **kw: None
+        wire_mock_progress_scope(mock_emb)
 
         def fake_load_models():
             mock_emb._on_progress("loading", "Loading CLAP model weights...", 0, 0)
@@ -1223,3 +1225,81 @@ class TestTimedProgress:
         assert "Importing thing…" in out
         # Bar climbs (8 modules clamped to 3/4 = 75%) but never completes here.
         assert "100%" not in out
+
+
+class TestConcurrentWeightInterception:
+    """Two embedders can load weights at once; the patches must survive that."""
+
+    def test_interleaved_sessions_keep_counts_separate_and_restore(self):
+        """Overlapping sessions must not leave torch permanently wrapped.
+
+        Model loading is serialised per embedder *class*, so two embedders can
+        be inside ``intercept_weight_loading_progress`` at the same time.  With
+        naive save/patch/restore the second entrant saves the *patched*
+        functions as its originals, and the ordering below (A enters, B enters,
+        A exits, B exits) leaves ``nn.Module.load_state_dict`` permanently
+        wrapped in A's dead counting closure.
+        """
+        import threading
+
+        orig_lsd = nn.Module.load_state_dict
+
+        a_calls: list[tuple] = []
+        b_calls: list[tuple] = []
+        errors: list[BaseException] = []
+
+        a_entered = threading.Event()
+        b_entered = threading.Event()
+        a_load_done = threading.Event()
+        b_load_done = threading.Event()
+        a_exited = threading.Event()
+
+        small = nn.Linear(4, 2)  # 2 tensors
+        big = nn.Sequential(nn.Linear(4, 8), nn.Linear(8, 2))  # 4 tensors
+
+        def thread_a() -> None:
+            try:
+                with intercept_weight_loading_progress(lambda *c: a_calls.append(c), "A"):
+                    a_entered.set()
+                    assert b_entered.wait(timeout=10)
+                    nn.Linear(4, 2).load_state_dict(small.state_dict())
+                    a_load_done.set()
+                    assert b_load_done.wait(timeout=10)
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+            finally:
+                a_entered.set()
+                a_load_done.set()
+                a_exited.set()
+
+        def thread_b() -> None:
+            try:
+                assert a_entered.wait(timeout=10)
+                with intercept_weight_loading_progress(lambda *c: b_calls.append(c), "B"):
+                    b_entered.set()
+                    nn.Sequential(nn.Linear(4, 8), nn.Linear(8, 2)).load_state_dict(big.state_dict())
+                    b_load_done.set()
+                    assert a_exited.wait(timeout=10)
+            except BaseException as exc:  # noqa: BLE001
+                errors.append(exc)
+            finally:
+                b_entered.set()
+                b_load_done.set()
+
+        threads = [threading.Thread(target=thread_a), threading.Thread(target=thread_b)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+            assert not t.is_alive()
+        assert errors == []
+
+        # Each session counted only its own tensors, not the other thread's.
+        assert a_calls and all(c[1] == "A" and c[3] == 2 for c in a_calls)
+        assert b_calls and all(c[1] == "B" and c[3] == 4 for c in b_calls)
+
+        # Both sessions are gone: torch must be fully unwrapped again.
+        assert nn.Module.load_state_dict is orig_lsd
+        before = (len(a_calls), len(b_calls))
+        nn.Linear(4, 2).load_state_dict(small.state_dict())
+        assert (len(a_calls), len(b_calls)) == before

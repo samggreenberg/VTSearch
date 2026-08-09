@@ -910,6 +910,14 @@ class TestRegionAwareTraining:
 
         Each cell is a distinct axis-aligned unit vector, so it's easy to
         check which cells got pooled by inspecting the resulting vector.
+
+        Bound to ``dinov3_patch`` because that is what a grid-bearing media
+        actually looks like: the grid lives in the *patch-slot* embedder's
+        space, and every patch behaviour - scoring
+        (:func:`~vtscore.detectors.training._score_all_media`), the Bad-vote
+        flood, the Good-vote pool - is gated on the detector scoring in that
+        slot.  A grid hung off a semantic embedder is a shape no loader
+        produces, and would (correctly) be scored image-level.
         """
         h, w, d = 4, 4, 16
         n = h * w
@@ -926,8 +934,8 @@ class TestRegionAwareTraining:
             "id": cid,
             "md5": f"md5-{cid:04x}",
             "media_type": "image",
-            "embedder": "siglip",
-            "embeddings": {"siglip": cls},
+            "embedder": "dinov3_patch",
+            "embeddings": {"dinov3_patch": cls},
             "patch_grid": grid,
         }
 
@@ -953,7 +961,7 @@ class TestRegionAwareTraining:
         from vtscore.embedding.matrix import media_score_rows
 
         media = self._media_with_patch_grid(0.99, cid=7)
-        rows = media_score_rows(media, "siglip")
+        rows = media_score_rows(media, "dinov3_patch")
         assert rows is not None
         for box in [(0.02, 0.02, 0.48, 0.48), (0.5, 0.5, 1.0, 1.0), (0.0, 0.0, 1.0, 1.0), None]:
             vec = _training_vec_for_vote(media, box)

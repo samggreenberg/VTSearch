@@ -98,25 +98,6 @@ def _flask_in_request_handler_predicate() -> bool:
     return bool(getattr(g, "_vts_in_request_handler", False))
 
 
-def _flask_request_user() -> str | None:
-    """Read the request user off ``flask.g``, or ``None`` outside a request.
-
-    The ``before_request`` middleware in ``app.py`` stashes the username
-    the active :class:`~vtsearch.auth.LoginProvider` resolved onto
-    ``g.user``.  Returning ``None`` outside a request context (CLI,
-    background thread, library caller) lets
-    :func:`vtscore.user.get_current_user` fall through to its
-    thread-local / ``"default"`` fallback.
-    """
-    from flask import g
-
-    try:
-        return g.user  # type: ignore[attr-defined]
-    except (AttributeError, RuntimeError):
-        # No Flask request context, or the middleware hasn't run yet.
-        return None
-
-
 def register_flask_context_resolvers() -> None:
     """Install Flask-aware request-context resolvers on ``vtscore.state.core``.
 
@@ -130,23 +111,16 @@ def register_flask_context_resolvers() -> None:
     frozen request-missing sentinel (rather than the global empty
     context) when a request arrives without an ``X-Dataset-Id`` /
     ``X-Detector-Id`` header - see logical-bug-audit H13 / H16.
-
-    Finally, installs :func:`_flask_request_user` as the request-user
-    resolver so library code that asks
-    :func:`vtscore.user.get_current_user` who triggered the work sees
-    ``g.user`` - without :mod:`vtscore` importing Flask (issue #2931).
     """
     from vtscore.state.core import (
         register_dataset_context_resolver,
         register_detector_context_resolver,
         register_request_context_predicate,
     )
-    from vtscore.user import register_request_user_resolver
 
     register_dataset_context_resolver(_flask_dataset_context_resolver)
     register_detector_context_resolver(_flask_detector_context_resolver)
     register_request_context_predicate(_flask_in_request_handler_predicate)
-    register_request_user_resolver(_flask_request_user)
 
 
 def register_app_persistence_hooks() -> None:

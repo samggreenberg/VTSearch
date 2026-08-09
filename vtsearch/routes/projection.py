@@ -113,7 +113,7 @@ def _subset_meta(ctx, bin_shape: str) -> dict:
         meta["status"] = "ready"
         meta["media_type"] = _media_type_for(ctx)
         meta["method"] = ctx._subset_projection.method if ctx._subset_projection else None
-        meta["content_version"] = getattr(ctx, "_subset_content_version", 0)
+        meta["content_version"] = ctx._subset_content_version
         label_set = _label_set_for(ctx, pyr, subset=True)
         meta["has_labels"] = bool(label_set and label_set.labels)
         return meta
@@ -774,7 +774,7 @@ def remove_from_subset(body: dict):
     ctx._subset_projection = new_proj
     ctx._subset_ids = list(new_proj.ids)
     ctx._subset_job_id = None
-    ctx._subset_content_version = getattr(ctx, "_subset_content_version", 0) + 1
+    ctx._subset_content_version += 1
     # Re-bin every shape that was already built, each on its own preserved grid,
     # then stamp the survivors' extent over rebin_like's kept template bounds.
     ctx._subset_pyramids = {

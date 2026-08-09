@@ -437,11 +437,17 @@ def set_progress_callback(callback: "ProgressCallback") -> None:
 
     Call this once at application startup to wire media types and embedders
     into whatever progress reporting mechanism the host application uses.
+
+    Embedders go through :meth:`~vtscore.media.embedder.MediaEmbedder.set_default_progress_callback`
+    rather than a plain ``_on_progress`` assignment: that attribute is
+    thread-scoped (so concurrent dataset loads can't trample each other's
+    tracker), whereas this startup wiring is a process-wide default every
+    thread must see.
     """
     for mt in _registry.values():
         mt._on_progress = callback
     for emb in _embedder_registry.values():
-        emb._on_progress = callback
+        emb.set_default_progress_callback(callback)
 
 
 __all__ = [

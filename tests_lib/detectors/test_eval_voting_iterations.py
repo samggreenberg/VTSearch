@@ -406,9 +406,10 @@ class TestProductionCalibrationFidelity:
     per-seed simulation RNG or letting folds auto-size can't silently
     reintroduce a production mismatch.
 
-    The *head* itself is where the eval's MLP arm and production part ways:
-    production trains the linear head (#2790), while this arm keeps the MLP as a
-    sweep candidate, so the width asserted below is the arm's own auto-sizing.
+    The *head* is threaded the same way whichever arm runs: the default arm
+    trains production's linear head (#2790/#2916) and ``head="mlp"`` the legacy
+    auto-sized one, and in both cases the folds must take the final model's
+    width rather than sizing themselves from their own smaller split.
     """
 
     def _spy_calibration(self, monkeypatch):
@@ -432,18 +433,20 @@ class TestProductionCalibrationFidelity:
         monkeypatch.setattr(voting_iterations, "calibration_folds", spy)
         return captured
 
-    def test_folds_forced_to_full_data_hidden_dim(self, monkeypatch):
-        from vtscore.training.mlp import _auto_hidden_dim
+    @pytest.mark.parametrize("head", [None, "mlp"])
+    def test_folds_forced_to_full_data_hidden_dim(self, head, monkeypatch):
+        from vtscore.eval.voting_iterations import PRODUCTION_HEAD, _resolve_hidden_dim
 
         captured = self._spy_calibration(monkeypatch)
         medias = _make_separable_clips(n_per_cat=10)
-        simulate_voting_iterations(medias, "alpha", seed=42)
+        simulate_voting_iterations(medias, "alpha", seed=42, head=head)
 
         assert captured  # at least one calibrated step
         for c in captured:
             # The fold models must be sized from the full label count for the
-            # step, not auto-sized per fold (hidden_dim=None).
-            assert c["hidden_dim"] == _auto_hidden_dim(c["n"])
+            # step, not auto-sized per fold (hidden_dim=None) - on the default
+            # (production) arm and on the legacy MLP arm alike.
+            assert c["hidden_dim"] == _resolve_hidden_dim(head or PRODUCTION_HEAD, c["n"])
 
     def test_folds_calibrate_with_fixed_random_state_42(self, monkeypatch):
         captured = self._spy_calibration(monkeypatch)

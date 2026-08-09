@@ -167,6 +167,9 @@ class TestTrainerPluggableVoting:
             assert key in row
         assert row["trainer"] == "svm_linear"
         assert row["backend"] == "sklearn-cpu"
+        # #2916: the SVM trainers fit no torch head, so naming one on their rows
+        # would attribute them to an architecture they never trained.
+        assert row["head"] == ""
         assert row["prevalence_arm"] == "natural"
 
     def test_svm_trajectory_learns(self):

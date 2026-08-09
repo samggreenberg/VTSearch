@@ -164,9 +164,13 @@ MIRRORS: list[Mirror] = [
         note=(
             "The app's canonical train + calibrate pipeline, which the harness reproduces step "
             "for step (fold calibration, full-data fit, fold-anchored threshold). A new stage "
-            "here - or a changed head, fold rule or ordering - has to reach the harness or its "
+            "here - or a changed fold rule or ordering - has to reach the harness or its "
             "default arm trains a detector the app no longer ships. Note "
-            "_mlp_train_and_calibrate is the single-vector path and reproduces the same shape."
+            "_mlp_train_and_calibrate is the single-vector path and reproduces the same shape. "
+            "The head is the one knob mirrored by name: this function's `hidden_dim` must equal "
+            "`_resolve_hidden_dim(voting_iterations.PRODUCTION_HEAD, ...)`, which "
+            "tests_lib/detectors/test_harness_linear_head.py pins by training this pipeline for "
+            "real - so a head change fails the suite as well as tripping this digest."
         ),
     ),
     Mirror(

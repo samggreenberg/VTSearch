@@ -39,7 +39,6 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, Iterator, Optional
 
 from vtscore.concurrency.progress import CancelledError
-from vtscore.user import get_current_user, thread_user
 
 
 @dataclass
@@ -237,6 +236,8 @@ class JobManager:
         """
         # Capture the user that triggered this start() so background work
         # touching per-user settings resolves to the right user.
+        from vtscore.state.current_user import get_current_user
+
         current_user = get_current_user()
 
         spawn_job: AsyncJob | None = None
@@ -312,6 +313,7 @@ class JobManager:
     def _run(self, job: AsyncJob, target: Callable[[AsyncJob], Any]) -> None:
         from contextlib import ExitStack
 
+        from vtscore.state.current_user import thread_user
         from vtscore.state.core import (
             get_context,
             get_detector_context,
