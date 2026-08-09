@@ -18,8 +18,10 @@ behaviours that used to be plugin-author responsibility:
    ``field_type="url"`` values are passed through
    :func:`~vtscore.security.url_validation.validate_url`;
    ``field_type="server_path"`` values are passed through
-   :func:`~vtscore.security.path_validation.validate_server_filepath`
-   anchored at the per-user data dir.
+   :func:`~vtscore.security.path_validation.confine_server_filepath`
+   anchored at the per-user data dir, and the *approved* path is written
+   back into ``field_values`` so the plugin body consumes exactly what
+   was validated.
 
 Plugin bodies are expected to trust the resulting dict - no more
 ``if not foo: raise ValueError`` boilerplate, no more manual
@@ -110,19 +112,29 @@ def _apply_templates(value: str, template_vars: tuple[str, ...]) -> str:
     return value
 
 
-def _validate_field_value(field_type: str, value: str) -> None:
-    """Run the field-type-driven security validator on a non-empty value."""
+def _validated_field_value(field_type: str, value: str) -> str:
+    """Run the field-type-driven security validator, returning the value to store.
+
+    Path-typed values come back **canonicalised**: under multi-user
+    confinement the validator resolves a relative path against the user's
+    data dir while the consuming plugin would resolve it against the process
+    CWD, so storing the raw string would let ``"data/alice"`` pass Bob's
+    confinement check and then read Alice's directory.  Returning the
+    approved path keeps validation and consumption on one anchor (see
+    :func:`~vtscore.security.path_validation.confine_server_filepath`).
+    """
     if field_type == "url":
         from vtscore.security.url_validation import validate_url  # noqa: PLC0415
 
         validate_url(value)
     elif field_type in ("server_path", "folder"):
         from vtscore.security.path_validation import (  # noqa: PLC0415
+            confine_server_filepath,
             get_file_access_base_dir,
-            validate_server_filepath,
         )
 
-        validate_server_filepath(value, base_dir=get_file_access_base_dir())
+        return confine_server_filepath(value, get_file_access_base_dir())
+    return value
 
 
 def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> dict[str, Any]:
@@ -158,7 +170,7 @@ def normalize_field_values(plugin: PluginBase, field_values: dict[str, Any]) -> 
 
         if value:
             value = _apply_templates(value, tuple(f.template_vars))
-            _validate_field_value(f.field_type, value)
+            value = _validated_field_value(f.field_type, value)
         field_values[f.key] = value
 
     return field_values

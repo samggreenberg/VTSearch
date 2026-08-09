@@ -878,9 +878,11 @@ def _embed_external_labels(labels: list[dict], emb) -> tuple[list, list[float], 
             skipped += 1
             continue
 
-        media_path = Path(raw_path)
         try:
-            _paths.validate_server_filepath(str(media_path), base_dir=file_base)
+            # Embed the approved path, not the raw one: under confinement the
+            # check anchors a relative path at the user's data dir while
+            # ``Path(...)`` would anchor it at the process CWD.
+            media_path = Path(_paths.confine_server_filepath(str(raw_path), file_base))
         except ValueError:
             skipped += 1
             continue

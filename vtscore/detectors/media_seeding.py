@@ -50,9 +50,11 @@ def _real_example_origin(ex: dict[str, Any]) -> dict[str, Any] | None:
 
     Security: the origin comes from a detector JSON / request body, so its
     params must pass the same per-user confinement the ingress applies; an
-    origin that fails the check is discarded (sentinel fallback).  URL params are re-validated by the url_download source at
-    fetch time (``validate_url`` plus per-redirect-hop checks in the
-    downloader).
+    origin that fails the check is discarded (sentinel fallback).  The
+    *confined* copy is returned so the seeded media resolves the path the
+    check approved rather than one anchored at the process CWD.  URL params
+    are re-validated by the url_download source at fetch time
+    (``validate_url`` plus per-redirect-hop checks in the downloader).
     """
     origin = ex.get("origin")
     if not isinstance(origin, dict):
@@ -63,13 +65,12 @@ def _real_example_origin(ex: dict[str, Any]) -> dict[str, Any] | None:
     if not isinstance(origin.get("params"), dict):
         return None
 
-    from vtscore.security.origin_validation import check_origin_param_confinement
+    from vtscore.security.origin_validation import confine_origin_params
 
     try:
-        check_origin_param_confinement(origin)
+        return confine_origin_params(origin)
     except ValueError:
         return None
-    return origin
 
 
 def _example_origin_name(origin: dict[str, Any] | None, filename: str) -> str:
