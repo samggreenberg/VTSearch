@@ -320,6 +320,61 @@ class TestUndecodableAudio:
         assert result == [media]
 
 
+def _zero_rate_wav() -> bytes:
+    """Return a WAV whose fmt chunk declares a sample rate of 0.
+
+    stdlib ``wave`` opens these without complaint, so ``getnframes() /
+    getframerate()`` used to raise ``ZeroDivisionError`` straight through the
+    clippers and abort the whole dataset load.
+    """
+    wav = bytearray(generate_wav(440, 3.0))
+    fmt_offset = wav.find(b"fmt ")
+    assert fmt_offset != -1
+    struct.pack_into("<I", wav, fmt_offset + 12, 0)  # sample rate
+    struct.pack_into("<I", wav, fmt_offset + 16, 0)  # byte rate
+    return bytes(wav)
+
+
+class TestZeroSampleRateWav:
+    """A framerate-0 header is a decode failure, not a load-aborting crash."""
+
+    def test_fixture_opens_with_zero_framerate(self):
+        # Guards the regression tests below: stdlib wave really does accept
+        # this header, so the clippers are the only line of defence.
+        with wave.open(io.BytesIO(_zero_rate_wav()), "rb") as wf:
+            assert wf.getframerate() == 0
+
+    def test_wav_duration_raises_audio_decode_error(self):
+        from vtscore.media.audio.clipper import AudioDecodeError, _wav_duration
+
+        with pytest.raises(AudioDecodeError):
+            _wav_duration(_zero_rate_wav())
+
+    def test_wav_slice_raises_audio_decode_error(self):
+        from vtscore.media.audio.clipper import AudioDecodeError, _wav_slice
+
+        with pytest.raises(AudioDecodeError):
+            _wav_slice(_zero_rate_wav(), 0.0, 1.0)
+
+    def test_tiling_clipper_returns_media_unchanged(self):
+        from vtscore.media.audio.clipper import SoundTilingClipper
+
+        media = {"id": 1, "media_type": "audio", "media_bytes": _zero_rate_wav()}
+        assert SoundTilingClipper(2.0).clip(media) == [media]
+
+    def test_clip_clipper_returns_media_unchanged(self):
+        from vtscore.media.audio.clipper import SoundClipClipper
+
+        media = {"id": 1, "media_type": "audio", "media_bytes": _zero_rate_wav()}
+        assert SoundClipClipper(1.0, 3.0).clip(media) == [media]
+
+    def test_silence_trim_cleaner_returns_media_unchanged(self):
+        from vtscore.media.audio.cleaner import AudioSilenceTrimCleaner
+
+        media = {"id": 1, "media_type": "audio", "media_bytes": _zero_rate_wav()}
+        assert AudioSilenceTrimCleaner().clean(media) == media
+
+
 # ---------------------------------------------------------------------------
 # SoundClipClipper
 # ---------------------------------------------------------------------------
