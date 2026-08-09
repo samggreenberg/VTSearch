@@ -22,6 +22,7 @@ from vtsearch.auth import (
     get_current_user,
     get_login_provider,
     get_user_data_dir,
+    is_safe_username,
     set_login_provider,
 )
 
@@ -406,6 +407,22 @@ class TestApiKeyLoginProvider:
         assert provider.get_user(_FakeRequest({"Authorization": "Bearer evil"})) == "anonymous"
         assert any("invalid username" in rec.message for rec in caplog.records)
 
+    @pytest.mark.parametrize("bare_dots", ["..", ".", "..."])
+    def test_bare_dot_username_skipped(self, tmp_path, caplog, bare_dots):
+        """A username of bare dots is a traversal segment with no separator.
+
+        These slip past a ``[A-Za-z0-9._-]+`` character class — ``.`` is in
+        the class — so they need an explicit check.
+        """
+        keys_file = tmp_path / "api_keys.json"
+        _write_keys(keys_file, {_hash_key("good"): "alice", _hash_key("evil"): bare_dots})
+        with caplog.at_level("ERROR"):
+            provider = ApiKeyLoginProvider(keys_file=keys_file)
+
+        assert provider.get_user(_FakeRequest({"Authorization": "Bearer good"})) == "alice"
+        assert provider.get_user(_FakeRequest({"Authorization": "Bearer evil"})) == "anonymous"
+        assert any("invalid username" in rec.message for rec in caplog.records)
+
     def test_malformed_json_keeps_existing_keys(self, tmp_path, caplog):
         keys_file = tmp_path / "api_keys.json"
         _write_keys(keys_file, {_hash_key("good"): "alice"})
@@ -593,6 +610,116 @@ class TestTrivialLoginProvider:
         assert status["user"] == "anonymous"
         assert status["authenticated"] is False
         assert status["login_required"] is True
+
+
+# ---------------------------------------------------------------------------
+# Username-as-path-component validation (issue #2930)
+# ---------------------------------------------------------------------------
+
+
+class TestIsSafeUsername:
+    """``is_safe_username`` gates any username that reaches the filesystem."""
+
+    @pytest.mark.parametrize("name", ["alice", "Bob_123", "user-1", "A", "sam.greenberg"])
+    def test_accepts_ordinary_names(self, name):
+        assert is_safe_username(name) is True
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "..",  # the traversal segment the old regex admitted
+            ".",  # resolves to the parent dir itself
+            "...",
+            "../etc",
+            "../../home/user/.ssh",
+            "a/b",
+            "/absolute",
+            "back\\slash",
+            "",
+            "has space",
+        ],
+    )
+    def test_rejects_path_unsafe_names(self, name):
+        assert is_safe_username(name) is False
+
+    @pytest.mark.parametrize("value", [None, 42, ["alice"], {"user": "alice"}])
+    def test_rejects_non_strings(self, value):
+        """A forged cookie can carry any JSON type, not just a string."""
+        assert is_safe_username(value) is False
+
+
+class TestTrivialProviderRejectsForgedUsernames:
+    """A forged session cookie must not turn a username into a path escape.
+
+    The login route's schema blocks traversal names on the way *in*, so
+    these tests write the session directly (``session_transaction``) to
+    model a cookie signed with a known ``app.secret_key`` — the only way
+    an unsafe name can reach ``get_user``.
+    """
+
+    @pytest.fixture
+    def trivial_client(self, client):
+        original = get_login_provider()
+        set_login_provider(TrivialLoginProvider())
+        try:
+            yield client
+        finally:
+            set_login_provider(original)
+
+    def _forge(self, client, username):
+        with client.session_transaction() as sess:
+            sess[TrivialLoginProvider._COOKIE_KEY] = username
+
+    @pytest.mark.parametrize("forged", ["../../home/user/.ssh", "..", ".", "../etc"])
+    def test_forged_traversal_resolves_to_anonymous(self, trivial_client, forged):
+        self._forge(trivial_client, forged)
+
+        data = trivial_client.get("/api/auth/status").get_json()
+        assert data["user"] == "anonymous"
+        # We refused to honour the name, so don't claim an authenticated session.
+        assert data["authenticated"] is False
+
+    def test_forged_traversal_cannot_escape_data_dir(self, trivial_client):
+        """The confinement root itself must stay inside DATA_DIR.
+
+        ``get_user_data_dir()`` is not only where per-user settings are
+        written — it is the ``base_dir`` handed to
+        ``validate_server_filepath``, which calls ``base_dir.resolve()``.
+        That collapses ``..`` instead of rejecting it, so an unvalidated
+        username would silently widen the sandbox for every server-file
+        importer and exporter.
+        """
+        from vtscore.config import DATA_DIR
+        from vtscore.security.path_validation import get_file_access_base_dir
+
+        forged = "../../../.."
+        self._forge(trivial_client, forged)
+
+        # The ``client`` fixture already enters the test client as a context
+        # manager, so the request context (and thus ``g.user``) stays alive
+        # after the request returns: the resolution below runs exactly as it
+        # would inside a handler.
+        trivial_client.get("/api/auth/status")
+        base = get_file_access_base_dir()
+
+        assert base is not None
+        assert base.resolve().is_relative_to(DATA_DIR.resolve())
+
+        # Guard against a vacuous assertion: the forged name really would
+        # have escaped had it been used verbatim.
+        escaped = (DATA_DIR / forged).resolve()
+        assert not escaped.is_relative_to(DATA_DIR.resolve())
+
+    def test_valid_forged_username_still_honoured(self, trivial_client):
+        """Impersonation is a *feature* of the trivial provider, not a bug.
+
+        Only path-unsafe names are refused; a well-formed name set directly
+        in the session works exactly as if it had come from the login route.
+        """
+        self._forge(trivial_client, "alice")
+        data = trivial_client.get("/api/auth/status").get_json()
+        assert data["user"] == "alice"
+        assert data["authenticated"] is True
 
 
 class TestTrivialLoginEndpoints:

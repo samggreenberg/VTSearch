@@ -122,6 +122,38 @@ class DefaultLoginProvider(LoginProvider):
 
 
 # ---------------------------------------------------------------------------
+# Username validation
+# ---------------------------------------------------------------------------
+
+
+# Usernames are used as data-directory names (data/<user>/...) so they must
+# not contain path separators or traversal segments.  Note that the character
+# class alone is not sufficient: it admits "." and "..", which *are* traversal
+# segments, so :func:`is_safe_username` rejects those explicitly.
+_VALID_USERNAME = re.compile(r"^[A-Za-z0-9._-]+$")
+
+
+def is_safe_username(username: Any) -> bool:
+    """Return ``True`` if *username* is safe to use as a path component.
+
+    A username reaches the filesystem in two places, so a bad one is not
+    merely a mislabelled request:
+
+    * ``get_user_data_dir()`` builds ``DATA_DIR / username`` for per-user
+      settings, which are written with ``mkdir(parents=True)``.
+    * The same directory is the confinement root handed to
+      :func:`~vtscore.security.path_validation.validate_server_filepath`,
+      which compares against ``base_dir.resolve()`` — so ``..`` segments in
+      the root are *collapsed* rather than rejected, silently widening the
+      sandbox for every server-file importer and exporter.
+
+    Providers must therefore validate any username they did not construct
+    themselves, whatever their authentication strength.
+    """
+    return isinstance(username, str) and bool(_VALID_USERNAME.match(username)) and username.strip(".") != ""
+
+
+# ---------------------------------------------------------------------------
 # TrivialLoginProvider - cookie-based, no password
 # ---------------------------------------------------------------------------
 
@@ -133,6 +165,14 @@ class TrivialLoginProvider(LoginProvider):
     ``POST /api/auth/login``.  The server stores the name in a
     signed Flask session cookie.  Completely insecure; useful only
     for testing multi-user features locally.
+
+    "Insecure" here means **no isolation between users**: anyone may claim
+    any username, and impersonating another user is a feature, not a bug.
+    It does *not* mean the username escapes ``DATA_DIR``.  The cookie is
+    only integrity-protected by ``app.secret_key``, so a client that knows
+    the key can put an arbitrary string in it — hence :meth:`get_user`
+    re-validates on the way out, even though the login route already
+    validates on the way in.  See :func:`is_safe_username`.
     """
 
     name = "trivial"
@@ -143,17 +183,29 @@ class TrivialLoginProvider(LoginProvider):
         try:
             from flask import session
 
-            return session.get(self._COOKIE_KEY, "anonymous")
+            username = session.get(self._COOKIE_KEY, "anonymous")
         except RuntimeError:
             return "anonymous"
+        if not is_safe_username(username):
+            logger.warning(
+                "TrivialLoginProvider: ignoring unsafe username %r in session cookie; treating request as anonymous",
+                username,
+            )
+            return "anonymous"
+        return username
 
     def is_authenticated(self, request: Any) -> bool:
         try:
             from flask import session
 
-            return self._COOKIE_KEY in session
+            if self._COOKIE_KEY not in session:
+                return False
         except RuntimeError:
             return False
+        # A cookie carrying an unsafe name resolves to "anonymous" above, so
+        # report it as unauthenticated rather than letting ``status_dict``
+        # claim an authenticated session for a user we refused to honour.
+        return is_safe_username(session.get(self._COOKIE_KEY))
 
     def login_required(self) -> bool:
         return True
@@ -165,11 +217,6 @@ class TrivialLoginProvider(LoginProvider):
 # ---------------------------------------------------------------------------
 # ApiKeyLoginProvider - bearer-token, for headless integrations
 # ---------------------------------------------------------------------------
-
-
-# Usernames are used as data-directory names (data/<user>/...) so they must
-# not contain path separators or traversal segments.
-_VALID_USERNAME = re.compile(r"^[A-Za-z0-9._-]+$")
 
 
 class ApiKeyLoginProvider(LoginProvider):
@@ -258,9 +305,10 @@ class ApiKeyLoginProvider(LoginProvider):
                     username,
                 )
                 continue
-            if not _VALID_USERNAME.match(username):
+            if not is_safe_username(username):
                 logger.error(
-                    "ApiKeyLoginProvider: skipping key for invalid username %r in %s (must match [A-Za-z0-9._-]+)",
+                    "ApiKeyLoginProvider: skipping key for invalid username %r in %s "
+                    "(must match [A-Za-z0-9._-]+ and not be a '.'/'..' path segment)",
                     username,
                     self._keys_file,
                 )
