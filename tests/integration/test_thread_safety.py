@@ -646,9 +646,7 @@ class TestGettersDoNotHoldSettingsLockAcrossFileIO:
         finally:
             _settings_mod.set_user_data_dir_override(None)
 
-    def test_getter_does_not_hold_settings_lock_across_source_load(
-        self, monkeypatch, isolated_settings, tmp_path
-    ):
+    def test_getter_does_not_hold_settings_lock_across_source_load(self, monkeypatch, isolated_settings, tmp_path):
         """With a settings source configured, the sync fires *inside* a getter.
 
         The source's ``load()`` is network/file I/O of unbounded duration, and
@@ -681,9 +679,7 @@ class TestGettersDoNotHoldSettingsLockAcrossFileIO:
             # in-memory sync state *and* the on-disk dedup marker (which would
             # otherwise let ``_adopt_sync_marker_if_current`` skip the load).
             _settings_mod._sync_state.pop("default", None)
-            _settings_store_mod._sync_marker_path(_settings_mod._user_settings_path("default")).unlink(
-                missing_ok=True
-            )
+            _settings_store_mod._sync_marker_path(_settings_mod._user_settings_path("default")).unlink(missing_ok=True)
 
             _settings_mod.get_theme()
 
@@ -692,51 +688,14 @@ class TestGettersDoNotHoldSettingsLockAcrossFileIO:
         finally:
             _settings_mod.set_user_data_dir_override(None)
 
-    def test_concurrent_cold_readers_and_writers_do_not_deadlock(self, isolated_settings, tmp_path):
-        """The end-to-end shape from the issue: cold readers racing writers.
-
-        Threads are daemons and joined with a timeout so a regression fails
-        the test instead of hanging the suite forever.
-        """
-        _settings_mod.set_user_data_dir_override(tmp_path)
-        try:
-            _settings_mod.reset()
-            errors: list[BaseException] = []
-            start = threading.Barrier(8)
-
-            def reader():
-                try:
-                    start.wait(timeout=10)
-                    for _ in range(20):
-                        _settings_mod.get_volume()
-                        _settings_mod.get_saved_datasets_dir()
-                except BaseException as exc:  # pragma: no cover - surfaced via errors
-                    errors.append(exc)
-
-            def writer(value):
-                try:
-                    start.wait(timeout=10)
-                    for _ in range(20):
-                        _settings_mod.set_theme(value)
-                except BaseException as exc:  # pragma: no cover - surfaced via errors
-                    errors.append(exc)
-
-            themes = ["light", "dark"]
-            threads = []
-            for i in range(8):
-                if i % 2 == 0:
-                    threads.append(threading.Thread(target=reader, daemon=True))
-                else:
-                    threads.append(threading.Thread(target=writer, args=(themes[i % len(themes)],), daemon=True))
-            for th in threads:
-                th.start()
-            for th in threads:
-                th.join(timeout=30)
-            alive = [th for th in threads if th.is_alive()]
-            assert not alive, f"{len(alive)} thread(s) deadlocked; issue #2913 has regressed"
-            assert not errors, f"Threads raised: {errors!r}"
-        finally:
-            _settings_mod.set_user_data_dir_override(None)
+    # Deliberately no end-to-end "race cold readers against writers" test here.
+    # The regression it would catch is a real deadlock, which wedges
+    # ``_settings_lock`` for the rest of the process: the racing threads can
+    # never be unwedged, so every later test that touches settings (and the
+    # ``reset_state`` fixture itself) hangs too. That turns a regression into a
+    # suite-wide hang instead of a failure. The probing tests above assert the
+    # same invariant deterministically, fail in milliseconds, and leave no
+    # poisoned lock behind.
 
 
 class TestProgressLock:
