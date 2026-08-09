@@ -4,6 +4,7 @@ import { HttpTestingController } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 
 import { FindViewComponent } from './find-view.component';
+import { ActiveContextService } from '../../services/active-context.service';
 import { SortStateService } from '../../services/sort-state.service';
 import { BrowseSubsetService } from '../../services/browse-subset.service';
 import { configureZoneless } from '../../testing/zoneless-testbed';
@@ -167,5 +168,98 @@ describe('FindViewComponent (zoneless canary)', () => {
     await settleZoneless(fixture);
 
     expect(sortState.sortOrder?.map((s) => s.id)).toEqual([999]);
+  });
+});
+
+/**
+ * Issue #2921: a find-label scoring run outlives the pair it was started for.
+ * Scoring takes minutes on a large dataset, so switching the active
+ * (dataset, detector) pair mid-run used to leave two live subscriptions racing:
+ * whichever landed last installed its ranking + threshold into the *active*
+ * context, and `advanceToBoundary()` then selected a media id that need not
+ * exist in the new dataset. Even the old response landing first was harmful —
+ * its `finalize()` dropped the wait overlay while the new run was still going.
+ * The run is now scoped to the pair (`pairScope$`), so a switch tears it down.
+ */
+describe('FindViewComponent (pair-switch supersession)', () => {
+  let fixture: ComponentFixture<FindViewComponent>;
+  let httpMock: HttpTestingController;
+  let activeContext: ActiveContextService;
+
+  beforeEach(async () => {
+    await configureZoneless({
+      imports: [FindViewComponent],
+      providers: [...provideHttpTesting(), provideRouter([])],
+    }).compileComponents();
+
+    activeContext = TestBed.inject(ActiveContextService);
+    // A detector must be active before ngOnInit or `runFindLabel` no-ops. Set
+    // it *before* creating the component so the pair$ replay this seeds is the
+    // subscription's skipped first emission, not a spurious reload.
+    activeContext.setActivePair('ds1', 'det1');
+
+    fixture = TestBed.createComponent(FindViewComponent);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    fixture.componentInstance.ngOnDestroy();
+    httpMock.match(() => true).forEach((req) => {
+      if (!req.cancelled) req.flush([]);
+    });
+    fixture.destroy();
+  });
+
+  // Same drain as the canary above, plus the dataset-status read (no assertion
+  // rides it here). The dataset is *images*: this spec is the only find-view
+  // one that installs a ranking, which auto-selects the top item into the
+  // centre viewer — and the audio player's waveform-decode path needs Web Audio,
+  // which jsdom does not implement.
+  async function flushInit(): Promise<void> {
+    TestBed.tick();
+    for (let i = 0; i < 3; i++) {
+      await settleResource();
+      httpMock.match('/api/medias/ids').forEach((req) =>
+        req.flush([{ id: 1, media_type: 'image' }]),
+      );
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 80 }));
+      httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
+      httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
+      httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+      httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'ds' }));
+    }
+  }
+
+  it('cancels the previous pair\'s scoring run and keeps the overlay on the new one', async () => {
+    const sortState = TestBed.inject(SortStateService);
+    await flushInit();
+    await settleZoneless(fixture);
+
+    // Pair one's scoring run is in flight behind the wait overlay.
+    const staleScore = httpMock.expectOne('/api/find-label');
+    expect(staleScore.cancelled).toBe(false);
+    expect(sortState.sortBusy).toBe(true);
+
+    // The user switches pair while that run is still going.
+    activeContext.setActivePair('ds2', 'det2');
+
+    // The stale run is aborted client-side, so its ranking can never land in
+    // the new context — and its finalize() did not drop the overlay, because
+    // the fresh run re-armed it.
+    expect(staleScore.cancelled).toBe(true);
+    expect(sortState.sortBusy).toBe(true);
+
+    // Only the new pair's ranking is installed.
+    const freshScore = httpMock.expectOne('/api/find-label');
+    freshScore.flush({ results: [{ id: 1, score: 0.9 }], threshold: 0.5 });
+    await flushInit();
+    await settleZoneless(fixture);
+
+    expect(sortState.sortOrder?.map((s) => s.id)).toEqual([1]);
+    expect(sortState.threshold).toBe(0.5);
+    expect(sortState.sortBusy).toBe(false);
   });
 });
