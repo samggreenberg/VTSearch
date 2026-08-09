@@ -738,11 +738,26 @@ class TestConcurrentProgressCache:
 class TestPluginRegistryLock:
     """Verify that PluginRegistry._ensure_discovered is thread-safe."""
 
-    def test_registry_has_lock(self):
+    def test_registry_has_reentrant_lock(self):
+        """The discovery lock must be re-entrant, not a plain ``Lock``.
+
+        A module scanned by ``_discover()`` may call ``get()``/``list()`` on
+        the same registry at import time; on a plain ``Lock`` that same-thread
+        re-acquisition hangs the process before the ``_discovering`` guard is
+        ever reached.
+        """
         from vtscore.plugins import PluginRegistry
 
         reg = PluginRegistry(package="vtscore.exporters", sentinel="EXPORTER", label="exporter", eager=False)
-        assert isinstance(reg._lock, type(threading.Lock()))
+        assert isinstance(reg._lock, type(threading.RLock()))
+        # ``RLock`` is a factory, not a class, so also assert the behaviour
+        # that matters: the same thread can acquire it twice.
+        assert reg._lock.acquire(blocking=False)
+        try:
+            assert reg._lock.acquire(blocking=False)
+            reg._lock.release()
+        finally:
+            reg._lock.release()
 
     def test_concurrent_first_access_discovers_once(self):
         """Concurrent .list() calls should trigger _discover exactly once.
