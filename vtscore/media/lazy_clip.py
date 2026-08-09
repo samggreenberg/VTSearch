@@ -297,11 +297,19 @@ def _apply_converter_recipe(source_bytes: bytes, recipe: tuple, media: dict[str,
 
 
 def _read_source_bytes(media: dict[str, Any]) -> bytes | None:
-    """Read the whole source file (or URL) backing a lazy clip."""
+    """Read the whole source file (or URL) backing a lazy clip.
+
+    The source reference comes off the media, so it goes through the same
+    per-user confinement as a plain ``media_path`` read (see
+    :func:`~vtscore.security.path_validation.resolve_media_file_path`) —
+    otherwise a clip recipe would be a way around it.
+    """
+    from vtscore.security.path_validation import resolve_media_file_path  # noqa: PLC0415
+
     media_path = media.get("media_path")
     if media_path:
-        path = Path(media_path)
-        if path.exists():
+        path = resolve_media_file_path(media_path)
+        if path is not None and path.exists():
             return path.read_bytes()
     media_url = media.get("media_url")
     if media_url:

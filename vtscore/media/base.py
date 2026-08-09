@@ -28,6 +28,8 @@ from typing import Any, Callable, Optional
 
 import numpy as np
 
+from vtscore.security.path_validation import resolve_media_file_path
+
 # Type alias for progress callbacks.  Modules that accept an ``on_progress``
 # parameter use this signature so callers can report status without depending
 # on ``vtscore.concurrency.progress``.
@@ -91,6 +93,10 @@ def _resolve_archive_member_bytes(media: dict) -> bytes | None:
 
     ref = archive_member_ref(media)
     if ref is None:
+        return None
+    # The archive path rides on the media, so it is externally supplied for a
+    # loaded pickle; confine it before opening (a no-op in single-user mode).
+    if resolve_media_file_path(ref[0]) is None:
         return None
     try:
         return read_member(ref[0], ref[1])
@@ -624,8 +630,8 @@ class MediaType(ABC):
             return archive_bytes
         media_path = media.get("media_path")
         if media_path:
-            path = Path(media_path)
-            if path.exists():
+            path = resolve_media_file_path(media_path)
+            if path is not None and path.exists():
                 with open(path, "rb") as f:
                     return f.read()
         media_url = media.get("media_url")
@@ -644,8 +650,8 @@ class MediaType(ABC):
             return media_string
         media_path = media.get("media_path")
         if media_path:
-            path = Path(media_path)
-            if path.exists():
+            path = resolve_media_file_path(media_path)
+            if path is not None and path.exists():
                 with open(path, "r", encoding="utf-8") as f:
                     return f.read().strip()
         media_url = media.get("media_url")

@@ -15,6 +15,7 @@ the load pipeline that calls these helpers during dataset import.
 ## Contents
 
 - [Path validation](#path-validation)
+  - [Media-carried file references](#media_file_read_roots-and-resolve_media_file_pathfilepath_str)
 - [URL validation](#url-validation)
   - [`validate_url` (SSRF guard)](#validate_url-ssrf-guard)
   - [Fetching: `open_validated_stream` / `fetch_validated_url`](#fetching-open_validated_stream--fetch_validated_url)
@@ -26,14 +27,16 @@ the load pipeline that calls these helpers during dataset import.
 
 ## Path validation
 
-`vtscore/security/path_validation.py` exposes four helpers used by every
-server-file importer / exporter and every server-path field on a plugin
-form.
+`vtscore/security/path_validation.py` exposes the helpers used by every
+server-file importer / exporter, every server-path field on a plugin
+form, and every serve-time read of a path that arrived *on a media*.
 
 | Function | Description |
 |----------|-------------|
 | `get_file_access_base_dir() -> Path \| None` | Resolve the per-user base directory; `None` (unrestricted) in single-user mode |
 | `validate_server_filepath(filepath_str, base_dir=None) -> Path` | Resolve and (when `base_dir` is given) assert containment; raises on escape |
+| `media_file_read_roots() -> list[Path] \| None` | Roots a media-carried file reference may be read from; `None` (unrestricted) in single-user mode |
+| `resolve_media_file_path(filepath_str) -> Path \| None` | Confine a media-carried file reference; `None` (rather than a raise) when it escapes |
 | `sanitize_template_value(value) -> str` | Replace path separators / `..` tokens with `_` |
 | `rglob_follow_symlinks(root, pattern) -> list[Path]` | `Path.rglob`-equivalent that descends into symlinked directories |
 | `glob_top_level(root, pattern) -> list[Path]` | Non-recursive variant; direct children of `root` only |
@@ -67,6 +70,41 @@ is called (follows symlinks, normalises `..`), and
 `ValueError`, the path escaped and we re-raise. Symlinks are followed
 during resolution, so a symlinked file inside `base_dir` whose target is
 outside is rejected.
+
+### `media_file_read_roots()` and `resolve_media_file_path(filepath_str)`
+
+`validate_server_filepath` guards paths the *user* just typed. A media
+carries paths of its own - `media_path`, a lazy clip's source path, an
+archive-member archive path - and those are equally untrusted, because
+they are copied verbatim out of a loaded dataset pickle and whatever they
+point at is served straight back to the requester. They are the
+filesystem twin of the `media_url` SSRF hole, so they get a matching
+guard, and every serve-time read goes through it:
+
+```python
+from vtscore.security.path_validation import resolve_media_file_path
+
+path = resolve_media_file_path(media["media_path"])
+if path is not None and path.exists():
+    return path.read_bytes()      # None -> serve nothing, no request-time raise
+```
+
+`media_file_read_roots()` decides what "inside" means. In single-user
+mode it returns `None` and `resolve_media_file_path` is a pass-through,
+matching `get_file_access_base_dir`. In multi-user mode the allowed roots
+are the user's data dir **plus** `DATA_DIR`: demo datasets extract into
+the shared dir as *siblings* of the per-user dirs
+(`data/ESC-50-master/audio`), so confining to `data/<username>/` alone
+would make every thin demo dataset unservable. The boundary this draws is
+"inside the app's data tree" - enough to stop `/etc/shadow` and every
+other server file, but it does leave a crafted reference able to name
+another user's subtree, since user dirs are siblings under `DATA_DIR` and
+there is no way to enumerate them.
+
+Unlike `validate_server_filepath` it returns `None` instead of raising:
+these are serve-time reads inside a resolution chain, and falling through
+to the next step is the right behaviour for a reference that shouldn't be
+honoured.
 
 ### `sanitize_template_value(value)`
 
