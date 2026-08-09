@@ -295,6 +295,32 @@ def all_embedders_dict() -> list[dict]:
     return [e.to_dict() for e in _embedder_registry.values()]
 
 
+def embedder_for_medias(media_dict: dict) -> "MediaEmbedder | None":
+    """Return the appropriate embedder for the given medias, or ``None``.
+
+    Looks up the ``"embedder"`` name stored on the first media entry; falls
+    back to the default embedder for the detected ``"type"``.
+
+    Lives here (rather than in the routes layer that first grew it) so the
+    dataset-load pipeline can resolve an embedder without importing
+    ``vtsearch.routes`` - which would drag Flask into a library code path.
+    """
+    if not media_dict:
+        return None
+    first = next(iter(media_dict.values()))
+    embedder_name = first.get("embedder", "")
+    media_type = first.get("media_type", "audio")
+
+    if embedder_name:
+        try:
+            return get_embedder(embedder_name)
+        except KeyError:
+            pass
+
+    avail = embedders_for_type(media_type)
+    return avail[0] if avail else None
+
+
 # ------------------------------------------------------------------
 # Auto-discover media types, embedders, and clippers
 # ------------------------------------------------------------------
