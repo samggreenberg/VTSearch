@@ -59,6 +59,9 @@ VTSearch/
 │
 ├── vtscore/                        Library tier; no Flask dependency
 │   ├── config.py                   Constants (sample rates, paths, model IDs)
+│   ├── user.py                     Current-user seam: thread-local user + pluggable
+│   │                               request-user resolver (get_current_user, thread_user)
+│   ├── achievements_hooks.py       Achievement-event seam; app installs the recorders
 │   ├── cli.py                      CLI autodetect workflow
 │   ├── cli_pipeline.py             Pipeline YAML loader
 │   ├── cli_progress.py             CLI progress bars
@@ -213,8 +216,9 @@ VTSearch/
 │   ├── port_preflight.py           Startup port-collision detection / single-instance lock
 │   │                               (CLI-only; not used by the WSGI app object)
 │   │
-│   ├── auth/                       LoginProvider ABC, DefaultLoginProvider, get_current_user(),
-│   │                               get_user_data_dir()
+│   ├── auth/                       LoginProvider ABC, DefaultLoginProvider, get_user_data_dir()
+│   │                               (get_current_user() / thread_user() are re-exported from
+│   │                               vtscore.user, which owns the thread-local)
 │   │
 │   ├── state/                      App-tier state shim; re-exports vtscore.state.* and adds
 │   │                               proxy view (medias, good_votes, bad_votes, …) from state_proxies.py
@@ -222,8 +226,9 @@ VTSearch/
 │   ├── state_proxies.py            _ProxyDict / _ProxyList per-request resolution
 │   │                               (checks flask.g, falls back to thread-local)
 │   │
-│   ├── shim/                       Flask glue: context resolvers, persistence hooks,
-│   │                               CoreConfig builder, app-only plugin families
+│   ├── shim/                       Flask glue: context resolvers, request-user resolver,
+│   │                               persistence hooks, achievement recorders, CoreConfig
+│   │                               builder, app-only plugin families
 │   │
 │   ├── schemas/                    Marshmallow schemas for API serialisation
 │   │
@@ -714,6 +719,18 @@ The `before_request` middleware in `app.py` populates `g.user` on every
 request via the active provider's `get_user()`. Routes access the current
 user via `get_current_user()`. Outside a Flask request context (CLI,
 background threads) it falls back to `"default"`.
+
+`get_current_user()` itself lives in `vtscore/user.py`, not in
+`vtsearch/auth/` — library code (the job manager, dataset loads, label
+sync, exporters) needs to know who triggered the work, and reaching into
+the app tier for it made those paths hard-require Flask. The library owns
+the thread-local and consults a **pluggable request-user resolver**;
+`vtsearch/shim/register_flask_context_resolvers()` installs the resolver
+that reads `g.user`. `vtsearch.auth` re-exports the names, so
+`from vtsearch.auth import get_current_user` keeps working and there is
+exactly one thread-local backing store. Resolution order: registered
+resolver (`g.user`) → thread-local (set by `thread_user(...)` when a
+request spawns a background thread) → `"default"`.
 
 ### Ownership tracking
 

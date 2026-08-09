@@ -328,7 +328,7 @@ never the reverse.
 └─────────────────────────────────────────────┘
 ```
 
-The app uses three categories of hooks to inject app-side behaviour into
+The app uses five categories of hooks to inject app-side behaviour into
 the library without the library knowing:
 
 1. **Context resolvers** - `register_dataset_context_resolver`,
@@ -339,8 +339,31 @@ the library without the library knowing:
    the app contribute `settings_importers`, `settings_exporters`,
    `settings_sources` to the registry that library tools (like
    `python app.py --list-plugins`) enumerate. Wired in `vtsearch/shim/`.
+4. **Request-user resolver** - `vtscore.user.register_request_user_resolver`.
+   Library code that needs the identity behind the work (the job manager
+   replaying a user onto its worker thread, `{username}` in an export
+   path) calls `vtscore.user.get_current_user()`; the app installs a
+   resolver reading `flask.g.user`. Wired in `vtsearch/shim/`.
+5. **Achievement recorders** -
+   `vtscore.achievements_hooks.register_achievement_recorder(event, fn)`
+   for the `vote` / `dataset_load` / `detector_import` / `find` events the
+   library raises. The counters are per-user settings state, so the
+   recording lives in `vtsearch.achievements`. Wired in `vtsearch/shim/`.
 
 If you're embedding `vtscore` in your own application, you'll typically
-install your own variants of these three hooks. None of them is required -
-the library has working defaults for all three (no context, no
-`from_settings()` builder, no app-side plugin families).
+install your own variants of these hooks. None of them is required - the
+library has working defaults for all five (no context, no
+`from_settings()` builder, no app-side plugin families, no request user
+- so `get_current_user()` reports `"default"` - and achievement events
+that no-op).
+
+**The dependency direction is enforced by a test.**
+`tests_lib/core/test_library_layering.py` walks the AST of every
+`vtscore` module and fails on any `import vtsearch`, at any nesting
+depth. Lazy function-level imports were how the rule kept breaking: the
+module still imported cleanly and the inverted dependency only bit at
+call time, in exactly the Flask-free deployment the tier exists for. A
+short allowlist there carries the remaining imports with their rationale
+(two optional `try`/`except`-guarded ones, plus `security/path_validation.py`,
+which still reaches for the `LoginProvider` abstraction); add a hook
+rather than a sixth category.

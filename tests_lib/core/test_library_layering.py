@@ -24,19 +24,20 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 _VTSCORE = _REPO_ROOT / "vtscore"
 
 #: Imports of ``vtsearch`` that are allowed to remain, with the reason.
-#: Both are *optional* - guarded by ``try``/``except`` so the library
-#: keeps working when the app package is absent - which is what makes
-#: them tolerable.  Anything else is a layering violation.
+#: The first two are *optional* - wrapped in ``try``/``except`` so the
+#: library keeps working when the app package is absent, which is what
+#: makes them tolerable.  The third is a genuine remaining violation with
+#: its own issue.  Anything else fails this test.
 _ALLOWED: dict[str, str] = {
     "exporters/portable_detector/__init__.py": (
         "guarded `import vtsearch` used only to stamp the producing app's version "
         "into a bundle; falls back to a literal when the app package is absent"
     ),
+    "embedding/loader.py": "optional transformers logging bridge, wrapped in try/except Exception",
     "security/path_validation.py": (
-        "the LoginProvider abstraction still lives in vtsearch.auth; confinement "
-        "falls back to unrestricted single-user behaviour without it"
+        "UNGUARDED, tracked separately: the whole LoginProvider abstraction still "
+        "lives in vtsearch.auth, so moving it is its own change rather than a hook"
     ),
-    "embedding/loader.py": ("optional transformers logging bridge, wrapped in try/except Exception"),
 }
 
 
