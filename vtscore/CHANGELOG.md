@@ -73,6 +73,16 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.state.current_user`** - Flask-free resolution of "who is this
+  work for": a pluggable request-user resolver
+  (`register_request_user_resolver`), the `thread_user` thread-local scope
+  background jobs use to inherit a requester's identity, and the `"default"`
+  fallback. Library code that needs a username now calls
+  `vtscore.state.current_user.get_current_user()` instead of importing
+  `vtsearch.auth`, which made `JobManager.start()` (and label sync, dataset
+  loading, exporters, plugin templating) hard-require Flask at call time.
+  `vtsearch.auth` re-exports every name, so there is still exactly one
+  thread-local behind the app.
 - **`FoldAnchoredCut`** / **`fit_fold_anchored_cut`** - the fitted estimator,
   split from the cut so a new Inclusion value can be re-cut arithmetically
   without refitting or re-scoring.

@@ -713,7 +713,14 @@ OAuth, LDAP, or any auth scheme without modifying route code.
 The `before_request` middleware in `app.py` populates `g.user` on every
 request via the active provider's `get_user()`. Routes access the current
 user via `get_current_user()`. Outside a Flask request context (CLI,
-background threads) it falls back to `"default"`.
+background threads) it falls back to the thread-local set by
+`thread_user(...)`, then to `"default"`.
+
+The resolution itself lives in `vtscore.state.current_user` so library
+code can ask "who is this for?" without Flask; `vtsearch/auth/` registers
+the `g.user` reader through `register_request_user_resolver()` at import
+time and re-exports `get_current_user` / `thread_user` / `set_thread_user`
+/ `get_thread_user` unchanged.
 
 ### Ownership tracking
 
