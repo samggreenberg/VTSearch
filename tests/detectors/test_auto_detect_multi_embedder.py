@@ -77,7 +77,7 @@ def _activate_trio_dataset():
 class TestAutoDetectOnMultiEmbedderDataset:
     def test_semantic_only_autofind_does_not_500(self, client):
         """No detector keys to the score-precedence embedder → must still run."""
-        from helpers import setup_trainable_model_in_registry
+        from tests.helpers import setup_trainable_model_in_registry
         from vtsearch.settings import add_autofind_detector
 
         ctx = _activate_trio_dataset()

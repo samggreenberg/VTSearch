@@ -2797,7 +2797,7 @@ class TestRegisterModelFromLabelset:
         """
         import hashlib
 
-        from helpers import make_wav_file
+        from tests.helpers import make_wav_file
 
         clips_dir = tmp_path / "foreign_clips"
         clips_dir.mkdir()
@@ -2846,7 +2846,7 @@ class TestRegisterModelFromLabelset:
         """No dataset loaded → nothing to ingest into, and the import still succeeds."""
         import hashlib
 
-        from helpers import make_wav_file
+        from tests.helpers import make_wav_file
         from vtsearch.state import clear_all_contexts
 
         clips_dir = tmp_path / "no_dataset_clips"

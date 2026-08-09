@@ -864,7 +864,7 @@ class TestActionHooks:
         system-generated scores (the user did not cast them), so they must not
         inflate the Get Out the Vote or Marathoner achievements.
         """
-        from helpers import setup_trainable_model_in_registry
+        from tests.helpers import setup_trainable_model_in_registry
         from vtsearch.state import snapshot_medias
 
         detector_id = setup_trainable_model_in_registry(

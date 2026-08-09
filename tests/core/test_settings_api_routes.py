@@ -846,3 +846,71 @@ class TestBrowserSettings:
             "bin_details_docked",
         ):
             assert data.get(key, {}) == {}
+
+
+class TestSettingsUpdateAtomicity:
+    """A rejected PUT must leave *every* key in the body unchanged.
+
+    Each setter persists immediately, so applying keys as the body was
+    iterated meant a 400 on a later key kept the earlier keys' writes --
+    with JSON key order silently deciding which ones stuck, and the client
+    (which reads a 400 as "nothing changed") left out of sync. The route
+    now validates the whole body before writing any of it.
+    """
+
+    def test_custom_setter_400_rolls_back_nothing(self, client):
+        from vtsearch import settings as settings_mod
+
+        client.put("/api/settings", json={"volume": 0.25})
+        # An unknown embedder aborts 400 from a custom setter; ``volume``
+        # comes first in the body and must not have been committed.
+        res = client.put(
+            "/api/settings",
+            json={"volume": 0.9, "solo_embedder_per_media_type": {"image": "no_such_embedder"}},
+        )
+        assert res.status_code == 400
+        assert settings_mod.get_volume() == 0.25
+        assert client.get("/api/settings").get_json()["volume"] == 0.25
+
+    def test_scalar_setter_400_rolls_back_nothing(self, client):
+        from vtsearch import settings as settings_mod
+
+        client.put("/api/settings", json={"theme": "dark"})
+        res = client.put("/api/settings", json={"theme": "light", "browse_colormap": {"audio": "rainbow"}})
+        assert res.status_code == 400
+        assert settings_mod.get_theme() == "dark"
+
+    def test_key_order_does_not_change_the_outcome(self, client):
+        """The failing key coming *first* must reject the same way."""
+        from vtsearch import settings as settings_mod
+
+        client.put("/api/settings", json={"volume": 0.25})
+        res = client.put(
+            "/api/settings",
+            json={"solo_embedder_per_media_type": {"image": "no_such_embedder"}, "volume": 0.9},
+        )
+        assert res.status_code == 400
+        assert settings_mod.get_volume() == 0.25
+
+    def test_valid_multi_key_body_still_applies_every_key(self, client):
+        res = client.put("/api/settings", json={"volume": 0.6, "theme": "dark", "show_metadata": True})
+        assert res.status_code == 200
+        data = client.get("/api/settings").get_json()
+        assert data["volume"] == 0.6
+        assert data["theme"] == "dark"
+        assert data["show_metadata"] is True
+
+    def test_directory_traversal_400_leaves_earlier_keys_untouched(self, client, tmp_path, monkeypatch):
+        import vtscore.security.path_validation as paths_mod
+        from vtsearch import settings as settings_mod
+
+        client.put("/api/settings", json={"volume": 0.25})
+        base = tmp_path / "base"
+        base.mkdir()
+        monkeypatch.setattr(paths_mod, "get_file_access_base_dir", lambda: base)
+        res = client.put(
+            "/api/settings",
+            json={"volume": 0.9, "detectors_dir": str(tmp_path / "outside")},
+        )
+        assert res.status_code == 400
+        assert settings_mod.get_volume() == 0.25

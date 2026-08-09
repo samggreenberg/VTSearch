@@ -18,7 +18,7 @@ from unittest.mock import MagicMock, patch
 import torch
 import torch.nn as nn
 
-from helpers import wire_mock_progress_scope
+from tests_lib.helpers import wire_mock_progress_scope
 from vtscore.media.embedder import (
     _hub_metadata_preflight,
     hf_token,

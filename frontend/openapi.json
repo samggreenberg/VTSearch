@@ -15628,7 +15628,7 @@
         ]
       },
       "put": {
-        "description": "Only keys present in *body* are applied. Unknown keys are silently\ndropped (per the schema's ``unknown = \"exclude\"`` policy); type\nerrors raise 422 with the standard error envelope; setter-level\nvalidation failures (range / one-of / path traversal) raise 400.",
+        "description": "Only keys present in *body* are applied. Unknown keys are silently\ndropped (per the schema's ``unknown = \"exclude\"`` policy); type\nerrors raise 422 with the standard error envelope; setter-level\nvalidation failures (range / one-of / path traversal) raise 400 and\nleave every key in the body unchanged.",
         "operationId": "update_settings",
         "requestBody": {
           "content": {
@@ -15661,7 +15661,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Update one or more settings fields.",
+        "summary": "Update one or more settings fields, all-or-nothing.",
         "tags": [
           "settings"
         ]

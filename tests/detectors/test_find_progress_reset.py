@@ -17,7 +17,7 @@ parked the tracker on its *success* path (a cold detector's train writes
 from __future__ import annotations
 
 import pytest
-from helpers import setup_trainable_model_in_registry
+from tests.helpers import setup_trainable_model_in_registry
 from vtscore.concurrency.progress import find_progress, get_find_progress
 from vtsearch.state import snapshot_medias
 

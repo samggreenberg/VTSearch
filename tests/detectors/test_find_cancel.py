@@ -12,7 +12,7 @@ completion.  The routes now poll the flag at their stage boundaries
 from __future__ import annotations
 
 import pytest
-from helpers import setup_trainable_model_in_registry
+from tests.helpers import setup_trainable_model_in_registry
 from vtscore.concurrency.progress import CancelledError, find_progress, get_find_progress
 from vtsearch.state import snapshot_medias
 

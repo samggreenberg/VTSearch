@@ -273,6 +273,30 @@ class TestVideoRoute:
         assert resp.status_code == 416
         assert resp.headers["Content-Range"] == f"bytes */{len(data)}"
 
+    def test_suffix_range_serves_only_the_tail(self, client):
+        data = b"0123456789ABCDEF" * 4
+        mid = _inject(media_type="video", filename="clip.mp4", media_bytes=data)
+        resp = client.get(f"/api/medias/{mid}/video", headers={"Range": "bytes=-12"})
+        assert resp.status_code == 206
+        assert resp.data == data[-12:]
+        assert resp.headers["Content-Range"] == f"bytes {len(data) - 12}-{len(data) - 1}/{len(data)}"
+        assert resp.headers["Content-Length"] == "12"
+
+    def test_oversized_suffix_range_serves_whole(self, client):
+        data = b"0123456789"
+        mid = _inject(media_type="video", filename="clip.mp4", media_bytes=data)
+        resp = client.get(f"/api/medias/{mid}/video", headers={"Range": "bytes=-500"})
+        assert resp.status_code == 206
+        assert resp.data == data
+        assert resp.headers["Content-Range"] == f"bytes 0-{len(data) - 1}/{len(data)}"
+
+    def test_zero_length_suffix_range_returns_416(self, client):
+        data = b"0123456789"
+        mid = _inject(media_type="video", filename="clip.mp4", media_bytes=data)
+        resp = client.get(f"/api/medias/{mid}/video", headers={"Range": "bytes=-0"})
+        assert resp.status_code == 416
+        assert resp.headers["Content-Range"] == f"bytes */{len(data)}"
+
     def test_missing_bytes_returns_404(self, client):
         mid = _inject(media_type="video", filename="clip.mp4", media_bytes=None)
         resp = client.get(f"/api/medias/{mid}/video")
