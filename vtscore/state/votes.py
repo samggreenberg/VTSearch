@@ -172,10 +172,7 @@ def rethreshold_unverified_find_items() -> None:
     """
     with _state_lock:
         ctx = get_active_detector_context()
-        # The request-missing sentinel (no detector identified) exposes none of
-        # these fields; guard with getattr so an Inclusion/settings write with
-        # no detector context is a clean no-op rather than an AttributeError.
-        if not getattr(ctx, "find_mode", False) or not getattr(ctx, "find_scores", None):
+        if not ctx.find_mode or not ctx.find_scores:
             return
         threshold = ctx.threshold
         good_votes = ctx.good_votes
@@ -230,7 +227,7 @@ def find_queue_ids(label_filter: str) -> list[int]:
     """
     with _state_lock:
         ctx = get_active_detector_context()
-        if not getattr(ctx, "find_mode", False) or not getattr(ctx, "find_scores", None):
+        if not ctx.find_mode or not ctx.find_scores:
             return []
         threshold = ctx.threshold
         if threshold is None:
@@ -267,7 +264,7 @@ def find_boundary_next(side: str, exclude: int | None = None) -> dict:
     """
     with _state_lock:
         ctx = get_active_detector_context()
-        if not getattr(ctx, "find_mode", False) or not getattr(ctx, "find_scores", None):
+        if not ctx.find_mode or not ctx.find_scores:
             return {"id": None, "side": None}
         threshold = ctx.threshold
         if threshold is None:
@@ -425,7 +422,7 @@ def _mark_verified_if_find_mode(ctx: Any, media_id: int, new_label: str) -> None
     path does *not* go through here, so detector-assigned labels stay
     unverified by construction.  See docs/plans/find-verification-workflow.md.
     """
-    if not getattr(ctx, "find_mode", False):
+    if not ctx.find_mode:
         return
     if new_label in ("good", "bad"):
         ctx.verified_ids[media_id] = None
