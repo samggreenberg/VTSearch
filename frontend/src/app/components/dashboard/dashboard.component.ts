@@ -691,6 +691,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.datasetsRegistryApi.deleteRegistered(dataset.id).subscribe({
         next: () => {
           this.selectedDatasetIds.delete(dataset.id);
+          if (this.activeContext.datasetId === dataset.id || this.activeContext.intentDatasetId === dataset.id) {
+            this.activeContext.setActivePair('', '');
+          }
           this.datasetState.refresh();
         },
       });
