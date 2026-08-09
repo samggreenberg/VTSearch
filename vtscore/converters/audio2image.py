@@ -6,21 +6,8 @@ import io
 from pathlib import Path
 from typing import Any
 
-from vtscore.converters.base import MediaConverter
+from vtscore.converters.base import MediaConverter, resolve_media_bytes
 from vtscore.plugins import PluginField
-
-
-def _resolve_media_bytes(media: dict[str, Any]) -> bytes | None:
-    """Read raw bytes from ``media_bytes`` or, failing that, ``media_path``."""
-    media_bytes = media.get("media_bytes")
-    if media_bytes is not None:
-        return media_bytes
-    media_path = media.get("media_path")
-    if media_path:
-        path = Path(media_path)
-        if path.exists():
-            return path.read_bytes()
-    return None
 
 
 def _load_audio_array(media_bytes: bytes, filename: str, duration: float | None) -> tuple[Any, int] | None:
@@ -216,7 +203,7 @@ class Audio2ImageMediaConverter(MediaConverter):
 
         filename = media.get("filename", "audio.wav")
         stem = Path(filename).stem
-        media_bytes = _resolve_media_bytes(media)
+        media_bytes = resolve_media_bytes(media)
         if not media_bytes:
             return []
 

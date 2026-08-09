@@ -308,3 +308,31 @@ class TestImage2FaceConverter:
         with patch.object(conv, "_make_detector", return_value=detector):
             out = conv.convert_normalized(media, {"threshold": "0.5", "padding": "0", "min_size": "1"})
         assert len(out) == 1
+
+    def test_path_only_media_is_read_from_disk(self, tmp_path):
+        """Reference (*thin*) mode passes only ``{filename, media_path}``.
+
+        The runner's thin path hands the converter no ``media_bytes`` at all,
+        so the converter has to read the file itself; otherwise every image in
+        a thin folder import yields zero faces with no error.
+        """
+        from vtscore.converters.image2face import Image2FaceMediaConverter
+
+        src = tmp_path / "group.png"
+        src.write_bytes(_png_bytes())
+
+        conv = Image2FaceMediaConverter()
+        detector = _fake_mtcnn(boxes=[[10, 10, 40, 40]], probs=[0.9])
+        media = {"filename": "group.png", "media_path": str(src)}
+        with patch.object(conv, "_make_detector", return_value=detector):
+            out = conv.convert_normalized(media, {"padding": "0", "min_size": "1"})
+        assert len(out) == 1
+        assert out[0]["media_bytes"]
+
+    def test_missing_path_yields_no_output(self, tmp_path):
+        from vtscore.converters.image2face import Image2FaceMediaConverter
+
+        conv = Image2FaceMediaConverter()
+        media = {"filename": "gone.png", "media_path": str(tmp_path / "gone.png")}
+        out = conv.convert_normalized(media, {})
+        assert out == []

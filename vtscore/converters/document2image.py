@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Any
 
 
-from vtscore.converters.base import MediaConverter
+from vtscore.converters.base import MediaConverter, resolve_media_bytes
 
 
 class Document2ImageMediaConverter(MediaConverter):
@@ -43,17 +43,10 @@ class Document2ImageMediaConverter(MediaConverter):
         return "image"
 
     def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-        media_bytes = media.get("media_bytes")
-        media_path = media.get("media_path")
         filename = media.get("filename", "document")
         stem = Path(filename).stem
 
-        if media_bytes is None and media_path:
-            path = Path(media_path)
-            if path.exists():
-                with open(path, "rb") as f:
-                    media_bytes = f.read()
-
+        media_bytes = resolve_media_bytes(media)
         if not media_bytes:
             return []
 
