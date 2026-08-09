@@ -54,6 +54,7 @@ from vtscore.embedding import initialize_models, preload_predicted_embedders  # 
 # (or any other shim-backed hook) finds the builder already installed.
 # See logical-bug-audit M24.
 from vtsearch.shim import (  # noqa: E402
+    register_app_achievement_recorders,
     register_app_config_builder,
     register_app_persistence_hooks,
     register_app_plugin_families,
@@ -64,6 +65,7 @@ register_flask_context_resolvers()
 register_app_persistence_hooks()
 register_app_config_builder()
 register_app_plugin_families()
+register_app_achievement_recorders()
 
 from vtsearch.routes import (  # noqa: E402
     achievements_bp,

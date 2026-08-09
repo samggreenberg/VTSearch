@@ -98,6 +98,25 @@ def _flask_in_request_handler_predicate() -> bool:
     return bool(getattr(g, "_vts_in_request_handler", False))
 
 
+def _flask_request_user() -> str | None:
+    """Read the request user off ``flask.g``, or ``None`` outside a request.
+
+    The ``before_request`` middleware in ``app.py`` stashes the username
+    the active :class:`~vtsearch.auth.LoginProvider` resolved onto
+    ``g.user``.  Returning ``None`` outside a request context (CLI,
+    background thread, library caller) lets
+    :func:`vtscore.user.get_current_user` fall through to its
+    thread-local / ``"default"`` fallback.
+    """
+    from flask import g
+
+    try:
+        return g.user  # type: ignore[attr-defined]
+    except (AttributeError, RuntimeError):
+        # No Flask request context, or the middleware hasn't run yet.
+        return None
+
+
 def register_flask_context_resolvers() -> None:
     """Install Flask-aware request-context resolvers on ``vtscore.state.core``.
 
@@ -111,16 +130,23 @@ def register_flask_context_resolvers() -> None:
     frozen request-missing sentinel (rather than the global empty
     context) when a request arrives without an ``X-Dataset-Id`` /
     ``X-Detector-Id`` header - see logical-bug-audit H13 / H16.
+
+    Finally, installs :func:`_flask_request_user` as the request-user
+    resolver so library code that asks
+    :func:`vtscore.user.get_current_user` who triggered the work sees
+    ``g.user`` - without :mod:`vtscore` importing Flask (issue #2931).
     """
     from vtscore.state.core import (
         register_dataset_context_resolver,
         register_detector_context_resolver,
         register_request_context_predicate,
     )
+    from vtscore.user import register_request_user_resolver
 
     register_dataset_context_resolver(_flask_dataset_context_resolver)
     register_detector_context_resolver(_flask_detector_context_resolver)
     register_request_context_predicate(_flask_in_request_handler_predicate)
+    register_request_user_resolver(_flask_request_user)
 
 
 def register_app_persistence_hooks() -> None:
@@ -140,6 +166,48 @@ def register_app_persistence_hooks() -> None:
     register_setting_persister("inclusion", settings.set_inclusion)
     register_setting_persister("calibrate_count", settings.set_calibrate_count)
     register_setting_persister("calibration_fraction", settings.set_calibration_fraction)
+
+
+def register_app_achievement_recorders() -> None:
+    """Wire the library's achievement events to :mod:`vtsearch.achievements`.
+
+    The achievement counters live in the current user's ``vtsearch.settings``
+    file, so the recording functions are app-tier - but the events they
+    count (a vote landing, a dataset load completing, a detector import, a
+    find run) are raised from inside :mod:`vtscore`.  The library dispatches
+    them through :func:`vtscore.achievements_hooks.record_achievement`; this
+    installs the app-side recorders.  Without them the events are no-ops,
+    which is what a library-only consumer wants.
+
+    Each recorder imports ``vtsearch.achievements`` lazily so app startup
+    doesn't pull the settings stack in through this wiring.
+    """
+    from vtscore.achievements_hooks import register_achievement_recorder
+
+    def _record_vote(*args: Any, **kwargs: Any) -> None:
+        from vtsearch.achievements import record_vote
+
+        record_vote(*args, **kwargs)
+
+    def _record_dataset_load(*args: Any, **kwargs: Any) -> None:
+        from vtsearch.achievements import record_dataset_load
+
+        record_dataset_load(*args, **kwargs)
+
+    def _record_detector_import(*args: Any, **kwargs: Any) -> None:
+        from vtsearch.achievements import record_detector_import
+
+        record_detector_import(*args, **kwargs)
+
+    def _record_find(*args: Any, **kwargs: Any) -> None:
+        from vtsearch.achievements import record_find
+
+        record_find(*args, **kwargs)
+
+    register_achievement_recorder("vote", _record_vote)
+    register_achievement_recorder("dataset_load", _record_dataset_load)
+    register_achievement_recorder("detector_import", _record_detector_import)
+    register_achievement_recorder("find", _record_find)
 
 
 def build_core_config(settings_path: str | Path | None = None) -> CoreConfig:
@@ -230,6 +298,7 @@ def register_app_plugin_families() -> None:
 
 __all__ = [
     "build_core_config",
+    "register_app_achievement_recorders",
     "register_app_config_builder",
     "register_app_persistence_hooks",
     "register_app_plugin_families",

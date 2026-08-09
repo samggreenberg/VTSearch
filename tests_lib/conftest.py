@@ -19,8 +19,17 @@ import numpy as np
 import os
 import pytest
 
-import vtscore.config as config
-from vtscore.utils.hashing import content_md5
+from tests_lib.flask_blocker import install_flask_blocker_if_armed
+
+# Arm the Flask-import blocker before anything library-tier is imported,
+# when running under ``./run-tests.sh vtscore-clean``.  This runs in the
+# xdist workers too (they inherit the environment variable and import
+# this conftest), which is the only place test bodies actually execute -
+# see ``scripts/check-vtscore-clean.py`` and issue #2931.
+install_flask_blocker_if_armed()
+
+import vtscore.config as config  # noqa: E402
+from vtscore.utils.hashing import content_md5  # noqa: E402
 
 
 _NON_GROUP_DIRS = {"tests_lib", "fixtures", "__pycache__"}

@@ -14,20 +14,25 @@ import logging
 import re
 import threading
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+# The current-user machinery itself is library-tier: background threads
+# spawned by ``vtscore`` (job manager, dataset loads, label sync) carry the
+# requesting user across the thread boundary, so the thread-local and the
+# resolution order live in :mod:`vtscore.user`.  The Flask half - reading
+# ``g.user`` for the in-flight request - is installed as a resolver by
+# ``vtsearch/shim/register_flask_context_resolvers()``.  These re-exports
+# keep ``from vtsearch.auth import get_current_user`` working for app-tier
+# callers and guarantee a single thread-local backing store.
+from vtscore.user import (  # noqa: F401
+    get_current_user,
+    get_thread_user,
+    set_thread_user,
+    thread_user,
+)
 
-# Thread-local fallback used when no Flask request context is available.
-# Background threads spawned by request handlers should use the
-# :func:`thread_user` context manager to propagate the user that triggered
-# them (it snapshots and restores the prior value automatically); tests
-# can use the bare :func:`set_thread_user` setter to pin or clear a user
-# without a request context.
-_thread_local = threading.local()
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -324,75 +329,6 @@ def set_login_provider(provider: LoginProvider) -> None:
 def get_login_provider() -> LoginProvider:
     """Return the active login provider."""
     return _login_provider
-
-
-def get_current_user() -> str:
-    """Return the username for the current request.
-
-    Resolution order:
-
-    1. ``g.user`` (set by the ``before_request`` middleware in ``app.py``).
-    2. Thread-local fallback (scoped by the :func:`thread_user` context
-       manager; background threads spawned from a request handler use
-       this).
-    3. ``"default"`` (CLI, tests, threads with no explicit user).
-    """
-    try:
-        from flask import g
-
-        return g.user  # type: ignore[attr-defined]
-    except (AttributeError, RuntimeError):
-        # No Flask request context (CLI mode, background thread, etc.)
-        pass
-    tl_user = getattr(_thread_local, "user", None)
-    if tl_user:
-        return tl_user
-    return "default"
-
-
-def set_thread_user(username: str | None) -> None:
-    """Set the thread-local user for the current thread.
-
-    Prefer :func:`thread_user` (a context manager) for new code, as it saves
-    and restores the prior value automatically, removing the need for a
-    manual ``try/finally`` discipline that is easy to get wrong (and would
-    leak across requests if these threads were ever pooled).
-
-    Pass ``None`` to clear.
-    """
-    _thread_local.user = username
-
-
-def get_thread_user() -> str | None:
-    """Return the thread-local user, or ``None`` if unset."""
-    return getattr(_thread_local, "user", None)
-
-
-@contextmanager
-def thread_user(username: str | None) -> Iterator[None]:
-    """Scope the thread-local user to *username* for the ``with``-block.
-
-    On entry, snapshots the prior thread-local user (if any) and sets it
-    to *username*.  On exit, restores the snapshot, so nested scopes
-    compose correctly and a pooled / reused thread cannot leak identity
-    across jobs even if the inner body raises.
-
-    Use this from background threads (or anywhere outside a Flask request
-    context) that need :func:`get_current_user` to resolve to a specific
-    user::
-
-        request_user = get_current_user()
-
-        def task():
-            with thread_user(request_user):
-                ...  # per-user settings writes resolve correctly here
-    """
-    prev = getattr(_thread_local, "user", None)
-    _thread_local.user = username
-    try:
-        yield
-    finally:
-        _thread_local.user = prev
 
 
 def get_user_data_dir(username: str | None = None) -> Path:

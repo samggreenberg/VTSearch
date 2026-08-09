@@ -452,13 +452,13 @@ def _run_origin_load_in_background(
 
     # Snapshot the user that triggered the load so background per-user
     # state (settings writes, settings_source sync) resolves correctly.
-    from vtsearch.auth import get_current_user  # noqa: PLC0415
+    from vtscore.user import get_current_user  # noqa: PLC0415
 
     request_user = created_by or get_current_user()
 
     def task():
-        from vtsearch.auth import thread_user  # noqa: PLC0415
         from vtscore.state.core import thread_dataset_context  # noqa: PLC0415
+        from vtscore.user import thread_user  # noqa: PLC0415
 
         ctx = DatasetContext(task_id)
         ctx.merge_near_duplicates = merge_near_duplicates
@@ -580,9 +580,9 @@ def _run_origin_load_in_background(
                     # save above necessarily predates the pass.
                     start_archive_thumbnail_warm(ctx)
 
-                    from vtsearch.achievements import record_dataset_load  # noqa: PLC0415
+                    from vtscore.achievements_hooks import record_achievement  # noqa: PLC0415
 
-                    record_dataset_load(str(origin.get("importer", "")))
+                    record_achievement("dataset_load", str(origin.get("importer", "")))
                 except Exception as exc:
                     _handle_load_failure(exc, context_id, tracker, registry_entry_id=registry_entry_id)
                 finally:
@@ -664,7 +664,7 @@ def _run_importer_in_background(importer, field_values: dict) -> str:
     # the reload-from-origin path supplies a server path string that
     # needs CliUploadedFile wrapping so ``run()`` doesn't have to
     # branch on the input shape.
-    from vtsearch.auth import get_current_user  # noqa: PLC0415
+    from vtscore.user import get_current_user  # noqa: PLC0415
 
     field_values = wrap_cli_file_fields(importer.fields, field_values)
     created_by = get_current_user()
@@ -797,8 +797,8 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
     Returns the ``task_id`` a caller can poll (via the ``loading-tasks`` SSE
     channel) for progress and the final ``staging_result``.
     """
-    from vtsearch.auth import get_current_user  # noqa: PLC0415
     from vtscore.plugins.uploads import wrap_cli_file_fields  # noqa: PLC0415
+    from vtscore.user import get_current_user  # noqa: PLC0415
 
     field_values = wrap_cli_file_fields(importer.fields, field_values)
     _request_user = get_current_user()
@@ -826,7 +826,7 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
     tracker.update("loading", "Preparing dataset…", 0, 0, step=1, total_steps=_TOTAL_STAGE_STEPS)
 
     def stage_task():
-        from vtsearch.auth import thread_user  # noqa: PLC0415
+        from vtscore.user import thread_user  # noqa: PLC0415
 
         with thread_user(_request_user):
             # Route the importer's own progress calls (and embedding progress)

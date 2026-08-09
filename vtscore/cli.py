@@ -329,9 +329,9 @@ def _score_medias_with_detectors(
             )
 
     if results:
-        from vtsearch.achievements import record_find
+        from vtscore.achievements_hooks import record_achievement
 
-        record_find(len(medias) * len(results))
+        record_achievement("find", len(medias) * len(results))
 
     return results
 
