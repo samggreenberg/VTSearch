@@ -315,6 +315,40 @@ def _open_validated_stream(session: requests.Session, url: str, headers: Optiona
     return response
 
 
+def fetch_url_bytes(url: str) -> bytes:
+    """GET *url* into memory under the same SSRF policy as a file download.
+
+    The in-memory twin of :func:`download_file_with_progress`, for callers that
+    want a small payload (a URL-backed media's content) rather than a file on
+    disk.  It runs :func:`~vtscore.security.url_validation.validate_url` up
+    front — which is what confines the fetch to ``http(s)`` and refuses
+    private/internal hosts — and then goes through
+    :func:`_open_validated_stream`, so every redirect hop is re-checked and no
+    public URL can bounce the request onto an internal one.
+
+    Use this instead of :func:`urllib.request.urlopen` for anything whose URL
+    came from outside the server: urllib's default opener also services
+    ``file://`` and ``ftp://``, which turns a fetch into an arbitrary local
+    file read.
+
+    Raises:
+        ValueError: If *url* fails the SSRF guard (bad scheme, no hostname,
+            private/internal address).
+        requests.HTTPError: If the server returns an error status.
+    """
+    validate_url(url)
+    session = requests.Session()
+    try:
+        response = _open_validated_stream(session, url)
+        try:
+            response.raise_for_status()
+            return response.content
+        finally:
+            response.close()
+    finally:
+        session.close()
+
+
 def _total_size_from_headers(response: requests.Response, downloaded: int, expected_size: int) -> int:
     """Determine the file's full size from response headers.
 

@@ -230,6 +230,78 @@ class TestWebhookExporterSSRF:
 
 
 # ---------------------------------------------------------------------------
+# media_url – SSRF protection on the media-serving fallback
+# ---------------------------------------------------------------------------
+
+
+class TestFetchMediaUrlSSRF:
+    """``media_url`` rides in on a media (i.e. out of a dataset pickle), so the
+    fetch that serves it is subject to the same SSRF policy as every other
+    server-side fetch (issue #2926).  Before the fix this used
+    ``urllib.request.urlopen``, whose default opener also services ``file://``
+    and ``ftp://`` — a ``media_url`` of ``file:///etc/passwd`` read the file off
+    the server and handed it back to the requester.
+    """
+
+    def test_file_scheme_is_refused(self, tmp_path):
+        from vtscore.media.base import _fetch_media_url
+
+        secret = tmp_path / "passwd"
+        secret.write_text("root:x:0:0:")
+        assert _fetch_media_url(secret.as_uri()) is None
+
+    @pytest.mark.parametrize("url", ["ftp://example.com/f.wav", "gopher://example.com/x", "example.com/no-scheme"])
+    def test_non_http_schemes_are_refused(self, url):
+        from vtscore.media.base import _fetch_media_url
+
+        assert _fetch_media_url(url) is None
+
+    def test_internal_host_is_refused(self):
+        from vtscore.media.base import _fetch_media_url
+
+        with mock.patch(
+            "vtscore.security.url_validation.socket.getaddrinfo",
+            return_value=[(2, 1, 0, "", ("169.254.169.254", 0))],
+        ):
+            with mock.patch("vtscore.datasets.downloader.core.requests.Session") as mock_session:
+                assert _fetch_media_url("http://metadata.internal/latest/meta-data/") is None
+        # The guard must fire *before* any request is opened.
+        mock_session.return_value.get.assert_not_called()
+
+    def test_public_url_is_fetched(self):
+        from vtscore.media.base import _fetch_media_url
+
+        response = mock.MagicMock(is_redirect=False, is_permanent_redirect=False, content=b"OGGS-payload")
+        with mock.patch(
+            "vtscore.security.url_validation.socket.getaddrinfo",
+            return_value=[(2, 1, 0, "", ("93.184.216.34", 0))],
+        ):
+            with mock.patch("vtscore.datasets.downloader.core.requests.Session") as mock_session:
+                mock_session.return_value.get.return_value = response
+                assert _fetch_media_url("https://example.com/clip.ogg") == b"OGGS-payload"
+        # Redirects are followed by hand so each hop is re-validated.
+        assert mock_session.return_value.get.call_args.kwargs["allow_redirects"] is False
+
+    def test_redirect_to_internal_host_is_refused(self):
+        """A public URL must not be able to bounce the fetch onto an internal one."""
+        from vtscore.media.base import _fetch_media_url
+
+        redirect = mock.MagicMock(is_redirect=True, is_permanent_redirect=False)
+        redirect.headers = {"Location": "http://169.254.169.254/latest/meta-data/"}
+
+        def _resolve(hostname, *args, **kwargs):  # noqa: ARG001
+            ip = "169.254.169.254" if hostname == "169.254.169.254" else "93.184.216.34"
+            return [(2, 1, 0, "", (ip, 0))]
+
+        with mock.patch("vtscore.security.url_validation.socket.getaddrinfo", side_effect=_resolve):
+            with mock.patch("vtscore.datasets.downloader.core.requests.Session") as mock_session:
+                mock_session.return_value.get.return_value = redirect
+                assert _fetch_media_url("https://example.com/clip.ogg") is None
+        # One hop attempted, then the guard refused the redirect target.
+        assert mock_session.return_value.get.call_count == 1
+
+
+# ---------------------------------------------------------------------------
 # validate_browser_url – the scheme guard for URLs the *browser* opens
 # ---------------------------------------------------------------------------
 

@@ -115,6 +115,7 @@ from vtscore.datasets.downloader.core import (
     _move_tree_contents,
     _validate_archive,
     download_file_with_progress,
+    fetch_url_bytes,
 )
 
 # Audio downloaders
@@ -267,6 +268,7 @@ __all__ = [
     "VISUAL_GENOME_OBJECTS_DOWNLOAD_SIZE_MB",
     "VISUAL_GENOME_OBJECTS_URL",
     "download_file_with_progress",
+    "fetch_url_bytes",
     # Audio
     "download_clotho",
     "download_esc50",

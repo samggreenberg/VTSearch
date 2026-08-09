@@ -228,7 +228,14 @@ def download_file_with_progress(
     *,
     progress: ProgressCallback | None = None,
 ) -> Path:
-    """HTTP GET with chunked streaming and progress events. Used by every download_*."""
+    """HTTP GET with chunked streaming and progress events. Used by every download_*.
+    Applies validate_url up front and re-checks every redirect hop."""
+
+def fetch_url_bytes(url: str) -> bytes:
+    """In-memory twin of the above, for small payloads (a URL-backed media's bytes).
+    Same SSRF policy: public http(s) only, every redirect hop re-validated. Use this
+    instead of urllib.request.urlopen, whose default opener also services file:// and
+    ftp://."""
 
 def download_esc50(dest_dir: Path, *, progress=None) -> Path: ...
 def download_cifar10(dest_dir: Path, *, progress=None) -> Path: ...
@@ -1116,6 +1123,17 @@ def get_file_access_base_dir() -> Path | None:
 def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) -> Path:
     """Resolve `filepath_str`. When `base_dir` is given, assert it stays inside
     `base_dir` (raises on escape); when None, the path is unrestricted."""
+
+def media_file_read_roots() -> list[Path] | None:
+    """Roots a media's own file reference may be read from: the user's data dir plus
+    the shared DATA_DIR (where demo datasets extract). None (unrestricted) in
+    single-user / no-auth mode."""
+
+def resolve_media_file_path(filepath_str: str) -> Path | None:
+    """Confine a file reference that arrived *on a media* (`media_path`, a lazy
+    clip's source, an archive-member archive path — all attacker-supplied inside a
+    dataset pickle). Returns the resolved path, or None when it escapes
+    `media_file_read_roots()` so the caller serves nothing."""
 
 def sanitize_template_value(value: str) -> str:
     """Sanitise a value before substituting it into a filesystem-path template."""
