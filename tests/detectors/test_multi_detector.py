@@ -281,11 +281,7 @@ class TestModelLoadEndpoints:
     """Test the multi-loaded model API endpoints."""
 
     def _register_trainable_model(self, client, name):
-        """Helper: create detector + register in model registry."""
-        client.post(
-            "/api/detectors",
-            json={"name": name, "media_type": "audio", "text_query": "test"},
-        )
+        """Helper: register a detector in the model registry."""
         res = client.post(
             "/api/detectors/registry",
             json={

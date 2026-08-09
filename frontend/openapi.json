@@ -11676,6 +11676,9 @@
           "400": {
             "description": "Empty name after stripping, or media_type is 'any'."
           },
+          "409": {
+            "description": "A detector with this name already exists."
+          },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
           },
@@ -12176,6 +12179,9 @@
           },
           "404": {
             "description": "Detector not found."
+          },
+          "409": {
+            "description": "A detector with the new name already exists."
           },
           "422": {
             "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"

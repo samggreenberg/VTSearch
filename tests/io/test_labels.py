@@ -286,10 +286,6 @@ class TestExportOriginOnlyFallback:
         ids = list(medias.keys())
         good_cid, bad_cid = ids[0], ids[1]
 
-        client.post(
-            "/api/detectors",
-            json={"name": "OriginOnlyExport", "media_type": "audio", "text_query": "test"},
-        )
         res = client.post(
             "/api/detectors/registry",
             json={"name": "OriginOnlyExport", "media_type": "audio", "text_query": "test"},
