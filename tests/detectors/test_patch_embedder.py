@@ -24,7 +24,6 @@ import torch
 
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.media.patch_embed import (
-    PatchEmbedOutput,
     eupe_features_to_patch_output,
     hf_vit_to_patch_output,
     nearest_patch_to_box,
@@ -33,26 +32,6 @@ from vtscore.training.region_similarity import (
     cosine_sort_with_boxes,
     score_against_query,
 )
-
-
-# ---------------------------------------------------------------------------
-# Fixtures: hand-crafted PatchEmbedOutputs
-# ---------------------------------------------------------------------------
-
-
-def _normed(rng: np.random.Generator, shape) -> np.ndarray:
-    """Random L2-normalised float32 array of *shape*."""
-    v = rng.standard_normal(shape).astype(np.float32)
-    return v / np.linalg.norm(v, axis=-1, keepdims=True).clip(min=1e-12)
-
-
-def _make_output(h: int = 4, w: int = 4, d: int = 8, seed: int = 0) -> PatchEmbedOutput:
-    rng = np.random.default_rng(seed)
-    cls = _normed(rng, (d,))
-    grid = _normed(rng, (h, w, d))
-    sal = np.abs(rng.standard_normal((h, w))).astype(np.float32)
-    sal = sal / sal.sum()
-    return PatchEmbedOutput(cls_vec=cls, patch_grid=grid, patch_saliency=sal)
 
 
 # ---------------------------------------------------------------------------
