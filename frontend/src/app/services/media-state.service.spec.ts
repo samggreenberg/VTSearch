@@ -77,6 +77,25 @@ describe('MediaStateService', () => {
     expect(service.selectedId()).toBeNull();
   });
 
+  it('loadMedias should restart an in-flight fetch instead of dropping the reload', async () => {
+    // Pair switch A->B issues the first fetch (stamped with B's X-Dataset-Id)...
+    service.loadMedias();
+    TestBed.tick();
+    const stale = httpMock.expectOne('/api/medias/ids');
+
+    // ...and a rapid B->C switch reloads while it is still in flight. The
+    // reload must not be swallowed: the in-flight response carries the *old*
+    // pair's id list, and nothing else would ever re-fetch (issue #2944).
+    service.loadMedias();
+    TestBed.tick();
+
+    expect(stale.cancelled).toBe(true);
+    const fresh = httpMock.expectOne('/api/medias/ids');
+    fresh.flush(mockMedias);
+    await settleResource();
+    expect(service.mediasSignal()).toEqual(mockMedias);
+  });
+
   it('mediasSignal should reflect the loaded medias', async () => {
     expect(service.mediasSignal()).toEqual([]);
     load();
