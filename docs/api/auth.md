@@ -30,6 +30,28 @@ determines what `/api/auth/*` does and whether the SPA shows a login screen.
 The SPA switches on `login_required` from `GET /api/auth/status`: when `true`
 it shows a login screen at startup, otherwise it goes straight to the app.
 
+### Usernames are path components
+
+Any provider that returns a per-user data dir puts the username on the
+filesystem twice: `data/<username>/` is where per-user settings are written,
+**and** it is the confinement root passed to `validate_server_filepath()` for
+server-file importers and exporters. That check calls `base_dir.resolve()`,
+which *collapses* `..` rather than rejecting it — so an unvalidated username
+would silently widen the sandbox rather than trip it.
+
+Every username is therefore screened by `vtsearch.auth.is_safe_username()`
+(`[A-Za-z0-9._-]+`, and not a bare `.` / `..` segment) at the point it enters
+the app: `ApiKeyLoginProvider` screens `api_keys.json` at load time, and
+`TrivialLoginProvider` re-screens the session cookie on every read — the
+cookie is only integrity-protected by `app.secret_key`, so a client that
+knows the key can put an arbitrary string in it regardless of what
+`POST /api/auth/login` accepted. An unsafe name resolves to `"anonymous"`
+with `authenticated: false`.
+
+This is *not* an impersonation defence. In `trivial` mode anyone may claim
+any username by design; the check only keeps a username from becoming a
+path escape.
+
 ### Auth status
 
 ```
