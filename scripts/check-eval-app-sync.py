@@ -117,10 +117,14 @@ MIRRORS: list[Mirror] = [
             "machine reads. Re-check the per-class minimum and the flatness threshold."
         ),
         divergence=(
-            "The harness takes the error-cost history as an argument instead of reading the "
+            "The harness takes the error-cost window as an argument instead of reading the "
             "module-level `_cached_steps` MLP cache, which is built for one interactive "
             "detector advancing a vote at a time. The *rules* are copied; only the input "
-            "plumbing differs."
+            "plumbing differs - and only in where the models come from, not in how they are "
+            "scored: the caller (`voting_iterations._labelset_error_costs`) re-scores the "
+            "whole window against the *current* labelset every step, as `_eval_cached_models` "
+            "does. Handing in a history of frozen per-step costs instead would silently change "
+            "the statistic the slope measures (issue #2923), which is not a declared divergence."
         ),
     ),
     Mirror(
