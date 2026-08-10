@@ -8,6 +8,7 @@ from typing import Any
 
 
 from vtscore.converters.base import MediaConverter, resolve_media_bytes
+from vtscore.utils.optional_deps import agpl_unavailable_message
 
 
 class Document2ImageMediaConverter(MediaConverter):
@@ -53,7 +54,7 @@ class Document2ImageMediaConverter(MediaConverter):
         try:
             import fitz  # noqa: PLC0415 - PyMuPDF
         except ImportError:
-            print("Document2ImageMediaConverter requires PyMuPDF: pip install PyMuPDF")
+            print(agpl_unavailable_message("PyMuPDF", "Converting documents to images"))
             return []
 
         results: list[dict[str, Any]] = []

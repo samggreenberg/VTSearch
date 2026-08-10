@@ -741,9 +741,10 @@ Add `--no-cache` after dependency changes to force a full rebuild.
 ## Dependency structure
 
 Runtime + dev dependencies are declared in `pyproject.toml` (under
-`[project.dependencies]` and `[project.optional-dependencies].dev`).
+`[project.dependencies]` and `[project.optional-dependencies]`, whose
+`dev` and `agpl` extras hold the dev tools and the two AGPL-3.0 packages).
 The top-level `requirements/base.txt` and `requirements/gpu.txt` just
-forward to it via `-e .[dev]`, so pyproject is the single source of
+forward to it via `-e .[dev,agpl]`, so pyproject is the single source of
 truth and deptry verifies every imported package is declared there.
 
 The labbench / image-embedders requirements files are deliberately
@@ -751,9 +752,11 @@ standalone (curated minimal subsets pinned for size-constrained Docker
 images) and do **not** flow through pyproject.
 
 ```
-pyproject.toml                       ← [project.dependencies] + [project.optional-dependencies].dev
-requirements/base.txt                ← --extra-index-url <cpu wheel index> + `-e .[dev]`
-requirements/gpu.txt                 ← `-e .[dev]` (install.sh / Dockerfile.gpu set --extra-index-url)
+pyproject.toml                       ← [project.dependencies] + [project.optional-dependencies] (dev, agpl)
+requirements/base.txt                ← --extra-index-url <cpu wheel index> + `-e .[dev,agpl]`
+requirements/gpu.txt                 ← `-e .[dev,agpl]` (install.sh / Dockerfile.gpu set --extra-index-url)
+requirements/base-no-agpl.txt        ← base.txt without the `agpl` extra (see below)
+requirements/gpu-no-agpl.txt         ← gpu.txt without the `agpl` extra (see below)
 requirements/labbench.txt            ← LabBench (SigLIP-only) image deps (standalone)
 requirements/image-embedders.txt     ← All-image-embedders image deps (CPU, standalone)
 requirements/image-embedders-gpu.txt ← All-image-embedders image deps (GPU, standalone)
@@ -770,6 +773,40 @@ bash scripts/install.sh cpu
 bash scripts/install.sh gpu
 ```
 
+### Installing without the AGPL dependencies
+
+Two runtime dependencies are AGPL-3.0-or-later: **`ultralytics`** (YOLO)
+and **`PyMuPDF`**. Every default install path includes them — the install
+scripts, both `requirements/{base,gpu}.txt`, and both Docker images — so
+the features that need them work out of the box. That is a deliberate
+choice for turnkey deployments, not an accident of the requirements
+fan-out: VTSearch's own Apache-2.0 grant is unaffected either way, but
+AGPL terms may attach to a combined work you redistribute or operate as a
+network service, and a service you host publicly is exactly the case
+AGPL's network clause is about.
+
+If your deployment cannot take copyleft code, install without them:
+
+```bash
+# Install script (CPU or GPU; picks the matching *-no-agpl.txt file)
+VTSEARCH_NO_AGPL=1 bash scripts/install.sh
+
+# pip, directly
+pip install -r requirements/base-no-agpl.txt      # CPU
+pip install -r requirements/gpu-no-agpl.txt       # CUDA hosts
+
+# Docker (same for Dockerfile.gpu with gpu-no-agpl.txt)
+docker build --build-arg REQUIREMENTS=base-no-agpl.txt -f docker/Dockerfile -t vtsearch .
+```
+
+What you give up: the YOLO image extractor and the YOLO image clipper,
+PDF import, and the document → image / document → text converters. Those
+fail with a message naming the missing package and how to get it
+(`vtscore/utils/optional_deps.py`) rather than erroring opaquely.
+Everything else — every embedder, every other media type, training,
+scoring, Browse — is unaffected. See [`NOTICE`](../NOTICE) for the full
+licensing statement.
+
 ### Key dependencies
 
 | Package | Version constraint | Purpose |
@@ -780,12 +817,12 @@ bash scripts/install.sh gpu
 | `numpy` | latest | Numeric arrays |
 | `flask` | latest | Web server |
 | `opencv-python-headless` | latest | Image processing (structural embedder, YOLO). **Not** used for video decoding — see [FIPS](#video-import-crashes-with-fatal-fips-selftest-failure) |
-| `ultralytics` | latest | YOLO-based image processing |
+| `ultralytics` | latest | YOLO-based image processing. AGPL-3.0; in the `agpl` extra, installed by default — see [Installing without the AGPL dependencies](#installing-without-the-agpl-dependencies) |
 | `laion_clap` | latest | Audio embedding preprocessing |
 | `librosa` | latest | Audio analysis (spectrograms, silence splitting) |
 | `soundfile` / `soxr` | latest | Audio decoding and resampling (`vtscore.media.audio.decode`) |
 | `imageio-ffmpeg` | latest | Bundled ffmpeg binary; audio codecs libsndfile can't read (AAC/M4A/MP4), and all video frame decoding (`vtscore.media.video.decode`) |
-| `PyMuPDF` | latest | Document (PDF/DOC/PPT) rendering and text extraction |
+| `PyMuPDF` | latest | Document (PDF/DOC/PPT) rendering and text extraction. AGPL-3.0; in the `agpl` extra, installed by default — see [Installing without the AGPL dependencies](#installing-without-the-agpl-dependencies) |
 
 ---
 

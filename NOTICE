@@ -41,11 +41,25 @@ anyone redistributing VTSearch or building a product on top of `vtscore`:
   * PyMuPDF - AGPL-3.0-or-later (or a commercial license from Artifex).
     Used by the PDF importer and the document converters.
 
-Both are imported lazily but are declared as install-time dependencies, so
-a default install pulls them in. VTSearch's own Apache-2.0 grant is
-unaffected, but the AGPL terms may attach to a combined work you
-distribute or operate as a network service. Uninstall these packages (and
-forgo the features that use them), or obtain suitable commercial terms, if
-that is incompatible with your deployment.
+A default install pulls both in, so the features that use them work out of
+the box. VTSearch's own Apache-2.0 grant is unaffected, but the AGPL terms
+may attach to a combined work you distribute or operate as a network
+service. If that is incompatible with your deployment, you can install
+without them:
+
+  * scripts/install.sh    VTSEARCH_NO_AGPL=1 bash scripts/install.sh
+  * pip                   pip install -r requirements/base-no-agpl.txt
+                          (or requirements/gpu-no-agpl.txt on CUDA hosts)
+  * docker                docker build --build-arg REQUIREMENTS=base-no-agpl.txt
+                          (or gpu-no-agpl.txt with docker/Dockerfile.gpu)
+
+Both packages sit in the `agpl` extra in pyproject.toml, which every
+default install path requests; the files and flags above are the same
+install with that extra dropped. The result is a permissively licensed
+install in which the YOLO image extractor and clipper, the PDF importer,
+and the document converters are unavailable and report themselves as such
+(vtscore/utils/optional_deps.py); everything else is unaffected. Obtaining
+commercial terms for these packages is the other option if you need the
+features.
 
   * soxr (audio resampling) - LGPL-2.1-or-later.

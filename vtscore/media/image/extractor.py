@@ -6,6 +6,7 @@ from typing import Any, Optional
 
 from vtscore.media.image.decode import decode_bounded_rgb
 from vtscore.media.processors import Extractor
+from vtscore.utils.optional_deps import agpl_import_error
 
 
 class ImageClassExtractor(Extractor):
@@ -70,7 +71,10 @@ class ImageClassExtractor(Extractor):
     def load_model(self) -> None:
         if self._model is not None:
             return
-        from ultralytics import YOLO  # pyright: ignore[reportPrivateImportUsage]
+        try:
+            from ultralytics import YOLO  # pyright: ignore[reportPrivateImportUsage]
+        except ImportError as exc:
+            raise agpl_import_error("ultralytics", "The YOLO object extractor") from exc
 
         self._model = YOLO(self._model_id)
 

@@ -1,0 +1,26 @@
+# VTSearch: core dependencies for local development (CPU), minus the
+# AGPL-3.0 packages.
+#
+# Install:  pip install -r requirements/base-no-agpl.txt
+#
+# Identical to `requirements/base.txt` except that it does NOT request the
+# `agpl` extra, so `ultralytics` (YOLO) and `PyMuPDF` are never installed.
+# Use this when AGPL-3.0-or-later code cannot ship in your deployment: the
+# resulting install is permissively licensed, and the features that need
+# those packages -- the YOLO image extractor and clipper, the PDF importer,
+# and the document converters -- fail with an actionable message instead of
+# working. Everything else is unaffected.
+#
+# `requirements/base.txt` remains the default; this file is the opt-out.
+# `tests/core/test_requirements.py` enforces that the two stay in sync
+# apart from the requested extras.
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+-e .[dev]
+
+# Transitive-dep security pin (not imported directly; required to keep
+# `pip-audit` clean in `run-tests.sh`). Drop the line if the version
+# pulled by requests/huggingface-hub already satisfies the constraint.
+# (urllib3's own pin lives in `[project.dependencies]` — we import it
+# directly for the SSRF guard's peer-checking transport adapter.)
+idna>=3.15  # CVE-2026-45409

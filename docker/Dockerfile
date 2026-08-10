@@ -33,17 +33,27 @@ RUN apt-get update && \
 WORKDIR /app
 
 # ---------- dependency layer ----------
-# requirements/base.txt forwards to pyproject.toml via `-e .[dev]`, so the
+# requirements/base.txt forwards to pyproject.toml via `-e .[dev,agpl]`, so the
 # package source needs to be present when this layer builds. That means
 # any Python source change busts this layer; full source copy happens here.
 COPY requirements/ requirements/
 COPY pyproject.toml ./
 COPY vtsearch/ vtsearch/
 
+# The image includes the two AGPL-3.0 dependencies (ultralytics, PyMuPDF) by
+# default, so the YOLO and PDF/document features work out of the box in a
+# turnkey deployment. To build an image without them -- forgoing those
+# features -- point this at the opt-out mirror:
+#
+#   docker build --build-arg REQUIREMENTS=base-no-agpl.txt ...
+#
+# See NOTICE and docs/DEPLOYMENT.md.
+ARG REQUIREMENTS=base.txt
+
 RUN pip install --no-cache-dir --upgrade pip setuptools && \
     pip install --no-cache-dir \
         --prefer-binary \
-        -r requirements/base.txt
+        -r "requirements/$REQUIREMENTS"
 
 # ---------- application layer ----------
 COPY . .
