@@ -146,12 +146,6 @@ Instead, add the affected shot id(s) to the **reshoot queue**: `docs/user/screen
 
 If you *do* have a browser this session, drain the queue instead of growing it: run `scripts/screenshots/refresh.sh`, review `git diff docs/user/assets/`, commit the regenerated PNGs, and delete the drained rows. The full system (manifest, harness, determinism knobs, embedding convention) lives in `docs/plans/user-docs-screenshots.md`.
 
-## Four docs are a served, hash-matched product surface (CRITICAL)
-
-`README.md`, `docs/user/USER_GUIDE.md`, `docs/CLI.md`, and `docs/API.md` are not just documentation: the running app serves each of them raw at `GET /api/achievements/docs/<doc_id>/raw` and treats the code phrase in each file's footer (`*Readme Reader code phrase:* \`...\``) as part of the "Readme Reader" achievement. `vtsearch/achievements.py` (`_DOCS_RAW`, `_DOC_HASHES`) hashes each phrase at import time and checks a pasted guess against it server-side; the phrase is never sent to the client. A test verifies each doc's footer phrase matches what `achievements.py` expects.
-
-**If you edit one of these four files:** do not remove, reword, or move its trailing `*Readme Reader code phrase:* \`...\`` line. If you must change the phrase text itself, update the matching entry in `_DOCS_RAW` in the same commit, and expect `./run-tests.sh` to catch a mismatch either way.
-
 ## No Persisted Vectors or MLPs (CRITICAL)
 
 **Embeddings and trained MLP weights are in-memory artifacts only.** Never serialize them to disk, to `data/settings.json`, to detector JSON files, or to any other persistent store. Origins are the canonical persisted form: the system rederives `origin → file → embedding → MLP` on demand.
