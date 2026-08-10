@@ -191,7 +191,8 @@ class DinoRegionProposer:
     def __call__(self, image: "Image.Image") -> np.ndarray:
         import torch
 
-        from vtscore.media.patch_embed import build_region_tree, hf_vit_to_patch_output
+        from vtscore.eval._hac_compat import build_region_tree  # noqa: PLC0415
+        from vtscore.media.patch_embed import hf_vit_to_patch_output  # noqa: PLC0415
 
         inputs = self.proc(images=image, return_tensors="pt").to(self.device)
         with torch.no_grad():
@@ -371,7 +372,11 @@ class _PatchSource:
         return self._emb._patch_forward_pil_batch([image])[0]
 
     def prepare(self, image: "Image.Image", gt_boxes: list[Box] | None = None) -> PreparedImage:
-        from vtscore.media.patch_embed import box_to_vote_vector, build_region_tree, snap_box_to_region
+        from vtscore.eval._hac_compat import (  # noqa: PLC0415
+            box_to_vote_vector,
+            build_region_tree,
+            snap_box_to_region,
+        )
 
         pe = self._patch_forward(image)
         if pe is None:  # forward failed — degrade to a zero whole vector

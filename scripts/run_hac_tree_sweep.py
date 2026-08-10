@@ -94,12 +94,8 @@ import numpy as np
 import torch
 from PIL import Image, ImageDraw, ImageFont
 
-from vtscore.media.patch_embed import (
-    PatchEmbedOutput,
-    RegionVector,
-    build_region_tree,
-    hf_vit_to_patch_output,
-)
+from vtscore.eval._hac_compat import RegionVector, build_region_tree
+from vtscore.media.patch_embed import PatchEmbedOutput, hf_vit_to_patch_output
 
 DEFAULT_K_VALUES = (2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16)
 DEFAULT_ALPHA_VALUES = (0.5,)

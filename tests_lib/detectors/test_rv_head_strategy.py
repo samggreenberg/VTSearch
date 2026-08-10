@@ -1,7 +1,7 @@
 """``--head-strategy`` must reach the region-voting path, or fail loudly.
 
 Region voting trains through :func:`train_rv_head`, which expresses the model as a torch
-``hidden_dim`` (the knob ``cross_calibration_threshold_cached`` and ``train_model`` share)
+``hidden_dim`` (the knob ``calculate_cross_calibration_threshold`` and ``train_model`` share)
 rather than as a pluggable ``trainer_fn``. Before this was wired, ``--head-strategy`` was a
 silent no-op on every ``hac`` + DINO cell and the path always trained an auto-sized MLP,
 diverging from the shipped detector, which has used the linear/logistic head since #2790.

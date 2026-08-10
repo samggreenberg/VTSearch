@@ -234,7 +234,7 @@ def sample_rv_budget(
 
 #: Head strategies the region-voting path can express.
 #:
-#: RV calibrates through :func:`cross_calibration_threshold_cached`, which is keyed on a
+#: RV calibrates through :func:`calculate_cross_calibration_threshold`, which is keyed on a
 #: torch ``hidden_dim`` (and carries the bag-aware ``groups`` split plus the per-bag
 #: ``sample_weights`` that keep a 200-leaf bad image from outvoting a 3-leaf one). The
 #: sklearn heads in :mod:`vtscore.eval.scoring_heads` are plugged in as a ``trainer_fn``
@@ -248,7 +248,7 @@ def rv_hidden_dim(head_strategy: str, n_votes: int, n_good: int, *, anneal_k: in
     """``hidden_dim`` implementing *head_strategy* on the region-voting path.
 
     Mirrors :func:`vtscore.eval.scoring_heads.make_head`'s capacity choices in the one
-    knob ``train_model`` / ``cross_calibration_threshold_cached`` expose, and is keyed on
+    knob ``train_model`` / ``calculate_cross_calibration_threshold`` expose, and is keyed on
     ``n_good`` (the FULL labelset's positives) exactly like ``make_head``, so M0 and every
     fold sub-model agree and the cross-calibration never averages one class's threshold
     into another's. ``"linear"`` resolves to :data:`~vtscore.training.mlp.LINEAR_HEAD`, the
@@ -307,7 +307,7 @@ def train_rv_head(
     import torch  # noqa: PLC0415
 
     from vtscore.training.mlp import train_model  # noqa: PLC0415
-    from vtscore.training.thresholds import cross_calibration_threshold_cached  # noqa: PLC0415
+    from vtscore.training.thresholds import calculate_cross_calibration_threshold  # noqa: PLC0415
 
     from vtscore.eval.scoring_heads import _mlp_predict_factory  # noqa: PLC0415
 
@@ -327,7 +327,7 @@ def train_rv_head(
     if safe_thresholds and n_votes < 6:
         threshold = 0.5
     else:
-        threshold = cross_calibration_threshold_cached(
+        threshold = calculate_cross_calibration_threshold(
             X_list,
             y_list,
             input_dim,
@@ -926,7 +926,7 @@ def _train_pool_head(
     (#2784) via :func:`vtscore.eval.threshold_rules.calibrated_threshold`;
     ``"argmin"`` (the pre-#2784 min-cost cut) is retained only for reproducing old
     runs. The region-voting branch (:func:`train_rv_head`) calibrates via the same
-    conformal rule through ``cross_calibration_threshold_cached``."""
+    conformal rule through ``calculate_cross_calibration_threshold``."""
     good = sorted(good_ids)
     bad = sorted(bad_ids)
     if not good or not bad:

@@ -1,4 +1,4 @@
-"""Parity tests: the SOD sweep must construct labels + score exactly like the app.
+"""Parity tests: the SOD sweep vs the app's label construction and scoring.
 
 The sweep (``vtscore/eval/region_sources.py`` + ``vtscore/eval/scoring_heads.py``)
 re-derives the region-voting flood/snap and the region max-pool rather than calling
@@ -6,15 +6,36 @@ the live detector directly, so its numbers only transfer to the app while those
 re-derivations stay in lockstep with the production primitives in
 ``vtscore/detectors/training.py`` and ``vtscore/embedding/matrix.py``.
 
-These tests lock that equivalence so a future edit to either side can't silently
-drift them apart:
+**Label parity is BROKEN as of #2886, deliberately, on the production side.** That
+change made production tree-free: there is no longer a ``patch_regions`` HAC tree for
+the sweep's label construction to agree with, and both primitives were rewritten around
+raw patches instead.
 
-* **Flood parity** — the childless-node set a Bad vote floods in the sweep
-  (``PreparedImage.leaf_mask`` over ``prepare()``) equals ``bad_negative_vecs``.
-* **Snap parity** — the sweep's snapped Good-vote positive equals
-  ``pool_box_from_media`` for the same covering box.
+============================  ==============================  ============================
+vote                          sweep (HAC arm)                 production after #2886
+============================  ==============================  ============================
+Bad -> ``bad_negative_vecs``  CLS + the K HAC leaves          the image vector + EVERY raw
+                              (``k + 1`` rows)                patch (``media_score_rows``)
+Good -> ``pool_box_from_media``  the snapped HAC node         the single raw patch nearest
+                                                              the box; ``None`` without a
+                                                              ``patch_grid``
+============================  ==============================  ============================
+
+The three label-parity tests below are therefore ``xfail(strict=True)``. They are kept
+rather than deleted because they are the executable record of the divergence, and
+because ``strict`` makes them fail loudly as **unexpectedly passing** if production ever
+regains a region tree - at which point the sweep's numbers would transfer again and this
+docstring is what needs re-reading. The consequence to keep in mind meanwhile: **HAC-arm
+sweep results no longer predict app behaviour.** ``vtscore/eval/_hac_compat.py`` explains
+where the tree the sweep still measures now lives.
+
+What remains genuinely locked:
+
+* **Flood rule** — the sweep floods exactly the childless nodes (CLS + HAC leaves) and
+  never the internal merge nodes. Sweep-side only, so #2886 does not touch it.
 * **Scorer parity** — ``scoring_heads`` per-image max-pool equals production
-  ``segmented_max_pool`` (score, first-wins region, and the non-finite sentinel).
+  ``segmented_max_pool`` (score, first-wins region, and the non-finite sentinel). Still a
+  live gate: the scorer is shared, only label construction diverged.
 
 Library tier: every production symbol imported here is Flask-clean, so this lives
 in ``tests_lib`` and runs under ``./run-tests.sh detectors``.
@@ -23,13 +44,27 @@ in ``tests_lib`` and runs under ``./run-tests.sh detectors``.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from vtscore.detectors.training import bad_negative_vecs, pool_box_from_media
 from vtscore.embedding.matrix import segmented_max_pool
+from vtscore.eval._hac_compat import build_region_tree
 from vtscore.eval.region_sources import _covering_box, _PatchSource
 from vtscore.eval.scoring_heads import max_pool_over_images, max_pool_with_argmax
-from vtscore.media.patch_embed import PatchEmbedOutput, build_region_tree
+from vtscore.media.patch_embed import PatchEmbedOutput
 from vtscore.utils.scores import NON_FINITE_SCORE_SENTINEL
+
+#: Why the three label-parity tests are expected to fail (see the module docstring).
+#: ``strict`` so that production regaining a region tree fails the suite as an
+#: unexpected pass rather than quietly restoring a gate nobody re-read.
+_TREE_FREE = pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "#2886 made production tree-free: bad_negative_vecs now floods the image vector plus "
+        "every raw patch, and pool_box_from_media returns the nearest raw patch (None without a "
+        "patch_grid), so the HAC sweep's label construction no longer mirrors the app"
+    ),
+)
 
 # The tree knobs the parity test builds with. They must match the values the
 # stubbed _PatchSource carries, so region_sources' in-prepare build_region_tree
@@ -75,8 +110,9 @@ def _stub_patch_source(pe: PatchEmbedOutput) -> _PatchSource:
 
 
 class TestFloodParity:
-    """The sweep's leaf_mask flood == production bad_negative_vecs."""
+    """The sweep's leaf_mask flood vs production bad_negative_vecs (diverged, #2886)."""
 
+    @_TREE_FREE
     def test_leaf_mask_selects_bad_negative_vecs(self):
         pe = _make_pe(seed=1)
         prep = _stub_patch_source(pe).prepare(object())
@@ -100,8 +136,9 @@ class TestFloodParity:
 
 
 class TestSnapParity:
-    """The sweep's snapped Good-vote positive == production pool_box_from_media."""
+    """The sweep's snapped Good-vote positive vs pool_box_from_media (diverged, #2886)."""
 
+    @_TREE_FREE
     def test_snapped_positive_matches_pool_box_from_media(self):
         pe = _make_pe(seed=2)
         box = (0.2, 0.2, 0.6, 0.6)
@@ -114,6 +151,7 @@ class TestSnapParity:
         assert prod is not None
         np.testing.assert_array_equal(prep.exemplars[0], np.asarray(prod, dtype=np.float32))
 
+    @_TREE_FREE
     def test_multi_instance_covers_all_boxes(self):
         # The covering box spans every instance box (the documented modeling
         # choice), so the snap is against that union, matching pool_box_from_media.

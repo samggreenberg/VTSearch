@@ -97,7 +97,8 @@ from vtscore.eval.metrics import compute_average_precision, compute_binary_class
 # sliding_boxes_by_scale / crops_from_boxes now live in the shared region-source
 # core so the sweep and this script use one implementation.
 from vtscore.eval.region_sources import crops_from_boxes, sliding_boxes_by_scale
-from vtscore.media.patch_embed import build_region_tree, hf_vit_to_patch_output
+from vtscore.eval._hac_compat import build_region_tree
+from vtscore.media.patch_embed import hf_vit_to_patch_output
 
 DEFAULT_VG_DIR = Path("/exp/scale26/datasets/external/VisualGenome")
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".tiff"}
