@@ -295,6 +295,22 @@ CLAP_MUSIC_MODEL_ID = "laion/larger_clap_music_and_speech"
 CLAP_GENERAL_MODEL_ID = "laion/larger_clap_general"
 AST_MODEL_ID = "MIT/ast-finetuned-audioset-10-10-0.4593"
 AST_SAMPLE_RATE = 16000  # AST expects 16 kHz mono
+# BEATs: Microsoft's self-supervised audio encoder (MIT, part of ``microsoft/unilm``).
+# The official weights are published as loose ``.pt`` files on Azure blob storage
+# rather than on the Hub, so we pull the ``iter3+`` AudioSet-2M checkpoint from an
+# MIT-licensed Hub mirror of that release. ``iter3_plus_AS2M`` is the
+# self-supervised encoder, *not* one of the AudioSet-finetuned classifier
+# variants: it has no prediction head, which is what we want for embeddings.
+BEATS_CHECKPOINT_REPO = "lpepino/beats_ckpts"
+BEATS_CHECKPOINT_FILE = "BEATs_iter3_plus_AS2M.pt"
+BEATS_SAMPLE_RATE = 16000  # BEATs expects 16 kHz mono
+BEATS_EMBED_DIM = 768
+BEATS_MAX_SAMPLES = 16000 * 10  # cap clips at the 10 s AudioSet window BEATs was trained on
+BEATS_MIN_SAMPLES = 16000  # zero-pad anything shorter, so short clips still yield patches
+# Global fbank normalisation constants baked into the released BEATs
+# checkpoints; the encoder expects ``(fbank - mean) / (2 * std)``.
+BEATS_FBANK_MEAN = 15.41663
+BEATS_FBANK_STD = 6.55582
 WHISPER_MODEL_ID = "openai/whisper-base"
 WHISPER_SAMPLE_RATE = 16000  # Whisper expects 16 kHz mono
 # ParaSpeechCLAP: dual-encoder speech↔text "style" CLAP (MIT-licensed).

@@ -298,6 +298,7 @@ embedder per media type should override the `is_default` property to return
 | `audio/embedder_clap_music.py` | `AudioClapMusicEmbedder` | audio | |
 | `audio/embedder_clap_general.py` | `AudioClapGeneralEmbedder` | audio | |
 | `audio/embedder_paraspeechclap.py` | `AudioParaSpeechClapEmbedder` | audio | |
+| `audio/embedder_beats.py` | `AudioBEATsEmbedder` | audio | |
 | `audio/embedder_ast.py` | `AudioASTEmbedder` | audio | |
 | `audio/embedder_whisper.py` | `AudioWhisperEncoderEmbedder` | audio | |
 | `image/embedder_siglip.py` | `ImageSiglipEmbedder` | image | ✅ |
@@ -554,6 +555,7 @@ loaded via `spec_from_file_location` so discovery still works.
 | `AudioClapMusicEmbedder` | `clap_music` | `audio` | CLAP Music & Speech (laion/larger_clap_music_and_speech) | 512 |
 | `AudioClapGeneralEmbedder` | `clap_general` | `audio` | CLAP General 2024 (laion/larger_clap_general) | 512 |
 | `AudioParaSpeechClapEmbedder` | `paraspeechclap` | `audio` | ParaSpeechCLAP speech-style (WavLM-Large + Granite, ajd12342/paraspeechclap-combined) | 768 |
+| `AudioBEATsEmbedder` | `beats` | `audio` | BEATs iter3+ AS2M self-supervised encoder (lpepino/beats_ckpts), audio-only | 768 |
 | `AudioASTEmbedder` | `ast` | `audio` | AST audio spectrogram (MIT/ast-finetuned-audioset-10-10-0.4593), audio-only | 768 |
 | `AudioWhisperEncoderEmbedder` | `whisper_encoder` | `audio` | Whisper-base encoder (openai/whisper-base), audio-only | 512 |
 | `ImageSiglipEmbedder` | `siglip` | `image` | SigLIP (google/siglip-base-patch16-224) | 768 |

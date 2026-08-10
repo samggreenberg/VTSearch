@@ -219,6 +219,9 @@ time. The actual download + load is lazy, driven by
 | `CLAP_GENERAL_MODEL_ID`        | `"laion/larger_clap_general"`                                                          | Larger general-purpose CLAP.                                                           |
 | `AST_MODEL_ID`                 | `"MIT/ast-finetuned-audioset-10-10-0.4593"`                                            | Audio Spectrogram Transformer. 16 kHz mono via `AST_SAMPLE_RATE`.                      |
 | `AST_SAMPLE_RATE`              | `16000`                                                                                |                                                                                        |
+| `BEATS_CHECKPOINT_REPO`        | `"lpepino/beats_ckpts"`                                                                | Hub mirror of the MIT-licensed BEATs release (no `transformers` implementation).       |
+| `BEATS_CHECKPOINT_FILE`        | `"BEATs_iter3_plus_AS2M.pt"`                                                           | Self-supervised encoder, not an AudioSet-finetuned classifier variant.                 |
+| `BEATS_SAMPLE_RATE`            | `16000`                                                                                | 16 kHz mono; features are Kaldi fbanks, not waveforms.                                 |
 | `WHISPER_MODEL_ID`             | `"openai/whisper-base"`                                                                | Used by the audio→text converter (ASR).                                                |
 | `WHISPER_SAMPLE_RATE`          | `16000`                                                                                |                                                                                        |
 | `XCLIP_MODEL_ID`               | `"microsoft/xclip-base-patch32"`                                                       | Default video embedder.                                                                |
