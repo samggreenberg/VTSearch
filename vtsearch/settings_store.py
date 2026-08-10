@@ -35,7 +35,7 @@ import os
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Container, Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -250,6 +250,30 @@ class UserSyncState:
     dirty_keys: set[str] = field(default_factory=set)
 
 
+class _LiveDirtyKeys:
+    """A ``key in ...`` view onto a user's *current* ``dirty_keys`` set.
+
+    Handed to ``_apply_settings`` as its ``skip_keys`` argument by the auto
+    re-sync path, in place of a set snapshotted before ``source.load()``.
+    A snapshot goes stale the moment a concurrent user write marks a key
+    dirty - which, given ``load()`` can be a slow network round-trip, is a
+    wide window.  Only ``__contains__`` is ever exercised.
+
+    This is the coarse filter; :meth:`UserSettingsStore.mutate_user_locked`
+    re-checks under the cross-process file lock, which is where the decision
+    actually becomes atomic against the racing write.
+    """
+
+    __slots__ = ("_store", "_username")
+
+    def __init__(self, store: UserSettingsStore, username: str) -> None:
+        self._store = store
+        self._username = username
+
+    def __contains__(self, key: object) -> bool:
+        return self._store.is_user_key_dirty(self._username, key)
+
+
 # ---------------------------------------------------------------------------
 # The store
 # ---------------------------------------------------------------------------
@@ -273,7 +297,7 @@ class UserSettingsStore:
         syncing: set[str],
         server_path: Callable[[], Path],
         user_path: Callable[[str], Path],
-        apply_settings: Callable[[dict[str, Any], set[str] | None], None],
+        apply_settings: Callable[[dict[str, Any], Container[str] | None], None],
         server_default_source: Callable[[], dict[str, Any] | None],
         server_keys: frozenset[str],
         fallback_keys: frozenset[str],
@@ -301,6 +325,12 @@ class UserSettingsStore:
         self._legacy_migrated: bool = False
         self._user_sync_locks: dict[str, threading.RLock] = {}
         self._user_sync_locks_guard = threading.Lock()
+        # Thread-scoped import context: the set of usernames *this* thread is
+        # currently importing for under a dirty-key-respecting pull.  The
+        # shared ``syncing`` set can't answer that - it is keyed by username
+        # only, so a genuine user write racing another thread's import would
+        # look like an import write.  See :meth:`_importing`.
+        self._import_ctx = threading.local()
 
     # -- introspection used by the settings module's read paths ----------
 
@@ -595,13 +625,65 @@ class UserSettingsStore:
             )
         return True
 
+    # -- import (sync-from-source) context --------------------------------
+
+    @contextlib.contextmanager
+    def _importing(self, username: str, *, honor_dirty: bool) -> Iterator[None]:
+        """Mark *username* as being imported for the duration of the block.
+
+        Maintains two markers:
+
+        * the shared ``syncing`` set (keyed by username), which suppresses the
+          re-entrant sync probe in :meth:`ensure_user_loaded` and the
+          source push in :meth:`mutate_user_locked`; and
+        * a **thread-scoped** marker recording that *this* thread's import
+          honors ``dirty_keys``.  :meth:`mutate_user_locked` consults it to
+          decide whether a write may overwrite a locally-edited key.  It has
+          to be thread-scoped: a concurrent genuine user write for the same
+          user is indistinguishable from an import write under the shared,
+          username-keyed set.
+        """
+        honoring: set[str] | None = None
+        if honor_dirty:
+            honoring = getattr(self._import_ctx, "honor_dirty", None)
+            if honoring is None:
+                honoring = set()
+                self._import_ctx.honor_dirty = honoring
+        nested = honoring is not None and username in honoring
+        if honoring is not None and not nested:
+            honoring.add(username)
+        with self._lock:
+            self._syncing.add(username)
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._syncing.discard(username)
+            if honoring is not None and not nested:
+                honoring.discard(username)
+
+    def _import_honors_dirty(self, username: str) -> bool:
+        """True when the calling thread is inside a dirty-respecting import."""
+        return username in getattr(self._import_ctx, "honor_dirty", ())
+
+    def is_user_key_dirty(self, username: str, key: object) -> bool:
+        """True when *key* is in *username*'s live ``dirty_keys`` set."""
+        with self._lock:
+            state = self._sync_state.get(username)
+            return state is not None and key in state.dirty_keys
+
     def _run_sync_from_source(self, username: str) -> None:
         """Pull settings from *username*'s configured source and apply them.
 
         Called with the per-user sync lock held.  Respects ``dirty_keys``:
         keys the user has set locally since the last successful
         ``_sync_to_source`` are skipped so a clicked-toggle isn't silently
-        overwritten by an upstream value.
+        overwritten by an upstream value.  The skip set is a **live view**
+        (:class:`_LiveDirtyKeys`), not a snapshot taken at entry: a user write
+        landing while the - potentially slow, network-bound - ``source.load()``
+        runs must still be honored.  :meth:`mutate_user_locked` re-checks it
+        under the file lock, which is what actually makes the decision
+        atomic with respect to the racing write.
 
         On success: stash the new ``peek_version`` token, mark the user as
         successfully synced, and refresh the freshness-check timestamp.
@@ -614,9 +696,6 @@ class UserSettingsStore:
         cache_cfg, _inherited = self.resolve_settings_source(username)
         if cache_cfg is None:
             return
-        with self._lock:
-            state = self._sync_state.setdefault(username, UserSyncState())
-            dirty_snapshot = set(state.dirty_keys)
 
         from vtsearch.settings_io.sources import get_settings_source
 
@@ -645,13 +724,8 @@ class UserSettingsStore:
             return
 
         if imported:
-            with self._lock:
-                self._syncing.add(username)
-            try:
-                self._apply_settings(imported, dirty_snapshot)
-            finally:
-                with self._lock:
-                    self._syncing.discard(username)
+            with self._importing(username, honor_dirty=True):
+                self._apply_settings(imported, _LiveDirtyKeys(self, username))
 
         with self._lock:
             state = self._sync_state.setdefault(username, UserSyncState())
@@ -767,14 +841,37 @@ class UserSettingsStore:
             with self._lock:
                 self._server_cache = fresh
 
-    def mutate_user_locked(self, username: str, mutator: Callable[[dict[str, Any]], None]) -> dict[str, Any] | None:
+    def mutate_user_locked(
+        self,
+        username: str,
+        mutator: Callable[[dict[str, Any]], None],
+        *,
+        keys: Iterable[str] | Callable[[dict[str, Any]], Iterable[str]] | None = None,
+    ) -> dict[str, Any] | None:
         """Apply *mutator* to a fresh-from-disk per-user cache, atomically.
 
         Returns a snapshot of the cache after the mutation, intended for
         ``sync_to_source`` which is invoked **outside** the file lock so a
         slow sync target (NFS, webhook) can't block other settings writes.
         Returns ``None`` if the cache should not be synced (i.e. we are
-        currently importing from the source).
+        currently importing from the source, or the write was skipped).
+
+        *keys* names the top-level keys this mutation touches - either the
+        literal names, or a callable resolving them from the post-mutation
+        dict (for mutators that change an arbitrary set of keys).  It drives
+        the ``dirty_keys`` bookkeeping, and both halves of that bookkeeping
+        happen **inside the cross-process file lock**, which is what makes
+        them atomic with respect to a concurrent sync-from-source:
+
+        * a user write registers *keys* as dirty before releasing the lock,
+          so a syncing thread can never observe "written but not yet dirty"
+          and clobber the value (the window this closes is issue #2955); and
+        * a dirty-respecting import write is skipped outright when every key
+          it touches is already dirty, so the check can't go stale between
+          ``_apply_settings``'s pre-filter and the write itself.  Import
+          writes come from single-key setters, so "every key" is exact; a
+          hypothetical multi-key import write still proceeds when only some
+          of its keys are dirty rather than silently dropping the rest.
 
         Like :meth:`mutate_server_locked`, file I/O runs under the
         cross-process file lock only; ``settings_lock`` is acquired briefly
@@ -782,23 +879,34 @@ class UserSettingsStore:
         flag.
         """
         path = self._user_path(username)
+        resolve_keys: Callable[[dict[str, Any]], Iterable[str]] | None = None
+        named: list[str] = []
+        if callable(keys):
+            resolve_keys = keys
+        elif keys is not None:
+            named = list(keys)
         with file_lock(path):
+            if (
+                named
+                and self._import_honors_dirty(username)
+                and all(self.is_user_key_dirty(username, k) for k in named)
+            ):
+                # Upstream value would overwrite a key the user just edited
+                # locally; the pending push wins.
+                return None
             fresh = _load_path(path)
             mutator(fresh)
             _atomic_write(path, fresh)
+            touched = list(resolve_keys(fresh)) if resolve_keys is not None else named
             with self._lock:
                 self._user_caches[username] = fresh
                 if username in self._syncing:
                     return None
+                exportable = [k for k in touched if k not in self._exclude_from_source_export]
+                if exportable:
+                    state = self._sync_state.setdefault(username, UserSyncState())
+                    state.dirty_keys.update(exportable)
                 return dict(fresh)
-
-    def mark_user_keys_dirty(self, username: str, keys) -> None:
-        """Add *keys* to the user's ``dirty_keys`` set."""
-        if not keys:
-            return
-        with self._lock:
-            state = self._sync_state.setdefault(username, UserSyncState())
-            state.dirty_keys.update(keys)
 
     # -- sync to source --------------------------------------------------
 
@@ -894,16 +1002,12 @@ class UserSettingsStore:
             return None
 
         # The setters invoked by ``_apply_settings`` acquire ``file_lock``
-        # and then ``settings_lock``. Holding ``settings_lock`` here would
-        # invert the canonical order - take the lock only to mutate
-        # ``syncing``, then drop it for the actual apply.
-        with self._lock:
-            self._syncing.add(username)
-        try:
+        # and then ``settings_lock``; ``_importing`` only ever holds
+        # ``settings_lock`` to flip the marker, so the canonical order holds.
+        # ``honor_dirty=False``: this is the explicit "Sync now" pull, so
+        # locally-edited keys are meant to be overwritten.
+        with self._importing(username, honor_dirty=False):
             self._apply_settings(imported, None)
-        finally:
-            with self._lock:
-                self._syncing.discard(username)
 
         with self._lock:
             self._sync_state[username] = UserSyncState(

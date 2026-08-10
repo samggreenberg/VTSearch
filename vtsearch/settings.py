@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from collections.abc import Iterable
+from collections.abc import Container, Iterable
 from typing import TYPE_CHECKING, Annotated, Any
 
 from pydantic import TypeAdapter, ValidationError
@@ -389,14 +389,20 @@ def _mutate_server_locked(mutator) -> None:
     _store.mutate_server_locked(mutator)
 
 
-def _mutate_user_locked(username: str, mutator) -> dict[str, Any] | None:
+def _mutate_user_locked(username: str, mutator, *, keys=None) -> dict[str, Any] | None:
     """Atomically read-modify-write *username*'s per-user settings file.
 
     Returns a post-mutation snapshot for ``_sync_to_source`` (invoked
     outside the file lock), or ``None`` when a sync-from-source import is
-    in progress for this user.
+    in progress for this user (or the write was skipped to preserve a
+    locally-edited key).
+
+    *keys* names the top-level keys the mutation touches (literally, or as
+    a callable resolving them from the post-mutation dict); the store marks
+    them dirty under the file lock so a concurrent auto re-sync can't
+    overwrite them in the gap between the write and the marking.
     """
-    return _store.mutate_user_locked(username, mutator)
+    return _store.mutate_user_locked(username, mutator, keys=keys)
 
 
 def mutate_user(mutator) -> None:
@@ -417,12 +423,12 @@ def mutate_user(mutator) -> None:
 
     username = get_current_user()
     _ensure_user_loaded(username)
-    sync_data = _mutate_user_locked(username, mutator)
+    # ``mutate_user`` can change arbitrary top-level keys, so the dirty set
+    # is resolved from the post-mutation dict: every exportable key is
+    # marked (under the file lock) so an auto re-sync between now and the
+    # ``_sync_to_source`` push doesn't clobber the mutation.
+    sync_data = _mutate_user_locked(username, mutator, keys=lambda cache: list(cache))
     if sync_data is not None:
-        # ``mutate_user`` can change arbitrary top-level keys; mark
-        # every exportable key dirty so an auto re-sync between now
-        # and the ``_sync_to_source`` push doesn't clobber the mutation.
-        _mark_user_keys_dirty(username, [k for k in sync_data if k not in _EXCLUDE_FROM_SOURCE_EXPORT])
         _sync_to_source(username, sync_data)
 
 
@@ -502,20 +508,15 @@ def _write_value(key: str, value: Any) -> None:
 
     username = get_current_user()
     _ensure_user_loaded(username)  # reconciles with source if due
-    sync_data = _mutate_user_locked(username, lambda c: c.__setitem__(key, value))
+    # ``keys=[key]`` makes the store mark this key dirty *under the file
+    # lock*, so an auto re-sync running between now and the
+    # ``_sync_to_source`` push leaves it alone - the push below clears the
+    # dirty flag again once it succeeds.  On the import path the same
+    # argument makes the store skip the write entirely when the key is
+    # already dirty.
+    sync_data = _mutate_user_locked(username, lambda c: c.__setitem__(key, value), keys=[key])
     if sync_data is not None:
-        # User-initiated write (not from an in-progress import).  Mark
-        # this key dirty so an auto re-sync running between now and the
-        # ``_sync_to_source`` push leaves it alone - the source push
-        # below clears the dirty flag again once it succeeds.
-        if key not in _EXCLUDE_FROM_SOURCE_EXPORT:
-            _mark_user_keys_dirty(username, [key])
         _sync_to_source(username, sync_data)
-
-
-def _mark_user_keys_dirty(username: str, keys) -> None:
-    """Add *keys* to the user's ``dirty_keys`` set."""
-    _store.mark_user_keys_dirty(username, keys)
 
 
 # ---------------------------------------------------------------------------
@@ -1622,7 +1623,7 @@ def _get_setter_map() -> dict:
     return _SETTER_MAP
 
 
-def _apply_settings(imported: dict, skip_keys: set[str] | None = None) -> None:
+def _apply_settings(imported: dict, skip_keys: Container[str] | None = None) -> None:
     """Apply a dict of settings via this module's ``set_*`` functions.
 
     Unknown keys or values that fail validation are silently skipped.
@@ -1630,9 +1631,13 @@ def _apply_settings(imported: dict, skip_keys: set[str] | None = None) -> None:
     path so an upstream value doesn't silently overwrite a key the
     user has just edited locally.  Used by :func:`sync_from_settings_source`
     and by the settings-import route in ``routes/settings/io.py``.
+
+    *skip_keys* is any container; the auto re-sync passes a **live** view of
+    the user's ``dirty_keys`` rather than a snapshot, so a key edited while
+    the source load was in flight is still honored.
     """
     setter_map = _get_setter_map()
-    skip = skip_keys or set()
+    skip: Container[str] = skip_keys if skip_keys is not None else frozenset()
     for key, value in imported.items():
         if key in skip:
             continue
