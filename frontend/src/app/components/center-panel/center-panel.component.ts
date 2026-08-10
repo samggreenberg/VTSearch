@@ -389,6 +389,11 @@ export class CenterPanelComponent implements OnDestroy {
     }
 
     const regionBox = vote === 'good' ? this.currentRegionBox : null;
+    // The vote belongs to the item that was selected when the key was pressed.
+    // Selection can move while the request is in flight (or during the 180ms
+    // swipe animation below), so pin the id here rather than re-reading the
+    // input later; otherwise the emit carries a new item's id with this vote.
+    const votedId = media.id;
     this.pendingBadConfirm.set(false);
     this.isVoting.set(true);
 
@@ -403,11 +408,11 @@ export class CenterPanelComponent implements OnDestroy {
             if (this.spinTimer) clearTimeout(this.spinTimer);
             this.spinTimer = setTimeout(() => this.spinningVote.set(null), 300);
             setTimeout(() => {
-              this.mediaVoted.emit({ id: this.media()!.id, vote });
+              this.mediaVoted.emit({ id: votedId, vote });
               this.isVoting.set(false);
             }, 180);
           } else {
-            this.mediaVoted.emit({ id: this.media()!.id, vote });
+            this.mediaVoted.emit({ id: votedId, vote });
             this.isVoting.set(false);
           }
         },
