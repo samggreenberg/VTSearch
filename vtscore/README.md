@@ -2,7 +2,7 @@
 
 The Flask-free, app-free core of [VTSearch](https://github.com/samggreenberg/vtsearch).
 A reusable Python library for trainable media search: dataset origins,
-MediaSources, clippers, embedders, MLP / detector training and scoring,
+MediaSources, clippers, embedders, detector training and scoring,
 and evaluation. The companion `vtsearch` Flask + Angular application wraps
 this library with the HTTP / SPA / settings layer; everything described
 here works without it.
@@ -13,7 +13,7 @@ Comprehensive developer documentation lives under [`docs/`](docs/):
 
 - **[Quickstart](docs/quickstart.md)** - load a folder, train a detector, score new media. Start here.
 - **[Architecture](docs/architecture.md)** - system overview, the seven seams between vtscore and vtsearch, the resolution chain for "active context".
-- **[Concepts](docs/concepts.md)** - `Media`, `Origin`, `LabelSet`, `Embedding`, `Context`, the MLP detector. The vocabulary every other doc assumes.
+- **[Concepts](docs/concepts.md)** - `Media`, `Origin`, `LabelSet`, `Embedding`, `Context`, the linear-head detector. The vocabulary every other doc assumes.
 - **[Package reference](docs/README.md#package-reference)** - one deep-dive guide per subpackage.
 - **[Extending vtscore](docs/extending/README.md)** - eleven plugin families with authoring guides for each.
 
@@ -80,7 +80,7 @@ The 17 subpackages and what they do:
 | `vtscore.media` | `MediaType` plugins (audio, image, text, video, document) + embedders + clippers |
 | `vtscore.embedding` | Embedder façade, torch runtime, cached `(N, D)` matrix |
 | `vtscore.datasets` | Origins, labelsets, loaders, importers, media sources |
-| `vtscore.training` | MLP / threshold / SVM / region-similarity primitives |
+| `vtscore.training` | Head (linear / MLP) / threshold / SVM / region-similarity primitives |
 | `vtscore.detectors` | Detector lifecycle: train, store, score, labelset sync |
 | `vtscore.eval` | Offline evaluation (text-sort, learned-sort, voting iterations) |
 | `vtscore.converters` | Cross-format converters (audio→spectrogram, ASR, OCR, …) |
@@ -111,9 +111,9 @@ See [docs/extending/](docs/extending/) for per-family authoring guides.
 
 ## Conventions
 
-- **No persisted vectors or MLP weights.** Embeddings and trained models
+- **No persisted vectors or model weights.** Embeddings and trained models
   live in-memory only. Origins are the canonical persisted form; the
-  library re-derives `origin → file → embedding → MLP` on demand. The
+  library re-derives `origin → file → embedding → head` on demand. The
   single exception is dataset pickle files, which are by design a
   snapshot of media + their embeddings.
 - **No hardcoded `data/` paths.** Every reference routes through
