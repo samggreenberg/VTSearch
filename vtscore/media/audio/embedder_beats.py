@@ -1,19 +1,20 @@
 """Audio embedder - BEATs (self-supervised audio-event encoder).
 
 BEATs ("Audio Pre-Training with Acoustic Tokenizers", Chen et al. 2022) is
-Microsoft's iterative self-supervised audio encoder and the long-standing
-state of the art on AudioSet tagging.  It is the strongest *audio-only*
-representation VTSearch ships: like :mod:`~vtscore.media.audio.embedder_ast`
-it has no paired text tower, so :attr:`supports_text` is ``False`` and the UI
-hides text-search affordances for datasets embedded with it - but where AST is
-a supervised AudioSet classifier whose features are shaped by its 527-label
-head, BEATs' features come from masked-prediction pre-training over acoustic
-tokens, which transfers noticeably better to categories the label set never
-covered.
+Microsoft's iterative self-supervised audio encoder, trained by masked
+prediction over learned acoustic tokens rather than by supervised tagging.
+Like :mod:`~vtscore.media.audio.embedder_ast` it has no paired text tower, so
+:attr:`supports_text` is ``False`` and the UI hides text-search affordances
+for datasets embedded with it; it is an option for collections searched by
+voted examples, not by a typed query.
 
-Reach for it over ``clap`` when the search is driven by voted examples rather
-than a text query, and over ``ast`` whenever quality matters more than the
-extra ~90M-parameter forward pass.
+It is not a drop-in upgrade over the default ``clap``.  On the ESC-50 arm of
+:mod:`vtscore.eval` its learned-sort scores land in the same band as the CLAP
+embedders rather than above them, and unlike them it cannot answer a text
+query at all.  Its appeal is the different inductive bias: AST's features are
+shaped by its 527-label AudioSet head and CLAP's by text alignment, while
+BEATs' are shaped by neither, so it is worth trying on collections whose
+categories sit outside both.
 
 There is no ``transformers`` implementation, so the architecture is vendored
 in :mod:`vtscore.media.audio._beats_model` and the released checkpoint is
