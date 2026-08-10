@@ -195,9 +195,12 @@ class TestCsvCellSanitization:
     def test_desanitize_leaves_unescaped_values_alone(self, value):
         assert desanitize_csv_cell(value) == value
 
-    def test_desanitize_strips_only_one_apostrophe(self):
-        # ``''-x`` is the sanitized form of ``'-x``, which is itself literal.
-        assert desanitize_csv_cell("''-x") == "'-x"
+    def test_literal_apostrophe_prefix_is_ambiguous(self):
+        # ``'-x`` is both the sanitized form of ``-x`` and a literal value
+        # the sanitizer would pass through untouched.  The reader resolves
+        # it as the escaped form; nothing in the CSV can tell them apart.
+        assert sanitize_csv_cell("'-x") == "'-x"
+        assert desanitize_csv_cell("'-x") == "-x"
 
     def test_sanitize_round_trips_the_desanitized_form(self):
         # Every value the reader produces re-encodes to what it was read from.

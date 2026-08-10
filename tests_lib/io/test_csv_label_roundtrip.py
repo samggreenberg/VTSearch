@@ -66,7 +66,8 @@ class TestCsvLabelRoundTrip:
         )
         with open(filepath, newline="", encoding="utf-8") as f:
             rows = list(csv.reader(f))
-        assert rows[1] == ["good", "abc123", "'-take2.wav"]
+        # ``origin`` is always appended as the last column (empty here).
+        assert rows[1] == ["good", "abc123", "'-take2.wav", ""]
 
     def test_ordinary_names_are_unchanged(self, tmp_path):
         labels = [{"label": "bad", "md5": "abc123", "origin_name": "clip.wav", "filename": "sub/clip.wav"}]
