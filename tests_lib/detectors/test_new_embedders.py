@@ -1112,8 +1112,8 @@ class TestAllEmbeddersRegistration:
         # plus single/patch variants for dinov2, dinov3, eupe) + 1 face embedder
         # + 1 structural image embedder (sift_vlad)
         # + 1 vision-only video embedder (videomae)
-        # + 4 audio embedders (ast, clap_general, whisper_encoder, paraspeechclap).
-        assert len(embedders) == 24
+        # + 5 audio embedders (ast, beats, clap_general, whisper_encoder, paraspeechclap).
+        assert len(embedders) == 25
 
     def test_all_embedders_dict_includes_supports_text(self):
         """The new ``supports_text`` flag must round-trip through ``to_dict``
@@ -1146,6 +1146,7 @@ class TestAllEmbeddersRegistration:
             "sift_vlad",
             "videomae",
             "ast",
+            "beats",
             "whisper_encoder",
         ):
             assert by_name[name]["supports_text"] is False, name
@@ -1159,6 +1160,7 @@ class TestAllEmbeddersRegistration:
             "clap_music",
             "clap_general",
             "ast",
+            "beats",
             "whisper_encoder",
             "paraspeechclap",
             "siglip",
@@ -1186,7 +1188,7 @@ class TestAllEmbeddersRegistration:
         from vtscore.media import embedders_for_type
 
         names = {e.name for e in embedders_for_type("audio")}
-        assert names == {"clap", "clap_music", "clap_general", "ast", "whisper_encoder", "paraspeechclap"}
+        assert names == {"clap", "clap_music", "clap_general", "ast", "beats", "whisper_encoder", "paraspeechclap"}
 
     def test_embedders_for_image(self):
         from vtscore.media import embedders_for_type
@@ -1244,8 +1246,8 @@ class TestAllEmbeddersRegistration:
         # plus single/patch variants for dinov2, dinov3, eupe) + 1 face embedder
         # + 1 structural image embedder (sift_vlad)
         # + 1 vision-only video embedder (videomae)
-        # + 4 audio embedders (ast, clap_general, whisper_encoder, paraspeechclap).
-        assert len(dicts) == 24
+        # + 5 audio embedders (ast, beats, clap_general, whisper_encoder, paraspeechclap).
+        assert len(dicts) == 25
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d
