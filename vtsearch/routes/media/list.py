@@ -932,7 +932,7 @@ def media_generic(query: dict, media_id: int):
     try:
         mt = media_get(c.get("media_type", ""))
     except KeyError:
-        abort(400, message=f"unsupported media type: {c.get('type')}")
+        abort(400, message=f"unsupported media type: {c.get('media_type')}")
 
     return _flask_response(mt.media_response(c))
 
