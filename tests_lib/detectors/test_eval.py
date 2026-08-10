@@ -345,7 +345,7 @@ class TestEvalTextSort:
         ]
 
         # Mock embed_text_query to return the cluster centre
-        def mock_embed(text, media_type, enrich=False):
+        def mock_embed(text, media_type, enrich=False, embedder_name=""):
             if "cat" in text:
                 return cat_dir.copy()
             return dog_dir.copy()
@@ -388,7 +388,7 @@ class TestEvalTextSort:
         medias, cat_dir, _ = self._make_synthetic_clips()
         queries = [EvalQuery("a cat", "cat"), EvalQuery("a dog", "dog")]
 
-        def mock_embed(text, media_type, enrich=False):
+        def mock_embed(text, media_type, enrich=False, embedder_name=""):
             return cat_dir.copy()
 
         start = time.monotonic()
@@ -398,6 +398,37 @@ class TestEvalTextSort:
             assert qm.elapsed_seconds >= 0.0
         # Second query should have equal or later timestamp
         assert results[1].elapsed_seconds >= results[0].elapsed_seconds
+
+    def test_query_is_embedded_with_the_datasets_embedder(self):
+        """The query must land in the *dataset's* space, not the default one.
+
+        Without this the harness embedded queries with the media type's
+        default embedder while the medias carried vectors from whatever
+        ``--embedder`` asked for. Cosine between two unrelated 512-d spaces
+        is noise, so every non-default arm silently reported near-chance mAP
+        while looking like a real measurement.
+        """
+        medias, cat_dir, _ = self._make_synthetic_clips()
+        queries = [EvalQuery("a cat", "cat")]
+        seen = []
+
+        def mock_embed(text, media_type, enrich=False, embedder_name=""):
+            seen.append(embedder_name)
+            return cat_dir.copy()
+
+        with patch("vtscore.embedding.helpers.embed_text_query", side_effect=mock_embed):
+            eval_text_sort(medias, queries, "image", k_values=[5], embedder_name="clap_general")
+        assert seen == ["clap_general"]
+
+    def test_loaded_embedder_name_is_read_off_the_medias(self):
+        """Resolved from the medias, not the flag, which is empty by default."""
+        from vtscore.eval.runner import _loaded_embedder_name
+
+        medias = {
+            1: {"embedder": "clap_general", "embeddings": {"clap_general": np.zeros(4, dtype=np.float32)}},
+        }
+        assert _loaded_embedder_name(medias) == "clap_general"
+        assert _loaded_embedder_name({}) == ""
 
 
 # =====================================================================

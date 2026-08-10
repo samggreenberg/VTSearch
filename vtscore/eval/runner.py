@@ -39,19 +39,42 @@ def _cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / norm)
 
 
+def _loaded_embedder_name(medias: dict[int, dict[str, Any]]) -> str:
+    """The embedder the loaded *medias* actually carry vectors for.
+
+    Read back off the medias rather than taken from the ``--embedder`` flag,
+    because the flag is empty for a default-embedder run while the medias
+    always name the concrete embedder that produced them.
+    """
+    from vtscore.embedding.media_vectors import media_embedder_names
+
+    first = next(iter(medias.values()), {})
+    names = media_embedder_names(first)
+    return names[0] if names else ""
+
+
 def _run_text_sort_query(
     query: EvalQuery,
     medias: dict[int, dict[str, Any]],
     media_type: str,
     enrich: bool = False,
+    embedder_name: str = "",
 ) -> list[dict[str, Any]]:
     """Embed the query text and rank medias by cosine similarity.
+
+    *embedder_name* must be the embedder the medias were embedded with: the
+    query has to land in the same vector space as the media vectors it is
+    compared against.  Omitting it falls back to the media type's *default*
+    embedder, which silently scores a non-default ``--embedder`` run across
+    two unrelated spaces and reports near-chance mAP.  The app threads the
+    dataset's bound embedder through the same argument
+    (``vtsearch/routes/sorting.py``).
 
     Returns a list of ``{"id": int, "similarity": float}`` sorted descending.
     """
     from vtscore.embedding.helpers import embed_text_query
 
-    text_vec = embed_text_query(query.text, media_type, enrich=enrich)
+    text_vec = embed_text_query(query.text, media_type, enrich=enrich, embedder_name=embedder_name)
     if text_vec is None:
         raise RuntimeError(f"Could not embed query {query.text!r} for media type {media_type}")
 
@@ -71,6 +94,7 @@ def eval_text_sort(
     k_values: list[int] | None = None,
     enrich: bool = False,
     start_time: float | None = None,
+    embedder_name: str = "",
 ) -> list:
     """Run text-sort evaluation for a list of queries.
 
@@ -85,6 +109,8 @@ def eval_text_sort(
         enrich: If ``True``, use enriched (wrapper-averaged) text embeddings.
         start_time: Monotonic timestamp from the start of the eval run.
             When provided, each result records ``elapsed_seconds``.
+        embedder_name: The embedder *medias* were embedded with, so the query
+            lands in the same space. Empty means the media type's default.
 
     Returns:
         List of :class:`~vtscore.eval.metrics.QueryMetrics`.
@@ -93,7 +119,7 @@ def eval_text_sort(
 
     results: list[QueryMetrics] = []
     for query in queries:
-        ranked = _run_text_sort_query(query, medias, media_type, enrich=enrich)
+        ranked = _run_text_sort_query(query, medias, media_type, enrich=enrich, embedder_name=embedder_name)
         ranked_ids = [r["id"] for r in ranked]
         relevant_ids = {cid for cid, c in medias.items() if media_is_positive(c, query.target_category)}
 
@@ -317,7 +343,17 @@ def run_eval(
         # --- Text sort ---
         if mode in ("text", "both"):
             print(f"\n--- Text Sort Evaluation ({len(queries)} queries) ---")
-            text_results = eval_text_sort(medias, queries, media_type, k_values, enrich=enrich, start_time=start_time)
+            # Score the query in the *dataset's* space, not the media type's
+            # default — see _run_text_sort_query.
+            text_results = eval_text_sort(
+                medias,
+                queries,
+                media_type,
+                k_values,
+                enrich=enrich,
+                start_time=start_time,
+                embedder_name=_loaded_embedder_name(medias),
+            )
             ds_result.text_sort = text_results
 
             for qm in text_results:
