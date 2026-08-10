@@ -9,7 +9,7 @@ one JSONL row per phase boundary to ``<path>`` (append mode), e.g.::
      "cold_download": true}
 
 This is the measurement instrument behind
-``docs/plans/progress-weight-calibration.md``: the rows are fit to an affine
+``scripts/profiling/README.md``: the rows are fit to an affine
 per-phase cost model ``T_phase ≈ a + b·n`` whose coefficients drive the
 ``n``-aware :func:`load_step_weights`. It is **off by default and has no
 behaviour effect when off** — the pipeline only pays a single ``os.environ``

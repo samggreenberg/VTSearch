@@ -30,8 +30,8 @@ deferred. Items are independently shippable.
 
 ## Suggested work order (open items, max-leverage first)
 
-4. **S3 + S17 + S19** (sparse sort results, lazy ordered items); must be done
-   together; unblocks 1 M+ in the frontend.
+4. **S3 + S17 + S19** (window the Find flow onto the already-built queue-ids /
+   boundary-next endpoints); must land atomically; unblocks 1 M+ in Find.
 5. **S12** (debounce the detector-JSON label-sync write); makes voting with large
    labelsets not stall the UI.
 6. **S11** (parallel label resolution); required for cross-dataset detectors with
@@ -58,158 +58,65 @@ deferred. Items are independently shippable.
 
 ## RAM
 
-### S3 / S17 / S19: sparse sort results — top-K API + lazy frontend
+### S3 / S17 / S19: sparse sort results — window the Find flow
 
-**Files:** `vtsearch/routes/sorting.py`, `vtscore/detectors/learned_sort.py`,
-`frontend/src/app/services/sort-state.service.ts`,
-`frontend/src/app/components/left-panel/media-list/media-list.component.ts`
+**Files:** `vtsearch/routes/find.py`, `frontend/src/app/components/find-view/find-view.component.ts`,
+`frontend/src/app/components/label-view/label-view.component.ts`
 
-The largest single change; needs coordinated backend + frontend work. These three
-items must land together (behind a flag or atomically).
+**Background.** Every sort API call used to return `results` for the entire
+dataset in one JSON response (~50 MB at 1 M items) and the frontend kept the full
+array, an O(N) JS loop that froze the tab. The **Train (label-view) flow is now
+windowed end to end**: the sort routes transmit a bounded window above
+`SORT_WINDOW_THRESHOLD`, `SortStateService` holds a windowed model,
+`media-list` pages via `GET /api/sort/page` (whose token doubles as the
+sort-generation guard), and `best_region` rides each windowed row. Two
+server-side Find endpoints are **built and tested but not yet consumed**:
 
-**Today:** every sort API call returns `results: [{id, score, bestRegion}, …]` for
-the entire dataset in one JSON response (`sorting.py` `_cosine_sort`,
-`learned_sort` both build the full `results` list). The frontend keeps the full
-array: `SortStateService._sortOrder` is a `signal<SortedItem[] | null>`, and
-`media-list.component.ts:rebuildOrderedItems` iterates the full `sortOrder` on
-every result to build `cachedOrderedItems` — an O(N) JS loop that freezes the tab
-at 1 M.
+- `GET /api/find/queue-ids?filter=unverified_good|good` — the full positive-set
+  ids in rank order, from frozen `find_scores` + cutoff + verified set.
+- `GET /api/find/boundary-next?side=above|below[&exclude=]` — the next unverified
+  item on the requested face of the cutoff.
 
-| N | JSON size (est.) |
-|---|-----------------|
-| 10 k | 0.5 MB |
-| 100 k | 5 MB |
-| 1 M | 50 MB |
-| 10 M | 500 MB |
-
-**Backend fix.** Change the response to a windowed shape:
-
-```json
-{
-  "total": 1000000,
-  "threshold": 0.72,
-  "above_threshold": 312,
-  "results": [{"id": 1, "score": 0.91}],
-  "has_more_below": true
-}
-```
-
-`results` carries only the top `K_ABOVE` items above threshold plus `K_BELOW`
-immediately below (e.g. 500 / 200). Clients fetch more via
-`GET /api/sort/page?offset=500&limit=200`. The full sorted order is computed as
-today but only a window is transmitted; the backend holds the full list in the
-existing `AsyncJob.result`.
-
-**Frontend fix.** Replace `SortStateService`'s array with a windowed model:
-
-```typescript
-interface SortWindow {
-  total: number;
-  threshold: number;
-  aboveThreshold: number;
-  items: SortedItem[];            // the loaded window
-  loadedRange: [number, number];  // [start, end] indices
-  hasMore: boolean;
-}
-```
-
-`rebuildOrderedItems` renders whatever is in `items` and shows a "Load more"
-trigger at the end; `cachedOrderedItems` stays bounded to the loaded window
-(≤700). Grid/list virtual scroll (shipped) already handles a fixed window; this
-caps the array size at the API level.
-
-**This is not a faithful "same UX, just windowed" swap.** A code trace (2026-07)
-found many Label/Find surfaces that assume the client holds the *entire* ranked
-order. Each needs an explicit decision or a server-assisted redesign — the three
-items alone don't cover them:
-
-- **Bulk actions ship the full id list to the backend.** In Find,
-  `unverifiedGoodIds()` / `goodIds()` derive the whole above-cutoff id set
-  *client-side* and hand it to **Browse**, **To Dataset (promote)**, and
-  **Export**. If `above_threshold` exceeds the window's `K_ABOVE`, these
-  silently truncate — a correctness bug, not a perf one. Fix: a server-side
-  "operate on all-above-threshold" path (the ids come from the backend's full
-  list, keyed by the sort-generation token below), not from the client window.
-- **Find boundary walk** (`advanceToBoundary`) scans the whole unverified order
-  for the nearest unverified item on each side of the cutoff; a window edge
-  makes it falsely report "All items reviewed." Needs a server endpoint that
-  returns the next unverified item above/below a cutoff, or a guarantee that the
-  window always straddles the boundary with slack.
-- **Diversity "New" select mode** (`fetchDiversityNext`) POSTs the entire
-  `{id: score}` map to `/api/coverage-atlas/next`; a partial window degrades the
-  direction signal. Send only the ids the server needs, or move the score lookup
-  server-side.
-- **`best_region` must stay in the window shape.** Region-aware datasets
-  (DINOv2/v3) read it from `sortOrder` for the center-panel overlay
-  (`center-panel.ts`); the example JSON above drops it. Keep `best_region` on
-  each windowed result. The overlay still can't paint for an item outside the
-  loaded window (e.g. after a stripe jump) — acceptable, but note it.
-- **Server-side list lifetime.** The sketch says "the backend holds the full
-  list in the existing `AsyncJob.result`," but only *learned-sort* is a job.
-  **Text-sort and example-sort are synchronous** (`sort_clips`, `example_sort`
-  return inline). Paging them means new per-session cached sorted lists with an
-  eviction policy, and the ~50 MB @1 M list now stays resident *server-side*
-  (× concurrent users) instead of being handed off and GC'd.
-- **`/api/sort/page` needs a sort-generation token.** A retrain / re-sort between
-  the initial response and a page fetch shifts offsets → duplicate/missing rows.
-  Return a generation id and require it on the page URL; a stale token 409s so
-  the client refetches from the top.
-- **Inclusion slider** currently just moves the line over frozen client-side
-  scores (`onInclusionChange`) and recomputes `above_threshold` locally. Under a
-  window, moving the cutoff changes which items are "above," so the slider must
-  refetch the window (scores stay frozen server-side, so no re-sort — just a new
-  slice + count).
-
-**Decisions (2026-07, from the S3/S17/S19 evaluation):**
-
-- **"Bottom" select mode is dropped.** The picker only ever offered Top / Hard /
-  New; `'bottom'` was a dead `SelectMode` variant + one branch in
-  `autoSelectNext`. Removed, so "walk from the end of the full order" is no
-  longer a constraint the window must satisfy. (Landed as the first slice.)
-- **The stripe minimap is gated above a large-sort size, not made windowed.**
-  The stripe is a full-order minimap by definition; it can't be honestly drawn
-  from a window. Above `STRIPE_MAX_ITEMS` it renders a disabled strip with a
-  clear tooltip ("Minimap unavailable for large sorts") instead of a wrong
-  picture. This also kills its O(N) dot-build loop at scale. (Landed as the
-  first slice; the threshold is the natural home for the future window's own
-  cutoff.)
-
-**The Train-side windowing has shipped end-to-end.** The sort routes
-(`/api/sort`, `/api/example-sort`, `/api/label-file-sort`, `/api/learned-sort`)
-window their transmitted `results` above `SORT_WINDOW_THRESHOLD` (aligned with
-`STRIPE_MAX_ITEMS`; below it the full ranking is sent unchanged), the frontend
-`SortStateService` holds a windowed model, and `media-list` renders the loaded
-window + a "Load more" trigger that pages via `GET /api/sort/page`. `best_region`
-rides each windowed row. The stripe was already size-gated (slice 1), so the
-Train (label-view) flow has no full-order client scan left.
-
-**Server-side Find contract (built, not yet consumed):**
-
-- **Find work-queue ids** — `GET /api/find/queue-ids?filter=unverified_good|good`
-  returns the full positive-set ids (rank order) for Browse / To Dataset /
-  Export, from frozen `find_scores` + cutoff + verified set.
-- **Find boundary walk** — `GET /api/find/boundary-next?side=above|below[&exclude=]`
-  returns the next unverified item on the requested face of the cutoff.
-
-**Remaining work — window the Find (find-view) flow:**
-
-`find-label` still returns the full `results` list, because Find's `find-view`
-derives its work queue, "just sit and vote" boundary walk, and Browse / To
-Dataset / Export id sets from the whole client-side ranking. To window it:
+**Remaining work — window the Find (find-view) flow.** `find-label` still returns
+the full `results` list, because `find-view` derives its work queue, "just sit and
+vote" boundary walk, and Browse / To Dataset / Export id sets from the whole
+client-side ranking.
 
 - Window `find-label`'s response (same `windowed_sort_response` helper) and have
   `find-view` install it via `setSortWindow` + wire the media-list "Load more"
   (paging the *unverified* ranking, filtering verified rows out of each page).
 - Switch the bulk actions (`unverifiedGoodIds` / `goodIds`) to
   `GET /api/find/queue-ids` and the boundary walk (`advanceToBoundary`) to
-  `GET /api/find/boundary-next` — both already built and tested. These are async
-  refactors of `find-view`'s currently-synchronous handlers, so land them with
-  the windowing atomically (a windowed `find-label` without them would truncate
-  Browse/Export and mis-terminate the boundary walk).
+  `GET /api/find/boundary-next`. These are async refactors of `find-view`'s
+  currently-synchronous handlers, so land them with the windowing **atomically** —
+  a windowed `find-label` without them would silently truncate Browse/Export
+  (a correctness bug, not a perf one) and mis-terminate the boundary walk with a
+  false "All items reviewed."
 - Feed the left-panel `unverifiedGoodCount` from the response's `above_threshold`
   (minus verified) rather than a full-order scan.
+- Under a window, moving the Inclusion cutoff changes which items are "above," so
+  `onInclusionChange` must refetch the window instead of recomputing
+  `above_threshold` over frozen client-side scores. Scores stay frozen
+  server-side, so this is a new slice + count, not a re-sort.
 
----
+**Still open on the Train side too:** the Diversity "New" select mode
+(`label-view`'s `fetchDiversityNext`) POSTs the entire `{id: score}` map to
+`/api/coverage-atlas/next`, so above `SORT_WINDOW_THRESHOLD` it now steers the
+atlas probe from the loaded window only. Send just the ids the server needs, or
+move the score lookup server-side.
+
+**Server-side list lifetime.** Only *learned-sort* is an `AsyncJob` whose result
+can hold the full order; text-sort and example-sort are synchronous. Paging them
+needs per-session cached sorted lists with an eviction policy, and the ~50 MB
+@1 M list then stays resident server-side (× concurrent users) instead of being
+handed off and GC'd.
+
+**Accepted limitation:** the matched-region overlay can't paint for an item
+outside the loaded window (e.g. after a stripe jump). The stripe minimap itself is
+a full-order picture by definition and is size-gated above `STRIPE_MAX_ITEMS`
+rather than windowed.
+
+<!-- item-sep -->
 
 ### S4: `medias` dict — one Python dict entry per item
 
@@ -251,7 +158,7 @@ arrays or a Polars frame) is deferred: it touches every media-reading call site.
 > interactive datasets approach 1 M. Land the "rebuilds exactly when medias
 > change; reused when they don't; O(1) on hit" test with the change.
 
----
+<!-- item-sep -->
 
 ### S7: epoch-based learned-sort signature — ⏸ GATED (with S6)
 
@@ -268,7 +175,7 @@ and the region-box sort with `frozenset(region_boxes_snapshot.keys())`. **Risk:*
 low — the signature is only a cache key; a false miss wastes one retrain, and a
 false hit can't happen because `media_revision` bumps on every structural change.
 
----
+<!-- item-sep -->
 
 ### S10: MLP forward pass — O(N) inference on every retrain
 
@@ -282,7 +189,7 @@ Even a tiny MLP at N=1 M takes several hundred ms; at N=10 M, ~1 s per retrain.
 **debounce** retraining so it doesn't fire on every single vote — accumulate a few
 votes and retrain once.
 
----
+<!-- item-sep -->
 
 ### S11: cross-dataset label population — serial I/O, O(N_labels)
 
@@ -303,7 +210,7 @@ bounded by the same `_embed_gate` that governs dataset embedding concurrency.
 Dedupe file resolves across elements with the same origin before dispatching. Also
 merge the double-walk (populate then build_xy) into a single pass.
 
----
+<!-- item-sep -->
 
 ### S12: label sync — full detector-JSON rewrite on every vote
 
@@ -323,7 +230,7 @@ journal** (one `{id, label}` line per vote) makes the per-vote write O(1)
 regardless of labelset size; a compaction step on load reconstructs the full
 labelset. (Journal deferred until compaction semantics are defined.)
 
----
+<!-- item-sep -->
 
 ### S15: dataset pickle loading — everything into RAM at once
 
@@ -387,17 +294,25 @@ before any inference.
 file resolves across detectors. Use batch embedding for labels from the same
 embedder. Shares the S11 approach.
 
----
+<!-- item-sep -->
 
 ## Open follow-ups (not yet scoped for implementation)
+
+<!-- item-sep -->
 
 - **FAISS / HNSW replacement for the coverage atlas** (long-term S2 fix): an
   approximate-nearest-neighbour structure supporting the same "next unseen
   cluster" query but storable mmap'd.
+
+<!-- item-sep -->
+
 - **Frontend "Build coverage atlas" button:** surface a trigger for
   `POST /api/datasets/registry/<id>/coverage-atlas` when a loaded dataset has no
   tree (auto-build is skipped above 50 k). No dataset/tree-status panel hosts it
   today, so it needs a UI home; the endpoint is meanwhile reachable via API/CLI.
+
+<!-- item-sep -->
+
 - **Share the coverage atlas with the progress cache instead of rebuilding it:**
   `labeling_progress._build_coverage_atlas` clones the dataset context's atlas
   only when the id sets match exactly; otherwise it fits a throwaway private one
@@ -409,8 +324,14 @@ embedder. Shares the S11 approach.
   before acquiring `_progress_lock` and publish it to the context so both paths
   share one structure. Now off the request thread (the plot modal runs it as a
   background job), so this is a cost problem, not a latency-hang.
+
+<!-- item-sep -->
+
 - **Columnar `medias` storage** (S4 full rewrite): deferred; requires redesign of
   every media-reading call site.
+
+<!-- item-sep -->
+
 - **Append-only vote journal** for labelset sources (S12 long-term): deferred
   until compaction semantics are defined.
 
@@ -430,8 +351,10 @@ embedder. Shares the S11 approach.
 
 ## Test coverage checklist (open items)
 
-- **S3/S17/S19:** sort response with 200 k items contains ≤700 results;
-  `/api/sort/page?offset=700&limit=200` returns the next window.
+- **S3/S17/S19:** `find-label` on 200 k items returns a bounded window; Browse /
+  To Dataset / Export operate on the full above-cutoff set (not the window); the
+  boundary walk reports "All items reviewed" only when the *server* says the face
+  is empty.
 - **S6:** matrix rebuilt exactly when medias change, reused when they don't; O(1)
   on cache hit (no per-call `sorted()`).
 - **S7:** learned-sort job not re-fired when called twice with the same votes on

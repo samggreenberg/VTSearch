@@ -18,7 +18,7 @@ sub-slot **shares** — the measured counterpart to the static
 table body for ``_load_cost_model.py``.
 
 and prints (a) a checked-in ``_load_cost_model.py`` body and (b) a human-readable
-summary table for docs/plans/progress-weight-calibration.md. See that plan.
+summary table for review. See ``scripts/profiling/README.md``.
 
 Usage:
     python scripts/profiling/fit_load_weights.py calib.gpu.jsonl calib.cpu.jsonl

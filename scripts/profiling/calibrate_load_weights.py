@@ -2,7 +2,7 @@
 """Calibration driver for the dataset-load progress weights.
 
 Iterates the ``device × media_type × embedder × size`` matrix from
-``docs/plans/progress-weight-calibration.md``, invoking the real demo-load path
+``scripts/profiling/README.md``, invoking the real demo-load path
 per cell with the env-gated per-phase recorder armed
 (``vtscore.datasets.stages._load_profiler``, ``VTSEARCH_PROFILE_LOAD``). Each run
 appends per-phase JSONL rows to ``--out`` (including one ``finalize:<slot>`` row

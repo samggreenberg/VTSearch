@@ -90,4 +90,3 @@ pretending its raw bytes are an image — render it *as a document*.
   takes a `page_index`; the route/frontend would need a `?page=` parameter.
 
 <!-- item-sep -->
-

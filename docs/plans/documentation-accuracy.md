@@ -248,12 +248,6 @@ separately.
 
 <!-- item-sep -->
 
-- **docs/reports/ and docs/experiments/ have no index, and half the report archive is
-  unreachable.** `docs/experiments/` is a healthy, properly-separate archive and should stay one.
-  But no doc links into much of `docs/reports/`, including a large OpenLogo structural-search study
-  whose verdict contradicts an open plan item. Add an index to each archive; resolve the
-  contradiction explicitly rather than leaving both documents standing.
-
 <!-- item-sep -->
 
 - **Screenshot staleness is unverifiable.** `scripts/screenshots/wiring-check.py` validates id and

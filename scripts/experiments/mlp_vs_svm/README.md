@@ -1,7 +1,8 @@
 # MLP vs SVM — the definitive experiment (runner)
 
-Code that runs the study designed in [`docs/plans/mlp-vs-svm-experiment.md`](../../../docs/plans/mlp-vs-svm-experiment.md)
-on the HLTCOE Grid and generates the report. Everything is image + SigLIP only.
+Code that runs the MLP-vs-SVM ranker study on the HLTCOE Grid and generates the
+report. The design, the pre-registered decision rule and the verdict are in
+[`docs/experiments/mlp-vs-svm/REPORT.md`](../../../docs/experiments/mlp-vs-svm/REPORT.md). Everything is image + SigLIP only.
 
 ## What each stage does
 

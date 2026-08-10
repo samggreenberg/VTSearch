@@ -23,18 +23,26 @@ must be half-migrated.
 
 ## Open follow-ups
 
+<!-- item-sep -->
+
 - **Expand to more read services** (the standing next step). Already done for
   `SettingsStateService`, `MediaStateService`, the left-panel media-type/embedder
   reads, and the importer/exporter picker modals. A still-open refinement: if media-types /
   embedders ever need to **re-fetch on dataset switch**, give the resource a
   `toSignal(activeContext.datasetId$)` request key instead of the eager load —
   today the component is recreated on switch, so eager-once suffices.
+
+<!-- item-sep -->
+
 - **Remaining component-local read subscribes** (not yet converted). The next
   candidates after the picker modals are heavier: `dataset-importer-modal`
   (interdependent clipper/embedder/demo loads + dynamic field-option fetches)
   and `label-importer-modal` (importer list is a clean read, but field-options
   and imports are mutations). Convert the clean list reads when those modals are
   next touched; leave the dynamic field-option fetches imperative.
+
+<!-- item-sep -->
+
 - **Pollers and `forkJoin` aggregates** (`VoteStateService`, labeling status,
   `DatasetStateService.refresh()`) are still imperative by design. Resources
   fetch-on-request-change, not on an interval, and don't map cleanly onto
@@ -43,21 +51,23 @@ must be half-migrated.
   (aggregates). Revisit only if a resource clearly wins — decide per call site;
   don't force it.
 
+<!-- item-sep -->
+
 ### Decision points still open
 
 - **Depth of signal adoption**: thin `toSignal` bridges (minimal, keep
   `BehaviorSubject` services) vs converting hot state services to signal-backed
   (bigger, cleaner). Started thin (recommended); convert services
-  opportunistically.
-- **Relationship to zoneless.** Going zoneless (the other deferred carrot from
-  `angular-21-upgrade.md`) wants broad signal adoption too; this migration is a
-  natural on-ramp. Decide whether to treat them as one track or keep separate.
+  opportunistically. The app is already zoneless
+  (`provideZonelessChangeDetection()`, `zone.js` dropped end to end), so every
+  remaining `BehaviorSubject` read path is change-detected via its `toSignal`
+  bridge rather than by a zone tick — which raises the value of converting the
+  hot ones, and makes a missed bridge a stale-view bug rather than a slow one.
 
 ### Out of scope (record only)
 
 - Mutations, SSE, polling intervals (above).
 - Replacing `ng-openapi-gen` — the generated client stays; `rxResource` wraps it.
-- Going zoneless — its own effort (`angular-21-upgrade.md` → Deferred).
 
 ## Conversion pattern (reference for the remaining reads)
 
@@ -116,12 +126,12 @@ The loader is **effect-scheduled and promise-based**, which changes Vitest +
   synchronously after `flush()` misses it. Drain with the shared
   `settleResource()` helper (`frontend/src/app/testing/settle-resource.ts`:
   `await macrotask` + `TestBed.tick()`).
-- **Values do not commit under `fakeAsync` at all** — the virtual clock doesn't
-  drive resolution. A fakeAsync spec can still *flush* the request to satisfy
-  `verify()`, but any spec asserting a resource-derived value must be a
-  real-async (`async`/`await`) test.
+- **A virtual clock does not commit values.** Advancing Vitest fake timers
+  flushes the *request* but not the resource's promise resolution, so any spec
+  asserting a resource-derived value must `await` a real macrotask (that is what
+  `settleResource()` does) rather than relying on timer advancement alone.
 - Match trigger-gated / query-string reads by an `r.url` predicate, not a plain
   `expectOne(string)` (e.g. export-modal's labels GET carries `?enrich=true`).
-- At **runtime** none of this matters: zone change detection flushes the loader
-  effect immediately after the load, so the GET fires as before. Timing change
-  is test-only.
+- At **runtime** none of this matters: the zoneless scheduler flushes the loader
+  effect as part of the change-detection pass that follows the load, so the GET
+  fires as before. The timing change is test-only.

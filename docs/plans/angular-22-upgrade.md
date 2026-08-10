@@ -3,8 +3,9 @@
 **Status:** Researched, not started. This doc captures the v22-specific
 findings and the scoped-work options; the reusable step-by-step upgrade
 mechanics (staged `ng update`, Vitest wiring gotchas, `overrides` drift,
-budget rules) live in [`angular-21-upgrade.md`](angular-21-upgrade.md) and are
-not duplicated here.
+budget rules) live in [`frontend/README.md` § *Upgrading
+Angular*](../../frontend/README.md#upgrading-angular) and are not duplicated
+here.
 
 ## Background
 

@@ -279,7 +279,7 @@ class FinalizeProgress:
         """Activate *slot*; subsequent :meth:`update` calls map into its range."""
         self._base, self._span = self._ranges[slot]
         # Stamp the sub-slot boundary for the env-gated load profiler (no-op when
-        # profiling is off). See docs/plans/progress-weight-calibration.md.
+        # profiling is off). See scripts/profiling/README.md.
         from vtscore.datasets.stages._load_profiler import note_finalize_slot  # noqa: PLC0415
 
         note_finalize_slot(slot)
