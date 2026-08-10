@@ -1,10 +1,11 @@
 # Structural Embedders — Design
 
 **Status:** v1 (SIFT + VLAD + RANSAC two-stage retrieve-then-verify, across all
-scoring paths) has shipped; the main next step is growing the VLAD codebook
-(256–1024 centroids on a building/scene corpus), since the spike identified
-Stage-1 VLAD recall as the end-to-end quality ceiling. Open follow-ups below; the
-living design spec is further down.
+scoring paths) has shipped. **Stage-1 recall is the end-to-end quality ceiling**,
+confirmed twice — a ROxford spike and then a 27k-image OpenLogo study on real
+in-the-wild photos ([report](../reports/2026-07-11-structural-search-openlogo.html)).
+The open follow-ups below are ordered by that study's leverage ranking. The living
+design spec is further down.
 
 Structural embedders are a third embedder *type* (alongside single-vector and
 patch) that searches for **specific instances** ("the Coca-Cola logo") rather
@@ -13,26 +14,87 @@ retrieve-then-geometrically-verify pipeline.
 
 ## Open follow-ups
 
-**Active / next:**
+**Active / next.** The OpenLogo study (2026-07-11: one cropped real-world logo
+seeded against 27,083 unstaged photos, 175 queries over 60 brands) measured the
+whole pipeline end to end and ranked the moves. Its headline: Stage-1 VLAD
+retrieval surfaces only **2.5% of a brand's true instances into the top-50
+shortlist**, so no amount of Stage-2 geometry or voting can recover them — median
+AP 0.006, against SigLIP cosine on the identical crops at mean AP 0.31. That
+reorders what was previously planned here.
 
-- **VLAD codebook — real fit shipped; grow it next (the headline item).** The
-  shipped `vlad_codebook_v1.npy` is a genuine k-means vocabulary fit on 1M
-  Caltech-101 rootSIFT descriptors (64 centroids), built with
+<!-- item-sep -->
+
+- **Hybrid retrieval — deep embedder for Stage 1, structural as the re-rank /
+  explanation layer (the headline item).** The highest-leverage move the OpenLogo
+  study found, and the plumbing already exists (multi-embedder medias, V3's
+  text/patch/structural trio). At cold start the hybrid already *matches* SigLIP's
+  AP while attaching an inlier-box "found it here" overlay to ~1.1 true matches per
+  query at an 80% true-match rate — i.e. it keeps structural search's unique
+  evidence without paying its recall ceiling. Open design question: how the score
+  embedder and the verification stage compose when they are different embedders
+  (today V3 resolves one score embedder by precedence `structural ▸ patch ▸ text`).
+  A hybrid with votes was never measured; that is the first thing to run.
+
+<!-- item-sep -->
+
+- **Ship the SuperPoint + LightGlue backend (the module exists; nothing consumes
+  it).** OpenLogo found **65% of true pairs die at the descriptor-matching step,
+  before RANSAC ever runs**, and the follow-up screenshot/scanned-document study
+  ([report](../reports/2026-07-13-screenshot-iconography.html)) confirmed SIFT
+  itself is the bottleneck on line art: it verifies **5.1%** of true scanned-doc
+  pairs against SP+LG's **41%**, and as a ranker SP+LG reaches AP 0.395 / 0.481 on
+  the two document corpora against SigLIP's 0.204 / 0.235 — **the first
+  configuration in either study where structural search beats the deep embedder on
+  a real corpus.** `vtscore/media/structural_splg.py` is a
+  `StructuralMatcher`-conformant implementation already in the tree; what is owed
+  is wiring it to an embedder (`embedder_superpoint_lightglue`, reusing
+  `_structural_shared.py` verbatim) and the three integration items its module
+  docstring names:
+  - **fp16 descriptor persistence.** `StructuralFeatures.compact` casts to uint8,
+    which is near-lossless for integer-valued SIFT and destroys unit-scale float
+    SuperPoint descriptors. Needs a `compact_fp16()` variant or a dtype flag
+    *before* the backend touches the ingest path.
+  - **Its own inlier floor.** The production floor of 8 was calibrated on SIFT's
+    sparse matches; LightGlue routinely finds 8+ geometrically consistent
+    correspondences between unrelated document pages (shared fonts, ruled lines,
+    layout). The sweep puts the working point near **24**.
+  - **Extra deps + GPU gating.** `cvg/LightGlue` + `kornia`, not in the default
+    install; weights download on first use. GPU strongly recommended for bulk
+    matching.
+
+<!-- item-sep -->
+
+- **3-DoF geometry as a per-media-profile default.** `scale_translation`
+  (isotropic scale + translation, no rotation) is implemented in
+  `vtscore/media/structural_geometry.py` and is a **free precision win** on flat
+  rasters: identical AP to the production 4-DoF fit, with false verifications
+  dropping sharply (synthetic SIFT verified-precision 0.77 → 0.98). A digitally
+  overlaid mark on a screenshot or a scanned page never rotates. Owed: pick the
+  model per media profile rather than globally, and decide where that profile
+  lives.
+
+<!-- item-sep -->
+
+- **Tile the candidate image before matching (small-target rescue).** Most of the
+  small-icon failure turned out to be **the big canvas, not the small target**:
+  matching against 224 px sliding-window tiles instead of whole screenshots lifts
+  SIFT's true-pair verify rate from 0.2% → 14% (32–64 px targets) and 3.8% → 20%
+  (64–128 px) at *unchanged* false-positive rate, and max-over-tiles VLAD
+  multiplies Stage-1 AP by 5.4×. Below ~32 px nothing helps — that floor is real.
+  This is a Stage-1 *and* Stage-2 change (tile the corpus at ingest, max-pool over
+  tiles), so it wants its own scoping pass; it is the cheapest known lever for the
+  screenshot/iconography regime.
+
+<!-- item-sep -->
+
+- **VLAD codebook growth — demoted, not dismissed.** The shipped
+  `vlad_codebook_v1.npy` is a real k-means vocabulary (64 centroids) fit on 1M
+  Caltech-101 rootSIFT descriptors via
   `scripts/build_vlad_codebook.py --images data/caltech-101/101_ObjectCategories`.
-  The ROxford spike shows **64 centroids is the recall bottleneck**: absolute mAP
-  is low (0.09–0.15) because weak VLAD retrieval means true matches the coarse
-  vocabulary under-ranks never enter the top-K, so Stage-2 cannot recover them.
-  The clear follow-up is a **larger vocabulary (256–1024 centroids) fit on a
-  building/scene corpus** (e.g. Paris6k or a Places365 slice — kept disjoint from
-  any eval set) to raise Stage-1 recall, which is what caps end-to-end mAP.
-  Bigger K also grows the VLAD vector (`K × 128`); confirm the coverage-atlas /
-  sort costs stay acceptable when bumping it. **Re-measure on OpenLogo**
-  (below) — does a 256–1024-word vocabulary lift Stage-1 recall on logos as the
-  ROxford spike predicts?
-
-  Spike evidence (ROxford5k: 4993 db + 70 queries, `max_features=1024`, the
-  shipped 64-centroid codebook, via `scripts/spike_structural_roxford.py`;
-  revisitop protocol):
+  The ROxford spike (4993 db + 70 queries, `max_features=1024`,
+  `scripts/spike_structural_roxford.py`, revisitop protocol) suggested a larger
+  vocabulary (256–1024 centroids on a building/scene corpus such as Paris6k or a
+  Places365 slice, kept disjoint from any eval set) as the fix for Stage-1 recall:
 
   | Stage | mAP-medium | mAP-hard | re-rank ms/query |
   |-------|-----------:|---------:|-----------------:|
@@ -42,51 +104,84 @@ retrieve-then-geometrically-verify pipeline.
   | + Stage-2 K=100 | 0.133 | 0.059 | 477 |
   | + Stage-2 K=200 | 0.148 | 0.057 | 936 |
 
-  Hard mAP peaks at K=100 and regresses by K=200; `K=50` is the shipped default
-  (good lift at ~250 ms/query), K=100 the quality-sensitive ceiling. The
-  geometric re-rank lifts mAP at every K, but Stage-1 is the floor it cannot
-  beat — hence growing the codebook.
-- **Double SIFT detection.** The embed pass (VLAD) and the local-features pass
-  each run SIFT once per image. Acceptable for v1; a combined single-detect pass
-  is a cheap later optimisation.
-- **Frontend debug view (deferred).** The matched-region overlay is reachable
-  (see *What shipped*); still optional is a debug view drawing the inlier
-  *correspondences* (matched keypoint lines), which would need the backend to
-  emit per-match point pairs.
+  (Hard mAP peaks at K=100 and regresses by K=200; `K=50` is the shipped default,
+  K=100 the quality-sensitive ceiling.) **OpenLogo then measured the same ceiling
+  on real imagery and located the loss further down the pipeline** — at descriptor
+  matching, not vocabulary coarseness — and found a cheaper route around it
+  (hybrid retrieval). So a bigger codebook is now a *cheap experiment to price*,
+  not the planned next step: it costs an ingest-side re-fit and grows the VLAD
+  vector (`K × 128`, with coverage-atlas / sort costs to re-check), and it should
+  be measured on OpenLogo with the existing harness before any of it is built.
 
-**v2 (next media/feature targets):**
+<!-- item-sep -->
 
-- **Learned-local-feature backend** (SuperPoint + LightGlue or similar) as a
-  drop-in `StructuralMatcher`, GPU-gated; no Stage-1/classifier/UI changes.
-- **Audio backend** (constellation fingerprinting) under the same
-  media-agnostic `StructuralMatcher` protocol + `supports_geometric_verification`
-  flag — the next media target. The protocol is kept media-agnostic from day one
-  precisely so this lands without an interface rewrite (local features →
-  spectrogram landmarks, geometric model → time-frequency offset histogram).
+- **The 30th-vote transient (a live bug the study caught).** Production auto-sizes
+  the detector MLP's hidden layer as `max(8, n_labels // 3)`
+  (`vtscore/training/mlp.py`) and `train_model` always initialises from `seed=42`,
+  so the architecture steps 9→10 neurons at exactly 30 labels and every dataset
+  draws the same unlucky width-10 init until the width steps again at 33. The study
+  saw a sharp, synchronized quality dip at exactly t=30 (25 of 175 queries lose
+  >0.3 P@10 at t=30, none at t=28 or 29; recovery by t=33). It is deterministic and
+  user-visible: a user's 30th–32nd vote can transiently make results worse. Cheap
+  fixes: average 2–3 seeds at width-change boundaries, derive the init seed from
+  the vote set, or add hysteresis to the width step. Not structural-specific — it
+  is worst on the 8,192-d VLAD inputs but the mechanism is in the shared trainer.
 
-**Multi-embedder coexistence (v3 trio):** structural as the **third role** in the
-v3 **text / patch / structural** trio (one embedder per role on a single
-dataset), so a dataset can offer text-seeded discovery *and* region voting *and*
-instance-matching simultaneously. The v3 substrate has shipped (patch-embedder.md
-Phases 2a–2b.5: `media["embeddings"]` dict + score-embedder-keyed MLPs); what
-remains is the `structural_embedder` binding slot, a `structural` routing role
-(precedence structural ▸ patch ▸ text), and the create-time picker. Tracked in
-patch-embedder.md ("V3 - design" / "Open follow-ups (from 2b.3)"), not here.
+<!-- item-sep -->
+
+- **Double SIFT detection.** The embed pass (VLAD) and the local-features pass each
+  run SIFT once per image. Acceptable for v1; a combined single-detect pass is a
+  cheap later optimisation.
+
+<!-- item-sep -->
+
+- **Frontend debug view (deferred).** The matched-region overlay ships; still
+  optional is a debug view drawing the inlier *correspondences* (matched keypoint
+  lines), which would need the backend to emit per-match point pairs.
+
+<!-- item-sep -->
+
+- **Audio backend (the next media target).** Constellation fingerprinting under the
+  same media-agnostic `StructuralMatcher` protocol + `supports_geometric_verification`
+  flag. The protocol is kept media-agnostic from day one precisely so this lands
+  without an interface rewrite (local features → spectrogram landmarks, geometric
+  model → time-frequency offset histogram). Note the study's caveat: it measured one
+  corpus and one media type, and audio's Stage-1/Stage-2 economics will differ.
+
+<!-- item-sep -->
 
 **Open design questions still live:**
 
-- **Cold-start with <3 votes.** The verification classifier has nothing to train
-  on until there are both yes and no votes; the shipped fallback is a default
-  inlier-count gate (`DEFAULT_MIN_INLIERS`, crossing 0.5 at
-  `MIN_VERIFICATION_VOTES = 3`), mirroring the safe-threshold GMM blend below 6
-  labels. Revisit if it proves too coarse.
-- **VLAD vs alternatives for Stage 1.** A learned global descriptor (e.g. a
-  DINOv2 CLS vector purely for the coarse shortlist) could outperform VLAD while
-  the local features do the verification. Worth a spike comparison — and relevant
-  to the codebook-growth work above.
+<!-- item-sep -->
+
+- **Cold-start with <3 votes — measured, and it holds.** The verification
+  classifier has nothing to train on until there are both yes and no votes; the
+  shipped fallback is a default inlier-count gate (`DEFAULT_MIN_INLIERS`, crossing
+  0.5 at `MIN_VERIFICATION_VOTES = 3`). OpenLogo found the *trained* classifier
+  statistically indistinguishable from that cold gate (0.090 vs 0.071 AP at t=40),
+  so for structural detectors labels are calibration rather than learning — ~3–5
+  votes capture essentially all the benefit, and structural search stays honest
+  with zero votes. Revisit only if a better Stage 1 changes the economics. Worth
+  surfacing as user guidance: on `sift_vlad` datasets, vote a handful of times to
+  calibrate and then stop; put sustained labeling effort into deep-embedder
+  detectors (the SigLIP MLP converts 40 votes into AP 0.39 → 0.67 and shows no
+  saturation).
+
+<!-- item-sep -->
+
+- **VLAD vs alternatives for Stage 1.** Superseded in practice by the hybrid item
+  above — a learned global descriptor *is* the alternative, and OpenLogo priced it.
+  Kept as the open sub-question of whether a cheaper CLS-only shortlist (DINOv2)
+  beats the full deep-embedder path when the dataset has no deep embedder bound.
+
+<!-- item-sep -->
+
 - **Per-dataset codebook (v2 option).** A data-tuned per-dataset codebook gives
   better instance recall on a narrow domain, at the cost of an ingest fit pass and
-  a per-dataset artifact. A possible v2 optimisation, not v1.
+  a per-dataset artifact. Subject to the same demotion as codebook growth: price it
+  against hybrid retrieval before building it.
+
+<!-- item-sep -->
 
 ## Design spec (living architecture)
 
@@ -189,9 +284,19 @@ per-dataset artifact — so no new persisted state and no per-dataset fit pass.
 ### Non-goals
 
 - No new media type (structural images are still `image`).
-- **Similarity transform only** — no affine shear, no perspective homography.
-  (If oblique real-world viewing is ever needed, jump straight to homography, not
-  affine's middle ground.)
+- **No affine shear, no perspective homography.** The 4-DoF similarity fit is the
+  general default, with a 3-DoF `scale_translation` reduction available for flat
+  rasters (`structural_geometry.py`) — the movement is *down* the DoF ladder, not
+  up. **Measured and confirmed, and the original reasoning here was wrong.** The
+  design used to say "if oblique real-world viewing is ever needed, jump straight
+  to homography, not affine's middle ground"; the OpenLogo study fitted all three
+  on 8,768 shared correspondence sets and found 6-DoF affine verifies 2.3 pt more
+  true pairs but **5.6× more false** ones at identical AUC and flat end-to-end AP,
+  while 8-DoF homography is strictly worse on every aggregate — with 4-point
+  minimal samples RANSAC overfits random correspondence sets. 4-DoF is the right
+  choice at today's feature quality. Revisit only after the feature backend
+  improves (denser correspondences change the RANSAC economics), and then prefer
+  an inlier floor scaled to model DoF over a blanket switch.
 - No persisted vectors outside the dataset pickle.
 - Image-only in v1; **audio is the next media target** (constellation
   fingerprinting), which is why the matcher/flag are media-agnostic. Text/document
@@ -207,9 +312,12 @@ per-dataset artifact — so no new persisted state and no per-dataset fit pass.
   classifier; RegionYes-as-template; matched-region overlay. Text sort greyed.
 - **v2:** learned-local-feature backend (GPU-gated) **plus** the audio backend,
   both under the media-agnostic `StructuralMatcher` protocol.
-- **Patch v3 (active):** structural as the third role in the text/patch/structural
-  trio — substrate shipped, binding slot + routing role + picker remain. Tracked
-  in patch-embedder.md.
+- **Patch v3 (shipped):** structural is the third role in the text/patch/structural
+  trio — `DatasetContext.structural_embedder` binds it, score routing resolves
+  `structural ▸ patch ▸ text` (`vtscore/embedding/binding.py`), and the
+  dataset-create flow offers the Instance-embedder picker. The living spec for the
+  trio, and its remaining open questions, are in
+  [`patch-embedder.md`](patch-embedder.md).
 
 ### Tests
 

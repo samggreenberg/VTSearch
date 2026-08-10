@@ -7,30 +7,52 @@ pixel-diff tolerance) are the remaining work.
 
 ## Open follow-ups
 
+<!-- item-sep -->
+
 - **Self-booting / temp-data-dir determinism.** The harness currently drives an
   already-running app against the real `data/` dir (a RAM-driven choice — a
   second instance would load the image embedder twice and OOM the ~3.7 GB box).
   The plan's original intent was a temp data dir per run. Revisit if pixel-diff
   drift from shared state becomes a problem; the synthetic seed already covers
   content stability.
+
+<!-- item-sep -->
+
 - **Annotation polish.** The declarative `highlight` overlay dims the whole
   viewport (including modals); a couple of boxes (`importer-subtab-bar`) sit a
   few px low. Cosmetic; tune the overlay geometry.
+
+<!-- item-sep -->
+
 - **`autopilot-progress` phase.** Captured with phase 3 (Refine Boundary) active
   thanks to the 9-vote `doc-demo` fixture; if the fixture vote count changes,
   the active phase in this shot moves with it.
+
+<!-- item-sep -->
+
 - **`region-voting` scriptability** — confirm the canvas drag can be driven
   deterministically; fall back to hand-capture only if not.
+
+<!-- item-sep -->
+
 - **`browse-view` determinism** — seed the UMAP fit (fixed `random_state`) so
   the layout is stable across runs, and pose the hover-preview popup; otherwise
   hand-capture. The projection is expensive to build, so reuse a cached fixture
   projection rather than rebuilding per run.
+
+<!-- item-sep -->
+
 - **Pixel-diff tolerance** for `check.sh` (font hinting / AA can cause sub-pixel
   noise across machines; may need a small per-pixel threshold).
+
+<!-- item-sep -->
+
 - **Optional `browse-bin-popup` shot.** Not yet added — it has no USER_GUIDE
   anchor/placeholder, so it stayed out of scope. Recipe for when a Browse-detail
   section is written to home it: within `openBrowse()`, hover/click a tile so
   `vt-browse-bin-popup` appears, then `clip` the popup.
+
+<!-- item-sep -->
 
 ---
 
@@ -39,10 +61,10 @@ pixel-diff tolerance) are the remaining work.
 **Goal.** Inline screenshots in the **user-facing** docs plus a system that
 **regenerates every shot with one command** when the GUI changes. The pain point
 is *staleness*: a single source of truth (a manifest) plus a deterministic,
-scriptable capture harness makes a refresh a re-run, not a re-shoot. This is
-*not* [browser-vision-testing.md](browser-vision-testing.md) (throwaway
-bug-hunt shots kept as working artifacts) — these are durable, doc-embedded
-shots that must look identical on every refresh.
+scriptable capture harness makes a refresh a re-run, not a re-shoot. These are
+durable, doc-embedded shots that must look identical on every refresh — not
+throwaway bug-hunt captures, which are working artifacts and belong nowhere near
+the manifest.
 
 **Locked decisions (2026-06-07).** Capture engine = checked-in automated
 Playwright/CDP script (needs chromium). Doc scope = USER_GUIDE.md + README.md +

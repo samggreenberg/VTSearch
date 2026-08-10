@@ -1,7 +1,7 @@
 """Tests for the env-gated ``_load_profiler`` measurement instrument.
 
 ``vtscore/datasets/stages/_load_profiler.py`` is the ``VTSEARCH_PROFILE_LOAD``
-recorder behind ``docs/plans/progress-weight-calibration.md``: when armed, it
+recorder behind ``scripts/profiling/README.md``: when armed, it
 subscribes to the load's :class:`ProgressTracker`, stamps each phase boundary,
 and writes one JSONL row per phase (and per finalize sub-slot) on
 :meth:`finish`. It has zero behaviour effect when off. These tests exercise the

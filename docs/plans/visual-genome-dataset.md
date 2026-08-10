@@ -6,10 +6,20 @@ VG is the first demo dataset with per-image **multi-label** ground truth (an ima
 
 ## Open follow-ups
 
+<!-- item-sep -->
+
 - [ ] #2387 — Build a side-by-side image-vs-region eval report (baseline vs `region_voting`)
+
+<!-- item-sep -->
+
 - **Vocab matching quality.** Object→category matching is a case/plural-folding
   heuristic. VG synonyms/synsets (`names` has multiple aliases; `synsets` exists)
   are only partially exploited; a richer synonym map would recover more positives.
+
+<!-- item-sep -->
+
 - **Attributes & relationships.** VG also ships `attributes.json` and
   `relationships.json` (e.g. "red apple", "man holding apple"). Out of scope for
   Phase 1; potential future eval axes.
+
+<!-- item-sep -->

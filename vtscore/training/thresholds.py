@@ -1914,9 +1914,11 @@ def calculate_safe_threshold(
     When few labels are available the cross-calibration threshold can be
     unreliable, so a GMM cut fitted on the full score distribution stands in for
     it.  *How much* it stands in - and for how long - is the schedule's job
-    (:mod:`vtscore.training.blend_schedules`, issue #2841).  The shipped default
-    is the historical ramp: pure GMM at ≤6 labels, pure x-cal at ≥20, linear
-    between.
+    (:mod:`vtscore.training.blend_schedules`, issue #2841).  Passing ``None``
+    takes :data:`~vtscore.training.blend_schedules.PRODUCTION_SCHEDULE`
+    (``cap50``); callers that know the voting mode should resolve the name
+    through :func:`~vtscore.training.blend_schedules.production_schedule_for`
+    instead, because the two modes want different curves.
 
     **No longer the shipped safe threshold.**  The 2026-08-05 population-
     anchored run (docs/experiments/population-anchored-calibration/REPORT.md)

@@ -8,7 +8,7 @@ The **v0 labelset-kNN evidence signals** (§6.1's `D` and `TS`) have also shippe
 
 Not yet built: the tree ensemble, the `n_viewed` channel, split-half calibration, everything in §5 (blob scan, global alarms), the rest of §6 (tiered work queue, active auditor / stratified estimation), and §7 (portable artifact).
 
-**Relationship to shipped work:** this design layers on top of the shipped [Find verification workflow](find-verification-workflow.md). That feature built the verify loop (frozen `find_scores`, `verified_ids`, the marginal-positive work queue, the Stats modal). Its Stats section explicitly documents a **false-confidence caveat**: unverified items are flood-filled with the detector's own call, so precision "agreement" is inflated by everything the human never looked at. The active-auditor portion of this design (§6) is the principled replacement for that flood-fill: stratified estimates with confidence intervals instead of adopted self-agreement.
+**Relationship to shipped work:** this design layers on top of the shipped Find verification workflow (`vtsearch/routes/find.py` + `frontend/src/app/components/find-view/`). That feature built the verify loop (frozen `find_scores`, `verified_ids`, the marginal-positive work queue, the Stats modal). Its Stats section explicitly documents a **false-confidence caveat**: unverified items are flood-filled with the detector's own call, so precision "agreement" is inflated by everything the human never looked at. The active-auditor portion of this design (§6) is the principled replacement for that flood-fill: stratified estimates with confidence intervals instead of adopted self-agreement.
 
 ---
 
@@ -286,19 +286,51 @@ No GPU anywhere; nothing exceeds what a dataset load already costs.
 
 ## 10. Phasing (sketch, not a commitment)
 
+<!-- item-sep -->
+
 1. **v0 — zero infrastructure** *(shipped)*: labelset-kNN evidence signals (D, TS) + conformal calibration via leave-one-out labelset distances, at `GET /api/find/evidence-coverage` and the Find Stats **Evidence coverage** chip. Needs nothing persisted that isn't already in the detector JSON; works cross-user, by construction. Still open here: feeding `D`/`TS` into a per-item work-queue order (the tiered queue of §6.2), and the sharper kNN form for tiny labelsets noted in §6.1.
+
+<!-- item-sep -->
+
 2. **v1 — in-session atlas, remaining parts**: the structure itself shipped (see Background), and the domain-shift report is now surfaced in the Find Stats modal as a **Training-domain overlap** section (a reference-dataset picker + an atypical-share chip; shown when another loaded dataset shares the active embedder). Still owed from this phase: the tiered work queue, the §5 blob scan, and VTSBrowse coloring by typicality.
+
+<!-- item-sep -->
+
 3. **v2 — portable artifact**: schema of §7, export at Train time, the rule amendment of §7.3, Stats-modal domain chip.
+
+<!-- item-sep -->
+
 4. **v3 — active auditor**: flip model, stratified estimation replacing the flood-fill Stats numbers, disagreement taxonomy and the concept-conflict map.
+
+<!-- item-sep -->
 
 ## 11. Open questions
 
+<!-- item-sep -->
+
 - Final blend for cold-start π(x) (before userB's verifications can train it): how heavy should D weigh against T and M? Needs an empirical pass on a synthetic shift bench (e.g., train on GTZAN-half, find on the other half plus an injected foreign genre).
+
+<!-- item-sep -->
+
 - Is the `n_viewed` channel signal or noise? "Saw it and didn't vote" is ambiguous between "irrelevant", "ambiguous", and "fatigued".
+
+<!-- item-sep -->
+
 - PCA-128 compression of μ: how much does typicality ranking degrade at leaf scale? (Cheap experiment: Spearman correlation of full-d vs compressed p-values.)
+
+<!-- item-sep -->
+
 - Ensemble size: do 3 trees suffice to kill boundary artifacts at the p < 0.05 flag level, or does the flag rate need 5?
+
+<!-- item-sep -->
+
 - Should the evidence-vacuum threshold scale with labelset size? (A 30-label detector leaves most of any haystack "vacuum" by raw count.)
+
+<!-- item-sep -->
+
 - UI question for blob review: scan-reported subtrees don't map 1:1 to VTSBrowse hex tiles (different projections); is tile-coloring by per-item T(x) good enough, or do blobs need their own overlay?
+
+<!-- item-sep -->
 
 ## 12. References
 

@@ -19,8 +19,8 @@ module holds the measured affine coefficients so
 
 The numbers below are produced by ``scripts/profiling/fit_load_weights.py`` from
 the calibration harness (``scripts/profiling/calibrate_load_weights.py``); see
-``docs/plans/progress-weight-calibration.md`` (Results) for the runs and fit
-diagnostics. Re-run that harness to refresh — do not hand-tune. Cells with no
+``scripts/profiling/README.md`` for the measurement matrix and fitting
+procedure. Re-run that harness to refresh — do not hand-tune. Cells with no
 measured row fall back to the static per-device/media profiles in ``_common``.
 
 **These are the shipped defaults, not the last word.** They were measured on one

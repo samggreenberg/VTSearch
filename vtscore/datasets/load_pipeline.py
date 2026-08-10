@@ -428,7 +428,7 @@ def _run_origin_load_in_background(
     )
     # Env-gated per-phase timing recorder (VTSEARCH_PROFILE_LOAD); ``None`` and
     # zero-cost when off. Subscribed before the first phase fires. See
-    # docs/plans/progress-weight-calibration.md.
+    # scripts/profiling/README.md.
     profiler = start_profiler(tracker, media_type, embedder)
     # The generic cross-task recorder (VTSEARCH_TIMING_RECORD), which every other
     # long-running family also feeds. It runs alongside the load-specific
