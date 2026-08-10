@@ -124,6 +124,11 @@ def _build_media_data(
     their media ``type`` (without it the frontend falls back to audio)
     and any ``custom_metadata`` supplied by the label entry (via
     :class:`~vtscore.datasets.labelset.LabeledElement.metadata`).
+
+    The ``origin`` is a fresh copy per media (``origin_dict`` is shared by
+    every entry in the origin group), so a later mutation of one media's
+    ``origin.params`` cannot leak across siblings — or survive into the next
+    dataset pickle as a backreference.
     """
     name = origin_name or file_path.name
     media_data: dict[str, Any] = {
@@ -134,7 +139,10 @@ def _build_media_data(
         "embedder": embedder_name,
         "filename": entry.get("filename") or name,
         "category": entry.get("category", ""),
-        "origin": origin_dict,
+        "origin": {
+            "importer": origin_dict.get("importer", ""),
+            "params": dict(origin_dict.get("params", {})),
+        },
         "origin_name": name,
         "media_bytes": file_bytes,
         "media_string": None,

@@ -21,6 +21,7 @@ from typing import Any
 
 import app as app_module  # noqa: F401  (sets up Flask test infra via conftest)
 from vtscore.datasets.importers.server_files import ServerFilesDatasetImporter
+from vtscore.datasets.ingest import _build_media_data
 from vtscore.datasets.load_pipeline import _tag_origins
 from vtscore.datasets.loader_folder import _build_folder_media_data
 
@@ -130,6 +131,58 @@ class TestBuildFolderMediaDataIsolation:
     def test_none_origin_passes_through(self):
         media = self._build(1, "a.wav", None)
         assert media["origin"] is None
+
+
+class TestBuildIngestMediaDataIsolation:
+    """``_build_media_data`` is called once per re-ingested entry with the
+    *group-shared* origin dict from ``_group_by_origin``; each media must
+    still end up with its own copy.
+    """
+
+    def _build(self, name: str, origin: dict[str, Any]) -> dict[str, Any]:
+        return _build_media_data(
+            origin_dict=origin,
+            entry={"filename": name},
+            media_type_id="audio",
+            origin_name=name,
+            file_path=Path(name),
+            file_bytes=b"data",
+            md5="deadbeef",
+            embedding=None,
+            embedder_name="test_embedder",
+        )
+
+    def test_two_calls_share_no_origin_state(self):
+        origin = {"importer": "server_folder", "params": {"path": "/data"}}
+        a = self._build("a.wav", origin)
+        b = self._build("b.wav", origin)
+        _assert_isolated(a, b)
+        assert a["origin"] is not origin
+        assert a["origin"] == origin
+
+    def test_mutating_one_origin_does_not_leak(self):
+        origin = {"importer": "server_folder", "params": {"path": "/data"}}
+        a = self._build("a.wav", origin)
+        b = self._build("b.wav", origin)
+        a["origin"]["params"]["clip_start"] = 1.5
+        a["origin"]["importer"] = "mutated"
+        assert "clip_start" not in b["origin"]["params"]
+        assert b["origin"]["importer"] == "server_folder"
+        # Caller-provided origin is also untouched.
+        assert "clip_start" not in origin["params"]
+        assert origin["importer"] == "server_folder"
+
+    def test_isolation_survives_pickle_roundtrip(self):
+        origin = {"importer": "server_folder", "params": {"path": "/data"}}
+        medias = {1: self._build("a.wav", origin), 2: self._build("b.wav", origin)}
+        revived = pickle.loads(pickle.dumps(medias))
+        _assert_isolated(revived[1], revived[2])
+        revived[1]["origin"]["params"]["extra"] = "only-on-1"
+        assert "extra" not in revived[2]["origin"]["params"]
+
+    def test_missing_origin_fields_default_empty(self):
+        media = self._build("a.wav", {})
+        assert media["origin"] == {"importer": "", "params": {}}
 
 
 class TestRewriteOriginsIsolation:
