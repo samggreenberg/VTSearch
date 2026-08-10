@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from vtscore.config import DATA_DIR
+from vtscore.io import desanitize_csv_cell
 from vtscore.labels.importers.base import LabelImporter, PluginField
 
 
@@ -79,6 +80,19 @@ class ServerCsvLabelImporter(LabelImporter):
 _OPTIONAL_COLS = ("origin_name", "filename", "category")
 
 
+def _cell(row: dict[str, Any], field: str) -> str:
+    """Read one cell, undoing the exporter's formula-injection escaping.
+
+    The CSV exporter prefixes any cell starting with ``=``/``+``/``-``/
+    ``@``/tab/CR with an apostrophe so spreadsheets treat it as text.
+    Reading it back without :func:`desanitize_csv_cell` would hand
+    ``'-take2.wav`` to origin_name/filename resolution, which then fails
+    to find the real media.  A short row yields ``None`` from
+    :class:`csv.DictReader`, so coerce that to an empty string.
+    """
+    return desanitize_csv_cell(str(row.get(field) or "").strip()).strip()
+
+
 def _row_to_entry(row: dict[str, Any], normalised: dict[str, str]) -> dict[str, Any] | None:
     """Build a label entry from one CSV *row*, or ``None`` to skip it.
 
@@ -88,19 +102,19 @@ def _row_to_entry(row: dict[str, Any], normalised: dict[str, str]) -> dict[str, 
     and an ``origin`` cell is parsed as JSON (a non-object or invalid value
     is ignored).
     """
-    md5 = row.get(normalised["md5"], "").strip()
-    label = row.get(normalised["label"], "").strip().lower()
+    md5 = _cell(row, normalised["md5"])
+    label = _cell(row, normalised["label"]).lower()
     if not (md5 and label):
         return None
     entry: dict[str, Any] = {"md5": md5, "label": label}
     for col in _OPTIONAL_COLS:
         if col in normalised:
-            val = row.get(normalised[col], "").strip()
+            val = _cell(row, normalised[col])
             if val:
                 entry[col] = val
     # Parse origin dict from JSON if present
     if "origin" in normalised:
-        origin_raw = row.get(normalised["origin"], "").strip()
+        origin_raw = _cell(row, normalised["origin"])
         if origin_raw:
             try:
                 origin = json.loads(origin_raw)
