@@ -27,7 +27,11 @@ Example:
         --out-dir /exp/$USER/sweep-train-test/my_corpus
         
 Matthew Usage:
-python scripts/sod/sweep_train_test.py --image-dir data/cats --name my_corpus --embedders siglip --iterations 3 --max-labels 150 --out-dir docs/experiments/sod-sweep/cats --viz --viz-band all --labeling-trace
+# Cats SigLIP
+python scripts/sod/sweep_train_test.py --image-dir data/cats --name cats --out-dir docs/experiments/sod-sweep/cats --reference-csv data/cats/reference/reference.csv --embedders siglip --iterations 3 --max-labels 150 --viz --viz-band all --labeling-trace --show-oracle
+
+# Cats HAC
+python scripts/sod/sweep_train_test.py --image-dir data/cats --name cats --embedders dinov3 -- --iterations 3 --max-labels 150 --resolution 448 --out-dir docs/experiments/sod-sweep/cats --viz --viz-band all --labeling-trace
 """
 
 from __future__ import annotations
@@ -283,20 +287,26 @@ def _run_plots(args, all_rows: list[dict], ds, split, out_dir: Path) -> None:
     """
     import traceback
 
+    import plots_train_test
     from features import prep_timing_summary
-    from plots import render_all, render_inference_time
+    from plots import render_inference_time
     from sweep import _build_total_timing
     from viz import render_split_gallery
 
     if all_rows:
-        render_all(
+        # plots_train_test adds the confusion-matrix family (derived from the stored
+        # rates, so it also works on older results.jsonl) plus threshold-free AUROC,
+        # and supports the dual-output 'all+std' band.
+        reference = plots_train_test.load_reference_csv(args.reference_csv) if args.reference_csv else None
+        plots_train_test.render_all(
             all_rows,
             out_dir / "plots",
-            metrics=("cost", "fpr", "fnr", "f1"),
+            metrics=plots_train_test.TRAIN_TEST_METRICS,
             band=args.viz_band,
             show_oracle=args.show_oracle,
             x_label="total annotations t",
             x_tag="t",
+            reference=reference,
         )
     total_timing = _build_total_timing(prep_timing_summary(), all_rows)
     if total_timing:
@@ -368,15 +378,34 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--viz-n", type=int, default=12, help="max images per montage/gallery")
     ap.add_argument(
         "--viz-band",
-        choices=("minmax", "std", "none", "all"),
+        choices=("minmax", "std", "none", "all", "all+std"),
         default="std",
-        help="seed spread on --viz plots: minmax/std band, none, or 'all' (one thin line per seed)",
+        help="seed spread on --viz plots: minmax/std band, none, 'all' (one line per seed), or "
+        "'all+std' (BOTH, as two files per metric: <metric>_vs_t.png with every seed drawn "
+        "individually, and <metric>_vs_t_summary.png with mean +/- stdev). Prefer 'all+std' when "
+        "reading a new run: a single outlier seed and a genuinely wide spread look identical in a "
+        "summary alone",
+    )
+    ap.add_argument(
+        "--reference-csv",
+        type=Path,
+        default=None,
+        help="path to a 'metric,value' CSV of external reference numbers (e.g. "
+        "data/cats/reference/reference.csv) drawn as a flat black dash-dot line on each "
+        "metric it names. No header needed; every metric is optional and the order is "
+        "arbitrary, so a file may carry any subset of cost/fpr/fnr/f1/accuracy/"
+        "balanced_accuracy/precision/recall/auroc. Names match case/space/hyphen-"
+        "insensitively; a non-float value is an error",
     )
     ap.add_argument(
         "--show-oracle",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="overlay the oracle bound (faint dashed) on the cost + F1 plots",
+        help="overlay the oracle bound (faint dashed) on every metric with a non-degenerate "
+        "best-over-τ value: cost (min achievable) and f1/accuracy/balanced_accuracy (max "
+        "achievable). fpr/fnr/precision/recall get none (degenerate optimum), nor does auroc "
+        "(threshold-free). Needs a run made after the oracle columns landed; older "
+        "results.jsonl carry NaN there and simply draw no dashed line",
     )
     ap.add_argument(
         "--confidence-gallery",

@@ -5,14 +5,16 @@ One figure per ``(dataset, class)``; all configs overlaid on shared axes, each
 curve its own color; solid = the calibrated (actual) value, dashed = the oracle
 companion (with --show-oracle). Linear K axis. Two reference overlays are OFF by default:
 
-  --show-oracle          add the oracle companion (dashed) on the cost + F1 plots:
-                         oracle_cost = min achievable cost, oracle_f1 = max achievable
-                         F1 (both true bounds the calibrated curve can't cross)
+  --show-oracle          add the oracle companion (dashed) on every metric that has a
+                         non-degenerate best-over-τ value: cost (min achievable), and
+                         F1 / accuracy / balanced accuracy (max achievable). All are true
+                         bounds the calibrated curve can't cross.
   --show-text-baseline   add the text-cosine zero-shot baseline (K=0 horizontal ref)
 
-The underlying ``oracle_cost`` / ``oracle_f1`` columns and the cosine K=0 rows are
-always present in ``results.jsonl`` regardless of these flags — they only control
-rendering. fpr/fnr have no oracle (their per-metric optimum is degenerate).
+The underlying ``oracle_*`` columns and the cosine K=0 rows are always present in
+``results.jsonl`` regardless of these flags — they only control rendering. fpr, fnr,
+precision and recall get no oracle: their per-metric optimum is degenerate (reachable by
+a threshold that ignores the scores). AUROC gets none either, being threshold-free.
 """
 
 from __future__ import annotations
@@ -155,13 +157,30 @@ _METRICS = {
     "f1": "F1 (at cross-cal threshold)",
     "mean_iou": "mean IoU (top region vs GT)",
     "corloc": "CorLoc@0.5",
+    # Confusion-matrix metrics at the cross-cal threshold. All but AUROC are exact
+    # functions of the fpr/fnr/n_test/n_test_pos already on every row, so
+    # ``plots_train_test.enrich_rows`` derives them and they work on old results too.
+    "accuracy": "accuracy (at cross-cal threshold)",
+    "balanced_accuracy": "balanced accuracy (at cross-cal threshold)",
+    "precision": "precision (at cross-cal threshold)",
+    "recall": "recall / TPR (at cross-cal threshold)",
+    "auroc": "AUROC (threshold-free)",
 }
 _DEFAULT_METRICS = ("cost", "fpr", "fnr", "f1", "mean_iou")
-# Metrics that have an oracle companion in the rows, and the field it lives under.
-# cost → min achievable cost; f1 → max achievable F1 (both true bounds the calibrated
-# curve can't cross). fpr/fnr have no oracle (their per-metric optimum is degenerate —
-# only their sum, cost, has a meaningful oracle); mean_iou/corloc aren't threshold-based.
-_ORACLE_FIELD = {"cost": "oracle_cost", "f1": "oracle_f1"}
+# Metrics that have an oracle companion in the rows, and the field it lives under. Each
+# is that metric's own best-over-τ value, so the dashed line is a true bound the solid
+# calibrated curve can't cross. Everything else is left off deliberately:
+#   fpr/fnr/precision/recall — degenerate optimum (0/0/1/1 from a score-blind threshold),
+#                              so a dashed line there would be a flat constant;
+#   auroc                    — threshold-free, so its oracle IS its value;
+#   mean_iou/corloc          — not threshold-based at all.
+# See ``region_curve._oracle_extra`` for the full reasoning.
+_ORACLE_FIELD = {
+    "cost": "oracle_cost",
+    "f1": "oracle_f1",
+    "accuracy": "oracle_accuracy",
+    "balanced_accuracy": "oracle_balanced_accuracy",
+}
 
 
 def _plot_group(
@@ -174,6 +193,7 @@ def _plot_group(
     show_oracle: bool,
     show_text_baseline: bool,
     x_label: str = "K (annotation count)",
+    reference: float | None = None,
 ) -> None:
     import matplotlib
 
@@ -262,7 +282,7 @@ def _plot_group(
         # a faint DASHED line in the curve's colour. The gap to the solid calibrated
         # curve is threshold-placement noise, not detector quality — under extreme
         # imbalance the calibrated value can swing 0→1 while the oracle stays flat.
-        # Drawn for cost/fpr/fnr/f1 (not the IoU metrics, which aren't threshold-based).
+        # Drawn only for the metrics in ``_ORACLE_FIELD``.
         _ofield = _ORACLE_FIELD.get(field)
         if show_oracle and _ofield:
             oracle_k = _mean_by_k(crows, _ofield)
@@ -270,6 +290,14 @@ def _plot_group(
             if oks:
                 ax.plot(oks, [oracle_k[k] for k in oks], color=color, ls="--", lw=1.2, alpha=0.55)
                 oracle_drawn = True
+
+    # External reference value for this metric (e.g. a published or hand-computed
+    # baseline), drawn as a flat horizontal line. Dash-dot in black so it reads as
+    # none of the existing line families: config curves are solid + coloured, the
+    # oracle companion is dashed + coloured + faint, the zero-shot text baseline is
+    # dotted + coloured.
+    if reference is not None:
+        ax.axhline(reference, color="black", ls="-.", lw=1.3, alpha=0.85, label=f"reference = {reference:g}")
 
     ax.set_xlabel(x_label)
     ax.set_ylabel(_METRICS.get(field, field))
@@ -308,12 +336,20 @@ def render_all(
     show_text_baseline: bool = False,
     x_label: str = "K (annotation count)",
     x_tag: str = "k",
+    file_tag: str | None = None,
+    title_note: str = "",
+    reference: dict[str, float] | None = None,
 ) -> None:
     """Write one figure per metric per (dataset, class). Reusable by sweep --viz.
 
     ``x_label``/``x_tag`` let the realistic labeling mode relabel the x-axis to
     "total annotations t" (rows carry ``k == t`` there, so the plotting stays the
     same; only the label and file suffix change).
+
+    ``file_tag`` overrides the filename suffix alone (default: ``x_tag``), and
+    ``title_note`` appends to the title. Together they let one caller emit two figures
+    per metric from the same rows - e.g. a per-seed overlay and a stdev summary - without
+    the filename tag leaking into the title as "vs t_summary".
     """
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for r in rows:
@@ -321,16 +357,19 @@ def render_all(
     for (dataset, cls), grows in sorted(groups.items()):
         stem = f"{dataset}_{cls.replace(' ', '_')}"
         for field in metrics:
-            out_path = out_dir / f"{stem}_{field}_vs_{x_tag}.png"
+            out_path = out_dir / f"{stem}_{field}_vs_{file_tag or x_tag}.png"
             _plot_group(
                 grows,
-                f"{dataset}: {cls} — {field} vs {x_tag}",
+                f"{dataset}: {cls} — {field} vs {x_tag}{title_note}",
                 out_path,
                 field=field,
                 band=band,
                 show_oracle=show_oracle,
                 show_text_baseline=show_text_baseline,
                 x_label=x_label,
+                # Only metrics present in the mapping get a line, so a reference file
+                # may carry any subset in any order.
+                reference=(reference or {}).get(field),
             )
             print(f"wrote {out_path}")
 

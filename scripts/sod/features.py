@@ -220,6 +220,7 @@ def build_curve_inputs(
     meta: dict,
     neg_regions: bool = True,
     region_voting: bool = False,
+    cal_inference_geometry: bool = False,
     build_pool: bool = False,
 ) -> RegionCurveInputs:
     """Materialize (cached) vectors from a partitioned :class:`Split`.
@@ -327,6 +328,7 @@ def build_curve_inputs(
         test_gt_boxes=test_gt,
         region_voting=region_voting,
         neg_regions=neg_regions,
+        cal_inference_geometry=cal_inference_geometry,
         neg_train_bags=neg_bags,
         pool_ids=pool_ids,
         pool_region_mats=pool_region_mats,
@@ -341,5 +343,6 @@ def build_curve_inputs(
             "n_train_neg": len(split.train_neg),
             "n_pos_exemplars": int(pos_exemplars.shape[0]),
             "neg_regions": bool(neg_regions),
+            "cal_inference_geometry": bool(cal_inference_geometry),
         },
     )

@@ -31,7 +31,7 @@ from pathlib import Path
 from datasets import GUI_MIN_BOX_FRAC, SodDataset
 from features import FeatureCache, build_curve_inputs, dump_split, partition_split, slugify
 
-from vtscore.eval.region_curve import evaluate_realistic_curve
+from vtscore.eval.region_curve import RV_HEAD_STRATEGIES, evaluate_realistic_curve
 from vtscore.eval.region_sources import build_region_source
 
 EMBEDDER_ALIASES = {"dinov2": "dinov2_patch", "dinov3": "dinov3_patch"}
@@ -76,11 +76,35 @@ def _strs(s: str) -> list[str]:
     return [x.strip() for x in s.split(",") if x.strip()]
 
 
+def _resolve_region_voting(args, proposal: str, embedder: str) -> bool:
+    """Whether this cell takes the region-voting label construction.
+
+    Faithful app-detector path, so it only applies to the HAC-tree proposal on a patch
+    embedder; ``--region-voting`` is a no-op elsewhere. Shared by the runner and the viz
+    so the two can never disagree about which construction a run used.
+    """
+    return bool(args.region_voting) and proposal == "hac" and embedder in {"dinov2", "dinov3"}
+
+
+def _resolve_snap_goods(args, proposal: str, embedder: str) -> bool:
+    """Whether a Good vote's box snaps to its best-IoU HAC node for this cell.
+
+    Snapping (the *positive* side of the app's DINO-patch label construction) and the
+    leaf-flooded negative bag (the *negative* side) used to be one flag. They are now
+    separable so the middle arm -- snapped goods, one whole-image CLS row per bad -- is
+    reachable. ``--snap-goods`` unset means "follow ``--region-voting``", so every command
+    written before the split behaves exactly as it did. Like region voting, snapping only
+    means anything for the HAC-tree proposal on a patch embedder.
+    """
+    want = args.region_voting if args.snap_goods is None else args.snap_goods
+    return bool(want) and proposal == "hac" and embedder in {"dinov2", "dinov3"}
+
+
 def _proposal_slug(
     proposal: str,
     args,
     alpha: float,
-    region_voting: bool = False,
+    snap_goods: bool = False,
     seeding: str = "topk",
     leaf_assign: str = "spatial",
     pca_dims: int | None = None,
@@ -93,9 +117,12 @@ def _proposal_slug(
     if proposal == "dino":
         return f"dino_k{hac_k}_a{args.hac_alpha_default}"
     if proposal == "hac":
-        # Region-voting rewrites the exemplar (snapped, one per image) and stores a
-        # leaf_mask, so it must not share a cache with the box-pool hac variant.
-        rv = "_rv" if region_voting else ""
+        # Snapping rewrites the exemplar (one per image, snapped to its best-IoU node),
+        # so a snapped run must not share a cache with the box-pool (grid-pooled) one.
+        # Keyed on snapping rather than on region voting because that is what actually
+        # changes the cached bytes: the regions/leaf_mask are identical either way, and
+        # snapping defaults to region voting, so pre-split runs keep their exact slug.
+        rv = "_rv" if snap_goods else ""
         # Per-image PCA changes the tree topology (and thus cached region vecs/
         # boxes/children), so a PCA run must not reuse non-PCA cached regions.
         pca = f"_pca{pca_dims}" if pca_dims else ""
@@ -115,7 +142,7 @@ def _build_source(
     embedder,
     args,
     alpha: float,
-    region_voting: bool = False,
+    snap_goods: bool = False,
     seeding: str = "topk",
     leaf_assign: str = "spatial",
     pca_dims: int | None = None,
@@ -139,7 +166,9 @@ def _build_source(
         dino_model_id=DINOV2_MODEL_ID,
         dino_device=resolve_device(),
         dino_register_tokens=0,
-        region_voting=region_voting,
+        # The source's ``region_voting`` knob controls exactly one thing: whether a Good
+        # vote's box snaps to its best-IoU tree node (region_sources.py:418).
+        region_voting=snap_goods,
     )
 
 
@@ -327,10 +356,13 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
     # Region-voting (faithful app-detector label construction) applies only to the
     # hac proposal on a patch embedder; a no-op elsewhere even when --region-voting
     # is set, so `--proposals whole,hac --region-voting` runs whole normally.
-    region_voting = bool(args.region_voting) and proposal == "hac" and cell["embedder"] in {"dinov2", "dinov3"}
+    region_voting = _resolve_region_voting(args, proposal, cell["embedder"])
     if args.region_voting and not region_voting and proposal == "hac":
         print(f"  skip {cell}: --region-voting needs a patch embedder", flush=True)
         return []
+    # Good-vote geometry, separable from the negative construction above:
+    # snap_goods and not region_voting is the "snapped good, whole-image CLS bad" arm.
+    snap_goods = _resolve_snap_goods(args, proposal, cell["embedder"])
 
     embedder = get_embedder(reg_name)
     # Re-point the DINOv3 singleton at this cell's checkpoint BEFORE loading (so
@@ -348,7 +380,7 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
             embedder,
             args,
             alpha,
-            region_voting=region_voting,
+            snap_goods=snap_goods,
             seeding=seeding,
             leaf_assign=leaf_assign,
             pca_dims=pca_dims,
@@ -383,7 +415,7 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
             proposal,
             args,
             alpha,
-            region_voting=region_voting,
+            snap_goods=snap_goods,
             seeding=seeding,
             leaf_assign=leaf_assign,
             pca_dims=pca_dims,
@@ -417,6 +449,7 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
             "resolution": resolution,
             "dinov3_model": dinov3_model,
             "region_voting": region_voting,
+            "snap_goods": snap_goods,
             "negatives_exhaustive": split.negatives_exhaustive,
             "n_pos_total": len(split.positive_ids),
             "n_neg_total": len(split.negative_ids),
@@ -430,6 +463,7 @@ def _run_cell(cell: dict, args, cache_root: Path) -> list[dict]:
             meta=meta,
             region_voting=region_voting,
             neg_regions=args.neg_regions,
+            cal_inference_geometry=args.cal_inference_geometry,
             build_pool=True,
         )
 
@@ -561,6 +595,10 @@ def _render_realistic_viz(args, cell, cache_root: Path, buckets, slug: str, fina
                         alpha=cell["alpha"],
                         slug=slug,
                         seed=s,
+                        # Which label construction this cell actually trained on: the bag path
+                        # (train_rv_head) vs one unweighted whole-image CLS row per Bad vote.
+                        bagged=_resolve_region_voting(args, cell["proposal"], cell["embedder"]) or args.neg_regions,
+                        snapped=_resolve_snap_goods(args, cell["proposal"], cell["embedder"]),
                     )
             if args.labeling_trace:
                 for s, f in sorted(finals.items()):
@@ -602,7 +640,13 @@ def _write_results(rows: list[dict], out_dir: Path) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--datasets", type=_strs, default=["coco"])
+    ap.add_argument(
+        "--datasets",
+        type=_strs,
+        default=["coco"],
+        help="coco, lvis, vg (whole corpus), or the demo-parity VG size slices vg_s/vg_m/vg_l/vg_a "
+        "(same image sets as the GUI's visual_genome_{s,m,l,a})",
+    )
     ap.add_argument("--classes", type=_strs, default=["stop sign"])
     ap.add_argument("--embedders", type=_strs, default=["clip", "siglip", "siglip2", "dinov2", "dinov3"])
     ap.add_argument("--proposals", type=_strs, default=["whole", "sliding", "dino", "hac"])
@@ -630,6 +674,27 @@ def main() -> int:
         "good votes snap to the nearest HAC node, bad votes flood CLS+leaves as negatives, "
         "bag-aware per-image weighting + grouped cross-calibration (mirrors `vtscore.eval --region-voting`). "
         "No-op for non-hac proposals. Uses a distinct 'hac_rv' cache slug.",
+    )
+    ap.add_argument(
+        "--snap-goods",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="good-vote geometry alone, split out of --region-voting: snap a Good vote's box to its "
+        "best-IoU HAC node instead of grid-pooling it. Unset = follow --region-voting (so existing "
+        "commands are unchanged). '--snap-goods --no-region-voting' is the middle arm: snapped goods "
+        "with one whole-image CLS row per Bad, instead of the leaf-flooded bag. Keys the 'hac_rv' "
+        "cache slug (snapping is what changes the cached exemplars). No-op for non-hac proposals.",
+    )
+    ap.add_argument(
+        "--cal-inference-geometry",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="box-pool path only: calibrate each vote as ONE max-pooled score over that image's "
+        "region stack, the geometry the scorer uses, instead of one score per raw training row. "
+        "Fixes the degenerate cut on '--proposals hac --no-region-voting', where negatives train "
+        "on a single whole-image CLS row while inference maxes over every tree node, so the cut "
+        "falls below every score and everything is labelled positive. Off by default: it changes "
+        "the calibration set, so existing runs stay reproducible.",
     )
     ap.add_argument(
         "--neg-regions",
@@ -841,12 +906,15 @@ def main() -> int:
         "--training-nodes",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="hac only: per seed, dump the HAC nodes that went into TRAINING at the final vote "
-        "set (after t consumed all annotations), in labeling order, as numbered cell-crops under "
-        "predictions/<config>/training_nodes/<config>/seed{N}/. Positives = the snapped covering-box "
-        "node per good vote; negatives = the flooded childless nodes (CLS+leaves) per bad vote. Each "
-        "crop is captioned id/POS|NEG/bag/weight (the per-row loss weight: good=n_bad_bags/n_good, "
-        "bad=1/bag_size).",
+        help="hac only: per seed, dump the rows that went into TRAINING at the final vote set "
+        "(after t consumed all annotations), in labeling order, as numbered crops under "
+        "predictions/<config>/training_nodes/<config>/seed{N}/. Follows the run's actual label "
+        "construction: positives are the snapped covering-box node (or one crop per GT box under "
+        "--no-snap-goods); negatives are the flooded childless nodes (CLS+leaves) per bad vote on "
+        "the bag path (--region-voting / --neg-regions, captioned with the per-row loss weights "
+        "good=n_bad_bags/n_good, bad=1/bag_size), or ONE unweighted whole-image CLS crop per bad "
+        "vote on the box-pool path. Volume warning: the bag path emits 1+hac_k crops per bad vote "
+        "(33 at --hac-k 32), so a multi-seed run writes tens of thousands of PNGs onto NFS.",
     )
     ap.add_argument(
         "--viz-band",
@@ -866,13 +934,29 @@ def main() -> int:
         "--show-oracle",
         action=argparse.BooleanOptionalAction,
         default=False,
-        help="overlay the oracle companion (faint dashed) on the cost and F1 plots: oracle_cost = "
-        "min achievable cost, oracle_f1 = max achievable F1 (both true bounds the calibrated curve "
-        "can't cross). The gap is threshold-placement noise vs detector quality — under extreme "
-        "imbalance the calibrated value swings while the oracle stays flat. fpr/fnr get no oracle. "
-        "Off by default.",
+        help="overlay the oracle companion (faint dashed) on every metric with a non-degenerate "
+        "best-over-τ value: cost (min achievable) and f1/accuracy/balanced_accuracy (max "
+        "achievable). All are true bounds the calibrated curve can't cross. The gap is "
+        "threshold-placement noise vs detector quality — under extreme imbalance the calibrated "
+        "value swings while the oracle stays flat. fpr/fnr/precision/recall get no oracle (their "
+        "optimum is degenerate), nor does auroc (threshold-free). Off by default.",
     )
     args = ap.parse_args()
+
+    # Both bag routes train through train_rv_head, which expresses the head as a torch
+    # hidden_dim and so cannot run the sklearn arms. Fail here rather than silently
+    # training an MLP for a run the user labelled "svm". --region-voting only takes that
+    # route for hac on a patch embedder (mirroring the gate in _run_embedder), but
+    # --neg-regions takes it for every proposal and embedder.
+    rv_route = args.region_voting and "hac" in args.proposals and bool(set(args.embedders) & {"dinov2", "dinov3"})
+    if (rv_route or args.neg_regions) and args.head_strategy not in RV_HEAD_STRATEGIES:
+        flag = "--region-voting" if rv_route else "--neg-regions"
+        ap.error(
+            f"--head-strategy {args.head_strategy} cannot run with {flag}: it trains through "
+            f"train_rv_head (supported there: {', '.join(sorted(RV_HEAD_STRATEGIES))}). "
+            "Drop to the box-pool path (--no-region-voting --no-neg-regions) for the sklearn "
+            "heads, or pick a supported head."
+        )
 
     cache_root = args.cache_dir or (args.out_dir / "cache")
     cells = _cells(args)

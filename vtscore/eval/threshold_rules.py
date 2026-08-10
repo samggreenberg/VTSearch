@@ -58,6 +58,22 @@ from vtscore.training.thresholds import conformal_threshold
 RULES = ("conformal", "rank-transfer", "argmin")
 
 
+def _group_index(groups: Sequence, y: np.ndarray) -> tuple[list, list[list[int]], list[float]]:
+    """``(group_ids, row_indices_per_group, label_per_group)`` in first-seen order.
+
+    A group is one voted image. Every row in a group shares that image's label, so the
+    group's label is its first row's.
+    """
+    order: list = []
+    rows: dict = {}
+    for i, g in enumerate(groups):
+        if g not in rows:
+            rows[g] = []
+            order.append(g)
+        rows[g].append(i)
+    return order, [rows[g] for g in order], [float(y[rows[g][0]]) for g in order]
+
+
 def stratified_fold_orderings(
     X_train: np.ndarray,
     y_train: np.ndarray,
@@ -67,6 +83,8 @@ def stratified_fold_orderings(
     calibrate_count: int = 2,
     cal_fraction: float = 0.5,
     stable_folds: bool = False,
+    groups: Sequence | None = None,
+    score_rows_by_group: dict | None = None,
 ) -> list[tuple[list[float], list[float]]]:
     """Held-out ``(scores, labels)`` per fold under **class-stratified** splits.
 
@@ -86,11 +104,40 @@ def stratified_fold_orderings(
 
     Returns ``[]`` when the labels are too few or single-class to split — the
     caller then falls back to ``0.5`` exactly as the argmin path does.
+
+    *groups* switches on the **bag-aware** path: rows sharing a group id are one voted
+    image, they stay together on one side of every split, split counts are taken over
+    groups rather than rows, and each calibration group collapses to a single
+    max-pooled score, matching how inference scores an image by its best region.
+    *score_rows_by_group* (grouped path only) gives the row stack a group should be
+    *scored* over, decoupling what a fold trains on from what a calibration bag
+    collapses to. Without it a bag collapses over its own training rows, which is
+    wrong whenever the two geometries differ: a box-pool HAC negative trains on one
+    whole-image CLS row while inference maxes over every tree node, and ``max`` is an
+    upward-biased order statistic, so a cut fitted to single rows lands far below every
+    inference score and the detector labels everything positive. This mirrors the
+    grouped torch path's ``score_rows_by_group``
+    (:func:`vtscore.training.thresholds.compute_fold_orderings`). ``groups=None`` keeps
+    the historical row-wise behaviour byte-identical.
     """
     y = np.asarray(y_train)
     n = int(y.size)
     if n < 4 or len({int(v) for v in y}) < 2:
         return []
+
+    if groups is not None:
+        return _grouped_fold_orderings(
+            X_train,
+            y_train,
+            y,
+            trainer_fn,
+            seed,
+            groups=groups,
+            score_rows_by_group=score_rows_by_group,
+            calibrate_count=calibrate_count,
+            cal_fraction=cal_fraction,
+            stable_folds=stable_folds,
+        )
 
     pos_idx = np.flatnonzero(y == 1.0)
     neg_idx = np.flatnonzero(y != 1.0)
@@ -113,6 +160,75 @@ def stratified_fold_orderings(
         cal_labels = [float(v) for v in y[cal_idx]]
         orderings.append((cal_scores, cal_labels))
     return orderings
+
+
+def _grouped_fold_orderings(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    y: np.ndarray,
+    trainer_fn: TrainerFn,
+    seed: int,
+    *,
+    groups: Sequence,
+    score_rows_by_group: dict | None,
+    calibrate_count: int,
+    cal_fraction: float,
+    stable_folds: bool,
+) -> list[tuple[list[float], list[float]]]:
+    """Bag-aware :func:`stratified_fold_orderings`; see its *groups* documentation."""
+    gids, grows, glabels = _group_index(groups, y)
+    gy = np.asarray(glabels)
+    if len(gids) < 4 or len({int(v) for v in gy}) < 2:
+        return []
+    pos_g = np.flatnonzero(gy == 1.0)
+    neg_g = np.flatnonzero(gy != 1.0)
+    if len(pos_g) < 2 or len(neg_g) < 2:
+        return []
+
+    rng = np.random.default_rng(seed)
+    orderings: list[tuple[list[float], list[float]]] = []
+    for k in range(max(1, calibrate_count)):
+        tr_g, cal_g = _stratified_split(pos_g, neg_g, cal_fraction, rng, stable=stable_folds)
+        if tr_g is None or cal_g is None:
+            continue
+        if len({int(gy[i]) for i in tr_g}) < 2 or len({int(gy[i]) for i in cal_g}) < 2:
+            continue
+        tr_rows = [r for gi in tr_g for r in grows[gi]]
+        try:
+            predict = trainer_fn(X_train[tr_rows], y_train[tr_rows], seed + k)
+        except ValueError:
+            continue
+        cal_scores, cal_labels = _collapse_groups(predict, cal_g, gids, grows, gy, X_train, score_rows_by_group)
+        if len(set(cal_labels)) < 2:
+            continue
+        orderings.append((cal_scores, cal_labels))
+    return orderings
+
+
+def _collapse_groups(
+    predict: PredictFn,
+    cal_g: np.ndarray,
+    gids: list,
+    grows: list[list[int]],
+    gy: np.ndarray,
+    X_train: np.ndarray,
+    score_rows_by_group: dict | None,
+) -> tuple[list[float], list[float]]:
+    """One max-pooled ``(score, label)`` per calibration group, as inference scores an image."""
+    scores: list[float] = []
+    labels: list[float] = []
+    for gi in cal_g:
+        rows = None if score_rows_by_group is None else score_rows_by_group.get(gids[gi])
+        mat = X_train[grows[gi]] if rows is None else np.asarray(rows)
+        if mat.size == 0:
+            continue
+        s = np.asarray(predict(mat), dtype=np.float64).reshape(-1)
+        finite = s[np.isfinite(s)]
+        if finite.size == 0:
+            continue
+        scores.append(float(finite.max()))
+        labels.append(float(gy[gi]))
+    return scores, labels
 
 
 def _stratified_split(
@@ -161,6 +277,8 @@ def calibrated_threshold(
     calibrate_count: int = 2,
     cal_fraction: float = 0.5,
     stable_folds: bool = False,
+    groups: Sequence | None = None,
+    score_rows_by_group: dict | None = None,
 ) -> float:
     """Decision threshold under the named *rule*.
 
@@ -174,6 +292,8 @@ def calibrated_threshold(
     valid split, matching the argmin path's fallback.
     """
     if rule == "argmin":
+        if groups is not None:
+            raise ValueError("the 'argmin' rule has no bag-aware path; use 'conformal' with groups")
         return cross_calibrated_threshold(
             X_train,
             y_train,
@@ -192,6 +312,8 @@ def calibrated_threshold(
             calibrate_count=calibrate_count,
             cal_fraction=cal_fraction,
             stable_folds=stable_folds,
+            groups=groups,
+            score_rows_by_group=score_rows_by_group,
         )
         if not orderings:
             return 0.5

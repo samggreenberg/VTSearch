@@ -33,7 +33,15 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from vtscore.eval.error_metrics import f1_at, max_f1, min_weighted_cost, weighted_error
+from vtscore.eval.error_metrics import (
+    f1_at,
+    max_accuracy,
+    max_balanced_accuracy,
+    max_f1,
+    min_weighted_cost,
+    roc_auc,
+    weighted_error,
+)
 from vtscore.eval.scoring_heads import CosineHead, MLPHead, make_head, max_pool_over_images, max_pool_with_argmax
 from vtscore.eval.threshold_rules import calibrated_threshold, median_smooth
 from vtscore.eval.xcal import cross_calibrated_threshold
@@ -65,6 +73,13 @@ class RegionCurveInputs:
     # single whole-image vector — "No → all windows" for sliding / dino / box-pool proposals. No-op
     # for ``whole`` (one region). ``region_voting`` already does this for hac and takes precedence.
     neg_regions: bool = False
+    # Realistic loop, box-pool path only: calibrate each vote as ONE max-pooled score over
+    # that image's inference region stack, instead of scoring its raw training rows. Without
+    # it a hac negative trains on a single whole-image CLS row while inference maxes over
+    # every tree node, so the cut lands below every inference score and the detector calls
+    # everything positive. A no-op for ``whole`` in score terms (one region, so the max is the
+    # identity) though it still collapses an image's duplicate exemplar rows to one vote.
+    cal_inference_geometry: bool = False
     # Realistic labeling-loop pool (only populated for ``evaluate_realistic_curve``).
     # These describe the *training* images the simulated user can label, keyed by a
     # stable image id, so the loop can rank/select them like the app does. All lists
@@ -115,17 +130,36 @@ def _oracle_operating_point(
 
 
 def _oracle_extra(scores: Sequence[float] | np.ndarray, labels: Sequence[int]) -> dict[str, float]:
-    """Oracle **ceiling** for F1: the max F1 over all thresholds.
+    """Per-metric oracle ceilings (F1, accuracy, balanced accuracy) plus AUROC.
 
-    Companion to ``oracle_cost`` (min cost) for the F1 plot. Unlike cost, F1 has
-    its own optimal threshold — at extreme imbalance it differs sharply from the
-    min-cost threshold (cost is rate-based; F1 is precision/count-based), so this
-    is computed independently as ``max_f1`` rather than "F1 at the min-cost τ".
-    By construction ``oracle_f1 >= f1`` always (a true ceiling). fpr/fnr get no
-    oracle companion — their per-metric optimum is degenerate (min FPR = 0 by
-    predicting all-negative), so only their sum (cost) has a meaningful oracle.
+    Companions to ``oracle_cost`` (min cost). Each is optimized **independently**, over
+    its own best threshold, rather than read off the min-cost τ: at extreme imbalance
+    those thresholds differ sharply (cost is rate-based; F1 is precision/count-based;
+    plain accuracy is prevalence-dominated). By construction each is a true ceiling the
+    calibrated value can never cross.
+
+    Metrics deliberately left without an oracle companion, because their per-metric
+    optimum is **degenerate** — attainable by a threshold that ignores the scores, so the
+    line would be a flat constant carrying no information:
+
+    * ``fpr`` (0.0 by predicting all-negative) and ``fnr`` (0.0 by predicting all-positive)
+      — only their sum, ``cost``, has a meaningful optimum;
+    * ``recall`` (1.0 by predicting all-positive) and ``precision`` (1.0 by keeping only
+      the single top-scored item whenever it is a true positive).
+
+    ``auroc`` is excluded for the opposite reason: it is a property of the score ORDERING,
+    not of any cut, so its oracle *is* its value. That is exactly what makes it useful —
+    it separates "the model ranks badly" from "the threshold is misplaced". It is also the
+    one metric in the row that cannot be reconstructed afterwards from the stored rates,
+    since it needs the score vector.
     """
-    return {"oracle_f1": max_f1(scores, [float(v) for v in labels])}
+    lbl = [float(v) for v in labels]
+    return {
+        "oracle_f1": max_f1(scores, lbl),
+        "oracle_accuracy": max_accuracy(scores, lbl),
+        "oracle_balanced_accuracy": max_balanced_accuracy(scores, lbl),
+        "auroc": roc_auc(scores, lbl),
+    }
 
 
 def _iou_metrics(inputs: RegionCurveInputs, argmax: np.ndarray) -> tuple[float, float]:
@@ -198,6 +232,49 @@ def sample_rv_budget(
     return pos_exemplars[pos_idx], [neg_train_bags[int(j)] for j in neg_idx]
 
 
+#: Head strategies the region-voting path can express.
+#:
+#: RV calibrates through :func:`cross_calibration_threshold_cached`, which is keyed on a
+#: torch ``hidden_dim`` (and carries the bag-aware ``groups`` split plus the per-bag
+#: ``sample_weights`` that keep a 200-leaf bad image from outvoting a 3-leaf one). The
+#: sklearn heads in :mod:`vtscore.eval.scoring_heads` are plugged in as a ``trainer_fn``
+#: instead, and that interface has no slot for either, so ``svm``/``anneal-svm`` cannot
+#: run here without teaching the bag-aware calibration to take a trainer function. Every
+#: other arm is a pure capacity choice and maps onto ``hidden_dim`` exactly.
+RV_HEAD_STRATEGIES = frozenset({"mlp", "linear", "reg-mlp", "anneal-linear", "anneal-reg"})
+
+
+def rv_hidden_dim(head_strategy: str, n_votes: int, n_good: int, *, anneal_k: int = 8) -> int:
+    """``hidden_dim`` implementing *head_strategy* on the region-voting path.
+
+    Mirrors :func:`vtscore.eval.scoring_heads.make_head`'s capacity choices in the one
+    knob ``train_model`` / ``cross_calibration_threshold_cached`` expose, and is keyed on
+    ``n_good`` (the FULL labelset's positives) exactly like ``make_head``, so M0 and every
+    fold sub-model agree and the cross-calibration never averages one class's threshold
+    into another's. ``"linear"`` resolves to :data:`~vtscore.training.mlp.LINEAR_HEAD`, the
+    shipped production head. Raises ``ValueError`` for the sklearn-only arms
+    (see :data:`RV_HEAD_STRATEGIES`).
+    """
+    from vtscore.training.mlp import LINEAR_HEAD, _auto_hidden_dim  # noqa: PLC0415
+
+    if head_strategy not in RV_HEAD_STRATEGIES:
+        raise ValueError(
+            f"head strategy {head_strategy!r} is unavailable under region voting; "
+            f"choose from {sorted(RV_HEAD_STRATEGIES)}. The sklearn heads calibrate via the "
+            "box-pool trainer_fn path, which has no bag-aware split or per-bag weights."
+        )
+    reg = max(4, min(64, 4 * max(1, int(n_good))))
+    if head_strategy == "linear":
+        return LINEAR_HEAD
+    if head_strategy == "reg-mlp":
+        return reg
+    if head_strategy == "anneal-linear":
+        return LINEAR_HEAD if n_good < anneal_k else _auto_hidden_dim(n_votes)
+    if head_strategy == "anneal-reg":
+        return reg if n_good < anneal_k else _auto_hidden_dim(n_votes)
+    return _auto_hidden_dim(n_votes)  # "mlp"
+
+
 def train_rv_head(
     pos_rows: np.ndarray,
     neg_bags: list[np.ndarray],
@@ -208,6 +285,8 @@ def train_rv_head(
     safe_thresholds: bool,
     calibrate_count: int,
     cal_fraction: float,
+    head_strategy: str = "mlp",
+    n_good: int | None = None,
 ):
     """Train the region-voting MLP + pick its (pre-GMM) threshold; bag-aware.
 
@@ -218,10 +297,16 @@ def train_rv_head(
     the caller applies the GMM safe-threshold blend against its scored set (the
     ``scores``/``n_votes`` production passes to ``calculate_safe_threshold``). The
     return is ``None`` on a single-class budget.
+
+    *head_strategy* picks the model capacity via :func:`rv_hidden_dim` (#2790 arms;
+    ``"linear"`` is the shipped production head). It defaults to ``"mlp"``, the
+    historical behaviour, so existing callers are unchanged. *n_good* is the FULL
+    labelset's positive count that keys the anneal/reg arms; it defaults to the row
+    count of *pos_rows*, which is one snapped exemplar per good image on this path.
     """
     import torch  # noqa: PLC0415
 
-    from vtscore.training.mlp import _auto_hidden_dim, train_model  # noqa: PLC0415
+    from vtscore.training.mlp import train_model  # noqa: PLC0415
     from vtscore.training.thresholds import cross_calibration_threshold_cached  # noqa: PLC0415
 
     from vtscore.eval.scoring_heads import _mlp_predict_factory  # noqa: PLC0415
@@ -237,7 +322,7 @@ def train_rv_head(
             groups.append(("b", bj))
 
     n_votes, cal_groups, sample_weights = _flood_context_np(X_list, y_list, groups)
-    hidden_dim = _auto_hidden_dim(n_votes)
+    hidden_dim = rv_hidden_dim(head_strategy, n_votes, k if n_good is None else int(n_good))
 
     if safe_thresholds and n_votes < 6:
         threshold = 0.5
@@ -436,10 +521,15 @@ def _row(
         "mean_iou": mean_iou,
         "corloc": corloc,
         "oracle_cost": float(oracle),
-        # Oracle F1 ceiling (max F1 over τ) for the F1 plot; NaN when the caller
-        # didn't supply it (e.g. legacy paths). See ``_oracle_extra``. fpr/fnr have
-        # no oracle companion (their per-metric optimum is degenerate).
+        # Per-metric oracle ceilings (max over τ), one per plotted metric that has a
+        # non-degenerate optimum; NaN when the caller didn't supply them (e.g. legacy
+        # paths, and every results.jsonl written before they landed). See
+        # ``_oracle_extra`` for why fpr/fnr/precision/recall/auroc have no companion.
         "oracle_f1": float(oe.get("oracle_f1", float("nan"))),
+        "oracle_accuracy": float(oe.get("oracle_accuracy", float("nan"))),
+        "oracle_balanced_accuracy": float(oe.get("oracle_balanced_accuracy", float("nan"))),
+        # Threshold-free ranking quality. NaN on legacy paths that pass no oracle_extra.
+        "auroc": float(oe.get("auroc", float("nan"))),
         "threshold": round(float(threshold), 6),
         "calib_mode": calib_mode,
         "n_test": len(inputs.test_labels),
@@ -791,6 +881,25 @@ def _select_next(select_mode, tree, pool_ids, pool_scores, threshold, labeled, i
     return _select_hard(pool_ids, pool_scores, threshold, labeled)  # "hard" (and any fallback)
 
 
+def _calibration_geometry(inputs: RegionCurveInputs, good: list[int], bad: list[int], idx: dict[int, int]):
+    """``(groups, score_rows_by_group)`` for the box-pool calibration, or ``(None, None)``.
+
+    Groups one calibration vote per voted image and scores it over that image's inference
+    region stack, so the cut is fitted in the geometry ``max_pool_with_argmax`` will use.
+    Returns ``(None, None)`` unless :attr:`RegionCurveInputs.cal_inference_geometry` is on,
+    keeping the historical row-wise calibration byte-identical by default.
+    """
+    if not (inputs.cal_inference_geometry and inputs.pool_region_mats):
+        return None, None
+    groups: list = []
+    for i in good:
+        groups.extend([("g", i)] * int(np.asarray(inputs.pool_pos_exemplars[i]).shape[0]))
+    groups.extend([("b", i) for i in bad])
+    score_rows = {("g", i): inputs.pool_region_mats[idx[i]] for i in good}
+    score_rows.update({("b", i): inputs.pool_region_mats[idx[i]] for i in bad})
+    return groups, score_rows
+
+
 def _train_pool_head(
     inputs: RegionCurveInputs,
     good_ids: set[int],
@@ -845,6 +954,8 @@ def _train_pool_head(
             safe_thresholds=safe_thresholds,
             calibrate_count=calibrate_count,
             cal_fraction=cal_fraction,
+            head_strategy=head_strategy,
+            n_good=len(good),
         )
         if trained is None:
             return None
@@ -862,6 +973,7 @@ def _train_pool_head(
     # (len(good)) — decided once and reused for M0 (fit) AND every fold sub-model (trainer_fn),
     # so the cross-calibration stays uniform (never averages an SVM threshold for an MLP).
     head = make_head(head_strategy, inputs.input_dim, len(good))
+    groups, score_rows_by_group = _calibration_geometry(inputs, good, bad, idx)
     raw_thr = calibrated_threshold(
         x,
         y,
@@ -872,6 +984,8 @@ def _train_pool_head(
         calibrate_count=calibrate_count,
         cal_fraction=cal_fraction,
         stable_folds=stable_folds,
+        groups=groups,
+        score_rows_by_group=score_rows_by_group,
     )
     if not np.isfinite(raw_thr):
         raw_thr = 0.5

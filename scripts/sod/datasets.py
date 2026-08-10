@@ -11,6 +11,11 @@ COCO negatives are exhaustively annotated (a non-positive image is a true
 negative → clean FPR); LVIS is federated and VG is noisy free-text, so their
 "negatives" are only *not-labelled-positive* (FPR is an upper bound). Each
 adapter reports ``negatives_exhaustive`` so the orchestrator can flag it per row.
+
+Visual Genome is registered five ways: ``vg`` (the whole annotated corpus) and the
+size slices ``vg_s`` / ``vg_m`` / ``vg_l`` / ``vg_a``, which reproduce the GUI demo
+datasets ``visual_genome_{s,m,l,a}`` image-for-image so sweep results line up with the
+``vtscore.eval --datasets visual_genome_m`` experiments under ``docs/experiments/``.
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ import json
 import re
 import zipfile
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 
 from PIL import Image
@@ -36,6 +42,25 @@ GUI_MIN_BOX_FRAC = 0.01
 
 EXTERNAL = Path("/exp/scale26/datasets/external")
 
+_VG_BASE = {
+    "extract": EXTERNAL / "VisualGenome/derived/objects_flat.jsonl.gz",
+    "images": EXTERNAL / "VisualGenome/images",
+    "kind": "vg",
+    "negatives_exhaustive": False,
+}
+
+# Visual Genome size slices, matching the GUI demo datasets ``visual_genome_{s,m,l,a}``
+# (vtscore/media/image/_demo_sources.py) so sweep numbers are directly comparable to the
+# ``vtscore.eval --datasets visual_genome_m`` experiments in docs/experiments/. VG is
+# multi-label, so the demo slices the image list *flat* rather than per-category; see
+# ``_demo_universe`` for the exact reproduction of that ordering.
+_VG_DEMO_SLICES = {
+    "vg_s": (0.0, 1 / 50),
+    "vg_m": (1 / 50, 3 / 50),
+    "vg_l": (3 / 50, 7 / 50),
+    "vg_a": (0.0, None),
+}
+
 _CONFIG = {
     "coco": {
         "extract": EXTERNAL / "COCO/derived/objects_flat_val2017.jsonl.gz",
@@ -49,13 +74,30 @@ _CONFIG = {
         "kind": "coco_lvis",
         "negatives_exhaustive": False,
     },
-    "vg": {
-        "extract": EXTERNAL / "VisualGenome/derived/objects_flat.jsonl.gz",
-        "images": EXTERNAL / "VisualGenome/images",
-        "kind": "vg",
-        "negatives_exhaustive": False,
-    },
+    # Whole corpus: every annotated VG image, no demo vocabulary filter.
+    "vg": dict(_VG_BASE),
+    **{name: {**_VG_BASE, "demo_slice": frac} for name, frac in _VG_DEMO_SLICES.items()},
 }
+
+
+@lru_cache(maxsize=1)
+def _vg_demo_matcher():
+    """Return ``names -> bool``: is this VG object one of the demo's 100 categories?
+
+    Reuses the demo loader's own vocabulary and name normalization (case/whitespace
+    fold, irregular plurals, naive trailing-``s``) so slice membership is decided by
+    exactly the same rule ``_collect_visual_genome_files`` applies.
+    """
+    from vtscore.media.image._demo_categories import VISUAL_GENOME_CATEGORIES
+    from vtscore.media.image._demo_sources import _vg_category_for
+
+    vocab = frozenset(VISUAL_GENOME_CATEGORIES)
+
+    def in_vocab(names: object) -> bool:
+        parts = names if isinstance(names, list) else [names]
+        return any(p and _vg_category_for(str(p), vocab) is not None for p in parts)
+
+    return in_vocab
 
 
 def _norm(s: str) -> str:
@@ -152,11 +194,34 @@ class SodDataset:
         for p in (self._extract, cfg["images"]):
             if not p.exists():
                 raise SystemExit(f"missing {p}; stage the {name.upper()} dataset first.")
+        # (start, end) image-list fractions for the VG demo size slices; None = whole corpus.
+        self._demo_slice: tuple[float, float | None] | None = cfg.get("demo_slice")
         self._reader: _SplitZipReader | _VgZipReader = (
             _SplitZipReader(cfg["images"]) if self._kind == "coco_lvis" else _VgZipReader(cfg["images"])
         )
         # id -> pixel locator: (split, file_name) for coco/lvis; None for VG (id-keyed).
         self._locator: dict[int, tuple[str, str]] = {}
+
+    def _demo_universe(self, invocab_ids: set[int]) -> set[int]:
+        """Reproduce the GUI demo dataset's image set for this size slice.
+
+        ``_collect_visual_genome_files`` keeps images with >=1 in-vocab object, drops
+        those whose JPEG is missing, sorts by ``image_id``, and *then* takes the
+        fractional slice. The presence check must stay ahead of the slice: 4 in-vocab
+        images have no JPEG, and pruning them afterwards would shift every later index.
+
+        Parity is exact for ``vg_s`` and ``vg_m`` and off by one image in 8,386 for
+        ``vg_l`` (measured 2026-08-06 against the demo loader over the real corpus).
+        The residue is 3 images that ``extract_objects.py`` dropped because their only
+        in-vocab object had a degenerate box, which nudges the later slice boundaries.
+        """
+        assert self._demo_slice is not None
+        ids = sorted(i for i in invocab_ids if self._reader.has(i))  # type: ignore[union-attr]
+        start_frac, end_frac = self._demo_slice
+        n = len(ids)
+        start = int(n * start_frac)
+        end = int(n * end_frac) if end_frac is not None else n
+        return set(ids[start:end])
 
     def _row_matches(self, row: dict, q_norm: str, q_syn: str) -> bool:
         if self._kind == "coco_lvis":
@@ -190,12 +255,17 @@ class SodDataset:
         all_ids: set[int] = set()
         class_ids: set[int] = set()  # every image containing the class, pre size-filter
         locator: dict[int, tuple[str, str]] = {}
+        # Demo-slice membership rides along on the single pass we already make.
+        invocab_ids: set[int] = set()
+        in_demo_vocab = _vg_demo_matcher() if self._demo_slice is not None else None
 
         with gzip.open(self._extract, "rt", encoding="utf-8") as fh:
             for line in fh:
                 row = json.loads(line)
                 iid = int(row["image_id"])
                 all_ids.add(iid)
+                if in_demo_vocab is not None and iid not in invocab_ids and in_demo_vocab(row.get("names")):
+                    invocab_ids.add(iid)
                 if self._kind == "coco_lvis":
                     locator[iid] = (str(row["split"]), str(row["file_name"]))
                 if self._row_matches(row, q_norm, q_syn):
@@ -207,6 +277,11 @@ class SodDataset:
                     pos_boxes.setdefault(iid, []).append((x0, y0, x1, y1))
 
         self._locator = locator
+        if self._demo_slice is not None:
+            universe = self._demo_universe(invocab_ids)
+            all_ids &= universe
+            class_ids &= universe
+            pos_boxes = {i: b for i, b in pos_boxes.items() if i in universe}
         positive_ids = sorted(pos_boxes)
         # Exclude EVERY class-containing image from the negative pool — including images
         # dropped as positives because all their class boxes were sub-floor (they still

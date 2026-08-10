@@ -250,17 +250,31 @@ def render_training_nodes(
     alpha: float,
     slug: str | None,
     seed: int,
+    bagged: bool = True,
+    snapped: bool = True,
 ) -> None:
-    """Dump the HAC nodes that went into TRAINING at the final vote set (after the loop
-    consumed all its annotations), in labeling order, as individual captioned cell-crops under
-    ``training_nodes/<config>/seed{seed}/``. Positives = the snapped covering-box node per good
-    vote (one row); negatives = the flooded childless nodes (CLS + HAC leaves) per bad vote (a
-    bag). Each crop is captioned id / POS|NEG / bag / weight, where weight is the per-row loss
-    weight the trainer applies (:func:`vtscore.training.thresholds._per_bag_fit_weights`: every
-    good row = ``n_bad_bags/n_good``, every bad row = ``1/bag_size``). HAC only (the node/flood
-    construction is the region-voting path)."""
+    """Dump the rows that went into TRAINING at the final vote set (after the loop consumed all
+    its annotations), in labeling order, as captioned crops under
+    ``training_nodes/<config>/seed{seed}/``.
+
+    *bagged* / *snapped* must describe the run being rendered, because the two label
+    constructions put genuinely different rows in front of the trainer:
+
+    * ``bagged=True`` (``--region-voting`` / ``--neg-regions``, via ``train_rv_head``) -- each Bad
+      vote floods the childless nodes (CLS + HAC leaves) as one bag, and rows carry the per-bag
+      loss weights of :func:`vtscore.training.thresholds._per_bag_fit_weights` (good =
+      ``n_bad_bags/n_good``, bad = ``1/bag_size``), so both are captioned.
+    * ``bagged=False`` (box-pool, via ``make_head``) -- each Bad vote contributes exactly ONE
+      whole-image CLS row, and that path applies no sample weights at all, so a single full-frame
+      crop is drawn per Bad vote and no weight is captioned.
+    * ``snapped=True`` -- a Good vote trains on the covering box snapped to its best-IoU node.
+      ``snapped=False`` -- it trains on one grid-pooled row per GT box, so every GT box is drawn.
+
+    Rendering the bagged construction for a box-pool run (the pre-2026-08-07 behaviour) drew 33
+    NEG crops and a weight caption for a run that used one unweighted CLS row, so the flags are
+    required rather than assumed. HAC only."""
     if proposal != "hac":
-        print(f"  [train-nodes] skip {embedder}/{proposal}: HAC region-voting only", flush=True)
+        print(f"  [train-nodes] skip {embedder}/{proposal}: HAC only", flush=True)
         return
     reg = _EMBEDDER_ALIASES.get(embedder, embedder)
     regions_root = cache_dir / "regions" / dataset / reg
@@ -278,7 +292,10 @@ def render_training_nodes(
             flush=True,
         )
         return
-    good_w = n_bad_bags / n_good  # _per_bag_fit_weights: every good row weighs n_bad_bags / n_good
+    # Weights exist only on the bagged path; make_head trains on raw unweighted rows.
+    good_w = (n_bad_bags / n_good) if bagged else None
+    wtag = (lambda w: f"_w{w:.3f}") if bagged else (lambda w: "")
+    wcap = (lambda w: f"  weight={w:.3f}") if bagged else (lambda w: "")
     gdir = out_dir / "training_nodes" / f"{dataset}_{slugify(cls)}_{embedder}_{proposal}_a{alpha}" / f"seed{seed}"
     rank = 0
     n_neg_nodes = 0
@@ -292,20 +309,27 @@ def render_training_nodes(
             full = np.asarray(ds.load_image(iid).convert("RGB"), dtype=np.uint8)
         except Exception:
             continue
+        gt = [tuple(float(v) for v in b) for b in split.gt_boxes.get(iid, [])]
+        blist = [tuple(float(v) for v in b) for b in boxes]
         if e["gt_label"] == "good":
-            gt = split.gt_boxes.get(iid, [])
-            j = _snapped_index(gt, [tuple(float(v) for v in b) for b in boxes])
-            if j is None:
-                continue
-            mask = cell_masks[j] if cell_masks is not None else None
-            thumb = _cell_thumb(full, mask, boxes[j], (384, 384))
-            _save_caption_pil(
-                thumb,
-                gdir / f"{rank:04d}_t{int(e['t']):03d}_id{iid}_POS_w{good_w:.3f}.png",
-                f"id={iid} POS  bag=g:{iid}  node={j}  weight={good_w:.3f}  (t{int(e['t'])})",
-            )
-            rank += 1
-        else:
+            # Snapped: one row, the best-IoU node for the covering box. Grid-pooled: one row per
+            # GT box, pooled over the box's cells rather than snapped to any node.
+            if snapped:
+                j = _snapped_index(gt, blist)
+                if j is None:
+                    continue
+                rows = [(cell_masks[j] if cell_masks is not None else None, boxes[j], f"node={j}")]
+            else:
+                rows = [(None, np.asarray(b, dtype=np.float32), f"gtbox{bi}") for bi, b in enumerate(gt)]
+            for mask, box, kind in rows:
+                thumb = _cell_thumb(full, mask, box, (384, 384))
+                _save_caption_pil(
+                    thumb,
+                    gdir / f"{rank:04d}_t{int(e['t']):03d}_id{iid}_POS{wtag(good_w)}.png",
+                    f"id={iid} POS  bag=g:{iid}  {kind}{wcap(good_w)}  (t{int(e['t'])})",
+                )
+                rank += 1
+        elif bagged:
             childless = [i for i in range(len(children)) if int(children[i][0]) < 0]
             bag_size = len(childless)
             bad_w = 1.0 / bag_size if bag_size else 0.0  # _per_bag_fit_weights: every bad row weighs 1/bag_size
@@ -320,9 +344,22 @@ def render_training_nodes(
                 )
                 rank += 1
                 n_neg_nodes += 1
+        else:
+            # Box-pool: the Bad vote is ONE whole-image CLS row (pool_whole_vecs), unweighted.
+            thumb = _cell_thumb(full, None, np.asarray([0.0, 0.0, 1.0, 1.0], dtype=np.float32), (384, 384))
+            _save_caption_pil(
+                thumb,
+                gdir / f"{rank:04d}_t{int(e['t']):03d}_id{iid}_NEG_wholeCLS.png",
+                f"id={iid} NEG  whole-image CLS (1 row, unweighted)  (t{int(e['t'])})",
+            )
+            rank += 1
+            n_neg_nodes += 1
+    shape = "bagged childless nodes" if bagged else "one whole-image CLS row"
+    wnote = f" (w={good_w:.3f})" if bagged else " (unweighted)"
     print(
-        f"  [train-nodes] {embedder}/{proposal} seed{seed}: {n_good} pos (w={good_w:.3f}) + "
-        f"{n_bad_bags} neg bags = {n_neg_nodes} neg nodes -> {rank} crops in {gdir.parent.name}/{gdir.name}",
+        f"  [train-nodes] {embedder}/{proposal} seed{seed}: {n_good} pos{wnote} + "
+        f"{n_bad_bags} neg [{shape}] = {n_neg_nodes} neg rows -> {rank} crops in "
+        f"{gdir.parent.name}/{gdir.name}",
         flush=True,
     )
 

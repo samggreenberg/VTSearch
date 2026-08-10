@@ -265,7 +265,7 @@ python scripts/sod/sweep.py --datasets coco --classes "traffic light,stop sign" 
 python scripts/sod/sweep.py --datasets coco --classes "traffic light,stop sign" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --leaf-seeding spread --leaf-assign feature --hac-k 32 --iterations 5 --resolution 448 --max-labels 50 --dinov3-model vitl16 --out-dir docs/experiments/sod-sweep/coco-stopsign-trafficlight-dinov3-vitl16-5-iterations --viz --viz-band all --summary --min-box-frac 0.05 --labeling-trace --pca-dims none 10 
 
 # SigLIP2 interpretability threshold test
-python scripts/sod/sweep.py --datasets coco --classes "stop sign, cat, traffic light" --cache-dir docs/experiments/sod-sweep/cache --embedders siglip2 --proposals whole --iterations 5 --max-labels 100 --out-dir docs/experiments/sod-sweep/coco-stopsign-siglip2-whole-3-iterations-oracle-p6 --viz --viz-band all --min-box-frac 0.03 --labeling-trace --show-oracle # --confidence-gallery
+python scripts/sod/sweep.py --datasets coco --classes "stop sign, cat, traffic light" --cache-dir docs/experiments/sod-sweep/cache --embedders siglip2 --proposals whole --iterations 5 --max-labels 100 --out-dir docs/experiments/sod-sweep/coco-stopsign-cat-trafficlight-siglip2-whole-5-iterations-oracle --viz --viz-band all --min-box-frac 0.03 --labeling-trace --show-oracle #--head-strategy mlp --confidence-gallery
 
 # DINOv3 HAC interpretability threshold test
 python scripts/sod/sweep.py --datasets coco --classes "stop sign, cat, traffic light" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --hac-k 32 --iterations 5 --resolution 448 --max-labels 100 --dinov3-model vitl16 --out-dir docs/experiments/sod-sweep/coco-stopsign-dinov3-hac-3-iterations-oracle-p5 --viz --viz-band all --min-box-frac 0.03 --labeling-trace --show-oracle # --confidence-gallery --training-nodes
@@ -278,4 +278,17 @@ python scripts/sod/sweep.py --datasets coco --classes "stop sign,fire hydrant,tr
 
 # DINOv3 CLS (whole) vs SigLIP 2
 python scripts/sod/sweep.py --datasets coco --classes "stop sign, cat, traffic light" --cache-dir docs/experiments/sod-sweep/cache --embedders siglip2,dinov3 --proposals whole --iterations 5 --max-labels 100 --out-dir docs/experiments/sod-sweep/coco-stopsign-cat-trafficlight-siglip2-dinov3-whole-5-iterations-oracle --viz --viz-band all --min-box-frac 0.03 --labeling-trace --show-oracle
+
+
+# vg_m head comparison test (MLP vs logistic regression vs SVM)
+python scripts/sod/sweep.py --datasets vg_m --classes "car, tree" --cache-dir docs/experiments/sod-sweep/cache --embedders siglip --proposals whole --iterations 3 --max-labels 60 --out-dir docs/experiments/sod-sweep/vg-m-head-comparison/vg-m-test-car-tree-siglip-whole-mlp --viz --viz-band all --min-box-frac 0.03 --labeling-trace --show-oracle
+
+python scripts/sod/sweep.py --datasets vg_m --classes "car, tree" --cache-dir docs/experiments/sod-sweep/cache --embedders siglip --proposals whole --iterations 3 --max-labels 60 --out-dir docs/experiments/sod-sweep/vg-m-head-comparison/vg-m-test-car-tree-siglip-whole-linear --viz --viz-band all --min-box-frac 0.03 --labeling-trace --show-oracle --head-strategy linear
+
+python scripts/sod/sweep.py --datasets vg_m --classes "car, tree" --cache-dir docs/experiments/sod-sweep/cache --embedders siglip --proposals whole --iterations 3 --max-labels 60 --out-dir docs/experiments/sod-sweep/vg-m-head-comparison/vg-m-test-car-tree-siglip-whole-svm --viz --viz-band all --min-box-frac 0.03 --labeling-trace --show-oracle --head-strategy svm
+
+# vg_s hac MLP test (region voting vs just CLS)
+python scripts/sod/sweep.py --datasets vg_s --classes "car" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --hac-k 32 --iterations 5 --resolution 448 --max-labels 100 --out-dir docs/experiments/sod-sweep/vg-s-hac/mlp/car-dinov3-hac-5-iterations-oracle-bag --viz --viz-band all --min-box-frac 0.03 --labeling-trace --show-oracle # --head-strategy linear
+
+python scripts/sod/sweep.py --datasets vg_s --classes "car" --cache-dir docs/experiments/sod-sweep/cache --embedders dinov3 --proposals hac --hac-k 32 --iterations 5 --resolution 448 --max-labels 100 --out-dir docs/experiments/sod-sweep/vg-s-hac/mlp/car-dinov3-hac-5-iterations-oracle-CLS --viz --viz-band all --min-box-frac 0.03 --labeling-trace --show-oracle --no-region-voting --no-neg-regions --snap-goods --cal-inference-geometry --training-nodes # --head-strategy linear
 ```
