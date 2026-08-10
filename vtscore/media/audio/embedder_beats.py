@@ -124,7 +124,7 @@ class AudioBEATsEmbedder(MediaEmbedder):
         # weights, so the encoder is built from the checkpoint's own ``cfg``
         # rather than from constants that could drift away from it.
         self._on_progress("loading", "Building BEATs encoder…", 0, 0)
-        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
         model = BEATs(checkpoint["cfg"])
         model.load_state_dict(checkpoint["model"], strict=True)
         self._model = to_compute_device(model)

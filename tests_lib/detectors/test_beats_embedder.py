@@ -31,6 +31,9 @@ TINY_CFG = {
     "relative_position_embedding": True,
     "num_buckets": 32,
     "max_distance": 80,
+    "gru_rel_pos": True,
+    "deep_norm": True,
+    "layer_norm_first": False,
     "conv_bias": False,
     "input_patch_size": 16,
     "embed_dim": 16,
@@ -128,6 +131,26 @@ class TestVendoredEncoder:
         for i in range(TINY_CFG["encoder_layers"]):
             assert f"encoder.layers.{i}.self_attn.relative_attention_bias.weight" in keys
             assert f"encoder.layers.{i}.self_attn.grep_a" in keys
+
+    def test_pre_layer_norm_configs_are_refused(self):
+        """Only the post-LN graph is ported; a pre-LN config must not load quietly."""
+        from vtscore.media.audio._beats_model import BEATs
+
+        with pytest.raises(ValueError, match="layer_norm_first"):
+            BEATs(dict(TINY_CFG, layer_norm_first=True))
+
+    def test_ungated_config_has_no_gate_tensors(self):
+        """``gru_rel_pos=False`` checkpoints carry no ``grep_*``; neither should we."""
+        from vtscore.media.audio._beats_model import BEATs
+
+        keys = set(BEATs(dict(TINY_CFG, gru_rel_pos=False)).state_dict())
+        assert not [k for k in keys if "grep_" in k]
+
+    def test_deep_norm_can_be_disabled(self):
+        from vtscore.media.audio._beats_model import BEATs
+
+        model = BEATs(dict(TINY_CFG, deep_norm=False))
+        assert model.encoder.layers[0].deep_norm_alpha == 1.0
 
     def test_deep_norm_alpha(self):
         from vtscore.media.audio._beats_model import BEATs

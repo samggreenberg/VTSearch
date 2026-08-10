@@ -222,6 +222,7 @@ class _MultiheadAttention(nn.Module):
         has_relative_attention_bias: bool,
         num_buckets: int,
         max_distance: int,
+        gru_rel_pos: bool,
     ) -> None:
         super().__init__()
         self.embed_dim = embed_dim
@@ -231,6 +232,7 @@ class _MultiheadAttention(nn.Module):
         self.has_relative_attention_bias = has_relative_attention_bias
         self.num_buckets = num_buckets
         self.max_distance = max_distance
+        self.gru_rel_pos = gru_rel_pos
 
         if has_relative_attention_bias:
             self.relative_attention_bias = nn.Embedding(num_buckets, num_heads)
@@ -240,8 +242,11 @@ class _MultiheadAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim)
         self.out_proj = nn.Linear(embed_dim, embed_dim)
 
-        self.grep_linear = nn.Linear(self.head_dim, 8)
-        self.grep_a = nn.Parameter(torch.ones(1, num_heads, 1, 1))
+        # The gate exists only when the config asks for it — otherwise the raw
+        # bias is used directly and the checkpoint carries no gate tensors.
+        if gru_rel_pos:
+            self.grep_linear = nn.Linear(self.head_dim, 8)
+            self.grep_a = nn.Parameter(torch.ones(1, num_heads, 1, 1))
 
     def _relative_positions_bucket(self, relative_positions: Tensor) -> Tensor:
         """T5-style bidirectional bucketing: exact when near, log-spaced when far."""
@@ -276,14 +281,16 @@ class _MultiheadAttention(nn.Module):
 
         attn_mask = None
         if position_bias is not None:
-            # Gate the shared bias on this layer's queries.
-            query_layer = x.transpose(0, 1).view(bsz, tgt_len, self.num_heads, -1).transpose(1, 2)
-            _b, _h, _l, _ = query_layer.size()
-            gate_a, gate_b = torch.sigmoid(
-                self.grep_linear(query_layer).view(_b, _h, _l, 2, 4).sum(-1, keepdim=False)
-            ).chunk(2, dim=-1)
-            gate = gate_a * (gate_b * self.grep_a - 1.0) + 2.0
-            attn_mask = gate.view(bsz * self.num_heads, tgt_len, 1) * position_bias
+            attn_mask = position_bias
+            if self.gru_rel_pos:
+                # Gate the shared bias on this layer's own queries.
+                query_layer = x.transpose(0, 1).view(bsz, tgt_len, self.num_heads, -1).transpose(1, 2)
+                _b, _h, _l, _ = query_layer.size()
+                gate_a, gate_b = torch.sigmoid(
+                    self.grep_linear(query_layer).view(_b, _h, _l, 2, 4).sum(-1, keepdim=False)
+                ).chunk(2, dim=-1)
+                gate = gate_a * (gate_b * self.grep_a - 1.0) + 2.0
+                attn_mask = gate.view(bsz * self.num_heads, tgt_len, 1) * position_bias
             attn_mask = attn_mask.view((-1, tgt_len, tgt_len))
 
         out, _ = F.multi_head_attention_forward(
@@ -325,6 +332,8 @@ class _EncoderLayer(nn.Module):
         has_relative_attention_bias: bool,
         num_buckets: int,
         max_distance: int,
+        gru_rel_pos: bool,
+        deep_norm: bool,
         encoder_layers: int,
     ) -> None:
         super().__init__()
@@ -335,6 +344,7 @@ class _EncoderLayer(nn.Module):
             has_relative_attention_bias=has_relative_attention_bias,
             num_buckets=num_buckets,
             max_distance=max_distance,
+            gru_rel_pos=gru_rel_pos,
         )
         self.dropout1 = nn.Dropout(dropout)
         self.dropout2 = nn.Dropout(activation_dropout)
@@ -343,7 +353,7 @@ class _EncoderLayer(nn.Module):
         self.fc1 = nn.Linear(embedding_dim, ffn_embedding_dim)
         self.fc2 = nn.Linear(ffn_embedding_dim, embedding_dim)
         self.final_layer_norm = nn.LayerNorm(embedding_dim)
-        self.deep_norm_alpha = math.pow(2 * encoder_layers, 1 / 4)
+        self.deep_norm_alpha = math.pow(2 * encoder_layers, 1 / 4) if deep_norm else 1.0
 
     def forward(self, x: Tensor, pos_bias: Optional[Tensor]) -> tuple[Tensor, Optional[Tensor]]:
         residual = x
@@ -368,6 +378,12 @@ class _TransformerEncoder(nn.Module):
         embed_dim = cfg["encoder_embed_dim"]
         layers = cfg["encoder_layers"]
         self.dropout = cfg["dropout"]
+        # Every released BEATs checkpoint is post-LN (``deep_norm`` and
+        # ``layer_norm_first`` are mutually exclusive upstream, and all of them
+        # pick deep_norm). Only the post-LN path is ported, so refuse a pre-LN
+        # config rather than silently producing features from the wrong graph.
+        if cfg.get("layer_norm_first"):
+            raise ValueError("layer_norm_first=True (pre-LN) BEATs configs are not supported")
         self.pos_conv = nn.Sequential(
             _WeightNormConv1d(embed_dim, cfg["conv_pos"], cfg["conv_pos_groups"]),
             _SamePad(cfg["conv_pos"]),
@@ -385,6 +401,8 @@ class _TransformerEncoder(nn.Module):
                     has_relative_attention_bias=cfg["relative_position_embedding"],
                     num_buckets=cfg["num_buckets"],
                     max_distance=cfg["max_distance"],
+                    gru_rel_pos=cfg["gru_rel_pos"],
+                    deep_norm=cfg["deep_norm"],
                     encoder_layers=layers,
                 )
                 for _ in range(layers)
