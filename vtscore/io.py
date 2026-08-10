@@ -40,9 +40,42 @@ __all__ = [
     "atomic_write_bytes",
     "atomic_write_json",
     "atomic_write_text",
+    "desanitize_csv_cell",
     "file_lock",
     "read_server_json",
+    "sanitize_csv_cell",
 ]
+
+#: Characters that trigger formula execution in spreadsheet applications.
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def sanitize_csv_cell(value: str) -> str:
+    """Prefix formula-like cell values with a single quote to prevent injection.
+
+    Spreadsheet applications execute a cell whose text starts with ``=``,
+    ``+``, ``-``, ``@``, tab, or CR.  A leading apostrophe forces the cell
+    to be read as literal text instead.
+    """
+    if value and value[0] in _FORMULA_PREFIXES:
+        return "'" + value
+    return value
+
+
+def desanitize_csv_cell(value: str) -> str:
+    """Undo :func:`sanitize_csv_cell` so a written CSV can be re-read losslessly.
+
+    This is the exact inverse of the sanitizer: it strips a leading
+    apostrophe only when the *next* character is one the sanitizer would
+    have escaped, which is precisely the shape the sanitizer emits.  A
+    value that genuinely starts with ``'`` followed by a formula prefix
+    (``'-foo``) is indistinguishable from the sanitized form of ``-foo``
+    and loses its apostrophe — an ambiguity inherent to the escaping
+    scheme, not something the reader can resolve.
+    """
+    if len(value) >= 2 and value[0] == "'" and value[1] in _FORMULA_PREFIXES:
+        return value[1:]
+    return value
 
 
 def read_server_json(path: Path | str, *, missing_ok: bool = False) -> Any:

@@ -20,7 +20,7 @@ from typing import Any, Iterator
 
 from vtscore.config import DATA_DIR
 from vtscore.exporters.base import PluginField, LabelsetExporter
-from vtscore.io import atomic_write_text
+from vtscore.io import atomic_write_text, sanitize_csv_cell as _sanitize_csv_cell
 
 _DEFAULT_CSV_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.csv"
 
@@ -37,17 +37,6 @@ def _atomic_write_csv(path: Path, write_rows) -> None:
     writer = csv.writer(buf)
     write_rows(writer)
     atomic_write_text(path, buf.getvalue())
-
-
-# Characters that trigger formula execution in spreadsheet applications.
-_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
-
-
-def _sanitize_csv_cell(value: str) -> str:
-    """Prefix formula-like cell values with a single quote to prevent injection."""
-    if value and value[0] in _FORMULA_PREFIXES:
-        return "'" + value
-    return value
 
 
 class ServerCsvLabelsetExporter(LabelsetExporter):

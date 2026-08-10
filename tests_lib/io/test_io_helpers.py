@@ -1,4 +1,4 @@
-"""Tests for ``vtscore.io``: the shared JSON read / atomic-write helpers."""
+"""Tests for ``vtscore.io``: the shared JSON read / atomic-write / CSV-cell helpers."""
 
 from __future__ import annotations
 
@@ -8,7 +8,13 @@ import threading
 
 import pytest
 
-from vtscore.io import atomic_write_json, atomic_write_text, read_server_json
+from vtscore.io import (
+    atomic_write_json,
+    atomic_write_text,
+    desanitize_csv_cell,
+    read_server_json,
+    sanitize_csv_cell,
+)
 
 
 class TestReadServerJson:
@@ -169,3 +175,31 @@ class TestConcurrentAtomicWrites:
         # ``os.replace`` swaps inodes on POSIX, proving the rename was
         # atomic rather than an in-place truncate.
         assert first_inode != second_inode
+
+
+class TestCsvCellSanitization:
+    @pytest.mark.parametrize("prefix", ["=", "+", "-", "@", "\t", "\r"])
+    def test_formula_prefix_is_escaped(self, prefix):
+        assert sanitize_csv_cell(f"{prefix}take2.wav") == f"'{prefix}take2.wav"
+
+    @pytest.mark.parametrize("value", ["take2.wav", "", "a-b", "'quoted", "0.5"])
+    def test_safe_value_is_untouched(self, value):
+        assert sanitize_csv_cell(value) == value
+
+    @pytest.mark.parametrize("prefix", ["=", "+", "-", "@", "\t", "\r"])
+    def test_desanitize_inverts_sanitize(self, prefix):
+        original = f"{prefix}handle_post.txt"
+        assert desanitize_csv_cell(sanitize_csv_cell(original)) == original
+
+    @pytest.mark.parametrize("value", ["take2.wav", "", "'", "'quoted", "a-b", "-"])
+    def test_desanitize_leaves_unescaped_values_alone(self, value):
+        assert desanitize_csv_cell(value) == value
+
+    def test_desanitize_strips_only_one_apostrophe(self):
+        # ``''-x`` is the sanitized form of ``'-x``, which is itself literal.
+        assert desanitize_csv_cell("''-x") == "'-x"
+
+    def test_sanitize_round_trips_the_desanitized_form(self):
+        # Every value the reader produces re-encodes to what it was read from.
+        for written in ["'-take2.wav", "'@handle.txt", "plain.wav"]:
+            assert sanitize_csv_cell(desanitize_csv_cell(written)) == written
