@@ -10,7 +10,8 @@
 GET /api/settings
 ```
 
-→ ```json
+→
+```json
 {
   "volume": 1.0,
   "theme": "dark",
