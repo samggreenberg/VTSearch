@@ -1,0 +1,15 @@
+# VTSearch: GPU dependencies (CUDA), minus the AGPL-3.0 packages.
+#
+# Identical to `requirements/gpu.txt` except that it does NOT request the
+# `agpl` extra, so `ultralytics` (YOLO) and `PyMuPDF` are never installed.
+# Use it wherever `gpu.txt` would be used (same --index-url / --extra-index-url
+# sequence for torch; see the header of that file) when AGPL-3.0-or-later code
+# cannot ship in your deployment. The features that need those packages -- the
+# YOLO image extractor and clipper, the PDF importer, the document converters
+# -- then fail with an actionable message instead of working.
+#
+# `requirements/gpu.txt` remains the default; this file is the opt-out.
+# `tests/core/test_requirements.py` enforces that the two stay in sync apart
+# from the requested extras.
+
+-e .[dev]

@@ -143,7 +143,14 @@ VTSearch is licensed under the [Apache License 2.0](LICENSE). That covers the so
 Two things it does **not** cover:
 
 - **Model weights are separately licensed.** VTSearch downloads embedding models at runtime rather than vendoring them, and each publisher sets its own terms; some are more restrictive than this project's license. EUPE (Perception Encoder) is released under the FAIR Noncommercial Research License and cannot be used commercially; DINOv3 is gated on Hugging Face and requires accepting its license before download. Embedders with a usage restriction advertise it via their descriptor's `license_notice` field, which the UI shows as a warning on the embedder picker. Check the terms of any model you enable before deploying.
-- **Two dependencies are copyleft.** `ultralytics` (used by the image extractor and clipper) and `PyMuPDF` (used by the PDF importer and document converters) are both AGPL-3.0. They are imported lazily but declared as install-time dependencies, so a default install pulls them in. VTSearch's own Apache-2.0 grant is unaffected, but the AGPL terms may attach to a combined work you redistribute or run as a network service. Uninstall those packages, or obtain commercial terms for them, if that doesn't suit your deployment.
+- **Two dependencies are copyleft, and can be skipped.** `ultralytics` (used by the image extractor and clipper) and `PyMuPDF` (used by the PDF importer and document converters) are both AGPL-3.0. A default install pulls them in, so those features work out of the box. VTSearch's own Apache-2.0 grant is unaffected, but the AGPL terms may attach to a combined work you redistribute or run as a network service. If that doesn't suit your deployment, install without them:
+
+  ```bash
+  VTSEARCH_NO_AGPL=1 bash scripts/install.sh      # or: pip install -r requirements/base-no-agpl.txt
+  docker build --build-arg REQUIREMENTS=base-no-agpl.txt -f docker/Dockerfile .
+  ```
+
+  Both packages live in the `agpl` extra in `pyproject.toml`, which every default install path requests; the commands above are the same install with that extra dropped. The result is permissively licensed, and the four features listed above report themselves as unavailable with an actionable message rather than half-working. Obtaining commercial terms for the packages is the other way to keep the features.
 
 See [NOTICE](NOTICE) for the full attribution and dependency-licensing statement.
 

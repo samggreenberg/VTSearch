@@ -111,12 +111,17 @@ Runtime dependencies are declared in **`pyproject.toml`** under
 `[project.dependencies]`: that's the single source of truth, and deptry
 (wired into `lint.yml` and the pre-commit hook) verifies that every
 imported package is declared there. Dev tools (pytest, ruff,
-pre-commit, etc.) live under `[project.optional-dependencies].dev`.
+pre-commit, etc.) live under `[project.optional-dependencies].dev`, and
+the two AGPL-3.0 packages (`ultralytics`, `PyMuPDF`) under
+`[project.optional-dependencies].agpl` — an extra every default install
+path requests, so it is opt-*out*, not opt-in (see
+[DEPLOYMENT.md](DEPLOYMENT.md#installing-without-the-agpl-dependencies)).
 
 ```
-pyproject.toml                       # [project.dependencies] + [project.optional-dependencies].dev
-requirements/base.txt                # `--extra-index-url <cpu wheel index>` + `-e .[dev]`
-requirements/gpu.txt                 # `-e .[dev]` (install.sh / Dockerfile.gpu set --extra-index-url)
+pyproject.toml                       # [project.dependencies] + [project.optional-dependencies] (dev, agpl)
+requirements/base.txt                # `--extra-index-url <cpu wheel index>` + `-e .[dev,agpl]`
+requirements/gpu.txt                 # `-e .[dev,agpl]` (install.sh / Dockerfile.gpu set --extra-index-url)
+requirements/*-no-agpl.txt           # The same two files without the `agpl` extra (VTSEARCH_NO_AGPL=1)
 requirements/labbench.txt            # Standalone curated list for Dockerfile.labbench (image+SigLIP only)
 requirements/image-embedders*.txt    # Standalone curated lists for Dockerfile.image-embedders[.gpu]
 ```

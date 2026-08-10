@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from vtscore.converters.base import MediaConverter, resolve_media_bytes
+from vtscore.utils.optional_deps import agpl_unavailable_message
 
 
 class Document2TextMediaConverter(MediaConverter):
@@ -47,7 +48,7 @@ class Document2TextMediaConverter(MediaConverter):
         try:
             import fitz  # noqa: PLC0415 - PyMuPDF
         except ImportError:
-            print("Document2TextMediaConverter requires PyMuPDF: pip install PyMuPDF")
+            print(agpl_unavailable_message("PyMuPDF", "Extracting text from documents"))
             return []
 
         try:

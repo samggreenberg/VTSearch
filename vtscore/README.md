@@ -144,10 +144,17 @@ Two carve-outs matter if you are embedding `vtscore` in your own product:
   its own weights. Some are noncommercial (EUPE, under the FAIR
   Noncommercial Research License) or gated (DINOv3). Embedders with a
   restriction expose it through their descriptor's `license_notice` field.
-- **Two dependencies are AGPL-3.0**: `ultralytics` (image extractor and
-  clipper) and `PyMuPDF` (PDF importer and document converters). Both are
-  lazily imported but declared as install-time dependencies. The Apache-2.0
-  grant on `vtscore` itself is unaffected, but AGPL terms may attach to a
-  combined work you distribute or operate as a service.
+- **Two dependencies are AGPL-3.0, and are skippable**: `ultralytics` (image
+  extractor and clipper) and `PyMuPDF` (PDF importer and document
+  converters). A default install includes both. The Apache-2.0 grant on
+  `vtscore` itself is unaffected, but AGPL terms may attach to a combined
+  work you distribute or operate as a service — so if you are shipping a
+  closed product on top of `vtscore`, install without them:
+  `VTSEARCH_NO_AGPL=1 bash scripts/install.sh`, or
+  `pip install -r requirements/base-no-agpl.txt`. Both packages live in the
+  `agpl` extra, which every default install path requests; dropping it
+  leaves a permissively licensed install in which those four features raise
+  an actionable error instead of running (see
+  `vtscore/utils/optional_deps.py`).
 
 See [`NOTICE`](../NOTICE) for the full statement.

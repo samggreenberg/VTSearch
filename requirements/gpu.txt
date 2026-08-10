@@ -5,9 +5,14 @@
 # from the chosen CUDA tag's index with --index-url (so PyPI can't override
 # the build with a mismatched-arch wheel), then install the rest of this file
 # with --extra-index-url. Like requirements/base.txt this forwards to
-# pyproject.toml; `[project.dependencies]` plus the `dev` extra.
+# pyproject.toml; `[project.dependencies]` plus the `dev` and `agpl` extras.
+#
+# `agpl` (ultralytics, PyMuPDF) is requested so this file installs exactly
+# what it always has. To skip those two AGPL-3.0 packages, install
+# `requirements/gpu-no-agpl.txt` instead (or run the installer as
+# `VTSEARCH_NO_AGPL=1 bash scripts/install.sh`); see NOTICE.
 
--e .[dev]
+-e .[dev,agpl]
 
 # --- GPU UMAP + k-means via cuML / RAPIDS ------------------------------------
 # cuML accelerates the VTSBrowse UMAP projection and the diversity-tree k-means

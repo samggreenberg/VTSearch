@@ -74,7 +74,6 @@ dependencies = [
     # Plugin deps that are imported from the codebase
     "sentence-transformers",
     "dnspython>=2.0.0",
-    "PyMuPDF",
     "librosa",
     "soundfile",
     # Resampler behind ``vtscore.media.audio.decode``. It arrives with librosa
@@ -92,7 +91,6 @@ dependencies = [
     "open_clip_torch",
     "timm",
     "ftfy",
-    "ultralytics",
     "opencv-python-headless",
     "imageio-ffmpeg",
     # Portable detector export: build a standalone ONNX scorer from a trained
@@ -120,6 +118,24 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The AGPL-3.0-or-later runtime dependencies, split out so a deployment that
+# cannot take copyleft code has a way to say no. THIS EXTRA IS PART OF THE
+# DEFAULT INSTALL: every documented install path requests it
+# (`requirements/base.txt` and `requirements/gpu.txt` are `-e .[dev,agpl]`,
+# and both Dockerfiles install those files), so a normal install pulls these
+# in exactly as it did when they were hard dependencies. Opting out means
+# using the `*-no-agpl.txt` mirrors -- `VTSEARCH_NO_AGPL=1 bash
+# scripts/install.sh` -- and forgoing the features listed below, which then
+# fail with an actionable message from `vtscore.utils.optional_deps`.
+# See NOTICE and the License section of README.md.
+agpl = [
+    # PDF page rendering + document text extraction: vtscore.datasets.pdf,
+    # vtscore.converters.document2image / document2text.
+    "PyMuPDF",
+    # YOLO object detection: the image extractor (vtscore.media.image.extractor)
+    # and the image clipper (vtscore.media.image.clipper).
+    "ultralytics",
+]
 dev = [
     "pytest",
     "pytest-xdist",

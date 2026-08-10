@@ -60,7 +60,9 @@ SETUPTOOLS_USE_DISTUTILS=stdlib pip install apricot-select -q
 pip install --no-deps "toponymy==0.5.2" -q
 
 # Install all dependencies + editable install via pyproject.toml
-# (requirements/base.txt is just `-e .[dev]`).
+# (requirements/base.txt is just `-e .[dev,agpl]`; the `agpl` extra keeps
+# ultralytics + PyMuPDF installed so the YOLO/PDF tests still exercise the
+# real code paths rather than skipping).
 pip install --prefer-binary \
   -r "$REPO_DIR/requirements/base.txt" \
   -q
