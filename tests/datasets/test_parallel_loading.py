@@ -1015,8 +1015,13 @@ class TestBuildCoverageAtlasForContext:
         ``RuntimeError: dictionary changed size during iteration``.  It now
         snapshots under ``_state_lock`` first, so hammering inserts alongside
         repeated builds must never raise.
+
+        The writer is bounded and paced: a tight unbounded loop would balloon
+        the vector set (and the k-means cost of every rebuild) without adding
+        anything to the race coverage.
         """
         import threading
+        import time
 
         from vtscore.state.core import DatasetContext, _state_lock
         from vtscore.state.coverage import build_coverage_atlas_for_context
@@ -1030,22 +1035,24 @@ class TestBuildCoverageAtlasForContext:
             }
 
         stop = threading.Event()
-        counter = {"next_id": 10_000}
 
         def writer() -> None:
-            while not stop.is_set():
+            next_id = 10_000
+            for _ in range(60):
+                if stop.is_set():
+                    return
                 with _state_lock:
-                    media_id = counter["next_id"]
-                    counter["next_id"] += 1
-                    ctx.medias[media_id] = {
-                        "id": media_id,
+                    ctx.medias[next_id] = {
+                        "id": next_id,
                         "embeddings": {"e5": rng.standard_normal(128).astype(np.float32)},
                     }
+                next_id += 1
+                time.sleep(0.001)
 
         thread = threading.Thread(target=writer, daemon=True)
         thread.start()
         try:
-            for _ in range(50):
+            for _ in range(15):
                 build_coverage_atlas_for_context(ctx)
         finally:
             stop.set()

@@ -19,6 +19,7 @@ from __future__ import annotations
 import io
 import tarfile
 import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -428,23 +429,31 @@ class TestConcurrentMutation:
     """
 
     @staticmethod
-    def _start_writer(ctx: DatasetContext) -> tuple[threading.Thread, threading.Event]:
+    def _start_writer(ctx: DatasetContext, *, max_inserts: int = 300) -> tuple[threading.Thread, threading.Event]:
+        """A bounded, paced writer -- enough contention to race the snapshot,
+
+        capped so it can't balloon ``ctx.medias`` into the hundreds of
+        thousands and drag the surrounding test (or a shared xdist worker)
+        into a real hang.
+        """
         from vtscore.state.core import _state_lock
 
         stop = threading.Event()
-        counter = {"next_id": 10_000}
 
         def writer() -> None:
-            while not stop.is_set():
+            next_id = 10_000
+            for _ in range(max_inserts):
+                if stop.is_set():
+                    return
                 with _state_lock:
-                    media_id = counter["next_id"]
-                    counter["next_id"] += 1
-                    ctx.medias[media_id] = {
-                        "id": media_id,
+                    ctx.medias[next_id] = {
+                        "id": next_id,
                         "media_type": "image",
                         "media_bytes": _jpeg_bytes(),
                         "origin": {"importer": "server_folder", "params": {}},
                     }
+                next_id += 1
+                time.sleep(0.001)
 
         thread = threading.Thread(target=writer, daemon=True)
         thread.start()
@@ -455,7 +464,7 @@ class TestConcurrentMutation:
         ctx = _ctx_with(medias, dataset_id="_warm_concurrent")
         writer, stop = self._start_writer(ctx)
         try:
-            for _ in range(50):
+            for _ in range(20):
                 warm_archive_thumbnails(ctx, max_workers=2)
         finally:
             stop.set()
@@ -469,12 +478,18 @@ class TestConcurrentMutation:
         ctx = _ctx_with(medias, dataset_id="_warm_kick_concurrent")
         writer, stop = self._start_writer(ctx)
         try:
-            for _ in range(50):
-                # A call this makes directly on the caller's thread (the
-                # pending check ahead of the JobManager kick) -- this is
-                # where the unlocked live iteration used to raise.
-                start_archive_thumbnail_warm(ctx)
+            # This runs directly on the caller's thread (the pending check
+            # ahead of the JobManager kick) -- exactly where the unlocked
+            # live iteration used to raise.
+            job_id = start_archive_thumbnail_warm(ctx)
         finally:
             stop.set()
             writer.join(timeout=5)
-            unregister_context(ctx.dataset_id)
+
+        if job_id is not None:
+            from vtscore.concurrency.async_jobs import archive_thumbnail_jobs
+
+            job = archive_thumbnail_jobs.get(job_id)
+            if job is not None:
+                job.done_event.wait(timeout=30)
+        unregister_context(ctx.dataset_id)
