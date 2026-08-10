@@ -5,6 +5,7 @@ import {
   hoverThumbHalfExtents,
   imageTileFitDimensions,
   pickCell,
+  sameBin,
   SQRT3,
   type BinGeometry,
 } from './bin-geometry';
@@ -261,6 +262,39 @@ describe('bin-geometry', () => {
       const big = imageTileFitDimensions(300, 100, 10, 'balanced');
       expect(big.dw).toBeCloseTo(2 * small.dw);
       expect(big.dh).toBeCloseTo(2 * small.dh);
+    });
+  });
+
+  describe('sameBin', () => {
+    it('matches the same (q, r) at the same level', () => {
+      expect(sameBin(2, { q: 3, r: -1 }, 2, { q: 3, r: -1 })).toBe(true);
+    });
+
+    it('does not match the same (q, r) across levels (issue #2967)', () => {
+      // The lattice origin exists at every level, so (0, 0) is the guaranteed
+      // collision — the pinned/hovered cell from level 1 is a different bin from
+      // level 2's (0, 0) even though the axial coords are identical.
+      expect(sameBin(1, { q: 0, r: 0 }, 2, { q: 0, r: 0 })).toBe(false);
+      expect(sameBin(0, { q: 4, r: 7 }, 1, { q: 4, r: 7 })).toBe(false);
+    });
+
+    it('does not match different cells within a level', () => {
+      expect(sameBin(1, { q: 0, r: 0 }, 1, { q: 0, r: 1 })).toBe(false);
+      expect(sameBin(1, { q: 0, r: 0 }, 1, { q: 1, r: 0 })).toBe(false);
+    });
+
+    it('treats an absent cell as never matching, including another absent one', () => {
+      expect(sameBin(1, null, 1, { q: 0, r: 0 })).toBe(false);
+      expect(sameBin(1, { q: 0, r: 0 }, 1, undefined)).toBe(false);
+      expect(sameBin(-1, null, -1, null)).toBe(false);
+    });
+
+    it('ignores fields beyond (level, q, r)', () => {
+      // Cells are re-fetched into fresh objects when a tile is evicted and
+      // reloaded, so identity must not depend on object reference or payload.
+      const a = { q: 1, r: 2, cx: 10, cy: 20, count: 5, rep_id: 7 };
+      const b = { q: 1, r: 2, cx: 10, cy: 20, count: 6, rep_id: 9 };
+      expect(sameBin(3, a, 3, b)).toBe(true);
     });
   });
 
