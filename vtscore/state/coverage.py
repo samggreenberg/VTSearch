@@ -123,8 +123,11 @@ def build_coverage_atlas_for_context(
 
     from vtscore.state.coverage_atlas import CoverageAtlas, auto_max_depth
 
+    with _state_lock:
+        medias_snapshot = dict(ctx.medias)
+
     vectors: dict[int, np.ndarray] = {}
-    for cid, media in ctx.medias.items():
+    for cid, media in medias_snapshot.items():
         emb = media_embedding(media)
         if emb is not None:
             vectors[cid] = np.asarray(emb, dtype=np.float32)

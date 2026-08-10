@@ -275,7 +275,11 @@ def warm_archive_thumbnails(
     number warmed so far -- a partial pass is a perfectly good outcome, since
     every un-warmed tile still resolves through the request path.
     """
-    pending = pending_archive_thumbnail_ids(ctx.medias)
+    from vtscore.state.core import _state_lock  # noqa: PLC0415
+
+    with _state_lock:
+        medias_snapshot = dict(ctx.medias)
+    pending = pending_archive_thumbnail_ids(medias_snapshot)
     if not pending:
         return 0
     total = len(pending)
@@ -368,7 +372,11 @@ def start_archive_thumbnail_warm(ctx: Any) -> str | None:
     requiring an explicit re-save, and costs nothing when the thumbnails did
     ride along.
     """
-    if not pending_archive_thumbnail_ids(ctx.medias):
+    from vtscore.state.core import _state_lock  # noqa: PLC0415
+
+    with _state_lock:
+        medias_snapshot = dict(ctx.medias)
+    if not pending_archive_thumbnail_ids(medias_snapshot):
         return None
     job = archive_thumbnail_jobs.start(
         ("archive-thumbnail-warm", ctx.dataset_id),
