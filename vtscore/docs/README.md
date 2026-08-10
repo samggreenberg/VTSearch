@@ -91,11 +91,13 @@ the docs make sense:
 
 ## API contract reference
 
-For the canonical inventory of every name vtscore exports, see
-[`docs/vtscore-api.md`](../../docs/vtscore-api.md) - a docstring-only
-contract sketch produced as the Phase 0 deliverable of the library
-extraction. Treat it as the authoritative list when checking whether a
-symbol is part of the public surface.
+The [package reference](#package-reference) above is the authoritative
+inventory of the public surface: one guide per subpackage, each listing the
+symbols that package exports and what they guarantee. The guides group
+symbols by intent rather than by import path, so pair them with
+[Architecture § Import paths](architecture.md#import-paths-read-before-copy-pasting),
+which records the real dotted path for every package - including the ones
+whose `__init__.py` re-exports nothing.
 
 ## Versioning
 

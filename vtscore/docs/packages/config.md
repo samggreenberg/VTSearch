@@ -11,8 +11,9 @@ place library code is allowed to read environment variables directly.
 
 **Source:** `vtscore/config.py` (~263 lines).
 **Related:** [`cli.md`](cli.md) for the CLI entry points that build a
-`CoreConfig` before running, and the broader public-API sketch in
-[`/home/user/VTSearch/docs/vtscore-api.md`](../../../docs/vtscore-api.md).
+`CoreConfig` before running, and
+[`architecture.md`](../architecture.md#the-coreconfig-bridge) for why the
+seam exists at all.
 
 ## Why `CoreConfig` exists
 

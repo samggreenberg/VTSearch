@@ -17,9 +17,10 @@ Comprehensive developer documentation lives under [`docs/`](docs/):
 - **[Package reference](docs/README.md#package-reference)** - one deep-dive guide per subpackage.
 - **[Extending vtscore](docs/extending/README.md)** - eleven plugin families with authoring guides for each.
 
-For the canonical inventory of every name vtscore exports, see
-[`docs/vtscore-api.md`](../docs/vtscore-api.md) at the repo root (a
-docstring-only API contract sketch).
+For the canonical inventory of every name vtscore exports, see the
+[package reference](docs/README.md#package-reference); for the real dotted
+import path of any symbol, see
+[Architecture § Import paths](docs/architecture.md#import-paths-read-before-copy-pasting).
 
 ## Install
 

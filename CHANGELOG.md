@@ -39,5 +39,6 @@ not list every commit. Use `git log` for the full history.
 ### Added
 
 - `vtscore` library distribution with its own [README](vtscore/README.md) and
-  [CHANGELOG](vtscore/CHANGELOG.md). See [`docs/vtscore-api.md`](docs/vtscore-api.md)
-  for the documented public surface.
+  [CHANGELOG](vtscore/CHANGELOG.md). See the
+  [package reference](vtscore/docs/README.md#package-reference) for the
+  documented public surface.
