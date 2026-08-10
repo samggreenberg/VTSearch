@@ -1,3 +1,8 @@
+<!-- This file is served raw at GET /api/achievements/docs/cli/raw and its
+     footer phrase is hash-matched in vtsearch/achievements.py. Don't remove
+     or reword the "Readme Reader code phrase" line without updating
+     achievements.py to match. See CLAUDE.md. -->
+
 # Command-line interface
 
 VTSearch provides a CLI workflow for running detectors on datasets and exporting results, all without starting the web server.
