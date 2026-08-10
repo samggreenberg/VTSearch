@@ -9,9 +9,9 @@ import { settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
 
 /**
- * Zoneless staleness canary for the offline banner (docs/plans/zoneless-migration.md,
- * Phases 0.3/0.4 + 1.3). The banner reads `ConnectionStateService.status()` /
- * `retrying()` — signals as of Phase 1.3 — directly in its template. This spec
+ * Zoneless staleness canary for the offline banner. The banner reads
+ * `ConnectionStateService.status()` / `retrying()` — both signals — directly
+ * in its template. This spec
  * runs under a zoneless `TestBed`, drives connectivity through the *production
  * channel* (the breaker's `recordNetworkFailure`/`recordSuccess` and the Retry
  * probe), and asserts on the rendered DOM after `settleZoneless()` with NO manual

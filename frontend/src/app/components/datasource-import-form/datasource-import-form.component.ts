@@ -44,8 +44,7 @@ export class DatasourceImportFormComponent {
   readonly submitting = signal(false);
   readonly error = signal('');
   // Dynamic-field-option state, keyed by field key; signalized so the
-  // unpatched HTTP callbacks schedule CD under zoneless (see
-  // docs/plans/zoneless-migration.md).
+  // unpatched HTTP callbacks schedule CD under zoneless.
   readonly dynamicOptions = signal<Record<string, FieldOptions[]>>({});
   readonly dynamicLoading = signal<Record<string, boolean>>({});
   readonly dynamicError = signal<Record<string, string>>({});

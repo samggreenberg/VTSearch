@@ -507,8 +507,7 @@ def _clip_to_bytes(file_path: Path, media_type: str, params: dict[str, Any]) -> 
 def _converter_origin_to_chain(params: dict[str, Any]) -> list[dict[str, Any]] | None:
     """Normalize a flat ``run_converters_on_folder`` origin into a one-step chain.
 
-    The importer-level converter path (path 1 in
-    ``docs/plans/server-dedup-references.md``) stamps a *flat* origin -
+    The importer-level converter path stamps a *flat* origin -
     ``converter`` / ``converter_param_<key>`` plus the Phase 2b sub-output
     disambiguators ``converter_out_index`` / ``converter_n_out`` /
     ``converter_content_hash`` - rather than the ``clipper_chain`` trail the

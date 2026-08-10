@@ -4,7 +4,7 @@ Per-operation progress is streamed via the unified ``/api/events`` SSE
 endpoint; see ``vtsearch/routes/events.py``.
 
 Migrated to ``flask_smorest`` so these routes appear in
-``/api/openapi.json``. See ``docs/plans/openapi-schema.md``. Schema-level
+``/api/openapi.json``. Schema-level
 validation is unused (all bodies are empty); handler-level rejects
 (unknown task id) surface as 404 with the standard ``message`` envelope.
 """

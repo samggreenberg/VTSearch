@@ -4,8 +4,7 @@ import { configureZoneless } from './zoneless-testbed';
 import { settleZoneless } from './settle-resource';
 
 /**
- * Framework canary for the zoneless migration (see
- * `docs/plans/zoneless-migration.md`, Phase 2.2 and Recipe D).
+ * Framework canary for the zoneless migration (Phase 2.2, Recipe D).
  *
  * Several modals close themselves from a `setTimeout(() => this.close())` where
  * `close()` emits a bound `output()` (`settings-importer`, `label-importer`,

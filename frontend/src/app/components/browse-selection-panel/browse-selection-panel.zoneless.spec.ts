@@ -13,8 +13,8 @@ import { makeActiveContextStub } from '../../testing/mocks';
 import { settleZoneless } from '../../testing/settle-resource';
 
 /**
- * Zoneless staleness canary for the browse selection panel
- * (docs/plans/zoneless-migration.md, Phases 0.3/0.4 + 2.6). Phase 2.6 signalized
+ * Zoneless staleness canary for the browse selection panel.
+ * Phase 2.6 signalized
  * `count`/`gridGoalWidth`/`sortedEntries`, which were template-bound
  * but written from the selection-refresh `effect()` and the metadata-cache
  * `version$` subscribe — neither of which schedules CD for a plain field under

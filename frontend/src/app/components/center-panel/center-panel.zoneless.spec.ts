@@ -11,8 +11,8 @@ import { settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
 
 /**
- * Zoneless staleness canary for the center panel (docs/plans/zoneless-migration.md,
- * Phases 0.3/0.4 + 1.2). Phase 1.2 dropped the `zone.run(...)` re-entries from
+ * Zoneless staleness canary for the center panel.
+ * Phase 1.2 dropped the `zone.run(...)` re-entries from
  * `KeyboardService`, moving the change-detection trigger to this consumer, whose
  * shortcut-driven state (`isVoting`/`spinningVote`/`swipeClass`/`undoToastText`/
  * `volume`/`pendingBadConfirm` + the settings mirror) is now signalized.

@@ -24,7 +24,6 @@ Migrated to ``flask_smorest`` so the JSON routes are described in
 ``/api/openapi.json``. The raw-markdown route stays undecorated (it
 serves ``text/plain``, not JSON); it's still attached to the same
 ``Blueprint`` and Flask routes it normally, just absent from the spec.
-See ``docs/plans/openapi-schema.md``.
 """
 
 from __future__ import annotations

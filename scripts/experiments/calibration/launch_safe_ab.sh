@@ -26,7 +26,7 @@ MAXPATCH="/exp/$USER/max-patch"
 export CALIB_AB_ON_EXP="${CALIB_AB_ON_EXP:-/exp/$USER/calibration-safe-linear}"
 export CALIB_AB_OFF_EXP="${CALIB_AB_OFF_EXP:-/exp/$USER/calibration-off-linear}"
 
-# Shared pre-registered knobs (see docs/plans/safe-threshold-gmm-experiment.md).
+# Shared pre-registered knobs.
 # Visual Genome region voting only: the production max_patch arm plus a
 # single-vector whole_image control.
 export CALIB_DATASETS="${CALIB_DATASETS:-visual_genome_m}"

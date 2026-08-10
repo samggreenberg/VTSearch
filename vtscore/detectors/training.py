@@ -313,8 +313,8 @@ def train_and_threshold(
             sized to match the final model).  This is what lets a later
             Inclusion slide re-derive the threshold over the cached orderings
             instead of being a no-op — see
-            :func:`vtscore.state.core.recompute_detector_thresholds_for_inclusion`
-            and docs/plans/find-verification-workflow.md.  ``None`` keeps the
+            :func:`vtscore.state.core.recompute_detector_thresholds_for_inclusion`.
+            ``None`` keeps the
             legacy (uncached) behaviour for callers that don't own a context.
         groups: Per-row bag ids (one voted image per bag); see
             :func:`_flood_context`.

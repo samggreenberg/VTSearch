@@ -2,7 +2,7 @@
 reload, plus export and clear.
 
 Migrated to ``flask_smorest`` so these routes appear in
-``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+``/api/openapi.json``.
 
 Routes with a single marshmallow-able body (``load-demo``, ``load-folder``,
 ``load-source``, ``clear``) use the standard ``@arguments`` + ``@response``

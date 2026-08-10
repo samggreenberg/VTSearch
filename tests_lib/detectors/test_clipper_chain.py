@@ -1,7 +1,5 @@
 """Phase 1 tests for the clipper-chain abstraction.
 
-See ``docs/plans/clipper-chain.md`` for the design.
-
 Covers:
 - Validation (unknown plugins, mismatched adjacency, empty chain).
 - Single-step chain matches the legacy single-clipper path's origin

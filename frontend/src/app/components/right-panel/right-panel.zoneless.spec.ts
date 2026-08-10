@@ -9,8 +9,8 @@ import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
 
 /**
- * Zoneless staleness canary for the right panel (docs/plans/zoneless-migration.md,
- * Phases 0.3/0.4 + 2.5/2.8). The panel used to mirror six `VoteStateService`
+ * Zoneless staleness canary for the right panel.
+ * The panel used to mirror six `VoteStateService`
  * observables into plain fields via `subscribe`; Phase 2.5 signalized the service
  * and replaced those mirrors with `computed`s over its getters. This drives the
  * vote state through the production channel (`applyOptimisticState`, the same

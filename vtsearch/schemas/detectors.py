@@ -59,9 +59,8 @@ Label endpoints (``vtsearch/routes/detectors/labels.py``):
 The ``POST /api/detectors/<name>/import-labels/<importer_name>`` and
 ``POST /api/detectors/registry/from-labelset/<importer>`` routes stay on the
 legacy flask pattern: their request shape depends on the chosen label
-importer's plugin fields, which don't fit a static marshmallow schema (see the
-*Open questions / Plugin field endpoints* section of
-``docs/plans/openapi-schema.md``).
+importer's plugin fields, which don't fit a static marshmallow schema (see
+"Routes absent from the spec" in ``docs/API.md``).
 
 The labelset-element shape is shared with :mod:`vtsearch.schemas.labels`.
 """
@@ -927,7 +926,7 @@ class FindStatsSweepPointSchema(Schema):
 
 class FindStatsResponseSchema(Schema):
     """Response for ``GET /api/find/stats`` (detector evaluation over the
-    adopted Find label set). See docs/plans/find-verification-workflow.md."""
+    adopted Find label set)."""
 
     # Adopted totals over ALL items (unverified flood-filled at the current
     # cutoff, like Export/Browse/ToDataset); verified_count is how many of
@@ -1000,7 +999,6 @@ class FindCorrectionsToDetectorResponseSchema(Schema):
     Reports how many corrections were folded into the active detector's
     labelset and the resulting labelset size.  The current Find session stays
     frozen; the retrained detector applies on the next scoring pass.
-    See docs/plans/find-verification-workflow.md.
     """
 
     ok = fields.Boolean(required=True)

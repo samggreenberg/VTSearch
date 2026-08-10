@@ -1,6 +1,6 @@
 """GPU runtime microbenchmark: MLP (torch) vs SVM (cuML) train/inference scaling.
 
-Stage C of the MLP-vs-SVM study (see ``docs/plans/mlp-vs-svm-experiment.md``).
+Stage C of the MLP-vs-SVM study.
 The per-step timings inside the voting simulation only exercise the tiny
 vote-regime fits; this benchmark instead measures how each trainer *scales*:
 

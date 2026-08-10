@@ -247,7 +247,7 @@ def set_inclusion(value: int) -> None:
         clear_progress_cache()
         # Inclusion is a pure cutoff knob: re-threshold from the cached fold
         # orderings instead of dropping the (inclusion-independent) MLP, so the
-        # scores stay frozen across a slide.  See docs/plans/find-verification-workflow.md.
+        # scores stay frozen across a slide.
         _core.recompute_detector_thresholds_for_inclusion(value)
         # In Find mode the unverified items' good/bad labels are derived from
         # the cutoff, so the new threshold must re-split them over the frozen

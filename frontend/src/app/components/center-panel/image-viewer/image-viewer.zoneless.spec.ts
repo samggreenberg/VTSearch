@@ -8,8 +8,8 @@ import { configureZoneless } from '../../../testing/zoneless-testbed';
 import { settleZoneless } from '../../../testing/settle-resource';
 
 /**
- * Zoneless staleness canary for the image viewer (docs/plans/zoneless-migration.md,
- * Phases 0.3/0.4 + 2.3). Phase 2.3 signalized the viewer state that is written from
+ * Zoneless staleness canary for the image viewer.
+ * Phase 2.3 signalized the viewer state that is written from
  * *un-patched* callbacks — the window-level `keydown`/`keyup`/`blur` (Shift) and
  * `mousemove`/`mouseup` drag handlers, the `ResizeObserver` rendered-size writes,
  * and the shake `setTimeout`. None of those callbacks are bound template/host

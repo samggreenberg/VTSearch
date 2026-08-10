@@ -15,8 +15,6 @@
 # The theory bench does not depend on prepare, so it is submitted immediately
 # rather than chained behind the embedding stage.
 #
-# Design + pre-registered predictions: docs/plans/gmm-cut-theory-experiment.md
-#
 # Usage: bash launch_cut.sh
 set -uo pipefail
 

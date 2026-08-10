@@ -6,7 +6,7 @@ results.  Each detector's MLP is sourced from its in-memory
 from its on-disk labelset.
 
 Migrated to ``flask_smorest`` so the routes are described in
-``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+``/api/openapi.json``.
 """
 
 from __future__ import annotations

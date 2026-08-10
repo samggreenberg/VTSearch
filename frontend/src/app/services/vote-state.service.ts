@@ -49,7 +49,7 @@ const UNDO_STACK_MAX = 20;
  * Shared vote state. The per-pile sets/maps are backed by signals so a write
  * from any context — a vote POST continuation, the 2s poll timer, an undo/redo
  * — notifies Angular's scheduler and repaints the views that bind these getters
- * with no zone.js (docs/plans/zoneless-migration.md, Phase 2.5 / Recipe B).
+ * with no zone.js.
  * Each value is exposed via a value-returning getter over a private signal, so
  * existing `voteState.goodVotes` reads stay the same yet become reactive under
  * zoneless (see `SortStateService` for the getter-signal rationale).

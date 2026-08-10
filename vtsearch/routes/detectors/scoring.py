@@ -5,7 +5,7 @@ on top of the detector concept.  Detectors are loaded into ``DetectorContext``
 instances on demand; weights live exclusively in RAM.
 
 Migrated to ``flask_smorest`` so the routes are described in
-``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+``/api/openapi.json``.
 """
 
 from __future__ import annotations
@@ -551,7 +551,7 @@ def find_stats():
     calibrated threshold across inclusion -10..10 (re-cutting the cached
     estimator behind the current cutoff) for false-positive / false-negative
     counts at every stop.
-    Pure read; no new state.  See docs/plans/find-verification-workflow.md.
+    Pure read; no new state.
     """
     from vtscore.state.core import get_active_detector_context
     from vtscore.training.thresholds import INCLUSION_MAX, INCLUSION_MIN, threshold_from_fold_orderings
@@ -989,7 +989,7 @@ def _run_autofind_export(response: dict) -> dict | None:
     status dict ``{exporter, success, message?, error?}`` otherwise. Export
     failures are reported in the status block rather than raised: the scored
     results are valuable on their own, so a misconfigured exporter must not
-    sink the whole request. See ``docs/plans/auto-find-settings-tab.md``.
+    sink the whole request.
     """
     from vtsearch.settings import (  # noqa: PLC0415
         get_autofind_exporter,

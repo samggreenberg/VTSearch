@@ -2,18 +2,18 @@ import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 
 /**
- * Zoneless `TestBed` helpers for the zoneless-migration effort.
+ * Zoneless `TestBed` helpers.
  *
- * See `docs/plans/zoneless-migration.md` (Phase 0). The migration converts
- * VTSearch's frontend off zone.js. The failure mode it introduces — "a value
- * changed but the view silently went stale" — does NOT surface in a normal spec
- * today, because every component spec drives `fixture.detectChanges()` by hand,
- * which force-renders and therefore masks the staleness. These helpers let a
- * spec run its `TestBed` under `provideZonelessChangeDetection()` so the fixture
- * refreshes only what change detection actually *schedules* — turning the
- * headless suite into a real zoneless-staleness oracle, component by component.
+ * The app converted its frontend off zone.js. The failure mode that
+ * introduces — "a value changed but the view silently went stale" — does NOT
+ * surface in a normal spec by default, because most component specs drive
+ * `fixture.detectChanges()` by hand, which force-renders and therefore masks
+ * the staleness. These helpers let a spec run its `TestBed` under
+ * `provideZonelessChangeDetection()` so the fixture refreshes only what
+ * change detection actually *schedules* — turning the headless suite into a
+ * real zoneless-staleness oracle, component by component.
  *
- * How to use, as a component migrates (Phase 1–2):
+ * How to use, when auditing a component under this oracle:
  *  1. Add `provideZonelessChangeDetection()` to the spec's providers — either via
  *     `provideZoneless()` spread into `configureTestingModule({ providers: [...] })`
  *     or by calling `configureZoneless({ ... })` instead of `configureTestingModule`.

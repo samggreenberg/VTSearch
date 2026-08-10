@@ -1094,8 +1094,7 @@ def _calibration_cache_key(
     the key, so an Inclusion change hits the cache and only re-runs the cheap
     conformal quantile rule.  The key encodes a hash of the raw training vectors (not
     just label IDs) so a labelset re-resolved to different embeddings - e.g.
-    after the embedder changes - invalidates the cache automatically.  See
-    docs/plans/find-verification-workflow.md.
+    after the embedder changes - invalidates the cache automatically.
     """
     # Hash the raw training vectors rather than embedding them in the key.
     # The full ``(N_labels x D x 4)``-byte string reaches ~150 MB at 100k
@@ -1653,8 +1652,7 @@ def compute_fold_orderings(
     labels.  Because :func:`train_model` is inclusion-independent, these
     orderings do **not** depend on ``inclusion`` - so they can be cached once
     and re-thresholded at any inclusion via :func:`threshold_from_fold_orderings`
-    (and swept across all inclusions for the Stats chart).  See
-    docs/plans/find-verification-workflow.md.
+    (and swept across all inclusions for the Stats chart).
 
     Returns ``(orderings, fallback)``.  When calibration is not possible the
     orderings are empty and ``fallback`` is the sentinel threshold the public
@@ -1842,8 +1840,7 @@ def calculate_cross_calibration_threshold(
             :func:`conformal_threshold` to control the miss/false-alarm
             trade-off.  It does **not** enter model training (the fold models
             are inclusion-independent), so the same fold scores can be
-            re-thresholded at any inclusion - see
-            docs/plans/find-verification-workflow.md.
+            re-thresholded at any inclusion.
         rng: Optional RandomState for the Train/Calibrate splits.  When
             ``None`` a fresh ``RandomState(CALIBRATION_SPLIT_SEED)`` is used,
             so the splits are reproducible and the global ``np.random`` state

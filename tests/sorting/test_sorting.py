@@ -531,7 +531,7 @@ class TestCalibrationCache:
     def test_inclusion_change_reuses_cached_orderings(self):
         """Inclusion is a pure threshold knob now: changing it must reuse the
         cached fold orderings (no fold refit) and only re-run the cheap
-        min-cost search.  See docs/plans/find-verification-workflow.md."""
+        min-cost search."""
         from vtscore.detectors import training as detector_training
         from vtscore.training import thresholds
 

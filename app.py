@@ -133,8 +133,7 @@ if _MAX_UPLOAD_MB > 0:
 # OpenAPI / Swagger UI (flask-smorest)
 # ---------------------------------------------------------------------------
 # The API spec is served at /api/openapi.json and a browsable Swagger UI
-# at /api/docs. See docs/plans/openapi-schema.md for the migration plan.
-# Blueprints registered via ``api.register_blueprint`` contribute to the
+# at /api/docs. Blueprints registered via ``api.register_blueprint`` contribute to the
 # spec when they use ``flask_smorest.Blueprint``; plain Flask Blueprints
 # still register but are absent from the spec until migrated.
 

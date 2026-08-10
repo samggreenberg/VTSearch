@@ -5,9 +5,9 @@ import { configureZoneless } from './zoneless-testbed';
 import { settleZoneless } from './settle-resource';
 
 /**
- * Harness canary for the Phase 2.5 service-signalization pattern
- * (docs/plans/zoneless-migration.md): SortStateService / VoteStateService expose
- * their state through *value-returning getters* over private signals, so existing
+ * Harness canary for the service-signalization pattern: SortStateService /
+ * VoteStateService expose their state through *value-returning getters* over
+ * private signals, so existing
  * `sortState.sortBusy` template bindings stay byte-for-byte the same yet must
  * become reactive under zoneless. This pins the load-bearing framework
  * guarantee: a signal read THROUGH A GETTER, during template evaluation, is

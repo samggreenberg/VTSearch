@@ -3,8 +3,7 @@
 _An Autopilot simulation study on the HLTCOE Grid, plus a synthetic bench with a
 known ground truth. Every number below comes from
 `scripts/experiments/calibration/analyze_cut.py` and `theory_bench.py`; the prose
-is written on top of those numbers. Design and pre-registered predictions:
-`docs/plans/gmm-cut-theory-experiment.md`._
+is written on top of those numbers._
 
 ## BLUF
 

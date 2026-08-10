@@ -1,7 +1,7 @@
 """Flask routes for the Label Importer API.
 
 Migrated to ``flask_smorest`` so these routes appear in
-``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+``/api/openapi.json``.
 
 Endpoints
 ---------
@@ -24,8 +24,7 @@ POST /api/label-importers/import/<importer_name>
     select value) surface as ``422`` with the standard ``errors``
     envelope; handler-level rejects (path traversal, plugin error) keep
     their original HTTP codes (400 / 500) with the standard ``message``
-    envelope. See *Resolved questions / Plugin field endpoints* in
-    ``docs/plans/openapi-schema.md``.
+    envelope. See "Routes absent from the spec" in ``docs/API.md``.
 
 POST /api/label-importers/ingest-missing
     Accept a list of missing label entries, re-ingest them from their
