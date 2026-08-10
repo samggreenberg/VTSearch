@@ -274,7 +274,7 @@ from vtscore.detectors.training import train_detector_from_origins
 def score_one(dataset_ctx: DatasetContext, detector_ctx: DetectorContext) -> dict:
     set_thread_dataset_context(dataset_ctx)
     set_thread_detector_context(detector_ctx)
-    # Re-derive the detector's MLP from its saved origins. Pass
+    # Re-derive the detector's head from its saved origins. Pass
     # detector_ctx.embedder so the re-embedded vectors match the embedder
     # the detector was originally trained with - never the media type's
     # default, which may have changed since save.

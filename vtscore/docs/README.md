@@ -2,7 +2,7 @@
 
 The `vtscore` library is the Flask-free, reusable core of
 [VTSearch](https://github.com/samggreenberg/vtsearch). It provides everything
-needed to load a dataset, embed media, train an MLP detector from labels,
+needed to load a dataset, embed media, train a detector from labels,
 score new media, and evaluate results - without any web framework, settings
 system, or UI dependency. The companion `vtsearch` Flask + Angular app wraps
 this library with the HTTP / SPA / settings layer.
@@ -16,7 +16,7 @@ For end users of the VTSearch web app, see the
 
 - [Quickstart](quickstart.md) - load a folder, train a detector, score new media. ~15 minute read.
 - [Architecture](architecture.md) - system overview, the seven seams between vtscore and vtsearch, the resolution chain for "active context".
-- [Concepts](concepts.md) - `Media`, `Origin`, `LabelSet`, `Embedding`, `Context`, the MLP detector. The vocabulary every other doc assumes.
+- [Concepts](concepts.md) - `Media`, `Origin`, `LabelSet`, `Embedding`, `Context`, the linear-head detector. The vocabulary every other doc assumes.
 
 ## Package reference
 
@@ -29,7 +29,7 @@ surface, worked examples, and gotchas.
 | `vtscore.media` | `MediaType`, embedder + clipper ABCs, processor ABCs | [packages/media.md](packages/media.md) |
 | `vtscore.embedding` | Embedder loaders, torch runtime, cached `(N, D)` matrix | [packages/embedding.md](packages/embedding.md) |
 | `vtscore.datasets` | Origins, labelsets, loaders, importers, media sources | [packages/datasets.md](packages/datasets.md) |
-| `vtscore.training` | MLP / threshold / SVM / region-similarity primitives | [packages/training.md](packages/training.md) |
+| `vtscore.training` | Head (linear / MLP) / threshold / SVM / region-similarity primitives | [packages/training.md](packages/training.md) |
 | `vtscore.detectors` | Detector lifecycle: train, store, score, labelset sync | [packages/detectors.md](packages/detectors.md) |
 | `vtscore.eval` | Offline evaluation: text-sort, learned-sort, voting iterations | [packages/eval.md](packages/eval.md) |
 | `vtscore.converters` | Cross-format converters (spectrogram, OCR, ASR, keyframes) | [packages/converters.md](packages/converters.md) |
@@ -65,10 +65,10 @@ library discovers it automatically. See:
 These rules hold across every package - internalise them once and the rest of
 the docs make sense:
 
-- **No persisted vectors or MLP weights.** Embeddings and trained models are
+- **No persisted vectors or model weights.** Embeddings and trained models are
   in-memory artefacts only. The on-disk persistence is `Origin` records
   inside `LabeledElement`s inside a detector's `LabelSet` JSON. On every load,
-  the library re-derives `origin → file → embedding → MLP` from those
+  the library re-derives `origin → file → embedding → head` from those
   origins. The single sanctioned exception is dataset pickle files, which
   are by design a snapshot of media plus their embeddings.
 - **No hardcoded `data/` paths.** Every filesystem reference goes through

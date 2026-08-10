@@ -3,7 +3,7 @@
 The runtime state package. Every loaded dataset and every loaded detector
 gets its own context object that bundles the mutable data structures
 operating on it - votes, label history, click times, the cached embedding
-matrix, the diversity tree, the trained MLP, the calibrated threshold.
+matrix, the diversity tree, the trained head, the calibrated threshold.
 The package also owns the resolution chain that picks which context is
 "active" for the current call (Flask request, background thread, or test
 harness), the helpers that operate on the active context, and the
@@ -36,7 +36,7 @@ infrastructure that drives long-running operations on these contexts.
 and `vtscore/state/core.py:122`. Both use `__slots__` so accidentally
 shadowing an attribute raises immediately. Every field is in-memory
 only; datasets persist via pickle, detectors via labelset JSON (origins
-+ labels only, never MLP weights - see the "No Persisted Vectors or
++ labels only, never model weights - see the "No Persisted Vectors or
 MLPs" rule in `CLAUDE.md`).
 
 ### `DatasetContext`
@@ -56,7 +56,7 @@ Per-dataset mutable state. One context per loaded dataset.
 
 The cached matrix is rebuilt lazily by
 `vtscore.embedding.matrix.get_embedding_matrix` and reused across
-cosine sort, MLP scoring, and diversity-tree construction so the library
+cosine sort, detector scoring, and diversity-tree construction so the library
 doesn't rebuild an `(N, D)` matrix per call. Cache validity is a single
 `media_revision` compare, so a mutation that changes vectors without
 changing the id set still invalidates it (root-cause Pattern #4). An
@@ -67,7 +67,7 @@ drops both the matrix and the diversity tree.
 ### `DetectorContext`
 
 Per-detector mutable state. Vote state, training artefacts, and the
-trained MLP live here - never on `DatasetContext`. One detector can be
+trained head live here - never on `DatasetContext`. One detector can be
 trained on labels collected against many datasets; the labelset is the
 canonical persisted form.
 
@@ -85,7 +85,7 @@ canonical persisted form.
 | `inclusion` | `int \| None` | Per-detector inclusion fraction override |
 | `training_medias` | `dict[int, dict[str, Any]]` | Voted medias with embeddings |
 | `label_embeddings` | `dict[str, np.ndarray]` | `stable_element_id -> embedding`, built from origins |
-| `model` | `torch.nn.Sequential \| None` | Trained MLP (process-lifetime only) |
+| `model` | `torch.nn.Sequential \| None` | Trained head (process-lifetime only) |
 | `threshold` | `float` | Calibrated decision threshold |
 | `labelset_good_count` / `labelset_bad_count` | `int` | Counts from the on-disk labelset (cross-dataset) |
 | `votes_dataset_id` | `str` | Dataset ID the cid-keyed dicts are valid against |

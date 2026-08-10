@@ -116,6 +116,7 @@ import numpy as np
 import torch
 
 from vtscore.training import train_model, calculate_cross_calibration_threshold
+from vtscore.training.mlp import LINEAR_HEAD
 
 # Map filenames to labels.
 labels = {
@@ -139,17 +140,21 @@ for m in medias.values():
 X = torch.from_numpy(np.stack(X_list).astype(np.float32))
 y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
 
-model = train_model(X, y, input_dim=X.shape[1])
+# LINEAR_HEAD is the production head: a single Linear(D, 1), i.e. logistic
+# regression. Omitting hidden_dim auto-sizes an MLP instead - see docs/ML.md.
+model = train_model(X, y, input_dim=X.shape[1], hidden_dim=LINEAR_HEAD)
 threshold = calculate_cross_calibration_threshold(
     X_list, y_list, input_dim=X.shape[1], inclusion_value=0,
+    hidden_dim=LINEAR_HEAD,
 )
-print(f"Trained MLP; calibrated threshold = {threshold:.3f}")
-# Trained MLP; calibrated threshold = 0.412
+print(f"Trained detector; calibrated threshold = {threshold:.3f}")
+# Trained detector; calibrated threshold = 0.412
 ```
 
 `train_model` is deterministic given the default seed (42). Six labels is
-enough for the MLP to converge - the model is small (auto-sized to ~16
-hidden units for this corpus) and the dropout regularises it.
+enough for the linear head to converge - it has `D + 1` parameters and no
+hidden layer, which is exactly why it is the production head when positives
+are sparse.
 
 For a more idiomatic detector lifecycle (with persistence), see
 [example 5](#5-persist-and-reload-a-detector) below.
@@ -196,7 +201,7 @@ For larger datasets, build the embedding matrix once on the
 
 Detectors persist as JSON labelsets - never as model weights. On reload,
 the library re-derives embeddings from the labelset's origins and
-retrains the MLP.
+retrains the head.
 
 ```python
 from vtscore.datasets.labelset import LabeledElement, LabelSet
@@ -234,7 +239,7 @@ register_detector_context(ctx)
 # Build (good_origins, bad_origins) from the saved labelset's elements,
 # then re-derive embeddings + retrain. Pass the same embedder the detector
 # was trained with so the re-embedded vectors line up with the saved ones -
-# otherwise the MLP trains on a mix of embedder outputs.
+# otherwise the head trains on a mix of embedder outputs.
 good_origins = [
     {"origin": e.origin, "origin_name": e.origin_name,
      "filename": e.filename, "md5": e.md5}

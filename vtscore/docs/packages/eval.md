@@ -225,7 +225,7 @@ through `json.dumps(indent=2)`.
 `vtscore/eval/voting_iterations.py` simulates an interactive labelling
 session - votes are cast one at a time in the order the app's
 **Autopilot** would present them, and at each step (once both
-polarities have at least one vote) a fresh MLP is trained, a threshold
+polarities have at least one vote) a fresh head is trained, a threshold
 is computed, the held-out test set is scored, and the inclusion-weighted
 cost is recorded. This is how the team answers "how does cost drop as
 the user labels?" without spinning up a UI session.
@@ -247,8 +247,9 @@ by `sim_fraction`, then iterates:
 1. Pick the next vote with the autopilot selector (seed → Good → Bad →
    Hard → New) and apply it; mirror it onto the coverage atlas that
    drives the New phase.
-2. When both polarities have at least one vote, train an MLP
-   (`train_model`) and pick a threshold
+2. When both polarities have at least one vote, train the head
+   (`train_model`; the default arm passes `LINEAR_HEAD`, matching the app)
+   and pick a threshold
    (`calculate_cross_calibration_threshold`, with optional
    `calculate_safe_threshold` blend).
 3. Score `D_test`, compute FPR / FNR, weight by inclusion, record the
@@ -410,7 +411,7 @@ matplotlib is not in the library's core dependencies - installing
 ## Invariants worth restating
 
 - **No persisted weights.** `eval_learned_sort` and
-  `simulate_voting_iterations` train MLPs in memory and discard them
+  `simulate_voting_iterations` train heads in memory and discard them
   after scoring; no detector files are written.
 - **Deterministic.** Every function that produces randomness takes a
   `seed` argument; `np.random.RandomState(seed)` controls splits and

@@ -188,7 +188,7 @@ opposite direction switches sides.
 `[x0, y0, x1, y1]` in normalised image coordinates (`0..1`,
 pre-rotation) that annotates *which region of the image* the user
 is voting good on. Persisted alongside the vote and consumed by
-region-aware MLP training (the trainer pools the box's patch-grid
+region-aware head training (the trainer pools the box's patch-grid
 cells on the fly). The box is dropped when the vote is toggled off
 or switched good → bad.
 
@@ -284,7 +284,7 @@ Status is `"idle"` or `"sorting"`.
 POST /api/learned-sort
 ```
 
-Trains an MLP on the current good/bad votes and scores all medias. Requires at
+Trains the detector head on the current good/bad votes and scores all medias. Requires at
 least one good and one bad vote.
 
 **Asynchronous by default.** Training is GIL-bound, so the endpoint hands the
@@ -340,7 +340,7 @@ Sets the cancel flag on the job; the training loop polls it cooperatively.
 Returns `{"ok": true}` (HTTP 200) even when the job has already finished — the
 contract is "make sure it's no longer running". Unknown `job_id`: HTTP 404.
 
-On patch datasets the MLP is max-pooled over each image's score-row
+On patch datasets the head is max-pooled over each image's score-row
 stack (the image-level vector plus every raw patch of its
 `patch_grid`), and each result carries `"best_region": [x0, y0, x1,
 y1]` for the row whose score won - the whole image when the
@@ -478,7 +478,7 @@ POST /api/label-file-sort
 **Form:** `file`: JSON file with a `labels` array. Each entry has `label`
 (`"good"` / `"bad"`) and a `path`/`file`/`filename` pointing to an audio file.
 
-Trains an MLP on the labeled files, then scores all loaded medias.
+Trains the detector head on the labeled files, then scores all loaded medias.
 
 → `{"results": [...], "threshold": 0.5123, "loaded": 10, "skipped": 2}`
 

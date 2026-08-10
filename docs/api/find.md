@@ -133,7 +133,7 @@ POST /api/find-label
 
 Scores every loaded media with the given detector and applies Good/Bad labels
 to **all** elements by threshold, freezing scores and initial labels for the
-Find verification workflow. If no trained MLP is cached in the detector
+Find verification workflow. If no trained head is cached in the detector
 context, it trains on the fly from the detector's labelset (resolving label
 origins as needed).
 
@@ -171,7 +171,7 @@ POST /api/auto-detect
 **Body:** `{"detector_name": ""}` — omit / empty to run **every** detector
 flagged for Auto-Find on the active dataset's media type, or name a single one.
 
-Scores the active dataset with each Auto-Find detector, training each MLP on
+Scores the active dataset with each Auto-Find detector, training each head on
 demand, and returns one result column per detector.
 
 →

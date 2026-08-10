@@ -228,9 +228,9 @@ block. When `sync_from_labelset_source` sees one, it folds the
 source's `input_spec` (and `media_type`, when the receiving detector
 is missing one) into the receiving detector's on-disk JSON. The
 source's `threshold` is intentionally **not** applied - the receiver
-retrains its MLP from the imported labels and recomputes its own
+retrains its head from the imported labels and recomputes its own
 threshold (`vtscore/labels/sync.py:296`). The detector files
-themselves only ever store origins and meta, never embeddings or MLP
+themselves only ever store origins and meta, never embeddings or model
 weights (CLAUDE.md "No Persisted Vectors").
 
 ### Configuration

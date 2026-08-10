@@ -392,7 +392,7 @@ out-of-tree implementations.
   carry the old callback; prefer re-registering or calling
   `set_progress_callback` again.
 - **Embedders do not own a `to_disk` / `from_disk`.** Vectors and
-  trained MLP weights are in-memory artefacts only. Re-derive on
+  trained model weights are in-memory artefacts only. Re-derive on
   demand from origins (`Origin → file → embedding`). The single
   exception is dataset pickles, which snapshot media + embeddings as
   one unit (see [datasets](datasets.md)).
@@ -414,7 +414,7 @@ out-of-tree implementations.
   (`vtscore/media/torch_setup.py:16`) reads `vtscore.config.TORCH_THREADS`
   (env `$VTSEARCH_TORCH_THREADS`, default `1`) and calls
   `torch.set_num_threads` the first time torch is imported. Every
-  code path that touches torch (embedders, MLP training, scoring)
+  code path that touches torch (embedders, head training, scoring)
   must call this first. `embedder_load_setup` does it for you.
 
 ---

@@ -149,7 +149,7 @@ in the folder (e.g. `class_a/foo.wav` and `class_b/foo.wav` with a
 single `"foo.wav"` key) without an explicit relative-path entry for
 every match, the loader raises `ValueError`; supply the full
 relative path for each file to disambiguate. Don't persist vectors
-or MLP weights to disk on your own; the library re-derives them
+or model weights to disk on your own; the library re-derives them
 from origins.
 
 ## Multi-media imports
