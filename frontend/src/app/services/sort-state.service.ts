@@ -249,6 +249,7 @@ export class SortStateService {
     this._selectMode.set('top');
     this._sortOrder.set(null);
     this._threshold.set(null);
+    this._acqThreshold.set(null);
     this._sortBusy.set(false);
     this._sortStatus.set('');
     this._sortProgress.set(0);

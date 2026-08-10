@@ -188,6 +188,25 @@ describe('SortStateService', () => {
     expect(service.aboveThreshold).toBe(0);
   });
 
+  it('clear should reset the acquisition cut', () => {
+    // Seeded via setSortWindow, the only path that sets an acquisition cut:
+    // setSortResults nulls it, so it cannot catch a missing reset in clear().
+    service.setSortWindow({
+      items: [{ id: 1, score: 0.9 }],
+      threshold: 0.5,
+      acqThreshold: 0.8,
+      total: 1,
+      hasMore: false,
+      token: null,
+      aboveThreshold: 1,
+    });
+    expect(service.acqThreshold).toBe(0.8);
+
+    service.clear();
+
+    expect(service.acqThreshold).toBeNull();
+  });
+
   it('sortMode getter is reactive (drives a computed that reads it)', () => {
     // The state is signal-backed and exposed via value getters; a computed that
     // reads the getter must recompute when the setter writes the backing signal.
