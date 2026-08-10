@@ -225,6 +225,7 @@ time. The actual download + load is lazy, driven by
 | `LANGUAGEBIND_VIDEO_MODEL_ID`  | `"LanguageBind/LanguageBind_Video_V1.5_FT"`                                            | Alternative video embedder with text-aligned latent.                                   |
 | `SIGLIP_MODEL_ID`              | `"google/siglip-base-patch16-224"`                                                     | Default image embedder.                                                                |
 | `SIGLIP2_MODEL_ID`             | `"google/siglip2-base-patch16-224"`                                                    | SigLIP v2.                                                                             |
+| `SIGLIP2_L_MODEL_ID`           | `"google/siglip2-so400m-patch14-384"`                                                  | SigLIP v2, SO400M/384 (1152-d).                                                        |
 | `CLIP_MODEL_ID`                | `"openai/clip-vit-base-patch32"`                                                       | OpenAI CLIP.                                                                           |
 | `DINOV2_MODEL_ID`              | `"facebook/dinov2-base"`                                                               | Self-supervised image encoder.                                                         |
 | `DINOV3_MODEL_ID`              | `"facebook/dinov3-vitb16-pretrain-lvd1689m"`                                           | DINO v3.                                                                               |

@@ -379,6 +379,56 @@ class TestSiglip2Wrapper:
 
 
 # ===========================================================================
+# SigLIP2-L (embedder_siglip2_l.py)
+# ===========================================================================
+
+
+class TestSiglip2LWrapper:
+    """Same shared cross-modal base as SigLIP 2, but at the SO400M width.
+
+    The point of these is the **1152** in every shape assertion: the two
+    SigLIP 2 entries are separate embedders precisely because their vectors
+    are not interchangeable, so a change that collapsed SigLIP2-L onto the
+    base checkpoint's width would fail here.
+    """
+
+    def _make(self, dim=1152):
+        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+
+        emb = ImageSiglip2LEmbedder()
+        emb._model = _FakeVisionTextModel(dim)
+        emb._processor = _FakeProcessor(keys=("pixel_values",))
+        return emb
+
+    def test_embed_pil_image(self):
+        from PIL import Image
+
+        emb = self._make()
+        vec = emb.embed_pil_image(Image.new("RGB", (16, 16)))
+        assert vec is not None
+        assert vec.shape == (1152,)
+
+    def test_embed_media_from_bytes(self):
+        emb = self._make()
+        vec = emb.embed_media({"media_bytes": _png_bytes()})
+        assert vec is not None
+        assert vec.shape == (1152,)
+        np.testing.assert_allclose(np.linalg.norm(vec), 1.0, atol=1e-5)
+
+    def test_embed_media_bad_source(self):
+        assert self._make().embed_media({}) is None
+
+    def test_embed_text_uses_padding_and_truncation(self):
+        emb = self._make()
+        vec = emb.embed_text("a photo of a cat")
+        assert vec is not None
+        assert vec.shape == (1152,)
+        _args, kwargs = emb._processor.calls[0]
+        assert kwargs["padding"] == "max_length"
+        assert kwargs["truncation"] is True
+
+
+# ===========================================================================
 # DINOv2 / DINOv3 (shared CLS-extraction path)
 # ===========================================================================
 

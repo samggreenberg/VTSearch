@@ -261,6 +261,13 @@ XCLIP_MODEL_ID = "microsoft/xclip-base-patch32"
 E5_MODEL_ID = "intfloat/e5-base-v2"
 SIGLIP_MODEL_ID = "google/siglip-base-patch16-224"
 SIGLIP2_MODEL_ID = "google/siglip2-base-patch16-224"
+# SigLIP2-L: the SigLIP 2 SO400M/384 checkpoint, loaded through ``transformers``
+# like its base sibling (SigLIP 2 has a first-party HF port, so there is no
+# reason to route it through open_clip the way ``SIGLIP_L_MODEL_ID`` is).  The
+# fixed-resolution ``patch14-384`` variant, not the NaFlex one, so the standard
+# ``AutoProcessor`` image pipeline applies.  Emits 1152-d vectors, so its
+# galleries are *not* interchangeable with the 768-d base SigLIP 2.
+SIGLIP2_L_MODEL_ID = "google/siglip2-so400m-patch14-384"
 # SigLIP-L: the SO400M/384 checkpoint, loaded via ``open_clip`` (not
 # transformers) so its 1152-d vectors match galleries produced by open_clip's
 # own ``ViT-SO400M-14-SigLIP-384`` model.  The arch name is the open_clip
