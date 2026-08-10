@@ -87,7 +87,7 @@ for the full dataclass and the [plugins package doc](../packages/plugins.md#plug
 for the field-type matrix.
 
 **Never persist vectors or trained model weights.** Embeddings are
-re-derived from origins on demand. MLP weights are retrained from the
+re-derived from origins on demand. The detector head is retrained from the
 linked labelset on each detector load. Plugins must not write either
 to disk, to `data/settings.json`, to detector JSON files, or to any
 other store. If your plugin appears to need a cache for vectors, put

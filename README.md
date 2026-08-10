@@ -79,7 +79,7 @@ VTSearch provides several CLI workflows for applying detectors to datasets, impo
 VTSearch is split into two Python packages along an **app tier / library tier** line:
 
 - **`vtsearch/`** — the app tier: Flask routes, authentication, settings, the achievements state machine, and the CLI entry point (`vtsearch/cli_main.py`). Anything that depends on Flask/Werkzeug lives here.
-- **`vtscore/`** — the library tier: the ML (training, MLP, thresholds), embedding runtime, media-type plugins (audio, image, text, video, document), converters, datasets/importers, exporters, labels, evaluation, projection (VTSBrowse), concurrency, security, and the plugin/sync machinery. It is import-clean of Flask so it can be reused as a standalone library. The CLI orchestration (`vtscore/cli.py`, `cli_pipeline.py`, `cli_progress.py`) lives here too.
+- **`vtscore/`** — the library tier: the ML (training, classifier head, thresholds), embedding runtime, media-type plugins (audio, image, text, video, document), converters, datasets/importers, exporters, labels, evaluation, projection (VTSBrowse), concurrency, security, and the plugin/sync machinery. It is import-clean of Flask so it can be reused as a standalone library. The CLI orchestration (`vtscore/cli.py`, `cli_pipeline.py`, `cli_progress.py`) lives here too.
 
 The remaining top level:
 
@@ -110,7 +110,7 @@ New to the project? Start with [docs/HANDOFF.md](docs/HANDOFF.md) for a full ori
 
 ## Machine learning
 
-VTSearch trains a small MLP neural network on user votes to learn a binary classifier over pretrained embeddings. See [docs/ML.md](docs/ML.md) for full details on the model architecture, training configuration, PyTorch settings, embedding models, and the Coverage Atlas that drives diversity sampling and domain-shift detection.
+VTSearch trains a **linear (logistic) head** — a single `Linear(input_dim, 1)` fitted with balanced binary cross-entropy — on user votes to learn a binary classifier over pretrained embeddings. See [docs/ML.md](docs/ML.md) for full details on the model architecture (including why the head is linear and where the older MLP path survives), training configuration, PyTorch settings, embedding models, and the Coverage Atlas that drives diversity sampling and domain-shift detection.
 
 ## Evaluation
 

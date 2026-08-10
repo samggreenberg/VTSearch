@@ -5,8 +5,8 @@ the detector pipeline. Everything in this package operates on raw numpy
 arrays and PyTorch tensors - there are no media-type, embedder, vote,
 or context dependencies. Library consumers can use it as a stand-alone
 learned-sort toolkit: feed in `(N, D)` feature matrices and binary
-labels, get back a trained MLP, a calibrated threshold, and (optionally)
-patch-level cosine scoring against a query vector.
+labels, get back a trained classifier head, a calibrated threshold, and
+(optionally) patch-level cosine scoring against a query vector.
 
 The detector-specific glue that resolves votes → origins → embeddings →
 training data lives one layer up in [`vtscore.detectors`](detectors.md);
@@ -21,7 +21,7 @@ this package is the underlying ML core.
 | `vtscore/training/svm.py`                                             | `SVMClassifier` + `train_svm` prototype                         |
 | `vtscore/training/region_similarity.py`                               | Patch-level cosine scoring with bounding boxes                  |
 
-The package `__init__.py` re-exports the MLP and threshold names; SVM
+The package `__init__.py` re-exports the head-building and threshold names; SVM
 and region-similarity helpers are imported from their submodules.
 
 ```python
@@ -39,12 +39,32 @@ from vtscore.training.region_similarity import (
 
 ---
 
-## MLP trainer
+## Classifier-head trainer
 
-A small `Linear → ReLU → Dropout → Linear` classifier that emits raw
-logits. Built and trained from feature matrices and binary labels.
+A classifier that emits raw logits, built and trained from feature
+matrices and binary labels. The `hidden_dim` argument selects the head:
 
 ### Architecture
+
+**Linear (logistic) head - the production head.** Selected by the
+`hidden_dim=LINEAR_HEAD` (`0`) sentinel at `vtscore/training/mlp.py:34`:
+
+```python
+nn.Sequential(
+    nn.Linear(input_dim, 1),
+)
+```
+
+Trained through `train_model`'s balanced BCE-with-logits loop this *is*
+logistic regression. `dropout` is ignored (a bare linear map has nothing to
+regularise with dropout). Every production fit passes `LINEAR_HEAD`:
+`vtscore/detectors/training.py` does it for both the final model and the
+calibration fold models (so the threshold is always calibrated on the
+architecture the final model has), `labeling_progress.py` does it for the
+per-step stopping-condition models, and `labelset_training.py` inherits it by
+going through `train_and_threshold`.
+
+**MLP head - eval harness and tests only.** Any `hidden_dim > 0`:
 
 ```python
 nn.Sequential(
@@ -55,15 +75,29 @@ nn.Sequential(
 )
 ```
 
-Built by `build_model(input_dim, hidden_dim=64, dropout=0.0, generator=None)`
-at `vtscore/training/mlp.py:35`. Pass a seeded `torch.Generator` to
+This was the production head until the threshold-stability work (#2790): with
+only ~3-5 labelled positives the MLP is under-determined, each retrain wobbles
+the scores, and the calibrated cut lurches. It survives for the eval harness's
+head-sweep arm (see [eval.md](eval.md)) and unit tests, and is not reachable
+from the app. See [`docs/ML.md`](../../../docs/ML.md#why-linear-and-where-the-mlp-survives)
+for the measurements.
+
+Both are built by
+`build_model(input_dim, hidden_dim=64, dropout=0.0, generator=None)` at
+`vtscore/training/mlp.py:51`. Pass a seeded `torch.Generator` to
 deterministically re-initialise the `Linear` weights (Kaiming uniform
 on the weight matrix, uniform on the bias with the standard PyTorch
 fan-in bound).
 
-### Auto-sizing the hidden layer
+> Note the mismatch between the two defaults: `build_model`'s own
+> `hidden_dim=64` builds an MLP, and `train_model`'s `hidden_dim=None`
+> auto-sizes one. Neither default is the production head - callers that want
+> it must pass `LINEAR_HEAD` explicitly.
 
-`_auto_hidden_dim(n_train)` at `vtscore/training/mlp.py:25` chooses the
+### Auto-sizing the MLP hidden layer
+
+Only the MLP head uses this; the linear head has no hidden layer.
+`_auto_hidden_dim(n_train)` at `vtscore/training/mlp.py:37` chooses the
 hidden width from the number of training examples:
 
 ```python
@@ -72,26 +106,28 @@ return max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))
 
 With the default `MLP_HIDDEN_MIN=8` and `MLP_HIDDEN_MAX=32` (from
 `vtscore.config`), the heuristic keeps the model small when only a
-handful of labels exist - n_train=10 picks 4, n_train=60 picks 20,
-n_train=120 picks 32 (capped). The function is private but stable; the
-detector code in `vtscore/detectors/training.py:182` and
-`vtscore/detectors/labelset_training.py:277` use it to ensure
-cross-calibration fold models share the same architecture as the final
-full-data model, so fold thresholds are directly comparable.
+handful of labels exist - n_train=10 picks 8 (floored), n_train=60 picks 20,
+n_train=120 picks 32 (capped). The function is private but stable; the eval
+harness's `_resolve_hidden_dim` (`vtscore/eval/voting_iterations.py`) calls it
+for the `"mlp"` arm. The detector code no longer does - it passes `LINEAR_HEAD`
+for both the final model and the cross-calibration fold models, so fold
+thresholds stay directly comparable to the full-data model.
 
 ### Training
 
-`train_model(X_train, y_train, input_dim, inclusion_value=0, seed=42, hidden_dim=None)`
-at `vtscore/training/mlp.py:110` is the workhorse:
+`train_model(X_train, y_train, input_dim, seed=42, hidden_dim=None, sample_weights=None)`
+at `vtscore/training/mlp.py:139` is the workhorse:
 
 ```python
 import numpy as np, torch
 from vtscore.training import train_model
+from vtscore.training.mlp import LINEAR_HEAD
 
 X = torch.from_numpy(np.random.RandomState(0).standard_normal((60, 512)).astype(np.float32))
 y = torch.tensor([1.0] * 30 + [0.0] * 30).unsqueeze(1)
 
-model = train_model(X, y, input_dim=512, inclusion_value=0)
+# hidden_dim=LINEAR_HEAD is what production passes; omitting it auto-sizes an MLP.
+model = train_model(X, y, input_dim=512, hidden_dim=LINEAR_HEAD)
 with torch.no_grad():
     scores = torch.sigmoid(model(X)).squeeze(1).cpu().numpy()
 ```
@@ -100,13 +136,16 @@ Key behaviour:
 
 - **Loss:** weighted `BCEWithLogitsLoss(reduction="none")`. Per-sample
   weights are precomputed from `y_train` so the loss balances class
-  frequencies (`weight_true = num_false / num_true`, `weight_false = 1.0`)
-  even before the inclusion bias is applied.
-- **Inclusion bias** (`inclusion_value ∈ [-10, 10]`): multiplies the
-  per-class weight by `2 ** abs(inclusion_value)`. Positive values
-  inflate the True-class weight so the classifier prefers recall
-  (include more); negative values inflate the False-class weight so it
-  prefers precision (include fewer). See `vtscore/training/mlp.py:193`.
+  frequencies (`weight_true = num_false / num_true`, `weight_false = 1.0`).
+  Pass `sample_weights` to replace them entirely - that is how the
+  region-flooding path expresses per-bag balancing.
+- **Inclusion does not enter training.** It is a pure threshold knob applied
+  later in `vtscore.training.thresholds.conformal_threshold`, so the trained
+  model - and therefore every item's score - is independent of inclusion.
+- **Label smoothing:** targets are smoothed by `MLP_LABEL_SMOOTHING` after the
+  class weights are derived from the hard labels, so a strongly-fit model
+  can't saturate every score to an exact 0.0/1.0 sigmoid and collapse the
+  conformal rule's quantiles into a single tie.
 - **Optimiser:** `Adam(lr=0.001, weight_decay=1e-4)`.
 - **Early stop:** trains up to `config.TRAIN_EPOCHS` (default 200) and
   stops after `config.TRAIN_PATIENCE` consecutive epochs with no
@@ -135,7 +174,8 @@ with torch.random.fork_rng(), torch.enable_grad():
 ```
 
 The local `torch.Generator` seeds weight initialisation; `fork_rng`
-isolates the dropout RNG inside the training loop. Two concurrent
+isolates the dropout RNG inside the training loop (the linear head has no
+dropout, so that half matters only for the MLP arm). Two concurrent
 `train_model` calls in different threads do not interfere with each
 other's seed, and either call produces the same model given the same
 `(X, y, seed)`. This matters because cross-calibration trains *k* fold
@@ -144,16 +184,17 @@ parallel.
 
 ### Reloading from saved weights
 
-`build_model_from_weights(weights)` at `vtscore/training/mlp.py:78`
+`build_model_from_weights(weights)` at `vtscore/training/mlp.py:101`
 reconstructs a model from a dict of lists (the output of
-`tensor.tolist()` per state-dict entry). It accepts the current 4-layer
-format (`0.weight`, `0.bias`, `3.weight`, `3.bias`) and silently
-remaps the legacy 3-layer format (`0.*`, `2.*`) to the current keys, so
-old detector files don't have to be migrated.
+`tensor.tolist()` per state-dict entry). It infers the head from the keys
+present: `0.*` alone means the linear head, while a `3.weight` means an MLP
+whose hidden width is the length of `0.bias`. It also silently remaps the
+legacy 3-layer MLP format (`0.*`, `2.*`) to the current keys, so old detector
+files don't have to be migrated.
 
-> **Invariant - no persisted MLP weights.** In VTSearch proper, detector
+> **Invariant - no persisted model weights.** In VTSearch proper, detector
 > JSON files store labelsets (origin info + per-element labels) only;
-> MLP weights are re-derived from those origins on every load. See
+> the head is re-derived from those origins on every load. See
 > [`detectors.md`](detectors.md) for the detector storage contract.
 > `build_model_from_weights` exists for callers (eval harnesses, third-
 > party tooling) that have their own reason to ship weights around - the
@@ -226,7 +267,8 @@ For each of `calibrate_count` rounds:
 
 1. Randomly split `(X_list, y_list)` into Train (`1 - calibration_fraction`)
    and Calibrate (`calibration_fraction`).
-2. Train an MLP on Train via `train_model`.
+2. Train a head on Train via `train_model` (the caller passes `hidden_dim`;
+   the detector pipeline passes `LINEAR_HEAD`).
 3. Score the held-out Calibrate portion.
 
 Pools every round's held-out (score, label) pairs and applies
@@ -306,8 +348,8 @@ back entirely to the GMM threshold.
 `vtscore/training/svm.py` ships a parallel trainer with the same call
 shape as `train_model`. It is **not** wired into the detector pipeline;
 its purpose is to let
-[`vtscore.eval.label_curve`](eval.md#label-curve-sweep) sweep MLP vs.
-SVM head-to-head so the team can decide whether to add a trainer-
+[`vtscore.eval.label_curve`](eval.md#label-curve-sweep) sweep the neural head
+vs. SVM head-to-head so the team can decide whether to add a trainer-
 selection field on detectors.
 
 ### `SVMClassifier` (`vtscore/training/svm.py:26`)
@@ -334,8 +376,8 @@ VTSearch picks its operating threshold via cross-calibration, not
 from the model's raw probability, so burning training data on k-fold
 CV calibration would shrink the final-fit data while inverting
 `inclusion_value`. Raises `ValueError` for fewer than 2 samples or
-single-class inputs (the MLP path returns `None` instead; here the
-eval harness wants the error to record a skip).
+single-class inputs, matching `train_model`, which refuses single-class data
+up front for the same reason: BCE has no discriminative signal there.
 
 ---
 
@@ -363,7 +405,7 @@ top_ten = results[:10]
 
 ## Invariants worth restating
 
-- **No persisted MLP weights.** Library callers that load a model from
+- **No persisted model weights.** Library callers that load a model from
   disk are expected to re-derive it from a labelset's origins (see
   [`detectors.md`](detectors.md)). `build_model_from_weights` is a
   utility, not a contract.

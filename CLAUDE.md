@@ -1,6 +1,6 @@
 # VTSearch
 
-Trainable media search tool. Searches collections of audio, images, text, video, and documents using a **detector**: a small trained ranker that scores each item by how well it matches. Two ways to search: **train a new detector** (vote good/bad on a handful of items; a small MLP learns to rank the rest) or **use an existing detector** (saved or imported). Trained detectors are reusable across compatible datasets. Text queries (LAION-CLAP, SigLIP, X-CLIP, E5 embeddings) seed either flow or work as a quick stand-alone search. Flask + Angular + PyTorch.
+Trainable media search tool. Searches collections of audio, images, text, video, and documents using a **detector**: a small trained ranker that scores each item by how well it matches. Two ways to search: **train a new detector** (vote good/bad on a handful of items; a linear (logistic) head learns to rank the rest) or **use an existing detector** (saved or imported). Trained detectors are reusable across compatible datasets. Text queries (LAION-CLAP, SigLIP, X-CLIP, E5 embeddings) seed either flow or work as a quick stand-alone search. Flask + Angular + PyTorch.
 
 Architecture, state model, plugin systems, auth, and the directory map all live in **`docs/ARCHITECTURE.md`**. This file holds the testing rules and the policy/gotchas that must be in context every turn.
 
@@ -148,18 +148,18 @@ If you *do* have a browser this session, drain the queue instead of growing it: 
 
 ## No Persisted Vectors or MLPs (CRITICAL)
 
-**Embeddings and trained MLP weights are in-memory artifacts only.** Never serialize them to disk, to `data/settings.json`, to detector JSON files, or to any other persistent store. Origins are the canonical persisted form: the system rederives `origin → file → embedding → MLP` on demand.
+**Embeddings and trained model weights are in-memory artifacts only.** Never serialize them to disk, to `data/settings.json`, to detector JSON files, or to any other persistent store. Origins are the canonical persisted form: the system rederives `origin → file → embedding → detector head` on demand.
 
 This rule applies to all detector code:
 
-- Detector JSON files store `LabeledElement`s with origin info, never embeddings or MLP weights.
+- Detector JSON files store `LabeledElement`s with origin info, never embeddings or model weights.
 - In-memory caches are fine and encouraged: `DetectorContext.label_embeddings`, `DetectorContext.model`, etc.: they live for the lifetime of the process and are repopulated from origins on the next start.
 - New features that cache vectors must use a process-scoped data structure (e.g. a field on `DetectorContext`), not a file or settings key.
 - Embedder version drift is impossible by construction because every load resolves+re-embeds against the active embedder.
 
 The single exception is **dataset pickle files**, which are by design a snapshot of media + their embeddings; they ARE the dataset, not a cache.
 
-If a feature seems to require persisting a vector or MLP, push back: either re-derive on demand, or change the design.
+If a feature seems to require persisting a vector or a trained head, push back: either re-derive on demand, or change the design.
 
 ## The Eval Default Arm IS the App (CRITICAL)
 

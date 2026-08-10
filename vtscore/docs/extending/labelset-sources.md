@@ -79,7 +79,7 @@ metadata you want the receiving detector to adopt - input spec
 via `apply_detector_meta`
 ([`vtscore/detectors/input_spec.py`](../../detectors/input_spec.py))
 on import. Threshold is intentionally **not** persisted from
-`detector_meta` - the receiving detector retrains its MLP from the
+`detector_meta` - the receiving detector retrains its head from the
 imported labels and computes its own threshold; remember the
 [no-persisted-vectors-or-MLPs invariant](README.md#shared-rules-for-every-plugin).
 

@@ -27,9 +27,10 @@ or *Context* are unfamiliar - this doc assumes them.
 1. **Turn media into embeddings.** Audio, images, text, video, documents go
    in via a `MediaEmbedder`; fixed-dimensional `(D,)` numpy vectors come
    out.
-2. **Train a small MLP on user-labelled embeddings.** Voted-good and
-   voted-bad media become `(X, y)`; an MLP plus a calibrated threshold
-   comes out.
+2. **Train a linear (logistic) head on user-labelled embeddings.** Voted-good
+   and voted-bad media become `(X, y)`; a `Linear(D, 1)` head plus a calibrated
+   threshold comes out. See [`docs/ML.md`](../../docs/ML.md) for why the head is
+   linear and where the older MLP path survives.
 3. **Score new media against a trained detector.** A new dataset is loaded,
    embedded, and ranked by the detector; the top results are exported.
 
@@ -39,7 +40,7 @@ extensible, and reproducible:
 - `vtscore.datasets` holds the data formats and loaders.
 - `vtscore.embedding` and `vtscore.media` hold the per-format embedder
   implementations.
-- `vtscore.training` holds the MLP / threshold primitives.
+- `vtscore.training` holds the classifier-head / threshold primitives.
 - `vtscore.detectors` orchestrates the full train→score→persist cycle.
 - `vtscore.plugins` plus the per-family registries make every component
   swappable and third-party-extensible.
@@ -207,7 +208,7 @@ ground rules:
   `set_thread_detector_context()` are how background threads tell the
   library which context they're operating on. The dataset-load and
   learned-sort job managers do this automatically when they spawn workers.
-- **Deterministic MLP training.** `train_model` uses a local
+- **Deterministic training.** `train_model` uses a local
   `torch.Generator` seeded with the caller-supplied seed (default 42) and
   wraps `nn.Dropout` initialisation in `torch.random.fork_rng()`, so
   parallel training calls don't race on the global RNG.
@@ -220,7 +221,7 @@ you allocate the threads and supply the contexts.
 
 Read this once and the persistence story makes sense.
 
-**Trained MLP weights and embeddings live in memory only.** They are never
+**Trained model weights and embeddings live in memory only.** They are never
 serialised to disk, never written to `data/settings.json`, never embedded
 inside a detector JSON file, never persisted anywhere.
 
@@ -280,7 +281,7 @@ vtscore/
 │   ├── video/
 │   └── document/
 ├── embedding/                          # embedder façade + cached matrix
-├── training/                           # MLP / thresholds / SVM / region-similarity
+├── training/                           # classifier head / thresholds / SVM / region-similarity
 ├── detectors/                          # full detector lifecycle
 │   ├── registry.py                     # in-memory detector registry
 │   ├── store.py                        # JSON labelset persistence
@@ -289,7 +290,7 @@ vtscore/
 │   ├── resolver.py                     # origin → file → embedding
 │   ├── label_sync.py / label_restoration.py / dataset_sync.py / media_seeding.py
 │   ├── labelset_elements.py / labelset_training.py
-│   └── labeling_progress.py            # per-step MLP cache + stopping conditions
+│   └── labeling_progress.py            # per-step model cache + stopping conditions
 ├── eval/                               # offline evaluation runner + metrics
 ├── converters/                         # audio↔image/text, video→audio/image, etc.
 ├── exporters/                          # EXPORTER-sentinel auto-discovery
