@@ -8,13 +8,22 @@ Like :mod:`~vtscore.media.audio.embedder_ast` it has no paired text tower, so
 for datasets embedded with it; it is an option for collections searched by
 voted examples, not by a typed query.
 
-It is not a drop-in upgrade over the default ``clap``.  On the ESC-50 arm of
-:mod:`vtscore.eval` its learned-sort scores land in the same band as the CLAP
-embedders rather than above them, and unlike them it cannot answer a text
-query at all.  Its appeal is the different inductive bias: AST's features are
-shaped by its 527-label AudioSet head and CLAP's by text alignment, while
-BEATs' are shaped by neither, so it is worth trying on collections whose
-categories sit outside both.
+It is not a drop-in upgrade over the default ``clap`` - on ESC-50 it is the
+weakest of the four audio embedders measured.  Leave-one-out 1-NN accuracy
+over all 50 classes: ``clap_general`` 0.973, ``clap`` 0.958, ``ast`` 0.940,
+``beats`` 0.905; on the learned-sort arm of :mod:`vtscore.eval` it lands in
+the same band as the CLAP embedders rather than above them, and unlike them it
+cannot answer a text query at all.  The headline BEATs results in the
+literature are for *fine-tuned* models; what we use here is the frozen encoder
+mean-pooled over its patch tokens, which is a different and weaker setting.
+
+Its appeal is the different inductive bias, not raw ESC-50 quality: AST's
+features are shaped by its 527-label AudioSet head and CLAP's by text
+alignment, while BEATs' come from masked prediction over acoustic tokens and
+are shaped by neither.  That makes it worth trying on collections whose
+categories sit outside both - but ESC-50 is not such a collection, so treat
+these numbers as the expected-case baseline rather than a reason to reach for
+it by default.
 
 There is no ``transformers`` implementation, so the architecture is vendored
 in :mod:`vtscore.media.audio._beats_model` and the released checkpoint is

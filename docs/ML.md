@@ -131,7 +131,7 @@ Each media type uses a different pretrained model to produce fixed-size embeddin
 | Audio (`audio`) | `clap_music` | CLAP Music & Speech (`laion/larger_clap_music_and_speech`) | 512 |
 | Audio (`audio`) | `clap_general` | CLAP General 2024 (`laion/larger_clap_general`) | 512 |
 | Audio (`audio`) | `paraspeechclap` | ParaSpeechCLAP speech-style (WavLM + Granite, `ajd12342/paraspeechclap-combined`) | 768 |
-| Audio (`audio`) | `beats` | BEATs iter3+ AS2M (`lpepino/beats_ckpts`, audio-only) | 768 |
+| Audio (`audio`) | `beats` | BEATs iter3+ AS2M self-supervised encoder (`lpepino/beats_ckpts`, audio-only) | 768 |
 | Audio (`audio`) | `ast` | AST audio spectrogram (`MIT/ast-finetuned-audioset-10-10-0.4593`, audio-only) | 768 |
 | Audio (`audio`) | `whisper_encoder` | Whisper-base encoder (`openai/whisper-base`, audio-only) | 512 |
 | Image (`image`) | `siglip` (default) | SigLIP (`google/siglip-base-patch16-224`) | 768 |
