@@ -131,6 +131,17 @@ VTSearch has a plugin architecture for media types, data importers, results expo
 - **[docs/EXTENDING-media.md](docs/EXTENDING-media.md)**: media types, embedders, clippers, converters, media sources.
 - **[docs/EXTENDING-processors.md](docs/EXTENDING-processors.md)**: detectors, localizers, extractors.
 
+## License
+
+VTSearch is licensed under the [Apache License 2.0](LICENSE). That covers the source code in this repository: both the `vtsearch` application and the `vtscore` library.
+
+Two things it does **not** cover:
+
+- **Model weights are separately licensed.** VTSearch downloads embedding models at runtime rather than vendoring them, and each publisher sets its own terms; some are more restrictive than this project's license. EUPE (Perception Encoder) is released under the FAIR Noncommercial Research License and cannot be used commercially; DINOv3 is gated on Hugging Face and requires accepting its license before download. Embedders with a usage restriction advertise it via their descriptor's `license_notice` field, which the UI shows as a warning on the embedder picker. Check the terms of any model you enable before deploying.
+- **Two dependencies are copyleft.** `ultralytics` (used by the image extractor and clipper) and `PyMuPDF` (used by the PDF importer and document converters) are both AGPL-3.0. They are imported lazily but declared as install-time dependencies, so a default install pulls them in. VTSearch's own Apache-2.0 grant is unaffected, but the AGPL terms may attach to a combined work you redistribute or run as a network service. Uninstall those packages, or obtain commercial terms for them, if that doesn't suit your deployment.
+
+See [NOTICE](NOTICE) for the full attribution and dependency-licensing statement.
+
 ---
 
 *Readme Reader code phrase:* `all aboard the embedding express`
