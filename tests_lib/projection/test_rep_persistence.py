@@ -57,12 +57,18 @@ def _a_dense_level0_cell(pyr):
     return next(c for (lvl, _, _), t in pyr.tiles.items() if lvl == 0 for c in t.cells if c.count > 1)
 
 
-def _nearest_member(proj, members: list[int]) -> int:
-    """The member id nearest the members' centroid (the deepest-level / fallback rule)."""
+def _is_centroid_nearest(proj, members: list[int], rep: int) -> bool:
+    """Whether *rep* is a member at minimal distance to the members' centroid.
+
+    "A" and not "the": equidistant members are common (any two-member cell ties
+    exactly, its centroid being the midpoint), and which one wins is an
+    arbitrary argmin tie-break, so the contract is only that the rep is one of
+    the centroid-nearest members.
+    """
     id_to_idx = {int(m): i for i, m in enumerate(proj.ids)}
     pts = np.asarray(proj.coords, dtype=np.float64)[[id_to_idx[m] for m in members]]
-    centroid = pts.mean(axis=0)
-    return members[int(np.argmin(np.sum((pts - centroid) ** 2, axis=1)))]
+    d2 = np.sum((pts - pts.mean(axis=0)) ** 2, axis=1)
+    return bool(d2[members.index(rep)] <= d2.min() + 1e-9)
 
 
 def _assert_reps_well_formed(pyr, proj):
@@ -82,7 +88,7 @@ def _assert_reps_well_formed(pyr, proj):
                 assert cell.rep_id in members, f"rep {cell.rep_id} not a member of its bin"
                 if finer is not None and cell.rep_id not in finer:
                     # Not inherited -> must be the centroid-nearest fallback.
-                    assert cell.rep_id == _nearest_member(proj, members)
+                    assert _is_centroid_nearest(proj, members, cell.rep_id)
 
 
 def _persistence_fractions(pyr) -> list[float]:
