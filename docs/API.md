@@ -104,6 +104,36 @@ via `flask-smorest` decorators. A browsable Swagger UI is served at
 - Generate a TypeScript / Python client.
 - Diff against the snapshot at `frontend/openapi.json` to catch unintended API surface changes. `./run-tests.sh` regenerates the spec and fails on drift.
 
+### Routes absent from the spec
+
+Most routes are `flask_smorest`-decorated and appear in `/api/openapi.json`.
+A route is left undecorated — plain Flask, still registered on the same
+`Blueprint` and reachable normally, just missing from the spec — for one of
+these reasons:
+
+- **Plugin-field bodies.** Import/export/labelset-seed endpoints whose body
+  shape depends on which plugin is named in the URL (e.g.
+  `POST /api/detectors/registry/from-labelset/<importer>`,
+  `POST /api/detectors/<name>/import-labels/<importer_name>`, the settings
+  importer/exporter run routes) take fields the plugin declares dynamically
+  (`creation_questions` / `fields`), which doesn't fit a single static
+  marshmallow schema. Runtime validation still goes through
+  `validate_plugin_args` (per-plugin schema built from the importer's
+  `fields`), so a missing required field or an invalid `select` value still
+  raises 422 with the standard `errors` envelope — the enforcement is real,
+  it's just not statically declared for Swagger/codegen.
+- **Binary-streaming routes.** Audio/video/image/media/thumbnail/preview
+  routes serve raw bytes (or a tiny content-only JSON for text media), not a
+  JSON response body; the sibling JSON-shaped routes in the same module are
+  migrated normally.
+- **Dual-mode dispatchers.** `POST /api/embed` accepts either
+  `multipart/form-data` (file upload) or `application/json` (text), decided
+  at request time — no single schema describes both.
+- **Non-JSON content types.** `GET /api/achievements/docs/<doc_id>/raw`
+  streams `text/plain`, not JSON.
+- **SPA-serving routes.** The Angular static-asset / deep-link catch-all
+  routes serve HTML, not JSON.
+
 ---
 
 *Readme Reader code phrase:* `json all the way down`

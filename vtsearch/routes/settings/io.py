@@ -1,7 +1,7 @@
 """Flask routes for the Settings Import/Export API.
 
 Migrated to ``flask_smorest`` so these routes appear in
-``/api/openapi.json``.  See ``docs/plans/openapi-schema.md``.
+``/api/openapi.json``.
 
 Endpoints
 ---------
@@ -14,8 +14,8 @@ POST /api/settings-importers/import/<importer_name>
     described in the OpenAPI spec; runtime validation goes through
     :func:`validate_plugin_args` (per-plugin schema built from the
     importer's :attr:`fields`), so missing required fields / invalid
-    select values raise 422.  See *Resolved questions / Plugin field
-    endpoints* in ``docs/plans/openapi-schema.md``.
+    select values raise 422.  See "Routes absent from the spec" in
+    ``docs/API.md``.
 
 GET  /api/settings-exporters
     List all registered settings exporters with their metadata and fields.
@@ -83,8 +83,7 @@ def get_settings_importers():
 # described in the OpenAPI spec.  Runtime validation goes through
 # :func:`validate_plugin_args` (per-plugin schema built from the importer's
 # :attr:`fields`), so missing required fields / invalid select values
-# raise 422.  See ``docs/plans/openapi-schema.md`` (Resolved questions /
-# Plugin field endpoints).
+# raise 422.  See "Routes absent from the spec" in ``docs/API.md``.
 # ---------------------------------------------------------------------------
 
 

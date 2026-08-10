@@ -4,8 +4,7 @@ These helpers backed the ``/api/learned-sort`` route handler in
 ``vtsearch/routes/sorting.py`` until they accreted the whole
 labelset-resolution / vote-reconciliation / det-ctx-update pipeline.  None
 of it touches Flask or the request context, so it belongs in the library
-tier where it can be exercised without a Flask client (see
-docs/plans/code-structure-review.md, Theme A).  The route is now
+tier where it can be exercised without a Flask client.  The route is now
 request↔library glue: it gathers settings / votes, calls
 :func:`run_learned_sort` inside its background-job closure, and renders the
 result.

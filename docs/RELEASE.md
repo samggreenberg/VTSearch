@@ -90,3 +90,11 @@ grep -rn '#<number>' docs/plans/
 For each hit, delete that pointer line (or check its box, `- [x]`, if the umbrella deliberately keeps a shipped-slice ledger — prefer deletion unless the surrounding plan clearly does the latter). Leave the `<!-- item-sep -->` sentinels around it in place, per the plan-file policy. If the deletion empties a plan entirely and no follow-ups remain, delete the plan file (after absorbing any lasting design notes into the permanent docs), as the plan-file policy directs. Commit these prunes.
 
 This is what makes issue-dismissal trickle back automatically: because plans hold only pointers (never bodies), pruning is always a safe one-line deletion.
+
+**Whenever this step deletes a plan file, also grep the source tree for it** — not just `docs/plans/`. Module docstrings and inline comments cite plan files by path far more often than other plan files do, and `docs/plans/` alone misses all of them:
+
+```
+grep -rl 'docs/plans/<deleted-name>\.md' --include="*.py" --include="*.ts" --include="*.sh" --include="*.md" --include="*.json" --include="*.html" .
+```
+
+Fix every hit in the same commit: repoint it at the permanent doc the rationale was folded into, or drop the pointer outright when the surrounding prose is already self-contained (the common case). See CLAUDE.md's plan-file policy for the full rule; issue #2982 is the incident that motivated it — 94 source files had gone dangling this way across 13 deleted plans before anyone grepped for them.

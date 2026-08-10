@@ -30,8 +30,8 @@ vote). ``import-labels`` keeps its plain-Flask route on the same smorest
 blueprint; its body shape depends on the importer plugin and isn't
 described in the OpenAPI spec, but runtime validation goes through
 :func:`validate_plugin_args` so the per-plugin field types are enforced
-and schema-level failures surface as 422.  See *Resolved questions /
-Plugin field endpoints* in ``docs/plans/openapi-schema.md``.  The
+and schema-level failures surface as 422.  See "Routes absent from the
+spec" in ``docs/API.md``.  The
 ``preview`` and ``thumbnail`` routes serve binary bodies (or a tiny
 content-only JSON for text media); they declare their non-default JSON
 error responses via ``alt_response`` but no success schema, so OpenAPI
@@ -209,8 +209,7 @@ def save_detector_labels(name: str):
 # described in the OpenAPI spec.  Runtime validation goes through
 # :func:`validate_plugin_args` (per-plugin schema built from the importer's
 # :attr:`fields`), so missing required fields / invalid select values
-# raise 422.  See ``docs/plans/openapi-schema.md`` (Resolved questions /
-# Plugin field endpoints).
+# raise 422.  See "Routes absent from the spec" in ``docs/API.md``.
 # ---------------------------------------------------------------------------
 
 

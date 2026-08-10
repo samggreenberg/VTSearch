@@ -139,7 +139,7 @@ def set_find_scores(scores: dict[int, float]) -> None:
 
     These are the single-pass scores the cutoff (Inclusion) slides over
     without re-scoring, and the basis for the Stats FP/FN sweep.  In-memory
-    only.  See docs/plans/find-verification-workflow.md.
+    only.
     """
     with _state_lock:
         ctx = get_active_detector_context()
@@ -168,7 +168,7 @@ def rethreshold_unverified_find_items() -> None:
     No-op outside Find mode or before a scoring pass has frozen ``find_scores``
     (e.g. Train-mode inclusion changes).  Must run *after*
     :func:`recompute_detector_thresholds_for_inclusion` has updated the
-    threshold.  See docs/plans/find-verification-workflow.md.
+    threshold.
     """
     with _state_lock:
         ctx = get_active_detector_context()
@@ -424,7 +424,7 @@ def _mark_verified_if_find_mode(ctx: Any, media_id: int, new_label: str) -> None
     moves the item out of the left work queue into the right verified pile;
     un-voting (``none``) returns it to unverified.  The bulk find-label scoring
     path does *not* go through here, so detector-assigned labels stay
-    unverified by construction.  See docs/plans/find-verification-workflow.md.
+    unverified by construction.
     """
     if not ctx.find_mode:
         return

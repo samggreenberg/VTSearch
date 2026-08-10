@@ -1,6 +1,6 @@
 """Tests for the MLP-vs-SVM experiment machinery.
 
-Covers the additions made for ``docs/plans/mlp-vs-svm-experiment.md``: the wider
+Covers the additions made for the MLP-vs-SVM study: the wider
 SVM grid (poly/sigmoid kernels, gamma multiplier, backend field), the shared
 trainer registry + parameterised-name resolver, the trainer-pluggable voting
 simulation (with the MLP path held numerically unchanged), prevalence control,

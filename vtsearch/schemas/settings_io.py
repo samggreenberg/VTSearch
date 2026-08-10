@@ -23,9 +23,8 @@ The per-plugin shape of ``field_values`` on ``POST
 is validated inside the handler against the selected plugin's
 :attr:`fields` declaration.  The multipart-or-JSON ``POST
 /api/settings-importers/import/<importer_name>`` route stays on the
-legacy plain-Flask path (no decorator) for the same reason; see the
-*Resolved questions / Plugin field endpoints* section of
-``docs/plans/openapi-schema.md``.
+legacy plain-Flask path (no decorator) for the same reason; see
+"Routes absent from the spec" in ``docs/API.md``.
 """
 
 from __future__ import annotations

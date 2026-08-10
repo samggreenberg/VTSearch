@@ -160,8 +160,7 @@ def train_model(
     don't count as many independent negatives.  Inclusion does **not** enter
     training: it is a pure threshold/cutoff knob applied later in
     :func:`vtscore.training.thresholds.conformal_threshold`, so the trained
-    model (and therefore every item's score) is independent of inclusion.  See
-    docs/plans/find-verification-workflow.md.
+    model (and therefore every item's score) is independent of inclusion.
 
     Targets are label-smoothed by ``MLP_LABEL_SMOOTHING`` (Good trains toward
     ``1 - eps``, Bad toward ``eps``) after class weights are derived from the

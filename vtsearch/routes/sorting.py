@@ -1,7 +1,7 @@
 """Blueprint for sorting and voting routes.
 
 Migrated to ``flask_smorest`` so the routes are described in
-``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+``/api/openapi.json``.
 
 Schema-level validation failures (missing required ``text`` / ``job_id`` /
 ``examples`` / ``inclusion``; type-mismatched ``inclusion``

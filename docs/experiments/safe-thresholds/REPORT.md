@@ -84,8 +84,7 @@ Two things forced a fresh two-arm run rather than a re-read of cached data:
 | Cells | 552 per arm × 2 arms = 1104, all COMPLETED; 511 non-empty per arm |
 | Fixed | inclusion 0, `sim_fraction` 0.5, `calibrate_count` 2, `calibration_fraction` 0.5, `autopilot_fidelity=True` |
 
-Deviations from the pre-registered plan
-(`docs/plans/safe-threshold-gmm-experiment.md`), all decided before the run:
+Deviations from the pre-registered plan, all decided before the run:
 **12 seeds instead of 8** (the A/B needs cell-level power on two runs, and a
 linear-head cell costs 188 s on CPU); **the production head instead of the plan's
 "MLP trainer"** line, which predates #2809; **the inclusion sweep reduced to one

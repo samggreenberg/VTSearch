@@ -85,8 +85,7 @@ every step then emits one extra row per safe-threshold GMM variant
 (`gmm_variant` column — fit geometry x cut rule x fit space, plus an
 `xcal_only` control), and the analyze stage runs `analyze_safe.py` instead of
 `analyze.py`. Results land under `/exp/$USER/calibration-safe`, reusing the
-shared Max-Patch pickles/crops in place. Design and pre-registered decision
-rules: `docs/plans/safe-threshold-gmm-experiment.md`.
+shared Max-Patch pickles/crops in place.
 
 ## Anchored-mixture study (issue #2852)
 

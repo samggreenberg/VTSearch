@@ -18,8 +18,7 @@ export async function settleResource(): Promise<void> {
 }
 
 /**
- * Drain scheduled change detection in a zoneless spec (see
- * `docs/plans/zoneless-migration.md`, Phase 0.3 and `zoneless-testbed.ts`).
+ * Drain scheduled change detection in a zoneless spec (see `zoneless-testbed.ts`).
  *
  * After driving a component's state through the production channel (a service
  * signal/subject write, a dispatched bound event), `await settleZoneless(fixture)`

@@ -755,7 +755,7 @@ class DetectorContext:
         "last_learned_scores",
         "textsort_suggestions",
         "find_initial_labels",
-        # Find-session verification state (see docs/plans/find-verification-workflow.md):
+        # Find-session verification state:
         # ``verified_ids`` are the ids the human has explicitly verified this Find
         # session (a dict used as an ordered set, like ``good_votes``);
         # ``find_scores`` is the frozen per-item detector score from the single
@@ -847,7 +847,7 @@ class DetectorContext:
         # inclusion is deliberately absent from *key*, an Inclusion change hits
         # the cache and only re-runs the cheap quantile rule (no fold refit);
         # a label/embedder change rotates *key* and falls through to a fresh
-        # calibration.  See docs/plans/find-verification-workflow.md.
+        # calibration.
         "calibration_cache",  # tuple[Any, CalibrationFolds] | None
         # The fold-anchored population estimator behind the current threshold
         # (``FoldAnchoredCut``), or None when the estimator degenerated.  A
@@ -891,7 +891,7 @@ class DetectorContext:
         self.last_learned_scores: dict[int, float] = {}
         self.textsort_suggestions: list[str] = []
         self.find_initial_labels: dict[int, str] = {}
-        # Find-session verification state (see docs/plans/find-verification-workflow.md).
+        # Find-session verification state.
         self.verified_ids: dict[int, None] = {}
         self.find_scores: dict[int, float] = {}
         # See the slot comment: the displayed Find evaluation is for the detector
@@ -1337,7 +1337,6 @@ def recompute_detector_thresholds_for_inclusion(inclusion_value: int) -> None:
     re-score the haystack - only move the threshold over already-computed
     scores.  Detectors with no cached fold orderings yet are left untouched;
     the next training pass computes the threshold under the new inclusion.
-    See docs/plans/find-verification-workflow.md.
 
     **The safe threshold is re-derived faithfully.**  With safe thresholds on,
     a fresh retrain stores the fold-anchored population cut

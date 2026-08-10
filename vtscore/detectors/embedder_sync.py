@@ -11,8 +11,7 @@ vote / learned-sort request.
 This logic lived inline in ``vtsearch/routes/detectors/registry.py`` until it
 grew its own mismatch-detection + task-orchestration branches.  Everything it
 touches except the thread-spawn helper already lives in the library tier, so
-it belongs here where it can be exercised without a Flask client (see
-docs/plans/code-structure-review.md, Theme A).  The one app-tier dependency —
+it belongs here where it can be exercised without a Flask client.  The one app-tier dependency —
 ``vtsearch.threading.spawn``, which replays the request's user thread-local
 into the worker — is injected by the caller so this module stays Flask-free.
 """

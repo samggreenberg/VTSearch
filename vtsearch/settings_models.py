@@ -387,7 +387,6 @@ class UserSettings(BaseModel):
     # - ``autofind_exporter_field_values``: per-exporter field values
     #   (``{exporter_name: {field_key: value}}``) so switching the picker
     #   preserves each exporter's configuration.
-    # See ``docs/plans/auto-find-settings-tab.md``.
     autofind_detectors: list[str] = Field(default_factory=list)
     autofind_exporter: str = ""
     autofind_exporter_field_values: dict[str, dict[str, str]] = Field(default_factory=dict)

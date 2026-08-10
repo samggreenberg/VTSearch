@@ -1,7 +1,7 @@
 """Library-tier tests for the coverage-atlas scalability behaviour.
 
 Covers the scaling pieces inherited from the diversity tree (see
-``docs/plans/scalability-plan.md``):
+``docs/plans/scalability.md``):
 
 - **Part A** (smarter k-means defaults): ``_n_init_for`` scales restarts down
   for large nodes while leaving small (test-sized) nodes at the full

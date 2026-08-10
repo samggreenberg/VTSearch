@@ -96,7 +96,7 @@ def _apply_clipper(
 
     Either *clipper_name* (single-step legacy path) or *chain_steps*
     (ordered list of converter/clipper/cleaner steps, see
-    ``docs/plans/clipper-chain.md`` and ``docs/plans/media-cleaners.md``)
+    ``docs/plans/media-cleaners.md`` for the cleaner-step design)
     may be supplied.  When *chain_steps* already carries a clipper or
     converter step it wins outright; when it carries only *cleaner* steps
     (the shape :func:`~vtscore.datasets.clipper_chain.append_cleaner_steps`
@@ -182,8 +182,7 @@ def _hydrate_reference_parents(clips_dict: dict, steps: list[dict]) -> bool:
     Lazy clips only apply to pure same-type clipper chains; a chain containing
     a converter changes media type, so the clip's bytes are no longer a slice
     of the original source file.  Such chains are left fully materialized
-    (lazy converter output is out of scope - see
-    ``docs/plans/server-dedup-references.md``).
+    (see "Reference (no-copy) imports and lazy clips" in ``docs/ARCHITECTURE.md``).
 
     Returns ``True`` if at least one parent was hydrated.
     """

@@ -22,8 +22,8 @@ import { makeActiveContextStub } from '../../testing/mocks';
 import { settleZoneless } from '../../testing/settle-resource';
 
 /**
- * Zoneless staleness canary for the VTSBrowse view
- * (docs/plans/zoneless-migration.md, Phases 0.3/0.4 + 2.6). Phase 2.6 signalized
+ * Zoneless staleness canary for the VTSBrowse view.
+ * Phase 2.6 signalized
  * the 13 template-bound fields browse-view writes from its async subscribes, the
  * projection build poller, and the settings effect (`status`, `errorMessage`,
  * `meta`, …). This drives the projection-load subscribe to an error from

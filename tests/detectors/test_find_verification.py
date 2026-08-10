@@ -7,8 +7,6 @@ Covers:
 - ``GET /api/find/stats`` (2x2 confusion + FP/FN inclusion sweep)
 - verified votes surviving a re-score (issue #2928)
 - a live Find session surviving a detector-file write (issue #2786)
-
-See docs/plans/find-verification-workflow.md.
 """
 
 from __future__ import annotations

@@ -13752,7 +13752,7 @@
     },
     "/api/find/stats": {
       "get": {
-        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and sweeps the\ncalibrated threshold across inclusion -10..10 (re-cutting the cached\nestimator behind the current cutoff) for false-positive / false-negative\ncounts at every stop.\nPure read; no new state.  See docs/plans/find-verification-workflow.md.",
+        "description": "Like Export / Browse / To-Dataset, this treats unverified items as if\nverified at their current cutoff: truth is the full ``good_votes`` /\n``bad_votes`` set (human votes flood-filled with the detector's call on\neverything untouched).  This can give false confidence in the detector -\nthat's the price of not verifying every item - but it reports the real\ncounts.  Crosses each item's adopted label against the detector's original\ncall (``find_initial_labels``) for a 2x2 confusion, and sweeps the\ncalibrated threshold across inclusion -10..10 (re-cutting the cached\nestimator behind the current cutoff) for false-positive / false-negative\ncounts at every stop.\nPure read; no new state.",
         "operationId": "find_stats",
         "responses": {
           "200": {

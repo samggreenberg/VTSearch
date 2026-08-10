@@ -16,7 +16,7 @@ export interface SortedItem {
  * Shared sort state. Backed by signals so a write from any context — an HTTP
  * subscribe, a poll timer, a learned-sort job continuation — notifies Angular's
  * scheduler and repaints the views that bind these getters, with no zone.js
- * involved (docs/plans/zoneless-migration.md, Phase 2.5 / Recipe B).
+ * involved.
  *
  * Each value is exposed as a *value-returning getter* over a private signal, so
  * existing `sortState.sortBusy` template bindings stay byte-for-byte the same

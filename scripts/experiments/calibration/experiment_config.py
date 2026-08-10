@@ -88,8 +88,7 @@ SIM_FRACTION = 0.5
 CALIBRATE_COUNT = int(os.environ.get("CALIB_CALIBRATE_COUNT", "2"))
 CALIBRATION_FRACTION = 0.5
 #: The #2781 study pre-registered safe_thresholds OFF (conformal path only);
-#: the #2799 safe-threshold GMM study flips this on via CALIB_SAFE_THRESHOLDS=1
-#: (see docs/plans/safe-threshold-gmm-experiment.md).
+#: the #2799 safe-threshold GMM study flips this on via CALIB_SAFE_THRESHOLDS=1.
 SAFE_THRESHOLDS = os.environ.get("CALIB_SAFE_THRESHOLDS", "0") == "1"
 MEDIA_TYPE = "image"
 

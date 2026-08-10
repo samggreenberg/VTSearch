@@ -84,8 +84,7 @@
             "test": {
               // Build configuration used only by the unit-test target. Mirrors
               // `development` but pins its OWN polyfills, decoupled from the base
-              // production build (which dropped zone.js entirely at the Phase 3
-              // zoneless flip — see docs/plans/zoneless-migration.md).
+              // production build (which dropped zone.js entirely at the zoneless flip).
               //
               // The polyfills array is now EMPTY: Phase 5 finished migrating
               // every fixture-creating spec to the zoneless `TestBed`
@@ -132,7 +131,7 @@
             // production build. The @angular/build:unit-test builder has no
             // `polyfills` option of its own; it inherits them from this
             // buildTarget. The base production build dropped "zone.js" at the
-            // zoneless flip (Phase 3 of docs/plans/zoneless-migration.md); the
+            // zoneless flip; the
             // test build still pins its own "zone.js" for the default-TestBed
             // specs (Phase 5), so the two cannot drift.
             "buildTarget": "frontend:build:test",

@@ -1,7 +1,6 @@
 """Clipper chain: ordered converter/clipper/cleaner steps applied at load time.
 
-See ``docs/plans/clipper-chain.md`` for the design. A chain is a list of
-dicts of the form::
+A chain is a list of dicts of the form::
 
     [
       {"kind": "converter", "name": "document2text", "params": {}},
@@ -427,7 +426,6 @@ def _stamp_origin(  # noqa: C901
 ) -> None:
     """Stamp ``origin.params['clipper_chain']`` and legacy single-clipper keys.
 
-    Mirrors the encoding documented in ``docs/plans/clipper-chain.md``.
     ``is_sub_item`` matches the legacy ``is_real_clip`` flag: ``True`` when
     the parent produced more than one final clip (or any clip whose chain
     crosses media types). Controls whether the legacy ``clip_index`` field

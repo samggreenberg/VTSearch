@@ -1,7 +1,7 @@
 """Authentication status and login/logout routes.
 
 Migrated to ``flask_smorest`` so the routes are described in
-``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+``/api/openapi.json``.
 """
 
 from __future__ import annotations

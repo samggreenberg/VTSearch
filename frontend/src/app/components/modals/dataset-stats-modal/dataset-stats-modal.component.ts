@@ -31,7 +31,7 @@ export class DatasetStatsModalComponent implements OnInit {
   readonly closed = output<void>();
 
   // Signalized so the `ngOnInit` subscribe (an unpatched callback under zoneless)
-  // schedules CD when the stats land. See docs/plans/zoneless-migration.md.
+  // schedules CD when the stats land.
   readonly loading = signal(true);
   readonly error = signal('');
   readonly stats = signal<DatasetRegistryStatsResponse | null>(null);

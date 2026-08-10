@@ -24,7 +24,6 @@ interface ChartPoint {
  * label set against the detector's original call, the derived agreement /
  * precision rates, and the headline FP/FN-vs-inclusion sweep rendered as a
  * dependency-free inline SVG line chart (current inclusion marked).
- * See docs/plans/find-verification-workflow.md.
  */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -43,7 +42,7 @@ export class FindStatsModalComponent implements OnInit {
   readonly closed = output<void>();
 
   // Signalized so the `ngOnInit` subscribe (an unpatched callback under zoneless)
-  // schedules CD when the stats land. See docs/plans/zoneless-migration.md.
+  // schedules CD when the stats land.
   readonly loading = signal(true);
   readonly error = signal('');
   readonly stats = signal<FindStatsResponse | null>(null);

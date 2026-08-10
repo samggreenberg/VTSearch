@@ -1,7 +1,7 @@
 """Blueprint for dataset-registry routes (the on-disk dataset catalog).
 
 Migrated to ``flask_smorest`` so these routes appear in
-``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+``/api/openapi.json``.
 
 Schema-level validation failures (missing required ``name`` on rename,
 missing or wrong-typed ``readers`` on the readers endpoint) surface as
