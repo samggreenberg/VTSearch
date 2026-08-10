@@ -1,0 +1,51 @@
+VTSearch
+Copyright 2026 Sam Greenberg
+
+This product includes software developed as part of the VTSearch project
+(https://github.com/samggreenberg/VTSearch), licensed under the Apache
+License, Version 2.0. See the LICENSE file for the full terms.
+
+The Apache-2.0 grant in LICENSE covers the source code in this repository
+(the `vtsearch` application and the `vtscore` library). It does NOT cover
+third-party dependencies or machine-learning model weights, which carry
+their own separate terms.
+
+
+Machine-learning model weights
+------------------------------
+
+VTSearch downloads embedding-model weights at runtime; it does not vendor
+them. Each model is licensed by its own publisher, and some carry usage
+restrictions that are more limiting than this project's license. Notably:
+
+  * EUPE (Perception Encoder, facebookresearch) is released under the FAIR
+    Noncommercial Research License and may not be used commercially.
+  * DINOv3 (Meta) is gated on Hugging Face and requires accepting its
+    license before the weights can be downloaded.
+
+Embedders that carry such a restriction advertise it through the
+`license_notice` field on their descriptor, which the UI surfaces as a
+warning on the embedder picker. Review the terms of any model you enable
+before deploying VTSearch.
+
+
+Third-party dependencies
+------------------------
+
+Most of VTSearch's runtime dependencies are permissively licensed (BSD,
+MIT, Apache-2.0, ISC). Two are copyleft and are worth calling out for
+anyone redistributing VTSearch or building a product on top of `vtscore`:
+
+  * ultralytics (YOLO object detection) - AGPL-3.0-or-later.
+    Used by the image extractor and the image clipper.
+  * PyMuPDF - AGPL-3.0-or-later (or a commercial license from Artifex).
+    Used by the PDF importer and the document converters.
+
+Both are imported lazily but are declared as install-time dependencies, so
+a default install pulls them in. VTSearch's own Apache-2.0 grant is
+unaffected, but the AGPL terms may attach to a combined work you
+distribute or operate as a network service. Uninstall these packages (and
+forgo the features that use them), or obtain suitable commercial terms, if
+that is incompatible with your deployment.
+
+  * soxr (audio resampling) - LGPL-2.1-or-later.

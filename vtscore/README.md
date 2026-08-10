@@ -133,4 +133,20 @@ for per-release notes.
 
 ## License
 
-Same as the parent `vtsearch` project - see the repository's `LICENSE` file.
+Apache License 2.0, same as the parent `vtsearch` project - see the
+repository's [`LICENSE`](../LICENSE) file.
+
+Two carve-outs matter if you are embedding `vtscore` in your own product:
+
+- **Model weights carry their own terms.** `vtscore` downloads embedding
+  models at runtime rather than vendoring them, and each publisher licenses
+  its own weights. Some are noncommercial (EUPE, under the FAIR
+  Noncommercial Research License) or gated (DINOv3). Embedders with a
+  restriction expose it through their descriptor's `license_notice` field.
+- **Two dependencies are AGPL-3.0**: `ultralytics` (image extractor and
+  clipper) and `PyMuPDF` (PDF importer and document converters). Both are
+  lazily imported but declared as install-time dependencies. The Apache-2.0
+  grant on `vtscore` itself is unaffected, but AGPL terms may attach to a
+  combined work you distribute or operate as a service.
+
+See [`NOTICE`](../NOTICE) for the full statement.

@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+# >= 77 for PEP 639 support (the SPDX `license` string + `license-files`
+# below); older setuptools only understands the deprecated table/classifier
+# form and errors on the expression.
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,6 +10,25 @@ name = "vtsearch"
 version = "0.1.0"
 requires-python = ">=3.10"
 description = "Media explorer for browsing and voting on audio, images, text, video, or documents"
+# Apache-2.0 covers this repository's source only. Embedding-model weights are
+# downloaded at runtime under their publishers' own terms (some noncommercial),
+# and two dependencies are AGPL-3.0 (ultralytics, PyMuPDF). See NOTICE.
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: Flask",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
 
 # Runtime dependencies. These mirror requirements/base.txt + the per-plugin
 # requirements.txt files so deptry can verify that every imported package is
