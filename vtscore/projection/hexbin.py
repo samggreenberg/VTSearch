@@ -29,6 +29,10 @@ import numpy as np
 # 2·sin(π/3): the column spacing of a pointy-top hex lattice is ``radius · SQRT3``.
 SQRT3 = math.sqrt(3.0)
 
+# ``(dy/dx)² = (1.5·r / (√3·r))² = 0.75``: the factor that makes a squared
+# distance in the per-axis-normalized (x/dx, y/dy) frame isotropic again.
+Y_WEIGHT = 0.75
+
 
 def hexbin_assign(points: np.ndarray, radius: float) -> tuple[np.ndarray, np.ndarray]:
     """Assign each point in *points* to a hex cell of the given *radius*.
@@ -43,6 +47,15 @@ def hexbin_assign(points: np.ndarray, radius: float) -> tuple[np.ndarray, np.nda
     then the nearest (row-offset) column, and where the point lands in the outer
     third of a row, compare against the staggered neighbor and snap to whichever
     center is closer.
+
+    One deliberate divergence from upstream d3-hexbin: the near-boundary
+    tie-break compares distances in *isotropic* units.  The working coordinates
+    are normalized per axis (x by ``dx = r·√3``, y by ``dy = 1.5·r``), so a raw
+    ``px² + py²`` — what d3 computes — is not a Euclidean distance and picks the
+    wrong center for ~2% of near-boundary points.  Weighting the y-terms by
+    ``(dy/dx)² = 0.75`` restores the true metric at zero extra cost, making the
+    result an exact point-in-hexagon partition that matches the hexagons the
+    renderer draws.
     """
     if radius <= 0:
         raise ValueError(f"hex radius must be positive, got {radius!r}")
@@ -70,7 +83,9 @@ def hexbin_assign(points: np.ndarray, radius: float) -> tuple[np.ndarray, np.nda
     pj2 = pj + np.where(py0 < pj, -1.0, 1.0)
     px2 = px - pi2
     py2 = py0 - pj2
-    closer_to_neighbor = (px1 * px1 + py1 * py1) > (px2 * px2 + py2 * py2)
+    # ``Y_WEIGHT`` converts the per-axis-normalized coordinates back to a true
+    # Euclidean comparison; see the docstring's note on diverging from d3.
+    closer_to_neighbor = (px1 * px1 + Y_WEIGHT * py1 * py1) > (px2 * px2 + Y_WEIGHT * py2 * py2)
     swap = needs_check & closer_to_neighbor
 
     # When we snap to the neighbor the column shifts by ±0.5 depending on the
