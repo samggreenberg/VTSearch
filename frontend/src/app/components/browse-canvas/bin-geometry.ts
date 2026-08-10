@@ -179,6 +179,35 @@ export function pickCell<T extends CellCentre>(
   return null;
 }
 
+/** The minimum an identity check needs of a cell: its axial coordinates. */
+export interface CellAxial {
+  q: number;
+  r: number;
+}
+
+/**
+ * Whether two cells are the *same bin*. Axial `(q, r)` repeats across pyramid
+ * levels — every level has its own `(0, 0)` at the lattice origin, and finer
+ * levels reuse the coarse coordinates generally — so a bin is identified by the
+ * pair **plus** the level it was resolved at, never by `(q, r)` alone. Comparing
+ * on `(q, r)` alone lets a level-crossing zoom silently swap in a different,
+ * finer cell that happens to share the coordinates (issue #2967).
+ *
+ * Takes the levels alongside the cells (rather than a `{level, q, r}` object) so
+ * callers in per-cell render loops can compare without allocating. A `null`
+ * cell on either side is never the same bin as anything, including another
+ * `null`.
+ */
+export function sameBin(
+  aLevel: number,
+  a: CellAxial | null | undefined,
+  bLevel: number,
+  b: CellAxial | null | undefined,
+): boolean {
+  if (!a || !b) return false;
+  return aLevel === bLevel && a.q === b.q && a.r === b.r;
+}
+
 /**
  * Half-extents (screen px) of a hovered break-out thumbnail with the given
  * `aspect` (image width / height), centred on a cell of screen `radius` and

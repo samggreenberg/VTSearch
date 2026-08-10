@@ -19,6 +19,7 @@ import {
   hoverThumbHalfExtents,
   imageTileFitDimensions,
   pickCell,
+  sameBin,
   type TileFit,
 } from './bin-geometry';
 import {
@@ -429,6 +430,15 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
 
   private hoveredCell: HexCellPayload | null = null;
   /**
+   * Pyramid level {@link hoveredCell} was resolved at, or -1 when nothing is
+   * hovered. A cell's axial ``(q, r)`` is only unique *within* a level, so the
+   * level travels alongside the payload (which carries no level of its own) and
+   * every identity check goes through {@link sameBin}. Without it a zoom that
+   * crosses a level boundary matches the stale hover against a different,
+   * finer same-``(q, r)`` cell — see issue #2967.
+   */
+  private hoveredLevel = -1;
+  /**
    * A bin "pinned" enlarged because its detail popup (right-click) is open.
    * Independent of the live hover: it stays enlarged as long as the popup is up,
    * so the user can tell which bin the details belong to. While a cell is pinned,
@@ -438,6 +448,12 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
    * path as a hover; see the ``pinnedCell ?? hoveredCell`` pick in {@link draw}.
    */
   private pinnedCell: HexCellPayload | null = null;
+  /** Pyramid level {@link pinnedCell} was pinned at, or -1 when nothing is
+   *  pinned. Same role as {@link hoveredLevel}: the pin survives wheel zooms, so
+   *  after a level-crossing zoom the pinned bin no longer exists among the drawn
+   *  cells and nothing is enlarged — rather than the wrong bin being enlarged
+   *  while the details panel still describes the original. */
+  private pinnedLevel = -1;
   private hoverDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   // Last known cursor position over the canvas (canvas-relative mx/my plus the
   // viewport clientX/clientY) and whether the pointer is currently inside.
@@ -1417,14 +1433,17 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // so the read-out is a size bump rather than a border — leaving the border
     // free to encode selection state. A pinned cell (its detail popup is open)
     // wins over the live hover, so the bin whose details are showing stays
-    // enlarged even as the cursor moves off it.
+    // enlarged even as the cursor moves off it. Matched by (level, q, r) via
+    // `sameBin`: the pin outlives a wheel zoom, and axial coords alone would
+    // match some unrelated finer cell once the zoom crosses a level.
     const enlargedCell = this.pinnedCell ?? this.hoveredCell;
+    const enlargedLevel = this.pinnedCell ? this.pinnedLevel : this.hoveredLevel;
     let hovered: { cell: HexCellPayload; sx: number; sy: number } | null = null;
     for (const cell of allCells) {
       const [sx, sy] = this.projToScreen(cell.cx, cell.cy);
       if (sx < -screenRadius * 2 || sx > this.width + screenRadius * 2) continue;
       if (sy < -screenRadius * 2 || sy > this.height + screenRadius * 2) continue;
-      if (enlargedCell && enlargedCell.q === cell.q && enlargedCell.r === cell.r) {
+      if (sameBin(enlargedLevel, enlargedCell, level, cell)) {
         hovered = { cell, sx, sy };
         continue;
       }
@@ -2430,7 +2449,11 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // its true hex, so a raw hit-test at the cursor can land outside the true
     // silhouette and find nothing — which used to shrink the bin and take a
     // second click. The hovered cell is unambiguously what the user is aiming at.
-    const cell = this.hoveredCell ?? this.hitTest(mx, my);
+    const hovered = this.hoveredCell;
+    const cell = hovered ?? this.hitTest(mx, my);
+    // The level the pinned cell belongs to: the hover's own level when we reuse
+    // it, otherwise the level the fresh hit-test just resolved against.
+    const cellLevel = hovered ? this.hoveredLevel : this.activeLevel;
     // Stop the transient hover audition and drop the hover highlight; from here
     // the pinned cell drives the enlarge and the popup drives the audio.
     this.clearHover();
@@ -2454,6 +2477,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // clicking another bin re-pins to it; dismissing the popup unpins via the
     // view calling {@link unpinCell}). Blank space clears any pin.
     this.pinnedCell = cell;
+    this.pinnedLevel = cell ? cellLevel : -1;
     this.requestRedraw();
     this.contextMenu.emit({
       clientX: event.clientX,
@@ -2473,6 +2497,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
   unpinCell(): void {
     if (!this.pinnedCell) return;
     this.pinnedCell = null;
+    this.pinnedLevel = -1;
     this.requestRedraw();
     if (this.pointerInside) {
       this.emitHoverHit(this.lastMouseX, this.lastMouseY, this.lastClientX, this.lastClientY);
@@ -2905,15 +2930,20 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     // post-zoom refresh path, which calls this directly).
     if (this.pinnedCell) return;
     const hit = this.hitTest(mx, my);
-    const prevQ = this.hoveredCell?.q;
-    const prevR = this.hoveredCell?.r;
+    const level = this.activeLevel;
+    const prev = this.hoveredCell;
+    const prevLevel = this.hoveredLevel;
     this.hoveredCell = hit;
+    this.hoveredLevel = hit ? level : -1;
     if (hit) {
-      if (hit.q !== prevQ || hit.r !== prevR) {
+      // Compared with the level included: a post-zoom refresh that lands on a
+      // finer cell sharing the old (q, r) is a *different* bin, so it must
+      // re-emit — otherwise the preview keeps describing the coarser bin.
+      if (!sameBin(level, hit, prevLevel, prev)) {
         this.hexHover.emit({ cell: hit, screenX: clientX, screenY: clientY });
         this.requestRedraw();
       }
-    } else if (prevQ != null) {
+    } else if (prev) {
       this.hexHover.emit(null);
       this.requestRedraw();
     }
@@ -2931,6 +2961,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
       this.emitHoverHit(this.lastMouseX, this.lastMouseY, this.lastClientX, this.lastClientY);
     } else if (this.hoveredCell) {
       this.hoveredCell = null;
+      this.hoveredLevel = -1;
       this.hexHover.emit(null);
       this.requestRedraw();
     }
@@ -2947,6 +2978,7 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     if (this.hoverDebounceTimer) clearTimeout(this.hoverDebounceTimer);
     if (this.hoveredCell) {
       this.hoveredCell = null;
+      this.hoveredLevel = -1;
       this.hexHover.emit(null);
       this.requestRedraw();
     }
