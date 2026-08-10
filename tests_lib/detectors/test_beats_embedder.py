@@ -8,11 +8,24 @@ Covers three layers, none of which downloads the released weights:
 """
 
 import math
+from typing import TYPE_CHECKING, cast
 
 import numpy as np
 import pytest
+import torch
 
-torch = pytest.importorskip("torch")
+if TYPE_CHECKING:
+    from vtscore.media.audio._beats_model import BEATs, _EncoderLayer
+
+
+def _layers(model: "BEATs") -> list["_EncoderLayer"]:
+    """The encoder's layers, typed.
+
+    ``nn.ModuleList`` indexing widens to ``Module``, whose ``__getattr__``
+    returns ``Tensor | Module``, so reaching into a layer's submodules needs
+    the concrete type back.
+    """
+    return cast(list["_EncoderLayer"], list(model.encoder.layers))
 
 
 # A miniature BEATs config: same shape as the released one, small enough to
@@ -40,7 +53,7 @@ TINY_CFG = {
 }
 
 
-def _tone(freq: float, n: int = 4000, sr: int = 16000) -> "torch.Tensor":
+def _tone(freq: float, n: int = 4000, sr: int = 16000) -> torch.Tensor:
     """A deterministic pure tone — no RNG, so goldens are version-stable."""
     t = torch.arange(n, dtype=torch.float32) / sr
     return torch.sin(2 * math.pi * freq * t)
@@ -110,9 +123,9 @@ class TestVendoredEncoder:
     def test_relative_attention_bias_is_shared_across_layers(self):
         from vtscore.media.audio._beats_model import BEATs
 
-        model = BEATs(TINY_CFG)
-        first = model.encoder.layers[0].self_attn.relative_attention_bias
-        for layer in model.encoder.layers[1:]:
+        layers = _layers(BEATs(TINY_CFG))
+        first = layers[0].self_attn.relative_attention_bias
+        for layer in layers[1:]:
             assert layer.self_attn.relative_attention_bias is first
 
     def test_state_dict_keys_match_the_released_layout(self):
@@ -150,13 +163,13 @@ class TestVendoredEncoder:
         from vtscore.media.audio._beats_model import BEATs
 
         model = BEATs(dict(TINY_CFG, deep_norm=False))
-        assert model.encoder.layers[0].deep_norm_alpha == 1.0
+        assert _layers(model)[0].deep_norm_alpha == 1.0
 
     def test_deep_norm_alpha(self):
         from vtscore.media.audio._beats_model import BEATs
 
         model = BEATs(dict(TINY_CFG, encoder_layers=12))
-        assert model.encoder.layers[0].deep_norm_alpha == pytest.approx(24**0.25)
+        assert _layers(model)[0].deep_norm_alpha == pytest.approx(24**0.25)
 
     def test_extract_features_shape(self):
         """One token per 16x16 patch: (frames // 16) rows x (128 // 16) columns."""
@@ -312,6 +325,7 @@ class TestBEATsEmbedderAudioHandling:
         emb = AudioBEATsEmbedder()
         self._stub(emb)
         vec = emb._embed_media_impl({"media_bytes": self._wav_bytes(5.0)})
+        assert vec is not None
         # Stub returns tokens [[0,1,2,3],[4,5,6,7]] -> mean over dim 1.
         np.testing.assert_allclose(vec, [2.0, 3.0, 4.0, 5.0])
 

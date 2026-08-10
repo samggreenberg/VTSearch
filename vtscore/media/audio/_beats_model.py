@@ -389,32 +389,32 @@ class _TransformerEncoder(nn.Module):
             _SamePad(cfg["conv_pos"]),
             nn.GELU(),
         )
-        self.layers = nn.ModuleList(
-            [
-                _EncoderLayer(
-                    embedding_dim=embed_dim,
-                    ffn_embedding_dim=cfg["encoder_ffn_embed_dim"],
-                    num_attention_heads=cfg["encoder_attention_heads"],
-                    dropout=self.dropout,
-                    attention_dropout=cfg["attention_dropout"],
-                    activation_dropout=cfg["activation_dropout"],
-                    has_relative_attention_bias=cfg["relative_position_embedding"],
-                    num_buckets=cfg["num_buckets"],
-                    max_distance=cfg["max_distance"],
-                    gru_rel_pos=cfg["gru_rel_pos"],
-                    deep_norm=cfg["deep_norm"],
-                    encoder_layers=layers,
-                )
-                for _ in range(layers)
-            ]
-        )
+        stack = [
+            _EncoderLayer(
+                embedding_dim=embed_dim,
+                ffn_embedding_dim=cfg["encoder_ffn_embed_dim"],
+                num_attention_heads=cfg["encoder_attention_heads"],
+                dropout=self.dropout,
+                attention_dropout=cfg["attention_dropout"],
+                activation_dropout=cfg["activation_dropout"],
+                has_relative_attention_bias=cfg["relative_position_embedding"],
+                num_buckets=cfg["num_buckets"],
+                max_distance=cfg["max_distance"],
+                gru_rel_pos=cfg["gru_rel_pos"],
+                deep_norm=cfg["deep_norm"],
+                encoder_layers=layers,
+            )
+            for _ in range(layers)
+        ]
         if cfg["relative_position_embedding"]:
             # Tie every layer's table to layer 0's, as upstream does. Only
             # layer 0 actually evaluates it (the bias is computed once and
             # passed up the stack), but the tie is what makes the checkpoint's
-            # twelve identical copies load.
-            for i in range(1, layers):
-                self.layers[i].self_attn.relative_attention_bias = self.layers[0].self_attn.relative_attention_bias
+            # twelve identical copies load. Tied here, before the ModuleList
+            # wraps them, so the concrete layer type is still in hand.
+            for layer in stack[1:]:
+                layer.self_attn.relative_attention_bias = stack[0].self_attn.relative_attention_bias
+        self.layers = nn.ModuleList(stack)
         self.layer_norm = nn.LayerNorm(embed_dim)
 
     def forward(self, x: Tensor) -> Tensor:
