@@ -241,13 +241,7 @@ def append_projection(
     entry_name = _projection_entry_name(pyramid.bin_shape)
     npz_bytes = _serialize_projection(projection, pyramid)
 
-    with zipfile.ZipFile(str(p), "a") as zf:
-        if entry_name in zf.namelist():
-            _rewrite_without(p, entry_name)
-            with zipfile.ZipFile(str(p), "a") as zf2:
-                zf2.writestr(entry_name, npz_bytes)
-        else:
-            zf.writestr(entry_name, npz_bytes)
+    _replace_entry(p, entry_name, npz_bytes)
 
     logger.info("Appended %s projection to container: %s", pyramid.bin_shape, p)
 
@@ -316,13 +310,7 @@ def append_region_labels(path: str | Path, label_set: Any, labeler_signature: st
     }
     body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
 
-    with zipfile.ZipFile(str(p), "a") as zf:
-        if _REGION_LABELS_ENTRY in zf.namelist():
-            _rewrite_without(p, _REGION_LABELS_ENTRY)
-            with zipfile.ZipFile(str(p), "a") as zf2:
-                zf2.writestr(_REGION_LABELS_ENTRY, body)
-        else:
-            zf.writestr(_REGION_LABELS_ENTRY, body)
+    _replace_entry(p, _REGION_LABELS_ENTRY, body)
 
     logger.info("Appended region labels (%d signs) to container: %s", len(label_set.labels), p)
 
@@ -389,6 +377,34 @@ def _deserialize_projection(npz_bytes: bytes) -> tuple[Any, Any] | None:
     except Exception:
         logger.warning("Failed to deserialize projection from container", exc_info=True)
         return None
+
+
+def _replace_entry(path: Path, entry_name: str, body: bytes) -> None:
+    """Store *body* at *entry_name*, replacing any copy already in the container.
+
+    ZIP has no in-place entry replacement, so an existing entry has to be dropped
+    by rewriting the whole archive — and :func:`_rewrite_without` publishes that
+    rewrite with :func:`os.replace`.  That rename must not run while an
+    append-mode handle is open on the same path: Windows refuses to replace a
+    file that has an open handle (``PermissionError``, losing the update), and on
+    POSIX the now-orphaned handle's ``close()`` writes a fresh central directory
+    into the unlinked inode.  So the presence probe gets its own short-lived
+    read-only open, and the append handle is taken only after the rewrite lands.
+    """
+    exists = False
+    try:
+        with zipfile.ZipFile(str(path), "r") as zf:
+            exists = entry_name in zf.namelist()
+    except (OSError, zipfile.BadZipFile):
+        # No container at this path yet (or an unreadable one) — the append
+        # below creates/repairs it, matching what mode "a" did before.
+        exists = False
+
+    if exists:
+        _rewrite_without(path, entry_name)
+
+    with zipfile.ZipFile(str(path), "a") as zf:
+        zf.writestr(entry_name, body)
 
 
 def _rewrite_without(path: Path, entry_name: str) -> None:

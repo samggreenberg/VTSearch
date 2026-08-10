@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import pickle
 import zipfile
 
@@ -228,6 +229,84 @@ class TestContainerProjection:
         loaded = read_projection(path)
         assert loaded is not None
         assert loaded[0].projection_id == "second-pid"
+
+
+def _forbid_replace_under_open_handle(monkeypatch, path) -> None:
+    """Make ``os.replace`` on *path* fail while a write handle is open on it.
+
+    That is exactly Windows' behaviour, and the reason the append helpers must
+    close their probe before rewriting the container.  On POSIX the same
+    overlap is silently tolerated, so without this shim the regression is
+    invisible here.
+    """
+    open_writers: list = []
+    real_zipfile = zipfile.ZipFile
+    real_replace = os.replace
+
+    class TrackingZipFile(real_zipfile):  # type: ignore[misc,valid-type]
+        def __init__(self, file, mode="r", *args, **kwargs):
+            super().__init__(file, mode, *args, **kwargs)
+            self._tracked = mode in ("a", "w") and str(file) == str(path)
+            if self._tracked:
+                open_writers.append(self)
+
+        def close(self):
+            if getattr(self, "_tracked", False):
+                self._tracked = False
+                open_writers.remove(self)
+            super().close()
+
+    def guarded_replace(src, dst):
+        if open_writers and str(dst) == str(path):
+            raise PermissionError(f"cannot replace {dst}: a write handle is still open on it")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(zipfile, "ZipFile", TrackingZipFile)
+    monkeypatch.setattr(os, "replace", guarded_replace)
+
+
+class TestContainerAppendHandleSafety:
+    """Replacing an existing entry must not rewrite the container under an open handle."""
+
+    def test_append_projection_replaces_without_open_handle(self, tmp_path, monkeypatch):
+        path = tmp_path / "dataset.pkl"
+        write_container(path, _medias_pkl_bytes(20), _meta())
+
+        rng = np.random.default_rng(7)
+        coords = rng.standard_normal((20, 2)).astype(np.float32)
+        proj = Projection("first-pid", list(range(20)), coords, "test")
+        append_projection(path, proj, build_pyramid(proj, n_levels=2))
+
+        _forbid_replace_under_open_handle(monkeypatch, path)
+
+        proj2 = Projection("second-pid", list(range(20)), coords, "test")
+        append_projection(path, proj2, build_pyramid(proj2, n_levels=2))
+
+        loaded = read_projection(path)
+        assert loaded is not None
+        assert loaded[0].projection_id == "second-pid"
+
+    def test_append_region_labels_replaces_without_open_handle(self, tmp_path, monkeypatch):
+        from vtscore.datasets.container import append_region_labels, read_region_labels
+        from vtscore.projection.labels import RegionLabel, make_label_set
+
+        path = tmp_path / "dataset.pkl"
+        write_container(path, _medias_pkl_bytes(), _meta())
+
+        def labels(text: str):
+            return make_label_set("pid", [RegionLabel(level=0.0, x=0.0, y=0.0, text=text)])
+
+        append_region_labels(path, labels("old"), "sig-old")
+
+        _forbid_replace_under_open_handle(monkeypatch, path)
+
+        append_region_labels(path, labels("new"), "sig-new")
+
+        result = read_region_labels(path)
+        assert result is not None
+        label_set, signature = result
+        assert [lab.text for lab in label_set.labels] == ["new"]
+        assert signature == "sig-new"
 
 
 class TestContainerMetaReaders:
