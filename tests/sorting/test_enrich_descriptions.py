@@ -355,8 +355,8 @@ class TestEvalTextSortEnrich:
 
         call_kwargs = []
 
-        def mock_embed(text, media_type, enrich=False):
-            call_kwargs.append({"enrich": enrich})
+        def mock_embed(text, media_type, enrich=False, embedder_name=""):
+            call_kwargs.append({"enrich": enrich, "embedder_name": embedder_name})
             if "cat" in text:
                 return cat_dir.copy()
             return dog_dir.copy()
@@ -366,6 +366,10 @@ class TestEvalTextSortEnrich:
 
         assert len(results) == 1
         assert all(kw["enrich"] is True for kw in call_kwargs)
+        # Called directly with no embedder_name, so it forwards the empty
+        # default. run_eval is what fills it in; that is covered by
+        # tests_lib/detectors/test_eval.py.
+        assert all(kw["embedder_name"] == "" for kw in call_kwargs)
 
     def test_eval_text_sort_without_enrich(self):
         """eval_text_sort with enrich=False should pass enrich=False."""
@@ -374,8 +378,8 @@ class TestEvalTextSortEnrich:
 
         call_kwargs = []
 
-        def mock_embed(text, media_type, enrich=False):
-            call_kwargs.append({"enrich": enrich})
+        def mock_embed(text, media_type, enrich=False, embedder_name=""):
+            call_kwargs.append({"enrich": enrich, "embedder_name": embedder_name})
             return cat_dir.copy()
 
         with patch("vtscore.embedding.helpers.embed_text_query", side_effect=mock_embed):
