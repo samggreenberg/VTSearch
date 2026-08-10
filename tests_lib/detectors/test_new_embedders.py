@@ -226,6 +226,124 @@ class TestImageSiglipLEmbedderProperties:
         assert embedder_siglip_l.EMBEDDER.name == "siglip_l"
 
 
+class TestImageSiglip2LEmbedderProperties:
+    """Verify ImageSiglip2LEmbedder class properties and registration.
+
+    Offline-safe like its SigLIP-L neighbour: nothing here imports
+    ``transformers`` or downloads the SO400M checkpoint, because
+    ``_load_models_impl`` defers both.
+    """
+
+    def test_name(self):
+        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+
+        assert ImageSiglip2LEmbedder().name == "siglip2_l"
+
+    def test_media_type_id(self):
+        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+
+        assert ImageSiglip2LEmbedder().media_type_id == "image"
+
+    def test_is_not_default(self):
+        """SigLIP (base) stays the default image embedder; SigLIP2-L is opt-in."""
+        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+
+        assert ImageSiglip2LEmbedder().is_default is False
+
+    def test_supports_text(self):
+        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+
+        assert ImageSiglip2LEmbedder().supports_text is True
+
+    def test_description_wrappers_non_empty(self):
+        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+
+        wrappers = ImageSiglip2LEmbedder().description_wrappers
+        assert len(wrappers) > 0
+        assert all("{text}" in w for w in wrappers)
+
+    def test_registered_in_registry(self):
+        from vtscore.media import get_embedder
+
+        emb = get_embedder("siglip2_l")
+        assert emb.name == "siglip2_l"
+        assert emb.media_type_id == "image"
+
+    def test_listed_in_embedders_for_type(self):
+        from vtscore.media import embedders_for_type
+
+        names = [e.name for e in embedders_for_type("image")]
+        assert "siglip2_l" in names
+
+    def test_to_dict(self):
+        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+
+        d = ImageSiglip2LEmbedder().to_dict()
+        assert d == {
+            "name": "siglip2_l",
+            "display_name": "SigLIP2-L (SO400M/384)",
+            "model_id": "google/siglip2-so400m-patch14-384",
+            "media_type_id": "image",
+            "is_default": False,
+            "supports_text": True,
+            "supports_patch_regions": False,
+            "supports_geometric_verification": False,
+            "license_notice": None,
+        }
+
+    def test_load_models_idempotent(self):
+        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+
+        emb = ImageSiglip2LEmbedder()
+        # Simulate already-loaded model: a second load must be a no-op and must
+        # not attempt to import transformers or download weights.
+        emb._model = MagicMock()
+        emb._processor = MagicMock()
+        emb.load_models()
+        assert isinstance(emb._model, MagicMock)
+
+    def test_embed_media_returns_none_when_not_loaded(self):
+        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+
+        emb = ImageSiglip2LEmbedder()
+        with patch.object(emb, "load_models"):
+            result = emb.embed_media({"media_path": "/nonexistent.jpg"})
+        assert result is None
+
+    def test_embed_text_returns_none_when_not_loaded(self):
+        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+
+        emb = ImageSiglip2LEmbedder()
+        with patch.object(emb, "load_models"):
+            result = emb.embed_text("a cat")
+        assert result is None
+
+    def test_uses_correct_model_id(self):
+        from vtscore.config import SIGLIP2_L_MODEL_ID
+
+        assert SIGLIP2_L_MODEL_ID == "google/siglip2-so400m-patch14-384"
+
+    def test_distinct_checkpoint_from_base_siglip2(self):
+        """The two SigLIP 2 entries must not collapse onto the same weights:
+        they emit different dimensions (768 vs 1152) and are not gallery-compatible."""
+        from vtscore.config import SIGLIP2_L_MODEL_ID, SIGLIP2_MODEL_ID
+
+        assert SIGLIP2_L_MODEL_ID != SIGLIP2_MODEL_ID
+
+    def test_is_media_embedder(self):
+        from vtscore.media.embedder import MediaEmbedder
+        from vtscore.media.image.embedder_siglip2_l import ImageSiglip2LEmbedder
+
+        assert issubclass(ImageSiglip2LEmbedder, MediaEmbedder)
+
+    def test_module_exposes_embedder_sentinel(self):
+        from vtscore.media.embedder import MediaEmbedder
+        from vtscore.media.image import embedder_siglip2_l
+
+        assert isinstance(embedder_siglip2_l.EMBEDDER, MediaEmbedder)
+        assert embedder_siglip2_l.EMBEDDER.name == "siglip2_l"
+
+
 class TestAudioClapMusicEmbedderProperties:
     """Verify AudioClapMusicEmbedder class properties and registration."""
 
@@ -990,12 +1108,12 @@ class TestAllEmbeddersRegistration:
         from vtscore.media import all_embedders
 
         embedders = all_embedders()
-        # 7 original + 9 image embedders (clip, siglip2, siglip_l, plus
-        # single/patch variants for dinov2, dinov3, eupe) + 1 face embedder
+        # 7 original + 10 image embedders (clip, siglip2, siglip2_l, siglip_l,
+        # plus single/patch variants for dinov2, dinov3, eupe) + 1 face embedder
         # + 1 structural image embedder (sift_vlad)
         # + 1 vision-only video embedder (videomae)
         # + 4 audio embedders (ast, clap_general, whisper_encoder, paraspeechclap).
-        assert len(embedders) == 23
+        assert len(embedders) == 24
 
     def test_all_embedders_dict_includes_supports_text(self):
         """The new ``supports_text`` flag must round-trip through ``to_dict``
@@ -1005,7 +1123,17 @@ class TestAllEmbeddersRegistration:
         dicts = all_embedders_dict()
         by_name = {d["name"]: d for d in dicts}
         # Cross-modal embedders advertise text support.
-        for name in ("siglip", "siglip2", "siglip_l", "clip", "clap", "clap_general", "paraspeechclap", "xclip"):
+        for name in (
+            "siglip",
+            "siglip2",
+            "siglip2_l",
+            "siglip_l",
+            "clip",
+            "clap",
+            "clap_general",
+            "paraspeechclap",
+            "xclip",
+        ):
             assert by_name[name]["supports_text"] is True, name
         # Vision-only / patch-based and speech-only embedders do not.
         for name in (
@@ -1035,6 +1163,7 @@ class TestAllEmbeddersRegistration:
             "paraspeechclap",
             "siglip",
             "siglip2",
+            "siglip2_l",
             "siglip_l",
             "clip",
             "dinov2_single",
@@ -1066,6 +1195,7 @@ class TestAllEmbeddersRegistration:
         assert names == {
             "siglip",
             "siglip2",
+            "siglip2_l",
             "siglip_l",
             "clip",
             "dinov2_single",
@@ -1110,12 +1240,12 @@ class TestAllEmbeddersRegistration:
         from vtscore.media import all_embedders_dict
 
         dicts = all_embedders_dict()
-        # 7 original + 9 image embedders (clip, siglip2, siglip_l, plus
-        # single/patch variants for dinov2, dinov3, eupe) + 1 face embedder
+        # 7 original + 10 image embedders (clip, siglip2, siglip2_l, siglip_l,
+        # plus single/patch variants for dinov2, dinov3, eupe) + 1 face embedder
         # + 1 structural image embedder (sift_vlad)
         # + 1 vision-only video embedder (videomae)
         # + 4 audio embedders (ast, clap_general, whisper_encoder, paraspeechclap).
-        assert len(dicts) == 23
+        assert len(dicts) == 24
         for d in dicts:
             assert "name" in d
             assert "media_type_id" in d

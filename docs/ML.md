@@ -135,6 +135,7 @@ Each media type uses a different pretrained model to produce fixed-size embeddin
 | Audio (`audio`) | `whisper_encoder` | Whisper-base encoder (`openai/whisper-base`, audio-only) | 512 |
 | Image (`image`) | `siglip` (default) | SigLIP (`google/siglip-base-patch16-224`) | 768 |
 | Image (`image`) | `siglip2` | SigLIP 2 (`google/siglip2-base-patch16-224`) | 768 |
+| Image (`image`) | `siglip2_l` | SigLIP2-L (`google/siglip2-so400m-patch14-384`) | 1152 |
 | Image (`image`) | `clip` | CLIP (`openai/clip-vit-base-patch32`) | 512 |
 | Image (`image`) | `dinov2_single` / `dinov2_patch` | DINOv2 ViT-B/14 (`facebook/dinov2-base`) | 768 |
 | Image (`image`) | `dinov3_single` / `dinov3_patch` | DINOv3 ViT-B/16 (`facebook/dinov3-vitb16-pretrain-lvd1689m`, gated) | 768 |

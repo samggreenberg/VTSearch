@@ -302,6 +302,7 @@ embedder per media type should override the `is_default` property to return
 | `audio/embedder_whisper.py` | `AudioWhisperEncoderEmbedder` | audio | |
 | `image/embedder_siglip.py` | `ImageSiglipEmbedder` | image | ✅ |
 | `image/embedder_siglip2.py` | `ImageSiglip2Embedder` | image | |
+| `image/embedder_siglip2_l.py` | `ImageSiglip2LEmbedder` | image | |
 | `image/embedder_clip.py` | `ImageClipEmbedder` | image | |
 | `image/embedder_dinov2_single.py` / `_patch.py` | `ImageDinov2SingleEmbedder` / `ImageDinov2PatchEmbedder` | image | |
 | `image/embedder_dinov3_single.py` / `_patch.py` | `ImageDinov3SingleEmbedder` / `ImageDinov3PatchEmbedder` | image | |
@@ -557,6 +558,7 @@ loaded via `spec_from_file_location` so discovery still works.
 | `AudioWhisperEncoderEmbedder` | `whisper_encoder` | `audio` | Whisper-base encoder (openai/whisper-base), audio-only | 512 |
 | `ImageSiglipEmbedder` | `siglip` | `image` | SigLIP (google/siglip-base-patch16-224) | 768 |
 | `ImageSiglip2Embedder` | `siglip2` | `image` | SigLIP 2 (google/siglip2-base-patch16-224) | 768 |
+| `ImageSiglip2LEmbedder` | `siglip2_l` | `image` | SigLIP2-L (google/siglip2-so400m-patch14-384) | 1152 |
 | `ImageClipEmbedder` | `clip` | `image` | CLIP (openai/clip-vit-base-patch32) | 512 |
 | `ImageDinov2SingleEmbedder` / `ImageDinov2PatchEmbedder` | `dinov2_single` / `dinov2_patch` | `image` | DINOv2 ViT-B/14 (facebook/dinov2-base), ungated | 768 |
 | `ImageDinov3SingleEmbedder` / `ImageDinov3PatchEmbedder` | `dinov3_single` / `dinov3_patch` | `image` | DINOv3 ViT-B/16 (facebook/dinov3-vitb16-pretrain-lvd1689m), HF-gated | 768 |

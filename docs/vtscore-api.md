@@ -112,6 +112,7 @@ E5_MODEL_ID: str             # Multilingual E5 text embedder
 BGE_MODEL_ID: str            # BGE text embedder variant
 SIGLIP_MODEL_ID: str
 SIGLIP2_MODEL_ID: str
+SIGLIP2_L_MODEL_ID: str
 CLIP_MODEL_ID: str
 DINOV2_MODEL_ID: str
 DINOV3_MODEL_ID: str

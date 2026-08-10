@@ -1,6 +1,6 @@
-"""Shared base for the HF cross-modal image embedders (SigLIP, SigLIP 2, CLIP).
+"""Shared base for the HF cross-modal image embedders (SigLIP, SigLIP 2, SigLIP2-L, CLIP).
 
-All three embedders wrap a Hugging Face model/processor pair that exposes
+All of them wrap a Hugging Face model/processor pair that exposes
 ``get_image_features`` / ``get_text_features``, so the full cross-modal
 surface (single/bulk image embedding, PIL embedding, text-query embedding)
 lives here.  Subclasses provide the identity properties, their own
