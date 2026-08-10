@@ -133,7 +133,8 @@ Returns the detector's saved labelset split into good/bad lists with right-pane
 render data. Not gated on a loaded dataset (but when one is loaded, each item's
 `cid` / `time` / `score` resolve against it).
 
-→ ```json
+→
+```json
 {
   "media_type": "audio",
   "good": [
@@ -193,7 +194,8 @@ manifest + README).
 GET /api/detectors/registry
 ```
 
-→ ```json
+→
+```json
 {
   "detectors": [
     {
@@ -273,7 +275,8 @@ Runs the label importer and creates a detector seeded with the labels it
 returns. The media type is inferred from the labels' origins; labels spanning
 more than one media type are rejected (400).
 
-→ ```json
+→
+```json
 {
   "ok": true,
   "detector": {...},
@@ -405,7 +408,8 @@ Counts and metadata only — never embeddings or MLP weights.
 detector's positive labels currently resolve into the loaded dataset (the
 set the dashboard's Browse button projects).
 
-→ ```json
+→
+```json
 {
   "name": "cat-sounds",
   "media_type": "audio",
@@ -441,7 +445,8 @@ mixed-source detectors work and no dataset need be loaded. The resulting
 throwaway context (vectors + preview bytes, never persisted) is registered
 under a synthetic `dataset_id` the browse view opens.
 
-→ ```json
+→
+```json
 {
   "ok": true,
   "dataset_id": "__detpos__<detector_id>",

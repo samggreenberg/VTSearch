@@ -492,7 +492,8 @@ Trains an MLP on the labeled files, then scores all loaded medias.
 GET /api/votes
 ```
 
-→ ```json
+→
+```json
 {
   "good": [0, 3, 7],
   "bad": [1, 5],

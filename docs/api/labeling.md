@@ -48,7 +48,8 @@ implementation).
 GET /api/labeling-status
 ```
 
-→ ```json
+→
+```json
 {
   "smart": {"status": "green"},
   "stable": {"status": "yellow"},

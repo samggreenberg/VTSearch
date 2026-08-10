@@ -16,7 +16,8 @@
 GET /api/media-types
 ```
 
-→ ```json
+→
+```json
 {
   "media_types": [
     {
@@ -289,7 +290,8 @@ GET /api/dataset/detect-media-type
 Samples a folder's files by extension to pre-fill the import modal's
 media-type dropdown.
 
-→ ```json
+→
+```json
 {
   "sample_size": 50,
   "counts_by_type": {"audio": 48, "image": 2},
@@ -401,7 +403,8 @@ All load endpoints are async; subscribe to the `dataset` and
 GET /api/dataset/demo-list
 ```
 
-→ ```json
+→
+```json
 {
   "datasets": [
     {
@@ -450,7 +453,8 @@ GET /api/browse-media-files
 Lists files and subdirectories within an allowed root, filtered to only
 media files with recognized extensions.
 
-→ ```json
+→
+```json
 {
   "directories": [{"name": "dog", "path": "dog", "modified_at": "2025-03-31T10:15:00"}],
   "files": [{"name": "bark.wav", "path": "dog/bark.wav", "size_bytes": 12345, "modified_at": "2025-03-31T10:15:00"}],
@@ -561,7 +565,8 @@ POST /api/dataset/clear
 GET /api/datasets/registry
 ```
 
-→ ```json
+→
+```json
 {
   "datasets": [
     {
@@ -623,7 +628,8 @@ response is a superset of the Dashboard grid's row (`name`, `media_type`,
 `num_items`, `created_at`, `expires_at`, `created_by`, `readers`), so the
 Stats window can show everything the grid does while it covers the grid up.
 
-→ ```json
+→
+```json
 {
   "name": "Field recordings",
   "media_type": "audio",
@@ -669,7 +675,8 @@ together and where each one came from. Each set corresponds to one
 `dupe_set` representative in the dataset's in-memory context; exact-dupe
 members share the representative's MD5, near-dupe members keep their own.
 
-→ ```json
+→
+```json
 {
   "duplicate_sets": [
     {

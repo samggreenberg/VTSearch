@@ -58,7 +58,8 @@ path escape.
 GET /api/auth/status
 ```
 
-→ ```json
+→
+```json
 {
   "provider": "default",
   "user": "default",
@@ -123,7 +124,8 @@ OpenAPI surface.
 GET /api/auth/huggingface/status
 ```
 
-→ ```json
+→
+```json
 {"configured": true, "authenticated": false, "username": "", "scopes": ""}
 ```
 

@@ -16,7 +16,8 @@ GET /api/dashboard/dataset-info
 
 Metadata about the currently loaded dataset.
 
-→ ```json
+→
+```json
 {
   "name": "ESC-50 Animals",
   "num_medias": 500,
