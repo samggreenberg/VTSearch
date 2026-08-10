@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import pickle
 import zipfile
+from typing import Any
 
 import numpy as np
 import pytest
@@ -244,7 +245,7 @@ def _forbid_replace_under_open_handle(monkeypatch, path) -> None:
     real_replace = os.replace
 
     class TrackingZipFile(real_zipfile):  # type: ignore[misc,valid-type]
-        def __init__(self, file, mode="r", *args, **kwargs):
+        def __init__(self, file, mode: Any = "r", *args, **kwargs):
             super().__init__(file, mode, *args, **kwargs)
             self._tracked = mode in ("a", "w") and str(file) == str(path)
             if self._tracked:
