@@ -381,9 +381,9 @@ else
     done
 fi
 
-# Coverage is opt-in via VTSEARCH_COVERAGE=1 (or `--cov` as first arg).
-# Default off because tests already run in ~35s; coverage adds ~10-20%
-# overhead and the coverage report is most useful when explicitly asked for.
+# Coverage is opt-in via VTSEARCH_COVERAGE=1. Default off because tests
+# already run in ~35s; coverage adds ~10-20% overhead and the coverage
+# report is most useful when explicitly asked for.
 COV_ARGS=()
 if [[ "${VTSEARCH_COVERAGE:-}" == "1" ]]; then
     COV_ARGS=(--cov=vtsearch --cov-report=term-missing)
