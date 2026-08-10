@@ -1006,6 +1006,60 @@ class TestBuildCoverageAtlasForContext:
         build_coverage_atlas_for_context(ctx)
         assert ctx.coverage_atlas is None
 
+    def test_survives_concurrent_media_inserts(self):
+        """Regression for #2958: this used to iterate ``ctx.medias.items()``
+
+        directly, with no lock, from the atlas route's spawned thread --
+        unlike every other cross-thread reader.  A writer inserting under
+        ``_state_lock`` (e.g. add-to-pile) while this iterates raised
+        ``RuntimeError: dictionary changed size during iteration``.  It now
+        snapshots under ``_state_lock`` first, so hammering inserts alongside
+        repeated builds must never raise.
+
+        The writer is bounded and paced: a tight unbounded loop would balloon
+        the vector set (and the k-means cost of every rebuild) without adding
+        anything to the race coverage.
+        """
+        import threading
+        import time
+
+        from vtscore.state.core import DatasetContext, _state_lock
+        from vtscore.state.coverage import build_coverage_atlas_for_context
+
+        rng = np.random.default_rng(42)
+        ctx = DatasetContext("test_coverage_concurrent")
+        for i in range(10):
+            ctx.medias[i] = {
+                "id": i,
+                "embeddings": {"e5": rng.standard_normal(128).astype(np.float32)},
+            }
+
+        stop = threading.Event()
+
+        def writer() -> None:
+            next_id = 10_000
+            for _ in range(60):
+                if stop.is_set():
+                    return
+                with _state_lock:
+                    ctx.medias[next_id] = {
+                        "id": next_id,
+                        "embeddings": {"e5": rng.standard_normal(128).astype(np.float32)},
+                    }
+                next_id += 1
+                time.sleep(0.001)
+
+        thread = threading.Thread(target=writer, daemon=True)
+        thread.start()
+        try:
+            for _ in range(15):
+                build_coverage_atlas_for_context(ctx)
+        finally:
+            stop.set()
+            thread.join(timeout=5)
+
+        assert ctx.coverage_atlas is not None
+
 
 class TestBackgroundLoadThreadContext:
     """Regression for C3: background load tasks must pin the in-flight
