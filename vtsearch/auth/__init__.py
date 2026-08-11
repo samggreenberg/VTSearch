@@ -67,6 +67,31 @@ class LoginProvider(ABC):
         """Whether the frontend should show a login screen at startup."""
         return False
 
+    def enforce_auth(self) -> bool:
+        """Whether the server rejects unauthenticated ``/api/*`` requests.
+
+        When ``True``, the ``_enforce_auth`` before_request hook (see
+        ``vtsearch.hooks``) aborts with 401 whenever
+        :meth:`is_authenticated` is ``False``, except for the small
+        allowlist of auth endpoints the SPA needs to reach the login
+        screen. Defaults to ``True`` so a custom provider that implements
+        real credentials is gated by construction — forgetting to override
+        this must fail closed, not silently serve every request as
+        ``"anonymous"``. Providers for which anonymous access is a
+        legitimate mode (``TrivialLoginProvider``) override this to
+        ``False``; ``DefaultLoginProvider`` is unaffected either way since
+        it authenticates every request.
+        """
+        return True
+
+    def www_authenticate(self) -> str | None:
+        """Challenge value for the ``WWW-Authenticate`` header on 401s.
+
+        Return the auth scheme clients should use (e.g. ``"Bearer"``), or
+        ``None`` to omit the header (cookie/session providers).
+        """
+        return None
+
     def get_user_data_dir(self, username: str, base_data_dir: Path) -> Path:
         """Return the data directory for *username*.
 
@@ -208,6 +233,15 @@ class TrivialLoginProvider(LoginProvider):
     def login_required(self) -> bool:
         return True
 
+    def enforce_auth(self) -> bool:
+        # Deliberately not enforced server-side: this provider has no
+        # password, so a 401 gate adds no security (any caller could just
+        # POST /api/auth/login first) — it would only break the SPA's
+        # pre-login boot requests and the documented anonymous fallback.
+        # The login screen is a UX affordance for switching identities,
+        # not an access control.
+        return False
+
     def get_user_data_dir(self, username: str, base_data_dir: Path) -> Path:
         return base_data_dir / username
 
@@ -236,10 +270,11 @@ class ApiKeyLoginProvider(LoginProvider):
             print('key:', k); \\
             print('hash:', hashlib.sha256(k.encode()).hexdigest())"
 
-    Requests without a valid bearer token resolve to the username
-    ``"anonymous"`` and ``is_authenticated`` returns ``False``.  This
-    provider does not show a login UI (``login_required`` is ``False``);
-    it is meant for headless callers that send the header directly.
+    Requests without a valid bearer token are rejected with 401 by the
+    ``_enforce_auth`` hook (``enforce_auth()`` is inherited ``True``),
+    except for the auth-status/login allowlist.  This provider does not
+    show a login UI (``login_required`` is ``False``); it is meant for
+    headless callers that send the header directly.
     """
 
     name = "api_key"
@@ -348,6 +383,9 @@ class ApiKeyLoginProvider(LoginProvider):
 
     def login_required(self) -> bool:
         return False
+
+    def www_authenticate(self) -> str | None:
+        return "Bearer"
 
     def get_user_data_dir(self, username: str, base_data_dir: Path) -> Path:
         return base_data_dir / username

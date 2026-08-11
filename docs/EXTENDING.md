@@ -57,6 +57,17 @@ class MyProvider(LoginProvider):
         return base_data_dir / username
 ```
 
+**Enforcement is on by default.** The base class's `enforce_auth()` returns
+`True`, which makes the server reject any `/api/*` request for which your
+`is_authenticated()` returns false with a JSON 401 (only the
+`/api/auth/status|login|logout` allowlist is exempt). You get real gating
+without writing a decorator or touching routes — but it also means
+`is_authenticated()` must return `True` for every request you intend to
+serve. Override `enforce_auth()` to return `False` only if anonymous access
+is a deliberate mode (see `TrivialLoginProvider`). Optionally override
+`www_authenticate()` (e.g. return `"Bearer"`) to set the 401's
+`WWW-Authenticate` header.
+
 **Validate any username you didn't construct yourself.** A username returned
 by `get_user()` becomes a path component (`data/<username>/`) *and* the
 confinement root for server-file path validation, which resolves `..` away
@@ -326,6 +337,9 @@ See [Authentication Providers](#authentication-providers) above.
 - [ ] Create a new module (e.g. `vtsearch/auth/my_provider.py`)
 - [ ] Subclass `LoginProvider` from `vtsearch.auth`
 - [ ] Implement `get_user(request)` and `is_authenticated(request)`
+- [ ] Decide on `enforce_auth()`: the inherited `True` makes the server 401
+      unauthenticated API requests; override to `False` only if anonymous
+      access is intended
 - [ ] Override `login_required()` if the frontend should show a login screen
 - [ ] Override `get_user_data_dir(username, base_data_dir)` for per-user isolation
 - [ ] Call `set_login_provider(MyProvider())` at app startup (in `app.py`)
