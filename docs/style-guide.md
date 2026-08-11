@@ -46,7 +46,7 @@ at the default 16px root.
 
 There are no other font sizes. `0.78rem`, `0.83rem`, `0.95rem`, `12px`, `13px`, etc. are all violations - they collapse into the table above.
 
-**Monospace:** `--font-mono` is the one monospace stack (`ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`). Reach for it whenever a face needs to be fixed-width (`.form-hint`, `.form-textarea`, code-ish values); never write a bare `monospace` or a hand-rolled font stack.
+**Monospace:** `--font-mono` is the one monospace stack (`ui-monospace, SFMono-Regular, Menlo, Consolas, monospace`). Reach for it whenever a face needs to be fixed-width (`.form-hint`, code-ish values); never write a bare `monospace` or a hand-rolled font stack.
 
 ### 1.3 Font weights - `--weight-*`
 
@@ -226,18 +226,15 @@ The full taxonomy is `.btn` plus optional variant + optional size. Always start 
 <button class="btn btn--toolbar">Import Labels</button>
 <button class="btn btn--sm">Compact</button>
 <button class="btn btn--primary btn--sm">Compact primary</button>
-<button class="btn btn--xs">Inline mini</button>
-<button class="btn btn--icon-square">+</button>
 ```
 
 Rules:
 
 - **Default size** for prominent actions (modal footers, top-of-panel actions).
 - **`.btn--sm`** for inline actions inside cards and rows.
-- **`.btn--xs`** for the densest tables / inline edit rows.
 - **`.btn--cancel`** for low-weight cancel/close affordances next to progress bars.
 - **`.btn--toolbar`** for compact outline buttons in toolbars and panel action rows (the right-panel Import Labels / Add Corrections / Export cluster, the image-view-controls strip): tighter padding, `--font-xs`, a muted resting color, `white-space: nowrap`, and a hover that promotes the border to `--accent`.
-- **`.btn--icon-square`** for square plus/icon buttons (28×28).
+- **This list is the whole taxonomy.** There is no `--xs`, `--ghost`, or `--icon-square`; if you need a size or treatment that isn't here, add it to `_components.scss` (and to this list) rather than inventing a class name that no rule matches.
 - **Do not write per-component `padding` / `font-size` / `border-radius` on a button.** Every "small button" implementation in component SCSS that bypassed this taxonomy has been removed.
 
 A borderless icon button inside a card row or action cluster is **not** a `.btn` variant - use `.card-icon-btn` (§2.11).
@@ -251,13 +248,11 @@ A borderless icon button inside a card row or action cluster is **not** a `.btn`
   <p class="form-hint">JSON, CSV, or NPZ accepted.</p>
 </div>
 <select class="form-select">...</select>
-<textarea class="form-textarea"></textarea>
 ```
 
 - `.form-group` is the label+control wrapper: a flex column with `gap: var(--space-xs)`. It owns the spacing *inside* one field; the surrounding form (`.importer-form`, §2.5) owns the spacing between fields. `.form-group--section` adds `margin-top: var(--space-xl)` above a grouped block inside an importer form (the Embedder/Clipper "Advanced" block).
 - `.form-input` and `.form-select` share padding, border, focus state. They sit on `--bg-subtle` so they read as "input wells."
 - `.form-select--compact` is the toolbar-sized select: sized to its content rather than full width, tighter padding, `--font-xs`, on `--bg-surface`. Use it in dense bars (label sort, browse selection panel), not in forms.
-- `.form-textarea` extends `.form-input` for multi-line entry: vertical resize only, a `5rem` floor, and `--font-mono` so long term lists line up.
 - `.form-label` is `--font-md`, `--weight-medium`, `--text-primary` - sized to match `.form-input` so the header is never visually smaller than the value the user types/picks underneath it. Custom `<button>`-based dropdown triggers that play the role of `.form-select` (e.g. icon-bearing media-type pickers) must set `font-size: var(--font-md)` explicitly: `<button>` doesn't inherit page font by default, and component-scoped overrides (`font: inherit`, etc.) silently win over the global `.form-select` because Angular view encapsulation raises their specificity. If the trigger text ever renders larger than the label above it, that rule is the regression.
 - `.form-hint` (used for plugin-field `hint` strings) is muted `--font-mono` at `--font-sm`, and preserves newlines (`white-space: pre-wrap`) so a multi-line schema hint keeps its shape.
 - `.required` marks required fields with `--color-bad`.
@@ -471,7 +466,6 @@ Global classes that any component can apply. All animations here are silenced by
 | `.drawer-enter-left` / `.drawer-leave-left` / `.drawer-enter-right` / `.drawer-leave-right` | Slide-from-edge transitions for side panels, bound via Angular's `animate.enter` / `animate.leave`. |
 | `.swipe-left` / `.swipe-right` | The vote fling that throws the current media off-screen (bad / good). |
 | `.icon-waggle` | 2s rotate-and-hold loop signalling "a slow job kicked off by this control is running" (Find/Train buttons, in-flight import/export submits). |
-| `.skeleton-bg` | Flat subtle placeholder painted behind a lazy-loaded `<img>` so it doesn't pop in against nothing. |
 | `.waveform-mask` | Paints `--accent` through an audio waveform's alpha mask so thumbnails tint per theme. The `mask-image` URL is set per instance via a style binding. |
 | `.sr-only` | Visually hidden, screen-reader-visible text. |
 
