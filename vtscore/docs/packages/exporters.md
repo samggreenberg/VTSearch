@@ -241,9 +241,11 @@ its Holder API client (see `vtscore/exporters/holder/__init__.py:46`).
 
 ## Template variables in path fields
 
-File-based exporters interpolate these placeholders in their path
-fields via `resolve_export_filepath`
-(`vtscore/exporters/_template.py:19`):
+A path field declares which placeholders it accepts in its
+`PluginField.template_vars` tuple; the framework's
+`normalize_field_values` pass
+(`vtscore/plugins/normalize.py`) substitutes them - and confines the
+resolved `server_path` to the user's data dir - before `export()` runs:
 
 | Placeholder | Substituted with |
 |-------------|------------------|
@@ -332,13 +334,15 @@ EXPORTER = SftpLabelsetExporter()
   minimum `{"message": "..."}`.
 - Decide which result shape(s) you support; raise `ValueError` on
   shapes you don't.
-- For file destinations, use
-  `vtscore.exporters._template.resolve_export_filepath` for template
-  variables and default the path under `vtscore.config.DATA_DIR`.
-  Write atomically (tmp file + `os.replace`) - the two server-file
-  exporters have helpers worth copying.
-- For URL destinations, run the URL through
-  `vtscore.security.validate_url` first (SSRF guard).
+- For file destinations, declare the field as `field_type="server_path"`
+  with the placeholders it accepts in `template_vars=(...)`, and default
+  the path under `vtscore.config.DATA_DIR`. The framework substitutes
+  and confines it; consume `field_values[key]` as-is. Write atomically
+  (`vtscore.io.atomic_write_json` / `atomic_write_text`).
+- For URL destinations, declare the field as `field_type="url"` - the
+  framework runs the SSRF guard for you. Call
+  `vtscore.security.validate_url` yourself only for a URL you
+  *construct* rather than receive.
 - Expose a module-level `EXPORTER = YourExporter()` constant.
 - (Third-party only) declare a `vtscore.exporters` entry point in
   your `pyproject.toml`.

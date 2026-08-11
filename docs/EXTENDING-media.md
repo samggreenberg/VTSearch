@@ -575,15 +575,22 @@ The image embedders come in **single/patch pairs**: `_single` slugs expose only 
 
 ### Embedder capability flags
 
-`MediaEmbedder` carries three capability flags consumed by the routes layer and the frontend. Set them on your subclass when relevant:
+`MediaEmbedder` carries four capability flags consumed by the routes layer and the frontend. They are **read-only properties on the base class, not plain class attributes** — override them with `@property` on your subclass rather than assigning `supports_text = False` in the class body:
 
-| Flag | Default | When to set |
+```python
+@property
+def supports_text(self) -> bool:
+    return False
+```
+
+| Flag | Default | When to override |
 |---|---|---|
-| `supports_text: bool` | False | True for cross-modal encoders that have a text tower (CLIP, SigLIP, CLAP, E5, BGE). Required for `POST /api/sort` text queries. |
-| `supports_patch_regions: bool` | False | True for image embedders that implement `_patch_forward(image) -> PatchEmbedOutput`. Loaders that see this flag run the patch pass after the standard CLS pass. |
-| `license_notice: Optional[str]` | None | Non-None when the upstream weights carry a usage restriction (e.g. FAIR Noncommercial). The frontend embedder picker surfaces this as a warning chip; the dataset-create flow surfaces it inline. |
+| `supports_text: bool` | **True** | Return `False` for vision-only or patch-based encoders with no text tower (DINOv2/v3, EUPE, SIFT/VLAD, FaceNet, BEATs, AST, Whisper-encoder). The default is `True` because most shipped embedders are cross-modal (CLIP, SigLIP, CLAP, E5, BGE); leaving it unset on a vision-only encoder wrongly advertises `POST /api/sort` text queries. |
+| `supports_patch_regions: bool` | False | Return `True` for image embedders that implement `_patch_forward(image) -> PatchEmbedOutput`. Loaders that see this flag run the patch pass after the standard CLS pass and store a hierarchical region set plus the raw patch grid. |
+| `supports_geometric_verification: bool` | False | Return `True` for structural embedders that produce local features for instance matching (SIFT/VLAD). The loader then asks for a `StructuralFeatures` per image and stores it as `media["local_features"]`, enabling the geometric re-rank and match-stat verification paths. Deliberately media-agnostic, so an audio fingerprint backend can reuse it. |
+| `license_notice: Optional[str]` | None | Return a short human-readable string when the upstream weights carry a usage restriction (e.g. FAIR Noncommercial). The frontend embedder picker surfaces this as a warning chip; the dataset-create flow surfaces it inline. |
 
-All three flags are included in `MediaEmbedder.to_dict()` and exposed via `GET /api/embedders`.
+All four are included in `MediaEmbedder.to_dict()` and exposed via `GET /api/embedders`.
 
 ---
 
@@ -598,15 +605,29 @@ clippers return **new media dicts** that can replace the original.
 | Clipper | Name | Media Type | Description |
 |---------|------|------------|-------------|
 | `SoundDefaultClipper` | `sound_default` | `audio` | Import each audio file as-is, without splitting |
-| `SoundTilingClipper` | `sound_tiling_2.0s` | `audio` | Split each audio file into fixed-length overlapping segments |
+| `SoundTilingClipper` | `sound_tiling` | `audio` | Split each audio file into fixed-length overlapping segments |
+| `SoundSilenceClipper` | `sound_silence` | `audio` | Split each audio file into non-silent segments; drops intro/outro silence |
+| `SoundSpeechActivityClipper` | `sound_speech_activity` | `audio` | Split each audio file into one clip per speech turn (Silero VAD) |
 | `ImageDefaultClipper` | `image_default` | `image` | Import each image as-is, without splitting |
 | `ImageTilingClipper` | `image_tiling` | `image` | Tile each image into equidistant square crops along the longer axis |
+| `ImageObjectClipper` | `image_object` | `image` | Detect objects with YOLO/RT-DETR and crop one clip per detection |
 | `TextDefaultClipper` | `text_default` | `text` | Import each text entry as-is, without splitting |
+| `TextParagraphClipper` | `text_paragraph` | `text` | Split each text entry into paragraphs separated by blank lines |
 | `TextSentenceClipper` | `text_sentence` | `text` | Split each text entry into individual sentences |
 | `VideoDefaultClipper` | `video_default` | `video` | Import each video as-is, without splitting |
-| `VideoTilingClipper` | `video_tiling_2.0s` | `video` | Split each video into fixed-length overlapping segments |
+| `VideoTilingClipper` | `video_tiling` | `video` | Split each video into fixed-length overlapping segments |
+| `VideoAutoClipper` | `video_auto` | `video` | Tile only when the video is longer than a threshold; pass through otherwise |
 | `VideoSceneClipper` | `video_scene` | `video` | Automatically split each video at detected scene changes |
 | `DocumentDefaultClipper` | `document_default` | `document` | Import each document as-is, without splitting |
+| `FaceDefaultClipper` | `face_default` | `face` | Keep each face crop as-is, without splitting |
+
+**Clipper names carry no parameter suffix.** A parameterised clipper
+registers under one stable name (`sound_tiling`, not
+`sound_tiling_2.0s`); the parameter values live in the `parameters`
+descriptors and travel with the clip's origin as a separate `params`
+dict. Two `SoundTilingClipper` instances with different durations would
+collide in the registry, so a media type ships one instance per clipper
+class and the user re-parameterises it through `with_params()`.
 
 ### What to implement
 
@@ -627,8 +648,8 @@ class SoundOverlapClipper(MediaClipper):
 
     @property
     def name(self) -> str:
-        """Unique identifier for this clipper."""
-        return f"sound_overlap_{self._duration}s"
+        """Unique identifier for this clipper (no parameter suffix)."""
+        return "sound_overlap"
 
     @property
     def media_type(self) -> str:
@@ -643,8 +664,8 @@ class SoundOverlapClipper(MediaClipper):
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
         """Split media into one or more media dicts of the same type.
 
-        Each returned dict preserves the original structure (id, type,
-        category, origin, etc.) but with updated content.
+        Each returned dict preserves the original structure (id,
+        media_type, category, origin, etc.) but with updated content.
         Returns a list with at least one element.
         """
         wav_bytes = media.get("media_bytes")
@@ -666,8 +687,18 @@ Add the clipper to the `CLIPPERS` sentinel list in your media type's
 
 from vtscore.media.audio.clipper import SoundOverlapClipper
 # ...
-CLIPPERS = [SoundDefaultClipper(), SoundTilingClipper(2.0), SoundOverlapClipper(2.0)]
+CLIPPERS = [
+    SoundTilingClipper(10.0, 1.0),
+    SoundDefaultClipper(),
+    SoundSilenceClipper(),
+    SoundSpeechActivityClipper(),
+    SoundOverlapClipper(2.0),  # new
+]
 ```
+
+Each entry is registered under `clipper.name`, so list **one instance
+per clipper class** — a second instance of the same class would
+overwrite the first.
 
 ### MediaClipper abstract interface reference
 
@@ -675,7 +706,7 @@ CLIPPERS = [SoundDefaultClipper(), SoundTilingClipper(2.0), SoundOverlapClipper(
 
 | Property     | Returns | Description                                    |
 |--------------|---------|------------------------------------------------|
-| `name`       | `str`   | Unique identifier (e.g. `"sound_tiling_2.0s"`) |
+| `name`       | `str`   | Unique identifier, with no parameter suffix (e.g. `"sound_tiling"`) |
 | `media_type` | `str`   | The `type_id` this clipper operates on          |
 
 **Required abstract methods:**
@@ -688,12 +719,15 @@ CLIPPERS = [SoundDefaultClipper(), SoundTilingClipper(2.0), SoundOverlapClipper(
 
 | Method/Property      | Signature / Returns      | Description                                                       |
 |----------------------|--------------------------|-------------------------------------------------------------------|
-| `display_name`       | `str`                    | Human-readable name for UI tabs (default: title-cased `name`)     |
+| `display_name`       | `str`                    | Human-readable name for UI tabs (default: `name` minus its type prefix, title-cased) |
 | `description`        | `str`                    | Short tooltip text shown on hover in the clipper chooser UI       |
-| `to_dict()`          | `() -> dict`             | JSON-serialisable metadata (default: name + media_type)           |
+| `summary_template`   | `str`                    | One-line preview with `{key}` placeholders for parameter values (defaults to `description`) |
+| `to_dict()`          | `() -> dict`             | JSON-serialisable metadata (default: name + display_name + media_type) |
 | `parameters`         | `list[dict[str, Any]]`   | Configurable parameters (key, label, type, default, description)  |
 | `creation_questions` | `list[dict[str, Any]]`   | Questions shown at creation time (defaults to `parameters`)       |
-| `with_params(p)`     | `(dict) -> MediaClipper` | Return new clipper with overridden parameters                     |
+| `with_params(p)`     | `(dict) -> MediaClipper` | Return a **new** clipper with overridden parameters; never mutate `self` |
+| `resolve_for_durations(d)` | `(list[float]) -> MediaClipper` | Per-dataset hook called once at load time                  |
+| `resolve_for_media(m)` | `(dict) -> MediaClipper` | Per-media hook; used by auto-selecting clippers (e.g. `video_auto`) |
 
 Parameter dicts support an optional `description` key alongside `label`
 (shown as a tooltip when the user hovers over the setting in
@@ -702,8 +736,8 @@ the clipper chooser dialog).
 ### Clip method contract
 
 Each dict in the returned list must:
-- Preserve the structure of the original (`id`, `type`, `category`,
-  `origin`, `origin_name`, etc.)
+- Preserve the structure of the original (`id`, `media_type`,
+  `category`, `origin`, `origin_name`, etc.)
 - Contain the clipped content (updated `media_bytes`/`media_string`,
   `duration`, and any type-specific fields)
 - Default clippers return `[media]` unchanged
@@ -940,6 +974,7 @@ Subclass `MediaConverter` from `vtscore.converters.base`.
 # vtscore/converters/audio2text.py
 
 from vtscore.converters.base import MediaConverter
+from vtscore.plugins import PluginField
 from typing import Any
 
 
@@ -947,6 +982,15 @@ class Audio2TextMediaConverter(MediaConverter):
 
     display_name = "Audio → Text"
     description = "Transcribe audio to text using a speech model."
+    fields = [
+        PluginField(
+            key="language",
+            label="Language",
+            field_type="text",
+            default="en",
+            description="ISO language code passed to the speech model.",
+        ),
+    ]
 
     @property
     def source_type(self) -> str:
@@ -958,7 +1002,11 @@ class Audio2TextMediaConverter(MediaConverter):
         """The type_id of the output media type."""
         return "text"
 
-    def convert(self, media: dict[str, Any]) -> list[dict[str, Any]]:
+    def convert(
+        self,
+        media: dict[str, Any],
+        params: dict[str, Any] | None = None,
+    ) -> list[dict[str, Any]]:
         """Convert one media dict into one or more target-type media dicts.
 
         Each returned dict must include:
@@ -969,9 +1017,28 @@ class Audio2TextMediaConverter(MediaConverter):
         Returns empty list if conversion fails.
         Does NOT include "id", "embedding", or "md5"; the caller handles those.
         """
+        language = params["language"]
         # ... transcription logic ...
         return [{"filename": "transcript.txt", "media_string": transcript}]
 ```
+
+**The `params` parameter is not optional in practice.** The abstract
+method is `convert(self, media, params=None)`, and every framework call
+site reaches it through `convert_normalized()`, which validates `params`
+against your `fields` schema and fills every declared key with its
+`default` before dispatching. So inside `convert()` you can index
+`params[key]` directly; the `None` default exists only for third-party
+callers who invoke `convert()` by hand (they should call
+`convert_normalized()` instead, or read through the
+`get_param(params, key)` shim). A subclass that declares
+`convert(self, media)` — without the second parameter — raises
+`TypeError` on the first conversion.
+
+Use `resolve_media_bytes(media)` (also in `vtscore.converters.base`)
+rather than reading `media["media_bytes"]` directly: reference (*thin*)
+imports hand the converter only `{filename, media_path}`, so a converter
+that reads `media_bytes` alone silently produces nothing for every thin
+import.
 
 ### Register the converter
 
@@ -1008,16 +1075,26 @@ that expose a `CONVERTER` attribute. No manual registration in
 
 **Required abstract methods:**
 
-| Method             | Signature              | Description                              |
-|--------------------|------------------------|------------------------------------------|
-| `convert(media)`   | `(dict) -> list[dict]` | Convert one media into target-type dicts  |
+| Method                        | Signature                             | Description                              |
+|-------------------------------|---------------------------------------|------------------------------------------|
+| `convert(media, params=None)` | `(dict, dict \| None) -> list[dict]`  | Convert one media into target-type dicts |
 
 **Optional class attributes:**
 
-| Attribute               | Type  | Default | Description                              |
-|-------------------------|-------|---------|------------------------------------------|
-| `display_name`          | `str` | `""`    | Human-readable label (auto-derived if empty) |
-| `description`           | `str` | `""`    | Short description of the conversion      |
+| Attribute               | Type                | Default | Description                              |
+|-------------------------|---------------------|---------|------------------------------------------|
+| `display_name`          | `str`               | `""`    | Human-readable label (auto-derived if empty) |
+| `description`           | `str`               | `""`    | Short description of the conversion      |
+| `summary_template`      | `str`               | `""`    | One-line preview with `{key}` placeholders for parameter values; shown on the import row (falls back to `description`) |
+| `fields`                | `list[PluginField]` | `[]`    | User-configurable parameters, delivered to `convert()` as `params` |
+
+**Framework-owned methods (call, don't override):**
+
+| Method                                   | Description |
+|------------------------------------------|-------------|
+| `convert_normalized(media, params=None)` | The framework entry point: validates `params` against `fields`, default-fills every declared key, then calls `convert()`. Raises `ValueError` on a bad value. Third-party call sites should use this rather than `convert()`. |
+| `normalize_params(params)`               | Validate + default-fill only; `convert_normalized()` wraps it. |
+| `get_param(params, key)`                 | Read one param with a `default` fallback. A shim for converters whose callers bypass `convert_normalized()`; framework-routed calls can just index `params[key]`. |
 
 **Derived property (not overridable):**
 

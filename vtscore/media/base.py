@@ -522,7 +522,7 @@ class MediaType(ABC):
         """Load and return media-specific fields for a media dict.
 
         The returned dict is merged into the *base* media dict (which already
-        contains ``id``, ``type``, ``file_size``, ``md5``, ``embedding``,
+        contains ``id``, ``media_type``, ``file_size``, ``md5``, ``embedding``,
         ``filename``, and ``category``).  You must include at minimum a
         ``"duration"`` key.
 
