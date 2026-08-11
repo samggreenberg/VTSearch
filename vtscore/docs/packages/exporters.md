@@ -33,7 +33,7 @@ external source) are not here; they live in
 - [Registry and accessors](#registry-and-accessors)
 - [`LabelsetExporter` ABC](#labelsetexporter-abc)
 - [The export contract](#the-export-contract)
-- [`PluginField`](#exporterfield)
+- [`PluginField`](#pluginfield)
 - [Built-in exporters](#built-in-exporters)
 - [Template variables in path fields](#template-variables-in-path-fields)
 - [Writing a custom exporter](#writing-a-custom-exporter)
