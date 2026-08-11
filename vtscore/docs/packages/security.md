@@ -6,7 +6,8 @@ allowlist-based pickle unpickler so loading a `.pkl` dataset can't lead
 to arbitrary code execution. The three modules
 (`path_validation.py`, `url_validation.py`, `pickle.py`) have no app
 coupling - they take their inputs explicitly and operate on bytes and
-strings, not request objects or settings.
+strings, not request objects or settings. A fourth, `login.py`, carries
+the identity abstraction the path checks depend on.
 
 Related docs: [`state.md`](state.md) for the contexts that hold the
 deserialised dataset artefacts; [`concurrency.md`](concurrency.md) for
@@ -14,6 +15,7 @@ the load pipeline that calls these helpers during dataset import.
 
 ## Contents
 
+- [Login providers](#login-providers)
 - [Path validation](#path-validation)
   - [Media-carried file references](#media_file_read_roots-and-resolve_media_file_pathfilepath_str)
 - [URL validation](#url-validation)
@@ -24,6 +26,58 @@ the load pipeline that calls these helpers during dataset import.
 - [Why no `find_class` shim is needed](#why-no-find_class-shim-is-needed)
 
 ---
+
+## Login providers
+
+`vtscore/security/login.py` answers the two questions the path checks
+below are built on: **how** an identity is established, and **where** that
+identity's data lives. `vtscore.state.current_user` resolves *which*
+username the work belongs to; this module maps that username to a
+directory, and that directory is the confinement root.
+
+| Name | Description |
+|------|-------------|
+| `LoginProvider` | ABC. Subclasses implement `get_user(request)` and `is_authenticated(request)`; override `get_user_data_dir(username, base_data_dir)` to opt into per-user confinement, and `login_required()` / `status_dict(request)` for the app's auth UI |
+| `DefaultLoginProvider` | Single-user, no auth. Every caller is `"default"`; the data dir is `DATA_DIR` itself, so nothing is confined |
+| `set_login_provider(p)` / `get_login_provider()` | The process-wide active provider. `DefaultLoginProvider()` until something replaces it |
+| `get_user_data_dir(username=None)` | `provider.get_user_data_dir(username or get_current_user(), DATA_DIR)` |
+| `is_safe_username(name)` | `True` when *name* is safe as a path component: matches `[A-Za-z0-9._-]+` and is not an all-dots traversal segment |
+
+The `request` argument is typed `Any` and never introspected by the
+library - it is handed straight back to the provider that asked for it.
+That is what lets the abstraction be Flask-free while the app's own
+providers (`TrivialLoginProvider`, `ApiKeyLoginProvider` in
+`vtsearch/auth/`, which read `flask.session` and the `Authorization`
+header) build on it. `vtsearch.auth` re-exports every name in the table,
+so there is exactly one active provider per process however you reach it.
+
+Embedding `vtscore` without the app and want per-user confinement? Register
+a provider; every path check in the library starts enforcing it:
+
+```python
+from pathlib import Path
+from vtscore.security.login import LoginProvider, set_login_provider
+
+class MyProvider(LoginProvider):
+    name = "mine"
+
+    def get_user(self, request):
+        return "alice"
+
+    def is_authenticated(self, request):
+        return True
+
+    def get_user_data_dir(self, username: str, base_data_dir: Path) -> Path:
+        return base_data_dir / username
+
+set_login_provider(MyProvider())
+```
+
+Validate any username you did not construct yourself with
+`is_safe_username()` before returning it from `get_user()`: the name
+becomes a path component, and `..` segments in a confinement root are
+*collapsed* by `Path.resolve()` rather than rejected - which silently
+widens the sandbox for every server-file importer and exporter.
 
 ## Path validation
 
@@ -48,8 +102,9 @@ which tells `validate_server_filepath` to apply **no** confinement: the
 lone trusted user may read from and write to any server-readable path.
 There is no per-user boundary to protect, so the app does not impose one.
 In multi-user mode it returns the current user's data directory so each
-user is confined to their own `data/<username>/` subtree. This is the only
-function in the package that imports `vtsearch.auth`.
+user is confined to their own `data/<username>/` subtree. Which of the two
+applies is decided entirely by the registered
+[login provider](#login-providers) - there is no separate switch.
 
 ### `validate_server_filepath(filepath_str, base_dir=None)`
 

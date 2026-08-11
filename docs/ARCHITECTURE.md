@@ -196,7 +196,7 @@ VTSearch/
 │   │   └── fit.py                  Fits recorded rows into a profile document
 │   │
 │   ├── plugins/                    PluginBase, PluginField, PluginRegistry (shared plugin infra)
-│   ├── security/                   Path/URL/pickle safety (path_validation, url_validation, pickle)
+│   ├── security/                   Path/URL/pickle safety + the LoginProvider ABC (path_validation, url_validation, pickle, login)
 │   ├── sync/                       SyncSource[LoadT, SaveT] generic base class
 │   └── utils/                      Shared helpers: hits.py (build_media_hit), synthetic/
 │

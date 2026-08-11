@@ -29,8 +29,11 @@ discovery/registration works, and includes a complete example.
 
 ## Authentication Providers
 
-VTSearch uses a pluggable `LoginProvider` ABC (`vtsearch/auth/__init__.py`)
-so that multi-user deployments can be supported without modifying routes.
+VTSearch uses a pluggable `LoginProvider` ABC so that multi-user deployments
+can be supported without modifying routes. The ABC itself is library-tier
+(`vtscore/security/login.py`, because `vtscore`'s path-confinement checks
+consult the active provider); `vtsearch.auth` re-exports it alongside the
+Flask-backed providers, and is the import path app code should use.
 
 ### Interface
 
