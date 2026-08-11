@@ -116,6 +116,19 @@ if ! codespell --toml pyproject.toml ; then
     echo "============================================================"
     exit 1
 fi
+# Documentation drift: relative links, in-page anchors, backticked repo paths,
+# leaked absolute machine paths, plan-file citations anywhere in the tree, and
+# broken code fences. Pure invariants against the current tree — nothing to
+# re-pin — and it imports nothing, so it costs ~0.4s and sits with the linters.
+echo "Checking documentation..."
+if ! python scripts/check-docs.py ; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: documentation check found drift"
+    echo "============================================================"
+    exit 1
+fi
+
 echo "Running deptry..."
 if ! python -m deptry . ; then
     echo ""
