@@ -152,8 +152,9 @@ Re-ingests medias from their recorded origins and applies labels.
 Pregen processors are the built-in autorun processors VTSearch ships with: an
 OCR extractor (PaddleOCR), a Speech extractor (Whisper Tiny), and a Face
 localizer (MTCNN). Adding them registers each into the autorun
-extractors / localizers stores so they run automatically after a dataset
-loads. They do **not** create detectors.
+extractors / localizers stores, from which `POST /api/auto-extract` and
+`POST /api/auto-localize` run them over the loaded medias. They do **not**
+create detectors.
 
 ### List pregen processors
 
@@ -178,8 +179,16 @@ Face localizer) into the autorun extractor / localizer stores.
 
 ## Autorun Extractors
 
-Autorun extractors run after a dataset loads and attach free-form metadata
-records to each media (e.g. OCR text, speech transcripts, image classes).
+Autorun extractors pull free-form metadata records out of each media (e.g. OCR
+text, speech transcripts, image classes). Registering one stores its type and
+config; `POST /api/auto-extract` is what builds and runs every stored extractor
+matching the loaded medias' type. The store is in-memory and does not survive
+a restart.
+
+Which extractor types exist is fixed in app code (`ocr`, `speech`,
+`image_class`); adding a new one means editing the factory dict in
+`vtsearch/routes/processors/crud.py` — see
+[EXTENDING-processors.md](../EXTENDING-processors.md#registering-a-processor-with-the-app).
 
 ### List autorun extractors
 
@@ -221,8 +230,10 @@ PUT /api/autorun-extractors/{name}/rename
 
 ## Autorun Localizers
 
-Autorun localizers run after a dataset loads and attach a list of
-`(box, confidence)` regions to each media (e.g. face detection).
+Autorun localizers find `(box, confidence)` regions inside each media (e.g.
+face detection). As with extractors, registering one only stores its type and
+config in an in-memory store; `POST /api/auto-localize` builds and runs them.
+`face` is the only localizer type in the factory dict.
 
 ### List autorun localizers
 
