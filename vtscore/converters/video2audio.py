@@ -88,6 +88,7 @@ class Video2AudioMediaConverter(MediaConverter):
                     [
                         ffmpeg,
                         "-y",
+                        "-nostdin",
                         "-i",
                         str(src_path),
                         "-vn",
@@ -95,6 +96,9 @@ class Video2AudioMediaConverter(MediaConverter):
                         "pcm_s16le",
                         wav_path,
                     ],
+                    # Explicit empty stdin (belt-and-suspenders with -nostdin) so the
+                    # child never inherits - and blocks on - the parent's terminal.
+                    input=b"",
                     capture_output=True,
                     timeout=ffmpeg_timeout,
                     check=True,

@@ -176,12 +176,21 @@ When activated, you'll see `(venv)` at the start of your terminal prompt.
 ## Installing dependencies
 
 Runtime + dev dependencies are declared in `pyproject.toml` (under
-`[project.dependencies]` and `[project.optional-dependencies].dev`).
+`[project.dependencies]` and `[project.optional-dependencies]`, whose
+`dev` and `agpl` extras hold the dev tools and the two AGPL-3.0 packages).
 `requirements/base.txt` and `requirements/gpu.txt` just forward to it via
-`-e .[dev]`, so pyproject is the single source of truth and deptry
+`-e .[dev,agpl]`, so pyproject is the single source of truth and deptry
 catches any drift. The labbench / image-embedders requirements files
 under `requirements/` are deliberately standalone; they pin a minimal
 subset for size-constrained Docker images.
+
+Two dependencies are AGPL-3.0-or-later — `ultralytics` (YOLO) and
+`PyMuPDF` — and a default install includes them. To install without them,
+set `VTSEARCH_NO_AGPL=1` on the install command below (or install
+`requirements/base-no-agpl.txt` directly); the YOLO extractor/clipper, PDF
+import, and the document converters then report themselves as unavailable
+and everything else works unchanged. See
+[DEPLOYMENT.md](DEPLOYMENT.md#installing-without-the-agpl-dependencies).
 
 One script handles both CPU and GPU. With no argument it **auto-detects**
 whether this host has an NVIDIA GPU and installs the matching dependency set,

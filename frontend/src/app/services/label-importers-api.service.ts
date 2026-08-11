@@ -21,9 +21,8 @@ export class LabelImportersApiService {
 
   /** Plugin-field route: request body shape is plugin-dependent and not
    *  described in the OpenAPI spec, so this stays on plain HttpClient (same
-   *  pattern as ``SettingsIoApiService.runImport``). See
-   *  ``docs/plans/openapi-schema.md`` § Resolved questions / Plugin field
-   *  endpoints. */
+   *  pattern as ``SettingsIoApiService.runImport``). See "Routes absent
+   *  from the spec" in docs/API.md. */
   runImport(importerName: string, params: Record<string, unknown>, file?: File, fileFieldKey?: string): Observable<unknown> {
     if (file && fileFieldKey) {
       const formData = new FormData();

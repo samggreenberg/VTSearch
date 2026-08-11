@@ -15,8 +15,8 @@ import { settleResource, settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
 
 /**
- * Zoneless staleness canary for the label view (docs/plans/zoneless-migration.md,
- * Phases 0.3/0.4 + 2.4). Phase 2.4 signalized label-view's subscribe/timer/effect
+ * Zoneless staleness canary for the label view.
+ * Phase 2.4 signalized label-view's subscribe/timer/effect
  * written template-bound state (`datasetName`, `labelingStatus`,
  * `trainableModelName`, the panel widths, the autopilot flags, `showResortPrompt`,
  * `cropPending`) and bridged the still-Observable `SortStateService` /

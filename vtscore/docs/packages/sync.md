@@ -148,7 +148,7 @@ pick it up.
   `vtscore/labels/sync.py` and `vtsearch/settings.py`, not here.
 - **It does not persist anything.** `SyncSource` is a contract;
   storage is whatever the subclass implements. The standard caveats
-  about persistence still apply - embeddings and trained MLP weights
+  about persistence still apply - embeddings and trained model weights
   are in-memory artefacts, not labels. See `CLAUDE.md` "No Persisted
   Vectors or MLPs" if you're tempted to round-trip more than label
   identifiers + their `good`/`bad` flag.

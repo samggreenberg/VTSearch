@@ -48,7 +48,8 @@ implementation).
 GET /api/labeling-status
 ```
 
-→ ```json
+→
+```json
 {
   "smart": {"status": "green"},
   "stable": {"status": "yellow"},
@@ -98,7 +99,7 @@ POST /api/eval/train-and-score
 
 **Body:** `{"metric": "smart"}` (or `"stable"` / `"diverse"`; optional `"wait": true`)
 
-The work retrains a small MLP at every step of the label history, so it runs
+The work retrains the detector head at every step of the label history, so it runs
 on a background daemon thread. The route returns immediately with a `job_id`;
 poll `GET /api/eval/train-and-score/result` for the metric data and subscribe
 to the `eval` SSE channel for live progress. A signature cache short-circuits

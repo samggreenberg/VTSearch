@@ -1237,6 +1237,152 @@ class TestSyncFromSourceFreshness:
         assert probes["n"] - baseline <= 1
 
 
+class TestDirtyKeyWriteOrdering:
+    """Issue #2955: a local write must become dirty *atomically with itself*.
+
+    ``dirty_keys`` is what stops an auto re-sync from overwriting a setting
+    the user just clicked.  Marking the key dirty only *after* the file write
+    had returned left a window in which a concurrent sync-from-source could
+    write the upstream value over the fresh local one - and because the
+    subsequent push then stamped the source with the pre-clobber snapshot and
+    cleared the dirty set, the divergence stuck.
+    """
+
+    def test_key_is_dirty_before_the_file_lock_is_released(self, isolated_settings, monkeypatch):
+        """The dirty marking happens inside the write's own file-lock hold.
+
+        This is the ordering the race turned on: a syncing thread must never
+        be able to observe "value written, key not yet dirty".
+        """
+        from vtsearch import settings
+        from vtsearch import settings_store as settings_store_mod
+
+        seen: list[set[str]] = []
+        real_file_lock = settings_store_mod.file_lock
+
+        @contextmanager
+        def recording_file_lock(path):
+            with real_file_lock(path):
+                try:
+                    yield
+                finally:
+                    # Still holding the lock: snapshot what a racing syncer
+                    # would see the instant before it can acquire the lock.
+                    state = settings._sync_state.get("default")
+                    seen.append(set(state.dirty_keys) if state is not None else set())
+
+        monkeypatch.setattr(settings_store_mod, "file_lock", recording_file_lock)
+        settings.set_volume(0.77)
+
+        assert seen, "no file lock was taken by the write"
+        assert any("volume" in snapshot for snapshot in seen)
+
+    def test_import_write_skips_an_already_dirty_key(self, isolated_settings):
+        """An import write is dropped under the file lock when the key is dirty.
+
+        ``_apply_settings``'s pre-filter is only a coarse screen - the key can
+        become dirty between that check and the write.  The store re-checks
+        while holding the lock, which is where the decision is actually atomic.
+        """
+        from vtsearch import settings
+
+        settings.set_volume(0.91)
+        assert "volume" in settings._sync_state["default"].dirty_keys
+
+        # Simulate the tail of an import: the pre-filter already let this key
+        # through, and only now does the store see it.
+        with settings._store._importing("default", honor_dirty=True):
+            settings.set_volume(0.10)
+
+        assert settings.get_volume() == 0.91
+
+    def test_import_write_applies_a_clean_key(self, isolated_settings):
+        """The skip is scoped to dirty keys; everything else still imports."""
+        from vtsearch import settings
+
+        settings.set_volume(0.91)
+        with settings._store._importing("default", honor_dirty=True):
+            settings.set_theme("highviz")
+
+        assert settings.get_theme() == "highviz"
+
+    def test_explicit_pull_still_overwrites_a_dirty_key(self, isolated_settings):
+        """``honor_dirty=False`` (manual "Sync now") keeps its override power."""
+        from vtsearch import settings
+
+        settings.set_volume(0.91)
+        with settings._store._importing("default", honor_dirty=False):
+            settings.set_volume(0.10)
+
+        assert settings.get_volume() == 0.10
+
+    def test_concurrent_user_write_is_not_mistaken_for_an_import_write(self, isolated_settings):
+        """The import marker is thread-scoped, so a real user write still lands.
+
+        The shared ``syncing`` set is keyed by username alone; if the skip
+        decision consulted *that*, a genuine click arriving while another
+        thread imported for the same user would be silently discarded.
+        """
+        from vtsearch import settings
+
+        settings.set_volume(0.91)  # marks "volume" dirty
+        importing = threading.Event()
+        release = threading.Event()
+
+        def hold_import():
+            with settings._store._importing("default", honor_dirty=True):
+                importing.set()
+                release.wait(timeout=10)
+
+        thread = threading.Thread(target=hold_import)
+        thread.start()
+        try:
+            assert importing.wait(timeout=10)
+            settings.set_volume(0.42)  # a real user write, from another thread
+        finally:
+            release.set()
+            thread.join(timeout=10)
+
+        assert settings.get_volume() == 0.42
+
+    def test_resync_honors_a_key_dirtied_during_the_load(self, tmp_path, isolated_settings, monkeypatch):
+        """A key that becomes dirty *while* ``source.load()`` runs is honored.
+
+        The skip set used to be snapshotted at the top of the re-sync, before
+        the (potentially network-bound) load - so a write landing during that
+        call was invisible to the syncer.  It is now a live view of
+        ``dirty_keys``, re-read at apply time.
+        """
+        from vtsearch import settings
+        from vtsearch.settings_io.sources import get_settings_source
+
+        source_file = tmp_path / "remote.json"
+        settings.set_settings_source_config(
+            {"source_name": "server_json_file", "field_values": {"filepath": str(source_file)}}
+        )
+        settings.set_volume(0.91)  # local == source == 0.91, dirty cleared
+
+        # An external writer moves the source on.
+        source_file.write_text(json.dumps({"volume": 0.10, "theme": "highviz"}))
+
+        src = get_settings_source("server_json_file")
+        assert src is not None
+        real_load = src.load
+
+        def load_then_user_write(field_values):
+            result = real_load(field_values)
+            # Stand-in for a concurrent local write completing mid-load: the
+            # key is dirty by the time the imported values get applied.
+            settings._sync_state["default"].dirty_keys.add("volume")
+            return result
+
+        monkeypatch.setattr(src, "load", load_then_user_write)
+        settings._store._run_sync_from_source("default")
+
+        assert settings.get_volume() == 0.91
+        assert settings.get_theme() == "highviz"
+
+
 class TestSyncDedupMarker:
     """H28 residual follow-up: a per-user on-disk marker records the source
     version last applied, so a *fresh* worker whose first read finds the

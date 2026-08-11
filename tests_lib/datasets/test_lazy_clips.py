@@ -6,7 +6,7 @@ reference parent is tiled/sliced, the derived clips store no ``media_bytes`` of
 their own - just the source path plus the clip boundaries in ``origin.params``
 - and reproduce their bytes on demand via ``_resolve_media_bytes``.
 
-See ``docs/plans/server-dedup-references.md``.
+See "Reference (no-copy) imports and lazy clips" in ``docs/ARCHITECTURE.md``.
 """
 
 from __future__ import annotations

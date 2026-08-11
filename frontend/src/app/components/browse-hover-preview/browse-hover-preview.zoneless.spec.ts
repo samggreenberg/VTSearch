@@ -12,11 +12,11 @@ import { settleZoneless } from '../../testing/settle-resource';
 /**
  * Zoneless canary + behaviour spec for the browse hover preview.
  *
- * The text path (docs/plans/zoneless-migration.md, Phases 0.3/0.4 + 2.6)
- * signalized `textContent`, written from the async paragraph `fetch().then()`
- * continuation — an un-patched microtask that must still schedule CD.
+ * The text path (Phase 2.6) signalized `textContent`, written from the async
+ * paragraph `fetch().then()` continuation — an un-patched microtask that must
+ * still schedule CD.
  *
- * The audio path (docs/plans/browse-audio-player.md, Phase 4) auditions the
+ * The audio path (Phase 4) auditions the
  * hovered bin's clip on a dwell with no on-canvas UI of its own; it emits
  * `nowPlaying` for the top-left indicator (`browse-view.component`) to render.
  * Those transitions run from `setTimeout` callbacks that emit the output, so

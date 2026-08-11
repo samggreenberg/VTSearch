@@ -11,8 +11,9 @@ place library code is allowed to read environment variables directly.
 
 **Source:** `vtscore/config.py` (~263 lines).
 **Related:** [`cli.md`](cli.md) for the CLI entry points that build a
-`CoreConfig` before running, and the broader public-API sketch in
-[`/home/user/VTSearch/docs/vtscore-api.md`](../../../docs/vtscore-api.md).
+`CoreConfig` before running, and
+[`architecture.md`](../architecture.md#the-coreconfig-bridge) for why the
+seam exists at all.
 
 ## Why `CoreConfig` exists
 
@@ -144,12 +145,12 @@ when one is in scope). Tests rely on this: they override
 | `TORCH_THREADS`          | `1`     | `VTSEARCH_TORCH_THREADS`      | Native thread count for OpenMP / MKL / `torch.set_num_threads`. Default 1 keeps RSS low in constrained envs.     |
 | `DEVICE`                 | `"auto"`| `VTSEARCH_DEVICE`             | Preferred compute device. `"auto"` resolves at call time; explicit `"cuda"`, `"cuda:0"`, `"cpu"`, `"mps"` are honoured, but a CUDA device the installed torch wheel can't actually run on falls back to `"cpu"`. |
 | `MAX_UPLOAD_MB`          | `2048`  | `VTSEARCH_MAX_UPLOAD_MB`      | HTTP body cap in megabytes (default 2 GiB). Oversized requests get HTTP 413. Set to `0` for unlimited (Flask's out-of-the-box behaviour). |
-| `TRAIN_EPOCHS`           | `200`   | `VTSEARCH_TRAIN_EPOCHS`       | Upper bound on MLP training epochs. `vtscore.training.mlp.train_model` may early-stop sooner.                    |
+| `TRAIN_EPOCHS`           | `200`   | `VTSEARCH_TRAIN_EPOCHS`       | Upper bound on head training epochs. `vtscore.training.mlp.train_model` may early-stop sooner.                   |
 | `TRAIN_PATIENCE`         | `10`    | `VTSEARCH_TRAIN_PATIENCE`     | Epochs the training loss must fail to improve before early-stop fires. `0` disables early-stop.                  |
 | `DEFAULT_CALIBRATE_COUNT`| `1`     | `VTSEARCH_CALIBRATE_COUNT`    | First-run default for `CoreConfig.calibrate_count`. Min 1.                                                       |
-| `MLP_HIDDEN_MIN`         | `8`     | -                             | Auto-sizing floor for MLP hidden width.                                                                          |
-| `MLP_HIDDEN_MAX`         | `32`    | -                             | Auto-sizing ceiling for MLP hidden width.                                                                        |
-| `MLP_DROPOUT`            | `0.5`   | -                             | Dropout rate for trained MLPs.                                                                                   |
+| `MLP_HIDDEN_MIN`         | `8`     | -                             | Auto-sizing floor for MLP hidden width. Legacy MLP head only - the production linear head has none.              |
+| `MLP_HIDDEN_MAX`         | `32`    | -                             | Auto-sizing ceiling for MLP hidden width. Legacy MLP head only.                                                  |
+| `MLP_DROPOUT`            | `0.5`   | -                             | Dropout rate for trained MLPs. Ignored by the production linear head.                                            |
 
 ### `resolve_device()`
 
@@ -218,6 +219,9 @@ time. The actual download + load is lazy, driven by
 | `CLAP_GENERAL_MODEL_ID`        | `"laion/larger_clap_general"`                                                          | Larger general-purpose CLAP.                                                           |
 | `AST_MODEL_ID`                 | `"MIT/ast-finetuned-audioset-10-10-0.4593"`                                            | Audio Spectrogram Transformer. 16 kHz mono via `AST_SAMPLE_RATE`.                      |
 | `AST_SAMPLE_RATE`              | `16000`                                                                                |                                                                                        |
+| `BEATS_CHECKPOINT_REPO`        | `"lpepino/beats_ckpts"`                                                                | Hub mirror of the MIT-licensed BEATs release (no `transformers` implementation).       |
+| `BEATS_CHECKPOINT_FILE`        | `"BEATs_iter3_plus_AS2M.pt"`                                                           | Self-supervised encoder, not an AudioSet-finetuned classifier variant.                 |
+| `BEATS_SAMPLE_RATE`            | `16000`                                                                                | 16 kHz mono; features are Kaldi fbanks, not waveforms.                                 |
 | `WHISPER_MODEL_ID`             | `"openai/whisper-base"`                                                                | Used by the audio→text converter (ASR).                                                |
 | `WHISPER_SAMPLE_RATE`          | `16000`                                                                                |                                                                                        |
 | `XCLIP_MODEL_ID`               | `"microsoft/xclip-base-patch32"`                                                       | Default video embedder.                                                                |
@@ -225,6 +229,7 @@ time. The actual download + load is lazy, driven by
 | `LANGUAGEBIND_VIDEO_MODEL_ID`  | `"LanguageBind/LanguageBind_Video_V1.5_FT"`                                            | Alternative video embedder with text-aligned latent.                                   |
 | `SIGLIP_MODEL_ID`              | `"google/siglip-base-patch16-224"`                                                     | Default image embedder.                                                                |
 | `SIGLIP2_MODEL_ID`             | `"google/siglip2-base-patch16-224"`                                                    | SigLIP v2.                                                                             |
+| `SIGLIP2_L_MODEL_ID`           | `"google/siglip2-so400m-patch14-384"`                                                  | SigLIP v2, SO400M/384 (1152-d).                                                        |
 | `CLIP_MODEL_ID`                | `"openai/clip-vit-base-patch32"`                                                       | OpenAI CLIP.                                                                           |
 | `DINOV2_MODEL_ID`              | `"facebook/dinov2-base"`                                                               | Self-supervised image encoder.                                                         |
 | `DINOV3_MODEL_ID`              | `"facebook/dinov3-vitb16-pretrain-lvd1689m"`                                           | DINO v3.                                                                               |
@@ -247,7 +252,7 @@ Every env var consulted by `vtscore.config`, in one place:
 | `VTSEARCH_TORCH_THREADS`    | Set `TORCH_THREADS` (and therefore OMP / MKL caps). Floor of 1.                                 |
 | `VTSEARCH_DEVICE`           | Set `DEVICE`. `"auto"` is the default; pin to `"cuda"`, `"cuda:0"`, `"cpu"`, or `"mps"`.        |
 | `VTSEARCH_MAX_UPLOAD_MB`    | Set `MAX_UPLOAD_MB` (default 2048 MB). `0` = unlimited.                                         |
-| `VTSEARCH_TRAIN_EPOCHS`     | Set `TRAIN_EPOCHS` (MLP training upper bound).                                                  |
+| `VTSEARCH_TRAIN_EPOCHS`     | Set `TRAIN_EPOCHS` (head training upper bound).                                                 |
 | `VTSEARCH_TRAIN_PATIENCE`   | Set `TRAIN_PATIENCE` (early-stop patience). `0` disables.                                       |
 | `VTSEARCH_CALIBRATE_COUNT`  | Set `DEFAULT_CALIBRATE_COUNT` (first-run default; later writes go to per-user settings).        |
 
@@ -289,5 +294,5 @@ care which path produced the config.
 - `CoreConfig` is `frozen=True`. Background threads can safely hold
   a reference; in-flight reconfiguration requires building a new
   `CoreConfig` and routing it explicitly.
-- No persisted embeddings, no persisted MLP weights. This config
+- No persisted embeddings, no persisted model weights. This config
   module does not introduce a place to cache them.

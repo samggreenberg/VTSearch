@@ -19,6 +19,7 @@ from __future__ import annotations
 import io
 import tarfile
 import threading
+import time
 from pathlib import Path
 
 import numpy as np
@@ -412,3 +413,83 @@ class TestKick:
             assert all(m["thumbnail_bytes"] for m in ctx.medias.values())
         finally:
             unregister_context(ctx.dataset_id)
+
+
+class TestConcurrentMutation:
+    """Regression tests for issue #2958.
+
+    ``pending_archive_thumbnail_ids`` used to be handed the live ``ctx.medias``
+    dict and iterate it directly from both ``warm_archive_thumbnails`` and
+    ``start_archive_thumbnail_warm`` -- with no lock, unlike every other
+    cross-thread reader.  A concurrent writer (e.g. add-to-pile, which inserts
+    under ``_state_lock``) racing that iteration raised ``RuntimeError:
+    dictionary changed size during iteration`` and aborted the pass.  Both
+    call sites now take a locked snapshot first; hammering inserts alongside
+    repeated calls must never raise.
+    """
+
+    @staticmethod
+    def _start_writer(ctx: DatasetContext, *, max_inserts: int = 300) -> tuple[threading.Thread, threading.Event]:
+        """A bounded, paced writer -- enough contention to race the snapshot,
+
+        capped so it can't balloon ``ctx.medias`` into the hundreds of
+        thousands and drag the surrounding test (or a shared xdist worker)
+        into a real hang.
+        """
+        from vtscore.state.core import _state_lock
+
+        stop = threading.Event()
+
+        def writer() -> None:
+            next_id = 10_000
+            for _ in range(max_inserts):
+                if stop.is_set():
+                    return
+                with _state_lock:
+                    ctx.medias[next_id] = {
+                        "id": next_id,
+                        "media_type": "image",
+                        "media_bytes": _jpeg_bytes(),
+                        "origin": {"importer": "server_folder", "params": {}},
+                    }
+                next_id += 1
+                time.sleep(0.001)
+
+        thread = threading.Thread(target=writer, daemon=True)
+        thread.start()
+        return thread, stop
+
+    def test_warm_pass_survives_concurrent_media_inserts(self, tmp_path: Path):
+        _archive, _payloads, medias = _image_corpus(tmp_path, n=10)
+        ctx = _ctx_with(medias, dataset_id="_warm_concurrent")
+        writer, stop = self._start_writer(ctx)
+        try:
+            for _ in range(20):
+                warm_archive_thumbnails(ctx, max_workers=2)
+        finally:
+            stop.set()
+            writer.join(timeout=5)
+            unregister_context(ctx.dataset_id)
+
+        assert all(m.get("thumbnail_bytes") for m in ctx.medias.values() if m.get("archive_member"))
+
+    def test_kick_survives_concurrent_media_inserts(self, tmp_path: Path):
+        _archive, _payloads, medias = _image_corpus(tmp_path, n=10)
+        ctx = _ctx_with(medias, dataset_id="_warm_kick_concurrent")
+        writer, stop = self._start_writer(ctx)
+        try:
+            # This runs directly on the caller's thread (the pending check
+            # ahead of the JobManager kick) -- exactly where the unlocked
+            # live iteration used to raise.
+            job_id = start_archive_thumbnail_warm(ctx)
+        finally:
+            stop.set()
+            writer.join(timeout=5)
+
+        if job_id is not None:
+            from vtscore.concurrency.async_jobs import archive_thumbnail_jobs
+
+            job = archive_thumbnail_jobs.get(job_id)
+            if job is not None:
+                job.done_event.wait(timeout=30)
+        unregister_context(ctx.dataset_id)

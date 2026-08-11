@@ -84,7 +84,7 @@ export class LabelImporterModalComponent implements OnDestroy {
   selectedFileFieldKey: string | null = null;
   // Mutation-result state, signalized so the submit/add-to-pile subscribes (and
   // the dynamic-field-option fetches) — all unpatched callbacks under zoneless —
-  // schedule CD when they land. See docs/plans/zoneless-migration.md.
+  // schedule CD when they land.
   readonly submitting = signal(false);
 
   /** Error from a failed import action; the list-load failure is merged in. */

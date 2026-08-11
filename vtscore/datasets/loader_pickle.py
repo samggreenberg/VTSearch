@@ -197,8 +197,15 @@ def _load_pickle_media_payload(
     if not ext_path.exists():
         return None, None, None, True
     if ext_path.suffix in (".txt", ".md"):
-        with open(ext_path, "r", encoding="utf-8") as f:
-            txt = f.read()
+        raw = ext_path.read_bytes()
+        try:
+            txt = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            logger.warning(
+                "%s is not valid UTF-8; falling back to latin-1 encoding. Non-Latin characters may be corrupted.",
+                ext_path,
+            )
+            txt = raw.decode("latin-1")
         return txt.encode("utf-8"), txt, str(ext_path.resolve()), False
     with open(ext_path, "rb") as f:
         return f.read(), None, str(ext_path.resolve()), False

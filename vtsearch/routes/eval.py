@@ -1,7 +1,7 @@
 """Blueprint for evaluation and labeling progress routes.
 
 Migrated to ``flask_smorest`` so the routes are described in
-``/api/openapi.json``. See ``docs/plans/openapi-schema.md``. Schema-level
+``/api/openapi.json``. Schema-level
 failures (missing ``metric`` / ``job_id``, invalid metric value) surface
 as 422 with the standard ``errors`` envelope; handler-level rejects
 (no votes / no label history, missing job) keep their HTTP codes

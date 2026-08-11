@@ -4,7 +4,7 @@
 pipeline then builds its config via ``CoreConfig.from_settings()``, which must
 reflect that user's per-user Auto-Find settings (detector list + exporter).
 Without ``--user`` the built-in "default" user applies, reading through to the
-server ``--settings`` file. See ``docs/plans/auto-find-settings-tab.md``.
+server ``--settings`` file.
 """
 
 from __future__ import annotations

@@ -64,6 +64,18 @@ set -euo pipefail
 # the next approach" instead of a wall of red, and the raw output only surfaces if
 # a step actually fails. Set VTSEARCH_VERBOSE=1 to stream every command's raw
 # output live (no capture, no spinner) when debugging a genuinely stuck install.
+#
+# SKIPPING THE AGPL DEPENDENCIES: two runtime deps are AGPL-3.0-or-later --
+# ultralytics (YOLO) and PyMuPDF -- and a default install includes them, as it
+# always has. Set VTSEARCH_NO_AGPL=1 to install neither, for deployments that
+# cannot take copyleft code:
+#
+#   VTSEARCH_NO_AGPL=1 bash scripts/install.sh
+#
+# That installs requirements/{base,gpu}-no-agpl.txt instead of the default
+# requirements/{base,gpu}.txt. The YOLO image extractor and clipper, the PDF
+# importer, and the document converters then fail with a message naming the
+# missing package instead of working; nothing else changes. See NOTICE.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -815,6 +827,24 @@ vts_resolve_cuda_tag() {
     fi
 }
 
+# --- requirements-file choice (shared) ---------------------------------------
+# Echo the requirements file for the given flavour ("base" or "gpu"), honouring
+# the VTSEARCH_NO_AGPL opt-out. The default (unset/0) keeps the AGPL packages,
+# which is what every install has always done; VTSEARCH_NO_AGPL=1 swaps in the
+# `*-no-agpl.txt` mirror, which forwards to pyproject.toml without the `agpl`
+# extra. Also announces the choice, since a silently AGPL-free install would be
+# confusing when the YOLO/PDF features later report themselves missing.
+vts_requirements_file() {
+    local flavour="$1"
+    if [ "${VTSEARCH_NO_AGPL:-0}" = "1" ]; then
+        echo "  (VTSEARCH_NO_AGPL=1 -> skipping ultralytics + PyMuPDF; the YOLO" >&2
+        echo "   extractor/clipper, PDF import, and document converters stay unavailable)" >&2
+        echo "$REPO_ROOT/requirements/${flavour}-no-agpl.txt"
+    else
+        echo "$REPO_ROOT/requirements/${flavour}.txt"
+    fi
+}
+
 # --- pre-commit wiring (shared) ----------------------------------------------
 vts_install_precommit() {
     if [ -d "$REPO_ROOT/.git" ] && [ -f "$REPO_ROOT/.pre-commit-config.yaml" ]; then
@@ -828,7 +858,8 @@ vts_install_precommit() {
 # --- CPU install -------------------------------------------------------------
 # Installs runtime + dev dependencies and the vtsearch package itself (editable)
 # by forwarding to pyproject.toml via requirements/base.txt, which is just
-# `--extra-index-url <cpu wheel index>` + `-e .[dev]`.
+# `--extra-index-url <cpu wheel index>` + `-e .[dev,agpl]` (or the
+# `base-no-agpl.txt` mirror under VTSEARCH_NO_AGPL=1).
 # --- toponymy (VTSBrowse signpost naming) ------------------------------------
 # Two quirks force a dedicated step (see docs/plans/vtsbrowse-toponymy.md):
 #   - apricot-select (a real toponymy dep, declared in pyproject.toml) ships a
@@ -884,7 +915,7 @@ vts_install_cpu() {
     vts_install_toponymy
 
     vts_progress_step "Installing runtime + dev dependencies (this may take several minutes)"
-    pip install -r "$REPO_ROOT/requirements/base.txt" --progress-bar on
+    pip install -r "$(vts_requirements_file base)" --progress-bar on
 
     vts_progress_step "Installing FaceNet face embedder (facenet-pytorch, --no-deps)"
     vts_install_face_deps
@@ -1104,7 +1135,7 @@ vts_install_gpu() {
     vts_progress_step "Installing remaining dependencies via ${extra_index} (this may take several minutes)"
     pip install --extra-index-url "$extra_index" \
       --prefer-binary \
-      -r "$REPO_ROOT/requirements/gpu.txt" \
+      -r "$(vts_requirements_file gpu)" \
       --progress-bar on
 
     vts_progress_step "Installing FaceNet face embedder (facenet-pytorch, --no-deps)"

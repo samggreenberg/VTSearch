@@ -5,14 +5,14 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CenterPanelComponent } from './center-panel.component';
 import { EmbedderInfo, Media } from '../../models/api.models';
 import { RegionBox } from './image-viewer/image-viewer.component';
-import { ANIMATIONS_OFF_CLASS } from '../../utils/reduced-motion';
+import { ANIMATIONS_OFF_CLASS, ANIMATIONS_ON_CLASS } from '../../utils/reduced-motion';
 import { configureZoneless } from '../../testing/zoneless-testbed';
 import { settleZoneless } from '../../testing/settle-resource';
 import { provideHttpTesting } from '../../testing/test-providers';
 
 /**
- * Zoneless staleness canary for the center panel (docs/plans/zoneless-migration.md,
- * Phases 0.3/0.4 + 1.2). Phase 1.2 dropped the `zone.run(...)` re-entries from
+ * Zoneless staleness canary for the center panel.
+ * Phase 1.2 dropped the `zone.run(...)` re-entries from
  * `KeyboardService`, moving the change-detection trigger to this consumer, whose
  * shortcut-driven state (`isVoting`/`spinningVote`/`swipeClass`/`undoToastText`/
  * `volume`/`pendingBadConfirm` + the settings mirror) is now signalized.
@@ -240,6 +240,72 @@ describe('CenterPanelComponent', () => {
 
     expect(emitted).toEqual({ id: 1, vote: 'good' });
     expect(component.voteState.goodVotes.has(1)).toBe(true);
+  });
+
+  /**
+   * The vote belongs to the item that was selected when the key was pressed.
+   * Selection can move while the POST is in flight or during the 180ms swipe
+   * animation (a click in the left list, hover-focus, a concurrent auto-advance),
+   * so `mediaVoted` must carry the id captured at castVote() time. Emitting the
+   * *current* selection's id pairs a new item with the old vote direction, which
+   * makes find-view mark the wrong row optimistically verified and makes
+   * label-view's auto-advance exclude the wrong id.
+   */
+  describe('mediaVoted id is pinned to the voted item', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+      document.documentElement.classList.remove(ANIMATIONS_ON_CLASS);
+    });
+
+    it('emits the voted id when selection moves while the vote is in flight', () => {
+      fixture.componentRef.setInput('media', mockMedia);
+      component.showAnimations.set(false);
+      TestBed.tick();
+
+      let emitted: { id: number; vote: string } | undefined;
+      component.mediaVoted.subscribe((e: { id: number; vote: string }) => (emitted = e));
+
+      component.castVote('good');
+      const voteReq = httpMock.expectOne('/api/medias/1/vote');
+
+      // The user clicks a different card before the server answers.
+      fixture.componentRef.setInput('media', { ...mockMedia, id: 2, filename: 'other.pdf' });
+      TestBed.tick();
+
+      voteReq.flush({ state: 'good', click_time: 1 });
+
+      expect(emitted).toEqual({ id: 1, vote: 'good' });
+    });
+
+    it('emits the voted id when selection moves during the swipe animation', async () => {
+      vi.useFakeTimers();
+      // The settings mirror put `animations-off` on <html> in beforeEach; swap it
+      // for `animations-on` so prefersReducedMotion() reports false and castVote()
+      // takes the animated (deferred-emit) branch.
+      document.documentElement.classList.remove(ANIMATIONS_OFF_CLASS);
+      document.documentElement.classList.add(ANIMATIONS_ON_CLASS);
+
+      fixture.componentRef.setInput('media', mockMedia);
+      component.showAnimations.set(true);
+      TestBed.tick();
+
+      let emitted: { id: number; vote: string } | undefined;
+      component.mediaVoted.subscribe((e: { id: number; vote: string }) => (emitted = e));
+
+      component.castVote('bad');
+      httpMock.expectOne('/api/medias/1/vote').flush({ state: 'bad', click_time: 1 });
+      // The deferred emit has not fired yet; selection moves inside the window.
+      expect(emitted).toBeUndefined();
+
+      fixture.componentRef.setInput('media', { ...mockMedia, id: 2, filename: 'other.pdf' });
+      TestBed.tick();
+
+      // Drain both the 180ms emit timer and the 300ms spin timer.
+      await vi.advanceTimersByTimeAsync(300);
+      TestBed.tick();
+
+      expect(emitted).toEqual({ id: 1, vote: 'bad' });
+    });
   });
 
   it('should prevent double voting', () => {

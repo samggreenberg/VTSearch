@@ -191,15 +191,13 @@ describe('ProgressEventsService liveness wiring', () => {
 });
 
 /**
- * Zoneless staleness canary (docs/plans/zoneless-migration.md, Phases 0.3/0.4 +
- * 1.1). As of Phase 1.1 the six SSE channels are signals, so a frame arriving on
- * the EventSource (which fires *outside* Angular's NgZone) schedules change
- * detection via the signal write — no `zone.run` re-entry. This component reads
- * the `dataset` channel signal in its template; driving a frame through the fake
- * EventSource and asserting the rendered DOM after `settleZoneless()`, with no
- * manual `detectChanges()`, proves the SSE pump repaints bound views under
- * zoneless. (Before Phase 1.1 the channel was a `BehaviorSubject.next()` from a
- * raw listener, which would leave this view stale.)
+ * Zoneless staleness canary. The six SSE channels are signals, so a frame
+ * arriving on the EventSource (which fires *outside* Angular's NgZone)
+ * schedules change detection via the signal write — no `zone.run` re-entry.
+ * This component reads the `dataset` channel signal in its template; driving
+ * a frame through the fake EventSource and asserting the rendered DOM after
+ * `settleZoneless()`, with no manual `detectChanges()`, proves the SSE pump
+ * repaints bound views under zoneless.
  */
 @Component({
   selector: 'app-progress-canary',

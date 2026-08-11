@@ -34,7 +34,7 @@ The word "progress" shows up in two unrelated parts of `vtscore`:
 | Layer | Module | What it tracks |
 |-------|--------|----------------|
 | Long-running operation progress | `vtscore.concurrency.progress` | Dataset load / sort / eval / find - coarse-grained `(current, total, status, message)` for UI bars and cancel buttons |
-| Labeling-session analyzer | `vtscore.detectors.labeling_progress` | Per-step trained MLP cache + stopping-condition metrics |
+| Labeling-session analyzer | `vtscore.detectors.labeling_progress` | Per-step trained model cache + stopping-condition metrics |
 
 The labeling-session analyzer is **not** in this package. If you see
 `clear_progress_cache()` or `recreate_model_at_time()` referenced

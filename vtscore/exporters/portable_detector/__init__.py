@@ -18,8 +18,7 @@ detectors are skipped with a note rather than aborting the whole export - their
 stage-2 RANSAC verification isn't representable as a scoring-only ONNX graph
 (see :func:`vtscore.detectors.portable_bundle.check_exportable`).  Patch
 (DINOv2/v3, EUPE) detectors export normally, in a degraded whole-item-only
-scoring mode (see :func:`vtscore.detectors.portable_bundle.caveats_for_embedder_type`);
-see ``docs/plans/detector-standalone-export.md``.
+scoring mode (see :func:`vtscore.detectors.portable_bundle.caveats_for_embedder_type`).
 """
 
 from __future__ import annotations

@@ -164,7 +164,7 @@ class TestTrainingSettingsInvalidateLoadedDetector:
     def test_set_inclusion_preserves_model_no_fold_cache(self):
         """Inclusion is a pure cutoff knob: it no longer drops the model.
         Without cached fold orderings the threshold is left for the next
-        training pass.  See docs/plans/find-verification-workflow.md."""
+        training pass."""
         from vtsearch.state import get_inclusion, set_inclusion
 
         ctx = self._loaded_ctx()

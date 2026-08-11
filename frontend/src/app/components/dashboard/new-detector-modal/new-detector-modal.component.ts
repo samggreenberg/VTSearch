@@ -240,7 +240,7 @@ export class NewDetectorModalComponent implements OnInit {
   // mirroring label-importer-modal so plugins with dynamic_options /
   // depends_on / allow_free_text render with full parity here too. Keyed by
   // field key; signalized so the unpatched HTTP callbacks schedule CD under
-  // zoneless. See docs/plans/zoneless-migration.md.
+  // zoneless.
   readonly labelImporterDynamicOptions = signal<Record<string, FieldOptions[]>>({});
   readonly labelImporterDynamicLoading = signal<Record<string, boolean>>({});
   readonly labelImporterDynamicError = signal<Record<string, string>>({});

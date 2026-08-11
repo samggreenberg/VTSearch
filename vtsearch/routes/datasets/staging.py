@@ -1,7 +1,7 @@
 """Dataset staging, importer dispatch, and the combine-datasets endpoint.
 
 Migrated to ``flask_smorest`` so these routes appear in
-``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+``/api/openapi.json``.
 
 JSON-shaped routes (available-files, combine, stage-demo, clear-staging,
 importer-field-options, importer-suggested-name) use the standard

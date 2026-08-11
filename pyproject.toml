@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+# >= 77 for PEP 639 support (the SPDX `license` string + `license-files`
+# below); older setuptools only understands the deprecated table/classifier
+# form and errors on the expression.
+requires = ["setuptools>=77.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -7,6 +10,25 @@ name = "vtsearch"
 version = "0.1.0"
 requires-python = ">=3.10"
 description = "Media explorer for browsing and voting on audio, images, text, video, or documents"
+# Apache-2.0 covers this repository's source only. Embedding-model weights are
+# downloaded at runtime under their publishers' own terms (some noncommercial),
+# and two dependencies are AGPL-3.0 (ultralytics, PyMuPDF). See NOTICE.
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Web Environment",
+    "Framework :: Flask",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Recognition",
+]
 
 # Runtime dependencies. These mirror requirements/base.txt + the per-plugin
 # requirements.txt files so deptry can verify that every imported package is
@@ -52,7 +74,6 @@ dependencies = [
     # Plugin deps that are imported from the codebase
     "sentence-transformers",
     "dnspython>=2.0.0",
-    "PyMuPDF",
     "librosa",
     "soundfile",
     # Resampler behind ``vtscore.media.audio.decode``. It arrives with librosa
@@ -70,7 +91,6 @@ dependencies = [
     "open_clip_torch",
     "timm",
     "ftfy",
-    "ultralytics",
     "opencv-python-headless",
     "imageio-ffmpeg",
     # Portable detector export: build a standalone ONNX scorer from a trained
@@ -98,6 +118,24 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# The AGPL-3.0-or-later runtime dependencies, split out so a deployment that
+# cannot take copyleft code has a way to say no. THIS EXTRA IS PART OF THE
+# DEFAULT INSTALL: every documented install path requests it
+# (`requirements/base.txt` and `requirements/gpu.txt` are `-e .[dev,agpl]`,
+# and both Dockerfiles install those files), so a normal install pulls these
+# in exactly as it did when they were hard dependencies. Opting out means
+# using the `*-no-agpl.txt` mirrors -- `VTSEARCH_NO_AGPL=1 bash
+# scripts/install.sh` -- and forgoing the features listed below, which then
+# fail with an actionable message from `vtscore.utils.optional_deps`.
+# See NOTICE and the License section of README.md.
+agpl = [
+    # PDF page rendering + document text extraction: vtscore.datasets.pdf,
+    # vtscore.converters.document2image / document2text.
+    "PyMuPDF",
+    # YOLO object detection: the image extractor (vtscore.media.image.extractor)
+    # and the image clipper (vtscore.media.image.clipper).
+    "ultralytics",
+]
 dev = [
     "pytest",
     "pytest-xdist",

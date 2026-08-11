@@ -8,7 +8,7 @@ package docs read smoothly.
 3. [Origin](#3-origin) - provenance: how to find a media item again.
 4. [LabelSet / LabeledElement](#4-labelset--labeledelement) - voted labels with provenance.
 5. [Embedder](#5-embedder) - the model that turns a file into an embedding.
-6. [Detector](#6-detector) - the MLP + threshold that scores embeddings.
+6. [Detector](#6-detector) - the linear head + threshold that scores embeddings.
 7. [Context](#7-context) - per-dataset / per-detector mutable state holder.
 8. [Plugin](#8-plugin) - auto-discovered, swappable component of any family.
 
@@ -72,7 +72,7 @@ the embedder:
 The library also maintains a **cached embedding matrix** per
 `DatasetContext`: a contiguous `(N, D)` float32 array built lazily by
 `vtscore.embedding.matrix.get_embedding_matrix(ctx)` and reused across
-cosine sort, MLP scoring, and diversity-tree construction. The cache lives
+cosine sort, detector scoring, and diversity-tree construction. The cache lives
 in process memory only - it's never persisted - and is invalidated when
 the underlying `medias` dict changes.
 
@@ -186,19 +186,23 @@ and [extending/embedders.md](extending/embedders.md) to write your own.
 
 ## 6. Detector
 
-A **detector** in `vtscore` is a small MLP classifier plus a calibrated
-decision threshold, both derived from a `LabelSet`.
+A **detector** in `vtscore` is a **linear (logistic) classifier head** plus a
+calibrated decision threshold, both derived from a `LabelSet`.
 
 Architecture (`vtscore/training/mlp.py`):
 
 ```
 input  (D,)
-  → Linear(D, H)        # H auto-sized from training-set count
-  → ReLU
-  → Dropout(p)          # default 0.3
-  → Linear(H, 1)
+  → Linear(D, 1)        # hidden_dim=LINEAR_HEAD (0): no hidden layer
   → (no activation; train with BCEWithLogitsLoss)
 ```
+
+`build_model(input_dim, hidden_dim=N)` with `N > 0` still builds the older MLP
+(`Linear(D, H) → ReLU → Dropout(p) → Linear(H, 1)`, width from
+`_auto_hidden_dim`), but that path survives only for the eval harness's sweep
+arm and unit tests - production always passes `LINEAR_HEAD`. See
+[`docs/ML.md`](../../docs/ML.md#why-linear-and-where-the-mlp-survives) for why
+the head is linear.
 
 Training (`vtscore.training.train_model`):
 
@@ -208,7 +212,8 @@ Training (`vtscore.training.train_model`):
 - Local `torch.Generator` seeded with the caller-supplied seed
   (default 42) for deterministic weight init.
 - `torch.random.fork_rng()` around `nn.Dropout` so concurrent training
-  calls don't race on the global RNG.
+  calls don't race on the global RNG (the linear head has no dropout, so
+  this only bites the MLP arm).
 
 Thresholding (`vtscore/training/thresholds.py`):
 

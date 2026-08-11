@@ -7,17 +7,22 @@ import pytest
 from vtscore.datasource_importers import get_datasource_importer
 from vtscore.datasource_importers.base import DataSourceImporter, FetchedMediaItem
 from vtscore.plugins import PluginField
-from vtsearch.routes.media.server import SERVER_MEDIA_DIR
+from vtsearch.routes.media import server as media_server_module
 
 
 @pytest.fixture
-def example_media_cleanup():
-    """Track and remove files this test adds to ``example_media/``."""
-    before = set(SERVER_MEDIA_DIR.glob("*")) if SERVER_MEDIA_DIR.exists() else set()
-    yield
-    if SERVER_MEDIA_DIR.exists():
-        for f in set(SERVER_MEDIA_DIR.glob("*")) - before:
-            f.unlink(missing_ok=True)
+def example_media_dir(tmp_path, monkeypatch):
+    """Redirect ``example_media/`` to a per-test directory and return it.
+
+    ``data/example_media/`` is a real shared directory, so pointing the route
+    at a private one keeps the suite from writing to disk. It also removes a
+    cross-worker race: the previous fixture deleted every file that appeared in
+    the shared directory during the test, which under ``pytest -n auto`` could
+    unlink a file another worker had just written and not yet read.
+    """
+    media_dir = tmp_path / "example_media"
+    monkeypatch.setattr(media_server_module, "SERVER_MEDIA_DIR", media_dir)
+    return media_dir
 
 
 class TestDatasourceImportersList:
@@ -43,7 +48,7 @@ class TestDatasourceImportersList:
 
 
 class TestDatasourceImportRun:
-    def test_server_file_fetches_into_example_media(self, client, tmp_path, example_media_cleanup):
+    def test_server_file_fetches_into_example_media(self, client, tmp_path, example_media_dir):
         src = tmp_path / "bark.wav"
         src.write_bytes(b"RIFFxxxxWAVE")
 
@@ -57,10 +62,10 @@ class TestDatasourceImportRun:
         assert data["origin"]["importer"] == "server_file"
         assert data["origin"]["params"]["path"] == str(src.resolve())
 
-        saved = SERVER_MEDIA_DIR / data["filename"]
+        saved = example_media_dir / data["filename"]
         assert saved.read_bytes() == b"RIFFxxxxWAVE"
 
-    def test_origin_null_when_importer_reports_none(self, client, monkeypatch, example_media_cleanup):
+    def test_origin_null_when_importer_reports_none(self, client, monkeypatch, example_media_dir):
         """Importers whose items have no re-derivable source return origin: null."""
 
         def _fetch(field_values):
@@ -107,7 +112,7 @@ class TestDatasourceImportRun:
         assert resp.status_code == 502
         assert "upstream fell over" in resp.get_json()["message"]
 
-    def test_file_field_importer_accepts_multipart(self, client, monkeypatch, example_media_cleanup):
+    def test_file_field_importer_accepts_multipart(self, client, monkeypatch, example_media_dir):
         class UploadThingDataSourceImporter(DataSourceImporter):
             """Test-only importer with a file field."""
 
@@ -131,7 +136,7 @@ class TestDatasourceImportRun:
         assert resp.status_code == 201
         data = resp.get_json()
         assert data["original_name"] == "pick.png"
-        assert (SERVER_MEDIA_DIR / data["filename"]).read_bytes() == b"\x01\x02"
+        assert (example_media_dir / data["filename"]).read_bytes() == b"\x01\x02"
 
 
 class TestDatasourceImportFieldOptions:

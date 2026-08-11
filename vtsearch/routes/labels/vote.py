@@ -1,7 +1,7 @@
 """Blueprint for label management routes (export, import, fill-from-sort).
 
 Migrated to ``flask_smorest`` so the routes are described in
-``/api/openapi.json``. See ``docs/plans/openapi-schema.md``.
+``/api/openapi.json``.
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ def _select_vote_pools(
     ``unverified`` / ``verified`` partition the pools by ``verified_ids`` (the
     Find-mode set of human-touched items): ``unverified`` is the left-panel
     work queue (the detector's calls the human hasn't acted on), ``verified``
-    is the right-panel confirmed set.  See docs/plans/find-verification-workflow.md.
+    is the right-panel confirmed set.
 
     Takes the vote dicts as parameters (rather than reading the module-level
     proxies) so the caller can pass an atomic snapshot from

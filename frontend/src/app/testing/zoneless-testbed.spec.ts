@@ -5,10 +5,9 @@ import { configureZoneless, provideZoneless } from './zoneless-testbed';
 import { settleZoneless } from './settle-resource';
 
 /**
- * Reference spec for the zoneless test harness (docs/plans/zoneless-migration.md,
- * Phase 0.3 / 0.4). It is NOT testing app code — it proves the harness itself
- * works, and serves as the copy-me pattern for per-component canary specs in
- * Phases 1–2:
+ * Reference spec for the zoneless test harness. It is NOT testing app code —
+ * it proves the harness itself works, and serves as the copy-me pattern for
+ * per-component canary specs:
  *
  *   - run the TestBed under `provideZonelessChangeDetection()` (via
  *     `configureZoneless` / `provideZoneless`),

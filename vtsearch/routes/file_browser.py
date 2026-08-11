@@ -5,7 +5,7 @@ the server filesystem and pick files instead of having to type paths
 by hand.
 
 Migrated to ``flask_smorest`` so the route is described in
-``/api/openapi.json``. See ``docs/plans/openapi-schema.md``. Schema-level
+``/api/openapi.json``. Schema-level
 failures (e.g. unparseable query params) surface as 422 with the
 standard ``errors`` envelope; handler-level rejects (path traversal,
 permission denied) keep their HTTP codes (400 / 403) with the standard

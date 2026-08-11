@@ -1,9 +1,11 @@
 # Calibration experiment — trained vs oracle thresholds (issue #2781)
 
-**Status: shipped.** The Grid study ran (Autopilot simulation, Visual Genome
+**Background.** The Grid study ran (Autopilot simulation, Visual Genome
 region voting + Caltech binary voting) on both the pre- and post-#2784
 calibration code. Results, verdict, and the pre-registered decision-rule
-outcomes are in **`docs/experiments/calibration/REPORT.md`**; the harness lives
+outcomes are in
+[`docs/experiments/calibration/REPORT.md`](../experiments/calibration/REPORT.md);
+the harness lives
 in `vtscore/eval/calibration_metrics.py` + the `emit_calibration_metrics` path of
 `vtscore/eval/voting_iterations.py` (+ the provenance/node-score surface in
 `vtscore/training/thresholds.py`), and the runner in
@@ -44,9 +46,11 @@ strategy.
 
 - **Cold-start degenerate defaults.** Post-#2784 the residual degenerate
   thresholds are dominated by the `too_few_default` (0.5) path at < ~4 votes,
-  which the fix does not touch — filed separately as #2788, with its measurement
-  spec pre-registered in
-  [`coldstart-threshold-experiment.md`](coldstart-threshold-experiment.md).
+  which the fix does not touch — filed separately as #2788. Its cold-start framing
+  did not survive PR #2789's Autopilot-fidelity alignment (the `too_few_default`
+  path turned out to be unreachable on the Autopilot flow); what survives is the
+  post-quorum 5–15 vote window, now owned by
+  [`inclusion-calibration-bias.md`](inclusion-calibration-bias.md).
   Note that this study ran before the harness's Autopilot-fidelity alignment, so
   some of those sub-quorum steps are ones the app would never have shown a user;
   the #2788 experiment measures the app-visible share.

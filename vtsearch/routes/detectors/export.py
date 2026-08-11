@@ -1,8 +1,7 @@
 """Portable detector export route.
 
 Streams a standalone, transferable scoring bundle (ONNX model + manifest +
-README) for a saved detector.  See :mod:`vtscore.detectors.portable_bundle` and
-``docs/plans/detector-standalone-export.md``.
+README) for a saved detector.  See :mod:`vtscore.detectors.portable_bundle`.
 
 This is the sanctioned exception to the "No Persisted Vectors or MLPs" rule
 (``CLAUDE.md``): the bundle persists the trained MLP - never embeddings or raw

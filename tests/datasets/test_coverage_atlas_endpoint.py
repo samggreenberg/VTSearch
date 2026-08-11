@@ -2,7 +2,7 @@
 
 ``POST /api/datasets/registry/<id>/coverage-atlas`` lets the user build the
 coverage atlas for a loaded dataset that skipped the automatic build at load
-time (see Phase 2.1 Part B in ``docs/plans/scalability-plan.md``).
+time (see the S2/S8 auto-defer item in ``docs/plans/scalability.md``).
 
 ``GET /api/datasets/registry/<id>/domain-shift`` reports how typical the
 active dataset's embeddings look under ``<id>``'s coverage atlas, so a user

@@ -6,7 +6,7 @@ will have:
 1. Loaded a folder of audio files into `vtscore`.
 2. Inspected the resulting media items and their embeddings.
 3. Cast labels on a handful of items.
-4. Trained an MLP detector with a calibrated threshold.
+4. Trained a linear-head detector with a calibrated threshold.
 5. Saved the detector to disk as a `LabelSet` JSON.
 6. Reloaded it in a fresh Python process and re-derived its weights.
 7. Scored a held-out folder against the detector.
@@ -14,7 +14,7 @@ will have:
 
 The scenario: you have a corpus of mixed audio - barks, music, speech,
 environmental sound - and you want a binary detector for "is this a
-dog bark?". Six labels is enough to get the MLP off the ground; a few
+dog bark?". Six labels is enough to get the detector off the ground; a few
 dozen will make it good.
 
 You'll need `vtscore` installed (`bash scripts/install.sh` from the
@@ -134,12 +134,13 @@ print(f"Labelled {len(labelled)} items.")
 
 ESC-50 uses `<fold>-<clip_id>-A-<category_id>.wav`; category 0 is "dog",
 category 7 is "rooster", etc. Replace these filenames with whatever you
-actually have. Six labels is enough - the MLP is small.
+actually have. Six labels is enough - the linear head is small.
 
-## Step 3: Train the MLP
+## Step 3: Train the detector
 
 ```python
 from vtscore.training import train_model, calculate_cross_calibration_threshold
+from vtscore.training.mlp import LINEAR_HEAD
 
 # Build (X, y) tensors.
 X_list = [m["embedding"] for m, _ in labelled]
@@ -148,21 +149,27 @@ y_list = [1.0 if label == "good" else 0.0 for _, label in labelled]
 X = torch.from_numpy(np.stack(X_list).astype(np.float32))
 y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
 
-# Train.
-model = train_model(X, y, input_dim=X.shape[1])
+# Train. LINEAR_HEAD is what the app passes on every production fit.
+model = train_model(X, y, input_dim=X.shape[1], hidden_dim=LINEAR_HEAD)
 
-# Calibrate the decision threshold via 2-fold cross-validation.
+# Calibrate the decision threshold via 2-fold cross-validation, on the same
+# head - otherwise the threshold is measured on a different architecture.
 threshold = calculate_cross_calibration_threshold(
     X_list, y_list, input_dim=X.shape[1], inclusion_value=0,
+    hidden_dim=LINEAR_HEAD,
 )
 
-print(f"Trained MLP; threshold = {threshold:.3f}")
+print(f"Trained detector; threshold = {threshold:.3f}")
 ```
 
-The MLP architecture is `Linear(512, H) → ReLU → Dropout → Linear(H, 1)`
-where `H` is auto-sized from the training-set count (`_auto_hidden_dim`
-in `vtscore/training/mlp.py`). With 6 examples, `H ≈ 16`. The default
-seed makes training deterministic.
+The production architecture is a single `Linear(512, 1)` - the
+`hidden_dim=LINEAR_HEAD` (`0`) sentinel in `vtscore/training/mlp.py` - trained
+with balanced BCE-with-logits, i.e. logistic regression. A positive
+`hidden_dim` builds the older MLP
+(`Linear(512, H) → ReLU → Dropout → Linear(H, 1)`, `H` auto-sized by
+`_auto_hidden_dim`), which now survives only for the eval harness and tests;
+see [docs/ML.md](../../../docs/ML.md#why-linear-and-where-the-mlp-survives).
+The default seed makes training deterministic.
 
 ## Step 4: Score all loaded items
 
@@ -354,7 +361,7 @@ for i, metrics in enumerate(metrics_list):
 ```
 
 `eval_learned_sort` is in `vtscore/eval/runner.py`; it splits the data
-into `n_folds` folds, trains a fresh MLP per fold, and computes
+into `n_folds` folds, trains a fresh head per fold, and computes
 classification + ranking metrics. See
 [packages/eval.md](../packages/eval.md) for the full evaluation API.
 
@@ -366,7 +373,7 @@ By the end of the tutorial:
   six origins, no weights. ~1 KB.
 - **`/tmp/vtscore-tutorial/models/`** - cached LAION-CLAP weights. Reused
   by every future detector with `embedder="audio_clap"`. ~600 MB.
-- **`ctx.model`** + **`ctx.threshold`** - in-memory trained MLP, ready
+- **`ctx.model`** + **`ctx.threshold`** - in-memory trained head, ready
   to score anything.
 
 The same shape generalises to:

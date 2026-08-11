@@ -34,30 +34,6 @@ folds.
 
 <!-- item-sep -->
 
-- **DONE — boundary sweep + environment generalization (PR #2864, 2026-08-06).**
-  Asked: κ ∈ {0.1, 0.3, 1} × folds ∈ {2, 4} with `slow_cap50` as a control,
-  because the shipped κ=1 sat at the *edge* of the measured grid with
-  performance still improving as κ fell, 2 folds made the qmean/qmedian combine
-  comparison degenerate, and the run's blend control predated #2841.
-  Ran: κ ∈ {0.01 … 3} × {mid, rate} across **six environments** (3 datasets ×
-  4 embedders × both voting modes), with `slow_cap50`/`cap50` scored as
-  counterfactual control rows, plus a K=4 addendum. Came back:
-
-  - The optimum is **interior at `fold_anchored κ=0.3` with the `mid` cut**, not
-    κ=1 with `rate` — better in 6/6 environments, and the best single global
-    setting measured.
-  - "Fusion beats every schedule" is **false**: it beats `slow_cap50` on region
-    voting (−0.026) but is a dead heat on COCO binary voting and a loss on
-    caltech101. The gain tracks *positive-anchor count*. Since the fused path
-    covers binary voting too — unconditionally after #2863 — that is a live
-    regression, not a choice.
-  - `qmean` beats `qmedian` at every κ (indistinguishable at κ=0.3, significant
-    from κ=1 up); four folds are nominally −0.008 better than two at all 16
-    grid points with no significant cell. `calibrate_count` is now the
-    `CALIB_CALIBRATE_COUNT` env knob (default unchanged).
-
-  See `docs/experiments/population-anchored-calibration/REPORT.md`.
-
 <!-- item-sep -->
 
 - **Give binary voting a path back to `cap50`.** The fused threshold covers

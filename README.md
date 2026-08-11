@@ -1,3 +1,8 @@
+<!-- This file is served raw at GET /api/achievements/docs/readme/raw and its
+     footer phrase is hash-matched in vtsearch/achievements.py. Don't remove
+     or reword the "Readme Reader code phrase" line without updating
+     achievements.py to match. See CLAUDE.md. -->
+
 # VTSearch
 
 A trainable media search tool. VTSearch searches collections of audio clips, images, text paragraphs, videos, and documents using a **detector** (a small trained ranker that scores every item in the collection by how well it matches what you're looking for). You search either by **training a new detector** (vote a handful of items "good" or "bad" and a small neural net learns from your votes to rank the rest of the collection) or by **using an existing detector** (one you saved earlier, exported from another VTSearch instance, or imported from disk). Trained detectors are reusable: apply the same one to any future dataset of the same media type. A natural-language query ("dog barking", "red car in snow") seeds either flow via pretrained embeddings (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text), and also works as a quick stand-alone search when you don't need a trained detector. Several demo datasets are available directly from the UI. Built with Flask (Python), Angular (TypeScript), and PyTorch.
@@ -74,7 +79,7 @@ VTSearch provides several CLI workflows for applying detectors to datasets, impo
 VTSearch is split into two Python packages along an **app tier / library tier** line:
 
 - **`vtsearch/`** — the app tier: Flask routes, authentication, settings, the achievements state machine, and the CLI entry point (`vtsearch/cli_main.py`). Anything that depends on Flask/Werkzeug lives here.
-- **`vtscore/`** — the library tier: the ML (training, MLP, thresholds), embedding runtime, media-type plugins (audio, image, text, video, document), converters, datasets/importers, exporters, labels, evaluation, projection (VTSBrowse), concurrency, security, and the plugin/sync machinery. It is import-clean of Flask so it can be reused as a standalone library. The CLI orchestration (`vtscore/cli.py`, `cli_pipeline.py`, `cli_progress.py`) lives here too.
+- **`vtscore/`** — the library tier: the ML (training, classifier head, thresholds), embedding runtime, media-type plugins (audio, image, text, video, document), converters, datasets/importers, exporters, labels, evaluation, projection (VTSBrowse), concurrency, security, and the plugin/sync machinery. It is import-clean of Flask so it can be reused as a standalone library. The CLI orchestration (`vtscore/cli.py`, `cli_pipeline.py`, `cli_progress.py`) lives here too.
 
 The remaining top level:
 
@@ -105,7 +110,7 @@ New to the project? Start with [docs/HANDOFF.md](docs/HANDOFF.md) for a full ori
 
 ## Machine learning
 
-VTSearch trains a small MLP neural network on user votes to learn a binary classifier over pretrained embeddings. See [docs/ML.md](docs/ML.md) for full details on the model architecture, training configuration, PyTorch settings, embedding models, and the Coverage Atlas that drives diversity sampling and domain-shift detection.
+VTSearch trains a **linear (logistic) head** — a single `Linear(input_dim, 1)` fitted with balanced binary cross-entropy — on user votes to learn a binary classifier over pretrained embeddings. See [docs/ML.md](docs/ML.md) for full details on the model architecture (including why the head is linear and where the older MLP path survives), training configuration, PyTorch settings, embedding models, and the Coverage Atlas that drives diversity sampling and domain-shift detection.
 
 ## Evaluation
 
@@ -130,6 +135,24 @@ VTSearch has a plugin architecture for media types, data importers, results expo
 - **[docs/EXTENDING-plugins.md](docs/EXTENDING-plugins.md)**: data importers, results exporters, label importers, processor importers, settings importers/exporters, settings sources, labelset sources (eight auto-discovered plugin families).
 - **[docs/EXTENDING-media.md](docs/EXTENDING-media.md)**: media types, embedders, clippers, converters, media sources.
 - **[docs/EXTENDING-processors.md](docs/EXTENDING-processors.md)**: detectors, localizers, extractors.
+
+## License
+
+VTSearch is licensed under the [Apache License 2.0](LICENSE). That covers the source code in this repository: both the `vtsearch` application and the `vtscore` library.
+
+Two things it does **not** cover:
+
+- **Model weights are separately licensed.** VTSearch downloads embedding models at runtime rather than vendoring them, and each publisher sets its own terms; some are more restrictive than this project's license. EUPE (Perception Encoder) is released under the FAIR Noncommercial Research License and cannot be used commercially; DINOv3 is gated on Hugging Face and requires accepting its license before download. Embedders with a usage restriction advertise it via their descriptor's `license_notice` field, which the UI shows as a warning on the embedder picker. Check the terms of any model you enable before deploying.
+- **Two dependencies are copyleft, and can be skipped.** `ultralytics` (used by the image extractor and clipper) and `PyMuPDF` (used by the PDF importer and document converters) are both AGPL-3.0. A default install pulls them in, so those features work out of the box. VTSearch's own Apache-2.0 grant is unaffected, but the AGPL terms may attach to a combined work you redistribute or run as a network service. If that doesn't suit your deployment, install without them:
+
+  ```bash
+  VTSEARCH_NO_AGPL=1 bash scripts/install.sh      # or: pip install -r requirements/base-no-agpl.txt
+  docker build --build-arg REQUIREMENTS=base-no-agpl.txt -f docker/Dockerfile .
+  ```
+
+  Both packages live in the `agpl` extra in `pyproject.toml`, which every default install path requests; the commands above are the same install with that extra dropped. The result is permissively licensed, and the four features listed above report themselves as unavailable with an actionable message rather than half-working. Obtaining commercial terms for the packages is the other way to keep the features.
+
+See [NOTICE](NOTICE) for the full attribution and dependency-licensing statement.
 
 ---
 

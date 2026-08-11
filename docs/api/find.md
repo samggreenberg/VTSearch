@@ -30,7 +30,8 @@ Reports, per detector, how many labels can be resolved against the chosen
 datasets so the UI can warn before an expensive Find. Call before `POST
 /api/find`.
 
-→ ```json
+→
+```json
 {
   "warnings": [
     {
@@ -54,7 +55,8 @@ POST /api/find
 
 **Body:** `{"dataset_ids": ["id1", "id2"], "detector_ids": ["m1"]}`
 
-→ ```json
+→
+```json
 {
   "results": [
     {
@@ -131,7 +133,7 @@ POST /api/find-label
 
 Scores every loaded media with the given detector and applies Good/Bad labels
 to **all** elements by threshold, freezing scores and initial labels for the
-Find verification workflow. If no trained MLP is cached in the detector
+Find verification workflow. If no trained head is cached in the detector
 context, it trains on the fly from the detector's labelset (resolving label
 origins as needed).
 
@@ -143,7 +145,8 @@ so a disagreement surfaces as a correction in Find stats. `good_count` /
 `bad_count` therefore count the labels actually *adopted* — the threshold split
 everywhere except those held votes.
 
-→ ```json
+→
+```json
 {
   "ok": true,
   "results": [{"id": 0, "score": 0.9812}, ...],
@@ -168,10 +171,11 @@ POST /api/auto-detect
 **Body:** `{"detector_name": ""}` — omit / empty to run **every** detector
 flagged for Auto-Find on the active dataset's media type, or name a single one.
 
-Scores the active dataset with each Auto-Find detector, training each MLP on
+Scores the active dataset with each Auto-Find detector, training each head on
 demand, and returns one result column per detector.
 
-→ ```json
+→
+```json
 {
   "media_type": "audio",
   "detectors_run": 2,
@@ -203,7 +207,8 @@ Pure-read detector-evaluation stats over the adopted Find label set: a 2×2
 confusion of the adopted label vs. the detector's original call, plus an FP/FN
 threshold sweep.
 
-→ ```json
+→
+```json
 {
   "total_good": 42, "total_bad": 458,
   "verified_count": 30,

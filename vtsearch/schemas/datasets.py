@@ -5,7 +5,7 @@ These cover the read-only / display-oriented dataset blueprints: listings
 and UI helpers (demo dataset list, file browser, dashboard). The heavier
 modules (``load``, ``staging``, ``registry``) involve multipart upload,
 binary streaming, and plugin-field-shaped bodies and are migrated
-separately. See ``docs/plans/openapi-schema.md``.
+separately.
 
 Every ``to_dict()`` payload here is enumerated as a nested schema so the
 generated OpenAPI client carries a real typed model and the frontend can

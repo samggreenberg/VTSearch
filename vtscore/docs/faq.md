@@ -23,7 +23,7 @@ the architecture overview in [architecture.md](architecture.md).
 
 ### How is `vtscore` different from `vtsearch`?
 
-`vtscore` is the **library**: dataset loaders, embedders, MLP training,
+`vtscore` is the **library**: dataset loaders, embedders, detector training,
 detector lifecycle, evaluation. It has no Flask, no Angular, no settings
 JSON. `vtsearch` is the **application** that wraps `vtscore` with a
 Flask + Angular UI, a per-user settings system, and authentication.
@@ -174,10 +174,12 @@ fetching at runtime.
 
 ### How many labels do I need?
 
-The MLP works from about 4 labels (2 good, 2 bad) and improves through
-about 50. Above 100 the gains are mostly noise. The MLP hidden layer
-auto-sizes from the training-set count (see `_auto_hidden_dim` in
-`vtscore/training/mlp.py`).
+The detector works from about 4 labels (2 good, 2 bad) and improves through
+about 50. Above 100 the gains are mostly noise. The production head is linear
+(a single `Linear(D, 1)`, i.e. logistic regression), which is what makes it
+usable that low: with 3-5 positives an MLP is under-determined and its scores
+wobble from retrain to retrain. See
+[docs/ML.md](../../docs/ML.md#why-linear-and-where-the-mlp-survives).
 
 ### Is training deterministic?
 
@@ -227,7 +229,7 @@ contains:
 - Nothing else - **no embeddings, no model weights**.
 
 On load, the library re-derives every embedding from the origin and
-re-trains the MLP. This is by design - see
+re-trains the head. This is by design - see
 [architecture.md §The no-persisted-vectors rule](architecture.md#the-no-persisted-vectors-rule).
 
 ### Doesn't re-deriving embeddings on every load take forever?
@@ -269,7 +271,7 @@ the route layer handles this.)
 
 `DatasetContext` holds dataset-intrinsic state: the medias dict, the
 diversity tree, the cached embedding matrix. `DetectorContext` holds
-detector-intrinsic state: votes, the trained MLP, the threshold, the
+detector-intrinsic state: votes, the trained head, the threshold, the
 labelset source. One dataset can be open with multiple detectors active
 against it simultaneously; both contexts are independently registered.
 
@@ -363,7 +365,7 @@ process loads from disk (~5s) and subsequent uses are instant.
 dimensions × 4 bytes = ~200 MB. The cached matrix on `DatasetContext`
 lives only in process memory; clearing it is `invalidate_embedding_matrix(ctx)`.
 
-### My MLP training is using only one CPU core. Why?
+### My detector training is using only one CPU core. Why?
 
 `OMP_NUM_THREADS=1` and `MKL_NUM_THREADS=1` are set at import time as a
 memory-optimisation default (the project runs in many low-memory

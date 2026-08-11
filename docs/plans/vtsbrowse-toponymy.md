@@ -122,7 +122,6 @@
 
 <!-- item-sep -->
 
-
 <!-- item-sep -->
 
 - **Post-hoc text persistence** — signpost texts computed during the *lazy*

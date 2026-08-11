@@ -3,6 +3,7 @@
 # Image-only deployment that ships every supported image embedder:
 #   * SigLIP   (google/siglip-base-patch16-224)         - default, text-capable, ungated
 #   * SigLIP 2 (google/siglip2-base-patch16-224)        - text-capable, ungated
+#   * SigLIP2-L (google/siglip2-so400m-patch14-384)     - text-capable, ungated, 1152-d
 #   * SigLIP-L (open_clip ViT-SO400M-14-SigLIP-384)     - text-capable, ungated, 1152-d
 
 #   * CLIP     (openai/clip-vit-base-patch32)           - text-capable, ungated

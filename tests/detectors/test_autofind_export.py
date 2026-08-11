@@ -2,7 +2,7 @@
 
 Covers :func:`vtsearch.routes.detectors.scoring._run_autofind_export`, which
 hands an autodetect run's results to the exporter configured under
-``autofind_exporter`` (see ``docs/plans/auto-find-settings-tab.md``).
+``autofind_exporter``.
 """
 
 from __future__ import annotations

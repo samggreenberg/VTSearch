@@ -430,7 +430,11 @@ CONVERTER = Text2EmojiMediaConverter()
   `document2*`, `openai-whisper` for `audio2text`). Each does the
   import inside `convert` and returns `[]` on `ImportError` rather
   than crashing - install the relevant extras before relying on a
-  converter.
+  converter. `pymupdf` is the one a *default* install still has but
+  can be deliberately left out (it is AGPL-3.0, so it sits in the
+  opt-out `agpl` extra); the `document2*` converters print the
+  message from `vtscore/utils/optional_deps.py` in that case, naming
+  the package and how to install it.
 - **Temporary files.** Converters that need a file path (e.g.
   `audio2image` decoding via librosa) write `media_bytes` to a
   `tempfile.NamedTemporaryFile`, run the operation, and `unlink` the

@@ -9,8 +9,6 @@
 # Results land under /exp/$USER/calibration-safe so the #2781 outputs are
 # untouched; the shared Max-Patch pickles/crops are reused in place.
 #
-# Design + pre-registered decision rules: docs/plans/safe-threshold-gmm-experiment.md
-#
 # Usage: bash launch_safe.sh
 set -uo pipefail
 

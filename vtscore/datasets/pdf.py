@@ -1,7 +1,8 @@
 """PDF page rendering utility.
 
 Converts each page of a PDF document into a PIL Image at a specified DPI.
-Requires the ``pymupdf`` package (``pip install pymupdf``).
+Requires ``PyMuPDF``, which a default install provides but the AGPL opt-out
+(``VTSEARCH_NO_AGPL=1``) leaves out - see :mod:`vtscore.utils.optional_deps`.
 
 Also provides :func:`load_pdf_images_into`, the shared folder-scan helper that
 expands every PDF in a directory into per-page image medias (used by the
@@ -14,6 +15,7 @@ import io
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from vtscore.utils.hashing import content_md5
+from vtscore.utils.optional_deps import agpl_import_error
 
 if TYPE_CHECKING:
     from PIL import Image
@@ -31,7 +33,10 @@ def render_pdf_pages(pdf_path: Path, dpi: int = 150) -> list[tuple[str, "Image.I
         List of ``(page_name, pil_image)`` tuples.  ``page_name`` follows the
         pattern ``"filename.pdf-1"``, ``"filename.pdf-2"``, etc. (1-indexed).
     """
-    import fitz  # noqa: PLC0415  (pymupdf)
+    try:
+        import fitz  # noqa: PLC0415  (pymupdf)
+    except ImportError as exc:
+        raise agpl_import_error("PyMuPDF", "Rendering PDF pages") from exc
     from PIL import Image as PILImage  # noqa: PLC0415
 
     doc = fitz.open(str(pdf_path))
@@ -66,7 +71,10 @@ def render_pdf_page_png(pdf_bytes: bytes, page_index: int = 0, dpi: int = 150) -
         page_index: 0-indexed page to render (default the first page).
         dpi: Render resolution.
     """
-    import fitz  # noqa: PLC0415  (pymupdf)
+    try:
+        import fitz  # noqa: PLC0415  (pymupdf)
+    except ImportError as exc:
+        raise agpl_import_error("PyMuPDF", "Rendering a PDF page preview") from exc
     from PIL import Image as PILImage  # noqa: PLC0415
 
     try:

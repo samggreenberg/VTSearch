@@ -744,3 +744,64 @@ class TestClipResponseLazyLoading:
         media = {"id": 1, "media_bytes": None, "media_path": None, "filename": "test.wav"}
         resp = mt.media_response(media)
         assert resp.data == b""
+
+
+class TestFullModeTextCompanionEncoding:
+    """Regression for #2961: a non-UTF-8 ``text_dir`` companion must not abort the load.
+
+    ``_load_pickle_media_payload`` used to open ``.txt``/``.md`` companion
+    files with strict ``encoding="utf-8"``, so one latin-1/cp1252 file in a
+    scraped text corpus raised ``UnicodeDecodeError`` and failed the entire
+    load. It now falls back to latin-1, mirroring the CSV label importer.
+    """
+
+    def _write_pickle(self, tmp_path: Path, text_dir: Path, filename: str) -> Path:
+        media: dict[str, Any] = {
+            "id": 1,
+            "media_type": "text",
+            "embedding": np.zeros(512).tolist(),
+            "embedder": "e5",
+            "filename": filename,
+            "category": "test",
+            "media_bytes": None,
+            "media_string": None,
+            "media_path": None,
+        }
+        pkl_path = tmp_path / "text.pkl"
+        from vtscore.datasets.container import write_container
+
+        write_container(
+            pkl_path,
+            pickle.dumps({"medias": {1: media}, "text_dir": str(text_dir)}),
+            {"format_version": 1},
+        )
+        return pkl_path
+
+    def test_full_mode_falls_back_to_latin1_on_bad_utf8(self, tmp_path, caplog):
+        text_dir = tmp_path / "texts"
+        text_dir.mkdir()
+        # "café" encoded as latin-1/cp1252, not valid UTF-8.
+        raw = "café scraped corpus entry".encode("latin-1")
+        (text_dir / "bad.txt").write_bytes(raw)
+
+        pkl_path = self._write_pickle(tmp_path, text_dir, "bad.txt")
+        medias: dict[int, dict[str, Any]] = {}
+        with caplog.at_level("WARNING"):
+            load_dataset_from_pickle(pkl_path, medias, thin=False)
+
+        assert len(medias) == 1
+        assert medias[1]["media_string"] == raw.decode("latin-1")
+        assert "falling back to latin-1" in caplog.text
+
+    def test_full_mode_still_reads_valid_utf8(self, tmp_path):
+        text_dir = tmp_path / "texts"
+        text_dir.mkdir()
+        content = "plain ascii/utf-8 entry"
+        (text_dir / "good.txt").write_text(content, encoding="utf-8")
+
+        pkl_path = self._write_pickle(tmp_path, text_dir, "good.txt")
+        medias: dict[int, dict[str, Any]] = {}
+        load_dataset_from_pickle(pkl_path, medias, thin=False)
+
+        assert len(medias) == 1
+        assert medias[1]["media_string"] == content

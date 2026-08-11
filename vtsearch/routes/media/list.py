@@ -1,7 +1,7 @@
 """Blueprint for media-related routes.
 
 Migrated to ``flask_smorest`` so the JSON-shaped routes appear in the
-``/api/openapi.json`` spec. See ``docs/plans/openapi-schema.md``.
+``/api/openapi.json`` spec.
 
 The binary-streaming routes (``audio``, ``video``, ``image``, ``media``)
 declare only their JSON error responses via ``alt_response``; the
@@ -932,7 +932,7 @@ def media_generic(query: dict, media_id: int):
     try:
         mt = media_get(c.get("media_type", ""))
     except KeyError:
-        abort(400, message=f"unsupported media type: {c.get('type')}")
+        abort(400, message=f"unsupported media type: {c.get('media_type')}")
 
     return _flask_response(mt.media_response(c))
 

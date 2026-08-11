@@ -71,8 +71,8 @@ VTSearch/
 │   │   ├── clipper.py              Shared clipper logic
 │   │   ├── audio/                  Audio media type, embedders (CLAP, CLAP-Music, CLAP-General,
 │   │   │                           ParaSpeechCLAP, AST, Whisper), clippers, SpeechExtractor
-│   │   ├── image/                  Image media type, embedders (SigLIP default; SigLIP2, CLIP,
-│   │   │                           SIFT-VLAD single-vector; DINOv2, DINOv3, EUPE each with
+│   │   ├── image/                  Image media type, embedders (SigLIP default; SigLIP2, SigLIP2-L,
+│   │   │                           SigLIP-L, CLIP, SIFT-VLAD single-vector; DINOv2, DINOv3, EUPE each with
 │   │   │                           single + patch variants), clippers, ImageClassExtractor,
 │   │   │                           FaceLocalizer, OCRExtractor
 │   │   ├── text/                   Text media type, embedders (E5 default, BGE), clippers

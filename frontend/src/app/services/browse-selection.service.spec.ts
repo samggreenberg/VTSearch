@@ -119,9 +119,8 @@ describe('BrowseSelectionService', () => {
 });
 
 /**
- * Zoneless staleness canary (docs/plans/zoneless-migration.md, Phases 0.3/0.4 +
- * 1.4). `version` is a signal as of Phase 1.4, so a view that reads it tracks
- * every selection mutation. This component mirrors how the real consumers
+ * Zoneless staleness canary. `version` is a signal, so a view that reads it
+ * tracks every selection mutation. This component mirrors how the real consumers
  * (browse-canvas redraw, bin-popup re-highlight, selection panel refresh) react:
  * it derives state from `version()` and renders it. Driving the service through
  * its production API and asserting the rendered DOM after `settleZoneless()` —

@@ -21,6 +21,13 @@
 
 set -euo pipefail
 cd "$(dirname "$0")"
+# Absolute, slash-containing path to this script. `$0` alone can be a bare
+# filename (e.g. `run-tests.sh` when invoked as `bash run-tests.sh`), which
+# makes `timeout`'s execvp do a PATH-only lookup below and fail with "No
+# such file or directory". We've already cd'd into dirname("$0"), so pwd
+# joined with basename("$0") is always absolute regardless of how we were
+# invoked.
+_self="$(pwd)/$(basename "$0")"
 
 # Wall-clock cap on the whole run.
 #
@@ -43,7 +50,7 @@ if [[ -z "${_VT_TIMEOUT_WRAPPED:-}" && "$VTSEARCH_TEST_TIMEOUT" != "0" ]] \
     # TERM first so pytest can print what it was doing; KILL 30s later for a
     # process too wedged to answer (exactly the defunct-worker case).
     set +e
-    timeout --signal=TERM --kill-after=30 "$VTSEARCH_TEST_TIMEOUT" "$0" "$@"
+    timeout --signal=TERM --kill-after=30 "$VTSEARCH_TEST_TIMEOUT" "$_self" "$@"
     _timeout_status=$?
     set -e
     if [[ $_timeout_status -eq 124 || $_timeout_status -eq 137 ]]; then
@@ -374,9 +381,9 @@ else
     done
 fi
 
-# Coverage is opt-in via VTSEARCH_COVERAGE=1 (or `--cov` as first arg).
-# Default off because tests already run in ~35s; coverage adds ~10-20%
-# overhead and the coverage report is most useful when explicitly asked for.
+# Coverage is opt-in via VTSEARCH_COVERAGE=1. Default off because tests
+# already run in ~35s; coverage adds ~10-20% overhead and the coverage
+# report is most useful when explicitly asked for.
 COV_ARGS=()
 if [[ "${VTSEARCH_COVERAGE:-}" == "1" ]]; then
     COV_ARGS=(--cov=vtsearch --cov-report=term-missing)

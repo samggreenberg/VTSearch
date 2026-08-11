@@ -56,6 +56,34 @@ def test_smaller_radius_yields_more_distinct_cells():
     assert n_fine > n_coarse
 
 
+@pytest.mark.parametrize("radius", [0.37, 1.0, 2.5])
+def test_assignment_is_the_exact_nearest_center_partition(radius):
+    """Every point must land in the hexagon that actually contains it.
+
+    Pins the deliberate divergence from d3-hexbin: d3 compares the
+    near-boundary tie-break in per-axis-normalized units (no 0.75 y-weight),
+    which misassigns ~2% of boundary points to a neighbor whose center is
+    farther away.  Assignment must equal nearest-center over the lattice.
+    """
+    rng = np.random.default_rng(0)
+    pts = rng.uniform(-10.0, 10.0, size=(20_000, 2))
+    q, r = hexbin_assign(pts, radius)
+
+    cx, cy = hex_center(q, r, radius)
+    assigned_dist = np.hypot(pts[:, 0] - cx, pts[:, 1] - cy)
+
+    # Brute-force nearest center over the neighborhood of the assigned cell.
+    # Only even ``q`` are real lattice columns (``hex_center`` folds the odd-row
+    # half-column offset in itself), so step the column index by two.
+    nearest_dist = np.full(len(pts), np.inf)
+    for d_row in (-2, -1, 0, 1, 2):
+        for d_col in (-4, -2, 0, 2, 4):
+            ncx, ncy = hex_center(q + d_col, r + d_row, radius)
+            nearest_dist = np.minimum(nearest_dist, np.hypot(pts[:, 0] - ncx, pts[:, 1] - ncy))
+
+    assert np.all(assigned_dist <= nearest_dist + 1e-9)
+
+
 def test_invalid_radius_raises():
     with pytest.raises(ValueError):
         hexbin_assign(np.zeros((3, 2)), radius=0.0)

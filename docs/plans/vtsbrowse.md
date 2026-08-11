@@ -19,6 +19,8 @@ embedders, embedding matrix, media serving, clipper, and concurrency stack.
 
 **Active:**
 
+<!-- item-sep -->
+
 - **Dataset pickle size — drop inline `media_bytes` when the media is reachable
   on disk.** The dataset container still bakes a full copy of every audio/image/
   video blob into `medias.pkl` even when the media also carries a `media_path`
@@ -27,40 +29,64 @@ embedders, embedding matrix, media serving, clipper, and concurrency stack.
   existing load-time `thin=True`) would shrink those containers dramatically, at
   the cost of making the `.pkl` no longer fully self-contained — so it needs a
   portability decision (always inline, never inline, or a per-export flag).
-- **Empirical tuning pass:** choose validated defaults for the UMAP fit, the
-  hex-tile pyramid, and the canvas renderer (the knobs *§Empirical knobs*
-  deliberately left unset). Planned in detail, ready to execute on an
-  environment with a browser (visual layout/hover judgment can't be done in
-  the headless cloud container) — see **`docs/plans/vtsbrowse-empirical-tuning.md`**.
+
+<!-- item-sep -->
+
+- **Empirical tuning pass:** the UMAP knobs are settled (per-embedder
+  `n_neighbors`/`min_dist`, compaction off — see
+  [`vtsbrowse-empirical-tuning.md`](vtsbrowse-empirical-tuning.md) and the
+  [tuning report](../reports/2026-07-22-vtsbrowse-umap-tuning.html)). Still owed
+  there: the pyramid-parameter sweep and the canvas/hover review, which needs an
+  environment with a browser (visual layout and hover judgment can't be done in
+  the headless cloud container).
+
+<!-- item-sep -->
+
 - **WebGL renderer** if the Canvas 2D ceiling is hit (a trigger from the tuning
   pass's performance review, not a standalone feature).
-- **Compaction fill ceiling (crispness-vs-coverage).** `compact_layout` deliberately
-  trades raw canvas coverage for crisp, separable islands. Because it only *translates*
-  clusters, it can close the oceans *between* islands but cannot fill the gaps *within*
-  a cluster or reach the frame corners — so its grid-fill tops out around ~0.21 on the
-  ESC-50 audio benchmark, below what a `min_dist≈0.9` UMAP fit reaches (~0.38). The
-  latter wins on fill only by *inflating* blobs (spreading points across more cells),
-  which blurs clusters and starts merging neighbouring classes (Procrustes disparity
-  ~0.22). Two unexplored levers if more coverage is wanted without the blur: (a) pack
-  noise as its own bounded set of micro-units so they fill inter-island gaps (the
-  prototype hit ~0.27 this way, but at O(N) units — would need a grid/merge cap to
-  scale); (b) a mild anisotropic stretch of the *packed* layout toward the frame
-  aspect ratio to claim the corners. Current defaults (`margin_frac=0.15`,
-  `attract=0.02`, `iters=400`) were tuned on ESC-50 only — fold into the empirical
-  tuning pass once a browser environment is available to judge layouts visually.
+
+<!-- item-sep -->
+
+- **Compaction fill ceiling (crispness-vs-coverage).** `compact_layout` is **off by
+  default** — the tuning sweep found it cost separability on every dataset × embedder
+  — but the code path remains for experimentation, and its own ceiling is unresolved.
+  Because it only *translates* clusters, it can close the oceans *between* islands but
+  cannot fill the gaps *within* a cluster or reach the frame corners, so its grid-fill
+  tops out around ~0.21 on the ESC-50 audio benchmark, below what a `min_dist≈0.9`
+  UMAP fit reaches (~0.38). The latter wins on fill only by *inflating* blobs
+  (spreading points across more cells), which blurs clusters and starts merging
+  neighbouring classes (Procrustes disparity ~0.22). Two unexplored levers if more
+  coverage is wanted without the blur: (a) pack noise as its own bounded set of
+  micro-units so they fill inter-island gaps (the prototype hit ~0.27 this way, but at
+  O(N) units — would need a grid/merge cap to scale); (b) a mild anisotropic stretch of
+  the *packed* layout toward the frame aspect ratio to claim the corners. Current
+  defaults (`margin_frac=0.15`, `attract=0.02`, `iters=400`) were tuned on ESC-50 only.
+  This is the same rework the tuning plan asks for (a minimum inter-island margin);
+  re-score with the Part 1 harness before flipping the default back.
+
+<!-- item-sep -->
+
 - If/when independent distribution of the projection backend is required, open
   a companion plan for **`vtscore` decoupling + PyPI publish**.
 
 **Cut (decided not to pursue):**
+
+<!-- item-sep -->
 
 - **Sibling highlighting** — *cut.* Would have highlighted hexes containing
   items from the same source file on hover (needs source-file group ids in the
   tile payload or a server-side lookup endpoint). The canvas has the rendering
   path stubbed (hovered-hex stroke in `drawHex`), but the data plumbing will not
   be wired.
+
+<!-- item-sep -->
+
 - **VTSearch detector handoff** — *cut.* Would have let a user select/vote items
   on the canvas to seed the train-a-detector flow and recolor hexes by detector
   score. Browse stays dataset-only; no bridge into a `DetectorContext`.
+
+<!-- item-sep -->
+
 - **Text-seeded navigation** — *cut.* Would have added a query box that embeds
   text and pans the canvas to the nearest region. The projection remains the
   only ordering in Browse.
@@ -71,8 +97,10 @@ These have no defensible a-priori value; they are set by running UMAP/the
 pyramid on real datasets and looking at the output. The design leaves them as
 tunable parameters, not baked-in constants:
 
-- **UMAP knobs:** `n_neighbors`, `min_dist`, and the small-N fallback
-  threshold. (Metric is settled: Euclidean on ingest-normalized vectors.)
+- **UMAP knobs:** `n_neighbors` and `min_dist` are **settled** — per-embedder
+  constants in `vtscore/config.py:PROJECTION_DEFAULTS_BY_EMBEDDER`, with
+  compaction off. Still unset: the small-N fallback threshold. (Metric is
+  settled: Euclidean on ingest-normalized vectors.)
 - **Pyramid parameters:** `Zmax`, base hex size at level 0, tile size
   (hexes per tile), and the density color scale (log vs sqrt, colormap).
 - **Performance ceiling / target N** for v1 — sets whether Canvas 2D culling is
@@ -85,16 +113,29 @@ tunable parameters, not baked-in constants:
 
 Pieces of the live feature left open, to pick up alongside the follow-ups above:
 
+<!-- item-sep -->
+
 - **Canvas selection actions** — selection is tracked (`BrowseSelectionService`)
   but not acted on: export / seed detector / subset projection, plus a minimap
   overlay.
+
+<!-- item-sep -->
+
 - **Detector-positives browse** — clipped/region positives are embedded
   image-level (not patch-pooled); no server-side TTL for the ephemeral
   `__detpos__<id>` context; preview bytes held in memory for the session.
+
+<!-- item-sep -->
+
 - **Bin-popup ordering** — true 1-D-UMAP member ordering (currently a Hilbert
   order over the 2-D coords) would need a second fit + a persisted `order` field
   on `Projection`.
+
+<!-- item-sep -->
+
 - [ ] #2402 — Browse: re-centre a bin's representative after a lopsided partial removal
+
+<!-- item-sep -->
 
 ## Design spec (living)
 

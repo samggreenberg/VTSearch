@@ -1,7 +1,7 @@
 """Dashboard, demo dataset listing, and other UI helper routes.
 
 Migrated to ``flask_smorest`` so these routes appear in
-``/api/openapi.json``. See ``docs/plans/openapi-schema.md``. Schema-level
+``/api/openapi.json``. Schema-level
 validation surfaces as 422; handler-level rejects (unknown demo, missing
 source on disk, path-traversal) use ``abort()`` with the standard
 ``message`` envelope.

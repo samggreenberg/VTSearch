@@ -10,6 +10,18 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ## [Unreleased]
 
+### Added
+
+- **`beats` audio embedder** - Microsoft's BEATs iter3+ AudioSet-2M
+  self-supervised encoder, exposed as a 768-d audio-only embedder
+  (`supports_text=False`). There is no `transformers` implementation, so the
+  architecture is vendored in `vtscore.media.audio._beats_model` (DeepNorm
+  residuals, a shared gated relative position bias, a weight-normalised
+  convolutional position embedding) and the released MIT-licensed checkpoint
+  is loaded onto it. Its Kaldi `compute-fbank-feats` front-end is ported from
+  torchaudio's pure-PyTorch implementation rather than taken as a dependency,
+  since torchaudio's wheels are built against a pinned torch.
+
 ### Changed
 
 - **`fold_anchored_gmm_threshold` is the shipped decision threshold.** Per

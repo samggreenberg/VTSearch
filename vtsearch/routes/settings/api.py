@@ -12,8 +12,7 @@ PUT  /api/settings
 GET  /api/settings/defaults
     Return the default values for all settings.
 
-This module is the **OpenAPI pilot** for the migration described in
-``docs/plans/openapi-schema.md``: schemas in
+This module was the **OpenAPI pilot**: schemas in
 ``vtsearch/schemas/settings.py`` are the source of truth, validation
 runs through marshmallow, and the OpenAPI spec is generated
 automatically by flask-smorest.

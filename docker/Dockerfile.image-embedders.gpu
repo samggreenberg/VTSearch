@@ -19,6 +19,12 @@
 #                                                          *outputs*, not on
 #                                                          download access)
 #
+# The two SO400M/384 embedders — SigLIP2-L (google/siglip2-so400m-patch14-384)
+# and SigLIP-L (open_clip ViT-SO400M-14-SigLIP-384) — are installed and
+# selectable but deliberately NOT baked: their weights would add several GB
+# to the image, so they download lazily into the persistent /app/data volume
+# the first time a user picks one.
+#
 # Gated weights (DINOv3, optionally EUPE's GitHub clone) are sourced
 # from the host's ./model_cache/; populate it with
 # scripts/cache_gated_models.sh BEFORE building. See the comments in

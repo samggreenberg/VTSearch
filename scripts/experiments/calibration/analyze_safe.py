@@ -4,8 +4,7 @@ Consumes the same ``results/cells/task_*.csv`` files as ``analyze.py`` but from
 a run with ``CALIB_SAFE_THRESHOLDS=1``, where every step additionally emits one
 row per safe-threshold GMM variant (``gmm_variant`` column; see
 ``vtscore.eval.voting_iterations._SAFE_GMM_VARIANTS``).  Computes the
-pre-registered #2799 deliverables (design + decision rules:
-``docs/plans/safe-threshold-gmm-experiment.md``):
+pre-registered #2799 deliverables:
 
 * FPR / FNR / cost vs vote count per variant, per arm - the 6-20-vote ramp
   window (and the sub-6 pure-GMM window) are the cells that matter.
@@ -192,7 +191,7 @@ def contrast_tables(df: pd.DataFrame, agg_dir: Path) -> dict:
 def decision_rules(contrasts: dict) -> dict:
     """Evaluate the pre-registered decisions on the ramp window's patch arm.
 
-    Rules (see docs/plans/safe-threshold-gmm-experiment.md):
+    Rules:
 
     * ``keep_crossing`` - #2801 stays unless the crossing cut is *significantly
       worse* than the midpoint on cost (p < 0.05 with a positive delta); the

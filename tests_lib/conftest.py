@@ -361,10 +361,6 @@ def pytest_unconfigure(config):
     """
     import sys
 
-    # If the app-tier conftest is loaded (i.e. pytest is collecting both
-    # trees, skip; its ``pytest_unconfigure`` already does the work.
-    if any("tests/conftest" in str(p) for p in getattr(config, "_inifile", None) and [config._inifile] or []):
-        return
     # Heuristic: only one of the two confests should print the summary.
     # When this conftest is loaded standalone (pytest tests_lib/), the
     # app conftest never gets imported.  Check by looking at registered

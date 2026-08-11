@@ -129,9 +129,8 @@ HTMLCanvasElement.prototype.getContext = (() =>
 // --- no zone.js at all -----------------------------------------------------
 // The specs no longer use Angular's fakeAsync()/tick(); they drive time with
 // native async + Vitest fake timers (vi.useFakeTimers / advanceTimersByTimeAsync)
-// and real macrotask drains instead. And as of Phase 5, every fixture-creating
-// spec runs under the zoneless `TestBed` (`provideZonelessChangeDetection()`),
-// so no spec needs `NgZone` from a default zone-based TestBed. zone.js is
-// therefore dropped entirely: the build:test polyfills array is empty and the
-// package.json dependency is removed (see docs/plans/zoneless-migration.md,
-// Phase 5). Nothing in this setup file needs it.
+// and real macrotask drains instead. Every fixture-creating spec runs under
+// the zoneless `TestBed` (`provideZonelessChangeDetection()`), so no spec
+// needs `NgZone` from a default zone-based TestBed. zone.js is therefore
+// dropped entirely: the build:test polyfills array is empty and the
+// package.json dependency is removed. Nothing in this setup file needs it.

@@ -311,8 +311,8 @@ Each lives under `vtscore/media/<type>/` and self-registers:
 
 | Type     | Folder                       | Default embedder                | Other embedders ship in-tree                            |
 |----------|------------------------------|---------------------------------|---------------------------------------------------------|
-| audio    | `vtscore/media/audio/`       | `clap` (`laion/clap-htsat-unfused`) | `clap_general`, `clap_music`, `ast`, `whisper_encoder`, `paraspeechclap` |
-| image    | `vtscore/media/image/`       | `siglip` (`google/siglip-base-patch16-224`) | `clip`, `siglip2`, `dinov2_single`, `dinov2_patch`, `dinov3_single`, `dinov3_patch`, `eupe_single`, `eupe_patch`, `face` |
+| audio    | `vtscore/media/audio/`       | `clap` (`laion/clap-htsat-unfused`) | `clap_general`, `clap_music`, `beats`, `ast`, `whisper_encoder`, `paraspeechclap` |
+| image    | `vtscore/media/image/`       | `siglip` (`google/siglip-base-patch16-224`) | `clip`, `siglip2`, `siglip2_l`, `siglip_l`, `dinov2_single`, `dinov2_patch`, `dinov3_single`, `dinov3_patch`, `eupe_single`, `eupe_patch`, `face` |
 | text     | `vtscore/media/text/`        | `e5` (`intfloat/multilingual-e5-base`) | `bge`                                            |
 | video    | `vtscore/media/video/`       | `xclip` (`microsoft/xclip-base-patch32`) | `videomae`, `languagebind`                       |
 | document | `vtscore/media/document/`    | - (uses converters; see below)  | -                                                       |
@@ -392,7 +392,7 @@ out-of-tree implementations.
   carry the old callback; prefer re-registering or calling
   `set_progress_callback` again.
 - **Embedders do not own a `to_disk` / `from_disk`.** Vectors and
-  trained MLP weights are in-memory artefacts only. Re-derive on
+  trained model weights are in-memory artefacts only. Re-derive on
   demand from origins (`Origin → file → embedding`). The single
   exception is dataset pickles, which snapshot media + embeddings as
   one unit (see [datasets](datasets.md)).
@@ -414,7 +414,7 @@ out-of-tree implementations.
   (`vtscore/media/torch_setup.py:16`) reads `vtscore.config.TORCH_THREADS`
   (env `$VTSEARCH_TORCH_THREADS`, default `1`) and calls
   `torch.set_num_threads` the first time torch is imported. Every
-  code path that touches torch (embedders, MLP training, scoring)
+  code path that touches torch (embedders, head training, scoring)
   must call this first. `embedder_load_setup` does it for you.
 
 ---

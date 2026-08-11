@@ -1,12 +1,12 @@
 # `vtscore.detectors` - Detector lifecycle, training, and labelset materialisation
 
 A **detector** in vtscore is the trained classifier you search with: a
-small MLP plus a calibrated threshold plus a `LabelSet`. This package
+linear (logistic) head plus a calibrated threshold plus a `LabelSet`. This package
 owns the resolve → embed → train pipeline that turns origin trails into
 a trained model, the on-disk JSON store that persists the labelset
 (never weights), the registry that tracks every detector the user has
 created, and a separate labeling-session analyzer that caches per-step
-MLPs so the stopping-condition UI can answer "should I keep voting?"
+models so the stopping-condition UI can answer "should I keep voting?"
 without retraining.
 
 The generic ML primitives this package builds on live in
@@ -20,7 +20,7 @@ origins into vectors live in `vtscore.embedding`.
 | `vtscore/detectors/registry.py`              | Persistent registry of detector entries (one JSON manifest)         |
 | `vtscore/detectors/store.py`                 | Per-detector on-disk JSON labelset file I/O                         |
 | `vtscore/detectors/training.py`              | `train_and_threshold`, `train_and_score`, `train_detector_from_origins` |
-| `vtscore/detectors/workflow.py`              | `apply_and_retrain` - combined "apply labels + retrain MLP" entry   |
+| `vtscore/detectors/workflow.py`              | `apply_and_retrain` - combined "apply labels + retrain" entry        |
 | `vtscore/detectors/resolver.py`              | Origin → file → embedding pipeline + pluggable resolvers            |
 | `vtscore/detectors/labelset_training.py`     | Train from the saved labelset (cross-dataset)                       |
 | `vtscore/detectors/labelset_elements.py`     | Stable element IDs, per-element views                               |
@@ -66,7 +66,7 @@ It contains **no weights, no embeddings, no scores**. On every load,
 weights are re-derived: each `LabeledElement.origin` is resolved to a
 file via an importer or media source, embedded with the active media
 type's embedder, and the resulting `(X_list, y_list)` is fed into
-`train_and_threshold`. The trained MLP + threshold live in
+`train_and_threshold`. The trained head + threshold live in
 `DetectorContext.model` / `.threshold` until the process ends or the
 labelset changes. This is the invariant the
 [CLAUDE.md "No Persisted Vectors or MLPs"](../../../CLAUDE.md) rule
@@ -233,7 +233,7 @@ sync flow:
    the UI like the user just cast them.
 3. Calls `sync_labels_to_loaded_detector()` so the on-disk labelset
    captures the new votes.
-4. Retrains the MLP via `train_and_score` when both polarities have
+4. Retrains the head via `train_and_score` when both polarities have
    labels, stores the model and threshold on `det_ctx`, and snapshots
    the voted medias into `det_ctx.training_medias`.
 
@@ -327,7 +327,7 @@ embedding.
 
 The detector's saved labelset is dataset-agnostic - every element is
 keyed by origin / md5. At load time, the labelset has to be resolved
-into a concrete embedding cache so the MLP can train. This is what
+into a concrete embedding cache so the head can train. This is what
 `labelset_training.py` does, and it's why one labelset trained on
 dataset A can score dataset B.
 
@@ -349,7 +349,7 @@ populated:
 
 If the active dataset's embedder name differs from
 `det_ctx.embedder`, the cache is cleared first - mixing vectors from
-two embedders into one MLP produces garbage.
+two embedders into one head produces garbage.
 
 ### `build_xy_from_labelset(det_ctx, labelset)`
 
@@ -453,7 +453,7 @@ obvious.
 - **`vtscore.concurrency.progress`** - long-running-operation
   progress and cancellation (`ProgressTracker`, `dataset_progress`,
   `sort_progress`, etc.).
-- **`vtscore.detectors.labeling_progress`** - per-step MLP cache and
+- **`vtscore.detectors.labeling_progress`** - per-step model cache and
   stopping-condition metrics. Used by the labeling-progress UI to
   answer "should I keep voting?" without retraining.
 
@@ -523,7 +523,7 @@ training clipper without reading the detector JSON.
 
 - **Labelset is the only persisted form.** Detector JSON files store
   `LabeledElement` lists; never weights, never embeddings, never
-  scores. Every load re-derives the MLP from origins.
+  scores. Every load re-derives the head from origins.
 - **Origins are stable across datasets.** `stable_element_id` is
   computed from origin / md5 fields, so the same training label
   identifies the same source file no matter which dataset is loaded.

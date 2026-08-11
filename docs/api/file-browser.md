@@ -22,7 +22,8 @@ directory. In single-user mode the root is the current working directory;
 in multi-user mode it is the current user's data directory. Hidden files
 (names starting with `.`) are excluded.
 
-→ ```json
+→
+```json
 {
   "directories": [
     {"name": "subdir", "path": "subdir", "modified_at": "2025-03-31T10:15:00"}

@@ -7,6 +7,7 @@ import math
 from typing import Any, Optional
 
 from vtscore.media.clipper import MediaClipper
+from vtscore.utils.optional_deps import agpl_import_error
 
 
 class ImageDefaultClipper(MediaClipper):
@@ -286,7 +287,10 @@ class ImageObjectClipper(MediaClipper):
     def _load_model(self) -> None:
         if self._model is not None:
             return
-        from ultralytics import YOLO  # pyright: ignore[reportPrivateImportUsage] # noqa: PLC0415
+        try:
+            from ultralytics import YOLO  # pyright: ignore[reportPrivateImportUsage] # noqa: PLC0415
+        except ImportError as exc:
+            raise agpl_import_error("ultralytics", "The YOLO object clipper") from exc
 
         self._model = YOLO(self._model_id)
 

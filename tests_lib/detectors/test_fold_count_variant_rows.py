@@ -23,13 +23,40 @@ The invariants the whole study rests on:
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from vtscore.eval.voting_iterations import _CALIBRATION_COLUMNS, simulate_voting_iterations
+from vtscore.training import thresholds as _thresholds
 
 # Reuse the synthetic planted-patch dataset builder from the Max-Patch tests.
 from .test_max_patch_style import _planted_dataset
 
 _COUNTS = [1, 2, 4]
+
+#: Make-believe price of one calibration fold, for :class:`_StubClock`.  Chosen
+#: far above any real wall clock in the run so the reported seconds are a *fold
+#: count* in disguise and no real measurement can perturb the arithmetic.
+_STUB_FOLD_SECONDS = 1000.0
+
+
+class _StubClock:
+    """A ``time`` stand-in whose every reading is *seconds* later than the last.
+
+    Installed over ``vtscore.training.thresholds.time`` — whose only clock user
+    is the per-fold stopwatch, exactly two readings per fold — this prices every
+    calibration fold at exactly *seconds*, turning the seconds a row reports
+    into a count of the folds it was billed for.  Nothing else in that module
+    reads a clock, and the eval module keeps the real one, so the surrounding
+    overhead stays honest (and, being dwarfed by the stub rate, clamps to zero).
+    """
+
+    def __init__(self, seconds: float) -> None:
+        self._seconds = seconds
+        self._now = 0.0
+
+    def monotonic(self) -> float:
+        self._now += self._seconds
+        return self._now
 
 
 def _run(
@@ -117,14 +144,36 @@ class TestFoldCountArms:
             for col in ("threshold", "cost", "regret", "n_good", "n_bad", "acq_threshold"):
                 assert row[col] == screened[t][col], f"step {t} column {col} moved"
 
-    def test_reported_xcal_seconds_is_billed_for_the_live_count(self):
-        """The base row's timing stays the one a plain run would report."""
-        screened = _base_rows(_run(fold_counts=[1, 2, 8], calibrate_count=2))
-        arms = _arm_rows(_run(fold_counts=[1, 2, 8], calibrate_count=2), "folds_k8_xcal")
-        for t, row in screened.items():
-            if t in arms:
-                # 8 folds cost strictly more than the 2 the base row is billed for.
-                assert row["xcal_seconds"] <= arms[t]["fold_seconds"] + 1e-6
+    @pytest.mark.parametrize(
+        ("region_voting", "style"), [(True, "max_patch"), (False, "whole_image")], ids=["grouped", "rowwise"]
+    )
+    def test_reported_xcal_seconds_is_billed_for_the_live_count(self, monkeypatch, region_voting, style):
+        """The base row's timing stays the one a plain run would report.
+
+        Asserted structurally rather than as a race between two real stopwatches:
+        with every fold priced at :data:`_STUB_FOLD_SECONDS` (see
+        :class:`_StubClock`), "which folds got billed" is exact arithmetic on the
+        reported seconds instead of a hope that six extra fold fits out-measure a
+        scheduler stall.  Both fold-timing sinks are covered — the bag-aware
+        grouped calibrator and the row-wise one.
+        """
+        monkeypatch.setattr(_thresholds, "time", _StubClock(_STUB_FOLD_SECONDS))
+        rows = _run(fold_counts=[1, 2, 8], calibrate_count=2, region_voting=region_voting, style=style)
+        base = _base_rows(rows)
+        live = _arm_rows(rows, "folds_k2_xcal")
+        screened = _arm_rows(rows, "folds_k8_xcal")
+        assert screened, "no k8 arm emitted"
+        extra_folds = 8 - 2
+        for t, arm in screened.items():
+            # Each arm bills its own K folds, so their difference is the six
+            # folds only the screen trained, at the stub rate.
+            assert arm["fold_seconds"] - live[t]["fold_seconds"] == pytest.approx(extra_folds * _STUB_FOLD_SECONDS)
+            # ...and the base row hands those six back: what remains of its
+            # xcal_seconds is the real (tiny) wall clock of everything else in
+            # the calibration window.  Billing all 8 would leave -2000 here and
+            # billing none would leave +6000, so the band cannot be hit by noise.
+            residual = base[t]["xcal_seconds"] + extra_folds * _STUB_FOLD_SECONDS
+            assert -1e-6 <= residual < 60.0, f"step {t}: xcal_seconds billed for the wrong fold count"
 
     def test_pooled_calibration_set_grows_with_k(self):
         rows = _run(fold_counts=_COUNTS)
@@ -142,6 +191,11 @@ class TestFoldCountArms:
             assert sizes[2] == 2 * sizes[1]
 
     def test_fold_seconds_is_monotone_in_k(self):
+        """Not a stopwatch race despite the timings: each arm's ``fold_seconds``
+        is a *prefix sum* of one non-negative per-fold list plus a shared
+        overhead, so a stalled fold inflates every K at and above it and can
+        never invert the order.  Timing jitter cannot fail this.
+        """
         rows = _run(fold_counts=_COUNTS)
         by_step: dict[int, dict[int, float]] = {}
         for r in rows:

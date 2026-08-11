@@ -247,8 +247,7 @@ class TestTrainModelGPU:
     def test_inclusion_lowers_threshold_not_model(self, device):
         """Inclusion is a pure threshold knob: it leaves the trained model
         (and its scores) untouched, but a higher inclusion yields a lower
-        (more inclusive) decision threshold via ``conformal_threshold``.
-        See docs/plans/find-verification-workflow.md."""
+        (more inclusive) decision threshold via ``conformal_threshold``."""
         import vtscore.config as config
 
         saved = config.TRAIN_EPOCHS

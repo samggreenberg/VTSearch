@@ -21,8 +21,7 @@ import type { ProjectionMeta, ViewTransform } from '../../models/projection.mode
 
 /**
  * Unit coverage for the framework-free pan/zoom/clamp/rubber-band geometry
- * extracted from `browse-canvas.component.ts` (see the plan item in
- * `docs/plans/code-structure-review.md` Theme B). These are pure functions —
+ * extracted from `browse-canvas.component.ts`. These are pure functions —
  * no Angular, no canvas — so a projection's bounds and a viewport size are
  * enough to exercise every invariant the component's JSDoc calls out.
  */

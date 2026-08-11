@@ -15,7 +15,8 @@ or *Context* are unfamiliar - this doc assumes them.
 6. [Threading model](#threading-model)
 7. [The no-persisted-vectors rule](#the-no-persisted-vectors-rule)
 8. [Directory map](#directory-map)
-9. [Dependency direction](#dependency-direction)
+9. [Import paths](#import-paths-read-before-copy-pasting)
+10. [Dependency direction](#dependency-direction)
 
 ---
 
@@ -26,9 +27,10 @@ or *Context* are unfamiliar - this doc assumes them.
 1. **Turn media into embeddings.** Audio, images, text, video, documents go
    in via a `MediaEmbedder`; fixed-dimensional `(D,)` numpy vectors come
    out.
-2. **Train a small MLP on user-labelled embeddings.** Voted-good and
-   voted-bad media become `(X, y)`; an MLP plus a calibrated threshold
-   comes out.
+2. **Train a linear (logistic) head on user-labelled embeddings.** Voted-good
+   and voted-bad media become `(X, y)`; a `Linear(D, 1)` head plus a calibrated
+   threshold comes out. See [`docs/ML.md`](../../docs/ML.md) for why the head is
+   linear and where the older MLP path survives.
 3. **Score new media against a trained detector.** A new dataset is loaded,
    embedded, and ranked by the detector; the top results are exported.
 
@@ -38,7 +40,7 @@ extensible, and reproducible:
 - `vtscore.datasets` holds the data formats and loaders.
 - `vtscore.embedding` and `vtscore.media` hold the per-format embedder
   implementations.
-- `vtscore.training` holds the MLP / threshold primitives.
+- `vtscore.training` holds the classifier-head / threshold primitives.
 - `vtscore.detectors` orchestrates the full train→score→persist cycle.
 - `vtscore.plugins` plus the per-family registries make every component
   swappable and third-party-extensible.
@@ -206,7 +208,7 @@ ground rules:
   `set_thread_detector_context()` are how background threads tell the
   library which context they're operating on. The dataset-load and
   learned-sort job managers do this automatically when they spawn workers.
-- **Deterministic MLP training.** `train_model` uses a local
+- **Deterministic training.** `train_model` uses a local
   `torch.Generator` seeded with the caller-supplied seed (default 42) and
   wraps `nn.Dropout` initialisation in `torch.random.fork_rng()`, so
   parallel training calls don't race on the global RNG.
@@ -219,7 +221,7 @@ you allocate the threads and supply the contexts.
 
 Read this once and the persistence story makes sense.
 
-**Trained MLP weights and embeddings live in memory only.** They are never
+**Trained model weights and embeddings live in memory only.** They are never
 serialised to disk, never written to `data/settings.json`, never embedded
 inside a detector JSON file, never persisted anywhere.
 
@@ -279,7 +281,7 @@ vtscore/
 │   ├── video/
 │   └── document/
 ├── embedding/                          # embedder façade + cached matrix
-├── training/                           # MLP / thresholds / SVM / region-similarity
+├── training/                           # classifier head / thresholds / SVM / region-similarity
 ├── detectors/                          # full detector lifecycle
 │   ├── registry.py                     # in-memory detector registry
 │   ├── store.py                        # JSON labelset persistence
@@ -288,7 +290,7 @@ vtscore/
 │   ├── resolver.py                     # origin → file → embedding
 │   ├── label_sync.py / label_restoration.py / dataset_sync.py / media_seeding.py
 │   ├── labelset_elements.py / labelset_training.py
-│   └── labeling_progress.py            # per-step MLP cache + stopping conditions
+│   └── labeling_progress.py            # per-step model cache + stopping conditions
 ├── eval/                               # offline evaluation runner + metrics
 ├── converters/                         # audio↔image/text, video→audio/image, etc.
 ├── exporters/                          # EXPORTER-sentinel auto-discovery
@@ -300,6 +302,39 @@ vtscore/
 ├── security/                           # path / URL validation, safe pickle
 └── utils/                              # build_media_hit, synthetic media generators
 ```
+
+## Import paths (read before copy-pasting)
+
+The package guides under [`packages/`](README.md#package-reference) group
+symbols **by intent**, not by import path. A package's `__init__.py` is not
+a re-export contract: several packages expose nothing at their root, and two
+have no `__init__.py` at all (PEP 420 namespace packages). When an example
+elsewhere in these docs shows a symbol without a full dotted path, this table
+is the authority on where to import it from.
+
+| Package | How to import |
+|---------|---------------|
+| `vtscore.config` | Plain module (`vtscore/config.py`): `from vtscore.config import CoreConfig, DATA_DIR`. |
+| `vtscore.datasets` | Re-exports the loader / importer-registry / `Origin` / `LabelSet` surface. Per-dataset demo metadata helpers live in their own submodules. |
+| `vtscore.media` | Re-exports the ABCs (`MediaType`, `MediaEmbedder`, `MediaClipper`, the processor ABCs) and the registry helpers (`get`, `get_embedder`, `get_clipper`, `set_progress_callback`, …). |
+| `vtscore.embedding` | Re-exports the embed / loader / matrix helpers. |
+| `vtscore.training` | Re-exports `build_model` / `train_model` and the threshold helpers. `SVMClassifier` is at `vtscore.training.svm`; region helpers at `vtscore.training.region_similarity`. |
+| `vtscore.detectors` | **`__init__` is a docstring only - no re-exports.** Always use the submodule: `vtscore.detectors.registry.list_detectors`, `vtscore.detectors.workflow.apply_and_retrain`, `vtscore.detectors.store`, … |
+| `vtscore.eval` | Re-exports the runners plus `compute_metrics`; the metric dataclasses live at `vtscore.eval.metrics` (e.g. `vtscore.eval.metrics.QueryMetrics`). |
+| `vtscore.converters` | `get_converter`, `list_converters`, plus the built-in converter classes. |
+| `vtscore.exporters` | `get_exporter`, `list_exporters`. |
+| `vtscore.labels` | **Empty `__init__` - no re-exports.** Importers: `vtscore.labels.importers.get_label_importer` / `list_label_importers`. Sources: `vtscore.labels.sources.get_labelset_source` / `list_labelset_sources`. Sync: `vtscore.labels.sync`. |
+| `vtscore.plugins` | `PluginBase`, `PluginField`, `PluginRegistry`, `make_plugin_registry`, the field-type enums. |
+| `vtscore.state` | Contexts (`DatasetContext`, `DetectorContext`), registries, and the vote / click ops. The `medias` / `good_votes` proxies are **app-side**, in `vtsearch.state_proxies`. |
+| `vtscore.sync` | `SyncSource`. |
+| `vtscore.concurrency` | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.concurrency.progress.ProgressTracker`, `vtscore.concurrency.async_jobs.JobManager`, `vtscore.concurrency.memory_budget.cap_workers_by_memory`. |
+| `vtscore.security` | **Namespace package (no `__init__.py`).** Always use the submodule: `vtscore.security.pickle.safe_pickle_load` / `RestrictedUnpickler`, `vtscore.security.path_validation.validate_server_filepath`, `vtscore.security.url_validation.validate_url`. |
+| `vtscore.utils` | **`__init__` is a docstring only - no re-exports.** Always use the submodule: `vtscore.utils.hits.build_media_hit`, `vtscore.utils.hashing`, `vtscore.utils.scores`, `vtscore.utils.synthetic`. |
+| `vtscore.cli` | Plain modules: `vtscore.cli`, `vtscore.cli_pipeline`, `vtscore.cli_progress`. |
+
+`vtsearch.state` is an app-tier shim that re-exports `vtscore.state` plus the
+request-scoped proxy views. Library code should import `vtscore.state`
+directly; app code may use either.
 
 ## Dependency direction
 

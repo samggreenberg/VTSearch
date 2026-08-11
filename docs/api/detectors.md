@@ -12,7 +12,7 @@
 ## Detectors
 
 A detector is a named labelset plus a text-sort query, persisted as a
-JSON file at `data/detectors/<name>.json`. The MLP is trained on demand
+JSON file at `data/detectors/<name>.json`. The head is trained on demand
 from the labelset and lives only in `DetectorContext` once the user
 loads the detector into memory.
 
@@ -99,12 +99,12 @@ regular label import).
 
 When the detector context **is** loaded, the new labels are also resolved
 against the loaded dataset's medias, applied to the detector's votes, and
-a fresh MLP is trained with a cross-validated threshold.
+a fresh head is trained with a cross-validated threshold.
 
 → `{"applied": 12, "skipped": 3, "resolved": 12, "trained": true, "num_labels": 62, "message": "..."}`
 
 `resolved` counts labels resolved into the loaded detector context (0 when no
-context is loaded); `trained` is `true` when a fresh MLP was retrained.
+context is loaded); `trained` is `true` when a fresh head was retrained.
 
 404 if detector or importer not found. 400 on validation errors.
 
@@ -133,7 +133,8 @@ Returns the detector's saved labelset split into good/bad lists with right-pane
 render data. Not gated on a loaded dataset (but when one is loaded, each item's
 `cid` / `time` / `score` resolve against it).
 
-→ ```json
+→
+```json
 {
   "media_type": "audio",
   "good": [
@@ -193,7 +194,8 @@ manifest + README).
 GET /api/detectors/registry
 ```
 
-→ ```json
+→
+```json
 {
   "detectors": [
     {
@@ -212,7 +214,7 @@ GET /api/detectors/registry
 ```
 
 `name` is the slug used to look up the on-disk labelset file at
-`data/detectors/<name>.json`. The MLP is trained on demand from the
+`data/detectors/<name>.json`. The head is trained on demand from the
 labelset and lives only in RAM. `autofind` mirrors whether the
 detector's name appears in `autofind_detectors` settings (toggle it with
 the route below).
@@ -273,7 +275,8 @@ Runs the label importer and creates a detector seeded with the labels it
 returns. The media type is inferred from the labels' origins; labels spanning
 more than one media type are rejected (400).
 
-→ ```json
+→
+```json
 {
   "ok": true,
   "detector": {...},
@@ -400,12 +403,13 @@ GET /api/detectors/registry/{detector_id}/stats
 ```
 
 Returns labelset composition and provenance for a registered detector.
-Counts and metadata only — never embeddings or MLP weights.
+Counts and metadata only — never embeddings or model weights.
 `num_positive_resolved` / `active_dataset_name` report how many of the
 detector's positive labels currently resolve into the loaded dataset (the
 set the dashboard's Browse button projects).
 
-→ ```json
+→
+```json
 {
   "name": "cat-sounds",
   "media_type": "audio",
@@ -441,7 +445,8 @@ mixed-source detectors work and no dataset need be loaded. The resulting
 throwaway context (vectors + preview bytes, never persisted) is registered
 under a synthetic `dataset_id` the browse view opens.
 
-→ ```json
+→
+```json
 {
   "ok": true,
   "dataset_id": "__detpos__<detector_id>",

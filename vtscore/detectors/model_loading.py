@@ -8,7 +8,7 @@ with, training from the detector's labelset when no live model exists.
 This logic lived inline in ``vtsearch/routes/detectors/scoring.py`` until it
 grew its own resolution/embedding/training branches; it has no Flask or
 request-context dependency, so it belongs in the library tier where it can be
-exercised directly (see docs/plans/code-structure-review.md, Theme A).
+exercised directly.
 """
 
 from __future__ import annotations

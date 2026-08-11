@@ -18,8 +18,8 @@ model weights are loaded.
 This blueprint lives on the ``flask_smorest`` ``Api`` for registration
 consistency, but the dual-mode dispatcher does not lend itself to a
 single marshmallow schema, so the route is left undecorated and is
-intentionally absent from ``/api/openapi.json`` (same pattern as the
-SPA-serving and plugin-field routes; see ``docs/plans/openapi-schema.md``).
+intentionally absent from ``/api/openapi.json`` (see "Routes absent from
+the spec" in ``docs/API.md``).
 """
 
 from __future__ import annotations
