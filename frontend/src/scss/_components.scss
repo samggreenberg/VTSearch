@@ -451,17 +451,6 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
   cursor: pointer;
 }
 
-// Multi-line text entry (e.g. a custom signpost tag vocabulary, one term per
-// line).  Shares `.form-input`'s framing but allows vertical resize and reads
-// in a monospace face so long term lists line up.
-.form-textarea {
-  @extend .form-input;
-  resize: vertical;
-  min-height: 5rem;
-  font-family: var(--font-mono, monospace);
-  line-height: 1.4;
-}
-
 // Compact variant for dense toolbars (the label-sort bar, the browse
 // selection panel).  Same visual treatment as `.form-select`, but sized to
 // its content rather than stretched full-width, with tighter padding and a
@@ -936,25 +925,6 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
-}
-
-// --- Skeleton shimmer background ---
-//
-// Static placeholder behind lazy-loaded <img>s: a flat subtle background
-// shows until the image paints, smoothing the "pop-in" from
-// loading="lazy" without any motion.
-.skeleton-bg {
-  position: relative;
-  isolation: isolate;
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--bg-subtle);
-    border-radius: inherit;
-    z-index: -1;
-  }
 }
 
 // --- Accessibility ---
