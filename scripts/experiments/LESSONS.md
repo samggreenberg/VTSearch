@@ -353,3 +353,73 @@ stage can be chained, its checks have to be code.
 *(This study also re-hit the #2877 premise trap above: `visual_genome_m ×
 siglip` carries no `patch_grid`, so its `region_voting=True` is a silent no-op.
 The one-line assertion recommended there is what caught it.)*
+
+<!-- entry-sep -->
+
+## 2026-08-08 — a gate that reported "ok" without having looked (#2905)
+
+**What happened.** `preflight.sh`'s first and third checks — "this arm's results
+dir does not already hold another grid's cells" and "no zero-byte cells that
+resume would skip" — only ever looked under `$EXP/results-ab/`. Every
+acquisition and anchor study puts its arms under `$EXP/results/`. So for those
+studies both checks ran, found no such directory, and printed **`ok`**.
+
+That is worse than not having the check. A missing check is a known gap; a check
+that passes vacuously is a *positive* signal that the thing was verified. #2877
+launched behind a green preflight whose arm-collision check had not examined a
+single file.
+
+**Cost.** None yet, by luck — no acquisition study has collided two grids in one
+dir. The exposure was the whole point of the check, silently absent for four
+studies.
+
+**Now prevented (code).** Both checks iterate `results-ab` *and* `results`, and
+the arm check reports which root it looked in, so "ok" now names its evidence.
+
+**Still advice — a check's silence is not the same as its success.** When a
+gate's finding is "nothing wrong here", make sure it can distinguish *nothing
+wrong* from *nothing examined*. The cheap form is to print what was inspected
+(paths, counts) alongside the verdict, so a vacuous pass reads as vacuous. This
+is the same shape as #2897's two failures — an empty job id read as a
+submission, a stale file read as a completion — a signal satisfiable by
+something other than the thing being waited on.
+
+<!-- entry-sep -->
+
+## 2026-08-08 — the tempting story was regression to the mean (#2905)
+
+**What happened.** Three environments disagreed about
+`ACQUISITION_INCLUSION_OFFSET`, and a clean unifying explanation presented
+itself: the offset is a *starvation remedy*, paying where the detector has few
+positives and charging its price everywhere. I tested it by binning each cell on
+how many positives the **`prod` arm** found in that cell, then reading the
+treatment response per bin. The curve appeared in both voting modes, monotone
+and beautiful, with a sharp crossover from benefit to harm.
+
+The response was measured **against that same `prod` run**. Cells where `prod`
+happened to do unusually well are, by construction, more likely to show a
+negative delta. Mean reversion manufactures exactly that curve with no mechanism
+at all.
+
+**Re-cut on axes independent of the arm being scored** — the category's
+`realized_prevalence`, and a leave-one-out baseline (the mean `prod` positives
+of the category's *other* seeds) — the binary-voting curve **survived** at full
+strength (AP slope −0.0207 on log prevalence, CI [−0.0259, −0.0159]; −0.0402 on
+LOO). The region-voting curve **vanished**: significant on the contaminated axis
+(−0.0074, CI excludes 0) and null on both clean ones. Half the finding was real
+and half was an artefact, and they looked identical.
+
+**Cost.** ~20 minutes, because the check was run before the report was written
+rather than after. Had it not been, the report would have recommended a
+supply-based rule on evidence that was half self-fulfilling, and the
+voting-mode conclusion would have been backwards — at *matched* prevalence the
+modes still differ, which is only visible once the contaminated axis is gone.
+
+**Still advice — never bin on a quantity that also appears in the contrast.**
+If cells are grouped by a baseline arm's own outcome and then scored on
+`treatment − baseline`, the grouping variable is inside the response and the
+slope is partly arithmetic. Two cheap fixes, both used here: bin on something
+fixed by the data (prevalence, category, pool size), or leave the cell's own
+observation out of the statistic it is binned on. The diagnostic signature is
+worth memorising: **an effect that is significant on the contaminated axis and
+absent on the clean ones is mean reversion, not mechanism.**
