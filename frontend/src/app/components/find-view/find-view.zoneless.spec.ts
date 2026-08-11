@@ -262,6 +262,33 @@ describe('FindViewComponent (pair-switch supersession)', () => {
     expect(sortState.threshold).toBe(0.5);
     expect(sortState.sortBusy).toBe(false);
   });
+
+  // The Inclusion POST is deferred until the slider settles (issue #2973), and
+  // that settle window is inside the pair scope too: a slide the user abandons
+  // by switching pair must never be written into the pair they switched *to*,
+  // whose own inclusion the reload has just re-seeded.
+  it('drops a pending inclusion POST when the pair switches first', async () => {
+    await flushInit();
+    // Land the first pair's ranking so the slider isn't disabled by sortBusy.
+    httpMock
+      .expectOne('/api/find-label')
+      .flush({ results: [{ id: 1, score: 0.9 }], threshold: 0.5 });
+    await flushInit();
+    await settleZoneless(fixture);
+
+    vi.useFakeTimers();
+    try {
+      fixture.componentInstance.onInclusionChange(5);
+      // Still inside the settle window when the user switches pair.
+      vi.advanceTimersByTime(50);
+      activeContext.setActivePair('ds2', 'det2');
+      vi.advanceTimersByTime(1000);
+
+      httpMock.expectNone((req) => req.url === '/api/inclusion' && req.method === 'POST');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 /**

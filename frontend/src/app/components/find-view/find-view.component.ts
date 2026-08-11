@@ -1,7 +1,7 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { EMPTY, Subject, Subscription } from 'rxjs';
-import { catchError, debounceTime, finalize, switchMap, takeUntil } from 'rxjs/operators';
+import { EMPTY, Subject, Subscription, timer } from 'rxjs';
+import { catchError, finalize, switchMap, takeUntil } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -181,12 +181,18 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // {@link inclusionRequests$} for why the slider is funnelled through it.
     this.inclusionRequests$
       .pipe(
-        debounceTime(INCLUSION_POST_DEBOUNCE_MS),
+        // `timer` + `switchMap` rather than `debounceTime`: it debounces the
+        // same way (a newer value restarts the wait and cancels the request the
+        // user moved past) while putting the *whole* chain, settle window
+        // included, inside the pair scope below — so a slide followed straight
+        // away by a dataset/detector switch cannot fire its POST into the new
+        // pair's context.
         switchMap((value) =>
-          this.sortingApi.setInclusion(value).pipe(
+          timer(INCLUSION_POST_DEBOUNCE_MS).pipe(
+            switchMap(() => this.sortingApi.setInclusion(value)),
             // Pair-scoped like every other threshold write: a response landing
-            // after a dataset/detector switch must not install the old pair's
-            // cutoff into the new context (see `pairScope$`).
+            // after a switch must not install the old pair's cutoff into the
+            // new context (see `pairScope$`).
             takeUntil(this.pairScope$),
             // A failed POST just leaves the cutoff where it was. Swallow it
             // inside the inner observable so the error can't tear down the
