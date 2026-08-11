@@ -120,9 +120,11 @@ enforced by `scripts/check-vtscore-docs.py` (a `./run-tests.sh` gate):
   `packages/` doc, and that doc's Contents table names every module in
   it.** Add a module, and the gate fails until the table lists it. The
   tables are the inventory; write them from the tree, not from memory.
-- **Never cite a line number.** `foo.py:317` is wrong by the next edit -
-  in practice every such anchor in this doc set had rotted, most by
-  hundreds of lines. Reference the module and the symbol instead
+- **Never cite a line number.** A `path.py` plus a colon plus a number
+  is wrong by the next edit - in practice every such anchor in this doc
+  set had rotted, most by hundreds of lines (which is why the gate
+  rejects the pattern outright, including in this sentence). Reference
+  the module and the symbol instead
   (``` `pool_box_from_media` in `vtscore/embedding/matrix.py` ```): it
   is stable under any edit that doesn't move the symbol, and it is
   greppable, which a line number never was.
