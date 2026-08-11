@@ -32,7 +32,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from vtscore.config import PROJECTION_MIN_DIST, PROJECTION_N_NEIGHBORS
+from vtscore.config import PROJECTION_COMPACT_DEFAULT, PROJECTION_MIN_DIST, PROJECTION_N_NEIGHBORS
 
 # Matches the ingest progress-callback shape (status, message, current, total).
 ProgressCallback = Callable[[str, str, int, int], None]
@@ -66,6 +66,13 @@ class Projection:
     #: containers written before the params were recorded.
     n_neighbors: int | None = None
     min_dist: float | None = None
+    #: Whether :func:`~vtscore.projection.compaction.compact_layout` was applied
+    #: after the fit.  Stamped for the same reason as the UMAP knobs: without it
+    #: a layout compacted under the old default is indistinguishable from one
+    #: fit under the current (off) default, so the mismatch can never force a
+    #: recompute.  ``None`` on the PCA / trivial fallbacks (never compacted) and
+    #: on legacy containers, which predate the stamp and were compacted.
+    compact: bool | None = None
 
     @property
     def bounds(self) -> tuple[float, float, float, float]:
@@ -98,7 +105,13 @@ def remove_ids(projection: Projection, remove: Iterable[int]) -> Projection:
     else:
         new_coords = projection.coords
     return Projection(
-        projection.projection_id, new_ids, new_coords, projection.method, projection.n_neighbors, projection.min_dist
+        projection.projection_id,
+        new_ids,
+        new_coords,
+        projection.method,
+        projection.n_neighbors,
+        projection.min_dist,
+        projection.compact,
     )
 
 
@@ -192,7 +205,7 @@ def fit_projection(
     min_dist: float = PROJECTION_MIN_DIST,
     min_n_for_umap: int = 10,
     random_state: int | None = None,
-    compact: bool = True,
+    compact: bool = PROJECTION_COMPACT_DEFAULT,
     on_progress: ProgressCallback | None = None,
 ) -> Projection:
     """Project the ``(N, d)`` embedding *matrix* to a frozen 2-D :class:`Projection`.
@@ -206,12 +219,23 @@ def fit_projection(
     path); pass an int for a reproducible fit.  ``on_progress`` receives coarse
     ``(status, message, current, total)`` milestones if provided.
 
-    ``compact`` (default ``True``) post-processes the UMAP layout with
+    ``compact`` post-processes the UMAP layout with
     :func:`~vtscore.projection.compaction.compact_layout`, sliding clusters
     together as rigid bodies to close the empty "oceans" UMAP leaves between
     islands so the canvas isn't mostly dead water after zoom-to-fit.  It only
     engages on the UMAP path (the PCA/trivial fallbacks are too small to pack)
-    and preserves each cluster's internal shape exactly.
+    and preserves each cluster's internal shape exactly.  It defaults to
+    :data:`~vtscore.config.PROJECTION_COMPACT_DEFAULT` (off — the Part 1 sweep
+    measured it as a consistent loss), so a caller that passes nothing gets the
+    shipped behaviour rather than a second, disagreeing default.
+
+    Every knob the layout was fit under is stamped onto the returned
+    :class:`Projection`, so a persisted layout can later be compared against
+    what the active configuration would produce.  Production callers should
+    resolve those knobs with
+    :func:`~vtscore.projection.params.resolve_projection_params` rather than
+    relying on these signature defaults, which know nothing about the dataset's
+    embedder or the operator's settings.
     """
     # Force an owned, writable copy (not just contiguity/dtype): *matrix* may
     # be a read-only mmap view (S1's embedding-matrix sidecar,
@@ -267,4 +291,4 @@ def fit_projection(
         _progress("projecting", "compacting layout", 0, 0)
         coords = compact_layout(coords)
 
-    return Projection(projection_id, list(ids), coords, "umap", n_neighbors, min_dist)
+    return Projection(projection_id, list(ids), coords, "umap", n_neighbors, min_dist, compact)

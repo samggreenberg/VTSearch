@@ -23,6 +23,7 @@ def _pyramid_to_meta(projection: Projection, pyramid: Pyramid) -> dict[str, Any]
         "method": projection.method,
         "n_neighbors": projection.n_neighbors,
         "min_dist": projection.min_dist,
+        "compact": projection.compact,
         "bin_shape": pyramid.bin_shape,
         "base_radius": pyramid.base_radius,
         "tile_span": pyramid.tile_span,
@@ -61,6 +62,10 @@ def _rebuild_from_npz_arrays(
         method=meta["method"],
         n_neighbors=meta.get("n_neighbors"),
         min_dist=meta.get("min_dist"),
+        # Containers written before compaction was stamped have no ``compact``
+        # key; ``None`` marks them as "unknown", which the freshness check reads
+        # as compacted (what the default was when they were written).
+        compact=meta.get("compact"),
     )
 
     levels = [LevelMeta(level=lm["level"], radius=lm["radius"], n_cells=lm["n_cells"]) for lm in meta["levels"]]

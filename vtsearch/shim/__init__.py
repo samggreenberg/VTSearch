@@ -218,6 +218,8 @@ def build_core_config(settings_path: str | Path | None = None) -> CoreConfig:
         autofind_exporter_field_values={
             name: dict(vals) for name, vals in _settings.get_autofind_exporter_field_values().items()
         },
+        projection_n_neighbors=_settings.get_projection_n_neighbors(),
+        projection_min_dist=_settings.get_projection_min_dist(),
         signpost_captioner=dict(_settings.get_browse_signpost_captioner()),
         signpost_vocab={mt: list(terms) for mt, terms in _settings.get_browse_signpost_vocab().items()},
     )

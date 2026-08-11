@@ -27,7 +27,7 @@ def _make_tracker():
     return LoadingTasksTracker().create_task("proj_task", "test")
 
 
-def _fake_fit_projection(matrix, ids, on_progress=None):
+def _fake_fit_projection(matrix, ids, on_progress=None, **kwargs):
     """Cheap stand-in for UMAP: a seeded random 2-D layout.
 
     Calls ``on_progress`` once so the stage's progress wiring is exercised.
@@ -88,6 +88,103 @@ class TestBuildProjectionStage:
         assert args[0] == "ds-123"
         assert args[1] is ctx._projection
         assert args[2] is ctx._pyramids["square"]
+
+    def test_threads_the_resolved_params_into_the_fit(self):
+        """The ingest fit uses the same knobs the route would resolve (#3056).
+
+        Not ``fit_projection``'s signature defaults: a layout fit under
+        different params than the route resolves is discarded on the first
+        Browse open (so the opt-in pre-build bought nothing), or — when the
+        mismatch happens to be invisible — served under knobs nobody chose.
+        """
+        ctx = self._ctx_with_embeddings("proj_stage_params")
+        captured: dict = {}
+
+        def _capturing(matrix, ids, on_progress=None, **kwargs):
+            captured.update(kwargs)
+            return _fake_fit_projection(matrix, ids, on_progress=on_progress)
+
+        with (
+            patch("vtscore.projection.fit_projection", side_effect=_capturing),
+            patch("vtscore.datasets.stages.projection._persist_projection_to_container"),
+        ):
+            _build_projection_stage(ctx, _make_tracker(), "ds-params")
+
+        # The fixtures are CLAP-embedded, whose swept defaults are (15, 0.10).
+        assert captured["n_neighbors"] == 15
+        assert captured["min_dist"] == 0.10
+        # And compaction is off, matching PROJECTION_COMPACT_DEFAULT — the
+        # signature default used to be True here.
+        assert captured["compact"] is False
+
+    def test_tuned_embedder_params_reach_the_fit(self):
+        """A SigLIP dataset is fit under SigLIP's swept knobs, not the globals."""
+        ctx = DatasetContext("proj_stage_siglip")
+        rng = np.random.default_rng(3)
+        for cid in (1, 2, 3, 4):
+            ctx.medias[cid] = {
+                "id": cid,
+                "media_type": "image",
+                "embedder": "siglip",
+                "embeddings": {"siglip": rng.standard_normal(8).astype(np.float32)},
+            }
+        captured: dict = {}
+
+        def _capturing(matrix, ids, on_progress=None, **kwargs):
+            captured.update(kwargs)
+            return _fake_fit_projection(matrix, ids, on_progress=on_progress)
+
+        with (
+            patch("vtscore.projection.fit_projection", side_effect=_capturing),
+            patch("vtscore.datasets.stages.projection._persist_projection_to_container"),
+        ):
+            _build_projection_stage(ctx, _make_tracker(), "ds-siglip")
+
+        assert (captured["n_neighbors"], captured["min_dist"]) == (10, 0.05)
+
+    def test_pre_built_layout_survives_the_routes_freshness_check(self):
+        """An ingest-built layout is kept — and kept uncompacted — on first Browse.
+
+        The end-to-end shape of #3056: the ingest stage stamps what it fit
+        under, and the route's persisted-layout guard asks for exactly those
+        knobs.  An untuned embedder is the interesting case, because there the
+        old mismatch was *invisible* — the stale layout passed the guard and
+        the user silently got the compacted arrangement the sweep measured as
+        worse.
+        """
+        from vtsearch.routes.projection import _projection_params_match
+
+        ctx = DatasetContext("proj_stage_untuned")
+        rng = np.random.default_rng(11)
+        for cid in (1, 2, 3, 4):
+            ctx.medias[cid] = {
+                "id": cid,
+                "media_type": "text",
+                "embedder": "e5",
+                "embeddings": {"e5": rng.standard_normal(8).astype(np.float32)},
+            }
+
+        def _stamping(matrix, ids, on_progress=None, **kwargs):
+            """A fake fit that records its knobs the way the real one does."""
+            coords = np.random.default_rng(1).standard_normal((len(ids), 2)).astype(np.float32)
+            return Projection(
+                "untuned-pid",
+                list(ids),
+                coords,
+                "umap",
+                kwargs.get("n_neighbors"),
+                kwargs.get("min_dist"),
+                kwargs.get("compact"),
+            )
+
+        with (
+            patch("vtscore.projection.fit_projection", side_effect=_stamping),
+            patch("vtscore.datasets.stages.projection._persist_projection_to_container"),
+        ):
+            _build_projection_stage(ctx, _make_tracker(), "ds-untuned")
+
+        assert ctx._projection.compact is False
+        assert _projection_params_match(ctx._projection, ctx) is True
 
     def test_empty_dataset_is_noop(self):
         ctx = DatasetContext("proj_stage_empty")

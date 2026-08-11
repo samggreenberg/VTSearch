@@ -141,12 +141,27 @@ def build_positives_browse_context(
 
     # Project + tile up front so the browse view lands on a ready layout.
     from vtscore.embedding.matrix import get_embedding_matrix
-    from vtscore.projection import bin_shape_for_media_type, build_pyramid, fit_projection
+    from vtscore.projection import (
+        bin_shape_for_media_type,
+        build_pyramid,
+        fit_projection,
+        resolve_projection_params,
+    )
 
     if on_progress is not None:
         on_progress(total, total, "Building projection…")
     sorted_ids, matrix = get_embedding_matrix(ctx, ctx.routed_embedder("score"))
-    proj = fit_projection(matrix, sorted_ids)
+    # Same knobs as every other Browse layout — this map is ephemeral, but a
+    # positives map fit under different params than the dataset browse would
+    # read as a different arrangement of the same items.
+    params = resolve_projection_params(ctx)
+    proj = fit_projection(
+        matrix,
+        sorted_ids,
+        n_neighbors=params.n_neighbors,
+        min_dist=params.min_dist,
+        compact=params.compact,
+    )
     pyr = build_pyramid(proj, bin_shape=bin_shape_for_media_type(media_type))
     ctx._projection = proj
     ctx._pyramids[pyr.bin_shape] = pyr
