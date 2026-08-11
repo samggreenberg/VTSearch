@@ -257,17 +257,18 @@ There is no CI: `./run-tests.sh` is the only gate, so it front-loads a long chai
 | 2 | Lint | `ruff check .` | |
 | 3 | Format | `ruff format --check .` | Fix with `ruff format .`. |
 | 4 | Spelling | `codespell --toml pyproject.toml` | |
-| 5 | Dependencies | `python -m deptry .` | |
-| 6 | Known CVEs | `pip-audit` | Audits the resolved venv, not the requirements files. `PIP_AUDIT_IGNORE` in the script lists advisories with no upstream fix; re-audit and remove an entry once a patched release exists. |
-| 7 | Types | `pyright` (pinned via `PYRIGHT_PYTHON_FORCE_VERSION`) | Scope is `pyrightconfig.json`. |
-| 8 | OpenAPI snapshot drift | `scripts/dump_openapi.py` diffed against `frontend/openapi.json` | The generated TS client is built from this snapshot. Regenerate with `npm run regenerate-openapi-snapshot` and commit the result. |
-| 9 | Dockerfiles | `scripts/check-dockerfiles.py` | |
-| 10 | User-docs screenshot wiring | `scripts/screenshots/wiring-check.py` | Browser-free; the pixel-diff (`check.sh`) stays a manual chore. Also what makes the reshoot queue un-rottable. |
-| 11 | Eval/app sync | `scripts/check-eval-app-sync.py` | Re-pin with `--update` **after** reconciling the harness. |
-| 12 | Frontend build | `cd frontend && npm run build:prod` | Full run, or the `core` / `frontend` groups. Any `▲ [WARNING]` line is a hard failure. Skipped with a notice if `frontend/node_modules` is absent. |
-| 13 | Frontend audit | `cd frontend && npm audit --omit=dev` | Same trigger as the build. Prod deps only — dev-only advisories don't ship. |
-| 14 | Frontend unit tests | `cd frontend && npm run test:ci` | Full run or the `frontend` group **only** — deliberately off the fast `core` path. |
-| 15 | Python tests | `pytest tests/ tests_lib/ -n auto --dist loadgroup` | Skipped entirely when `frontend` is the only requested group. |
+| 5 | Documentation | `scripts/check-docs.py` | Pure invariants over every tracked markdown file: relative links, `#anchors` (GitHub slug rules), backticked repo paths, absolute-path leaks, `docs/plans/*.md` citations **anywhere in the tree**, and broken code fences. Nothing to re-pin; fix the doc, or add an allowlist entry with a reason. |
+| 6 | Dependencies | `python -m deptry .` | |
+| 7 | Known CVEs | `pip-audit` | Audits the resolved venv, not the requirements files. `PIP_AUDIT_IGNORE` in the script lists advisories with no upstream fix; re-audit and remove an entry once a patched release exists. |
+| 8 | Types | `pyright` (pinned via `PYRIGHT_PYTHON_FORCE_VERSION`) | Scope is `pyrightconfig.json`. |
+| 9 | OpenAPI snapshot drift | `scripts/dump_openapi.py` diffed against `frontend/openapi.json` | The generated TS client is built from this snapshot. Regenerate with `npm run regenerate-openapi-snapshot` and commit the result. |
+| 10 | Dockerfiles | `scripts/check-dockerfiles.py` | |
+| 11 | User-docs screenshot wiring | `scripts/screenshots/wiring-check.py` | Browser-free; the pixel-diff (`check.sh`) stays a manual chore. Also what makes the reshoot queue un-rottable. |
+| 12 | Eval/app sync | `scripts/check-eval-app-sync.py` | Re-pin with `--update` **after** reconciling the harness. |
+| 13 | Frontend build | `cd frontend && npm run build:prod` | Full run, or the `core` / `frontend` groups. Any `▲ [WARNING]` line is a hard failure. Skipped with a notice if `frontend/node_modules` is absent. |
+| 14 | Frontend audit | `cd frontend && npm audit --omit=dev` | Same trigger as the build. Prod deps only — dev-only advisories don't ship. |
+| 15 | Frontend unit tests | `cd frontend && npm run test:ci` | Full run or the `frontend` group **only** — deliberately off the fast `core` path. |
+| 16 | Python tests | `pytest tests/ tests_lib/ -n auto --dist loadgroup` | Skipped entirely when `frontend` is the only requested group. |
 
 ## Test Groups
 
