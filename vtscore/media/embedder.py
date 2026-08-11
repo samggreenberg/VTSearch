@@ -911,6 +911,17 @@ class MediaEmbedder(ABC):
         return None
 
     @property
+    def embedding_dim(self) -> Optional[int]:
+        """Output dimensionality of the vectors this embedder produces.
+
+        Descriptor metadata, not derived from a loaded model: it lets tooling
+        (the generated docs inventories, UI hints) report the dimension without
+        downloading weights.  ``None`` means the dimension is unknown or
+        variable; built-in embedders all declare a concrete value.
+        """
+        return None
+
+    @property
     @abstractmethod
     def media_type_id(self) -> str:
         """The ``type_id`` of the media type this embedder works with."""

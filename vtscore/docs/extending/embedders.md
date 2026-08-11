@@ -2,9 +2,9 @@
 
 A media embedder turns a media file (or a text query) into a fixed-size
 vector in some embedding space. Each embedder belongs to exactly one
-media type, but a type can have multiple embedders - VTSearch ships
-two CLAP variants for audio, four image embedders (SigLIP + three
-patch-capable backbones), three video embedders, and so on. Embedders
+media type, but a type can have multiple embedders - see the generated
+roster in [`docs/ML.md` § Embedding
+Models](../../../docs/ML.md#embedding-models). Embedders
 are auto-discovered: any `embedder_<name>.py` file (or `embedder_<name>/`
 sub-package) inside a media-type sub-package gets imported, and its
 module-level `EMBEDDER` sentinel is registered. Subclass

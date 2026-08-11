@@ -49,7 +49,9 @@ surface, worked examples, and gotchas.
 
 ## Extending vtscore
 
-Eleven plugin families share a common registry-based architecture. Subclass
+The plugin families (see the generated inventory in
+[concepts.md § Plugin](concepts.md#8-plugin) for the authoritative list)
+share a common registry-based architecture. Subclass
 the relevant base class, expose a sentinel attribute, drop the module in the
 right directory (or register an `importlib.metadata` entry point), and the
 library discovers it automatically. See:

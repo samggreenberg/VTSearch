@@ -221,6 +221,21 @@ if ! diff -u frontend/openapi.json "$_openapi_regen" > /dev/null; then
 fi
 rm -f "$_openapi_regen" "$_openapi_dump_log"
 
+# Generated doc-inventory drift check: regenerate the registry-backed
+# tables embedded in the docs (embedders, plugin families, demo datasets,
+# ...) and fail if any committed region is stale. Same shape as the
+# OpenAPI snapshot gate above; see scripts/gen-docs-inventories.py.
+echo "Checking generated doc inventories..."
+if ! python scripts/gen-docs-inventories.py --check ; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: generated doc inventories are stale"
+    echo "============================================================"
+    echo "Run 'python scripts/gen-docs-inventories.py' and commit the"
+    echo "result."
+    exit 1
+fi
+
 echo "Checking Dockerfiles..."
 if ! python scripts/check-dockerfiles.py ; then
     echo ""

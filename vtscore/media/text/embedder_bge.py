@@ -77,6 +77,10 @@ class TextBGEEmbedder(MediaEmbedder):
     def media_type_id(self) -> str:
         return "text"
 
+    @property
+    def embedding_dim(self) -> int:
+        return 768
+
     # ------------------------------------------------------------------
     # Model lifecycle
     # ------------------------------------------------------------------

@@ -66,6 +66,10 @@ class AudioWhisperEncoderEmbedder(MediaEmbedder):
         return "audio"
 
     @property
+    def embedding_dim(self) -> int:
+        return 512
+
+    @property
     def supports_text(self) -> bool:
         return False
 

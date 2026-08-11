@@ -314,13 +314,16 @@ location /api/ {
 
 ### Embedding models (HuggingFace Hub)
 
-VTSearch downloads five embedding models on first use. Each model is
-lazy-loaded when a dataset of the corresponding media type is opened for
-the first time. At startup, VTSearch also runs a smart-preload pass that
+VTSearch downloads embedding models from the HuggingFace Hub on first
+use. Each model is lazy-loaded when a dataset of the corresponding media
+type is opened for the first time. At startup, VTSearch also runs a smart-preload pass that
 warms every embedder referenced by the dataset and detector registries
 (see `predict_embedders_to_preload()` in `vtscore/embedding/loader.py`),
 so the first request that uses each embedder doesn't pay the cold-load
 cost. On an empty registry, nothing is preloaded.
+
+`scripts/download_models.sh` prefetches the most commonly used models for
+offline deployments:
 
 | Model | Media type | HuggingFace ID | Approx. size |
 |-------|-----------|----------------|-------------|
@@ -336,17 +339,16 @@ dataset or detector actually uses are loaded.
 
 #### Alternative embedders
 
-Two additional embedder models are available as alternatives to the defaults.
-These are only downloaded if explicitly selected:
+Every other embedder in the registry is downloaded only when explicitly
+selected. The authoritative roster — every embedder with its model ID —
+is the generated table in [docs/ML.md § Embedding
+Models](ML.md#embedding-models). Model sizes vary from a few hundred MB
+to several GB (ParaSpeechCLAP, which chains WavLM and Granite encoders,
+is the largest at ~4.5 GB across its three checkpoints).
 
-| Model | Media type | HuggingFace ID | Approx. size |
-|-------|-----------|----------------|-------------|
-| CLAP Music & Speech | Audio | `laion/larger_clap_music_and_speech` | ~1.3 GB |
-| ParaSpeechCLAP (speech style) | Audio | `microsoft/wavlm-large` + `ibm-granite/granite-embedding-278m-multilingual` + `ajd12342/paraspeechclap-combined` | ~4.5 GB |
-| BGE | Text | `BAAI/bge-base-en-v1.5` | ~440 MB |
-
-All model downloads use `token=False`; no HuggingFace account or API
-token is required.
+Most model downloads use `token=False`, so no HuggingFace account or API
+token is required; the exception is DINOv3, which is gated and needs an
+accepted license plus a token.
 
 ### Demo dataset downloads
 
@@ -354,7 +356,8 @@ Demo datasets are downloaded only when a user selects them through the web
 UI. They are **not** downloaded at startup.
 
 **[docs/demos.md](demos.md) is the catalogue** — every demo, grouped by media
-type, with the size variants (S / M / L / A) each one offers. It is not
+type, with the size variants (S / M / L / A) each one offers and per-demo
+download sizes, generated from the demo-dataset registry. It is not
 duplicated here: a second copy of the roster would rot the moment a demo is
 added or its upstream source moves.
 

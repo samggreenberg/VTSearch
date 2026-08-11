@@ -80,6 +80,10 @@ class _ClapBase(MediaEmbedder):
     def media_type_id(self) -> str:
         return "audio"
 
+    @property
+    def embedding_dim(self) -> int:
+        return 512
+
     # ------------------------------------------------------------------
     # Model lifecycle
     # ------------------------------------------------------------------
