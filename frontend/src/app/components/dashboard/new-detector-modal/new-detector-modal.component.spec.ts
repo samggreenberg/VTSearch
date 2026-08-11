@@ -430,7 +430,7 @@ describe('NewDetectorModalComponent', () => {
     expect(req.request.body.field_key).toBe('sheet');
     req.flush({ options: [{ value: 's1', label: 'Sheet 1' }] });
 
-    expect(component.labelImporterOptionsFor(field)).toEqual([{ value: 's1', label: 'Sheet 1' }]);
+    expect(component.labelImporterFieldOptions.optionsFor(field)).toEqual([{ value: 's1', label: 'Sheet 1' }]);
     // A required dynamic select auto-selects the first option.
     expect(component.labelImporterValues['sheet']).toBe('s1');
   });
@@ -461,7 +461,7 @@ describe('NewDetectorModalComponent', () => {
 
   it('coerces static string options into {value,label} pairs on the Trained tab', () => {
     const staticSelect = { key: 's', field_type: 'select', options: ['x', 'y'] } as any;
-    expect(component.labelImporterOptionsFor(staticSelect)).toEqual([
+    expect(component.labelImporterFieldOptions.optionsFor(staticSelect)).toEqual([
       { value: 'x', label: 'x' },
       { value: 'y', label: 'y' },
     ]);
@@ -489,7 +489,7 @@ describe('NewDetectorModalComponent', () => {
     const field = { key: 'q', field_type: 'select', dynamic_options: true, allow_free_text: true } as any;
     component.selectedLabelImporter = { name: 'imp', fields: [field] } as any;
     component.labelImporterValues['q'] = 'hand-typed';
-    (component as any).refreshLabelImporterFieldOptions(field);
+    component.labelImporterFieldOptions.refresh(field, component.labelImporterValues);
     httpMock
       .expectOne('/api/label-importers/field-options/imp')
       .flush({ options: [{ value: 'a', label: 'A' }] });
@@ -500,7 +500,7 @@ describe('NewDetectorModalComponent', () => {
     const field = { key: 'q', field_type: 'select', dynamic_options: true } as any;
     component.selectedLabelImporter = { name: 'imp', fields: [field] } as any;
     component.labelImporterValues['q'] = 'stale';
-    (component as any).refreshLabelImporterFieldOptions(field);
+    component.labelImporterFieldOptions.refresh(field, component.labelImporterValues);
     httpMock
       .expectOne('/api/label-importers/field-options/imp')
       .flush({ options: [{ value: 'a', label: 'A' }] });
@@ -510,12 +510,12 @@ describe('NewDetectorModalComponent', () => {
   it('surfaces a dynamic-option fetch error on the Trained tab', () => {
     const field = { key: 'q', field_type: 'select', dynamic_options: true } as any;
     component.selectedLabelImporter = { name: 'imp', fields: [field] } as any;
-    (component as any).refreshLabelImporterFieldOptions(field);
+    component.labelImporterFieldOptions.refresh(field, component.labelImporterValues);
     httpMock
       .expectOne('/api/label-importers/field-options/imp')
       .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
-    expect(component.labelImporterDynamicError()['q']).toBe('boom');
-    expect(component.labelImporterOptionsFor(field)).toEqual([]);
+    expect(component.labelImporterFieldOptions.error()['q']).toBe('boom');
+    expect(component.labelImporterFieldOptions.optionsFor(field)).toEqual([]);
   });
 
   // --- Create & Import: the background labelset-media ingest (#2703) ---

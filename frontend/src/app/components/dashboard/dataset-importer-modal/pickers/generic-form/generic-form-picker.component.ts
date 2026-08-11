@@ -11,6 +11,7 @@ import { FileBrowserComponent } from '../../../../file-browser/file-browser.comp
 import { DatasetsCrudApiService } from '../../../../../services/datasets-crud-api.service';
 import { DatasetsListingsApiService } from '../../../../../services/datasets-listings-api.service';
 import { apiErrorMessage } from '../../../../../utils/api-error';
+import { DynamicFieldOptions } from '../../../../../utils/dynamic-field-options';
 import {
   CleanerInfo,
   CleanerSelection,
@@ -18,7 +19,6 @@ import {
   ClipperParameter,
   ConverterInfo,
   EmbedderInfo,
-  FieldOptions,
   ImporterField,
   ImporterInfo,
   MediaTypeInfo,
@@ -99,9 +99,14 @@ export class GenericFormPickerComponent {
 
   sourceSpecs: SourceSpec[] = [];
 
-  readonly dynamicFieldOptions = signal<Record<string, FieldOptions[]>>({});
-  readonly dynamicFieldLoading = signal<Record<string, boolean>>({});
-  readonly dynamicFieldError = signal<Record<string, string>>({});
+  /** Option lists for the selected importer's ``dynamic_options`` fields.
+   *  Auto-selecting an option is a form change like any other, and it is
+   *  exactly the case the importer's own naming exists for: only it can turn
+   *  the opaque option value back into a readable label. */
+  readonly fieldOptions = new DynamicFieldOptions(
+    (key, values) => this.datasetsCrudApi.getImporterFieldOptions(this.selectedImporter()!.name, key, values),
+    () => this.requestSuggestedDatasetName(),
+  );
 
   clipperChooserOpen = false;
   clipperChooserClippers: ClipperInfo[] = [];
@@ -183,9 +188,7 @@ export class GenericFormPickerComponent {
     this.clipperParamValues.set({});
     this.selectedEmbedder.set('');
     this.availableEmbedders.set([]);
-    this.dynamicFieldOptions.set({});
-    this.dynamicFieldLoading.set({});
-    this.dynamicFieldError.set({});
+    this.fieldOptions.reset();
     this.datasetNameDirty = false;
 
     if (importer.fields) {
@@ -227,11 +230,7 @@ export class GenericFormPickerComponent {
 
     this.resetSourceSpecs();
 
-    for (const field of importer.fields || []) {
-      if (field.dynamic_options) {
-        this.refreshDynamicFieldOptions(field);
-      }
-    }
+    this.fieldOptions.refreshAll(importer.fields || [], this.formValues);
 
     // Importers whose defaults already describe a dataset (a preselected
     // select, a remembered path) get named before the user touches
@@ -262,12 +261,7 @@ export class GenericFormPickerComponent {
   onFieldChanged(changedKey: string): void {
     const importer = this.selectedImporter();
     if (!importer?.fields) return;
-    for (const field of importer.fields) {
-      if (!field.dynamic_options) continue;
-      if (!(field.depends_on || []).includes(changedKey)) continue;
-      this.formValues[field.key] = '';
-      this.refreshDynamicFieldOptions(field);
-    }
+    this.fieldOptions.refreshDependentsOf(changedKey, importer.fields, this.formValues);
     if (changedKey !== 'dataset_name') {
       this.requestSuggestedDatasetName();
     }
@@ -294,48 +288,6 @@ export class GenericFormPickerComponent {
   private requestSuggestedDatasetName(): void {
     if (this.datasetNameDirty) return;
     this.suggestedNameRequests.next();
-  }
-
-  private refreshDynamicFieldOptions(field: ImporterField): void {
-    const importer = this.selectedImporter();
-    if (!importer) return;
-    const key = field.key;
-    this.dynamicFieldLoading.update((m) => ({ ...m, [key]: true }));
-    this.dynamicFieldError.update((m) => ({ ...m, [key]: '' }));
-    this.datasetsCrudApi.getImporterFieldOptions(importer.name, key, { ...this.formValues }).subscribe({
-      next: (res) => {
-        const options: FieldOptions[] = res.options || [];
-        this.dynamicFieldOptions.update((m) => ({ ...m, [key]: options }));
-        this.dynamicFieldLoading.update((m) => ({ ...m, [key]: false }));
-        const current = this.formValues[key];
-        const inList = options.some((o) => o.value === String(current));
-        // Strict selects clear a value the new list no longer offers; a
-        // free-text combobox keeps whatever the user typed.
-        if (current && !inList && !field.allow_free_text) {
-          this.formValues[key] = '';
-        }
-        if (!this.formValues[key] && field.required && !field.allow_free_text && options.length > 0) {
-          this.formValues[key] = options[0].value;
-        }
-        // Auto-selecting an option is a form change like any other, and it
-        // is exactly the case the importer's own naming exists for: only it
-        // can turn the opaque option value back into a readable label.
-        this.requestSuggestedDatasetName();
-      },
-      error: (err) => {
-        this.dynamicFieldLoading.update((m) => ({ ...m, [key]: false }));
-        this.dynamicFieldError.update((m) => ({ ...m, [key]: apiErrorMessage(err, 'Could not load options') }));
-        this.dynamicFieldOptions.update((m) => ({ ...m, [key]: [] }));
-      },
-    });
-  }
-
-  optionsFor(field: ImporterField): FieldOptions[] {
-    if (field.dynamic_options) {
-      return this.dynamicFieldOptions()[field.key] || [];
-    }
-    // Static options are plain strings; render each as its own label.
-    return (field.options || []).map((o) => ({ value: o, label: o }));
   }
 
   /** Fetch the cleanup gates registered for *mediaType* and seed the
