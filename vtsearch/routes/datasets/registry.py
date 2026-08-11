@@ -382,9 +382,9 @@ def build_dataset_coverage_atlas(dataset_id: str):
     Datasets past ``should_auto_build_coverage_atlas`` skip the automatic build
     at load time so they load fast; this endpoint lets the user trigger that
     build on demand.  The dataset must already be loaded in memory.  Progress
-    is reported via ``/api/progress`` under the returned ``task_id``; the build
-    is cancellable.  Calling it on a dataset that already has a tree rebuilds
-    it from scratch.
+    is reported on the ``loading-tasks`` channel of ``GET /api/events`` under
+    the returned ``task_id``; the build is cancellable.  Calling it on a
+    dataset that already has a tree rebuilds it from scratch.
     """
     from vtsearch.auth import get_current_user
     from vtsearch.state import (
