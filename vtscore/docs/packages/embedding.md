@@ -263,16 +263,34 @@ def get_embedding_matrix_for_snap(snap: dict) -> tuple[list[int], np.ndarray]: .
 
 `DatasetContext._emb_matrix`, `DatasetContext._emb_matrix_ids`, and
 `DatasetContext._emb_matrix_revision` are the cache.
-`get_embedding_matrix(ctx)` (`vtscore/embedding/matrix.py`):
+`get_embedding_matrix(ctx, embedder_name=None)`
+(`vtscore/embedding/matrix.py`) runs in four phases, and only the two
+cheap ones hold the lock - a large numpy stack must not stall every
+other request's state-sync:
 
-1. Acquires `vtscore.state.core._state_lock`.
-2. Snapshots `revision = ctx.media_revision`.
-3. If `ctx._emb_matrix_revision == revision` (and the matrix is
-   present), returns the cached `(ids, matrix)` directly - no rebuild.
-4. Otherwise, allocates an `(N, D) float32` array, fills it row by
-   row from `media_embedding(ctx.medias[cid])` (the per-embedder
-   `media["embeddings"]` dict), and stores it on the context along
-   with the revision it was built at.
+1. **Locked.** Snapshot `sorted_ids` and `revision = ctx.media_revision`.
+   If `ctx._emb_matrix_revision == revision` and a matrix is present,
+   return the cached `(ids, matrix)` immediately. Otherwise take a
+   shallow ref-copy of `ctx.medias` and release the lock.
+2. **Unlocked.** Try the on-disk sidecar (below); on a miss, allocate an
+   `(N, D) float32` array and fill it row by row from
+   `media_embedding(...)` (the per-embedder `media["embeddings"]` dict).
+3. **Locked.** Re-check that `ctx.media_revision` still equals the
+   snapshotted `revision` before storing - a mutation during the
+   unlocked build must not cache a stale matrix - and populate the
+   cache if it does.
+4. **Unlocked, best-effort.** Persist a freshly-built matrix as a
+   sidecar, unless the sidecar is where it came from or phase 3 lost
+   the race.
+
+Pass an explicit *embedder_name* (one of a multi-embedder dataset's
+bound slots) to build from that embedder's vectors instead. The named
+path builds fresh every call and never touches the cache or the
+sidecar - both are reserved for the hot primary path. A name that
+happens to equal the primary collapses back onto the cached path.
+
+An empty dataset returns `([], np.empty((0, 0), dtype=np.float32))`; a
+media missing the requested vector raises `ValueError`.
 
 Convert to torch with `torch.from_numpy(matrix)` for a zero-copy
 view. The matrix is contiguous, so it's safe to slice without
@@ -306,16 +324,53 @@ non-cached matrix is built. Cross-dataset Find takes the fresh path.
 
 ### Cache lifetime and persistence
 
-- **Cache lifetime:** as long as `ctx` is alive. The matrix is **not**
-  written to disk and **never** persists across process restarts.
-- **Where it lives:** on the `DatasetContext` instance, in
-  `_emb_matrix` / `_emb_matrix_ids`. This is by design - the
-  matrix is keyed to one dataset's contents and shouldn't outlive
-  them. See [state](state.md) for `DatasetContext`.
-- **Thread safety:** every read/write goes through
-  `vtscore.state.core._state_lock`. Concurrent callers serialise on
-  the same lock, so the rebuild happens exactly once when the key
-  set changes.
+- **In-memory cache:** lives on the `DatasetContext` instance, in
+  `_emb_matrix` / `_emb_matrix_ids` / `_emb_matrix_revision`, for as
+  long as `ctx` is alive. See [state](state.md) for `DatasetContext`.
+- **On-disk mmap sidecar:** for a dataset that is *registered against a
+  saved `.pkl`*, a freshly-built primary matrix is also written next to
+  that pickle as `<stem>.embmat.npy` + `<stem>.embids.npy`, and a later
+  cold load `mmap`s it back instead of restacking the matrix from
+  per-item embeddings. Details below.
+- **Thread safety:** every read/write of the in-memory cache goes
+  through `vtscore.state.core._state_lock`. Concurrent callers serialise
+  on the same lock, so the rebuild happens exactly once when the key
+  set changes. The sidecar read/write happens *outside* the lock.
+
+#### The `.npy` sidecar, and why it isn't a "persisted vector"
+
+CLAUDE.md forbids persisting embeddings, with an exception for dataset
+pickle files. The sidecar sits inside that exception rather than beside
+it: it is a **derived cache of data the pickle already stores durably**,
+regenerable from `ctx.medias` at any time, deterministic, and swept
+alongside the pkl by `registry.unregister_dataset` (both files share the
+pkl's stem, so the stem-glob delete catches them). Nothing reaches disk
+that was not already on disk. See S1 in `docs/plans/scalability.md`.
+
+The guard rails that make it safe to trust:
+
+- **Only for registered datasets.** `_registered_pkl_path` returns
+  `None` for in-memory datasets (tests, ephemeral browse contexts,
+  positives-map previews), and those get no sidecar at all.
+- **Validated on read.** `_try_load_matrix_sidecar` adopts the file only
+  when both halves exist, the persisted id list matches the current
+  sorted ids exactly, and the width matches a probe embedding.
+  Otherwise it returns `None` and the caller restacks.
+- **Crash-safe.** Each half is written to a temp file and atomically
+  renamed, matrix first. A crash between the two renames leaves a
+  mismatched pair, which the read-side checks reject.
+- **Latched off after an in-place rewrite.** An id set cannot detect a
+  same-id vector rewrite (re-embed, re-clip), so the first
+  `invalidate_embedding_matrix(ctx)` sets `ctx._emb_sidecar_disabled`
+  permanently for that context's lifetime. A fresh load gets a fresh
+  context, and so a fresh unset latch.
+- **Best-effort.** A read-only filesystem, a full disk or a concurrent
+  writer is logged and swallowed. The sidecar is an optimisation, never
+  a dependency.
+
+Persisting *per-item* vectors anywhere outside the dataset pickle - to
+settings, to a detector JSON, to a new cache file of your own - is still
+a project-invariant violation.
 
 ---
 

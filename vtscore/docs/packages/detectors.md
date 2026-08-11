@@ -499,7 +499,8 @@ state: `_cache_inclusion` (rebuild trigger), `_cached_steps` (one entry
 per label-history step with `model` / `threshold` / `good_ids` /
 `bad_ids` / `stability` / `diversity`), `_cache_good_ids` /
 `_cache_bad_ids` (running label sets), `_cache_prev_predictions`
-(stability baseline), `_cache_diversity_tree`, and `_live_models`
+(stability baseline), `_cache_coverage_atlas` (the per-step replay of
+coverage evidence), the monitored-pool tensors, and `_live_models`
 (models injected by `train_and_score` during sorting, keyed by
 `(frozenset(good), frozenset(bad))`).
 
@@ -513,9 +514,10 @@ per label-history step with `model` / `threshold` / `good_ids` /
 | `recreate_model_at_time(snap, history, t, inclusion)` | Return the model + threshold + good/bad ids for step `t`           |
 | `calculate_error_cost_over_time(...)`           | Per-step FPR/FNR-weighted cost on current votes                        |
 | `calculate_prediction_stability_over_time(...)` | Per-step flip-count on unlabeled medias                                |
-| `calculate_diversity_level_over_time(...)`      | Per-step diversity-tree coverage                                       |
-| `compute_labeling_status(...)`                  | Aggregate red / yellow / green status for the Smart / Stable / Span indicators |
+| `calculate_diversity_level_over_time(...)`      | Per-step coverage-atlas coverage                                        |
+| `compute_labeling_status(..., span_info=None)`  | Aggregate red / yellow / green status for the Smart / Stable / Span indicators |
 | `analyze_labeling_progress(...)`                | Run the three "over-time" functions and bundle the result              |
+| `cached_indicator_history(metric, ...)`         | Read one metric's history **without** advancing the cache; returns `(history, complete)` |
 
 ### Smart / Stable / Span statuses
 
@@ -527,9 +529,18 @@ per label-history step with `model` / `threshold` / `good_ids` /
 - **Stable** - fraction of unlabeled predictions that flipped between
   successive steps; green when the recent 10-step average is below
   0.5% and no single step exceeded 1%.
-- **Span** - diversity-tree coverage; green at
+- **Span** - coverage-atlas coverage: the number of consecutive
+  evidence-bearing nodes in BFS order. Green at
   `CoreConfig.from_settings().autopilot_goal_diversity` nodes (default
-  40), yellow at 10, red below.
+  40, capped at the atlas's total node count), yellow at 10, red below.
+  Computed from the `span_info` the route passes in rather than from the
+  per-step model cache, so it stays cheap.
+
+`compute_labeling_status` advances the per-step cache, which can retrain
+heads and run a forward pass over every unlabeled media - it is the
+heavy path. `cached_indicator_history` is the cheap read: it returns
+`complete=False` with an empty history rather than doing that work, and
+the caller falls back to the async `/api/eval/train-and-score` job.
 
 Each color comes with a `reason` string the UI displays as a tooltip.
 
