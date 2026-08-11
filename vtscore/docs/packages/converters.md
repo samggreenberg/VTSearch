@@ -4,10 +4,24 @@ A *converter* turns a media dict of one type into one or more media
 dicts of a **different** type. They're how you embed audio with an
 image model (audio → spectrogram → SigLIP), search OCR'd documents
 with a text model (image → text → E5), or run a video through a
-keyframe-image pipeline. The package ships seven concrete
-converters, all auto-discovered via the `CONVERTER` sentinel, plus a
-runner (`run_converters_on_folder`) that wires conversion into the
-dataset-import path. Adding a new converter is a one-file change.
+keyframe-image pipeline. Every converter is auto-discovered via the
+`CONVERTER` sentinel, so adding one is a one-file change.
+
+## Contents
+
+| Module | Concern |
+|--------|---------|
+| `vtscore/converters/base.py` | The `MediaConverter` ABC |
+| `vtscore/converters/__init__.py` | The auto-discovering registry and its accessors |
+| `vtscore/converters/runner.py` | `run_converters_on_folder` - wires conversion into dataset import |
+| `vtscore/converters/audio2image.py` | Render audio as a mel-spectrogram image |
+| `vtscore/converters/audio2text.py` | Transcribe speech via Whisper (ASR) |
+| `vtscore/converters/image2text.py` | OCR an image for embedded text |
+| `vtscore/converters/image2face.py` | Localise faces and emit one crop per detection |
+| `vtscore/converters/document2image.py` | Render document pages as images |
+| `vtscore/converters/document2text.py` | Extract a document's embedded text |
+| `vtscore/converters/video2image.py` | Extract frames as images |
+| `vtscore/converters/video2audio.py` | Extract the audio track |
 
 ---
 

@@ -133,10 +133,18 @@ CRUD: `list_detectors`, `get_detector`, `register_detector`,
 ### Find mode
 
 When the user runs Find on a detector against a different dataset
-(`is_find_mode() == True`), the global vote dicts contain scoring hits,
-not real training labels. `vtscore/detectors/label_sync.py` checks
-`is_find_mode()` and silently skips the labelset write so the
-detector's saved training data is not overwritten.
+(`is_find_mode() == True`), that detector's vote dicts contain scoring
+hits, not real training labels. `vtscore/detectors/label_sync.py` checks
+`is_find_mode()` and silently skips the labelset write so the detector's
+saved training data is not overwritten.
+
+Despite living in `registry.py`, the flag is **per-detector state**
+(`DetectorContext.find_mode`), not a process global: `is_find_mode()` /
+`set_find_mode()` read and write the active detector context. A scoring
+pass on one detector must never block vote syncing on another, and
+switching detectors must not inherit the previous one's find state.
+`set_find_mode` is a no-op when no real detector is active - the empty
+and request-missing sentinel contexts have no labelset to protect.
 
 ---
 

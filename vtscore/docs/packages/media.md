@@ -1,7 +1,7 @@
 # `vtscore.media`
 
 Everything media-format-specific lives here: the `MediaType` plugin that
-describes a content kind (audio, image, text, video, document), the
+describes a content kind (audio, image, text, video, document, face), the
 `MediaEmbedder` that turns one media item into a vector, the `MediaClipper`
 that splits one media into sub-items of the same type, and the `Processor`
 ABCs (`Detector` / `Localizer` / `Extractor`) that score or annotate media.
@@ -9,6 +9,44 @@ Each media-type sub-package self-registers at import time through sentinel
 attributes - adding a new format is "drop a folder into `vtscore/media/`",
 not "edit an `__init__.py`". This package has no Flask or settings imports
 and is the foundation every other `vtscore` subsystem builds on.
+
+## Contents
+
+**Shared surface** - the top-level modules, which every media type builds on.
+
+| Module | Concern |
+|--------|---------|
+| `vtscore/media/__init__.py` | The registries and their accessors (`get`, `get_embedder`, `all_types`, …), plus sentinel discovery |
+| `vtscore/media/base.py` | The `MediaType` ABC |
+| `vtscore/media/embedder.py` | The `MediaEmbedder` ABC and its capability flags |
+| `vtscore/media/clipper.py` | The `MediaClipper` ABC (1 → N, same type) |
+| `vtscore/media/cleaner.py` | The `MediaCleaner` ABC (1 → 1 cleanup gate, run before embedding) |
+| `vtscore/media/processors.py` | The `Processor` / `Detector` / `Localizer` / `Extractor` ABCs |
+| `vtscore/media/cropping.py` | Shared normalised-box cropping helpers |
+| `vtscore/media/patch_embed.py` | Raw patch grids for image embedders (the MaxPatch region geometry) |
+| `vtscore/media/lazy_clip.py` | Derive a clip's bytes from its source on demand |
+| `vtscore/media/provenance.py` | Human-readable provenance for converter- and clipper-derived media |
+| `vtscore/media/structural.py` | Structural (instance-matching) features and geometric verification |
+| `vtscore/media/structural_geometry.py` | Parametrised geometric verification models |
+| `vtscore/media/structural_splg.py` | SuperPoint + LightGlue structural backend |
+| `vtscore/media/torch_setup.py` | Runtime torch configuration for embedder code |
+
+**Media types** - one self-registering sub-package each. Every one holds a
+`media_type.py` (the `MediaType`), plus whichever of `clipper.py`,
+`cleaner.py`, `decode.py`, `embedder_*.py` and processor modules it needs.
+
+| Sub-package | Embedders | Also holds |
+|-------------|-----------|------------|
+| `vtscore/media/audio/` | CLAP (general / music), AST, BEATs, ParaSpeechCLAP, Whisper | clipper, cleaner, ffmpeg + decode helpers, silence detection, speech extractor, synthetic audio generator |
+| `vtscore/media/image/` | SigLIP, SigLIP-L, SigLIP 2, SigLIP2-L, CLIP, DINOv2 (patch / single), DINOv3 (patch / single), EUPE (patch / single), SIFT-VLAD | clipper, cleaner, decode, edge trim, thumbnail, YOLO extractor, OCR extractor, face localizer, demo sources |
+| `vtscore/media/text/` | E5, BGE | clipper (paragraph / sentence), cleaner |
+| `vtscore/media/video/` | X-CLIP, LanguageBind, VideoMAE v2 | clipper (tile / scene-detect), cleaner, ffmpeg decode, frame sampling, `clip_box` crop |
+| `vtscore/media/document/` | — (converts to image or text) | clipper |
+| `vtscore/media/face/` | FaceNet | clipper - a convert-in type produced by `image2face` |
+
+Underscore-prefixed modules inside a media type (`_clap_shared.py`,
+`_dinov3_shared.py`, `_frame_sampling.py`, …) are shared backbone /
+sampling code for the embedders next to them, not public surface.
 
 ---
 

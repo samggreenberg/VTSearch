@@ -9,11 +9,17 @@ imperative pipeline (four entry-point functions plus helpers),
 shape, and `vtscore.cli_progress` is a tiny format-aware emitter that
 both modules use for status output (human prose or NDJSON).
 
-**Source:** `vtscore/cli.py` (~745 lines), `vtscore/cli_pipeline.py`
-(~278 lines), `vtscore/cli_progress.py` (~128 lines).
-**See also:** [`/home/user/VTSearch/docs/CLI.md`](../../../docs/CLI.md)
-for the user-facing `python app.py --autodetect` reference; the
-functions documented here are the underlying primitives.
+## Contents
+
+| Module | Concern |
+|--------|---------|
+| `vtscore/cli.py` | The imperative autodetect pipeline - four entry points plus helpers |
+| `vtscore/cli_pipeline.py` | Parse a YAML pipeline file into the same call shape |
+| `vtscore/cli_progress.py` | Format-aware status emitter (human prose or NDJSON) |
+
+**See also:** [`docs/CLI.md`](../../../docs/CLI.md) for the user-facing
+`python app.py --autodetect` reference; the functions documented here
+are the underlying primitives.
 
 ## When to use what
 
@@ -357,7 +363,7 @@ events on stdout.
 
 - The user-facing CLI flags (`--autodetect`, `--pipeline`,
   `--progress-format`, etc.) are documented in
-  [`/home/user/VTSearch/docs/CLI.md`](../../../docs/CLI.md). The
+  [`docs/CLI.md`](../../../docs/CLI.md). The
   functions documented here are the underlying primitives those
   flags call.
 - [`config.md`](config.md) explains `CoreConfig.from_settings()`,

@@ -9,6 +9,20 @@ votes change. Both produce / consume the same
 [`LabelSet`](datasets.md#labelset) object defined in
 `vtscore.datasets` - there is no separate label datatype.
 
+## Contents
+
+| Module | Concern |
+|--------|---------|
+| `vtscore/labels/importers/base.py` | The `LabelImporter` ABC |
+| `vtscore/labels/importers/__init__.py` | Label-importer registry with auto-discovery |
+| `vtscore/labels/importers/server_json_file/` | Read labels from a `.json` file on the server |
+| `vtscore/labels/importers/server_csv_file/` | Read labels from a `.csv` file on the server |
+| `vtscore/labels/importers/holder/` | Read labels from a Holder package |
+| `vtscore/labels/sources/base.py` | The `LabelsetSource` ABC (a `SyncSource`) |
+| `vtscore/labels/sources/__init__.py` | Labelset-source registry with auto-discovery |
+| `vtscore/labels/sources/server_json_file/` | Bidirectional sync with a JSON file on the server |
+| `vtscore/labels/sync.py` | The sync glue: when to pull, when to push, conflict handling |
+
 ## Label importers
 
 `LabelImporter` (`vtscore/labels/importers/base.py`) is the ABC.

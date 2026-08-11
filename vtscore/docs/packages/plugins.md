@@ -22,6 +22,14 @@ end-to-end example per family.
 
 ## Contents
 
+| Module | Concern |
+|--------|---------|
+| `vtscore/plugins/__init__.py` | `PluginField`, `PluginBase`, `PluginRegistry`, `make_plugin_registry`, sentinel + entry-point discovery |
+| `vtscore/plugins/inventory.py` | Enumerate every installed plugin across every family in one call |
+| `vtscore/plugins/normalize.py` | Framework-side normalisation of incoming `field_values` |
+| `vtscore/plugins/schema.py` | Build marshmallow schemas from `PluginField` declarations |
+| `vtscore/plugins/uploads.py` | The normalised upload type shared by library-tier plugin bases |
+
 - [Architecture in one paragraph](#architecture-in-one-paragraph)
 - [`PluginField`](#pluginfield)
   - [Field-value normalization (`vtscore.plugins.normalize`)](#field-value-normalization)
@@ -32,6 +40,8 @@ end-to-end example per family.
 - [Entry-point integration](#entry-point-integration)
 - [Inventory (`vtscore.plugins.inventory`)](#inventory)
 - [Schema helpers (`vtscore.plugins.schema`)](#schema-helpers)
+- [Field-value normalisation](#field-value-normalisation)
+- [File uploads](#file-uploads)
 - [End-to-end: writing a third-party plugin](#end-to-end-writing-a-third-party-plugin)
 
 ---
@@ -463,6 +473,62 @@ the plugin instance, so the schema-build cost is paid once per
 process). Unknown keys are dropped (`Meta.unknown = "exclude"`).
 This module is used by the Flask routes in `vtsearch/routes/`;
 library consumers don't typically interact with it directly.
+
+## Field-value normalisation
+
+Schema validation checks the *shape* of incoming values.
+`vtscore/plugins/normalize.py` applies the behaviours that come after,
+which used to be every plugin author's job to remember:
+
+```python
+def normalize_field_values(plugin: PluginBase, field_values: dict) -> dict: ...
+```
+
+1. **Whitespace strip** on every text-like value, so a plugin body can
+   trust `field_values[key]` is already trimmed.
+2. **Template substitution** for fields declaring
+   `PluginField.template_vars` - `YYYYMMDD-HHMMSS`, `YYYYMMDD`, `YYYY`,
+   `MM`, `DD`, `detector_name`, `detector_id`, `username`. Each
+   resolved value runs through `sanitize_template_value`, so an
+   attacker-controlled name cannot escape the directory an
+   admin-configured template implies.
+3. **Field-type-driven security validation.** `field_type="url"` goes
+   through `validate_url`; `field_type="server_path"` goes through
+   `confine_server_filepath` anchored at the per-user data dir, and the
+   **approved** path is written back into `field_values` so the plugin
+   body consumes exactly what was validated.
+
+It is wired into both ingress points - the HTTP path
+(`validate_plugin_args`, after marshmallow loads the body) and the CLI
+path (`PluginBase.validate_cli_field_values`, after the presence check).
+So a plugin body should trust the dict it receives: no
+`if not foo: raise ValueError` boilerplate, no manual `validate_url` /
+`validate_server_filepath` calls, no bespoke `str.replace("{detector_name}", ...)`
+chains. External plugins that still call the validators by hand keep
+working - re-validation is idempotent on already-validated values.
+
+It mutates *field_values* in place and returns it, skips file uploads
+and non-string values, and raises `ValueError` for a missing required
+field, an invalid URL, a path-traversal attempt, or an unknown template
+variable. The whole pass is idempotent.
+
+## File uploads
+
+`field_type="file"` inputs reach a plugin body as an `UploadedFile`
+(`vtscore/plugins/uploads.py`), a **structural protocol** carrying
+`.filename`, `.read()` / `.stream`, and `.save(dst)`. It exists so the
+library tier never has to import Werkzeug's `FileStorage`.
+
+Three implementations satisfy it, one per ingress:
+
+| Path | Implementation |
+|------|----------------|
+| Flask request | Werkzeug's `FileStorage`, passed straight through - it already has the surface |
+| CLI (`--file <path>`) | `CliUploadedFile`, backed by a local filesystem path |
+| Background-thread upload | `BytesIOUploadedFile`, holding the bytes in memory so the thread can still read them after the request context is torn down |
+
+Write plugin bodies against `.filename` (matching Werkzeug's name) and
+they work on all three.
 
 ## End-to-end: writing a third-party plugin
 

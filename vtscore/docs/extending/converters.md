@@ -89,7 +89,7 @@ output). Each dict must contain at minimum:
 - any extras the target media type's `pickle_extra_fields` declares
   (e.g. `width`, `height` for images).
 
-`convert()` does **not** populate `id`, `embedding`, or `md5` - those
+`convert()` does **not** populate `id`, `embeddings`, or `md5` - those
 are filled in by the caller. Don't compute embeddings inside
 `convert()`; the loader pipeline embeds the produced media afterwards.
 
