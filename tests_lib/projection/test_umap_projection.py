@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 import vtscore.projection.umap_projection as up
+from vtscore.config import PROJECTION_COMPACT_DEFAULT
 from vtscore.projection.umap_projection import Projection, fit_projection
 
 # Several tests below run *real* umap-learn fits (tiny matrices, but the first
@@ -110,7 +111,7 @@ def _clustered_matrix(per: int = 40, d: int = 12, seed: int = 0) -> np.ndarray:
     return np.concatenate([c + rng.standard_normal((per, d)).astype(np.float32) for c in centres])
 
 
-def test_compaction_on_by_default_moves_clusters_together():
+def test_compaction_moves_clusters_together():
     mat = _clustered_matrix(seed=5)
     ids = list(range(mat.shape[0]))
     packed = fit_projection(mat, ids, n_neighbors=10, random_state=3, compact=True)
@@ -118,8 +119,8 @@ def test_compaction_on_by_default_moves_clusters_together():
     assert packed.method == "umap" and loose.method == "umap"
     assert packed.coords.shape == loose.coords.shape
 
-    # Default compaction must actually change the layout (close the oceans):
-    # the packed bbox is no larger than the raw UMAP bbox.
+    # Compaction must actually change the layout (close the oceans): the packed
+    # bbox is no larger than the raw UMAP bbox.
     def _area(c):
         span = c.max(axis=0) - c.min(axis=0)
         return float(span[0] * span[1])
@@ -128,9 +129,24 @@ def test_compaction_on_by_default_moves_clusters_together():
     assert _area(packed.coords) <= _area(loose.coords) + 1e-3
 
 
+def test_compaction_defaults_to_the_shipped_default():
+    """``fit_projection``'s own default is ``PROJECTION_COMPACT_DEFAULT``.
+
+    The signature used to hardcode ``True`` while the app shipped ``False``, so
+    a caller that passed nothing (the ingest-time pre-build) got a layout
+    nobody configured — see issue #3056.
+    """
+    mat = _clustered_matrix(seed=5)
+    ids = list(range(mat.shape[0]))
+    implicit = fit_projection(mat, ids, n_neighbors=10, random_state=3)
+    explicit = fit_projection(mat, ids, n_neighbors=10, random_state=3, compact=PROJECTION_COMPACT_DEFAULT)
+    assert implicit.compact is PROJECTION_COMPACT_DEFAULT
+    assert np.allclose(implicit.coords, explicit.coords)
+
+
 def test_compaction_preserves_finiteness_and_dtype():
     mat = _clustered_matrix(seed=6)
-    proj = fit_projection(mat, list(range(mat.shape[0])), n_neighbors=10, random_state=2)
+    proj = fit_projection(mat, list(range(mat.shape[0])), n_neighbors=10, random_state=2, compact=True)
     assert proj.coords.dtype == np.float32
     assert np.isfinite(proj.coords).all()
 
@@ -204,18 +220,24 @@ def test_umap_fit_emits_elapsed_heartbeats(monkeypatch):
 
 def test_umap_fit_stamps_params():
     """A UMAP fit records the knobs it used on the returned projection."""
-    proj = fit_projection(_matrix(30, 16, seed=5), list(range(30)), n_neighbors=12, min_dist=0.3, random_state=1)
+    proj = fit_projection(
+        _matrix(30, 16, seed=5), list(range(30)), n_neighbors=12, min_dist=0.3, random_state=1, compact=True
+    )
     assert proj.method == "umap"
     assert proj.n_neighbors == 12
     assert proj.min_dist == 0.3
+    # Compaction is stamped too, or a layout packed under an old default is
+    # indistinguishable from one fit under the current one (issue #3056).
+    assert proj.compact is True
 
 
 def test_pca_fallback_leaves_params_none():
-    """The small-N PCA fallback ignores the knobs, so it stamps neither."""
-    proj = fit_projection(_matrix(6, 8, seed=3), list(range(6)), min_n_for_umap=10)
+    """The small-N PCA fallback ignores the knobs, so it stamps none of them."""
+    proj = fit_projection(_matrix(6, 8, seed=3), list(range(6)), min_n_for_umap=10, compact=True)
     assert proj.method == "pca"
     assert proj.n_neighbors is None
     assert proj.min_dist is None
+    assert proj.compact is None
 
 
 def test_remove_ids_preserves_stamped_params():
@@ -223,8 +245,9 @@ def test_remove_ids_preserves_stamped_params():
     from vtscore.projection.umap_projection import remove_ids
 
     coords = _matrix(5, 2, seed=1)
-    proj = Projection("pid", [0, 1, 2, 3, 4], coords, "umap", 20, 0.2)
+    proj = Projection("pid", [0, 1, 2, 3, 4], coords, "umap", 20, 0.2, False)
     culled = remove_ids(proj, [1, 3])
     assert culled.n_neighbors == 20
     assert culled.min_dist == 0.2
+    assert culled.compact is False
     assert culled.ids == [0, 2, 4]
