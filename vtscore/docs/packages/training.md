@@ -18,8 +18,11 @@ this package is the underlying ML core.
 |-----------------------------------------------------------------------|-----------------------------------------------------------------|
 | `vtscore/training/mlp.py`                                             | `build_model`, `build_model_from_weights`, `train_model`        |
 | `vtscore/training/thresholds.py`                                      | GMM / cross-cal / safe threshold helpers                        |
+| `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
+| `vtscore/training/evt_mixture.py`                                     | Gumbel + Normal score mixture - the extreme-value cut           |
 | `vtscore/training/svm.py`                                             | `SVMClassifier` + `train_svm` prototype                         |
 | `vtscore/training/region_similarity.py`                               | Patch-level cosine scoring with bounding boxes                  |
+| `vtscore/training/structural_similarity.py`                           | Stage-2 geometric re-rank + match-statistic verification classifier |
 
 The package `__init__.py` re-exports the head-building and threshold names; SVM
 and region-similarity helpers are imported from their submodules.

@@ -11,6 +11,18 @@ calling convention: a small set of well-known functions that hide
 "look up the default embedder for media type X, lazy-load it, embed
 the file, return the vector".
 
+## Contents
+
+| Module | Concern |
+|--------|---------|
+| `vtscore/embedding/helpers.py` | The `embed_*_file` façades and `embed_text_query` (with its LRU) |
+| `vtscore/embedding/loader.py` | Model loading / initialisation, preload prediction, concurrency defaults |
+| `vtscore/embedding/matrix.py` | The lazy cached `(N, D)` matrix, its region-expanded twin, and the on-disk sidecar |
+| `vtscore/embedding/media_vectors.py` | Per-media vector access out of the `media["embeddings"]` dict |
+| `vtscore/embedding/normalize.py` | Canonical L2 normalisation - the single ingest chokepoint |
+| `vtscore/embedding/binding.py` | Role-typed (text / patch / structural) embedder binding for a dataset |
+| `vtscore/embedding/__init__.py` | Re-exports the public façade |
+
 ---
 
 ## What's an embedder, in this package's vocabulary?
@@ -371,6 +383,119 @@ The guard rails that make it safe to trust:
 Persisting *per-item* vectors anywhere outside the dataset pickle - to
 settings, to a detector JSON, to a new cache file of your own - is still
 a project-invariant violation.
+
+---
+
+## Per-media vector access
+
+`vtscore/embedding/media_vectors.py` is how you read and write the
+`media["embeddings"]` dict. A media carries a `{embedder_name: vector}`
+map, not a single `embedding` field, because one media can hold vectors
+from several bound embedders at once.
+
+```python
+def primary_embedder_name(media) -> str | None: ...
+def media_embedder_names(media) -> list[str]: ...           # primary first
+def media_embedding(media, embedder_name=None) -> Any: ...  # primary when unset
+def init_embeddings(embedder_name, vec) -> dict: ...        # for media-dict literals
+def set_media_embedding(media, embedder_name, vec) -> None: ...
+def ensure_embeddings_dict(media) -> None: ...
+```
+
+The primary is `media["embedder"]` when recorded, else the first key of
+the dict. `media_embedder_names` puts it first so role derivation and
+primary-vector reads agree on which embedder leads.
+
+`UNKNOWN_EMBEDDER_KEY` (the empty string) is the sentinel for a
+pre-computed, externally-supplied vector with no embedder name - an NPZ
+import, `content_vectors`, `custom_metadata_map`. Such a vector is
+stored rather than dropped: a nameless vector binds no role, and the
+embed stage's *named* missing-vector check still treats the media as
+lacking any named embedder's vector, while `media_embedding` still
+resolves the sole entry as primary.
+
+Use `init_embeddings` in media-dict literals at creation time, and
+`set_media_embedding` afterwards. Passing `vec=None` yields `{}`, the
+deferred-embed placeholder the embed stage fills in later.
+
+---
+
+## Normalisation
+
+`vtscore/embedding/normalize.py` is one function:
+
+```python
+def l2_normalize(vec: object) -> np.ndarray: ...
+```
+
+VTSearch is direction-only nearly everywhere - every similarity
+comparison treats embeddings as points on the unit sphere. Rather than
+re-normalising at each comparison, **the unit vector is the stored
+form**. This module is the single place that performs it, applied at
+every point a vector enters the system: fresh embeds
+(`MediaEmbedder.embed_media` / `embed_media_bulk`, so every subclass is
+covered), text queries (`MediaEmbedder.embed_text`), pickle-loaded
+stored vectors, and re-ingested-from-origin vectors.
+
+Because the invariant holds at the store, downstream consumers - the
+cached matrix, the coverage atlas's k-means, MLP training, region
+similarity, the VTSBrowse projection - all consume unit vectors without
+re-normalising.
+
+Two properties make applying it at several chokepoints safe: it is
+**idempotent** (re-normalising a unit vector returns it unchanged up to
+float32 rounding, so an embedder that already normalises costs nothing),
+and a **zero or non-finite-norm vector is returned unchanged** rather
+than divided, so it can't mint `inf` / `nan` rows that would poison every
+downstream consumer.
+
+---
+
+## Role-typed embedder binding
+
+`vtscore/embedding/binding.py` implements the v3 "three-slot" model: a
+dataset binds up to one **text**-capable embedder, up to one
+**patch**-capable embedder, and up to one **structural** (geometric
+verification) embedder. All three can coexist on one dataset, and each
+drives a different path - text sort against the text slot; region
+similarity, region voting and the detector head against the patch slot;
+instance retrieval and geometric re-rank against the structural slot.
+
+The three immutable detector *embedder types* partition the registry
+(no embedder advertises more than one capability flag), classified in
+precedence order **structural ▸ patch_semantic ▸ semantic** so that
+typing is a total function matching score-routing precedence:
+
+| Constant | Label |
+|----------|-------|
+| `EMBEDDER_TYPE_STRUCTURAL` | Structural |
+| `EMBEDDER_TYPE_PATCH_SEMANTIC` | Patch Semantic |
+| `EMBEDDER_TYPE_SEMANTIC` | Semantic |
+
+| Function | Description |
+|----------|-------------|
+| `embedder_type(name)` | Classify one embedder into its type |
+| `derive_binding(name)` / `derive_binding_from_names(names)` | Map embedder name(s) onto the `(text, patch, structural)` triple |
+| `validate_binding(...)` | Reject a slot pointing at an embedder lacking that role's capability |
+| `embedder_of_type(names, target_type)` | The first name of a given type, or `None` |
+| `dataset_supplied_types(names)` / `detector_dataset_compatible(det_type, names)` | Which types a dataset supplies; whether a detector can run on it |
+| `score_marker_embedder(media)` / `..._for_snap(snap)` / `keying_embedder_for_snap(det_ctx, snap)` | Which embedder the score / cache key routes through |
+
+`derive_binding` is how a **pre-v3 dataset** - one `embedder` name and
+nothing else - resolves into the three-slot model on load, by
+role-typing that name against the embedder's declared capabilities. An
+explicit binding (`bind_embedders`) overrides the derivation for
+genuinely multi-embedder datasets.
+
+Neither function holds state; the binding lives on `DatasetContext` as
+embedder **names**, never vectors. Capability lookups go through the
+embedder registry, so an unknown name resolves to "no capabilities" and
+is ineligible for every slot.
+
+A detector locks one type at create time and is compatible with any
+dataset binding an embedder of that same type - the labels (and, for
+`patch_semantic`, the region boxes) re-derive against whichever concrete
+embedder that dataset supplies.
 
 ---
 

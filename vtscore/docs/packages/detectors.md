@@ -15,21 +15,50 @@ origins into vectors live in `vtscore.embedding`.
 
 ## Contents
 
+Every module in the package, grouped by what it is for.
+
+**Storage and identity**
+
 | Module                                       | Concern                                                             |
 |----------------------------------------------|---------------------------------------------------------------------|
 | `vtscore/detectors/registry.py`              | Persistent registry of detector entries (one JSON manifest)         |
-| `vtscore/detectors/store.py`                 | Per-detector on-disk JSON labelset file I/O                         |
+| `vtscore/detectors/store.py`                 | Low-level per-detector JSON file I/O                                |
+| `vtscore/detectors/embedder_type.py`         | Resolve and validate a detector's immutable embedder *type*         |
+| `vtscore/detectors/input_spec.py`            | Clipper input-spec extraction and matching                          |
+
+**Training and scoring**
+
+| Module                                       | Concern                                                             |
+|----------------------------------------------|---------------------------------------------------------------------|
 | `vtscore/detectors/training.py`              | `train_and_threshold`, `train_and_score`, `train_detector_from_origins` |
-| `vtscore/detectors/workflow.py`              | `apply_and_retrain` - combined "apply labels + retrain" entry        |
+| `vtscore/detectors/labelset_training.py`     | Train and score from the saved labelset (cross-dataset)             |
+| `vtscore/detectors/learned_sort.py`          | Learned-sort orchestration: resolve labelset → train → score → reconcile |
+| `vtscore/detectors/model_loading.py`         | Resolve a detector's scoring model, training it on demand           |
+| `vtscore/detectors/workflow.py`              | `apply_and_retrain` - combined "apply labels + retrain" entry       |
+| `vtscore/detectors/labeling_progress.py`     | Per-step model cache + stopping-condition metrics                   |
+| `vtscore/detectors/evidence_coverage.py`     | Labelset-kNN evidence coverage - decision support without an atlas  |
+
+**Labels: resolving, syncing, restoring**
+
+| Module                                       | Concern                                                             |
+|----------------------------------------------|---------------------------------------------------------------------|
 | `vtscore/detectors/resolver.py`              | Origin → file → embedding pipeline + pluggable resolvers            |
-| `vtscore/detectors/labelset_training.py`     | Train from the saved labelset (cross-dataset)                       |
 | `vtscore/detectors/labelset_elements.py`     | Stable element IDs, per-element views                               |
+| `vtscore/detectors/labelset_ops.py`          | Single entry point onto the detector-labelset operations surface    |
+| `vtscore/detectors/labelset_rename.py`       | Move / rewrite labelset source files when a detector is renamed     |
 | `vtscore/detectors/label_sync.py`            | Sync current votes back into the on-disk labelset                   |
 | `vtscore/detectors/label_restoration.py`     | Restore saved labels into the active dataset                        |
 | `vtscore/detectors/dataset_sync.py`          | Rehydrate cid-keyed vote state on dataset switch                    |
-| `vtscore/detectors/media_seeding.py`         | Seed votes from a detector's example media files                    |
-| `vtscore/detectors/labeling_progress.py`     | Per-step model cache + stopping-condition metrics                   |
-| `vtscore/detectors/input_spec.py`            | Clipper input-spec extraction and matching                          |
+| `vtscore/detectors/embedder_sync.py`         | Re-embed a loaded detector's labels when the dataset's space changes |
+| `vtscore/detectors/media_seeding.py`         | Seed good votes from a detector's example media files               |
+
+**Consumers of a trained detector**
+
+| Module                                       | Concern                                                             |
+|----------------------------------------------|---------------------------------------------------------------------|
+| `vtscore/detectors/converter_routing.py`     | Route media through converters for CLI autodetect scoring           |
+| `vtscore/detectors/portable_bundle.py`       | Build a standalone, portable detector bundle for transfer           |
+| `vtscore/detectors/positives_browse.py`      | Ephemeral browse context over a detector's positive labels          |
 
 The package `__init__.py` is intentionally minimal - every public name
 is imported from the submodule it lives in.

@@ -5,13 +5,23 @@ moved to topical homes - state, plugins, sync, concurrency, security,
 and audio helpers all live in their own top-level packages now (see
 `vtscore.state`, `vtscore.plugins`, `vtscore.sync`,
 `vtscore.concurrency`, `vtscore.security`, and
-`vtscore.media.audio`). What's left is genuinely homeless: a single
-hit-dict builder shared by the CLI and the API, plus the synthetic
-media generators used by the offline demo importer. Two modules,
-both small, both stable.
+`vtscore.media.audio`). What's left is genuinely homeless.
 
-**Source:** `vtscore/utils/__init__.py`, `vtscore/utils/hits.py`,
-`vtscore/utils/synthetic/`.
+There is a theme to what stays: each module is a **single chokepoint**
+for something that would otherwise be re-implemented at dozens of call
+sites and drift. One hit-dict shape, one place that declares MD5 as
+non-security, one non-finite score sentinel, one wording for the
+"AGPL extra not installed" error.
+
+## Contents
+
+| Module | Concern |
+|--------|---------|
+| `vtscore/utils/hits.py` | `build_media_hit` - the scored-media hit-dict shape |
+| `vtscore/utils/hashing.py` | Content fingerprints (`content_md5`, `content_sha1`, `new_md5`, `file_md5`) |
+| `vtscore/utils/scores.py` | Non-finite score sanitisation, so a `NaN` logit can't produce invalid JSON |
+| `vtscore/utils/optional_deps.py` | Actionable errors when an opt-out AGPL dependency isn't installed |
+| `vtscore/utils/synthetic/` | Offline synthetic media generators (`audio.py`, `images.py`, `video.py`) |
 
 ## `vtscore.utils.hits.build_media_hit`
 
@@ -99,6 +109,107 @@ hit = build_media_hit(cid=42, media=media, score=0.873, label="good")
 Extra keyword arguments are merged in last, so callers can attach
 detector-specific or call-site-specific fields (`label="good"`,
 `detector="my-detector"`) without needing to extend this function.
+
+## `vtscore.utils.hashing` - content fingerprints
+
+```python
+def content_md5(data: bytes | str) -> str: ...
+def content_sha1(data: bytes | str) -> str: ...
+def new_md5() -> hashlib._Hash: ...          # incremental, for .update() streaming
+def file_md5(file_path: Path | str) -> str:  # constant-memory, chunked
+```
+
+Every hash VTSearch computes over media bytes answers "are these the
+same bytes?" - dedup, cache keys, ETags, origin tracking. **None of them
+is a security primitive.** Nothing here authenticates, signs, or protects
+anything.
+
+That distinction has a runtime consequence, which is the whole reason
+this module exists. On a FIPS-enabled host OpenSSL refuses to hand out
+MD5 at all, and `hashlib.md5(...)` raises `ValueError: [digital envelope
+routines] unsupported`. CPython normally falls back to its built-in
+`_md5`, but the Python builds shipped by FIPS-oriented distributions
+(RHEL, Fedora) strip that fallback so the policy cannot be bypassed.
+`usedforsecurity=False` is the supported escape hatch: it declares the
+non-security use and those builds then allow the digest.
+
+Call these instead of `hashlib` directly for anything that fingerprints
+content, so the declaration is made in one place and the next
+environment quirk is a one-file change.
+
+---
+
+## `vtscore.utils.scores` - non-finite score sanitisation
+
+```python
+NON_FINITE_SCORE_SENTINEL: float = -1.0
+
+def sigmoid_to_finite_scores(logits, *, default=NON_FINITE_SCORE_SENTINEL) -> list[float]: ...
+def sigmoid_to_finite_array(logits, *, default=NON_FINITE_SCORE_SENTINEL) -> np.ndarray: ...
+def finite_or(value, default=NON_FINITE_SCORE_SENTINEL) -> float: ...
+```
+
+A trained head can emit `NaN` logits when training destabilises - bad
+optimisation, corrupted input embeddings, AMP overflow on CUDA, an
+extreme class-weight shift. `torch.sigmoid(NaN)` is `NaN`, and
+`json.dumps` will happily emit the bare token `NaN` (and
+`Infinity` / `-Infinity`), which is invalid JSON per RFC 7159 and is
+rejected by every browser's `JSON.parse`. One poisoned response breaks
+the Angular client until the user clears votes.
+
+So every score-emitting path routes through one sentinel. `-1.0` sits
+*outside* the `[0, 1]` sigmoid range, which buys two things: `score >=
+threshold` is always `False` for a sanitised score, so broken items fall
+deterministically to the bottom of any sort; and the frontend already
+renders a missing score as `-1`, so a sanitised score looks exactly like
+"no score yet" with no UI change.
+
+Use `sigmoid_to_finite_scores` in place of
+`torch.sigmoid(model(X)).squeeze(1).cpu().tolist()` at any site whose
+output reaches a JSON response. Use `sigmoid_to_finite_array` where the
+output feeds straight into numpy math (e.g. segmented max-pool): it ends
+in `.numpy()` instead of `.tolist()`, avoiding a pure-Python,
+GIL-holding O(N) pass that matters on the background training thread.
+`finite_or` is the defensive guard for already-stored floats such as
+`DetectorContext.last_learned_scores`.
+
+---
+
+## `vtscore.utils.optional_deps` - AGPL opt-out errors
+
+```python
+def agpl_unavailable_message(package: str, feature: str) -> str: ...
+def agpl_import_error(package: str, feature: str) -> ImportError: ...
+```
+
+Two runtime dependencies are AGPL-3.0-or-later: `ultralytics` (YOLO) and
+`PyMuPDF` (PDF rendering / document text extraction). They live in the
+`agpl` extra rather than in `[project.dependencies]`, but every
+documented install path requests that extra, so a normal install has
+them exactly as it always did. The split exists so a deployment that
+cannot take copyleft code can decline:
+`VTSEARCH_NO_AGPL=1 bash scripts/install.sh`, or the
+`requirements/*-no-agpl.txt` mirrors.
+
+On such an install the backed features are simply unavailable, and a
+bare `ImportError` says nothing about why. These helpers name the
+package, the feature, and both ways back.
+
+Keep the plain `import` inside a `try` at the call site rather than
+routing it through `importlib.import_module`, so static analysis still
+sees the real module and its stubs:
+
+```python
+try:
+    import fitz
+except ImportError as exc:
+    raise agpl_import_error("PyMuPDF", "Rendering PDF pages") from exc
+```
+
+Raise it `from` the original so a genuinely broken install stays
+distinguishable from a deliberately absent one.
+
+---
 
 ## `vtscore.utils.synthetic` - offline media generators
 

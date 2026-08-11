@@ -17,28 +17,63 @@ surface a programmatic consumer calls into.
 
 ## Contents
 
+**Core harness** - the parts every eval run touches.
+
 | Module                                  | Concern                                                  |
 |-----------------------------------------|----------------------------------------------------------|
 | `vtscore/eval/config.py`                | `EvalQuery` dataclass and `EVAL_DATASETS` registry       |
 | `vtscore/eval/metrics.py`               | `QueryMetrics`, `LearnedSortMetrics`, `DatasetResult`, metric functions |
+| `vtscore/eval/labels.py`                | The ground-truth membership test shared by every harness |
 | `vtscore/eval/runner.py`                | `eval_text_sort`, `eval_learned_sort`, `run_eval`, `format_results_json` |
-| `vtscore/eval/voting_iterations.py`     | Per-step cost simulator and multi-dataset sweep          |
-| `vtscore/eval/label_curve.py`           | MLP-vs-SVM label-curve sweep (`run_label_curve_eval`)    |
-| `vtscore/eval/label_curve_main.py`      | CLI for the label-curve sweep                            |
 | `vtscore/eval/visualize.py`             | `plot_eval_results`, `plot_voting_iterations` (matplotlib) |
 | `vtscore/eval/__main__.py`              | CLI for `python -m vtscore.eval`                         |
+
+**Voting-iterations simulation** - the autopilot cost model.
+
+| Module                                  | Concern                                                  |
+|-----------------------------------------|----------------------------------------------------------|
+| `vtscore/eval/voting_iterations.py`     | Per-step cost simulator and multi-dataset sweep          |
+| `vtscore/eval/al_strategies.py`         | The vote-order simulation: `STRATEGIES`, `ALContext`, `select_next` |
+| `vtscore/eval/al_benchmark.py`          | Hermetic harness around the voting-iterations eval       |
+| `vtscore/eval/autopilot_flow.py`        | The app's Autopilot phase machine, **ported** from TypeScript |
+| `vtscore/eval/seed_scores.py`           | Text-sort seed scores that start the simulation          |
+
+**Experiment arms** - each answers one study; none is the default arm.
+
+| Module                                  | Concern                                                  |
+|-----------------------------------------|----------------------------------------------------------|
+| `vtscore/eval/patch_styles.py`          | Detection-style abstraction for the Max-Patch experiment |
+| `vtscore/eval/cut_rules.py`             | Score-cut rules and their oracle decomposition           |
+| `vtscore/eval/calibration_metrics.py`   | Pure-numpy calibration metrics and pooling variants      |
+| `vtscore/eval/trainers.py`              | Shared trainer registry for the learned-sort comparisons |
+| `vtscore/eval/label_curve.py`           | MLP-vs-SVM label-curve sweep (`run_label_curve_eval`)    |
+| `vtscore/eval/label_curve_main.py`      | CLI for the label-curve sweep                            |
+| `vtscore/eval/timing_benchmark.py`      | GPU microbenchmark: MLP (torch) vs SVM (cuML)            |
 
 The package `__init__.py` re-exports the main entry points:
 
 ```python
 from vtscore.eval import (
     EVAL_DATASETS, EvalQuery,
+    STRATEGIES, ALContext, available_strategies, select_next,
     compute_metrics, run_eval,
     simulate_voting_iterations, run_voting_iterations_eval,
     run_voting_iterations_eval_from_pickles,
     plot_eval_results, plot_voting_iterations,
 )
 ```
+
+> **The default arm is the shipped algorithm.** `vtscore.eval` measures
+> *deviations* from what the app does, which only means anything if the
+> no-explicit-arm path is what the app actually runs. Most of the
+> harness stays honest by **delegating** into app code
+> (`MaxPatchStyle` calls `pool_box_from_media` / `media_score_rows`
+> rather than re-deriving them). Two things can't delegate and so can
+> drift: `autopilot_flow.py`, which is ported because the original is
+> TypeScript, and the places where "no arm" resolves to the app's
+> current default. `scripts/check-eval-app-sync.py` (a `./run-tests.sh`
+> gate) pins a digest of each mirrored surface and fails when one moves.
+> See the "Eval Default Arm IS the App" rule in `CLAUDE.md`.
 
 ---
 
