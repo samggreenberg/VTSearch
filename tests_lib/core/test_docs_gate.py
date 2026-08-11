@@ -177,7 +177,7 @@ class TestPathCheck:
 
 class TestLeakCheck:
     def test_home_directory_path_fires(self):
-        assert checks("**See also:** [`/home/user/VTSearch/docs/CLI.md`](../CLI.md)") == ["LEAK"]
+        assert checks("**See also:** [`/home/user/VTSearch/docs/CLI.md`](CLI.md)") == ["LEAK"]
 
     def test_macos_home_directory_path_fires(self):
         assert checks("Run it from `/Users/someone/VTSearch`.") == ["LEAK"]
@@ -238,3 +238,7 @@ class TestAllowlistsStayHonest:
     def test_leak_allowlist_entries_point_at_real_files(self):
         for rel in gate.ALLOWED_LEAKS:
             assert (REPO_ROOT / rel).exists(), f"{rel} is allowlisted for path leaks but no longer exists"
+
+    def test_plan_self_reference_entries_point_at_real_files(self):
+        for rel in gate.PLAN_SELF_REFERENCE:
+            assert (REPO_ROOT / rel).exists(), f"{rel} is exempt from the PLAN check but no longer exists"

@@ -35,9 +35,9 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
-import sys
 from collections.abc import Iterable, Iterator
 from pathlib import Path
+from urllib.parse import unquote
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -78,6 +78,17 @@ PATH_SKIP_PREFIXES = (
     "docs/plans/",
     "docs/experiments/",
     "scripts/experiments/",
+)
+
+# Exempt from the PLAN check: this checker and its test are the one place in the
+# tree that must name plan paths which deliberately do not resolve — an example
+# in a comment, a synthetic fixture — because naming them is how the check is
+# explained and proven.
+PLAN_SELF_REFERENCE = frozenset(
+    {
+        "scripts/check-docs.py",
+        "tests_lib/core/test_docs_gate.py",
+    }
 )
 
 # Absolute-path leaks that are legitimate: experiment reports record the cluster
@@ -161,8 +172,8 @@ class Failure:
 def tracked_files() -> list[str]:
     """Every git-tracked path, repo-relative, POSIX-separated."""
     try:
-        out = subprocess.run(
-            ["git", "-C", str(ROOT), "ls-files", "-z"],
+        out = subprocess.run(  # noqa: S603 - fixed argv, no shell, no user input
+            ["git", "-C", str(ROOT), "ls-files", "-z"],  # noqa: S607 - git resolved from PATH
             capture_output=True,
             check=True,
             text=True,
@@ -213,7 +224,12 @@ def split_fences(text: str) -> tuple[list[tuple[int, str]], list[tuple[int, str]
         else:
             code.append((lineno, raw))
             # A fence closes on a marker of at least the opening length, same char.
-            if match and match.group(2)[0] == fence[0] and len(match.group(2)) >= len(fence) and not match.group(3).strip():
+            if (
+                match
+                and match.group(2)[0] == fence[0]
+                and len(match.group(2)) >= len(fence)
+                and not match.group(3).strip()
+            ):
                 fence = None
     return prose, code
 
@@ -322,6 +338,10 @@ def check_markdown(
     failures: list[Failure] = []
     rel = doc.relative_to(ROOT).as_posix()
     prose, _code = split_fences(text)
+    # Seed the cache with the text we were handed, so in-page anchors are
+    # checked against *this* version of the document rather than whatever is
+    # currently on disk under the same name.
+    anchor_cache.setdefault(doc, anchors_of(text))
 
     def anchors_for(target_doc: Path) -> frozenset[str]:
         if target_doc not in anchor_cache:
@@ -344,8 +364,6 @@ def check_markdown(
         if path_part.startswith("/"):
             failures.append(Failure("LINK", doc, lineno, f"'{target}' is an absolute link; use a relative path"))
             continue
-        from urllib.parse import unquote
-
         resolved = (doc.parent / unquote(path_part)).resolve()
         if not resolved.exists():
             failures.append(Failure("LINK", doc, lineno, f"'{path_part}' does not exist"))
@@ -388,7 +406,9 @@ def check_markdown(
         broken = BROKEN_FENCE_RE.match(strip_quote(line))
         if broken and "`" not in broken.group(1):
             failures.append(
-                Failure("FENCE", doc, lineno, f"code fence preceded by text ({line.strip()!r}); the block will not render")
+                Failure(
+                    "FENCE", doc, lineno, f"code fence preceded by text ({line.strip()!r}); the block will not render"
+                )
             )
 
     return failures
@@ -446,6 +466,8 @@ def check_plan_refs(files: frozenset[str]) -> list[Failure]:
     """
     failures: list[Failure] = []
     for rel in sorted(files):
+        if rel in PLAN_SELF_REFERENCE:
+            continue
         path = ROOT / rel
         try:
             text = path.read_text(encoding="utf-8")
