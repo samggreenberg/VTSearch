@@ -24,6 +24,7 @@ end-to-end example per family.
 
 - [Architecture in one paragraph](#architecture-in-one-paragraph)
 - [`PluginField`](#pluginfield)
+  - [Field-value normalization (`vtscore.plugins.normalize`)](#field-value-normalization)
 - [`PluginBase`](#pluginbase)
 - [`PluginRegistry`](#pluginregistry)
 - [`make_plugin_registry()` factory](#make_plugin_registry-factory)
@@ -78,9 +79,14 @@ is used by every family; each family's base module re-exports
 | `hint` | `str` | `""` | Format-hint chip rendered below the input (separate from `description`) |
 | `dynamic_options` | `bool` | `False` | `"select"` fields whose options come from `plugin.get_field_options()` at runtime |
 | `depends_on` | `list[str]` | `[]` | Other field keys that, when changed, trigger a re-fetch of this field's options |
+| `allow_free_text` | `bool` | `False` | `"select"` fields: render as a combobox accepting an arbitrary typed value |
 | `min` | `str` | `""` | `"number"` fields: minimum value (string form; empty = unbounded) |
 | `max` | `str` | `""` | `"number"` fields: maximum value |
 | `step` | `str` | `""` | `"number"` fields: step increment; non-integer step → `float` CLI parsing |
+| `clears` | `list[str]` | `[]` | Field keys blanked in the UI when this field gets a non-empty value ("supply A *or* B") |
+| `include_in_origin` | `bool \| None` | `None` | Copy into the persisted origin dict. `None` = field-type default (`False` for `"file"` / `"password"`, `True` otherwise) |
+| `origin_serializer` | `Callable[[Any], str] \| None` | `None` | Custom value → origin-string conversion for list/dict values |
+| `template_vars` | `tuple[str, ...]` | `()` | Template placeholders the framework substitutes into this field's value; see [Field-value normalization](#field-value-normalization) |
 
 ### `FieldType` values
 
@@ -96,7 +102,7 @@ Defined as `Literal[...]` at `vtscore/plugins/__init__.py:44`:
 | `"email"` | Email input | Plain string; loosely validated |
 | `"number"` | Numeric input with min/max/step | Coerced to `int` or `float` by `is_integer_number()` (`vtscore/plugins/__init__.py:168`) |
 | `"select"` | Dropdown | `options` must be populated, or `dynamic_options=True` |
-| `"server_path"` | Server filesystem path picker | Validated by `vtscore.security.validate_server_filepath` at use-time |
+| `"server_path"` | Server filesystem path picker | Confined to the user's data dir by `vtscore.security.confine_server_filepath` in the normalization pass, which writes the approved path back |
 | `"checkbox"` | Boolean tickbox | `default` is `"true"` / `"false"`; values arrive coerced via `bool(str(v).lower() == "true")` |
 
 ### Number-field type inference
@@ -117,7 +123,54 @@ current_values) -> list[str]` method. List dependencies in
 field changes.
 
 `PluginField.to_dict()` returns the JSON shape served by every plugin
-listing endpoint; the keys mirror the dataclass attributes 1-to-1.
+listing endpoint; the keys mirror the dataclass attributes 1-to-1 (with
+the exception of `include_in_origin` and `origin_serializer`, which are
+server-side only).
+
+### Field-value normalization
+
+`vtscore/plugins/normalize.py` holds the framework's
+`normalize_field_values(plugin, field_values)` pass. It mutates
+*field_values* in place, returns it, and is idempotent. For each
+declared field of a text-like type (`text`, `url`, `email`, `password`,
+`folder`, `server_path`, `select`) it:
+
+1. Strips whitespace, and raises `ValueError("<Label> is required.")`
+   for a `required` field that is then empty (or was absent).
+2. Substitutes each `{name}` listed in the field's `template_vars`,
+   running every resolved value through
+   `vtscore.security.path_validation.sanitize_template_value`. An
+   undeclared or unknown name raises `ValueError`. Supported names:
+   `YYYYMMDD-HHMMSS`, `YYYYMMDD`, `YYYY`, `MM`, `DD`, `detector_name`,
+   `detector_id`, `username`.
+3. Runs the field-type validator: `url` → `validate_url`;
+   `server_path` / `folder` → `confine_server_filepath` anchored at
+   `get_file_access_base_dir()`, whose **approved path is written back**
+   into `field_values` so the plugin body consumes exactly what was
+   validated.
+
+File fields and non-string values are skipped.
+
+Step 3's write-back is a security property, not a convenience: under
+multi-user confinement the validator resolves a relative path against
+the user's data dir while a plugin body would resolve it against the
+process CWD, so consuming the raw string can read another user's
+directory even though the check passed.
+
+Both ingress points run the pass, so HTTP and CLI behave identically:
+`vtsearch/routes/_shared.py`'s `validate_plugin_args()` and
+`validate_exporter_field_values()` on the web path,
+`PluginBase.validate_cli_field_values()` on the CLI path, and
+`SyncSource.load()` / `save()` / `peek_version()` for sync sources (see
+[`sync.md`](sync.md)). Plugin bodies are expected to trust the result:
+no `.strip()`, no `if not foo: raise`, no manual `validate_url` /
+`validate_server_filepath` chains.
+
+**Not covered:** `MediaConverter.params` and `MediaClipper.parameters`
+arrive as pass-through payloads rather than plugin form bodies.
+Converter params are shape-validated against the `fields` schema by
+`MediaConverter.convert_normalized()` — ranges and `select` whitelists,
+but no URL or path guard.
 
 ## `PluginBase`
 

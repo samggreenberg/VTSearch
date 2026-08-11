@@ -142,7 +142,7 @@ class MediaClipper(ABC):
         """Split *media* into one or more media dicts of the same type.
 
         Each dict in the returned list is a **new** media dict that preserves
-        the structure of the original (``id``, ``type``, ``category``,
+        the structure of the original (``id``, ``media_type``, ``category``,
         ``origin``, ``origin_name``, etc.) but contains the clipped content
         (updated ``media_bytes`` / ``media_string``, ``duration``, and any
         type-specific fields).

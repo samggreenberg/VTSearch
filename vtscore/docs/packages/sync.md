@@ -21,8 +21,8 @@ Concrete subclasses live wherever the data domain does:
 ## Why it lives in `vtscore`
 
 The ABC defines the contract: "a plugin with `load()` and `save()`
-methods, configurable via `PluginField`s, discoverable via the standard
-plugin registry." Both library-tier (labelsets) and app-tier (settings)
+entry points backed by `_do_load()` / `_do_save()` hooks, configurable
+via `PluginField`s, discoverable via the standard plugin registry." Both library-tier (labelsets) and app-tier (settings)
 sources implement exactly that contract, so the abstract base lives at
 the lowest tier that can host it. The concrete subclasses then live
 wherever their data domain does - labels in `vtscore.labels`, settings
@@ -44,15 +44,48 @@ class SyncSource(PluginBase, Generic[LoadT, SaveT]):
     """Bidirectional sync target.
 
     Subclasses set the standard PluginBase class attributes (``name``,
-    ``display_name``, ``fields``, ...) and implement ``load`` / ``save``.
+    ``display_name``, ``fields``, ...) and override the underscored
+    template methods ``_do_load`` / ``_do_save``.
     """
 
     icon: str = "\U0001f504"        # default emoji: counter-clockwise arrows
     fields: list[PluginField]
 
-    def load(self, field_values: dict[str, Any]) -> LoadT: ...
-    def save(self, data: SaveT, /, field_values: dict[str, Any]) -> None: ...
+    # Framework-owned wrappers: normalize field_values, then dispatch.
+    def load(self, field_values: dict[str, Any]) -> LoadT:
+        return self._do_load(self._normalize(field_values))
+
+    def save(self, data: SaveT, /, field_values: dict[str, Any]) -> None:
+        self._do_save(data, self._normalize(field_values))
+
+    def peek_version(self, field_values: dict[str, Any]) -> Any | None: ...
+
+    # Subclass hooks.
+    def _do_load(self, field_values: dict[str, Any]) -> LoadT: ...
+    def _do_save(self, data: SaveT, /, field_values: dict[str, Any]) -> None: ...
+    def _do_peek_version(self, field_values: dict[str, Any]) -> Any | None: ...
 ```
+
+### Why the public / hook split
+
+`load` / `save` / `peek_version` are **framework-owned**. Each runs
+`vtscore.plugins.normalize.normalize_field_values` over a *copy* of
+`field_values` (the caller's dict is never mutated) before dispatching,
+so every subclass body receives values that are whitespace-stripped,
+required-checked, `template_vars`-substituted, and - for `url` and
+`server_path` / `folder` field types - security-validated, with path
+fields replaced by their confined, canonicalised form.
+
+A subclass that overrides `load` or `save` directly **replaces that
+wrapper**: its body then runs on raw input and the path confinement
+never happens. Override `_do_load` / `_do_save` instead. `peek_version`
+additionally swallows normalization errors and returns `None`, so an
+unresolvable template can't crash a caller's freshness probe.
+
+`_do_peek_version` is optional - the default returns `None`, meaning
+"I can't cheaply check", and the caller falls back to an explicit sync.
+Implement it when the backing store offers a cheap freshness token
+(`st_mtime_ns` for a local file, `ETag` for an HTTP source).
 
 The two type parameters are separate so the **load** and **save**
 shapes can differ. This matters in practice: a `LabelsetSource` loads
@@ -61,16 +94,17 @@ object, and a `SettingsSource` may load a flat dict from an external
 source but save a more curated subset. Letting `LoadT != SaveT`
 captures that without forcing either side into a least-common-shape.
 
-The `save` signature has the value as the first **positional-only**
-parameter so subclasses can rename it according to what they save
-(`labelset`, `settings`, …) without breaking the override contract.
+The `save` / `_do_save` signature has the value as the first
+**positional-only** parameter so subclasses can rename it according to
+what they save (`labelset`, `settings`, …) without breaking the
+override contract.
 
 ```python
-def save(self, labelset: LabelSet, /, field_values: dict[str, Any]) -> None: ...
+def _do_save(self, labelset: LabelSet, /, field_values: dict[str, Any]) -> None: ...
 ```
 
-Both `load` and `save` raise `NotImplementedError` by default - a
-subclass must override them.
+Both `_do_load` and `_do_save` raise `NotImplementedError` by default -
+a subclass must override them.
 
 ## Discovery and registration
 
@@ -110,13 +144,15 @@ class SqliteLabelsetSource(LabelsetSource):
         PluginField(key="table", label="Table", field_type="text", default="labels"),
     ]
 
-    def load(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
+    def _do_load(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
+        # db_path is a server_path field, so it arrives already confined
+        # to the current user's data directory.
         conn = sqlite3.connect(field_values["db_path"])
         rows = conn.execute(f"SELECT md5, label FROM {field_values['table']}").fetchall()
         conn.close()
         return [{"md5": md5, "label": lbl} for md5, lbl in rows]
 
-    def save(self, labelset: LabelSet, /, field_values: dict[str, Any]) -> None:
+    def _do_save(self, labelset: LabelSet, /, field_values: dict[str, Any]) -> None:
         conn = sqlite3.connect(field_values["db_path"])
         conn.execute(
             f"CREATE TABLE IF NOT EXISTS {field_values['table']} "
@@ -140,19 +176,20 @@ pick it up.
 
 ## What this package does *not* do
 
-- **It does not auto-sync.** The ABC defines `load` and `save`. The
-  caller (a route handler, an app-side hook, a CLI driver) decides
+- **It does not auto-sync.** The ABC defines the `load` / `save` pair.
+  The caller (a route handler, an app-side hook, a CLI driver) decides
   when to call them. App-side wiring for the two existing source
   families - auto-export on vote change, auto-import on first load,
-  circular-trigger prevention via thread-local guards - lives in
-  `vtscore/labels/sync.py` and `vtsearch/settings.py`, not here.
+  circular-trigger prevention via a module-level `_syncing` flag under a
+  re-entrant lock - lives in `vtscore/labels/sync.py` and
+  `vtsearch/settings.py`, not here.
 - **It does not persist anything.** `SyncSource` is a contract;
   storage is whatever the subclass implements. The standard caveats
   about persistence still apply - embeddings and trained model weights
   are in-memory artefacts, not labels. See `CLAUDE.md` "No Persisted
   Vectors or MLPs" if you're tempted to round-trip more than label
   identifiers + their `good`/`bad` flag.
-- **It does not impose a transport.** `load` / `save` can talk to a
+- **It does not impose a transport.** `_do_load` / `_do_save` can talk to a
   filesystem, an HTTP API, a database, a message queue - anything the
   subclass cares to wire up. The framework only requires that the two
   methods exist.

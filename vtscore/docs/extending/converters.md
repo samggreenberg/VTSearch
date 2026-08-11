@@ -6,9 +6,9 @@ image (spectrogram), audio → text (ASR), image → text (OCR), document
 → image (rendered pages). Converters unlock cross-format access -
 running an image embedder over audio via a spectrogram, surfacing
 searchable text behind a scanned document - without requiring new
-embedders. Subclass [`MediaConverter`](../../converters/base.py)
-([`vtscore/converters/base.py:11`](../../converters/base.py)),
-implement `source_type`, `target_type`, and `convert()`, optionally
+embedders. Subclass [`MediaConverter`](../../converters/base.py),
+implement `source_type`, `target_type`, and
+`convert(media, params=None)`, optionally
 declare user-configurable parameters via `fields`, and expose a
 module-level `CONVERTER` sentinel.
 
@@ -55,7 +55,12 @@ encoder for the same kind, write an [embedder](embedders.md).
 |--------|------|---------|
 | `source_type` (property) | `str` | The `type_id` of the input media type |
 | `target_type` (property) | `str` | The `type_id` of the output media type |
-| `convert(media, params)` | `(dict, dict\|None) -> list[dict]` | Convert one media into one or more target-type dicts |
+| `convert(media, params=None)` | `(dict, dict\|None) -> list[dict]` | Convert one media into one or more target-type dicts |
+
+**Both parameters are part of the signature.** The abstract method is
+`convert(self, media, params=None)`; a subclass that declares
+`convert(self, media)` raises `TypeError` on the first conversion,
+because every framework call site passes a populated `params` dict.
 
 `name` is auto-derived as `f"{source_type}2{target_type}"` - don't
 override it. Two converters with the same source / target would clash;
@@ -67,7 +72,11 @@ Optional overrides:
 |--------|---------|---------|
 | `display_name` | derived | Human-readable label for the chooser UI |
 | `description` | `""` | One-line description |
+| `summary_template` | `""` | One-line import-row preview with `{key}` placeholders for parameter values (falls back to `description`) |
 | `fields` | `[]` | User-configurable parameters |
+
+**Don't override `convert_normalized()`** - it's the framework entry
+point that wraps `convert()` (see below).
 
 ### What `convert()` returns
 
@@ -84,14 +93,48 @@ output). Each dict must contain at minimum:
 are filled in by the caller. Don't compute embeddings inside
 `convert()`; the loader pipeline embeds the produced media afterwards.
 
+### Reading the source bytes
+
+Read the input through `resolve_media_bytes(media)`
+([`vtscore/converters/base.py`](../../converters/base.py)), not
+`media["media_bytes"]`. In full-import mode the source dict carries
+inline bytes, but a reference (*thin*) import hands the converter only
+`{filename, media_path}` - so a converter that reads `media_bytes`
+alone silently produces nothing for every thin import. The helper falls
+back to reading `media_path` and returns `None` when neither yields
+bytes.
+
 ### Reading parameters
 
-User-supplied parameters arrive in the `params` dict. Always read them
-via `self.get_param(params, key)` - it returns the field's declared
-`default` when the key is missing or empty, and treats empty strings
-as "unset" so a UI submitting blank inputs still gets the default.
-Coerce types explicitly (`int(value)`, `float(value)`) since web
-requests deliver every field as a string.
+User-supplied parameters arrive in the `params` dict, and by the time
+`convert()` runs the framework has already validated and default-filled
+it. Every in-tree call site (importer multi-media ingestion, the
+converter-folder runner, the clipper-chain runner) goes through
+`convert_normalized(media, params)`, which loads `params` through the
+per-plugin marshmallow schema built from your `fields` - enforcing
+declared `min` / `max` ranges and `select` whitelists, raising
+`ValueError` on a bad value - and then fills every missing or
+empty-string key with that field's `default`.
+
+So inside `convert()` you can index `params[key]` directly: it is a
+non-`None` dict in which every declared field key is present.
+
+`self.get_param(params, key)` remains as a thin shim for third-party
+call sites that invoke `convert()` by hand rather than
+`convert_normalized()`; it does the same default fallback for a
+`params` that may be `None` or partial. New code should prefer
+`convert_normalized()` at the call site and plain indexing in the body.
+
+Note that the converter `params` path is **not** the `field_values`
+normalization pass described in the [plugin
+README](README.md#framework-side-normalization): converter params are
+shape-checked against the schema, but nothing strips whitespace,
+substitutes `template_vars`, or runs the URL / server-path guards. A
+converter that accepts a URL or a server path must validate it itself.
+
+Values from web requests still arrive as strings for `text` fields, so
+coerce explicitly (`int(value)`, `float(value)`) where the schema
+doesn't already do it for you (`number` fields load as `int` / `float`).
 
 ## Where the file goes
 
@@ -164,7 +207,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from vtscore.converters.base import MediaConverter
+from vtscore.converters.base import MediaConverter, resolve_media_bytes
 from vtscore.plugins import PluginField
 
 
@@ -203,12 +246,13 @@ class Audio2TextWhisperConverter(MediaConverter):
         return "text"
 
     def convert(self, media: dict[str, Any], params: dict[str, Any] | None = None) -> list[dict]:
-        model_size = self.get_param(params, "model_size") or "base"
-        language = self.get_param(params, "language") or None
+        # convert_normalized() default-filled every declared key, so both
+        # of these are present. "language" defaults to "" (auto-detect).
+        model_size = params["model_size"]
+        language = params["language"] or None
 
-        media_bytes = media.get("media_bytes")
-        if media_bytes is None and media.get("media_path"):
-            media_bytes = Path(media["media_path"]).read_bytes()
+        # Works for thin imports too, where only media_path is set.
+        media_bytes = resolve_media_bytes(media)
         if not media_bytes:
             return []
 

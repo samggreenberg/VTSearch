@@ -551,7 +551,7 @@ def list_media_ids():
 
     Each item contains only the fields the frontend needs to build virtual
     scrollers and to inspect the dataset's media type / embedder *before*
-    any item becomes visible: ``id``, ``type``, and ``embedder`` (when set).
+    any item becomes visible: ``id``, ``media_type``, and ``embedder`` (when set).
     Display-worthy metadata (``filename``, ``md5``, ``custom_metadata``,
     ``origin_name``, ``description``, ``clip_*``) is fetched on demand for
     the items currently in the viewport via ``POST /api/medias/batch``.

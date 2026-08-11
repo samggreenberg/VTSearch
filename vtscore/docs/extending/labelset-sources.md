@@ -11,11 +11,11 @@ an external store (server JSON file, database, S3 object, an LMS
 gradebook); use a [label importer](label-importers.md) for one-shot
 pulls.
 
-Subclass [`LabelsetSource`](../../labels/sources/base.py)
-([`vtscore/labels/sources/base.py:30`](../../labels/sources/base.py)),
-which inherits from `SyncSource[list[dict[str, str]], LabelSet]`.
-Implement `load(field_values)` and `save(labelset, field_values)`;
-optionally override `load_full(field_values)` to surface richer
+Subclass [`LabelsetSource`](../../labels/sources/base.py), which
+inherits from `SyncSource[list[dict[str, str]], LabelSet]`. Implement
+`_do_load(field_values)` and `_do_save(labelset, field_values)` — the
+underscored template methods, **not** the public `load` / `save` —
+and optionally override `_do_load_full(field_values)` to surface richer
 metadata. The library auto-discovers sources under
 `vtscore.labels.sources` (sentinel `LABELSET_SOURCE`) and walks the
 `vtscore.labelset_sources` entry-point group.
@@ -27,7 +27,7 @@ covers the UI / route wiring. This guide focuses on the library API.
 ## Contents
 
 - [The contract](#the-contract)
-- [`load` vs. `load_full`](#load-vs-load_full)
+- [`_do_load` vs. `_do_load_full`](#_do_load-vs-_do_load_full)
 - [Template variables: `{detector_id}` and `{detector_name}`](#template-variables-detector_id-and-detector_name)
 - [Circular-trigger prevention (`_syncing` guard)](#circular-trigger-prevention-_syncing-guard)
 - [Entry-point registration](#entry-point-registration)
@@ -38,12 +38,22 @@ covers the UI / route wiring. This guide focuses on the library API.
 
 `LabelsetSource` is a `SyncSource[list[dict[str, str]], LabelSet]`
 subclass. The generic parameters describe the load and save shapes:
-`load()` returns a list of label dicts; `save()` accepts a `LabelSet`
+loading returns a list of label dicts; saving accepts a `LabelSet`
 ([`vtscore/datasets/labelset.py`](../../datasets/labelset.py)). The
-two shapes differ intentionally - `load()` is the cheap path that the
-manual-sync endpoint and detector-reload flow use, while `save()` gets
+two shapes differ intentionally - loading is the cheap path that the
+manual-sync endpoint and detector-reload flow use, while saving gets
 the full structured labelset including per-element origins and
 optional detector metadata.
+
+**Override the underscored template methods.** `load` / `save` /
+`load_full` / `peek_version` are framework-owned wrappers: each
+normalizes a copy of `field_values` (whitespace strip, template
+substitution, URL / path validation - see [Framework-side
+normalization](README.md#framework-side-normalization)) and then
+dispatches to the matching `_do_*` hook. A subclass that overrides
+`load` or `save` directly replaces that wrapper, so its body runs on
+**unnormalized, unvalidated** input and the framework's path
+confinement never happens.
 
 Required:
 
@@ -53,26 +63,31 @@ Required:
 | `display_name: str` | class attr | Human-readable label |
 | `description: str` | class attr | One-sentence subtitle |
 | `fields: list[PluginField]` | class attr | User-configurable inputs |
-| `load(field_values)` | method | Return a list of `{"md5", "label", ...}` dicts |
-| `save(labelset, field_values)` | method | Persist a `LabelSet` |
+| `_do_load(field_values)` | method | Return a list of `{"md5", "label", ...}` dicts |
+| `_do_save(labelset, field_values)` | method | Persist a `LabelSet` |
 
 Optional:
 
 | Member | Default | Purpose |
 |--------|---------|---------|
 | `icon: str` | family default | Emoji in the UI |
-| `load_full(field_values)` | wraps `load()` | Return a `LabelSet` carrying `detector_meta` too |
+| `_do_load_full(field_values)` | wraps `_do_load()` | Return a `LabelSet` carrying `detector_meta` too |
+| `_do_peek_version(field_values)` | returns `None` | Cheap freshness probe (`st_mtime_ns`, `ETag`) so callers can skip a full load |
 
 Expose `LABELSET_SOURCE = YourSource()` at module level.
 
-## `load` vs. `load_full`
+Callers still use the **public** names - `src.load(fv)`,
+`src.save(labelset, fv)` - so tests and app code are unaffected by the
+split.
 
-`load()` returns the minimum - a list of label dicts the receiving
-detector can apply. The default `load_full()` wraps each dict in a
+## `_do_load` vs. `_do_load_full`
+
+`_do_load()` returns the minimum - a list of label dicts the receiving
+detector can apply. The default `_do_load_full()` wraps each dict in a
 `LabeledElement` and returns a `LabelSet(elements)`, which is enough
 for sources that only round-trip label/MD5 pairs.
 
-Override `load_full()` when your source carries detector-level
+Override `_do_load_full()` when your source carries detector-level
 metadata you want the receiving detector to adopt - input spec
 (media type, embedder, clipper choice), threshold, etc. The returned
 `LabelSet.detector_meta` is folded into the detector's on-disk JSON
@@ -84,38 +99,49 @@ imported labels and computes its own threshold; remember the
 [no-persisted-vectors-or-MLPs invariant](README.md#shared-rules-for-every-plugin).
 
 The built-in server-JSON-file source
-([`vtscore/labels/sources/server_json_file/__init__.py:61`](../../labels/sources/server_json_file/__init__.py))
-is the canonical reference: `load()` returns raw label dicts;
-`load_full()` reads the same file but parses `detector_meta` too.
+([`vtscore/labels/sources/server_json_file/__init__.py`](../../labels/sources/server_json_file/__init__.py))
+is the canonical reference: `_do_load()` returns raw label dicts;
+`_do_load_full()` reads the same file but parses `detector_meta` too.
 
 ## Template variables: `{detector_id}` and `{detector_name}`
 
-Field values support two template variables resolved at runtime from
-the active `DetectorContext`:
+Two template variables resolve at runtime from the active
+`DetectorContext`:
 
 - `{detector_id}` - stable internal identifier
 - `{detector_name}` - user-facing detector name (may be renamed; the
   rename endpoint resolves both old and new paths to detect orphaned
   files)
 
-Always run substituted values through
-`vtscore.security.sanitize_template_value`
-([`vtscore/security/path_validation.py:82`](../../security/path_validation.py))
-before splicing into a filesystem path, URL, or anything else
-attacker-controllable; otherwise a detector named `../../etc/passwd`
-would escape the admin-configured template:
+**Declare them on the field; don't substitute them yourself.** The
+framework only interpolates a field that lists the variables in
+`template_vars`, and it sanitises each resolved value with
+`sanitize_template_value` so a detector named `../../etc/passwd` can't
+escape the admin-configured template:
 
 ```python
-from vtscore.security.path_validation import sanitize_template_value
-
-filepath = filepath.replace("{detector_name}", sanitize_template_value(name))
+PluginField(
+    key="filepath",
+    label="Save to (server path)",
+    field_type="server_path",
+    placeholder=f"{DATA_DIR}/labels/{{detector_name}}.labels.json",
+    template_vars=("detector_id", "detector_name"),
+)
 ```
 
-When resolving paths in `load()` / `save()`, also call
-`validate_server_filepath(filepath, base_dir=get_file_access_base_dir())`
-so the final resolved path stays inside the current user's data directory
-in multi-user mode (single-user / no-auth mode is unrestricted). The
-built-in server-JSON source's `resolve_filepath_for()` helper is a useful
+Because the field is typed `server_path`, the same pass also runs the
+resolved path through `confine_server_filepath()` anchored at the
+current user's data directory and writes the approved path back, so
+`field_values["filepath"]` in your `_do_load` / `_do_save` is already
+substituted *and* confined. Omit `template_vars` and the user's
+`{detector_name}` arrives as a literal - the placeholder ends up in the
+filename.
+
+The one case that still needs manual work is resolving a template for a
+detector that **isn't** the active one - the rename endpoint has to
+resolve both the old and the new path to spot an orphaned file. The
+built-in source's `resolve_filepath_for()` helper does that by hand with
+`sanitize_template_value` + `validate_server_filepath`, and is the
 pattern to copy.
 
 ## Circular-trigger prevention (`_syncing` guard)
@@ -131,10 +157,10 @@ re-entrant `_sync_lock`. The flag is set for the duration of a
 execution time) to suppress the push.
 
 You don't have to do anything in your source to participate - the
-guard wraps the apply pass, not your `load()` or `save()`. Just know
+guard wraps the apply pass, not your `_do_load()` or `_do_save()`. Just know
 that:
 
-- `save()` will not be called as a side effect of `load()` returning
+- `_do_save()` will not be called as a side effect of `_do_load()` returning
   labels;
 - two concurrent `sync_to`s from different threads serialize on
   `_sync_lock`;
@@ -142,7 +168,7 @@ that:
   the last 200ms of votes get pushed (SIGKILL bypasses atexit and
   drops that window).
 
-If your source's `save()` is expensive, the 200ms debounce coalesces
+If your source's `_do_save()` is expensive, the 200ms debounce coalesces
 rapid voting bursts into a single push; the in-flight write is held
 by `_workers_lock` so `flush_pending_label_syncs()` (used by tests
 and graceful shutdown) waits for it.
@@ -176,6 +202,11 @@ A labelset source backed by S3, with per-detector keys derived from
 `{detector_name}`. Every detector linked to it pushes its labels to a
 dedicated S3 object and pulls them back on reload.
 
+Note how little the bodies do: no `.strip()`, no required-field check,
+no template substitution, no `sanitize_template_value`. Declaring
+`template_vars` on the key field buys all of it, and the framework
+wrapper has already applied it by the time `_do_load` runs.
+
 ```python
 # my_pkg/labelset_source.py
 from __future__ import annotations
@@ -184,25 +215,9 @@ import json
 from typing import TYPE_CHECKING, Any
 
 from vtscore.labels.sources.base import LabelsetSource, PluginField
-from vtscore.security.path_validation import sanitize_template_value
 
 if TYPE_CHECKING:
     from vtscore.datasets.labelset import LabelSet
-
-
-def _resolve_key(field_values: dict[str, Any]) -> str:
-    """Substitute {detector_name} into the user-provided key template."""
-    key = (field_values.get("key") or "").strip()
-    if not key:
-        raise ValueError("S3 object key is required.")
-    if "{detector_name}" in key:
-        from vtscore.state.core import get_active_detector_context  # noqa: PLC0415
-
-        ctx = get_active_detector_context()
-        if ctx is None:
-            raise ValueError("No active detector context for {detector_name} substitution.")
-        key = key.replace("{detector_name}", sanitize_template_value(ctx.name))
-    return key
 
 
 class S3LabelsetSource(LabelsetSource):
@@ -223,19 +238,20 @@ class S3LabelsetSource(LabelsetSource):
             key="key",
             label="Object Key",
             field_type="text",
-            description="Supports {detector_name} template.",
+            description="Supports the {detector_name} template.",
             placeholder="vtsearch/labels/{detector_name}.json",
             required=True,
+            # Without this line the framework performs no substitution
+            # and the object key literally contains "{detector_name}".
+            template_vars=("detector_name",),
         ),
     ]
 
-    def load(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
+    def _do_load(self, field_values: dict[str, Any]) -> list[dict[str, str]]:
         import boto3  # noqa: PLC0415
-        bucket = field_values["bucket"]
-        key = _resolve_key(field_values)
         s3 = boto3.client("s3")
         try:
-            obj = s3.get_object(Bucket=bucket, Key=key)
+            obj = s3.get_object(Bucket=field_values["bucket"], Key=field_values["key"])
         except s3.exceptions.NoSuchKey:
             return []
         data = json.loads(obj["Body"].read())
@@ -244,15 +260,13 @@ class S3LabelsetSource(LabelsetSource):
             return []
         return [e for e in labels if isinstance(e, dict)]
 
-    def load_full(self, field_values: dict[str, Any]) -> LabelSet:
+    def _do_load_full(self, field_values: dict[str, Any]) -> LabelSet:
         from vtscore.datasets.labelset import LabelSet as _LabelSet  # noqa: PLC0415
 
         import boto3  # noqa: PLC0415
-        bucket = field_values["bucket"]
-        key = _resolve_key(field_values)
         s3 = boto3.client("s3")
         try:
-            obj = s3.get_object(Bucket=bucket, Key=key)
+            obj = s3.get_object(Bucket=field_values["bucket"], Key=field_values["key"])
         except s3.exceptions.NoSuchKey:
             return _LabelSet()
         data = json.loads(obj["Body"].read())
@@ -260,14 +274,12 @@ class S3LabelsetSource(LabelsetSource):
             return _LabelSet()
         return _LabelSet.from_dict(data)
 
-    def save(self, labelset: LabelSet, field_values: dict[str, Any]) -> None:
+    def _do_save(self, labelset: LabelSet, field_values: dict[str, Any]) -> None:
         import boto3  # noqa: PLC0415
-        bucket = field_values["bucket"]
-        key = _resolve_key(field_values)
         s3 = boto3.client("s3")
         s3.put_object(
-            Bucket=bucket,
-            Key=key,
+            Bucket=field_values["bucket"],
+            Key=field_values["key"],
             Body=json.dumps(labelset.to_dict(), indent=2).encode("utf-8"),
             ContentType="application/json",
         )
@@ -352,5 +364,6 @@ class TestS3LabelsetSourceSave:
 ```
 
 The built-in [`vtscore/labels/sources/server_json_file/__init__.py`](../../labels/sources/server_json_file/__init__.py)
-is the closest reference implementation - single file, single field,
-both `load()` and `load_full()` overrides, atomic-write `save()`.
+is the closest reference implementation - single file, single
+`template_vars`-declaring field, both `_do_load()` and `_do_load_full()`
+overrides, atomic-write `_do_save()`.
