@@ -386,9 +386,7 @@ class TestEventsRoute:
             # The only queued frame is the stale `running` one.
             frame = next(gen)
             assert frame.startswith("event: sort\n")
-            payload = json.loads(
-                [ln for ln in frame.splitlines() if ln.startswith("data: ")][0].removeprefix("data: ")
-            )
+            payload = json.loads([ln for ln in frame.splitlines() if ln.startswith("data: ")][0].removeprefix("data: "))
             assert payload["status"] == "running"
 
             # The heartbeat repairs it without any further tracker update.
