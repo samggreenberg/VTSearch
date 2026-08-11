@@ -35,9 +35,23 @@ def _clips(rng: np.random.Generator, cids: range) -> dict[int, dict]:
     }
 
 
+#: Haystack size for the trained fixtures below.  A cut is realized as an
+#: empirical quantile of this haystack (:meth:`FoldAnchoredCut.threshold_at`),
+#: so the haystack's own spacing is the finest gap two cuts can be apart: with
+#: 20 items a quantile has to move a full 5% before the threshold moves at all.
+#: :data:`ACQUISITION_INCLUSION_OFFSET` is one inclusion step, whose tilt is
+#: routinely smaller than that, so on a 20-item haystack the acquisition cut
+#: lands on the *same* haystack element as the reporting cut and a strict ``>``
+#: holds or fails on numerical noise - which is how it varied with process
+#: ordering.  100 resolves a single step with room to spare (verified across
+#: seeds), keeping the direction pin about the offset rather than about
+#: discretization.
+HAYSTACK = 100
+
+
 def _trained(seed: int, detector_id: str, inclusion_value: int = 0):
     rng = np.random.default_rng(seed)
-    clips = _clips(rng, range(500, 520))
+    clips = _clips(rng, range(500, 500 + HAYSTACK))
     good = {cid: None for cid in range(500, 504)}
     bad = {cid: None for cid in range(504, 508)}
     det_ctx = DetectorContext(detector_id=detector_id, media_type="audio")
