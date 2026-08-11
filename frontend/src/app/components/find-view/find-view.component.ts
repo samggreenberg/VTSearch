@@ -1,7 +1,7 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, computed, effect, ElementRef, inject, NgZone, OnDestroy, OnInit, signal, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Subject, Subscription } from 'rxjs';
-import { finalize, takeUntil } from 'rxjs/operators';
+import { EMPTY, Subject, Subscription } from 'rxjs';
+import { catchError, debounceTime, finalize, switchMap, takeUntil } from 'rxjs/operators';
 import { LeftPanelComponent } from '../left-panel/left-panel.component';
 import { CenterPanelComponent } from '../center-panel/center-panel.component';
 import { RightPanelComponent } from '../right-panel/right-panel.component';
@@ -34,6 +34,14 @@ import {
   progressBarState,
 } from '../../utils/format-progress';
 import { iconSizeToGoalWidth, snapPanelWidthToGridColumns } from '../../utils/grid-icon-size';
+
+/**
+ * How long the Inclusion slider has to settle before its `POST /api/inclusion`
+ * goes out.  Short enough to feel immediate, long enough that walking the
+ * cutoff a few steps with the arrow keys (the slider emits on every `input`
+ * event) coalesces into a single round trip instead of a burst of racing ones.
+ */
+const INCLUSION_POST_DEBOUNCE_MS = 150;
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -143,6 +151,24 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * going. `takeUntil` here also aborts the stale XHR client-side.
    */
   private pairScope$ = new Subject<void>();
+  /**
+   * Inclusion-slider values awaiting their `POST /api/inclusion`, funnelled
+   * through a single debounced `switchMap` pipeline (wired in the constructor).
+   *
+   * The slider emits on every `input` event, so a quick walk of the cutoff used
+   * to put several POSTs in flight at once, each installing its own threshold
+   * on arrival: a slow response for a value the user had already moved past
+   * landed *last* and overwrote the newer threshold, snapping the green/red line
+   * (and the left/right vote split) back to a cutoff that was no longer
+   * selected — and leaving it there, since nothing re-reconciles until the next
+   * slide.  This is the same out-of-order hazard `VoteStateService.votesSeq`
+   * closes for `/api/votes`.  Debouncing means only the value the user settled
+   * on is sent, and `switchMap` cancels any request they moved past, so the
+   * newest POST is both the last one the server sees (keeping the persisted
+   * per-detector inclusion in step with the slider) and the only response that
+   * can install a threshold.
+   */
+  private readonly inclusionRequests$ = new Subject<number>();
   private dragging = false;
   private draggingRight = false;
   private boundMouseMove = this.onMouseMove.bind(this);
@@ -151,6 +177,34 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
   private boundRightMouseUp = this.onRightMouseUp.bind(this);
 
   constructor() {
+    // The one place `POST /api/inclusion` is issued from — see
+    // {@link inclusionRequests$} for why the slider is funnelled through it.
+    this.inclusionRequests$
+      .pipe(
+        debounceTime(INCLUSION_POST_DEBOUNCE_MS),
+        switchMap((value) =>
+          this.sortingApi.setInclusion(value).pipe(
+            // Pair-scoped like every other threshold write: a response landing
+            // after a dataset/detector switch must not install the old pair's
+            // cutoff into the new context (see `pairScope$`).
+            takeUntil(this.pairScope$),
+            // A failed POST just leaves the cutoff where it was. Swallow it
+            // inside the inner observable so the error can't tear down the
+            // long-lived outer pipeline and silence every later slide.
+            catchError(() => EMPTY),
+          ),
+        ),
+        takeUntil(this.destroy$),
+      )
+      .subscribe((resp) => {
+        if (resp.threshold != null && this.sortState.sortOrder) {
+          this.sortState.setSortResults(this.sortState.sortOrder, resp.threshold);
+        }
+        // The server re-thresholded the unverified items over the frozen
+        // scores; pull the new good/bad split back for the left/right panes.
+        this.voteState.loadVotes();
+      });
+
     effect(() => {
       const settings = this.settingsState.settingsSignal();
       if (!settings) return;
@@ -313,6 +367,7 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.pairScope$.complete();
     this.destroy$.next();
     this.destroy$.complete();
+    this.inclusionRequests$.complete();
     this.voteState.setFindMode(false);
     this.voteState.stopPolling();
     // Stop waiting on a map build if the user left Find some other way (the
@@ -532,23 +587,15 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    * re-splits the *unverified* items server-side (verified items hold). We
    * reconcile the new threshold (moves the line) and the re-split votes on the
    * cheap response — there is no scoring spinner.
+   *
+   * The slider box moves at once; the round trip is deferred to the debounced
+   * {@link inclusionRequests$} pipeline, which is what keeps a superseded
+   * response from installing a threshold the user has already moved past.
    */
   onInclusionChange(value: number): void {
     if (this.sortState.sortBusy) return;
     this.sortState.setInclusion(value);
-    this.sortingApi
-      .setInclusion(value)
-      .pipe(takeUntil(this.pairScope$))
-      .subscribe({
-        next: (resp) => {
-          if (resp.threshold != null && this.sortState.sortOrder) {
-            this.sortState.setSortResults(this.sortState.sortOrder, resp.threshold);
-          }
-          // The server re-thresholded the unverified items over the frozen
-          // scores; pull the new good/bad split back for the left/right panes.
-          this.voteState.loadVotes();
-        },
-      });
+    this.inclusionRequests$.next(value);
   }
 
   onHoverVote(event: { id: number; vote: 'good' | 'bad' }): void {
@@ -719,8 +766,8 @@ export class FindViewComponent implements OnInit, AfterViewInit, OnDestroy {
    *
    * Derived from the *frozen scores + current cutoff* (`sortOrder` + `threshold`)
    * rather than the `goodVotes` signal, because those two move **synchronously**
-   * when the Inclusion slider does (`onInclusionChange` sets them on the POST
-   * response), whereas `goodVotes` only catches up on the follow-up
+   * when the Inclusion slider does ({@link inclusionRequests$} sets them on the
+   * POST response), whereas `goodVotes` only catches up on the follow-up
    * `loadVotes()` GET. Reading `goodVotes` here let a Browse fired right after a
    * slide pick up the *previous* cutoff's positives (the stale-superset bug);
    * scoring against the live cutoff keeps Browse in lock-step with the green
