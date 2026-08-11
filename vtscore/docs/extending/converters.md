@@ -144,7 +144,7 @@ In-tree, converters are **flat modules** under `vtscore.converters/`:
 vtscore/converters/<source>2<target>.py
 ```
 
-The registry ([`vtscore/converters/__init__.py:25`](../../converters/__init__.py))
+The registry ([`vtscore/converters/__init__.py`](../../converters/__init__.py))
 scans this directory for `.py` files (excluding `__init__.py` and
 `base.py`) and registers any module-level `CONVERTER` sentinel. No
 `__init__.py` edits are needed for the discovery itself - it's
@@ -159,10 +159,10 @@ entry point (see below).
 
 Converters declare user-configurable knobs the same way every other
 plugin family does - a list of `PluginField`s
-([`vtscore/plugins/__init__.py:71`](../../plugins/__init__.py)) on the
+([`vtscore/plugins/__init__.py`](../../plugins/__init__.py)) on the
 class. The audio→image spectrogram converter is a good reference for
 the spread of field types (select, number with min/max/step) it can
-accept; see [`vtscore/converters/audio2image.py:126`](../../converters/audio2image.py).
+accept; see [`vtscore/converters/audio2image.py`](../../converters/audio2image.py).
 
 Field values flow into `convert(media, params)` as a flat dict keyed by
 `PluginField.key`. The multi-media import flow stores per-row

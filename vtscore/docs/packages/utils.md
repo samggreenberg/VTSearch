@@ -32,7 +32,7 @@ def build_media_hit(
 ) -> dict[str, Any]:
 ```
 
-Defined at `vtscore/utils/hits.py:8`.
+Defined in `vtscore/utils/hits.py`.
 
 ### Shape
 
@@ -130,7 +130,7 @@ calls (the importer relies on this cache across reloads).
 
 ### `generate_audio_dataset`
 
-`vtscore/utils/synthetic/audio.py:172`. Cycles through six "ideas"
+`vtscore/utils/synthetic/audio.py`. Cycles through six "ideas"
 producing 16-bit mono PCM WAV files at 48 kHz:
 
 | Idea    | What it sounds like                                       |
@@ -148,7 +148,7 @@ CLAP-family embedders consume the files without resampling.
 
 ### `generate_image_dataset`
 
-`vtscore/utils/synthetic/images.py:140`. Cycles through two ideas at
+`vtscore/utils/synthetic/images.py`. Cycles through two ideas at
 256x256 PNG:
 
 - `smiley` - a face on a coloured background, with one of four
@@ -162,7 +162,7 @@ Requires `PIL` (Pillow), imported lazily. Output filenames:
 
 ### `generate_video_dataset`
 
-`vtscore/utils/synthetic/video.py:190`. Cycles through four ideas
+`vtscore/utils/synthetic/video.py`. Cycles through four ideas
 encoded as 2-second 12 fps mp4 at 224x224:
 
 - `ball` - bouncing-ball animation.

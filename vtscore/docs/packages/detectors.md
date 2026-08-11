@@ -157,7 +157,7 @@ contexts.
 
 ### `train_and_threshold(X_list, y_list, snap=None)`
 
-`vtscore/detectors/training.py:37`. The canonical pipeline used by
+`vtscore/detectors/training.py`. The canonical pipeline used by
 every detector route:
 
 1. Cross-calibration threshold via
@@ -176,7 +176,7 @@ Library consumers running outside an app should pass these via
 
 ### `train_and_score(...)`
 
-`vtscore/detectors/training.py:273`. Vote-aware online trainer. Takes
+`vtscore/detectors/training.py`. Vote-aware online trainer. Takes
 the current `clips_dict`, `good_votes` / `bad_votes`, threshold-
 related settings, and an optional `vote_region_boxes` map and returns
 `(results, threshold, model)`:
@@ -359,7 +359,7 @@ dataset A can score dataset B.
 
 ### `populate_label_embeddings(det_ctx, labelset, *, media_type, snap, on_progress=None)`
 
-`vtscore/detectors/labelset_training.py:127`. For each element in the
+`vtscore/detectors/labelset_training.py`. For each element in the
 labelset, ensure `det_ctx.label_embeddings[stable_element_id(elem)]` is
 populated:
 
@@ -379,13 +379,13 @@ two embedders into one head produces garbage.
 
 ### `build_xy_from_labelset(det_ctx, labelset)`
 
-`vtscore/detectors/labelset_training.py:185`. Walk the labelset
+`vtscore/detectors/labelset_training.py`. Walk the labelset
 elements (filtering to `good` / `bad`), look up each cached embedding,
 and return `(X_list, y_list)`.
 
 ### `train_from_labelset(det_ctx, labelset, *, media_type, snap, on_progress=None)`
 
-`vtscore/detectors/labelset_training.py:207`. Populate the cache,
+`vtscore/detectors/labelset_training.py`. Populate the cache,
 build `(X, y)`, run `train_and_threshold`, store the result on
 `det_ctx.model` / `det_ctx.threshold`. Returns `True` on success,
 `False` when fewer than 2 cached vectors exist or one class is
@@ -393,7 +393,7 @@ missing.
 
 ### `labelset_train_and_score(det_ctx, labelset, *, media_type, clips_dict, ...)`
 
-`vtscore/detectors/labelset_training.py:241`. Like `train_and_score`
+`vtscore/detectors/labelset_training.py`. Like `train_and_score`
 but trains on the full labelset (cross-dataset labels) and scores only
 the active `clips_dict`. Returns the same `(results, threshold, model)`
 tuple.

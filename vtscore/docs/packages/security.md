@@ -341,7 +341,7 @@ for any input arriving over HTTP or from an untrusted filesystem.
 
 ### The allowlist contract
 
-`_PICKLE_SAFE_CLASSES` (`pickle.py:17`) enumerates every
+`_PICKLE_SAFE_CLASSES` (`pickle.py`) enumerates every
 `(module, name)` pair the unpickler will instantiate. Plain Python
 primitives (`int`, `float`, `str`, `None`, `bool`, `dict`, `list`,
 `tuple`) are handled by pickle's opcodes directly and never trigger
@@ -375,7 +375,7 @@ with open("dataset.pkl", "rb") as f:
 `find_class` to enforce the allowlist:
 
 ```python
-# vtscore/security/pickle.py:48
+# vtscore/security/pickle.py
 def find_class(self, module: str, name: str) -> Any:
     if (module, name) in _PICKLE_SAFE_CLASSES:
         return super().find_class(module, name)

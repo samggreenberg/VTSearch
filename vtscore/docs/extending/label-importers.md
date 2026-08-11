@@ -9,7 +9,7 @@ bidirectional sync (auto-export on vote change, auto-import on detector
 load), write a [labelset source](labelset-sources.md) instead.
 
 Subclass [`LabelImporter`](../../labels/importers/base.py)
-([`vtscore/labels/importers/base.py:68`](../../labels/importers/base.py)),
+([`vtscore/labels/importers/base.py`](../../labels/importers/base.py)),
 declare `fields`, and implement `run(field_values) -> list[dict]`. The
 library auto-discovers importers under `vtscore.labels.importers`
 (sentinel `LABEL_IMPORTER`) and walks the `vtscore.label_importers`

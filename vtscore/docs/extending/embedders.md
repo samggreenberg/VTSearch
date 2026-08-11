@@ -9,7 +9,7 @@ are auto-discovered: any `embedder_<name>.py` file (or `embedder_<name>/`
 sub-package) inside a media-type sub-package gets imported, and its
 module-level `EMBEDDER` sentinel is registered. Subclass
 [`MediaEmbedder`](../../media/embedder.py)
-([`vtscore/media/embedder.py:416`](../../media/embedder.py)), implement
+([`vtscore/media/embedder.py`](../../media/embedder.py)), implement
 two abstract methods, and expose the sentinel.
 
 **App-side counterpart:** [`docs/EXTENDING-media.md § Adding a Media
@@ -61,7 +61,7 @@ In-tree:
 vtscore/media/<media_type>/embedder_<name>.py
 ```
 
-The discovery scan ([`vtscore/media/__init__.py:260`](../../media/__init__.py))
+The discovery scan ([`vtscore/media/__init__.py`](../../media/__init__.py))
 looks for any file matching `embedder*.py` (or any directory matching
 `embedder*/` with an `__init__.py`) inside a media-type sub-package
 and registers its `EMBEDDER` sentinel.

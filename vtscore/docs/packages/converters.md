@@ -35,7 +35,7 @@ type's embedder. The runner handles that handoff.
 
 ## `MediaConverter` ABC
 
-`vtscore/converters/base.py:11`. A `PluginBase` subclass - same
+`vtscore/converters/base.py`. A `PluginBase` subclass - same
 field-driven configuration system every other plugin family uses.
 
 ```python
@@ -78,7 +78,7 @@ The implementation contract:
 - `params` follows the same shape every plugin family uses:
   `{field.key: value}`. The default is `None`, meaning "use declared
   defaults". Implementations should always read params through
-  `self.get_param(params, key)` (`vtscore/converters/base.py:95`)
+  `self.get_param(params, key)` (`vtscore/converters/base.py`)
   so missing or empty values fall back to `field.default`.
 
 ### Declaring parameters
@@ -104,7 +104,7 @@ class Video2ImageMediaConverter(MediaConverter):
     ]
 ```
 
-(`vtscore/converters/video2image.py:29`–`41`.) The frontend reads
+(`vtscore/converters/video2image.py`.) The frontend reads
 these fields off `converter.to_dict()` and renders matching inputs.
 
 ---
@@ -151,7 +151,7 @@ outputs = v2i.convert(media_dict, {"n_clips": "20"})
 
 ## Registry & discovery
 
-`vtscore/converters/__init__.py:25`. The registry is a
+`vtscore/converters/__init__.py`. The registry is a
 `PluginRegistry[MediaConverter]` built on the standard discovery
 machinery - exactly like importers, exporters, settings sources, etc.
 
@@ -217,7 +217,7 @@ class Audio2ImageMediaConverter(MediaConverter):
 CONVERTER = Audio2ImageMediaConverter()
 ```
 
-(`vtscore/converters/audio2image.py:261`.) That's the only
+(`vtscore/converters/audio2image.py`.) That's the only
 boilerplate needed for discovery. Out-of-tree converters can either:
 
 1. Drop the module into `vtscore/converters/` (or symlink it there).
@@ -237,7 +237,7 @@ in-tree and entry-point converter is already known.
 
 ## Running a converter - the runner
 
-`vtscore/converters/runner.py:213`. Most callers don't invoke
+`vtscore/converters/runner.py`. Most callers don't invoke
 `converter.convert(...)` directly - they call
 `run_converters_on_folder(...)`, which:
 
@@ -290,7 +290,7 @@ run_converters_on_folder(
 # `medias` is now populated with spectrograms embedded via the default image embedder.
 ```
 
-The runner also exposes `apply_converter_to_demo` (`runner.py:395`)
+The runner also exposes `apply_converter_to_demo` (`runner.py`)
 for the demo-dataset case: convert every existing media in a dict
 in-place (replacing it with the converted outputs).
 
@@ -299,7 +299,7 @@ in-place (replacing it with the converted outputs).
 ## How `convert()` outputs flow into media dicts
 
 The runner builds each output media dict via
-`_build_converted_media_dict` (`vtscore/converters/runner.py:123`):
+`_build_converted_media_dict` (`vtscore/converters/runner.py`):
 
 ```python
 {
@@ -416,7 +416,7 @@ CONVERTER = Text2EmojiMediaConverter()
 
 - **Converter output is embedded by the target's *default* embedder.**
   `run_converters_on_folder` calls `embedders_for_type(target_type)[0]`
-  (`vtscore/converters/runner.py:82`). To embed with a non-default
+  (`vtscore/converters/runner.py`). To embed with a non-default
   target embedder, set it as default in the registry or call
   `_emit_converted_outputs` yourself with a hand-resolved embedder.
 - **Converters don't produce vectors.** They produce media dicts.
@@ -439,7 +439,7 @@ CONVERTER = Text2EmojiMediaConverter()
   `audio2image` decoding via librosa) write `media_bytes` to a
   `tempfile.NamedTemporaryFile`, run the operation, and `unlink` the
   file in a `finally`. The runner's `_embed_converted_output`
-  (`vtscore/converters/runner.py:325`) does the same thing for the
+  (`vtscore/converters/runner.py`) does the same thing for the
   embedding pass. No persisted intermediates.
 - **`get_param` treats empty strings as unset.** A UI that submits
   empty inputs gets the field's `default`, not `""`. This is
@@ -450,7 +450,7 @@ CONVERTER = Text2EmojiMediaConverter()
   or discovery will silently shadow the duplicate.
 - **`apply_converter_to_demo` mutates `medias` in place** -
   `medias.clear()` followed by `medias.update(converted)`
-  (`runner.py:462`). Callers that need the original around must
+  (`runner.py`). Callers that need the original around must
   snapshot first.
 
 ---

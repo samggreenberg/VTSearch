@@ -63,7 +63,7 @@ def autodetect_main(
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
     *, dry_run: bool = False,
-) -> None: ...                                                # vtscore/cli.py:637
+) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_main_chunked(
     dataset_path: str,
@@ -72,7 +72,7 @@ def autodetect_main_chunked(
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
     *, dry_run: bool = False,
-) -> None: ...                                                # vtscore/cli.py:691
+) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_importer_main(
     importer_name: str,
@@ -81,7 +81,7 @@ def autodetect_importer_main(
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
     *, dry_run: bool = False,
-) -> None: ...                                                # vtscore/cli.py:661
+) -> None: ...                                                # vtscore/cli.py
 
 def autodetect_importer_main_chunked(
     importer_name: str,
@@ -91,7 +91,7 @@ def autodetect_importer_main_chunked(
     exporter_name: str | None = None,
     exporter_field_values: dict[str, Any] | None = None,
     *, dry_run: bool = False,
-) -> None: ...                                                # vtscore/cli.py:716
+) -> None: ...                                                # vtscore/cli.py
 ```
 
 ### Behaviour
@@ -171,7 +171,7 @@ def import_labels_into_detector_from_file(
 ) -> tuple[int, int]:
 ```
 
-Defined at `vtscore/cli.py:300`. Runs a named label importer
+Defined in `vtscore/cli.py`. Runs a named label importer
 (`vtscore.labels.importers`) against a single file, merges the
 returned `LabeledElement`s into the named detector's labelset, and
 returns `(applied, skipped)`. Used by the pipeline-YAML
@@ -182,7 +182,7 @@ autodetect pass.
 ### What `_run_pipeline` does
 
 All four entry points delegate to `_run_pipeline` (defined at
-`vtscore/cli.py:583`). The interesting steps:
+`vtscore/cli.py`). The interesting steps:
 
 1. Build a `CoreConfig` via `CoreConfig.from_settings(settings_path=...)`.
 2. If `dry_run`, validate + emit the plan and return.
@@ -259,7 +259,7 @@ run_pipeline_file("pipeline.yaml")
 # Loads + dispatches against vtscore.cli._run_pipeline.
 ```
 
-`run_pipeline_file` (defined at `vtscore/cli_pipeline.py:209`) is the
+`run_pipeline_file` (defined in `vtscore/cli_pipeline.py`) is the
 "do everything" wrapper: it calls `load_pipeline_file`, runs the
 optional `import_labels` block, then dispatches to `_run_pipeline`
 with `override_detectors=config["detectors"]` so the YAML file can

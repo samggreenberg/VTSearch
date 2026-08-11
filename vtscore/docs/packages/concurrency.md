@@ -60,7 +60,7 @@ returns immediately with a job ID.
 
 ### `AsyncJob` (dataclass)
 
-State container for one background job (`async_jobs.py:36`). Fields:
+State container for one background job (`async_jobs.py`). Fields:
 `job_id` (UUID4 hex), `signature` (caller-supplied fingerprint),
 `status` (`"pending"` / `"running"` / `"done"` / `"error"` /
 `"cancelled"`), `result`, `error`, `current` / `total` / `message`
@@ -125,7 +125,7 @@ per-user settings resolution works from inside the worker; cleared in a
 ### Module-level managers and `JOB_MANAGERS`
 
 ```python
-# vtscore/concurrency/async_jobs.py:323
+# vtscore/concurrency/async_jobs.py
 learned_sort_jobs = JobManager("learned-sort")
 eval_jobs = JobManager("eval-train-score")
 
@@ -152,7 +152,7 @@ clears state.
 ## `ProgressTracker`
 
 Thread-safe progress tracker for a single long-running operation
-(`progress.py:14`). Each instance holds its own lock, data dict, cancel
+(`progress.py`). Each instance holds its own lock, data dict, cancel
 event, and optional subscriber callbacks.
 
 ```python
@@ -179,7 +179,7 @@ snapshot = tracker.get()
 `(status, message, current, total)` tuple. Unrecognised keys are
 silently dropped, so a single `update_progress()` call site can supply
 kwargs some trackers care about and others don't. Every shipped tracker
-uses `_PROGRESS_COMMON_EXTRAS` (`progress.py:235`):
+uses `_PROGRESS_COMMON_EXTRAS` (`progress.py`):
 
 ```python
 _PROGRESS_COMMON_EXTRAS = {
@@ -211,7 +211,7 @@ swallowed. This is what `events.py` uses.
 ## `LoadingTasksTracker`
 
 A bag of named `ProgressTracker`s, each with a creation timestamp
-(`progress.py:248`). Used to multiplex concurrent dataset / detector
+(`progress.py`). Used to multiplex concurrent dataset / detector
 loads - the dashboard polls `list_tasks()` to show one row per loading
 operation.
 
@@ -294,7 +294,7 @@ not directly to a tracker. Module-level helpers check the thread-local
 first and fall back to a global default when nothing is set.
 
 ```python
-# vtscore/concurrency/progress.py:209
+# vtscore/concurrency/progress.py
 def set_thread_progress(callback) -> None: ...
 def get_thread_progress(): ...
 def clear_thread_progress() -> None: ...

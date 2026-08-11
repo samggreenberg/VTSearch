@@ -43,7 +43,7 @@ sub_medias = tiling.clip(audio_media_dict)
 
 ### `MediaType` - one per content kind
 
-`vtscore/media/base.py:171` - an ABC bundling the file-extension filter,
+`vtscore/media/base.py` - an ABC bundling the file-extension filter,
 demo-dataset list, HTTP-serving helper, and "load one file into a media
 dict" loader for a single content format.
 
@@ -51,14 +51,14 @@ A concrete `MediaType` declares:
 
 | Abstract member                     | Purpose                                           |
 |-------------------------------------|---------------------------------------------------|
-| `type_id` (`vtscore/media/base.py:204`)  | Internal identifier - `"audio"`, `"image"`, etc.  |
+| `type_id` (`vtscore/media/base.py`)  | Internal identifier - `"audio"`, `"image"`, etc.  |
 | `name`                              | Human-readable label for pickers                  |
 | `icon`                              | SVG icon key                                      |
 | `file_extensions`                   | List of glob patterns (e.g. `["*.wav", "*.mp3"]`) |
 | `loops`                             | Whether the player loops (audio/video → `True`)   |
-| `demo_datasets` (`vtscore/media/base.py:317`) | List of `DemoDataset` records                  |
-| `load_media_data(path, bytes)` (`vtscore/media/base.py:391`) | Returns `{"duration": ..., "media_bytes": ...}` and any type-specific fields |
-| `media_response(media)` (`vtscore/media/base.py:482`) | Returns a framework-agnostic `MediaResponse` |
+| `demo_datasets` (`vtscore/media/base.py`) | List of `DemoDataset` records                  |
+| `load_media_data(path, bytes)` (`vtscore/media/base.py`) | Returns `{"duration": ..., "media_bytes": ...}` and any type-specific fields |
+| `media_response(media)` (`vtscore/media/base.py`) | Returns a framework-agnostic `MediaResponse` |
 
 A `MediaType` is **not** an embedder. Embedding is a separate plugin
 (see below), and one media type may have zero, one, or many embedders
@@ -67,14 +67,14 @@ subclasses that still own their model loading.
 
 The class also provides `_resolve_media_bytes(media)` /
 `_resolve_media_string(media)` helpers
-(`vtscore/media/base.py:418`, `vtscore/media/base.py:441`) that read
+(`vtscore/media/base.py`, `vtscore/media/base.py`) that read
 content from `media_bytes` → `media_path` → `media_url` in that order, so
 implementations transparently handle in-memory, on-disk, and lazy-fetched
 items.
 
 ### `MediaEmbedder` - file/text → vector
 
-`vtscore/media/embedder.py:416` - an ABC for "take one media dict and
+`vtscore/media/embedder.py` - an ABC for "take one media dict and
 produce a fixed-D `np.ndarray`". Each embedder is bound to exactly one
 `MediaType` via `media_type_id`, but a media type can have many
 embedders. Subclasses implement four things:
@@ -91,13 +91,13 @@ embedders. Subclasses implement four things:
 
 Threading and lock contract:
 
-- `MediaEmbedder._embed_lock` (`vtscore/media/embedder.py:438`) is a
+- `MediaEmbedder._embed_lock` (`vtscore/media/embedder.py`) is a
   **class-level** `threading.Lock` shared across every embedder
   subclass. `embed_media()` and `patch_forward()` both acquire it, so
   at most one forward pass runs at a time process-wide. Bulk callers
   acquire it per-item, not once per batch, so two parallel callers
   interleave smoothly.
-- `_model_load_lock` (`vtscore/media/embedder.py:434`) is **per-class**.
+- `_model_load_lock` (`vtscore/media/embedder.py`) is **per-class**.
   `load_models()` is idempotent and lock-protected - concurrent callers
   serialise on the first load, subsequent callers return immediately
   once `self._model is not None`.
@@ -115,18 +115,18 @@ implementation uses:
 
 | Helper                                                 | Purpose                                       |
 |--------------------------------------------------------|-----------------------------------------------|
-| `media_from_path(path)` (`vtscore/media/embedder.py:56`) | Wrap a `Path` in a minimal media dict.       |
-| `embedder_load_setup(cb, msg)` (`vtscore/media/embedder.py:140`) | Wire torch threads, return cache dir. |
-| `load_pretrained_local_first(fn, *)` (`vtscore/media/embedder.py:177`) | Prefer cached weights, retry transient HF errors. |
-| `intercept_tqdm_progress(cb)` (`vtscore/media/embedder.py:215`) | Forward HF tqdm bars to your progress callback. |
-| `intercept_weight_loading_progress(cb, label)` (`vtscore/media/embedder.py:378`) | Tensor-level progress for weight loading. |
-| `extract_tensor(out)` (`vtscore/media/embedder.py:81`)  | Normalise the assorted shapes HF returns.    |
-| `timed_progress(cb, status, msg)` (`vtscore/media/embedder.py:103`) | Append `(Ns)` to a stuck progress message. |
-| `resolve_embed_batch_size(default)` (`vtscore/media/embedder.py:38`) | Read `$VTSEARCH_EMBED_BATCH_SIZE`.      |
+| `media_from_path(path)` (`vtscore/media/embedder.py`) | Wrap a `Path` in a minimal media dict.       |
+| `embedder_load_setup(cb, msg)` (`vtscore/media/embedder.py`) | Wire torch threads, return cache dir. |
+| `load_pretrained_local_first(fn, *)` (`vtscore/media/embedder.py`) | Prefer cached weights, retry transient HF errors. |
+| `intercept_tqdm_progress(cb)` (`vtscore/media/embedder.py`) | Forward HF tqdm bars to your progress callback. |
+| `intercept_weight_loading_progress(cb, label)` (`vtscore/media/embedder.py`) | Tensor-level progress for weight loading. |
+| `extract_tensor(out)` (`vtscore/media/embedder.py`)  | Normalise the assorted shapes HF returns.    |
+| `timed_progress(cb, status, msg)` (`vtscore/media/embedder.py`) | Append `(Ns)` to a stuck progress message. |
+| `resolve_embed_batch_size(default)` (`vtscore/media/embedder.py`) | Read `$VTSEARCH_EMBED_BATCH_SIZE`.      |
 
 ### `MediaClipper` - split one media into sub-medias of the same type
 
-`vtscore/media/clipper.py:9` - given one media dict, return one or more
+`vtscore/media/clipper.py` - given one media dict, return one or more
 media dicts of the **same** type. Used to tile a long audio clip into
 fixed-length windows, slice a paragraph into sentences, crop an image
 into a fixed bbox, etc. Clippers are how you bound the unit of
@@ -147,9 +147,9 @@ class MediaClipper(ABC):
 Two optional hooks let the dataset-load pipeline tune a clipper at
 load time:
 
-- `resolve_for_durations(durations)` (`vtscore/media/clipper.py:145`) -
+- `resolve_for_durations(durations)` (`vtscore/media/clipper.py`) -
   dataset-level: decide once, given every item's duration.
-- `resolve_for_media(media)` (`vtscore/media/clipper.py:156`) - per-item:
+- `resolve_for_media(media)` (`vtscore/media/clipper.py`) - per-item:
   auto-route to a different concrete clipper based on each item
   (e.g. pass-through for short audio, tiling for long).
 
@@ -161,7 +161,7 @@ the original auto policy.
 
 ### `Processor` / `Detector` / `Localizer` / `Extractor`
 
-`vtscore/media/processors.py:9`–`235`. Four ABCs in a hierarchy. The
+`vtscore/media/processors.py`. Four ABCs in a hierarchy. The
 generic `process(media)` method delegates to a typed method on each
 subclass:
 
@@ -191,7 +191,7 @@ and `"bbox"` (format is media-specific). Extractor outputs must include
 
 ### `MediaResponse`
 
-`vtscore/media/base.py:69` - a `dataclass` for "this is bytes of MIME
+`vtscore/media/base.py` - a `dataclass` for "this is bytes of MIME
 type X, name it Y on download". Framework-agnostic so the same
 `MediaType.media_response(media)` works whether the caller is a Flask
 route, a Jupyter notebook, or a CLI exporter. The app converts it to a
@@ -207,7 +207,7 @@ class MediaResponse:
 
 ### `DemoDataset`
 
-`vtscore/media/base.py:88` - metadata for one downloadable demo dataset
+`vtscore/media/base.py` - metadata for one downloadable demo dataset
 attached to a media type. Bundles the id, label, description, category
 slugs, optional slicing bounds, and the `required_folder` used both as
 a staleness check on the pickle cache and as the browsable root for
@@ -220,13 +220,13 @@ ProgressCallback = Callable[[str, str, int, int], None]
 # (status, message, current, total) -> None
 ```
 
-(`vtscore/media/base.py:34`.) Threaded through every long-running
+(`vtscore/media/base.py`.) Threaded through every long-running
 library op so the caller can report progress upstream. `current == 0`
 and `total == 0` means indeterminate.
 
 ### `crop_file_bytes`
 
-`vtscore/media/cropping.py:16` - apply a single-clip bounded clipper to
+`vtscore/media/cropping.py` - apply a single-clip bounded clipper to
 an arbitrary file. Used by upload/example-sort callers that need to
 materialise a sub-region of one item without round-tripping through a
 full clipper pipeline. Supported types: `"audio"` (start/end seconds)
@@ -237,7 +237,7 @@ and `"image"` (bbox in original-image pixel coords).
 ## Registry API
 
 The registry is a small set of module-level dicts populated at import
-time by `_discover_media_plugins()` (`vtscore/media/__init__.py:320`).
+time by `_discover_media_plugins()` (`vtscore/media/__init__.py`).
 Three sentinel names drive discovery:
 
 | Sentinel     | Location                          | Type                 |
@@ -270,11 +270,11 @@ folder. No `__init__.py` edits required.
 
 | Function                                                   | Use                                          |
 |------------------------------------------------------------|----------------------------------------------|
-| `register_embedder(emb)` (`vtscore/media/__init__.py:219`) | Manual registration.                         |
-| `get_embedder(name)` (`vtscore/media/__init__.py:224`)     | Look up by `name`.                           |
-| `embedders_for_type(type_id)` (`vtscore/media/__init__.py:234`) | All embedders for a media type, **default first**. |
-| `all_embedders()` (`vtscore/media/__init__.py:245`)        | Every registered embedder.                   |
-| `all_embedders_dict()` (`vtscore/media/__init__.py:250`)   | JSON-safe summaries.                         |
+| `register_embedder(emb)` (`vtscore/media/__init__.py`) | Manual registration.                         |
+| `get_embedder(name)` (`vtscore/media/__init__.py`)     | Look up by `name`.                           |
+| `embedders_for_type(type_id)` (`vtscore/media/__init__.py`) | All embedders for a media type, **default first**. |
+| `all_embedders()` (`vtscore/media/__init__.py`)        | Every registered embedder.                   |
+| `all_embedders_dict()` (`vtscore/media/__init__.py`)   | JSON-safe summaries.                         |
 
 `embedders_for_type(t)[0]` is the default embedder for `t` (the one
 whose `is_default` returns `True`). Exactly one embedder per media
@@ -284,11 +284,11 @@ type should override `is_default`.
 
 | Function                                                   | Use                                  |
 |------------------------------------------------------------|--------------------------------------|
-| `register_clipper(c)` (`vtscore/media/__init__.py:182`)    | Manual registration.                 |
-| `get_clipper(name)` (`vtscore/media/__init__.py:187`)      | Look up by `name`.                   |
-| `clippers_for_type(type_id)` (`vtscore/media/__init__.py:197`) | All clippers for a media type.   |
-| `all_clippers()` (`vtscore/media/__init__.py:202`)         | Every registered clipper.            |
-| `all_clippers_dict()` (`vtscore/media/__init__.py:207`)    | JSON-safe summaries.                 |
+| `register_clipper(c)` (`vtscore/media/__init__.py`)    | Manual registration.                 |
+| `get_clipper(name)` (`vtscore/media/__init__.py`)      | Look up by `name`.                   |
+| `clippers_for_type(type_id)` (`vtscore/media/__init__.py`) | All clippers for a media type.   |
+| `all_clippers()` (`vtscore/media/__init__.py`)         | Every registered clipper.            |
+| `all_clippers_dict()` (`vtscore/media/__init__.py`)    | JSON-safe summaries.                 |
 
 ### Progress callback
 
@@ -296,7 +296,7 @@ type should override `is_default`.
 def set_progress_callback(cb: ProgressCallback) -> None: ...
 ```
 
-(`vtscore/media/__init__.py:363`) - wires `cb` into every registered
+(`vtscore/media/__init__.py`) - wires `cb` into every registered
 `MediaType._on_progress` and `MediaEmbedder._on_progress`. Call this
 once at startup. A thread-local override
 (`set_thread_progress_callback`) is in the public-API sketch but lives
@@ -411,7 +411,7 @@ out-of-tree implementations.
   it. Check `all_embedders()` after import if a custom embedder
   doesn't show up.
 - **Torch threading.** `vtscore.media.torch_setup.ensure_torch_configured`
-  (`vtscore/media/torch_setup.py:16`) reads `vtscore.config.TORCH_THREADS`
+  (`vtscore/media/torch_setup.py`) reads `vtscore.config.TORCH_THREADS`
   (env `$VTSEARCH_TORCH_THREADS`, default `1`) and calls
   `torch.set_num_threads` the first time torch is imported. Every
   code path that touches torch (embedders, head training, scoring)

@@ -33,7 +33,7 @@ no eviction.
 
 ## File embedders
 
-`vtscore/embedding/helpers.py:28`–`49`. Four one-liners that pick the
+`vtscore/embedding/helpers.py`. Four one-liners that pick the
 default embedder for a media type, build a minimal media dict from a
 file path, and run a forward pass.
 
@@ -85,7 +85,7 @@ def embed_text_query(
 ) -> Optional[np.ndarray]: ...
 ```
 
-(`vtscore/embedding/helpers.py:86`.) Embed a free-form text query
+(`vtscore/embedding/helpers.py`.) Embed a free-form text query
 into the vector space of a media type, so it can be cosine-scored
 against media embeddings. When `embedder_name` is set, that specific
 embedder is used; otherwise it falls back to the default for the
@@ -94,7 +94,7 @@ averages the query across the embedder's `description_wrappers`
 (e.g. `"a photo of {text}"`, `"a video of {text}"`).
 
 Results are cached in a small process-wide LRU
-(`_query_cache` at `vtscore/embedding/helpers.py:60`):
+(`_query_cache` in `vtscore/embedding/helpers.py`):
 
 | Aspect       | Detail                                                 |
 |--------------|--------------------------------------------------------|
@@ -129,7 +129,7 @@ clear_text_query_cache()                          # drop everything
 def get_torch_device() -> torch.device: ...
 ```
 
-(`vtscore/embedding/loader.py:22`.) Resolves
+(`vtscore/embedding/loader.py`.) Resolves
 `vtscore.config.DEVICE` (env `$VTSEARCH_DEVICE`, default `"auto"`)
 to a concrete `torch.device`. `"auto"` picks `cuda` when available,
 `mps` on Apple silicon, otherwise `cpu`. Torch is imported lazily
@@ -152,7 +152,7 @@ model.to(dev)
 def initialize_models(on_progress: ProgressCallback | None = None) -> None: ...
 ```
 
-(`vtscore/embedding/loader.py:76`.) Pass `on_progress` to render console
+(`vtscore/embedding/loader.py`.) Pass `on_progress` to render console
 progress bars for the two heavy first-time imports it triggers (scikit-learn
 and transformers, ~10s combined on a cold start); omit it (the default, used
 by tests and the eval CLI) to run silently. Sets up the runtime environment:
@@ -191,7 +191,7 @@ def predict_embedder_for_dataset(dataset_id: str) -> str: ...
 def preload_embedder_for_dataset(dataset_id: str) -> str: ...
 ```
 
-(`vtscore/embedding/loader.py:131`–`287`.)
+(`vtscore/embedding/loader.py`.)
 
 | Function                            | Sync? | Returns                              |
 |-------------------------------------|-------|--------------------------------------|
@@ -235,7 +235,7 @@ def get_xclip_model():  # (model, processor) for the "xclip" embedder
 def get_e5_model():     # SentenceTransformer for the "e5" embedder
 ```
 
-(`vtscore/embedding/loader.py:298`–`320`.) Each calls
+(`vtscore/embedding/loader.py`.) Each calls
 `get_embedder(name).load_models()` and returns the private
 `_get_model_and_processor()` / `_get_model()` accessor. Prefer the
 public `embed_media` / `embed_text` API for new code - these helpers
@@ -257,13 +257,13 @@ def invalidate_embedding_matrix(ctx: DatasetContext) -> None: ...
 def get_embedding_matrix_for_snap(snap: dict) -> tuple[list[int], np.ndarray]: ...
 ```
 
-(`vtscore/embedding/matrix.py:29`–`104`.)
+(`vtscore/embedding/matrix.py`.)
 
 ### How the cache works
 
 `DatasetContext._emb_matrix`, `DatasetContext._emb_matrix_ids`, and
 `DatasetContext._emb_matrix_revision` are the cache.
-`get_embedding_matrix(ctx)` (`vtscore/embedding/matrix.py:29`):
+`get_embedding_matrix(ctx)` (`vtscore/embedding/matrix.py`):
 
 1. Acquires `vtscore.state.core._state_lock`.
 2. Snapshots `revision = ctx.media_revision`.
@@ -298,7 +298,7 @@ dict subclass can't observe a mutation to a value's internals, so those
 stages call `invalidate_embedding_matrix(ctx)` (which bumps the counter)
 afterwards (logical-bug-audit root-cause Pattern #4).
 
-`get_embedding_matrix_for_snap(snap)` (`vtscore/embedding/matrix.py:70`)
+`get_embedding_matrix_for_snap(snap)` (`vtscore/embedding/matrix.py`)
 is for callers that hold a media-dict snapshot (typically from
 `snapshot_medias()`): when `snap`'s key set matches the active
 dataset's medias, the cached matrix is reused; otherwise a fresh
@@ -326,7 +326,7 @@ def default_concurrent_downloads() -> int: ...
 def default_concurrent_embeddings() -> int: ...
 ```
 
-(`vtscore/embedding/loader.py:51`–`73`.) Heuristics for the dataset-
+(`vtscore/embedding/loader.py`.) Heuristics for the dataset-
 load `ConcurrencyGate`s in `vtscore.datasets.load_pipeline`:
 
 - **Downloads** - defaults to `min(4, os.cpu_count())`. Bandwidth and

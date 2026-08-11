@@ -32,8 +32,8 @@ infrastructure that drives long-running operations on these contexts.
 
 ## The two context classes
 
-`DatasetContext` and `DetectorContext` live in `vtscore/state/core.py:91`
-and `vtscore/state/core.py:122`. Both use `__slots__` so accidentally
+`DatasetContext` and `DetectorContext` live in `vtscore/state/core.py`
+and `vtscore/state/core.py`. Both use `__slots__` so accidentally
 shadowing an attribute raises immediately. Every field is in-memory
 only; datasets persist via pickle, detectors via labelset JSON (origins
 + labels only, never model weights - see the "No Persisted Vectors or
@@ -117,7 +117,7 @@ is treating the dict as a set.
 
 The library never carries a global "currently active" pointer. Helpers
 that operate on "the" active context walk a four-tier chain (see
-`vtscore/state/core.py:331` for the detector side; the dataset side is
+`vtscore/state/core.py` for the detector side; the dataset side is
 identical minus the forced-override tier). Highest precedence wins.
 
 | Tier | Source | How it's set | Lifetime |
@@ -178,7 +178,7 @@ point at the context being removed.
 `vtscore` is a library - it must not import Flask. The app layer
 (`vtsearch/shim/`) installs a Flask-aware resolver that reads the
 request's `X-Dataset-Id` / `X-Detector-Id` header out of `flask.g`. The
-hooks are at `vtscore/state/core.py:66`:
+hooks are in `vtscore/state/core.py`:
 
 ```python
 from vtscore.state.core import (
@@ -210,7 +210,7 @@ the start and `set_thread_*_context(None)` at the end. There is no
 
 A context manager that forces `get_active_detector_context()` to return
 `ctx` regardless of resolver / thread-local. Lives at the top of the
-chain (tier 1). Used by `vtscore/detectors/workflow.py:38` so the
+chain (tier 1). Used by `vtscore/detectors/workflow.py` so the
 apply-and-retrain flow works whether the caller is inside a Flask
 request or a background thread.
 
@@ -254,15 +254,15 @@ does not need to thread it through every call. Each helper acquires
 
 | Function | File | Description |
 |----------|------|-------------|
-| `clear_votes()` | `votes.py:25` | Drop all votes, history, click times, region boxes |
-| `toggle_vote(cid, vote, region_box=None)` | `votes.py:122` | Toggle semantics: same vote removes; opposite flips |
-| `apply_label(cid, label, *, silent=False, region_box=None)` | `votes.py:209` | Set label unconditionally (for imports). `silent=True` skips history + diversity tree |
-| `apply_label_with_click_time(cid, label)` | `votes.py:257` | Same as `apply_label` but assigns a click-time ordinal |
-| `apply_labels_bulk_with_click_time(labels, replace_all=False)` | `votes.py:283` | Apply many labels under a single lock acquisition |
-| `add_label_to_history(cid, label)` | `votes.py:49` | Append `(cid, label, time)` to `label_history` |
-| `add_textsort_suggestion(text)` / `get_textsort_suggestions()` | `votes.py:62` | LRU of recent queries |
-| `update_learned_scores(scores)` / `get_learned_scores()` | `votes.py:85` | Cache last `train_and_score` output |
-| `set_find_initial_labels(labels)` / `get_find_initial_labels()` | `votes.py:99` | Snapshot of detector-assigned labels |
+| `clear_votes()` | `votes.py` | Drop all votes, history, click times, region boxes |
+| `toggle_vote(cid, vote, region_box=None)` | `votes.py` | Toggle semantics: same vote removes; opposite flips |
+| `apply_label(cid, label, *, silent=False, region_box=None)` | `votes.py` | Set label unconditionally (for imports). `silent=True` skips history + diversity tree |
+| `apply_label_with_click_time(cid, label)` | `votes.py` | Same as `apply_label` but assigns a click-time ordinal |
+| `apply_labels_bulk_with_click_time(labels, replace_all=False)` | `votes.py` | Apply many labels under a single lock acquisition |
+| `add_label_to_history(cid, label)` | `votes.py` | Append `(cid, label, time)` to `label_history` |
+| `add_textsort_suggestion(text)` / `get_textsort_suggestions()` | `votes.py` | LRU of recent queries |
+| `update_learned_scores(scores)` / `get_learned_scores()` | `votes.py` | Cache last `train_and_score` output |
+| `set_find_initial_labels(labels)` / `get_find_initial_labels()` | `votes.py` | Snapshot of detector-assigned labels |
 
 ### Toggle semantics
 
@@ -326,7 +326,7 @@ A hierarchical k-means clustering over a dataset's embeddings, used to
 pick the next maximally-diverse training sample. The tree lives on
 `DatasetContext.diversity_tree`; the helpers in `state/diversity.py`
 manipulate the active dataset's tree. The implementation is in
-`vtscore/state/diversity_tree.py:34` (`DiversityTree`).
+`vtscore/state/diversity_tree.py` (`DiversityTree`).
 
 The tree partitions the embedding space recursively, tracks which leaves
 have been "seen" (had a label applied to one of their members), and
@@ -401,7 +401,7 @@ hook surface; the app installs the persistence callbacks. Library-only
 consumers see purely in-memory mutation.
 
 ```python
-# vtscore/state/__init__.py:159
+# vtscore/state/__init__.py
 def register_setting_persister(key: str, fn: Callable[[Any], None]) -> None:
     """Recognised keys: inclusion, calibrate_count,
     calibration_fraction."""
@@ -428,7 +428,7 @@ Cross-cutting helpers shipped at the package level: `snapshot_medias()`
 
 ## Thread-safety invariants
 
-- **One re-entrant lock** (`vtscore/state/core.py:36`,
+- **One re-entrant lock** (`vtscore/state/core.py`,
   `_state_lock = threading.RLock()`) guards every mutation across both
   context registries, every per-context dict, the diversity tree, and
   the setting cache. RLock so that compound operations like

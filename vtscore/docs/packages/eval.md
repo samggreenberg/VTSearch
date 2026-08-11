@@ -46,7 +46,7 @@ from vtscore.eval import (
 
 ### `EvalQuery`
 
-`vtscore/eval/config.py:18`. One natural-language query targeting one
+`vtscore/eval/config.py`. One natural-language query targeting one
 ground-truth category.
 
 ```python
@@ -65,7 +65,7 @@ categories - see `vtscore/eval/config.py` for the full lists.
 
 ### `QueryMetrics`
 
-`vtscore/eval/metrics.py:11`. One text-sort query's results.
+`vtscore/eval/metrics.py`. One text-sort query's results.
 
 ```python
 @dataclass
@@ -82,7 +82,7 @@ class QueryMetrics:
 
 ### `LearnedSortMetrics`
 
-`vtscore/eval/metrics.py:25`. One learned-sort fold's results.
+`vtscore/eval/metrics.py`. One learned-sort fold's results.
 
 ```python
 @dataclass
@@ -99,7 +99,7 @@ class LearnedSortMetrics:
 
 ### `DatasetResult`
 
-`vtscore/eval/metrics.py:39`. Aggregated results for one eval dataset.
+`vtscore/eval/metrics.py`. Aggregated results for one eval dataset.
 
 ```python
 @dataclass
@@ -153,7 +153,7 @@ print(qm.average_precision, qm.precision_at_k, qm.recall_at_k)
 
 ### `eval_text_sort(medias, queries, media_type, ...)`
 
-`vtscore/eval/runner.py:65`. For each query: embed the query text via
+`vtscore/eval/runner.py`. For each query: embed the query text via
 `vtscore.embedding.helpers.embed_text_query`, score every media by
 cosine similarity, sort descending, and compute metrics treating
 medias whose `"category"` matches `query.target_category` as relevant.
@@ -163,7 +163,7 @@ baseline) to populate `elapsed_seconds` on each result.
 
 ### `eval_learned_sort(medias, queries, train_fraction=0.5, seed=42, ...)`
 
-`vtscore/eval/runner.py:106`. For each query/category: split target-
+`vtscore/eval/runner.py`. For each query/category: split target-
 category vs. other medias, take `train_fraction` of each as training
 data, build the synthetic `good_votes` / `bad_votes` dicts, call
 `train_and_score` from [`vtscore.detectors`](detectors.md), and
@@ -191,7 +191,7 @@ learned_results = eval_learned_sort(medias, queries,
 
 ### `run_eval(dataset_ids=None, mode="both", ...)`
 
-`vtscore/eval/runner.py:211`. The full pipeline, written for the CLI
+`vtscore/eval/runner.py`. The full pipeline, written for the CLI
 but usable from Python directly. Iterates over `dataset_ids` (or every
 key of `EVAL_DATASETS` when `None`), loads each demo dataset into a
 fresh `medias` dict via `load_demo_dataset`, runs `eval_text_sort`
@@ -214,7 +214,7 @@ Args:
 
 ### `format_results_json(results)`
 
-`vtscore/eval/runner.py:336`. Serialise a list of `DatasetResult` to a
+`vtscore/eval/runner.py`. Serialise a list of `DatasetResult` to a
 JSON string by calling `r.to_dict()` on each and round-tripping
 through `json.dumps(indent=2)`.
 
