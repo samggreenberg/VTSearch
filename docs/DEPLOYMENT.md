@@ -6,15 +6,97 @@ installation and getting started, see [SETUP.md](SETUP.md).
 
 ## Table of Contents
 
-1. [Environment variables](#environment-variables)
-2. [Running under gunicorn](#running-under-gunicorn)
-3. [Network dependencies](#network-dependencies)
-4. [Offline deployment](#offline-deployment)
-5. [Data directory layout](#data-directory-layout)
-6. [Progress-bar timing profile](#progress-bar-timing-profile)
-7. [Docker production notes](#docker-production-notes)
-8. [Dependency structure](#dependency-structure)
-9. [Troubleshooting](#troubleshooting)
+1. [Security](#security)
+2. [Environment variables](#environment-variables)
+3. [Running under gunicorn](#running-under-gunicorn)
+4. [Network dependencies](#network-dependencies)
+5. [Offline deployment](#offline-deployment)
+6. [Data directory layout](#data-directory-layout)
+7. [Progress-bar timing profile](#progress-bar-timing-profile)
+8. [Docker production notes](#docker-production-notes)
+9. [Dependency structure](#dependency-structure)
+10. [Troubleshooting](#troubleshooting)
+
+---
+
+## Security
+
+> **A default VTSearch deployment has no authentication and no filesystem
+> confinement. Anyone who can reach the port gets full use of the app and,
+> through it, read and write access to every path the server process can
+> reach. Do not put one on an untrusted network — including the public
+> internet — without the measures in [Before you expose
+> it](#before-you-expose-it) below.**
+
+This is a deliberate design for the deployment VTSearch is built around: one
+trusted user, on their own workstation or a private host. It is *not* a
+hardened multi-tenant server, and nothing in the app assumes it is.
+
+### What the default deployment grants
+
+With no `--login` flag the app runs `DefaultLoginProvider`: every request is
+treated as the single user `default`, always authenticated. There is no
+password, token, session, or login step to obtain — the request lifecycle
+identifies the caller but never challenges them. Concretely, an unauthenticated
+caller can:
+
+- **Read any server-readable path.** `GET /api/browse` roots at the filesystem
+  root (`/`) in single-user mode, and server-path importer fields accept any
+  absolute or relative path. `get_file_access_base_dir()`
+  (`vtscore/security/path_validation.py`) returns `None` for the default
+  provider, which tells `validate_server_filepath()` to apply **no**
+  containment check at all. Imported file contents are then served back
+  through the media routes.
+- **Write any server-writable path.** Server-file exporters
+  (`server_json_file`, `server_csv_file`, portable-detector export, the
+  server-JSON label source) take a destination path as a free-text field and
+  create parent directories as needed, under the same `None` confinement.
+- **Make the server issue outbound requests.** The HTTP-archive importer and
+  the webhook exporter fetch/post to a user-supplied URL (these go through the
+  SSRF guard in `vtscore/security/url_validation.py`, which rejects non-HTTP(S)
+  schemes and private/internal addresses).
+- **Read and change every setting and every dataset/detector on the instance.**
+  There is one shared `data/` tree with no per-user boundary.
+
+The bound host makes this reachable by default: `python app.py` listens on
+`0.0.0.0:5000`, and gunicorn's `VTSEARCH_BIND` defaults to `0.0.0.0:5000`. On a
+cloud or multi-homed host that is every interface, not just loopback.
+
+### Before you expose it
+
+- **Put an authenticating proxy in front, and bind VTSearch to loopback.** Set
+  `VTSEARCH_BIND=127.0.0.1:5000` (or publish only to a private Docker network)
+  and terminate authentication — mTLS, OIDC/SSO, or HTTP basic auth — in the
+  reverse proxy, which then forwards to gunicorn. **Today this is the only way
+  to actually require authentication**; see the next bullet for why the
+  built-in providers are not a substitute.
+- **Understand what `--login` does and does not do.** Selecting a non-default
+  provider (`--login trivial`, `--login api_key`) makes
+  `get_file_access_base_dir()` return `data/<username>/`, which *does* confine
+  the browse root and every server-path importer/exporter to that subtree — a
+  real and worthwhile change. It does **not** gate access: no `before_request`
+  hook or route calls `provider.is_authenticated()`, so a request with a
+  missing or invalid Bearer token is served as the `anonymous` user rather than
+  rejected, and `TrivialLoginProvider`'s login screen is enforced only in the
+  SPA ([#2946](https://github.com/samggreenberg/VTSearch/issues/2946)). Treat
+  provider choice as a **confinement** mechanism, not an authentication one,
+  until that issue is fixed.
+- **Set `VTSEARCH_SECRET_KEY` to a random value.** The default is a constant
+  visible in the source. `TrivialLoginProvider`'s session cookie is only
+  integrity-protected by that key, so with the default anyone can forge a
+  cookie naming any user — and the username is also a path component
+  ([#2930](https://github.com/samggreenberg/VTSearch/issues/2930)).
+- **Let the OS be the real boundary.** In single-user mode the only limit on
+  file access is what the process account can read and write, so run VTSearch
+  as an unprivileged, dedicated user (or in a container) whose only writable
+  mount is the data directory. Do not run it as root.
+- **Keep the media you import in mind.** Dataset pickles are loaded through a
+  restricted unpickler (`vtscore/security/pickle.py`) that permits only plain
+  types and numpy arrays, so a `.pkl` cannot execute code — but everything a
+  user can point an importer at is content the server will read and serve.
+
+Behaviour changes to close these gaps are tracked as open issues rather than
+documented workarounds; this section describes the code as it stands.
 
 ---
 
@@ -136,6 +218,13 @@ For public deployments, put nginx / Caddy / Traefik in front of gunicorn
 to handle TLS, gzip, and static-asset caching. Flask serves the Angular
 build from `static/` directly, but a dedicated reverse proxy is much
 more efficient for that traffic.
+
+> **Read [Security](#security) first.** VTSearch itself does not
+> authenticate anyone and, in the default single-user mode, does not confine
+> file access. A proxy that only terminates TLS publishes an unauthenticated
+> filesystem browser. The proxy is also where you add authentication — and
+> gunicorn should be bound to loopback (`VTSEARCH_BIND=127.0.0.1:5000`) so it
+> can't be reached around it.
 
 A few VTSearch-specific points matter when configuring the proxy:
 
