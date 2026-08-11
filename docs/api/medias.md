@@ -179,29 +179,51 @@ Delegates to the registered media type's handler. Works for all media types.
 POST /api/medias/{media_id}/vote
 ```
 
-**Body:** `{"vote": "good"}` or `{"vote": "bad"}`
+**Body:** `{"target": "good"}`, `{"target": "bad"}`, or `{"target": "none"}`
 
-Toggle semantics: voting the same direction again removes the vote. Voting the
-opposite direction switches sides.
+**Absolute-target semantics**, not toggle semantics: `target` is the state the
+media should be in *after* the call, so un-voting is an explicit
+`{"target": "none"}` rather than a repeated vote in the same direction.
 
-**Optional `region_box`** (yes-votes only): a 4-float array
+The call is **idempotent**: sending the state the media is already in is a
+no-op — it does not append to the label history, does not credit achievements,
+and returns the existing click-time. (This is deliberate: with toggle
+semantics, two stale-view tabs clicking the same media alternated
+ADD/REMOVE on the server and inflated the achievement counters.)
+
+**Optional `region_box`** (`"good"` targets only): a 4-float array
 `[x0, y0, x1, y1]` in normalised image coordinates (`0..1`,
 pre-rotation) that annotates *which region of the image* the user
 is voting good on. Persisted alongside the vote and consumed by
 region-aware head training (the trainer pools the box's patch-grid
-cells on the fly). The box is dropped when the vote is toggled off
-or switched good → bad.
+cells on the fly). The box is dropped when the vote is removed
+(`target: "none"`) or switched good → bad; sending one with a
+`"bad"` or `"none"` target is rejected.
 
 ```json
-{"vote": "good", "region_box": [0.2, 0.3, 0.55, 0.7]}
+{"target": "good", "region_box": [0.2, 0.3, 0.55, 0.7]}
 ```
 
-→ `{"ok": true}`
+→
+```json
+{"ok": true, "state": "good", "click_time": 17}
+```
+
+`state` is the media's vote state after the call (`"good"` / `"bad"` /
+`"none"`), so a client can reconcile its optimistic view without a follow-up
+`GET /api/votes`. `click_time` is the click-time ordinal assigned to the new
+label, and is `null` when the target was `"none"` or when the call was an
+idempotent no-op.
+
+Unknown body fields are silently dropped, so a client may attach advisory keys
+(e.g. `confidence`, `note`) without failing schema validation.
 
 | Status | Cause |
 |--------|-------|
-| `400` | Invalid `vote` value; `region_box` on a `bad` vote; `region_box` outside `[0, 1]` or not a 4-tuple. |
+| `400` | `region_box` on a `"bad"` / `"none"` target; `region_box` outside `[0, 1]`, not a 4-element list, or non-numeric. |
 | `404` | Media not found. |
+| `422` | Missing `target`, or a `target` outside `good` / `bad` / `none` (marshmallow validation envelope). |
+| `500` | The vote was applied in memory but the detector labelset could not be persisted. |
 
 ### Bulk vote
 
@@ -211,15 +233,17 @@ POST /api/medias/vote-bulk
 
 **Body:** `{"ids": [1, 2, 3], "target": "good"}`
 
-Applies one absolute vote `target` (`"good"` / `"bad"`) to many medias in a
-single request, with the same idempotent semantics as the per-media vote
-(including Find-mode verification: a good/bad target marks the item verified).
-The detector labelset is persisted once rather than per id. Bulk votes are
-image-level (no region boxes). Powers the Browser's "Verified Good" /
-"Verified Bad" actions.
+Applies one absolute vote `target` (`"good"` / `"bad"` / `"none"`) to many
+medias in a single request, with the same idempotent semantics as the
+per-media vote (including Find-mode verification: a good/bad target marks the
+item verified). The detector labelset is persisted once rather than per id.
+Bulk votes are image-level (no region boxes). Powers the Browser's "Verified
+Good" / "Verified Bad" actions. Unlike a hand-click, a bulk vote does not build
+the Marathoner streak.
 
-→ `{"changed": 2, "missing": [3]}` — `changed` counts only ids whose state
-actually moved; ids not in the loaded dataset are reported in `missing`.
+→ `{"ok": true, "changed": 2, "missing": [3]}` — `changed` counts only ids
+whose state actually moved (idempotent re-applies don't count); ids not in the
+loaded dataset are reported in `missing`.
 400 if no ids supplied.
 
 ### Thumbnail
@@ -243,6 +267,81 @@ not found or bytes unavailable.
 
 ## Sorting
 
+### Sort response shape (windowing)
+
+The sorts that rank the whole dataset — [text sort](#text-sort),
+[learned sort](#learned-sort), [example sort (upload)](#example-sort-upload)
+and [label-file sort](#label-file-sort) — do **not** return a bare
+`{results, threshold}` pair. They return a windowed envelope:
+
+```json
+{
+  "results": [{"id": 0, "similarity": 0.8234}],
+  "threshold": 0.5123,
+  "acq_threshold": null,
+  "sort_token": "9f1c…",
+  "total": 250000,
+  "above_threshold": 1840,
+  "has_more_below": true
+}
+```
+
+| Field | Meaning |
+|-------|---------|
+| `results` | The transmitted ranking rows, **descending by score**. May be a *head window* of the full ranking (see below), not the whole thing. |
+| `threshold` | The decision line (see [learned sort](#learned-sort) for `threshold` vs `acq_threshold`). |
+| `acq_threshold` | The acquisition cut; `null` on sorts with no detector behind them. |
+| `sort_token` | Opaque handle for [`GET /api/sort/page`](#sort-page). Also the sort-generation token: a re-sort mints a new one. |
+| `total` | Length of the **full** ranking — `>= results.length`. |
+| `above_threshold` | Rows at or above `threshold` across the full ranking (not just the window). |
+| `has_more_below` | `true` when `results` is a head window and more rows follow. |
+
+**Windowing only engages on large sorts.** Below `SORT_WINDOW_THRESHOLD`
+(20 000 rows, `vtscore/state/sort_results_cache.py`) the full ranking is
+transmitted unchanged and `has_more_below` is `false`. At or above it the
+response carries only the initial window — up to `SORT_WINDOW_HEAD` (500)
+above-threshold rows plus `SORT_WINDOW_TAIL` (200) rows just past the
+boundary — and the client pages the rest through `/api/sort/page`.
+
+A client that ignores `has_more_below` therefore gets a **silently truncated
+ranking** on datasets past 20 k items. Page until `has_more` is `false` (or
+until `offset + results.length == total`) when you need the whole order.
+
+The full ranking is held server-side in a process-global LRU cache of the 8
+most recent sorts. Nothing is persisted: it holds only the lightweight
+`{id, score}` / `{id, similarity}` rows, never embeddings or model weights.
+
+### Sort page
+
+```
+GET /api/sort/page?token=<sort_token>&offset=0&limit=200
+```
+
+Returns one window of a previously-computed ranking, so a client can scroll
+deep into a large sort without receiving the whole list up front.
+
+| Query | Default | Notes |
+|-------|---------|-------|
+| `token` | *(required)* | The `sort_token` from the sort response. |
+| `offset` | `0` | Start index into the full ranking; `>= 0`. |
+| `limit` | `200` | Window size, `1`–`2000`. |
+
+→
+```json
+{
+  "results": [{"id": 4021, "score": 0.4412}],
+  "offset": 600,
+  "limit": 200,
+  "total": 250000,
+  "threshold": 0.5123,
+  "has_more": true
+}
+```
+
+404 when the token is unknown, has been evicted from the cache, or belongs to
+a different dataset than the active `X-Dataset-Id` — in every case the client
+should re-run the sort and start from the new token.
+
 ### Text sort
 
 ```
@@ -254,7 +353,9 @@ POST /api/sort
 Embeds the text query using the media type's embedding model, then sorts all
 medias by cosine similarity. Includes a GMM-based threshold.
 
-→ `{"results": [{"id": 0, "similarity": 0.8234}], "threshold": 0.5123}`
+→ A [windowed sort response](#sort-response-shape-windowing) whose rows are
+`{"id": 0, "similarity": 0.8234}`. `acq_threshold` is `null` (no detector
+behind this sort).
 
 When the dataset's embedder is patch-region-aware (e.g.
 `dinov3_patch`), each result additionally carries
@@ -300,10 +401,14 @@ successful run) short-circuits and returns the cached `done` payload directly.
 Pass `{"wait": true}` in the body to block until the job finishes and receive
 the result inline (used by tests; the frontend leaves it `false`):
 
-→ `{"results": [{"id": 0, "score": 0.9234}], "threshold": 0.5123, "acq_threshold": 0.6180}`
+→ A [windowed sort response](#sort-response-shape-windowing) whose rows are
+`{"id": 0, "score": 0.9234}`.
 
 The `done` payload — whether returned inline (`wait=true`) or via the result
-poll — carries `results`, `threshold` and `acq_threshold`.
+poll — is that same windowed envelope: `results`, `threshold`,
+`acq_threshold`, `sort_token`, `total`, `above_threshold`, `has_more_below`.
+This is the only sort with a detector behind it, so the only one whose
+`acq_threshold` is non-`null`.
 
 `threshold` is the **decision line**: the cutoff shown to the user, what
 `above_threshold` counts against, and what Find calls a match. `acq_threshold`
@@ -325,7 +430,8 @@ GET /api/learned-sort/result?job_id=<id>
 Polls a background learned-sort job.
 
 - Running: `{"job_id": "…", "status": "running", "current": N, "total": M}`
-- Done: `{"results": [{"id": 0, "score": 0.9234}], "threshold": 0.5123, "acq_threshold": 0.6180}`
+- Done: the [windowed sort response](#sort-response-shape-windowing), plus
+  `job_id` and `status`.
 - Cancelled: `{"job_id": "…", "status": "cancelled"}`
 - Job failed: HTTP 500.
 - Unknown `job_id`: HTTP 404.
@@ -360,7 +466,8 @@ POST /api/example-sort
 
 Embeds the uploaded file and sorts by cosine similarity.
 
-→ `{"results": [{"id": 0, "similarity": 0.8234}], "threshold": 0.5123}`
+→ A [windowed sort response](#sort-response-shape-windowing) whose rows are
+`{"id": 0, "similarity": 0.8234}`.
 
 `best_region` is included per-result on patch-region-aware datasets,
 same shape as text sort.
@@ -380,6 +487,11 @@ and re-embedded before sorting. Powers the right-click "sort by similarity" /
 "crop then sort" context-menu actions.
 
 → `{"results": [...], "threshold": 0.5123}`
+
+The three `example-sort-{by-id,server,origin}` routes are the exception to
+the [windowed sort response](#sort-response-shape-windowing): they return the
+plain `{results, threshold}` pair with the full ranking and mint no
+`sort_token`, so there is nothing to page.
 
 400 if no medias loaded or `media_id` not in the loaded snapshot. 404 if the
 media's bytes are unavailable when cropping is requested.
@@ -427,9 +539,21 @@ Sorts by similarity to a file resolved from an origin dict.
 POST /api/server-media-files/upload
 ```
 
-**Form:** `file`: media file to upload.
+**Form:**
+- `file`: media file to upload.
+- `crop_params` (optional): JSON object with the user-cropped bounds
+  (audio `{"start", "end"}`, image `{"box": [...]}`). When set, the file is
+  cropped server-side before being saved, so the persisted example *is* the
+  cropped sub-region.
+- `media_type` (required when `crop_params` is present): `"audio"` or
+  `"image"`; selects which bounded clipper to apply.
 
 → `{"filename": "abc123.wav", "original_name": "dog_bark.wav"}` (201)
+
+`filename` is the server-generated UUID name (the persistence key);
+`original_name` is the user's file name, kept for display.
+400 if the multipart body is missing a file/filename, or `crop_params` is
+invalid for the given media type.
 
 ### Save loaded media as a server example file
 
@@ -465,9 +589,17 @@ type), 500 (generation failed).
 POST /api/votes/seed-from-examples
 ```
 
-Seeds good votes from the active model's media examples.
+**Body:** `{"examples": [{"type": "media", "filename": "abc123.wav"}, ...]}`
 
-→ `{"ok": true, "seeded": 5}`
+Seeds good votes from a detector's media examples. For each `type: "media"`
+entry the file is read out of `example_media/` and MD5'd: a matching loaded
+media is voted Good, and an example that isn't in the dataset is embedded,
+inserted as a new media, and voted Good.
+
+→ `{"seeded": 2, "skipped": 1}` — `skipped` is every example that produced no
+vote (`len(examples) - seeded`).
+
+500 if the seeded votes could not be persisted to the detector store.
 
 ### Label-file sort
 
@@ -480,7 +612,9 @@ POST /api/label-file-sort
 
 Trains the detector head on the labeled files, then scores all loaded medias.
 
-→ `{"results": [...], "threshold": 0.5123, "loaded": 10, "skipped": 2}`
+→ A [windowed sort response](#sort-response-shape-windowing) plus `loaded` and
+`skipped` counts for the label file:
+`{"results": [...], "threshold": 0.5123, "acq_threshold": null, "sort_token": "…", "total": 10, "above_threshold": 4, "has_more_below": false, "loaded": 10, "skipped": 2}`
 
 ---
 
@@ -497,10 +631,24 @@ GET /api/votes
 {
   "good": [0, 3, 7],
   "bad": [1, 5],
+  "verified": [3],
   "click_times": {"0": 1234567890.123},
-  "learned_scores": {"0": 0.9234}
+  "learned_scores": {"0": 0.9234},
+  "labelset_good_count": 12,
+  "labelset_bad_count": 9,
+  "good_region_boxes": {"3": [0.2, 0.3, 0.55, 0.7]}
 }
 ```
+
+Every key is always present. `verified` lists the ids the human has explicitly
+verified this session (Find mode splits verified from the unverified work
+queue); it is empty outside Find mode. `labelset_good_count` /
+`labelset_bad_count` are the **active detector's** persisted label counts,
+which include elements that don't resolve into the loaded dataset — so they
+can exceed `good.length` / `bad.length`. They fall back to the session vote
+counts when no detector context is active. `good_region_boxes` maps media id
+(as a string) to the normalised `[x0, y0, x1, y1]` box of a good vote cast by
+drawing on the image; only good votes that carry a box appear.
 
 ### Clear votes
 
@@ -537,6 +685,14 @@ GET /api/labels/export
 
 **Query:**
 - `?goods_only=1` (optional): export only good labels.
+- `?label_filter=<mode>` (optional): `good`, `bad`, `both` (default),
+  `corrections` (entries where the user changed the detector's original
+  label), `unverified` (Find work-queue items the human hasn't acted on), or
+  `verified` (items the human has confirmed). Overrides `goods_only`. The
+  session-scoped modes (`corrections` / `unverified` / `verified`) never
+  include `origin_only` fallback entries.
+- `?enrich=1` (optional): add per-entry `custom_metadata` and a top-level
+  `available_columns` list (see the flattened `origin.params` note above).
 - `?format=ndjson` (optional): stream the response as newline-delimited JSON
   (`application/x-ndjson`), one label entry per line, instead of the buffered
   `{"labels": [...]}` object. Use for large exports that shouldn't be
@@ -558,6 +714,14 @@ GET /api/labels/export
 }
 ```
 
+Only `md5` and `label` are guaranteed on an entry; `origin`, `origin_name`,
+`filename`, `category`, `metadata`, and `region_box` (good votes cast on a
+region) appear when the underlying element has them. The export is a faithful
+rendering of the **detector's** labelset, not just the session's votes: elements
+that don't resolve into the active dataset are appended and marked
+`"origin_only": true`. Entries where the user changed the detector's original
+label carry `"is_correction": true`.
+
 ### Import labels
 
 ```
@@ -566,7 +730,10 @@ POST /api/labels/import
 
 **Body:** `{"labels": [{"origin": {...}, "origin_name": "...", "md5": "...", "label": "good"}]}`
 
-Matches by origin+origin_name first, falls back to MD5.
+Matches by origin+origin_name first, falls back to MD5. An entry whose `label`
+is neither `"good"` nor `"bad"`, or that resolves to no loaded media, is
+counted in `skipped` rather than failing the request. A `region_box` on a
+`"good"` entry is round-tripped back onto the vote (ignored on `"bad"`).
 
 → `{"applied": 8, "skipped": 2}`
 

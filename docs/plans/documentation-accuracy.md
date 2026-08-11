@@ -194,10 +194,8 @@ separately.
 
 - **docs/api/ — wrong or incomplete contracts.** `settings.md` documents the theme enum and default
   wrongly and omits roughly twenty real `PUT /api/settings` keys; `labeling.md` omits the resolved
-  detector fields both `/api/inclusion` verbs return; `medias.md` omits four always-present keys on
-  `GET /api/votes`, the `label_filter` param on label export, the crop fields on server-media
-  upload, and `"none"` as a `vote-bulk` target; `detectors.md`'s second create example omits the
-  required `media_type`; `io.md`'s exporter list omits `holder` and `portable_detector`;
+  detector fields both `/api/inclusion` verbs return; `detectors.md`'s second create example omits
+  the required `media_type`; `io.md`'s exporter list omits `holder` and `portable_detector`;
   `datasets.md` shows load responses in a shape the routes do not return; `auth.md` omits the SPA
   deep-link routes. `API.md` undersells the error envelope (`{error, detail, request_id}`, plus the
   422 marshmallow shape).
