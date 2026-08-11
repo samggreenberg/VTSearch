@@ -26,7 +26,7 @@ export const EMBEDDER_TYPE_ORDER: EmbedderType[] = ['semantic', 'patch_semantic'
  * registry), so callers can answer "can this dataset's embedder search by
  * text?" without each reimplementing the `supports_text` lookup.
  *
- * Vision-only / speech-only encoders (DINOv3, EUPE, AST, Whisper, VideoMAE)
+ * Vision-only / audio-only encoders (DINOv3, EUPE, BEATs, AST, Whisper, VideoMAE)
  * report `supports_text === false`; CLIP/SigLIP/CLAP/E5/X-CLIP report `true`.
  * Text sort and Autopilot's text-seed phase only work on the latter.
  *
