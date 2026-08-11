@@ -42,7 +42,7 @@ Processor (ABC)
 
 Each processor operates on exactly one media type.
 
-> **Processors are not auto-discovered.** Unlike the nine plugin families in
+> **Processors are not auto-discovered.** Unlike the plugin families in
 > [EXTENDING-plugins.md](EXTENDING-plugins.md), there is no registry scan and
 > no module-level sentinel here: the app instantiates processors through two
 > **hardcoded factory dicts** in `vtsearch/routes/processors/crud.py`. Writing

@@ -212,6 +212,7 @@ max-complexity = 10
 # Intentional `git` / `ffmpeg` invocations: arguments are
 # project-controlled paths, no shell expansion.
 "vtsearch/__init__.py" = ["S603", "S607"]
+"scripts/gen-docs-inventories.py" = ["S603", "S607"]
 "vtscore/converters/video2audio.py" = ["S603"]
 "vtscore/media/audio/decode.py" = ["S603"]
 "vtscore/media/video/decode.py" = ["S603"]

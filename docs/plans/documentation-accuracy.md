@@ -244,14 +244,6 @@ separately.
 
 <!-- item-sep -->
 
-- **The two audit areas that disagreed with each other.** Independent reviewers "corrected" the
-  plugin-family count to ten and to eleven, and a sentinel-grep gives a third answer — because no
-  doc states which registry it is counting. The authoritative inventory is
-  `vtscore/plugins/inventory.py:228-241` (11 library families) plus 3 app families from
-  `vtsearch.shim.register_app_plugin_families`. The fix is a stated counting rule or a generated
-  list, not another number; folded into #2984. Recording it here because it is the one place the
-  audit contradicted itself, and the next person to "fix" the count will hit the same fork.
-
 <!-- item-sep -->
 
 - **`media_sources` is a real extension point with no authoring guide.** Eleven library plugin

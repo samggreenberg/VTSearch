@@ -264,9 +264,7 @@ def build_region(region_id: str) -> str:
 
 
 def tracked_markdown_files() -> list[Path]:
-    out = subprocess.run(
-        ["git", "ls-files", "*.md"], cwd=REPO_ROOT, capture_output=True, text=True, check=True
-    ).stdout
+    out = subprocess.run(["git", "ls-files", "*.md"], cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout
     return [REPO_ROOT / line for line in out.splitlines() if line]
 
 
