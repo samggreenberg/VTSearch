@@ -375,7 +375,11 @@ class TestEventsRoute:
             # regression this test exists to catch.
             deadline = time.monotonic() + 10.0
             chunk = next(gen)
-            while chunk.startswith("event: ") and not chunk.startswith("event: heartbeat\n") and time.monotonic() < deadline:
+            while (
+                chunk.startswith("event: ")
+                and not chunk.startswith("event: heartbeat\n")
+                and time.monotonic() < deadline
+            ):
                 chunk = next(gen)
             assert chunk.startswith(": "), f"idle wakeup should be an SSE comment, got {chunk!r}"
             assert "event:" not in chunk
