@@ -95,9 +95,12 @@ class TestApiKeyEnforcement:
         assert client.post("/api/auth/logout").status_code == 400
 
     def test_spa_shell_not_gated(self, client, tmp_path):
+        # The guard only covers /api/*. Whether "/" is 200 or 404 here
+        # depends on whether the Angular bundle is built (see
+        # tests/core/test_frontend.py); what matters is that it isn't 401.
         set_login_provider(_api_key_provider(tmp_path))
         resp = client.get("/")
-        assert resp.status_code == 200
+        assert resp.status_code != 401
 
     def test_huggingface_endpoints_are_gated(self, client, tmp_path):
         # hf_auth_bp configures a server-wide HuggingFace token; it must sit
