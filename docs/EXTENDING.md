@@ -295,11 +295,25 @@ See [EXTENDING-media.md § Adding a Media Converter](EXTENDING-media.md#adding-a
 See [EXTENDING-processors.md](EXTENDING-processors.md).
 
 - [ ] Subclass `Localizer` or `Extractor` from `vtscore.media.processors`
-- [ ] Implement `name`, `media_type`, and the type-specific method
-      (`localize` or `extract`)
+- [ ] Implement `name` (from a constructor argument, **not** hardcoded),
+      `media_type`, and the type-specific method (`localize` or `extract`)
 - [ ] Optionally override `load_model()` for one-time resource loading
+- [ ] Add a `from_config(name, config)` classmethod, and a `to_dict()` that
+      reports the matching `extractor_type` / `localizer_type` + `config`
+- [ ] **Wire it into the hardcoded factory dict** in
+      `vtsearch/routes/processors/crud.py` (`_ensure_extractor_factories` or
+      `_ensure_localizer_factories`) — processors are *not* auto-discovered,
+      and an unregistered type is a 400 from every endpoint
+- [ ] Optionally add it to `_PREGEN_PROCESSORS` in the same file
 - [ ] Register as autorun via `POST /api/autorun-extractors` or
-      `POST /api/autorun-localizers`
+      `POST /api/autorun-localizers`, then run it with `POST /api/auto-extract`
+      / `POST /api/auto-localize`
+- [ ] Test: build it via `_build_extractor` / `_build_localizer` and assert a
+      bad config raises (see `tests/detectors/test_processors.py`)
+
+Note that `Detector` (the `Processor` subtype) has no factory dict and no
+endpoint; it is not registrable. The ML classifiers users actually train are
+detectors in a different sense, covered below.
 
 For ML classifiers, create a detector instead: register it via
 `POST /api/detectors/registry`, label items in the right pane, and toggle
