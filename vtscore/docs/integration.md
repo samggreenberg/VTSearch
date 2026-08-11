@@ -28,12 +28,16 @@ describes the general pattern in less code than `vtsearch` does.
 this from any Python process:
 
 ```python
-from vtscore.media import audio
+from pathlib import Path
+
+from vtscore.media import audio  # noqa: F401 - registry auto-discovers every built-in type
 from vtscore.datasets.loader import load_dataset_from_folder
+from vtscore.datasets.stages.embedding import embed_missing
 from vtscore.training import train_model
 
 medias = {}
-load_dataset_from_folder("/path", media_type="audio", medias=medias)
+load_dataset_from_folder(Path("/path"), media_type="audio", medias=medias)
+embed_missing(medias)   # loaders don't embed; this stage does
 # train_model(...) works on raw arrays - no setup needed
 ```
 
@@ -59,26 +63,32 @@ constructs a `CoreConfig` from your config source:
 from pathlib import Path
 from vtscore.config import CoreConfig, register_core_config_builder
 
-def _build_core_config() -> CoreConfig:
+def _build_core_config(settings_path=None) -> CoreConfig:
     # Your config source - env vars, settings JSON, database row, …
+    # `settings_path` is whatever the caller passed to
+    # `CoreConfig.from_settings(...)`; ignore it if you have nowhere to put it.
     return CoreConfig(
         data_dir=Path("/var/lib/myapp/data"),
         saved_datasets_dir=Path("/var/lib/myapp/data/datasets"),
         detectors_dir=Path("/var/lib/myapp/data/detectors"),
-        inclusion=0,
+        max_concurrent_dataset_downloads=2,
+        max_concurrent_dataset_embeddings=1,
+        autofind_detectors=(),
+        dataset_max_age_days=None,
         calibrate_count=2,
         calibration_fraction=0.5,
         enrich_descriptions=False,
-        autopilot_goal_diversity=0.5,
-        max_concurrent_dataset_downloads=2,
-        max_concurrent_dataset_embeddings=1,
+        autopilot_goal_diversity=8,
+        inclusion=0,
     )
 
 register_core_config_builder(_build_core_config)
 ```
 
 Call this **once at startup**, before any library code that calls
-`CoreConfig.from_settings()`. The builder is process-wide.
+`CoreConfig.from_settings()`. The builder is process-wide, and it is called
+with one positional argument - a builder declared as `def _build()` raises
+`TypeError` the first time someone passes a settings path.
 
 ### Hook 2: `register_*_context_resolver`
 
@@ -118,8 +128,9 @@ automatically.
 
 If your application **isn't** request-oriented - say it's a worker that
 processes one dataset at a time - skip this hook entirely and use
-`set_thread_dataset_context()` / `set_thread_detector_context()` (or
-the `override_*_context()` context managers) directly.
+`set_thread_dataset_context()` / `set_thread_detector_context()` (or their
+save-and-restore context-manager forms, `thread_dataset_context()` /
+`thread_detector_context()`) directly.
 
 ### Hook 3: `register_setting_persister`
 
@@ -141,6 +152,10 @@ register_setting_persister("inclusion", _persist_inclusion)
 register_setting_persister("calibrate_count", _persist_calibrate_count)
 ```
 
+The recognised keys are `inclusion`, `calibrate_count`, and
+`calibration_fraction`; a persister for anything else is stored but never
+fired.
+
 If you don't install persisters, library code can still call
 `set_inclusion(5)` - the value just won't survive a process restart.
 That's a fine choice for many apps.
@@ -155,26 +170,30 @@ from pathlib import Path
 import numpy as np, torch
 
 from vtscore.config import CoreConfig, register_core_config_builder
-from vtscore.media import audio  # noqa: F401 - registers MediaType + embedders
+from vtscore.media import audio  # noqa: F401 - registry auto-discovers every built-in type
 from vtscore.datasets.loader import load_dataset_from_folder
+from vtscore.datasets.stages.embedding import embed_missing
 from vtscore.training import train_model, calculate_cross_calibration_threshold
 
 
 # Hook 1: where does data live?
-register_core_config_builder(lambda: CoreConfig(
+register_core_config_builder(lambda _settings_path=None: CoreConfig(
     data_dir=Path("/tmp/myapp"),
     saved_datasets_dir=Path("/tmp/myapp/datasets"),
     detectors_dir=Path("/tmp/myapp/detectors"),
-    inclusion=0,
-    calibrate_count=2, calibration_fraction=0.5,
-    enrich_descriptions=False, autopilot_goal_diversity=0.5,
     max_concurrent_dataset_downloads=1,
     max_concurrent_dataset_embeddings=1,
+    autofind_detectors=(),
+    dataset_max_age_days=None,
+    calibrate_count=2, calibration_fraction=0.5,
+    enrich_descriptions=False, autopilot_goal_diversity=8,
+    inclusion=0,
 ))
 
 # That's it. Now use the library.
 medias: dict[int, dict] = {}
 load_dataset_from_folder(Path("/data/audio"), media_type="audio", medias=medias)
+embed_missing(medias)
 # train, score, export, …
 ```
 
@@ -193,8 +212,9 @@ from fastapi import FastAPI, Header
 from vtscore.config import CoreConfig, register_core_config_builder
 from vtscore.state import (
     DatasetContext, DetectorContext,
-    register_context, register_detector_context, get_context, get_detector_context,
-    register_dataset_context_resolver, register_detector_context_resolver,
+    get_context, get_detector_context,
+    register_context, register_dataset_context_resolver,
+    register_detector_context, register_detector_context_resolver,
     register_setting_persister,
 )
 
@@ -205,17 +225,19 @@ current_detector_id: ContextVar[str | None] = ContextVar("current_detector_id", 
 
 
 # Hook 1: settings → CoreConfig
-register_core_config_builder(lambda: CoreConfig(
+register_core_config_builder(lambda _settings_path=None: CoreConfig(
     data_dir=settings.data_dir,
     saved_datasets_dir=settings.saved_datasets_dir,
     detectors_dir=settings.detectors_dir,
-    inclusion=settings.inclusion,
+    max_concurrent_dataset_downloads=settings.max_concurrent_dataset_downloads,
+    max_concurrent_dataset_embeddings=settings.max_concurrent_dataset_embeddings,
+    autofind_detectors=tuple(settings.autofind_detectors),
+    dataset_max_age_days=settings.dataset_max_age_days,
     calibrate_count=settings.calibrate_count,
     calibration_fraction=settings.calibration_fraction,
     enrich_descriptions=settings.enrich_descriptions,
     autopilot_goal_diversity=settings.autopilot_goal_diversity,
-    max_concurrent_dataset_downloads=settings.max_concurrent_dataset_downloads,
-    max_concurrent_dataset_embeddings=settings.max_concurrent_dataset_embeddings,
+    inclusion=settings.inclusion,
 ))
 
 
@@ -278,7 +300,9 @@ def score_one(dataset_ctx: DatasetContext, detector_ctx: DetectorContext) -> dic
     # detector_ctx.embedder so the re-embedded vectors match the embedder
     # the detector was originally trained with - never the media type's
     # default, which may have changed since save.
-    good_origins, bad_origins = origins_from_labelset(detector_ctx.labelset)
+    # `origins_from_labelset` is your own helper: it walks
+    # `LabelSet.elements` and splits them into two lists of origin dicts.
+    good_origins, bad_origins = origins_from_labelset(detector_ctx.cached_labelset)
     train_detector_from_origins(
         good_origins, bad_origins,
         inclusion=0,
@@ -307,8 +331,11 @@ Notes on the multi-thread story:
   not a shared global.
 
 What the library does **not** do is supply a job manager. If you want a
-single-slot pending-job system, look at `vtscore.concurrency.JobManager`
-(used by the app's learned-sort and eval routes). If you want
+single-slot pending-job system, look at
+`vtscore.concurrency.async_jobs.JobManager` (used by the app's learned-sort
+and eval routes). `vtscore.concurrency` is an implicit namespace package
+with no `__init__.py`, so import from the defining module - a bare
+`from vtscore.concurrency import JobManager` raises `ImportError`. If you want
 something fancier - a Celery integration, a Kubernetes operator -
 that's your code.
 
@@ -319,8 +346,8 @@ that's your code.
 
 | What | Where | Format |
 |------|-------|--------|
-| Saved dataset pickles | `CoreConfig.saved_datasets_dir` | `pickle.dump((medias, embeddings))` - the **only** sanctioned vector store |
-| Detector labelsets | `CoreConfig.detectors_dir / "<name>.json"` | JSON; origins + labels only, never weights |
+| Saved datasets | `CoreConfig.saved_datasets_dir` | ZIP container: `medias.pkl` (the pickled medias dict, embeddings included) + `meta.json`. The **only** sanctioned vector store. Written by `export_dataset_to_file`. |
+| Detector labelsets | `CoreConfig.detectors_dir / "<slug>.json"` | JSON; origins + labels only, never weights. Written by `vtscore.detectors.store.save_detector`. |
 | Embedder model cache | `CoreConfig.data_dir / "models"` | HuggingFace / torch cache layout |
 
 If you want a different layout - say, store detectors in your database
@@ -372,11 +399,15 @@ keyed by ID strings.
 The library has no required hooks. If you're writing a one-shot script,
 you can ignore all of the above and just import what you need:
 
-- `from vtscore.training import train_model` - works directly on numpy
-  arrays, no setup required.
+- `from vtscore.training import train_model` - takes `(X, y)` torch
+  tensors and an `input_dim`, no setup required. (Its threshold sibling
+  `calculate_cross_calibration_threshold` takes the same data as a list of
+  numpy vectors plus a list of float labels.)
 - `from vtscore.embedding.helpers import embed_text_query, embed_image_file` -
-  works as long as the relevant `MediaType` has been imported (which
-  registers the default embedder).
+  works out of the box; `vtscore.media` auto-discovers every built-in type
+  and its default embedder at import time. Both return `None` rather than
+  raising when the media type's embedder has no text tower / can't embed the
+  file.
 - `from vtscore.datasets.loader import load_dataset_from_folder` -
   works if you don't call `CoreConfig.from_settings()` anywhere.
 

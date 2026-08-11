@@ -13,6 +13,13 @@ Related docs: [`state.md`](state.md) for the contexts these jobs and
 trackers operate against; [`security.md`](security.md) for the
 safe-load helpers used during dataset import.
 
+**Import from the defining module.** `vtscore/concurrency/` has no
+`__init__.py` - it is a PEP 420 implicit namespace package, so it exports
+nothing of its own and `from vtscore.concurrency import JobManager` raises
+`ImportError`. Every snippet below imports from the module that defines the
+name: `async_jobs`, `progress`, `memory_budget`, or `events`. The same is
+true of `vtscore.security`.
+
 ## Contents
 
 - [Two kinds of "progress"](#two-kinds-of-progress)
@@ -76,7 +83,7 @@ calls overwrite the slot (latest wins) and return the same pending
 and spawned automatically.
 
 ```python
-from vtscore.concurrency import JobManager
+from vtscore.concurrency.async_jobs import JobManager
 
 mgr = JobManager("my-task", max_history=8)
 
@@ -149,7 +156,7 @@ Thread-safe progress tracker for a single long-running operation
 event, and optional subscriber callbacks.
 
 ```python
-from vtscore.concurrency import ProgressTracker
+from vtscore.concurrency.progress import ProgressTracker
 
 tracker = ProgressTracker(extra_fields={"error": None, "eta_seconds": None})
 tracker.update("loading", "Reading file", current=10, total=100)
@@ -209,7 +216,7 @@ loads - the dashboard polls `list_tasks()` to show one row per loading
 operation.
 
 ```python
-from vtscore.concurrency import LoadingTasksTracker
+from vtscore.concurrency.progress import LoadingTasksTracker
 
 bag = LoadingTasksTracker()
 tracker = bag.create_task(
@@ -258,7 +265,7 @@ callers don't have to import the tracker itself:
 | `find_progress` | `update_find_progress(...)` | `get_find_progress()` | - |
 
 ```python
-from vtscore.concurrency import update_progress, get_progress, check_dataset_cancelled
+from vtscore.concurrency.progress import update_progress, get_progress, check_dataset_cancelled
 
 update_progress("loading", "Starting", 0, 100, step=1, total_steps=3)
 check_dataset_cancelled()   # raises CancelledError if cancel was requested
@@ -299,7 +306,7 @@ consumers (e.g. scoring two detectors in parallel) don't have one
 thread clobber another's callback.
 
 ```python
-from vtscore.concurrency import set_thread_progress, clear_thread_progress, loading_tasks
+from vtscore.concurrency.progress import set_thread_progress, clear_thread_progress, loading_tasks
 
 def worker(task_id):
     tracker = loading_tasks.get_tracker(task_id)
@@ -321,7 +328,7 @@ running thread; the thread must check periodically and return early.
 `CancelledError`. The canonical pattern inside a loop:
 
 ```python
-from vtscore.concurrency import check_dataset_cancelled, update_progress
+from vtscore.concurrency.progress import check_dataset_cancelled, update_progress
 
 for i, item in enumerate(items):
     check_dataset_cancelled()           # raises CancelledError if cancelled
@@ -366,7 +373,7 @@ available memory as the budget (default), and returns
 `max(1, min(max_workers, budget // per_worker))`.
 
 ```python
-from vtscore.concurrency import cap_workers_by_memory
+from vtscore.concurrency.memory_budget import cap_workers_by_memory
 
 n_workers = cap_workers_by_memory(
     n_items=len(medias), embed_dim=512, max_workers=8,

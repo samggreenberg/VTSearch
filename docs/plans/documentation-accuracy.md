@@ -215,11 +215,9 @@ separately.
 
 <!-- item-sep -->
 
-- **vtscore/docs — faq.md contradicts the code and concepts.md.** The FAQ's description of the
-  Inclusion knob disagrees with both. The context-resolution chain is documented with a nonexistent
-  `override_dataset_context` and a `None` terminal case that never occurs. Three real subpackages
-  (`projection`, `timing`, `datasource_importers`) and the sixth media type are absent from every
-  vtscore inventory. (The broken snippets are #2985; the package-doc coverage gaps are #2999.)
+- **vtscore/docs — inventory gaps.** Three real subpackages (`projection`, `timing`,
+  `datasource_importers`) and the sixth media type are absent from every vtscore inventory.
+  (The package-doc coverage gaps are #2999.)
 
 <!-- item-sep -->
 

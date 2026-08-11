@@ -28,8 +28,9 @@ and region-similarity helpers are imported from their submodules.
 from vtscore.training import (
     build_model, build_model_from_weights, train_model,
     calculate_gmm_threshold, conformal_threshold,
-    calculate_cross_calibration_threshold,
-    cross_calibration_threshold_cached, calculate_safe_threshold,
+    calculate_cross_calibration_threshold, calculate_safe_threshold,
+    calibration_folds, calibration_folds_cached, threshold_from_folds,
+    fold_anchored_gmm_threshold,
 )
 from vtscore.training.svm import SVMClassifier, train_svm
 from vtscore.training.region_similarity import (
@@ -212,8 +213,10 @@ lists from votes, caching on `DetectorContext`) sits one layer up.
 |-------------------------------------------|---------------------------------------------------------------|
 | `calculate_gmm_threshold`                 | All-media score distribution - used by the safe blend         |
 | `conformal_threshold`                     | Conformal inclusion rule on one (scores, labels) set          |
-| `calculate_cross_calibration_threshold`   | Production threshold - k-fold cross-calibration               |
-| `cross_calibration_threshold_cached`      | Memoised wrapper around the cross-cal trainer                 |
+| `calculate_cross_calibration_threshold`   | k-fold cross-calibration, in one call                         |
+| `calibration_folds` / `calibration_folds_cached` | The inclusion-*independent* half: fit the folds       |
+| `threshold_from_folds`                    | The inclusion-*dependent* half: apply the rule to fitted folds |
+| `fold_anchored_gmm_threshold`             | The shipped cut - fold mixtures anchored on held-out labels    |
 | `calculate_safe_threshold`                | Blends cross-cal with GMM when label counts are low           |
 
 ### `calculate_gmm_threshold(scores)`
@@ -280,6 +283,7 @@ than 2 training examples or 1 calibration example.
 
 ```python
 from vtscore.training import calculate_cross_calibration_threshold
+from vtscore.training.mlp import LINEAR_HEAD
 
 t = calculate_cross_calibration_threshold(
     X_list=[v for v in feature_vectors],
@@ -288,27 +292,46 @@ t = calculate_cross_calibration_threshold(
     inclusion_value=0,
     calibrate_count=2,
     calibration_fraction=0.5,
-    hidden_dim=8,   # match the full-data model's hidden width
+    hidden_dim=LINEAR_HEAD,   # match the full-data model's architecture
 )
 ```
 
 The fold models honour `hidden_dim` when provided - important for the
 detector pipeline, which wants fold thresholds calibrated against a
-model with the same capacity as the final full-data model.
+model with the same capacity as the final full-data model, and therefore
+passes `LINEAR_HEAD` on both sides. A positive `hidden_dim` here calibrates
+against MLP fold models, which is what the eval harness's sweep arm wants
+and nothing else does.
 
-### `cross_calibration_threshold_cached(...)`
+### `calibration_folds_cached(...)` + `threshold_from_folds(...)`
 
-`vtscore/training/thresholds.py:93`. Same signature plus an optional
-`det_ctx` argument. Builds a deterministic cache key from `X_list`,
-`y_list`, `inclusion_value`, `calibrate_count`, `calibration_fraction`,
-and `hidden_dim`, then stores the resulting threshold on
-`det_ctx.calibration_cache`. The next call with matching inputs returns
-the cached value without retraining; a real label change produces a
-different key and falls through to a fresh calibration.
+The interactive path splits the work in two, because only half of it
+depends on the Inclusion knob:
+
+```python
+from vtscore.training import calibration_folds_cached, threshold_from_folds
+
+folds = calibration_folds_cached(          # expensive: fits `calibrate_count` fold models
+    X_list, y_list, input_dim,
+    calibrate_count=2, calibration_fraction=0.5,
+    hidden_dim=LINEAR_HEAD, det_ctx=det_ctx,
+)
+threshold = threshold_from_folds(folds, inclusion_value=0)   # cheap: a quantile rule
+```
+
+`CalibrationFolds` is a `NamedTuple` of `(orderings, fallback, models)`.
+`calibration_folds_cached` memoises it on `det_ctx.calibration_cache` under a
+deterministic key built from `X_list`, `y_list`, the calibrate settings,
+`hidden_dim`, and any `score_rows_by_group` - so toggling Inclusion during
+an interactive sort re-runs only the cheap rule, with no ~200-epoch fold
+refits. A real label change produces a different key and falls through to a
+fresh calibration; no explicit invalidation is needed.
 
 The key bytes encode the actual training vectors (not just label IDs),
 so if the embedder changes and a labelset is re-resolved to different
-embeddings, the cache invalidates automatically.
+embeddings, the cache invalidates automatically. The fitted fold *models*
+ride along in the tuple because the shipped fold-anchored cut needs to
+re-score the haystack with them.
 
 ### `calculate_safe_threshold(xcal_threshold, all_scores, ctx, schedule=None)`
 
