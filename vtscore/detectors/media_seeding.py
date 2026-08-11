@@ -1,16 +1,28 @@
-"""Seed good votes from a model's media examples.
+"""Turn a detector's media examples into labels and votes.
 
-Provides :func:`seed_good_votes_from_examples` which reads example media
-files, matches them to loaded dataset medias by MD5, and votes them good.
+Two entry points, both keyed off the same example → origin identity:
+
+* :func:`labeled_elements_from_examples` converts the media examples the
+  user supplied at create time into ``good`` :class:`LabeledElement`s, so
+  the detector's labelset carries them from the moment it exists - no
+  dataset, embedder, or vote required.  This is what makes an exemplar a
+  *label* rather than a transient hint.
+* :func:`seed_good_votes_from_examples` reads the example media files,
+  matches them to loaded dataset medias by MD5, and votes them good, so
+  the same exemplars are usable for training against whatever dataset is
+  active.
 """
 
 from __future__ import annotations
 
 from contextlib import ExitStack
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from vtscore.utils.hashing import content_md5
+
+if TYPE_CHECKING:
+    from vtscore.datasets.labelset import LabeledElement, LabelSet
 
 
 def _ensure_embedder(embedder, dataset_embedder_name: str, dataset_media_type: str):
@@ -73,6 +85,18 @@ def _real_example_origin(ex: dict[str, Any]) -> dict[str, Any] | None:
         return None
 
 
+def _sentinel_origin(filename: str) -> dict[str, Any]:
+    """The dead-end ``example_media`` origin for an example with no real source.
+
+    Uploads and add-to-pile snapshots have no re-derivable origin: the bytes
+    only exist in the ``example_media/`` cache.  The sentinel still gives the
+    element a stable identity key (see
+    :func:`~vtscore.datasets.labelset.element_key`), so the label dedupes and
+    survives merges the same way a real origin does.
+    """
+    return {"importer": "example_media", "params": {"filename": filename}}
+
+
 def _example_origin_name(origin: dict[str, Any] | None, filename: str) -> str:
     """Human-meaningful origin name: the URL / path for a real origin, else the cache filename."""
     if origin is not None:
@@ -119,16 +143,92 @@ def _insert_example_media(
             "filename": filename,
             "file_size": len(file_bytes),
             "category": "",
-            "origin": origin
-            if origin is not None
-            else {
-                "importer": "example_media",
-                "params": {"filename": filename},
-            },
+            "origin": origin if origin is not None else _sentinel_origin(filename),
             "origin_name": origin_name,
         }
 
     apply_label(new_id, "good", record_achievement=False)
+
+
+def labeled_elements_from_examples(examples: list[dict]) -> list["LabeledElement"]:
+    """Build one ``good`` :class:`LabeledElement` per ``type: "media"`` example.
+
+    A user who supplies three Good exemplars instead of a Good text
+    description has cast three good votes, so those exemplars belong in the
+    detector's labelset - not merely in its ``examples`` list, which nothing
+    downstream of training reads.  This runs at create time, before any
+    dataset is involved: the element's identity is its **origin**, which is
+    dataset-agnostic by construction, so an ``https://`` exemplar is kept
+    verbatim even when the dataset it will be used against is entirely local
+    files (issue #3045).
+
+    Each element carries:
+
+    * the example's validated real origin (``url_download``, ``server_file``,
+      ...) when it has one, else the ``example_media`` sentinel for genuinely
+      un-re-derivable exemplars (uploads, add-to-pile snapshots);
+    * the MD5 of the ``example_media/`` cache file when it is still there, so
+      the label can also match dataset media by content hash.  A missing
+      cache file leaves ``md5`` empty and costs nothing: origin is the
+      preferred identity key either way.
+
+    Text examples are skipped - they are queries, not labeled media.  The
+    origin / origin_name derivation is shared with
+    :func:`seed_good_votes_from_examples`, so the label a create emits and
+    the media a later seed inserts collapse onto one identity key instead of
+    double-counting.
+    """
+    from vtscore.config import DATA_DIR
+    from vtscore.datasets.labelset import LabeledElement
+    from vtscore.utils.hashing import file_md5
+
+    server_media_dir = DATA_DIR / "example_media"
+    elements: list[LabeledElement] = []
+    for ex in examples:
+        if not isinstance(ex, dict) or ex.get("type") != "media":
+            continue
+        filename = (ex.get("value") or "").strip()
+        if not filename:
+            continue
+
+        origin = _real_example_origin(ex)
+        origin_name = _example_origin_name(origin, filename)
+
+        md5 = ""
+        file_path = _example_file_path(server_media_dir, filename)
+        if file_path is not None and file_path.is_file():
+            try:
+                md5 = file_md5(file_path)
+            except OSError:
+                md5 = ""
+
+        elements.append(
+            LabeledElement(
+                md5=md5,
+                label="good",
+                origin=origin if origin is not None else _sentinel_origin(filename),
+                origin_name=origin_name,
+                filename=filename,
+            )
+        )
+    return elements
+
+
+def merge_examples_into_labelset(existing: "LabelSet", examples: list[dict]) -> "LabelSet":
+    """Return *existing* plus a good label for each media example not already in it.
+
+    Purely additive: an exemplar whose identity key is already present keeps
+    whatever label it has (the user may have since voted it Bad, and a
+    re-supplied example must not silently flip that back), and no existing
+    element is dropped.
+    """
+    from vtscore.datasets.labelset import LabelSet, element_key
+
+    seen = {element_key(el) for el in existing.elements}
+    added = [el for el in labeled_elements_from_examples(examples) if element_key(el) not in seen]
+    if not added:
+        return existing
+    return LabelSet(list(existing.elements) + added, detector_meta=existing.detector_meta)
 
 
 def _seed_one_example(

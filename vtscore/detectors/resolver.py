@@ -290,6 +290,12 @@ def _resolve_with_stack(  # noqa: C901
             )
         return result
 
+    if importer_name == "example_media":
+        result = _resolve_example_media(params)
+        if result is None:
+            log.debug("resolve_file: example_media cache file %r is gone", params.get("filename", ""))
+        return result
+
     # -- Source-based dispatch (preferred) --
 
     _auto_wire_resolvers()
@@ -353,6 +359,33 @@ def _resolve_dupe_set(stack: ExitStack, origin: dict[str, Any]) -> Path | None:
         if result is not None:
             return result
     return None
+
+
+def _resolve_example_media(params: dict[str, Any]) -> Path | None:
+    """Resolve an ``example_media`` sentinel origin to its byte-cache file.
+
+    The sentinel is what a detector exemplar with no re-derivable source
+    (a local upload, an add-to-pile snapshot) carries, and its bytes live
+    only in ``data/example_media/``.  Resolving it there lets such an
+    exemplar's *label* be thumbnailed and exported before any dataset is
+    loaded - the cache file is the closest thing it has to an origin.  It is
+    still a dead end in the sense that #2774 meant: delete the cache file and
+    there is nowhere left to re-fetch from.
+    """
+    from vtscore.config import DATA_DIR
+
+    filename = params.get("filename", "")
+    if not isinstance(filename, str) or not filename:
+        return None
+    base = DATA_DIR / "example_media"
+    candidate = base / filename
+    try:
+        # ``filename`` comes from a detector JSON, so confine it the same way
+        # the seeding path does before touching the filesystem.
+        candidate.resolve().relative_to(base.resolve())
+    except ValueError:
+        return None
+    return candidate if candidate.is_file() else None
 
 
 def _resolve_converter(stack: ExitStack, params: dict[str, str]) -> Path | None:

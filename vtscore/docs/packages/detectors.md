@@ -312,10 +312,12 @@ with resolve_file_context(origin, origin_name, filename) as path:
 `resolved_count`, `total_count`, `missing_entries` plus the
 `available_fraction` and `has_good_and_bad` properties.
 
-Two synthetic origin types are special-cased: `dupe_set` (tries each
-member origin in turn) and `converter` (reconstructs a parent origin
+Three synthetic origin types are special-cased: `dupe_set` (tries each
+member origin in turn), `converter` (reconstructs a parent origin
 from `parent_importer` / `parent_path` / `parent_url` params and
-recurses). Clipped origins - audio `clip_start`/`clip_end`, image
+recurses), and `example_media` (the detector-exemplar sentinel, resolved
+to its `DATA_DIR / "example_media"` byte-cache file under the same
+traversal confinement the seeding path applies). Clipped origins - audio `clip_start`/`clip_end`, image
 `clip_box`, text `clip_index`, and origin-stored clipper chains - are
 handled transparently: the chain is replayed on the resolved source
 file via `vtscore.datasets.clipper_chain.replay_chain_on_file` before
@@ -431,6 +433,17 @@ last saw it. When triggered, clears `good_votes` / `bad_votes` /
 `label_history` / etc., replays `restore_labels_from_detector`, and
 caches the parsed labelset + mtime so subsequent requests within the
 same `(dataset_id, file_mtime)` tuple are no-ops.
+
+### `media_seeding.labeled_elements_from_examples(examples)`
+
+Turn a detector's media examples into `good` `LabeledElement`s at create
+time, so a supplied exemplar is a *label* and not just a hint. Origin
+is the example's validated durable origin when it has one, else the
+`example_media` sentinel; `md5` is filled in from the byte cache when the
+file is still there. Being origin-keyed, the resulting labels are
+dataset-agnostic: an `https://` exemplar survives against an all-local
+dataset. `merge_examples_into_labelset(existing, examples)` is the additive
+variant used when examples are replaced on an existing detector.
 
 ### `media_seeding.seed_good_votes_from_examples(examples)` (line 10)
 
