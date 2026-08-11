@@ -12,7 +12,9 @@
 ## Detectors
 
 A detector is a named labelset plus a text-sort query, persisted as a
-JSON file at `data/detectors/<name>.json`. The head is trained on demand
+JSON file under `data/detectors/`, named after a slug of the detector name
+rather than the name itself (`Dog Barks` → `dog_barks.json`; see
+[CLI.md § Detector file names](../CLI.md#detector-file-names)). The head is trained on demand
 from the labelset and lives only in `DetectorContext` once the user
 loads the detector into memory.
 
@@ -213,8 +215,8 @@ GET /api/detectors/registry
 }
 ```
 
-`name` is the slug used to look up the on-disk labelset file at
-`data/detectors/<name>.json`. The head is trained on demand from the
+`name` is what the on-disk labelset file is looked up by; the file itself is
+`data/detectors/<slug-of-name>.json`. The head is trained on demand from the
 labelset and lives only in RAM. `autofind` mirrors whether the
 detector's name appears in `autofind_detectors` settings (toggle it with
 the route below).

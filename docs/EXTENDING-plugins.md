@@ -1333,7 +1333,8 @@ classifier:
 
 1. Use `POST /api/detectors` (or
    `POST /api/detectors/registry/from-labelset/<importer>`) to create a
-   detector file under `data/detectors/<name>.json`.
+   detector file under `data/detectors/` (named after a slug of the
+   detector name, e.g. `Dog Barks` → `dog_barks.json`).
 2. Toggle its Auto-Find flag with
    `PUT /api/detectors/registry/<id>/autofind` so it runs from
    `/api/auto-detect` and the CLI's `--autodetect` flow.
