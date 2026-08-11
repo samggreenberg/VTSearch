@@ -83,7 +83,9 @@ Canonical roles:
 - **Borders:** `--border` (default), `--border-secondary` (emphasis), `--border-subtle` (table row dividers)
 - **Accent:** `--accent` (primary), `--accent-hover`, `--accent-light`, `--accent-highlight-bg`, `--accent-highlight-border`
 - **Status:** `--color-good` (success/green), `--color-bad` (error/red), `--text-warning`, `--badge-embedding`
+- **Status surfaces:** `--good-bg`, `--bad-bg`, `--warning-bg` / `--warning-border` (amber chips: license notices, type-mismatch rows)
 - **Status rows (red/yellow/green sets):** `--status-{color}-{border|dot|label|sub}`
+- **Text on a filled surface:** `--btn-primary-text` (on `--accent` buttons), `--btn-filled-text`, `--toggle-active-text` (on an active segmented-toggle button), `--badge-text-dark` (on a saturated status badge). These flip per theme - never hardcode `#fff` on a fill.
 
 If you need a color that does not exist, add it to all three theme blocks in `_variables.scss` - don't introduce a hex literal "just this once."
 
@@ -538,7 +540,7 @@ Within one feature, **use the same gap for the same visual pattern**. If a heade
 Don't write per-component focus / disabled CSS. The base classes handle both:
 
 - `:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }` (global)
-- `.btn:disabled { opacity: 0.5; cursor: not-allowed; }`
+- `.btn:disabled { opacity: var(--opacity-disabled); cursor: not-allowed; }` (`.btn--primary` swaps to a neutral fill + dimmed text instead, since opacity can't hold contrast over the accent)
 - `.form-input:focus { border-color: var(--accent); }`
 
 ### 3.4 Theme overrides inside a component
