@@ -5,6 +5,11 @@ selectively extract** components from VTSearch.  It maps the module
 structure, dependency graph, and public APIs so you can quickly identify
 which pieces you need and how to pull them out.
 
+It covers the **Python tiers**.  The Angular SPA in `frontend/` has its own
+map: **[FRONTEND.md](FRONTEND.md)** — change-detection model, service layer,
+active dataset/detector propagation, the generated API client, and the
+component conventions.
+
 ## Table of Contents
 
 1. [What VTSearch does](#what-vtsearch-does)
@@ -37,7 +42,8 @@ imported/loaded from disk and applied as-is. The architecture combines:
   embedding-based similarity search, with alternative embedders
   available (CLAP Music, BGE). Used to seed a detector during the
   training loop, or as a quick stand-alone search.
-- **Flask web UI**: Angular SPA frontend with a REST API.
+- **Flask web UI**: Angular SPA frontend with a REST API (see
+  [FRONTEND.md](FRONTEND.md)).
 - **Plugin systems**: nine auto-discovered plugin families: dataset
   importers, results exporters, label importers, settings importers/
   exporters/sources, labelset sources, media converters, and media
@@ -258,6 +264,7 @@ VTSearch/
 │
 ├── static/                         Angular build output (HTML + CSS + JS)
 ├── frontend/                       Angular SPA source (components, services, SCSS)
+│                                   -> see docs/FRONTEND.md for the SPA architecture
 ├── tests/                          App-tier test suite (uses Flask client, vtsearch.*)
 └── tests_lib/                      Library-tier test suite (Flask-import-clean, vtscore.*)
 ```
@@ -695,7 +702,11 @@ API endpoints: `POST /api/datasets/registry/<id>/load` (load from pkl),
 
 The Angular frontend's `ActiveContextService` tracks which dataset/model
 the user selected, and `activeContextInterceptor` attaches
-`X-Dataset-Id` / `X-Detector-Id` headers to every API request.
+`X-Dataset-Id` / `X-Detector-Id` headers to every API request.  The
+frontend deliberately splits *intent* (what the user picked) from
+*active* (what the backend has loaded) so the headers never name a
+not-yet-loaded id; see
+[FRONTEND.md § The active dataset/detector context](FRONTEND.md#6-the-active-datasetdetector-context).
 
 ---
 

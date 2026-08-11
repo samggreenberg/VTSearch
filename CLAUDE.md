@@ -431,10 +431,11 @@ def slow_load():
 ## More docs
 
 - `docs/ARCHITECTURE.md` — directory map, dependency graph, plugin systems, state management (multi-dataset / multi-detector contexts, proxies, `X-Dataset-Id` / `X-Detector-Id` headers), auth, origin tracking.
+- `docs/FRONTEND.md` — Angular SPA architecture: feature-area boundaries, the service layer, the **zoneless change-detection rules**, active dataset/detector propagation, the generated OpenAPI client, component/modal conventions. Read this before changing frontend state or reactivity.
 - `docs/API.md` and `docs/api/*.md` — REST API reference.
 - `docs/CLI.md` — CLI flags and autodetect workflow.
 - `docs/ML.md` — training/scoring details.
 - `docs/EXTENDING.md` + `docs/EXTENDING-plugins.md` + `docs/EXTENDING-media.md` + `docs/EXTENDING-processors.md` — how to add plugins.
 - `docs/plans/` — future-work design docs (open/proposed; shipped work is pruned out, not archived); check here before adding a "Phase N" feature.
 - `docs/RELEASE.md` — the `dev` → `main` release runbook (the procedure the Dev2Main Routine follows: vulture audit, release summary, punch-card refresh, release PR, issue close-out, plan-pointer prune).
-- `docs/style-guide.md` — frontend SCSS conventions.
+- `docs/style-guide.md` — frontend SCSS conventions (the styling half of `docs/FRONTEND.md`).
