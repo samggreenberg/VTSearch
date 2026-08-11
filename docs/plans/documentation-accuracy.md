@@ -124,6 +124,17 @@ separately.
 
 <!-- item-sep -->
 
+- **The `run-tests.sh` gate list is still hand-maintained in three places.** CLAUDE.md's "What
+  `run-tests.sh` gates" table, `docs/HANDOFF.md`'s quality-tools paragraph and the script's own
+  usage header each restate the chain by hand; the first two were six gates stale before #2997.
+  This is the same inventory-drift shape as #2984, and it wants the same treatment — but note the
+  cheaper shape fits better here: rather than *generating* the table, an invariant check could
+  assert that the set of `echo "…"` stage banners in `run-tests.sh` matches the rows in CLAUDE.md's
+  table, which is a few lines inside whatever #2983's docs-drift gate becomes. Worth folding into
+  that gate rather than shipping its own script.
+
+<!-- item-sep -->
+
 - **README.md and SETUP.md — install-path drift.** `SETUP.md:205-207` describes GPU detection
   as "nvidia-smi absent → CPU wheel", but `scripts/install.sh:1137-1173` only falls back to CPU
   when no NVIDIA PCI hardware exists; with a card present and no driver it prompts for a sudo
