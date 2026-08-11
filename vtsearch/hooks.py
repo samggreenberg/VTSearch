@@ -2,8 +2,9 @@
 
 Holds the ``before_request`` / ``after_request`` / ``teardown_request``
 handlers that used to live inline in ``app.py``: per-request id + user +
-dataset/detector context resolution, the in-handler marker, and the
-API-response ``Cache-Control`` / ``X-Request-Id`` shaping.
+dataset/detector context resolution, server-side auth enforcement, the
+in-handler marker, and the API-response ``Cache-Control`` /
+``X-Request-Id`` shaping.
 
 ``app.py`` calls :func:`register_hooks` to wire them onto its module-level
 ``app``. Registration is done explicitly (rather than via ``@app.before_request``
@@ -70,6 +71,67 @@ def _set_user_context():
     except Exception:
         logging.getLogger(__name__).exception("Login provider get_user failed")
         g.user = "default"
+
+
+# API paths reachable without credentials when the active provider enforces
+# auth. Exactly what the SPA needs to render the login screen and log in:
+# `/api/auth/status` tells it whether a login is required at all, and
+# login/logout are how credentials are established/cleared in the first
+# place. Deliberately exact-match (not a prefix): `/api/auth/huggingface/*`
+# configures a server-wide HuggingFace token and must stay behind the gate.
+_AUTH_EXEMPT_PATHS = frozenset(
+    {
+        "/api/auth/status",
+        "/api/auth/login",
+        "/api/auth/logout",
+    }
+)
+
+
+def _enforce_auth():
+    """Reject unauthenticated ``/api/*`` requests for enforcing providers.
+
+    ``_set_user_context`` above only *identifies* the caller; this hook is
+    the *authentication* step (see issue #2946): when the active provider's
+    ``enforce_auth()`` is true and ``is_authenticated(request)`` is false,
+    the request is aborted with a JSON 401 before any route handler (or the
+    lock-taking state sync below) runs. Non-API paths (the SPA shell,
+    favicons) and the ``_AUTH_EXEMPT_PATHS`` allowlist pass through.
+
+    ``DefaultLoginProvider`` authenticates every request, so single-user
+    deployments never hit the 401 branch. ``TrivialLoginProvider`` opts out
+    via ``enforce_auth() -> False``. A provider that raises from either
+    check fails **closed** (401): a broken enforcing provider must not
+    degrade to serving everyone as anonymous — which was the bug this hook
+    exists to fix. The built-in providers' checks cannot raise, so the
+    fail-closed path is unreachable for stock deployments.
+    """
+    from flask import request
+
+    from vtsearch.auth import get_login_provider
+
+    path = request.path
+    if not path.startswith("/api/") or path in _AUTH_EXEMPT_PATHS:
+        return None
+    provider = get_login_provider()
+    try:
+        if not provider.enforce_auth() or provider.is_authenticated(request):
+            return None
+    except Exception:
+        logging.getLogger(__name__).exception(
+            "Login provider auth check failed; rejecting request (fail closed)"
+        )
+    from vtsearch.routes._shared import error_response
+
+    body, status = error_response("Authentication required", 401, code="auth_required")
+    body.status_code = status
+    try:
+        challenge = provider.www_authenticate()
+    except Exception:
+        challenge = None
+    if challenge:
+        body.headers["WWW-Authenticate"] = challenge
+    return body
 
 
 def _set_request_context():
@@ -209,6 +271,7 @@ def register_hooks(app) -> None:
     """
     app.before_request(_set_request_id)
     app.before_request(_set_user_context)
+    app.before_request(_enforce_auth)
     app.before_request(_set_request_context)
     app.teardown_request(_clear_in_request_handler_marker)
     app.after_request(_no_cache_api)

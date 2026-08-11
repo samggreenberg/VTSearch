@@ -30,6 +30,36 @@ determines what `/api/auth/*` does and whether the SPA shows a login screen.
 The SPA switches on `login_required` from `GET /api/auth/status`: when `true`
 it shows a login screen at startup, otherwise it goes straight to the app.
 
+### Server-side enforcement
+
+Whether the server actually *rejects* unauthenticated requests is governed by
+the provider's `enforce_auth()`, checked by a `before_request` hook: when it
+is true and `is_authenticated(request)` is false, any `/api/*` request is
+refused with **401** `{"error": "Authentication required", "code":
+"auth_required"}` before reaching a route handler. Exactly three paths are
+exempt — `/api/auth/status`, `/api/auth/login`, `/api/auth/logout` — so a
+client can always discover the auth mode and log in; everything else,
+including `/api/auth/huggingface/*`, sits behind the gate. Non-API paths
+(the SPA shell, favicons) are never gated.
+
+Per provider:
+
+- **`default`** — `enforce_auth()` is `True` but every request is
+  authenticated, so single-user deployments never see a 401. No change from
+  historical behaviour.
+- **`trivial`** — `enforce_auth()` is **`False`**, deliberately: the provider
+  is passwordless, so a server-side gate would add no security (any caller
+  could simply log in as any name first). Requests without a session cookie
+  are served as `"anonymous"`; the login screen is an identity switcher, not
+  an access control.
+- **`api_key`** — enforced. Requests without a valid Bearer token get 401
+  with `WWW-Authenticate: Bearer`. This is the provider to use when access
+  must actually be gated.
+- **Custom providers** — enforced by default (`enforce_auth()` inherits
+  `True`); a provider whose `is_authenticated()` raises fails **closed**
+  (401). Override `enforce_auth()` to `False` only if anonymous access is a
+  legitimate mode for your deployment.
+
 ### Usernames are path components
 
 Any provider that returns a per-user data dir puts the username on the

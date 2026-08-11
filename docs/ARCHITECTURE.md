@@ -713,6 +713,8 @@ The `LoginProvider` ABC defines the interface:
 | `get_user(request)` | Return the username for the current request |
 | `is_authenticated(request)` | Check if the request carries valid credentials |
 | `login_required()` | Whether the frontend should show a login screen |
+| `enforce_auth()` | Whether the server 401s unauthenticated `/api/*` requests (default `True`) |
+| `www_authenticate()` | Optional `WWW-Authenticate` challenge for those 401s |
 | `get_user_data_dir(username, base)` | Return per-user data directory |
 | `status_dict(request)` | JSON dict for `/api/auth/status` |
 
@@ -722,8 +724,15 @@ OAuth, LDAP, or any auth scheme without modifying route code.
 
 ### Per-request user context
 
-The `before_request` middleware in `app.py` populates `g.user` on every
-request via the active provider's `get_user()`. Routes access the current
+The `before_request` middleware (`vtsearch/hooks.py`) populates `g.user` on
+every request via the active provider's `get_user()`, then — when the
+provider's `enforce_auth()` is true — rejects unauthenticated `/api/*`
+requests with a JSON 401 (`code: "auth_required"`) before any route
+handler runs. Only `/api/auth/status`, `/api/auth/login`, and
+`/api/auth/logout` are exempt, so the SPA can always reach the login
+screen. `DefaultLoginProvider` authenticates every request (single-user
+deployments never see a 401); `TrivialLoginProvider` opts out of
+enforcement because it is passwordless by design. Routes access the current
 user via `get_current_user()`. Outside a Flask request context (CLI,
 background threads) it falls back to the thread-local set by
 `thread_user(...)`, then to `"default"`.
