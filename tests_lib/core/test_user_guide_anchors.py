@@ -74,10 +74,7 @@ class TestUserGuideAnchors:
         assert anchors, "no headings found in USER_GUIDE.md"
 
         dead = sorted({a for a in _ANCHOR_LINK_RE.findall(markdown) if a not in anchors})
-        assert not dead, (
-            "USER_GUIDE.md links to anchors with no matching heading: "
-            + ", ".join(f"#{a}" for a in dead)
-        )
+        assert not dead, "USER_GUIDE.md links to anchors with no matching heading: " + ", ".join(f"#{a}" for a in dead)
 
     def test_table_of_contents_covers_every_top_level_section(self):
         """The TOC must list every ``##`` section, so none goes unreachable."""
@@ -92,9 +89,8 @@ class TestUserGuideAnchors:
         ]
         linked = set(_ANCHOR_LINK_RE.findall(body))
         missing = [s for s in sections if s not in linked]
-        assert not missing, (
-            "USER_GUIDE.md sections missing from the table of contents: "
-            + ", ".join(f"#{s}" for s in missing)
+        assert not missing, "USER_GUIDE.md sections missing from the table of contents: " + ", ".join(
+            f"#{s}" for s in missing
         )
 
 
