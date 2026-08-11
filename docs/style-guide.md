@@ -662,7 +662,10 @@ detector-stats table (standard ML terminology in that context).
 
 > A static scan for items 1-3, 6-7, 10, 13-15 lives at
 > `.claude/scripts/style-check.py` (invoked via the `/style-check`
-> skill). Run it before a styling-heavy PR, or whenever a layout
+> skill). It also checks the token-level rules that aren't anti-pattern
+> items: raw `z-index` (§1.8), raw decorative-dim opacity (§1.10),
+> hand-rolled accent tints, unresolvable `var()`s, and deleted token
+> aliases. Run it before a styling-heavy PR, or whenever a layout
 > regression shows up that you can't explain by reading one file.
 
 ---
