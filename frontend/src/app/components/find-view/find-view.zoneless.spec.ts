@@ -262,4 +262,165 @@ describe('FindViewComponent (pair-switch supersession)', () => {
     expect(sortState.threshold).toBe(0.5);
     expect(sortState.sortBusy).toBe(false);
   });
+
+  // The Inclusion POST is deferred until the slider settles (issue #2973), and
+  // that settle window is inside the pair scope too: a slide the user abandons
+  // by switching pair must never be written into the pair they switched *to*,
+  // whose own inclusion the reload has just re-seeded.
+  it('drops a pending inclusion POST when the pair switches first', async () => {
+    await flushInit();
+    // Land the first pair's ranking so the slider isn't disabled by sortBusy.
+    httpMock
+      .expectOne('/api/find-label')
+      .flush({ results: [{ id: 1, score: 0.9 }], threshold: 0.5 });
+    await flushInit();
+    await settleZoneless(fixture);
+
+    vi.useFakeTimers();
+    try {
+      fixture.componentInstance.onInclusionChange(5);
+      // Still inside the settle window when the user switches pair.
+      vi.advanceTimersByTime(50);
+      activeContext.setActivePair('ds2', 'det2');
+      vi.advanceTimersByTime(1000);
+
+      httpMock.expectNone((req) => req.url === '/api/inclusion' && req.method === 'POST');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+/**
+ * Issue #2973: the Inclusion slider emits on every `input` event, so walking the
+ * cutoff a few steps used to leave several `POST /api/inclusion` requests in
+ * flight at once, each installing its own threshold on arrival. A slow response
+ * for a value the user had already moved past could land *last* and overwrite
+ * the newer threshold, snapping the green/red line (and the left/right split)
+ * back to a cutoff that was no longer selected — with nothing to re-reconcile it
+ * until the next slide. Slider changes now funnel through one debounced
+ * `switchMap` pipeline, so only the settled value is sent and only its response
+ * is applied.
+ */
+describe('FindViewComponent (inclusion supersession)', () => {
+  let fixture: ComponentFixture<FindViewComponent>;
+  let httpMock: HttpTestingController;
+
+  beforeEach(async () => {
+    await configureZoneless({
+      imports: [FindViewComponent],
+      providers: [...provideHttpTesting(), provideRouter([])],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(FindViewComponent);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    fixture.componentInstance.ngOnDestroy();
+    httpMock.match(() => true).forEach((req) => {
+      if (!req.cancelled) req.flush([]);
+    });
+    fixture.destroy();
+  });
+
+  // Same drain as the canary above; no pair is active, so `runFindLabel` no-ops
+  // and the only /api/inclusion traffic afterwards is the slider's.
+  async function flushInit(): Promise<void> {
+    TestBed.tick();
+    for (let i = 0; i < 3; i++) {
+      await settleResource();
+      httpMock.match('/api/medias/ids').forEach((req) =>
+        req.flush([{ id: 1, media_type: 'audio' }]),
+      );
+      httpMock.match('/api/votes').forEach((req) =>
+        req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
+      );
+      httpMock.match('/api/settings').forEach((req) => req.flush({ volume: 80 }));
+      httpMock.match('/api/inclusion').forEach((req) => req.flush({ inclusion: 0 }));
+      httpMock.match('/api/media-types').forEach((req) => req.flush({ media_types: [] }));
+      httpMock.match('/api/embedders').forEach((req) => req.flush([]));
+      httpMock.match('/api/dataset/status').forEach((req) => req.flush({ display_name: 'ds' }));
+    }
+  }
+
+  /** Seed a ranking so a returned threshold has an order to be installed against. */
+  function seedRanking(): SortStateService {
+    const sortState = TestBed.inject(SortStateService);
+    sortState.setSortResults([{ id: 1, score: 0.9 }], 0.5);
+    return sortState;
+  }
+
+  it('coalesces a rapid walk of the slider into one POST for the settled value', async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+    const sortState = seedRanking();
+    const component = fixture.componentInstance;
+
+    vi.useFakeTimers();
+    // Three steps up in quick succession: the box tracks every one of them...
+    component.onInclusionChange(1);
+    vi.advanceTimersByTime(40);
+    component.onInclusionChange(2);
+    vi.advanceTimersByTime(40);
+    component.onInclusionChange(3);
+    expect(sortState.inclusion).toBe(3);
+    // ...but nothing is sent until the slider settles.
+    httpMock.expectNone('/api/inclusion');
+
+    vi.advanceTimersByTime(200);
+    const req = httpMock.expectOne('/api/inclusion');
+    expect(req.request.body).toEqual({ inclusion: 3 });
+    req.flush({ inclusion: 3, threshold: 0.7 });
+    expect(sortState.threshold).toBe(0.7);
+  });
+
+  it('cancels a superseded POST so its stale threshold can never land', async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+    const sortState = seedRanking();
+    const component = fixture.componentInstance;
+
+    vi.useFakeTimers();
+    component.onInclusionChange(3);
+    vi.advanceTimersByTime(200);
+    // The first POST is still in flight (a slow re-threshold server-side) when
+    // the user moves the cutoff again.
+    const stale = httpMock.expectOne('/api/inclusion');
+    expect(stale.cancelled).toBe(false);
+
+    component.onInclusionChange(7);
+    vi.advanceTimersByTime(200);
+
+    // switchMap aborted the superseded request, so its threshold (0.2) has no
+    // subscriber left to install it however late it resolves.
+    expect(stale.cancelled).toBe(true);
+    const fresh = httpMock.expectOne('/api/inclusion');
+    expect(fresh.request.body).toEqual({ inclusion: 7 });
+    fresh.flush({ inclusion: 7, threshold: 0.9 });
+    expect(sortState.threshold).toBe(0.9);
+  });
+
+  it('keeps posting after a failed slide', async () => {
+    await flushInit();
+    await settleZoneless(fixture);
+    const sortState = seedRanking();
+    const component = fixture.componentInstance;
+
+    vi.useFakeTimers();
+    component.onInclusionChange(2);
+    vi.advanceTimersByTime(200);
+    httpMock
+      .expectOne('/api/inclusion')
+      .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+
+    // The error is swallowed per-request, so the shared pipeline survives it.
+    component.onInclusionChange(4);
+    vi.advanceTimersByTime(200);
+    const retry = httpMock.expectOne('/api/inclusion');
+    expect(retry.request.body).toEqual({ inclusion: 4 });
+    retry.flush({ inclusion: 4, threshold: 0.6 });
+    expect(sortState.threshold).toBe(0.6);
+  });
 });
