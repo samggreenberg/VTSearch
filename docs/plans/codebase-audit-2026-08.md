@@ -373,12 +373,6 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **style-guide.md §2.5/§2.6 document shared classes that no longer exist** — `docs/style-guide.md:285` (medium impact)
-
-  §2.5 instructs authors to use `.importer-card` / `.importer-name` / `.importer-desc` — a whole-src grep finds zero occurrences; the current primitives are `.picker-card` / `.picker-card__title` / `.picker-card__desc` (_components.scss:644-678). §2.6 (line 289) names `.importer-tab-bar` / `.importer-tab`; the shared strip is now `.tab-bar` / `.tab` (_picker-shared.scss:14-67), with `.importer-subtab*` as the only surviving `importer-`-prefixed subclass, and `.importer-tab-bar` survives only in a comment (_components.scss:278). Since the guide is the canonical reference ("apply the shared classes and the cards will pick up consistent padding"), this drift actively steers new code toward unstyled dead class names — the exact failure the guide exists to prevent. CLAUDE.md's persistent-tab-picker paragraph repeats the stale `.importer-tab-bar` name too.
-
-  *Direction:* Update §2.5 to `.picker-card`/`.picker-card__title`/`.picker-card__desc` (+ `.importer-picker`/`.exporter-picker` container semantics once the grid contradiction is resolved) and §2.6 to `.tab-bar`/`.tab` with the `@extend` subclasses; fix the CLAUDE.md reference in the same pass.
-
 <!-- item-sep -->
 
 - **`.form-actions` rule duplicated verbatim in six component SCSS files** — `frontend/src/app/components/modals/settings-importer-modal/settings-importer-modal.component.scss:24` (medium impact)
