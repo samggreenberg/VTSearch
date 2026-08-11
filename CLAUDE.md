@@ -252,7 +252,7 @@ There is no CI: `./run-tests.sh` is the only gate, so it front-loads a long chai
 | # | Gate | Command it runs | Notes |
 |---|------|-----------------|-------|
 | 0 | Wall-clock cap | re-`exec`s itself under `timeout` | `VTSEARCH_TEST_TIMEOUT` (default **1800s = 30 min**) bounds the *whole* run, every stage included. `VTSEARCH_TEST_TIMEOUT=0` opts out for a deliberately long run (GPU, coverage sweep). |
-| 1 | Dep install | `.claude/hooks/ensure-test-deps.sh` | ~1-2 min on a cold container, near-instant after. |
+| 1 | Dep install | `.claude/hooks/ensure-test-deps.sh` | Minutes on a cold container, near-instant after. |
 | 2 | Lint | `ruff check .` | |
 | 3 | Format | `ruff format --check .` | Fix with `ruff format .`. |
 | 4 | Spelling | `codespell --toml pyproject.toml` | |
@@ -309,8 +309,13 @@ The default filter lives in `pyproject.toml`'s `addopts`: `-m 'not gpu and not s
 Testing can crash the session. To avoid losing work, follow this workflow:
 
 1. **Commit and push before running tests.** Before running `pytest` or any test command, commit all current changes and push to your working branch. Use a message like `"WIP: pre-test checkpoint"` if the work isn't finalized yet.
-2. **Run tests in the foreground (never in the background).** The test command has a slow startup phase: `ensure-test-deps.sh` installs dependencies (~1-2 min on first run), then `conftest.py` imports `app.py` and generates test media/embeddings before any tests execute. There may be no output for 1-3 minutes; this is normal. Do NOT run tests with `run_in_background` or assume output capture is broken because of the delay.
-   **Give a full `./run-tests.sh` the Bash tool's maximum timeout, `600000` ms (10 minutes).** A healthy full run is several minutes — cold dep install, then pyright and pip-audit, then the frontend build + `npm audit` + Vitest gate (~3 min on its own), and only then the ~35s pytest — so the old "at least 5 minutes" suggestion cut healthy runs off mid-gate and produced spurious timeouts. If 10 minutes is genuinely not enough, run one group at a time rather than backgrounding the run; a group run skips the frontend gate unless it is `core` or `frontend`. The script has its own 30-minute wall-clock cap and prints a distinctive `TESTS TIMED OUT` banner when *it* fires, which is how you tell a wedged run from a harness cut-off.
+2. **Start the run in the foreground with the maximum timeout, and never *launch* it with `run_in_background`.** The test command has a slow startup phase: `ensure-test-deps.sh` installs dependencies (~1-2 min on first run), then `conftest.py` imports `app.py` and generates test media/embeddings before any tests execute. There may be no output for several minutes; this is normal, and is not a sign that output capture is broken.
+
+   **Pass `600000` ms (10 minutes) — the Bash tool's maximum — and expect a cold full run to exceed it anyway.** A measured cold `./run-tests.sh` is ~11 minutes: ~7 for dep install plus the linter/pyright/pip-audit/snapshot gates and the frontend build + `npm audit` + Vitest, then ~3.5 minutes of pytest. (The old "at least 5 minutes" suggestion cut healthy runs off mid-gate.) When the tool's cap is hit the harness moves the run to the background rather than killing it — that is fine; wait for the completion notification and read the output file it names. What matters is that you *started* it in the foreground so the harness tracks it.
+
+   Two consequences worth knowing before you run it:
+   - **Do not pipe the run through `tail`/`grep`.** If the harness backgrounds a pipeline, nothing flushes until the whole pipeline ends, so the output file sits empty and you can't watch progress. Run the script bare and read the tail of the output file afterwards.
+   - **A run that outlives the tool's cap is not a timeout.** The script has its own 30-minute wall-clock cap (`VTSEARCH_TEST_TIMEOUT`) and prints a distinctive `TESTS TIMED OUT` banner when *it* fires. Absent that banner, the run is still healthy. To stay inside 10 minutes, run one group at a time — a group run skips the frontend gates unless it is `core` or `frontend`.
 3. **If tests fail and fixes are needed**, make the fixes, then commit and push again before re-running tests.
 4. **Repeat** until tests pass. Every cycle of fixes should be committed and pushed before the next test run.
 
