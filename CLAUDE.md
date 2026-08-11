@@ -33,7 +33,9 @@ This rule has **no exceptions for "quick" yes/no follow-ups.** Yes/no offers bel
 
 ## Branch Policy (CRITICAL)
 
-- **Always base work on `dev`.** The `.claude/hooks/session-start.sh` SessionStart hook runs `git fetch origin --prune && git rebase origin/dev` automatically in remote sessions, so a fresh container lands rebased onto `dev`. If the hook reports "skipping" (dirty tree, detached HEAD) or "rebase failed", run the fetch+rebase yourself before making any changes. The harness cuts the working branch off `main` (the GitHub default), so this rebase is required to pick up work already merged to `dev`. The GitHub default stays `main` so new users land on the stable branch: `dev` is Claude's starting point, not the public default.
+- **Always base work on `dev`.** The `.claude/hooks/session-start.sh` SessionStart hook fetches `origin --prune` and then lands the working branch on `origin/dev` automatically in remote sessions. The harness cuts the working branch off `main` (the GitHub default), so this is required to pick up work already merged to `dev`. The GitHub default stays `main` so new users land on the stable branch: `dev` is Claude's starting point, not the public default.
+  - **The hook can *hard-reset*, not only rebase — read its output.** It picks one of four outcomes and says which: `already includes origin/dev; nothing to do`; **hard-reset** to `origin/dev` (either because the branch has no `origin/<branch>` counterpart — a fresh branch the harness just cut off `main`, whose unique commits are all inherited `main`-only history carrying no Claude work — or because `git cherry` shows every unique commit is patch-equivalent to one already on `dev`); **rebase** onto `origin/dev` (the branch is in sync with its origin counterpart and carries genuinely new pushed commits); or a **skip**. A hard-reset discards the branch's prior commits by design; that is expected at session start and nothing of yours is lost, but do not assume commits you saw in `git log` before the hook ran are still there.
+  - If the hook prints `‼ session-start: DID NOT rebase onto origin/dev` (dirty tree, detached HEAD, fetch failed, a reset/rebase that failed, or a local branch that differs from its pushed origin counterpart), run `git fetch origin --prune && git rebase origin/dev` yourself before making any changes.
 - **All pull requests MUST target `dev`**, never `main`.
 - **Claude must NEVER open a PR that merges into `main`.** The `main` branch is protected and only updated by human maintainers.
 - When creating a PR, always use `--base dev` (e.g., `gh pr create --base dev ...` or the equivalent MCP tool parameter).
@@ -216,16 +218,17 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 
 ## Commands
 
-- **Run tests (CPU, fast)**: `./run-tests.sh` (also runs `ruff check`, `ruff format --check`, `codespell`, `deptry`, and the frontend TypeScript build)
-- **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; every invocation runs ruff/codespell/deptry first; `core` additionally runs the frontend build check)
+- **Run tests (CPU, fast)**: `./run-tests.sh` (runs every gate listed under "What `run-tests.sh` gates" below, then pytest)
+- **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; **every** invocation runs the full non-pytest gate chain first, so a group run is not a way to skip the linters; `core` and `frontend` additionally run the frontend build + `npm audit`, and `frontend` alone also runs the Vitest unit suite)
 - **Run tests with coverage**: `VTSEARCH_COVERAGE=1 ./run-tests.sh` (opt-in; adds ~10-20% overhead)
 - **Run multiple groups**: `./run-tests.sh core sorting api`
 - **Run tests with extra args**: `./run-tests.sh core -- -x --tb=long` (args after `--` go to pytest)
-- **Run library-tier tests only (Flask-blocked)**: `./run-tests.sh vtscore-clean` (runs `tests_lib/` via a meta-path import hook that refuses `flask`, `werkzeug`, `flask_smorest`; proves the library tier is import-clean)
+- **Run library-tier tests only (Flask-blocked)**: `./run-tests.sh vtscore-clean` (runs `tests_lib/` via a meta-path import hook that refuses `flask`, `werkzeug`, `flask_smorest`; proves the library tier is import-clean. This mode `exec`s straight into the checker, so it deliberately skips the linter and frontend gates)
 - **Run tests (CPU, full)**: `bash .claude/hooks/ensure-test-deps.sh && python -m pytest tests/ tests_lib/ -q --tb=short -m 'not gpu'`
-- **Run slow CLI subprocess tests only**: `python -m pytest tests/ -q --tb=short -m slow`
+- **Run slow tests only**: `python -m pytest tests/ tests_lib/ -q --tb=short -m slow` (both trees — the slow tests do not all live under `tests/`; see Test Markers)
 - **Run GPU tests**: `python -m pytest tests_lib/gpu/test_gpu.py -q --tb=short -m gpu` (requires CUDA GPU; downloads models on first run)
 - **Run all tests (CPU + GPU)**: `python -m pytest tests/ tests_lib/ -q --tb=short -m ''`
+- **Regenerate the OpenAPI snapshot** (after any route/schema change, to clear the drift gate): `cd frontend && npm run regenerate-openapi-snapshot` (equivalently `python scripts/dump_openapi.py > frontend/openapi.json`), then commit `frontend/openapi.json`
 - **Start app**: `bash .claude/hooks/ensure-test-deps.sh && python app.py` (or `python app.py --local` for dev)
 - **CLI autodetect**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json>`
 - **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json> --exporter server_json_file --filepath results.json`
@@ -241,6 +244,29 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **Spell check**: `codespell --toml pyproject.toml`
 - **Dependency check**: `python -m deptry .`
 - **Dead code audit** (manual, pre-release): see `.vulture-whitelist.py` for the full invocation (60% confidence, with marshmallow/pydantic field directories excluded and pytest/Flask/dunder noise filtered). Run before each release; not a CI gate.
+
+## What `run-tests.sh` gates
+
+There is no CI: `./run-tests.sh` is the only gate, so it front-loads a long chain of checks and stops at the first failure with a `TESTS BLOCKED: ...` banner naming which one. **This list is derived from `run-tests.sh`; when you add or remove a gate there, update it here in the same commit.** In script order:
+
+| # | Gate | Command it runs | Notes |
+|---|------|-----------------|-------|
+| 0 | Wall-clock cap | re-`exec`s itself under `timeout` | `VTSEARCH_TEST_TIMEOUT` (default **1800s = 30 min**) bounds the *whole* run, every stage included. `VTSEARCH_TEST_TIMEOUT=0` opts out for a deliberately long run (GPU, coverage sweep). |
+| 1 | Dep install | `.claude/hooks/ensure-test-deps.sh` | Minutes on a cold container, near-instant after. |
+| 2 | Lint | `ruff check .` | |
+| 3 | Format | `ruff format --check .` | Fix with `ruff format .`. |
+| 4 | Spelling | `codespell --toml pyproject.toml` | |
+| 5 | Dependencies | `python -m deptry .` | |
+| 6 | Known CVEs | `pip-audit` | Audits the resolved venv, not the requirements files. `PIP_AUDIT_IGNORE` in the script lists advisories with no upstream fix; re-audit and remove an entry once a patched release exists. |
+| 7 | Types | `pyright` (pinned via `PYRIGHT_PYTHON_FORCE_VERSION`) | Scope is `pyrightconfig.json`. |
+| 8 | OpenAPI snapshot drift | `scripts/dump_openapi.py` diffed against `frontend/openapi.json` | The generated TS client is built from this snapshot. Regenerate with `npm run regenerate-openapi-snapshot` and commit the result. |
+| 9 | Dockerfiles | `scripts/check-dockerfiles.py` | |
+| 10 | User-docs screenshot wiring | `scripts/screenshots/wiring-check.py` | Browser-free; the pixel-diff (`check.sh`) stays a manual chore. Also what makes the reshoot queue un-rottable. |
+| 11 | Eval/app sync | `scripts/check-eval-app-sync.py` | Re-pin with `--update` **after** reconciling the harness. |
+| 12 | Frontend build | `cd frontend && npm run build:prod` | Full run, or the `core` / `frontend` groups. Any `▲ [WARNING]` line is a hard failure. Skipped with a notice if `frontend/node_modules` is absent. |
+| 13 | Frontend audit | `cd frontend && npm audit --omit=dev` | Same trigger as the build. Prod deps only — dev-only advisories don't ship. |
+| 14 | Frontend unit tests | `cd frontend && npm run test:ci` | Full run or the `frontend` group **only** — deliberately off the fast `core` path. |
+| 15 | Python tests | `pytest tests/ tests_lib/ -n auto --dist loadgroup` | Skipped entirely when `frontend` is the only requested group. |
 
 ## Test Groups
 
@@ -268,17 +294,28 @@ Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a py
 
 ## Test Markers
 
-- **Default** (`./run-tests.sh` or `pytest tests/`): Runs fast CPU tests only (~35s). Excludes `gpu` and `slow` markers.
-- **`slow`**: CLI subprocess tests that spawn `python app.py --autodetect` (2 tests in `tests/cli/test_cli_main_subprocess.py`, each ~16s). Run with `-m slow` or include with `-m 'not gpu'`.
-- **`gpu`**: CUDA-only tests. Run with `-m gpu`.
-- **All tests**: Use `-m ''` to run everything.
+The default filter lives in `pyproject.toml`'s `addopts`: `-m 'not gpu and not slow' --timeout=300 --timeout-method=thread`.
+
+- **Default** (`./run-tests.sh` with no group, or a bare `pytest`): fast CPU tests only (~35s). Excludes `gpu` and `slow`.
+- **`slow`**: 3 tests, in **two** trees — one CLI subprocess test that spawns `python app.py --autodetect` (`tests/cli/test_cli_main_subprocess.py`, ~16s) and two real-`toponymy` fit tests (`tests_lib/projection/test_toponymy_smoke.py`, module-level `pytestmark`, ~1 min each; `importorskip`ped when toponymy isn't installed). Run with `python -m pytest tests/ tests_lib/ -m slow` — passing only `tests/` silently misses two thirds of them.
+- **`gpu`**: CUDA-only tests (`tests_lib/gpu/test_gpu.py`). Run with `-m gpu`.
+- **All tests**: `-m ''`.
+- **Per-test timeout**: 300s, thread-based (signal-based interruption doesn't work on xdist workers). One hung test fails by name instead of stalling the run; the wall-clock cap in `run-tests.sh` is the backstop for a worker that dies outright and can no longer fire its own timeout.
+
+**Gotcha: naming a group re-opens `slow` and `gpu`.** `./run-tests.sh <group>` passes `-m "<group>"` on the command line, and a command-line `-m` *replaces* the one in `addopts` rather than combining with it. So `./run-tests.sh cli` does run the slow subprocess test, and `./run-tests.sh projection` does run the toponymy smoke tests — a group run is slower than the same tests in a default run. That is also why `./run-tests.sh gpu` works at all. To get the default exclusions back inside a group, spell the filter out after `--` (a later `-m` wins): `./run-tests.sh cli -- -m 'cli and not slow'`.
 
 ## Test Workflow (IMPORTANT)
 
 Testing can crash the session. To avoid losing work, follow this workflow:
 
 1. **Commit and push before running tests.** Before running `pytest` or any test command, commit all current changes and push to your working branch. Use a message like `"WIP: pre-test checkpoint"` if the work isn't finalized yet.
-2. **Run tests in the foreground (never in the background).** The test command has a slow startup phase: `ensure-test-deps.sh` installs dependencies (~1-2 min on first run), then `conftest.py` imports `app.py` and generates test media/embeddings before any tests execute. There may be no output for 1-3 minutes; this is normal. Do NOT run tests with `run_in_background` or assume output capture is broken because of the delay. Use a timeout of at least 300000ms (5 minutes).
+2. **Start the run in the foreground with the maximum timeout, and never *launch* it with `run_in_background`.** The test command has a slow startup phase: `ensure-test-deps.sh` installs dependencies (~1-2 min on first run), then `conftest.py` imports `app.py` and generates test media/embeddings before any tests execute. There may be no output for several minutes; this is normal, and is not a sign that output capture is broken.
+
+   **Pass `600000` ms (10 minutes) — the Bash tool's maximum — and expect a cold full run to exceed it anyway.** A measured cold `./run-tests.sh` is ~11 minutes: ~7 for dep install plus the linter/pyright/pip-audit/snapshot gates and the frontend build + `npm audit` + Vitest, then ~3.5 minutes of pytest. (The old "at least 5 minutes" suggestion cut healthy runs off mid-gate.) When the tool's cap is hit the harness moves the run to the background rather than killing it — that is fine; wait for the completion notification and read the output file it names. What matters is that you *started* it in the foreground so the harness tracks it.
+
+   Two consequences worth knowing before you run it:
+   - **Do not pipe the run through `tail`/`grep`.** If the harness backgrounds a pipeline, nothing flushes until the whole pipeline ends, so the output file sits empty and you can't watch progress. Run the script bare and read the tail of the output file afterwards.
+   - **A run that outlives the tool's cap is not a timeout.** The script has its own 30-minute wall-clock cap (`VTSEARCH_TEST_TIMEOUT`) and prints a distinctive `TESTS TIMED OUT` banner when *it* fires. Absent that banner, the run is still healthy. To stay inside 10 minutes, run one group at a time — a group run skips the frontend gates unless it is `core` or `frontend`.
 3. **If tests fail and fixes are needed**, make the fixes, then commit and push again before re-running tests.
 4. **Repeat** until tests pass. Every cycle of fixes should be committed and pushed before the next test run.
 

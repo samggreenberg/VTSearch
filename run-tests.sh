@@ -9,12 +9,20 @@
 #   ./run-tests.sh vtscore-clean  # run tests_lib/ with Flask import blocked
 #
 # Available groups: core, api, sorting, datasets, io, detectors,
-#                   downloads, integration, cli, converters, projection
+#                   downloads, integration, cli, converters, projection,
+#                   frontend (build + audit + Vitest, no Python tests), gpu
 #
 # Each group is a folder under tests/ AND tests_lib/. Marker assignment is
 # automatic: any file at tests[_lib]/<group>/test_*.py gets marked <group>
 # by the respective conftest.  tests_lib/ holds Flask-free library tests
-# (Phase 7 of vtscore/docs/architecture.md).
+# (see vtscore/docs/architecture.md).
+#
+# NOTE: naming a group puts `-m <group>` on the pytest command line, which
+# REPLACES the `-m 'not gpu and not slow'` default in pyproject.toml's
+# addopts rather than combining with it. So a group run also picks up any
+# slow/gpu tests in that folder (that is how `./run-tests.sh gpu` works).
+# To keep the default exclusions, spell the filter out after `--`, e.g.
+#   ./run-tests.sh cli -- -m 'cli and not slow'
 #
 # Extra pytest args can follow a '--':
 #   ./run-tests.sh core -- -x --tb=short

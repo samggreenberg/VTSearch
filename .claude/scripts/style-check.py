@@ -249,7 +249,7 @@ def check_raw_zindex(files: list[Path]) -> Finding:
 
 
 # ---------------------------------------------------------------------------
-# §1.9 Raw decorative-dim opacity (should be var(--opacity-dim))
+# §1.10 Raw decorative-dim opacity (should be var(--opacity-dim))
 # ---------------------------------------------------------------------------
 # The canonical decorative-dim value. A raw `opacity: 0.7` on a decorative or
 # secondary element (dimmed icon, chevron, accent divider, hint/note text,
@@ -262,7 +262,7 @@ RAW_OPACITY_RE = re.compile(r"\bopacity\s*:\s*(0?\.\d+|1(?:\.0+)?|0)\b")
 
 def check_raw_dim_opacity(files: list[Path]) -> Finding:
     f = Finding(
-        rule="§1.9 Raw decorative-dim opacity",
+        rule="§1.10 Raw decorative-dim opacity",
         description=(
             f"A raw `opacity: {DIM_OPACITY_VALUE}` on a decorative/secondary "
             "element should use var(--opacity-dim). Legitimate exceptions: "

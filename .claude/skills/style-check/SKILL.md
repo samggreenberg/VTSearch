@@ -33,6 +33,9 @@ your job is to review them and decide which to fix.
 | §4.6   | `font-weight: 700` / `bold` | Regex |
 | §4.7   | Heading tags (`h1`–`h6`) restyled in component SCSS | Top-level `hN {` rule blocks |
 | §4.10  | `transition: all <custom-duration>` | Regex, ignores tokenised durations |
+| §1.8   | Raw `z-index` integers that bypass the `--z-*` scale | Regex, skips lines already resolving through a `var(--…)` |
+| §1.10  | Raw `opacity: 0.7` where `var(--opacity-dim)` is the token | Regex on the canonical dim value only |
+| Bespoke accent tint | Hand-rolled `color-mix(in srgb, var(--accent) N%, transparent)` instead of `--accent-highlight-bg` | Regex on the bare `var(--accent)` form, so the fallback-carrying decorative tint isn't flagged |
 | §4.13  | `font: inherit` inside component SCSS (specificity trap) | Regex |
 | §4.14  | `flex-direction: column` blocks without an explicit `gap` | Brace-depth aware SCSS parser |
 | §4.15  | Shared utility classes redeclared locally | Top-level `.{class} {` outside shared files |
@@ -57,6 +60,15 @@ patterns alongside real bugs. Apply judgement before fixing:
   the redeclared `.info-text`/`.error-text` blocks across modals are
   near-identical copies. Worth consolidating, but a bulk rewrite
   touches many components; consider doing it as its own PR.
+- **§1.10 raw `opacity: 0.7`** has legitimate hits: animation keyframes
+  that fade `0`↔`1`, hover-brighten rest states, and the two-tier
+  done/future progression dims all carry their own values. Flag it when
+  the element is decorative or secondary *at rest*.
+- **§1.8 raw `z-index`** and the **bespoke accent tint** are, like the
+  two token-resolution checks, close to objective - both have a single
+  canonical token (`--z-*`, `--accent-highlight-bg`) and a hit means the
+  component reinvented it. Adding a new layer means adding a `--z-*`
+  token to `_variables.scss`, not a bare integer.
 - **§4.1-2 raw `px`/`rem`** is sometimes a deliberate off-scale value
   with an inline comment justifying it (e.g.
   `padding: var(--space-xs) 0.625rem; // 10px - off-scale horizontal

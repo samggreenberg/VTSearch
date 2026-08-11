@@ -1,9 +1,13 @@
 # Running eval experiments on the GRID (SLURM) — playbook
 
-Practical, hard-won ops notes for running the `scripts/experiments/*` and
-`scripts/sod` sweeps on the JHU-HLTCOE GRID (a shared SLURM cluster). The
-patterns are general; HLTCOE-specific values are marked **[HLTCOE]**. Read this
-before launching a big sweep — most of it was learned by getting it wrong.
+Practical, hard-won ops notes for running the `scripts/experiments/*` sweeps on
+the JHU-HLTCOE GRID (a shared SLURM cluster) — and the older `scripts/sod`
+sweeps, which live **only on the `evaluation-framework` branch** and are not
+present on `dev` (see `LESSONS.md`, the 2026-08-07 entry, and
+`docs/experiments/spike-check-2847/REPORT.md` for why that harness can't be
+pointed at `dev`). The patterns are general; HLTCOE-specific values are marked
+**[HLTCOE]**. Read this before launching a big sweep — most of it was learned by
+getting it wrong.
 
 This file covers **SLURM resources**. Its companions cover the rest of running a
 study, and the `grid-experiments` skill ties all three together:
