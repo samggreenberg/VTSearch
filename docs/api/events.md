@@ -97,9 +97,15 @@ Angular client treats every frame (heartbeat or real progress) as proof of
 life and only declares the backend offline when the stream goes silent. It is
 a real named event rather than an SSE comment (`: heartbeat`) precisely because
 comments are invisible to the browser's `EventSource` API. Each heartbeat tick
-also re-emits the `loading-tasks` and `detector-loading-tasks` channels so
-finished tasks vanish from the UI once they pass their stale-prune window
-without a server-side timer.
+also re-emits **every** channel's current snapshot. For `loading-tasks` and
+`detector-loading-tasks` that is what makes finished tasks vanish from the UI
+once they pass their stale-prune window, without a server-side timer. For the
+single-tracker channels (`dataset`, `sort`, `find`, `eval`) it is a self-heal:
+each client's queue is bounded and drops frames when the client stalls, so a
+channel's single terminal `idle`/`error` frame can be lost and would otherwise
+leave a progress bar stuck at its last percentage until the next operation
+fired that channel. Re-emitting the (tiny) snapshots makes every channel
+eventually consistent after any drop.
 
 Between heartbeats an idle stream also writes a bare SSE comment (`: ka`)
 roughly every second. It is deliberately a comment — invisible to
