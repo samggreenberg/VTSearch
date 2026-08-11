@@ -106,10 +106,18 @@ documented workarounds; this section describes the code as it stands.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `VTSEARCH_DATA_DIR` | `<repo root>/data` | **Relocates the entire data directory** (settings, per-user dirs, model cache, embeddings, detectors, media, demo downloads). The default is anchored to the *repository root*, not the current working directory, so a systemd unit or cron job started from elsewhere still finds existing state. This is the one variable most production deployments need: point it at a persistent volume outside the checkout so a redeploy never touches user state. |
+| `VTSEARCH_MODELS_DIR` | `$VTSEARCH_DATA_DIR/models` | HuggingFace model cache. Split it out from the data dir when several instances should share one ~3.8 GB model download. |
 | `VTSEARCH_SECRET_KEY` | `vtsearch-dev-key-change-in-production` | Flask session secret key (**set this to a random value in production**) |
+| `VTSEARCH_PORT` | `5000` | Bind port for the **dev server** (`python app.py`); `--port` wins over it. Gunicorn ignores this — use `VTSEARCH_BIND` below. |
 | `VTSEARCH_LOG_LEVEL` | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`). `INFO`/`DEBUG` also turn on the per-request access log. |
-| `VTSEARCH_MODELS_DIR` | `data/models` | Directory for HuggingFace model cache |
+| `VTSEARCH_LOG_FORMAT` | `json` | Log record format: `json` (one JSON object per line, for log aggregators) or `text` (bracketed-tag human-readable form, for local dev). Every record carries the active user, `dataset_id`, `detector_id`, and `request_id`. |
+| `VTSEARCH_MAX_UPLOAD_MB` | `2048` | Maximum size of a single HTTP request body, in MB (Flask's `MAX_CONTENT_LENGTH`). Oversize uploads are rejected with HTTP 413 before they consume disk. Set to `0` to disable the cap entirely for genuinely large-archive uploads. |
+| `VTSEARCH_SSE_MAX_CONNECTIONS` | `VTSEARCH_THREADS - 2` (i.e. `6`) | Hard cap on concurrent `/api/events` streams. Each stream holds a gunicorn worker thread for its lifetime, so the default reserves headroom for ordinary REST requests. The Flask dev server spawns a thread per connection and therefore uncaps this automatically unless you set it explicitly. |
+| `VTSEARCH_RUNDIR` | system temp dir | Directory for the single-instance port lockfiles. Set it when several users run VTSearch on one host and a shared `/tmp` lockfile would collide. |
 | `VTSEARCH_SUPPORT_EMAIL` | built-in project address | Recipient for the Help modal's "Email us" link. Overrides the persisted `support_email` setting for the process lifetime (all users; not editable via the API). Equivalent to the `--support-email` CLI flag, for the gunicorn images that never parse `argv`; an explicit flag wins. |
+| `VTSEARCH_SEMANTIC_ONLY` | unset | Set to `1`/`true`/`yes`/`on` to lock the deployment to **Semantic** embedders, hiding the prototype Patch Semantic and Structural types from every picker and rejecting them at the dataset-load / detector-create routes. Env-var equivalent of `--semantic-only`, for the gunicorn images; an explicit flag wins, and either beats the persisted `semantic_only` server setting. |
+| `VTSEARCH_DATASET_MAX_AGE_DAYS` | unset (datasets never expire) | Stamps every newly created dataset with an expiry this many days out. Positive integers only; anything else is ignored with a warning on stdout. Env-var equivalent of `--dataset-max-age-days`, for the gunicorn images; an explicit flag wins. |
 
 ### Progress-bar timing
 
@@ -127,6 +135,34 @@ How many datasets the server downloads / embeds in parallel. Both knobs **autode
 |----------|---------|-------------|
 | `VTSEARCH_MAX_CONCURRENT_DOWNLOADS` | autodetect (CPU count, cap 4) | Max datasets downloaded in parallel |
 | `VTSEARCH_MAX_CONCURRENT_EMBEDDINGS` | autodetect (min of cores/4 and RAM/4 GiB, cap 4) | Max dataset embedding jobs run in parallel |
+
+### Compute and model runtime
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VTSEARCH_DEVICE` | `auto` | Preferred compute device for embedding, training, and scoring. `auto` resolves to `cuda` when a usable GPU is visible, then `mps`, then `cpu`; explicit values (`cuda`, `cuda:1`, `cpu`, `mps`) pass through unchanged. Resolution is lazy — the var records intent, torch is only imported when a device is actually needed. Pin it to `cpu` to keep a shared GPU free, or to `cuda:N` to place the process on one card of a multi-GPU box. |
+| `VTSEARCH_TORCH_THREADS` | `1` | Thread count for `torch` and the native math libraries (also exported as `OMP_NUM_THREADS` / `MKL_NUM_THREADS` before torch is imported). The default of 1 keeps RSS low in constrained environments, since each thread allocates its own scratch buffers; raise it on a big box where CPU embedding throughput matters more than memory. |
+| `VTSEARCH_EMBED_BATCH_SIZE` | `32` | Items per GPU embedding batch. Lower it if a large model OOMs on a small card; non-positive or unparseable values fall back to the default. Some embedders (e.g. video models, whose per-clip frame stacks are much larger) ship a smaller default of their own. |
+| `VTSEARCH_MAX_DECODE_PIXELS` | `64000000` (64 MP) | Pixel budget for a single image decode. Sources above it are downsampled (aspect preserved) before reaching a thumbnail, embedder, extractor, or converter — all of which resize to a few hundred pixels anyway — so gigapixel panoramas and whole-slide scans import instead of exhausting memory. Ordinary photographs are never touched; crop/clip paths deliberately bypass this and decode at native size. Set to `0` to disable bounding entirely. |
+| `VTSEARCH_TRAIN_EPOCHS` | `200` | Upper bound on training epochs for the detector head. Training also short-circuits on a loss plateau (see `VTSEARCH_TRAIN_PATIENCE`). |
+| `VTSEARCH_TRAIN_PATIENCE` | `10` | Epochs the training loss may fail to improve before early-stop fires. Set to `0` to disable early-stop and always run the full `VTSEARCH_TRAIN_EPOCHS`. |
+| `VTSEARCH_CALIBRATE_COUNT` | `2` | Default `calibrate_count` baked into a fresh user's settings. Each unit adds one fold-training pass per learned sort, and buys resolution on the Inclusion knob (which is a quantile rule over pooled held-out fold scores). Lower to `1` to trade calibration quality for sort latency. |
+| `VTSEARCH_DISABLE_CUML` | unset | Set to any non-empty, non-`0` value to force the CPU clustering libraries for UMAP / k-means even when cuML is installed and the GPU is usable. Runtime opt-out — distinct from the install-time `VTSEARCH_SKIP_CUML` below. Useful when a RAPIDS install is present but misbehaving. |
+
+### Install-time (`scripts/install.sh`)
+
+These are read by the installer, not the running app.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VTSEARCH_SKIP_CUML` | `0` | Set to `1` to skip the cuML/RAPIDS install step on a GPU box (e.g. air-gapped installs that can't reach the NVIDIA index). GPU UMAP / k-means then use the CPU fallback. |
+| `VTSEARCH_NO_AGPL` | `0` | Set to `1` to install the `*-no-agpl.txt` requirement set, omitting the AGPL-licensed dependencies. See [Installing without the AGPL dependencies](#installing-without-the-agpl-dependencies). |
+| `VTSEARCH_AUTO_DRIVER` | `0` | On a box with NVIDIA hardware but no working driver, `1` installs the driver unattended instead of prompting. |
+| `VTSEARCH_ASSUME_CPU` | `0` | The opposite unattended answer: `1` skips the driver and installs the CPU stack. On a non-interactive shell with neither set, the installer takes neither privileged action. |
+| `VTSEARCH_AUTO_DKMS` | `0` | When a working driver is *not* DKMS-managed (so a kernel update will break it), `1` converts it in place unattended. See [Making the GPU driver survive reboots and kernel updates](#making-the-gpu-driver-survive-reboots-and-kernel-updates). |
+| `VTSEARCH_SKIP_DKMS` | `0` | The opposite unattended answer: `1` declines the DKMS conversion offer. |
+| `VTSEARCH_NVIDIA_RUNFILE_URL` | unset (auto-resolved) | Pin a specific NVIDIA driver `.run` installer, or point at a locally mirrored copy for an air-gapped install. |
+| `VTSEARCH_VERBOSE` | `0` | Set to `1` to stream every command's raw output instead of only surfacing it when a step fails. |
 
 ### Gunicorn / WSGI (production)
 
@@ -317,24 +353,18 @@ token is required.
 Demo datasets are downloaded only when a user selects them through the web
 UI. They are **not** downloaded at startup.
 
-| Dataset | Media type | Source | Approx. size |
-|---------|-----------|--------|-------------|
-| ESC-50 | Audio | GitHub | ~600 MB |
-| GTZAN Music Genre | Audio | Internet Archive | ~600 MB |
-| Speech Commands v2 | Audio | Google | ~600 MB |
-| UrbanSound8K | Audio | Zenodo | ~600 MB |
-| TUT Sound Events 2017 | Audio | Zenodo | ~1700 MB |
-| Caltech-101 | Image | Caltech Data | ~131 MB |
-| Caltech-256 | Image | Caltech Data | ~1200 MB |
-| Oxford Flowers 102 | Image | Oxford | ~131 MB |
-| Food-101 | Image | ETH Zurich | ~170 MB |
-| EuroSAT | Image | Zenodo | ~170 MB |
-| UCSF Industry Documents | Document | UCSF IDL | ~50 MB |
-| 20 Newsgroups | Text | scikit-learn | ~14 MB |
-| AG News | Text | HuggingFace | ~15 MB |
-| BBC News | Text | Internet | ~15 MB |
-| IMDB Movie Reviews | Text | Stanford | ~15 MB |
-| UCF-101 subset | Video | HuggingFace Datasets | ~171 MB |
+**[docs/demos.md](demos.md) is the catalogue** — every demo, grouped by media
+type, with the size variants (S / M / L / A) each one offers. It is not
+duplicated here: a second copy of the roster would rot the moment a demo is
+added or its upstream source moves.
+
+What matters for capacity planning: the underlying sources range from a few MB
+(the text corpora) to several GB (the largest audio and image archives), they
+land under `DATA_DIR` as both a temporary archive and an extracted directory,
+and every size variant of a demo shares one download. Provision the data volume
+for the demos your users will actually pull rather than the whole catalogue, and
+see [Sharing demo downloads between data dirs](#sharing-demo-downloads-between-data-dirs-multi-user-servers)
+below when several instances live on one host.
 
 ### Sharing demo downloads between data dirs (multi-user servers)
 
@@ -470,8 +500,9 @@ evaluation, sorting, voting) works fully offline.
 
 ## Data directory layout
 
-The `data/` directory (or `/app/data` in Docker) holds all runtime state.
-It is created automatically on first startup.
+The `data/` directory (or `/app/data` in Docker, or whatever
+`VTSEARCH_DATA_DIR` points at) holds all runtime state. It is created
+automatically on first startup.
 
 ```
 data/
@@ -482,14 +513,26 @@ data/
 │   ├── models--microsoft--xclip-base-patch32/
 │   └── models--intfloat--e5-base-v2/
 ├── embeddings/                       # Cached dataset embeddings (.pkl files)
-├── detectors/                 # Persistent detector definitions (.json)
-├── settings.json                     # User preferences, Auto-Find config, thresholds
+├── saved_datasets/                   # Datasets saved from the UI
+├── detectors/                        # Persistent detector definitions (.json)
+├── settings.json                     # SERVER settings only (see below)
+├── user_settings.json                # Preferences of the single-user "default" user
+├── <username>/                       # Multi-user only: one subtree per user
+│   ├── user_settings.json            #   that user's preferences
+│   └── ...                           #   their datasets, detectors, media
 ├── audio/                            # Audio media files
 ├── video/                            # Video media files
 ├── images/                           # Image media files
 ├── paragraphs/                       # Text media files
-└── documents/                        # Document media files (PDF, DOC, PPT)
+├── documents/                        # Document media files (PDF, DOC, PPT)
+├── local_uploads/                    # Files uploaded through the browser
+├── staging/                          # Scratch space for in-flight imports
+└── ESC-50-master/, gtzan/, ...       # Extracted demo dataset sources
 ```
+
+The per-user subtree only appears under a multi-user login provider: the
+single-user default keeps `user_settings.json` directly in the data dir. See
+[Settings file schema](#settings-file-schema) below for what goes in which file.
 
 ### What to preserve vs. what's safe to delete
 
@@ -497,91 +540,184 @@ data/
 |------|-----------|-----|
 | `data/models/` | **Yes** | Re-downloading is slow (~3.8 GB) |
 | `data/embeddings/` | **Yes** | Contains cached embeddings; losing them means recomputing |
-| `data/settings.json` | **Yes** | User preferences, trained detectors, autorun processors |
+| `data/settings.json` | **Yes** | Server settings: directories, concurrency limits, deployment locks |
+| `data/user_settings.json`, `data/<username>/user_settings.json` | **Yes** | Every user preference, including each user's Auto-Find detector list |
 | `data/detectors/` | **Yes** | Persistent detector definitions with labelsets |
+| `data/saved_datasets/` | **Yes** | Datasets users explicitly saved |
 | `data/audio/`, `video/`, `images/`, `paragraphs/`, `documents/` | Depends | Media files from imported datasets; re-import if lost |
+| `data/staging/` | Safe to delete | Scratch space for in-flight imports |
 | Demo dataset archives (`.zip`, `.tar.gz`) | Safe to delete | Can be re-downloaded |
 | Extracted demo folders (`ESC-50-master/`, etc.) | Safe to delete | Can be re-extracted from archives |
 
 ### Settings file schema
 
-The settings file at `data/settings.json` is auto-created on first startup
-and auto-saved on every change. Schema:
+Settings live in **two tiers, in two different files**. Editing the wrong one
+is the most common settings mistake on a fresh deployment, so start here:
+
+| Tier | File | Holds | Model |
+|------|------|-------|-------|
+| **Server** | `data/settings.json` | Deployment-wide infrastructure and operator locks. Loaded once at startup, before any user logs in. | `ServerSettings` (`vtsearch/settings_models.py`) |
+| **Per-user** | `<user data dir>/user_settings.json` | Every user preference — theme, volume, autopilot, Auto-Find, panel layout, browse prefs. Resolved per request from the logged-in user. | `UserSettings` (same module) |
+
+The per-user file lives at `data/user_settings.json` in a single-user
+deployment and at `data/<username>/user_settings.json` under a multi-user login
+provider. Both files are auto-created on first use and auto-saved on every
+change. Both models accept extra keys, so an unrecognised key is preserved
+rather than dropped.
+
+**If you are changing a user preference, edit `user_settings.json`, not
+`settings.json`.** A `theme` or `autopilot_enabled` key placed in
+`data/settings.json` is simply ignored. The one deliberate exception is the
+Auto-Find trio (`autofind_detectors`, `autofind_exporter`,
+`autofind_exporter_field_values`): for the built-in `default` user only, a read
+that misses in `user_settings.json` falls through to `data/settings.json`, which
+is what lets the CLI's `--settings` flat file and single-user deployments keep
+working.
+
+#### Server tier — `data/settings.json`
+
+```json
+{
+  "saved_datasets_dir": "data/saved_datasets",
+  "detectors_dir": "data/detectors",
+  "max_concurrent_dataset_downloads": 4,
+  "max_concurrent_dataset_embeddings": 2,
+  "hidden_plugins": {},
+  "dataset_max_age_days": null,
+  "support_email": "ops@example.org",
+  "semantic_only": false,
+  "solo_media_type": null,
+  "projection_n_neighbors": 15,
+  "projection_min_dist": 0.1,
+  "browse_signpost_vocab": {},
+  "default_settings_source": null
+}
+```
+
+- `saved_datasets_dir`, `detectors_dir`: infrastructure directories
+  (overridable for custom data layouts).
+- `max_concurrent_dataset_downloads` / `max_concurrent_dataset_embeddings`:
+  concurrency gates for dataset loading. The download gate covers the
+  bandwidth/disk-bound import phase; the embed gate covers CPU/GPU-bound
+  embedding plus post-load clipping, dedup, and coverage-atlas construction.
+  Changes take effect on queued and future loads (running tasks are never
+  preempted). Defaults derive from hardware on first read and are **not**
+  persisted to disk: downloads = `max(1, min(4, cpu_count))`; embeddings = `1`
+  on an accelerator (CUDA/MPS — embed jobs share the one device and serialise
+  on it, so extra workers only add VRAM pressure), and on a CPU host the
+  scarcer of `cores/4` and `RAM/4 GiB` (cap 4, floor 1). See
+  `default_concurrent_downloads` / `default_concurrent_embeddings` in
+  `vtscore/embedding/loader.py`. These match the autodetect described under
+  [Dataset-ingest concurrency](#dataset-ingest-concurrency) above. Values are
+  clamped to `[1, 16]`; an explicit value here always wins over both the
+  autodetect and the env vars.
+- `hidden_plugins`: admin-side plugin hiding, mapping a plugin-family id
+  (`"converters"`, `"embedders"`, `"importers"`, … — the keys used by
+  `vtscore.plugins.inventory`) to a list of plugin names to omit from picker
+  and listing responses. Merged at read time with any `--hide-plugin
+  family:name` CLI flags. This is a UI-declutter setting, **not a security
+  boundary**: hidden plugins remain importable and callable by name.
+- `dataset_max_age_days`: stamps new datasets with an expiry this many days
+  out. `null` (the default) means datasets never expire. Also settable with
+  `--dataset-max-age-days` / `VTSEARCH_DATASET_MAX_AGE_DAYS`, either of which
+  wins for the process lifetime.
+- `support_email`: recipient for the Help modal's "Email us" contact link.
+  Shared across all users; defaults to the built-in project address. Override
+  per instance by editing this key, or at startup with `--support-email` /
+  `VTSEARCH_SUPPORT_EMAIL` (either applies process-wide and wins over the
+  persisted value). Surfaced read-only at `GET /api/settings`; not editable via
+  `PUT`.
+- `semantic_only`: locks the deployment to Semantic embedders, hiding the
+  prototype Patch Semantic and Structural types from every picker and rejecting
+  them at the dataset-load / detector-create routes. Also settable with
+  `--semantic-only` / `VTSEARCH_SEMANTIC_ONLY`.
+- `solo_media_type`: narrows the whole instance to one media type. The importer
+  and new-detector flows hide their media-type pickers and lock to it, the
+  converter picker filters to converters that output it, and media-type steps
+  in tabbed UIs are skipped. `null` shows everything. Users cannot change it;
+  also settable with `--solo-media-type`.
+- `projection_n_neighbors`, `projection_min_dist`: UMAP knobs for the VTSBrowse
+  map. The persisted projection is keyed on these, so changing one forces a
+  recompute rather than serving a layout fit under the old params. Clamped to
+  `[2, 200]` and `[0.0, 0.99]`.
+- `browse_signpost_vocab`: per-media-type zero-shot tag vocabulary used to name
+  map regions in Tags mode, replacing the built-in AudioSet-527 /
+  OpenImages-600 lists — the hook for a domain-specific taxonomy (bird species,
+  machine faults, product categories). Server-tier and read-only over the API,
+  since every user of an instance should read the same region names. Normalized
+  on write (trimmed, de-duplicated, capped at 2000 terms); a media type with an
+  empty or absent list falls back to the shipped vocabulary. Takes effect on the
+  next projection build / Re-project, since signpost texts are cached.
+- `default_settings_source`: deployment-wide default for settings sync, same
+  `{"source_name": ..., "field_values": ...}` shape as the per-user
+  `settings_source`. A user with no explicit source of their own inherits this;
+  a user whose `settings_source` is `{"source_name": "none"}` explicitly opts
+  out. Template the `field_values` (e.g.
+  `{"filepath": "data/user-settings/{username}.json"}`) to personalise it per
+  user.
+
+#### Per-user tier — `user_settings.json`
+
+An abridged example; the full field list is `UserSettings` in
+`vtsearch/settings_models.py`.
 
 ```json
 {
   "volume": 1.0,
   "inclusion": 0,
-  "theme": "dark",
+  "theme": "system",
   "enrich_descriptions": false,
-  "calibrate_count": 1,
+  "calibrate_count": 2,
   "calibration_fraction": 0.5,
   "audio_playing": true,
   "show_animations": "show",
   "show_metadata": false,
-  "focus_mode_left": {},
-  "focus_mode_right": {},
-  "grid_icon_size_left": {},
-  "grid_icon_size_right": {},
-  "panel_pct_left": {},
-  "panel_pct_right": {},
-  "autofind_detectors": [],
+  "label_hint_dismissed": false,
+  "enable_achievements": true,
   "autopilot_enabled": true,
   "hide_autopilot": false,
   "autopilot_top_greens": 3,
   "autopilot_hard_reds": 4,
   "autopilot_resort_interval": 10,
   "autopilot_goal_diversity": 40,
-  "saved_datasets_dir": "data/saved_datasets",
-  "detectors_dir": "data/detectors",
-  "max_concurrent_dataset_downloads": 1,
-  "max_concurrent_dataset_embeddings": 1,
-  "support_email": "sam.greenberg@gmail.com"
+  "autofind_detectors": [],
+  "autofind_exporter": "",
+  "autofind_exporter_field_values": {},
+  "focus_mode_left": {},
+  "focus_mode_right": {},
+  "grid_icon_size_left": {},
+  "grid_icon_size_right": {},
+  "panel_pct_left": {},
+  "panel_pct_right": {},
+  "browse_graphics": "auto",
+  "browse_panel_width": 360,
+  "browse_colormap": {},
+  "browse_icon_size": {},
+  "import_defaults_by_media_type": {},
+  "recent_sessions": []
 }
 ```
 
-Notable fields:
-
-- `autofind_detectors`: list of registered detector names
-  to run during `/api/auto-detect` and the CLI `--autodetect` flow.
-  This is a **per-user** setting (each user curates their own list on the
-  Dashboard's AutoRun detector tab, backed by
-  `PUT /api/detectors/registry/<id>/autofind`).
-  A list placed here in `data/settings.json` applies to the built-in
-  `default` user — i.e. single-user deployments and the CLI's default
-  `--autodetect` run, which read through to this file.
-- `saved_datasets_dir`, `detectors_dir`:
-  infrastructure directories (overridable for custom data layouts)
-- `max_concurrent_dataset_downloads` /
-  `max_concurrent_dataset_embeddings`: concurrency gates for dataset
-  loading. The download gate covers the bandwidth/disk-bound import
-  phase; the embed gate covers CPU/GPU-bound embedding plus post-load
-  clipping, dedup, and coverage-atlas construction. Changes take
-  effect on queued and future loads (running tasks are never
-  preempted). Defaults derive from hardware on first read (and are
-  **not** persisted to disk): downloads = `max(1, min(4, cpu_count))`;
-  embeddings = `1` on an accelerator (CUDA/MPS — embed jobs share the
-  one device and serialise on it, so extra workers only add VRAM
-  pressure), and on a CPU host the scarcer of `cores/4` and
-  `RAM/4 GiB` (cap 4, floor 1). See `default_concurrent_downloads` /
-  `default_concurrent_embeddings` in `vtscore/embedding/loader.py`.
-  These match the autodetect described under
-  [Dataset-ingest concurrency](#dataset-ingest-concurrency) above. An
-  explicit value in `settings.json` always wins.
-- `support_email`: recipient for the Help modal's "Email us" contact
-  link. Server-tier (shared across all users); defaults to the built-in
-  project address. Override per instance by editing this key, or at
-  startup with the `--support-email` CLI flag / `VTSEARCH_SUPPORT_EMAIL`
-  env var (either applies process-wide and wins over the persisted
-  value). Surfaced read-only at `GET /api/settings`; not editable via
-  `PUT`.
-- `settings_source` (not shown above; excluded from defaults): opt-in
-  bidirectional sync. Set to a plugin name + field values to auto-export
+- `theme`: `"system"` (the default — follows the OS `prefers-color-scheme`),
+  `"dark"`, `"light"`, or `"highviz"`.
+- `autofind_detectors`: detector names to run during `/api/auto-detect` and the
+  CLI `--autodetect` flow, each mapping to a JSON file under `data/detectors/`.
+  Every user curates their own list on the Dashboard's AutoRun detector tab
+  (`PUT /api/detectors/registry/<id>/autofind`). `autofind_exporter` names the
+  results exporter run afterwards (`""` = no auto-export; the CLI then falls
+  back to the `gui` exporter), and `autofind_exporter_field_values` keeps each
+  exporter's configuration around when the picker switches between them. This is
+  the trio that reads through to `data/settings.json` for the `default` user.
+- `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`, and the `browse_*` maps:
+  per-media-type UI preferences, keyed by media-type id, so a user can tune
+  audio and image datasets independently. Empty entries fall back to the
+  frontend's per-type default.
+- `import_defaults_by_media_type`: the embedder, clipper (+ params), and
+  converter rows to auto-fill into the Add Dataset advanced panel for each
+  output media type. Set from Settings → Data Imports.
+- `settings_source` (not shown; excluded from the defaults endpoint): opt-in
+  bidirectional sync. Set it to a plugin name + field values to auto-export
   every settings change and auto-import at startup. See `settings_io/sources/`.
-- `theme`: `"dark"`, `"light"`, or `"highviz"`
-- `grid_icon_size_*`, `focus_mode_*`, `panel_pct_*`:
-  per-media-type UI layout preferences (keyed by media type ID)
-- `autopilot_enabled`: whether the autopilot feature is active
 
 ---
 
