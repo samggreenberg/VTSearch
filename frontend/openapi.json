@@ -10909,7 +10909,7 @@
         }
       ],
       "post": {
-        "description": "Datasets past ``should_auto_build_coverage_atlas`` skip the automatic build\nat load time so they load fast; this endpoint lets the user trigger that\nbuild on demand.  The dataset must already be loaded in memory.  Progress\nis reported via ``/api/progress`` under the returned ``task_id``; the build\nis cancellable.  Calling it on a dataset that already has a tree rebuilds\nit from scratch.",
+        "description": "Datasets past ``should_auto_build_coverage_atlas`` skip the automatic build\nat load time so they load fast; this endpoint lets the user trigger that\nbuild on demand.  The dataset must already be loaded in memory.  Progress\nis reported on the ``loading-tasks`` channel of ``GET /api/events`` under\nthe returned ``task_id``; the build is cancellable.  Calling it on a\ndataset that already has a tree rebuilds it from scratch.",
         "operationId": "build_dataset_coverage_atlas",
         "responses": {
           "200": {
