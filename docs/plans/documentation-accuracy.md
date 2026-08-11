@@ -35,15 +35,11 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2977 — Repository has no LICENSE file or license metadata (Sonnet 5; needs an owner decision)
-
 <!-- item-sep -->
 
 - [ ] #2978 — Personal Gmail address committed as the `support_email` example in DEPLOYMENT.md (Haiku 4.5)
 
 <!-- item-sep -->
-
-- [ ] #2979 — 25 JSON examples across 10 API pages use a `→ ```json` fence that does not render (Haiku 4.5)
 
 <!-- item-sep -->
 
@@ -51,11 +47,7 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2981 — README, CLAUDE.md and vtscore/docs still teach the retired MLP head (Sonnet 5)
-
 <!-- item-sep -->
-
-- [ ] #2982 — 94 source files link to 13 deleted plan files; the ship-and-prune policy never greps source (Sonnet 5)
 
 <!-- item-sep -->
 
@@ -70,8 +62,6 @@ Fixing individual docs without the first two bullets buys about six weeks.
 - [ ] #2985 — Every runnable snippet in the vtscore docs fails (Opus 4.8)
 
 <!-- item-sep -->
-
-- [ ] #2986 — Retire docs/vtscore-api.md, a frozen refactor artifact duplicating vtscore/docs/packages/ (Opus 4.8)
 
 <!-- item-sep -->
 
@@ -111,8 +101,6 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2996 — docs/plans/ hygiene: shipped plans unpruned, stale technical claims, dead cross-references (Sonnet 5)
-
 <!-- item-sep -->
 
 - [ ] #2997 — CLAUDE.md Commands and Test Markers sections are out of date with run-tests.sh (Sonnet 5)
@@ -127,7 +115,6 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #3000 — Four docs are a shipped product surface with hash-matched footers, undocumented (Haiku 4.5)
 
 ## Open findings not yet promoted
 

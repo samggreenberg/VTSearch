@@ -18,7 +18,7 @@ rejected.
 
 ---
 
-## Filed issues (24 still open; 38 shipped in the 2026-08-09 release)
+## Filed issues (8 still open; 54 shipped across the 2026-08-09 and 2026-08-11 releases)
 
 Severity and recommended implementer model in parentheses. Bodies — failure
 scenario, suggested fix, verifier's confirmation — live in the issues; this list
@@ -26,17 +26,14 @@ carries pointers only.
 
 ### Flask API layer
 
-- [ ] #2956 — media_generic error message reads nonexistent 'type' key, always printing None (low, Haiku 4.5)
 
 ### App core (settings, auth, CLI)
 
 - [ ] #2930 — TrivialLoginProvider trusts unvalidated session usernames; with the default secret key this enables path traversal out of DATA_DIR (medium, Opus 4.8)
-- [ ] #2955 — Dirty-key marking happens after the file write, letting a concurrent auto-sync clobber a just-written setting (low, Opus 4.8)
 
 ### State & concurrency
 
 - [ ] #2931 — JobManager.start() hard-requires Flask via vtsearch.auth; ./run-tests.sh vtscore-clean gate currently fails (medium, Opus 4.8)
-- [ ] #2958 — Background threads iterate live ctx.medias without _state_lock; concurrent media add kills the pass (low, Sonnet 5)
 - [ ] #2960 — SSE tracker channels never re-emitted: a dropped terminal frame leaves the client's progress bar stuck (low, Sonnet 5)
 
 ### Training & detectors
@@ -44,14 +41,9 @@ carries pointers only.
 
 ### Media & embedding
 
-- [ ] #2957 — video2audio ffmpeg invocation omits the stdin guard every other ffmpeg call site applies (low, Haiku 4.5)
 
 ### Datasets & IO
 
-- [ ] #2959 — CSV label export → import round-trip corrupts values starting with -, +, @, = (sanitizer never stripped) (low, Sonnet 5)
-- [ ] #2961 — Full-mode pickle load aborts entirely on one non-UTF-8 companion text file (low, Sonnet 5)
-- [ ] #2962 — ingest _build_media_data shares one origin dict by reference across all ingested medias in a group (low, Sonnet 5)
-- [ ] #2963 — append_projection/append_region_labels rewrite the container while an append-mode handle is still open (low, Opus 4.8)
 
 ### Eval harness
 
@@ -59,12 +51,10 @@ carries pointers only.
 ### Projection, plugins & security utils
 
 - [ ] #2940 — PluginRegistry re-entrant discovery deadlocks; the _discovering guard is dead code behind a non-reentrant Lock (medium, Opus 4.8)
-- [ ] #2964 — hexbin edge correction compares distances in anisotropic units, assigning ~2% of boundary points to a hexagon that doesn't contain them (low, Sonnet 5)
 
 ### Frontend — browse surface
 
 - [ ] #2966 — Hover state is not re-resolved when a drag pan ends, so the lifted bin / preview / right-click target go stale (low, Sonnet 5)
-- [ ] #2967 — Cells are identified by (q,r) without pyramid level: pinned/hover enlarge can target the wrong bin and the hover preview goes stale across a level-crossing zoom (low, Sonnet 5)
 
 ### Frontend — dashboard & modals
 
@@ -72,14 +62,11 @@ carries pointers only.
 
 ### Frontend — services & views
 
-- [ ] #2968 — castVote's 180ms animation timeout re-reads this.media(), emitting mediaVoted with whatever item is selected by then (low, Sonnet 5)
-- [ ] #2970 — SortStateService.clear() forgets _acqThreshold (and has no production callers) (low, Haiku 4.5)
 - [ ] #2973 — Rapid inclusion-slider changes in Find have no response-ordering guard; a stale threshold can win (low, Sonnet 5)
 
 ### Frontend — styles & templates
 
 - [ ] #2951 — Dead CSS sweep: leftover rules in dashboard, resort-prompt-modal, center-panel (.swipe-hidden), and export-modal stylesheets (low, Haiku 4.5)
-- [ ] #2969 — Virtual-scroll media list renders role="option" items with no listbox ancestor (low, Haiku 4.5)
 
 ### Security
 
@@ -87,9 +74,6 @@ carries pointers only.
 
 ### Tests & tooling
 
-- [ ] #2971 — run-tests.sh timeout re-exec breaks `bash run-tests.sh` invocation with a confusing error (low, Sonnet 5)
-- [ ] #2974 — Dead always-false guard in tests_lib pytest_unconfigure checks the inifile for 'tests/conftest' (low, Haiku 4.5)
-- [ ] #2975 — run-tests.sh coverage comment promises `--cov` as first arg but the code only reads VTSEARCH_COVERAGE (low, Haiku 4.5)
 
 ---
 
