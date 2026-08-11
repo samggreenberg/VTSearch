@@ -275,7 +275,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 
 // --- Side tab bar (vertical tab rail) ---
 //
-// The vertical counterpart to `.importer-tab-bar`: a fixed-width column of
+// The vertical counterpart to `.tab-bar` (`_picker-shared.scss`): a fixed-width column of
 // tabs down the left edge of a modal, with a left-border active indicator
 // instead of the horizontal bar's underline. Currently the Settings modal's
 // tab rail; extract-and-fold target for any other vertical rail.

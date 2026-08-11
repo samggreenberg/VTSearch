@@ -64,7 +64,7 @@ def rel(p: Path) -> str:
 
 
 # ---------------------------------------------------------------------------
-# §4.1-2 Hardcoded px/rem in spacing or font-size properties
+# §5.1-2 Hardcoded px/rem in spacing or font-size properties
 # ---------------------------------------------------------------------------
 SPACING_PROP = re.compile(
     r"\b(padding|padding-(?:top|right|bottom|left)|margin|margin-(?:top|right|bottom|left)|"
@@ -78,7 +78,7 @@ RAW_OK_VALUES = {"0px", "0rem", "1px"}
 
 def check_raw_lengths(files: list[Path]) -> Finding:
     f = Finding(
-        rule="§4.1-2 Hardcoded px/rem in spacing/font-size",
+        rule="§5.1-2 Hardcoded px/rem in spacing/font-size",
         description=(
             "Use --space-* / --font-* tokens. Raw values in padding | margin | gap | font-size bypass the token system."
         ),
@@ -106,14 +106,14 @@ def check_raw_lengths(files: list[Path]) -> Finding:
 
 
 # ---------------------------------------------------------------------------
-# §4.3 Hex colors in component SCSS
+# §5.3 Hex colors in component SCSS
 # ---------------------------------------------------------------------------
 HEX_COLOR = re.compile(r"#[0-9a-fA-F]{3,8}\b")
 
 
 def check_hex_colors(files: list[Path]) -> Finding:
     f = Finding(
-        rule="§4.3 Hex colors in component SCSS",
+        rule="§5.3 Hex colors in component SCSS",
         description=(
             "Theme variables only. Component-local hex literals don't respond "
             "to theme changes - add a token to _variables.scss instead."
@@ -133,14 +133,14 @@ def check_hex_colors(files: list[Path]) -> Finding:
 
 
 # ---------------------------------------------------------------------------
-# §4.6 font-weight: 700 / bold
+# §5.6 font-weight: 700 / bold
 # ---------------------------------------------------------------------------
 BOLD_RE = re.compile(r"font-weight\s*:\s*(700|bold)\b")
 
 
 def check_bold_weight(files: list[Path]) -> Finding:
     f = Finding(
-        rule="§4.6 font-weight: 700 / bold",
+        rule="§5.6 font-weight: 700 / bold",
         description="Use --weight-semibold (600). <strong> is fine; raw 700 is not.",
     )
     for path in files:
@@ -151,14 +151,14 @@ def check_bold_weight(files: list[Path]) -> Finding:
 
 
 # ---------------------------------------------------------------------------
-# §4.7 Heading tags restyled in component SCSS
+# §5.7 Heading tags restyled in component SCSS
 # ---------------------------------------------------------------------------
 HEADING_RULE_RE = re.compile(r"^\s*h[1-6]\s*\{")
 
 
 def check_heading_restyling(files: list[Path]) -> Finding:
     f = Finding(
-        rule="§4.7 Heading tags visually restyled in component SCSS",
+        rule="§5.7 Heading tags visually restyled in component SCSS",
         description=(
             "Use the right tag; let the global rule style it. Margin-only "
             "scoping (`h3 { margin: 0 0 var(--space-md); }`) is fine - it "
@@ -200,14 +200,14 @@ def check_heading_restyling(files: list[Path]) -> Finding:
 
 
 # ---------------------------------------------------------------------------
-# §4.10 transition: all <custom-duration>
+# §5.10 transition: all <custom-duration>
 # ---------------------------------------------------------------------------
 TRANSITION_ALL_RE = re.compile(r"transition\s*:\s*all\s+0?\.\d+s")
 
 
 def check_transition_all(files: list[Path]) -> Finding:
     f = Finding(
-        rule="§4.10 transition: all <custom-duration>",
+        rule="§5.10 transition: all <custom-duration>",
         description=(
             "Use var(--transition-base) (or a specific property). `transition: "
             "all 0.2s` couples every animatable property to a one-off duration."
@@ -316,11 +316,11 @@ def check_bespoke_accent_tint(files: list[Path]) -> Finding:
 
 
 # ---------------------------------------------------------------------------
-# §4.13 `font: inherit` on form-input/form-select aliases
+# §5.13 `font: inherit` on form-input/form-select aliases
 # ---------------------------------------------------------------------------
 def check_font_inherit_trap(files: list[Path]) -> Finding:
     f = Finding(
-        rule="§4.13 `font: inherit` may silently override .form-select",
+        rule="§5.13 `font: inherit` may silently override .form-select",
         description=(
             "Angular view encapsulation gives component-scoped rules higher "
             "specificity than the global .form-input/.form-select. `font: "
@@ -337,11 +337,11 @@ def check_font_inherit_trap(files: list[Path]) -> Finding:
 
 
 # ---------------------------------------------------------------------------
-# §4.14 flex-direction: column rule blocks without an explicit `gap`
+# §5.14 flex-direction: column rule blocks without an explicit `gap`
 # ---------------------------------------------------------------------------
 def check_flex_column_no_gap(files: list[Path]) -> Finding:
     f = Finding(
-        rule="§4.14 `flex-direction: column` block missing explicit `gap`",
+        rule="§5.14 `flex-direction: column` block missing explicit `gap`",
         description=(
             "Stacked-column containers must own their inter-row spacing. "
             "Either set `gap: var(--space-*)` on the parent or rely on a "
@@ -387,7 +387,7 @@ def _read_line(text: str, line_no: int) -> str:
 
 
 # ---------------------------------------------------------------------------
-# §4.15 Shared utility classes redeclared locally
+# §5.15 Shared utility classes redeclared locally
 # ---------------------------------------------------------------------------
 SHARED_CLASSES = [
     "info-text",
@@ -413,7 +413,7 @@ SHARED_CLASSES = [
 
 def check_redeclared_utility(files: list[Path]) -> Finding:
     f = Finding(
-        rule="§4.15 Shared utility classes redeclared in component SCSS",
+        rule="§5.15 Shared utility classes redeclared in component SCSS",
         description=(
             "The classes in _components.scss are the source of truth. "
             "Redeclaring `.info-text { ... }` etc. locally drifts styling "
