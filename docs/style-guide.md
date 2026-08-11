@@ -257,7 +257,7 @@ A borderless icon button inside a card row or action cluster is **not** a `.btn`
 - `.form-select--compact` is the toolbar-sized select: sized to its content rather than full width, tighter padding, `--font-xs`, on `--bg-surface`. Use it in dense bars (label sort, browse selection panel), not in forms.
 - `.form-textarea` extends `.form-input` for multi-line entry: vertical resize only, a `5rem` floor, and `--font-mono` so long term lists line up.
 - `.form-label` is `--font-md`, `--weight-medium`, `--text-primary` - sized to match `.form-input` so the header is never visually smaller than the value the user types/picks underneath it. Custom `<button>`-based dropdown triggers that play the role of `.form-select` (e.g. icon-bearing media-type pickers) must set `font-size: var(--font-md)` explicitly: `<button>` doesn't inherit page font by default, and component-scoped overrides (`font: inherit`, etc.) silently win over the global `.form-select` because Angular view encapsulation raises their specificity. If the trigger text ever renders larger than the label above it, that rule is the regression.
-- `.form-hint` (used for plugin-field `hint` strings) is muted monospace.
+- `.form-hint` (used for plugin-field `hint` strings) is muted `--font-mono` at `--font-sm`, and preserves newlines (`white-space: pre-wrap`) so a multi-line schema hint keeps its shape.
 - `.required` marks required fields with `--color-bad`.
 
 Focus state is provided globally by `:focus-visible { outline: 2px solid var(--accent); }`. Inputs additionally swap their border to `--accent` on focus. **Do not override focus styling per component.**
@@ -392,7 +392,7 @@ Subclasses extend the base via SCSS `@extend`, so they inherit every rule and ad
 
 `.tab-bar-hint` is the italic muted line shown below a bar before the user has picked a tab ("Select what type of dataset to add."); `.empty-state--inline` is the matching "this category is empty" notice.
 
-**Vertical rail - `.side-tab-bar` / `.side-tab`** (`_components.scss`). A fixed-width (140px) column of tabs down the left edge of a modal, with a 3px left-border active indicator instead of an underline. The Settings modal's rail is the current user. Active class: `.side-tab--active`.
+**Vertical rail - `.side-tab-bar` / `.side-tab`** (`_components.scss`). A fixed-width (140px) column of tabs down the left edge of a modal, with a 3px left-border active indicator instead of an underline. The Settings modal's rail is its only consumer today; it's the extract-and-fold target for any other vertical rail. Active class: `.side-tab--active`.
 
 **Paneled tabs - `.view-tabs` / `.view-tab` / `.view-tab-content`** (`_components.scss`). A tab strip whose active tab visually flows into the inset content region below it: the active tab's background matches `.view-tab-content` so the border between them disappears, leaving only the accent underline. Use when the tabs sit *inside* a panel and own a bordered content box (the Auto-Find and Import-Defaults settings sections). Active class: `.view-tab--active`. `.view-tab-content` deliberately omits `display` - pick `flex` or `grid` for your inner layout.
 
