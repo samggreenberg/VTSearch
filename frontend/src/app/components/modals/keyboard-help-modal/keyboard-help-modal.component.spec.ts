@@ -87,11 +87,23 @@ describe('KeyboardHelpModalComponent — in-app guide anchors', () => {
   it('leaves non-anchor links alone', async () => {
     const body = await loadGuide('[Docs](https://example.com/docs)');
 
-    const link = body.querySelector('a') as HTMLAnchorElement;
-    const event = new MouseEvent('click', { bubbles: true, cancelable: true });
-    link.dispatchEvent(event);
+    // Read `defaultPrevented` from a document-level listener — it bubbles past
+    // `.guide-body`, so it sees the component's verdict — then cancel the event
+    // so jsdom doesn't try to actually navigate to example.com.
+    let prevented: boolean | null = null;
+    const observe = (event: Event): void => {
+      prevented = event.defaultPrevented;
+      event.preventDefault();
+    };
+    document.addEventListener('click', observe);
+    try {
+      const link = body.querySelector('a') as HTMLAnchorElement;
+      link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    } finally {
+      document.removeEventListener('click', observe);
+    }
 
-    expect(event.defaultPrevented).toBe(false);
+    expect(prevented).toBe(false);
   });
 });
 
