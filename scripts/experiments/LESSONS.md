@@ -423,3 +423,87 @@ fixed by the data (prevalence, category, pool size), or leave the cell's own
 observation out of the statistic it is binned on. The diagnostic signature is
 worth memorising: **an effect that is significant on the contaminated axis and
 absent on the clean ones is mean reversion, not mechanism.**
+
+<!-- entry-sep -->
+
+## 2026-08-12 — a study invalidated by a fix that landed after it (#2905 / #2943)
+
+**What happened.** The #2905 region-voting run completed clean on 2026-08-07/08 —
+3864/3864 cells, zero failures, premise verified, preflight green — and shipped a
+report and a constant. Two days later #2943 (`b7d528d8`) fixed `_score_pool`,
+which on a patch dataset scored each pool item by its **whole-image** vector while
+every threshold was cut on the style's **region max-pooled** scores. Autopilot's
+`hard` pick compares `ranking[cid] <= threshold` absolutely, so the two have to
+share a space, and on `visual_genome_m × dinov3_patch` they did not. The run was
+therefore measuring a harness artefact. PR #2909 merged *after* the fix, so `dev`
+briefly carried a fixed harness alongside a report written on the broken one.
+
+**Cost.** A published report voided, a merged PR corrected, and ~7 h of cluster
+time to redo. The shipped constant survived only because it never depended on the
+region numbers.
+
+**Why the existing gates all passed.** The premise gate this same study *added*
+(`preflight.sh --require-region-voting`) confirmed `patch_grid` on 4193/4193 —
+correctly. The bug was **downstream of the premise**: the environment really did
+region-vote, and the pool was then scored in the wrong space. A gate that proves
+the input geometry says nothing about whether the pipeline honours it.
+
+**How it hid.** The bug's own signature lived in the columns added to catch it.
+`acq_pool_percentile` / `report_pool_percentile` were computed in the same
+mismatched space as the pool scores, so they read as healthy (`prod` median
+0.9859) while the cut was in fact detached from the ranking. #2943 says this
+plainly: the columns "were computed in the same mismatched space and so could not
+reveal it."
+
+**The damage was asymmetric, which is what made it fatal rather than noisy.**
+Steps with the cut pinned at exactly 1.0 — above the *entire* pool, where raising
+`k` changes nothing: `prod` 5.8%, **`acq_m3` 39.2%**, `acq_p2` (the k=+2
+falsifier) **1.5%**. The treatment arms were clamped; the falsifier moves the cut
+*down*, away from the ceiling, and was spared. So the one contrast that appeared
+to validate the mechanism is the one contrast the bug did not touch. **When a bug
+clamps a lever at one end, the falsification arm at the other end will still
+behave — and will certify the run.**
+
+**Prevented (partly), by others:** #2943 fixed the scoring and made `_score_pool`
+take the threshold's space explicitly.
+
+**Still advice — a clean run is not a valid run, and freshness is a property of
+the harness, not the data.** Before publishing, re-check what has landed on `dev`
+*since the run's base commit* in the code paths the study exercises. This run's
+base was `84789040`; the invalidating fix was five days later, and its author had
+even written "**Wait for #2943 before running it**" into `REPORT.md` — a warning
+that post-dated the run and so was never seen. A cheap habit that would have
+caught it: at analysis time, diff `git log <base>..origin/dev -- <the modules the
+harness calls>` and read the subject lines. Ten seconds, and it is the only step
+that looks *forward* from a run instead of inward at it.
+
+<!-- entry-sep -->
+
+## 2026-08-12 — a column the fix redefines cannot be the fix's acceptance test (#2905)
+
+**What happened.** Verifying the #2943 fix before committing ~7 h of cluster time,
+I pre-registered three pass criteria on a single re-run cell, two of which were
+"`acq_pool_percentile` pinning should **fall**" and "its median should move off
+the ceiling". Both failed — pinning went **0% → 60.6%**, the median **0.9905 →
+1.0000** — and for a moment that read as the fix not working.
+
+It was my criteria that were wrong. #2943 changed *what those columns measure*:
+pre-fix they were computed in the pool's whole-image space (self-consistent, and
+therefore healthy-looking), post-fix in the threshold's max-pooled space. They are
+**not the same statistic on either side of the fix**, so no comparison across it
+means anything — including a comparison designed to validate the fix.
+
+**Cost.** Minutes, because the criteria were written down in advance and so failed
+loudly instead of being quietly reinterpreted. The real risk was the opposite
+outcome: had they *passed*, I would have launched on a false green.
+
+**What actually showed the fix working** was the outcome, not the instrument — the
+same cell, same trajectory, went from 6 positives / cost 0.452 / AP 0.209 to 3 /
+0.625 / 0.130, i.e. the optimistic bias #2943 describes, removed.
+
+**Still advice — validate a fix on quantities the fix does not redefine.**
+Prefer end-state outcomes (positives found, cost, AP) or a within-harness contrast
+(does arm A differ from arm B *on the fixed code*) over any before/after on a
+column whose semantics the change touches. And write the criteria down first: the
+value of a pre-registered check is not that it is right, but that when it is wrong
+you find out instead of rationalising.

@@ -164,14 +164,21 @@ and they beat the constant 18 to 6.
    pre-registered arm `visual_genome_m × siglip` has no `patch_grid`, so
    `region_voting=True` silently fell back to whole-image training, whole-image
    scoring and the binary blend schedule: it is a second *binary* environment.
-   **The region-voting check still needs running, on `dinov3_patch`.** Wait for
-   #2943 before running it: until that fix the harness scored the acquisition
-   pool by each media's whole-image vector while cutting the threshold on the
-   style's region max-pooled scores, which on a patch dataset put the whole pool
-   below the cut (`acq_pool_percentile` pinned at `1.0`) and made the lever
-   unmeasurable — the one thing this study is about. Both published environments
-   are `siglip`/`siglip2` with no `patch_grid`, so they scored and cut in the
-   same whole-image space and their numbers are unaffected.
+   **The region-voting check STILL NEEDS RUNNING, on `dinov3_patch`.** It was
+   attempted a second time in #2905 / PR #2909 and that run is **void**: it
+   landed two days *before* #2943 and so hit exactly the failure this note
+   warned about — the harness scored the acquisition pool by each media's
+   whole-image vector while cutting the threshold on the style's region
+   max-pooled scores, which on a patch dataset put the whole pool below the cut
+   and made the lever unmeasurable, the one thing this study is about. Measured
+   on that run's own cells, the cut sat pinned above the entire pool on **39% of
+   `k=-3` steps** against **1.5%** of the `k=+2` falsifier, so the treatment arms
+   were clamped while the falsifier — which moves the cut the other way — was
+   spared and certified the run. See the banner on
+   [`REPORT_REGION_VOTING.md`](REPORT_REGION_VOTING.md) for what died, what
+   survived, and how to redo it. Both *published* environments are
+   `siglip`/`siglip2` with no `patch_grid`, so they scored and cut in the same
+   whole-image space and their numbers are unaffected.
 
    What that run does establish is that `-3` **fails this ship rule in another
    binary environment** — cost CI [+0.003, +0.022] against a +0.01 tolerance,
