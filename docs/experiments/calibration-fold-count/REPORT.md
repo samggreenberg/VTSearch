@@ -1,7 +1,7 @@
 # Is 2 still the right number of cross-calibration folds?
 
-**Issue #2897 · design pre-registered in `docs/plans/calibration-fold-count-experiment.md`,
-removed by this report · harness PR #2902 · run + fixes PR #2906 · follow-ups #3115, #3116**
+**Issue #2897 · design pre-registered in a plan file, deleted by the PR that added this
+report · harness PR #2902 · run + fixes PR #2906 · follow-ups #3115, #3116**
 
 The decision rules below (`MARGIN`, `COST_CEILING_X`, the deep regime, H1–H4)
 were fixed before the run and live as module constants in
