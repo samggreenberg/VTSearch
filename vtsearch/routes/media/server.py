@@ -60,6 +60,7 @@ _IMAGE_MIMETYPES = {
     ".bmp": "image/bmp",
 }
 
+
 def _get_server_media_dir() -> Path:
     """Return the per-user server media directory.
 
@@ -83,7 +84,7 @@ def _get_server_media_dir() -> Path:
     ),
 )
 def upload_server_media_file():
-    """Upload a media file to data/example_media/ and return its filename.
+    """Upload a media file to the user's example_media/ dir and return its filename.
 
     Optional form fields:
 
