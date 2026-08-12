@@ -291,52 +291,32 @@ def _pkl_path_for(dataset_id: str) -> str | None:
     return entry.get("pkl_path") or None
 
 
-def _primary_embedder_for(ctx) -> str | None:
-    """The embedder that produced this dataset's projected matrix (its primary)."""
-    if ctx is None or not getattr(ctx, "medias", None):
-        return None
-    try:
-        from vtscore.embedding.media_vectors import primary_embedder_name
+def _projection_params(ctx=None):
+    """The knobs a projection for *ctx* should be fit under.
 
-        return primary_embedder_name(ctx.medias)
-    except Exception:  # pragma: no cover - defensive; fall back to globals
-        return None
-
-
-def _umap_params(ctx=None) -> tuple[int, float]:
-    """The active UMAP knobs (``n_neighbors``, ``min_dist``).
-
-    Resolution: an explicit ``ServerSettings`` override wins; otherwise the
-    per-embedder default (:data:`~vtscore.config.PROJECTION_DEFAULTS_BY_EMBEDDER`)
-    keyed off the dataset's primary embedder; otherwise the global config default.
-    An "explicit override" is a setting that differs from the global default, so an
-    operator who deliberately picks the global value simply gets it.
+    A thin pass-through to the shared resolver
+    (:func:`vtscore.projection.params.resolve_projection_params`), which the
+    ingest-time pre-build stage calls too — the two paths must agree or the
+    pre-built layout is discarded (or silently served) on the first Browse
+    open.  Kept as a named seam here so the freshness check and the build
+    entry points read the same way, and so tests can substitute it.
     """
-    from vtsearch import settings
-    from vtscore.config import (
-        PROJECTION_DEFAULTS_BY_EMBEDDER,
-        PROJECTION_MIN_DIST,
-        PROJECTION_N_NEIGHBORS,
-    )
+    from vtscore.projection.params import resolve_projection_params
 
-    s_n = settings.get_projection_n_neighbors()
-    s_d = settings.get_projection_min_dist()
-    emb = _primary_embedder_for(ctx)
-    default = (PROJECTION_N_NEIGHBORS, PROJECTION_MIN_DIST)
-    d_n, d_d = PROJECTION_DEFAULTS_BY_EMBEDDER.get(emb, default) if emb else default
-    n = s_n if s_n != PROJECTION_N_NEIGHBORS else d_n
-    d = s_d if s_d != PROJECTION_MIN_DIST else d_d
-    return n, d
+    return resolve_projection_params(ctx)
 
 
 def _projection_params_match(proj, ctx=None) -> bool:
-    """Whether a persisted projection was fit under the active UMAP params.
+    """Whether a persisted projection was fit under the active params.
 
     Non-UMAP layouts (the PCA / trivial fallbacks for tiny datasets) ignore
     these knobs, so they always match.  A legacy projection with no stamped
-    params is assumed to have used the config defaults, so it only mismatches
-    once an operator has changed a setting away from the default — exactly
-    when its layout must be recomputed.
+    UMAP params is assumed to have used the config defaults, so it only
+    mismatches once an operator has changed a setting away from the default —
+    exactly when its layout must be recomputed.  An unstamped ``compact``
+    reads as ``True``: compaction was on by default for every layout written
+    before it was recorded, so those layouts correctly fail against today's
+    ``compact=False`` and get refit.
     """
     import math
 
@@ -346,8 +326,14 @@ def _projection_params_match(proj, ctx=None) -> bool:
 
     stored_n = proj.n_neighbors if proj.n_neighbors is not None else PROJECTION_N_NEIGHBORS
     stored_d = proj.min_dist if proj.min_dist is not None else PROJECTION_MIN_DIST
-    want_n, want_d = _umap_params(ctx)
-    return stored_n == want_n and math.isclose(stored_d, want_d, abs_tol=1e-9)
+    stored_c = getattr(proj, "compact", None)
+    stored_c = True if stored_c is None else bool(stored_c)
+    want = _projection_params(ctx)
+    return (
+        stored_n == want.n_neighbors
+        and math.isclose(stored_d, want.min_dist, abs_tol=1e-9)
+        and stored_c == want.compact
+    )
 
 
 def _try_load_persisted(ctx, sorted_ids: list[int], bin_shape: str) -> dict | None:
@@ -505,10 +491,7 @@ def _start_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str, *, for
     mat_copy = matrix.copy()
     ids_copy = list(sorted_ids)
     dataset_id = ctx.dataset_id
-    from vtscore.config import PROJECTION_COMPACT_DEFAULT
-
-    compact = PROJECTION_COMPACT_DEFAULT
-    n_neighbors, min_dist = _umap_params(ctx)
+    params = _projection_params(ctx)
 
     def _run(job):
         with thread_dataset_context(ctx):
@@ -520,9 +503,9 @@ def _start_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str, *, for
             proj = fit_projection(
                 mat_copy,
                 ids_copy,
-                n_neighbors=n_neighbors,
-                min_dist=min_dist,
-                compact=compact,
+                n_neighbors=params.n_neighbors,
+                min_dist=params.min_dist,
+                compact=params.compact,
                 on_progress=_on_progress,
             )
             job.set_phase(2, _BUILD_STEPS, "building pyramid")
@@ -631,10 +614,7 @@ def _start_subset_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str,
 
     mat_copy = matrix.copy()
     ids_copy = list(sorted_ids)
-    from vtscore.config import PROJECTION_COMPACT_DEFAULT
-
-    compact = PROJECTION_COMPACT_DEFAULT
-    n_neighbors, min_dist = _umap_params(ctx)
+    params = _projection_params(ctx)
 
     def _run(job):
         with thread_dataset_context(ctx):
@@ -646,9 +626,9 @@ def _start_subset_umap_build(ctx, sorted_ids: list[int], matrix, bin_shape: str,
             proj = fit_projection(
                 mat_copy,
                 ids_copy,
-                n_neighbors=n_neighbors,
-                min_dist=min_dist,
-                compact=compact,
+                n_neighbors=params.n_neighbors,
+                min_dist=params.min_dist,
+                compact=params.compact,
                 on_progress=_on_progress,
             )
             job.set_phase(2, _BUILD_STEPS, "building pyramid")
@@ -717,7 +697,7 @@ def build_projection():
         abort(409, message="Dataset is empty — nothing to project.")
 
     try:
-        # The diversity tree / projection clusters in the score embedder's
+        # The coverage atlas / projection clusters in the score embedder's
         # space (patch-else-text; the v3 routing table).
         sorted_ids, matrix = get_embedding_matrix(ctx, ctx.routed_embedder("score"))
     except ValueError as exc:

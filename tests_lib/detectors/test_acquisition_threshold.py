@@ -35,9 +35,34 @@ def _clips(rng: np.random.Generator, cids: range) -> dict[int, dict]:
     }
 
 
+#: Haystack size for the trained fixtures below.  A cut is realized as an
+#: empirical quantile of this haystack (:meth:`FoldAnchoredCut.threshold_at`),
+#: so the haystack's own spacing is the finest gap two cuts can be apart: with
+#: 20 items a quantile has to move a full 5% before the threshold moves at all.
+#: :data:`ACQUISITION_INCLUSION_OFFSET` is one inclusion step, whose tilt is
+#: routinely smaller than that, so on a 20-item haystack the acquisition cut
+#: lands on the *same* haystack element as the reporting cut and a strict ``>``
+#: degenerates into an equality.  100 resolves a single step with room to spare
+#: (verified across seeds), keeping the direction pin about the offset rather
+#: than about discretization.
+#:
+#: The 20-item version *looked* nondeterministic (issue #3101): it failed only
+#: in a full run, from a fully seeded fixture.  What varied with process
+#: ordering was the ambient training budget, not the estimator - a stray
+#: ``vtscore.config`` reload reverted ``TRAIN_EPOCHS`` to production, which
+#: moved the fit, which moved which side of a haystack gap the two cuts landed
+#: on.  The offset itself was never at risk: measured on the failing fixture,
+#: the per-fold rate cut moved 0.528 -> 0.551 between the two inclusions with
+#: an interior stationary point at both, i.e. exactly the tilt this file pins,
+#: too small to cross a 20-sample gap.  The leak is fixed at its source, but
+#: the fixture stays wide: a pin whose margin is one haystack spacing is a pin
+#: that reports unrelated drift as a falsified conclusion.
+HAYSTACK = 100
+
+
 def _trained(seed: int, detector_id: str, inclusion_value: int = 0):
     rng = np.random.default_rng(seed)
-    clips = _clips(rng, range(500, 520))
+    clips = _clips(rng, range(500, 500 + HAYSTACK))
     good = {cid: None for cid in range(500, 504)}
     bad = {cid: None for cid in range(504, 508)}
     det_ctx = DetectorContext(detector_id=detector_id, media_type="audio")

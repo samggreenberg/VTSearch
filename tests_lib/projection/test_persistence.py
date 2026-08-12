@@ -190,10 +190,10 @@ def test_remove_projections_no_entries_is_noop(tmp_path):
 
 
 def test_umap_params_round_trip(tmp_path):
-    """A UMAP projection's stamped n_neighbors / min_dist survive persistence."""
+    """A UMAP projection's stamped n_neighbors / min_dist / compact survive persistence."""
     path = _make_container(tmp_path)
     base = _make_projection()
-    proj = Projection(base.projection_id, base.ids, base.coords, "umap", 30, 0.25)
+    proj = Projection(base.projection_id, base.ids, base.coords, "umap", 30, 0.25, False)
     append_projection(path, proj, build_pyramid(proj, n_levels=3))
     loaded = read_projection(path)
     assert loaded is not None
@@ -201,14 +201,32 @@ def test_umap_params_round_trip(tmp_path):
     assert proj2.method == "umap"
     assert proj2.n_neighbors == 30
     assert proj2.min_dist == 0.25
+    assert proj2.compact is False
+
+
+def test_compact_true_round_trips_distinctly_from_unstamped(tmp_path):
+    """``compact=True`` persists as True, not as the unstamped ``None``.
+
+    The freshness check reads an unstamped ``compact`` as "compacted", so the
+    two are equivalent *there* — but they must stay distinguishable on disk,
+    or a deliberately compacted layout is indistinguishable from a legacy one.
+    """
+    path = _make_container(tmp_path)
+    base = _make_projection()
+    proj = Projection(base.projection_id, base.ids, base.coords, "umap", 15, 0.1, True)
+    append_projection(path, proj, build_pyramid(proj, n_levels=3))
+    loaded = read_projection(path)
+    assert loaded is not None
+    assert loaded[0].compact is True
 
 
 def test_projection_without_params_reads_back_none(tmp_path):
     """A layout stored with no stamped knobs (PCA fallback / legacy) reads None."""
     path = _make_container(tmp_path)
-    proj = _make_projection()  # n_neighbors / min_dist default to None
+    proj = _make_projection()  # n_neighbors / min_dist / compact default to None
     append_projection(path, proj, build_pyramid(proj, n_levels=3))
     loaded = read_projection(path)
     assert loaded is not None
     assert loaded[0].n_neighbors is None
     assert loaded[0].min_dist is None
+    assert loaded[0].compact is None

@@ -8,7 +8,7 @@ fixed-vector + cosine world via the two-stage architecture:
 * **Stage 1 (retrieval).** :func:`aggregate_vlad` folds an image's local
   descriptor set into a single fixed-D L2-normalised VLAD vector that *is* a
   metric-space embedding - it rides the existing ``media["embeddings"]``
-  pipeline (diversity tree, cosine/example sort, ``train_model``) unchanged.
+  pipeline (coverage atlas, cosine/example sort, ``train_model``) unchanged.
 
 * **Stage 2 (verification).** A :class:`StructuralMatcher` matches the raw
   keypoints/descriptors of a template against a candidate and RANSAC-fits a

@@ -1,6 +1,8 @@
 # Writing plugins for `vtscore`
 
-`vtscore` ships ten plugin families that share one machinery: a
+`vtscore`'s plugin families (the generated inventory in
+[concepts.md § Plugin](../concepts.md#8-plugin) is the authoritative
+list) share one machinery: a
 `PluginRegistry` per family scans its package directory at import time,
 registers every sub-package or flat module that exposes a sentinel
 attribute (`IMPORTER`, `EXPORTER`, `EMBEDDER`, …), and then walks the
@@ -16,8 +18,8 @@ in the family's package; if you're shipping a separate distribution,
 declare an `importlib.metadata` entry point in the family's group. Both
 discovery paths converge on the same registry, and built-ins win on
 name clashes so a stray third-party package can't silently shadow a
-core plugin. See [`vtscore/plugins/__init__.py:287`](../../plugins/__init__.py)
-for the registry, [`vtscore/plugins/__init__.py:386`](../../plugins/__init__.py)
+core plugin. See [`vtscore/plugins/__init__.py`](../../plugins/__init__.py)
+for the registry, [`vtscore/plugins/__init__.py`](../../plugins/__init__.py)
 for the entry-point loader, and the [plugins package
 doc](../packages/plugins.md) for the lower-level API surface.
 
@@ -41,14 +43,15 @@ group to pick.
 | Media types | - (in-tree only) | `MEDIA_TYPE` | `MediaType` | A whole new content kind (file extensions, HTTP serving, demos) |
 | Media embedders | - (in-tree only) | `EMBEDDER` | `MediaEmbedder` | A new encoder for an existing or new media type |
 | Media clippers | - (in-tree only) | `CLIPPERS` (list) | `MediaClipper` | Split one media into many (tiling, sentence-split, scene-split) |
+| Media cleaners | - (in-tree only) | `CLEANERS` (list) | `MediaCleaner` | Strip content-free regions in place, 1 → 1 (letterbox bars, leading silence) |
 
-Media types, embedders, and clippers do not currently expose an
-entry-point group - they discover via the `vtscore.media`
+Media types, embedders, clippers, and cleaners do not currently expose
+an entry-point group - they discover via the `vtscore.media`
 sub-package scan. To ship one out-of-tree, symlink the
 `embedder_<name>.py` (or media-type sub-package) into the appropriate
 directory under `vtscore/media/`; both symlinked files and symlinked
 directories are loaded via `importlib.util.spec_from_file_location`
-([`vtscore/media/__init__.py:260`](../../media/__init__.py)).
+([`vtscore/media/__init__.py`](../../media/__init__.py)).
 
 ### App tier (in `vtsearch`)
 
@@ -82,7 +85,7 @@ third-party plugins.
 re-exports `PluginField` so you can import it alongside the family's
 base class. The frontend renders a form from `fields`, the CLI
 derives `argparse` flags from `fields`, and the marshmallow schema
-builder validates POST bodies against `fields`. See [`vtscore/plugins/__init__.py:71`](../../plugins/__init__.py)
+builder validates POST bodies against `fields`. See [`vtscore/plugins/__init__.py`](../../plugins/__init__.py)
 for the full dataclass and the [plugins package doc](../packages/plugins.md#pluginfield)
 for the field-type matrix.
 
@@ -106,24 +109,108 @@ plugins must be importable in a Flask-free environment - the
 `tests_lib/` test tier is verified by `./run-tests.sh vtscore-clean`,
 which installs a meta-path import hook that refuses `flask`,
 `werkzeug`, and `flask_smorest`. Read configuration through
-`CoreConfig` ([`vtscore/config.py:209`](../../config.py)); construct
+`CoreConfig` ([`vtscore/config.py`](../../config.py)); construct
 one directly when running outside an app context, or call
 `CoreConfig.from_settings()` when an app shim has been registered.
 
-**Validate filesystem paths at the boundary.** Any plugin that accepts
-a user-supplied server path must run it through
-`vtscore.security.validate_server_filepath` ([`vtscore/security/path_validation.py`](../../security/path_validation.py)),
-passing `base_dir=get_file_access_base_dir()`, so a malicious path can't
-escape the current user's data directory in multi-user mode (single-user
-/ no-auth mode is unrestricted). When splicing a template variable like
-`{detector_name}` into a path, also call `sanitize_template_value`
-([`vtscore/security/path_validation.py`](../../security/path_validation.py)).
+**Trust `field_values`; don't re-validate declared fields.** Every
+plugin family whose inputs arrive as `field_values` gets a framework
+normalization pass before your body runs — see [Framework-side
+normalization](#framework-side-normalization) below. Whitespace is
+stripped, required-but-empty raises, declared `template_vars` are
+substituted and sanitised, `url` fields are SSRF-checked, and
+`server_path` / `folder` fields are confined to the user's data dir and
+written back canonicalised. Writing that boilerplate again is redundant;
+skipping the framework by reading a raw value from somewhere else is a
+bug.
 
-**Validate URLs.** Any plugin that makes an outbound HTTP request must
-call `vtscore.security.validate_url` ([`vtscore/security/url_validation.py:30`](../../security/url_validation.py))
-before issuing the request. It rejects non-HTTP(S) schemes and resolves
-the hostname to refuse private / link-local / loopback IPs (SSRF
-guard).
+**But validate paths and URLs you construct yourself.** The pass keys
+off *declared field types*. A URL you build by joining a configured base
+with a path segment, or a filesystem path you join from a field plus a
+filename, is not a declared field value and still needs
+`vtscore.security.validate_url`
+([`vtscore/security/url_validation.py`](../../security/url_validation.py))
+or `validate_server_filepath` with
+`base_dir=get_file_access_base_dir()`
+([`vtscore/security/path_validation.py`](../../security/path_validation.py))
+before you use it.
+
+## Framework-side normalization
+
+`vtscore/plugins/normalize.py` owns everything that used to be
+plugin-author boilerplate. `normalize_field_values(plugin,
+field_values)` walks the plugin's declared `fields` and, for every
+text-like type (`text`, `url`, `email`, `password`, `folder`,
+`server_path`, `select`):
+
+1. **Strips whitespace**, then raises `ValueError("<Label> is
+   required.")` if a `required=True` field is empty or missing. Your
+   body never needs `.strip()` or a presence check.
+2. **Substitutes declared `template_vars`** (see below).
+3. **Runs the field-type security validator.** `url` → `validate_url`.
+   `server_path` / `folder` → `confine_server_filepath` anchored at the
+   per-user data dir, whose *approved* path is written back into
+   `field_values`.
+
+That write-back matters. Under multi-user confinement the validator
+resolves a relative path against the user's data dir, while your plugin
+would resolve the same string against the process CWD — so re-deriving
+the path from the raw value can read a different user's directory even
+though the check passed. Consume `field_values[key]`, nothing else.
+
+The pass is idempotent, so an external plugin that still calls the
+validators by hand keeps working; it is simply doing no additional work.
+
+### Where it runs
+
+| Ingress | Hook |
+|---------|------|
+| HTTP, flat plugin body | `validate_plugin_args()` (`vtsearch/routes/_shared.py`) |
+| HTTP, `{"..._name", "field_values"}` body | `validate_exporter_field_values()` (same module) |
+| CLI | `PluginBase.validate_cli_field_values()` |
+| Sync sources | `SyncSource.load()` / `save()` / `peek_version()` normalize a copy before dispatching to `_do_load` / `_do_save` / `_do_peek_version` ([`vtscore/sync/__init__.py`](../../sync/__init__.py)) |
+
+**Two families are outside it.** Media converter `params` and media
+clipper `parameters` ride in as pass-through payloads, not plugin form
+bodies. Converter params are validated against the `fields` schema by
+`MediaConverter.convert_normalized()` — types, ranges, and `select`
+whitelists, but no URL or path guard. A converter or clipper that takes
+a URL or a server path must validate it itself.
+
+### Template variables
+
+Substitution is **opt-in per field**. A `PluginField` that does not
+declare `template_vars` passes `{detector_name}` through as a literal
+string — a silent no-op that reads as a plugin bug:
+
+```python
+PluginField(
+    key="filepath",
+    label="Save to (server path)",
+    field_type="server_path",
+    placeholder=f"{DATA_DIR}/labels/{{detector_name}}.labels.json",
+    template_vars=("detector_id", "detector_name"),
+)
+```
+
+| Variable | Resolves to |
+|----------|-------------|
+| `{YYYYMMDD-HHMMSS}` | Current UTC timestamp; unique per run, so consecutive exports don't overwrite each other |
+| `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` | Current UTC date parts, for date-stamped paths from scheduled runs |
+| `{detector_name}` / `{detector_id}` | The active `DetectorContext`'s name / id |
+| `{username}` | The current user; `"default"` on single-user installs |
+
+Declaring a name outside that set raises `ValueError` on the first
+request, so a typo fails fast instead of shipping a literal placeholder
+into a filename. Every resolved value passes through
+`sanitize_template_value`, so a detector named `../../etc/passwd`
+cannot escape the directory the admin-configured template implies.
+
+Resolving a template for something *other* than the active context —
+the detector-rename flow needs both the old and the new path — can't use
+the per-field pass, because the identity isn't the active one. Do it by
+hand with the same primitives; [`vtscore/labels/sources/server_json_file/__init__.py`](../../labels/sources/server_json_file/__init__.py)'s
+`resolve_filepath_for()` is the worked example.
 
 ## Entry-point registration in `pyproject.toml`
 

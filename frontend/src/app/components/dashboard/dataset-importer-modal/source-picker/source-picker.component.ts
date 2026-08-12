@@ -12,7 +12,7 @@ import { ManagedColumns } from '../../../../utils/managed-columns';
  *  source-specific picker below.
  *
  *  Navigation is a *persistent* two-level tab bar: the category tabs
- *  (`.importer-tab-bar`) and importer sub-tabs (`.importer-subtab-bar`)
+ *  (`.tab-bar`) and importer sub-tabs (`.importer-subtab-bar`)
  *  stay on screen while the selected source form renders beneath them.
  *  This intentionally diverges from the New-detector › Trained flow's
  *  picker → form → `← Back` shape, and there is deliberately **no**

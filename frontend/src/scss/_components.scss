@@ -54,8 +54,6 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 //   .btn--cancel      subtle, link-weight cancel/close (no fill, small)
 //   .btn--toolbar     compact outline button for toolbars / panel action rows
 //   .btn--sm          compact size modifier
-//   .btn--xs          inline mini size modifier (used inside table rows etc.)
-//   .btn--icon-square square 28×28 plus/icon button
 //
 // Combine variant + size as needed: `class="btn btn--primary btn--sm"`.
 
@@ -132,16 +130,10 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
     }
   }
 
-  // Size modifiers: change padding + font, keep border/colors from the variant.
+  // Size modifier: changes padding + font, keeps border/colors from the variant.
   &--sm {
     padding: var(--space-2xs) var(--space-md);
     font-size: var(--font-sm);
-  }
-
-  &--xs {
-    padding: 0 var(--space-sm);
-    font-size: var(--font-xs);
-    line-height: 1.6;
   }
 
   // Compact outline button for toolbars and panel action rows: tighter
@@ -163,14 +155,6 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
     }
   }
 
-  // Square 28×28 icon button (used for "+ add" in dashboard headers).
-  &--icon-square {
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    font-size: var(--font-xl);
-    line-height: 1;
-  }
 }
 
 // --- Segmented toggle ---
@@ -275,7 +259,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 
 // --- Side tab bar (vertical tab rail) ---
 //
-// The vertical counterpart to `.importer-tab-bar`: a fixed-width column of
+// The vertical counterpart to `.tab-bar` (`_picker-shared.scss`): a fixed-width column of
 // tabs down the left edge of a modal, with a left-border active indicator
 // instead of the horizontal bar's underline. Currently the Settings modal's
 // tab rail; extract-and-fold target for any other vertical rail.
@@ -449,17 +433,6 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 .form-select {
   @extend .form-input;
   cursor: pointer;
-}
-
-// Multi-line text entry (e.g. a custom signpost tag vocabulary, one term per
-// line).  Shares `.form-input`'s framing but allows vertical resize and reads
-// in a monospace face so long term lists line up.
-.form-textarea {
-  @extend .form-input;
-  resize: vertical;
-  min-height: 5rem;
-  font-family: var(--font-mono, monospace);
-  line-height: 1.4;
 }
 
 // Compact variant for dense toolbars (the label-sort bar, the browse
@@ -936,25 +909,6 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
-}
-
-// --- Skeleton shimmer background ---
-//
-// Static placeholder behind lazy-loaded <img>s: a flat subtle background
-// shows until the image paints, smoothing the "pop-in" from
-// loading="lazy" without any motion.
-.skeleton-bg {
-  position: relative;
-  isolation: isolate;
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--bg-subtle);
-    border-radius: inherit;
-    z-index: -1;
-  }
 }
 
 // --- Accessibility ---

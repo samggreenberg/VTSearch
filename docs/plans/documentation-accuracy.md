@@ -22,8 +22,9 @@ Three things follow from that, and they shape how this work should be done:
   demo datasets, env vars, settings keys) disagreeing with the code and with the other nine
   copies of the same list. This is a generation problem, not ten editing mistakes.
 - **The mechanical defects are mechanically detectable.** Dead links, dead anchors, dead
-  file paths and leaked absolute paths accounted for roughly 30 findings, and `run-tests.sh`
-  gates ten things today without checking any of them.
+  file paths and leaked absolute paths accounted for roughly 30 findings. `scripts/check-docs.py`
+  now gates that whole class in `run-tests.sh`; what remains below is the part no invariant can
+  check, because it needs a human to know what the prose *should* say.
 - **Prefer invariants over generation over pinning.** The repo already has all three shapes
   — `wiring-check.py` (invariant), the OpenAPI snapshot (generation), `check-eval-app-sync.py`
   (digest pinning). A noisy gate gets `--update`'d blindly, a failure mode CLAUDE.md already
@@ -43,7 +44,6 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2980 — DEPLOYMENT.md has no security section; file-browser.md misdescribes the single-user browse root (Opus 4.8)
 
 <!-- item-sep -->
 
@@ -51,29 +51,21 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2983 — Add a docs drift gate to run-tests.sh: links, anchors, code paths, absolute-path leaks (Sonnet 5)
 
 <!-- item-sep -->
 
-- [ ] #2984 — Generate registry inventories instead of hand-maintaining them in ~10 documents (Opus 4.8)
-
-<!-- item-sep -->
-
-- [ ] #2985 — Every runnable snippet in the vtscore docs fails (Opus 4.8)
 
 <!-- item-sep -->
 
 <!-- item-sep -->
 
-- [ ] #2987 — Create docs/README.md as the spine; demote docs/HANDOFF.md (Opus 4.8)
+- [ ] #2987 — Retire docs/HANDOFF.md (the stalest doc hub) and fix doc orphans (Opus 4.8)
 
 <!-- item-sep -->
 
-- [ ] #2988 — docs/api/medias.md vote endpoint is wrong in all three parts; windowed sort contract undocumented (Sonnet 5)
 
 <!-- item-sep -->
 
-- [ ] #2989 — EXTENDING docs teach contracts that raise at runtime, and omit the normalize.py validation layer (Opus 4.8)
 
 <!-- item-sep -->
 
@@ -85,15 +77,12 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2992 — CLI.md: detector paths are slugged, and the plugin-flag discovery command cannot work (Sonnet 5)
 
 <!-- item-sep -->
 
-- [ ] #2993 — style-guide.md Section 2 names classes that no longer exist; teaches hand-copied modal markup (Sonnet 5)
 
 <!-- item-sep -->
 
-- [ ] #2994 — USER_GUIDE.md: dead table of contents, hidden importers described, shipped features missing (Sonnet 5)
 
 <!-- item-sep -->
 
@@ -103,15 +92,12 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2997 — CLAUDE.md Commands and Test Markers sections are out of date with run-tests.sh (Sonnet 5)
 
 <!-- item-sep -->
 
-- [ ] #2998 — The Angular frontend has no architecture documentation (Opus 4.8)
 
 <!-- item-sep -->
 
-- [ ] #2999 — vtscore/docs/packages/: half-covered module tables, six undocumented subpackages, stale features (Opus 4.8)
 
 <!-- item-sep -->
 
@@ -121,6 +107,17 @@ Fixing individual docs without the first two bullets buys about six weeks.
 Grouped by document. Each bullet is a defect with no issue of its own yet; promote one to
 an issue (and replace the body here with a pointer line) when it becomes worth shipping
 separately.
+
+<!-- item-sep -->
+
+- **The `run-tests.sh` gate list is still hand-maintained in three places.** CLAUDE.md's "What
+  `run-tests.sh` gates" table, `docs/HANDOFF.md`'s quality-tools paragraph and the script's own
+  usage header each restate the chain by hand; the first two were six gates stale before #2997.
+  This is the same inventory-drift shape as #2984, and it wants the same treatment — but note the
+  cheaper shape fits better here: rather than *generating* the table, an invariant check could
+  assert that the set of `echo "…"` stage banners in `run-tests.sh` matches the rows in CLAUDE.md's
+  table, which is a few lines inside whatever #2983's docs-drift gate becomes. Worth folding into
+  that gate rather than shipping its own script.
 
 <!-- item-sep -->
 
@@ -183,10 +180,8 @@ separately.
 
 - **docs/api/ — wrong or incomplete contracts.** `settings.md` documents the theme enum and default
   wrongly and omits roughly twenty real `PUT /api/settings` keys; `labeling.md` omits the resolved
-  detector fields both `/api/inclusion` verbs return; `medias.md` omits four always-present keys on
-  `GET /api/votes`, the `label_filter` param on label export, the crop fields on server-media
-  upload, and `"none"` as a `vote-bulk` target; `detectors.md`'s second create example omits the
-  required `media_type`; `io.md`'s exporter list omits `holder` and `portable_detector`;
+  detector fields both `/api/inclusion` verbs return; `detectors.md`'s second create example omits
+  the required `media_type`; `io.md`'s exporter list omits `holder` and `portable_detector`;
   `datasets.md` shows load responses in a shape the routes do not return; `auth.md` omits the SPA
   deep-link routes. `API.md` undersells the error envelope (`{error, detail, request_id}`, plus the
   422 marshmallow shape).
@@ -204,26 +199,17 @@ separately.
 
 <!-- item-sep -->
 
-- **vtscore/docs — faq.md contradicts the code and concepts.md.** The FAQ's description of the
-  Inclusion knob disagrees with both. The context-resolution chain is documented with a nonexistent
-  `override_dataset_context` and a `None` terminal case that never occurs. Three real subpackages
-  (`projection`, `timing`, `datasource_importers`) and the sixth media type are absent from every
-  vtscore inventory. (The broken snippets are #2985; the package-doc coverage gaps are #2999.)
+- **vtscore/docs — inventory gaps.** Three real subpackages (`projection`, `timing`,
+  `datasource_importers`) and the sixth media type are absent from every vtscore inventory.
+  (The package-doc coverage gaps are #2999.)
 
 <!-- item-sep -->
 
 - **vtscore/docs/extending — stale contracts beyond #2989.** The media-dict key is `media_type`,
   not `type`. The clipper naming convention shown (`sound_tiling_2.0s`) carries a parameter suffix
-  real names do not have. `dataset-importers.md` points four times at
-  `../../datasets/importers/base.py`, which is a package now — in the doc most likely to be
-  copy-pasted from. About a dozen `file.py:NNN` anchors are stale.
+  real names do not have. About a dozen `file.py:NNN` anchors are stale.
 
 <!-- item-sep -->
-
-- **Leaked absolute machine paths.** `vtscore/docs/packages/cli.md:14,360` and `config.md:15` carry
-  `/home/user/VTSearch/...` in visible link text (the link *targets* are correct relative paths;
-  only the label leaks). Clear artifact of an agent-authored docs session. Covered by the #2983
-  gate once it exists, but worth fixing directly.
 
 <!-- item-sep -->
 
@@ -246,14 +232,6 @@ separately.
   `embeddedIn`/`caption` fields.
 
 <!-- item-sep -->
-
-- **The two audit areas that disagreed with each other.** Independent reviewers "corrected" the
-  plugin-family count to ten and to eleven, and a sentinel-grep gives a third answer — because no
-  doc states which registry it is counting. The authoritative inventory is
-  `vtscore/plugins/inventory.py:228-241` (11 library families) plus 3 app families from
-  `vtsearch.shim.register_app_plugin_families`. The fix is a stated counting rule or a generated
-  list, not another number; folded into #2984. Recording it here because it is the one place the
-  audit contradicted itself, and the next person to "fix" the count will hit the same fork.
 
 <!-- item-sep -->
 

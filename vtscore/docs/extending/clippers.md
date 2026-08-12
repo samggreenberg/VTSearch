@@ -8,7 +8,7 @@ detected scene changes. Default clippers return the media unchanged
 (one-element list) - they're the no-op that lets the framework
 uniformly route everything through a clipper. Subclass
 [`MediaClipper`](../../media/clipper.py)
-([`vtscore/media/clipper.py:9`](../../media/clipper.py)), declare
+([`vtscore/media/clipper.py`](../../media/clipper.py)), declare
 which type it operates on, implement `clip()`, and add the instance to
 the media-type sub-package's `CLIPPERS` list.
 
@@ -32,7 +32,7 @@ convention.
 
 | Member | Type | Purpose |
 |--------|------|---------|
-| `name` (property) | `str` | Unique registry key (`"sound_tiling_2.0s"`, `"video_scene"`) |
+| `name` (property) | `str` | Unique registry key, with no parameter suffix (`"sound_tiling"`, `"video_scene"`) |
 | `media_type` (property) | `str` | The `MediaType.type_id` this clipper operates on |
 | `clip(media)` | `(dict) -> list[dict]` | Split one media into one or more media dicts of the same type |
 
@@ -42,6 +42,7 @@ Optional overrides:
 |--------|---------|---------|
 | `display_name` | derived from `name` | Friendlier label for UI tabs and dropdowns |
 | `description` | `""` | One-line tooltip surfaced on hover in the clipper chooser |
+| `summary_template` | `description` | One-line preview with `{key}` placeholders filled from the current parameter values |
 | `parameters` (property) | `[]` | List of `{key, label, type, default, min, max, step, description}` dicts describing user-configurable knobs |
 | `creation_questions` (property) | `parameters` | Questions shown when the user first picks this clipper (defaults to `parameters`) |
 | `with_params(params)` | returns `self` | Return a new clipper instance with overridden parameters |
@@ -49,9 +50,10 @@ Optional overrides:
 | `resolve_for_media(media)` | returns `self` | Per-media hook called per item - used by auto-selecting clippers (e.g. tile when long, pass-through when short) |
 
 Each dict returned by `clip()` must preserve the original's structure
-(`id`, `type`, `category`, `origin`, `origin_name`, …) and update only
-the content fields (`media_bytes` / `media_string`, `duration`, and
-type-specific extras like `width`, `height`, `start`, `end`). Default
+(`id`, `media_type`, `category`, `origin`, `origin_name`, …) and update only
+the content fields (`media_bytes` / `media_string`, `duration`,
+`file_size`, and type-specific extras like `width`, `height`,
+`clip_index`, `clip_start`, `clip_end`). Default
 clippers return `[media]` unchanged. Don't compute embeddings inside
 `clip()`; the loader pipeline embeds the produced clips afterwards.
 
@@ -69,16 +71,23 @@ splitting." for the description. Existing default clippers:
 | `TextDefaultClipper` (`text_default`) | text |
 | `VideoDefaultClipper` (`video_default`) | video |
 | `DocumentDefaultClipper` (`document_default`) | document |
+| `FaceDefaultClipper` (`face_default`) | face |
 
-**Tiling** clippers actually split. The convention is
-`<type>_tiling[_<param>]` - e.g. `sound_tiling_2.0s` for 2-second
-audio tiles, `video_tiling_2.0s` for 2-second video tiles. They are
-usually parameterised (window size, overlap, stride) so the same class
-ships multiple registered instances with different param values.
+**Tiling** clippers actually split. The convention is `<type>_tiling` -
+`sound_tiling` for audio tiles, `video_tiling` for video tiles.
+
+**The name carries no parameter suffix.** A parameterised clipper is
+registered once, under a stable name; its window size / overlap / stride
+live in the `parameters` descriptors and are re-bound per import through
+`with_params()`. Two instances of the same class would collide in the
+registry (it is keyed on `name`), so each media type's `CLIPPERS` list
+holds exactly one instance per class, and the constructor arguments are
+just that instance's *defaults*.
 
 Scene-based or content-aware clippers get their own names -
-`VideoSceneClipper` is `video_scene`. There's no "tiling" suffix when
-the split isn't grid-based.
+`VideoSceneClipper` is `video_scene`, `SoundSilenceClipper` is
+`sound_silence`. There's no "tiling" suffix when the split isn't
+grid-based.
 
 ## The `CLIPPERS` list sentinel
 
@@ -90,21 +99,33 @@ exports every clipper for that type in one list:
 # vtscore/media/audio/__init__.py
 from vtscore.media.audio.clipper import (
     SoundDefaultClipper,
+    SoundSilenceClipper,
+    SoundSpeechActivityClipper,
     SoundTilingClipper,
 )
 from vtscore.media.audio.media_type import AudioMediaType
 
 MEDIA_TYPE = AudioMediaType()
 CLIPPERS = [
+    SoundTilingClipper(10.0, 1.0),   # constructor args are this instance's defaults
     SoundDefaultClipper(),
-    SoundTilingClipper(2.0),
-    SoundTilingClipper(5.0),
+    SoundSilenceClipper(),
+    SoundSpeechActivityClipper(),
 ]
 ```
 
 The framework's discovery scan calls `register_clipper()` for every
 entry, keyed by `clipper.name`. A clipper file can define multiple
 `MediaClipper` classes; only those listed in `CLIPPERS` get registered.
+List **one instance per class** - a second `SoundTilingClipper(5.0)`
+would register under the same `sound_tiling` name and silently replace
+the first. A user who wants 5-second tiles re-parameterises the single
+registered instance through the clipper chooser, which calls
+`with_params({"duration": 5.0})`.
+
+The same module scan reads a sibling `CLEANERS` list into the separate
+cleaner registry (`MediaCleaner` subclasses `MediaClipper` but never
+appears in a clipper chooser).
 
 ## Parameters and re-parameterisation
 
@@ -133,10 +154,20 @@ with the updated value; never mutate `self`. The default implementation
 returns `self` unchanged, which is correct for parameter-less
 clippers.
 
-The resolved clipper's `name` (which usually includes the param value,
-e.g. `sound_tiling_3.0s`) is what gets recorded in each clip's origin,
-so cross-dataset replay is deterministic regardless of which
-parameterisation the user picked.
+The resolved clipper's `name` **and** the param dict the user chose are
+both recorded in each clip's origin, as a
+`{"kind": "clipper", "name": ..., "params": {...}}` chain step. The name
+alone would not be enough, precisely because it doesn't encode the
+parameter values; storing the two together is what makes cross-dataset
+replay deterministic regardless of which parameterisation the user
+picked.
+
+Note also `summary_template` - a one-line preview with `{key}`
+placeholders that the frontend fills from the current parameter values
+when rendering the import row (e.g.
+`"Cut each audio file into {duration}s tiles (min overlap
+{min_overlap}s)."`). It defaults to `description`, so static clippers
+don't need to override it.
 
 ## Worked example
 
@@ -166,7 +197,8 @@ class SoundOverlapClipper(MediaClipper):
 
     @property
     def name(self) -> str:
-        return f"sound_overlap_{self._duration}s"
+        # Stable across re-parameterisation: no "{duration}s" suffix.
+        return "sound_overlap"
 
     @property
     def media_type(self) -> str:
@@ -220,12 +252,18 @@ class SoundOverlapClipper(MediaClipper):
                 out.setframerate(sr)
                 bps = n_ch * sampwidth
                 out.writeframes(full_pcm[start_f * bps:end_f * bps])
+            sliced = buf.getvalue()
             clips.append({
-                **media,  # preserves id/type/category/origin/origin_name
-                "media_bytes": buf.getvalue(),
+                # preserves id / media_type / category / origin / origin_name
+                **media,
+                "media_bytes": sliced,
                 "duration": window,
-                "start": t,
-                "end": t + window,
+                "file_size": len(sliced),
+                # The audio media type reads these back to serve a window of
+                # the parent file; "start"/"end" would be ignored.
+                "clip_index": len(clips),
+                "clip_start": round(t, 6),
+                "clip_end": round(t + window, 6),
             })
             t += step
         return clips
@@ -236,14 +274,16 @@ Register it by appending to the package's `CLIPPERS` list:
 ```python
 # vtscore/media/audio/__init__.py
 CLIPPERS = [
+    SoundTilingClipper(10.0, 1.0),
     SoundDefaultClipper(),
-    SoundTilingClipper(2.0),
+    SoundSilenceClipper(),
+    SoundSpeechActivityClipper(),
     SoundOverlapClipper(2.0),  # new
 ]
 ```
 
 The next import of `vtscore.media.audio` registers the new clipper
-under the name `sound_overlap_2.0s`; the dataset-loader pipeline routes
+under the name `sound_overlap`; the dataset-loader pipeline routes
 audio files through it when the user picks that clipper in the
 chooser, and each produced clip carries an `origin` plus a 50%-overlap
 slice of the original WAV.
@@ -275,10 +315,10 @@ def _make_wav(duration_s: float, sr: int = 16_000) -> bytes:
 class TestSoundOverlapClipper:
     def test_is_registered(self):
         names = [c.name for c in clippers_for_type("audio")]
-        assert "sound_overlap_2.0s" in names
+        assert "sound_overlap" in names
 
     def test_clip_returns_overlapping_windows(self):
-        cl = get_clipper("sound_overlap_2.0s")
+        cl = get_clipper("sound_overlap")
         media = {
             "id": 1, "media_type": "audio", "category": "",
             "filename": "x.wav", "origin": None, "origin_name": "x.wav",
@@ -287,11 +327,11 @@ class TestSoundOverlapClipper:
         clips = cl.clip(media)
         # 5s with 2s window, 1s step → starts at 0, 1, 2, 3 → 4 clips
         assert len(clips) == 4
-        assert clips[0]["start"] == 0.0
-        assert clips[1]["start"] == 1.0
+        assert clips[0]["clip_start"] == 0.0
+        assert clips[1]["clip_start"] == 1.0
 
     def test_short_clip_passes_through(self):
-        cl = get_clipper("sound_overlap_2.0s")
+        cl = get_clipper("sound_overlap")
         media = {
             "id": 1, "media_type": "audio", "category": "",
             "filename": "x.wav", "origin": None, "origin_name": "x.wav",
@@ -300,10 +340,12 @@ class TestSoundOverlapClipper:
         assert cl.clip(media) == [media]
 
     def test_with_params_returns_new_instance(self):
-        cl = get_clipper("sound_overlap_2.0s")
+        cl = get_clipper("sound_overlap")
         re = cl.with_params({"duration": 4.0})
-        assert re.name == "sound_overlap_4.0s"
-        assert cl.name == "sound_overlap_2.0s"  # original unchanged
+        assert re is not cl                    # a new instance, not a mutation
+        assert re.name == cl.name              # name is stable; params are not in it
+        assert re.parameters[0]["default"] == 4.0
+        assert cl.parameters[0]["default"] == 2.0  # original unchanged
 ```
 
 See [`tests_lib/detectors/test_clipper_chain.py`](../../../tests_lib/detectors/test_clipper_chain.py)

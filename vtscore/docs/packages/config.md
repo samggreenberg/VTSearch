@@ -9,7 +9,7 @@ would otherwise force the library to import `vtsearch.settings`. The
 file is import-clean - it never reaches into the app - and is the only
 place library code is allowed to read environment variables directly.
 
-**Source:** `vtscore/config.py` (~263 lines).
+**Source:** `vtscore/config.py` - a single module, no sub-package.
 **Related:** [`cli.md`](cli.md) for the CLI entry points that build a
 `CoreConfig` before running, and
 [`architecture.md`](../architecture.md#the-coreconfig-bridge) for why the
@@ -37,23 +37,31 @@ thread cannot be mutated underneath it.
 
 ## The `CoreConfig` dataclass
 
-Defined at `vtscore/config.py:208-263`. Every field is required - the
-class has no defaults so consumers can never accidentally inherit
-stale state from a previous run.
+Defined in `vtscore/config.py`. The twelve fields below are **required** -
+they have no defaults, so a consumer can never accidentally inherit stale
+state from a previous run. (The handful of newer optional fields listed
+after the table do have defaults, precisely so a library-only
+`CoreConfig(...)` construction written before they existed keeps working.)
 
 | Field                             | Type           | Tier        | Meaning                                                                                          |
 |-----------------------------------|----------------|-------------|--------------------------------------------------------------------------------------------------|
-| `saved_datasets_dir`              | `Path`         | server      | Where dataset pickles are read from / written to.                                                |
+| `saved_datasets_dir`              | `Path`         | server      | Where saved-dataset containers are read from / written to.                                       |
 | `detectors_dir`                   | `Path`         | server      | Where detector JSON files are read from / written to.                                            |
 | `max_concurrent_dataset_downloads`| `int`          | server      | Cap on parallel dataset downloads (bandwidth/disk-bound stage).                                  |
 | `max_concurrent_dataset_embeddings`| `int`         | server      | Cap on parallel dataset embedding (CPU/GPU-bound stage).                                         |
 | `autofind_detectors`               | `tuple[str, ...]` | server   | Detector names to train + score automatically on every freshly-loaded dataset.                   |
+| `dataset_max_age_days`            | `int \| None`  | server      | Age-off horizon stamped into saved datasets. `None` = never expire.                              |
 | `calibrate_count`                 | `int`          | per-user    | Number of fold-training passes used to calibrate the operating threshold. Min 1.                 |
 | `calibration_fraction`            | `float`        | per-user    | Fraction of labels held out per calibration fold. Typical 0.5.                                   |
 | `enrich_descriptions`             | `bool`         | per-user    | When `True`, attach `custom_metadata` from origins to result rows on export.                     |
-| `autopilot_goal_diversity`        | `int`          | per-user    | Diversity-tree depth target used by autopilot pacing.                                            |
-| `inclusion`                       | `int`          | per-user    | Inclusion filter: `0` = all medias, `1` = only labeled, `2` = only unlabeled.                    |
+| `autopilot_goal_diversity`        | `int`          | per-user    | Diversity target used by autopilot pacing.                                                       |
+| `inclusion`                       | `int`          | per-user    | The Inclusion knob, `[-10, +10]`. A pure threshold shift (it never enters training); `0` is the default operating point. See [`training.md`](training.md#decision-thresholds). |
 | `data_dir`                        | `Path`         | bootstrap   | Filesystem root for caches, embeddings, and model downloads. Mirrors `DATA_DIR` at construction. |
+
+Optional (defaulted) fields: `autofind_exporter` (`str`, `""`),
+`autofind_exporter_field_values` (`dict`, `{}`), `signpost_captioner`
+(`dict[str, bool]`, `{}`), and `signpost_vocab` (`dict[str, list[str]]`,
+`{}`).
 
 "Server" and "per-user" refer to where the app stores the corresponding
 setting - both tiers flow into the same `CoreConfig` so library code
@@ -72,6 +80,7 @@ config = CoreConfig(
     max_concurrent_dataset_downloads=2,
     max_concurrent_dataset_embeddings=1,
     autofind_detectors=(),
+    dataset_max_age_days=None,
     calibrate_count=1,
     calibration_fraction=0.5,
     enrich_descriptions=False,
@@ -91,8 +100,10 @@ def from_settings(cls, settings_path: str | Path | None = None) -> CoreConfig:
 
 This classmethod has no library-side implementation. It calls a builder
 that the app installs at startup via
-`register_core_config_builder(fn)` (defined at `vtscore/config.py:196`).
-The builder is a function `(settings_path: str | Path | None) -> CoreConfig`.
+`register_core_config_builder(fn)`. The builder is a function
+`(settings_path: str | Path | None) -> CoreConfig` - it is always called
+with that one positional argument, so a zero-argument builder raises
+`TypeError`.
 
 If `from_settings()` is called and no builder is registered, it raises
 `RuntimeError` with a message pointing the caller at the library-only
@@ -147,7 +158,7 @@ when one is in scope). Tests rely on this: they override
 | `MAX_UPLOAD_MB`          | `2048`  | `VTSEARCH_MAX_UPLOAD_MB`      | HTTP body cap in megabytes (default 2 GiB). Oversized requests get HTTP 413. Set to `0` for unlimited (Flask's out-of-the-box behaviour). |
 | `TRAIN_EPOCHS`           | `200`   | `VTSEARCH_TRAIN_EPOCHS`       | Upper bound on head training epochs. `vtscore.training.mlp.train_model` may early-stop sooner.                   |
 | `TRAIN_PATIENCE`         | `10`    | `VTSEARCH_TRAIN_PATIENCE`     | Epochs the training loss must fail to improve before early-stop fires. `0` disables early-stop.                  |
-| `DEFAULT_CALIBRATE_COUNT`| `1`     | `VTSEARCH_CALIBRATE_COUNT`    | First-run default for `CoreConfig.calibrate_count`. Min 1.                                                       |
+| `DEFAULT_CALIBRATE_COUNT`| `2`     | `VTSEARCH_CALIBRATE_COUNT`    | First-run default for `CoreConfig.calibrate_count`. Min 1.                                                       |
 | `MLP_HIDDEN_MIN`         | `8`     | -                             | Auto-sizing floor for MLP hidden width. Legacy MLP head only - the production linear head has none.              |
 | `MLP_HIDDEN_MAX`         | `32`    | -                             | Auto-sizing ceiling for MLP hidden width. Legacy MLP head only.                                                  |
 | `MLP_DROPOUT`            | `0.5`   | -                             | Dropout rate for trained MLPs. Ignored by the production linear head.                                            |

@@ -12,7 +12,9 @@
 ## Detectors
 
 A detector is a named labelset plus a text-sort query, persisted as a
-JSON file at `data/detectors/<name>.json`. The head is trained on demand
+JSON file under `data/detectors/`, named after a slug of the detector name
+rather than the name itself (`Dog Barks` → `dog_barks.json`; see
+[CLI.md § Detector file names](../CLI.md#detector-file-names)). The head is trained on demand
 from the labelset and lives only in `DetectorContext` once the user
 loads the detector into memory.
 
@@ -35,6 +37,10 @@ POST /api/detectors
 Or with examples: `{"name": "Dog Barks", "examples": [{"type": "text", "value": "dog barking"}]}`
 
 → `{"success": true, "name": "...", "text_query": "...", "media_type": "audio", "examples": [...], "num_labels": 0}` (201)
+
+`num_labels` counts the **media** examples, which are written into the new
+detector's labelset as `good` labels (see *Register detector* below); a
+text-only detector reports 0.
 
 409 if name already exists.
 
@@ -75,6 +81,11 @@ PUT /api/detectors/{name}/examples
 **Body:** `{"examples": [{"type": "text", "value": "dog barking"}]}`
 
 → `{"success": true, "name": "...", "examples": [...]}`
+
+Replaces the `examples` list (on the detector JSON and the registry entry) and
+**adds** a `good` label for each media example not already in the labelset.
+The labelset edit is additive only: no existing label is dropped, and an
+exemplar the user has since voted Bad keeps that label.
 
 ### Save labels
 
@@ -213,8 +224,8 @@ GET /api/detectors/registry
 }
 ```
 
-`name` is the slug used to look up the on-disk labelset file at
-`data/detectors/<name>.json`. The head is trained on demand from the
+`name` is what the on-disk labelset file is looked up by; the file itself is
+`data/detectors/<slug-of-name>.json`. The head is trained on demand from the
 labelset and lives only in RAM. `autofind` mirrors whether the
 detector's name appears in `autofind_detectors` settings (toggle it with
 the route below).
@@ -251,9 +262,18 @@ Or seeded with media examples (each `value` a filename previously saved in
 ```
 
 The full `examples` list is persisted on both the detector JSON and the
-registry entry. On detector load every media example is seeded as a Good
-vote, and Autopilot's Good phase sorts against the embedding centroid of
-all of them.
+registry entry. Every **media** example additionally becomes a `good`
+`LabeledElement` in the detector's labelset right away (so `num_training`
+is the example count, not 0): a supplied exemplar is a vote the user
+already cast. Each label carries the example's durable `origin` when it has
+one (`url_download`, `server_file`, …), else the `example_media` sentinel;
+because labels are origin-keyed and dataset-agnostic, an `https://` exemplar
+is kept verbatim even when the dataset it is used against holds only local
+files. Text examples are queries, not media, and produce no labels.
+
+On detector load every media example is *also* seeded as a Good vote against
+the active dataset (matched by MD5, or embedded and inserted when absent), and
+Autopilot's Good phase sorts against the embedding centroid of all of them.
 
 → `{"ok": true, "detector": {...}}` (201)
 

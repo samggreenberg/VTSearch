@@ -58,6 +58,21 @@ const THEME_VARIANT_RE = /\.(light|dark)\.(png|jpe?g|webp|gif|avif)$/i;
 /** True for an absolute URL or root-relative path (left untouched). */
 const ABSOLUTE_SRC_RE = /^([a-z]+:)?\/\//i;
 
+/**
+ * GitHub's heading-anchor slug, so the guide's own table of contents (written
+ * against GitHub's rendering) resolves in-app too: lowercase, drop everything
+ * that isn't a word character / hyphen / space, then turn each remaining space
+ * into a hyphen. Space-by-space rather than run-collapsing, because that is
+ * what GitHub does and the guide's links are written to match it.
+ */
+export function headingSlug(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\w\- ]+/g, '')
+    .replace(/ /g, '-');
+}
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-keyboard-help-modal',
@@ -219,7 +234,64 @@ export class KeyboardHelpModalComponent implements OnInit {
     const rendered = marked.parse(md, { async: false }) as string;
     const themed = this.applyImagePolicy(rendered, this.themeService.resolveEffectiveTheme(this.themeService.currentTheme));
     const safe = this.sanitizer.sanitize(SecurityContext.HTML, themed) ?? '';
-    this.guideHtml.set(this.sanitizer.bypassSecurityTrustHtml(safe));
+    // Heading ids go on *after* sanitization: Angular's HTML sanitizer strips
+    // `id` (DOM-clobbering defence), so ids added before it would not survive.
+    // Safe to add here because every id is derived by `headingSlug`, which
+    // keeps only word characters and hyphens.
+    this.guideHtml.set(this.sanitizer.bypassSecurityTrustHtml(this.addHeadingIds(safe)));
+  }
+
+  /**
+   * Give every heading a GitHub-compatible `id`.
+   *
+   * `marked` v14 emits bare `<h2>` elements, so without this the guide's
+   * table of contents (and its body cross-references) would link to anchors
+   * that exist only on GitHub, leaving the in-app copy's whole TOC dead.
+   * Collisions get GitHub's `-1`, `-2`, … suffix for the same reason.
+   */
+  private addHeadingIds(html: string): string {
+    if (typeof DOMParser === 'undefined') {
+      return html;
+    }
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const seen = new Map<string, number>();
+    doc.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
+      const base = headingSlug(heading.textContent ?? '');
+      if (!base) {
+        return;
+      }
+      const count = seen.get(base) ?? 0;
+      seen.set(base, count + 1);
+      heading.setAttribute('id', count === 0 ? base : `${base}-${count}`);
+    });
+    return doc.body.innerHTML;
+  }
+
+  /**
+   * Follow an in-guide anchor link by scrolling, not by navigating.
+   *
+   * A bare `href="#..."` would push a fragment onto the SPA's URL (and, in a
+   * modal, scroll a container the browser picks rather than the guide pane),
+   * so intercept the click and scroll the matching heading into view here.
+   * Links to anything else are left alone.
+   */
+  onGuideClick(event: MouseEvent): void {
+    const anchor = (event.target as Element | null)?.closest?.('a');
+    const href = anchor?.getAttribute('href') ?? '';
+    if (!href.startsWith('#') || href.length < 2) {
+      return;
+    }
+    event.preventDefault();
+    const id = decodeURIComponent(href.slice(1));
+    const host = event.currentTarget as Element;
+    for (const heading of Array.from(host.querySelectorAll('h1, h2, h3, h4, h5, h6'))) {
+      if (heading.id === id) {
+        // `scrollIntoView` is absent under jsdom; the scroll is cosmetic, so
+        // skipping it there costs nothing.
+        heading.scrollIntoView?.({ block: 'start' });
+        return;
+      }
+    }
   }
 
   /**

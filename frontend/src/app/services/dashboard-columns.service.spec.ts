@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { DashboardColumnsService } from './dashboard-columns.service';
-import { SortState } from '../utils/managed-columns';
+import { SortState } from '../utils/sort-rows';
 
 describe('DashboardColumnsService', () => {
   let service: DashboardColumnsService;

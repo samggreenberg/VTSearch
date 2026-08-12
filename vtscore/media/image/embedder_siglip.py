@@ -44,6 +44,10 @@ class ImageSiglipEmbedder(_CrossModalHFEmbedder):
         return SIGLIP_MODEL_ID
 
     @property
+    def embedding_dim(self) -> int:
+        return 768
+
+    @property
     def is_default(self) -> bool:
         return True
 

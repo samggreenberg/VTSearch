@@ -22,8 +22,17 @@ end-to-end example per family.
 
 ## Contents
 
+| Module | Concern |
+|--------|---------|
+| `vtscore/plugins/__init__.py` | `PluginField`, `PluginBase`, `PluginRegistry`, `make_plugin_registry`, sentinel + entry-point discovery |
+| `vtscore/plugins/inventory.py` | Enumerate every installed plugin across every family in one call |
+| `vtscore/plugins/normalize.py` | Framework-side normalisation of incoming `field_values` |
+| `vtscore/plugins/schema.py` | Build marshmallow schemas from `PluginField` declarations |
+| `vtscore/plugins/uploads.py` | The normalised upload type shared by library-tier plugin bases |
+
 - [Architecture in one paragraph](#architecture-in-one-paragraph)
 - [`PluginField`](#pluginfield)
+  - [Field-value normalization (`vtscore.plugins.normalize`)](#field-value-normalization)
 - [`PluginBase`](#pluginbase)
 - [`PluginRegistry`](#pluginregistry)
 - [`make_plugin_registry()` factory](#make_plugin_registry-factory)
@@ -31,6 +40,8 @@ end-to-end example per family.
 - [Entry-point integration](#entry-point-integration)
 - [Inventory (`vtscore.plugins.inventory`)](#inventory)
 - [Schema helpers (`vtscore.plugins.schema`)](#schema-helpers)
+- [Field-value normalisation](#field-value-normalisation)
+- [File uploads](#file-uploads)
 - [End-to-end: writing a third-party plugin](#end-to-end-writing-a-third-party-plugin)
 
 ---
@@ -54,7 +65,7 @@ standard `(get, list)` accessor pair every family re-exports.
 
 ## `PluginField`
 
-`vtscore/plugins/__init__.py:71` - a dataclass that describes one
+`vtscore/plugins/__init__.py` - a dataclass that describes one
 user-configurable input on a plugin. Each plugin declares its inputs as
 `fields: list[PluginField]` on the class; the frontend renders a form
 from those, the CLI derives flags from those, and the marshmallow
@@ -78,13 +89,18 @@ is used by every family; each family's base module re-exports
 | `hint` | `str` | `""` | Format-hint chip rendered below the input (separate from `description`) |
 | `dynamic_options` | `bool` | `False` | `"select"` fields whose options come from `plugin.get_field_options()` at runtime |
 | `depends_on` | `list[str]` | `[]` | Other field keys that, when changed, trigger a re-fetch of this field's options |
+| `allow_free_text` | `bool` | `False` | `"select"` fields: render as a combobox accepting an arbitrary typed value |
 | `min` | `str` | `""` | `"number"` fields: minimum value (string form; empty = unbounded) |
 | `max` | `str` | `""` | `"number"` fields: maximum value |
 | `step` | `str` | `""` | `"number"` fields: step increment; non-integer step → `float` CLI parsing |
+| `clears` | `list[str]` | `[]` | Field keys blanked in the UI when this field gets a non-empty value ("supply A *or* B") |
+| `include_in_origin` | `bool \| None` | `None` | Copy into the persisted origin dict. `None` = field-type default (`False` for `"file"` / `"password"`, `True` otherwise) |
+| `origin_serializer` | `Callable[[Any], str] \| None` | `None` | Custom value → origin-string conversion for list/dict values |
+| `template_vars` | `tuple[str, ...]` | `()` | Template placeholders the framework substitutes into this field's value; see [Field-value normalization](#field-value-normalization) |
 
 ### `FieldType` values
 
-Defined as `Literal[...]` at `vtscore/plugins/__init__.py:44`:
+Defined as `Literal[...]` in `vtscore/plugins/__init__.py`:
 
 | Value | Frontend widget | Notes |
 |-------|-----------------|-------|
@@ -94,9 +110,9 @@ Defined as `Literal[...]` at `vtscore/plugins/__init__.py:44`:
 | `"text"` | Generic single-line input | Plain string |
 | `"password"` | Masked text input | Plain string |
 | `"email"` | Email input | Plain string; loosely validated |
-| `"number"` | Numeric input with min/max/step | Coerced to `int` or `float` by `is_integer_number()` (`vtscore/plugins/__init__.py:168`) |
+| `"number"` | Numeric input with min/max/step | Coerced to `int` or `float` by `is_integer_number()` (`vtscore/plugins/__init__.py`) |
 | `"select"` | Dropdown | `options` must be populated, or `dynamic_options=True` |
-| `"server_path"` | Server filesystem path picker | Validated by `vtscore.security.validate_server_filepath` at use-time |
+| `"server_path"` | Server filesystem path picker | Confined to the user's data dir by `vtscore.security.confine_server_filepath` in the normalization pass, which writes the approved path back |
 | `"checkbox"` | Boolean tickbox | `default` is `"true"` / `"false"`; values arrive coerced via `bool(str(v).lower() == "true")` |
 
 ### Number-field type inference
@@ -117,11 +133,58 @@ current_values) -> list[str]` method. List dependencies in
 field changes.
 
 `PluginField.to_dict()` returns the JSON shape served by every plugin
-listing endpoint; the keys mirror the dataclass attributes 1-to-1.
+listing endpoint; the keys mirror the dataclass attributes 1-to-1 (with
+the exception of `include_in_origin` and `origin_serializer`, which are
+server-side only).
+
+### Field-value normalization
+
+`vtscore/plugins/normalize.py` holds the framework's
+`normalize_field_values(plugin, field_values)` pass. It mutates
+*field_values* in place, returns it, and is idempotent. For each
+declared field of a text-like type (`text`, `url`, `email`, `password`,
+`folder`, `server_path`, `select`) it:
+
+1. Strips whitespace, and raises `ValueError("<Label> is required.")`
+   for a `required` field that is then empty (or was absent).
+2. Substitutes each `{name}` listed in the field's `template_vars`,
+   running every resolved value through
+   `vtscore.security.path_validation.sanitize_template_value`. An
+   undeclared or unknown name raises `ValueError`. Supported names:
+   `YYYYMMDD-HHMMSS`, `YYYYMMDD`, `YYYY`, `MM`, `DD`, `detector_name`,
+   `detector_id`, `username`.
+3. Runs the field-type validator: `url` → `validate_url`;
+   `server_path` / `folder` → `confine_server_filepath` anchored at
+   `get_file_access_base_dir()`, whose **approved path is written back**
+   into `field_values` so the plugin body consumes exactly what was
+   validated.
+
+File fields and non-string values are skipped.
+
+Step 3's write-back is a security property, not a convenience: under
+multi-user confinement the validator resolves a relative path against
+the user's data dir while a plugin body would resolve it against the
+process CWD, so consuming the raw string can read another user's
+directory even though the check passed.
+
+Both ingress points run the pass, so HTTP and CLI behave identically:
+`vtsearch/routes/_shared.py`'s `validate_plugin_args()` and
+`validate_exporter_field_values()` on the web path,
+`PluginBase.validate_cli_field_values()` on the CLI path, and
+`SyncSource.load()` / `save()` / `peek_version()` for sync sources (see
+[`sync.md`](sync.md)). Plugin bodies are expected to trust the result:
+no `.strip()`, no `if not foo: raise`, no manual `validate_url` /
+`validate_server_filepath` chains.
+
+**Not covered:** `MediaConverter.params` and `MediaClipper.parameters`
+arrive as pass-through payloads rather than plugin form bodies.
+Converter params are shape-validated against the `fields` schema by
+`MediaConverter.convert_normalized()` — ranges and `select` whitelists,
+but no URL or path guard.
 
 ## `PluginBase`
 
-`vtscore/plugins/__init__.py:188` - the mixin every plugin class
+`vtscore/plugins/__init__.py` - the mixin every plugin class
 inherits from (directly or via a family-specific ABC like
 `LabelsetExporter`). It supplies the CLI-flag, JSON-serialisation, and
 field-validation glue that's identical across families.
@@ -160,7 +223,7 @@ family-specific metadata (e.g. converters expose `source_type` /
 
 ## `PluginRegistry`
 
-`vtscore/plugins/__init__.py:287` - generic auto-discovering registry.
+`vtscore/plugins/__init__.py` - generic auto-discovering registry.
 One instance per plugin family.
 
 ### Constructor
@@ -218,7 +281,7 @@ pre-discovery state.
 
 ## `make_plugin_registry()` factory
 
-`vtscore/plugins/__init__.py:513` - collapses the per-family
+`vtscore/plugins/__init__.py` - collapses the per-family
 boilerplate. Returns the `(get, list)` accessor pair every plugin
 family re-exports.
 
@@ -305,7 +368,7 @@ my_exporter = "my_pkg.exporter:EXPORTER"
 After `pip install` of your package, the plugin appears in
 `list_importers()` / `list_exporters()` / etc. without any code change
 to `vtscore`. The discovery routine is `_discover_entry_points()` at
-`vtscore/plugins/__init__.py:649`.
+`vtscore/plugins/__init__.py`.
 
 ### Invariants
 
@@ -366,7 +429,7 @@ register_plugin_family(FamilyProvider(
 ```
 
 Library-tier families self-register at module import (see
-`_LIBRARY_FAMILIES` at `vtscore/plugins/inventory.py:217`). App-tier
+`_LIBRARY_FAMILIES` in `vtscore/plugins/inventory.py`). App-tier
 families (settings importers/exporters/sources) are registered by
 `vtsearch/shim/register_app_plugin_families()` at app startup so
 `vtscore` stays free of cross-boundary imports.
@@ -410,6 +473,62 @@ the plugin instance, so the schema-build cost is paid once per
 process). Unknown keys are dropped (`Meta.unknown = "exclude"`).
 This module is used by the Flask routes in `vtsearch/routes/`;
 library consumers don't typically interact with it directly.
+
+## Field-value normalisation
+
+Schema validation checks the *shape* of incoming values.
+`vtscore/plugins/normalize.py` applies the behaviours that come after,
+which used to be every plugin author's job to remember:
+
+```python
+def normalize_field_values(plugin: PluginBase, field_values: dict) -> dict: ...
+```
+
+1. **Whitespace strip** on every text-like value, so a plugin body can
+   trust `field_values[key]` is already trimmed.
+2. **Template substitution** for fields declaring
+   `PluginField.template_vars` - `YYYYMMDD-HHMMSS`, `YYYYMMDD`, `YYYY`,
+   `MM`, `DD`, `detector_name`, `detector_id`, `username`. Each
+   resolved value runs through `sanitize_template_value`, so an
+   attacker-controlled name cannot escape the directory an
+   admin-configured template implies.
+3. **Field-type-driven security validation.** `field_type="url"` goes
+   through `validate_url`; `field_type="server_path"` goes through
+   `confine_server_filepath` anchored at the per-user data dir, and the
+   **approved** path is written back into `field_values` so the plugin
+   body consumes exactly what was validated.
+
+It is wired into both ingress points - the HTTP path
+(`validate_plugin_args`, after marshmallow loads the body) and the CLI
+path (`PluginBase.validate_cli_field_values`, after the presence check).
+So a plugin body should trust the dict it receives: no
+`if not foo: raise ValueError` boilerplate, no manual `validate_url` /
+`validate_server_filepath` calls, no bespoke `str.replace("{detector_name}", ...)`
+chains. External plugins that still call the validators by hand keep
+working - re-validation is idempotent on already-validated values.
+
+It mutates *field_values* in place and returns it, skips file uploads
+and non-string values, and raises `ValueError` for a missing required
+field, an invalid URL, a path-traversal attempt, or an unknown template
+variable. The whole pass is idempotent.
+
+## File uploads
+
+`field_type="file"` inputs reach a plugin body as an `UploadedFile`
+(`vtscore/plugins/uploads.py`), a **structural protocol** carrying
+`.filename`, `.read()` / `.stream`, and `.save(dst)`. It exists so the
+library tier never has to import Werkzeug's `FileStorage`.
+
+Three implementations satisfy it, one per ingress:
+
+| Path | Implementation |
+|------|----------------|
+| Flask request | Werkzeug's `FileStorage`, passed straight through - it already has the surface |
+| CLI (`--file <path>`) | `CliUploadedFile`, backed by a local filesystem path |
+| Background-thread upload | `BytesIOUploadedFile`, holding the bytes in memory so the thread can still read them after the request context is torn down |
+
+Write plugin bodies against `.filename` (matching Werkzeug's name) and
+they work on all three.
 
 ## End-to-end: writing a third-party plugin
 

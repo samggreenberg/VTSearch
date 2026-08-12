@@ -39,7 +39,7 @@ Nothing here persists to disk at runtime and nothing is cached across
 processes: the profile is read once per process at first use and can be
 re-read with :func:`reload_profile`.
 
-See ``docs/TIMING.md`` for the admin workflow and the JSON schema.
+See ``../docs/packages/timing.md`` for the package reference.
 """
 
 from __future__ import annotations

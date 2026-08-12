@@ -9017,7 +9017,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Copy a file from a browse source into ``data/example_media/``.",
+        "summary": "Copy a file from a browse source into the user's ``example_media/`` dir.",
         "tags": [
           "datasets_ui"
         ]
@@ -10909,7 +10909,7 @@
         }
       ],
       "post": {
-        "description": "Datasets past ``should_auto_build_coverage_atlas`` skip the automatic build\nat load time so they load fast; this endpoint lets the user trigger that\nbuild on demand.  The dataset must already be loaded in memory.  Progress\nis reported via ``/api/progress`` under the returned ``task_id``; the build\nis cancellable.  Calling it on a dataset that already has a tree rebuilds\nit from scratch.",
+        "description": "Datasets past ``should_auto_build_coverage_atlas`` skip the automatic build\nat load time so they load fast; this endpoint lets the user trigger that\nbuild on demand.  The dataset must already be loaded in memory.  Progress\nis reported on the ``loading-tasks`` channel of ``GET /api/events`` under\nthe returned ``task_id``; the build is cancellable.  Calling it on a\ndataset that already has a tree rebuilds it from scratch.",
         "operationId": "build_dataset_coverage_atlas",
         "responses": {
           "200": {
@@ -14690,7 +14690,7 @@
     },
     "/api/medias/ids": {
       "get": {
-        "description": "Each item contains only the fields the frontend needs to build virtual\nscrollers and to inspect the dataset's media type / embedder *before*\nany item becomes visible: ``id``, ``type``, and ``embedder`` (when set).\nDisplay-worthy metadata (``filename``, ``md5``, ``custom_metadata``,\n``origin_name``, ``description``, ``clip_*``) is fetched on demand for\nthe items currently in the viewport via ``POST /api/medias/batch``.\n\nThis replaces the previous unpaginated ``GET /api/medias`` endpoint,\nwhich serialised the full metadata for every media in the dataset on\nevery call; a 10-20x larger payload that the cache + batch pattern\nmakes unnecessary.",
+        "description": "Each item contains only the fields the frontend needs to build virtual\nscrollers and to inspect the dataset's media type / embedder *before*\nany item becomes visible: ``id``, ``media_type``, and ``embedder`` (when set).\nDisplay-worthy metadata (``filename``, ``md5``, ``custom_metadata``,\n``origin_name``, ``description``, ``clip_*``) is fetched on demand for\nthe items currently in the viewport via ``POST /api/medias/batch``.\n\nThis replaces the previous unpaginated ``GET /api/medias`` endpoint,\nwhich serialised the full metadata for every media in the dataset on\nevery call; a 10-20x larger payload that the cache + batch pattern\nmakes unnecessary.",
         "operationId": "list_media_ids",
         "responses": {
           "200": {
@@ -15502,7 +15502,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Upload a media file to data/example_media/ and return its filename.",
+        "summary": "Upload a media file to the user's example_media/ dir and return its filename.",
         "tags": [
           "media_server"
         ]
@@ -16202,7 +16202,7 @@
     },
     "/api/votes/seed-from-examples": {
       "post": {
-        "description": "For each ``type: \"media\"`` example, reads the file from\n``data/example_media/``, computes its MD5, and either marks the\nmatching loaded media as Good, or (if the example is new)\nembeds it, inserts it into the ``medias`` dict, and votes it Good.\n\nReturns::\n\n    {\"seeded\": 2, \"skipped\": 1}",
+        "description": "For each ``type: \"media\"`` example, reads the file from the current\nuser's ``example_media/`` directory, computes its MD5, and either marks\nthe matching loaded media as Good, or (if the example is new) embeds it,\ninserts it into the ``medias`` dict, and votes it Good.\n\nReturns::\n\n    {\"seeded\": 2, \"skipped\": 1}",
         "operationId": "seed_votes_from_examples",
         "requestBody": {
           "content": {

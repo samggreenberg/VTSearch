@@ -30,10 +30,12 @@ from vtscore.concurrency.progress import (
     sort_progress,
 )
 
-#: SSE heartbeat cadence. Also drives the periodic re-emit of task
-#: channels so finished tasks vanish from clients once they pass the
-#: ``LoadingTasksTracker`` stale-prune window without us having to
-#: schedule a background timer for every finish.
+#: SSE heartbeat cadence. Also drives the periodic re-emit of every
+#: channel's snapshot: task channels so finished tasks vanish from clients
+#: once they pass the ``LoadingTasksTracker`` stale-prune window without us
+#: having to schedule a background timer for every finish, and tracker
+#: channels so a client that dropped a terminal frame on queue overflow
+#: recovers within one heartbeat (#2960).
 #:
 #: The heartbeat is the frontend's authoritative "backend is alive" signal
 #: (see ``ConnectionStateService``): as long as a frame — heartbeat or real
@@ -239,8 +241,19 @@ def stream_progress_events(  # noqa: C901
                     # proof the backend is still alive (and keeping idle proxies
                     # open just as a comment would).
                     yield _format_sse("heartbeat", {"ts": time.time()})
-                    # Re-emit task channels so clients see finished tasks
-                    # disappear once their stale-prune window elapses.
+                    # Re-emit every channel's current snapshot. For task
+                    # channels this is what makes finished tasks disappear
+                    # once their stale-prune window elapses. For tracker
+                    # channels it is a self-heal: a client whose bounded
+                    # queue overflowed (see the ``queue.Full`` drops above)
+                    # can lose a channel's single terminal ``idle``/``error``
+                    # frame, which would otherwise leave its progress bar
+                    # stuck at the last percentage until some later operation
+                    # happened to fire that channel again (#2960). Snapshots
+                    # are tiny, so re-emitting them makes every channel
+                    # eventually consistent after any drop.
+                    for name, tracker in _TRACKER_CHANNELS.items():
+                        yield _format_sse(name, tracker.get())
                     for name, tasks_tracker in _TASK_CHANNELS.items():
                         yield _format_sse(name, tasks_tracker.list_tasks())
                     last_heartbeat = time.monotonic()

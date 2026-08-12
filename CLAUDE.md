@@ -33,7 +33,9 @@ This rule has **no exceptions for "quick" yes/no follow-ups.** Yes/no offers bel
 
 ## Branch Policy (CRITICAL)
 
-- **Always base work on `dev`.** The `.claude/hooks/session-start.sh` SessionStart hook runs `git fetch origin --prune && git rebase origin/dev` automatically in remote sessions, so a fresh container lands rebased onto `dev`. If the hook reports "skipping" (dirty tree, detached HEAD) or "rebase failed", run the fetch+rebase yourself before making any changes. The harness cuts the working branch off `main` (the GitHub default), so this rebase is required to pick up work already merged to `dev`. The GitHub default stays `main` so new users land on the stable branch: `dev` is Claude's starting point, not the public default.
+- **Always base work on `dev`.** The `.claude/hooks/session-start.sh` SessionStart hook fetches `origin --prune` and then lands the working branch on `origin/dev` automatically in remote sessions. The harness cuts the working branch off `main` (the GitHub default), so this is required to pick up work already merged to `dev`. The GitHub default stays `main` so new users land on the stable branch: `dev` is Claude's starting point, not the public default.
+  - **The hook can *hard-reset*, not only rebase — read its output.** It picks one of four outcomes and says which: `already includes origin/dev; nothing to do`; **hard-reset** to `origin/dev` (either because the branch has no `origin/<branch>` counterpart — a fresh branch the harness just cut off `main`, whose unique commits are all inherited `main`-only history carrying no Claude work — or because `git cherry` shows every unique commit is patch-equivalent to one already on `dev`); **rebase** onto `origin/dev` (the branch is in sync with its origin counterpart and carries genuinely new pushed commits); or a **skip**. A hard-reset discards the branch's prior commits by design; that is expected at session start and nothing of yours is lost, but do not assume commits you saw in `git log` before the hook ran are still there.
+  - If the hook prints `‼ session-start: DID NOT rebase onto origin/dev` (dirty tree, detached HEAD, fetch failed, a reset/rebase that failed, or a local branch that differs from its pushed origin counterpart), run `git fetch origin --prune && git rebase origin/dev` yourself before making any changes.
 - **All pull requests MUST target `dev`**, never `main`.
 - **Claude must NEVER open a PR that merges into `main`.** The `main` branch is protected and only updated by human maintainers.
 - When creating a PR, always use `--base dev` (e.g., `gh pr create --base dev ...` or the equivalent MCP tool parameter).
@@ -158,7 +160,7 @@ This rule applies to all detector code:
 - New features that cache vectors must use a process-scoped data structure (e.g. a field on `DetectorContext`), not a file or settings key.
 - Embedder version drift is impossible by construction because every load resolves+re-embeds against the active embedder.
 
-The single exception is **dataset pickle files**, which are by design a snapshot of media + their embeddings; they ARE the dataset, not a cache.
+The single exception is **dataset pickle files**, which are by design a snapshot of media + their embeddings; they ARE the dataset, not a cache. That exception extends to **derived caches of a pickle's own contents, written beside that pickle** — today the `<stem>.embmat.npy` / `<stem>.embids.npy` embedding-matrix sidecar (`vtscore/embedding/matrix.py`) and the coverage atlas cached inside the pickle itself. These put nothing on disk that the pickle does not already hold durably, and they only qualify when all four hold: the payload is a pure function of the pickle's medias, it is validated against the live id set on read (a mismatch rebuilds rather than being adopted), it is swept with the pickle by `registry.unregister_dataset`, and losing it costs only time. A cache that fails any of those is a persisted vector, not a derived cache.
 
 If a feature seems to require persisting a vector or a trained head, push back: either re-derive on demand, or change the design.
 
@@ -190,7 +192,7 @@ This applies to:
 - Frontend unit-test failures from the Vitest suite (`cd frontend && npm run test:ci`, also run by `./run-tests.sh` and `./run-tests.sh frontend`).
 - Angular build warnings of any kind, including `anyComponentStyle` budget warnings (e.g. `▲ [WARNING] ... exceeded maximum budget`). `run-tests.sh` treats every `▲ [WARNING]` line from `build:prod` as a hard test failure, so do not just bump budgets to silence them: fix the underlying bloat (split the component, extract shared styles, or remove dead rules). Bumping a budget is only acceptable when the size is genuinely justified, and requires the user's explicit approval.
 - Python test failures from `./run-tests.sh` and `pytest` runs.
-- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these run as the first steps of `./run-tests.sh`, so the test loop catches them before pytest. There is no CI backstop: VTSearch has no GitHub Actions workflows; `./run-tests.sh` is the source of truth, so do not push a change without running it.
+- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, documentation drift from `scripts/check-docs.py`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these run as the first steps of `./run-tests.sh`, so the test loop catches them before pytest. There is no CI backstop: VTSearch has no GitHub Actions workflows; `./run-tests.sh` is the source of truth, so do not push a change without running it.
 - Any other diagnostics surfaced by tooling you invoke.
 
 If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it. The default is **fix it**; skipping requires justification.
@@ -212,25 +214,28 @@ The `.back-btn` rule in `frontend/src/scss/_components.scss` provides the shared
 
 A flow can legitimately carry both: a nested view shows `← Back` at the top to step back one view, while the outer view's footer shows `Cancel` to dismiss the whole modal. What it should *not* do is use the word "Cancel" for an action that is really navigation back to a parent view.
 
-**Persistent-tab pickers are an intentional exception.** The rule's trigger is a view that *replaces* its outer view (the picker vanishes, the form takes over). A picker whose navigation chrome stays **persistently visible** while the selected form renders below it never hides an outer view, so there is nothing to navigate "back" to and no `.back-btn` belongs on it — switching selection is done by clicking a different tab in the always-present bar. The Add-Dataset importer picker (`vt-source-picker`'s `.importer-tab-bar` + `.importer-subtab-bar`) is the canonical case: its category/importer tabs remain on screen with the source form beneath them, so it correctly diverges from the New-detector › Trained flow's picker→form→`← Back` shape. Do not add a `.back-btn` to a persistent-tab picker to "align" it; the divergence is by design. (The footer `Cancel` on such a picker is still correct — it dismisses the whole modal, per the Back-vs-Cancel rule above.)
+**Persistent-tab pickers are an intentional exception.** The rule's trigger is a view that *replaces* its outer view (the picker vanishes, the form takes over). A picker whose navigation chrome stays **persistently visible** while the selected form renders below it never hides an outer view, so there is nothing to navigate "back" to and no `.back-btn` belongs on it — switching selection is done by clicking a different tab in the always-present bar. The Add-Dataset importer picker (`vt-source-picker`'s `.tab-bar` + `.importer-subtab-bar`) is the canonical case: its category/importer tabs remain on screen with the source form beneath them, so it correctly diverges from the New-detector › Trained flow's picker→form→`← Back` shape. Do not add a `.back-btn` to a persistent-tab picker to "align" it; the divergence is by design. (The footer `Cancel` on such a picker is still correct — it dismisses the whole modal, per the Back-vs-Cancel rule above.)
 
 ## Commands
 
-- **Run tests (CPU, fast)**: `./run-tests.sh` (also runs `ruff check`, `ruff format --check`, `codespell`, `deptry`, and the frontend TypeScript build)
-- **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; every invocation runs ruff/codespell/deptry first; `core` additionally runs the frontend build check)
+- **Run tests (CPU, fast)**: `./run-tests.sh` (runs every gate listed under "What `run-tests.sh` gates" below, then pytest)
+- **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; **every** invocation runs the full non-pytest gate chain first, so a group run is not a way to skip the linters; `core` and `frontend` additionally run the frontend build + `npm audit`, and `frontend` alone also runs the Vitest unit suite)
 - **Run tests with coverage**: `VTSEARCH_COVERAGE=1 ./run-tests.sh` (opt-in; adds ~10-20% overhead)
 - **Run multiple groups**: `./run-tests.sh core sorting api`
 - **Run tests with extra args**: `./run-tests.sh core -- -x --tb=long` (args after `--` go to pytest)
-- **Run library-tier tests only (Flask-blocked)**: `./run-tests.sh vtscore-clean` (runs `tests_lib/` via a meta-path import hook that refuses `flask`, `werkzeug`, `flask_smorest`; proves the library tier is import-clean)
+- **Run library-tier tests only (Flask-blocked)**: `./run-tests.sh vtscore-clean` (runs `tests_lib/` via a meta-path import hook that refuses `flask`, `werkzeug`, `flask_smorest`; proves the library tier is import-clean. This mode `exec`s straight into the checker, so it deliberately skips the linter and frontend gates)
 - **Run tests (CPU, full)**: `bash .claude/hooks/ensure-test-deps.sh && python -m pytest tests/ tests_lib/ -q --tb=short -m 'not gpu'`
-- **Run slow CLI subprocess tests only**: `python -m pytest tests/ -q --tb=short -m slow`
+- **Run slow tests only**: `python -m pytest tests/ tests_lib/ -q --tb=short -m slow` (both trees — the slow tests do not all live under `tests/`; see Test Markers)
 - **Run GPU tests**: `python -m pytest tests_lib/gpu/test_gpu.py -q --tb=short -m gpu` (requires CUDA GPU; downloads models on first run)
 - **Run all tests (CPU + GPU)**: `python -m pytest tests/ tests_lib/ -q --tb=short -m ''`
+- **Regenerate the OpenAPI snapshot** (after any route/schema change, to clear the drift gate): `cd frontend && npm run regenerate-openapi-snapshot` (equivalently `python scripts/dump_openapi.py > frontend/openapi.json`), then commit `frontend/openapi.json`
 - **Start app**: `bash .claude/hooks/ensure-test-deps.sh && python app.py` (or `python app.py --local` for dev)
 - **CLI autodetect**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json>`
 - **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json> --exporter server_json_file --filepath results.json`
 - **CLI autodetect + importer**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings <settings.json>`
 - **Check eval/app sync**: `python scripts/check-eval-app-sync.py` (also a `./run-tests.sh` gate; re-pin with `--update` after reconciling the harness)
+- **Check documentation**: `python scripts/check-docs.py` (also a `./run-tests.sh` gate; validates relative links, `#anchors`, backticked repo paths, absolute-path leaks, `docs/plans/*.md` citations anywhere in the tree, and code fences. Pure invariants — nothing to re-pin. Fix the doc, or add an allowlist entry with a reason if the path is runtime-generated or a deliberately fictional example)
+- **Regenerate doc inventories**: `python scripts/gen-docs-inventories.py` (fills the `<!-- BEGIN GENERATED: ... -->` regions in the docs from the live registries — embedders, plugin families, demo datasets; `--check` is a `./run-tests.sh` gate, so registry changes require rerunning this and committing the result)
 - **Install deps**: `bash scripts/install.sh` (auto-detects CPU vs GPU; pass `cpu`/`gpu` to force, or a `cuXYZ` tag to override the GPU wheel, e.g. `bash scripts/install.sh cu121`)
 - **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
 - **Frontend dev server**: `cd frontend && npm start` (proxies `/api/*` to Flask at localhost:5000)
@@ -241,6 +246,30 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **Spell check**: `codespell --toml pyproject.toml`
 - **Dependency check**: `python -m deptry .`
 - **Dead code audit** (manual, pre-release): see `.vulture-whitelist.py` for the full invocation (60% confidence, with marshmallow/pydantic field directories excluded and pytest/Flask/dunder noise filtered). Run before each release; not a CI gate.
+
+## What `run-tests.sh` gates
+
+There is no CI: `./run-tests.sh` is the only gate, so it front-loads a long chain of checks and stops at the first failure with a `TESTS BLOCKED: ...` banner naming which one. **This list is derived from `run-tests.sh`; when you add or remove a gate there, update it here in the same commit.** In script order:
+
+| # | Gate | Command it runs | Notes |
+|---|------|-----------------|-------|
+| 0 | Wall-clock cap | re-`exec`s itself under `timeout` | `VTSEARCH_TEST_TIMEOUT` (default **1800s = 30 min**) bounds the *whole* run, every stage included. `VTSEARCH_TEST_TIMEOUT=0` opts out for a deliberately long run (GPU, coverage sweep). |
+| 1 | Dep install | `.claude/hooks/ensure-test-deps.sh` | Minutes on a cold container, near-instant after. |
+| 2 | Lint | `ruff check .` | |
+| 3 | Format | `ruff format --check .` | Fix with `ruff format .`. |
+| 4 | Spelling | `codespell --toml pyproject.toml` | |
+| 5 | Documentation | `scripts/check-docs.py` | Pure invariants over every tracked markdown file: relative links, `#anchors` (GitHub slug rules), backticked repo paths, absolute-path leaks, `docs/plans/*.md` citations **anywhere in the tree**, and broken code fences. Nothing to re-pin; fix the doc, or add an allowlist entry with a reason. |
+| 6 | Dependencies | `python -m deptry .` | |
+| 7 | Known CVEs | `pip-audit` | Audits the resolved venv, not the requirements files. `PIP_AUDIT_IGNORE` in the script lists advisories with no upstream fix; re-audit and remove an entry once a patched release exists. |
+| 8 | Types | `pyright` (pinned via `PYRIGHT_PYTHON_FORCE_VERSION`) | Scope is `pyrightconfig.json`. |
+| 9 | OpenAPI snapshot drift | `scripts/dump_openapi.py` diffed against `frontend/openapi.json` | The generated TS client is built from this snapshot. Regenerate with `npm run regenerate-openapi-snapshot` and commit the result. |
+| 10 | Dockerfiles | `scripts/check-dockerfiles.py` | |
+| 11 | User-docs screenshot wiring | `scripts/screenshots/wiring-check.py` | Browser-free; the pixel-diff (`check.sh`) stays a manual chore. Also what makes the reshoot queue un-rottable. |
+| 12 | Eval/app sync | `scripts/check-eval-app-sync.py` | Re-pin with `--update` **after** reconciling the harness. |
+| 13 | Frontend build | `cd frontend && npm run build:prod` | Full run, or the `core` / `frontend` groups. Any `▲ [WARNING]` line is a hard failure. Skipped with a notice if `frontend/node_modules` is absent. |
+| 14 | Frontend audit | `cd frontend && npm audit --omit=dev` | Same trigger as the build. Prod deps only — dev-only advisories don't ship. |
+| 15 | Frontend unit tests | `cd frontend && npm run test:ci` | Full run or the `frontend` group **only** — deliberately off the fast `core` path. |
+| 16 | Python tests | `pytest tests/ tests_lib/ -n auto --dist loadgroup` | Skipped entirely when `frontend` is the only requested group. |
 
 ## Test Groups
 
@@ -268,17 +297,28 @@ Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a py
 
 ## Test Markers
 
-- **Default** (`./run-tests.sh` or `pytest tests/`): Runs fast CPU tests only (~35s). Excludes `gpu` and `slow` markers.
-- **`slow`**: CLI subprocess tests that spawn `python app.py --autodetect` (2 tests in `tests/cli/test_cli_main_subprocess.py`, each ~16s). Run with `-m slow` or include with `-m 'not gpu'`.
-- **`gpu`**: CUDA-only tests. Run with `-m gpu`.
-- **All tests**: Use `-m ''` to run everything.
+The default filter lives in `pyproject.toml`'s `addopts`: `-m 'not gpu and not slow' --timeout=300 --timeout-method=thread`.
+
+- **Default** (`./run-tests.sh` with no group, or a bare `pytest`): fast CPU tests only (~35s). Excludes `gpu` and `slow`.
+- **`slow`**: 3 tests, in **two** trees — one CLI subprocess test that spawns `python app.py --autodetect` (`tests/cli/test_cli_main_subprocess.py`, ~16s) and two real-`toponymy` fit tests (`tests_lib/projection/test_toponymy_smoke.py`, module-level `pytestmark`, ~1 min each; `importorskip`ped when toponymy isn't installed). Run with `python -m pytest tests/ tests_lib/ -m slow` — passing only `tests/` silently misses two thirds of them.
+- **`gpu`**: CUDA-only tests (`tests_lib/gpu/test_gpu.py`). Run with `-m gpu`.
+- **All tests**: `-m ''`.
+- **Per-test timeout**: 300s, thread-based (signal-based interruption doesn't work on xdist workers). One hung test fails by name instead of stalling the run; the wall-clock cap in `run-tests.sh` is the backstop for a worker that dies outright and can no longer fire its own timeout.
+
+**Gotcha: naming a group re-opens `slow` and `gpu`.** `./run-tests.sh <group>` passes `-m "<group>"` on the command line, and a command-line `-m` *replaces* the one in `addopts` rather than combining with it. So `./run-tests.sh cli` does run the slow subprocess test, and `./run-tests.sh projection` does run the toponymy smoke tests — a group run is slower than the same tests in a default run. That is also why `./run-tests.sh gpu` works at all. To get the default exclusions back inside a group, spell the filter out after `--` (a later `-m` wins): `./run-tests.sh cli -- -m 'cli and not slow'`.
 
 ## Test Workflow (IMPORTANT)
 
 Testing can crash the session. To avoid losing work, follow this workflow:
 
 1. **Commit and push before running tests.** Before running `pytest` or any test command, commit all current changes and push to your working branch. Use a message like `"WIP: pre-test checkpoint"` if the work isn't finalized yet.
-2. **Run tests in the foreground (never in the background).** The test command has a slow startup phase: `ensure-test-deps.sh` installs dependencies (~1-2 min on first run), then `conftest.py` imports `app.py` and generates test media/embeddings before any tests execute. There may be no output for 1-3 minutes; this is normal. Do NOT run tests with `run_in_background` or assume output capture is broken because of the delay. Use a timeout of at least 300000ms (5 minutes).
+2. **Start the run in the foreground with the maximum timeout, and never *launch* it with `run_in_background`.** The test command has a slow startup phase: `ensure-test-deps.sh` installs dependencies (~1-2 min on first run), then `conftest.py` imports `app.py` and generates test media/embeddings before any tests execute. There may be no output for several minutes; this is normal, and is not a sign that output capture is broken.
+
+   **Pass `600000` ms (10 minutes) — the Bash tool's maximum — and expect a cold full run to exceed it anyway.** A measured cold `./run-tests.sh` is ~11 minutes: ~7 for dep install plus the linter/pyright/pip-audit/snapshot gates and the frontend build + `npm audit` + Vitest, then ~3.5 minutes of pytest. (The old "at least 5 minutes" suggestion cut healthy runs off mid-gate.) When the tool's cap is hit the harness moves the run to the background rather than killing it — that is fine; wait for the completion notification and read the output file it names. What matters is that you *started* it in the foreground so the harness tracks it.
+
+   Two consequences worth knowing before you run it:
+   - **Do not pipe the run through `tail`/`grep`.** If the harness backgrounds a pipeline, nothing flushes until the whole pipeline ends, so the output file sits empty and you can't watch progress. Run the script bare and read the tail of the output file afterwards.
+   - **A run that outlives the tool's cap is not a timeout.** The script has its own 30-minute wall-clock cap (`VTSEARCH_TEST_TIMEOUT`) and prints a distinctive `TESTS TIMED OUT` banner when *it* fires. Absent that banner, the run is still healthy. To stay inside 10 minutes, run one group at a time — a group run skips the frontend gates unless it is `core` or `frontend`.
 3. **If tests fail and fixes are needed**, make the fixes, then commit and push again before re-running tests.
 4. **Repeat** until tests pass. Every cycle of fixes should be committed and pushed before the next test run.
 
@@ -394,10 +434,11 @@ def slow_load():
 ## More docs
 
 - `docs/ARCHITECTURE.md` — directory map, dependency graph, plugin systems, state management (multi-dataset / multi-detector contexts, proxies, `X-Dataset-Id` / `X-Detector-Id` headers), auth, origin tracking.
+- `docs/FRONTEND.md` — Angular SPA architecture: feature-area boundaries, the service layer, the **zoneless change-detection rules**, active dataset/detector propagation, the generated OpenAPI client, component/modal conventions. Read this before changing frontend state or reactivity.
 - `docs/API.md` and `docs/api/*.md` — REST API reference.
 - `docs/CLI.md` — CLI flags and autodetect workflow.
 - `docs/ML.md` — training/scoring details.
 - `docs/EXTENDING.md` + `docs/EXTENDING-plugins.md` + `docs/EXTENDING-media.md` + `docs/EXTENDING-processors.md` — how to add plugins.
 - `docs/plans/` — future-work design docs (open/proposed; shipped work is pruned out, not archived); check here before adding a "Phase N" feature.
 - `docs/RELEASE.md` — the `dev` → `main` release runbook (the procedure the Dev2Main Routine follows: vulture audit, release summary, punch-card refresh, release PR, issue close-out, plan-pointer prune).
-- `docs/style-guide.md` — frontend SCSS conventions.
+- `docs/style-guide.md` — frontend SCSS conventions (the styling half of `docs/FRONTEND.md`).

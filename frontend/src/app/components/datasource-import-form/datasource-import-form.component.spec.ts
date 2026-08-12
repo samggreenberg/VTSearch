@@ -54,7 +54,7 @@ describe('DatasourceImportFormComponent', () => {
     expect(req.request.body.field_key).toBe('sheet');
     req.flush({ options: [{ value: 's1', label: 'Sheet 1' }] });
 
-    expect(component.optionsFor(field as never)).toEqual([{ value: 's1', label: 'Sheet 1' }]);
+    expect(component.fieldOptions.optionsFor(field as never)).toEqual([{ value: 's1', label: 'Sheet 1' }]);
     expect(component.values['sheet']).toBe('s1');
   });
 
@@ -80,8 +80,8 @@ describe('DatasourceImportFormComponent', () => {
       .expectOne('/api/datasource-import/svc/options')
       .flush({ message: 'boom' }, { status: 502, statusText: 'Bad Gateway' });
 
-    expect(component.dynamicError()['q']).toBe('boom');
-    expect(component.optionsFor(field as never)).toEqual([]);
+    expect(component.fieldOptions.error()['q']).toBe('boom');
+    expect(component.fieldOptions.optionsFor(field as never)).toEqual([]);
   });
 
   it('blocks submit until every required field is filled', () => {

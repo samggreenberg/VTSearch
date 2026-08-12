@@ -18,8 +18,11 @@ this package is the underlying ML core.
 |-----------------------------------------------------------------------|-----------------------------------------------------------------|
 | `vtscore/training/mlp.py`                                             | `build_model`, `build_model_from_weights`, `train_model`        |
 | `vtscore/training/thresholds.py`                                      | GMM / cross-cal / safe threshold helpers                        |
+| `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
+| `vtscore/training/evt_mixture.py`                                     | Gumbel + Normal score mixture - the extreme-value cut           |
 | `vtscore/training/svm.py`                                             | `SVMClassifier` + `train_svm` prototype                         |
 | `vtscore/training/region_similarity.py`                               | Patch-level cosine scoring with bounding boxes                  |
+| `vtscore/training/structural_similarity.py`                           | Stage-2 geometric re-rank + match-statistic verification classifier |
 
 The package `__init__.py` re-exports the head-building and threshold names; SVM
 and region-similarity helpers are imported from their submodules.
@@ -28,8 +31,9 @@ and region-similarity helpers are imported from their submodules.
 from vtscore.training import (
     build_model, build_model_from_weights, train_model,
     calculate_gmm_threshold, conformal_threshold,
-    calculate_cross_calibration_threshold,
-    cross_calibration_threshold_cached, calculate_safe_threshold,
+    calculate_cross_calibration_threshold, calculate_safe_threshold,
+    calibration_folds, calibration_folds_cached, threshold_from_folds,
+    fold_anchored_gmm_threshold,
 )
 from vtscore.training.svm import SVMClassifier, train_svm
 from vtscore.training.region_similarity import (
@@ -47,7 +51,7 @@ matrices and binary labels. The `hidden_dim` argument selects the head:
 ### Architecture
 
 **Linear (logistic) head - the production head.** Selected by the
-`hidden_dim=LINEAR_HEAD` (`0`) sentinel at `vtscore/training/mlp.py:34`:
+`hidden_dim=LINEAR_HEAD` (`0`) sentinel in `vtscore/training/mlp.py`:
 
 ```python
 nn.Sequential(
@@ -84,7 +88,7 @@ for the measurements.
 
 Both are built by
 `build_model(input_dim, hidden_dim=64, dropout=0.0, generator=None)` at
-`vtscore/training/mlp.py:51`. Pass a seeded `torch.Generator` to
+`vtscore/training/mlp.py`. Pass a seeded `torch.Generator` to
 deterministically re-initialise the `Linear` weights (Kaiming uniform
 on the weight matrix, uniform on the bias with the standard PyTorch
 fan-in bound).
@@ -97,7 +101,7 @@ fan-in bound).
 ### Auto-sizing the MLP hidden layer
 
 Only the MLP head uses this; the linear head has no hidden layer.
-`_auto_hidden_dim(n_train)` at `vtscore/training/mlp.py:37` chooses the
+`_auto_hidden_dim(n_train)` in `vtscore/training/mlp.py` chooses the
 hidden width from the number of training examples:
 
 ```python
@@ -116,7 +120,7 @@ thresholds stay directly comparable to the full-data model.
 ### Training
 
 `train_model(X_train, y_train, input_dim, seed=42, hidden_dim=None, sample_weights=None)`
-at `vtscore/training/mlp.py:139` is the workhorse:
+in `vtscore/training/mlp.py` is the workhorse:
 
 ```python
 import numpy as np, torch
@@ -184,7 +188,7 @@ parallel.
 
 ### Reloading from saved weights
 
-`build_model_from_weights(weights)` at `vtscore/training/mlp.py:101`
+`build_model_from_weights(weights)` in `vtscore/training/mlp.py`
 reconstructs a model from a dict of lists (the output of
 `tensor.tolist()` per state-dict entry). It infers the head from the keys
 present: `0.*` alone means the linear head, while a `3.weight` means an MLP
@@ -212,13 +216,15 @@ lists from votes, caching on `DetectorContext`) sits one layer up.
 |-------------------------------------------|---------------------------------------------------------------|
 | `calculate_gmm_threshold`                 | All-media score distribution - used by the safe blend         |
 | `conformal_threshold`                     | Conformal inclusion rule on one (scores, labels) set          |
-| `calculate_cross_calibration_threshold`   | Production threshold - k-fold cross-calibration               |
-| `cross_calibration_threshold_cached`      | Memoised wrapper around the cross-cal trainer                 |
+| `calculate_cross_calibration_threshold`   | k-fold cross-calibration, in one call                         |
+| `calibration_folds` / `calibration_folds_cached` | The inclusion-*independent* half: fit the folds       |
+| `threshold_from_folds`                    | The inclusion-*dependent* half: apply the rule to fitted folds |
+| `fold_anchored_gmm_threshold`             | The shipped cut - fold mixtures anchored on held-out labels    |
 | `calculate_safe_threshold`                | Blends cross-cal with GMM when label counts are low           |
 
 ### `calculate_gmm_threshold(scores)`
 
-`vtscore/training/thresholds.py:17`. Fits a 2-component
+`vtscore/training/thresholds.py`. Fits a 2-component
 `sklearn.mixture.GaussianMixture` to the score list and returns the
 **midpoint between the two component means**. Used to produce a
 reasonable operating point even when only a few labels exist - the score
@@ -280,6 +286,7 @@ than 2 training examples or 1 calibration example.
 
 ```python
 from vtscore.training import calculate_cross_calibration_threshold
+from vtscore.training.mlp import LINEAR_HEAD
 
 t = calculate_cross_calibration_threshold(
     X_list=[v for v in feature_vectors],
@@ -288,27 +295,46 @@ t = calculate_cross_calibration_threshold(
     inclusion_value=0,
     calibrate_count=2,
     calibration_fraction=0.5,
-    hidden_dim=8,   # match the full-data model's hidden width
+    hidden_dim=LINEAR_HEAD,   # match the full-data model's architecture
 )
 ```
 
 The fold models honour `hidden_dim` when provided - important for the
 detector pipeline, which wants fold thresholds calibrated against a
-model with the same capacity as the final full-data model.
+model with the same capacity as the final full-data model, and therefore
+passes `LINEAR_HEAD` on both sides. A positive `hidden_dim` here calibrates
+against MLP fold models, which is what the eval harness's sweep arm wants
+and nothing else does.
 
-### `cross_calibration_threshold_cached(...)`
+### `calibration_folds_cached(...)` + `threshold_from_folds(...)`
 
-`vtscore/training/thresholds.py:93`. Same signature plus an optional
-`det_ctx` argument. Builds a deterministic cache key from `X_list`,
-`y_list`, `inclusion_value`, `calibrate_count`, `calibration_fraction`,
-and `hidden_dim`, then stores the resulting threshold on
-`det_ctx.calibration_cache`. The next call with matching inputs returns
-the cached value without retraining; a real label change produces a
-different key and falls through to a fresh calibration.
+The interactive path splits the work in two, because only half of it
+depends on the Inclusion knob:
+
+```python
+from vtscore.training import calibration_folds_cached, threshold_from_folds
+
+folds = calibration_folds_cached(          # expensive: fits `calibrate_count` fold models
+    X_list, y_list, input_dim,
+    calibrate_count=2, calibration_fraction=0.5,
+    hidden_dim=LINEAR_HEAD, det_ctx=det_ctx,
+)
+threshold = threshold_from_folds(folds, inclusion_value=0)   # cheap: a quantile rule
+```
+
+`CalibrationFolds` is a `NamedTuple` of `(orderings, fallback, models)`.
+`calibration_folds_cached` memoises it on `det_ctx.calibration_cache` under a
+deterministic key built from `X_list`, `y_list`, the calibrate settings,
+`hidden_dim`, and any `score_rows_by_group` - so toggling Inclusion during
+an interactive sort re-runs only the cheap rule, with no ~200-epoch fold
+refits. A real label change produces a different key and falls through to a
+fresh calibration; no explicit invalidation is needed.
 
 The key bytes encode the actual training vectors (not just label IDs),
 so if the embedder changes and a labelset is re-resolved to different
-embeddings, the cache invalidates automatically.
+embeddings, the cache invalidates automatically. The fitted fold *models*
+ride along in the tuple because the shipped fold-anchored cut needs to
+re-score the haystack with them.
 
 ### `calculate_safe_threshold(xcal_threshold, all_scores, ctx, schedule=None)`
 
@@ -348,11 +374,11 @@ back entirely to the GMM threshold.
 `vtscore/training/svm.py` ships a parallel trainer with the same call
 shape as `train_model`. It is **not** wired into the detector pipeline;
 its purpose is to let
-[`vtscore.eval.label_curve`](eval.md#label-curve-sweep) sweep the neural head
+[`vtscore.eval.label_curve`](eval.md#label-curve) sweep the neural head
 vs. SVM head-to-head so the team can decide whether to add a trainer-
 selection field on detectors.
 
-### `SVMClassifier` (`vtscore/training/svm.py:26`)
+### `SVMClassifier` (`vtscore/training/svm.py`)
 
 Dataclass wrapping a fitted sklearn estimator plus an optional
 probability source: `base` (`LinearSVC` or `SVC`), `calibrator`
@@ -364,7 +390,7 @@ otherwise it sigmoids the raw `decision_function` (clipped to ±30).
 The sigmoid wrapper is not a true probability, but it is monotone in
 the SVM score - which is all the ranker and threshold-finder need.
 
-### `train_svm(...)` (`vtscore/training/svm.py:130`)
+### `train_svm(...)` (`vtscore/training/svm.py`)
 
 Fits a `LinearSVC` (linear, fast) or `SVC` (RBF), translates
 `inclusion_value` into a sklearn `class_weight` map, and optionally

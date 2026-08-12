@@ -229,6 +229,26 @@ class TestLoadingTasksTrackerSubscriptions:
 # ---------------------------------------------------------------------------
 
 
+def _drain_connect_and_snapshot(gen) -> None:
+    """Consume the connect comment + initial snapshot from a fresh stream.
+
+    The generator yields the handshake comment followed by exactly one frame
+    per channel before it ever blocks, so the count is fixed and this needs no
+    wall-clock deadline: pulling ``len(initial_snapshot())`` frames lands the
+    generator on its first ``queue.get()`` every time, loaded machine or not.
+    Asserting the channel *set* here (with the missing names in the message)
+    is what makes a short read legible instead of a bare set mismatch.
+    """
+    assert next(gen).startswith(": connected")
+    seen_channels: set[str] = set()
+    for _ in initial_snapshot():
+        chunk = next(gen)
+        if chunk.startswith("event: "):
+            seen_channels.add(chunk.split("\n", 1)[0].removeprefix("event: "))
+    expected = set(_TRACKER_CHANNELS.keys()) | set(_TASK_CHANNELS.keys()) | {"server"}
+    assert seen_channels == expected, f"snapshot missing channels: {sorted(expected - seen_channels)}"
+
+
 class TestEventsRoute:
     def test_initial_snapshot_includes_every_channel(self):
         frames = initial_snapshot()
@@ -257,42 +277,60 @@ class TestEventsRoute:
             resp.close()
 
     def test_stream_yields_update_after_subscribe(self):
-        """Pump the generator directly and assert a live update arrives."""
-        gen = stream_progress_events(heartbeat_seconds=60.0)
+        """Pump the generator directly and assert a live update arrives.
+
+        No thread and no sleep: the stream subscribes to every tracker when
+        its body first runs, and each subscriber pushes into a *buffered*
+        queue, so an update published while the generator is suspended is
+        waiting for it on the next ``next()``. The old version slept 0.05s in
+        a publisher thread to "make sure" the generator had parked in
+        ``queue.get()`` — a distinction the queue makes unobservable, and a
+        sleep that lost its race whenever a co-resident heavy process delayed
+        the thread past the 1s keepalive (#3075).
+
+        Idle wakeups are pushed out of reach so nothing but the real update
+        can be the next frame.
+        """
+        gen = stream_progress_events(heartbeat_seconds=60.0, keepalive_seconds=60.0)
         try:
-            # Drain initial connect comment + the snapshot frames so the
-            # generator is parked on the queue.get() call.
-            seen_channels: set[str] = set()
-            expected = set(_TRACKER_CHANNELS.keys()) | set(_TASK_CHANNELS.keys()) | {"server"}
-            deadline = time.monotonic() + 2.0
-            while seen_channels != expected and time.monotonic() < deadline:
-                chunk = next(gen)
-                if chunk.startswith("event: "):
-                    name = chunk.split("\n", 1)[0].removeprefix("event: ")
-                    seen_channels.add(name)
-            assert seen_channels == expected
+            _drain_connect_and_snapshot(gen)
 
-            # Now publish an update on a fresh tracker and read it back.
-            #
-            # The generator is blocked inside queue.get() in the SSE
-            # thread; we trigger an update from this thread, then pull
-            # the next frame.
-            def push_update():
-                # Small wait so we know the generator has parked on
-                # queue.get(). Without this, the publish can race the
-                # subscribe.
-                time.sleep(0.05)
-                sort_progress.update("running", "tick", 1, 10)
+            sort_progress.update("running", "tick", 1, 10)
 
-            t = threading.Thread(target=push_update, daemon=True)
-            t.start()
             frame = next(gen)
-            t.join(timeout=1.0)
-            assert frame.startswith("event: sort\n")
+            assert frame.startswith("event: sort\n"), f"expected the published sort update, got {frame!r}"
             data_line = [ln for ln in frame.splitlines() if ln.startswith("data: ")][0]
             payload = json.loads(data_line.removeprefix("data: "))
             assert payload["status"] == "running"
             assert payload["current"] == 1
+        finally:
+            gen.close()
+
+    def test_parked_reader_is_woken_by_an_update_from_another_thread(self):
+        """A reader blocked in ``queue.get()`` gets the frame a *foreign*
+        thread publishes — the real cross-thread path, since tracker
+        subscribers run on whichever thread called ``update()``.
+
+        Ordering between the publish and the park needs no handshake: if the
+        publish lands first the queue holds it, and if it lands second it
+        wakes the parked reader. Both interleavings produce the same frame,
+        which is exactly why the old fixed sleep bought nothing.
+        """
+        # Generous enough that no plausible scheduling delay reaches it, low
+        # enough that a genuine regression fails in seconds instead of hanging.
+        gen = stream_progress_events(heartbeat_seconds=10.0, keepalive_seconds=10.0)
+        try:
+            _drain_connect_and_snapshot(gen)
+
+            t = threading.Thread(target=lambda: sort_progress.update("running", "tick", 2, 10), daemon=True)
+            t.start()
+            try:
+                frame = next(gen)
+            finally:
+                t.join(timeout=10.0)
+            assert frame.startswith("event: sort\n"), f"parked reader was not woken by the update; got {frame!r}"
+            data_line = [ln for ln in frame.splitlines() if ln.startswith("data: ")][0]
+            assert json.loads(data_line.removeprefix("data: "))["current"] == 2
         finally:
             gen.close()
 
@@ -306,12 +344,12 @@ class TestEventsRoute:
             # until the idle branch fires a heartbeat (no updates published, so
             # the queue.get() times out almost immediately).
             heartbeat = None
-            deadline = time.monotonic() + 2.0
+            deadline = time.monotonic() + 10.0
             while heartbeat is None and time.monotonic() < deadline:
                 chunk = next(gen)
                 if chunk.startswith("event: heartbeat\n"):
                     heartbeat = chunk
-            assert heartbeat is not None, "no heartbeat frame arrived"
+            assert heartbeat is not None, "no heartbeat frame arrived within 10s"
             # It is a real event with a JSON data line, never a `: heartbeat`
             # comment.
             assert not heartbeat.startswith(": ")
@@ -328,12 +366,22 @@ class TestEventsRoute:
         comment (invisible to EventSource), never a named event."""
         gen = stream_progress_events(heartbeat_seconds=60.0, keepalive_seconds=0.01)
         try:
-            assert next(gen).startswith(": connected")
-            for _ in initial_snapshot():
-                next(gen)
-            # The next idle wakeup is the socket-probe comment, not a heartbeat.
+            _drain_connect_and_snapshot(gen)
+            # The next *idle* wakeup is the socket-probe comment, not a
+            # heartbeat. A stray progress frame (the global trackers are
+            # shared, and a background thread from elsewhere in the suite can
+            # publish onto one) is not an idle wakeup at all, so skip past it
+            # rather than failing — but never skip a heartbeat, which is the
+            # regression this test exists to catch.
+            deadline = time.monotonic() + 10.0
             chunk = next(gen)
-            assert chunk.startswith(": ")
+            while (
+                chunk.startswith("event: ")
+                and not chunk.startswith("event: heartbeat\n")
+                and time.monotonic() < deadline
+            ):
+                chunk = next(gen)
+            assert chunk.startswith(": "), f"idle wakeup should be an SSE comment, got {chunk!r}"
             assert "event:" not in chunk
         finally:
             gen.close()
@@ -344,12 +392,12 @@ class TestEventsRoute:
         gen = stream_progress_events(heartbeat_seconds=0.05, keepalive_seconds=0.01)
         try:
             heartbeat = None
-            deadline = time.monotonic() + 2.0
+            deadline = time.monotonic() + 10.0
             while heartbeat is None and time.monotonic() < deadline:
                 chunk = next(gen)
                 if chunk.startswith("event: heartbeat\n"):
                     heartbeat = chunk
-            assert heartbeat is not None, "no heartbeat frame arrived"
+            assert heartbeat is not None, "no heartbeat frame arrived within 10s"
         finally:
             gen.close()
 
@@ -364,6 +412,69 @@ class TestEventsRoute:
             assert payload["total"] == 8
         finally:
             dataset_progress.update("idle", "", 0, 0)
+
+    def test_heartbeat_reemits_tracker_channels(self):
+        """A client whose bounded queue overflowed can lose a tracker
+        channel's single terminal frame, which would leave its progress bar
+        stuck at the last percentage until some later operation happened to
+        fire that channel again. The heartbeat re-emits every tracker
+        snapshot, so the client self-heals within one heartbeat (#2960)."""
+        # max_queue=1 makes the overflow deterministic: the first update
+        # fills the queue, the terminal one is dropped just as it would be
+        # for a stalled client behind a burst of per-item frames.
+        gen = stream_progress_events(heartbeat_seconds=0.01, max_queue=1)
+        try:
+            assert next(gen).startswith(": connected")
+            for _ in initial_snapshot():
+                next(gen)
+
+            sort_progress.update("running", "Scoring", 97, 100)
+            sort_progress.update("idle", "Done", 100, 100)  # dropped: queue full
+
+            # The only queued frame is the stale `running` one.
+            frame = next(gen)
+            assert frame.startswith("event: sort\n")
+            payload = json.loads([ln for ln in frame.splitlines() if ln.startswith("data: ")][0].removeprefix("data: "))
+            assert payload["status"] == "running"
+
+            # The heartbeat repairs it without any further tracker update.
+            repaired = None
+            deadline = time.monotonic() + 2.0
+            while repaired is None and time.monotonic() < deadline:
+                chunk = next(gen)
+                if chunk.startswith("event: sort\n"):
+                    repaired = json.loads(
+                        [ln for ln in chunk.splitlines() if ln.startswith("data: ")][0].removeprefix("data: ")
+                    )
+            assert repaired is not None, "no re-emitted sort frame arrived"
+            assert repaired["status"] == "idle"
+            assert repaired["current"] == 100
+        finally:
+            gen.close()
+            sort_progress.update("idle", "", 0, 0)
+
+    def test_heartbeat_reemits_every_tracker_channel(self):
+        """The re-emit covers all of ``_TRACKER_CHANNELS``, not just the one
+        that happened to move last."""
+        gen = stream_progress_events(heartbeat_seconds=0.01)
+        try:
+            assert next(gen).startswith(": connected")
+            for _ in initial_snapshot():
+                next(gen)
+
+            seen: set[str] = set()
+            expected = set(_TRACKER_CHANNELS) | set(_TASK_CHANNELS)
+            saw_heartbeat = False
+            deadline = time.monotonic() + 2.0
+            while seen != expected and time.monotonic() < deadline:
+                chunk = next(gen)
+                if chunk.startswith("event: heartbeat\n"):
+                    saw_heartbeat = True
+                elif saw_heartbeat and chunk.startswith("event: "):
+                    seen.add(chunk.split("\n", 1)[0].removeprefix("event: "))
+            assert seen == expected
+        finally:
+            gen.close()
 
     def test_initial_loading_tasks_snapshot(self):
         loading_tasks.create_task("evt_test", name="Evt DS")

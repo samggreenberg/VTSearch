@@ -9,7 +9,7 @@ matches what you want to build.
 
 | Guide | What you build |
 |-------|----------------|
-| [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, results exporters, label importers, settings importers/exporters, settings sources, labelset sources, media converters, media sources: nine auto-discovered plugin families that share a common registry-based architecture. |
+| [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, datasource importers, results exporters, label importers, settings importers/exporters/sources, labelset sources: the form-driven auto-discovered plugin families that share a common registry-based architecture (the generated family inventory lives there too). |
 | [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, cleaners, converters, and media sources (anything in `vtscore/media/` or `vtscore/converters/`). |
 | [EXTENDING-processors.md](EXTENDING-processors.md) | Detectors, localizers, and extractors: the three kinds of `Processor`. |
 
@@ -29,8 +29,11 @@ discovery/registration works, and includes a complete example.
 
 ## Authentication Providers
 
-VTSearch uses a pluggable `LoginProvider` ABC (`vtsearch/auth/__init__.py`)
-so that multi-user deployments can be supported without modifying routes.
+VTSearch uses a pluggable `LoginProvider` ABC so that multi-user deployments
+can be supported without modifying routes. The ABC itself is library-tier
+(`vtscore/security/login.py`, because `vtscore`'s path-confinement checks
+consult the active provider); `vtsearch.auth` re-exports it alongside the
+Flask-backed providers, and is the import path app code should use.
 
 ### Interface
 
@@ -56,6 +59,17 @@ class MyProvider(LoginProvider):
         """Return a per-user data directory for isolated storage."""
         return base_data_dir / username
 ```
+
+**Enforcement is on by default.** The base class's `enforce_auth()` returns
+`True`, which makes the server reject any `/api/*` request for which your
+`is_authenticated()` returns false with a JSON 401 (only the
+`/api/auth/status|login|logout` allowlist is exempt). You get real gating
+without writing a decorator or touching routes — but it also means
+`is_authenticated()` must return `True` for every request you intend to
+serve. Override `enforce_auth()` to return `False` only if anonymous access
+is a deliberate mode (see `TrivialLoginProvider`). Optionally override
+`www_authenticate()` (e.g. return `"Bearer"`) to set the 401's
+`WWW-Authenticate` header.
 
 **Validate any username you didn't construct yourself.** A username returned
 by `get_user()` becomes a path component (`data/<username>/`) *and* the
@@ -295,11 +309,25 @@ See [EXTENDING-media.md § Adding a Media Converter](EXTENDING-media.md#adding-a
 See [EXTENDING-processors.md](EXTENDING-processors.md).
 
 - [ ] Subclass `Localizer` or `Extractor` from `vtscore.media.processors`
-- [ ] Implement `name`, `media_type`, and the type-specific method
-      (`localize` or `extract`)
+- [ ] Implement `name` (from a constructor argument, **not** hardcoded),
+      `media_type`, and the type-specific method (`localize` or `extract`)
 - [ ] Optionally override `load_model()` for one-time resource loading
+- [ ] Add a `from_config(name, config)` classmethod, and a `to_dict()` that
+      reports the matching `extractor_type` / `localizer_type` + `config`
+- [ ] **Wire it into the hardcoded factory dict** in
+      `vtsearch/routes/processors/crud.py` (`_ensure_extractor_factories` or
+      `_ensure_localizer_factories`) — processors are *not* auto-discovered,
+      and an unregistered type is a 400 from every endpoint
+- [ ] Optionally add it to `_PREGEN_PROCESSORS` in the same file
 - [ ] Register as autorun via `POST /api/autorun-extractors` or
-      `POST /api/autorun-localizers`
+      `POST /api/autorun-localizers`, then run it with `POST /api/auto-extract`
+      / `POST /api/auto-localize`
+- [ ] Test: build it via `_build_extractor` / `_build_localizer` and assert a
+      bad config raises (see `tests/detectors/test_processors.py`)
+
+Note that `Detector` (the `Processor` subtype) has no factory dict and no
+endpoint; it is not registrable. The ML classifiers users actually train are
+detectors in a different sense, covered below.
 
 For ML classifiers, create a detector instead: register it via
 `POST /api/detectors/registry`, label items in the right pane, and toggle
@@ -312,6 +340,9 @@ See [Authentication Providers](#authentication-providers) above.
 - [ ] Create a new module (e.g. `vtsearch/auth/my_provider.py`)
 - [ ] Subclass `LoginProvider` from `vtsearch.auth`
 - [ ] Implement `get_user(request)` and `is_authenticated(request)`
+- [ ] Decide on `enforce_auth()`: the inherited `True` makes the server 401
+      unauthenticated API requests; override to `False` only if anonymous
+      access is intended
 - [ ] Override `login_required()` if the frontend should show a login screen
 - [ ] Override `get_user_data_dir(username, base_data_dir)` for per-user isolation
 - [ ] Call `set_login_provider(MyProvider())` at app startup (in `app.py`)

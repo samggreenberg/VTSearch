@@ -7,7 +7,14 @@ under `vtscore.datasets.importers` (sentinel `IMPORTER`) and also walks
 the `vtscore.importers` entry-point group, so a third-party
 distribution can ship one by `pip install`-ing a package with the
 right `pyproject.toml` block. Subclass
-[`DatasetImporter`](../../datasets/importers/base.py) ([`vtscore/datasets/importers/base.py:210`](../../datasets/importers/base.py)),
+[`DatasetImporter`](../../datasets/importers/base/dataset_importer.py)
+(`vtscore/datasets/importers/base/` is a **package**, not a module:
+`core.py` holds `ImporterBase`, `dataset_importer.py` the
+`DatasetImporter` subclass, `specs.py` the `SourceSpec` dataclass,
+`origin.py` the origin builders, and `naming.py` the display-name
+helpers; `base/__init__.py` re-exports all of them, so
+`from vtscore.datasets.importers.base import DatasetImporter, PluginField`
+is the import you want),
 declare your `fields`, and either implement `run()` (full control) or
 the `list_records()` / `fetch_record()` hooks (default `run()` does
 the rest).
@@ -83,13 +90,13 @@ bulk-request or `ThreadPoolExecutor.map` covers the entire dataset.
 ## Building media dicts
 
 Each entry in `medias` is a dict with these keys (most are required;
-see [`vtscore/datasets/importers/base.py:340`](../../datasets/importers/base.py)
+see [`vtscore/datasets/importers/base/core.py`](../../datasets/importers/base/core.py)
 for the importer-side instance attributes that feed into the loader):
 
 | Key | Type | Required | Notes |
 |-----|------|----------|-------|
 | `id` | `int` | Yes (set by framework when using the hook path) | 1-based |
-| `type` | `str` | Yes | The media type's `type_id` (`"audio"`, `"image"`, …) |
+| `media_type` | `str` | Yes | The media type's `type_id` (`"audio"`, `"image"`, …). The key is `media_type`, **not** `type` |
 | `filename` | `str` | Yes | Display name and origin-resolution key |
 | `md5` | `str` | Recommended | Hex digest; computed by loader if absent |
 | `embeddings` | `dict[str, np.ndarray]` | Recommended | Per-embedder `{name: vector}` dict; skips the embedding model when it carries a vector. Leave `{}` to let the framework embed. |
@@ -158,7 +165,7 @@ Every importer can pull in multiple source media types in one shot;
 e.g. images, plus videos converted to images, plus documents
 converted to images.  The user submits a list of `source_specs` in
 the dataset modal; the framework iterates them and dispatches
-converters.  Each `SourceSpec` ([`vtscore/datasets/importers/base.py:67`](../../datasets/importers/base.py))
+converters.  Each `SourceSpec` ([`vtscore/datasets/importers/base/specs.py`](../../datasets/importers/base/specs.py))
 is `(source_type, converter, params)`:
 
 - `converter is None` means "include directly": fetch files of
@@ -308,7 +315,6 @@ from typing import Any
 import numpy as np
 
 from vtscore.datasets.importers.base import DatasetImporter, PluginField
-from vtscore.security.url_validation import validate_url
 
 
 class CatalogueImporter(DatasetImporter):
@@ -327,7 +333,10 @@ class CatalogueImporter(DatasetImporter):
     ]
 
     def list_records(self, field_values: dict[str, Any]) -> list[dict]:
-        url = validate_url(field_values["catalogue_url"])
+        # field_type="url" means the framework already ran validate_url on
+        # this value (SSRF guard) before run() was reached - see
+        # "Framework-side normalization" in the plugin README.
+        url = field_values["catalogue_url"]
         with urllib.request.urlopen(url, timeout=30) as resp:  # noqa: S310
             return [json.loads(line) for line in resp if line.strip()]
 

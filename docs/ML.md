@@ -39,7 +39,7 @@ The head used to be a small MLP (`Linear(input_dim, hidden_dim) -> ReLU -> Dropo
 
 ### Class Weighting
 
-Training balances classes by **inverse-frequency weighting** by default (`mlp.py`). The one exception is region flooding on patch datasets, where the caller supplies explicit per-bag `sample_weights` instead (see [Region-aware training](#region-aware-training-on-patch-region-datasets) below). Either way, inclusion does **not** enter training — the trained model, and therefore every item's score, is independent of inclusion. Inclusion is applied later as a pure threshold knob in `conformal_threshold` (see [Threshold Calibration](#threshold-calibration) below).
+Training balances classes by **inverse-frequency weighting** by default (`mlp.py`). The one exception is region flooding on patch datasets, where the caller supplies explicit per-bag `sample_weights` instead (see [Region-aware training](#region-aware-training-on-patch-datasets) below). Either way, inclusion does **not** enter training — the trained model, and therefore every item's score, is independent of inclusion. Inclusion is applied later as a pure threshold knob in `conformal_threshold` (see [Threshold Calibration](#threshold-calibration) below).
 
 - **Weights**: `weight_true = num_false / num_true`, `weight_false = 1.0`
 
@@ -80,9 +80,13 @@ The fitted mixtures are cached on the detector context and **re-cut** when the u
 
 **How Inclusion reaches the cut (`mid_tilt`, issue #2865).** Inclusion arrives at this estimator only as the rate weights a cut rule optimizes, and the bare midpoint ignores them — shipping it verbatim made the knob a no-op for every detector with usable folds. The shipped rule therefore anchors at the midpoint and tilts by the rate rule: in fold-quantile space, `q(k) = q_mid + (q_rate(k) − q_rate(0))` — the midpoint's combined fold quantile, shifted by however far the rate-optimal cut's own quantile moves from its inclusion-0 position. At inclusion 0 the shift is identically zero, so the shipped threshold is bit-for-bit the measured `κ=0.3, mid` arm; away from 0 it inherits the rate rule's monotone tilt without inheriting its weight-biased location, so raising Inclusion can only lower the cutoff and the included sets stay nested. (The rate cut is taken as the *highest* score at which the Bad component still out-densities the Good one under the cost tilt, which keeps it monotone in Inclusion even on fits where the density crossing leaves the inter-mean interval — and once the crossing runs off the interval the cut *continues* past the mode at the rule's own first-order slope, `var/d` per nat of log-cost, rather than pinning to the edge. Pinning made the cut constant over whole bands of the slider, which both deadened the knob there and silently collapsed the acquisition offset below to a no-op — issue #2896; the only plateau left is the honest one, where the cut runs off the haystack's support and the quantile pins at 0 or 1. A fold too degenerate for a rate cut contributes a zero shift and degrades to plain `mid`.) The tilt itself is still unmeasured — every arm of both calibration runs was scored at inclusion 0 — and **issue #2865**'s inclusion sweep is what prices it.
 
-**The acquisition cut is not the decision line (`ACQUISITION_INCLUSION_OFFSET`, PR #2876).** The threshold does two unrelated jobs and they want opposite things from it. *Reporting* is the line the user sees, what Find calls a match, and what `cost = FPR + FNR` is scored at. *Acquisition* is what Autopilot's **Hard** and **New** picks consume — and those don't use it as a decision boundary at all: Hard ranks every item descending, finds the first rank position at or below the threshold, and takes the nearest unlabeled item **in rank space**, while New steers the atlas probe by a node's median score. A threshold is a *sampling position* to them.
+**The acquisition cut is not the decision line (`ACQUISITION_INCLUSION_OFFSET`, PR #2876; re-tuned #2905).** The threshold does two unrelated jobs and they want opposite things from it. *Reporting* is the line the user sees, what Find calls a match, and what `cost = FPR + FNR` is scored at. *Acquisition* is what Autopilot's **Hard** and **New** picks consume — and those don't use it as a decision boundary at all: Hard ranks every item descending, finds the first rank position at or below the threshold, and takes the nearest unlabeled item **in rank space**, while New steers the atlas probe by a node's median score. A threshold is a *sampling position* to them.
 
-That inverts the direction relative to the cost weights: a **negative** inclusion prices false alarms higher, *raises* the cut, moves it *up* the ranking, and so returns *more* positives. Production therefore re-cuts the same fitted estimator at `inclusion − 3` for the selector and leaves reporting where it is (`acquisition_inclusion` in `vtscore/training/thresholds.py`; `detector_acquisition_threshold` in `vtscore/state/core.py` derives it per request from the cached mixtures, so it costs a re-cut and no refit). The −3 is the measured interior optimum: positives found per 100 votes **4 → 18**, final cost **0.137 → 0.129** (paired median −0.011, 95% CI [−0.025, −0.005], p=8e-5), average precision **0.696 → 0.817**, deep-spike incidence unchanged. −4 buys one more positive for 0.005 more cost; +2 (the falsification arm) made everything worse, which is what makes the rest interpretable. See [`docs/experiments/acquisition-inclusion/REPORT.md`](experiments/acquisition-inclusion/REPORT.md).
+That inverts the direction relative to the cost weights: a **negative** inclusion prices false alarms higher, *raises* the cut, moves it *up* the ranking, and so returns *more* positives. Production therefore re-cuts the same fitted estimator at `inclusion − 1` for the selector and leaves reporting where it is (`acquisition_inclusion` in `vtscore/training/thresholds.py`; `detector_acquisition_threshold` in `vtscore/state/core.py` derives it per request from the cached mixtures, so it costs a re-cut and no refit).
+
+**The offset is −1, and it is deliberately not gated by voting mode.** It was shipped at −3 off one environment and has since been measured in two more, which disagree. `coco_val × siglip2` (binary) found an interior optimum at −3: positives per 100 votes **4 → 18**, final cost **0.137 → 0.129** (95% CI [−0.025, −0.005]), average precision **0.696 → 0.817**. `visual_genome_m × siglip` (binary) **rejected** it — cost CI [+0.003, +0.022] against a +0.01 tolerance, with only −1 passing. `visual_genome_m × dinov3_patch` (the first real **region-voting** measurement) passes −3 on the ship rule, but the mechanism −3 was justified by is absent there: paired on the same 536 cells, `k = −3` moves average precision **+0.0283 under binary voting and +0.0003 under region voting** (difference-in-differences −0.0281, CI [−0.0361, −0.0202]), while the cost side — oracle cost rising as the ranking's tail blurs — shows up in **both**. So the disagreement runs along the environment, not the mode: the largest split is *within* binary voting, which no mode gate can reach. −1 is the only value passing everywhere measured. Contrast `PRODUCTION_SCHEDULE_BY_MODE`, which *is* mode-gated — that asymmetry is measured, not an oversight.
+
+**What −1 gives up, and the way to get it back.** On a starved environment −1 finds 6 positives per 100 votes where −3 finds 18. Under binary voting the benefit is sharply concentrated in *starved* cells and turns negative in well-supplied ones — measured on axes independent of the arm being scored (AP response slope **−0.0207** on log category prevalence, CI [−0.0259, −0.0159]; **−0.0402** on a leave-one-out baseline). The offset is a starvation remedy whose price is charged everywhere, so the principled successor is a **supply-dependent** offset — aggressive while positives are scarce, relaxing as they accumulate — which the detector can drive off its own positive count and which subsumes the voting-mode question (#2910). See [`REPORT.md`](experiments/acquisition-inclusion/REPORT.md) (COCO), [`REPORT_SECOND_ENVIRONMENT.md`](experiments/acquisition-inclusion/REPORT_SECOND_ENVIRONMENT.md) (VG binary) and [`REPORT_REGION_VOTING.md`](experiments/acquisition-inclusion/REPORT_REGION_VOTING.md) (VG region).
 
 **That measurement is one environment, and a second one disagrees (issue #2877).** Rerun verbatim on `visual_genome_m × siglip`, the mechanism reproduces exactly — the sampling position moves *further* (+0.121 pool percentile against COCO's +0.058), positives per 100 votes go **6 → 12**, the `+2` falsifier falsifies on every endpoint, and the adaptive ramp is identical — but the payoff inverts: final cost degrades roughly monotonically in `|k|`, and `-3` **fails the same pre-registered ship rule**, with a 95% CI of **[+0.003, +0.022]** on the mean cost delta against a +0.01 tolerance. Only `k=-1` passes. The mechanism is legible: `regret` (cost minus oracle cost) is *flat* in every negative-`k` arm, so the cut estimator is blameless; what changes is the learned ranking, in two directions at once. Average precision **rises** (0.349 → 0.371, p<1e-5) while oracle cost — `min_θ (FPR+FNR)`, a statement about *global* separability — **rises too** (0.395 → 0.410). Aggressive acquisition sharpens the head of the ranking and blurs its tail; AP sees the first, and a globally-placed reporting cut sees the second. COCO escaped this only because it was starved hard enough that any positive helped everywhere. The ranking benefit also **saturates at `k=-2`** while the cost penalty keeps growing. **Note that this second environment is also binary voting** — `visual_genome_m × siglip` carries no `patch_grid`, so its `region_voting` flag was a no-op — so `-3` is over-fitted to `coco_val × siglip2` rather than to binary voting as a class, and **the region-voting generalisation check remains unrun** (it needs `dinov3_patch`). `-1` is the best-supported single global value pending that run. See [`docs/experiments/acquisition-inclusion/REPORT_SECOND_ENVIRONMENT.md`](experiments/acquisition-inclusion/REPORT_SECOND_ENVIRONMENT.md).
 
@@ -123,34 +127,44 @@ Threading is restricted to 1 to minimize memory overhead; the real cost is the e
 
 ## Embedding Models
 
-Each media type uses a different pretrained model to produce fixed-size embedding vectors:
+Each embedder produces fixed-size embedding vectors from a pretrained model. The full roster is generated from the live registry (the `document` media type has no embedder of its own, so it is absent here — documents are converted to other media types before embedding):
 
-| Media type (`type_id`) | Embedder | Model | Embedding dim |
-|------------------------|----------|-------|--------------|
-| Audio (`audio`) | `clap` (default) | LAION CLAP (`laion/clap-htsat-unfused`) | 512 |
-| Audio (`audio`) | `clap_music` | CLAP Music & Speech (`laion/larger_clap_music_and_speech`) | 512 |
-| Audio (`audio`) | `clap_general` | CLAP General 2024 (`laion/larger_clap_general`) | 512 |
-| Audio (`audio`) | `paraspeechclap` | ParaSpeechCLAP speech-style (WavLM + Granite, `ajd12342/paraspeechclap-combined`) | 768 |
-| Audio (`audio`) | `beats` | BEATs iter3+ AS2M self-supervised encoder (`lpepino/beats_ckpts`, audio-only) | 768 |
-| Audio (`audio`) | `ast` | AST audio spectrogram (`MIT/ast-finetuned-audioset-10-10-0.4593`, audio-only) | 768 |
-| Audio (`audio`) | `whisper_encoder` | Whisper-base encoder (`openai/whisper-base`, audio-only) | 512 |
-| Image (`image`) | `siglip` (default) | SigLIP (`google/siglip-base-patch16-224`) | 768 |
-| Image (`image`) | `siglip2` | SigLIP 2 (`google/siglip2-base-patch16-224`) | 768 |
-| Image (`image`) | `siglip2_l` | SigLIP2-L (`google/siglip2-so400m-patch14-384`) | 1152 |
-| Image (`image`) | `clip` | CLIP (`openai/clip-vit-base-patch32`) | 512 |
-| Image (`image`) | `dinov2_single` / `dinov2_patch` | DINOv2 ViT-B/14 (`facebook/dinov2-base`) | 768 |
-| Image (`image`) | `dinov3_single` / `dinov3_patch` | DINOv3 ViT-B/16 (`facebook/dinov3-vitb16-pretrain-lvd1689m`, gated) | 768 |
-| Image (`image`) | `eupe_single` / `eupe_patch` | EUPE ViT-B/16 (`facebookresearch/EUPE`, FAIR Noncommercial) | 768 |
-| Image (`image`) | `sift_vlad` | SIFT/VLAD instance matching (classical, no text encoder) | 8192 (64 centroids × 128-dim SIFT) |
-| Image (`image`) | `face` | FaceNet identity (`InceptionResnetV1`, face crops, no text encoder) | 512 |
-| Video (`video`) | `xclip` (default) | Microsoft X-CLIP (`microsoft/xclip-base-patch32`) | 768 |
-| Text (`text`) | `e5` (default) | E5 (`intfloat/e5-base-v2`) | 768 |
-| Text (`text`) | `bge` | BGE (`BAAI/bge-base-en-v1.5`) | 768 |
-| Document (`document`) | (none) | None (no embedder) | N/A |
+<!-- BEGIN GENERATED: embedders -->
+<!-- Generated by scripts/gen-docs-inventories.py; do not edit by hand. Refresh with: python scripts/gen-docs-inventories.py -->
 
-Each embedder lives in its own `embedder_<name>.py` file inside the media-type package and exposes a module-level `EMBEDDER` sentinel; the default for a given media type is whichever embedder overrides `is_default` to return `True` (exactly one per media type).
+| Media type | Embedder | Display name | Model | Dim | Notes |
+|---|---|---|---|---|---|
+| `audio` | `clap` | CLAP (general audio) | `laion/clap-htsat-unfused` | 512 | **default** for its media type |
+| `audio` | `ast` | AST (audio spectrogram) | `MIT/ast-finetuned-audioset-10-10-0.4593` | 768 | no text queries |
+| `audio` | `beats` | BEATs (audio events) | `lpepino/beats_ckpts` | 768 | no text queries |
+| `audio` | `clap_general` | CLAP (general 2024) | `laion/larger_clap_general` | 512 | — |
+| `audio` | `clap_music` | CLAP (music) | `laion/larger_clap_music_and_speech` | 512 | — |
+| `audio` | `paraspeechclap` | ParaSpeechCLAP (speech style) | `ajd12342/paraspeechclap-combined` | 768 | — |
+| `audio` | `whisper_encoder` | Whisper encoder (speech) | `openai/whisper-base` | 512 | no text queries |
+| `face` | `face` | FaceNet (face identity, 512d) | — | 512 | no text queries |
+| `image` | `siglip` | SigLIP (general images) | `google/siglip-base-patch16-224` | 768 | **default** for its media type |
+| `image` | `clip` | CLIP (general images) | `openai/clip-vit-base-patch32` | 512 | — |
+| `image` | `dinov2_patch` | DINOv2 patch (region-aware images) | `facebook/dinov2-base` | 768 | no text queries; patch grid (region-aware) |
+| `image` | `dinov2_single` | DINOv2 single (image vector) | `facebook/dinov2-base` | 768 | no text queries |
+| `image` | `dinov3_patch` | DINOv3 patch (region-aware images) | `facebook/dinov3-vitb16-pretrain-lvd1689m` | 768 | no text queries; patch grid (region-aware) |
+| `image` | `dinov3_single` | DINOv3 single (image vector) | `facebook/dinov3-vitb16-pretrain-lvd1689m` | 768 | no text queries |
+| `image` | `eupe_patch` | EUPE patch (region-aware images) | `https://huggingface.co/facebook/EUPE-ViT-B/resolve/main/EUPE-ViT-B.pt` | 768 | no text queries; patch grid (region-aware); restricted model license |
+| `image` | `eupe_single` | EUPE single (image vector) | `https://huggingface.co/facebook/EUPE-ViT-B/resolve/main/EUPE-ViT-B.pt` | 768 | no text queries; restricted model license |
+| `image` | `sift_vlad` | SIFT/VLAD (instance matching) | — | 8192 | no text queries; geometric verification |
+| `image` | `siglip2` | SigLIP 2 (general images) | `google/siglip2-base-patch16-224` | 768 | — |
+| `image` | `siglip2_l` | SigLIP2-L (SO400M/384) | `google/siglip2-so400m-patch14-384` | 1152 | — |
+| `image` | `siglip_l` | SigLIP-L (SO400M/384) | `ViT-SO400M-14-SigLIP-384` | 1152 | — |
+| `text` | `e5` | E5 (text) | `intfloat/e5-base-v2` | 768 | **default** for its media type |
+| `text` | `bge` | BGE (text) | `BAAI/bge-base-en-v1.5` | 768 | — |
+| `video` | `xclip` | X-CLIP (video) | `microsoft/xclip-base-patch32` | 768 | **default** for its media type |
+| `video` | `languagebind` | LanguageBind (video) | `LanguageBind/LanguageBind_Video_V1.5_FT` | 768 | — |
+| `video` | `videomae` | VideoMAE v2 (action features) | `OpenGVLab/VideoMAEv2-Base` | 768 | no text queries |
 
-Audio, image, and text media types each ship alternative embedders alongside the default. The image variants come in **single/patch pairs**: `_single` embedders produce one CLS-pooled vector per image (cheap, same shape as SigLIP); `_patch` embedders additionally produce the raw `H × W × D` patch grid (196 vectors on a DINOv3 14×14), enabling region-level similarity, region-aware detector scoring, and region voting on yes-votes.  See [`docs/plans/patch-embedder.md`](plans/patch-embedder.md) for the full design.
+<!-- END GENERATED: embedders -->
+
+Each embedder lives in its own `embedder_<name>.py` file inside the media-type package and exposes a module-level `EMBEDDER` sentinel; the default for a given media type is whichever embedder overrides `is_default` to return `True` (exactly one per media type). Each embedder declares its output dimensionality via the `embedding_dim` descriptor property (the "Dim" column above).
+
+Most media types ship alternative embedders alongside the default. The image variants come in **single/patch pairs**: `_single` embedders produce one CLS-pooled vector per image (cheap, same shape as SigLIP); `_patch` embedders additionally produce the raw `H × W × D` patch grid (196 vectors on a DINOv3 14×14), enabling region-level similarity, region-aware detector scoring, and region voting on yes-votes.  See [`docs/plans/patch-embedder.md`](plans/patch-embedder.md) for the full design.
 
 Embedders carry capability flags consumed by the routes layer and the frontend:
 

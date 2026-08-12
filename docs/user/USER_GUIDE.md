@@ -10,15 +10,15 @@
 1. [What VTSearch does](#what-vtsearch-does)
 2. [Loading a dataset](#loading-a-dataset)
 3. [The three-panel layout](#the-three-panel-layout)
-4. [Autopilot - the guided workflow](#autopilot--the-guided-workflow) *(start here)*
-5. [Manual mode - for power users](#manual-mode--for-power-users)
+4. [Autopilot: the guided workflow](#autopilot-the-guided-workflow) *(start here)*
+5. [Manual mode: for power users](#manual-mode-for-power-users)
 6. [Region voting on images](#region-voting-on-images)
 7. [Creating a detector](#creating-a-detector)
-8. [Find - scoring and verifying](#find--scoring-and-verifying)
+8. [Find: scoring and verifying](#find-scoring-and-verifying)
 9. [View options](#view-options)
 10. [Settings tabs](#settings-tabs)
-11. [Dashboard - managing datasets and detectors](#dashboard--managing-datasets-and-detectors)
-12. [Browse - exploring a dataset spatially](#browse--exploring-a-dataset-spatially)
+11. [Dashboard: managing datasets and detectors](#dashboard-managing-datasets-and-detectors)
+12. [Browse: exploring a dataset spatially](#browse-exploring-a-dataset-spatially)
 13. [Exporting your work](#exporting-your-work)
 14. [Importing pre-trained detectors](#importing-pre-trained-detectors)
 15. [Achievements](#achievements)
@@ -76,39 +76,59 @@ need to think about sort modes or selection strategies directly.
 ## Loading a dataset
 
 Click the **+** button on the **Datasets** card to open the **Add Dataset**
-dialog. It has three tabs, which boil down to two choices:
+dialog. Its top row of tabs is one tab per *category* of source; picking a
+category shows the importers in it as a second row of tabs, and picking an
+importer shows its form underneath. Both rows stay on screen, so switching
+sources is always one click away.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/dataset-panel.dark.png" />
-  <img src="assets/dataset-panel.light.png" alt="The Add Dataset dialog: the Demo tab lists ready-made datasets (Downloaded and Synthetic Media), while the Services and Files tabs import your own data" width="720" />
+  <img src="assets/dataset-panel.light.png" alt="The Add Dataset dialog: the Demo tab lists ready-made datasets (Downloaded and Synthetic Media), while the Files tab imports media from the server" width="720" />
 </picture>
 
-- **Demo datasets** (the **Demo** tab) - VTSearch ships with a catalogue of open
-  datasets across all five media types (audio, image, text, video,
-  document). The demo importer groups them under a **per-media-type tab
-  bar**, so you can narrow the catalogue to just audio, just images, and
-  so on. Each demo downloads on first use (~15 MB to ~1.2 GB depending on
-  dataset) and is cached, so subsequent loads are instant.
-- **Import your own** (the **Files** and **Services** tabs) - Load a
-  folder of files from the server, a VTSearch pickle file, a zipped HTTP
-  archive, or combine several existing datasets. Each importer asks for
-  the fields it needs (path, URL, media type) in a small form.
+VTSearch ships two populated categories, which boil down to two choices:
 
-  The **Files → Manifest** importer also accepts a `.npz` archive of
-  pre-computed fingerprints so you can import media you have already
-  processed offline without doing the work twice. See
-  [Pre-computed embeddings (.npz)](#pre-computed-embeddings-npz) below.
+- **Demo datasets** (the **Demo** tab) - two importers, neither of which
+  needs data of your own:
+  - **Downloaded Media** - a catalogue of open datasets across all five
+    media types (audio, image, text, video, document), grouped under a
+    **per-media-type tab bar** so you can narrow it to just audio, just
+    images, and so on. Each demo downloads on first use (~15 MB to
+    ~1.2 GB depending on dataset) and is cached, so subsequent loads are
+    instant.
+  - **🏭 Synthetic Media** - fabricates images, audio, or video on the
+    fly. This is the quickest way to try VTSearch, since nothing is
+    downloaded at all.
+- **Import your own** (the **Files** tab) - two importers, both reading
+  from the **server's** filesystem (VTSearch has no browser-side upload
+  importer; media must already be somewhere the server can see):
+  - **Folder** - browse the server's filesystem and import a directory of
+    media files, or an archive to unpack.
+  - **Manifest** - point at a `.txt`/`.list` file of media paths. It also
+    accepts a `.npz` archive of pre-computed fingerprints, so you can
+    import media you have already processed offline without doing the work
+    twice (see [Pre-computed embeddings (.npz)](#pre-computed-embeddings-npz)),
+    and a `.npz` that references members inside tar/zip shards, which
+    imports them without unpacking anything (see
+    [Archive members, no extraction (WebDataset shards)](#archive-members-no-extraction-webdataset-shards)).
 
-The quickest way to try VTSearch with no download is the **🏭 Synthetic
-Media** generator on the **Demo** tab, which fabricates images, audio, or
-video on the fly:
+There is also a **Services** tab, which is an extension point rather than a
+feature: it is where an installed plugin's service importers appear (a
+corporate media archive, a third-party search API). Nothing in the stock
+install registers one, so on a default deployment the tab reads *"No
+importers in this category."* See `docs/EXTENDING-plugins.md` if you want to
+add one.
+
+The **Downloaded Media** catalogue is a table: pick a media type from its
+tab bar, then click the dataset you want. Each row carries a readiness
+badge telling you whether it is already cached or still needs downloading.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/importer-picker.dark.png" />
-  <img src="assets/importer-picker.light.png" alt="The Demo importer with its per-media-type tab bar, the Synthetic Media generator, and the Downloaded Media catalogue" width="720" />
+  <img src="assets/importer-picker.light.png" alt="The Demo importer on Downloaded Media: the per-media-type tab bar and the demo-dataset catalogue with per-row readiness badges" width="720" />
 </picture>
 
-Each importer shows a small form for the fields it needs - here, the
+Every other importer shows a small form for the fields it needs - here, the
 Synthetic Media generator's media type and dataset size:
 
 <picture>
@@ -118,9 +138,9 @@ Synthetic Media generator's media type and dataset size:
 
 ### Advanced import options
 
-The file importers expose a collapsible **Advanced** section. The most
-important control there is the embedder picker, which is actually a
-three-role picker:
+Importers expose a collapsible **Advanced** section (hidden when there is
+nothing in it to choose). The most important control there is the embedder
+picker, which is actually a three-role picker:
 
 - **Embedder** - the main model that powers search and matching for the
   dataset. VTSearch picks a sensible default for each media type.
@@ -129,15 +149,30 @@ three-role picker:
 - **Instance embedder (optional)** - a pattern-matching model for
   finding a specific object or logo.
 
-Two more import toggles live nearby:
+The rest of the Advanced section, and one toggle on the importer's own
+form:
 
+- **Include media** - which source media types feed the dataset. The
+  dataset's own type is included directly; other types are pulled in and
+  converted (images out of videos, pages out of documents).
+- **Clipper** - a pre-processing pass applied before each item is
+  analyzed, e.g. cutting long audio into shorter segments.
+- **Cleanup** - optional passes that strip content-free regions from each
+  item just before it's analyzed, so the analysis isn't spent on them.
+  They're independent; tick any combination.
+- **Build the Browse map now** - build the spatial
+  [Browse](#browse-exploring-a-dataset-spatially) map (and its region
+  signposts) during import instead of the first time you open Browse.
+  Costs time up front, opens instantly later.
 - **Merge near-duplicates** - in addition to exact duplicates, fold in
   visually/textually near-identical copies (resizes, recompressions,
   trivial edits). VTSearch keeps the largest copy of each group, and
   exporting one member exports the whole group.
-- **Reference files in place (don't copy)** - store a path reference to
-  each original file on the server instead of copying its bytes in. Saves
-  storage, but the dataset then depends on the source files staying put.
+- **Reference files in place (don't copy)** - on the **Folder** and
+  **Manifest** importer forms (not under Advanced): store a path reference
+  to each original file on the server instead of copying its bytes in.
+  Saves storage, but the dataset then depends on the source files staying
+  put.
 
 Loading a dataset does three things: downloads or reads the media,
 analyzes every item with the embedder so it can be searched, and groups
@@ -258,7 +293,7 @@ remembers your layout per media type.
 
 ---
 
-## Autopilot - the guided workflow
+## Autopilot: the guided workflow
 
 **Start here.** Autopilot is the recommended way to use VTSearch.
 Most users should never need Manual mode.
@@ -332,7 +367,7 @@ toggle.
 
 ---
 
-## Manual mode - for power users
+## Manual mode: for power users
 
 Manual mode gives you direct control over what the sort bar ranks
 by and which unlabeled item is served next. Use it if Autopilot's
@@ -500,8 +535,17 @@ It has two tabs:
 - **Blank** - start a fresh detector that learns from your votes as you
   label. Give it a name, and seed it one of two ways: type a short
   **Text Example** ("e.g. dog barking sounds"), or pick one or more
-  **media examples** by browsing demos / server folders / uploading
-  files. Picked examples stack vertically, each with its own **Remove**
+  **media examples**. The quickest way to supply one is the drop zone
+  right there on the tab - drag a file from your computer onto it, or
+  click it to browse. For anything else, the **Browse Images…** button
+  (it's named for the dataset's media type) opens a picker with the same
+  two-row tab bar as the Add Dataset dialog, offering three sources out of
+  the box: **Downloaded Media** (browse a demo dataset's files), **Server
+  File** (the path of one file on the server), and **URL** (VTSearch
+  downloads the file for you). The last two are *datasource importers* -
+  single-item fetchers that render as a small form, and the extension
+  point where a plugin can add another place to fetch one example from.
+  Picked examples stack vertically, each with its own **Remove**
   button; use **+ Add** below the stack to append another. With several
   examples, Autopilot's first sort ranks the dataset against their
   *average* - it surfaces items resembling what the examples have in
@@ -523,7 +567,7 @@ seed** option (see [Tips and shortcuts](#tips-and-shortcuts)).
 
 ---
 
-## Find - scoring and verifying
+## Find: scoring and verifying
 
 **Find** scores an entire dataset with a detector and drops you into a
 dedicated **three-pane verification view** so you can confirm or correct
@@ -558,15 +602,40 @@ The verification view's action buttons let you act on the result:
   calls plus a chart of how wrong matches and missed matches change as
   you adjust inclusion - the clearest way to see the trade-off the
   inclusion stepper controls.
-- **Export** - send the good set to clipboard, a file, email, or a
-  webhook (see [Exporting your work](#exporting-your-work)).
+- **Export** - send the good set to clipboard, a file, email, a webhook,
+  or another website (see [Exporting your work](#exporting-your-work)).
 - **Browse** - open the positive items in the spatial
-  [Browse](#browse--exploring-a-dataset-spatially) view.
+  [Browse](#browse-exploring-a-dataset-spatially) view.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/find-stats.dark.png" />
   <img src="assets/find-stats.light.png" alt="The Find view's Detector Stats modal: counts, a breakdown of the detector's calls, and a chart of wrong matches vs. missed matches as inclusion changes" width="720" />
 </picture>
+
+### How far to trust the score
+
+The Stats modal also answers a question the accuracy numbers can't: *which
+of these calls is the detector actually qualified to make?* Two sections
+flag the items to verify by hand, each reported as a percentage chip with
+a one-line verdict and a line of supporting numbers:
+
+- **Training-domain overlap** - how much of *this* dataset looks unlike
+  the dataset the detector was trained on. VTSearch can't infer which
+  dataset that was (a detector handed to you may not travel with its
+  haystack), so you pick it from the **Compare against** dropdown, which
+  lists every *other* loaded dataset sharing this one's embedder - the
+  section is hidden entirely when there is no such candidate. A high
+  atypical share means domain shift: the detector is scoring media unlike
+  anything it ever saw, and that share is the part to check yourself.
+- **Evidence coverage** - how much of the dataset the detector is calling
+  with no labeled example like it behind the call. This one is measured
+  from the detector's own votes, so it works even when the training data
+  isn't loaded at all. Items in that "evidence vacuum" are where a
+  handed-over detector is least reliable.
+
+If either share is large, the fastest fix is usually to label a few items
+from the flagged region and retrain, rather than to nudge the inclusion
+stepper.
 
 ---
 
@@ -594,7 +663,7 @@ controls, remembered per media type:
   clicking it. Hover-focus means just moving your cursor over
   an item selects it (faster for scanning, more mis-clicks).
 
-### Solo media type - streamline for one media type
+### Solo media type: streamline for one media type
 
 If everyone on a server only ever works with one kind of media (e.g.
 they exclusively search images, optionally pulled in from videos and
@@ -652,7 +721,7 @@ The Settings modal (gear icon) is organised into eight tabs:
 
 ---
 
-## Dashboard - managing datasets and detectors
+## Dashboard: managing datasets and detectors
 
 The Dashboard is your inventory view. Two tables stacked vertically
 with bulk-action and per-card controls.
@@ -674,14 +743,15 @@ with bulk-action and per-card controls.
     Like datasets, the name carries a **Rename** pencil and **Delete**
     is inline; the **⋯** overflow menu holds the rest, including
     **Import Labels** (import labels into this detector), **Export**,
-    and **Move to AutoRun**.
+    **Export model** (a standalone ONNX scoring bundle - see
+    [Exporting your work](#exporting-your-work)), and **Move to AutoRun**.
   - **AutoRun** holds finalized detectors. They run automatically
     against every dataset as it is imported (and during CLI
     autodetect), and they are *frozen*: no rename, delete, retrain, or
     label import until you pick **Move to Drafts** from the **⋯** menu
     to unfreeze them. Read-only actions (**Load**, **Browse
-    positives**, **Stats**, **Export**) stay available, and **Find**
-    works as usual.
+    positives**, **Stats**, **Export**, **Export model**) stay
+    available, and **Find** works as usual.
 
   A detector lives on exactly one tab at a time, and every user
   curates their own AutoRun list. The typical loop: build and test a
@@ -705,7 +775,7 @@ against your selection.
 
 **Scoring a dataset:** select a dataset and a detector, then click
 **Find** in the action bar to open the verification view (see
-[Find - scoring and verifying](#find--scoring-and-verifying)).
+[Find: scoring and verifying](#find-scoring-and-verifying)).
 
 You can keep multiple datasets and multiple detectors loaded at once.
 Loading just pulls them into memory; the Train / Find buttons work
@@ -720,7 +790,7 @@ stitching together work that started out split across several imports.
 
 ---
 
-## Browse - exploring a dataset spatially
+## Browse: exploring a dataset spatially
 
 Open Browse from a dataset row's **⋯** overflow menu (**Browse
 dataset**) to get a bird's-eye map of the whole collection. VTSearch
@@ -756,6 +826,40 @@ Hovering a tile previews a representative item from that region:
 - **Images, text, video, and documents** show a thumbnail or snippet in
   a popup anchored to your cursor.
 
+### Signposts: named regions
+
+A density map tells you *where* the clusters are but not *what* they are.
+**Signposts** letter the map like street signs: a broad name over each big
+region when you're zoomed out, finer names inside it as you zoom in. They
+turn "there's a dense blob at the top-left" into "that blob is dogs
+barking."
+
+The signpost toggle sits in the bottom-left control cluster next to Region
+select, and is greyed out on a map that has no names to show. Naming
+happens when the map is built, so a freshly built map may letter itself a
+moment after it appears; if the naming settings change, VTSearch re-runs
+the naming in the background the next time you browse rather than making
+you rebuild.
+
+Settings → **Browser** controls them per media type:
+
+- **Signposts** - show or hide the lettering (the same thing the canvas
+  toggle does, but remembered as your default).
+- **Signpost text** - how the names are generated. **Tags** names each
+  region from a fixed vocabulary; it is fast and downloads nothing.
+  **Captions** runs a generative model to describe each item instead,
+  which is sharper on fine-grained collections but downloads a multi-GB
+  model and runs at map-build time. Not every media type offers the
+  choice; the control only appears where it applies.
+
+A server operator can replace the tag vocabulary with their own term list;
+when they have, the Settings → **Server** tab shows it read-only under
+**Custom signpost tags**. Datasets whose items carry a hierarchical
+category path (`Europe/France/Paris`) skip the naming pipeline entirely
+and are lettered straight from that taxonomy, so they light up the moment
+you browse them - which also means they're the one case that works on an
+install without the optional naming dependency.
+
 ### Navigating
 
 The control cluster at the bottom-left of the canvas gives you:
@@ -765,6 +869,8 @@ The control cluster at the bottom-left of the canvas gives you:
 - **Thumbnail size** - smaller or bigger tiles.
 - **Region select** - the dashed-rectangle toggle (or `Shift`+drag) lets
   you drag a box to select every item inside it.
+- **Signposts** - the signpost toggle described above, disabled when the
+  map has no names.
 
 The tiles are **squares** for media with browsable thumbnails (images,
 video, documents) so the thumbnails pack edge-to-edge, and **hexagons**
@@ -775,6 +881,32 @@ there's nothing to set.
 Top-left, **Rebuild map** shuffles the items into a fresh layout
 (handy when a cluster lands somewhere awkward). To return to the
 inventory, use the **Dashboard** button in the top bar.
+
+### Looking inside a tile
+
+Hovering shows you one representative item; **right-click a tile** to see
+everything in it. That opens the **bin details** popup, a small window
+anchored where you clicked:
+
+- A **grid of every item in the tile**, with a running count at the top.
+  It scrolls, so a dense tile holding thousands of items is fine, and its
+  own thumbnail smaller/larger buttons size the grid independently of the
+  map.
+- A **large preview** of the item you're pointing at in that grid (a
+  waveform that plays for audio), with its own size buttons.
+- An optional **metadata column** - name, media type, MD5, and whatever
+  custom fields the dataset carries - toggled by the ⓘ button. Each value
+  has a copy button next to it.
+- **Selection controls**: clicking any thumbnail (or the big preview)
+  selects that item, and a **select-all** checkbox takes the whole tile at
+  once. These feed the same Selection panel described below.
+
+The popup can be dragged around by its header, and the **dock** button in
+its top-left corner turns it into a permanent side panel instead of a
+floating window - useful when you're working through many tiles in a row.
+Docked, the pop-out button hands it back to a floating window, and the
+dividers inside it resize the metadata column and the panel itself.
+VTSearch remembers docked-or-floating per media type.
 
 ### Selecting items
 
@@ -787,7 +919,7 @@ a region of interest out of a large collection by eye.
 Browse can also open **scoped to a Find result**: after scoring a dataset
 you can map just the matched items and use **Verified Good** /
 **Verified Bad** to lasso and prune wrong matches before exporting.
-(See [Find](#find--scoring-and-verifying).)
+(See [Find](#find-scoring-and-verifying).)
 
 ---
 
@@ -805,8 +937,18 @@ saves your current labels. Formats (by their display names):
 - **Server CSV File** - same, but CSV.
 - **Webhook (HTTP POST)** - POSTs the result to a URL you configure.
 - **Send by Email** - emails the result if SMTP is configured.
-- **Display Results** and **Holder Package** are also available for
-  on-screen review and for bundling the matched media into a package.
+- **Open in Website** - for the review tool that has no ingest API but
+  *does* take identifiers in its URL. You give it a URL template such as
+  `https://example.com/review?ids={ids}`; VTSearch fills `{ids}` with the
+  exported items' identifiers (`{count}` works too, and you choose which
+  field to use as the identifier, the separator, and how many to include),
+  then opens the finished URL in a new browser tab. Nothing is sent from
+  the server - the only request is the one your own browser makes - but
+  everything you put in the template is visible to the destination site
+  and lands in your browser history, so keep it to identifiers. Only
+  `http://` and `https://` URLs are accepted, and a formatted URL longer
+  than about 2000 characters is reported as an error rather than
+  truncated (lower **Max items** if you hit it).
 
 The exporter also offers a **Clipboard** copy. It copies a
 column-selected, delimited table (a header row plus one line per item),
@@ -814,9 +956,32 @@ not a raw JSON list - the default columns are **Label**, **MD5**,
 **Filename**, and **Category**, and you can pick which columns and which
 delimiter to use.
 
-You can also export a **detector** from the Detectors dashboard
-(the **Export** overflow item) - useful for sharing a trained detector
-with another VTSearch instance.
+### Exporting a detector
+
+The Detectors dashboard's **⋯** overflow menu exports the detector
+itself, two different ways:
+
+- **Export** - opens the same exporter modal described above, scoped to
+  that detector. This is how you move a detector to another VTSearch
+  instance: a detector *is* its labels (VTSearch re-derives the trained
+  ranker from them every time it loads), so exporting the labels and
+  importing them there with **Import Labels** reconstructs it.
+- **Export model** - a **portable, standalone scoring bundle**: a zip
+  holding `detector.onnx` (the trained ranker, which runs anywhere ONNX
+  does), `manifest.json` (which embedder to use and where the good/bad
+  cutoff sits), and a `README.md` with a copy-paste scoring snippet. This
+  is how you hand the detector to someone who doesn't run VTSearch at all.
+
+  This is the one place VTSearch writes a trained ranker to disk - it
+  normally keeps them in memory only - so the modal says so before you
+  download. The bundle contains **no media and no fingerprints**, just the
+  small trained ranker, but a trained ranker can still reveal something
+  about the data it was trained on, so share it only with people you'd
+  trust with the labels themselves. A compatible dataset must be loaded,
+  since the ranker is trained against that dataset's embedder.
+  Pattern-matching (structural) detectors can't be exported this way -
+  their second verification stage has no ONNX equivalent - and region
+  (patch) detectors export in a whole-item-only scoring mode.
 
 ---
 
@@ -839,7 +1004,7 @@ Two ways to bring in existing work:
   lists the saved detectors already in the registry, so you can score a
   fresh dataset with one without retraining. (There is no separate
   detector-file upload step in the labeling UI; detectors come in via the
-  registry and via [Find](#find--scoring-and-verifying).)
+  registry and via [Find](#find-scoring-and-verifying).)
 
 ---
 
@@ -882,9 +1047,15 @@ and hides the trophy button and unlock pop-ups until you turn it back on.
   audio span before using the item as a sort example or detector seed.
 - **The Autopilot resort prompt.** When you sort by an example and then
   move on, VTSearch may ask whether to update the sort to your new
-  example (**Update Sort Example?**) or **Keep Current**.
-- **Drag-and-drop upload.** Importer file fields are drop zones - drag
-  files (or a folder) onto them instead of clicking to browse.
+  example (**Update Sort Example?**) or **Keep Current**. A new example
+  can be typed as text, picked from the loaded media (**Browse Media…**),
+  uploaded from your computer (**Upload File…**), or fetched by any of
+  the same single-item sources the New Detector modal offers - a path on
+  the server, a URL, or whatever a plugin adds (see
+  [Creating a detector](#creating-a-detector)).
+- **Drag-and-drop upload.** The New Detector modal's media-example field
+  is a drop zone - drag a file from your computer onto it instead of
+  clicking to browse.
 - **Login-gated deployments.** Some servers ask for your name on first
   load before you can start.
 - **Offline banner.** If the app can't reach the server, a banner reads

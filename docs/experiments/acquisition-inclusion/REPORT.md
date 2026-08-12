@@ -1,6 +1,6 @@
 # Decoupling the acquisition threshold from the reporting threshold — the result
 
-**Plan: `docs/plans/acquisition-inclusion-decoupling.md` (deleted on ship; the design now lives in
+**Plan: `acquisition-inclusion-decoupling` (plan file deleted on ship; the design now lives in
 [`docs/ML.md`](../../ML.md#threshold-calibration)) ·
 follow-up to #2847 / PR #2873 · base dev `e9b8ecde` · branch
 `claude/acq-inclusion-decoupling` · GRID worktree

@@ -33,7 +33,7 @@ import {
   formatProgressMessage,
   progressBarState,
 } from '../../utils/format-progress';
-import { sortRowsByColumn } from '../../utils/managed-columns';
+import { sortRowsByColumn } from '../../utils/sort-rows';
 import {
   DashboardColumnsService,
   DatasetColumn,

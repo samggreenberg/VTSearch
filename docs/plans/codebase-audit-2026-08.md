@@ -34,7 +34,6 @@ carries pointers only.
 ### State & concurrency
 
 - [ ] #2931 — JobManager.start() hard-requires Flask via vtsearch.auth; ./run-tests.sh vtscore-clean gate currently fails (medium, Opus 4.8)
-- [ ] #2960 — SSE tracker channels never re-emitted: a dropped terminal frame leaves the client's progress bar stuck (low, Sonnet 5)
 
 ### Training & detectors
 
@@ -58,11 +57,9 @@ carries pointers only.
 
 ### Frontend — dashboard & modals
 
-- [ ] #2965 — Dynamic plugin-field option fetches have no cancellation/ordering guard — stale responses clobber the current form (low, Sonnet 5)
 
 ### Frontend — services & views
 
-- [ ] #2973 — Rapid inclusion-slider changes in Find have no response-ordering guard; a stale threshold can win (low, Sonnet 5)
 
 ### Frontend — styles & templates
 
@@ -70,7 +67,6 @@ carries pointers only.
 
 ### Security
 
-- [ ] #2946 — No server-side authentication enforcement: is_authenticated / login_required are never checked, so every endpoint is reachable unauthenticated (medium, Opus 4.8)
 
 ### Tests & tooling
 
@@ -372,12 +368,6 @@ ship on its own.
   *Direction:* Make the global rule match universal usage (flex column with the agreed gap), delete the four local redeclarations, and fix the misleading comment. Any picker that genuinely wants a grid can opt in with a modifier class.
 
 <!-- item-sep -->
-
-- **style-guide.md §2.5/§2.6 document shared classes that no longer exist** — `docs/style-guide.md:285` (medium impact)
-
-  §2.5 instructs authors to use `.importer-card` / `.importer-name` / `.importer-desc` — a whole-src grep finds zero occurrences; the current primitives are `.picker-card` / `.picker-card__title` / `.picker-card__desc` (_components.scss:644-678). §2.6 (line 289) names `.importer-tab-bar` / `.importer-tab`; the shared strip is now `.tab-bar` / `.tab` (_picker-shared.scss:14-67), with `.importer-subtab*` as the only surviving `importer-`-prefixed subclass, and `.importer-tab-bar` survives only in a comment (_components.scss:278). Since the guide is the canonical reference ("apply the shared classes and the cards will pick up consistent padding"), this drift actively steers new code toward unstyled dead class names — the exact failure the guide exists to prevent. CLAUDE.md's persistent-tab-picker paragraph repeats the stale `.importer-tab-bar` name too.
-
-  *Direction:* Update §2.5 to `.picker-card`/`.picker-card__title`/`.picker-card__desc` (+ `.importer-picker`/`.exporter-picker` container semantics once the grid contradiction is resolved) and §2.6 to `.tab-bar`/`.tab` with the `@extend` subclasses; fix the CLAUDE.md reference in the same pass.
 
 <!-- item-sep -->
 

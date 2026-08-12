@@ -423,6 +423,18 @@ class CoreConfig:
     autofind_exporter: str = ""
     autofind_exporter_field_values: dict[str, dict[str, str]] = field(default_factory=dict)
 
+    # Operator overrides for the Browse projection's UMAP knobs (server-tier
+    # ``projection_n_neighbors`` / ``projection_min_dist``).  Mirrored onto the
+    # library tier because *both* fit paths — the on-demand route and the
+    # ingest-time pre-build, which cannot import ``vtsearch.settings`` — resolve
+    # their params through :func:`vtscore.projection.params.resolve_projection_params`.
+    # A value equal to the global constant above means "no override", which is
+    # what lets ``PROJECTION_DEFAULTS_BY_EMBEDDER`` apply.  Defaulted here so
+    # library-only ``CoreConfig(...)`` constructions without the app shim keep
+    # working unchanged.
+    projection_n_neighbors: int = PROJECTION_N_NEIGHBORS
+    projection_min_dist: float = PROJECTION_MIN_DIST
+
     # Per-media-type opt-in to the generative signpost captioner (image VLM /
     # audio captioner) instead of the default zero-shot tag texts.  ``{}`` (the
     # default) means tags for every type.  Read by

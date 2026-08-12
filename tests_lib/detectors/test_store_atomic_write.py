@@ -75,6 +75,17 @@ class TestDetectorAtomicWrite:
         """The truncation path is inert for ordinary names."""
         assert _slug("Mammals of North America") == "mammals_of_north_america"
 
+    def test_slug_matches_documented_examples(self):
+        """Pin the worked examples in ``docs/CLI.md`` § Detector file names.
+
+        The doc tells operators that a detector *name* and its *filename* are
+        not the same string; these are the two examples it spells out, so a
+        change to slugging shows up as a doc-drift failure here.
+        """
+        assert _slug("Dog Barks") == "dog_barks"
+        assert _slug("Bird calls (v2)") == "bird_calls_v2"
+        assert _slug("!!!") == "detector"
+
     def test_tmp_cleaned_up_on_replace_error(self, tmp_path, monkeypatch):
         """A failed ``os.replace`` must not leak the half-written tmp file."""
         path = tmp_path / "mammals.json"

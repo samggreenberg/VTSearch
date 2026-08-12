@@ -98,6 +98,14 @@ def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> No
     frozen layout (see ``vtscore.projection.signpost_prep``), cache
     everything on the context, and persist it into the dataset container.
 
+    "Mirrors" includes the knobs: the fit goes through the same
+    :func:`~vtscore.projection.params.resolve_projection_params` the route
+    uses, never ``fit_projection``'s signature defaults.  A layout fit under
+    different params than the route would resolve is worse than no pre-build
+    at all — the first Browse open either throws it away (params mismatch, so
+    UMAP re-runs and the opt-in bought nothing) or keeps a layout nobody
+    configured.
+
     Best-effort by contract: the dataset is already registered and usable
     before this runs, so any failure here (including a cancellation during
     the fit) must leave the dataset intact and merely fall back to the lazy
@@ -109,6 +117,7 @@ def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> No
         bin_shape_for_media_type,
         build_pyramid,
         fit_projection,
+        resolve_projection_params,
     )
 
     def _progress(current: int, total: int, message: str) -> None:
@@ -135,7 +144,15 @@ def _build_projection_stage(ctx: DatasetContext, tracker, dataset_id: str) -> No
     def _on_fit_progress(status: str, message: str, current: int, total: int) -> None:
         _progress(current, total, message or "Building 2-D projection…")
 
-    proj = fit_projection(matrix, list(sorted_ids), on_progress=_on_fit_progress)
+    params = resolve_projection_params(ctx)
+    proj = fit_projection(
+        matrix,
+        list(sorted_ids),
+        n_neighbors=params.n_neighbors,
+        min_dist=params.min_dist,
+        compact=params.compact,
+        on_progress=_on_fit_progress,
+    )
     _progress(0, 1, "Building tile pyramid…")
     # The bin shape is a fixed property of the dataset's media type — squares
     # for browsable-thumbnail media (image/video/document), hexes otherwise —

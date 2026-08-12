@@ -843,28 +843,63 @@ def test_projection_params_match(monkeypatch):
     import numpy as np
 
     from vtsearch.routes import projection as proj_route
+    from vtscore.projection.params import ProjectionParams
     from vtscore.projection.umap_projection import Projection
 
     coords = np.zeros((3, 2), dtype=np.float32)
     ids = [0, 1, 2]
-    umap_default = Projection("p", ids, coords, "umap", 15, 0.1)
-    umap_changed = Projection("p", ids, coords, "umap", 30, 0.1)
-    pca = Projection("p", ids, coords, "pca", None, None)
-    legacy = Projection("p", ids, coords, "umap", None, None)
+    umap_default = Projection("p", ids, coords, "umap", 15, 0.1, False)
+    umap_changed = Projection("p", ids, coords, "umap", 30, 0.1, False)
+    pca = Projection("p", ids, coords, "pca", None, None, None)
+    legacy = Projection("p", ids, coords, "umap", None, None, None)
 
     # Active settings at the config defaults.
-    monkeypatch.setattr(proj_route, "_umap_params", lambda ctx=None: (15, 0.1))
+    monkeypatch.setattr(proj_route, "_projection_params", lambda ctx=None: ProjectionParams(15, 0.1, False))
     assert proj_route._projection_params_match(umap_default) is True
     assert proj_route._projection_params_match(umap_changed) is False
     assert proj_route._projection_params_match(pca) is True
-    # Legacy None params are assumed to be the config defaults.
-    assert proj_route._projection_params_match(legacy) is True
+    # Legacy None UMAP knobs are assumed to be the config defaults — but an
+    # unstamped ``compact`` means "compacted", which today's default is not.
+    assert proj_route._projection_params_match(legacy) is False
 
     # Operator tuned the setting away from the default -> stale layouts recompute.
-    monkeypatch.setattr(proj_route, "_umap_params", lambda ctx=None: (30, 0.1))
+    monkeypatch.setattr(proj_route, "_projection_params", lambda ctx=None: ProjectionParams(30, 0.1, False))
     assert proj_route._projection_params_match(legacy) is False
     assert proj_route._projection_params_match(umap_changed) is True
     assert proj_route._projection_params_match(pca) is True
+
+
+def test_projection_params_match_detects_compaction_mismatch(monkeypatch):
+    """A layout compacted under the old default is refit, not silently served.
+
+    ``compact`` used not to be stamped at all, so a compacted layout was
+    indistinguishable from an uncompacted one and the mismatch could never
+    force a recompute (issue #3056).
+    """
+    import numpy as np
+
+    from vtsearch.routes import projection as proj_route
+    from vtscore.projection.params import ProjectionParams
+    from vtscore.projection.umap_projection import Projection
+
+    coords = np.zeros((3, 2), dtype=np.float32)
+    ids = [0, 1, 2]
+    compacted = Projection("p", ids, coords, "umap", 15, 0.1, True)
+    uncompacted = Projection("p", ids, coords, "umap", 15, 0.1, False)
+    unstamped = Projection("p", ids, coords, "umap", 15, 0.1, None)
+
+    monkeypatch.setattr(proj_route, "_projection_params", lambda ctx=None: ProjectionParams(15, 0.1, False))
+    assert proj_route._projection_params_match(uncompacted) is True
+    assert proj_route._projection_params_match(compacted) is False
+    # Unstamped reads as compacted — what it was when nothing recorded it.
+    assert proj_route._projection_params_match(unstamped) is False
+
+    # ...and the guard is symmetric: with compaction back on, the uncompacted
+    # layout is the stale one.
+    monkeypatch.setattr(proj_route, "_projection_params", lambda ctx=None: ProjectionParams(15, 0.1, True))
+    assert proj_route._projection_params_match(compacted) is True
+    assert proj_route._projection_params_match(unstamped) is True
+    assert proj_route._projection_params_match(uncompacted) is False
 
 
 class TestProjectionLabels:

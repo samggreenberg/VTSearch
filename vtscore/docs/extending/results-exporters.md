@@ -7,14 +7,14 @@ auto-discovers exporters under `vtscore.exporters` (sentinel
 `EXPORTER`) and walks the `vtscore.exporters` entry-point group so a
 third-party distribution can `pip install` one in. Subclass
 [`LabelsetExporter`](../../exporters/base.py)
-([`vtscore/exporters/base.py:59`](../../exporters/base.py)), declare
+([`vtscore/exporters/base.py`](../../exporters/base.py)), declare
 your `fields`, and implement `export(results, field_values) -> dict`.
 
 The base class is named `LabelsetExporter` for historical reasons; in
 practice it handles both autodetect-results payloads and label
 exports. The `export()` method should detect which is which (label
 payloads carry a top-level `"labels"` key - see
-[`vtscore/exporters/server_json_file/__init__.py:75`](../../exporters/server_json_file/__init__.py)
+[`vtscore/exporters/server_json_file/__init__.py`](../../exporters/server_json_file/__init__.py)
 for the pattern).
 
 **App-side counterpart:** [`docs/EXTENDING-plugins.md § Adding a
@@ -113,59 +113,75 @@ this pattern.
 
 ## Template-variable interpolation
 
-`server_path` fields support template variables resolved at export
-time:
+Declare the variables a field accepts in its `template_vars` tuple; the
+framework substitutes them before `export()` is called:
 
-- `{YYYYMMDD-HHMMSS}` - current UTC timestamp
-- `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` - current UTC date parts (for
-  date-stamped paths from scheduled runs, e.g. `results_{YYYY}.{MM}.{DD}.csv`)
-- `{detector_name}` / `{detector_id}` - active detector identity
-- `{username}` - current user (single-user installs: `"default"`)
+```python
+PluginField(
+    key="filepath",
+    label="Save to (server path)",
+    field_type="server_path",
+    default=f"{DATA_DIR}/results_{{YYYYMMDD-HHMMSS}}.json",
+    template_vars=("YYYYMMDD-HHMMSS", "YYYYMMDD", "YYYY", "MM", "DD", "detector_name", "username"),
+)
+```
 
-The interpolation helper lives at
-[`vtscore/exporters/_template.py`](../../exporters/_template.py); use
-`resolve_export_filepath(filepath_str)` to apply every supported
-substitution to a user-supplied path string. Don't roll your own
-regex - `resolve_export_filepath` also sanitises substituted values
-via `sanitize_template_value` so a malicious `{detector_name}`
-containing `../` can't escape the per-user data directory in
-multi-user mode.
+| Variable | Resolves to |
+|----------|-------------|
+| `{YYYYMMDD-HHMMSS}` | Current UTC timestamp - unique per run, so consecutive exports don't overwrite each other |
+| `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` | Current UTC date parts, for date-stamped paths from scheduled runs, e.g. `results_{YYYY}.{MM}.{DD}.csv` |
+| `{detector_name}` / `{detector_id}` | Active detector identity |
+| `{username}` | Current user (single-user installs: `"default"`) |
+
+**Don't substitute by hand, and don't omit `template_vars`.** The
+framework pass sanitises every resolved value with
+`sanitize_template_value`, so a malicious `{detector_name}` containing
+`../` can't escape the per-user data directory in multi-user mode; a
+hand-rolled `str.replace` chain gets that wrong. And a field that
+doesn't declare `template_vars` gets *no* substitution at all - the
+user's `{YYYYMMDD}` ends up literally in the filename. Declaring a name
+outside the supported set raises `ValueError` on the first request, so
+typos fail loudly.
 
 ## Server-path and URL validation
 
-Any exporter that accepts a file path **must** validate it through
-`vtscore.security.validate_server_filepath`
-([`vtscore/security/path_validation.py`](../../security/path_validation.py)),
-passing the active base dir from `get_file_access_base_dir()`. In
-multi-user mode this confines the path to the current user's data
-directory; in single-user / no-auth mode the base dir is `None` and the
-path is unrestricted:
+**A declared field is already validated.** Because a field typed
+`url` is passed through `vtscore.security.validate_url` and a field
+typed `server_path` (or `folder`) through `confine_server_filepath()`
+before your `export()` runs — see [Framework-side
+normalization](README.md#framework-side-normalization) — the correct
+exporter body just uses the value:
 
 ```python
-from vtscore.security.path_validation import (
-    get_file_access_base_dir,
-    validate_server_filepath,
-)
-
-path = validate_server_filepath(field_values["filepath"], base_dir=get_file_access_base_dir())
-# Raises ValueError if it escapes the user's data dir (multi-user) - let it propagate.
+def export(self, results: dict, field_values: dict) -> dict:
+    path = Path(field_values["filepath"])   # already stripped, substituted, confined
+    requests.post(field_values["url"], json=results, timeout=30, allow_redirects=False)
 ```
 
-Any exporter that makes an outbound HTTP request **must** validate
-the URL through `vtscore.security.validate_url`
-([`vtscore/security/url_validation.py:30`](../../security/url_validation.py)).
-It rejects non-HTTP(S) schemes and resolves the hostname to refuse
-private / loopback / link-local IPs - the standard SSRF guard:
+Use `field_values[key]`, never a copy of the raw request value you
+stashed elsewhere: for path fields the pass writes back the *approved,
+canonicalised* path, and re-deriving it yourself resolves against the
+process CWD instead of the user's data dir.
+
+**Anything you construct is still yours to validate.** A URL you build
+by joining a configured base with a path segment, or a path you join
+from a field plus a generated filename, never passed through a declared
+field, so run it through `validate_url`
+([`vtscore/security/url_validation.py`](../../security/url_validation.py))
+or `validate_server_filepath(..., base_dir=get_file_access_base_dir())`
+([`vtscore/security/path_validation.py`](../../security/path_validation.py))
+yourself:
 
 ```python
 from vtscore.security.url_validation import validate_url
 
-url = validate_url(field_values["url"])
-requests.post(url, json=results, timeout=30, allow_redirects=False)
+url = validate_url(urljoin(field_values["base_url"], f"/labelsets/{labelset_id}"))
 ```
 
 Both helpers are import-clean of Flask, so library-only exporter tests
-can exercise them directly.
+can exercise them directly. Calling them redundantly on an
+already-validated field value is harmless (they're idempotent), just
+unnecessary.
 
 ## Opening a URL in the browser
 
@@ -267,7 +283,6 @@ from typing import Any
 import requests
 
 from vtscore.exporters.base import PluginField, LabelsetExporter
-from vtscore.security.url_validation import validate_url
 
 
 class SignedWebhookExporter(LabelsetExporter):
@@ -299,10 +314,10 @@ class SignedWebhookExporter(LabelsetExporter):
         if "labels" not in results:
             raise ValueError("signed_webhook exporter only handles label exports.")
 
-        url = validate_url(field_values["url"].strip())
+        # Both fields are declared and required, so by this point they are
+        # stripped, non-empty, and (for the "url" field type) SSRF-checked.
+        url = field_values["url"]
         secret = field_values["hmac_secret"].encode("utf-8")
-        if not secret:
-            raise ValueError("HMAC secret is required.")
 
         body = json.dumps(results, sort_keys=True).encode("utf-8")
         signature = hmac.new(secret, body, hashlib.sha256).hexdigest()
@@ -386,8 +401,9 @@ class TestSignedWebhookExport:
             captured["headers"] = headers
             return _Resp()
 
-        with patch("my_pkg.exporter.requests.post", _fake_post), \
-             patch("my_pkg.exporter.validate_url", lambda u: u):
+        # export() takes already-normalized field_values, so a unit test
+        # can hand it a plain dict without going through a route.
+        with patch("my_pkg.exporter.requests.post", _fake_post):
             result = exp.export(results, {
                 "url": "https://example.com/hook",
                 "hmac_secret": "s3cret",

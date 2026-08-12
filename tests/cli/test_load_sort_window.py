@@ -115,10 +115,10 @@ class TestServerMediaFiles:
 
     @pytest.fixture(autouse=True)
     def _setup_media_dir(self, tmp_path, monkeypatch):
-        from vtsearch.routes.media import server as media_server_module
+        import vtscore.security.path_validation as paths_mod
 
         self._media_dir = tmp_path / "example_media"
-        monkeypatch.setattr(media_server_module, "SERVER_MEDIA_DIR", self._media_dir)
+        monkeypatch.setattr(paths_mod, "example_media_dir", lambda: self._media_dir)
 
     def test_empty_dir_returns_empty_list(self, client):
         resp = client.get("/api/server-media-files")
@@ -164,11 +164,11 @@ class TestServerMediaFileThumbnail:
 
     @pytest.fixture(autouse=True)
     def _setup_media_dir(self, tmp_path, monkeypatch):
-        from vtsearch.routes.media import server as media_server_module
+        import vtscore.security.path_validation as paths_mod
 
         self._media_dir = tmp_path / "example_media"
         self._media_dir.mkdir(parents=True, exist_ok=True)
-        monkeypatch.setattr(media_server_module, "SERVER_MEDIA_DIR", self._media_dir)
+        monkeypatch.setattr(paths_mod, "example_media_dir", lambda: self._media_dir)
 
     def _make_wav(self, name="example.wav", duration=0.1):
         sample_rate = 16000
@@ -227,11 +227,11 @@ class TestExampleSortServer:
 
     @pytest.fixture(autouse=True)
     def _setup_media_dir(self, tmp_path, monkeypatch):
-        from vtsearch.routes.media import server as media_server_module
+        import vtscore.security.path_validation as paths_mod
 
         self._media_dir = tmp_path / "example_media"
         self._media_dir.mkdir(parents=True, exist_ok=True)
-        monkeypatch.setattr(media_server_module, "SERVER_MEDIA_DIR", self._media_dir)
+        monkeypatch.setattr(paths_mod, "example_media_dir", lambda: self._media_dir)
 
     def _create_test_wav(self, name="test.wav"):
         """Create a valid WAV file in the server media dir."""

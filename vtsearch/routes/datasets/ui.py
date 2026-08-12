@@ -432,7 +432,7 @@ def detect_media_type(query: dict):
 @datasets_ui_bp.alt_response(400, description="Path escapes the source root.")
 @datasets_ui_bp.alt_response(404, description="Source or file not found on disk.")
 def select_browsed_file(body: dict):
-    """Copy a file from a browse source into ``data/example_media/``.
+    """Copy a file from a browse source into the user's ``example_media/`` dir.
 
     Expects JSON::
 
@@ -445,7 +445,7 @@ def select_browsed_file(body: dict):
     import shutil
     import uuid
 
-    from vtscore.config import DATA_DIR
+    from vtscore.security.path_validation import example_media_dir
 
     source = body["source"].strip()
     file_path = body["path"].strip()
@@ -464,8 +464,8 @@ def select_browsed_file(body: dict):
     if not abs_path.is_file():
         abort(404, message="File not found")
 
-    # Copy to data/example_media/ with a unique prefix to avoid collisions.
-    dest_dir = DATA_DIR / "example_media"
+    # Copy to the user's example_media/ with a unique prefix to avoid collisions.
+    dest_dir = example_media_dir()
     dest_dir.mkdir(parents=True, exist_ok=True)
     safe_name = f"{uuid.uuid4().hex[:8]}_{abs_path.name}"
     dest = dest_dir / safe_name

@@ -9,12 +9,20 @@
 #   ./run-tests.sh vtscore-clean  # run tests_lib/ with Flask import blocked
 #
 # Available groups: core, api, sorting, datasets, io, detectors,
-#                   downloads, integration, cli, converters, projection
+#                   downloads, integration, cli, converters, projection,
+#                   frontend (build + audit + Vitest, no Python tests), gpu
 #
 # Each group is a folder under tests/ AND tests_lib/. Marker assignment is
 # automatic: any file at tests[_lib]/<group>/test_*.py gets marked <group>
 # by the respective conftest.  tests_lib/ holds Flask-free library tests
-# (Phase 7 of vtscore/docs/architecture.md).
+# (see vtscore/docs/architecture.md).
+#
+# NOTE: naming a group puts `-m <group>` on the pytest command line, which
+# REPLACES the `-m 'not gpu and not slow'` default in pyproject.toml's
+# addopts rather than combining with it. So a group run also picks up any
+# slow/gpu tests in that folder (that is how `./run-tests.sh gpu` works).
+# To keep the default exclusions, spell the filter out after `--`, e.g.
+#   ./run-tests.sh cli -- -m 'cli and not slow'
 #
 # Extra pytest args can follow a '--':
 #   ./run-tests.sh core -- -x --tb=short
@@ -108,6 +116,19 @@ if ! codespell --toml pyproject.toml ; then
     echo "============================================================"
     exit 1
 fi
+# Documentation drift: relative links, in-page anchors, backticked repo paths,
+# leaked absolute machine paths, plan-file citations anywhere in the tree, and
+# broken code fences. Pure invariants against the current tree — nothing to
+# re-pin — and it imports nothing, so it costs ~0.4s and sits with the linters.
+echo "Checking documentation..."
+if ! python scripts/check-docs.py ; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: documentation check found drift"
+    echo "============================================================"
+    exit 1
+fi
+
 echo "Running deptry..."
 if ! python -m deptry . ; then
     echo ""
@@ -200,6 +221,21 @@ if ! diff -u frontend/openapi.json "$_openapi_regen" > /dev/null; then
 fi
 rm -f "$_openapi_regen" "$_openapi_dump_log"
 
+# Generated doc-inventory drift check: regenerate the registry-backed
+# tables embedded in the docs (embedders, plugin families, demo datasets,
+# ...) and fail if any committed region is stale. Same shape as the
+# OpenAPI snapshot gate above; see scripts/gen-docs-inventories.py.
+echo "Checking generated doc inventories..."
+if ! python scripts/gen-docs-inventories.py --check ; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: generated doc inventories are stale"
+    echo "============================================================"
+    echo "Run 'python scripts/gen-docs-inventories.py' and commit the"
+    echo "result."
+    exit 1
+fi
+
 echo "Checking Dockerfiles..."
 if ! python scripts/check-dockerfiles.py ; then
     echo ""
@@ -218,6 +254,19 @@ if ! python scripts/screenshots/wiring-check.py ; then
     echo ""
     echo "============================================================"
     echo "TESTS BLOCKED: user-docs screenshot wiring check failed"
+    echo "============================================================"
+    exit 1
+fi
+
+# vtscore package docs: every top-level module / sub-package of vtscore/ is
+# covered by a packages/ doc, and no doc cites a file.py:NNN line anchor (they
+# rot on the next edit; cite module-and-symbol instead). Regex sweep, imports
+# nothing, ~0.1s. See scripts/check-vtscore-docs.py for the policy.
+echo "Checking vtscore package docs..."
+if ! python scripts/check-vtscore-docs.py ; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: vtscore package docs check failed"
     echo "============================================================"
     exit 1
 fi
@@ -288,16 +337,25 @@ if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
     echo "Checking frontend TypeScript build..."
     _fe_log=$(mktemp)
     if (cd frontend && npm run build:prod 2>&1) > "$_fe_log"; then
-        # Treat Angular compiler warnings (e.g. NG8107) as errors
-        if grep -q '▲ \[WARNING\]' "$_fe_log"; then
+        # Treat Angular compiler warnings (e.g. NG8107) and budget warnings as
+        # errors. Angular colourises its output even when stdout is a file, and
+        # it interleaves the escapes *inside* the marker
+        # (`ESC[33m▲ ESC[43;33m[ESC[43;30mWARNING…`), so the literal
+        # `▲ [WARNING]` never matches the raw log — that blindness let an
+        # over-budget initial bundle sail past this gate for months. Match
+        # against an ANSI-stripped copy instead.
+        _fe_plain=$(mktemp)
+        sed -r 's/\x1b\[[0-9;]*m//g' "$_fe_log" > "$_fe_plain"
+        if grep -q '▲ \[WARNING\]' "$_fe_plain"; then
             echo ""
             echo "============================================================"
             echo "TESTS BLOCKED: Frontend build has warnings (treated as errors)"
             echo "============================================================"
-            grep -A 10 '▲ \[WARNING\]' "$_fe_log"
-            rm -f "$_fe_log"
+            grep -A 10 '▲ \[WARNING\]' "$_fe_plain"
+            rm -f "$_fe_log" "$_fe_plain"
             exit 1
         fi
+        rm -f "$_fe_plain"
         echo "Frontend build OK"
     else
         echo ""

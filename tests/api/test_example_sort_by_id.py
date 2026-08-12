@@ -105,9 +105,9 @@ class TestServerMediaFileFromMediaIdEndpoint:
         """Happy path: media bytes are written under example_media/ and the
         saved filename + original name come back in the response."""
         # Redirect the per-user example_media/ dir so we don't pollute disk.
-        import vtsearch.routes.media.server as server_module
+        import vtscore.security.path_validation as paths_mod
 
-        monkeypatch.setattr(server_module, "SERVER_MEDIA_DIR", tmp_path / "example_media")
+        monkeypatch.setattr(paths_mod, "example_media_dir", lambda: tmp_path / "example_media")
 
         # Make sure the media has resolvable bytes.
         media = medias[loaded_media_id]

@@ -4,7 +4,9 @@ Maintains a JSON manifest at ``data/detector_registry.json`` that tracks every
 detector the user has created.  Each entry stores enough metadata to display
 the detector in the dashboard grid.
 
-Every entry is backed by a labelset file at ``data/detectors/<name>.json``.
+Every entry is backed by a labelset file under ``data/detectors/``, named
+after a slug of the detector name rather than the name itself (see
+:func:`vtscore.detectors.store._slug`).
 The MLP that scores the detector is trained on demand from the labelset and
 lives only in RAM (see :class:`~vtsearch.state.DetectorContext`).
 
@@ -132,8 +134,9 @@ def register_detector(
     """Add a new detector to the registry and persist.
 
     Args:
-        name: Display name for the dashboard.  Also the slug used to look
-            up the on-disk labelset file at ``data/detectors/<name>.json``.
+        name: Display name for the dashboard.  Also the key the on-disk
+            labelset file is looked up by; the file itself is
+            ``data/detectors/<slug-of-name>.json``.
         media_type: ``"audio"``, ``"image"``, ``"video"``, ``"text"``, etc.
         num_training: Number of training examples (label count).
         text_query: Text-sort query associated with the detector.

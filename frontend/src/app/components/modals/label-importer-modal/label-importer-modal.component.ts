@@ -21,9 +21,10 @@ import { LabelImportersApiService } from '../../../services/label-importers-api.
 import { MediasApiService } from '../../../services/medias-api.service';
 import { ProgressEventsService } from '../../../services/progress-events.service';
 import { VoteStateService } from '../../../services/vote-state.service';
-import { FieldOptions, ImporterField, LoadingTask } from '../../../models/api.models';
+import { ImporterField, LoadingTask } from '../../../models/api.models';
 import type { LabelImporterEntry } from '../../../generated/api-client/models/label-importer-entry';
 import { apiErrorMessage } from '../../../utils/api-error';
+import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
 import { ProgressBarComponent } from '../../progress-bar/progress-bar.component';
 import { formatProgressMessage, progressBarState, type ProgressBarState } from '../../../utils/format-progress';
 
@@ -95,9 +96,10 @@ export class LabelImporterModalComponent implements OnDestroy {
       (this.importersResource.error() ? 'Failed to load label importers' : ''),
   );
   readonly successMessage = signal('');
-  readonly dynamicFieldOptions = signal<Record<string, FieldOptions[]>>({});
-  readonly dynamicFieldLoading = signal<Record<string, boolean>>({});
-  readonly dynamicFieldError = signal<Record<string, string>>({});
+  /** Option lists for the selected importer's ``dynamic_options`` fields. */
+  readonly fieldOptions = new DynamicFieldOptions((key, values) =>
+    this.labelImportersApi.getFieldOptions(this.selectedImporter!.name, key, values),
+  );
   readonly addingGood = signal(false);
   readonly addingBad = signal(false);
 
@@ -129,9 +131,7 @@ export class LabelImporterModalComponent implements OnDestroy {
     this.selectedFileFieldKey = null;
     this.importError.set('');
     this.successMessage.set('');
-    this.dynamicFieldOptions.set({});
-    this.dynamicFieldLoading.set({});
-    this.dynamicFieldError.set({});
+    this.fieldOptions.reset();
     const fields = (importer.fields ?? []) as ImporterField[];
     for (const field of fields) {
       if (field.default) {
@@ -145,66 +145,13 @@ export class LabelImporterModalComponent implements OnDestroy {
         this.formValues[field.key] = field.options![0];
       }
     }
-    for (const field of fields) {
-      if (field.dynamic_options) {
-        this.refreshDynamicFieldOptions(field);
-      }
-    }
+    this.fieldOptions.refreshAll(fields, this.formValues);
     this.view = 'form';
   }
 
   onFormFieldChanged(changedKey: string): void {
-    const importer = this.selectedImporter;
-    if (!importer?.fields) return;
-    for (const field of (importer.fields as ImporterField[])) {
-      if (!field.dynamic_options) continue;
-      if (!(field.depends_on || []).includes(changedKey)) continue;
-      this.formValues[field.key] = '';
-      this.refreshDynamicFieldOptions(field);
-    }
-  }
-
-  optionsFor(field: ImporterField): FieldOptions[] {
-    if (field.dynamic_options) {
-      return this.dynamicFieldOptions()[field.key] || [];
-    }
-    // Static options are plain strings; render each as its own label.
-    return (field.options || []).map((o) => ({ value: o, label: o }));
-  }
-
-  private refreshDynamicFieldOptions(field: ImporterField): void {
-    const importer = this.selectedImporter;
-    if (!importer) return;
-    const key = field.key;
-    this.dynamicFieldLoading.update((m) => ({ ...m, [key]: true }));
-    this.dynamicFieldError.update((m) => ({ ...m, [key]: '' }));
-    this.labelImportersApi
-      .getFieldOptions(importer.name, key, { ...this.formValues })
-      .subscribe({
-        next: (res) => {
-          const options: FieldOptions[] = res.options || [];
-          this.dynamicFieldOptions.update((m) => ({ ...m, [key]: options }));
-          this.dynamicFieldLoading.update((m) => ({ ...m, [key]: false }));
-          const current = this.formValues[key];
-          const inList = options.some((o) => o.value === String(current));
-          // Strict selects clear a value the new list no longer offers; a
-          // free-text combobox keeps whatever the user typed.
-          if (current && !inList && !field.allow_free_text) {
-            this.formValues[key] = '';
-          }
-          if (!this.formValues[key] && field.required && !field.allow_free_text && options.length > 0) {
-            this.formValues[key] = options[0].value;
-          }
-        },
-        error: (err) => {
-          this.dynamicFieldLoading.update((m) => ({ ...m, [key]: false }));
-          this.dynamicFieldError.update((m) => ({
-            ...m,
-            [key]: apiErrorMessage(err, 'Could not load options'),
-          }));
-          this.dynamicFieldOptions.update((m) => ({ ...m, [key]: [] }));
-        },
-      });
+    if (!this.selectedImporter?.fields) return;
+    this.fieldOptions.refreshDependentsOf(changedKey, this.selectedImporterFields, this.formValues);
   }
 
   back(): void {
@@ -212,6 +159,7 @@ export class LabelImporterModalComponent implements OnDestroy {
     this.selectedImporter = null;
     this.importError.set('');
     this.successMessage.set('');
+    this.fieldOptions.reset();
   }
 
   onFileSelected(event: Event, fieldName: string): void {

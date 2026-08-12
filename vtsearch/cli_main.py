@@ -26,7 +26,20 @@ from vtsearch.port_preflight import _acquire_single_instance_lock, _preflight_po
 
 def _build_parser() -> argparse.ArgumentParser:
     """Construct the full ``python app.py`` argument parser."""
-    parser = argparse.ArgumentParser(description="VTSearch \u2014 media explorer web app")
+    parser = argparse.ArgumentParser(description="VTSearch \u2014 media explorer web app", add_help=False)
+    # Help is a plain flag, not argparse's built-in ``action="help"``. The
+    # built-in action fires and exits during the *first* parse pass, which
+    # happens before ``--importer``/``--exporter`` have had their plugin-specific
+    # flags registered -- so ``--importer server_folder --help`` would print help
+    # that omits the very flags the user asked about. ``main()`` registers the
+    # selected plugin's arguments first and prints help afterwards.
+    parser.add_argument(
+        "-h",
+        "--help",
+        action="store_true",
+        dest="show_help",
+        help="show this help message and exit (lists the selected --importer/--exporter's flags too)",
+    )
     parser.add_argument("--local", action="store_true", help="Run in local development mode")
     parser.add_argument(
         "--port",
@@ -342,6 +355,23 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _maybe_print_help(args, parser) -> None:
+    """Handle ``-h``/``--help``, including plugin-specific flags, then exit.
+
+    Registers the flags of any ``--importer``/``--exporter`` named on the
+    command line before printing, so ``python app.py --autodetect --importer
+    server_folder --help`` lists ``--path``, ``--media-type``, and the rest of
+    that importer's fields rather than only the base flags. (argparse's default
+    help action can't do this: it fires during the first parse pass, before the
+    plugin flags exist.)
+    """
+    if not getattr(args, "show_help", False):
+        return
+    _register_plugin_cli_args(args, parser)
+    parser.print_help()
+    sys.exit(0)
+
+
 def _maybe_list_plugins(args, parser) -> None:
     """Handle ``--list-plugins`` (and family shortcuts), then exit."""
     # ---- Early-exit informational flags --------------------------------
@@ -399,16 +429,18 @@ def _maybe_run_pipeline(args, parser, remaining) -> None:
         sys.exit(0)
 
 
-def _resolve_plugins(args, parser, remaining):
-    """Two-pass resolution of ``--importer``/``--exporter`` and their plugin args.
+def _register_plugin_cli_args(args, parser):
+    """Look up ``--importer``/``--exporter`` and register their plugin flags.
 
-    Returns ``(args, importer, exporter)``; ``args`` is re-parsed once the
-    plugin-specific arguments have been registered.
+    Returns the ``(importer, exporter)`` plugin instances (``None`` when the
+    corresponding flag wasn't given). Called both by :func:`_resolve_plugins`
+    for the second parse pass and by the ``--help`` path in :func:`main`, so
+    ``--importer <name> --help`` prints that importer's flags.
     """
     importer = None
     exporter = None
 
-    if args.autodetect and args.importer:
+    if args.importer:
         from vtscore.datasets.importers import get_importer, list_importers
 
         importer = get_importer(args.importer)
@@ -418,7 +450,7 @@ def _resolve_plugins(args, parser, remaining):
 
         importer.add_cli_arguments(parser)
 
-    if args.autodetect and args.exporter:
+    if args.exporter:
         from vtscore.exporters import get_exporter, list_exporters
 
         exporter = get_exporter(args.exporter)
@@ -427,6 +459,21 @@ def _resolve_plugins(args, parser, remaining):
             parser.error(f"Unknown exporter: {args.exporter}. Available: {available}")
 
         exporter.add_cli_arguments(parser)
+
+    return importer, exporter
+
+
+def _resolve_plugins(args, parser, remaining):
+    """Two-pass resolution of ``--importer``/``--exporter`` and their plugin args.
+
+    Returns ``(args, importer, exporter)``; ``args`` is re-parsed once the
+    plugin-specific arguments have been registered.
+    """
+    importer = None
+    exporter = None
+
+    if args.autodetect:
+        importer, exporter = _register_plugin_cli_args(args, parser)
 
     if importer or exporter:
         args = parser.parse_args()
@@ -849,6 +896,7 @@ def main(app, initialize_server) -> None:
     # second pass adds their plugin-specific arguments and re-parses.
     args, remaining = parser.parse_known_args()
 
+    _maybe_print_help(args, parser)
     _maybe_list_plugins(args, parser)
     _maybe_run_pipeline(args, parser, remaining)
     args, importer, exporter = _resolve_plugins(args, parser, remaining)

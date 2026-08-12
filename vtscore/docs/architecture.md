@@ -82,22 +82,35 @@ the resolution chain.
 For each of dataset and detector context, the resolution order is (highest
 precedence first):
 
-1. **Explicit override** via `override_dataset_context(ctx)` /
-   `override_detector_context(ctx)` context managers. Used by the detector
-   workflow (`vtscore/detectors/workflow.py:apply_and_retrain`) when it
-   needs to swap the active detector mid-request without touching the
-   request-scoped state.
+1. **Explicit override** via `override_detector_context(ctx)`. Used by the
+   detector workflow (`vtscore/detectors/workflow.py:apply_and_retrain`)
+   when it needs to swap the active detector mid-request without touching
+   the request-scoped state. This step exists for detectors only - there is
+   no `override_dataset_context`, because nothing has needed to swap the
+   active *dataset* inside a call it doesn't own.
 2. **Installed resolver hook** via `register_dataset_context_resolver(fn)`
    / `register_detector_context_resolver(fn)`. The Flask shim installs
    resolvers that read from `flask.g` - these are how route handlers see
    the dataset / detector implied by the `X-Dataset-Id` / `X-Detector-Id`
    request headers.
 3. **Thread-local** set via `set_thread_dataset_context(ctx)` /
-   `set_thread_detector_context(ctx)`. Used by background threads spawned
-   from a request handler (so per-thread state doesn't collide).
-4. **`None`** - no context available. Library code is expected to either
-   error explicitly or no-op; it must not silently fall back to "the first
-   loaded one".
+   `set_thread_detector_context(ctx)` (or their save-and-restore
+   context-manager forms `thread_dataset_context` / `thread_detector_context`).
+   Used by background threads spawned from a request handler (so per-thread
+   state doesn't collide).
+4. **The request-missing sentinel**, when a host app has registered a
+   request-context predicate and the current request named no dataset /
+   detector. Reads see an empty context; writes raise
+   `RequestMissingContextError` rather than silently polluting shared state.
+5. **A process-wide empty fallback context**, for CLI and library callers
+   outside any request.
+
+Note what step 5 means: `get_active_context()` and
+`get_active_detector_context()` always return a context object, never
+`None`. The fallback is deliberately *empty* rather than "the first loaded
+one" - but it is shared, so a library caller that skips step 3 is writing
+into the same object as every other caller that skipped it. Bind a context
+explicitly.
 
 ```python
 # Library consumer with no Flask, no threads - just call the API directly.
@@ -158,11 +171,15 @@ config = CoreConfig(
     data_dir=Path("/var/lib/myapp/data"),
     saved_datasets_dir=Path("/var/lib/myapp/datasets"),
     detectors_dir=Path("/var/lib/myapp/detectors"),
-    inclusion=0,
-    calibrate_count=2,
-    calibration_fraction=0.5,
     max_concurrent_dataset_downloads=2,
     max_concurrent_dataset_embeddings=1,
+    autofind_detectors=(),
+    dataset_max_age_days=None,
+    calibrate_count=2,
+    calibration_fraction=0.5,
+    enrich_descriptions=False,
+    autopilot_goal_diversity=8,
+    inclusion=0,
 )
 ```
 
@@ -320,7 +337,7 @@ is the authority on where to import it from.
 | `vtscore.embedding` | Re-exports the embed / loader / matrix helpers. |
 | `vtscore.training` | Re-exports `build_model` / `train_model` and the threshold helpers. `SVMClassifier` is at `vtscore.training.svm`; region helpers at `vtscore.training.region_similarity`. |
 | `vtscore.detectors` | **`__init__` is a docstring only - no re-exports.** Always use the submodule: `vtscore.detectors.registry.list_detectors`, `vtscore.detectors.workflow.apply_and_retrain`, `vtscore.detectors.store`, … |
-| `vtscore.eval` | Re-exports the runners plus `compute_metrics`; the metric dataclasses live at `vtscore.eval.metrics` (e.g. `vtscore.eval.metrics.QueryMetrics`). |
+| `vtscore.eval` | Re-exports the top-level runners (`run_eval`, `run_voting_iterations_eval`, `simulate_voting_iterations`) plus `compute_metrics` and `EvalQuery`. The per-sort runners are **not** re-exported: `vtscore.eval.runner.eval_learned_sort` / `eval_text_sort`. Metric dataclasses live at `vtscore.eval.metrics`. |
 | `vtscore.converters` | `get_converter`, `list_converters`, plus the built-in converter classes. |
 | `vtscore.exporters` | `get_exporter`, `list_exporters`. |
 | `vtscore.labels` | **Empty `__init__` - no re-exports.** Importers: `vtscore.labels.importers.get_label_importer` / `list_label_importers`. Sources: `vtscore.labels.sources.get_labelset_source` / `list_labelset_sources`. Sync: `vtscore.labels.sync`. |
@@ -378,7 +395,12 @@ the library without the library knowing:
    `vtscore.state.current_user.get_current_user()` how to read the
    *request-scoped* user; `vtsearch/auth/` wires it to `flask.g.user` at
    import time. Below it sit the thread-local (`thread_user`) and the
-   `"default"` fallback, both Flask-free.
+   `"default"` fallback, both Flask-free. Its companion,
+   `vtscore.security.login.set_login_provider(provider)`, is not a hook so
+   much as a plain registry: it decides *where* that user's data lives and
+   therefore whether file access is confined at all (see
+   [`packages/security.md`](packages/security.md)). Only the providers that
+   read `flask.session` / request headers stay app-side in `vtsearch/auth/`.
 5. **Achievement recorders** -
    `vtscore.achievements_hooks.register_achievement_recorder(event, fn)`
    for the `vote` / `dataset_load` / `detector_import` / `find` events the
@@ -399,6 +421,6 @@ depth. Lazy function-level imports were how the rule kept breaking: the
 module still imported cleanly and the inverted dependency only bit at
 call time, in exactly the Flask-free deployment the tier exists for. A
 short allowlist there carries the remaining imports with their rationale
-(two optional `try`/`except`-guarded ones, plus `security/path_validation.py`,
-which still reaches for the `LoginProvider` abstraction); add a hook
-rather than a sixth category.
+(two optional `try`/`except`-guarded ones, both wrapped so the library
+still works when the app package is absent); add a hook rather than a
+sixth category.

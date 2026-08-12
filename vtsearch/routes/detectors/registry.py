@@ -217,6 +217,15 @@ def register_detector_route(body: dict):
         # display, Autopilot fallback) see the first media example.
         media_example = next((ex.get("value", "") for ex in examples if ex.get("type") == "media"), "")
 
+    # Media exemplars are good votes the user already cast, so they land in
+    # the labelset immediately - origin-keyed and dataset-agnostic, which is
+    # what keeps an https:// exemplar alive against an all-local dataset
+    # (issue #3045).  Text examples are queries, not labels.
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.media_seeding import labeled_elements_from_examples
+
+    example_labels = labeled_elements_from_examples(examples)
+
     detector_data = {
         "name": name,
         "text_query": text_query,
@@ -225,13 +234,14 @@ def register_detector_route(body: dict):
         "examples": examples,
         "created_at": time.time(),
         "embedder_type": embedder_type,
-        "labelset": {"labels": []},
+        "labelset": LabelSet(example_labels).to_dict(),
     }
     _write_detector(_detector_path(name), detector_data)
 
     entry = register_detector(
         name=name,
         media_type=media_type,
+        num_training=len(example_labels),
         text_query=text_query,
         media_example=media_example,
         examples=examples,

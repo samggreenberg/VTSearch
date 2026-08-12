@@ -589,10 +589,10 @@ def clear_votes_route():
 def seed_votes_from_examples(body: dict):
     """Seed good votes from a model's media examples.
 
-    For each ``type: "media"`` example, reads the file from
-    ``data/example_media/``, computes its MD5, and either marks the
-    matching loaded media as Good, or (if the example is new)
-    embeds it, inserts it into the ``medias`` dict, and votes it Good.
+    For each ``type: "media"`` example, reads the file from the current
+    user's ``example_media/`` directory, computes its MD5, and either marks
+    the matching loaded media as Good, or (if the example is new) embeds it,
+    inserts it into the ``medias`` dict, and votes it Good.
 
     Returns::
 

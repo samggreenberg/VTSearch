@@ -11,6 +11,18 @@ calling convention: a small set of well-known functions that hide
 "look up the default embedder for media type X, lazy-load it, embed
 the file, return the vector".
 
+## Contents
+
+| Module | Concern |
+|--------|---------|
+| `vtscore/embedding/helpers.py` | The `embed_*_file` façades and `embed_text_query` (with its LRU) |
+| `vtscore/embedding/loader.py` | Model loading / initialisation, preload prediction, concurrency defaults |
+| `vtscore/embedding/matrix.py` | The lazy cached `(N, D)` matrix, its region-expanded twin, and the on-disk sidecar |
+| `vtscore/embedding/media_vectors.py` | Per-media vector access out of the `media["embeddings"]` dict |
+| `vtscore/embedding/normalize.py` | Canonical L2 normalisation - the single ingest chokepoint |
+| `vtscore/embedding/binding.py` | Role-typed (text / patch / structural) embedder binding for a dataset |
+| `vtscore/embedding/__init__.py` | Re-exports the public façade |
+
 ---
 
 ## What's an embedder, in this package's vocabulary?
@@ -33,7 +45,7 @@ no eviction.
 
 ## File embedders
 
-`vtscore/embedding/helpers.py:28`–`49`. Four one-liners that pick the
+`vtscore/embedding/helpers.py`. Four one-liners that pick the
 default embedder for a media type, build a minimal media dict from a
 file path, and run a forward pass.
 
@@ -85,7 +97,7 @@ def embed_text_query(
 ) -> Optional[np.ndarray]: ...
 ```
 
-(`vtscore/embedding/helpers.py:86`.) Embed a free-form text query
+(`vtscore/embedding/helpers.py`.) Embed a free-form text query
 into the vector space of a media type, so it can be cosine-scored
 against media embeddings. When `embedder_name` is set, that specific
 embedder is used; otherwise it falls back to the default for the
@@ -94,7 +106,7 @@ averages the query across the embedder's `description_wrappers`
 (e.g. `"a photo of {text}"`, `"a video of {text}"`).
 
 Results are cached in a small process-wide LRU
-(`_query_cache` at `vtscore/embedding/helpers.py:60`):
+(`_query_cache` in `vtscore/embedding/helpers.py`):
 
 | Aspect       | Detail                                                 |
 |--------------|--------------------------------------------------------|
@@ -129,7 +141,7 @@ clear_text_query_cache()                          # drop everything
 def get_torch_device() -> torch.device: ...
 ```
 
-(`vtscore/embedding/loader.py:22`.) Resolves
+(`vtscore/embedding/loader.py`.) Resolves
 `vtscore.config.DEVICE` (env `$VTSEARCH_DEVICE`, default `"auto"`)
 to a concrete `torch.device`. `"auto"` picks `cuda` when available,
 `mps` on Apple silicon, otherwise `cpu`. Torch is imported lazily
@@ -152,7 +164,7 @@ model.to(dev)
 def initialize_models(on_progress: ProgressCallback | None = None) -> None: ...
 ```
 
-(`vtscore/embedding/loader.py:76`.) Pass `on_progress` to render console
+(`vtscore/embedding/loader.py`.) Pass `on_progress` to render console
 progress bars for the two heavy first-time imports it triggers (scikit-learn
 and transformers, ~10s combined on a cold start); omit it (the default, used
 by tests and the eval CLI) to run silently. Sets up the runtime environment:
@@ -191,7 +203,7 @@ def predict_embedder_for_dataset(dataset_id: str) -> str: ...
 def preload_embedder_for_dataset(dataset_id: str) -> str: ...
 ```
 
-(`vtscore/embedding/loader.py:131`–`287`.)
+(`vtscore/embedding/loader.py`.)
 
 | Function                            | Sync? | Returns                              |
 |-------------------------------------|-------|--------------------------------------|
@@ -235,7 +247,7 @@ def get_xclip_model():  # (model, processor) for the "xclip" embedder
 def get_e5_model():     # SentenceTransformer for the "e5" embedder
 ```
 
-(`vtscore/embedding/loader.py:298`–`320`.) Each calls
+(`vtscore/embedding/loader.py`.) Each calls
 `get_embedder(name).load_models()` and returns the private
 `_get_model_and_processor()` / `_get_model()` accessor. Prefer the
 public `embed_media` / `embed_text` API for new code - these helpers
@@ -257,22 +269,40 @@ def invalidate_embedding_matrix(ctx: DatasetContext) -> None: ...
 def get_embedding_matrix_for_snap(snap: dict) -> tuple[list[int], np.ndarray]: ...
 ```
 
-(`vtscore/embedding/matrix.py:29`–`104`.)
+(`vtscore/embedding/matrix.py`.)
 
 ### How the cache works
 
 `DatasetContext._emb_matrix`, `DatasetContext._emb_matrix_ids`, and
 `DatasetContext._emb_matrix_revision` are the cache.
-`get_embedding_matrix(ctx)` (`vtscore/embedding/matrix.py:29`):
+`get_embedding_matrix(ctx, embedder_name=None)`
+(`vtscore/embedding/matrix.py`) runs in four phases, and only the two
+cheap ones hold the lock - a large numpy stack must not stall every
+other request's state-sync:
 
-1. Acquires `vtscore.state.core._state_lock`.
-2. Snapshots `revision = ctx.media_revision`.
-3. If `ctx._emb_matrix_revision == revision` (and the matrix is
-   present), returns the cached `(ids, matrix)` directly - no rebuild.
-4. Otherwise, allocates an `(N, D) float32` array, fills it row by
-   row from `media_embedding(ctx.medias[cid])` (the per-embedder
-   `media["embeddings"]` dict), and stores it on the context along
-   with the revision it was built at.
+1. **Locked.** Snapshot `sorted_ids` and `revision = ctx.media_revision`.
+   If `ctx._emb_matrix_revision == revision` and a matrix is present,
+   return the cached `(ids, matrix)` immediately. Otherwise take a
+   shallow ref-copy of `ctx.medias` and release the lock.
+2. **Unlocked.** Try the on-disk sidecar (below); on a miss, allocate an
+   `(N, D) float32` array and fill it row by row from
+   `media_embedding(...)` (the per-embedder `media["embeddings"]` dict).
+3. **Locked.** Re-check that `ctx.media_revision` still equals the
+   snapshotted `revision` before storing - a mutation during the
+   unlocked build must not cache a stale matrix - and populate the
+   cache if it does.
+4. **Unlocked, best-effort.** Persist a freshly-built matrix as a
+   sidecar, unless the sidecar is where it came from or phase 3 lost
+   the race.
+
+Pass an explicit *embedder_name* (one of a multi-embedder dataset's
+bound slots) to build from that embedder's vectors instead. The named
+path builds fresh every call and never touches the cache or the
+sidecar - both are reserved for the hot primary path. A name that
+happens to equal the primary collapses back onto the cached path.
+
+An empty dataset returns `([], np.empty((0, 0), dtype=np.float32))`; a
+media missing the requested vector raises `ValueError`.
 
 Convert to torch with `torch.from_numpy(matrix)` for a zero-copy
 view. The matrix is contiguous, so it's safe to slice without
@@ -298,7 +328,7 @@ dict subclass can't observe a mutation to a value's internals, so those
 stages call `invalidate_embedding_matrix(ctx)` (which bumps the counter)
 afterwards (logical-bug-audit root-cause Pattern #4).
 
-`get_embedding_matrix_for_snap(snap)` (`vtscore/embedding/matrix.py:70`)
+`get_embedding_matrix_for_snap(snap)` (`vtscore/embedding/matrix.py`)
 is for callers that hold a media-dict snapshot (typically from
 `snapshot_medias()`): when `snap`'s key set matches the active
 dataset's medias, the cached matrix is reused; otherwise a fresh
@@ -306,16 +336,166 @@ non-cached matrix is built. Cross-dataset Find takes the fresh path.
 
 ### Cache lifetime and persistence
 
-- **Cache lifetime:** as long as `ctx` is alive. The matrix is **not**
-  written to disk and **never** persists across process restarts.
-- **Where it lives:** on the `DatasetContext` instance, in
-  `_emb_matrix` / `_emb_matrix_ids`. This is by design - the
-  matrix is keyed to one dataset's contents and shouldn't outlive
-  them. See [state](state.md) for `DatasetContext`.
-- **Thread safety:** every read/write goes through
-  `vtscore.state.core._state_lock`. Concurrent callers serialise on
-  the same lock, so the rebuild happens exactly once when the key
-  set changes.
+- **In-memory cache:** lives on the `DatasetContext` instance, in
+  `_emb_matrix` / `_emb_matrix_ids` / `_emb_matrix_revision`, for as
+  long as `ctx` is alive. See [state](state.md) for `DatasetContext`.
+- **On-disk mmap sidecar:** for a dataset that is *registered against a
+  saved `.pkl`*, a freshly-built primary matrix is also written next to
+  that pickle as `<stem>.embmat.npy` + `<stem>.embids.npy`, and a later
+  cold load `mmap`s it back instead of restacking the matrix from
+  per-item embeddings. Details below.
+- **Thread safety:** every read/write of the in-memory cache goes
+  through `vtscore.state.core._state_lock`. Concurrent callers serialise
+  on the same lock, so the rebuild happens exactly once when the key
+  set changes. The sidecar read/write happens *outside* the lock.
+
+#### The `.npy` sidecar, and why it isn't a "persisted vector"
+
+CLAUDE.md forbids persisting embeddings, with an exception for dataset
+pickle files. The sidecar sits inside that exception rather than beside
+it: it is a **derived cache of data the pickle already stores durably**,
+regenerable from `ctx.medias` at any time, deterministic, and swept
+alongside the pkl by `registry.unregister_dataset` (both files share the
+pkl's stem, so the stem-glob delete catches them). Nothing reaches disk
+that was not already on disk. See S1 in `docs/plans/scalability.md`.
+
+The guard rails that make it safe to trust:
+
+- **Only for registered datasets.** `_registered_pkl_path` returns
+  `None` for in-memory datasets (tests, ephemeral browse contexts,
+  positives-map previews), and those get no sidecar at all.
+- **Validated on read.** `_try_load_matrix_sidecar` adopts the file only
+  when both halves exist, the persisted id list matches the current
+  sorted ids exactly, and the width matches a probe embedding.
+  Otherwise it returns `None` and the caller restacks.
+- **Crash-safe.** Each half is written to a temp file and atomically
+  renamed, matrix first. A crash between the two renames leaves a
+  mismatched pair, which the read-side checks reject.
+- **Latched off after an in-place rewrite.** An id set cannot detect a
+  same-id vector rewrite (re-embed, re-clip), so the first
+  `invalidate_embedding_matrix(ctx)` sets `ctx._emb_sidecar_disabled`
+  permanently for that context's lifetime. A fresh load gets a fresh
+  context, and so a fresh unset latch.
+- **Best-effort.** A read-only filesystem, a full disk or a concurrent
+  writer is logged and swallowed. The sidecar is an optimisation, never
+  a dependency.
+
+Persisting *per-item* vectors anywhere outside the dataset pickle - to
+settings, to a detector JSON, to a new cache file of your own - is still
+a project-invariant violation.
+
+---
+
+## Per-media vector access
+
+`vtscore/embedding/media_vectors.py` is how you read and write the
+`media["embeddings"]` dict. A media carries a `{embedder_name: vector}`
+map, not a single `embedding` field, because one media can hold vectors
+from several bound embedders at once.
+
+```python
+def primary_embedder_name(media) -> str | None: ...
+def media_embedder_names(media) -> list[str]: ...           # primary first
+def media_embedding(media, embedder_name=None) -> Any: ...  # primary when unset
+def init_embeddings(embedder_name, vec) -> dict: ...        # for media-dict literals
+def set_media_embedding(media, embedder_name, vec) -> None: ...
+def ensure_embeddings_dict(media) -> None: ...
+```
+
+The primary is `media["embedder"]` when recorded, else the first key of
+the dict. `media_embedder_names` puts it first so role derivation and
+primary-vector reads agree on which embedder leads.
+
+`UNKNOWN_EMBEDDER_KEY` (the empty string) is the sentinel for a
+pre-computed, externally-supplied vector with no embedder name - an NPZ
+import, `content_vectors`, `custom_metadata_map`. Such a vector is
+stored rather than dropped: a nameless vector binds no role, and the
+embed stage's *named* missing-vector check still treats the media as
+lacking any named embedder's vector, while `media_embedding` still
+resolves the sole entry as primary.
+
+Use `init_embeddings` in media-dict literals at creation time, and
+`set_media_embedding` afterwards. Passing `vec=None` yields `{}`, the
+deferred-embed placeholder the embed stage fills in later.
+
+---
+
+## Normalisation
+
+`vtscore/embedding/normalize.py` is one function:
+
+```python
+def l2_normalize(vec: object) -> np.ndarray: ...
+```
+
+VTSearch is direction-only nearly everywhere - every similarity
+comparison treats embeddings as points on the unit sphere. Rather than
+re-normalising at each comparison, **the unit vector is the stored
+form**. This module is the single place that performs it, applied at
+every point a vector enters the system: fresh embeds
+(`MediaEmbedder.embed_media` / `embed_media_bulk`, so every subclass is
+covered), text queries (`MediaEmbedder.embed_text`), pickle-loaded
+stored vectors, and re-ingested-from-origin vectors.
+
+Because the invariant holds at the store, downstream consumers - the
+cached matrix, the coverage atlas's k-means, MLP training, region
+similarity, the VTSBrowse projection - all consume unit vectors without
+re-normalising.
+
+Two properties make applying it at several chokepoints safe: it is
+**idempotent** (re-normalising a unit vector returns it unchanged up to
+float32 rounding, so an embedder that already normalises costs nothing),
+and a **zero or non-finite-norm vector is returned unchanged** rather
+than divided, so it can't mint `inf` / `nan` rows that would poison every
+downstream consumer.
+
+---
+
+## Role-typed embedder binding
+
+`vtscore/embedding/binding.py` implements the v3 "three-slot" model: a
+dataset binds up to one **text**-capable embedder, up to one
+**patch**-capable embedder, and up to one **structural** (geometric
+verification) embedder. All three can coexist on one dataset, and each
+drives a different path - text sort against the text slot; region
+similarity, region voting and the detector head against the patch slot;
+instance retrieval and geometric re-rank against the structural slot.
+
+The three immutable detector *embedder types* partition the registry
+(no embedder advertises more than one capability flag), classified in
+precedence order **structural ▸ patch_semantic ▸ semantic** so that
+typing is a total function matching score-routing precedence:
+
+| Constant | Label |
+|----------|-------|
+| `EMBEDDER_TYPE_STRUCTURAL` | Structural |
+| `EMBEDDER_TYPE_PATCH_SEMANTIC` | Patch Semantic |
+| `EMBEDDER_TYPE_SEMANTIC` | Semantic |
+
+| Function | Description |
+|----------|-------------|
+| `embedder_type(name)` | Classify one embedder into its type |
+| `derive_binding(name)` / `derive_binding_from_names(names)` | Map embedder name(s) onto the `(text, patch, structural)` triple |
+| `validate_binding(...)` | Reject a slot pointing at an embedder lacking that role's capability |
+| `embedder_of_type(names, target_type)` | The first name of a given type, or `None` |
+| `dataset_supplied_types(names)` / `detector_dataset_compatible(det_type, names)` | Which types a dataset supplies; whether a detector can run on it |
+| `score_marker_embedder(media)` / `..._for_snap(snap)` / `keying_embedder_for_snap(det_ctx, snap)` | Which embedder the score / cache key routes through |
+
+`derive_binding` is how a **pre-v3 dataset** - one `embedder` name and
+nothing else - resolves into the three-slot model on load, by
+role-typing that name against the embedder's declared capabilities. An
+explicit binding (`bind_embedders`) overrides the derivation for
+genuinely multi-embedder datasets.
+
+Neither function holds state; the binding lives on `DatasetContext` as
+embedder **names**, never vectors. Capability lookups go through the
+embedder registry, so an unknown name resolves to "no capabilities" and
+is ineligible for every slot.
+
+A detector locks one type at create time and is compatible with any
+dataset binding an embedder of that same type - the labels (and, for
+`patch_semantic`, the region boxes) re-derive against whichever concrete
+embedder that dataset supplies.
 
 ---
 
@@ -326,7 +506,7 @@ def default_concurrent_downloads() -> int: ...
 def default_concurrent_embeddings() -> int: ...
 ```
 
-(`vtscore/embedding/loader.py:51`–`73`.) Heuristics for the dataset-
+(`vtscore/embedding/loader.py`.) Heuristics for the dataset-
 load `ConcurrencyGate`s in `vtscore.datasets.load_pipeline`:
 
 - **Downloads** - defaults to `min(4, os.cpu_count())`. Bandwidth and

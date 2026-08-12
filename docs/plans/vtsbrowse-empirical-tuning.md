@@ -8,8 +8,9 @@ across 23 embedded (dataset × embedder) matrices, scored with a ceiling-normali
 taxonomy-separability metric and label-free structure guards, CPU-verified with
 `umap-learn`. The chosen per-embedder values live in
 `vtscore/config.py:PROJECTION_DEFAULTS_BY_EMBEDDER` (+
-`PROJECTION_COMPACT_DEFAULT`), consulted by
-`vtsearch/routes/projection.py:_umap_params`; the harness is
+`PROJECTION_COMPACT_DEFAULT`), resolved by
+`vtscore/projection/params.py:resolve_projection_params` (the one resolver every
+projection fit path calls); the harness is
 `scripts/experiments/umap_params/` and the write-up is
 [`docs/reports/2026-07-22-vtsbrowse-umap-tuning.html`](../reports/2026-07-22-vtsbrowse-umap-tuning.html).
 
@@ -64,11 +65,6 @@ the rework below exists.
 
 <!-- item-sep -->
 
-- [ ] #3056 — Ingest-time projection ignores the tuned UMAP defaults and still
-  compacts; `compact` is never stamped so the mismatch is undetectable (Sonnet 5)
-
-<!-- item-sep -->
-
 - **Rework `compact_layout` with a minimum inter-island margin.** Compaction is
   off by default because it consistently bled neighbours across cluster
   boundaries, and the cost grew with layout density (worst on 21k-image
@@ -116,9 +112,9 @@ the rework below exists.
 
 | Knob | Current default | Notes |
 |------|-----------------|-------|
-| `n_neighbors` | per-embedder (`PROJECTION_DEFAULTS_BY_EMBEDDER`): 10 for `clip`/`siglip`/`siglip_l`, 15 for `clap`; global fallback `15` | Clamped to `N-1`. A `ServerSettings` (`projection_n_neighbors`) still overrides. Resolved by `vtsearch/routes/projection.py:_umap_params`, which only the route path calls — see #3056. |
+| `n_neighbors` | per-embedder (`PROJECTION_DEFAULTS_BY_EMBEDDER`): 10 for `clip`/`siglip`/`siglip_l`, 15 for `clap`; global fallback `15` | Clamped to `N-1`. A `ServerSettings` (`projection_n_neighbors`) still overrides. Resolved by `vtscore/projection/params.py:resolve_projection_params`, which every fit path calls (route, ingest pre-build, positives map). |
 | `min_dist` | per-embedder: 0.05 image, 0.10 audio; global fallback `0.1` | A `ServerSettings` (`projection_min_dist`) still overrides. |
-| `compact` | `False` (`PROJECTION_COMPACT_DEFAULT`) on the route path; `fit_projection`'s own signature default is still `True` | Post-fit `compact_layout` rigid-body packing; off since the Part 1 sweep. The ingest-time build takes the signature default — see #3056. |
+| `compact` | `False` (`PROJECTION_COMPACT_DEFAULT`), including `fit_projection`'s own signature default | Post-fit `compact_layout` rigid-body packing; off since the Part 1 sweep. Stamped on the `Projection`, so a layout packed under the old default fails the freshness check and is refit. |
 | `min_n_for_umap` | `10` | Below this → PCA-2 fallback. Constant for now. |
 | `random_state` | `None` (unseeded) | Keep unseeded in prod. Seed only inside a sweep harness. |
 | `metric` | `"euclidean"` | Settled (ingest-normalized vectors); not a tuning target. |

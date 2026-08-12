@@ -50,7 +50,7 @@ vtscore/media/<your_type>/
 └── embedder_<other>.py    # additional embedders
 ```
 
-The discovery scan ([`vtscore/media/__init__.py:260`](../../media/__init__.py))
+The discovery scan ([`vtscore/media/__init__.py`](../../media/__init__.py))
 walks every sub-package of `vtscore.media`, imports the package, and:
 
 - registers `MEDIA_TYPE` (a single `MediaType` instance) via
@@ -92,7 +92,7 @@ Optional overrides:
 
 `MediaResponse` is a small dataclass (`data`, `mimetype`,
 `download_name`) that decouples the library from Flask
-([`vtscore/media/base.py:68`](../../media/base.py)). The app-tier
+([`vtscore/media/base.py`](../../media/base.py)). The app-tier
 route layer converts it into a `flask.Response`; library callers can
 use the same value directly.
 

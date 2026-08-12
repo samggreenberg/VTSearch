@@ -35,18 +35,20 @@ WORKDIR.mkdir(exist_ok=True)
 
 from vtscore.config import CoreConfig, register_core_config_builder
 
-def _build_config() -> CoreConfig:
+def _build_config(settings_path=None) -> CoreConfig:
     return CoreConfig(
         data_dir=WORKDIR,
         saved_datasets_dir=WORKDIR / "datasets",
         detectors_dir=WORKDIR / "detectors",
-        inclusion=0,
+        max_concurrent_dataset_downloads=1,
+        max_concurrent_dataset_embeddings=1,
+        autofind_detectors=(),
+        dataset_max_age_days=None,
         calibrate_count=2,
         calibration_fraction=0.5,
         enrich_descriptions=False,
-        autopilot_goal_diversity=0.5,
-        max_concurrent_dataset_downloads=1,
-        max_concurrent_dataset_embeddings=1,
+        autopilot_goal_diversity=8,
+        inclusion=0,
     )
 
 register_core_config_builder(_build_config)
@@ -64,8 +66,11 @@ which is "dog"). If you don't want to download ESC-50, swap in your
 own folder of `.wav` files.
 
 ```python
-from vtscore.media import audio  # noqa: F401 - register MediaType + embedders
+from vtscore.media import audio  # noqa: F401 - registry is auto-discovered; see below
 from vtscore.datasets.loader import load_dataset_from_folder
+from vtscore.datasets.origin import Origin
+from vtscore.datasets.stages.embedding import embed_missing
+from vtscore.embedding.media_vectors import media_embedding
 
 # Replace with your folder of audio files.
 AUDIO_FOLDER = Path("/data/esc50/audio")  # or wherever your audio lives
@@ -76,18 +81,30 @@ load_dataset_from_folder(
     media_type="audio",
     medias=medias,
     recursive=True,
+    origin=Origin(
+        importer="server_folder",
+        params={"path": str(AUDIO_FOLDER), "media_type": "audio"},
+    ).to_dict(),
 )
+embed_missing(medias)
 print(f"Loaded {len(medias)} audio items.")
 ```
 
 What just happened:
 
-1. `vtscore.media.audio` import registered the audio `MediaType`, the
-   LAION-CLAP `MediaEmbedder`, and the default `CLIPPERS`.
-2. `load_dataset_from_folder` walked `AUDIO_FOLDER`, ran every `.wav`
-   through CLAP, and populated `medias` with the embedding + origin
-   metadata for each file.
-3. CLAP downloaded its weights on first use to
+1. Importing `vtscore.media` (directly, or transitively through
+   `vtscore.datasets.loader`) auto-discovered every built-in media type,
+   embedder, and clipper - including audio's `MediaType`, the LAION-CLAP
+   `MediaEmbedder`, and the default `CLIPPERS`. The explicit
+   `from vtscore.media import audio` is a readability nicety, not a
+   registration step.
+2. `load_dataset_from_folder` walked `AUDIO_FOLDER` and populated `medias`
+   with one dict per file - md5, bytes/path, and the `origin` you passed -
+   but **no vectors**. Loaders never call the embedder.
+3. `embed_missing` resolved the media type's default embedder (CLAP), ran
+   every item through it in one bulk call, and wrote the vectors into
+   `media["embeddings"]["clap"]`.
+4. CLAP downloaded its weights on first use to
    `WORKDIR/models/` (about 600 MB; subsequent runs are instant).
 
 The first call takes ~30s for model download and ~10s per 100 files
@@ -98,16 +115,19 @@ Peek at the shape of a media item:
 ```python
 sample = next(iter(medias.values()))
 print({k: type(v).__name__ for k, v in sample.items()})
-# {'id': 'int', 'type': 'str', 'embedder': 'str', 'file_size': 'int',
-#  'md5': 'str', 'embedding': 'ndarray', 'filename': 'str', ...}
+# {'id': 'int', 'media_type': 'str', 'embedder': 'str', 'file_size': 'int',
+#  'md5': 'str', 'embeddings': 'dict', 'filename': 'str', ...}
 
-print(f"Embedding shape: {sample['embedding'].shape}")  # (512,)
+print(f"Embedder: {sample['embedder']}")                  # clap
+print(f"Embedding shape: {media_embedding(sample).shape}")  # (512,)
 print(f"Origin: {sample['origin']}")
 # {'importer': 'server_folder', 'params': {'path': '/data/esc50/audio', 'media_type': 'audio'}}
 ```
 
 The embedding is a 512-D float32 vector; LAION-CLAP's output
-dimensionality. Every audio item now has one.
+dimensionality. It lives in the per-embedder `embeddings` dict (keyed
+`"clap"`), which is why every read goes through `media_embedding` - there
+is no `sample["embedding"]`.
 
 ## Step 2: Label a few items
 
@@ -143,7 +163,7 @@ from vtscore.training import train_model, calculate_cross_calibration_threshold
 from vtscore.training.mlp import LINEAR_HEAD
 
 # Build (X, y) tensors.
-X_list = [m["embedding"] for m, _ in labelled]
+X_list = [media_embedding(m) for m, _ in labelled]
 y_list = [1.0 if label == "good" else 0.0 for _, label in labelled]
 
 X = torch.from_numpy(np.stack(X_list).astype(np.float32))
@@ -176,7 +196,7 @@ The default seed makes training deterministic.
 ```python
 # Stack every loaded embedding.
 ids = list(medias.keys())
-embeddings = np.stack([medias[i]["embedding"] for i in ids]).astype(np.float32)
+embeddings = np.stack([media_embedding(medias[i]) for i in ids]).astype(np.float32)
 
 # Forward pass.
 with torch.no_grad():
@@ -214,20 +234,22 @@ for m, label in labelled:
         label=label,
         origin_name=m["origin_name"],
         origin=m["origin"],
+        filename=m["filename"],
     ))
 
-labelset = LabelSet(
-    labels=elements,
-    metadata={
-        "detector_name": "dog-barks",
-        "media_type": "audio",
-        "embedder": "audio_clap",
-    },
-)
+# `elements` is positional; the optional metadata keyword is `detector_meta`.
+labelset = LabelSet(elements)
 
-save_detector("dog-barks", labelset)
-print(f"Saved detector to {WORKDIR / 'detectors' / 'dog-barks.json'}")
+path = save_detector("dog-barks", labelset, media_type="audio")
+print(f"Saved detector to {path}")
 ```
+
+`save_detector` slugifies the name for the filename (lowercased, everything
+outside `[a-z0-9_-]` collapsed to `_`), so "Dog Barks" and "dog-barks" both
+land on `dog-barks.json`. It writes the file and nothing else - to make the
+detector visible in the app's dashboard, also add a registry entry with
+`vtscore.detectors.registry.register_detector(name="dog-barks",
+media_type="audio", num_training=len(labelset))`.
 
 Look at the JSON file:
 
@@ -237,13 +259,13 @@ $ cat /tmp/vtscore-tutorial/detectors/dog-barks.json
 
 ```json
 {
-  "detector_name": "dog-barks",
+  "name": "dog-barks",
   "media_type": "audio",
-  "embedder": "audio_clap",
   "labelset": {
     "labels": [
       {"md5": "5d41…", "label": "good",
        "origin_name": "1-100032-A-0.wav",
+       "filename": "1-100032-A-0.wav",
        "origin": {"importer": "server_folder",
                   "params": {"path": "/data/esc50/audio", "media_type": "audio"}}},
       …
@@ -252,7 +274,10 @@ $ cat /tmp/vtscore-tutorial/detectors/dog-barks.json
 }
 ```
 
-No embeddings. No weights. Six origins. That's the whole detector.
+No embeddings. No weights. Six origins. That's the whole detector. The
+embedder is not recorded in this file - it lives on the detector's registry
+entry (stamped the first time training runs), which is why the reload below
+passes it explicitly.
 
 ## Step 6: Reload in a fresh process
 
@@ -262,8 +287,11 @@ setting `model = None; threshold = None` to prove the point.
 ```python
 from vtscore.config import CoreConfig, register_core_config_builder
 from vtscore.media import audio  # noqa: F401
+from vtscore.datasets.labelset import LabelSet
 from vtscore.state import DetectorContext, register_detector_context
+from vtscore.detectors.store import load_detector
 from vtscore.detectors.training import train_detector_from_origins
+from vtscore.training.mlp import build_model_from_weights
 
 register_core_config_builder(_build_config)   # same builder as before
 
@@ -271,24 +299,29 @@ ctx = DetectorContext(
     detector_id="dog-barks",
     name="dog-barks",
     media_type="audio",
-    embedder="audio_clap",
+    embedder="clap",
 )
 register_detector_context(ctx)
 
-# Build (good_origins, bad_origins) from the saved JSON's labelset, then
+# Read the file back and rebuild the labelset.  Its elements live on
+# `.elements` - there is no `.labels` attribute (that is the key *inside*
+# the serialised dict).
+saved_labelset = LabelSet.from_dict(load_detector("dog-barks")["labelset"])
+
+# Build (good_origins, bad_origins) from the saved labelset, then
 # resolve every origin to a file, embed each file *with the same embedder
-# the detector was trained with* (here: "audio_clap"), and train. Passing
+# the detector was trained with* (here: "clap"), and train. Passing
 # ctx.embedder is critical - using "" would silently fall back to whatever
 # the media type's default embedder is, mixing model outputs.
 good_origins = [
     {"origin": e.origin, "origin_name": e.origin_name,
      "filename": e.filename, "md5": e.md5}
-    for e in saved_labelset.labels if e.label == "good"
+    for e in saved_labelset.elements if e.label == "good"
 ]
 bad_origins = [
     {"origin": e.origin, "origin_name": e.origin_name,
      "filename": e.filename, "md5": e.md5}
-    for e in saved_labelset.labels if e.label == "bad"
+    for e in saved_labelset.elements if e.label == "bad"
 ]
 weights, threshold = train_detector_from_origins(
     good_origins,
@@ -297,8 +330,10 @@ weights, threshold = train_detector_from_origins(
     media_type="audio",
     embedder_name=ctx.embedder,
 )
+# `weights` is a state-dict-shaped dict of plain lists, or None when too few
+# origins re-resolved (it needs at least one Good and one Bad).
+ctx.model = build_model_from_weights(weights)
 ctx.threshold = threshold
-# weights is a state_dict-shaped dict; load it onto a model and attach.
 
 print(f"Restored detector: threshold={ctx.threshold:.3f}")
 ```
@@ -317,15 +352,21 @@ Apply the reloaded detector to a different folder of audio:
 import torch
 import numpy as np
 
+HELD_OUT_FOLDER = Path("/data/new-audio")
 held_out: dict[int, dict] = {}
 load_dataset_from_folder(
-    folder_path=Path("/data/new-audio"),
+    folder_path=HELD_OUT_FOLDER,
     media_type="audio",
     medias=held_out,
+    origin=Origin(
+        importer="server_folder",
+        params={"path": str(HELD_OUT_FOLDER), "media_type": "audio"},
+    ).to_dict(),
 )
+embed_missing(held_out)
 
 ids = list(held_out.keys())
-embeddings = np.stack([held_out[i]["embedding"] for i in ids]).astype(np.float32)
+embeddings = np.stack([media_embedding(held_out[i]) for i in ids]).astype(np.float32)
 with torch.no_grad():
     logits = ctx.model(torch.from_numpy(embeddings)).squeeze(1).numpy()
 scores = 1.0 / (1.0 + np.exp(-logits))
@@ -346,24 +387,42 @@ This is what an autodetect job does - the CLI wraps the same calls in
 If you have ground-truth labels for the held-out set, run the eval
 runner to get precision / recall / AP:
 
+Ground truth lives **on the medias**, not in a separate dict: the harness
+reads `media["category"]` (or `media["categories"]` for multi-label data)
+and each `EvalQuery` names the category that should score positive.
+
 ```python
-from vtscore.eval import eval_learned_sort
+from vtscore.eval.config import EvalQuery
+from vtscore.eval.runner import eval_learned_sort
 
-# Build a ground-truth label dict for held_out: cid → "good" | "bad"
-ground_truth = {cid: ("good" if "dog" in m["filename"] else "bad")
-                for cid, m in held_out.items()}
+# Stamp ground truth onto the medias.  A demo dataset arrives with this
+# already set; a folder import does not (every item comes in as "custom").
+for media in held_out.values():
+    media["category"] = "dog" if "dog" in media["filename"] else "other"
 
-# Run learned-sort evaluation: trains on a slice, scores the rest, repeats.
-metrics_list = eval_learned_sort(held_out, ground_truth, n_folds=5)
-for i, metrics in enumerate(metrics_list):
-    print(f"Fold {i}: AP={metrics.average_precision:.3f}, "
-          f"F1={metrics.f1:.3f}, P@10={metrics.precision_at_10:.3f}")
+# Trains on a random `train_fraction` slice per query and scores the rest.
+metrics_list = eval_learned_sort(
+    held_out,
+    [EvalQuery("a dog barking", "dog")],
+    train_fraction=0.5,
+    seed=42,
+)
+for metrics in metrics_list:
+    print(f"{metrics.target_category}: F1={metrics.f1:.3f}, "
+          f"precision={metrics.precision:.3f}, recall={metrics.recall:.3f} "
+          f"({metrics.num_train} train / {metrics.num_test} test)")
 ```
 
-`eval_learned_sort` is in `vtscore/eval/runner.py`; it splits the data
-into `n_folds` folds, trains a fresh head per fold, and computes
-classification + ranking metrics. See
-[packages/eval.md](../packages/eval.md) for the full evaluation API.
+`eval_learned_sort` is in `vtscore/eval/runner.py` (it is not re-exported
+from `vtscore.eval`). It simulates a voting session per query - train
+positives become Good votes, train negatives Bad votes - calls
+`train_and_score` on the full media set, and measures
+accuracy / precision / recall / F1 on the held-out half against the
+cross-calibrated threshold. A query whose category has fewer than 2
+positives or 2 negatives is skipped, so the returned list can be shorter
+than the query list. For ranking metrics (AP, P@10) use the text-sort side
+of the runner instead; see [packages/eval.md](../packages/eval.md) for the
+full evaluation API.
 
 ## What you built
 
@@ -372,7 +431,7 @@ By the end of the tutorial:
 - **`/tmp/vtscore-tutorial/detectors/dog-barks.json`** - your detector,
   six origins, no weights. ~1 KB.
 - **`/tmp/vtscore-tutorial/models/`** - cached LAION-CLAP weights. Reused
-  by every future detector with `embedder="audio_clap"`. ~600 MB.
+  by every future detector with `embedder="clap"`. ~600 MB.
 - **`ctx.model`** + **`ctx.threshold`** - in-memory trained head, ready
   to score anything.
 

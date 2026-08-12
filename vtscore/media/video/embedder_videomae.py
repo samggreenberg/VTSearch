@@ -129,6 +129,10 @@ class VideoVideoMAEEmbedder(MediaEmbedder):
         return "video"
 
     @property
+    def embedding_dim(self) -> int:
+        return 768
+
+    @property
     def is_default(self) -> bool:
         return False
 

@@ -470,8 +470,8 @@ POST /api/browse-media-files/select
 
 **Body:** `{"source": "demo:esc50_s", "path": "dog/1-100032-A-0.wav"}`
 
-Copies a file from a browse source into `data/example_media/` with a unique
-prefix to avoid collisions.
+Copies a file from a browse source into the user's `example_media/` directory
+with a unique prefix to avoid collisions.
 
 → `{"filename": "abc123_bark.wav", "original_name": "bark.wav"}` (201)
 
@@ -728,7 +728,9 @@ POST /api/datasets/registry/{dataset_id}/coverage-atlas
 ```
 
 Kicks off a cancellable background build of the coverage atlas for an
-already-loaded dataset. Progress streams on `/api/progress`. No body.
+already-loaded dataset. Progress streams on the `loading-tasks` channel of
+[`GET /api/events`](events.md#task-object-shape-loading-tasks--detector-loading-tasks),
+under the returned `task_id`. No body.
 
 → `{"ok": true, "message": "...", "task_id": "_atlas_abc12345"}`
 

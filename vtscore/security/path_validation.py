@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Iterator
 
 from vtscore.config import DATA_DIR
+from vtscore.security.login import DefaultLoginProvider, get_login_provider, get_user_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 def get_file_access_base_dir() -> Path | None:
     """Return the base directory for file-access validation.
 
-    In single-user / no-auth mode (:class:`~vtsearch.auth.DefaultLoginProvider`)
+    In single-user / no-auth mode (:class:`~vtscore.security.login.DefaultLoginProvider`)
     this returns ``None``, which tells :func:`validate_server_filepath` to apply
     **no** confinement: the lone trusted user may read from and write to any
     server-readable path.  There is no per-user boundary to protect, so the app
@@ -31,12 +32,32 @@ def get_file_access_base_dir() -> Path | None:
     user's data directory so that each user is confined to their own
     ``data/<username>/`` subtree.
     """
-    from vtsearch.auth import DefaultLoginProvider, get_login_provider, get_user_data_dir
-
     provider = get_login_provider()
     if isinstance(provider, DefaultLoginProvider):
         return None  # single-user / no-auth: unrestricted file access
     return get_user_data_dir()
+
+
+def example_media_dir() -> Path:
+    """Return the directory detector example media is cached in.
+
+    This is the **single** definition of where an exemplar's bytes live, and
+    every writer (the upload / from-media-id / datasource-import routes, the
+    browse-source copy) and every reader (media seeding, label building, the
+    ``example_media`` sentinel resolver) must go through it.  Splitting the
+    two halves is exactly the multi-user bug in issue #3102: uploads landed
+    in ``data/<username>/example_media/`` while every reader looked in
+    ``data/example_media/``, so an uploaded exemplar was silently invisible
+    to seeding.
+
+    Single-user / no-auth mode gets :data:`~vtscore.config.DATA_DIR` (there
+    is no per-user boundary to draw); multi-user mode gets the current user's
+    data dir, so one user's exemplars are neither readable nor overwritable
+    by another.  The split is :func:`get_file_access_base_dir`'s, reused
+    rather than re-derived.
+    """
+    base = get_file_access_base_dir()
+    return (DATA_DIR if base is None else base) / "example_media"
 
 
 def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) -> Path:

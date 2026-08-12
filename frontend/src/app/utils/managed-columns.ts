@@ -1,5 +1,7 @@
 import { BehaviorSubject, Observable } from 'rxjs';
 
+import type { SortState } from './sort-rows';
+
 /**
  * Shared controller for tables whose columns can be sorted, resized, and
  * drag-reordered.  Holds all the mutable state plus the event handlers; a
@@ -12,14 +14,11 @@ import { BehaviorSubject, Observable } from 'rxjs';
  * same amount; clicking (no drag) auto-fits the left column to its content.
  *
  * Sort state is also exposed as the `sortState$` observable so non-host
- * components (e.g. the top-bar context pulldowns) can mirror the host
- * table's sort without being coupled to the host component.
+ * components can mirror the host table's sort without being coupled to the
+ * host component.  The eager top-bar context pulldowns read it through
+ * `DashboardSortService` rather than reaching in here, so that this class
+ * stays off the initial bundle; see `sort-rows.ts`.
  */
-export interface SortState<TCol extends string = string> {
-  column: TCol;
-  asc: boolean;
-}
-
 export interface ColMeta {
   label: string;
   title: string;
@@ -357,28 +356,4 @@ export class ManagedColumns<TCol extends string = string> {
   isDragging(col: TCol): boolean {
     return this.dragCol === col;
   }
-}
-
-/**
- * Sort *rows* by the value of the column named `column`.
- *
- * A table column id is not necessarily a field on the row objects: purely
- * presentational columns (`actions`, `select`) have no value, and rows typed
- * against a generated OpenAPI model expose only the fields the backend
- * declares.  So the lookup is deliberately widened to a `Record` here rather
- * than each caller's row type carrying a catch-all index signature — the
- * index signature is what used to hide backend/frontend schema drift.
- *
- * Numbers compare numerically; everything else compares as a locale string,
- * with a missing value sorting as `''`.
- */
-export function sortRowsByColumn<T>(rows: readonly T[], column: string, asc: boolean): T[] {
-  const dir = asc ? 1 : -1;
-  const valueAt = (row: T): unknown => (row as Record<string, unknown>)[column];
-  return [...rows].sort((a, b) => {
-    const va = valueAt(a) ?? '';
-    const vb = valueAt(b) ?? '';
-    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
-    return String(va).localeCompare(String(vb)) * dir;
-  });
 }

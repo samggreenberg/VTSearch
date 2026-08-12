@@ -126,17 +126,17 @@
                 class="form-input"
                 [attr.list]="'lif-' + field.key + '-list'"
                 [(ngModel)]="formValues[field.key]"
-                [disabled]="!!dynamicFieldLoading()[field.key]"
-                [placeholder]="dynamicFieldLoading()[field.key] ? 'Loading…' : (field.placeholder || field.description || field.label || field.key)"
+                [disabled]="!!fieldOptions.loading()[field.key]"
+                [placeholder]="fieldOptions.loading()[field.key] ? 'Loading…' : (field.placeholder || field.description || field.label || field.key)"
                 (ngModelChange)="onFormFieldChanged(field.key)"
               />
               <datalist [id]="'lif-' + field.key + '-list'">
-                @for (opt of optionsFor(field); track opt.value) {
+                @for (opt of fieldOptions.optionsFor(field); track opt.value) {
                   <option [value]="opt.value">{{ opt.label }}</option>
                 }
               </datalist>
-              @if (field.dynamic_options && dynamicFieldError()[field.key]) {
-                <p class="error-text">{{ dynamicFieldError()[field.key] }}</p>
+              @if (field.dynamic_options && fieldOptions.error()[field.key]) {
+                <p class="error-text">{{ fieldOptions.error()[field.key] }}</p>
               }
             } @else if (field.field_type === 'select') {
               <select
@@ -144,19 +144,19 @@
                 class="form-select"
                 [(ngModel)]="formValues[field.key]"
                 (ngModelChange)="onFormFieldChanged(field.key)"
-                [disabled]="!!dynamicFieldLoading()[field.key] || (!!field.dynamic_options && optionsFor(field).length === 0)"
+                [disabled]="!!fieldOptions.loading()[field.key] || (!!field.dynamic_options && fieldOptions.optionsFor(field).length === 0)"
               >
-                @if (field.dynamic_options && dynamicFieldLoading()[field.key]) {
+                @if (field.dynamic_options && fieldOptions.loading()[field.key]) {
                   <option value="">Loading…</option>
-                } @else if (field.dynamic_options && optionsFor(field).length === 0 && !dynamicFieldError()[field.key]) {
+                } @else if (field.dynamic_options && fieldOptions.optionsFor(field).length === 0 && !fieldOptions.error()[field.key]) {
                   <option value="">No options available</option>
                 }
-                @for (opt of optionsFor(field); track opt.value) {
+                @for (opt of fieldOptions.optionsFor(field); track opt.value) {
                   <option [value]="opt.value">{{ opt.label }}</option>
                 }
               </select>
-              @if (field.dynamic_options && dynamicFieldError()[field.key]) {
-                <p class="error-text">{{ dynamicFieldError()[field.key] }}</p>
+              @if (field.dynamic_options && fieldOptions.error()[field.key]) {
+                <p class="error-text">{{ fieldOptions.error()[field.key] }}</p>
               }
             } @else if (field.field_type === 'number') {
               <input
