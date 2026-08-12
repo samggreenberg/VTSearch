@@ -156,6 +156,14 @@ def create_detector(body: dict):
     elif examples is None and media_example:
         examples = [{"type": "media", "value": media_example}]
 
+    # Media exemplars are good votes the user already cast: they go into the
+    # labelset now, origin-keyed, so they survive against any dataset (issue
+    # #3045).  Mirrors POST /api/detectors/registry.
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.media_seeding import labeled_elements_from_examples
+
+    example_labels = labeled_elements_from_examples(examples or [])
+
     detector_data = {
         "name": name,
         "text_query": text_query,
@@ -164,7 +172,7 @@ def create_detector(body: dict):
         "examples": examples or [],
         "created_at": time.time(),
         "embedder_type": embedder_type,
-        "labelset": {"labels": []},
+        "labelset": LabelSet(example_labels).to_dict(),
     }
     _write_detector(path, detector_data)
 
@@ -175,7 +183,7 @@ def create_detector(body: dict):
         "media_example": media_example,
         "media_type": media_type,
         "examples": examples or [],
-        "num_labels": 0,
+        "num_labels": len(example_labels),
     }
 
 
@@ -307,7 +315,22 @@ def set_detector_examples(body: dict, name: str):
     text_examples = [e for e in examples if e.get("type") == "text" and e.get("value")]
     if text_examples:
         data["text_query"] = text_examples[0]["value"]
+
+    # Newly-supplied media exemplars become good labels (issue #3045).  The
+    # merge is additive - replacing the examples list must not delete labels
+    # the user voted, nor flip an exemplar the user has since voted Bad.
+    from vtscore.datasets.labelset import LabelSet
+    from vtscore.detectors.media_seeding import merge_examples_into_labelset
+
+    merged = merge_examples_into_labelset(LabelSet.from_dict(data.get("labelset") or {}), examples)
+    data["labelset"] = merged.to_dict()
     _write_detector(path, data)
+
+    from vtscore.detectors.registry import find_by_name, update_detector
+
+    reg_entry = find_by_name(name)
+    if reg_entry:
+        update_detector(reg_entry["id"], num_training=len(merged), examples=examples)
 
     return {"success": True, "name": name, "examples": examples}
 

@@ -157,6 +157,226 @@ class TestRegisterDetectorExamples:
         assert listed[detector_id]["examples"] == self._EXAMPLES
 
 
+class TestExamplesBecomeLabels:
+    """Media exemplars supplied at create time are labels, not just hints (issue #3045)."""
+
+    _URL_ORIGIN = {"importer": "url_download", "params": {"url": "https://x.test/bark.wav"}}
+
+    @pytest.fixture(autouse=True)
+    def _restore_medias(self):
+        """Remove any media items inserted by example seeding after each test."""
+        from vtsearch.state import medias
+
+        saved = dict(medias)
+        yield
+        medias.clear()
+        medias.update(saved)
+
+    def _write_example_file(self, media_bytes: bytes, filename: str) -> str:
+        """Write *media_bytes* into ``data/example_media/<filename>``."""
+        from vtscore.config import DATA_DIR
+
+        example_dir = DATA_DIR / "example_media"
+        example_dir.mkdir(parents=True, exist_ok=True)
+        (example_dir / filename).write_bytes(media_bytes)
+        return filename
+
+    def _register(self, client, name, examples):
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": name, "media_type": "audio", "examples": examples},
+        )
+        assert res.status_code == 201
+        return res.get_json()["detector"]
+
+    def test_every_media_example_becomes_a_good_label(self, client):
+        entry = self._register(
+            client,
+            "ThreeSeeds",
+            [
+                {"type": "media", "value": "one.wav"},
+                {"type": "media", "value": "two.wav"},
+                {"type": "media", "value": "three.wav", "origin": self._URL_ORIGIN},
+            ],
+        )
+        labels = client.get("/api/detectors/ThreeSeeds").get_json()["labelset"]["labels"]
+        assert len(labels) == 3
+        assert {lbl["label"] for lbl in labels} == {"good"}
+        assert [lbl["filename"] for lbl in labels] == ["one.wav", "two.wav", "three.wav"]
+        # The label count is the detector's training count from the outset.
+        assert entry["num_training"] == 3
+
+    def test_foreign_url_origin_kept_verbatim(self, client):
+        """A http:// exemplar keeps its own origin - the dataset it will be
+        used against is irrelevant at create time."""
+        self._register(
+            client,
+            "UrlSeed",
+            [{"type": "media", "value": "bark.wav", "origin": self._URL_ORIGIN}],
+        )
+        labels = client.get("/api/detectors/UrlSeed").get_json()["labelset"]["labels"]
+        assert len(labels) == 1
+        assert labels[0]["origin"] == self._URL_ORIGIN
+        assert labels[0]["origin_name"] == "https://x.test/bark.wav"
+
+    def test_upload_without_origin_gets_example_media_sentinel(self, client):
+        self._register(client, "UploadSeed", [{"type": "media", "value": "upload.wav"}])
+        labels = client.get("/api/detectors/UploadSeed").get_json()["labelset"]["labels"]
+        assert labels[0]["origin"] == {"importer": "example_media", "params": {"filename": "upload.wav"}}
+        assert labels[0]["origin_name"] == "upload.wav"
+
+    def test_label_carries_md5_of_cached_example_file(self, client):
+        fname = self._write_example_file(b"exemplar-bytes", "hashed.wav")
+        self._register(client, "HashedSeed", [{"type": "media", "value": fname}])
+        labels = client.get("/api/detectors/HashedSeed").get_json()["labelset"]["labels"]
+        assert labels[0]["md5"] == content_md5(b"exemplar-bytes")
+
+    def test_missing_cache_file_still_yields_a_label(self, client):
+        """No bytes on disk yet is no reason to drop the exemplar; origin is
+        the identity, md5 is only the content fallback."""
+        self._register(client, "NoBytesSeed", [{"type": "media", "value": "absent.wav"}])
+        labels = client.get("/api/detectors/NoBytesSeed").get_json()["labelset"]["labels"]
+        assert len(labels) == 1
+        assert labels[0].get("md5", "") == ""
+
+    def test_text_example_produces_no_labels(self, client):
+        """A text description is a query, not a labeled media."""
+        entry = self._register(client, "TextSeed", [{"type": "text", "value": "dog barking"}])
+        data = client.get("/api/detectors/TextSeed").get_json()
+        assert data["labelset"]["labels"] == []
+        assert entry["num_training"] == 0
+
+    def test_legacy_media_example_scalar_becomes_a_label(self, client):
+        """The scalar-only payload (no ``examples`` list) is labeled too."""
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "ScalarSeed", "media_type": "audio", "media_example": "scalar.wav"},
+        )
+        assert res.status_code == 201
+        labels = client.get("/api/detectors/ScalarSeed").get_json()["labelset"]["labels"]
+        assert len(labels) == 1
+        assert labels[0]["filename"] == "scalar.wav"
+
+    def test_crud_create_labels_media_examples(self, client):
+        """POST /api/detectors mirrors the registry route."""
+        res = client.post(
+            "/api/detectors",
+            json={
+                "name": "CrudSeed",
+                "media_type": "audio",
+                "examples": [
+                    {"type": "media", "value": "a.wav"},
+                    {"type": "media", "value": "b.wav", "origin": self._URL_ORIGIN},
+                ],
+            },
+        )
+        assert res.status_code == 201
+        assert res.get_json()["num_labels"] == 2
+        labels = client.get("/api/detectors/CrudSeed").get_json()["labelset"]["labels"]
+        assert len(labels) == 2
+
+    def test_set_examples_adds_labels_without_duplicating(self, client):
+        """PUT .../examples is additive and idempotent."""
+        self._register(client, "SetSeed", [{"type": "media", "value": "first.wav"}])
+        res = client.put(
+            "/api/detectors/SetSeed/examples",
+            json={
+                "examples": [
+                    {"type": "media", "value": "first.wav"},
+                    {"type": "media", "value": "second.wav"},
+                ]
+            },
+        )
+        assert res.status_code == 200
+        labels = client.get("/api/detectors/SetSeed").get_json()["labelset"]["labels"]
+        assert [lbl["filename"] for lbl in labels] == ["first.wav", "second.wav"]
+
+        # Re-supplying the same examples must not grow the labelset.
+        client.put(
+            "/api/detectors/SetSeed/examples",
+            json={"examples": [{"type": "media", "value": "second.wav"}]},
+        )
+        labels = client.get("/api/detectors/SetSeed").get_json()["labelset"]["labels"]
+        assert len(labels) == 2
+
+    def test_set_examples_does_not_flip_an_existing_bad_label(self, client):
+        """An exemplar the user has since voted Bad keeps that label."""
+        from vtscore.detectors.store import _detector_path, _read_detector, _write_detector
+
+        self._register(client, "BadSeed", [{"type": "media", "value": "oops.wav"}])
+        path = _detector_path("BadSeed")
+        data = _read_detector(path)
+        assert data is not None
+        data["labelset"]["labels"][0]["label"] = "bad"
+        _write_detector(path, data)
+
+        client.put(
+            "/api/detectors/BadSeed/examples",
+            json={"examples": [{"type": "media", "value": "oops.wav"}]},
+        )
+        labels = client.get("/api/detectors/BadSeed").get_json()["labelset"]["labels"]
+        assert len(labels) == 1
+        assert labels[0]["label"] == "bad"
+
+    def test_foreign_origin_label_survives_a_vote_against_a_local_dataset(self, client, monkeypatch):
+        """The issue's core guarantee: a http:// exemplar stays in the labelset
+        even while the loaded dataset is entirely local files and the user votes
+        in it (the vote sync must not reconcile the exemplar away)."""
+        import vtscore.datasets.downloader as downloader_mod
+        import vtscore.security.url_validation as url_mod
+        from vtsearch.state import medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        def _download(u, dest_path, expected_size=0, on_progress=None):
+            dest_path.write_bytes(b"foreign-exemplar-bytes")
+
+        monkeypatch.setattr(downloader_mod, "download_file_with_progress", _download)
+        monkeypatch.setattr(url_mod, "validate_url", lambda u: u)
+
+        detector_id = self._register(
+            client,
+            "ForeignSurvives",
+            [{"type": "media", "value": "never_cached.wav", "origin": self._URL_ORIGIN}],
+        )["id"]
+        _load_detector_and_wait(client, detector_id)
+
+        first_id = next(iter(medias))
+        client.post(f"/api/medias/{first_id}/vote", json={"target": "good"})
+
+        labels = client.get("/api/detectors/ForeignSurvives").get_json()["labelset"]["labels"]
+        url_labels = [lbl for lbl in labels if lbl.get("origin") == self._URL_ORIGIN]
+        assert len(url_labels) == 1
+        assert url_labels[0]["label"] == "good"
+
+    def test_sentinel_origin_resolves_to_the_example_media_cache(self):
+        """An upload exemplar's label resolves to its byte cache, so the Labels
+        pane and label export can reach it without a dataset."""
+        from vtscore.detectors.resolver import resolve_file_from_origin
+
+        fname = self._write_example_file(b"sentinel-bytes", "sentinel.wav")
+        origin = {"importer": "example_media", "params": {"filename": fname}}
+        resolved = resolve_file_from_origin(origin, fname, fname)
+        assert resolved is not None
+        assert resolved.read_bytes() == b"sentinel-bytes"
+
+    def test_sentinel_resolution_refuses_traversal(self):
+        from vtscore.config import DATA_DIR
+        from vtscore.detectors.resolver import resolve_file_from_origin
+
+        # A real, readable file just outside example_media/ - the check must
+        # refuse it on the path shape, not on it happening to be missing.
+        (DATA_DIR / "example_media").mkdir(parents=True, exist_ok=True)
+        outside = DATA_DIR / "traversal_target.txt"
+        outside.write_bytes(b"not-an-exemplar")
+        try:
+            origin = {"importer": "example_media", "params": {"filename": "../traversal_target.txt"}}
+            assert resolve_file_from_origin(origin, "", "") is None
+        finally:
+            outside.unlink(missing_ok=True)
+
+
 class TestListDetectors:
     def test_empty_list(self, client):
         res = client.get("/api/detectors")
