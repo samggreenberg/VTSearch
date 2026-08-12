@@ -79,12 +79,44 @@ BOX_BANDS: dict[str, tuple[float, float]] = {
 
 #: How many categories each banded dataset draws, and the image cap.  Categories
 #: are stratified *within* the band so a band is not silently all one size.
-BAND_N_CATEGORIES = int(os.environ.get("VTS_BAND_N_CATEGORIES", "24"))
-BAND_MAX_IMAGES = int(os.environ.get("VTS_BAND_MAX_IMAGES", "6000"))
+BAND_N_CATEGORIES = int(os.environ.get("VTS_BAND_N_CATEGORIES", "40"))
+BAND_MAX_IMAGES = int(os.environ.get("VTS_BAND_MAX_IMAGES", "12000"))
 #: Categories whose union box is much larger than a single instance are
 #: scattered instances, not a region a user would drag.
 BAND_MAX_INFLATION = float(os.environ.get("VTS_BAND_MAX_INFLATION", "1.5"))
 BAND_MIN_IMAGES = int(os.environ.get("VTS_BAND_MIN_IMAGES", "50"))
+
+#: VG is annotated with free text, so its vocabulary is not a list of objects.
+#: A detector asked to find "red" or "front" is measuring nothing, so these are
+#: excluded from the banded datasets. The policy is **concrete countable
+#: objects only**, which drops three kinds of name:
+#:
+#: * colours and other attributes -- properties, not things;
+#: * frame relations and abstractions -- "front", "group", "object": either a
+#:   position in the image or a placeholder the annotator reached for;
+#: * mass nouns and unbounded surfaces -- "grass", "sky", "floor": real, but
+#:   *stuff* rather than an object with an extent a user would drag a box around.
+#:
+#: The third group is the aggressive part of the policy and it costs coverage
+#: in the large band specifically, because scene-scale stuff is exactly what
+#: large boxes are made of. Countable landforms and structures ("tree",
+#: "mountain", "building") are deliberately kept.
+NON_OBJECT_CATEGORIES: frozenset[str] = frozenset(
+    # attributes
+    """red blue green yellow orange purple pink brown black white gray grey tan beige
+    silver gold golden dark light bright colorful clear blurry shiny""".split()
+    # frame relations, abstractions, placeholders
+    + """front back side top bottom left right middle center centre corner edge end
+    part section area region spot place row line lines stripe stripes pattern design
+    shape size distance background foreground surface object objects thing things item
+    items stuff group bunch pile set collection image picture photo photograph view
+    scene display something other""".split()
+    # mass nouns, unbounded surfaces and scene regions
+    + """water snow sand dirt mud grass gravel concrete pavement asphalt sky smoke steam
+    fog haze shade shadow shadows reflection glare sunlight ice foam liquid air weather
+    ground floor flooring wall walls ceiling road roadway street sidewalk pathway path
+    field beach ocean sea lake river land terrain lawn grassy""".split()
+)
 
 #: Embedders in the pile. ``patch`` embedders attach ``patch_grid`` and are the
 #: only ones that can carry a region-voting arm.

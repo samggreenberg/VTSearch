@@ -192,11 +192,19 @@ def _band_categories(band: str) -> list[str]:
         if lo <= s["voted_area"] < hi
         and s["n_images"] >= pc.BAND_MIN_IMAGES
         and s["union_inflation"] <= pc.BAND_MAX_INFLATION
+        and name not in pc.NON_OBJECT_CATEGORIES
     ]
     if not pool:
         raise SystemExit(f"no categories qualify for band {band!r}")
     pool.sort()
 
+    if len(pool) < pc.BAND_N_CATEGORIES:
+        # Say so rather than quietly returning a shorter list: a band that
+        # cannot fill its quota is a real limit on what it can support.
+        log(
+            f"  band {band}: ONLY {len(pool)} categories qualify "
+            f"(wanted {pc.BAND_N_CATEGORIES}) -- band is supply-limited"
+        )
     n = min(pc.BAND_N_CATEGORIES, len(pool))
     chosen: list[str] = []
     for i in range(n):
