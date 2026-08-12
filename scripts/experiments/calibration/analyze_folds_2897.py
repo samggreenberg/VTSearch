@@ -15,7 +15,7 @@ is absent by construction.  The price of that pairing is the acquisition
 feedback the screen cannot see, which is what the A/B stage measures; pass the
 A/B run dirs as arguments to fold that check in.
 
-Pre-registered deliverables (``docs/plans/calibration-fold-count-experiment.md``):
+Pre-registered deliverables (``docs/experiments/calibration-fold-count/REPORT.md``):
 
 * **Benefit** - regret(K) and its paired delta vs production's K=2, per voting
   mode and vote window, with a Wilcoxon over cell means.
@@ -445,7 +445,7 @@ def write_report(results: Path, levels, paired, knee, verd, ab) -> None:
         "at that K would have computed *for those votes*.  What they cannot show is",
         "the votes a different K would have collected - that is the A/B section.",
         "",
-        "Design + decision rules: `docs/plans/calibration-fold-count-experiment.md`.",
+        "Design + decision rules: `docs/experiments/calibration-fold-count/REPORT.md`.",
         "",
         "## Verdicts (mechanical; read the tables before believing them)",
         "",

@@ -148,7 +148,7 @@ position Autopilot's Hard pick samples around — which is why
 at its own K. Pass those arm dirs to the analyzer
 (`python analyze_folds_2897.py /exp/$USER/calibration-folds-2897-ab-k8`) to get
 the `screen_agrees` check. Analyzer: `analyze_folds_2897.py`; design and
-pre-registered decision rules: `docs/plans/calibration-fold-count-experiment.md`.
+pre-registered decision rules: `docs/experiments/calibration-fold-count/REPORT.md`.
 
 Not to be confused with the older `analyze_folds.py` / `launch_folds_2861.sh`,
 which moved the fold count to 4 only to unlock the anchored `qmean`/`qmedian`
