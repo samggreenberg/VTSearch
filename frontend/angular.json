@@ -59,8 +59,12 @@
                 // deferred chunk. The shared `vt-modal` adds CDK a11y's focus
                 // trap (`CdkTrapFocus`) for keyboard/screen-reader focus
                 // management across all ~24 dialogs; because the modal is eager,
-                // that ~7kB lands in the initial bundle, taking it to ~507kB. The
-                // warn limit sits just above the real size with a small headroom.
+                // that ~7kB lands in the initial bundle, taking it to ~507kB.
+                // Measured 515.63kB as of the eager-path audit that split
+                // `DashboardSortService` out of `DashboardColumnsService` (the
+                // eager context pulldowns were dragging `ManagedColumns` and the
+                // Dashboard column metadata onto first paint, ~6.5kB). The warn
+                // limit sits just above the real size with a small headroom.
                 // Do not raise without first auditing the eager path for genuine
                 // bloat.
                 {

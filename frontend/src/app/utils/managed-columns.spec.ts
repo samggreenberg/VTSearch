@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { ColMeta, ManagedColumns, SortState } from './managed-columns';
+import { ColMeta, ManagedColumns } from './managed-columns';
+import { SortState } from './sort-rows';
 
 /**
  * Unit coverage for the ManagedColumns table controller. The class is pure
