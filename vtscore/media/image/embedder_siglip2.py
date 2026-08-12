@@ -46,6 +46,10 @@ class ImageSiglip2Embedder(_CrossModalHFEmbedder):
     def model_id(self) -> str:
         return SIGLIP2_MODEL_ID
 
+    @property
+    def embedding_dim(self) -> int:
+        return 768
+
     def _load_models_impl(self) -> None:
         if self._model is not None:
             return

@@ -1,7 +1,8 @@
 # Writing plugins for `vtscore`
 
-`vtscore` ships ten plugin families (plus three app-tier ones in
-`vtsearch`) that share one machinery: a
+`vtscore`'s plugin families (the generated inventory in
+[concepts.md § Plugin](../concepts.md#8-plugin) is the authoritative
+list) share one machinery: a
 `PluginRegistry` per family scans its package directory at import time,
 registers every sub-package or flat module that exposes a sentinel
 attribute (`IMPORTER`, `EXPORTER`, `EMBEDDER`, …), and then walks the

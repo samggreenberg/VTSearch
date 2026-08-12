@@ -95,6 +95,10 @@ class AudioBEATsEmbedder(MediaEmbedder):
         return "audio"
 
     @property
+    def embedding_dim(self) -> int:
+        return 768
+
+    @property
     def supports_text(self) -> bool:
         return False
 

@@ -69,6 +69,10 @@ class FaceEmbedder(MediaEmbedder):
         return "face"
 
     @property
+    def embedding_dim(self) -> int:
+        return 512
+
+    @property
     def is_default(self) -> bool:
         return False
 

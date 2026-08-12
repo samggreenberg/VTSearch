@@ -29,6 +29,10 @@ class ImageSiftVladEmbedder(_StructuralImageBase):
     def display_name(self) -> str:
         return "SIFT/VLAD (instance matching)"
 
+    @property
+    def embedding_dim(self) -> int:
+        return 8192
+
     def _make_matcher(self) -> StructuralMatcher:
         return SiftMatcher()
 

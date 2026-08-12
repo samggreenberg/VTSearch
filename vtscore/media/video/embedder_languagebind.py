@@ -97,6 +97,10 @@ class VideoLanguageBindEmbedder(MediaEmbedder):
     def media_type_id(self) -> str:
         return "video"
 
+    @property
+    def embedding_dim(self) -> int:
+        return 768
+
     # ------------------------------------------------------------------
     # Model lifecycle
     # ------------------------------------------------------------------

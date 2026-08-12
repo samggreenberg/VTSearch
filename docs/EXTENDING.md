@@ -9,7 +9,7 @@ matches what you want to build.
 
 | Guide | What you build |
 |-------|----------------|
-| [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, results exporters, label importers, settings importers/exporters, settings sources, labelset sources, media converters, media sources: nine auto-discovered plugin families that share a common registry-based architecture. |
+| [EXTENDING-plugins.md](EXTENDING-plugins.md) | Data importers, datasource importers, results exporters, label importers, settings importers/exporters/sources, labelset sources: the form-driven auto-discovered plugin families that share a common registry-based architecture (the generated family inventory lives there too). |
 | [EXTENDING-media.md](EXTENDING-media.md) | Media types, embedders, clippers, cleaners, converters, and media sources (anything in `vtscore/media/` or `vtscore/converters/`). |
 | [EXTENDING-processors.md](EXTENDING-processors.md) | Detectors, localizers, and extractors: the three kinds of `Processor`. |
 
