@@ -2329,11 +2329,20 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
     const dx = event.clientX - this.panStartX;
     const dy = event.clientY - this.panStartY;
     if (
-      Math.abs(dx) > BrowseCanvasComponent.CLICK_MOVE_THRESHOLD ||
-      Math.abs(dy) > BrowseCanvasComponent.CLICK_MOVE_THRESHOLD
+      !this.dragMoved &&
+      (Math.abs(dx) > BrowseCanvasComponent.CLICK_MOVE_THRESHOLD ||
+        Math.abs(dy) > BrowseCanvasComponent.CLICK_MOVE_THRESHOLD)
     ) {
       this.dragMoved = true;
       this.framedByUser = true;
+      // The press turned into a pan: the map is about to slide out from under a
+      // stationary cursor while hover stays frozen ({@link onCanvasMouseMove}
+      // early-returns for the rest of the drag), so a hover held from before the
+      // press would ride along — drawn enlarged at the bin's new position with its
+      // preview still open. Drop it for the duration (this also cancels a hover
+      // debounce that would otherwise fire mid-pan); {@link onMouseUp} re-resolves
+      // it against the view the drag actually ends on.
+      this.clearHover();
     }
     const z = this.effZoom;
     this.transform.centerX = this.panStartCenterX - dx / z;
@@ -2372,8 +2381,39 @@ export class BrowseCanvasComponent implements AfterViewInit, OnDestroy {
         this.scheduleToggle(mx, my);
       }
     }
-    // A drag that pulled past the content edge ends overshot; spring it back.
-    if (wasPanning && this.dragMoved) this.settleToBounds();
+    if (wasPanning && this.dragMoved) {
+      // The drag moved the map under the cursor with hover suppressed throughout,
+      // so the pointer cache is as stale as the hover — re-sync it from the
+      // release (which, being tracked on `document`, can land off-canvas).
+      this.syncPointerFromEvent(event);
+      // A drag that pulled past the content edge ends overshot; spring it back.
+      this.settleToBounds();
+      // Re-resolve the hover against where the view ended up: otherwise the
+      // pre-pan bin stays lifted with its preview open, and a right-click still
+      // targets it ({@link onContextMenu} prefers `hoveredCell` over a fresh
+      // hit-test). A settle that actually animates does its own refresh when it
+      // lands — refreshing here as well would resolve against the overshoot and
+      // drag a lifted bin through the spring-back.
+      if (!this.settleActive) this.refreshHoverAfterZoom();
+    }
+  }
+
+  /**
+   * Re-sync the cached pointer position (and inside-ness) from a drag event.
+   * Drags are tracked on `document`, and {@link onCanvasMouseMove} — the usual
+   * updater of that cache — is suppressed for their duration, so the cache is
+   * stale by the time a drag ends and the hover has to be re-resolved.
+   */
+  private syncPointerFromEvent(event: MouseEvent): void {
+    const rect = this.canvasRef().nativeElement.getBoundingClientRect();
+    const mx = event.clientX - rect.left;
+    const my = event.clientY - rect.top;
+    this.pointerInside = mx >= 0 && my >= 0 && mx < rect.width && my < rect.height;
+    if (!this.pointerInside) return;
+    this.lastMouseX = mx;
+    this.lastMouseY = my;
+    this.lastClientX = event.clientX;
+    this.lastClientY = event.clientY;
   }
 
   /**
