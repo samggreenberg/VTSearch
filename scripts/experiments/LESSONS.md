@@ -507,3 +507,72 @@ Prefer end-state outcomes (positives found, cost, AP) or a within-harness contra
 column whose semantics the change touches. And write the criteria down first: the
 value of a pre-registered check is not that it is right, but that when it is wrong
 you find out instead of rationalising.
+
+<!-- entry-sep -->
+
+## 2026-08-12 — a study default is not a shipped default (#3129)
+
+**What happened.** The overview benchmark exists to measure *what a current user
+gets*, so every behavioural knob was deliberately left unset. `CALIB_PATCH_STYLES`
+was one of them — and its default is `max_patch,max_patch_pca_hac`, because the
+**calibration study** wanted that contrast. `max_patch_pca_hac` lost the
+Max-Patch study at the operating point (PR #2749) and production no longer
+carries the tree it delegates to. So "leave the defaults alone" silently added a
+retired arm to a baseline, and doubled the cost of every patch cell: all three
+sizing cells finished `max_patch` and were still grinding through the HAC style
+when they were cancelled.
+
+Caught by the owner reading a status line, not by any check. Cost: one cancelled
+array ~3 minutes in, plus ~50 minutes of sizing.
+
+**Prevented?** *Advice only.* The general form — "is this default a product
+default or this study's default?" — is not mechanically checkable without a
+per-knob provenance table that does not exist. What *is* now pinned: the
+benchmark launcher sets `CALIB_PATCH_STYLES=max_patch` explicitly and passes it
+in `ENVX` rather than relying on `--export=ALL`, so the value cannot drift with
+the submitting shell.
+
+**Rule of thumb:** when a study's premise is "defaults", enumerate the defaults
+and say where each one comes from. A knob whose default was chosen by another
+study is a knob you are setting, not a knob you are leaving alone.
+
+## 2026-08-12 — a header-only CSV passes `-size +0` (#3129)
+
+**What happened.** The array's watcher reported `non-empty cells: 189/189, zero-byte: 0`
+and the run looked complete. It was not: **seven cells held a header row and no
+data**. `find -size +0` counts bytes, and a header is bytes. The analyzer caught
+it only because it counted loaded rows separately from files found and printed
+both numbers.
+
+Those seven turned out to be the most interesting result in the study — runs that
+never surfaced a single positive in 150 votes — so the cost of missing them would
+have been a wrong headline, not just a small denominator.
+
+**Prevented?** *Partly.* The wave-2 watcher counts cells with `wc -l > 1` rather
+than bytes. The general control is the one already in the playbook: **count what
+you dropped, and print both numbers**. A completion count that cannot distinguish
+"wrote results" from "wrote a header" is the same blind gate as a preflight that
+reports ok without looking.
+
+**Related, worth knowing:** `simulate_voting_iterations` never emits a row with
+`n_good == 0`, so a starved cell writes a header and exits 0 with no warning
+anywhere. Verifying `min(n_good) == 1` across every row is what proved the seven
+were starvation rather than an I/O incident. A `starved` column and a one-line
+warning would make this visible without an analyst noticing a row-count mismatch.
+
+## 2026-08-12 — `echo "exit=$?"` after a pipeline reads the pipeline (#3129)
+
+**What happened.** The playbook already says to check a commit's own exit code.
+It was checked as `git commit -q -m "..." 2>&1 | tail -3; echo "commit exit=$?"`,
+which reports **`tail`'s** status. It printed `exit=0` while the pre-commit hooks
+had rewritten the files and failed the commit; `git push` then pushed nothing and
+`git log` still showed the previous head.
+
+Also on the same run: `git commit -F /tmp/commitmsg2.txt` picked up a **stale
+file from an earlier session** and committed the report under an unrelated #2877
+message, which had to be amended.
+
+**Prevented?** *Advice only, but sharpened.* Never pipe the command whose status
+you are about to read — run it bare, then `echo $?`, then inspect `git log -1`
+to confirm the head actually moved. Use a run-unique path for `-F` message files
+(`/tmp/msg-<jobid>.txt`); `/tmp` on a shared login node is not yours alone.
