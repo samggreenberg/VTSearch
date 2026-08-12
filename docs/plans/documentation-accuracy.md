@@ -44,7 +44,6 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2980 — DEPLOYMENT.md has no security section; file-browser.md misdescribes the single-user browse root (Opus 4.8)
 
 <!-- item-sep -->
 
@@ -52,11 +51,9 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2984 — Generate registry inventories instead of hand-maintaining them in ~10 documents (Opus 4.8)
 
 <!-- item-sep -->
 
-- [ ] #2985 — Every runnable snippet in the vtscore docs fails (Opus 4.8)
 
 <!-- item-sep -->
 
@@ -66,11 +63,9 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2988 — docs/api/medias.md vote endpoint is wrong in all three parts; windowed sort contract undocumented (Sonnet 5)
 
 <!-- item-sep -->
 
-- [ ] #2989 — EXTENDING docs teach contracts that raise at runtime, and omit the normalize.py validation layer (Opus 4.8)
 
 <!-- item-sep -->
 
@@ -82,15 +77,12 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2992 — CLI.md: detector paths are slugged, and the plugin-flag discovery command cannot work (Sonnet 5)
 
 <!-- item-sep -->
 
-- [ ] #2993 — style-guide.md Section 2 names classes that no longer exist; teaches hand-copied modal markup (Sonnet 5)
 
 <!-- item-sep -->
 
-- [ ] #2994 — USER_GUIDE.md: dead table of contents, hidden importers described, shipped features missing (Sonnet 5)
 
 <!-- item-sep -->
 
@@ -100,15 +92,12 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2997 — CLAUDE.md Commands and Test Markers sections are out of date with run-tests.sh (Sonnet 5)
 
 <!-- item-sep -->
 
-- [ ] #2998 — The Angular frontend has no architecture documentation (Opus 4.8)
 
 <!-- item-sep -->
 
-- [ ] #2999 — vtscore/docs/packages/: half-covered module tables, six undocumented subpackages, stale features (Opus 4.8)
 
 <!-- item-sep -->
 

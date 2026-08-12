@@ -34,7 +34,6 @@ carries pointers only.
 ### State & concurrency
 
 - [ ] #2931 — JobManager.start() hard-requires Flask via vtsearch.auth; ./run-tests.sh vtscore-clean gate currently fails (medium, Opus 4.8)
-- [ ] #2960 — SSE tracker channels never re-emitted: a dropped terminal frame leaves the client's progress bar stuck (low, Sonnet 5)
 
 ### Training & detectors
 
@@ -58,11 +57,9 @@ carries pointers only.
 
 ### Frontend — dashboard & modals
 
-- [ ] #2965 — Dynamic plugin-field option fetches have no cancellation/ordering guard — stale responses clobber the current form (low, Sonnet 5)
 
 ### Frontend — services & views
 
-- [ ] #2973 — Rapid inclusion-slider changes in Find have no response-ordering guard; a stale threshold can win (low, Sonnet 5)
 
 ### Frontend — styles & templates
 
@@ -70,7 +67,6 @@ carries pointers only.
 
 ### Security
 
-- [ ] #2946 — No server-side authentication enforcement: is_authenticated / login_required are never checked, so every endpoint is reachable unauthenticated (medium, Opus 4.8)
 
 ### Tests & tooling
 
