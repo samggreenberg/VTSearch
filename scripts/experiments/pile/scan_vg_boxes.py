@@ -186,8 +186,10 @@ def main() -> int:
     for name, lo, hi in bands:
         pool = [c for c, s in stats.items() if lo <= s["voted_area"] < hi]
         clean = [c for c in pool if stats[c]["union_inflation"] <= 1.5]
-        log(f"  {name:14s} [{lo * 100:5.2f}%, {hi * 100:6.2f}%): {len(pool):5d} categories "
-            f"({len(clean)} with union_inflation <= 1.5)")
+        log(
+            f"  {name:14s} [{lo * 100:5.2f}%, {hi * 100:6.2f}%): {len(pool):5d} categories "
+            f"({len(clean)} with union_inflation <= 1.5)"
+        )
         example = sorted(pool, key=lambda c: -stats[c]["n_images"])[:8]
         log(f"      most-supported: {example}")
     return 0
