@@ -5,7 +5,7 @@ This is the procedure the **Dev2Main** Routine follows to promote `dev` to `main
 > **Override for this procedure only:** the final release PR's `base` is
 > **`main`**, not `dev`. This is the one sanctioned exception to CLAUDE.md's
 > "never open a PR to `main`" rule — it applies solely to the release PR
-> opened in step 6, and only when running this runbook.
+> opened in step 5, and only when running this runbook.
 
 Work through the steps in order.
 
@@ -43,7 +43,7 @@ Run `git fetch origin --prune`, then summarize
 - If vulture was clean, append a single line: `vulture: clean.` Otherwise:
   `vulture: <N> findings triaged.`
 
-Use the summary verbatim as the PR body (step 6) and also output it in chat, written in plaintext, so the MD formatting can be copied.
+Use the summary verbatim as the PR body (step 5) and also output it in chat, written in plaintext, so the MD formatting can be copied.
 
 ## 4. Rebuild the punch-card graphic
 
@@ -63,19 +63,31 @@ Use the summary verbatim as the PR body (step 6) and also output it in chat, wri
 
 Now that the release PR is open, close the GitHub issues whose fixes are included in this `dev → main` batch. This is the counterpart to the per-fix rule in CLAUDE.md: individual fix PRs link their issue with a `Closes #N` keyword but leave it **open** (their merge to `dev` can't auto-close it), and this step is what finally closes it once the fix reaches `main`.
 
-**Find the issues to close** from this release's PRs:
+**Find the candidate issues** from this release's PRs:
 
 - List the pull requests merged into `dev` within this release range — the same `origin/main..origin/dev` window used for the summary in step 3 (inspect the merge commits in that range to get the PR numbers).
-- For each such PR, read its body and collect every issue it references with a **closing** keyword: `Closes #N`, `Fixes #N`, or `Resolves #N` (case-insensitive). **Skip** non-closing references (`Refs #N`, `Part of #N`)
-  — those are partial and must stay open.
+- For each such PR, read its body and collect **every** issue it references, keeping track of which keyword introduced each reference. Sort them into two buckets:
+  - **Closing** — `Closes #N`, `Fixes #N`, `Resolves #N` (case-insensitive).
+  - **Non-closing** — `Refs #N`, `Part of #N`, or a bare `#N` mention.
+- Then add a third bucket, the **orphan backstop**: list the repo's still-open issues and check each one's comments for a pointer at a PR in this release range (`Addressed in #M`, `Fixed in #M`, and similar). Collect any whose pointer names a PR in the range that never referenced it back. (To keep this cheap, it's enough to check issues updated since the previous release.)
 
-**Then, for each collected issue that is still open:**
+Non-closing references are **not** silently skipped. A PR that finishes an issue but writes `Refs #N` would otherwise orphan it permanently: this step skips it, and because no later release re-examines an already-merged PR, nothing ever revisits it — the issue stays open forever while its fix is live in `main`. Real incident: #2940, #2930 and #2951 each shipped in the 2026-08-12 release under `Refs`, with an "Addressed in #M" comment on the issue, and all three stayed open. So the non-closing and orphan buckets get **reconciled** rather than dropped.
 
+**Reconcile each issue in the non-closing and orphan buckets.** Read the issue (body *and* comments) alongside the PR, then close it only when **both** hold:
+
+- The PR (or a comment on the issue pointing at it) claims to address the issue **without qualification** — e.g. an `Addressed in #M` comment, or a PR body that plainly does everything the issue body asks.
+- Neither the PR body nor any later comment names work still owed **by that issue**. Scope the PR explicitly deferred into a plan file or a separate issue is no longer owed here and does not make it partial; likewise, an issue that was rescoped narrower counts as finished if the PR does all of what remains.
+
+Anything else stays open — a genuinely partial `Refs` is doing its job.
+
+**Then, for each issue to be closed (closing bucket, plus the reconciled ones):**
+
+- Skip it if it is already closed. Never reopen or re-close.
 - Close it with `state_reason: completed`.
 - Add a one-line comment noting it shipped to `main` in today's release and linking the fix PR (e.g. `Shipped to main in the 2026-07-14 release — fixed
-  in #M.`).
+  in #M.`). When the PR used a non-closing keyword, say so in that comment, so the mislabel is visible on the issue rather than silently corrected.
 
-Do not close any issue that isn't linked by a closing keyword from a PR in this batch, and don't reopen or re-close issues already closed. If no qualifying issues are found, state that in chat and do nothing.
+**Report the reconciliation in chat**, briefly: which issues came from the closing bucket, which were closed after reconciliation (and under which PR keyword), and which non-closing references were deliberately left open. This is the only place a crossed wire between a PR keyword and an issue comment becomes visible, so do not collapse it to a bare count. If no qualifying issues are found, state that and do nothing.
 
 ## 7. Prune plan pointers for the closed issues
 
