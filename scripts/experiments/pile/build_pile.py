@@ -44,14 +44,26 @@ def log(msg: str) -> None:
     print(f"[pile] {msg}", flush=True)
 
 
-def _cells_io():
-    """Import the calibration harness's pickle IO (drops bytes, keeps patch_grid)."""
+def _calibration_path() -> None:
     calib = Path(__file__).resolve().parent.parent / "calibration"
     if str(calib) not in sys.path:
         sys.path.insert(0, str(calib))
+
+
+def _cells_io():
+    """Import the calibration harness's pickle IO (drops bytes, keeps patch_grid)."""
+    _calibration_path()
     import _cells_io  # noqa: PLC0415
 
     return _cells_io
+
+
+def _experiment_config():
+    """Import the calibration harness's category-selection config."""
+    _calibration_path()
+    import experiment_config  # noqa: PLC0415
+
+    return experiment_config
 
 
 # --------------------------------------------------------------------------
@@ -261,6 +273,75 @@ def verify() -> int:
     return 0
 
 
+def report_bands() -> int:
+    """Report voted-box scale-band populations for each boxed dataset.
+
+    The bands are anchored to the patch embedder's geometry: ``sub_patch`` is
+    "smaller than one DINOv3 patch", i.e. below what the patch grid can resolve
+    at all. That anchoring is the band's whole meaning, so a thin ``sub_patch``
+    is a fact about the data, not a threshold to tune — widening the edge would
+    inflate the count with objects that *are* resolvable.
+
+    Reads the smallest available cell for each dataset: scale stats need only
+    ``regions``, which every cell carries, so there is no reason to page in the
+    multi-GB patch cell.
+    """
+    io = _cells_io()
+    cfg = _experiment_config()
+    from vtscore.eval.labels import category_scale_stats  # noqa: PLC0415
+
+    boxed = [ds for ds, info in pc.DATASETS.items() if info.get("boxed")]
+    if not boxed:
+        log("no boxed datasets in the pile; nothing to stratify")
+        return 0
+
+    for ds in boxed:
+        present = [(pc.cell_path(ds, e).stat().st_size, e) for e in pc.EMBEDDERS if pc.cell_path(ds, e).exists()]
+        if not present:
+            log(f"{ds}: no cells present")
+            continue
+        _, emb = min(present)
+        medias = io.load_medias(pc.cell_path(ds, emb))
+
+        counts: dict[str, int] = defaultdict(int)
+        for m in medias.values():
+            for c in m.get("categories") or [m.get("category")]:
+                if c:
+                    counts[c] += 1
+
+        selected, report = cfg.select_categories_by_scale(medias, dict(counts))
+        log("")
+        log(f"=== {ds}: {len(medias)} medias, {len(counts)} categories (via {emb}) ===")
+        dropped = report.get("dropped_above_max_voted_area") or []
+        log(f"  dropped above max_voted_area={report.get('max_voted_area')}: {len(dropped)}")
+        for name, info in (report.get("bands") or {}).items():
+            lo, hi = info["range"]
+            flag = "  ** UNDER-POPULATED **" if info["under_populated"] else ""
+            log(
+                f"  {name:14s} [{lo * 100:5.2f}%, {hi * 100:6.2f}%): "
+                f"{len(info['selected'])}/{info['target']} of {info['n_candidates']} candidates{flag}"
+            )
+            log(f"      {info['selected']}")
+
+        # When a band is starved, say whether the min-count filter is even the
+        # binding constraint. Measured on the first run it was not: the
+        # sub_patch pool held 5 categories (VG) and 1 (COCO) at every
+        # min_count from 5 to 30, so lowering it recovers nothing.
+        starved = [n for n, i in (report.get("bands") or {}).items() if i["under_populated"]]
+        if starved:
+            stats = {c: s for c in counts if (s := category_scale_stats(medias, c)) is not None}
+            for name in starved:
+                lo, hi = report["bands"][name]["range"]
+                pools = {
+                    mc: sum(1 for c, s in stats.items() if counts[c] >= mc and lo <= s["voted_area"] < hi)
+                    for mc in (5, 10, 20, 30)
+                }
+                spread = "same at every min_count" if len(set(pools.values())) == 1 else str(pools)
+                log(f"  {name}: candidate pool by min category count -> {spread}")
+        log(f"  -> selected {len(selected)} categories")
+    return 0
+
+
 def write_manifest() -> None:
     """Write MANIFEST.json + MANIFEST.md describing the pile and how to rebuild it."""
     io = _cells_io()
@@ -366,6 +447,7 @@ def main() -> int:
     ap.add_argument("--force", action="store_true", help="rebuild cells that already exist")
     ap.add_argument("--list", action="store_true", help="show cell status and exit")
     ap.add_argument("--verify", action="store_true", help="load every cell and check geometry")
+    ap.add_argument("--bands", action="store_true", help="report voted-box scale bands for boxed datasets")
     ap.add_argument("--manifest", action="store_true", help="(re)write the manifest and exit")
     args = ap.parse_args()
 
@@ -376,6 +458,8 @@ def main() -> int:
         return 0
     if args.verify:
         return verify()
+    if args.bands:
+        return report_bands()
     if args.manifest:
         write_manifest()
         return 0

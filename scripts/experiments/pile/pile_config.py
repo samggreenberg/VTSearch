@@ -57,10 +57,17 @@ DATASETS: dict[str, dict] = {
 
 #: Embedders in the pile. ``patch`` embedders attach ``patch_grid`` and are the
 #: only ones that can carry a region-voting arm.
+#: Deliberately three, not five. ``siglip`` is the shipped default and
+#: ``siglip2_l`` the premium end; the middles (``siglip_l``, ``siglip2``) were
+#: dropped because a study learns little from interpolating between them, and
+#: the compute is better spent on more runs of the endpoints.
+#:
+#: The cost of that: ``siglip`` -> ``siglip2_l`` moves generation (1 -> 2) and
+#: capacity (base -> SO400M) at the same time, so a difference between them
+#: cannot be attributed to either alone. Rebuild a middle column if a result
+#: ever needs that split -- ``build_pile.py --embedders siglip2`` restores one.
 EMBEDDERS: dict[str, dict] = {
     "siglip": {"patch": False},
-    "siglip2": {"patch": False},
-    "siglip_l": {"patch": False},
     "siglip2_l": {"patch": False},
     "dinov3_patch": {"patch": True, "gated": True},
 }
