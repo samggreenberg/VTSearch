@@ -20,6 +20,40 @@ import torch
 
 
 @pytest.fixture(autouse=True)
+def restore_reloaded_modules():
+    """Undo what ``importlib.reload`` does to the rest of the session.
+
+    Every test here reloads ``vtscore.config`` (and often
+    ``vtscore.embedding.loader``) to re-read an env var at import time.  A
+    reload re-executes the module *in place*, so it resets every module-level
+    value to its import-time default - including the ones the conftests install
+    for the whole session, none of which the reloading test wants to change.
+    Nothing restored them, so the wipe leaked into every later test sharing the
+    worker process.
+
+    That is issue #3101: ``TRAIN_EPOCHS`` reverted from the session's 30 to the
+    production 200, so a *fully seeded* threshold fixture trained a different
+    model depending on whether these tests happened to run before it on the
+    same xdist worker - which read as a nondeterministic failure in the safe
+    threshold subsystem rather than as test-state leakage.  Restoring the
+    module dicts fixes the whole class of leak rather than the one constant
+    that happened to be load-bearing; the conftests additionally re-assert the
+    two values with the worst blast radius.
+
+    Declared first so it tears down *last*, after the narrower fixtures below
+    have cleared the caches they own on the reloaded module.
+    """
+    import vtscore.config as config
+    import vtscore.embedding.loader as loader
+
+    snapshots = [(module, dict(module.__dict__)) for module in (config, loader)]
+    yield
+    for module, snapshot in snapshots:
+        module.__dict__.clear()
+        module.__dict__.update(snapshot)
+
+
+@pytest.fixture(autouse=True)
 def reset_torch_configured_flag():
     """Force ``ensure_torch_configured`` to re-run on each test."""
     import vtscore.media.torch_setup as torch_setup
