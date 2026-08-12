@@ -45,7 +45,12 @@ def main() -> int:
             continue
         print(f"[prefetch] {name}: {model_id}", flush=True)
         try:
-            path = snapshot_download(model_id)
+            # cache_dir=MODELS, not the default HF_HOME/hub: the embedders load
+            # with ``cache_dir=<VTSEARCH_MODELS_DIR>`` (see embedder_siglip2.py),
+            # which puts ``models--*`` at the top of that dir. Prefetching to
+            # HF_HOME/hub instead leaves weights the jobs cannot see, so each one
+            # re-downloads -- and three parallel jobs race on the same dir.
+            path = snapshot_download(model_id, cache_dir=str(pc.MODELS))
             print(f"[prefetch]   -> {path}", flush=True)
         except Exception as exc:  # noqa: BLE001 - report and continue to the next
             print(f"[prefetch]   FAILED {name}: {exc}", flush=True)
