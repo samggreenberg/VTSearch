@@ -224,7 +224,7 @@ def main() -> int:  # noqa: C901 - a linear list of planted-answer assertions
 
         # --- (b) knob liveness ---------------------------------------------
         live = pd.read_csv(results / "agg" / "cutincl_liveness.csv").set_index(["arm", "env"])
-        for (ds, emb, style, _gran) in ENVS:
+        for ds, emb, style, _gran in ENVS:
             env = f"{ds}/{emb}/{style}"
             mid = live.loc[(_arm("mid"), env)]
             assert mid["distinct_admitted"] == 1.0, mid.to_dict()
@@ -243,10 +243,7 @@ def main() -> int:  # noqa: C901 - a linear list of planted-answer assertions
         # On the separated one it cannot be, whatever the rule does.
         assert live.loc[(_arm("q_tilt"), coarse_env), "knob_yield"] < 1.0
         # The incumbent is live but coarser than q_tilt on the fine haystack.
-        assert (
-            live.loc[(_arm("mid_tilt"), fine_env), "knob_yield"]
-            < live.loc[(_arm("q_tilt"), fine_env), "knob_yield"]
-        )
+        assert live.loc[(_arm("mid_tilt"), fine_env), "knob_yield"] < live.loc[(_arm("q_tilt"), fine_env), "knob_yield"]
         assert live.loc[(_arm("mid_tilt"), fine_env), "knob_yield"] > 1.0 / len(KS)
 
         # The ceiling table must rank the separated environment as the worse one.

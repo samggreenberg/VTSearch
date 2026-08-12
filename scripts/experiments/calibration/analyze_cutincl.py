@@ -28,8 +28,9 @@ adjacent ``k`` steps that moved the set at all (the "dead steps" rate, which is
 what a user experiences as a slider that does nothing).
 
 This second table is also the answer to the plan's *"Inclusion resolution on
-cleanly separated haystacks"* item: ``flat_rate`` per environment says how often
-real data sits in the regime where no cut rule can help.
+cleanly separated haystacks"* item: ``best_knob_yield`` per environment is the
+ceiling the haystack itself imposes, so an environment where the *best* rule
+still loses most of the knob is one where no cut rule can help.
 
 Writes ``results/agg/cutincl_*.csv``, ``results/cutincl_summary.json`` and a
 ``results/REPORT_cutincl.md`` draft.
@@ -322,8 +323,7 @@ def write_report(results: Path, regret: pd.DataFrame, liveness: pd.DataFrame, fl
         "# Cut rule x Inclusion sweep (issue #2865) - draft",
         "",
         f"Incumbent (the shipped rule): `{v['incumbent']}`.",
-        f"Swept k: {cfg.CUT_INCLUSION_KS}.  Anchor weights: {cfg.ANCHORED_WEIGHTS}.  "
-        f"Rules: {cfg.ANCHORED_RULES}.",
+        f"Swept k: {cfg.CUT_INCLUSION_KS}.  Anchor weights: {cfg.ANCHORED_WEIGHTS}.  Rules: {cfg.ANCHORED_RULES}.",
         "",
         "Every row is scored at its own `k` against the oracle at that `k`, so",
         "regret is comparable along the knob as well as across arms.",

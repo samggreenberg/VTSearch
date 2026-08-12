@@ -3128,14 +3128,10 @@ def simulate_voting_iterations(  # noqa: C901
                     weights=anchored_weights if anchored_weights is not None else list(_ANCHORED_WEIGHTS),
                     rules=anchored_rules if anchored_rules is not None else list(_ANCHORED_RULES),
                     fold_combines=(
-                        anchored_fold_combines
-                        if anchored_fold_combines is not None
-                        else list(_ANCHORED_FOLD_COMBINES)
+                        anchored_fold_combines if anchored_fold_combines is not None else list(_ANCHORED_FOLD_COMBINES)
                     ),
                     qtilt_steps=(
-                        cut_inclusion_qtilt_steps
-                        if cut_inclusion_qtilt_steps is not None
-                        else [FOLD_ANCHOR_QTILT_STEP]
+                        cut_inclusion_qtilt_steps if cut_inclusion_qtilt_steps is not None else [FOLD_ANCHOR_QTILT_STEP]
                     ),
                 ):
                     cut_inclusion_sink.append({**base_row, **cr})
