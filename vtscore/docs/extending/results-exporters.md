@@ -7,14 +7,14 @@ auto-discovers exporters under `vtscore.exporters` (sentinel
 `EXPORTER`) and walks the `vtscore.exporters` entry-point group so a
 third-party distribution can `pip install` one in. Subclass
 [`LabelsetExporter`](../../exporters/base.py)
-([`vtscore/exporters/base.py:59`](../../exporters/base.py)), declare
+([`vtscore/exporters/base.py`](../../exporters/base.py)), declare
 your `fields`, and implement `export(results, field_values) -> dict`.
 
 The base class is named `LabelsetExporter` for historical reasons; in
 practice it handles both autodetect-results payloads and label
 exports. The `export()` method should detect which is which (label
 payloads carry a top-level `"labels"` key - see
-[`vtscore/exporters/server_json_file/__init__.py:75`](../../exporters/server_json_file/__init__.py)
+[`vtscore/exporters/server_json_file/__init__.py`](../../exporters/server_json_file/__init__.py)
 for the pattern).
 
 **App-side counterpart:** [`docs/EXTENDING-plugins.md § Adding a

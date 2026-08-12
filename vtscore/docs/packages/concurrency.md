@@ -1,17 +1,13 @@
 # `vtscore.concurrency`
 
-The runtime plumbing for background work. Three independent layers live
-here: an async **job manager** (`async_jobs.py`) for single-slot
-coalescing background tasks, a **progress** layer (`progress.py`) for
-thread-safe long-running-operation progress tracking with cooperative
-cancellation, and a **memory budget** helper (`memory_budget.py`) that
-caps fan-out concurrency so peak per-worker memory fits inside a
-fraction of available RAM. An additional `events.py` module wires the
-progress trackers into a Server-Sent Events stream.
+The runtime plumbing for background work: independent layers for running
+a task off-request, reporting how far it has got, letting the user cancel
+it, and capping how many run at once.
 
 Related docs: [`state.md`](state.md) for the contexts these jobs and
 trackers operate against; [`security.md`](security.md) for the
-safe-load helpers used during dataset import.
+safe-load helpers used during dataset import; [`timing.md`](timing.md)
+for the per-step duration model that turns a step index into an ETA.
 
 **Import from the defining module.** `vtscore/concurrency/` has no
 `__init__.py` - it is a PEP 420 implicit namespace package, so it exports
@@ -22,6 +18,14 @@ true of `vtscore.security`.
 
 ## Contents
 
+| Module | Concern |
+|--------|---------|
+| `vtscore/concurrency/async_jobs.py` | Single-slot async job manager: coalescing background tasks with a result slot |
+| `vtscore/concurrency/progress.py` | `ProgressTracker`, `LoadingTasksTracker`, the module-level singletons, cooperative cancellation |
+| `vtscore/concurrency/events.py` | Server-Sent Events stream over the progress channels |
+| `vtscore/concurrency/gate.py` | `ConcurrencyGate` - a semaphore whose limit is re-read on every acquisition |
+| `vtscore/concurrency/memory_budget.py` | Cap fan-out so peak per-worker memory fits a fraction of available RAM |
+
 - [Two kinds of "progress"](#two-kinds-of-progress)
 - [Async jobs](#async-jobs)
 - [`ProgressTracker`](#progresstracker)
@@ -30,6 +34,7 @@ true of `vtscore.security`.
 - [Per-thread progress callback](#per-thread-progress-callback)
 - [Cancellation contract](#cancellation-contract)
 - [Memory budget](#memory-budget)
+- [`ConcurrencyGate`](#concurrencygate)
 - [`events.py`](#eventspy)
 
 ---
@@ -60,7 +65,7 @@ returns immediately with a job ID.
 
 ### `AsyncJob` (dataclass)
 
-State container for one background job (`async_jobs.py:36`). Fields:
+State container for one background job (`async_jobs.py`). Fields:
 `job_id` (UUID4 hex), `signature` (caller-supplied fingerprint),
 `status` (`"pending"` / `"running"` / `"done"` / `"error"` /
 `"cancelled"`), `result`, `error`, `current` / `total` / `message`
@@ -125,7 +130,7 @@ per-user settings resolution works from inside the worker; cleared in a
 ### Module-level managers and `JOB_MANAGERS`
 
 ```python
-# vtscore/concurrency/async_jobs.py:323
+# vtscore/concurrency/async_jobs.py
 learned_sort_jobs = JobManager("learned-sort")
 eval_jobs = JobManager("eval-train-score")
 
@@ -152,7 +157,7 @@ clears state.
 ## `ProgressTracker`
 
 Thread-safe progress tracker for a single long-running operation
-(`progress.py:14`). Each instance holds its own lock, data dict, cancel
+(`progress.py`). Each instance holds its own lock, data dict, cancel
 event, and optional subscriber callbacks.
 
 ```python
@@ -179,7 +184,7 @@ snapshot = tracker.get()
 `(status, message, current, total)` tuple. Unrecognised keys are
 silently dropped, so a single `update_progress()` call site can supply
 kwargs some trackers care about and others don't. Every shipped tracker
-uses `_PROGRESS_COMMON_EXTRAS` (`progress.py:235`):
+uses `_PROGRESS_COMMON_EXTRAS` (`progress.py`):
 
 ```python
 _PROGRESS_COMMON_EXTRAS = {
@@ -211,7 +216,7 @@ swallowed. This is what `events.py` uses.
 ## `LoadingTasksTracker`
 
 A bag of named `ProgressTracker`s, each with a creation timestamp
-(`progress.py:248`). Used to multiplex concurrent dataset / detector
+(`progress.py`). Used to multiplex concurrent dataset / detector
 loads - the dashboard polls `list_tasks()` to show one row per loading
 operation.
 
@@ -294,7 +299,7 @@ not directly to a tracker. Module-level helpers check the thread-local
 first and fall back to a global default when nothing is set.
 
 ```python
-# vtscore/concurrency/progress.py:209
+# vtscore/concurrency/progress.py
 def set_thread_progress(callback) -> None: ...
 def get_thread_progress(): ...
 def clear_thread_progress() -> None: ...
@@ -383,6 +388,46 @@ n_workers = cap_workers_by_memory(
 Available-memory detection prefers `/proc/meminfo`'s `MemAvailable:`,
 falls back to `sysconf(SC_AVPHYS_PAGES) * SC_PAGE_SIZE`, and lastly
 uses a 1 GiB floor. The function always returns at least 1.
+
+---
+
+## `ConcurrencyGate`
+
+`vtscore/concurrency/gate.py` is a semaphore whose cap is a **callable
+re-read on every acquisition**, not a number fixed at construction:
+
+```python
+class ConcurrencyGate:
+    def __init__(self, get_limit: Callable[[], int]) -> None: ...
+    def acquire(self, blocking: bool = True, timeout: float | None = None) -> bool: ...
+    def release(self) -> None: ...
+    @property
+    def active(self) -> int: ...
+```
+
+That is the whole point of it existing next to `threading.Semaphore`.
+The dataset-load pipeline gates concurrent downloads and concurrent
+embeddings on settings the user can change mid-run; with a plain
+semaphore the new value would apply only to the next process. Here it
+takes effect immediately for queued and future tasks. Already-running
+tasks are never preempted, and the limit is floored at 1 so a
+misconfigured setting cannot deadlock the pipeline.
+
+```python
+from vtscore.concurrency.gate import ConcurrencyGate
+
+gate = ConcurrencyGate(lambda: CoreConfig.from_settings().concurrent_downloads)
+if gate.acquire(timeout=30):
+    try:
+        ...
+    finally:
+        gate.release()
+```
+
+`acquire()` is not a context manager - pair it with `release()` in a
+`finally`. The `waiter_parked` event on the instance is a test hook (it
+lets a test wait for "a waiter is queued" instead of sleeping a fixed
+race window); production code should not read it.
 
 ---
 

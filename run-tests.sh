@@ -230,6 +230,19 @@ if ! python scripts/screenshots/wiring-check.py ; then
     exit 1
 fi
 
+# vtscore package docs: every top-level module / sub-package of vtscore/ is
+# covered by a packages/ doc, and no doc cites a file.py:NNN line anchor (they
+# rot on the next edit; cite module-and-symbol instead). Regex sweep, imports
+# nothing, ~0.1s. See scripts/check-vtscore-docs.py for the policy.
+echo "Checking vtscore package docs..."
+if ! python scripts/check-vtscore-docs.py ; then
+    echo ""
+    echo "============================================================"
+    echo "TESTS BLOCKED: vtscore package docs check failed"
+    echo "============================================================"
+    exit 1
+fi
+
 # Eval/app sync: the eval framework reproduces a handful of app surfaces it
 # cannot call (the TypeScript autopilot phase machine, the app's default
 # resolution). This gate notices when one of those app surfaces changes, so the

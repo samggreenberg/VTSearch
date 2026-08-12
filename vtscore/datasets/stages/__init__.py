@@ -5,7 +5,7 @@ runs *after* an importer has populated a context's ``medias`` dict:
 
 - :mod:`clipper`     — clipper/converter chain + per-clip MD5/embedding fixup
 - :mod:`embedding`   — embed media items the importer left unembedded
-- :mod:`finalize`    — drop failed embeds, collapse duplicates, diversity tree
+- :mod:`finalize`    — drop failed embeds, collapse duplicates, coverage atlas
 - :mod:`projection`  — optional 2-D UMAP projection build + persist
 - :mod:`registry`    — save to the dataset registry + context-id migration
 

@@ -308,7 +308,7 @@ def export_dataset_to_file(
         return entry
 
     data: dict[str, Any] = {"medias": {cid: _serialize_media(cid, media) for cid, media in medias.items()}}
-    # Merge the extra top-level keys (e.g. ``diversity_tree``, ``audio_dir``)
+    # Merge the extra top-level keys (e.g. ``coverage_atlas``, ``audio_dir``)
     # into the dict *before* the single pickle.dump, so ``write_container``
     # doesn't have to unpickle+update+re-pickle the whole (embedding-heavy)
     # blob a second time — the container save then pickles exactly once.

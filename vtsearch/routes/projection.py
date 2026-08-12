@@ -697,7 +697,7 @@ def build_projection():
         abort(409, message="Dataset is empty — nothing to project.")
 
     try:
-        # The diversity tree / projection clusters in the score embedder's
+        # The coverage atlas / projection clusters in the score embedder's
         # space (patch-else-text; the v3 routing table).
         sorted_ids, matrix = get_embedding_matrix(ctx, ctx.routed_embedder("score"))
     except ValueError as exc:

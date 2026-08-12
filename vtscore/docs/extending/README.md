@@ -17,8 +17,8 @@ in the family's package; if you're shipping a separate distribution,
 declare an `importlib.metadata` entry point in the family's group. Both
 discovery paths converge on the same registry, and built-ins win on
 name clashes so a stray third-party package can't silently shadow a
-core plugin. See [`vtscore/plugins/__init__.py:287`](../../plugins/__init__.py)
-for the registry, [`vtscore/plugins/__init__.py:386`](../../plugins/__init__.py)
+core plugin. See [`vtscore/plugins/__init__.py`](../../plugins/__init__.py)
+for the registry, [`vtscore/plugins/__init__.py`](../../plugins/__init__.py)
 for the entry-point loader, and the [plugins package
 doc](../packages/plugins.md) for the lower-level API surface.
 
@@ -50,7 +50,7 @@ sub-package scan. To ship one out-of-tree, symlink the
 `embedder_<name>.py` (or media-type sub-package) into the appropriate
 directory under `vtscore/media/`; both symlinked files and symlinked
 directories are loaded via `importlib.util.spec_from_file_location`
-([`vtscore/media/__init__.py:260`](../../media/__init__.py)).
+([`vtscore/media/__init__.py`](../../media/__init__.py)).
 
 ### App tier (in `vtsearch`)
 
@@ -84,7 +84,7 @@ third-party plugins.
 re-exports `PluginField` so you can import it alongside the family's
 base class. The frontend renders a form from `fields`, the CLI
 derives `argparse` flags from `fields`, and the marshmallow schema
-builder validates POST bodies against `fields`. See [`vtscore/plugins/__init__.py:71`](../../plugins/__init__.py)
+builder validates POST bodies against `fields`. See [`vtscore/plugins/__init__.py`](../../plugins/__init__.py)
 for the full dataclass and the [plugins package doc](../packages/plugins.md#pluginfield)
 for the field-type matrix.
 
@@ -108,7 +108,7 @@ plugins must be importable in a Flask-free environment - the
 `tests_lib/` test tier is verified by `./run-tests.sh vtscore-clean`,
 which installs a meta-path import hook that refuses `flask`,
 `werkzeug`, and `flask_smorest`. Read configuration through
-`CoreConfig` ([`vtscore/config.py:209`](../../config.py)); construct
+`CoreConfig` ([`vtscore/config.py`](../../config.py)); construct
 one directly when running outside an app context, or call
 `CoreConfig.from_settings()` when an app shim has been registered.
 

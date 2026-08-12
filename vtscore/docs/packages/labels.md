@@ -9,9 +9,23 @@ votes change. Both produce / consume the same
 [`LabelSet`](datasets.md#labelset) object defined in
 `vtscore.datasets` - there is no separate label datatype.
 
+## Contents
+
+| Module | Concern |
+|--------|---------|
+| `vtscore/labels/importers/base.py` | The `LabelImporter` ABC |
+| `vtscore/labels/importers/__init__.py` | Label-importer registry with auto-discovery |
+| `vtscore/labels/importers/server_json_file/` | Read labels from a `.json` file on the server |
+| `vtscore/labels/importers/server_csv_file/` | Read labels from a `.csv` file on the server |
+| `vtscore/labels/importers/holder/` | Read labels from a Holder package |
+| `vtscore/labels/sources/base.py` | The `LabelsetSource` ABC (a `SyncSource`) |
+| `vtscore/labels/sources/__init__.py` | Labelset-source registry with auto-discovery |
+| `vtscore/labels/sources/server_json_file/` | Bidirectional sync with a JSON file on the server |
+| `vtscore/labels/sync.py` | The sync glue: when to pull, when to push, conflict handling |
+
 ## Label importers
 
-`LabelImporter` (`vtscore/labels/importers/base.py:68`) is the ABC.
+`LabelImporter` (`vtscore/labels/importers/base.py`) is the ABC.
 Subclasses declare `fields: list[PluginField]`, implement `run`, and
 expose a module-level `LABEL_IMPORTER` sentinel. The registry
 auto-discovers them.
@@ -86,7 +100,7 @@ no extra code.
 
 ## Labelset sources
 
-`LabelsetSource` (`vtscore/labels/sources/base.py:30`) extends
+`LabelsetSource` (`vtscore/labels/sources/base.py`) extends
 [`SyncSource[LoadT, SaveT]`](sync.md) for a detector's labelset. A
 source can both *load* labels and *save* them back, so a detector
 linked to a source auto-imports its labels on load and auto-exports
@@ -131,7 +145,7 @@ Substitution happens at `load` / `save` time and runs each value
 through `vtscore.security.path_validation.sanitize_template_value`, so
 an attacker-controlled detector name like `../../etc/passwd` cannot
 escape the directory implied by an admin-configured template
-(`vtscore/labels/sources/server_json_file/__init__.py:117`).
+(`vtscore/labels/sources/server_json_file/__init__.py`).
 `resolve_filepath_for(field_values, detector_id=..., detector_name=...)`
 exposes the substitution as a pure function for flows that need to
 resolve a path for a non-active detector (notably detector rename).
@@ -190,7 +204,7 @@ the timer, so a rapid voting burst collapses into a single sync run
 that uses the **latest** captured contexts (latest wins). A per-detector
 `_pending_syncs` slot keyed by `detector_id` keeps two concurrent
 detectors from coalescing into each other's window
-(`vtscore/labels/sync.py:60`).
+(`vtscore/labels/sync.py`).
 
 `flush_pending_label_syncs()` drains the queue synchronously - used by
 tests that need to assert the file was written, and by graceful
@@ -229,7 +243,7 @@ source's `input_spec` (and `media_type`, when the receiving detector
 is missing one) into the receiving detector's on-disk JSON. The
 source's `threshold` is intentionally **not** applied - the receiver
 retrains its head from the imported labels and recomputes its own
-threshold (`vtscore/labels/sync.py:296`). The detector files
+threshold (`vtscore/labels/sync.py`). The detector files
 themselves only ever store origins and meta, never embeddings or model
 weights (CLAUDE.md "No Persisted Vectors").
 

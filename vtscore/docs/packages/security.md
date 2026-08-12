@@ -1,13 +1,12 @@
 # `vtscore.security`
 
 Defensive helpers used at every external-input boundary: path validation
-to prevent directory traversal, URL validation to block SSRF, and an
-allowlist-based pickle unpickler so loading a `.pkl` dataset can't lead
-to arbitrary code execution. The three modules
-(`path_validation.py`, `url_validation.py`, `pickle.py`) have no app
-coupling - they take their inputs explicitly and operate on bytes and
-strings, not request objects or settings. A fourth, `login.py`, carries
-the identity abstraction the path checks depend on.
+to prevent directory traversal, URL validation to block SSRF, hardened
+archive extraction, and an allowlist-based pickle unpickler so loading a
+`.pkl` dataset can't lead to arbitrary code execution. Every module here
+is app-uncoupled - they take their inputs explicitly and operate on bytes
+and strings, not request objects or settings. `login.py` carries the
+identity abstraction the path checks depend on.
 
 Related docs: [`state.md`](state.md) for the contexts that hold the
 deserialised dataset artefacts; [`concurrency.md`](concurrency.md) for
@@ -21,13 +20,26 @@ as the snippets below do.
 
 ## Contents
 
+| Module | Concern |
+|--------|---------|
+| `vtscore/security/path_validation.py` | Server file-path validation and per-user confinement |
+| `vtscore/security/url_validation.py` | SSRF guard, validated fetch/stream helpers, browser-URL checks |
+| `vtscore/security/origin_validation.py` | Confinement for origin dicts arriving from outside the server |
+| `vtscore/security/pickle.py` | Allowlist unpickler for dataset deserialisation |
+| `vtscore/security/archive.py` | Hardened single-member tar extraction (`safe_tar_extract`) |
+| `vtscore/security/hf_auth.py` | In-memory HuggingFace credential store + `GatedResourceError` |
+| `vtscore/security/login.py` | `LoginProvider`: how an identity is established, and which subtree it is confined to |
+
 - [Login providers](#login-providers)
 - [Path validation](#path-validation)
   - [Media-carried file references](#media_file_read_roots-and-resolve_media_file_pathfilepath_str)
+  - [Origin confinement](#origin-confinement)
 - [URL validation](#url-validation)
   - [`validate_url` (SSRF guard)](#validate_url-ssrf-guard)
   - [Fetching: `open_validated_stream` / `fetch_validated_url`](#fetching-open_validated_stream--fetch_validated_url)
   - [Browser-URL validation](#browser-url-validation)
+- [Archive extraction](#archive-extraction)
+- [HuggingFace credentials](#huggingface-credentials)
 - [Pickle safety](#pickle-safety)
 - [Why no `find_class` shim is needed](#why-no-find_class-shim-is-needed)
 
@@ -199,6 +211,49 @@ children only, file symlinks followed). Neither applies containment
 itself - if you need it after a glob, pass each result through
 `validate_server_filepath`.
 
+### Origin confinement
+
+`vtscore/security/origin_validation.py` guards the flows that accept a
+**whole origin dict** from outside the server - a request body
+(`POST /api/example-sort-origin`), or a detector JSON's saved media
+examples. An origin is normally stamped by the server at import time and
+trusted afterwards; one that arrives from outside has not been, and
+resolving it re-runs filesystem or network access from user-supplied
+params.
+
+```python
+def confine_origin_params(origin: Any) -> Any: ...
+```
+
+Two design choices are worth knowing before you call it:
+
+- **Every string param is checked, not just path-shaped ones.** Params
+  are untyped, and the tokens that matter (`..`, `.`, `~`) carry no path
+  separator to key off. Checking a non-path is harmless - a plain
+  relative name resolves inside the user's own directory and passes - so
+  the check deliberately errs towards validating too much.
+- **It returns a confined *copy*, not a boolean.** The validator anchors
+  a relative path at the user's data dir while the consuming source
+  would anchor it at the process CWD, so a bare pass/fail would approve
+  one path and open another. Only the params the source factories
+  actually resolve as filesystem paths (`_PATH_PARAM_KEYS`) are
+  rewritten - turning an opaque key into an absolute path would corrupt
+  it. **Consume the returned origin, not the input.**
+
+URL-valued params are deliberately *not* path-checked here. They are
+re-validated with `validate_url` at fetch time by the URL-backed sources
+(and the downloader re-checks every redirect hop), and running them
+through the path validator would spuriously reject them in multi-user
+mode.
+
+The same validate-then-use-a-different-path trap exists one level down,
+which is why `confine_server_filepath(filepath_str, base_dir)` exists
+alongside `validate_server_filepath`: it hands back the canonical path
+the check actually approved. Store and forward *that* string. With
+`base_dir=None` (single-user, no auth) both anchors are already the
+process CWD, so the input comes back verbatim and stored origins stay
+relative and portable across checkouts.
+
 ---
 
 ## URL validation
@@ -331,6 +386,54 @@ IP yourself and pass that IP (plus a `Host:` header) to the HTTP client.
 
 ---
 
+## Archive extraction
+
+`vtscore/security/archive.py` is the single audited path for pulling a
+member out of a tar, so no call site re-implements traversal protection
+by hand.
+
+```python
+def safe_tar_extract(tar: TarFile, member: TarInfo, dest: str | Path) -> None: ...
+```
+
+On interpreters that ship PEP 706 extraction filters
+(`tarfile.data_filter`) every member goes through the strict `data`
+filter, which strips a leading `/` so absolute names land *inside* the
+destination, refuses `..` traversal, and refuses symlink / hardlink
+members pointing outside. On older interpreters `_reject_unsafe_member`
+reproduces the same three guarantees by hand before anything is written.
+Either way the caller gets identical behaviour, so never call
+`tar.extract` / `tar.extractall` directly.
+
+---
+
+## HuggingFace credentials
+
+`vtscore/security/hf_auth.py` holds the active HuggingFace OAuth
+credential **in memory only** - it is never written to settings or to
+disk, and a restart signs the user out.
+
+| Name | Description |
+|------|-------------|
+| `HFCredential` | Frozen dataclass: `access_token`, `username`, `expires_at`, `scopes`, plus `is_expired()` |
+| `set_credential(token, *, username="", expires_at=None, scopes="")` / `clear_credential()` | Store / drop the active credential (lock-guarded) |
+| `get_token()` / `is_authenticated()` / `get_status()` | Read the token, a boolean, or a JSON-serialisable snapshot for the UI |
+| `auth_header_for_url(url)` | `{"Authorization": "Bearer …"}` **iff** *url* targets the Hub, else `{}` |
+| `GatedResourceError` | Raised when a download fails because the resource is gated; carries `url` and `status` |
+
+`auth_header_for_url` is the one to use on every request. It returns an
+empty dict for any non-Hub host, so callers can merge it in
+unconditionally without leaking the token to a third-party CDN or a
+redirect target - which matters because Hub downloads redirect to signed
+Xet URLs that carry their own authorization and neither need nor should
+see the bearer token.
+
+`GatedResourceError` exists as a distinct type because the frontend keys
+off it to offer a "Sign in with HuggingFace" affordance; raise it rather
+than a generic error when a 401/403 means "gated", not "broken".
+
+---
+
 ## Pickle safety
 
 `vtscore/security/pickle.py` provides a restricted unpickler used for
@@ -341,7 +444,7 @@ for any input arriving over HTTP or from an untrusted filesystem.
 
 ### The allowlist contract
 
-`_PICKLE_SAFE_CLASSES` (`pickle.py:17`) enumerates every
+`_PICKLE_SAFE_CLASSES` (`pickle.py`) enumerates every
 `(module, name)` pair the unpickler will instantiate. Plain Python
 primitives (`int`, `float`, `str`, `None`, `bool`, `dict`, `list`,
 `tuple`) are handled by pickle's opcodes directly and never trigger
@@ -375,7 +478,7 @@ with open("dataset.pkl", "rb") as f:
 `find_class` to enforce the allowlist:
 
 ```python
-# vtscore/security/pickle.py:48
+# vtscore/security/pickle.py
 def find_class(self, module: str, name: str) -> Any:
     if (module, name) in _PICKLE_SAFE_CLASSES:
         return super().find_class(module, name)

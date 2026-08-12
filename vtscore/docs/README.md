@@ -29,6 +29,7 @@ surface, worked examples, and gotchas.
 | `vtscore.media` | `MediaType`, embedder + clipper ABCs, processor ABCs | [packages/media.md](packages/media.md) |
 | `vtscore.embedding` | Embedder loaders, torch runtime, cached `(N, D)` matrix | [packages/embedding.md](packages/embedding.md) |
 | `vtscore.datasets` | Origins, labelsets, loaders, importers, media sources | [packages/datasets.md](packages/datasets.md) |
+| `vtscore.datasource_importers` | Single-item importers for exemplar media | [packages/datasource-importers.md](packages/datasource-importers.md) |
 | `vtscore.training` | Head (linear / MLP) / threshold / SVM / region-similarity primitives | [packages/training.md](packages/training.md) |
 | `vtscore.detectors` | Detector lifecycle: train, store, score, labelset sync | [packages/detectors.md](packages/detectors.md) |
 | `vtscore.eval` | Offline evaluation: text-sort, learned-sort, voting iterations | [packages/eval.md](packages/eval.md) |
@@ -40,8 +41,11 @@ surface, worked examples, and gotchas.
 | `vtscore.sync` | `SyncSource[L,S]` generic ABC | [packages/sync.md](packages/sync.md) |
 | `vtscore.concurrency` | Async jobs, memory budget, long-running progress | [packages/concurrency.md](packages/concurrency.md) |
 | `vtscore.security` | Path / URL validation, allowlist pickle loader | [packages/security.md](packages/security.md) |
-| `vtscore.utils` | `build_media_hit`, synthetic-media generators | [packages/utils.md](packages/utils.md) |
+| `vtscore.projection` | VTSBrowse: UMAP layout, hex-tile pyramid, region signposts | [packages/projection.md](packages/projection.md) |
+| `vtscore.timing` | Measured per-step cost model behind every progress bar | [packages/timing.md](packages/timing.md) |
+| `vtscore.utils` | Hit dicts, content hashes, score sanitisation, synthetic media | [packages/utils.md](packages/utils.md) |
 | `vtscore.cli` | Flask-free CLI entry points (autodetect, pipeline, progress) | [packages/cli.md](packages/cli.md) |
+| `vtscore.io`, `.gpu_backends`, `.single_instance` | Top-level runtime modules: file I/O, cuML routing, the port lock | [packages/runtime-modules.md](packages/runtime-modules.md) |
 
 ## Extending vtscore
 
@@ -106,6 +110,28 @@ whose `__init__.py` re-exports nothing.
 uses a git-derived timestamp instead, since every commit on `dev` is
 effectively a new app release. See the top-level
 [`CHANGELOG.md`](../CHANGELOG.md) for per-release notes.
+
+## Doc conventions
+
+Two rules keep this doc set from drifting away from the code, both
+enforced by `scripts/check-vtscore-docs.py` (a `./run-tests.sh` gate):
+
+- **Every top-level module and sub-package of `vtscore/` has a
+  `packages/` doc, and that doc's Contents table names every module in
+  it.** Add a module, and the gate fails until the table lists it. The
+  tables are the inventory; write them from the tree, not from memory.
+- **Never cite a line number.** A `path.py` plus a colon plus a number
+  is wrong by the next edit - in practice every such anchor in this doc
+  set had rotted, most by hundreds of lines (which is why the gate
+  rejects the pattern outright, including in this sentence). Reference
+  the module and the symbol instead
+  (``` `pool_box_from_media` in `vtscore/embedding/matrix.py` ```): it
+  is stable under any edit that doesn't move the symbol, and it is
+  greppable, which a line number never was.
+
+The same reasoning rules out `(~745 lines)`-style size annotations and
+absolute machine paths in link text. If a fact about the code will be
+wrong after somebody else's unrelated commit, don't write it down.
 
 ## Contributing
 

@@ -30,7 +30,7 @@ in `vtsearch.settings_io`.
 
 ## The class
 
-`vtscore/sync/__init__.py:26` defines:
+`vtscore/sync/__init__.py` defines:
 
 ```python
 from typing import Any, Generic, TypeVar

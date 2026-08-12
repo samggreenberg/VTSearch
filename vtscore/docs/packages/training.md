@@ -18,8 +18,11 @@ this package is the underlying ML core.
 |-----------------------------------------------------------------------|-----------------------------------------------------------------|
 | `vtscore/training/mlp.py`                                             | `build_model`, `build_model_from_weights`, `train_model`        |
 | `vtscore/training/thresholds.py`                                      | GMM / cross-cal / safe threshold helpers                        |
+| `vtscore/training/blend_schedules.py`                                 | Mix-in schedules for the safe-threshold blend                   |
+| `vtscore/training/evt_mixture.py`                                     | Gumbel + Normal score mixture - the extreme-value cut           |
 | `vtscore/training/svm.py`                                             | `SVMClassifier` + `train_svm` prototype                         |
 | `vtscore/training/region_similarity.py`                               | Patch-level cosine scoring with bounding boxes                  |
+| `vtscore/training/structural_similarity.py`                           | Stage-2 geometric re-rank + match-statistic verification classifier |
 
 The package `__init__.py` re-exports the head-building and threshold names; SVM
 and region-similarity helpers are imported from their submodules.
@@ -48,7 +51,7 @@ matrices and binary labels. The `hidden_dim` argument selects the head:
 ### Architecture
 
 **Linear (logistic) head - the production head.** Selected by the
-`hidden_dim=LINEAR_HEAD` (`0`) sentinel at `vtscore/training/mlp.py:34`:
+`hidden_dim=LINEAR_HEAD` (`0`) sentinel in `vtscore/training/mlp.py`:
 
 ```python
 nn.Sequential(
@@ -85,7 +88,7 @@ for the measurements.
 
 Both are built by
 `build_model(input_dim, hidden_dim=64, dropout=0.0, generator=None)` at
-`vtscore/training/mlp.py:51`. Pass a seeded `torch.Generator` to
+`vtscore/training/mlp.py`. Pass a seeded `torch.Generator` to
 deterministically re-initialise the `Linear` weights (Kaiming uniform
 on the weight matrix, uniform on the bias with the standard PyTorch
 fan-in bound).
@@ -98,7 +101,7 @@ fan-in bound).
 ### Auto-sizing the MLP hidden layer
 
 Only the MLP head uses this; the linear head has no hidden layer.
-`_auto_hidden_dim(n_train)` at `vtscore/training/mlp.py:37` chooses the
+`_auto_hidden_dim(n_train)` in `vtscore/training/mlp.py` chooses the
 hidden width from the number of training examples:
 
 ```python
@@ -117,7 +120,7 @@ thresholds stay directly comparable to the full-data model.
 ### Training
 
 `train_model(X_train, y_train, input_dim, seed=42, hidden_dim=None, sample_weights=None)`
-at `vtscore/training/mlp.py:139` is the workhorse:
+in `vtscore/training/mlp.py` is the workhorse:
 
 ```python
 import numpy as np, torch
@@ -185,7 +188,7 @@ parallel.
 
 ### Reloading from saved weights
 
-`build_model_from_weights(weights)` at `vtscore/training/mlp.py:101`
+`build_model_from_weights(weights)` in `vtscore/training/mlp.py`
 reconstructs a model from a dict of lists (the output of
 `tensor.tolist()` per state-dict entry). It infers the head from the keys
 present: `0.*` alone means the linear head, while a `3.weight` means an MLP
@@ -221,7 +224,7 @@ lists from votes, caching on `DetectorContext`) sits one layer up.
 
 ### `calculate_gmm_threshold(scores)`
 
-`vtscore/training/thresholds.py:17`. Fits a 2-component
+`vtscore/training/thresholds.py`. Fits a 2-component
 `sklearn.mixture.GaussianMixture` to the score list and returns the
 **midpoint between the two component means**. Used to produce a
 reasonable operating point even when only a few labels exist - the score
@@ -375,7 +378,7 @@ its purpose is to let
 vs. SVM head-to-head so the team can decide whether to add a trainer-
 selection field on detectors.
 
-### `SVMClassifier` (`vtscore/training/svm.py:26`)
+### `SVMClassifier` (`vtscore/training/svm.py`)
 
 Dataclass wrapping a fitted sklearn estimator plus an optional
 probability source: `base` (`LinearSVC` or `SVC`), `calibrator`
@@ -387,7 +390,7 @@ otherwise it sigmoids the raw `decision_function` (clipped to ±30).
 The sigmoid wrapper is not a true probability, but it is monotone in
 the SVM score - which is all the ranker and threshold-finder need.
 
-### `train_svm(...)` (`vtscore/training/svm.py:130`)
+### `train_svm(...)` (`vtscore/training/svm.py`)
 
 Fits a `LinearSVC` (linear, fast) or `SVC` (RBF), translates
 `inclusion_value` into a sklearn `class_weight` map, and optionally

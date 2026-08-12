@@ -4,11 +4,9 @@ Result/labelset exporters: plugins that take a labelset or an
 autodetect-results dict and deliver it somewhere - a file on disk, an
 HTTP webhook, an email, a Holder package. Every exporter is one
 subclass of `LabelsetExporter` plus a module-level `EXPORTER` sentinel,
-discovered by the standard `vtscore.plugins` registry. The package
-ships seven built-ins (`server_json_file`, `server_csv_file`, `webhook`,
-`email_smtp`, `gui`, `holder`, `open_url`) and external code adds more by either
-dropping a module under `vtscore/exporters/<name>/` or declaring an
-entry point in the `vtscore.exporters` group.
+discovered by the standard `vtscore.plugins` registry. External code
+adds more by either dropping a module under `vtscore/exporters/<name>/`
+or declaring an entry point in the `vtscore.exporters` group.
 
 Label *importers* (the reverse direction - pulling labels in from an
 external source) are not here; they live in
@@ -19,17 +17,30 @@ external source) are not here; they live in
 
 ## Contents
 
+| Module | Concern |
+|--------|---------|
+| `vtscore/exporters/base.py` | The `LabelsetExporter` ABC and its siblings |
+| `vtscore/exporters/__init__.py` | The auto-discovering registry and its accessors |
+| `vtscore/exporters/server_json_file/` | Write results to a `.json` file on the server |
+| `vtscore/exporters/server_csv_file/` | Write results to a `.csv` file on the server |
+| `vtscore/exporters/webhook/` | POST results to an arbitrary URL |
+| `vtscore/exporters/email_smtp/` | Email results directly via MX lookup |
+| `vtscore/exporters/gui/` | Show results in the browser, or print them on the CLI |
+| `vtscore/exporters/holder/` | Export labels to a Holder package |
+| `vtscore/exporters/open_url/` | Format the labelset into a URL for the browser to open |
+| `vtscore/exporters/portable_detector/` | Write standalone ONNX scoring bundles headlessly |
+
 - [Registry and accessors](#registry-and-accessors)
 - [`LabelsetExporter` ABC](#labelsetexporter-abc)
 - [The export contract](#the-export-contract)
-- [`PluginField`](#exporterfield)
+- [`PluginField`](#pluginfield)
 - [Built-in exporters](#built-in-exporters)
 - [Template variables in path fields](#template-variables-in-path-fields)
 - [Writing a custom exporter](#writing-a-custom-exporter)
 
 ## Registry and accessors
 
-`vtscore/exporters/__init__.py:17` is a one-line registry built with
+`vtscore/exporters/__init__.py` is a one-line registry built with
 `make_plugin_registry`:
 
 ```python
@@ -65,7 +76,7 @@ the result.
 
 ## `LabelsetExporter` ABC
 
-`vtscore/exporters/base.py:59` - abstract base class. Subclasses set
+`vtscore/exporters/base.py` - abstract base class. Subclasses set
 the standard `PluginBase` class attributes (`name`, `display_name`,
 `description`, `icon`, `fields`, optionally `ui_mode` and
 `hidden_from_picker`) and implement `export()`. The default `icon` is
@@ -215,26 +226,50 @@ Field semantics - `field_type` literals, `dynamic_options`,
 | `email_smtp` | Sends an email via direct MX delivery | Resolves the recipient domain's MX record (`dnspython`), connects on port 25, sends a multipart plain+HTML summary. Requires a sender domain you control |
 | `gui` | Displays results in the browser (GUI) or prints to stdout (CLI) | `hidden_from_picker = True`. The default exporter for the web UI's autodetect modal; in CLI mode `export_cli()` prints origin + name of each Good hit |
 | `holder` | Creates a new Holder package with Good/Bad folders | `hidden_from_picker = True` until the Holder API client lands. Only labels carrying a `contentID` (typically from a ReCaller import) are written; everything else is silently skipped |
+| `portable_detector` | Writes one standalone ONNX scoring bundle per trained detector | `hidden_from_picker = True`, CLI-only. See below - it is the one exporter that consumes detectors rather than results |
 
 `hidden_from_picker = True` keeps an exporter out of the generic
 picker UI. The `gui` exporter is special-cased by the frontend; the
 `holder` exporter is a scaffold with `NotImplementedError` stubs for
-its Holder API client (see `vtscore/exporters/holder/__init__.py:46`).
+its Holder API client (see `vtscore/exporters/holder/__init__.py`); the
+`portable_detector` exporter is hidden because the GUI has its own
+dedicated portable-export modal.
+
+### `portable_detector` is shaped differently
+
+Every other exporter consumes the **scored results**. This one consumes
+the **trained classifiers**, so it sets `needs_trained_detectors` and
+the pipeline hands it the detectors via `export_cli_detectors` instead
+of the usual `export` call. It only works on the `--autodetect` /
+`--pipeline` path, which is the only one that produces a trained head.
+
+It is also the sanctioned exception to the "No Persisted Vectors or
+MLPs" rule: the bundle persists the trained MLP (as ONNX, alongside a
+`manifest.json` and a `README.md`) so a third party can score their own
+media without VTSearch. It never writes embeddings or raw media. The
+bundle itself is built by `vtscore.detectors.portable_bundle`.
+
+Two per-embedder-type caveats: **structural** (SIFT/VLAD) detectors are
+skipped with a note rather than aborting the export, because their
+stage-2 RANSAC verification isn't representable as a scoring-only ONNX
+graph; **patch** (DINOv2/v3, EUPE) detectors export normally but in a
+degraded whole-item-only scoring mode. Use `{detector_name}` in the
+path to disambiguate a multi-detector run.
 
 ### File-format notes
 
-- **`server_json_file`** (`vtscore/exporters/server_json_file/__init__.py:39`)
+- **`server_json_file`** (`vtscore/exporters/server_json_file/__init__.py`)
   writes either the full autodetect-results JSON or, when the input is
   a `labels` payload, an object filtered to the user-selected columns.
-  Atomic write helper is at `vtscore/exporters/server_json_file/__init__.py:25`.
-- **`server_csv_file`** (`vtscore/exporters/server_csv_file/__init__.py:57`)
+  Atomic write helper is in `vtscore/exporters/server_json_file/__init__.py`.
+- **`server_csv_file`** (`vtscore/exporters/server_csv_file/__init__.py`)
   produces one row per hit (autodetect path) or one row per label
   (labels path). The labels path always re-orders `origin` to the last
   column so the file can be re-imported losslessly.
-- **`webhook`** (`vtscore/exporters/webhook/__init__.py:16`) sends the
+- **`webhook`** (`vtscore/exporters/webhook/__init__.py`) sends the
   full `results` dict as the JSON body. Returned dict includes
   `status_code` and `url` alongside `message`.
-- **`email_smtp`** (`vtscore/exporters/email_smtp/__init__.py:84`)
+- **`email_smtp`** (`vtscore/exporters/email_smtp/__init__.py`)
   composes both a plain-text and HTML body and sends both as alternative
   MIME parts. Requires the `dnspython` package for MX resolution; the
   import is lazy so installs that don't use email are unaffected.
@@ -243,9 +278,9 @@ its Holder API client (see `vtscore/exporters/holder/__init__.py:46`).
 
 A path field declares which placeholders it accepts in its
 `PluginField.template_vars` tuple; the framework's
-`normalize_field_values` pass
-(`vtscore/plugins/normalize.py`) substitutes them - and confines the
-resolved `server_path` to the user's data dir - before `export()` runs:
+`normalize_field_values` pass (`vtscore/plugins/normalize.py`)
+substitutes them - and confines the resolved `server_path` to the
+user's data dir - before `export()` runs:
 
 | Placeholder | Substituted with |
 |-------------|------------------|
@@ -334,15 +369,13 @@ EXPORTER = SftpLabelsetExporter()
   minimum `{"message": "..."}`.
 - Decide which result shape(s) you support; raise `ValueError` on
   shapes you don't.
-- For file destinations, declare the field as `field_type="server_path"`
-  with the placeholders it accepts in `template_vars=(...)`, and default
-  the path under `vtscore.config.DATA_DIR`. The framework substitutes
-  and confines it; consume `field_values[key]` as-is. Write atomically
-  (`vtscore.io.atomic_write_json` / `atomic_write_text`).
-- For URL destinations, declare the field as `field_type="url"` - the
-  framework runs the SSRF guard for you. Call
-  `vtscore.security.validate_url` yourself only for a URL you
-  *construct* rather than receive.
+- For file destinations, declare the placeholders you accept in the
+  field's `template_vars` and let `normalize_field_values` substitute
+  them; default the path under `vtscore.config.DATA_DIR`. Write through
+  `vtscore.io.atomic_write_bytes` / `atomic_write_text` rather than
+  hand-rolling the tmp-file + `os.replace` ritual.
+- For URL destinations, run the URL through
+  `vtscore.security.validate_url` first (SSRF guard).
 - Expose a module-level `EXPORTER = YourExporter()` constant.
 - (Third-party only) declare a `vtscore.exporters` entry point in
   your `pyproject.toml`.

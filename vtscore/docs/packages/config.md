@@ -9,7 +9,7 @@ would otherwise force the library to import `vtsearch.settings`. The
 file is import-clean - it never reaches into the app - and is the only
 place library code is allowed to read environment variables directly.
 
-**Source:** `vtscore/config.py`.
+**Source:** `vtscore/config.py` - a single module, no sub-package.
 **Related:** [`cli.md`](cli.md) for the CLI entry points that build a
 `CoreConfig` before running, and
 [`architecture.md`](../architecture.md#the-coreconfig-bridge) for why the
