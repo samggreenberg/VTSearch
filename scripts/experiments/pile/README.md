@@ -41,6 +41,41 @@ ever needs that split.
 | `visual_genome_m` | 4193 | yes | demo dataset; ground-truth regions |
 | `caltech101_m` | 838 | no | demo dataset; whole-image labels only |
 | `coco_val` | 4952 | yes | assembled from the staged val2017 zip |
+| `vg_box_small` | 12000 | yes | box-banded VG: union box **below one patch** |
+| `vg_box_medium` | 12000 | yes | box-banded VG: patch → HAC leaf |
+| `vg_box_large` | 12000 | yes | box-banded VG: leaf → 80% of the image |
+
+### The box-banded VG sets
+
+`vg_box_small/medium/large` exist because **`visual_genome_m`'s `_m` is a
+dataset size tier, not a box size** — it is a `slice_frac` window over the
+source, and `caltech101_m` (boxless) carries the same suffix. To vary box scale
+you need datasets built for it.
+
+They are drawn from the **whole** VG source — all 108k images across `VG_100K`
+and `VG_100K_2`, with the full free-text vocabulary in `objects.json` — not the
+demo pipeline's 100 curated categories on a 4% slice. That matters: the demo
+vocabulary puts **5** categories in the sub-patch band; the full source has
+**643**. A vocabulary chosen for recognisability is not a sample of scales.
+
+Each band takes 40 categories, stratified *within* the band (support correlates
+with size, so taking the best-supported would cluster them at one end and the
+band would silently be a point), and up to 12000 images carrying them.
+Categories are restricted to **concrete countable objects**: attributes (`red`),
+frame relations (`front`), placeholders (`object`, `group`) and mass nouns /
+unbounded surfaces (`sky`, `grass`, `floor`) are excluded by
+`pile_config.is_object_category`, which matches on the **head noun** so
+`blue sky` is dropped while `blue jeans` and `tennis ball` survive.
+
+Rebuild the scan behind them with `python scan_vg_boxes.py` (writes
+`vg_box_scale.json`; caches image dims, since `objects.json` stores boxes in
+pixels and carries no image dimensions).
+
+Verified separation, measured with `--bands`: 38/40 of `vg_box_small`'s
+categories fall in `sub_patch`, 40/40 of `vg_box_medium` in `patch_to_leaf`,
+33/40 of `vg_box_large` in `leaf_to_4x`. The handful of strays are a
+measurement difference — band membership was assigned on the full-VG median
+voted area, while `--bands` recomputes it on the 12000-image sample.
 
 ## Region voting needs both halves
 
@@ -84,16 +119,18 @@ Band edges are anchored to the patch embedder's geometry, which is the point:
 | `leaf_to_4x` | 8.33 – 33.3% | a few leaves |
 | `above_4x` | 33.3 – 101% | most of the image |
 
-**`sub_patch` is under-populated and cannot be fixed by tuning.** It holds 5
-candidate categories on VG and 1 on COCO, and that is unchanged at every
-`min_count` from 5 to 30 — the filter is not the binding constraint, so
-lowering it recovers nothing. Objects below one patch are simply rare, and
-COCO is worse by construction: its vocabulary is object-level (80 classes)
-while VG annotates *parts* (`eye`, `nose`, `cap`, `hat`), which is what fills
-the band. Widening the edge would inflate the count with objects the grid can
-actually resolve, destroying what the band means. Treat sub-patch conclusions
-as resting on ~5 VG categories, and prefer pooling both datasets over
-re-cutting the band.
+**On `visual_genome_m` and `coco_val`, `sub_patch` is starved and tuning cannot
+fix it.** It holds 5 candidate categories on VG and 1 on COCO, unchanged at
+every `min_count` from 5 to 30 — the filter is not the binding constraint, so
+lowering it recovers nothing. Widening the band edge would inflate the count
+with objects the grid *can* resolve, destroying what the band means.
+
+The real cause is the **vocabulary**, not the band: those are the demo
+pipeline's 100 curated categories (and COCO's 80 object-level classes, which
+have no analogue for VG's part annotations like `eye`, `nose`, `cap`). Measured
+against the full VG source the same band holds **643** categories. So the fix is
+to use `vg_box_small` — built for exactly this — rather than to re-cut the band
+on a dataset that was never sampled for scale.
 
 ## Rebuilding
 
