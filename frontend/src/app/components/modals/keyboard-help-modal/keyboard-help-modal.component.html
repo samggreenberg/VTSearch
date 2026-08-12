@@ -68,7 +68,7 @@
         @if (guideError()) {
           <p class="guide-error">{{ guideError() }}</p>
         } @else if (guideHtml()) {
-          <div class="guide-body" [innerHTML]="guideHtml()"></div>
+          <div class="guide-body" [innerHTML]="guideHtml()" (click)="onGuideClick($event)"></div>
         } @else {
           <p class="guide-loading">Loading user guide…</p>
         }

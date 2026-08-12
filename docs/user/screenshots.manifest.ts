@@ -166,7 +166,7 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 'autopilot-vote',
-    embeddedIn: 'docs/user/USER_GUIDE.md#autopilot--the-guided-workflow',
+    embeddedIn: 'docs/user/USER_GUIDE.md#autopilot-the-guided-workflow',
     caption: 'An item in the centre viewer with the green Good and red Bad vote buttons, alongside the Autopilot phase panel',
     themes: BOTH,
     annotations: [
@@ -196,7 +196,7 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 'manual-controls',
-    embeddedIn: 'docs/user/USER_GUIDE.md#manual-mode--for-power-users',
+    embeddedIn: 'docs/user/USER_GUIDE.md#manual-mode-for-power-users',
     caption: 'The three Manual-mode control rows: Sort mode, Selection strategy, and the Inclusion slider',
     themes: BOTH,
     annotations: [
@@ -288,7 +288,7 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 'settings-appearance',
-    embeddedIn: 'docs/user/USER_GUIDE.md#solo-media-type--streamline-for-one-media-type',
+    embeddedIn: 'docs/user/USER_GUIDE.md#solo-media-type-streamline-for-one-media-type',
     caption: 'The Settings → Appearance pane: theme picker, the Show Animations pulldown (Show / Hide / OS Setting), the metadata-panel / achievements toggles, and the per-media-type Scroll Style controls (Solo media type is an admin setting, shown read-only on the Server tab)',
     themes: BOTH,
     async recipe(_page, h) {
@@ -298,7 +298,7 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 'dashboard-manage',
-    embeddedIn: 'docs/user/USER_GUIDE.md#dashboard--managing-datasets-and-detectors',
+    embeddedIn: 'docs/user/USER_GUIDE.md#dashboard-managing-datasets-and-detectors',
     caption: 'A dataset row and a detector row selected, with the Train / Find action bar below the tables',
     themes: BOTH,
     annotations: [
@@ -320,7 +320,7 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 'browse-view',
-    embeddedIn: 'docs/user/USER_GUIDE.md#browse--exploring-a-dataset-spatially',
+    embeddedIn: 'docs/user/USER_GUIDE.md#browse-exploring-a-dataset-spatially',
     caption: 'The Browse map: a pannable square-tile map of a synthetic image dataset, with the legend and minimap on the right',
     themes: BOTH,
     annotations: [
@@ -389,7 +389,7 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 'find-view',
-    embeddedIn: 'docs/user/USER_GUIDE.md#find--scoring-and-verifying',
+    embeddedIn: 'docs/user/USER_GUIDE.md#find-scoring-and-verifying',
     caption:
       'The Find verification view: the work queue (left), the viewer with Good/Bad (centre), and the Verified Good / Verified Bad piles plus their actions (right)',
     themes: BOTH,
@@ -406,7 +406,7 @@ export const SHOTS: Shot[] = [
   },
   {
     id: 'find-stats',
-    embeddedIn: 'docs/user/USER_GUIDE.md#find--scoring-and-verifying',
+    embeddedIn: 'docs/user/USER_GUIDE.md#find-scoring-and-verifying',
     caption:
       "The Find view's Detector Stats modal: detector-vs-verified counts, a breakdown of the detector's calls, and a chart of wrong matches vs. missed matches as inclusion changes",
     themes: BOTH,
