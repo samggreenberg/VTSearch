@@ -55,7 +55,8 @@ deployments. Runs locally or in Docker.
 | [SETUP.md](SETUP.md) | Installation, prerequisites, getting started, basic Docker usage |
 | [user/USER_GUIDE.md](user/USER_GUIDE.md) | End-user walkthrough: training a detector with Autopilot, manual mode, applying existing detectors, sort modes, dashboard, exporting |
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Production deployment, offline mode, network deps, env vars, data directory, troubleshooting |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Module structure, dependency graph, extractability matrix, state management |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Module structure, dependency graph, extractability matrix, state management (Python tiers) |
+| [FRONTEND.md](FRONTEND.md) | Angular SPA architecture: feature areas, service layer, zoneless change detection, active dataset/detector context, generated API client, component conventions |
 | [API.md](API.md) | HTTP API reference (all REST endpoints, request/response formats) |
 | [CLI.md](CLI.md) | Command-line interface reference (autodetect, importers, exporters) |
 | [ML.md](ML.md) | Detector-head architecture, training config, embedding models, threshold calibration, Coverage Atlas |

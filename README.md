@@ -96,7 +96,7 @@ The remaining top level:
 └── pyproject.toml    # Project metadata and dependencies
 ```
 
-For the complete directory map, dependency graph, and the app-tier/library-tier rules, see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**.
+For the complete directory map, dependency graph, and the app-tier/library-tier rules, see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**. For the Angular SPA — feature areas, service layer, zoneless change detection, and the generated API client — see **[docs/FRONTEND.md](docs/FRONTEND.md)**.
 
 ## HTTP API
 

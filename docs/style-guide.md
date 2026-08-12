@@ -512,5 +512,6 @@ When you add a new token:
 - `frontend/src/scss/_picker-shared.scss` - importer/exporter tabs, picker table, badges.
 - `frontend/src/scss/_data-table.scss` - dashboard table.
 - `frontend/src/scss/_layout.scss` - 3-panel grid.
+- `docs/FRONTEND.md` - SPA architecture: feature areas, service layer, zoneless change detection, component conventions.
 - `CLAUDE.md` - Back vs Cancel rules, desktop-only scope.
 - `.claude/scripts/style-check.py` - static SCSS audit (invoked via the `/style-check` skill).
