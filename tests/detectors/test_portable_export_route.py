@@ -13,6 +13,7 @@ import zipfile
 
 import app as app_module
 import pytest
+from tests.fixtures.medias import DEFAULT_AUDIO_EMBEDDER
 from tests.helpers import setup_trainable_model_in_registry
 from vtsearch.state import snapshot_medias
 
@@ -76,11 +77,14 @@ class TestPortableExport:
         det_data = _read_detector(_detector_path("portable-parity"))
         mlp, _threshold, _diag = resolve_or_train_detector(detector_id, det_data, "audio", snap)
         assert mlp is not None
-        live = {r["id"]: r["score"] for r in score_media_with_model(mlp, snap, embedder_name="clap")}
+        live = {
+            r["id"]: r["score"]
+            for r in score_media_with_model(mlp, snap, embedder_name=DEFAULT_AUDIO_EMBEDDER)
+        }
 
         # Re-embed the same medias and run them through the exported graph.
         ids = sorted(live)
-        x = np.stack([np.asarray(snap[i]["embeddings"]["clap"], dtype=np.float32) for i in ids])
+        x = np.stack([np.asarray(snap[i]["embeddings"][DEFAULT_AUDIO_EMBEDDER], dtype=np.float32) for i in ids])
         session = ort.InferenceSession(onnx_bytes)
         onnx_scores = session.run(["score"], {"embedding": x})[0].ravel()
         for i, s in zip(ids, onnx_scores, strict=True):
@@ -130,7 +134,7 @@ class TestPortableExport:
         import vtsearch.routes.detectors.scoring as scoring_mod
 
         monkeypatch.setattr(scoring_mod, "_dataset_supplies_detector_type", lambda *_a, **_kw: True)
-        monkeypatch.setattr(binding_mod, "keying_embedder_for_snap", lambda *_a, **_kw: "clap")
+        monkeypatch.setattr(binding_mod, "keying_embedder_for_snap", lambda *_a, **_kw: DEFAULT_AUDIO_EMBEDDER)
         detector_id = setup_trainable_model_in_registry(
             "portable-patch",
             good_ids=[1, 2, 3],
