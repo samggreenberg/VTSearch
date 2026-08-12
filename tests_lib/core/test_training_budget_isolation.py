@@ -31,11 +31,21 @@ pytestmark = pytest.mark.xdist_group("training-budget-isolation")
 
 
 def test_a_reloading_config_resets_the_training_budget():
-    """The hazard itself: a reload silently reverts the budget to production."""
+    """The hazard itself: a reload silently reverts the budget to production.
+
+    The budget is the one that read as nondeterminism, but it is not the only
+    session-level value the reload drops - the registered ``CoreConfig``
+    builder goes with it, and its absence makes ``from_settings()`` raise.
+    """
     importlib.reload(config)
     assert config.TRAIN_EPOCHS == int(os.environ.get("VTSEARCH_TRAIN_EPOCHS", "200"))
+    assert config._core_config_builder is None
 
 
 def test_b_the_next_test_still_gets_the_session_budget():
     """...and the next test is handed the session's budget regardless."""
     assert config.TRAIN_EPOCHS == TEST_TRAIN_EPOCHS
+    # Restored, and *callable*: registration alone would still leave
+    # ``from_settings()`` raising if the builder came back unusable.
+    assert config._core_config_builder is not None
+    assert config.CoreConfig.from_settings().data_dir == config.DATA_DIR
