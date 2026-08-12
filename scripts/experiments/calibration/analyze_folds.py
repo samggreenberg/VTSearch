@@ -23,6 +23,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+from _cells_io import main_frame_files
 from scipy.stats import mannwhitneyu, wilcoxon
 
 FOLD_RE = re.compile(r"^fold_anchored_w(?P<w>[\d.]+)_(?P<rule>mid|rate)_(?P<combine>\w+)$")
@@ -32,7 +34,7 @@ CELL = ["category", "seed", "window"]
 
 
 def load(results: Path) -> pd.DataFrame:
-    files = [p for p in sorted(results.glob("task_*.csv")) if "__sweep" not in p.name and "__cutdiag" not in p.name]
+    files = main_frame_files(results)
     frames = [pd.read_csv(p) for p in files if p.stat().st_size > 0]
     df = pd.concat(frames, ignore_index=True)
     df["gmm_variant"] = df["gmm_variant"].fillna("")
