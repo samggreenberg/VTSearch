@@ -44,6 +44,7 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from _cells_io import main_frame_files  # noqa: E402
 
 try:  # scipy is in the grid venv, but the analyzer must not die without it
     from scipy.stats import wilcoxon as _wilcoxon
@@ -108,7 +109,7 @@ def load_arm(arm_dir: Path) -> tuple[pd.DataFrame, dict]:
     unreadable ones, and the zero-byte ones, because an analysis that silently
     drops cells is how a disk incident becomes a wrong verdict.
     """
-    files = sorted((arm_dir / "cells").glob("task_*.csv"))
+    files = main_frame_files(arm_dir / "cells")
     files = [f for f in files if "__" not in f.name]  # skip __sweep / __cutdiag
     frames, bad, empty, headless = [], [], [], []
     for f in files:

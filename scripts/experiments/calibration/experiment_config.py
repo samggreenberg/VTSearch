@@ -117,6 +117,28 @@ ANCHORED_CHECKPOINTS = [
     int(c) for c in os.environ.get("CALIB_ANCHORED_CHECKPOINTS", "20,50,100,200,300").split(",") if c
 ]
 
+#: Inclusion values the **fold-anchored cut rules** are swept over (issue
+#: #2865), into the ``__cutincl.csv`` side frame.  Empty (the default) = off,
+#: and every other study runs exactly as before.
+#:
+#: Not to be confused with :data:`INCLUSION_SWEEP_KS`, which sweeps the
+#: *conformal* rule's ``alpha(k)`` budget.  This one asks a different question -
+#: which cut rule should answer the Inclusion knob at all - so its rows are
+#: scored at their own ``k``, not at :data:`INCLUSION`.
+#:
+#: The arms are :data:`ANCHORED_WEIGHTS` x :data:`ANCHORED_RULES` x
+#: :data:`ANCHORED_FOLD_COMBINES`, so a run that wants the #2865 candidate set
+#: sets ``CALIB_ANCHORED_RULES=mid,mid_tilt,rate,cross_tilt,q_tilt``.
+CUT_INCLUSION_KS = [int(k) for k in os.environ.get("CALIB_CUT_INCL_KS", "").split(",") if k.strip()]
+
+#: Step sizes the eval-only ``q_tilt`` rule expands over - its free parameter,
+#: in combined-fold-quantile units per inclusion step.  Every other rule ignores
+#: this.  Empty = the single placeholder default in
+#: ``vtscore.training.thresholds.FOLD_ANCHOR_QTILT_STEP``, which is a
+#: placeholder and not a measurement; a run that means to *place* the parameter
+#: has to pass a grid here.
+CUT_INCLUSION_QTILT_STEPS = [float(s) for s in os.environ.get("CALIB_CUT_INCL_QTILT_STEPS", "").split(",") if s.strip()]
+
 #: Calibration fold counts to score **counterfactually** at every step (issue
 #: #2897), on top of whatever :data:`CALIBRATE_COUNT` the run lives under.
 #: Empty (the default) = off, and every other study runs exactly as before.

@@ -8,8 +8,9 @@ decomposition, threshold provenance, the degenerate flag) and the near-free
 inclusion-budget sweep; the raw-patch tree style additionally re-pools its own
 per-node scores under ``topk`` / ``pnorm`` (extra rows tagged ``pool_variant``).
 
-Main rows -> ``results/cells/task_<idx>.csv``; the inclusion sweep ->
-``results/cells/task_<idx>__sweep.csv``.
+Main rows -> ``results/cells/task_<idx>.csv``; the inclusion-budget sweep ->
+``results/cells/task_<idx>__sweep.csv``; the #2836 cut decomposition ->
+``__cutdiag.csv``; the #2865 cut-rule x inclusion sweep -> ``__cutincl.csv``.
 
 Run directly with ``--index N`` for one cell, or via SLURM with
 ``$SLURM_ARRAY_TASK_ID``.
@@ -80,6 +81,7 @@ def main(argv: list[str] | None = None) -> int:
         f"cell {idx}/{len(cells)}: dataset={ds} embedder={emb} category={cat} seed={seed} "
         f"styles={styles} head={cfg.HEAD or 'default (production)'} safe_thresholds={cfg.SAFE_THRESHOLDS} "
         f"calibrate_count={cfg.CALIBRATE_COUNT} fold_counts={cfg.FOLD_COUNTS or 'off'} "
+        f"cut_incl_ks={cfg.CUT_INCLUSION_KS or 'off'} "
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE}"
     )
 
@@ -89,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     from vtscore.eval.voting_iterations import (
         _CALIBRATION_COLUMNS,
         _CUT_DIAGNOSTIC_COLUMNS,
+        _CUT_INCLUSION_COLUMNS,
         _INCLUSION_SWEEP_COLUMNS,
         simulate_voting_iterations,
     )
@@ -108,6 +111,7 @@ def main(argv: list[str] | None = None) -> int:
     all_rows: list[dict] = []
     all_sweep: list[dict] = []
     all_cutdiag: list[dict] = []
+    all_cutincl: list[dict] = []
     for style in styles:
         seed_scores = None
         if crop_vec is not None:
@@ -115,6 +119,7 @@ def main(argv: list[str] | None = None) -> int:
         variants = cfg.REPOOL_VARIANTS if style == cfg.REPOOL_STYLE else []
         sweep_local: list[dict] = []
         cutdiag_local: list[dict] = []
+        cutincl_local: list[dict] = []
         rows = simulate_voting_iterations(
             medias,
             target_category=cat,
@@ -145,6 +150,9 @@ def main(argv: list[str] | None = None) -> int:
             anchored_fold_arms=cfg.ANCHORED_FOLD_ARMS,
             anchored_fold_combines=cfg.ANCHORED_FOLD_COMBINES,
             fold_count_variants=cfg.FOLD_COUNTS or None,
+            cut_inclusion_ks=cfg.CUT_INCLUSION_KS or None,
+            cut_inclusion_sink=cutincl_local,
+            cut_inclusion_qtilt_steps=cfg.CUT_INCLUSION_QTILT_STEPS or None,
             acq_inclusion_offset=cfg.ACQ_INCLUSION_OFFSET,
             acq_rank_percentile=cfg.ACQ_RANK_PERCENTILE,
         )
@@ -155,12 +163,15 @@ def main(argv: list[str] | None = None) -> int:
             sr["embedder"] = emb
         for dr in cutdiag_local:
             dr["embedder"] = emb
+        for cr in cutincl_local:
+            cr["embedder"] = emb
         all_rows.extend(rows)
         all_sweep.extend(sweep_local)
         all_cutdiag.extend(cutdiag_local)
+        all_cutincl.extend(cutincl_local)
         common.log(
             f"  style={style}: {len(rows)} rows, {len(sweep_local)} sweep rows, "
-            f"{len(cutdiag_local)} cut-diagnostic rows"
+            f"{len(cutdiag_local)} cut-diagnostic rows, {len(cutincl_local)} cut-inclusion rows"
         )
 
     outdir = common.Path(args.outdir)
@@ -175,9 +186,17 @@ def main(argv: list[str] | None = None) -> int:
     cutdiag_cols = [*_CUT_DIAGNOSTIC_COLUMNS, "embedder"]
     cutdiag_out = outdir / f"task_{idx:04d}__cutdiag.csv"
     pd.DataFrame(all_cutdiag, columns=pd.Index(cutdiag_cols)).to_csv(cutdiag_out, index=False)
+    # The #2865 cut-rule x inclusion frame (one row per step per arm per k).
+    # Written unconditionally, like the frames above: an empty CSV with the
+    # right header is what tells the analyzer the run had the sweep switched
+    # off, rather than that its cells silently failed.
+    cutincl_cols = [*_CUT_INCLUSION_COLUMNS, "embedder"]
+    cutincl_out = outdir / f"task_{idx:04d}__cutincl.csv"
+    pd.DataFrame(all_cutincl, columns=pd.Index(cutincl_cols)).to_csv(cutincl_out, index=False)
     common.log(
         f"wrote {len(all_rows)} rows to {out}, {len(all_sweep)} sweep rows to {sweep_out}, "
-        f"and {len(all_cutdiag)} cut-diagnostic rows to {cutdiag_out}"
+        f"{len(all_cutdiag)} cut-diagnostic rows to {cutdiag_out}, "
+        f"and {len(all_cutincl)} cut-inclusion rows to {cutincl_out}"
     )
     return 0
 
