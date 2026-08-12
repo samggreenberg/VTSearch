@@ -172,9 +172,14 @@ describe('ExportModalComponent', () => {
       fields: [],
     };
 
+    /** A stand-in for the `Window` handle `window.open` hands back. */
+    function fakeWindow() {
+      return { closed: false, opener: {}, location: { href: '' }, close: vi.fn() };
+    }
+
     /** Stub `window.open`, returning *handle* as the opened window. */
     function stubWindowOpen(handle: unknown) {
-      return vi.spyOn(window, 'open').mockReturnValue(handle as Window);
+      return vi.spyOn(window, 'open').mockReturnValue(handle as unknown as Window);
     }
 
     // `window` outlives the TestBed, so a spy left installed on it carries its
@@ -184,14 +189,28 @@ describe('ExportModalComponent', () => {
       vi.restoreAllMocks();
     });
 
-    it('opens the returned URL in a new tab, severing the opener handle', async () => {
+    // The tab is claimed inside the click handler and navigated when the
+    // response lands: a `window.open` deferred to the response callback is what
+    // popup blockers eat, which is why nothing opened in issue #2898.
+    it('claims the tab on click and navigates it when the URL arrives', async () => {
       await flushInit();
-      const openSpy = stubWindowOpen({});
+      const win = fakeWindow();
+      const openSpy = stubWindowOpen(win);
       component.startExporter(openUrlExporter as never);
+
+      // Opened before the response — with no URL yet to give it.
+      expect(openSpy).toHaveBeenCalledWith('', '_blank');
+      expect(win.location.href).toBe('');
+
       httpMock
         .expectOne('/api/exporters/export')
         .flush({ success: true, open_url: 'https://example.com/r?ids=a' });
-      expect(openSpy).toHaveBeenCalledWith('https://example.com/r?ids=a', '_blank', 'noopener');
+
+      expect(win.location.href).toBe('https://example.com/r?ids=a');
+      // `noopener` would make `window.open` return null even on success, so the
+      // opener is severed by hand instead (see `utils/external-url.ts`).
+      expect(openSpy).toHaveBeenCalledTimes(1);
+      expect(win.opener).toBeNull();
     });
 
     it('offers an Open action on the toast so a blocked popup is recoverable', async () => {
@@ -207,38 +226,78 @@ describe('ExportModalComponent', () => {
       const toast = successSpy.mock.calls[0][0];
       expect(toast.detail).toContain('blocked');
       expect(toast.action?.label).toBe('Open');
+      // That button is the only way left to reach the site, so the toast must
+      // not time out from under it.
+      expect(toast.autoDismissMs).toBe(0);
       // The action's click is a real user gesture, so this one gets through.
-      openSpy.mockReturnValue({} as Window);
+      const win = fakeWindow();
+      openSpy.mockReturnValue(win as unknown as Window);
       toast.action!.onClick();
-      expect(openSpy).toHaveBeenCalledTimes(2);
+      expect(openSpy).toHaveBeenLastCalledWith('https://example.com/r', '_blank');
     });
 
     it('reports an opened tab rather than an export in the toast message', async () => {
       await flushInit();
-      stubWindowOpen({});
+      stubWindowOpen(fakeWindow());
       const successSpy = vi.spyOn(TestBed.inject(ToastService), 'success');
       component.labelFilter = 'good'; // two matching labels in the fixture
       component.startExporter(openUrlExporter as never);
       httpMock
         .expectOne('/api/exporters/export')
         .flush({ success: true, open_url: 'https://example.com/r' });
-      expect(successSpy.mock.calls[0][0].message).toBe('Opened 2 labels in Open in Website');
+      const toast = successSpy.mock.calls[0][0];
+      expect(toast.message).toBe('Opened 2 labels in Open in Website');
+      // Nothing to escape from: the default auto-dismiss applies.
+      expect(toast.autoDismissMs).toBeUndefined();
+    });
+
+    // A user who closed the pre-opened tab while the export ran gets the same
+    // recoverable toast as a blocked one.
+    it('treats a closed pre-opened tab as a failure to open', async () => {
+      await flushInit();
+      const win = fakeWindow();
+      stubWindowOpen(win);
+      const successSpy = vi.spyOn(TestBed.inject(ToastService), 'success');
+      component.startExporter(openUrlExporter as never);
+      win.closed = true;
+      httpMock
+        .expectOne('/api/exporters/export')
+        .flush({ success: true, open_url: 'https://example.com/r' });
+
+      expect(win.location.href).toBe('');
+      expect(successSpy.mock.calls[0][0].action?.label).toBe('Open');
     });
 
     it.each(['javascript:alert(1)', 'data:text/html,x', 'file:///etc/passwd', '/relative'])(
       'refuses to open a %s URL even if the server sent one',
       async (url) => {
         await flushInit();
-        const openSpy = stubWindowOpen({});
+        const win = fakeWindow();
+        stubWindowOpen(win);
         component.startExporter(openUrlExporter as never);
         httpMock.expectOne('/api/exporters/export').flush({ success: true, open_url: url });
-        expect(openSpy).not.toHaveBeenCalled();
+        // The tab was claimed on click, but nothing unsafe is navigated to and
+        // the blank tab doesn't outlive the export.
+        expect(win.location.href).toBe('');
+        expect(win.close).toHaveBeenCalled();
       },
     );
 
+    it('closes the claimed tab when the export fails outright', async () => {
+      await flushInit();
+      const win = fakeWindow();
+      stubWindowOpen(win);
+      component.startExporter(openUrlExporter as never);
+      httpMock
+        .expectOne('/api/exporters/export')
+        .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+      expect(win.close).toHaveBeenCalled();
+    });
+
     it('leaves a response without an open_url alone', async () => {
       await flushInit();
-      const openSpy = stubWindowOpen({});
+      const openSpy = stubWindowOpen(fakeWindow());
+      // `mockExporters[0]` doesn't declare `opens_url`, so no tab is claimed.
       component.startExporter(mockExporters[0] as never);
       httpMock.expectOne('/api/exporters/export').flush({ success: true });
       expect(openSpy).not.toHaveBeenCalled();

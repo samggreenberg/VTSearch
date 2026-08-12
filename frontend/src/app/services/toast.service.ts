@@ -89,6 +89,15 @@ interface ShowOptions {
    * the seconds the user sees are the seconds they actually have.
    */
   countdown?: { label: string; seconds: number; onExpire: () => void };
+  /**
+   * Override how long a success toast stays up, in milliseconds; ``0`` keeps
+   * it until the user dismisses it. Left unset, success toasts auto-dismiss
+   * after ``SUCCESS_AUTO_DISMISS_MS``. Set this when the toast's
+   * {@link ToastAction} is the user's only route to something they asked for
+   * (e.g. a browser tab the popup blocker refused), since a timed-out toast
+   * takes that route with it.
+   */
+  autoDismissMs?: number;
   dedupKey?: string;
 }
 
@@ -150,10 +159,12 @@ export class ToastService {
   /**
    * Non-blocking success notification. Auto-dismisses after
    * ``SUCCESS_AUTO_DISMISS_MS`` so the user is not forced to click
-   * through a modal for "X is done" style messages.
+   * through a modal for "X is done" style messages, unless the caller
+   * overrides that with ``autoDismissMs`` (``0`` = stays until dismissed).
    */
   success(opts: ShowOptions): number {
-    return this.push('success', opts, opts.countdown ? 0 : SUCCESS_AUTO_DISMISS_MS);
+    const autoDismissMs = opts.autoDismissMs ?? SUCCESS_AUTO_DISMISS_MS;
+    return this.push('success', opts, opts.countdown ? 0 : autoDismissMs);
   }
 
   private push(level: ToastLevel, opts: ShowOptions, autoDismissMs = 0): number {
