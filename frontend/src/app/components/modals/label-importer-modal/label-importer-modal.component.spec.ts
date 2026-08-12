@@ -125,7 +125,7 @@ describe('LabelImporterModalComponent', () => {
   it('coerces static string options into {value,label} pairs', async () => {
     await flushInit();
     const staticSelect = { key: 's', field_type: 'select', options: ['x', 'y'] } as any;
-    expect(component.optionsFor(staticSelect)).toEqual([
+    expect(component.fieldOptions.optionsFor(staticSelect)).toEqual([
       { value: 'x', label: 'x' },
       { value: 'y', label: 'y' },
     ]);
@@ -151,7 +151,7 @@ describe('LabelImporterModalComponent', () => {
       allow_free_text: true,
     } as any;
     component.selectedImporter = { name: 'imp', fields: [field] } as any;
-    (component as any).refreshDynamicFieldOptions(field);
+    component.fieldOptions.refresh(field, component.formValues);
     httpMock
       .expectOne((req) => req.url.endsWith('/api/label-importers/field-options/imp'))
       .flush({ options: [{ value: 'a', label: 'A' }] });
@@ -163,7 +163,7 @@ describe('LabelImporterModalComponent', () => {
     const field = { key: 'q', field_type: 'select', dynamic_options: true, allow_free_text: true } as any;
     component.selectedImporter = { name: 'imp', fields: [field] } as any;
     component.formValues['q'] = 'hand-typed';
-    (component as any).refreshDynamicFieldOptions(field);
+    component.fieldOptions.refresh(field, component.formValues);
     httpMock
       .expectOne((req) => req.url.endsWith('/api/label-importers/field-options/imp'))
       .flush({ options: [{ value: 'a', label: 'A' }] });
@@ -175,7 +175,7 @@ describe('LabelImporterModalComponent', () => {
     const field = { key: 'q', field_type: 'select', dynamic_options: true } as any;
     component.selectedImporter = { name: 'imp', fields: [field] } as any;
     component.formValues['q'] = 'stale';
-    (component as any).refreshDynamicFieldOptions(field);
+    component.fieldOptions.refresh(field, component.formValues);
     httpMock
       .expectOne((req) => req.url.endsWith('/api/label-importers/field-options/imp'))
       .flush({ options: [{ value: 'a', label: 'A' }] });

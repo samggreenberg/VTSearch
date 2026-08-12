@@ -704,6 +704,14 @@ The frontend wiring is fully automatic:
 3. While a fetch is in-flight the dropdown is disabled and shows
    `Loading…`.  Errors raised by `get_field_options()` are surfaced
    inline next to the field.
+4. Only the newest response for a field is applied.  Every form shares
+   `DynamicFieldOptions`
+   (`frontend/src/app/utils/dynamic-field-options.ts`), which stamps a
+   token per dispatch and drops any response a newer request — or a
+   switch to a different importer — has superseded.  A slow
+   `get_field_options()` is therefore safe: it can never repopulate a
+   dropdown the user has already navigated away from, and it can never
+   auto-select a value for an importer that is no longer on screen.
 
 API contract: `POST /api/dataset/import/<name>/options` with body
 `{"field_key": "...", "values": {...}}` returns
