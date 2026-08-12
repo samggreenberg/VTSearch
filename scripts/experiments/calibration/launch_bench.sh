@@ -38,6 +38,17 @@ export CALIB_REPOOL_VARIANTS=""
 export CALIB_SCHEDULE_VARIANTS=""
 export CALIB_FOLD_COUNTS=""
 
+# PRODUCTION GEOMETRY ONLY.  The calibration study's default is
+# "max_patch,max_patch_pca_hac" because that study wanted the contrast -- but a
+# *study* default is not a *shipped* default.  Per vtscore/eval/patch_styles.py,
+# `max_patch` IS the production patch pipeline, while the HAC hybrids lost the
+# Max-Patch study at the operating point (PR #2749) and production no longer
+# carries the tree they delegate to; they survive only for an open calibration
+# follow-up.  Running them here would put non-production rows in a benchmark
+# whose whole purpose is "what does a current user get", and would double the
+# cost of every patch cell.
+export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
+
 LOGS="$CALIB_EXP/logs"
 mkdir -p "$LOGS" "$CALIB_RESULTS/cells"
 
