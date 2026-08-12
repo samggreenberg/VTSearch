@@ -671,7 +671,15 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for additional deployment-specific configurat
 - **Use the app**: See [user/USER_GUIDE.md](user/USER_GUIDE.md) for a walkthrough
   of loading a dataset, labeling with Autopilot, and exporting results.
 - **Run tests**: See [Running the tests](#running-the-tests) above.
+- **Learn the codebase**: See [ARCHITECTURE.md](ARCHITECTURE.md#key-concepts)
+  for the core vocabulary (media items, votes, media types, processors,
+  origins) and the module-by-module map, and
+  [FRONTEND.md](FRONTEND.md) for the Angular SPA.
 - **CLI workflows**: See [CLI.md](CLI.md) for running detectors and
   exporters from the command line.
+- **Evaluate sorting quality**: `python -m vtscore.eval --plot-dir eval_output`
+  runs the evaluation suite over the demo datasets; see [EVAL.md](EVAL.md).
+- **Deploy**: See [DEPLOYMENT.md](DEPLOYMENT.md) for production, offline /
+  air-gapped, and GPU deployments.
 - **Extend**: See [EXTENDING.md](EXTENDING.md) for adding new media
   types, importers, or exporters.
