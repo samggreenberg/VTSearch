@@ -46,9 +46,12 @@ COCO_ANNOTATIONS = COCO_ROOT / "derived" / "objects_flat_val2017.jsonl.gz"
 #: Datasets in the pile. ``boxed`` means the medias carry ground-truth region
 #: boxes, which is what a region-voting arm drags — necessary but not
 #: sufficient (the embedder must also be patch-capable; see region_capable).
+#: ``source_dir`` is the demo extraction dir the loader treats as "already
+#: downloaded" (vtscore/datasets/downloader/*.py). It must be present in the
+#: datadir before a demo cell is built — see :func:`require_demo_source`.
 DATASETS: dict[str, dict] = {
-    "visual_genome_m": {"boxed": True, "kind": "demo"},
-    "caltech101_m": {"boxed": False, "kind": "demo"},
+    "visual_genome_m": {"boxed": True, "kind": "demo", "source_dir": "visual_genome"},
+    "caltech101_m": {"boxed": False, "kind": "demo", "source_dir": "caltech-101"},
     "coco_val": {"boxed": True, "kind": "coco"},
 }
 
@@ -88,6 +91,29 @@ def region_capable(dataset: str, embedder: str) -> bool:
     per-dataset flag alone reads as "this arm region-votes" and does not.
     """
     return bool(DATASETS.get(dataset, {}).get("boxed")) and is_patch_embedder(embedder)
+
+
+def require_demo_source(dataset: str) -> None:
+    """Fail loudly if a demo dataset's source is not staged in the datadir.
+
+    The demo downloaders treat a *missing* extraction dir as "not downloaded
+    yet" and go fetch it. On a datadir that lost its symlink into the shared
+    demo cache, that silently substitutes a partial re-download for the real
+    dataset: the build still succeeds, but the cell holds a truncated subset
+    and disagrees with its sibling cells. Cheaper to block than to detect.
+    """
+    name = DATASETS.get(dataset, {}).get("source_dir")
+    if not name:
+        return
+    src = DATADIR / name
+    if not src.exists():
+        raise SystemExit(
+            f"{dataset}: demo source {src} is missing, so the loader would re-download it.\n"
+            f"  Link the shared cache in first, e.g.\n"
+            f"    ln -s {DEMO_CACHE}/{name} {src}"
+        )
+    if not any(src.iterdir()):
+        raise SystemExit(f"{dataset}: demo source {src} is empty (an empty dir reads as 'download complete')")
 
 
 def setup_env() -> None:

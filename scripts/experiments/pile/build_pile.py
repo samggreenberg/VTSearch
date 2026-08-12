@@ -163,6 +163,7 @@ def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
     if kind == "coco":
         _load_coco(medias, embedder)
     else:
+        pc.require_demo_source(dataset)
         _load_demo(dataset, medias, embedder)
     log(f"  loaded {len(medias)} medias in {time.time() - t0:.0f}s")
 
@@ -200,6 +201,7 @@ def verify() -> int:
     io = _cells_io()
     problems: list[str] = []
     rows = []
+    counts_by_dataset: dict[str, dict[str, int]] = defaultdict(dict)
     for ds, emb in pc.cells():
         path = pc.cell_path(ds, emb)
         if not path.exists():
@@ -207,6 +209,7 @@ def verify() -> int:
             continue
         medias = io.load_medias(path)
         n = len(medias)
+        counts_by_dataset[ds][emb] = n
         n_patch = sum(1 for m in medias.values() if m.get("patch_grid") is not None)
         first = next(iter(medias.values()), None)
         dim = ""
@@ -230,6 +233,20 @@ def verify() -> int:
             state = "UNEXPECTED-PATCH"
             problems.append(f"{ds} x {emb}: single-vector embedder carries patch grids")
         rows.append((ds, emb, state, str(n), f"{n_patch}/{n}", dim))
+
+    # A dataset's cells must all cover the same medias, or cross-embedder
+    # comparisons silently compare different populations. This is not
+    # hypothetical: a datadir missing its demo-source symlink sent the loader
+    # off to re-download the dataset, and it embedded a truncated 1662-media
+    # subset of a 4193-media dataset into a cell that otherwise looked healthy.
+    for ds, per_emb in counts_by_dataset.items():
+        if len(set(per_emb.values())) > 1:
+            majority = max(set(per_emb.values()), key=list(per_emb.values()).count)
+            odd = {e: n for e, n in per_emb.items() if n != majority}
+            problems.append(
+                f"{ds}: cells disagree on media count (most are {majority}); "
+                f"rebuild {', '.join(f'{e} ({n})' for e, n in sorted(odd.items()))}"
+            )
 
     log(f"{'dataset':18s} {'embedder':14s} {'state':16s} {'medias':>7s} {'patch':>12s} {'dim':>6s}")
     for ds, emb, state, n, patch, dim in rows:
