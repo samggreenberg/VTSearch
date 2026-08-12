@@ -42,10 +42,21 @@ def _clips(rng: np.random.Generator, cids: range) -> dict[int, dict]:
 #: :data:`ACQUISITION_INCLUSION_OFFSET` is one inclusion step, whose tilt is
 #: routinely smaller than that, so on a 20-item haystack the acquisition cut
 #: lands on the *same* haystack element as the reporting cut and a strict ``>``
-#: holds or fails on numerical noise - which is how it varied with process
-#: ordering.  100 resolves a single step with room to spare (verified across
-#: seeds), keeping the direction pin about the offset rather than about
-#: discretization.
+#: degenerates into an equality.  100 resolves a single step with room to spare
+#: (verified across seeds), keeping the direction pin about the offset rather
+#: than about discretization.
+#:
+#: The 20-item version *looked* nondeterministic (issue #3101): it failed only
+#: in a full run, from a fully seeded fixture.  What varied with process
+#: ordering was the ambient training budget, not the estimator - a stray
+#: ``vtscore.config`` reload reverted ``TRAIN_EPOCHS`` to production, which
+#: moved the fit, which moved which side of a haystack gap the two cuts landed
+#: on.  The offset itself was never at risk: measured on the failing fixture,
+#: the per-fold rate cut moved 0.528 -> 0.551 between the two inclusions with
+#: an interior stationary point at both, i.e. exactly the tilt this file pins,
+#: too small to cross a 20-sample gap.  The leak is fixed at its source, but
+#: the fixture stays wide: a pin whose margin is one haystack spacing is a pin
+#: that reports unrelated drift as a falsified conclusion.
 HAYSTACK = 100
 
 
