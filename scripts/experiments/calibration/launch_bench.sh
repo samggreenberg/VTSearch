@@ -67,6 +67,10 @@ ENVX="$ENVX CALIB_COCO_EMBEDDERS=$CALIB_COCO_EMBEDDERS"
 ENVX="$ENVX CALIB_N_SEEDS=$CALIB_N_SEEDS CALIB_N_PER_BAND=$CALIB_N_PER_BAND"
 ENVX="$ENVX CALIB_N_CATEGORIES=$CALIB_N_CATEGORIES CALIB_MAX_STEPS=$CALIB_MAX_STEPS"
 ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
+# Explicit, not via --export=ALL.  This one decides whether the run measures the
+# production geometry or silently adds a retired arm, so it must not depend on
+# the submitting shell's environment surviving into the job.
+ENVX="$ENVX CALIB_PATCH_STYLES=$CALIB_PATCH_STYLES"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms this way).
