@@ -142,6 +142,63 @@ class TestBuildParser:
 
 
 # ---------------------------------------------------------------------------
+# -h / --help (plugin-aware)
+# ---------------------------------------------------------------------------
+
+
+class TestHelp:
+    """``--help`` must list the selected plugin's flags.
+
+    argparse's built-in help action would fire during the *first* parse pass,
+    before ``_resolve_plugins`` registers the importer/exporter flags, so the
+    doc-advertised ``--importer <name> --help`` discovery path printed only the
+    base flags. ``cli_main`` registers help as a plain flag and prints it after
+    plugin resolution instead.
+    """
+
+    def test_bare_help_exits_zero(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--help"])
+        assert exc.value.code == 0
+        out = capsys.readouterr().out
+        assert "--autodetect" in out
+        # No plugin selected: the importer's own flags stay out of the way.
+        assert "--dig-archives" not in out
+
+    def test_short_h_exits_zero(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["-h"])
+        assert exc.value.code == 0
+        assert "usage:" in capsys.readouterr().out
+
+    def test_help_lists_importer_flags(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--autodetect", "--importer", "server_folder", "--help"])
+        assert exc.value.code == 0
+        out = capsys.readouterr().out
+        for flag in ("--path", "--media-type", "--recursive", "--dig-archives"):
+            assert flag in out, f"{flag} missing from --importer server_folder --help"
+
+    def test_help_lists_exporter_flags(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--autodetect", "--exporter", "webhook", "--help"])
+        assert exc.value.code == 0
+        assert "--auth-header" in capsys.readouterr().out
+
+    def test_help_with_unknown_importer_errors(self, monkeypatch, capsys):
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--autodetect", "--importer", "no_such_importer", "--help"])
+        assert exc.value.code == 2
+        assert "Unknown importer" in capsys.readouterr().err
+
+    def test_help_does_not_start_server(self, monkeypatch):
+        monkeypatch.setattr(cli_main, "_run_server", lambda *a, **k: pytest.fail("server started"))
+        with pytest.raises(SystemExit) as exc:
+            _run_main(monkeypatch, ["--help"])
+        assert exc.value.code == 0
+
+
+# ---------------------------------------------------------------------------
 # --list-plugins early exit
 # ---------------------------------------------------------------------------
 
