@@ -44,6 +44,27 @@ def log(msg: str) -> None:
     print(f"[pile] {msg}", flush=True)
 
 
+def assert_vtscore_is_this_checkout() -> None:
+    """Refuse to run against a different checkout's ``vtscore``.
+
+    The venv's editable install points at the main checkout. If anything
+    resolves ``vtscore`` there instead of here, cells get embedded by whatever
+    code that tree happens to be on — silently, and possibly by a different
+    embedder implementation. Cheap to assert, expensive to discover later.
+    """
+    import vtscore  # noqa: PLC0415
+
+    want = Path(__file__).resolve().parents[3]
+    got = Path(vtscore.__file__).resolve().parent.parent
+    if got != want:
+        raise SystemExit(
+            f"vtscore resolved to {got}, not this checkout ({want}).\n"
+            f"  Something put another checkout ahead on sys.path — usually the venv's\n"
+            f"  editable install. Re-run with VTS_REPO={want} set for THIS command\n"
+            f"  (note `VAR=x cmd1 && cmd2` sets VAR for cmd1 only)."
+        )
+
+
 def _calibration_path() -> None:
     calib = Path(__file__).resolve().parent.parent / "calibration"
     if str(calib) not in sys.path:
@@ -452,6 +473,7 @@ def main() -> int:
     args = ap.parse_args()
 
     pc.EMBEDDINGS.mkdir(parents=True, exist_ok=True)
+    assert_vtscore_is_this_checkout()
 
     if args.list:
         list_cells()

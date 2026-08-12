@@ -134,9 +134,18 @@ def setup_env() -> None:
     for var in ("VTSEARCH_DATA_DIR", "VTSEARCH_MODELS_DIR", "HF_HOME"):
         Path(os.environ[var]).mkdir(parents=True, exist_ok=True)
 
-    repo = os.environ.get("VTS_REPO")
-    if repo and repo not in sys.path:
+    # Default to the checkout this file lives in, rather than requiring VTS_REPO.
+    # Depending on the env var is a live hazard: with it unset, ``import vtscore``
+    # falls through to the venv's editable install, which points at the *main*
+    # checkout -- 592 commits stale at the time of writing, and missing embedders
+    # this pile uses. A build that resolved there would embed against different
+    # code with no error. (This is how the shadow-module trap actually bites:
+    # `VAR=x cmd1 && cmd2` applies VAR to cmd1 only, so the second command
+    # silently ran against the wrong tree.)
+    repo = os.environ.get("VTS_REPO") or str(Path(__file__).resolve().parents[3])
+    if repo not in sys.path:
         sys.path.insert(0, repo)
+    os.environ["VTS_REPO"] = repo  # so calibration's common.py agrees with us
     # Drop the venv's editable-install finder so ``import vtscore`` resolves to
     # this checkout rather than whichever clone the editable install points at.
     keep = []
