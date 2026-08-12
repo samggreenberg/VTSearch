@@ -35,6 +35,21 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`clap_general` is the default audio embedder**, replacing `clap`.
+  Measured on the full ESC-50 (2000 clips, all 50 categories),
+  `laion/larger_clap_general` wins every comparison against
+  `laion/clap-htsat-unfused`: text-sort mAP 0.869-0.895 vs 0.850-0.866,
+  learned-sort mean F1 0.523-0.564 vs 0.457-0.529, and leave-one-out 1-NN
+  accuracy 0.973 vs 0.958. `embedders_for_type("audio")[0]` and any caller
+  that passes `embedder=""`/`None` now resolve to `clap_general`.
+  `clap` is **not** removed - it stays a first-class explicit choice, ~2.1x
+  faster and ~20% smaller, and existing pickles and detector JSONs recording
+  `embedder: "clap"` keep resolving. Both are 512-d, so vectors from the two
+  are dimension-compatible but not interchangeable.
+- **The two general CLAP display names are now distinguishable.** `clap` reads
+  "CLAP (general, faster)" (was "CLAP (general audio)") and `clap_general`
+  reads "CLAP (general, larger)" (was "CLAP (general 2024)"); their progress
+  labels are "CLAP Fast" and "CLAP General".
 - **`fold_anchored_gmm_threshold` is the shipped decision threshold.** Per
   calibration fold, a semi-supervised 2-component mixture is fitted to that
   fold model's scores over the whole collection with the fold's *held-out*

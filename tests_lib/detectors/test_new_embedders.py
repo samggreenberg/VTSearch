@@ -466,10 +466,10 @@ class TestAudioClapGeneralEmbedderProperties:
         d = emb.to_dict()
         assert d == {
             "name": "clap_general",
-            "display_name": "CLAP (general 2024)",
+            "display_name": "CLAP (general, larger)",
             "model_id": "laion/larger_clap_general",
             "media_type_id": "audio",
-            "is_default": False,
+            "is_default": True,
             "supports_text": True,
             "supports_patch_regions": False,
             "supports_geometric_verification": False,
@@ -624,7 +624,7 @@ class TestAudioParaSpeechClapEmbedderProperties:
         assert emb.supports_text is True
 
     def test_is_not_default(self):
-        """CLAP remains the default audio embedder; ParaSpeechCLAP is opt-in."""
+        """CLAP General is the default audio embedder; ParaSpeechCLAP is opt-in."""
         from vtscore.media.audio.embedder_paraspeechclap import AudioParaSpeechClapEmbedder
 
         emb = AudioParaSpeechClapEmbedder()
@@ -1225,6 +1225,40 @@ class TestAllEmbeddersRegistration:
         ordered = embedders_for_type("image")
         assert ordered[0].name == "siglip"
         assert ordered[0].is_default is True
+
+    def test_clap_general_is_the_default_audio_embedder(self):
+        """``clap_general`` beats ``clap`` on every measured ESC-50 metric, so
+        it is what ``embedders_for_type('audio')[0]`` hands back."""
+        from vtscore.media import embedders_for_type
+
+        ordered = embedders_for_type("audio")
+        assert ordered[0].name == "clap_general"
+        assert ordered[0].is_default is True
+
+    def test_clap_stays_available_as_the_cheap_tier(self):
+        """The smaller checkpoint is not the default any more but must keep
+        resolving: existing pickles and detector JSONs record ``embedder:
+        "clap"`` and would stop loading if it were dropped."""
+        from vtscore.media import get_embedder
+
+        emb = get_embedder("clap")
+        assert emb.name == "clap"
+        assert emb.is_default is False
+        assert emb.model_id == "laion/clap-htsat-unfused"
+
+    def test_the_two_general_clap_display_names_are_distinguishable(self):
+        """They used to read as "CLAP (general audio)" and "CLAP (general
+        2024)", which is not a choice a user can make in a picker."""
+        from vtscore.media import get_embedder
+
+        assert get_embedder("clap").display_name == "CLAP (general, faster)"
+        assert get_embedder("clap_general").display_name == "CLAP (general, larger)"
+
+    def test_exactly_one_default_audio_embedder(self):
+        from vtscore.media import embedders_for_type
+
+        defaults = [e.name for e in embedders_for_type("audio") if e.is_default]
+        assert defaults == ["clap_general"]
 
     def test_embedders_for_text(self):
         from vtscore.media import embedders_for_type

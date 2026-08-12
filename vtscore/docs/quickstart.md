@@ -117,7 +117,7 @@ print(f"Loaded {len(medias)} audio items.")
 print(f"Embedder: {first['embedder']}")
 print(f"First embedding shape: {media_embedding(first).shape}")
 # Loaded 532 audio items.
-# Embedder: clap
+# Embedder: clap_general
 # First embedding shape: (512,)
 ```
 
@@ -136,9 +136,9 @@ medias[1]
 # {
 #   "id": 1,
 #   "media_type": "audio",
-#   "embedder": "clap",
+#   "embedder": "clap_general",
 #   "md5": "5d41402abc4b2a76b9719d911017c592",
-#   "embeddings": {"clap": np.ndarray(shape=(512,), dtype=float32)},
+#   "embeddings": {"clap_general": np.ndarray(shape=(512,), dtype=float32)},
 #   "filename": "bark/poodle.wav",
 #   "origin": {"importer": "server_folder",
 #              "params": {"path": "/data/audio-corpus", "media_type": "audio"}},
@@ -153,7 +153,7 @@ Note `embeddings` (plural): vectors live in a dict keyed by embedder name so
 several bound embedders can coexist on one media. There is no
 `media["embedding"]`. Always read through
 `media_embedding(media)` - it resolves the media's primary embedder - or
-`media_embedding(media, "clap")` for a specific one.
+`media_embedding(media, "clap_general")` for a specific one.
 
 ## 3. Train a detector from labels
 
@@ -287,7 +287,7 @@ save_detector("barks", labelset, media_type="audio")
 
 # Later, in a different process - reload and train.
 ctx = DetectorContext(detector_id="barks", name="barks",
-                      media_type="audio", embedder="clap")
+                      media_type="audio", embedder="clap_general")
 register_detector_context(ctx)
 
 # Build (good_origins, bad_origins) from the saved labelset's elements,

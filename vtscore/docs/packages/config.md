@@ -224,10 +224,10 @@ time. The actual download + load is lazy, driven by
 
 | Constant                       | Value                                                                                  | Notes                                                                                  |
 |--------------------------------|----------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
-| `CLAP_MODEL_ID`                | `"laion/clap-htsat-unfused"`                                                           | Default audio embedder.                                                                |
+| `CLAP_MODEL_ID`                | `"laion/clap-htsat-unfused"`                                                           | Smaller/faster general CLAP; the `clap` embedder.                                      |
 | `CLAP_SAMPLE_RATE`             | `48000`                                                                                | Required input sample rate for the CLAP family.                                        |
 | `CLAP_MUSIC_MODEL_ID`          | `"laion/larger_clap_music_and_speech"`                                                 | CLAP variant for music + speech.                                                       |
-| `CLAP_GENERAL_MODEL_ID`        | `"laion/larger_clap_general"`                                                          | Larger general-purpose CLAP.                                                           |
+| `CLAP_GENERAL_MODEL_ID`        | `"laion/larger_clap_general"`                                                          | Larger general-purpose CLAP. **Default audio embedder.**                               |
 | `AST_MODEL_ID`                 | `"MIT/ast-finetuned-audioset-10-10-0.4593"`                                            | Audio Spectrogram Transformer. 16 kHz mono via `AST_SAMPLE_RATE`.                      |
 | `AST_SAMPLE_RATE`              | `16000`                                                                                |                                                                                        |
 | `BEATS_CHECKPOINT_REPO`        | `"lpepino/beats_ckpts"`                                                                | Hub mirror of the MIT-licensed BEATs release (no `transformers` implementation).       |

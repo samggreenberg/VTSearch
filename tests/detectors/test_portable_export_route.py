@@ -44,9 +44,9 @@ class TestPortableExport:
         assert manifest["format"] == "vtsearch-portable-detector"
         assert manifest["detector_name"] == "portable-export"
         # Audio test medias bind the default CLAP embedder (512-dim).
-        assert manifest["embedder"]["name"] == "clap"
+        assert manifest["embedder"]["name"] == "clap_general"
         # The exact HF checkpoint travels in the bundle so it's fully actionable.
-        assert manifest["embedder"]["model_id"] == "laion/clap-htsat-unfused"
+        assert manifest["embedder"]["model_id"] == "laion/larger_clap_general"
         assert manifest["embedder"]["embedding_dim"] == 512
         assert 0.0 <= manifest["scoring"]["threshold"] <= 1.0
         assert manifest["training_labels"] == {"good": 3, "bad": 3}

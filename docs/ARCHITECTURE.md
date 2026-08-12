@@ -85,7 +85,7 @@ detector training and label export.
 
 | Media type | Default embedder | Model | Alternative embedders |
 |---|---|---|---|
-| `audio` | `clap` (CLAP (general audio)) | `laion/clap-htsat-unfused` | `ast`, `beats`, `clap_general`, `clap_music`, `paraspeechclap`, `whisper_encoder` |
+| `audio` | `clap_general` (CLAP (general, larger)) | `laion/larger_clap_general` | `ast`, `beats`, `clap`, `clap_music`, `paraspeechclap`, `whisper_encoder` |
 | `document` | — (convert first) | — | — |
 | `face` | `face` (FaceNet (face identity, 512d)) | — | — |
 | `image` | `siglip` (SigLIP (general images)) | `google/siglip-base-patch16-224` | `clip`, `dinov2_patch`, `dinov2_single`, `dinov3_patch`, `dinov3_single`, `eupe_patch`, `eupe_single`, `sift_vlad`, `siglip2`, `siglip2_l`, `siglip_l` |

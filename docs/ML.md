@@ -136,10 +136,10 @@ Each embedder produces fixed-size embedding vectors from a pretrained model. The
 
 | Media type | Embedder | Display name | Model | Dim | Notes |
 |---|---|---|---|---|---|
-| `audio` | `clap` | CLAP (general audio) | `laion/clap-htsat-unfused` | 512 | **default** for its media type |
+| `audio` | `clap_general` | CLAP (general, larger) | `laion/larger_clap_general` | 512 | **default** for its media type |
 | `audio` | `ast` | AST (audio spectrogram) | `MIT/ast-finetuned-audioset-10-10-0.4593` | 768 | no text queries |
 | `audio` | `beats` | BEATs (audio events) | `lpepino/beats_ckpts` | 768 | no text queries |
-| `audio` | `clap_general` | CLAP (general 2024) | `laion/larger_clap_general` | 512 | — |
+| `audio` | `clap` | CLAP (general, faster) | `laion/clap-htsat-unfused` | 512 | — |
 | `audio` | `clap_music` | CLAP (music) | `laion/larger_clap_music_and_speech` | 512 | — |
 | `audio` | `paraspeechclap` | ParaSpeechCLAP (speech style) | `ajd12342/paraspeechclap-combined` | 768 | — |
 | `audio` | `whisper_encoder` | Whisper encoder (speech) | `openai/whisper-base` | 512 | no text queries |

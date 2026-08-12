@@ -101,11 +101,11 @@ What just happened:
 2. `load_dataset_from_folder` walked `AUDIO_FOLDER` and populated `medias`
    with one dict per file - md5, bytes/path, and the `origin` you passed -
    but **no vectors**. Loaders never call the embedder.
-3. `embed_missing` resolved the media type's default embedder (CLAP), ran
-   every item through it in one bulk call, and wrote the vectors into
-   `media["embeddings"]["clap"]`.
-4. CLAP downloaded its weights on first use to
-   `WORKDIR/models/` (about 600 MB; subsequent runs are instant).
+3. `embed_missing` resolved the media type's default embedder (CLAP
+   General), ran every item through it in one bulk call, and wrote the
+   vectors into `media["embeddings"]["clap_general"]`.
+4. CLAP General downloaded its weights on first use to
+   `WORKDIR/models/` (about 776 MB; subsequent runs are instant).
 
 The first call takes ~30s for model download and ~10s per 100 files
 for embedding. Once cached, the same call runs in seconds.
@@ -118,7 +118,7 @@ print({k: type(v).__name__ for k, v in sample.items()})
 # {'id': 'int', 'media_type': 'str', 'embedder': 'str', 'file_size': 'int',
 #  'md5': 'str', 'embeddings': 'dict', 'filename': 'str', ...}
 
-print(f"Embedder: {sample['embedder']}")                  # clap
+print(f"Embedder: {sample['embedder']}")                  # clap_general
 print(f"Embedding shape: {media_embedding(sample).shape}")  # (512,)
 print(f"Origin: {sample['origin']}")
 # {'importer': 'server_folder', 'params': {'path': '/data/esc50/audio', 'media_type': 'audio'}}
@@ -126,7 +126,7 @@ print(f"Origin: {sample['origin']}")
 
 The embedding is a 512-D float32 vector; LAION-CLAP's output
 dimensionality. It lives in the per-embedder `embeddings` dict (keyed
-`"clap"`), which is why every read goes through `media_embedding` - there
+`"clap_general"`), which is why every read goes through `media_embedding` - there
 is no `sample["embedding"]`.
 
 ## Step 2: Label a few items
@@ -299,7 +299,7 @@ ctx = DetectorContext(
     detector_id="dog-barks",
     name="dog-barks",
     media_type="audio",
-    embedder="clap",
+    embedder="clap_general",
 )
 register_detector_context(ctx)
 
@@ -310,7 +310,7 @@ saved_labelset = LabelSet.from_dict(load_detector("dog-barks")["labelset"])
 
 # Build (good_origins, bad_origins) from the saved labelset, then
 # resolve every origin to a file, embed each file *with the same embedder
-# the detector was trained with* (here: "clap"), and train. Passing
+# the detector was trained with* (here: "clap_general"), and train. Passing
 # ctx.embedder is critical - using "" would silently fall back to whatever
 # the media type's default embedder is, mixing model outputs.
 good_origins = [
@@ -430,8 +430,8 @@ By the end of the tutorial:
 
 - **`/tmp/vtscore-tutorial/detectors/dog-barks.json`** - your detector,
   six origins, no weights. ~1 KB.
-- **`/tmp/vtscore-tutorial/models/`** - cached LAION-CLAP weights. Reused
-  by every future detector with `embedder="clap"`. ~600 MB.
+- **`/tmp/vtscore-tutorial/models/`** - cached LAION-CLAP General weights.
+  Reused by every future detector with `embedder="clap_general"`. ~776 MB.
 - **`ctx.model`** + **`ctx.threshold`** - in-memory trained head, ready
   to score anything.
 

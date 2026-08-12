@@ -327,15 +327,18 @@ offline deployments:
 
 | Model | Media type | HuggingFace ID | Approx. size |
 |-------|-----------|----------------|-------------|
-| CLAP | Audio (default) | `laion/clap-htsat-unfused` | ~1.1 GB |
+| CLAP General | Audio (default) | `laion/larger_clap_general` | ~1.4 GB |
 | SigLIP | Image (default) | `google/siglip-base-patch16-224` | ~400 MB |
 | CLIP | Image (alternative) | `openai/clip-vit-base-patch32` | ~600 MB |
 | X-CLIP | Video (default) | `microsoft/xclip-base-patch32` | ~1.2 GB |
 | E5 | Text (default) | `intfloat/e5-base-v2` | ~440 MB |
 
-**Total: ~3.8 GB** for the five models `download_models.sh` fetches (four
+**Total: ~4.1 GB** for the five models `download_models.sh` fetches (four
 defaults plus CLIP, the image alternative). At runtime, only the embedders a
-dataset or detector actually uses are loaded.
+dataset or detector actually uses are loaded. The smaller
+`laion/clap-htsat-unfused` checkpoint (the `clap` embedder, ~1.1 GB) is *not*
+prefetched: it is an alternative now, so it downloads on first use like any
+other non-default embedder.
 
 #### Alternative embedders
 
@@ -430,7 +433,7 @@ Run the provided script on a machine with internet access:
 ./scripts/download_models.sh [CACHE_DIR]
 ```
 
-This downloads all five embedding models (CLAP, SigLIP, CLIP, X-CLIP, E5) to `CACHE_DIR` (defaults to
+This downloads all five embedding models (CLAP General, SigLIP, CLIP, X-CLIP, E5) to `CACHE_DIR` (defaults to
 `data/models`). The script prints instructions for offline use when
 finished.
 
@@ -509,8 +512,8 @@ automatically on first startup.
 
 ```
 data/
-├── models/                           # HuggingFace model cache (~3.8 GB total)
-│   ├── models--laion--clap-htsat-unfused/
+├── models/                           # HuggingFace model cache (~4.1 GB total)
+│   ├── models--laion--larger_clap_general/
 │   ├── models--google--siglip-base-patch16-224/
 │   ├── models--openai--clip-vit-base-patch32/
 │   ├── models--microsoft--xclip-base-patch32/
