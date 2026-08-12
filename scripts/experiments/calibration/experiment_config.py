@@ -35,13 +35,20 @@ import zlib
 DATASETS = os.environ.get("CALIB_DATASETS", "visual_genome_m,caltech101_m").split(",")
 
 DATASET_EMBEDDERS: dict[str, list[str]] = {
-    "visual_genome_m": os.environ.get("CALIB_VG_EMBEDDERS", "siglip,siglip_l,dinov3_patch").split(","),
-    "caltech101_m": os.environ.get("CALIB_CALTECH_EMBEDDERS", "siglip,siglip_l").split(","),
+    "visual_genome_m": os.environ.get("CALIB_VG_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
+    "caltech101_m": os.environ.get("CALIB_CALTECH_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
     # COCO-2017-val, assembled from the #2790 sweep cache by
     # ``build_coco_pickle.py`` (issue #2841).  Whole-image embedders only: that
     # cache holds each image's whole vector and its HAC region vectors but not
     # the raw patch grid, so no region-voting style can be built from it.
-    "coco_val": os.environ.get("CALIB_COCO_EMBEDDERS", "siglip,siglip2").split(","),
+    "coco_val": os.environ.get("CALIB_COCO_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
+    # Box-size-banded VG (PR #3123, still unmerged).  Only the embedder table is
+    # needed: the pile already holds every cell, and prepare_data reads a cell
+    # pickle in place when it exists.  Registering them here rather than basing
+    # the run on that branch keeps the code at dev HEAD.
+    "vg_box_small": os.environ.get("CALIB_VGBOX_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
+    "vg_box_medium": os.environ.get("CALIB_VGBOX_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
+    "vg_box_large": os.environ.get("CALIB_VGBOX_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
@@ -59,6 +66,37 @@ REGION_VOTING_BY_DATASET: dict[str, bool] = {
     "caltech101_m": False,
     "coco_val": False,
 }
+
+#: Whether a dataset carries ground-truth region boxes.  This is the *dataset*
+#: half of region voting; the other half is the embedder (it must emit a patch
+#: grid).  Kept separate from :data:`REGION_VOTING_BY_DATASET` - which older
+#: analyzers read as a per-dataset label - so that marking a dataset boxed here
+#: cannot silently change another study's control selection.
+#:
+#: ``coco_val`` is boxed and, since the pile gained ``coco_val__dinov3_patch``,
+#: is now genuinely region-capable - the second region-voting environment the
+#: #2905 confound needed.  The older map still says False because it predates
+#: that cell.
+BOXED_BY_DATASET: dict[str, bool] = {
+    "visual_genome_m": True,
+    "caltech101_m": False,
+    "coco_val": True,
+    "vg_box_small": True,
+    "vg_box_medium": True,
+    "vg_box_large": True,
+}
+
+
+def region_voting_for(dataset: str, embedder: str) -> bool:
+    """Region voting needs **both** halves: boxes (dataset) and a patch grid (embedder).
+
+    Asserting the premise per *cell* rather than per dataset is the control for
+    the mis-specification behind #2877, #2897 and #2905, where a boxed dataset
+    paired with a single-vector embedder was reported as a region-voting arm
+    while it silently ran as binary voting.
+    """
+    return BOXED_BY_DATASET.get(dataset, False) and is_patch_embedder(embedder)
+
 
 # --- Styles per embedder kind ---
 PATCH_STYLES = os.environ.get("CALIB_PATCH_STYLES", "max_patch,max_patch_pca_hac").split(",")
@@ -209,9 +247,11 @@ def _opt_float(name: str) -> float | None:
 #: pick reads the threshold as a **rank position**: a *negative* offset raises
 #: the cut, moves it *up* the ranking, and returns *more* positives.
 #:
-#: Unset = the shipped default (-3, the interior optimum PR #2876 measured), so
-#: an unconfigured run measures what users get.  ``0`` is the pre-#2876 control,
-#: one threshold doing both jobs.
+#: Unset = whatever ``vtscore.training.thresholds`` currently ships, so an
+#: unconfigured run measures what users actually get.  Do not restate the value
+#: here: PR #2876 shipped -3, and it is **-1** today.  A number written into
+#: this comment goes stale silently and a study then mis-states its own
+#: baseline.  ``0`` is the pre-#2876 control, one threshold doing both jobs.
 ACQ_INCLUSION_OFFSET = _opt_int("CALIB_ACQ_INCLUSION_OFFSET")
 if ACQ_INCLUSION_OFFSET is None:
     from vtscore.training.thresholds import ACQUISITION_INCLUSION_OFFSET
@@ -255,6 +295,26 @@ def is_patch_embedder(embedder: str) -> bool:
 def styles_for_embedder(embedder: str) -> list[str]:
     """The style arms an embedder participates in."""
     return PATCH_STYLES if is_patch_embedder(embedder) else SINGLE_STYLES
+
+
+def styles_for(dataset: str, embedder: str) -> list[str]:
+    """The style arms one ``(dataset, embedder)`` cell runs.
+
+    A patch embedder only earns its patch styles where the dataset can supply
+    box supervision.  On a **boxless** dataset a Good vote has no box to pool,
+    so it falls back to the image-level vector, while every Bad vote floods the
+    full-image row **plus ~197 raw patches** as negatives.  No patch row is ever
+    positive, so the patch geometry teaches only "patch-like => negative", and
+    max-pooling it at inference buys nothing while re-opening the asymmetry
+    behind the boxless-``max_patch`` failure (perfect ranking, zero FPR,
+    catastrophic FNR -- see :mod:`vtscore.eval.patch_styles`).
+
+    If the user can only answer in booleans about whole images, then the Bad
+    pile and the haystack should be whole images too.
+    """
+    if is_patch_embedder(embedder) and not BOXED_BY_DATASET.get(dataset, False):
+        return SINGLE_STYLES
+    return styles_for_embedder(embedder)
 
 
 def embedders_for_dataset(dataset: str) -> list[str]:

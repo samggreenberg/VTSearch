@@ -224,6 +224,50 @@ PY
   fi
 fi
 
+# --- 7. Patch STYLES require box supervision --------------------------------
+# Check 6 asks whether the region geometry is present.  This asks whether it is
+# usable.  On a boxless dataset a Good vote has no box to pool, so it falls back
+# to the image-level vector, while every Bad vote floods the full-image row plus
+# ~197 raw patches as negatives.  No patch row is ever positive: the geometry can
+# only teach "patch-like => negative", and max-pooling it at inference re-opens
+# the asymmetry that produced perfect ranking, zero FPR and catastrophic FNR
+# (see the module docstring in vtscore/eval/patch_styles.py).
+#
+# Reads the study's own config, so it needs no arguments and cannot drift from
+# what the run will actually do.
+if [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
+  STYLE_VERDICT=$(CALIB_EXP="$EXP" python - "$REPO" <<'PY' 2>&1
+import pathlib, sys
+repo = sys.argv[1]
+sys.path.insert(0, str(pathlib.Path(repo) / "scripts" / "experiments" / "calibration"))
+import experiment_config as cfg
+
+if not hasattr(cfg, "styles_for"):
+    print("SKIP config has no dataset-aware styles_for()")
+    raise SystemExit(0)
+
+bad = []
+for ds in cfg.DATASETS:
+    boxed = cfg.BOXED_BY_DATASET.get(ds, False)
+    for emb in cfg.embedders_for_dataset(ds):
+        styles = [st for st in cfg.styles_for(ds, emb) if st != "whole_image"]
+        if styles and not boxed:
+            bad.append(f"{ds}x{emb}={','.join(styles)}")
+print(("FAILS " + "; ".join(bad)) if bad else "HOLDS")
+PY
+)
+  case "$STYLE_VERDICT" in
+    HOLDS*) say_ok "patch styles only on boxed datasets" ;;
+    SKIP*)  say_ok "patch-style check skipped (${STYLE_VERDICT#SKIP })" ;;
+    FAILS*)
+      say_fail "patch styles on a BOXLESS dataset: ${STYLE_VERDICT#FAILS }"
+      echo "        -> no Good vote can land on a patch row there; the patch rows are"
+      echo "           negatives only, which is the boxless-max_patch failure mode"
+      ;;
+    *) say_fail "could not check patch styles: $STYLE_VERDICT" ;;
+  esac
+fi
+
 echo
 if [[ "$FAILED" == "1" ]]; then
   echo "PREFLIGHT FAILED - fix the above before launching (or --warn-only if deliberate)"
