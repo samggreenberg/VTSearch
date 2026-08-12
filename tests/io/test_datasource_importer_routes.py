@@ -4,10 +4,10 @@ import io
 
 import pytest
 
+import vtscore.security.path_validation as paths_mod
 from vtscore.datasource_importers import get_datasource_importer
 from vtscore.datasource_importers.base import DataSourceImporter, FetchedMediaItem
 from vtscore.plugins import PluginField
-from vtsearch.routes.media import server as media_server_module
 
 
 @pytest.fixture
@@ -19,9 +19,13 @@ def example_media_dir(tmp_path, monkeypatch):
     cross-worker race: the previous fixture deleted every file that appeared in
     the shared directory during the test, which under ``pytest -n auto`` could
     unlink a file another worker had just written and not yet read.
+
+    Patching :func:`~vtscore.security.path_validation.example_media_dir` (the
+    one definition both writers and readers go through) redirects the whole
+    upload → seed round trip, not just the route half.
     """
     media_dir = tmp_path / "example_media"
-    monkeypatch.setattr(media_server_module, "SERVER_MEDIA_DIR", media_dir)
+    monkeypatch.setattr(paths_mod, "example_media_dir", lambda: media_dir)
     return media_dir
 
 

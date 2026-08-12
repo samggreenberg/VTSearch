@@ -178,11 +178,11 @@ def labeled_elements_from_examples(examples: list[dict]) -> list["LabeledElement
     the media a later seed inserts collapse onto one identity key instead of
     double-counting.
     """
-    from vtscore.config import DATA_DIR
     from vtscore.datasets.labelset import LabeledElement
+    from vtscore.security.path_validation import example_media_dir
     from vtscore.utils.hashing import file_md5
 
-    server_media_dir = DATA_DIR / "example_media"
+    server_media_dir = example_media_dir()
     elements: list[LabeledElement] = []
     for ex in examples:
         if not isinstance(ex, dict) or ex.get("type") != "media":
@@ -310,9 +310,11 @@ def _seed_one_example(
 def seed_good_votes_from_examples(examples: list[dict]) -> int:
     """Seed good votes from a model's media examples.
 
-    For each ``type: "media"`` example, reads the file from
-    ``data/example_media/`` (re-fetching it from the example's ``origin``
-    when the cached file is gone) and adds it to ``good_votes``:
+    For each ``type: "media"`` example, reads the file from the current
+    user's ``example_media/`` cache (see
+    :func:`~vtscore.security.path_validation.example_media_dir`, and
+    re-fetching it from the example's ``origin`` when the cached file is
+    gone) and adds it to ``good_votes``:
 
     * **Match by MD5** - if a loaded media has the same content hash,
       that media is voted good (keeping its original dataset origin).
@@ -328,7 +330,7 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:
     Returns the number of example entries successfully seeded.
     """
 
-    from vtscore.config import DATA_DIR
+    from vtscore.security.path_validation import example_media_dir
     from vtscore.state import cached_md5_lookup, snapshot_medias
 
     media_examples = [
@@ -342,7 +344,7 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:
         return 0
 
     md5_lookup = cached_md5_lookup()
-    server_media_dir = DATA_DIR / "example_media"
+    server_media_dir = example_media_dir()
 
     # Determine the embedder and media type from the loaded dataset so we
     # can embed example files that aren't already in the dataset.

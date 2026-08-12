@@ -39,6 +39,28 @@ def get_file_access_base_dir() -> Path | None:
     return get_user_data_dir()
 
 
+def example_media_dir() -> Path:
+    """Return the directory detector example media is cached in.
+
+    This is the **single** definition of where an exemplar's bytes live, and
+    every writer (the upload / from-media-id / datasource-import routes, the
+    browse-source copy) and every reader (media seeding, label building, the
+    ``example_media`` sentinel resolver) must go through it.  Splitting the
+    two halves is exactly the multi-user bug in issue #3102: uploads landed
+    in ``data/<username>/example_media/`` while every reader looked in
+    ``data/example_media/``, so an uploaded exemplar was silently invisible
+    to seeding.
+
+    Single-user / no-auth mode gets :data:`~vtscore.config.DATA_DIR` (there
+    is no per-user boundary to draw); multi-user mode gets the current user's
+    data dir, so one user's exemplars are neither readable nor overwritable
+    by another.  The split is :func:`get_file_access_base_dir`'s, reused
+    rather than re-derived.
+    """
+    base = get_file_access_base_dir()
+    return (DATA_DIR if base is None else base) / "example_media"
+
+
 def validate_server_filepath(filepath_str: str, base_dir: Path | None = None) -> Path:
     """Resolve *filepath_str*, optionally asserting it stays within *base_dir*.
 

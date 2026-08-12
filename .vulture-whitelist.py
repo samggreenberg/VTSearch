@@ -280,7 +280,7 @@ stub_extractor_factory  # noqa: F821
 stub_localizer_factory  # noqa: F821
 stubbed_resolver  # noqa: F821
 reset_state  # noqa: F821
-example_media_dir  # noqa: F821 - tests/io/test_datasource_importer_routes.py redirects SERVER_MEDIA_DIR to tmp_path
+example_media_dir  # noqa: F821 - tests/io/test_datasource_importer_routes.py redirects example_media_dir() to tmp_path
 
 # ---------------------------------------------------------------------------
 # Mock function signatures that must match a real API but whose body

@@ -10,6 +10,7 @@ Verifies that:
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import pytest
@@ -825,3 +826,113 @@ class TestTrivialLoginEndpoints:
             assert resp.get_json()["user"] == "carol"
         finally:
             set_login_provider(original)
+
+
+# ---------------------------------------------------------------------------
+# Example media lives in one place (issue #3102)
+# ---------------------------------------------------------------------------
+
+
+class TestExampleMediaPerUserDir:
+    """Uploads and seeding must agree on where example media lives.
+
+    Uploads landed in ``data/<username>/example_media/`` while every reader
+    (media seeding, label building, the ``example_media`` sentinel resolver)
+    looked in ``data/example_media/``.  The two coincide in single-user mode,
+    so the split only showed in multi-user deployments — where every uploaded
+    exemplar was silently invisible to seeding: no file, no origin, example
+    skipped.
+    """
+
+    @pytest.fixture
+    def multi_user_client(self, client, tmp_path):
+        """A client running under a non-default provider rooted at *tmp_path*."""
+
+        class _PerUserProvider(LoginProvider):
+            name = "per-user-test"
+
+            def get_user(self, request):
+                return "alice"
+
+            def is_authenticated(self, request):
+                return True
+
+            def login_required(self):
+                return False
+
+            def get_user_data_dir(self, username, base_data_dir):
+                user_dir = tmp_path / username
+                user_dir.mkdir(parents=True, exist_ok=True)
+                return user_dir
+
+        original = get_login_provider()
+        set_login_provider(_PerUserProvider())
+        try:
+            yield client
+        finally:
+            set_login_provider(original)
+
+    def test_dir_resolves_under_the_user_data_dir(self, multi_user_client, tmp_path):
+        from vtscore.config import DATA_DIR
+        from vtscore.security.path_validation import example_media_dir
+
+        # Establish a request context so ``g.user`` (and thus the per-user
+        # data dir) resolves the way it does inside a handler.
+        multi_user_client.get("/api/auth/status")
+
+        assert example_media_dir() == tmp_path / "alice" / "example_media"
+        assert example_media_dir() != DATA_DIR / "example_media"
+
+    def test_upload_then_seed_round_trips(self, multi_user_client, tmp_path):
+        """The regression: an uploaded exemplar must be seedable by the reader."""
+        from vtsearch.state import good_votes, medias
+
+        if not medias:
+            pytest.skip("No medias loaded")
+
+        first_id = next(iter(medias))
+        media_bytes = medias[first_id]["media_bytes"]
+
+        upload = multi_user_client.post(
+            "/api/server-media-files/upload",
+            data={"file": (io.BytesIO(media_bytes), "exemplar.wav")},
+            content_type="multipart/form-data",
+        )
+        assert upload.status_code == 201, upload.get_json()
+        filename = upload.get_json()["filename"]
+
+        # The bytes really did land in the per-user directory, so a reader
+        # still hard-coding the global one would find nothing.
+        assert (tmp_path / "alice" / "example_media" / filename).is_file()
+
+        seed = multi_user_client.post(
+            "/api/votes/seed-from-examples",
+            json={"examples": [{"type": "media", "value": filename}]},
+        )
+        assert seed.status_code == 200, seed.get_json()
+        assert seed.get_json() == {"seeded": 1, "skipped": 0}
+        assert first_id in good_votes
+
+    def test_created_labels_carry_the_uploaded_exemplars_md5(self, multi_user_client, tmp_path):
+        """``labeled_elements_from_examples`` reads the same per-user dir.
+
+        The label is built at detector-create time, before any seeding, and
+        its ``md5`` comes from the ``example_media/`` cache file — empty when
+        the reader looks in the wrong directory.
+        """
+        from vtscore.detectors.media_seeding import labeled_elements_from_examples
+        from vtscore.utils.hashing import content_md5
+
+        payload = b"per-user exemplar bytes"
+
+        upload = multi_user_client.post(
+            "/api/server-media-files/upload",
+            data={"file": (io.BytesIO(payload), "exemplar.wav")},
+            content_type="multipart/form-data",
+        )
+        assert upload.status_code == 201, upload.get_json()
+        filename = upload.get_json()["filename"]
+
+        elements = labeled_elements_from_examples([{"type": "media", "value": filename}])
+        assert len(elements) == 1
+        assert elements[0].md5 == content_md5(payload)
