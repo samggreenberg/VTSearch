@@ -12,6 +12,12 @@ Related docs: [`state.md`](state.md) for the contexts that hold the
 deserialised dataset artefacts; [`concurrency.md`](concurrency.md) for
 the load pipeline that calls these helpers during dataset import.
 
+**Import from the defining module.** `vtscore/security/` has no
+`__init__.py` - it is a PEP 420 implicit namespace package, so
+`from vtscore.security import validate_url` raises `ImportError`. Import
+from `vtscore.security.path_validation`, `.url_validation`, or `.pickle`
+as the snippets below do.
+
 ## Contents
 
 - [Path validation](#path-validation)
@@ -54,7 +60,7 @@ function in the package that imports `vtsearch.auth`.
 ### `validate_server_filepath(filepath_str, base_dir=None)`
 
 ```python
-from vtscore.security import validate_server_filepath, get_file_access_base_dir
+from vtscore.security.path_validation import validate_server_filepath, get_file_access_base_dir
 
 resolved = validate_server_filepath(user_supplied_path, get_file_access_base_dir())
 # resolved is the canonical Path; reading from it is safe
@@ -116,7 +122,7 @@ rewrites `/`, `\`, and `\0` to `_`, and collapses empty / `.` / `..` to
 `_`:
 
 ```python
-from vtscore.security import sanitize_template_value
+from vtscore.security.path_validation import sanitize_template_value
 
 sanitize_template_value("safe_name")         # "safe_name"
 sanitize_template_value("../../etc/passwd")  # "______etc_passwd"
@@ -183,7 +189,7 @@ endpoints, etc. An unparseable IP is also treated as unsafe - defensive
 `True` rather than silently allowing the address through.
 
 ```python
-from vtscore.security import validate_url
+from vtscore.security.url_validation import validate_url
 
 validate_url("https://example.com/data.json")            # → original URL
 validate_url("http://169.254.169.254/latest/meta-data/") # raises ValueError
@@ -302,7 +308,7 @@ Anything else - `os.system`, `subprocess.Popen`, `builtins.eval`,
 ### `RestrictedUnpickler` and `safe_pickle_load`
 
 ```python
-from vtscore.security import safe_pickle_load
+from vtscore.security.pickle import safe_pickle_load
 
 with open("dataset.pkl", "rb") as f:
     medias, embeddings = safe_pickle_load(f)
@@ -340,7 +346,7 @@ media-byte blobs are `b""`. For a multi-GB dataset upload this turns a
 30-second `pickle.load` into a sub-second peek.
 
 ```python
-from vtscore.security import peek_pickle_dataset_summary
+from vtscore.security.pickle import peek_pickle_dataset_summary
 
 with open(uploaded_pkl, "rb") as f:
     summary = peek_pickle_dataset_summary(f)

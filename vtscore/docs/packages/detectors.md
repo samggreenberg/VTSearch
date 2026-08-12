@@ -113,15 +113,39 @@ detector's saved training data is not overwritten.
 
 ## Store
 
-`vtscore/detectors/store.py` is the low-level file I/O layer.
+`vtscore/detectors/store.py` is the on-disk detector layer.
 `get_detectors_dir()` reads `CoreConfig.from_settings().detectors_dir`
 (Phase 2 seam - library callers will pass a `CoreConfig` directly after
-Phase 8). `_detector_path(name)` slugifies via
-`re.sub(r"[^a-z0-9_-]+", "_", name.lower())` and appends `.json`.
+Phase 8).
+
+The public pair is `save_detector` / `load_detector`:
+
+```python
+from vtscore.datasets.labelset import LabelSet
+from vtscore.detectors.store import load_detector, save_detector
+
+path = save_detector("dog barks", labelset, media_type="audio")
+# → <detectors_dir>/dog_barks.json
+
+data = load_detector("dog barks")          # parsed dict, or None if absent
+labelset = LabelSet.from_dict(data["labelset"])
+```
+
+`save_detector` writes `{"name", "media_type", "labelset"}` (plus
+`embedder_type` when given, plus anything passed as `extra=`), replacing any
+existing file for the same slug - merge first if you mean to add. It writes
+the file and nothing else: a detector that should appear in the app's
+dashboard also needs a `vtscore.detectors.registry.register_detector(...)`
+entry, and deleting one means removing both.
+
+Underneath, `_detector_path(name)` slugifies via
+`re.sub(r"[^a-z0-9_-]+", "_", name.lower())` (truncating past 190 chars with
+a content hash appended so long names can't collide) and appends `.json`.
 `_read_detector(path)` returns the parsed dict or `None`.
-`_write_detector(path, data)` writes atomically via tempfile +
-`os.fsync` + `os.replace`. The leading underscores are historical;
-every other module in the package calls these names.
+`_write_detector(path, data)` writes atomically via a per-writer tempfile +
+`os.fsync` + `os.replace`. The leading underscores are historical; every
+other module in the package calls these path-level names directly, because
+they already hold a path and a fully-composed dict.
 
 ---
 
@@ -340,7 +364,7 @@ labelset, ensure `det_ctx.label_embeddings[stable_element_id(elem)]` is
 populated:
 
 1. If the element resolves to a cid in the active `snap`, reuse
-   `snap[cid]["embedding"]` (zero I/O). Region-voted elements re-pool
+   `media_embedding(snap[cid])` (zero I/O). Region-voted elements re-pool
    from the source `patch_grid` every pass - the cache is keyed by
    stable element id (origin/md5), intentionally stable across region
    edits.
