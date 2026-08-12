@@ -60,22 +60,19 @@ _IMAGE_MIMETYPES = {
     ".bmp": "image/bmp",
 }
 
-#: Default directory for server-side example media files (single-user fallback).
-SERVER_MEDIA_DIR = DATA_DIR / "example_media"
-
 
 def _get_server_media_dir() -> Path:
     """Return the per-user server media directory.
 
-    In multi-user mode each user gets their own ``example_media/``
-    subdirectory inside their data dir, preventing cross-user file access.
+    Thin delegate to :func:`~vtscore.security.path_validation.example_media_dir`,
+    which is the single definition of where example media lives so that the
+    routes here (all writers) and the library-tier readers - media seeding,
+    label building, the ``example_media`` sentinel resolver - cannot disagree
+    about it in multi-user mode.
     """
-    from vtsearch.auth import DefaultLoginProvider, get_login_provider, get_user_data_dir
+    from vtscore.security.path_validation import example_media_dir
 
-    provider = get_login_provider()
-    if isinstance(provider, DefaultLoginProvider):
-        return SERVER_MEDIA_DIR
-    return get_user_data_dir() / "example_media"
+    return example_media_dir()
 
 
 @media_server_bp.route("/api/server-media-files/upload", methods=["POST"])
@@ -87,7 +84,7 @@ def _get_server_media_dir() -> Path:
     ),
 )
 def upload_server_media_file():
-    """Upload a media file to data/example_media/ and return its filename.
+    """Upload a media file to the user's example_media/ dir and return its filename.
 
     Optional form fields:
 

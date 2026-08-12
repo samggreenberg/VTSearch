@@ -470,8 +470,8 @@ POST /api/browse-media-files/select
 
 **Body:** `{"source": "demo:esc50_s", "path": "dog/1-100032-A-0.wav"}`
 
-Copies a file from a browse source into `data/example_media/` with a unique
-prefix to avoid collisions.
+Copies a file from a browse source into the user's `example_media/` directory
+with a unique prefix to avoid collisions.
 
 → `{"filename": "abc123_bark.wav", "original_name": "bark.wav"}` (201)
 

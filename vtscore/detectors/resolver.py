@@ -366,18 +366,18 @@ def _resolve_example_media(params: dict[str, Any]) -> Path | None:
 
     The sentinel is what a detector exemplar with no re-derivable source
     (a local upload, an add-to-pile snapshot) carries, and its bytes live
-    only in ``data/example_media/``.  Resolving it there lets such an
-    exemplar's *label* be thumbnailed and exported before any dataset is
-    loaded - the cache file is the closest thing it has to an origin.  It is
-    still a dead end in the sense that #2774 meant: delete the cache file and
-    there is nowhere left to re-fetch from.
+    only in the uploading user's ``example_media/`` cache.  Resolving it
+    there lets such an exemplar's *label* be thumbnailed and exported before
+    any dataset is loaded - the cache file is the closest thing it has to an
+    origin.  It is still a dead end in the sense that #2774 meant: delete the
+    cache file and there is nowhere left to re-fetch from.
     """
-    from vtscore.config import DATA_DIR
+    from vtscore.security.path_validation import example_media_dir
 
     filename = params.get("filename", "")
     if not isinstance(filename, str) or not filename:
         return None
-    base = DATA_DIR / "example_media"
+    base = example_media_dir()
     candidate = base / filename
     try:
         # ``filename`` comes from a detector JSON, so confine it the same way

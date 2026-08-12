@@ -173,10 +173,10 @@ class TestExamplesBecomeLabels:
         medias.update(saved)
 
     def _write_example_file(self, media_bytes: bytes, filename: str) -> str:
-        """Write *media_bytes* into ``data/example_media/<filename>``."""
-        from vtscore.config import DATA_DIR
+        """Write *media_bytes* into the current user's ``example_media/<filename>``."""
+        from vtscore.security.path_validation import example_media_dir
 
-        example_dir = DATA_DIR / "example_media"
+        example_dir = example_media_dir()
         example_dir.mkdir(parents=True, exist_ok=True)
         (example_dir / filename).write_bytes(media_bytes)
         return filename
@@ -362,13 +362,14 @@ class TestExamplesBecomeLabels:
         assert resolved.read_bytes() == b"sentinel-bytes"
 
     def test_sentinel_resolution_refuses_traversal(self):
-        from vtscore.config import DATA_DIR
         from vtscore.detectors.resolver import resolve_file_from_origin
+        from vtscore.security.path_validation import example_media_dir
 
         # A real, readable file just outside example_media/ - the check must
         # refuse it on the path shape, not on it happening to be missing.
-        (DATA_DIR / "example_media").mkdir(parents=True, exist_ok=True)
-        outside = DATA_DIR / "traversal_target.txt"
+        example_dir = example_media_dir()
+        example_dir.mkdir(parents=True, exist_ok=True)
+        outside = example_dir.parent / "traversal_target.txt"
         outside.write_bytes(b"not-an-exemplar")
         try:
             origin = {"importer": "example_media", "params": {"filename": "../traversal_target.txt"}}
@@ -2073,10 +2074,10 @@ class TestSeedVotesFromExamples:
         medias.update(saved)
 
     def _create_example_file(self, media_bytes: bytes, filename: str = "ex.wav") -> str:
-        """Write *media_bytes* into data/example_media/<filename> and return the filename."""
-        from vtscore.config import DATA_DIR
+        """Write *media_bytes* into the user's example_media/<filename>, returning the filename."""
+        from vtscore.security.path_validation import example_media_dir
 
-        example_dir = DATA_DIR / "example_media"
+        example_dir = example_media_dir()
         example_dir.mkdir(parents=True, exist_ok=True)
         dest = example_dir / filename
         dest.write_bytes(media_bytes)
@@ -2292,8 +2293,8 @@ class TestSeedVotesFromExamples:
 
     def test_seed_stamped_origin_resolves_without_cache_file(self, client, tmp_path):
         """The stamped origin must resolve after the example_media/ file is gone."""
-        from vtscore.config import DATA_DIR
         from vtscore.detectors.resolver import resolve_file_from_origin
+        from vtscore.security.path_validation import example_media_dir
         from vtsearch.state import medias
 
         src = tmp_path / "resolvable.wav"
@@ -2307,7 +2308,7 @@ class TestSeedVotesFromExamples:
         )
         assert res.get_json()["seeded"] == 1
 
-        (DATA_DIR / "example_media" / fname).unlink()
+        (example_media_dir() / fname).unlink()
         new_media = medias[max(medias.keys())]
         resolved = resolve_file_from_origin(new_media["origin"], new_media["origin_name"], new_media["filename"])
         assert resolved == src

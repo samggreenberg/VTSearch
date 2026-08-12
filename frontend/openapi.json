@@ -9017,7 +9017,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Copy a file from a browse source into ``data/example_media/``.",
+        "summary": "Copy a file from a browse source into the user's ``example_media/`` dir.",
         "tags": [
           "datasets_ui"
         ]
@@ -15502,7 +15502,7 @@
             "$ref": "#/components/responses/DEFAULT_ERROR"
           }
         },
-        "summary": "Upload a media file to data/example_media/ and return its filename.",
+        "summary": "Upload a media file to the user's example_media/ dir and return its filename.",
         "tags": [
           "media_server"
         ]
@@ -16202,7 +16202,7 @@
     },
     "/api/votes/seed-from-examples": {
       "post": {
-        "description": "For each ``type: \"media\"`` example, reads the file from\n``data/example_media/``, computes its MD5, and either marks the\nmatching loaded media as Good, or (if the example is new)\nembeds it, inserts it into the ``medias`` dict, and votes it Good.\n\nReturns::\n\n    {\"seeded\": 2, \"skipped\": 1}",
+        "description": "For each ``type: \"media\"`` example, reads the file from the current\nuser's ``example_media/`` directory, computes its MD5, and either marks\nthe matching loaded media as Good, or (if the example is new) embeds it,\ninserts it into the ``medias`` dict, and votes it Good.\n\nReturns::\n\n    {\"seeded\": 2, \"skipped\": 1}",
         "operationId": "seed_votes_from_examples",
         "requestBody": {
           "content": {

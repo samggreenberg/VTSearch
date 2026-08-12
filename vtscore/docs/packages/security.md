@@ -33,6 +33,7 @@ as the snippets below do.
 - [Login providers](#login-providers)
 - [Path validation](#path-validation)
   - [Media-carried file references](#media_file_read_roots-and-resolve_media_file_pathfilepath_str)
+  - [Example media](#example_media_dir)
   - [Origin confinement](#origin-confinement)
 - [URL validation](#url-validation)
   - [`validate_url` (SSRF guard)](#validate_url-ssrf-guard)
@@ -106,6 +107,7 @@ form, and every serve-time read of a path that arrived *on a media*.
 | Function | Description |
 |----------|-------------|
 | `get_file_access_base_dir() -> Path \| None` | Resolve the per-user base directory; `None` (unrestricted) in single-user mode |
+| `example_media_dir() -> Path` | The directory detector example media is cached in, per user |
 | `validate_server_filepath(filepath_str, base_dir=None) -> Path` | Resolve and (when `base_dir` is given) assert containment; raises on escape |
 | `media_file_read_roots() -> list[Path] \| None` | Roots a media-carried file reference may be read from; `None` (unrestricted) in single-user mode |
 | `resolve_media_file_path(filepath_str) -> Path \| None` | Confine a media-carried file reference; `None` (rather than a raise) when it escapes |
@@ -122,7 +124,8 @@ There is no per-user boundary to protect, so the app does not impose one.
 In multi-user mode it returns the current user's data directory so each
 user is confined to their own `data/<username>/` subtree. Which of the two
 applies is decided entirely by the registered
-[login provider](#login-providers) - there is no separate switch.
+[login provider](#login-providers) - there is no separate switch, and
+`example_media_dir()` below reuses this split rather than re-deriving it.
 
 ### `validate_server_filepath(filepath_str, base_dir=None)`
 
@@ -178,6 +181,23 @@ Unlike `validate_server_filepath` it returns `None` instead of raising:
 these are serve-time reads inside a resolution chain, and falling through
 to the next step is the right behaviour for a reference that shouldn't be
 honoured.
+
+### `example_media_dir()`
+
+The single definition of where a detector's media exemplars are cached:
+`get_file_access_base_dir()` when it is set, else `DATA_DIR`, plus
+`example_media/`. Every writer (the upload / from-media-id /
+datasource-import routes, the browse-source copy) and every reader (media
+seeding, label building, the `example_media` sentinel resolver) goes
+through it.
+
+It exists because splitting those two halves is invisible in single-user
+mode and silently lossy in multi-user mode: uploads once landed in
+`data/<username>/example_media/` while the readers looked in
+`data/example_media/`, so an uploaded exemplar never became a vote and
+its label could never be thumbnailed, embedded, or exported (issue
+#3102). Resolve the directory here, never by re-spelling
+`DATA_DIR / "example_media"`.
 
 ### `sanitize_template_value(value)`
 
