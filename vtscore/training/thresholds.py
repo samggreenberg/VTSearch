@@ -115,27 +115,35 @@ def inclusion_cost_weights(inclusion_value: int) -> tuple[float, float]:
 #: moves it *up* the ranking, and so returns *more* positives.
 #:
 #: ``-1`` is the only value that passes the pre-registered ship rule in **all
-#: three** environments measured, and this constant is deliberately **not** gated
-#: by voting mode.  The history is worth keeping, because the first answer was
-#: bigger and did not survive:
+#: **two** binary environments measured, and this constant is deliberately **not**
+#: gated by voting mode.  The history is worth keeping, because the first answer
+#: was bigger and did not survive:
 #:
 #: * ``coco_val x siglip2`` (binary, PR #2876) found an interior optimum at
 #:   ``-3``: positives per 100 votes 4 -> 18, final cost 0.137 -> 0.129 (95% CI
 #:   [-0.025, -0.005]), average precision 0.696 -> 0.817.  #2878 shipped it.
 #: * ``visual_genome_m x siglip`` (binary, PR #2891) **rejected** ``-3``: cost CI
 #:   [+0.003, +0.022] against a +0.01 tolerance.  Only ``-1`` passed.
-#: * ``visual_genome_m x dinov3_patch`` (REGION voting, PR #2905) passes ``-3``
-#:   on the ship rule - but the mechanism ``-3`` was justified by is **absent**
-#:   there.  Paired on the same 536 cells, ``k=-3`` moves average precision
-#:   +0.0283 under binary voting and **+0.0003** under region voting
-#:   (difference-in-differences -0.0281, CI [-0.0361, -0.0202]), while the cost
-#:   side - oracle cost rising as the ranking's tail blurs - is present in both.
 #:
 #: So the disagreement runs along the *environment*, not the voting mode: the
 #: largest split (``-3`` ships on COCO, fails on VG) is **within** binary voting,
-#: which no mode gate can reach.  ``-1`` is the value with no measured harm
-#: anywhere.  Do not raise this without a fourth environment; do not gate it by
-#: mode without evidence that mode - and not label supply - is the axis.
+#: which no mode gate can reach - and that leg alone is what sets this value.
+#: ``-1`` is the value with no measured harm in either environment.  Do not raise
+#: it without a further environment; do not gate it by mode without evidence that
+#: mode - and not label supply - is the axis.
+#:
+#: **The region-voting check is still OUTSTANDING.**  It was run (PR #2909) and
+#: its result is **void**: that run predates #2943, which fixed the harness
+#: scoring the acquisition pool by each media's whole-image vector while cutting
+#: the threshold on region max-pooled scores.  On a patch dataset that put the
+#: cut above the entire pool - pinned on 39% of ``k=-3`` steps against 1.5% of
+#: the ``k=+2`` falsifier - so the aggressive arms were clamped and the lever was
+#: partly inert exactly where the decision needed it live.  The two binary
+#: environments are unaffected (``patch_grid`` on 0/4193, so they scored and cut
+#: in one space).  Read the banner on
+#: ``docs/experiments/acquisition-inclusion/REPORT_REGION_VOTING.md`` before
+#: citing anything from that run, and re-run it before concluding anything about
+#: voting mode.
 #:
 #: **The known cost of this conservatism**: on a starved COCO-like environment
 #: ``-1`` finds 6 positives per 100 votes where ``-3`` finds 18.  Under binary
@@ -146,7 +154,9 @@ def inclusion_cost_weights(inclusion_value: int) -> tuple[float, float]:
 #: is the way to recover COCO's gain without charging the other environments'
 #: tails, and it subsumes the voting-mode question entirely (#2910).
 #:
-#: See ``docs/experiments/acquisition-inclusion/REPORT_REGION_VOTING.md``.
+#: See ``docs/experiments/acquisition-inclusion/REPORT.md`` (COCO) and
+#: ``REPORT_SECOND_ENVIRONMENT.md`` (VG binary) for the two live environments,
+#: and ``REPORT_REGION_VOTING.md`` for the voided region run and how to redo it.
 ACQUISITION_INCLUSION_OFFSET = -1
 
 
