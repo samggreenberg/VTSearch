@@ -166,6 +166,133 @@ def _load_coco(medias: dict[int, dict], embedder_name: str) -> None:
         log(f"  coco: WARNING {missing} annotated images absent from the zip")
 
 
+# --------------------------------------------------------------------------
+# Box-size-banded Visual Genome, assembled from the full source
+# --------------------------------------------------------------------------
+
+
+def _band_categories(band: str) -> list[str]:
+    """Pick this band's categories from the full-VG scan, stratified within it.
+
+    Stratified on purpose: taking the N best-supported categories in a band
+    would cluster them at one end of it (support correlates with size), so the
+    "band" would silently be a point. Splitting the band into N slots by
+    voted-area rank and taking the best-supported category in each keeps the
+    band spanning its own range.
+    """
+    scan_path = pc.PILE / "vg_box_scale.json"
+    if not scan_path.exists():
+        raise SystemExit(f"missing {scan_path}; run scan_vg_boxes.py first")
+    stats = json.loads(scan_path.read_text())
+    lo, hi = pc.BOX_BANDS[band]
+
+    pool = [
+        (s["voted_area"], name)
+        for name, s in stats.items()
+        if lo <= s["voted_area"] < hi
+        and s["n_images"] >= pc.BAND_MIN_IMAGES
+        and s["union_inflation"] <= pc.BAND_MAX_INFLATION
+    ]
+    if not pool:
+        raise SystemExit(f"no categories qualify for band {band!r}")
+    pool.sort()
+
+    n = min(pc.BAND_N_CATEGORIES, len(pool))
+    chosen: list[str] = []
+    for i in range(n):
+        slot = pool[i * len(pool) // n : max((i + 1) * len(pool) // n, i * len(pool) // n + 1)]
+        best = max(slot, key=lambda t: stats[t[1]]["n_images"])
+        chosen.append(best[1])
+    log(f"  band {band}: {len(chosen)} categories from {len(pool)} candidates")
+    return sorted(set(chosen))
+
+
+def _load_vg_band(band: str, medias: dict[int, dict], embedder_name: str) -> None:
+    """Populate *medias* with full-VG images carrying this band's categories."""
+    import random  # noqa: PLC0415
+
+    from PIL import Image  # noqa: PLC0415
+
+    vg_root = pc.DEMO_CACHE / "visual_genome"
+    objects_json = vg_root / "objects.json"
+    if not objects_json.exists():
+        raise SystemExit(f"missing {objects_json}")
+
+    wanted = set(_band_categories(band))
+    paths: dict[int, Path] = {}
+    for d in (vg_root / "VG_100K", vg_root / "VG_100K_2"):
+        for p in d.iterdir():
+            if p.suffix.lower() == ".jpg":
+                try:
+                    paths[int(p.stem)] = p
+                except ValueError:
+                    continue
+
+    with objects_json.open() as fh:
+        records = json.load(fh)
+
+    # Every image carrying at least one of the band's categories.
+    hits: list[tuple[int, dict]] = []
+    for rec in records:
+        iid = int(rec["image_id"])
+        if iid not in paths:
+            continue
+        by_name: dict[str, list[list[float]]] = defaultdict(list)
+        for obj in rec.get("objects") or []:
+            names = obj.get("names") or []
+            if not names:
+                continue
+            name = str(names[0]).strip().lower()
+            if name not in wanted:
+                continue
+            x, y = float(obj.get("x", 0)), float(obj.get("y", 0))
+            w, h = float(obj.get("w", 0)), float(obj.get("h", 0))
+            if w > 0 and h > 0:
+                by_name[name].append([x, y, x + w, y + h])
+        if by_name:
+            hits.append((iid, dict(by_name)))
+
+    rng = random.Random(0xB0FFED)  # deterministic sample, stable across rebuilds
+    rng.shuffle(hits)
+    hits = hits[: pc.BAND_MAX_IMAGES]
+    log(f"  band {band}: {len(hits)} images carry a band category")
+
+    for iid, by_name in hits:
+        path = paths[iid]
+        try:
+            with Image.open(path) as im:
+                W, H = im.size
+            data = path.read_bytes()
+        except Exception:  # noqa: BLE001 - a corrupt file just drops out
+            continue
+        if W <= 0 or H <= 0:
+            continue
+        regions = [
+            {"box": [b[0] / W, b[1] / H, b[2] / W, b[3] / H], "label": name}
+            for name, boxes in by_name.items()
+            for b in boxes
+        ]
+        counts = {name: len(b) for name, b in by_name.items()}
+        ordered = [c for c, _ in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
+        medias[iid] = {
+            "id": iid,
+            "media_type": "image",
+            "embedder": embedder_name,
+            "duration": 0,
+            "file_size": 0,
+            "md5": "",
+            "embeddings": {},
+            "media_bytes": data,
+            "media_string": None,
+            "filename": path.name,
+            "category": ordered[0],
+            "categories": ordered,
+            "regions": regions,
+            "origin": {"importer": "vg_box_band", "params": {"band": band, "embedder": embedder_name}},
+            "origin_name": str(path),
+        }
+
+
 def _load_demo(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     from vtscore.datasets.loader_demo import load_demo_dataset  # noqa: PLC0415
 
@@ -195,6 +322,8 @@ def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
     medias: dict[int, dict] = {}
     if kind == "coco":
         _load_coco(medias, embedder)
+    elif kind == "vg_band":
+        _load_vg_band(pc.DATASETS[dataset]["band"], medias, embedder)
     else:
         pc.require_demo_source(dataset)
         _load_demo(dataset, medias, embedder)

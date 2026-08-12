@@ -53,7 +53,38 @@ DATASETS: dict[str, dict] = {
     "visual_genome_m": {"boxed": True, "kind": "demo", "source_dir": "visual_genome"},
     "caltech101_m": {"boxed": False, "kind": "demo", "source_dir": "caltech-101"},
     "coco_val": {"boxed": True, "kind": "coco"},
+    # Box-size-banded VG, drawn from the WHOLE source (all 108k images, full
+    # free-text vocabulary) rather than the demo pipeline's 100 curated
+    # categories on a 4% slice.  The `_s`/`_m`/`_l` on `visual_genome_*` is a
+    # dataset *size* tier and says nothing about boxes; these are the box bands.
+    "vg_box_small": {"boxed": True, "kind": "vg_band", "band": "small"},
+    "vg_box_medium": {"boxed": True, "kind": "vg_band", "band": "medium"},
+    "vg_box_large": {"boxed": True, "kind": "vg_band", "band": "large"},
 }
+
+#: Box-size bands, as a fraction of image area, anchored to the patch
+#: embedder's geometry (the same anchors the calibration harness bands on):
+#: one DINOv3 patch is 1/196 of the image and the smallest HAC leaf is 1/12.
+#: ``small`` is therefore "below what the patch grid can resolve at all".
+#: The upper cut mirrors ``MAX_VOTED_AREA``: a box covering >80% of the image
+#: is not a region, it is the image.
+PATCH_AREA = 1 / 196
+LEAF_AREA = 1 / 12
+MAX_VOTED_AREA = 0.80
+BOX_BANDS: dict[str, tuple[float, float]] = {
+    "small": (0.0, PATCH_AREA),
+    "medium": (PATCH_AREA, LEAF_AREA),
+    "large": (LEAF_AREA, MAX_VOTED_AREA),
+}
+
+#: How many categories each banded dataset draws, and the image cap.  Categories
+#: are stratified *within* the band so a band is not silently all one size.
+BAND_N_CATEGORIES = int(os.environ.get("VTS_BAND_N_CATEGORIES", "24"))
+BAND_MAX_IMAGES = int(os.environ.get("VTS_BAND_MAX_IMAGES", "6000"))
+#: Categories whose union box is much larger than a single instance are
+#: scattered instances, not a region a user would drag.
+BAND_MAX_INFLATION = float(os.environ.get("VTS_BAND_MAX_INFLATION", "1.5"))
+BAND_MIN_IMAGES = int(os.environ.get("VTS_BAND_MIN_IMAGES", "50"))
 
 #: Embedders in the pile. ``patch`` embedders attach ``patch_grid`` and are the
 #: only ones that can carry a region-voting arm.
