@@ -316,8 +316,8 @@ Three synthetic origin types are special-cased: `dupe_set` (tries each
 member origin in turn), `converter` (reconstructs a parent origin
 from `parent_importer` / `parent_path` / `parent_url` params and
 recurses), and `example_media` (the detector-exemplar sentinel, resolved
-to its `DATA_DIR / "example_media"` byte-cache file under the same
-traversal confinement the seeding path applies). Clipped origins - audio `clip_start`/`clip_end`, image
+to its `example_media_dir()` byte-cache file under the same traversal
+confinement the seeding path applies). Clipped origins - audio `clip_start`/`clip_end`, image
 `clip_box`, text `clip_index`, and origin-stored clipper chains - are
 handled transparently: the chain is replayed on the resolved source
 file via `vtscore.datasets.clipper_chain.replay_chain_on_file` before
@@ -449,7 +449,8 @@ variant used when examples are replaced on an existing detector.
 
 Seed good votes from a detector's `media_example` list. Each
 `{"type": "media", "value": filename}` entry is read from
-`DATA_DIR / "example_media"`; matching media (by md5) get a good vote
+`vtscore.security.path_validation.example_media_dir()` (the current user's
+`example_media/`); matching media (by md5) get a good vote
 in place, non-matching files are embedded, inserted with an
 `example_media` origin, then voted. Path traversal is guarded by
 `file_path.resolve().relative_to(server_media_dir.resolve())`.

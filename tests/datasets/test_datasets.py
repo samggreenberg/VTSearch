@@ -303,10 +303,10 @@ class TestDatasetEndpoints:
             data = resp.get_json()
             assert "filename" in data
             assert data["original_name"] == "pick_me.wav"
-            # The file should have been copied to data/example_media/
-            from vtscore.config import DATA_DIR
+            # The file should have been copied to the user's example_media/
+            from vtscore.security.path_validation import example_media_dir
 
-            dest = DATA_DIR / "example_media" / data["filename"]
+            dest = example_media_dir() / data["filename"]
             assert dest.exists()
             # Clean up
             dest.unlink(missing_ok=True)
