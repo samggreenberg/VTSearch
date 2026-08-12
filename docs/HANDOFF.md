@@ -182,7 +182,7 @@ argument parsing. Key startup sequence:
 | Flask routes (REST API) | `vtsearch/routes/` |
 | Global state (medias, votes) | `vtscore/state/core.py` |
 | Persistent settings | `vtsearch/settings.py` → `data/settings.json` |
-| ML training, embedding models | `vtscore/training/`, `vtscore/embedding/`, `vtscore/media/*/embedder.py` |
+| ML training, embedding models | `vtscore/training/`, `vtscore/embedding/`, `vtscore/media/*/embedder_*.py` |
 | Dataset loading, demo downloads | `vtscore/datasets/` |
 | Frontend (Angular source / build output) | `frontend/` → `static/` |
 
@@ -259,13 +259,14 @@ vulture vtsearch/ .vulture-whitelist.py --min-confidence 80   # dead code audit
 Configuration is in `pyproject.toml`. `pre-commit install` wires up
 ruff, codespell, and deptry as git hooks. There is **no CI**: VTSearch has
 no GitHub Actions workflows, so `./run-tests.sh` is the only gate — it runs
-ruff, `ruff format --check`, codespell, deptry, `pip-audit`, pyright, the
-OpenAPI snapshot diff, the Dockerfile check, the user-docs screenshot wiring
-check, the eval/app sync check, and the frontend build + `npm audit` + Vitest
-suite before pytest. Run it before pushing; CLAUDE.md's "What `run-tests.sh`
-gates" table is the authoritative list. The rationale for which flake8-bandit
-security rules are enabled and which are ignored lives inline in
-`pyproject.toml`'s `[tool.ruff.lint]` block, one comment per ignored rule.
+ruff, `ruff format --check`, codespell, the documentation check, deptry,
+`pip-audit`, pyright, the OpenAPI snapshot diff, the Dockerfile check, the
+user-docs screenshot wiring check, the eval/app sync check, and the frontend
+build + `npm audit` + Vitest suite before pytest. Run it before pushing;
+CLAUDE.md's "What `run-tests.sh` gates" table is the authoritative list. The
+rationale for which flake8-bandit security rules are enabled and which are
+ignored lives inline in `pyproject.toml`'s `[tool.ruff.lint]` block, one
+comment per ignored rule.
 
 ---
 

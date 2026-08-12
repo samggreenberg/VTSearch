@@ -374,7 +374,7 @@ back entirely to the GMM threshold.
 `vtscore/training/svm.py` ships a parallel trainer with the same call
 shape as `train_model`. It is **not** wired into the detector pipeline;
 its purpose is to let
-[`vtscore.eval.label_curve`](eval.md#label-curve-sweep) sweep the neural head
+[`vtscore.eval.label_curve`](eval.md#label-curve) sweep the neural head
 vs. SVM head-to-head so the team can decide whether to add a trainer-
 selection field on detectors.
 

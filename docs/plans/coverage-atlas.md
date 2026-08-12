@@ -8,7 +8,7 @@ The **v0 labelset-kNN evidence signals** (§6.1's `D` and `TS`) have also shippe
 
 Not yet built: the tree ensemble, the `n_viewed` channel, split-half calibration, everything in §5 (blob scan, global alarms), the rest of §6 (tiered work queue, active auditor / stratified estimation), and §7 (portable artifact).
 
-**Relationship to shipped work:** this design layers on top of the shipped Find verification workflow (`vtsearch/routes/find.py` + `frontend/src/app/components/find-view/`). That feature built the verify loop (frozen `find_scores`, `verified_ids`, the marginal-positive work queue, the Stats modal). Its Stats section explicitly documents a **false-confidence caveat**: unverified items are flood-filled with the detector's own call, so precision "agreement" is inflated by everything the human never looked at. The active-auditor portion of this design (§6) is the principled replacement for that flood-fill: stratified estimates with confidence intervals instead of adopted self-agreement.
+**Relationship to shipped work:** this design layers on top of the shipped Find verification workflow (`vtsearch/routes/detectors/find.py` + `frontend/src/app/components/find-view/`). That feature built the verify loop (frozen `find_scores`, `verified_ids`, the marginal-positive work queue, the Stats modal). Its Stats section explicitly documents a **false-confidence caveat**: unverified items are flood-filled with the detector's own call, so precision "agreement" is inflated by everything the human never looked at. The active-auditor portion of this design (§6) is the principled replacement for that flood-fill: stratified estimates with confidence intervals instead of adopted self-agreement.
 
 ---
 
