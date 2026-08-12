@@ -17,6 +17,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Audio now defaults to the larger CLAP checkpoint.** New audio datasets and
+  text queries use `clap_general` (`laion/larger_clap_general`, shown as "CLAP
+  (general, larger)") instead of `clap`. It wins every measured retrieval
+  comparison on ESC-50, at roughly 2.1x the embedding time. The old checkpoint
+  is still selectable as "CLAP (general, faster)" for large collections where
+  ingest speed matters more, and existing datasets and detectors built with it
+  keep working. Cached demo-dataset pickles built with `clap` are re-embedded
+  the next time they are loaded with the new default.
 - **Library extracted.** The reusable core of VTSearch was carved out into a
   separate `vtscore/` package. The user-facing application surface (the Flask
   app, the Angular SPA, the settings system, the auth layer) is unchanged.

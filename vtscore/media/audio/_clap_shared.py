@@ -4,15 +4,19 @@ VTSearch ships three CLAP audio embedders that share an identical
 architecture (LAION CLAP: a 512-dim audio encoder + a text encoder) and
 differ only in which pretrained checkpoint they load:
 
-- ``clap``          - ``laion/clap-htsat-unfused`` (the default baseline).
-- ``clap_general``  - ``laion/larger_clap_general`` (broader audio mix).
+- ``clap_general``  - ``laion/larger_clap_general`` (broader audio mix; the
+  default, and the stronger of the two general checkpoints on every measured
+  retrieval metric).
+- ``clap``          - ``laion/clap-htsat-unfused`` (the original baseline, kept
+  as the cheap tier: ~2.1x faster and ~20% smaller).
 - ``clap_music``    - ``laion/larger_clap_music_and_speech`` (music/speech).
 
 All three share this base; subclasses set :attr:`name`,
-:attr:`display_name`, :attr:`model_id`, and (for the baseline) override
-:attr:`is_default`.  The underscore-prefixed filename keeps it out of the
-auto-discovery scan in :mod:`vtscore.media` (only ``embedder*.py`` files
-are imported as plugins) - the variant modules import from here.
+:attr:`display_name`, :attr:`label`, :attr:`model_id`, and (for
+``clap_general``) override :attr:`is_default`.  The underscore-prefixed
+filename keeps it out of the auto-discovery scan in :mod:`vtscore.media`
+(only ``embedder*.py`` files are imported as plugins) - the variant modules
+import from here.
 """
 
 from __future__ import annotations

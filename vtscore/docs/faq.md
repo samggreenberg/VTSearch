@@ -178,10 +178,10 @@ Depends on the embedder — each one declares its dimensionality via the
 
 | Embedder | Media type | D |
 |---|---|---|
-| `clap` | `audio` (default) | 512 |
+| `clap_general` | `audio` (default) | 512 |
 | `ast` | `audio` | 768 |
 | `beats` | `audio` | 768 |
-| `clap_general` | `audio` | 512 |
+| `clap` | `audio` | 512 |
 | `clap_music` | `audio` | 512 |
 | `paraspeechclap` | `audio` | 768 |
 | `whisper_encoder` | `audio` | 512 |
