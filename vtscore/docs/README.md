@@ -17,6 +17,8 @@ For end users of the VTSearch web app, see the
 - [Quickstart](quickstart.md) - load a folder, train a detector, score new media. ~15 minute read.
 - [Architecture](architecture.md) - system overview, the seven seams between vtscore and vtsearch, the resolution chain for "active context".
 - [Concepts](concepts.md) - `Media`, `Origin`, `LabelSet`, `Embedding`, `Context`, the linear-head detector. The vocabulary every other doc assumes.
+- [Tutorials](tutorials/README.md) - end-to-end worked examples that go deeper than the quickstart, starting with [training and scoring a detector](tutorials/train-and-score.md).
+- [FAQ & common gotchas](faq.md) - the questions and pitfalls that come up most often. Read it when something behaves unexpectedly.
 
 ## Package reference
 

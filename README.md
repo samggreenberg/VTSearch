@@ -98,6 +98,8 @@ The remaining top level:
 
 For the complete directory map, dependency graph, and the app-tier/library-tier rules, see **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**. For the Angular SPA — feature areas, service layer, zoneless change detection, and the generated API client — see **[docs/FRONTEND.md](docs/FRONTEND.md)**.
 
+New to the codebase? Get it running with [docs/SETUP.md](docs/SETUP.md), then read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#key-concepts) for the vocabulary (media items, votes, media types, processors, origins) and the module map.
+
 ## HTTP API
 
 VTSearch exposes a REST-style JSON API. See [docs/API.md](docs/API.md) for the full endpoint reference, including media listing, sorting, voting, dataset management, detector CRUD and scoring, exporter and importer operations, and settings.
@@ -105,8 +107,6 @@ VTSearch exposes a REST-style JSON API. See [docs/API.md](docs/API.md) for the f
 ## Deployment
 
 For production deployment, offline/air-gapped operation, Docker hardening, environment variables, network dependency details, and data directory management, see [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
-
-New to the project? Start with [docs/HANDOFF.md](docs/HANDOFF.md) for a full orientation including a documentation map, key concepts, deployment checklist, and common workflows.
 
 ## Machine learning
 

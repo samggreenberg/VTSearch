@@ -59,8 +59,6 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2987 — Retire docs/HANDOFF.md (the stalest doc hub) and fix doc orphans (Opus 4.8)
-
 <!-- item-sep -->
 
 
@@ -110,9 +108,9 @@ separately.
 
 <!-- item-sep -->
 
-- **The `run-tests.sh` gate list is still hand-maintained in three places.** CLAUDE.md's "What
-  `run-tests.sh` gates" table, `docs/HANDOFF.md`'s quality-tools paragraph and the script's own
-  usage header each restate the chain by hand; the first two were six gates stale before #2997.
+- **The `run-tests.sh` gate list is still hand-maintained in two places.** CLAUDE.md's "What
+  `run-tests.sh` gates" table and the script's own usage header each restate the chain by hand;
+  the table was six gates stale before #2997.
   This is the same inventory-drift shape as #2984, and it wants the same treatment — but note the
   cheaper shape fits better here: rather than *generating* the table, an invariant check could
   assert that the set of `echo "…"` stage banners in `run-tests.sh` matches the rows in CLAUDE.md's
@@ -137,7 +135,7 @@ separately.
 
 - **README.md — the media-type count is five, the code ships six.** The intro omits the `face`
   convert-in half type (`vtscore/media/face/media_type.py`, FaceNet identity space, provisioned by
-  `install.sh:855-867`). The same undercount appears in `docs/HANDOFF.md` and the vtscore docs.
+  `install.sh:855-867`). The same undercount appears in the vtscore docs.
 
 <!-- item-sep -->
 

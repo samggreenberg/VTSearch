@@ -22,6 +22,7 @@ unless otherwise noted. File uploads use `multipart/form-data`.
 | [Dashboard](api/dashboard.md) | Dashboard dataset info/rename, disk/RAM usage probes |
 | [Find, Auto-Detect & Scoring](api/find.md) | Multi-dataset find (+ cancel/check-labels), Find Label, Auto-Detect, find stats/corrections, find progress |
 | [File Browser](api/file-browser.md) | Server filesystem browsing |
+| [Progress events (SSE)](api/events.md) | `GET /api/events`: the single Server-Sent Events stream carrying progress for every long-running operation |
 
 ### Not yet documented in depth
 
