@@ -12,6 +12,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.security.login`** - the `LoginProvider` ABC,
+  `DefaultLoginProvider`, the process-wide `set_login_provider` /
+  `get_login_provider` registry, `get_user_data_dir()` and
+  `is_safe_username()`, moved down from the `vtsearch` app tier. Path
+  confinement (`vtscore.security.path_validation`) asks the active provider
+  where the current user's data lives, so the abstraction had to be reachable
+  in a process with no Flask in it — previously `get_file_access_base_dir()`
+  raised `ImportError` there. An embedder can now opt into per-user
+  confinement by registering a provider whose `get_user_data_dir()` returns a
+  per-user subtree; the default stays single-user and unconfined.
+
 - **`beats` audio embedder** - Microsoft's BEATs iter3+ AudioSet-2M
   self-supervised encoder, exposed as a 768-d audio-only embedder
   (`supports_text=False`). There is no `transformers` implementation, so the

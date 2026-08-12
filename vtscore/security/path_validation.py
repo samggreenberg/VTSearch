@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Iterator
 
 from vtscore.config import DATA_DIR
+from vtscore.security.login import DefaultLoginProvider, get_login_provider, get_user_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 def get_file_access_base_dir() -> Path | None:
     """Return the base directory for file-access validation.
 
-    In single-user / no-auth mode (:class:`~vtsearch.auth.DefaultLoginProvider`)
+    In single-user / no-auth mode (:class:`~vtscore.security.login.DefaultLoginProvider`)
     this returns ``None``, which tells :func:`validate_server_filepath` to apply
     **no** confinement: the lone trusted user may read from and write to any
     server-readable path.  There is no per-user boundary to protect, so the app
@@ -31,8 +32,6 @@ def get_file_access_base_dir() -> Path | None:
     user's data directory so that each user is confined to their own
     ``data/<username>/`` subtree.
     """
-    from vtsearch.auth import DefaultLoginProvider, get_login_provider, get_user_data_dir
-
     provider = get_login_provider()
     if isinstance(provider, DefaultLoginProvider):
         return None  # single-user / no-auth: unrestricted file access

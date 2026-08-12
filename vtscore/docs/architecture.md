@@ -395,7 +395,12 @@ the library without the library knowing:
    `vtscore.state.current_user.get_current_user()` how to read the
    *request-scoped* user; `vtsearch/auth/` wires it to `flask.g.user` at
    import time. Below it sit the thread-local (`thread_user`) and the
-   `"default"` fallback, both Flask-free.
+   `"default"` fallback, both Flask-free. Its companion,
+   `vtscore.security.login.set_login_provider(provider)`, is not a hook so
+   much as a plain registry: it decides *where* that user's data lives and
+   therefore whether file access is confined at all (see
+   [`packages/security.md`](packages/security.md)). Only the providers that
+   read `flask.session` / request headers stay app-side in `vtsearch/auth/`.
 5. **Achievement recorders** -
    `vtscore.achievements_hooks.register_achievement_recorder(event, fn)`
    for the `vote` / `dataset_load` / `detector_import` / `find` events the
@@ -416,6 +421,6 @@ depth. Lazy function-level imports were how the rule kept breaking: the
 module still imported cleanly and the inverted dependency only bit at
 call time, in exactly the Flask-free deployment the tier exists for. A
 short allowlist there carries the remaining imports with their rationale
-(two optional `try`/`except`-guarded ones, plus `security/path_validation.py`,
-which still reaches for the `LoginProvider` abstraction); add a hook
-rather than a sixth category.
+(two optional `try`/`except`-guarded ones, both wrapped so the library
+still works when the app package is absent); add a hook rather than a
+sixth category.

@@ -369,22 +369,32 @@ that resolves an `Origin` back to a file pulled from your storage layer
 
 ## Authentication and per-user data
 
-`vtscore` is **single-tenant by design.** It does not know about users,
-ACLs, or per-user data directories. If your app is multi-user, the
-`vtsearch` companion app's `vtsearch.auth` package is one reference
-implementation:
+`vtscore` is **single-tenant by default**, not by design: out of the box
+every caller is `"default"` and nothing is confined. Multi-tenancy is
+opt-in, and two library-tier pieces carry it:
 
-- A `LoginProvider` ABC plus a `DefaultLoginProvider` (single-user,
-  no-op).
-- A `get_current_user()` accessor that reads the resolved user from
-  `flask.g`.
-- A `get_user_data_dir(user)` helper that returns
-  `data/<username>/...`.
+- `vtscore.state.current_user` - *which* user this work belongs to. A
+  pluggable request-user resolver (`register_request_user_resolver`) on
+  top of a thread-local (`thread_user`) on top of `"default"`.
+- `vtscore.security.login` - *how* an identity is established and *where*
+  its data lives. A `LoginProvider` ABC plus a `DefaultLoginProvider`
+  (single-user, no-op), a process-wide registry (`set_login_provider` /
+  `get_login_provider`), and `get_user_data_dir(user)`. Registering a
+  provider whose `get_user_data_dir()` returns `data/<username>/` is what
+  switches on file-access confinement for every server-file importer,
+  exporter, and media read - see
+  [packages/security.md](packages/security.md).
 
-To port this idea to your own app:
+The `vtsearch` companion app is a reference implementation: it registers a
+resolver reading `flask.g.user` and providers reading `flask.session` /
+the `Authorization` header. To port the idea to your own app:
 
 - Replace `flask.g` with your request-local store (a `ContextVar`,
-  request-scoped dependency injection, etc.).
+  request-scoped dependency injection, etc.) and install it via
+  `register_request_user_resolver`.
+- Subclass `LoginProvider`, override `get_user_data_dir()`, and register
+  it with `set_login_provider()`. Screen client-supplied usernames with
+  `is_safe_username()` - they become path components.
 - Build a per-user `CoreConfig` in your `register_core_config_builder`
   callback - point `data_dir` / `saved_datasets_dir` / `detectors_dir`
   at the per-user paths.
