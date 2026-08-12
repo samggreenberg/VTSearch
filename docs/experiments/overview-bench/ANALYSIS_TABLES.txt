@@ -1,0 +1,176 @@
+====================================================================================================
+COVERAGE
+====================================================================================================
+cell files found : 189 / 189 expected
+unreadable/empty : 7 [('task_0001.csv', 'empty'), ('task_0141.csv', 'empty'), ('task_0145.csv', 'empty'), ('task_0162.csv', 'empty'), ('task_0166.csv', 'empty')]
+rows loaded      : 26538
+distinct cells   : 182
+steps per cell   : min=71 median=147 max=149
+styles           : ['max_patch', 'whole_image']
+heads            : ['linear']
+
+====================================================================================================
+HEADLINE - deep regime (t >= 100), cost = fpr + fnr, regret vs oracle threshold
+====================================================================================================
+                                n_steps  prevalence    cost     fpr     fnr  regret  oracle_cost      AP   auroc
+arm
+caltech101_m x siglip2_l            918      0.0712  0.0013  0.0013  0.0000  0.0013       0.0000  1.0000  1.0000
+caltech101_m x siglip               918      0.0712  0.0039  0.0039  0.0000  0.0039       0.0000  1.0000  1.0000
+caltech101_m x dinov3_patch         918      0.0712  0.0047  0.0038  0.0009  0.0031       0.0016  0.9998  0.9999
+coco_val x dinov3_patch             969      0.0261  0.1524  0.0920  0.0604  0.0496       0.1029  0.7871  0.9757
+coco_val x siglip2_l                969      0.0261  0.2019  0.1154  0.0865  0.0618       0.1401  0.7108  0.9550
+coco_val x siglip                   969      0.0261  0.2177  0.0711  0.1466  0.0448       0.1729  0.6949  0.9424
+visual_genome_m x dinov3_patch     1224      0.0405  0.3242  0.1819  0.1423  0.1100       0.2142  0.5250  0.9134
+visual_genome_m x siglip2_l        1224      0.0405  0.3666  0.2438  0.1228  0.0960       0.2706  0.4574  0.8992
+visual_genome_m x siglip           1173      0.0417  0.3918  0.3006  0.0912  0.1113       0.2805  0.4281  0.8981
+
+====================================================================================================
+BANDED ON VOTES SPENT - the axis the user actually pays
+====================================================================================================
+                                  cost                          regret
+votes                             1-20 101-150   21-50  51-100    1-20 101-150   21-50  51-100
+arm
+caltech101_m x dinov3_patch     0.1857  0.0048  0.0326  0.0044  0.1756  0.0031  0.0292  0.0024
+caltech101_m x siglip           0.0879  0.0039  0.0025  0.0018  0.0844  0.0039  0.0025  0.0018
+caltech101_m x siglip2_l        0.1357  0.0013  0.0000  0.0006  0.1329  0.0013  0.0000  0.0006
+coco_val x dinov3_patch         0.3454  0.1524  0.2213  0.1908  0.1508  0.0497  0.0641  0.0707
+coco_val x siglip               0.5856  0.2176  0.3555  0.2556  0.1932  0.0449  0.1004  0.0531
+coco_val x siglip2_l            0.4795  0.2022  0.2663  0.2214  0.2061  0.0622  0.0747  0.0602
+visual_genome_m x dinov3_patch  0.4841  0.3242  0.3832  0.3448  0.1690  0.1101  0.1196  0.1154
+visual_genome_m x siglip        0.6718  0.3918  0.5032  0.4344  0.2059  0.1116  0.1350  0.1181
+visual_genome_m x siglip2_l     0.7130  0.3667  0.4745  0.4099  0.2068  0.0962  0.1228  0.1259
+
+====================================================================================================
+WHERE THE REGRET COMES FROM (rule inefficiency vs calibration shift)
+====================================================================================================
+rows with a decomposition: 25707 / 26538
+                                regret  rule_ineff  cal_shift  cal_share
+arm
+caltech101_m x dinov3_patch     0.0031     -0.0277     0.0308     9.8417
+caltech101_m x siglip           0.0039     -0.0687     0.0726    18.6812
+caltech101_m x siglip2_l        0.0013     -0.0985     0.0998    77.5744
+coco_val x dinov3_patch         0.0496     -0.0179     0.0675     1.3619
+coco_val x siglip               0.0448     -0.0163     0.0611     1.3644
+coco_val x siglip2_l            0.0618     -0.0040     0.0658     1.0652
+visual_genome_m x dinov3_patch  0.1119     -0.0041     0.1160     1.0366
+visual_genome_m x siglip        0.1113     -0.0220     0.1333     1.1974
+visual_genome_m x siglip2_l     0.0960     -0.0235     0.1195     1.2449
+
+====================================================================================================
+FAILURE MODES - how the threshold was chosen
+====================================================================================================
+threshold_provenance            conformal  too_few_default
+arm
+caltech101_m x dinov3_patch          98.3              1.7
+caltech101_m x siglip                99.1              0.9
+caltech101_m x siglip2_l             98.8              1.2
+coco_val x dinov3_patch              96.7              3.3
+coco_val x siglip                    98.1              1.9
+coco_val x siglip2_l                 98.3              1.7
+visual_genome_m x dinov3_patch       92.8              7.2
+visual_genome_m x siglip             94.4              5.6
+visual_genome_m x siglip2_l          97.1              2.9
+
+degenerate steps : 10 / 26538 (0.04%)
+cut_fallback     : 0 / 26538 (0.00%)
+deep steps with fpr==0 : 2116 / 9282 (22.80%)  [mean fnr there: 0.0000]
+
+====================================================================================================
+STARVATION - do runs actually find positives?
+====================================================================================================
+                                cells  median_good  zero_good  median_t  pct_zero_good
+arm
+caltech101_m x dinov3_patch        18          6.5          0     150.0            0.0
+caltech101_m x siglip              18          4.0          0     150.0            0.0
+caltech101_m x siglip2_l           18          5.0          0     150.0            0.0
+coco_val x dinov3_patch            19          9.0          0     150.0            0.0
+coco_val x siglip                  19         11.0          0     150.0            0.0
+coco_val x siglip2_l               19          8.0          0     150.0            0.0
+visual_genome_m x dinov3_patch     24          6.0          0     150.0            0.0
+visual_genome_m x siglip           23          7.0          0     150.0            0.0
+visual_genome_m x siglip2_l        24          6.5          0     150.0            0.0
+
+====================================================================================================
+COST OF A STEP (seconds)
+====================================================================================================
+                                  mean  median      max
+arm
+caltech101_m x dinov3_patch      46.78   46.15    95.08
+caltech101_m x siglip            45.31   44.18   109.99
+caltech101_m x siglip2_l         47.66   46.91    99.85
+coco_val x dinov3_patch         273.55  231.68  1121.38
+coco_val x siglip                53.10   51.94   116.15
+coco_val x siglip2_l             61.34   60.37   114.32
+visual_genome_m x dinov3_patch  248.61  214.04  1009.30
+visual_genome_m x siglip         54.23   53.15   108.82
+visual_genome_m x siglip2_l      57.61   56.33   111.46
+
+====================================================================================================
+INDIVIDUAL TRACES
+====================================================================================================
+
+--- visual_genome_m x dinov3_patch | category=bed seed=0 (prevalence=0.0203, style=max_patch) ---
+  t  n_good  n_bad   cost    fpr    fnr  regret  average_precision threshold_provenance  degenerate
+  2       1      1 1.0526 0.1208 0.9318  0.0539             0.0140      too_few_default           0
+ 14       3     11 0.1718 0.0809 0.0909  0.0487             0.7457            conformal           0
+ 26       3     23 0.1505 0.0141 0.1364  0.0466             0.7803            conformal           0
+ 38       3     35 0.1437 0.0073 0.1364  0.0346             0.7907            conformal           0
+ 50       3     47 0.1313 0.0404 0.0909  0.0424             0.7974            conformal           0
+ 62       3     59 0.1446 0.0083 0.1364  0.0490             0.8046            conformal           0
+ 74       3     71 0.1052 0.0370 0.0682  0.0196             0.8035            conformal           0
+ 86       3     83 0.1240 0.0331 0.0909  0.0487             0.8026            conformal           0
+ 98       3     95 0.1451 0.0088 0.1364  0.0627             0.8095            conformal           0
+110       3    107 0.1221 0.0312 0.0909  0.0411             0.8124            conformal           0
+122       3    119 0.1451 0.0088 0.1364  0.0651             0.8162            conformal           0
+134       4    130 0.0690 0.0463 0.0227  0.0317             0.8035            conformal           0
+146       4    142 0.0700 0.0472 0.0227  0.0326             0.8043            conformal           0
+
+--- visual_genome_m x siglip | category=bus seed=2 (prevalence=0.0324, style=whole_image) ---
+  t  n_good  n_bad   cost    fpr    fnr  regret  average_precision threshold_provenance  degenerate
+  2       1      1 0.4912 0.3912 0.1000  0.1161             0.3167      too_few_default           0
+ 14       4     10 0.5784 0.0641 0.5143  0.2570             0.2234            conformal           0
+ 26       5     21 0.4568 0.0853 0.3714  0.1462             0.2745            conformal           0
+ 38       6     32 0.2918 0.1061 0.1857  0.0168             0.3960            conformal           0
+ 50       6     44 0.2859 0.1001 0.1857  0.0310             0.3874            conformal           0
+ 62       6     56 0.2814 0.0957 0.1857  0.0261             0.4316            conformal           0
+ 74       6     68 0.3109 0.0681 0.2429  0.0650             0.4148            conformal           0
+ 86       7     79 0.3200 0.1914 0.1286  0.0612             0.4263            conformal           0
+ 98       7     91 0.2795 0.1223 0.1571  0.0158             0.4235            conformal           0
+110       7    103 0.2835 0.1406 0.1429  0.0247             0.4134            conformal           0
+122       7    115 0.2923 0.1495 0.1429  0.0370             0.4116            conformal           0
+134       7    127 0.3407 0.2264 0.1143  0.0656             0.4075            conformal           0
+146       7    139 0.3175 0.1603 0.1571  0.0375             0.4194            conformal           0
+
+--- caltech101_m x dinov3_patch | category=airplanes seed=0 (prevalence=0.2721, style=whole_image) ---
+  t  n_good  n_bad   cost    fpr    fnr  regret  average_precision threshold_provenance  degenerate
+  4       3      1 0.7503 0.7417 0.0085  0.5619             0.9158      too_few_default           0
+ 16       8      8 0.0668 0.0497 0.0171  0.0293             0.9918            conformal           0
+ 28       8     20 0.0204 0.0033 0.0171  0.0000             0.9975            conformal           0
+ 40       8     32 0.0370 0.0199 0.0171  0.0113             0.9970            conformal           0
+ 52       8     44 0.0218 0.0132 0.0085  0.0066             0.9994            conformal           0
+ 64      14     50 0.0488 0.0232 0.0256  0.0166             0.9934            conformal           0
+ 76      14     62 0.0455 0.0199 0.0256  0.0132             0.9942            conformal           0
+ 88      14     74 0.0323 0.0066 0.0256  0.0000             0.9930            conformal           0
+100      14     86 0.0389 0.0132 0.0256  0.0099             0.9947            conformal           0
+112      14     98 0.0317 0.0232 0.0085  0.0033             0.9956            conformal           0
+124      14    110 0.0284 0.0199 0.0085  0.0033             0.9972            conformal           0
+136      14    122 0.0350 0.0265 0.0085  0.0066             0.9970            conformal           0
+148      14    134 0.0317 0.0232 0.0085  0.0033             0.9966            conformal           0
+
+--- coco_val x siglip2_l | category=bed seed=1 (prevalence=0.0301, style=whole_image) ---
+  t  n_good  n_bad   cost    fpr    fnr  regret  average_precision threshold_provenance  degenerate
+  2       1      1 0.9531 0.9301 0.0230  0.3783             0.1316      too_few_default           0
+ 14       3     11 0.7331 0.6986 0.0345  0.4627             0.5811            conformal           0
+ 26       3     23 0.1526 0.0607 0.0920  0.0109             0.8068            conformal           0
+ 38       4     34 0.2136 0.1331 0.0805  0.0098             0.6250            conformal           0
+ 50       4     46 0.2116 0.0737 0.1379  0.0261             0.6579            conformal           0
+ 62       4     58 0.2506 0.1817 0.0690  0.0476             0.6500            conformal           0
+ 74       5     69 0.2176 0.1716 0.0460  0.0562             0.7306            conformal           0
+ 86       5     81 0.2392 0.2277 0.0115  0.0790             0.7314            conformal           0
+ 98       6     92 0.3210 0.2980 0.0230  0.1711             0.7596            conformal           0
+110       6    104 0.3617 0.3617 0.0000  0.2122             0.7306            conformal           0
+122       6    116 0.2989 0.2989 0.0000  0.1466             0.7258            conformal           0
+134       6    128 0.4023 0.4023 0.0000  0.2398             0.7079            conformal           0
+146       6    140 0.3788 0.3788 0.0000  0.2195             0.7196            conformal           0
+
+(tables also written to /expscratch/sgreenberg/bench-overview/results/ANALYSIS_TABLES.txt)
