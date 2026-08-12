@@ -192,7 +192,7 @@ def _band_categories(band: str) -> list[str]:
         if lo <= s["voted_area"] < hi
         and s["n_images"] >= pc.BAND_MIN_IMAGES
         and s["union_inflation"] <= pc.BAND_MAX_INFLATION
-        and name not in pc.NON_OBJECT_CATEGORIES
+        and pc.is_object_category(name)
     ]
     if not pool:
         raise SystemExit(f"no categories qualify for band {band!r}")

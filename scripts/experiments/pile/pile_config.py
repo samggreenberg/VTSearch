@@ -115,8 +115,23 @@ NON_OBJECT_CATEGORIES: frozenset[str] = frozenset(
     + """water snow sand dirt mud grass gravel concrete pavement asphalt sky smoke steam
     fog haze shade shadow shadows reflection glare sunlight ice foam liquid air weather
     ground floor flooring wall walls ceiling road roadway street sidewalk pathway path
-    field beach ocean sea lake river land terrain lawn grassy""".split()
+    field beach ocean sea lake river land terrain lawn grassy lot traffic""".split()
 )
+
+
+def is_object_category(name: str) -> bool:
+    """False for VG names that are not concrete countable objects.
+
+    Matches on the **head noun** (the last token), not the whole string, because
+    VG's vocabulary is full of modified compounds. Whole-string matching lets
+    ``blue sky`` and ``table top`` through while head-noun matching drops them;
+    matching *any* token would wrongly drop ``blue jeans``, ``tennis ball`` and
+    ``left eye``, whose heads are perfectly good objects.
+    """
+    tokens = name.replace("-", " ").split()
+    if not tokens:
+        return False
+    return tokens[-1] not in NON_OBJECT_CATEGORIES and name not in NON_OBJECT_CATEGORIES
 
 #: Embedders in the pile. ``patch`` embedders attach ``patch_grid`` and are the
 #: only ones that can carry a region-voting arm.
