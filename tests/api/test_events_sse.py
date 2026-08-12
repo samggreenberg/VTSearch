@@ -413,6 +413,69 @@ class TestEventsRoute:
         finally:
             dataset_progress.update("idle", "", 0, 0)
 
+    def test_heartbeat_reemits_tracker_channels(self):
+        """A client whose bounded queue overflowed can lose a tracker
+        channel's single terminal frame, which would leave its progress bar
+        stuck at the last percentage until some later operation happened to
+        fire that channel again. The heartbeat re-emits every tracker
+        snapshot, so the client self-heals within one heartbeat (#2960)."""
+        # max_queue=1 makes the overflow deterministic: the first update
+        # fills the queue, the terminal one is dropped just as it would be
+        # for a stalled client behind a burst of per-item frames.
+        gen = stream_progress_events(heartbeat_seconds=0.01, max_queue=1)
+        try:
+            assert next(gen).startswith(": connected")
+            for _ in initial_snapshot():
+                next(gen)
+
+            sort_progress.update("running", "Scoring", 97, 100)
+            sort_progress.update("idle", "Done", 100, 100)  # dropped: queue full
+
+            # The only queued frame is the stale `running` one.
+            frame = next(gen)
+            assert frame.startswith("event: sort\n")
+            payload = json.loads([ln for ln in frame.splitlines() if ln.startswith("data: ")][0].removeprefix("data: "))
+            assert payload["status"] == "running"
+
+            # The heartbeat repairs it without any further tracker update.
+            repaired = None
+            deadline = time.monotonic() + 2.0
+            while repaired is None and time.monotonic() < deadline:
+                chunk = next(gen)
+                if chunk.startswith("event: sort\n"):
+                    repaired = json.loads(
+                        [ln for ln in chunk.splitlines() if ln.startswith("data: ")][0].removeprefix("data: ")
+                    )
+            assert repaired is not None, "no re-emitted sort frame arrived"
+            assert repaired["status"] == "idle"
+            assert repaired["current"] == 100
+        finally:
+            gen.close()
+            sort_progress.update("idle", "", 0, 0)
+
+    def test_heartbeat_reemits_every_tracker_channel(self):
+        """The re-emit covers all of ``_TRACKER_CHANNELS``, not just the one
+        that happened to move last."""
+        gen = stream_progress_events(heartbeat_seconds=0.01)
+        try:
+            assert next(gen).startswith(": connected")
+            for _ in initial_snapshot():
+                next(gen)
+
+            seen: set[str] = set()
+            expected = set(_TRACKER_CHANNELS) | set(_TASK_CHANNELS)
+            saw_heartbeat = False
+            deadline = time.monotonic() + 2.0
+            while seen != expected and time.monotonic() < deadline:
+                chunk = next(gen)
+                if chunk.startswith("event: heartbeat\n"):
+                    saw_heartbeat = True
+                elif saw_heartbeat and chunk.startswith("event: "):
+                    seen.add(chunk.split("\n", 1)[0].removeprefix("event: "))
+            assert seen == expected
+        finally:
+            gen.close()
+
     def test_initial_loading_tasks_snapshot(self):
         loading_tasks.create_task("evt_test", name="Evt DS")
         try:

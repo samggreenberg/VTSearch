@@ -14,6 +14,7 @@ import os
 import re
 import uuid
 from pathlib import Path
+from typing import Any
 
 from vtscore.config import DATA_DIR
 
@@ -93,3 +94,63 @@ def _write_detector(path: Path, data: dict) -> None:
         with contextlib.suppress(FileNotFoundError):
             os.unlink(tmp)
         raise
+
+
+def save_detector(
+    name: str,
+    labelset: Any,
+    *,
+    media_type: str = "",
+    embedder_type: str = "",
+    extra: dict | None = None,
+) -> Path:
+    """Write *labelset* to ``<detectors_dir>/<slug>.json`` and return the path.
+
+    The library-facing entry point for detector persistence: a caller that
+    has built a :class:`~vtscore.datasets.labelset.LabelSet` (from votes, from
+    an external label store, from its own pipeline) hands it here and gets a
+    file the app, the CLI, and :func:`load_detector` all read.
+
+    Only origins and labels are written — never embeddings and never model
+    weights (see the "No Persisted Vectors or MLPs" invariant).  An existing
+    file for the same slug is replaced wholesale; use :func:`load_detector`
+    plus ``LabelSet.merge`` first when you mean to add to one.
+
+    Args:
+        name: Human-readable detector name.  Slugified for the filename.
+        labelset: The :class:`~vtscore.datasets.labelset.LabelSet` to persist.
+        media_type: Media type the detector scores (``"audio"``, ``"image"``, …).
+        embedder_type: Locked embedder type (``"semantic"`` /
+            ``"patch_semantic"`` / ``"structural"``); ``""`` leaves the
+            detector typeless, resolved from its labels on load.
+        extra: Additional top-level keys to merge into the file (e.g.
+            ``{"text_query": "dog barking"}``).  Never overrides the keys
+            above.
+
+    Returns:
+        The path written.
+    """
+    data: dict = dict(extra or {})
+    data.update(
+        {
+            "name": name,
+            "media_type": media_type,
+            "labelset": labelset.to_dict(),
+        }
+    )
+    if embedder_type:
+        data["embedder_type"] = embedder_type
+    path = _detector_path(name)
+    _write_detector(path, data)
+    return path
+
+
+def load_detector(name: str) -> dict | None:
+    """Return the parsed detector JSON for *name*, or ``None`` if absent.
+
+    The counterpart of :func:`save_detector`.  Rebuild the labelset with
+    ``LabelSet.from_dict(data["labelset"])``; the head itself is not stored
+    and is re-derived from the labelset's origins (see
+    :func:`vtscore.detectors.training.train_detector_from_origins`).
+    """
+    return _read_detector(_detector_path(name))

@@ -14,7 +14,9 @@ Auto-Find and output the items each model predicts as "Good."
 
 Models are specified via a **settings file** (`--settings`) whose
 `autofind_detectors` list names registered models.  Each name
-maps to `data/detectors/<name>.json`; the CLI re-resolves the
+maps to a JSON file under `data/detectors/` named after a **slug** of the
+detector name, not the name itself (see [Detector file
+names](#detector-file-names) below); the CLI re-resolves the
 labelset's origins, embeds them with the dataset's embedder, trains an
 head, and applies it to the dataset.  See below for the exact format.
 
@@ -58,7 +60,7 @@ python app.py --autodetect --importer http_archive --url https://example.com/dat
 python app.py --autodetect --importer http_archive --url /data/sounds.tar.gz --media-type audio --settings settings.json
 ```
 
-Use `python app.py --list-importers` to see all available importers. The full set includes: `server_folder`, `server_files`, `local_folder`, `local_files`, `pickle`, `http_archive`, `combine_datasets`, `demo`, `synthetic`. Each importer adds its own flags; run `python app.py --autodetect --importer <name> --help` to see them.
+Use `python app.py --list-importers` to see all available importers. The full set includes: `server_folder`, `server_files`, `local_folder`, `local_files`, `pickle`, `http_archive`, `combine_datasets`, `demo`, `synthetic`. Each importer adds its own flags; run `python app.py --autodetect --importer <name> --help` to see them. `--help` resolves the named plugin first, so its flags are listed at the end of the usual help output (the same works for `--exporter <name> --help`).
 
 **Chunked loading**: for large datasets, use `--chunk-size N` to process in batches to limit memory:
 
@@ -155,7 +157,7 @@ with no `input_spec.clipper` scores whole media.
 **How to get the files:**
 
 - **Dataset file**: Export from the web UI via the dataset menu ("Export dataset"), or use a cached `.pkl` file from the `data/embeddings/` directory after loading a demo dataset.
-- **Settings file**: A JSON file listing the detector names that should run during `--autodetect`. Each name maps to a JSON labelset under `data/detectors/<name>.json`; the CLI re-resolves the labelset's origins, embeds them with the dataset's embedder, trains a fresh head, and scores the dataset.
+- **Settings file**: A JSON file listing the detector names that should run during `--autodetect`. Each name maps to a JSON labelset under `data/detectors/` (see [Detector file names](#detector-file-names) below); the CLI re-resolves the labelset's origins, embeds them with the dataset's embedder, trains a fresh head, and scores the dataset.
 
 ```json
 {
@@ -165,6 +167,23 @@ with no `input_spec.clipper` scores whole media.
 ```
 
 - **Detector file**: Created from the dashboard by labeling items in the right pane. The file stores origin info plus labels (no weights); the head is rebuilt from origins at scoring time.
+
+#### Detector file names
+
+Everything that names a detector — `autofind_detectors`, `--import-labels-into`,
+the pipeline file's `detectors:` list — uses the **human-readable name**, exactly
+as it appears in the UI (`Dog Barks`). The *filename* is a slug derived from that
+name, so the two don't match literally: the name is lowercased and every run of
+characters outside `[a-z0-9_-]` collapses to a single `_`, with leading and
+trailing `_` stripped. So `Dog Barks` lives at `data/detectors/dog_barks.json`,
+and `Bird calls (v2)` at `data/detectors/bird_calls_v2.json`. A name that slugs
+to nothing falls back to `detector.json`, and a name long enough to overrun the
+filesystem's limit is truncated with a short content hash appended so two long
+names sharing a prefix can't collide.
+
+Don't hand-construct these paths when you can avoid it: `--dry-run` (below)
+prints the resolved file for every detector it would run, which is the reliable
+way to check that a name in your settings file points where you think it does.
 
 **Example output:**
 
@@ -208,8 +227,8 @@ Source:
 
 Settings: settings.json
 Auto-Find detectors (2):
-  - Dog Barks  [media_type=audio, labels=12, file=data/detectors/Dog Barks.json]
-  - Cat Meows  [media_type=audio, labels=8, file=data/detectors/Cat Meows.json]
+  - Dog Barks  [media_type=audio, labels=12, file=data/detectors/dog_barks.json]
+  - Cat Meows  [media_type=audio, labels=8, file=data/detectors/cat_meows.json]
 
 Exporter: server_json_file
   filepath: out.json
@@ -226,6 +245,43 @@ typos in a cron-style invocation fail immediately instead of after a
 multi-minute embedding pass. `--import-labels-into ... --label-importer-file ...`
 is announced as part of the plan but skipped (no detector JSON is
 modified).
+
+### Importing labels into a detector
+
+`--import-labels-into` merges an external label file into a detector's labelset
+*before* the run trains and scores, so a batch of labels produced elsewhere
+(another VTSearch instance, an annotation tool, a script) can be folded in
+headlessly. Three flags work together:
+
+| Flag | Meaning |
+|------|---------|
+| `--import-labels-into NAME` | Detector to merge into, by its human-readable name (see [Detector file names](#detector-file-names)). |
+| `--label-importer-file PATH` | The label file to read. Required whenever `--import-labels-into` is given. |
+| `--label-importer NAME` | Which label importer parses the file. Defaults to `server_json_file`; `python app.py --list-label-importers` shows the rest. |
+
+```bash
+# Merge new labels, then run Auto-Find with the enlarged labelset.
+python app.py --autodetect --dataset data.pkl --settings settings.json \
+    --import-labels-into "Dog Barks" --label-importer-file new_labels.json
+
+# Same, from a CSV.
+python app.py --autodetect --dataset data.pkl --settings settings.json \
+    --import-labels-into "Dog Barks" \
+    --label-importer server_csv_file --label-importer-file new_labels.csv
+```
+
+The two server-side importers expect labels keyed by media MD5:
+`server_json_file` reads `{"labels": [{"md5": "...", "label": "good"}, ...]}`,
+and `server_csv_file` reads a header row of `md5,label`. Only `good` and `bad`
+labels are accepted; entries with any other label, and `(md5, label)` pairs the
+detector already holds, are skipped and reported in the count.
+
+The import is a **one-shot mutation of the detector JSON on disk**: the merged
+labelset persists after the run, which is why it happens before scoring rather
+than only for the run's duration. It is part of the `--autodetect` flow (or the
+pipeline file's `import_labels:` block) — there is no standalone import mode.
+Under `--dry-run` the import is announced but not performed, so no detector JSON
+is touched.
 
 ### Progress output format
 
@@ -303,7 +359,7 @@ keep_negatives: false
 # before scoring (same as --import-labels-into / --label-importer /
 # --label-importer-file).
 import_labels:
-  detector: dog-barks
+  detector: Dog Barks             # the detector's name, not its filename slug
   importer: server_json_file       # default: server_json_file
   file: new_labels.json
 

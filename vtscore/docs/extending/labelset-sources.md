@@ -150,7 +150,7 @@ When a source's `load()` runs, every label it applies would normally
 fire `sync_to_labelset_source()` and push the same labels back to the
 source - an infinite loop. The framework prevents this with a
 module-level `_syncing` flag in
-[`vtscore/labels/sync.py:41`](../../labels/sync.py), coordinated by a
+[`vtscore/labels/sync.py`](../../labels/sync.py), coordinated by a
 re-entrant `_sync_lock`. The flag is set for the duration of a
 `sync_from_labelset_source()` import pass, and
 `sync_to_labelset_source()` checks it (both at scheduling time and at

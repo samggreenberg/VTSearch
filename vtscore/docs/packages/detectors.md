@@ -15,21 +15,50 @@ origins into vectors live in `vtscore.embedding`.
 
 ## Contents
 
+Every module in the package, grouped by what it is for.
+
+**Storage and identity**
+
 | Module                                       | Concern                                                             |
 |----------------------------------------------|---------------------------------------------------------------------|
 | `vtscore/detectors/registry.py`              | Persistent registry of detector entries (one JSON manifest)         |
-| `vtscore/detectors/store.py`                 | Per-detector on-disk JSON labelset file I/O                         |
+| `vtscore/detectors/store.py`                 | Low-level per-detector JSON file I/O                                |
+| `vtscore/detectors/embedder_type.py`         | Resolve and validate a detector's immutable embedder *type*         |
+| `vtscore/detectors/input_spec.py`            | Clipper input-spec extraction and matching                          |
+
+**Training and scoring**
+
+| Module                                       | Concern                                                             |
+|----------------------------------------------|---------------------------------------------------------------------|
 | `vtscore/detectors/training.py`              | `train_and_threshold`, `train_and_score`, `train_detector_from_origins` |
-| `vtscore/detectors/workflow.py`              | `apply_and_retrain` - combined "apply labels + retrain" entry        |
+| `vtscore/detectors/labelset_training.py`     | Train and score from the saved labelset (cross-dataset)             |
+| `vtscore/detectors/learned_sort.py`          | Learned-sort orchestration: resolve labelset → train → score → reconcile |
+| `vtscore/detectors/model_loading.py`         | Resolve a detector's scoring model, training it on demand           |
+| `vtscore/detectors/workflow.py`              | `apply_and_retrain` - combined "apply labels + retrain" entry       |
+| `vtscore/detectors/labeling_progress.py`     | Per-step model cache + stopping-condition metrics                   |
+| `vtscore/detectors/evidence_coverage.py`     | Labelset-kNN evidence coverage - decision support without an atlas  |
+
+**Labels: resolving, syncing, restoring**
+
+| Module                                       | Concern                                                             |
+|----------------------------------------------|---------------------------------------------------------------------|
 | `vtscore/detectors/resolver.py`              | Origin → file → embedding pipeline + pluggable resolvers            |
-| `vtscore/detectors/labelset_training.py`     | Train from the saved labelset (cross-dataset)                       |
 | `vtscore/detectors/labelset_elements.py`     | Stable element IDs, per-element views                               |
+| `vtscore/detectors/labelset_ops.py`          | Single entry point onto the detector-labelset operations surface    |
+| `vtscore/detectors/labelset_rename.py`       | Move / rewrite labelset source files when a detector is renamed     |
 | `vtscore/detectors/label_sync.py`            | Sync current votes back into the on-disk labelset                   |
 | `vtscore/detectors/label_restoration.py`     | Restore saved labels into the active dataset                        |
 | `vtscore/detectors/dataset_sync.py`          | Rehydrate cid-keyed vote state on dataset switch                    |
-| `vtscore/detectors/media_seeding.py`         | Seed votes from a detector's example media files                    |
-| `vtscore/detectors/labeling_progress.py`     | Per-step model cache + stopping-condition metrics                   |
-| `vtscore/detectors/input_spec.py`            | Clipper input-spec extraction and matching                          |
+| `vtscore/detectors/embedder_sync.py`         | Re-embed a loaded detector's labels when the dataset's space changes |
+| `vtscore/detectors/media_seeding.py`         | Seed good votes from a detector's example media files               |
+
+**Consumers of a trained detector**
+
+| Module                                       | Concern                                                             |
+|----------------------------------------------|---------------------------------------------------------------------|
+| `vtscore/detectors/converter_routing.py`     | Route media through converters for CLI autodetect scoring           |
+| `vtscore/detectors/portable_bundle.py`       | Build a standalone, portable detector bundle for transfer           |
+| `vtscore/detectors/positives_browse.py`      | Ephemeral browse context over a detector's positive labels          |
 
 The package `__init__.py` is intentionally minimal - every public name
 is imported from the submodule it lives in.
@@ -104,24 +133,56 @@ CRUD: `list_detectors`, `get_detector`, `register_detector`,
 ### Find mode
 
 When the user runs Find on a detector against a different dataset
-(`is_find_mode() == True`), the global vote dicts contain scoring hits,
-not real training labels. `vtscore/detectors/label_sync.py` checks
-`is_find_mode()` and silently skips the labelset write so the
-detector's saved training data is not overwritten.
+(`is_find_mode() == True`), that detector's vote dicts contain scoring
+hits, not real training labels. `vtscore/detectors/label_sync.py` checks
+`is_find_mode()` and silently skips the labelset write so the detector's
+saved training data is not overwritten.
+
+Despite living in `registry.py`, the flag is **per-detector state**
+(`DetectorContext.find_mode`), not a process global: `is_find_mode()` /
+`set_find_mode()` read and write the active detector context. A scoring
+pass on one detector must never block vote syncing on another, and
+switching detectors must not inherit the previous one's find state.
+`set_find_mode` is a no-op when no real detector is active - the empty
+and request-missing sentinel contexts have no labelset to protect.
 
 ---
 
 ## Store
 
-`vtscore/detectors/store.py` is the low-level file I/O layer.
+`vtscore/detectors/store.py` is the on-disk detector layer.
 `get_detectors_dir()` reads `CoreConfig.from_settings().detectors_dir`
 (Phase 2 seam - library callers will pass a `CoreConfig` directly after
-Phase 8). `_detector_path(name)` slugifies via
-`re.sub(r"[^a-z0-9_-]+", "_", name.lower())` and appends `.json`.
+Phase 8).
+
+The public pair is `save_detector` / `load_detector`:
+
+```python
+from vtscore.datasets.labelset import LabelSet
+from vtscore.detectors.store import load_detector, save_detector
+
+path = save_detector("dog barks", labelset, media_type="audio")
+# → <detectors_dir>/dog_barks.json
+
+data = load_detector("dog barks")          # parsed dict, or None if absent
+labelset = LabelSet.from_dict(data["labelset"])
+```
+
+`save_detector` writes `{"name", "media_type", "labelset"}` (plus
+`embedder_type` when given, plus anything passed as `extra=`), replacing any
+existing file for the same slug - merge first if you mean to add. It writes
+the file and nothing else: a detector that should appear in the app's
+dashboard also needs a `vtscore.detectors.registry.register_detector(...)`
+entry, and deleting one means removing both.
+
+Underneath, `_detector_path(name)` slugifies via
+`re.sub(r"[^a-z0-9_-]+", "_", name.lower())` (truncating past 190 chars with
+a content hash appended so long names can't collide) and appends `.json`.
 `_read_detector(path)` returns the parsed dict or `None`.
-`_write_detector(path, data)` writes atomically via tempfile +
-`os.fsync` + `os.replace`. The leading underscores are historical;
-every other module in the package calls these names.
+`_write_detector(path, data)` writes atomically via a per-writer tempfile +
+`os.fsync` + `os.replace`. The leading underscores are historical; every
+other module in the package calls these path-level names directly, because
+they already hold a path and a fully-composed dict.
 
 ---
 
@@ -133,7 +194,7 @@ contexts.
 
 ### `train_and_threshold(X_list, y_list, snap=None)`
 
-`vtscore/detectors/training.py:37`. The canonical pipeline used by
+`vtscore/detectors/training.py`. The canonical pipeline used by
 every detector route:
 
 1. Cross-calibration threshold via
@@ -152,7 +213,7 @@ Library consumers running outside an app should pass these via
 
 ### `train_and_score(...)`
 
-`vtscore/detectors/training.py:273`. Vote-aware online trainer. Takes
+`vtscore/detectors/training.py`. Vote-aware online trainer. Takes
 the current `clips_dict`, `good_votes` / `bad_votes`, threshold-
 related settings, and an optional `vote_region_boxes` map and returns
 `(results, threshold, model)`:
@@ -335,12 +396,12 @@ dataset A can score dataset B.
 
 ### `populate_label_embeddings(det_ctx, labelset, *, media_type, snap, on_progress=None)`
 
-`vtscore/detectors/labelset_training.py:127`. For each element in the
+`vtscore/detectors/labelset_training.py`. For each element in the
 labelset, ensure `det_ctx.label_embeddings[stable_element_id(elem)]` is
 populated:
 
 1. If the element resolves to a cid in the active `snap`, reuse
-   `snap[cid]["embedding"]` (zero I/O). Region-voted elements re-pool
+   `media_embedding(snap[cid])` (zero I/O). Region-voted elements re-pool
    from the source `patch_grid` every pass - the cache is keyed by
    stable element id (origin/md5), intentionally stable across region
    edits.
@@ -355,13 +416,13 @@ two embedders into one head produces garbage.
 
 ### `build_xy_from_labelset(det_ctx, labelset)`
 
-`vtscore/detectors/labelset_training.py:185`. Walk the labelset
+`vtscore/detectors/labelset_training.py`. Walk the labelset
 elements (filtering to `good` / `bad`), look up each cached embedding,
 and return `(X_list, y_list)`.
 
 ### `train_from_labelset(det_ctx, labelset, *, media_type, snap, on_progress=None)`
 
-`vtscore/detectors/labelset_training.py:207`. Populate the cache,
+`vtscore/detectors/labelset_training.py`. Populate the cache,
 build `(X, y)`, run `train_and_threshold`, store the result on
 `det_ctx.model` / `det_ctx.threshold`. Returns `True` on success,
 `False` when fewer than 2 cached vectors exist or one class is
@@ -369,7 +430,7 @@ missing.
 
 ### `labelset_train_and_score(det_ctx, labelset, *, media_type, clips_dict, ...)`
 
-`vtscore/detectors/labelset_training.py:241`. Like `train_and_score`
+`vtscore/detectors/labelset_training.py`. Like `train_and_score`
 but trains on the full labelset (cross-dataset labels) and scores only
 the active `clips_dict`. Returns the same `(results, threshold, model)`
 tuple.
@@ -476,7 +537,8 @@ state: `_cache_inclusion` (rebuild trigger), `_cached_steps` (one entry
 per label-history step with `model` / `threshold` / `good_ids` /
 `bad_ids` / `stability` / `diversity`), `_cache_good_ids` /
 `_cache_bad_ids` (running label sets), `_cache_prev_predictions`
-(stability baseline), `_cache_diversity_tree`, and `_live_models`
+(stability baseline), `_cache_coverage_atlas` (the per-step replay of
+coverage evidence), the monitored-pool tensors, and `_live_models`
 (models injected by `train_and_score` during sorting, keyed by
 `(frozenset(good), frozenset(bad))`).
 
@@ -490,9 +552,10 @@ per label-history step with `model` / `threshold` / `good_ids` /
 | `recreate_model_at_time(snap, history, t, inclusion)` | Return the model + threshold + good/bad ids for step `t`           |
 | `calculate_error_cost_over_time(...)`           | Per-step FPR/FNR-weighted cost on current votes                        |
 | `calculate_prediction_stability_over_time(...)` | Per-step flip-count on unlabeled medias                                |
-| `calculate_diversity_level_over_time(...)`      | Per-step diversity-tree coverage                                       |
-| `compute_labeling_status(...)`                  | Aggregate red / yellow / green status for the Smart / Stable / Span indicators |
+| `calculate_diversity_level_over_time(...)`      | Per-step coverage-atlas coverage                                        |
+| `compute_labeling_status(..., span_info=None)`  | Aggregate red / yellow / green status for the Smart / Stable / Span indicators |
 | `analyze_labeling_progress(...)`                | Run the three "over-time" functions and bundle the result              |
+| `cached_indicator_history(metric, ...)`         | Read one metric's history **without** advancing the cache; returns `(history, complete)` |
 
 ### Smart / Stable / Span statuses
 
@@ -504,9 +567,18 @@ per label-history step with `model` / `threshold` / `good_ids` /
 - **Stable** - fraction of unlabeled predictions that flipped between
   successive steps; green when the recent 10-step average is below
   0.5% and no single step exceeded 1%.
-- **Span** - diversity-tree coverage; green at
+- **Span** - coverage-atlas coverage: the number of consecutive
+  evidence-bearing nodes in BFS order. Green at
   `CoreConfig.from_settings().autopilot_goal_diversity` nodes (default
-  40), yellow at 10, red below.
+  40, capped at the atlas's total node count), yellow at 10, red below.
+  Computed from the `span_info` the route passes in rather than from the
+  per-step model cache, so it stays cheap.
+
+`compute_labeling_status` advances the per-step cache, which can retrain
+heads and run a forward pass over every unlabeled media - it is the
+heavy path. `cached_indicator_history` is the cheap read: it returns
+`complete=False` with an empty history rather than doing that work, and
+the caller falls back to the async `/api/eval/train-and-score` job.
 
 Each color comes with a `reason` string the UI displays as a tooltip.
 

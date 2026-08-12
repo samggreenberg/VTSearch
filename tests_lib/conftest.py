@@ -46,7 +46,16 @@ def pytest_collection_modifyitems(items, config):
             item.add_marker(getattr(pytest.mark, parent))
 
 
-config.TRAIN_EPOCHS = 30
+#: Training epochs for the whole test session (production default is 200; 30 is
+#: enough for the tiny heads to converge on the small test fixtures).  Named
+#: rather than inlined because it is re-asserted per test in ``reset_contexts``
+#: below - ``tests_lib/core/test_torch_config.py`` reloads ``vtscore.config``,
+#: which resets every module-level constant to its import-time value, and a
+#: leaked 200 silently retrains every later detector fixture against a different
+#: budget (issue #3101).
+TEST_TRAIN_EPOCHS = 30
+
+config.TRAIN_EPOCHS = TEST_TRAIN_EPOCHS
 
 
 # ---------------------------------------------------------------------------
@@ -339,10 +348,16 @@ def reset_contexts(tmp_path, monkeypatch):
     _reset_model_reg()
 
     # ``test_torch_config.py`` reloads ``vtscore.config`` to test env-var
-    # behaviour, which wipes the module-level builder installed at import
-    # time.  Re-register defensively so any later test that calls
-    # ``CoreConfig.from_settings()`` still has a backing implementation.
+    # behaviour, which wipes *every* module-level value this conftest installed
+    # at import time.  That file restores its own snapshot now (issue #3101),
+    # but re-assert the two that matter defensively, so any future reload - or
+    # any test that writes to ``vtscore.config`` and forgets to restore - cannot
+    # silently change what the rest of the session runs against: a missing
+    # builder makes ``CoreConfig.from_settings()`` raise, and a leaked training
+    # budget retrains every later detector fixture on a different number of
+    # epochs (which is how #3101 turned a seeded fixture order-dependent).
     config.register_core_config_builder(_lib_default_core_config)
+    config.TRAIN_EPOCHS = TEST_TRAIN_EPOCHS
 
 
 @pytest.hookimpl(trylast=True)

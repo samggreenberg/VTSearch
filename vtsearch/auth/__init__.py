@@ -1,22 +1,46 @@
-"""Authentication and user management for VTSearch.
+"""Authentication and user management for VTSearch - the Flask half.
 
-Provides a pluggable login-provider abstraction so VTSearch can run in
-single-user mode (DefaultLoginProvider) or multi-user mode (e.g.
-UserPassLoginProvider, PKILoginProvider) without changing route code.
+VTSearch runs in single-user mode (:class:`DefaultLoginProvider`) or
+multi-user mode (:class:`TrivialLoginProvider`,
+:class:`ApiKeyLoginProvider`, or your own subclass) without changing
+route code.  Routes call :func:`get_current_user` to learn who is making
+the request; the active provider is set once at startup via
+:func:`set_login_provider`.
 
-Routes call :func:`get_current_user` to learn who is making the request.
-The active provider is set once at startup via :func:`set_login_provider`.
+The abstraction itself is **library-tier**: the :class:`LoginProvider`
+ABC, the single-user default, the process-wide registry,
+:func:`is_safe_username` and :func:`get_user_data_dir` all live in
+:mod:`vtscore.security.login`, because
+:mod:`vtscore.security.path_validation` consults them on every server-file
+path check and must work in a process with no Flask in it (see
+``../../vtscore/docs/architecture.md``).  This module re-exports them
+verbatim - so ``from vtsearch.auth import LoginProvider`` keeps working
+and there is exactly one active provider per process - and adds only the
+parts that genuinely need the web framework:
+
+* :class:`TrivialLoginProvider` / :class:`ApiKeyLoginProvider`, which read
+  ``flask.session`` and the request headers;
+* the request-user resolver that reads ``g.user``.
+
+The same split already backs the current-user thread-local, whose
+mechanics live in :mod:`vtscore.state.current_user`.
 """
 
 from __future__ import annotations
 
 import logging
-import re
 import threading
-from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+from vtscore.security.login import (
+    DefaultLoginProvider as DefaultLoginProvider,
+    LoginProvider as LoginProvider,
+    get_login_provider as get_login_provider,
+    get_user_data_dir as get_user_data_dir,
+    is_safe_username as is_safe_username,
+    set_login_provider as set_login_provider,
+)
 from vtscore.state.current_user import (
     get_current_user as get_current_user,
     get_thread_user as get_thread_user,
@@ -26,154 +50,6 @@ from vtscore.state.current_user import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# LoginProvider ABC
-# ---------------------------------------------------------------------------
-
-
-class LoginProvider(ABC):
-    """Abstract base for authentication providers.
-
-    Subclasses must implement :meth:`get_user` and :meth:`is_authenticated`.
-    The default implementations of the other methods are suitable for
-    single-user deployments; multi-user providers should override them.
-    """
-
-    #: Short identifier for this provider (e.g. ``"default"``, ``"userpass"``).
-    name: str = ""
-
-    @abstractmethod
-    def get_user(self, request: Any) -> str:
-        """Return the username for the current request.
-
-        Args:
-            request: The Flask request object.
-
-        Returns:
-            A non-empty string identifying the user.
-        """
-
-    @abstractmethod
-    def is_authenticated(self, request: Any) -> bool:
-        """Return ``True`` if the request carries valid credentials.
-
-        For providers that don't require authentication (e.g.
-        :class:`DefaultLoginProvider`) this should always return ``True``.
-        """
-
-    def login_required(self) -> bool:
-        """Whether the frontend should show a login screen at startup."""
-        return False
-
-    def enforce_auth(self) -> bool:
-        """Whether the server rejects unauthenticated ``/api/*`` requests.
-
-        When ``True``, the ``_enforce_auth`` before_request hook (see
-        ``vtsearch.hooks``) aborts with 401 whenever
-        :meth:`is_authenticated` is ``False``, except for the small
-        allowlist of auth endpoints the SPA needs to reach the login
-        screen. Defaults to ``True`` so a custom provider that implements
-        real credentials is gated by construction — forgetting to override
-        this must fail closed, not silently serve every request as
-        ``"anonymous"``. Providers for which anonymous access is a
-        legitimate mode (``TrivialLoginProvider``) override this to
-        ``False``; ``DefaultLoginProvider`` is unaffected either way since
-        it authenticates every request.
-        """
-        return True
-
-    def www_authenticate(self) -> str | None:
-        """Challenge value for the ``WWW-Authenticate`` header on 401s.
-
-        Return the auth scheme clients should use (e.g. ``"Bearer"``), or
-        ``None`` to omit the header (cookie/session providers).
-        """
-        return None
-
-    def get_user_data_dir(self, username: str, base_data_dir: Path) -> Path:
-        """Return the data directory for *username*.
-
-        The default implementation returns *base_data_dir* unchanged, which
-        is correct for single-user deployments.  Multi-user providers should
-        return ``base_data_dir / username`` (or similar) so each user's
-        datasets, detectors, and settings are stored separately.
-        """
-        return base_data_dir
-
-    def status_dict(self, request: Any) -> dict[str, Any]:
-        """Return a JSON-serialisable dict describing the auth state.
-
-        Used by the ``/api/auth/status`` endpoint.
-        """
-        return {
-            "provider": self.name,
-            "user": self.get_user(request),
-            "authenticated": self.is_authenticated(request),
-            "login_required": self.login_required(),
-        }
-
-
-# ---------------------------------------------------------------------------
-# DefaultLoginProvider - single-user, no authentication
-# ---------------------------------------------------------------------------
-
-
-class DefaultLoginProvider(LoginProvider):
-    """No-op provider for single-user deployments.
-
-    Every request is treated as coming from the ``"default"`` user.
-    No login screen is shown, and the data directory is used as-is
-    (no per-user subdirectory).
-    """
-
-    name = "default"
-
-    def get_user(self, request: Any) -> str:  # noqa: ARG002
-        return "default"
-
-    def is_authenticated(self, request: Any) -> bool:  # noqa: ARG002
-        return True
-
-    def login_required(self) -> bool:
-        return False
-
-    def get_user_data_dir(self, username: str, base_data_dir: Path) -> Path:  # noqa: ARG002
-        # Single-user: no subdirectory, use data/ directly.
-        return base_data_dir
-
-
-# ---------------------------------------------------------------------------
-# Username validation
-# ---------------------------------------------------------------------------
-
-
-# Usernames are used as data-directory names (data/<user>/...) so they must
-# not contain path separators or traversal segments.  Note that the character
-# class alone is not sufficient: it admits "." and "..", which *are* traversal
-# segments, so :func:`is_safe_username` rejects those explicitly.
-_VALID_USERNAME = re.compile(r"^[A-Za-z0-9._-]+$")
-
-
-def is_safe_username(username: Any) -> bool:
-    """Return ``True`` if *username* is safe to use as a path component.
-
-    A username reaches the filesystem in two places, so a bad one is not
-    merely a mislabelled request:
-
-    * ``get_user_data_dir()`` builds ``DATA_DIR / username`` for per-user
-      settings, which are written with ``mkdir(parents=True)``.
-    * The same directory is the confinement root handed to
-      :func:`~vtscore.security.path_validation.validate_server_filepath`,
-      which compares against ``base_dir.resolve()`` — so ``..`` segments in
-      the root are *collapsed* rather than rejected, silently widening the
-      sandbox for every server-file importer and exporter.
-
-    Providers must therefore validate any username they did not construct
-    themselves, whatever their authentication strength.
-    """
-    return isinstance(username, str) and bool(_VALID_USERNAME.match(username)) and username.strip(".") != ""
 
 
 # ---------------------------------------------------------------------------
@@ -392,25 +268,6 @@ class ApiKeyLoginProvider(LoginProvider):
 
 
 # ---------------------------------------------------------------------------
-# Module-level state
-# ---------------------------------------------------------------------------
-
-_login_provider: LoginProvider = DefaultLoginProvider()
-
-
-def set_login_provider(provider: LoginProvider) -> None:
-    """Set the active login provider (called once at app startup)."""
-    global _login_provider
-    _login_provider = provider
-    logger.info("Login provider set to %r", provider.name)
-
-
-def get_login_provider() -> LoginProvider:
-    """Return the active login provider."""
-    return _login_provider
-
-
-# ---------------------------------------------------------------------------
 # Current-user resolution
 # ---------------------------------------------------------------------------
 # The mechanics (thread-local storage, the ``"default"`` fallback) live in
@@ -442,17 +299,3 @@ def _flask_request_user() -> str | None:
 
 
 register_request_user_resolver(_flask_request_user)
-
-
-def get_user_data_dir(username: str | None = None) -> Path:
-    """Return the data directory for a user.
-
-    If *username* is ``None``, the current request user is used.  For
-    :class:`DefaultLoginProvider` this always returns ``DATA_DIR``
-    unchanged.
-    """
-    from vtscore.config import DATA_DIR
-
-    if username is None:
-        username = get_current_user()
-    return _login_provider.get_user_data_dir(username, DATA_DIR)

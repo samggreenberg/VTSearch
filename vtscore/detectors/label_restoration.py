@@ -69,7 +69,7 @@ def restore_labels_from_detector(det_data: dict) -> int:
     MD5, and checks for a match in the loaded dataset.
 
     Restored labels are applied silently: ``label_history`` is not appended
-    and the diversity tree is not pre-marked, so per-dataset Smart/Stable
+    and the coverage atlas is not pre-marked, so per-dataset Smart/Stable
     trends and span/diversity coverage start fresh from the user's session
     votes.  The good/bad counts still reflect restored labels, so autopilot's
     initial Find Goods / Find Bads gates can skip ahead.

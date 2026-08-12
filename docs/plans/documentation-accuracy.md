@@ -22,8 +22,9 @@ Three things follow from that, and they shape how this work should be done:
   demo datasets, env vars, settings keys) disagreeing with the code and with the other nine
   copies of the same list. This is a generation problem, not ten editing mistakes.
 - **The mechanical defects are mechanically detectable.** Dead links, dead anchors, dead
-  file paths and leaked absolute paths accounted for roughly 30 findings, and `run-tests.sh`
-  gates ten things today without checking any of them.
+  file paths and leaked absolute paths accounted for roughly 30 findings. `scripts/check-docs.py`
+  now gates that whole class in `run-tests.sh`; what remains below is the part no invariant can
+  check, because it needs a human to know what the prose *should* say.
 - **Prefer invariants over generation over pinning.** The repo already has all three shapes
   — `wiring-check.py` (invariant), the OpenAPI snapshot (generation), `check-eval-app-sync.py`
   (digest pinning). A noisy gate gets `--update`'d blindly, a failure mode CLAUDE.md already
@@ -51,10 +52,6 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2983 — Add a docs drift gate to run-tests.sh: links, anchors, code paths, absolute-path leaks (Sonnet 5)
-
-<!-- item-sep -->
-
 - [ ] #2984 — Generate registry inventories instead of hand-maintaining them in ~10 documents (Opus 4.8)
 
 <!-- item-sep -->
@@ -65,7 +62,7 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2987 — Create docs/README.md as the spine; demote docs/HANDOFF.md (Opus 4.8)
+- [ ] #2987 — Retire docs/HANDOFF.md (the stalest doc hub) and fix doc orphans (Opus 4.8)
 
 <!-- item-sep -->
 
@@ -213,26 +210,17 @@ separately.
 
 <!-- item-sep -->
 
-- **vtscore/docs — faq.md contradicts the code and concepts.md.** The FAQ's description of the
-  Inclusion knob disagrees with both. The context-resolution chain is documented with a nonexistent
-  `override_dataset_context` and a `None` terminal case that never occurs. Three real subpackages
-  (`projection`, `timing`, `datasource_importers`) and the sixth media type are absent from every
-  vtscore inventory. (The broken snippets are #2985; the package-doc coverage gaps are #2999.)
+- **vtscore/docs — inventory gaps.** Three real subpackages (`projection`, `timing`,
+  `datasource_importers`) and the sixth media type are absent from every vtscore inventory.
+  (The package-doc coverage gaps are #2999.)
 
 <!-- item-sep -->
 
 - **vtscore/docs/extending — stale contracts beyond #2989.** The media-dict key is `media_type`,
   not `type`. The clipper naming convention shown (`sound_tiling_2.0s`) carries a parameter suffix
-  real names do not have. `dataset-importers.md` points four times at
-  `../../datasets/importers/base.py`, which is a package now — in the doc most likely to be
-  copy-pasted from. About a dozen `file.py:NNN` anchors are stale.
+  real names do not have. About a dozen `file.py:NNN` anchors are stale.
 
 <!-- item-sep -->
-
-- **Leaked absolute machine paths.** `vtscore/docs/packages/cli.md:14,360` and `config.md:15` carry
-  `/home/user/VTSearch/...` in visible link text (the link *targets* are correct relative paths;
-  only the label leaks). Clear artifact of an agent-authored docs session. Covered by the #2983
-  gate once it exists, but worth fixing directly.
 
 <!-- item-sep -->
 

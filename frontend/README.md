@@ -26,43 +26,17 @@ npm run build:prod
 
 This compiles the Angular app and outputs the build artifacts to `../static/` (the project root's `static/` directory), where Flask serves them. Output files: `index.html`, `main.js`, `polyfills.js`, `styles.css`.
 
-## Project structure
+## Architecture
 
-```
-src/app/
-├── app.component.ts          # Root component
-├── app.routes.ts              # Route definitions
-├── components/                # UI components
-│   ├── center-panel/          # Media viewer (image, text, video, audio, document)
-│   ├── left-panel/            # Media list, sort bar, inclusion slider, autopilot
-│   ├── right-panel/           # Labels and detector context
-│   ├── dashboard/             # Dataset and model management UI
-│   ├── label-view/            # Main labeling view (orchestrates left/center/right panels)
-│   ├── find-view/             # Multi-dataset search interface
-│   ├── login/                 # Authentication screen
-│   ├── modals/                # 17 modal dialogs (export, import, settings, progress, etc.)
-│   ├── dialog-host/           # Modal container
-│   ├── file-browser/          # Server file picker
-│   ├── progress-bar/          # Progress indicators
-│   └── icon/                  # Icon system
-├── services/                  # State management and API communication
-│   ├── *-api.service.ts       # API services (one per backend module)
-│   ├── *-state.service.ts     # Client-side state services
-│   ├── active-context.service.ts  # Tracks selected dataset/detector
-│   ├── dialog.service.ts      # Modal management
-│   ├── keyboard.service.ts    # Keyboard shortcuts
-│   └── theme.service.ts       # Theme (light/dark) switching
-├── interceptors/
-│   └── active-context.interceptor.ts  # Attaches X-Dataset-Id/X-Detector-Id headers
-└── models/
-    └── api.models.ts          # TypeScript interfaces for API responses
-```
+The SPA's architecture lives in **[`../docs/FRONTEND.md`](../docs/FRONTEND.md)**:
+directory layout and feature-area boundaries, the service layer, the
+**zoneless change-detection rules**, active dataset/detector propagation and
+the `X-Dataset-Id` / `X-Detector-Id` headers, the generated OpenAPI client, and
+the component/modal composition conventions. Styling conventions are in
+[`../docs/style-guide.md`](../docs/style-guide.md).
 
-### Key architecture patterns
-
-- **ActiveContextService** tracks which dataset and detector the user has selected. The `activeContextInterceptor` attaches `X-Dataset-Id` and `X-Detector-Id` headers to every API request so the backend resolves the correct per-dataset state.
-- **State services** (`media-state`, `dataset-state`, `vote-state`, `sort-state`, `settings-state`) hold client-side state and expose signals (or, for the not-yet-migrated services, observables) for reactive UI updates.
-- **API services** (`medias-api`, `datasets-api`, `detectors-api`, etc.) wrap HTTP calls to the Flask backend. Each maps to a backend route module.
+This file stays scoped to the build: commands, test wiring, and the Angular
+upgrade runbook.
 
 ## Running unit tests
 

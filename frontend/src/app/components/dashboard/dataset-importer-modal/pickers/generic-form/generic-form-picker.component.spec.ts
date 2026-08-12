@@ -67,7 +67,7 @@ describe('GenericFormPickerComponent', () => {
 
   it('coerces static string options into {value,label} pairs', () => {
     const staticSelect = { key: 's', field_type: 'select', options: ['x', 'y'] } as any;
-    expect(component.optionsFor(staticSelect)).toEqual([
+    expect(component.fieldOptions.optionsFor(staticSelect)).toEqual([
       { value: 'x', label: 'x' },
       { value: 'y', label: 'y' },
     ]);
@@ -91,7 +91,7 @@ describe('GenericFormPickerComponent', () => {
       allow_free_text: true,
     } as any;
     component.selectedImporter.set({ name: 'imp', fields: [field] } as any);
-    (component as any).refreshDynamicFieldOptions(field);
+    component.fieldOptions.refresh(field, component.formValues);
     httpMock
       .expectOne((req) => req.url.endsWith('/api/dataset/import/imp/options'))
       .flush({ options: [{ value: 'a', label: 'A' }] });
@@ -102,7 +102,7 @@ describe('GenericFormPickerComponent', () => {
     const field = { key: 'q', field_type: 'select', dynamic_options: true, allow_free_text: true } as any;
     component.selectedImporter.set({ name: 'imp', fields: [field] } as any);
     component.formValues['q'] = 'hand-typed';
-    (component as any).refreshDynamicFieldOptions(field);
+    component.fieldOptions.refresh(field, component.formValues);
     httpMock
       .expectOne((req) => req.url.endsWith('/api/dataset/import/imp/options'))
       .flush({ options: [{ value: 'a', label: 'A' }] });
@@ -113,7 +113,7 @@ describe('GenericFormPickerComponent', () => {
     const field = { key: 'q', field_type: 'select', dynamic_options: true } as any;
     component.selectedImporter.set({ name: 'imp', fields: [field] } as any);
     component.formValues['q'] = 'stale';
-    (component as any).refreshDynamicFieldOptions(field);
+    component.fieldOptions.refresh(field, component.formValues);
     httpMock
       .expectOne((req) => req.url.endsWith('/api/dataset/import/imp/options'))
       .flush({ options: [{ value: 'a', label: 'A' }] });
@@ -144,7 +144,7 @@ describe('GenericFormPickerComponent', () => {
     it('re-asks once a dynamic select resolves, so an opaque id can become a label', () => {
       const field = { key: 'query_id', field_type: 'select', dynamic_options: true, required: true } as any;
       component.selectedImporter.set({ name: 'imp', fields: [field] } as any);
-      (component as any).refreshDynamicFieldOptions(field);
+      component.fieldOptions.refresh(field, component.formValues);
       httpMock
         .expectOne((req) => req.url.endsWith('/api/dataset/import/imp/options'))
         .flush({ options: [{ value: 'q-8f31', label: 'Q1 Field Survey' }] });

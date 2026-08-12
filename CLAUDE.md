@@ -160,7 +160,7 @@ This rule applies to all detector code:
 - New features that cache vectors must use a process-scoped data structure (e.g. a field on `DetectorContext`), not a file or settings key.
 - Embedder version drift is impossible by construction because every load resolves+re-embeds against the active embedder.
 
-The single exception is **dataset pickle files**, which are by design a snapshot of media + their embeddings; they ARE the dataset, not a cache.
+The single exception is **dataset pickle files**, which are by design a snapshot of media + their embeddings; they ARE the dataset, not a cache. That exception extends to **derived caches of a pickle's own contents, written beside that pickle** — today the `<stem>.embmat.npy` / `<stem>.embids.npy` embedding-matrix sidecar (`vtscore/embedding/matrix.py`) and the coverage atlas cached inside the pickle itself. These put nothing on disk that the pickle does not already hold durably, and they only qualify when all four hold: the payload is a pure function of the pickle's medias, it is validated against the live id set on read (a mismatch rebuilds rather than being adopted), it is swept with the pickle by `registry.unregister_dataset`, and losing it costs only time. A cache that fails any of those is a persisted vector, not a derived cache.
 
 If a feature seems to require persisting a vector or a trained head, push back: either re-derive on demand, or change the design.
 
@@ -192,7 +192,7 @@ This applies to:
 - Frontend unit-test failures from the Vitest suite (`cd frontend && npm run test:ci`, also run by `./run-tests.sh` and `./run-tests.sh frontend`).
 - Angular build warnings of any kind, including `anyComponentStyle` budget warnings (e.g. `▲ [WARNING] ... exceeded maximum budget`). `run-tests.sh` treats every `▲ [WARNING]` line from `build:prod` as a hard test failure, so do not just bump budgets to silence them: fix the underlying bloat (split the component, extract shared styles, or remove dead rules). Bumping a budget is only acceptable when the size is genuinely justified, and requires the user's explicit approval.
 - Python test failures from `./run-tests.sh` and `pytest` runs.
-- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these run as the first steps of `./run-tests.sh`, so the test loop catches them before pytest. There is no CI backstop: VTSearch has no GitHub Actions workflows; `./run-tests.sh` is the source of truth, so do not push a change without running it.
+- Linter errors from `ruff check` (including the flake8-bandit `S` ruleset), formatting drift from `ruff format --check`, typos from `codespell`, documentation drift from `scripts/check-docs.py`, dependency issues from `deptry`, known CVEs from `pip-audit`, type errors from `pyright`, and OpenAPI snapshot drift. All of these run as the first steps of `./run-tests.sh`, so the test loop catches them before pytest. There is no CI backstop: VTSearch has no GitHub Actions workflows; `./run-tests.sh` is the source of truth, so do not push a change without running it.
 - Any other diagnostics surfaced by tooling you invoke.
 
 If a failure is genuinely outside the scope of the current task (e.g. a flaky network test, a failure in unrelated infrastructure you cannot reproduce), explicitly call it out in your end-of-turn summary with one sentence explaining why you did not fix it. The default is **fix it**; skipping requires justification.
@@ -214,7 +214,7 @@ The `.back-btn` rule in `frontend/src/scss/_components.scss` provides the shared
 
 A flow can legitimately carry both: a nested view shows `← Back` at the top to step back one view, while the outer view's footer shows `Cancel` to dismiss the whole modal. What it should *not* do is use the word "Cancel" for an action that is really navigation back to a parent view.
 
-**Persistent-tab pickers are an intentional exception.** The rule's trigger is a view that *replaces* its outer view (the picker vanishes, the form takes over). A picker whose navigation chrome stays **persistently visible** while the selected form renders below it never hides an outer view, so there is nothing to navigate "back" to and no `.back-btn` belongs on it — switching selection is done by clicking a different tab in the always-present bar. The Add-Dataset importer picker (`vt-source-picker`'s `.importer-tab-bar` + `.importer-subtab-bar`) is the canonical case: its category/importer tabs remain on screen with the source form beneath them, so it correctly diverges from the New-detector › Trained flow's picker→form→`← Back` shape. Do not add a `.back-btn` to a persistent-tab picker to "align" it; the divergence is by design. (The footer `Cancel` on such a picker is still correct — it dismisses the whole modal, per the Back-vs-Cancel rule above.)
+**Persistent-tab pickers are an intentional exception.** The rule's trigger is a view that *replaces* its outer view (the picker vanishes, the form takes over). A picker whose navigation chrome stays **persistently visible** while the selected form renders below it never hides an outer view, so there is nothing to navigate "back" to and no `.back-btn` belongs on it — switching selection is done by clicking a different tab in the always-present bar. The Add-Dataset importer picker (`vt-source-picker`'s `.tab-bar` + `.importer-subtab-bar`) is the canonical case: its category/importer tabs remain on screen with the source form beneath them, so it correctly diverges from the New-detector › Trained flow's picker→form→`← Back` shape. Do not add a `.back-btn` to a persistent-tab picker to "align" it; the divergence is by design. (The footer `Cancel` on such a picker is still correct — it dismisses the whole modal, per the Back-vs-Cancel rule above.)
 
 ## Commands
 
@@ -234,6 +234,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json> --exporter server_json_file --filepath results.json`
 - **CLI autodetect + importer**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings <settings.json>`
 - **Check eval/app sync**: `python scripts/check-eval-app-sync.py` (also a `./run-tests.sh` gate; re-pin with `--update` after reconciling the harness)
+- **Check documentation**: `python scripts/check-docs.py` (also a `./run-tests.sh` gate; validates relative links, `#anchors`, backticked repo paths, absolute-path leaks, `docs/plans/*.md` citations anywhere in the tree, and code fences. Pure invariants — nothing to re-pin. Fix the doc, or add an allowlist entry with a reason if the path is runtime-generated or a deliberately fictional example)
 - **Install deps**: `bash scripts/install.sh` (auto-detects CPU vs GPU; pass `cpu`/`gpu` to force, or a `cuXYZ` tag to override the GPU wheel, e.g. `bash scripts/install.sh cu121`)
 - **Build frontend**: `cd frontend && npm install && npm run build:prod` (builds Angular app to `static/`)
 - **Frontend dev server**: `cd frontend && npm start` (proxies `/api/*` to Flask at localhost:5000)
@@ -256,17 +257,18 @@ There is no CI: `./run-tests.sh` is the only gate, so it front-loads a long chai
 | 2 | Lint | `ruff check .` | |
 | 3 | Format | `ruff format --check .` | Fix with `ruff format .`. |
 | 4 | Spelling | `codespell --toml pyproject.toml` | |
-| 5 | Dependencies | `python -m deptry .` | |
-| 6 | Known CVEs | `pip-audit` | Audits the resolved venv, not the requirements files. `PIP_AUDIT_IGNORE` in the script lists advisories with no upstream fix; re-audit and remove an entry once a patched release exists. |
-| 7 | Types | `pyright` (pinned via `PYRIGHT_PYTHON_FORCE_VERSION`) | Scope is `pyrightconfig.json`. |
-| 8 | OpenAPI snapshot drift | `scripts/dump_openapi.py` diffed against `frontend/openapi.json` | The generated TS client is built from this snapshot. Regenerate with `npm run regenerate-openapi-snapshot` and commit the result. |
-| 9 | Dockerfiles | `scripts/check-dockerfiles.py` | |
-| 10 | User-docs screenshot wiring | `scripts/screenshots/wiring-check.py` | Browser-free; the pixel-diff (`check.sh`) stays a manual chore. Also what makes the reshoot queue un-rottable. |
-| 11 | Eval/app sync | `scripts/check-eval-app-sync.py` | Re-pin with `--update` **after** reconciling the harness. |
-| 12 | Frontend build | `cd frontend && npm run build:prod` | Full run, or the `core` / `frontend` groups. Any `▲ [WARNING]` line is a hard failure. Skipped with a notice if `frontend/node_modules` is absent. |
-| 13 | Frontend audit | `cd frontend && npm audit --omit=dev` | Same trigger as the build. Prod deps only — dev-only advisories don't ship. |
-| 14 | Frontend unit tests | `cd frontend && npm run test:ci` | Full run or the `frontend` group **only** — deliberately off the fast `core` path. |
-| 15 | Python tests | `pytest tests/ tests_lib/ -n auto --dist loadgroup` | Skipped entirely when `frontend` is the only requested group. |
+| 5 | Documentation | `scripts/check-docs.py` | Pure invariants over every tracked markdown file: relative links, `#anchors` (GitHub slug rules), backticked repo paths, absolute-path leaks, `docs/plans/*.md` citations **anywhere in the tree**, and broken code fences. Nothing to re-pin; fix the doc, or add an allowlist entry with a reason. |
+| 6 | Dependencies | `python -m deptry .` | |
+| 7 | Known CVEs | `pip-audit` | Audits the resolved venv, not the requirements files. `PIP_AUDIT_IGNORE` in the script lists advisories with no upstream fix; re-audit and remove an entry once a patched release exists. |
+| 8 | Types | `pyright` (pinned via `PYRIGHT_PYTHON_FORCE_VERSION`) | Scope is `pyrightconfig.json`. |
+| 9 | OpenAPI snapshot drift | `scripts/dump_openapi.py` diffed against `frontend/openapi.json` | The generated TS client is built from this snapshot. Regenerate with `npm run regenerate-openapi-snapshot` and commit the result. |
+| 10 | Dockerfiles | `scripts/check-dockerfiles.py` | |
+| 11 | User-docs screenshot wiring | `scripts/screenshots/wiring-check.py` | Browser-free; the pixel-diff (`check.sh`) stays a manual chore. Also what makes the reshoot queue un-rottable. |
+| 12 | Eval/app sync | `scripts/check-eval-app-sync.py` | Re-pin with `--update` **after** reconciling the harness. |
+| 13 | Frontend build | `cd frontend && npm run build:prod` | Full run, or the `core` / `frontend` groups. Any `▲ [WARNING]` line is a hard failure. Skipped with a notice if `frontend/node_modules` is absent. |
+| 14 | Frontend audit | `cd frontend && npm audit --omit=dev` | Same trigger as the build. Prod deps only — dev-only advisories don't ship. |
+| 15 | Frontend unit tests | `cd frontend && npm run test:ci` | Full run or the `frontend` group **only** — deliberately off the fast `core` path. |
+| 16 | Python tests | `pytest tests/ tests_lib/ -n auto --dist loadgroup` | Skipped entirely when `frontend` is the only requested group. |
 
 ## Test Groups
 
@@ -431,10 +433,11 @@ def slow_load():
 ## More docs
 
 - `docs/ARCHITECTURE.md` — directory map, dependency graph, plugin systems, state management (multi-dataset / multi-detector contexts, proxies, `X-Dataset-Id` / `X-Detector-Id` headers), auth, origin tracking.
+- `docs/FRONTEND.md` — Angular SPA architecture: feature-area boundaries, the service layer, the **zoneless change-detection rules**, active dataset/detector propagation, the generated OpenAPI client, component/modal conventions. Read this before changing frontend state or reactivity.
 - `docs/API.md` and `docs/api/*.md` — REST API reference.
 - `docs/CLI.md` — CLI flags and autodetect workflow.
 - `docs/ML.md` — training/scoring details.
 - `docs/EXTENDING.md` + `docs/EXTENDING-plugins.md` + `docs/EXTENDING-media.md` + `docs/EXTENDING-processors.md` — how to add plugins.
 - `docs/plans/` — future-work design docs (open/proposed; shipped work is pruned out, not archived); check here before adding a "Phase N" feature.
 - `docs/RELEASE.md` — the `dev` → `main` release runbook (the procedure the Dev2Main Routine follows: vulture audit, release summary, punch-card refresh, release PR, issue close-out, plan-pointer prune).
-- `docs/style-guide.md` — frontend SCSS conventions.
+- `docs/style-guide.md` — frontend SCSS conventions (the styling half of `docs/FRONTEND.md`).

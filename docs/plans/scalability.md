@@ -60,7 +60,7 @@ deferred. Items are independently shippable.
 
 ### S3 / S17 / S19: sparse sort results — window the Find flow
 
-**Files:** `vtsearch/routes/find.py`, `frontend/src/app/components/find-view/find-view.component.ts`,
+**Files:** `vtsearch/routes/detectors/find.py`, `frontend/src/app/components/find-view/find-view.component.ts`,
 `frontend/src/app/components/label-view/label-view.component.ts`
 
 **Background.** Every sort API call used to return `results` for the entire

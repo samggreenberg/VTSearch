@@ -39,7 +39,7 @@ The head used to be a small MLP (`Linear(input_dim, hidden_dim) -> ReLU -> Dropo
 
 ### Class Weighting
 
-Training balances classes by **inverse-frequency weighting** by default (`mlp.py`). The one exception is region flooding on patch datasets, where the caller supplies explicit per-bag `sample_weights` instead (see [Region-aware training](#region-aware-training-on-patch-region-datasets) below). Either way, inclusion does **not** enter training — the trained model, and therefore every item's score, is independent of inclusion. Inclusion is applied later as a pure threshold knob in `conformal_threshold` (see [Threshold Calibration](#threshold-calibration) below).
+Training balances classes by **inverse-frequency weighting** by default (`mlp.py`). The one exception is region flooding on patch datasets, where the caller supplies explicit per-bag `sample_weights` instead (see [Region-aware training](#region-aware-training-on-patch-datasets) below). Either way, inclusion does **not** enter training — the trained model, and therefore every item's score, is independent of inclusion. Inclusion is applied later as a pure threshold knob in `conformal_threshold` (see [Threshold Calibration](#threshold-calibration) below).
 
 - **Weights**: `weight_true = num_false / num_true`, `weight_false = 1.0`
 

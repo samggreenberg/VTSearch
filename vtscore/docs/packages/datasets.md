@@ -9,6 +9,74 @@ The package owns three things: the domain objects (`Origin`, `LabeledElement`,
 and the auto-discovered registries of importers and media sources that
 plug new bytes-providers into the system.
 
+## Contents
+
+The largest package in the library. Every module, grouped by role.
+
+**Domain objects and provenance**
+
+| Module | Concern |
+|--------|---------|
+| `vtscore/datasets/origin.py` | `Origin` - importer name + the params that reproduce one element |
+| `vtscore/datasets/labelset.py` | `LabeledElement`, `LabelSet`, `element_key` |
+| `vtscore/datasets/metadata.py` | Per-media metadata extraction |
+| `vtscore/datasets/file_types.py` | Best-effort file-type labelling for media dicts |
+| `vtscore/datasets/config.py` | Dataset configurations, built from the media-type registry |
+| `vtscore/datasets/demo_counts.py` | Exact demo-dataset media counts, measured once and written down |
+
+**Loading and persistence**
+
+| Module | Concern |
+|--------|---------|
+| `vtscore/datasets/loader.py` | `export_dataset_to_file` and the shared loader surface |
+| `vtscore/datasets/loader_folder.py` | Folder loaders (whole and chunked) |
+| `vtscore/datasets/loader_pickle.py` | Pickle loaders (whole and chunked) |
+| `vtscore/datasets/loader_demo.py` | Demo-dataset loader |
+| `vtscore/datasets/load_pipeline.py` | Load orchestration: background threading, gate handoff, staging |
+| `vtscore/datasets/stages/` | The post-import stages the pipeline runs - see below |
+| `vtscore/datasets/container.py` | ZIP-based dataset container format |
+| `vtscore/datasets/registry.py` | Persistent on-disk registry of `.pkl` datasets |
+| `vtscore/datasets/ingest.py` / `ingest_task.py` | Re-run origins to ingest missing medias, foreground and background |
+| `vtscore/datasets/split.py` | Deterministic category-stratified splits for evaluation |
+
+**Bytes providers**
+
+| Module | Concern |
+|--------|---------|
+| `vtscore/datasets/importers/` | Dataset-importer registry, ABCs, and the built-in importers |
+| `vtscore/datasets/sources/` | `MediaSource` registry and the built-in low-level media sources |
+| `vtscore/datasets/downloader/` | Demo-dataset downloaders, per media type |
+| `vtscore/datasets/archive.py` | Extract zip/tar/rar archives and load their media |
+| `vtscore/datasets/archive_stream.py` | Stream one member out of a tar/zip **without** extracting |
+
+**Load-time transforms and helpers**
+
+| Module | Concern |
+|--------|---------|
+| `vtscore/datasets/clipper_chain.py` | Ordered converter / clipper / cleaner steps applied at load |
+| `vtscore/datasets/media_type_detection.py` | Sample a folder and guess which media type dominates |
+| `vtscore/datasets/pdf.py` | PDF page rendering |
+| `vtscore/datasets/thumbnail_warm.py` | Background thumbnail warm-up for archive-member datasets |
+
+### `vtscore/datasets/stages/`
+
+The post-import pipeline, one module per stage, run in this order:
+
+| Module | Stage |
+|--------|-------|
+| `clipper.py` | Clipper / converter chain, plus per-clip MD5 + embedding fixup |
+| `embedding.py` | Embed items the importer left unembedded |
+| `finalize.py` | Drop failed embeds, collapse duplicates, build the coverage atlas |
+| `projection.py` | Optional 2-D UMAP projection build + persist |
+| `registry.py` | Save to the dataset registry, migrate the context id |
+
+`_common.py` holds shared constants and helpers; `_load_profiler.py` and
+`_load_cost_model.py` are the env-gated per-phase timing recorder and
+the affine cost coefficients fit from its measurements, which is how the
+loader predicts a remaining-time estimate.
+
+---
+
 ## What you load into
 
 Every loader populates a single dict, conventionally bound to the name
@@ -20,10 +88,10 @@ below. The same shape round-trips through `export_dataset_to_file` /
 | Key                  | Type                          | Notes                                                                                  |
 |----------------------|-------------------------------|----------------------------------------------------------------------------------------|
 | `id`                 | `int`                         | Sequential media ID, same as the dict key.                                             |
-| `type`               | `str`                         | Media type id: `"audio"`, `"image"`, `"text"`, `"video"`, `"document"`.                |
-| `embedder`           | `str`                         | Name of the registered `MediaEmbedder` that produced `embedding`.                      |
+| `media_type`         | `str`                         | Media type id: `"audio"`, `"image"`, `"text"`, `"video"`, `"document"`, `"face"`.       |
+| `embedder`           | `str`                         | Name of the registered `MediaEmbedder` that produced the **primary** vector.           |
 | `md5`                | `str`                         | Hex digest of the **source bytes** (streamed, constant memory). See "MD5" gotcha.      |
-| `embedding`          | `np.ndarray`                  | The vector. On pickle round-trip embeddings are converted to plain lists and back.     |
+| `embeddings`         | `dict[str, np.ndarray]`       | `embedder_name -> vector`. One media can carry a vector per bound embedder; read it through `vtscore.embedding.media_vectors`. On pickle round-trip the vectors become plain lists and back. |
 | `filename`           | `str`                         | Basename of the source file, e.g. `"clip_123.wav"`.                                    |
 | `category`           | `str`                         | Category derived from the parent folder name (or `"unknown"`).                         |
 | `origin`             | `dict \| None`                | Serialised `Origin.to_dict()`: `{"importer": ..., "params": {...}}`.                  |
@@ -40,7 +108,7 @@ below. The same shape round-trips through `export_dataset_to_file` /
 
 Importers may attach additional keys; the schema above is the durable
 subset that `export_dataset_to_file` preserves (see
-`vtscore/datasets/loader.py:142`).
+`vtscore/datasets/loader.py`).
 
 **MD5 gotcha:** `md5` is the hash of the **raw source file bytes**,
 computed via `file_md5` (`vtscore/utils/hashing.py`). It is
@@ -55,7 +123,7 @@ importer instance.
 
 ### `Origin`
 
-`vtscore/datasets/origin.py:27`: the importer name plus the params
+`vtscore/datasets/origin.py`: the importer name plus the params
 needed to reproduce one media element. Every media dict carries one
 (serialised via `Origin.to_dict()`); every `LabeledElement` carries
 one. Hashable, equal by value, and the canonical persisted form of
@@ -74,7 +142,7 @@ Origin.from_dict(o.to_dict()) == o      # True
 
 ### `LabeledElement`
 
-`vtscore/datasets/labelset.py:27`: one `(md5, label, origin, …)` tuple,
+`vtscore/datasets/labelset.py`: one `(md5, label, origin, …)` tuple,
 the unit of a labelset. The optional `metadata` field is a free-form
 `dict[str, Any]` that round-trips through `to_dict()` / `from_dict()`,
 so importers (notably `holder`) can attach external system identifiers
@@ -97,7 +165,7 @@ serialised form compact for legacy consumers that only look at
 
 ### `LabelSet`
 
-`vtscore/datasets/labelset.py:107`: ordered list of `LabeledElement`
+`vtscore/datasets/labelset.py`: ordered list of `LabeledElement`
 plus an optional `detector_meta` block (`media_type`, `input_spec`,
 `threshold`). The serialised form
 `{"labels": [...], "detector_meta": {...}}` is a strict superset of
@@ -123,7 +191,7 @@ merged = ls_a.merge(ls_b, conflict_policy="drop")
 
 `"drop"` is the only supported `conflict_policy` today; entries with
 disagreeing labels across inputs are silently removed. See
-`element_key` at `vtscore/datasets/labelset.py:363` for the dedup key.
+`element_key` in `vtscore/datasets/labelset.py` for the dedup key.
 
 ---
 
@@ -134,12 +202,12 @@ over three sibling modules:
 
 | Function                        | Module                    | Populates / returns                                  |
 |---------------------------------|---------------------------|------------------------------------------------------|
-| `load_dataset_from_folder`      | `loader_folder.py:549`    | Populates `medias` in-place; returns `None`.         |
-| `load_dataset_from_folder_chunked` | `loader_folder.py:735` | Iterator of chunk dicts.                             |
-| `load_dataset_from_pickle`      | `loader_pickle.py:226`    | Populates `medias` in-place; returns `None`.         |
-| `load_dataset_from_pickle_chunked` | `loader_pickle.py:311` | Iterator of chunk dicts.                             |
-| `load_demo_dataset`             | `loader_demo.py:43`       | Populates `medias` in-place; returns `None`.         |
-| `export_dataset_to_file`        | `loader.py:142`           | Returns pickle **bytes** (caller writes to disk).    |
+| `load_dataset_from_folder`      | `loader_folder.py`    | Populates `medias` in-place; returns `None`.         |
+| `load_dataset_from_folder_chunked` | `loader_folder.py` | Iterator of chunk dicts.                             |
+| `load_dataset_from_pickle`      | `loader_pickle.py`    | Populates `medias` in-place; returns `None`.         |
+| `load_dataset_from_pickle_chunked` | `loader_pickle.py` | Iterator of chunk dicts.                             |
+| `load_demo_dataset`             | `loader_demo.py`       | Populates `medias` in-place; returns `None`.         |
+| `export_dataset_to_file`        | `loader.py`           | Returns pickle **bytes** (caller writes to disk).    |
 
 All three primary loaders **mutate** the `medias` dict the caller passes
 in; they clear it first, then populate it with sequential int IDs
@@ -217,7 +285,7 @@ Every loader takes an optional `on_progress: Callable[[str, str, int,
 int], None]`. When omitted it falls back to the per-thread or global
 progress callback in `vtscore.concurrency.progress`. Multi-threaded
 consumers should pass an explicit callback per call to avoid one
-thread clobbering another's reporter (`vtscore/datasets/loader.py:56`).
+thread clobbering another's reporter (`vtscore/datasets/loader.py`).
 
 ---
 
@@ -240,7 +308,7 @@ their own copies of the same datasets.
 
 ## Importers
 
-`DatasetImporter` (`vtscore/datasets/importers/base.py:210`) is the ABC
+`DatasetImporter` (`vtscore/datasets/importers/base/dataset_importer.py`) is the ABC
 for "convert external bytes into a `medias` dict". Subclasses declare
 `fields: list[PluginField]`, implement `run(field_values, medias,
 thin=False)` (or the higher-level `list_records` + `fetch_record`
@@ -305,7 +373,7 @@ loop with batched / concurrent I/O.
 
 **Resolving back to a file.** Importers whose media is reachable on
 disk **must** override `resolve_file(origin, origin_name, filename) ->
-Path | None` (`vtscore/datasets/importers/base.py:781`). Cross-dataset
+Path | None` (`vtscore/datasets/importers/base/core.py`). Cross-dataset
 features (applying a saved detector to a different dataset via Find,
 re-embedding a labelset after switching embedders) depend on it. The
 default returns `None`, which is only correct when the media genuinely
@@ -315,7 +383,7 @@ cannot be relocated (e.g. browser-uploaded pickles with no server path).
 
 ## Media sources
 
-`MediaSource` (`vtscore/datasets/sources/base.py:46`) is a thin
+`MediaSource` (`vtscore/datasets/sources/base.py`) is a thin
 abstraction *below* the importer: it knows how to enumerate items at a
 location (`list_items`), fetch one by key (`fetch_item`), and resolve
 a stored origin back to a `Path` (`resolve_path`). Importers that deal
@@ -391,7 +459,7 @@ visible.
 
 `split_dataset(medias, test_fraction, seed)` does category-stratified
 train/test splits with reproducible per-category RNGs derived from
-`SHA-256("<seed>:<category>")` (`vtscore/datasets/split.py:15`).
+`SHA-256("<seed>:<category>")` (`vtscore/datasets/split.py`).
 Adding or removing categories does not perturb the split of other
 categories. Categories of size ≥ 2 are guaranteed at least one item
 in each split; clip IDs are preserved (not renumbered).
@@ -406,7 +474,7 @@ simulate, test = split_dataset(medias, test_fraction=0.2, seed=42)
 
 ## Concurrency gates
 
-`vtscore/datasets/load_pipeline.py:17` defines `ConcurrencyGate`: a
+`vtscore/datasets/load_pipeline.py` defines `ConcurrencyGate`: a
 semaphore whose limit is re-read on every `acquire()`, so changes to
 the underlying setting affect queued and future tasks without
 preempting in-flight ones. Two module-level gates drive dataset
@@ -439,7 +507,7 @@ DEMO_DATASETS["esc50"]
 
 A flat `dict[str, DemoDataset]` populated lazily from every registered
 `MediaType.demo_datasets` at import time
-(`vtscore/datasets/config.py:12`). Adding a media type plugin
+(`vtscore/datasets/config.py`). Adding a media type plugin
 automatically adds its demos here; there is no central registration
 step. `load_demo_dataset(name, medias)` keys into this dict; the
 `demo` importer enumerates it for its picker.

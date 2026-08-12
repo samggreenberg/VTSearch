@@ -1,5 +1,6 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { ColMeta, ManagedColumns } from '../utils/managed-columns';
+import { DashboardSortService } from './dashboard-sort.service';
 
 export type DatasetColumn =
   | 'name'
@@ -78,11 +79,20 @@ export const DETECTOR_COL_META: Record<string, ColMeta> = {
  * (datasets, detectors). Lifting them out of `DashboardComponent` lets
  * the top-bar context pulldowns mirror the Dashboard's column sort
  * without coupling to the Dashboard component.
+ *
+ * The pulldowns read that sort from `DashboardSortService`, which this
+ * service feeds, rather than injecting this one: this service reaches
+ * `ManagedColumns` and the column-metadata tables, all of which belong on
+ * the lazy `dashboard-component` chunk rather than the initial bundle.
+ * So this stays a Dashboard-side type — only lazily-loaded code may inject
+ * it.
  */
 @Injectable({ providedIn: 'root' })
 export class DashboardColumnsService {
   readonly datasetCols: ManagedColumns<DatasetColumn>;
   readonly detectorCols: ManagedColumns<DetectorColumn>;
+
+  private readonly sortMirror = inject(DashboardSortService);
 
   constructor() {
     this.datasetCols = new ManagedColumns<DatasetColumn>(
@@ -95,5 +105,10 @@ export class DashboardColumnsService {
       DETECTOR_COL_META,
       { initialSort: 'name', storageKey: DETECTOR_COL_ORDER_KEY },
     );
+    // Forward both tables' sort into the read-side mirror. Never
+    // unsubscribed, which is correct for a root singleton feeding another
+    // root singleton: both live for the lifetime of the app.
+    this.datasetCols.sortState$.subscribe((s) => this.sortMirror.publish('dataset', s));
+    this.detectorCols.sortState$.subscribe((s) => this.sortMirror.publish('detector', s));
   }
 }

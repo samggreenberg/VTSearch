@@ -32,8 +32,14 @@ def pytest_collection_modifyitems(items, config):
 
 
 # Reduce training epochs for faster tests (default is 200; 30 is sufficient
-# for the tiny MLP to converge on the small test dataset).
-config.TRAIN_EPOCHS = 30
+# for the tiny MLP to converge on the small test dataset).  Named rather than
+# inlined because it is re-asserted per test in ``reset_state`` below: the two
+# trees share a worker process in a full run, and
+# ``tests_lib/core/test_torch_config.py`` reloads ``vtscore.config``, which
+# resets every module-level constant to its import-time value (issue #3101).
+TEST_TRAIN_EPOCHS = 30
+
+config.TRAIN_EPOCHS = TEST_TRAIN_EPOCHS
 
 # ---------------------------------------------------------------------------
 # Stub out heavy embedding models BEFORE importing the app.
@@ -363,6 +369,12 @@ def reset_state():
 
     config.resolve_device.cache_clear()
     _emb_loader.resolve_device.cache_clear()
+
+    # Same reload hazard, for a value that doesn't crash when it leaks: a wiped
+    # ``TRAIN_EPOCHS`` falls back to the production 200 and silently retrains
+    # every later detector fixture on a different budget, which is what made a
+    # fully seeded threshold fixture order-dependent (issue #3101).
+    config.TRAIN_EPOCHS = TEST_TRAIN_EPOCHS
 
     _dataset_progress.reset_cancel()
     _find_progress.update("idle", "", 0, 0, step=None, total_steps=None, error=None)
