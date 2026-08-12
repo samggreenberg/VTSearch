@@ -309,16 +309,25 @@ if $_run_frontend_check && [ -d "frontend/node_modules" ]; then
     echo "Checking frontend TypeScript build..."
     _fe_log=$(mktemp)
     if (cd frontend && npm run build:prod 2>&1) > "$_fe_log"; then
-        # Treat Angular compiler warnings (e.g. NG8107) as errors
-        if grep -q '▲ \[WARNING\]' "$_fe_log"; then
+        # Treat Angular compiler warnings (e.g. NG8107) and budget warnings as
+        # errors. Angular colourises its output even when stdout is a file, and
+        # it interleaves the escapes *inside* the marker
+        # (`ESC[33m▲ ESC[43;33m[ESC[43;30mWARNING…`), so the literal
+        # `▲ [WARNING]` never matches the raw log — that blindness let an
+        # over-budget initial bundle sail past this gate for months. Match
+        # against an ANSI-stripped copy instead.
+        _fe_plain=$(mktemp)
+        sed -r 's/\x1b\[[0-9;]*m//g' "$_fe_log" > "$_fe_plain"
+        if grep -q '▲ \[WARNING\]' "$_fe_plain"; then
             echo ""
             echo "============================================================"
             echo "TESTS BLOCKED: Frontend build has warnings (treated as errors)"
             echo "============================================================"
-            grep -A 10 '▲ \[WARNING\]' "$_fe_log"
-            rm -f "$_fe_log"
+            grep -A 10 '▲ \[WARNING\]' "$_fe_plain"
+            rm -f "$_fe_log" "$_fe_plain"
             exit 1
         fi
+        rm -f "$_fe_plain"
         echo "Frontend build OK"
     else
         echo ""

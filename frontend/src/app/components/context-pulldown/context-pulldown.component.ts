@@ -9,10 +9,10 @@ import { ActiveContextService } from '../../services/active-context.service';
 import { ContextSwitchService } from '../../services/context-switch.service';
 import { NewThingFlowsService } from '../../services/new-thing-flows.service';
 import { PulldownControlService } from '../../services/pulldown-control.service';
-import { DashboardColumnsService } from '../../services/dashboard-columns.service';
+import { DashboardSortService } from '../../services/dashboard-sort.service';
 import { DashboardSelectionService } from '../../services/dashboard-selection.service';
 import { RunningJobsService, pairKey } from '../../services/running-jobs.service';
-import { SortState, sortRowsByColumn } from '../../utils/managed-columns';
+import { SortState, sortRowsByColumn } from '../../utils/sort-rows';
 import { DatasetRegistryEntry } from '../../models/api.models';
 import { IconComponent } from '../icon/icon.component';
 import { DetectorRegistryEntry } from '../../generated/api-client/models/detector-registry-entry';
@@ -74,7 +74,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   private contextSwitch = inject(ContextSwitchService);
   private newThingFlows = inject(NewThingFlowsService);
   private pulldownControl = inject(PulldownControlService);
-  private dashboardColumns = inject(DashboardColumnsService);
+  private dashboardSort = inject(DashboardSortService);
   private dashSelection = inject(DashboardSelectionService);
   private runningJobs = inject(RunningJobsService);
   private cdr = inject(ChangeDetectorRef);
@@ -195,11 +195,11 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => this.openMenu());
 
-    // Erase the column-type union to a plain `SortState`; the pulldown
-    // doesn't care which specific column-type union the source carries.
-    const sortState$: Observable<SortState> = this.isDataset
-      ? this.dashboardColumns.datasetCols.sortState$
-      : this.dashboardColumns.detectorCols.sortState$;
+    // Mirror of the Dashboard table's sort. Read through
+    // `DashboardSortService` rather than the owning `DashboardColumnsService`
+    // so this eager component doesn't pull the column-management code onto
+    // the initial bundle.
+    const sortState$: Observable<SortState> = this.dashboardSort.sort$(this.kind());
     sortState$.pipe(takeUntil(this.destroy$)).subscribe((state) => {
       this.sortState = state;
       this.rebuildRows();
@@ -447,7 +447,7 @@ export class ContextPulldownComponent implements OnInit, OnDestroy {
   }
 
   /** Sort registry entries the same way the Dashboard's tables sort them
-   *  (column + direction read from `DashboardColumnsService`). Mirrors
+   *  (column + direction read from `DashboardSortService`). Mirrors
    *  the comparator in `DashboardComponent.sortedDatasets` /
    *  `sortedDetectors`. */
   private applySort<T>(arr: T[]): T[] {
