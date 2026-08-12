@@ -1311,21 +1311,32 @@ return it. A delivery exporter whose remote hands back a permalink returns the
 same key.
 
 ```python
-def export(self, results: dict, field_values: dict) -> dict:
-    url = validate_browser_url(f"https://review.example.com/?ids={quote(ids, safe='')}")
-    return {"message": "Opening the labelset in Review Site.", "open_url": url}
+class ReviewSiteExporter(LabelsetExporter):
+    name = "review_site"
+    display_name = "Review Site"
+    description = "Open the labelset in Review Site."
+    opens_url = True
+    fields = []          # required, even when empty — there is no default
+
+    def export(self, results: dict, field_values: dict) -> dict:
+        ids = ",".join(e["md5"] for e in results.get("labels", []))
+        url = validate_browser_url(f"https://review.example.com/?ids={quote(ids, safe='')}")
+        return {"message": "Opening the labelset in Review Site.", "open_url": url}
 ```
 
 Set `opens_url = True` as well **only if you always return a URL**: the flag is
 what lets the Export modal label the button "Open in &lt;name&gt;" *before*
-running anything. An exporter that returns one only sometimes leaves the flag
-`False` — the URL still opens, the button just can't advertise it up front.
+running anything, and — more importantly — it is what tells the modal to claim
+the browser tab while the user's click is still in hand (see the table below).
+An exporter that returns one only sometimes leaves the flag `False`; the URL
+still opens on a best-effort basis, but it is the case a popup blocker is most
+likely to eat.
 
 What each surface does with the key:
 
 | Surface | Behaviour |
 |---------|-----------|
-| Export modal | Opens a new tab; if the popup blocker eats it, the success toast carries an **Open** action that always gets through |
+| Export modal | An `opens_url` exporter gets a blank tab opened inside the click handler, which is navigated when the export returns — a tab opened from the response instead is what popup blockers stop. If the blocker refuses even that, the success toast carries an **Open** action and stays up until dismissed |
 | Auto-Find auto-export (`POST /api/auto-detect`) | Offered as an **Open** button on the Auto-Detect Results modal's status line — not opened on arrival, since the response is async and would be blocked |
 | CLI (`--exporter`) | No browser: the URL is printed under the confirmation message, and rides along as an `open_url` field on the `export_complete` event under `--progress-format json` |
 
