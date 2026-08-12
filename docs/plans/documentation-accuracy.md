@@ -65,7 +65,7 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2987 — Create docs/README.md as the spine; demote docs/HANDOFF.md (Opus 4.8)
+- [ ] #2987 — Retire docs/HANDOFF.md (the stalest doc hub) and fix doc orphans (Opus 4.8)
 
 <!-- item-sep -->
 
