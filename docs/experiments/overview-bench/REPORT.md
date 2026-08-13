@@ -167,3 +167,113 @@ past saturation add little.
    direction #2876 found when decoupling the selector threshold.
 3. **Retire `caltech101_m`** from overview benchmarks; substitute a dataset that
    discriminates.
+
+---
+
+# Wave 2 — the box-size banding axis
+
+**Run:** array `496454`, drained 18:36:41 · `/expscratch/sgreenberg/bench-vgbox/results`
+
+99 cells / 14,042 steps over `vg_box_{small,medium,large}` — 12,000 images each,
+banded on voted-box area at the DINOv3 patch geometry (small = under one patch,
+1/196; medium → the smallest HAC leaf, 1/12; large → the 80 % cap), drawn from
+the **whole** VG source rather than the demo pipeline's curated vocabulary.
+
+**99/99 cells carry data. Zero starved** — against wave 1's seven. The
+purpose-built banded sets are better populated than the rare tail of
+`visual_genome_m` and `coco_val`, so no run failed to find a positive.
+
+## Headline (t ≥ 100)
+
+| arm | cost | fpr | fnr | regret | AP | AUROC |
+|---|---:|---:|---:|---:|---:|---:|
+| `vg_box_large` × `siglip2_l` | **0.3234** | 0.1591 | 0.1643 | 0.0709 | 0.277 | 0.906 |
+| `vg_box_large` × `dinov3_patch` | **0.3243** | 0.1554 | 0.1689 | 0.1241 | 0.300 | 0.940 |
+| `vg_box_large` × `siglip` | 0.3677 | 0.2050 | 0.1628 | 0.0974 | 0.283 | 0.901 |
+| `vg_box_medium` × **`dinov3_patch`** | **0.5902** | 0.1725 | 0.4176 | 0.0885 | 0.143 | 0.789 |
+| `vg_box_medium` × `siglip2_l` | 0.7365 | 0.3830 | 0.3535 | 0.0945 | 0.105 | 0.708 |
+| `vg_box_medium` × `siglip` | 0.7471 | 0.4062 | 0.3409 | 0.0800 | 0.097 | 0.689 |
+| `vg_box_small` × **`dinov3_patch`** | **0.6463** | 0.4429 | 0.2035 | 0.1964 | 0.136 | 0.823 |
+| `vg_box_small` × `siglip2_l` | 0.7391 | 0.4363 | 0.3028 | 0.0902 | 0.086 | 0.683 |
+| `vg_box_small` × `siglip` | 0.7774 | 0.4131 | 0.3642 | 0.0934 | 0.093 | 0.668 |
+
+## The finding: region voting earns its cost only when the target is small
+
+Difference in cost, whole-image best vs `dinov3_patch`:
+
+| band | best whole-image | `dinov3_patch` | dinov3 advantage |
+|---|---:|---:|---:|
+| large (> 33 % of image) | 0.3234 | 0.3243 | **−0.001 (tie)** |
+| medium (8–33 %) | 0.7365 | 0.5902 | **+0.146** |
+| small (< 0.5 %) | 0.7391 | 0.6463 | **+0.093** |
+
+On **large** boxes region voting buys nothing at the operating point: a box that
+covers a third of the image *is* roughly the whole image, so the whole-image
+vector already carries the signal — and `siglip2_l` matches it for ~1/10th the
+compute (401 s median per cell vs ~40 s).
+
+This is not "the patch model is worse there". Its **ranking is better**
+(AP 0.300 vs 0.277, AUROC 0.940 vs 0.906) and it is the only arm in either wave
+with a **positive `rule_inefficiency`** (+0.0208 vs −0.021 for `siglip2_l`), with
+regret 0.124 vs 0.071. So on large boxes `dinov3_patch` **ranks better and cuts
+worse, and the two cancel.** The ranking advantage is real and currently
+unrealised — a calibration problem, not a representation problem.
+
+Combined with wave 1 (where `dinov3_patch` won on both boxed datasets), the rule
+is: **region voting pays when the target is small relative to the frame, and is
+a wash when it is large.** That is a concrete product criterion for when to spend
+the ~10× — and it is exactly the question `vg_box_*` was built to answer.
+
+## Everything degrades with box size
+
+Cost rises monotonically as boxes shrink (best arm per band): **0.323 → 0.590 →
+0.646**, and ranking collapses: AP **0.30 → 0.14 → 0.14**, AUROC 0.94 → 0.79 →
+0.82. The sub-patch band is genuinely hard — and with 643 sub-patch categories in
+the full VG vocabulary (against 5 in the demo vocabulary), this is the first time
+that band has been measured on a real sample rather than an artefact.
+
+## Cold start gets much worse as boxes shrink
+
+`too_few_default` share of steps:
+
+| band | dinov3 | siglip | siglip2_l |
+|---|---:|---:|---:|
+| large | 4.4 % | 8.1 % | 6.5 % |
+| medium | 11.2 % | 8.3 % | 5.4 % |
+| small | **18.0 %** | **17.3 %** | **20.4 %** |
+
+On the small band roughly **one step in five** never reaches the conformal path.
+`degenerate` steps are also 50× wave 1's rate (**1.96 %** vs 0.04 %). The
+threshold machinery still never falls back (`cut_fallback` 0/14,042), but it is
+visibly working harder.
+
+## One wrong-way trend
+
+`vg_box_small × dinov3_patch` is the only arm whose **regret grows with votes**:
+0.129 (1–20) → 0.114 (21–50) → 0.209 (51–100) → **0.196 (101–150)**. Every other
+arm in both waves improves or flattens. More labels making calibration *worse* is
+the signature #2825 investigated; on the sub-patch band it appears to be live.
+Worth a follow-up rather than a conclusion — see the power caveat below.
+
+## Power caveat — read this before quoting wave 2
+
+**The banding comparison is under-powered, and the fault is mine.** I left the
+scale-band category selector on for datasets that are *already* box-banded, so it
+re-banded within each set and most bands came up empty. The result:
+
+| dataset | categories | cells |
+|---|---:|---|
+| `vg_box_large` | 5 (`barn, court, dresser, sheet, station`) | 15 |
+| `vg_box_small` | 4 (`hands, lips, mask, mustache`) | 12 |
+| `vg_box_medium` | **2** (`chest, collar`) | 6 |
+
+`vg_box_medium` rests on **two categories**. Each set has 40 available; a
+prevalence-spread selection would have used far more of them. The large-vs-small
+direction is big enough (0.32 vs 0.65) to survive this, and the
+region-voting crossover is consistent across two bands and echoed by wave 1, but
+**the medium row specifically should not be quoted as a point estimate**, and no
+between-band difference smaller than ~0.05 should be read as real.
+
+Re-running wave 2 with `CALIB_N_CATEGORIES` on a prevalence spread (the boxless
+path) instead of scale bands is cheap — the pile cells are built — and is the
+first thing to do before anyone acts on these numbers.
