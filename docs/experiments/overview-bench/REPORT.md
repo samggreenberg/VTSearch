@@ -248,3 +248,95 @@ produced data at all.
    is already negative nearly everywhere.
 4. **Make a starved run say so** — a `starved` column and a warning; this is the
    shape that hid #2877.
+
+---
+
+# The constraint scenarios
+
+Nobody gets to pick freely. Some environments cannot run the premium encoder;
+some users will not draw boxes; real text queries are not the toy ones. So the
+comparison that matters is *within* a constraint, not across.
+
+Region voting needs **both** a patch embedder and a user willing to draw. That
+makes the interaction axis measurable independently of the encoder axis, which
+every earlier table in this report confounded:
+
+| | binary only (Good/Bad on whole images) | draws boxes |
+|---|---|---|
+| `siglip` | measured | impossible — no patch grid |
+| `siglip2_l` | measured | impossible |
+| `dinov3_patch` | **measured (array 496762)** | measured |
+
+`dinov3_patch` binary was run on the *same* datasets, categories, seeds and
+splits as its box-drawing counterpart — cell-for-cell paired, differing only in
+whether a box is dragged.
+
+## Under a binary interaction, DINOv3 is the worst of the three
+
+Deep regime (t ≥ 100), all binary except the last row:
+
+**`visual_genome_m`**
+
+| configuration | cost | fpr | fnr | AP | AUROC |
+|---|---:|---:|---:|---:|---:|
+| `siglip2_l` binary | **0.3666** | 0.2438 | 0.1228 | 0.457 | 0.899 |
+| `siglip` binary (shipped default) | 0.3918 | 0.3006 | 0.0912 | 0.428 | 0.898 |
+| `dinov3_patch` binary | **0.4838** | 0.3069 | 0.1769 | **0.402** | 0.856 |
+| *`dinov3_patch` with boxes* | *0.3242* | *0.1819* | *0.1423* | *0.525* | *0.913* |
+
+**`coco_val`**
+
+| configuration | cost | fpr | fnr | AP | AUROC |
+|---|---:|---:|---:|---:|---:|
+| `siglip2_l` binary | **0.2019** | 0.1154 | 0.0865 | 0.711 | 0.955 |
+| `siglip` binary (shipped default) | 0.2177 | 0.0711 | 0.1466 | 0.695 | 0.942 |
+| `dinov3_patch` binary | **0.2930** | 0.2067 | 0.0863 | **0.642** | 0.937 |
+| *`dinov3_patch` with boxes* | *0.1524* | *0.0920* | *0.0604* | *0.787* | *0.976* |
+
+**Strip the boxes and the expensive encoder finishes last** — on cost *and* on
+ranking, on both datasets, against the cheap shipped default:
+
+| | VG | COCO |
+|---|---:|---:|
+| `dinov3` binary vs `dinov3` boxes | **+0.160 cost, −0.123 AP** | **+0.141 cost, −0.145 AP** |
+| `dinov3` binary vs `siglip` binary | **+0.092 cost, −0.026 AP** | **+0.075 cost, −0.053 AP** |
+
+So essentially the whole DINOv3 advantage reported earlier in this document is
+**box supervision, not encoder quality.** Read as a constraint: *if your users
+will not draw boxes, DINOv3 is not a weaker version of the win — it is worse
+than the default you already ship.*
+
+The mechanism is consistent with what the models are. DINOv3 is self-supervised
+and vision-only: its strength is spatial correspondence between patches, and its
+whole-image vector was never trained to separate semantic categories the way
+SigLIP's language-contrastive embedding was. Give it a region to point at and
+that spatial strength is usable; take the region away and you are using the part
+of it that is weakest — which is also why it has no text tower to fall back on.
+
+## What this says per constraint
+
+**Compute-limited (stuck on `siglip`).** You lose ~0.026 cost against
+`siglip2_l` on VG and ~0.016 on COCO — small. Your characteristic failure is
+**over-inclusion**: fpr is 3.3× fnr on VG (0.301 vs 0.091), the most lopsided
+error budget in the study. The lever is the operating point, not the encoder.
+And `siglip` has a text tower, so a typed query gives you a usable ranking for
+free — see the text section.
+
+**Box-averse (users answer Good/Bad only).** Your ceiling is `siglip2_l`, not
+DINOv3, and the gap to the shipped default is small (0.037 on VG, 0.016 on
+COCO). Spending on a patch encoder you cannot point at makes things **worse**.
+This is the clearest actionable finding in the report.
+
+**Can draw boxes and can afford DINOv3.** The advantage is real (−0.042 cost vs
+`siglip2_l` on VG, −0.050 on COCO) and grows as targets shrink (see the box-band
+section), but it costs ~10× wall-clock, has the worst cold start
+(`too_few_default` 7.2 % on VG, 18 % on the sub-patch band), and cannot be
+seeded from text.
+
+## Starvation is a property of the data, not the interaction
+
+The binary arm starved on exactly the same two cells as the box-drawing arm —
+`coco_val`/`refrigerator`/seed 0 and `coco_val`/`sports ball`/seed 1 — 2 of 45.
+Identical categories and seeds. Whether the user draws boxes has no bearing on
+whether Autopilot ever surfaces a first positive; that is set by prevalence and
+the split.
