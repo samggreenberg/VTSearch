@@ -102,6 +102,59 @@ def f(a, b):
         assert gate._normalize_typescript(changed) != gate._normalize_typescript(base)
 
 
+class TestFstringsDigestTheSameOnEveryInterpreter:
+    """A pin must travel between the Python versions the repo supports (>=3.10).
+
+    Python 3.12 (PEP 701) stopped emitting an f-string as one STRING token and
+    started splitting it into FSTRING_START / FSTRING_MIDDLE / FSTRING_END plus
+    the real tokens of each replacement field.  The normalizer is token-based
+    precisely so it would be version-stable, so this went unnoticed: the three
+    mirrored `labeling_progress._compute_*_status` functions all contain an
+    f-string, so the gate was red on 3.12+ and green on 3.10/3.11 for the same
+    tree, and `--update` only moved the failure to the other half of the range
+    (issue #3117).  These assert the collapsed, <=3.11-shaped form, so they fail
+    on an unfixed 3.12+ and pass everywhere once it is normalized away.
+    """
+
+    def test_a_simple_fstring_stays_one_token(self):
+        assert 'f"a{b}c"' in gate._normalize_python('x = f"a{b}c"\n').splitlines()
+
+    def test_a_nested_fstring_stays_one_token(self):
+        """Legal on 3.12+, so the run has to be matched by depth, not first END."""
+        source = "x = f\"{f'{y}'}\"\n"
+        assert "f\"{f'{y}'}\"" in gate._normalize_python(source).splitlines()
+
+    def test_a_multiline_fstring_stays_one_token(self):
+        """Exercises the multi-row branch of the source slice."""
+        source = 'x = f"""\nhello {name}\n"""\n'
+        assert 'f"""\nhello {name}\n"""' in gate._normalize_python(source)
+
+    def test_an_fstring_is_still_part_of_the_digest(self):
+        """Collapsing must not amount to dropping it - rewording is a real change."""
+        base = 'def f(good, bad):\n    return f"Currently {good}g, {bad}b."\n'
+        changed = base.replace("{good}g, {bad}b.", "{good}g and {bad}b.")
+        assert gate._normalize_python(changed) != gate._normalize_python(base)
+
+    def test_an_fstring_expression_change_trips(self):
+        base = 'def f(good, bad):\n    return f"{good}g, {bad}b"\n'
+        changed = base.replace("{good}g", "{bad}g")
+        assert gate._normalize_python(changed) != gate._normalize_python(base)
+
+    def test_logic_beside_an_fstring_still_trips(self):
+        """The real shape of the mirrored functions: a threshold, then a message."""
+        base = 'def f(good, bad):\n    if good < 5 or bad < 5:\n        return f"need {good}"\n    return None\n'
+        changed = base.replace("good < 5 or bad < 5", "good < 7 or bad < 7")
+        assert gate._normalize_python(changed) != gate._normalize_python(base)
+
+    def test_reformatting_around_an_fstring_does_not_trip(self):
+        base = 'def f(good):\n    return dict(reason=f"need {good}", status="red")\n'
+        changed = base.replace(
+            'dict(reason=f"need {good}", status="red")',
+            'dict(\n        reason=f"need {good}",\n        status="red",\n    )',
+        )
+        assert gate._normalize_python(changed) == gate._normalize_python(base)
+
+
 class TestResolutionFailures:
     """A moved or renamed side is drift too, not a silent pass."""
 

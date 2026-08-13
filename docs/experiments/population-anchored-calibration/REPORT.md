@@ -77,13 +77,31 @@ H3 ✓ vs x-cal, ✗ vs the incumbent · H4 ✓ on binary, ✓ from 51 votes on 
 
 ## Take-aways
 
-- **The cut rule flips with the anchor mass, and that is the mechanism.**
-  `mid` ignores the mixture weights; `rate` needs them. At light anchoring the
-  weights come from the population (right) and `mid` wins; heavier anchoring
-  lets the votes' acquisition-biased prevalence into the weights, which is
-  exactly what `rate` reads. So `mid` peaks low (κ=0.3) and `rate` peaks high
-  (κ=1) — and the two curves cross near κ=1–2, which is why run A, whose grid
-  started at 1, saw `rate` in front.
+- **The cut rule flips with the anchor mass.** `mid` peaks low (κ=0.3) and
+  `rate` peaks high (κ=1) — and the two curves cross near κ=1–2, which is why
+  run A, whose grid started at 1, saw `rate` in front.
+
+  > **Correction (2026-08-12, from #2865's follow-up).** This take-away
+  > originally explained the flip as "`mid` ignores the mixture weights; `rate`
+  > needs them", with heavier anchoring letting the votes' acquisition-biased
+  > prevalence into the weights that `rate` reads. **That mechanism is wrong.**
+  > `rate` passes `lam = (fnr/fpr)·(w_lo/w_hi)` into a solve of the form
+  > `w_lo·N_lo = lam·w_hi·N_hi`, where the prior-odds factor cancels the weights
+  > exactly: the rule reduces to `N_lo = (fnr/fpr)·N_hi`, is prior-free, and its
+  > interior root is invariant to the mixture weights at every inclusion (it
+  > reads them only through the out-of-interval continuation slope). Verified
+  > numerically over `w_lo ∈ {0.5, 0.9, 0.99}` and pinned by
+  > `tests_lib/detectors/test_cut_inclusion_sweep.py::TestRateIsPriorFree`.
+  >
+  > What actually separates the two rules at inclusion 0 is the **variance
+  > asymmetry**: `rate` solves the equal-density crossing, which sits off the
+  > midpoint by `≈ var·ln(w_lo/(lam·w_hi))/(mu_hi − mu_lo)` whenever the
+  > components differ in width, and heavier anchoring is what pulls the anchored
+  > components' *widths* apart. The κ recommendation and every number in this
+  > report are measurements and stand unchanged; only this explanation of them
+  > does not. It is corrected rather than deleted because #2865's candidate
+  > list was derived from it — its "candidate 2", *drop the mixture-weight
+  > factor from `rate`*, is a no-op that describes what `rate` already computes.
 - **"Honest anchors beat anchor mass" was a statement about heavy anchoring.**
   Run A found label-anchored fits flipping worse than x-cal at κ≥10. At κ=0.3
   they do not: pooled deep, `anchored κ=0.3 rate` is −0.0424, and on region

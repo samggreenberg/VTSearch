@@ -23,8 +23,15 @@ Three companions, each with a different job:
 Run the preflight. It is a gate, not a reminder:
 
 ```bash
-bash scripts/experiments/preflight.sh --exp "$CALIB_EXP" --arms a,b,c
+bash scripts/experiments/preflight.sh --exp "$CALIB_EXP" --arms a,b,c \
+  --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC"
 ```
+
+Pass `--job-name`, `--mem` and `--conc` whenever you know them. They gate the two
+mistakes that cost the most queue time in #3129: an array that claims your whole
+**per-user memory** allowance (memory is the binding quota here, not CPU — see
+GRID-PLAYBOOK.md for measured RSS per cell type), and a **job name you are
+already using**, which silently breaks the per-name completion waiter below.
 
 It refuses to pass when the results dir already holds another grid's cells,
 when the *actual* mount is low on space, when zero-byte cells from a previous
@@ -48,7 +55,11 @@ Then check the two things a script cannot:
 id and that cells begin appearing. An arm that was refused, or a waiter that
 aborted, looks exactly like an arm that is merely queued.
 
-**Never quote an ETA for a launch you have not confirmed started.**
+**Never quote an ETA for a launch you have not confirmed started** — and
+never quote one from a cell you have not timed *on this grid*. Read the
+distribution of completed cells (`sacct -j <id> --format=Elapsed,State`), not
+its maximum: quoting a previous grid's slowest cell produced a 90-minute
+overestimate in #3129, offered alongside a proposal to cancel work.
 
 Arm a completion notification on the run itself — a background command that
 exits when the queue drains:

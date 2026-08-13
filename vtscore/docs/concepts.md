@@ -84,10 +84,10 @@ declares it via its `embedding_dim` property):
 
 | Embedder | Media type | D |
 |---|---|---|
-| `clap` | `audio` (default) | 512 |
+| `clap_general` | `audio` (default) | 512 |
 | `ast` | `audio` | 768 |
 | `beats` | `audio` | 768 |
-| `clap_general` | `audio` | 512 |
+| `clap` | `audio` | 512 |
 | `clap_music` | `audio` | 512 |
 | `paraspeechclap` | `audio` | 768 |
 | `whisper_encoder` | `audio` | 512 |
@@ -222,8 +222,8 @@ embedding. Every concrete embedder subclasses `vtscore.media.MediaEmbedder`
 
 ```python
 class MediaEmbedder:
-    name: str                  # property - registry key, e.g. "clap"
-    display_name: str          # property - human label, e.g. "CLAP (general audio)"
+    name: str                  # property - registry key, e.g. "clap_general"
+    display_name: str          # property - human label, e.g. "CLAP (general, larger)"
     media_type_id: str         # property - "audio", "image", …
     supports_text: bool        # property - is there a text tower?
 

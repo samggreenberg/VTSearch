@@ -71,8 +71,6 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2991 — ARCHITECTURE.md: false flask.g claim about the library tier, plus directory-map drift (Sonnet 5)
-
 <!-- item-sep -->
 
 
@@ -149,21 +147,6 @@ separately.
   `vtscore/CHANGELOG.md` by contrast is actively maintained and should stay.
 
 <!-- item-sep -->
-
-- **ARCHITECTURE.md — inventory and description drift beyond the flask.g claim in #2991.**
-  `settings_models.py` is described as Marshmallow when it is pydantic; the theme enum is given as
-  three modes when there are four; `vtscore/media/base.py` is credited with ABCs that live
-  elsewhere; the exporter inventory omits `open_url` and `portable_detector`; request hooks and
-  error handlers are attributed to `app.py` after moving to `vtsearch/hooks.py` and `errors.py`.
-  Missing from the map: `gpu_backends.py`, `io.py`, `single_instance.py`, the signpost
-  (region-labeling) subsystem under `projection/`, half of `datasets/` (`archive_stream.py`,
-  `clipper_chain.py`), 13 of 18 `eval/` modules including `autopilot_flow.py`, and
-  `state/sort_results_cache.py`. Five server-tier settings keys are missing. `PluginRegistry`'s
-  entry-point discovery is described as directory-scan only. The auth section presents
-  `DefaultLoginProvider` as the sole built-in, omitting `TrivialLoginProvider` and
-  `ApiKeyLoginProvider`. Context resolution also accepts `dataset_id`/`detector_id` query params
-  as a header fallback, undocumented. Minor: a duplicated word in the ownership-tracking sentence;
-  the `DatasetContext` key-state table understates what a context holds.
 
 <!-- item-sep -->
 

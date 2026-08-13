@@ -97,6 +97,31 @@ The pointer carries the issue number (the durable link) and a short human-readab
 
 This is why closing an issue by hand didn't previously "trickle back": the item was **duplicated as a body** in the plan instead of **referenced as a pointer.** Store it once, point at it from anywhere else, and dismissal is just deleting the pointer.
 
+## Label every issue you file (CRITICAL)
+
+**Every GitHub issue you create must carry the `claude` label**, and the `experiment` label when it applies. Apply them at creation time (`labels: ["claude", …]`), not as a follow-up edit. If a label is missing from the repo, applying it via the issues API creates it automatically — do not skip a label because it doesn't exist yet.
+
+### `claude` — who filed it
+
+`claude` means **this issue was written by Claude, not by a human.** It is not a topic tag and has nothing to do with what the issue is about (nearly every issue here concerns Claude-adjacent work; that is never why the label goes on).
+
+The label exists because **authorship is otherwise invisible.** Claude sessions file issues through the repo owner's GitHub account, so a Claude-written issue and a human-written one have the *same author* — there is no `author:` query that separates them. The label is the only signal, which is why the burden sits on Claude:
+
+- **Claude labels its own issues.** Humans file issues without ceremony and are never asked to remember a `human` tag.
+- **Human-filed issues are the ones *without* the label:** `is:issue is:open -label:claude`.
+
+That asymmetry is the whole design. It only works if Claude is exhaustive: a Claude-filed issue that slips through unlabeled doesn't just lose a tag, it **silently contaminates the human-issue view** — the query that a human uses to find their own thinking now returns Claude's. Never apply `claude` to an issue a human wrote, and never omit it from one you wrote.
+
+### `experiment` — does closing it require a run?
+
+`experiment` means **this issue cannot be resolved without running an experiment** — a GRID/SLURM sweep, an eval study, a calibration run. It marks a *gate*, not a topic: the test is "could a competent implementer close this from a laptop with the test suite, or do they need measured results first?"
+
+- Apply it to: new eval arms, sweeps and re-runs, calibration rows that must be measured, "is X better than Y?" questions, and research ideas whose first real step is a measurement.
+- Do **not** apply it to: bug fixes, docs, refactors, plumbing, or code changes whose spec is already measured and decided.
+- It is orthogonal to `claude` — a human-filed research idea gets `experiment` alone; a Claude-filed sweep gets both.
+
+The point is scheduling: `label:experiment` is the queue of work that needs machine time booked, and `-label:experiment` is what can be picked up right now. See the `grid-experiments` skill for how those runs are actually launched.
+
 ## Recommend a Claude model in every issue you file
 
 **Every GitHub issue you create must include a recommended Claude model** for whoever picks it up, sized to the work. This lets a task be routed to the cheapest model that will do it well — a Haiku-tier mechanical edit shouldn't burn Opus, and a regression-prone refactor shouldn't be handed to a model that will botch it.

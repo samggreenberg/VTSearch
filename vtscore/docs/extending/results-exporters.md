@@ -228,10 +228,15 @@ Four things this shape gets right, and that yours should too:
 - **Assume the URL is public.** It reaches the destination site's logs
   and the user's browser history. Identifiers, not content.
 
-Set `opens_url = True` only if you *always* return a URL; the flag is
-what the UI reads to label the button before running anything. An
-exporter that returns one only sometimes (a webhook whose remote hands
-back a permalink) leaves the flag `False` - the URL still opens.
+Set `opens_url = True` only if you *always* return a URL. The flag does
+two jobs: it labels the button before anything runs, and it tells the
+Export modal to claim the new tab *inside the click handler* and
+navigate it when your `export()` returns. That ordering is the whole
+game - a `window.open()` fired from the response instead is exactly what
+a popup blocker exists to stop, and it fails silently. An exporter that
+returns a URL only sometimes (a webhook whose remote hands back a
+permalink) leaves the flag `False`; the URL still opens on a best-effort
+basis, with the success toast's **Open** button as the fallback.
 
 **You don't need an `export_cli` override for this.** The CLI has no
 browser, so it surfaces the `open_url` your `export()` returned rather

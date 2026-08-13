@@ -115,27 +115,35 @@ def inclusion_cost_weights(inclusion_value: int) -> tuple[float, float]:
 #: moves it *up* the ranking, and so returns *more* positives.
 #:
 #: ``-1`` is the only value that passes the pre-registered ship rule in **all
-#: three** environments measured, and this constant is deliberately **not** gated
-#: by voting mode.  The history is worth keeping, because the first answer was
-#: bigger and did not survive:
+#: **two** binary environments measured, and this constant is deliberately **not**
+#: gated by voting mode.  The history is worth keeping, because the first answer
+#: was bigger and did not survive:
 #:
 #: * ``coco_val x siglip2`` (binary, PR #2876) found an interior optimum at
 #:   ``-3``: positives per 100 votes 4 -> 18, final cost 0.137 -> 0.129 (95% CI
 #:   [-0.025, -0.005]), average precision 0.696 -> 0.817.  #2878 shipped it.
 #: * ``visual_genome_m x siglip`` (binary, PR #2891) **rejected** ``-3``: cost CI
 #:   [+0.003, +0.022] against a +0.01 tolerance.  Only ``-1`` passed.
-#: * ``visual_genome_m x dinov3_patch`` (REGION voting, PR #2905) passes ``-3``
-#:   on the ship rule - but the mechanism ``-3`` was justified by is **absent**
-#:   there.  Paired on the same 536 cells, ``k=-3`` moves average precision
-#:   +0.0283 under binary voting and **+0.0003** under region voting
-#:   (difference-in-differences -0.0281, CI [-0.0361, -0.0202]), while the cost
-#:   side - oracle cost rising as the ranking's tail blurs - is present in both.
 #:
 #: So the disagreement runs along the *environment*, not the voting mode: the
 #: largest split (``-3`` ships on COCO, fails on VG) is **within** binary voting,
-#: which no mode gate can reach.  ``-1`` is the value with no measured harm
-#: anywhere.  Do not raise this without a fourth environment; do not gate it by
-#: mode without evidence that mode - and not label supply - is the axis.
+#: which no mode gate can reach - and that leg alone is what sets this value.
+#: ``-1`` is the value with no measured harm in either environment.  Do not raise
+#: it without a further environment; do not gate it by mode without evidence that
+#: mode - and not label supply - is the axis.
+#:
+#: **The region-voting check is still OUTSTANDING.**  It was run (PR #2909) and
+#: its result is **void**: that run predates #2943, which fixed the harness
+#: scoring the acquisition pool by each media's whole-image vector while cutting
+#: the threshold on region max-pooled scores.  On a patch dataset that put the
+#: cut above the entire pool - pinned on 39% of ``k=-3`` steps against 1.5% of
+#: the ``k=+2`` falsifier - so the aggressive arms were clamped and the lever was
+#: partly inert exactly where the decision needed it live.  The two binary
+#: environments are unaffected (``patch_grid`` on 0/4193, so they scored and cut
+#: in one space).  Read the banner on
+#: ``docs/experiments/acquisition-inclusion/REPORT_REGION_VOTING.md`` before
+#: citing anything from that run, and re-run it before concluding anything about
+#: voting mode.
 #:
 #: **The known cost of this conservatism**: on a starved COCO-like environment
 #: ``-1`` finds 6 positives per 100 votes where ``-3`` finds 18.  Under binary
@@ -146,7 +154,9 @@ def inclusion_cost_weights(inclusion_value: int) -> tuple[float, float]:
 #: is the way to recover COCO's gain without charging the other environments'
 #: tails, and it subsumes the voting-mode question entirely (#2910).
 #:
-#: See ``docs/experiments/acquisition-inclusion/REPORT_REGION_VOTING.md``.
+#: See ``docs/experiments/acquisition-inclusion/REPORT.md`` (COCO) and
+#: ``REPORT_SECOND_ENVIRONMENT.md`` (VG binary) for the two live environments,
+#: and ``REPORT_REGION_VOTING.md`` for the voided region run and how to redo it.
 ACQUISITION_INCLUSION_OFFSET = -1
 
 
@@ -739,20 +749,36 @@ def gmm_cut_from_fit(fit: GmmFit1D, rule: str, fpr_weight: float = 1.0, fnr_weig
     ``"mid"`` never reports a kind: the midpoint of two means is defined for
     every fit, so it has no fallback branch to distinguish.
 
+    ``"cross_tilt"`` is **eval-only** (issue #2865's candidate 2, as literally
+    specified): the same solve at ``lam = fnr/fpr``, i.e. the Bayes
+    misclassification-*count* boundary - mixture weights kept as class priors -
+    tilted by the cost ratio.  It exists because ``"rate"``, despite the
+    surrounding prose, does *not* read the mixture weights: the prior-odds
+    factor in its ``lam`` cancels the ``w_lo/w_hi`` inside :func:`_rate_cut`'s
+    ``offset`` exactly, leaving the cut invariant to the weights at every
+    inclusion (only the out-of-interval continuation *slope* still averages the
+    variances by them).  So "drop the mixture-weight factor from ``rate``" -
+    #2865's stated candidate - is a no-op, and the rule that genuinely *does*
+    read the acquisition-biased weights is this one.  Do not ship it without a
+    measurement: retaining the prior odds is precisely what #2836 identified as
+    the bias in the ``cross`` rule #2833 reverted.
+
     ``"mid_tilt"`` (the shipped fold-level rule, :data:`FOLD_ANCHOR_CUT_RULE`)
-    is deliberately *not* accepted here: it is defined in fold-quantile space
-    over a :class:`FoldAnchoredCut`'s combined folds
-    (:meth:`FoldAnchoredCut._quantile_at`), so it has no per-fit, score-space
-    form for this function to apply.
+    and ``"q_tilt"`` (eval-only) are deliberately *not* accepted here: both are
+    defined in fold-quantile space over a :class:`FoldAnchoredCut`'s combined
+    folds (:meth:`FoldAnchoredCut._quantile_at`), so they have no per-fit,
+    score-space form for this function to apply.
     """
     if rule == "mid":
         return fit.midpoint(), CUT_KIND_INTERIOR
-    if rule == "rate":
+    if rule in ("rate", "cross_tilt"):
         if not (fpr_weight > 0.0 and fnr_weight > 0.0 and fit.w_hi > 0.0):
             return fit.midpoint(), CUT_KIND_DEGENERATE_MIDPOINT
-        lam = (fnr_weight / fpr_weight) * (fit.w_lo / fit.w_hi)
+        lam = fnr_weight / fpr_weight
+        if rule == "rate":
+            lam *= fit.w_lo / fit.w_hi
         return _rate_cut(fit.w_lo, fit.mu_lo, fit.var_lo, fit.w_hi, fit.mu_hi, fit.var_hi, lam=lam)
-    raise ValueError(f"unknown cut rule {rule!r}; expected 'mid' or 'rate'")
+    raise ValueError(f"unknown cut rule {rule!r}; expected 'mid', 'rate' or 'cross_tilt'")
 
 
 def rank_transfer(
@@ -814,6 +840,23 @@ FOLD_ANCHOR_CUT_RULE = "mid_tilt"
 #: shipped ``calibrate_count=2`` the mean and the median coincide.
 FOLD_ANCHOR_COMBINE = "qmean"
 
+#: Step size of the **eval-only** ``"q_tilt"`` cut rule (issue #2865's candidate
+#: 3), in units of combined-fold quantile per inclusion step.
+#:
+#: ``q_tilt`` decouples the Inclusion knob from the mixture entirely: it takes
+#: the measured midpoint's combined fold quantile and shifts it by a fixed
+#: amount per step of the knob, so the admitted fraction moves by construction
+#: rather than by whatever the fitted Gaussians happen to imply.  That makes it
+#: the simplest rule that cannot be inclusion-blind - and its price is this free
+#: parameter, which has no principled value and must be *fitted*.
+#:
+#: **This default is a placeholder, not a measurement.**  0.02 means "one
+#: inclusion step moves the cut by two percentage points of the haystack", which
+#: is the right order of magnitude for the shipped ``mid_tilt`` rule's own
+#: realised tilt but is otherwise arbitrary.  #2865's sweep varies it; nothing
+#: should ship at this value on the strength of it being written down here.
+FOLD_ANCHOR_QTILT_STEP = 0.02
+
 
 @dataclass(frozen=True, eq=False)
 class FoldAnchoredCut:
@@ -845,6 +888,9 @@ class FoldAnchoredCut:
     n_anchored: int
     cut_rule: str = FOLD_ANCHOR_CUT_RULE
     combine: str = FOLD_ANCHOR_COMBINE
+    #: Only read by the eval-only ``"q_tilt"`` rule; see
+    #: :data:`FOLD_ANCHOR_QTILT_STEP`.
+    qtilt_step: float = FOLD_ANCHOR_QTILT_STEP
 
     @property
     def provenance(self) -> str:
@@ -880,13 +926,39 @@ class FoldAnchoredCut:
         cut contributes a zero shift (its ``rate`` cut falls back to the
         midpoint at every weight), degrading that fold to plain ``mid`` rather
         than poisoning the tilt.
+
+        ``"q_tilt"`` (**eval-only**, issue #2865's candidate 3) is the same
+        shape with the mixture taken out of the tilt: ``q = q_mid - step *
+        log2(fnr/fpr)``.  The log-cost ratio *is* the inclusion value for
+        weights from :func:`inclusion_cost_weights`, so this reads "shift the
+        admitted fraction by :attr:`qtilt_step` per step of the knob" - also
+        identically ``q_mid`` at inclusion 0, also monotone, but moving the
+        admitted set *by construction* rather than by whatever the fitted
+        Gaussians happen to imply.  Its step size is a free parameter with no
+        principled value (:data:`FOLD_ANCHOR_QTILT_STEP`), which is the whole of
+        what it trades away for that guarantee.
         """
         if self.cut_rule == "mid_tilt":
             q_mid = self._combined_fold_quantile("mid", 1.0, 1.0)
             q_rate = self._combined_fold_quantile("rate", fpr_weight, fnr_weight)
             q_rate_zero = self._combined_fold_quantile("rate", *inclusion_cost_weights(0))
             return q_mid + (q_rate - q_rate_zero)
+        if self.cut_rule == "q_tilt":
+            q_mid = self._combined_fold_quantile("mid", 1.0, 1.0)
+            return q_mid - self.qtilt_step * math.log2(fnr_weight / fpr_weight)
         return self._combined_fold_quantile(self.cut_rule, fpr_weight, fnr_weight)
+
+    def quantile_at(self, inclusion_value: int) -> float:
+        """The combined fold quantile this estimator admits at *inclusion_value*.
+
+        :meth:`threshold_at` realizes this quantile on the final model's
+        haystack; reading it directly separates "did the rule move the cut" from
+        "did the haystack have anything there to move past", which is the
+        distinction the #2865 sweep turns on - on a cleanly separated haystack a
+        whole band of the knob can move the quantile while realizing the same
+        threshold and the same admitted set.
+        """
+        return self._quantile_at(*inclusion_cost_weights(inclusion_value))
 
     def threshold_at(self, inclusion_value: int) -> float:
         """The threshold this estimator cuts at *inclusion_value*.

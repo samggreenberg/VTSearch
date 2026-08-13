@@ -1,0 +1,86 @@
+====================================================================================================
+COVERAGE
+====================================================================================================
+cell files found : 45 / 45 expected
+unreadable/empty : 2 [('task_0039.csv', 'empty'), ('task_0043.csv', 'empty')]
+rows loaded      : 6249
+distinct cells   : 43
+steps per cell   : min=101 median=147 max=149
+styles           : ['whole_image']
+heads            : ['linear']
+
+====================================================================================================
+HEADLINE - deep regime (t >= 100), cost = fpr + fnr, regret vs oracle threshold
+====================================================================================================
+                                n_steps  prevalence    cost     fpr     fnr  regret  oracle_cost      AP   auroc
+arm
+coco_val x dinov3_patch             969      0.0261  0.2930  0.2067  0.0863  0.1047       0.1884  0.6418  0.9366
+visual_genome_m x dinov3_patch     1224      0.0405  0.4838  0.3069  0.1769  0.1172       0.3667  0.4015  0.8560
+
+====================================================================================================
+BANDED ON VOTES SPENT - the axis the user actually pays
+====================================================================================================
+                                  cost                          regret
+votes                             1-20 101-150   21-50  51-100    1-20 101-150   21-50  51-100
+arm
+coco_val x dinov3_patch         0.5805  0.2929  0.3924  0.3183  0.1736  0.1046  0.0908  0.0996
+visual_genome_m x dinov3_patch  0.7467  0.4839  0.6499  0.5596  0.1814  0.1174  0.1801  0.1454
+
+====================================================================================================
+WHERE THE REGRET COMES FROM (rule inefficiency vs calibration shift)
+====================================================================================================
+rows with a decomposition: 5975 / 6249
+                                regret  rule_ineff  cal_shift  cal_share
+arm
+coco_val x dinov3_patch         0.1047       0.011     0.0937     0.8949
+visual_genome_m x dinov3_patch  0.1172      -0.004     0.1212     1.0338
+
+====================================================================================================
+FAILURE MODES - how the threshold was chosen
+====================================================================================================
+threshold_provenance            conformal  too_few_default
+arm
+coco_val x dinov3_patch              97.2              2.8
+visual_genome_m x dinov3_patch       94.3              5.7
+
+degenerate steps : 7 / 6249 (0.11%)
+cut_fallback     : 0 / 6249 (0.00%)
+deep steps with fpr==0 : 0 / 2193 (0.00%)  [mean fnr there: nan]
+
+====================================================================================================
+STARVATION - do runs actually find positives?
+====================================================================================================
+                                cells  median_good  zero_good  median_t  pct_zero_good
+arm
+coco_val x dinov3_patch            19          8.0          0     150.0            0.0
+visual_genome_m x dinov3_patch     24          6.0          0     150.0            0.0
+
+====================================================================================================
+COST OF A STEP (seconds)
+====================================================================================================
+                                 mean  median     max
+arm
+coco_val x dinov3_patch         62.31   61.55  124.47
+visual_genome_m x dinov3_patch  61.22   59.81  122.47
+
+====================================================================================================
+INDIVIDUAL TRACES
+====================================================================================================
+
+--- visual_genome_m x dinov3_patch | category=bed seed=0 (prevalence=0.0203, style=whole_image) ---
+  t  n_good  n_bad   cost    fpr    fnr  regret  average_precision threshold_provenance  degenerate
+  2       1      1 1.1165 0.5938 0.5227  0.1761             0.0290      too_few_default           0
+ 14       2     12 1.1008 0.8962 0.2045  0.1832             0.0634            conformal           0
+ 26       3     23 0.9386 0.0068 0.9318  0.1429             0.1034            conformal           0
+ 38       4     34 0.8637 0.6137 0.2500  0.2645             0.3028            conformal           0
+ 50       4     46 0.8647 0.7511 0.1136  0.3087             0.3287            conformal           0
+ 62       4     58 0.7365 0.5319 0.2045  0.1656             0.3371            conformal           0
+ 74       4     70 0.7533 0.5261 0.2273  0.2325             0.3318            conformal           0
+ 86       4     82 0.6754 0.4481 0.2273  0.1781             0.3438            conformal           0
+ 98       5     93 0.4860 0.4632 0.0227  0.2933             0.7536            conformal           0
+110       5    105 0.4864 0.4637 0.0227  0.3101             0.7496            conformal           0
+122       5    117 0.3880 0.3653 0.0227  0.2234             0.7666            conformal           0
+134       5    129 0.4567 0.4340 0.0227  0.2965             0.7688            conformal           0
+146       5    141 0.4426 0.4199 0.0227  0.2790             0.7724            conformal           0
+
+(tables also written to /expscratch/sgreenberg/bench-binary/results/ANALYSIS_TABLES.txt)

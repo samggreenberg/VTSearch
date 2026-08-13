@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import pytest
 
+from tests.fixtures.medias import DEFAULT_AUDIO_EMBEDDER
 from vtscore.detectors.workflow import apply_and_retrain
 from vtsearch.state import medias
 from vtscore.state.core import DetectorContext
@@ -112,7 +113,7 @@ class TestTraining:
         # training_medias cache should hold both voted media.
         assert set(det_ctx.training_medias) >= {1, 2}
         # embedder / media_type stamped from the snapshot.
-        assert det_ctx.embedder == "clap"
+        assert det_ctx.embedder == DEFAULT_AUDIO_EMBEDDER
         assert det_ctx.media_type == "audio"
 
 

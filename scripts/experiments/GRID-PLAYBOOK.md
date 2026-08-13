@@ -154,3 +154,44 @@ silently runs as binary voting**, which has now cost three studies (#2877,
 - App-tier work that needs `./run-tests.sh` (deps, frontend build) belongs in the
   **Claude Code webapp** (`CLAUDE_CODE_REMOTE=true`, deps auto-install), not a local
   session or local agent. GRID SSH from a sandboxed remote won't work (no VPN/keys).
+
+## Memory is a per-user quota, not just a per-job request
+
+`cpu_limit` caps **cpu=240 and mem=1100000M (~1.07 TB) per user**. CPU is rarely
+the binding constraint; memory usually is, and it binds against *your own* jobs.
+
+An array of `16 x --mem=64G` claims 1024G — 95 % of the allowance — so every
+later job you submit sits in `QOSMaxMemoryPerUser` behind it. That is
+indistinguishable from a busy cluster and it is entirely self-inflicted. In
+#3129 it delayed a prepare job, throttled a second array to 2 slots instead of
+12, and parked five small diagnostic jobs for 25 minutes.
+
+**Size `--mem` from a real cell, the same way you size wall-clock:**
+
+```bash
+sacct -j <jobid> --format=JobID,JobName%20,MaxRSS,Elapsed
+```
+
+Measured peaks for the calibration harness (#3129):
+
+| cell | medias | peak RSS | sensible `--mem` |
+|---|---:|---:|---|
+| whole-image (siglip / siglip2_l) | 4–5k | ~1.1 GB | 8G |
+| whole-image, 12k set | 12k | ~3 GB | 8G |
+| `max_patch` (dinov3, 4–5k) | 4–5k | ~13–14 GB | 24G |
+| `max_patch` (dinov3, 12k) | 12k | ~14 GB | 24G |
+| prepare (loads every pickle) | — | ~3.4 GB | 24G |
+
+Two QOS can bind and they disagree: `squeue %q` reports the association QOS
+while the partition carries its own. Read both and use the tightest —
+`preflight.sh --mem --conc` does this.
+
+Levers once an array is already running:
+
+```bash
+scontrol update JobId=<id> ArrayTaskThrottle=<n>   # frees quota as tasks finish
+scontrol update JobId=<id> MinMemoryNode=<MB>      # PENDING tasks only
+```
+
+`MinMemoryNode` cannot retarget tasks the scheduler has already dispatched, so
+throttling is usually the faster lever.

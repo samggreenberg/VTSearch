@@ -102,6 +102,17 @@ class TestInclusionSlideRecutsTheAnchoredEstimator:
         # ``mid_tilt`` rule answers the knob (issue #2865).
         assert seen[0] > seen[-1], seen
 
+        # The threshold moving is necessary but *not sufficient*: the cut is
+        # carried to the final model as a quantile, so a whole band of the
+        # slider can move the cut without moving the set the user sees.  Pin
+        # the observable the knob is actually for - how many distinct verdicts
+        # the slider produces - so a rule that only moves the number cannot
+        # pass.  How *much* of the knob a rule should deliver is what #2865's
+        # sweep prices; that more than one survives is the floor.
+        scores = [float(r["score"]) for r in _results]
+        admitted = {sum(1 for s in scores if s >= thr) for thr in seen}
+        assert len(admitted) > 1, f"the slider moved the cut but never the admitted set: {sorted(admitted)}"
+
     def test_without_an_estimator_the_slide_falls_back_to_the_conformal_rule(self):
         """A detector whose population fit degenerated (no cached estimator)
         still slides, by re-thresholding the cached fold orderings."""

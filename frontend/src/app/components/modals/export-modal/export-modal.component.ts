@@ -28,7 +28,7 @@ import { SortingApiService } from '../../../services/sorting-api.service';
 import type { LabelFilter } from '../../../services/sorting-api.service';
 import { ToastService } from '../../../services/toast.service';
 import { ImporterField } from '../../../models/api.models';
-import { openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
+import { openBlankTab, openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 import type { LabeledElement } from '../../../generated/api-client/models/labeled-element';
 
@@ -582,6 +582,15 @@ export class ExportModalComponent implements OnInit {
       labels: this.filteredLabels,
       selected_columns: this.exportColumns.map((c) => c.key),
     };
+
+    // Claim the tab *now*, while the click that got us here still counts as
+    // user activation. Opening it from the response callback instead is what a
+    // popup blocker exists to stop, and it gets swallowed silently (#2898).
+    // Only exporters that declare `opens_url` are known to be heading for a new
+    // tab; one that returns a URL without declaring it falls back to the
+    // best-effort open in the callback, and to the toast's Open action.
+    const pendingTab = exporter.opens_url ? openBlankTab() : null;
+
     this.exportersApi
       .runExport({
         exporter_name: exporter.name,
@@ -597,13 +606,21 @@ export class ExportModalComponent implements OnInit {
           // (or as well as) delivering the labelset somewhere — that's how a
           // third-party site with no ingest API gets the selection (#2855).
           const openUrl = safeExternalUrl(response?.open_url);
-          const opened = openUrl ? openExternalUrl(openUrl) : false;
+          let opened = false;
+          if (openUrl) {
+            opened = pendingTab ? pendingTab.navigate(openUrl) : openExternalUrl(openUrl);
+          } else {
+            // The exporter advertised a URL and didn't produce one; don't leave
+            // a blank tab sitting there.
+            pendingTab?.close();
+          }
           const plural = labelCount === 1 ? '' : 's';
 
           // Three toast shapes: opened a tab, tried and got blocked, or a
-          // plain delivery export. The popup blocker fires when the response
-          // lands outside the click's task, so say why nothing happened
-          // rather than leaving the user staring at an unchanged screen.
+          // plain delivery export. The blocked case survives the pre-opened
+          // tab above (a blocker can refuse even a gesture-time popup), so say
+          // why nothing happened rather than leaving the user staring at an
+          // unchanged screen.
           let message = `Exported ${labelCount.toLocaleString()} label${plural} to ${exporterLabel}`;
           let detail = fieldValues['filepath'] ? `Destination: ${fieldValues['filepath']}` : undefined;
           if (openUrl) {
@@ -625,11 +642,17 @@ export class ExportModalComponent implements OnInit {
             action: openUrl
               ? { label: 'Open', title: openUrl, onClick: () => openExternalUrl(openUrl) }
               : undefined,
+            // A blocked tab makes that button the only way to reach the site,
+            // so the toast has to outlive the 5s success default — otherwise
+            // the escape hatch is gone before the user finishes reading why
+            // nothing opened.
+            autoDismissMs: openUrl && !opened ? 0 : undefined,
             dedupKey: 'export-labels-success',
           });
           this.exported.emit();
         },
         error: () => {
+          pendingTab?.close();
           this.status.set('');
           this.actionError.set('Label export failed');
           this.submitting.set(false);

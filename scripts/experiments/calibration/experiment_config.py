@@ -35,13 +35,20 @@ import zlib
 DATASETS = os.environ.get("CALIB_DATASETS", "visual_genome_m,caltech101_m").split(",")
 
 DATASET_EMBEDDERS: dict[str, list[str]] = {
-    "visual_genome_m": os.environ.get("CALIB_VG_EMBEDDERS", "siglip,siglip_l,dinov3_patch").split(","),
-    "caltech101_m": os.environ.get("CALIB_CALTECH_EMBEDDERS", "siglip,siglip_l").split(","),
+    "visual_genome_m": os.environ.get("CALIB_VG_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
+    "caltech101_m": os.environ.get("CALIB_CALTECH_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
     # COCO-2017-val, assembled from the #2790 sweep cache by
     # ``build_coco_pickle.py`` (issue #2841).  Whole-image embedders only: that
     # cache holds each image's whole vector and its HAC region vectors but not
     # the raw patch grid, so no region-voting style can be built from it.
-    "coco_val": os.environ.get("CALIB_COCO_EMBEDDERS", "siglip,siglip2").split(","),
+    "coco_val": os.environ.get("CALIB_COCO_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
+    # Box-size-banded VG (PR #3123, still unmerged).  Only the embedder table is
+    # needed: the pile already holds every cell, and prepare_data reads a cell
+    # pickle in place when it exists.  Registering them here rather than basing
+    # the run on that branch keeps the code at dev HEAD.
+    "vg_box_small": os.environ.get("CALIB_VGBOX_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
+    "vg_box_medium": os.environ.get("CALIB_VGBOX_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
+    "vg_box_large": os.environ.get("CALIB_VGBOX_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
@@ -59,6 +66,37 @@ REGION_VOTING_BY_DATASET: dict[str, bool] = {
     "caltech101_m": False,
     "coco_val": False,
 }
+
+#: Whether a dataset carries ground-truth region boxes.  This is the *dataset*
+#: half of region voting; the other half is the embedder (it must emit a patch
+#: grid).  Kept separate from :data:`REGION_VOTING_BY_DATASET` - which older
+#: analyzers read as a per-dataset label - so that marking a dataset boxed here
+#: cannot silently change another study's control selection.
+#:
+#: ``coco_val`` is boxed and, since the pile gained ``coco_val__dinov3_patch``,
+#: is now genuinely region-capable - the second region-voting environment the
+#: #2905 confound needed.  The older map still says False because it predates
+#: that cell.
+BOXED_BY_DATASET: dict[str, bool] = {
+    "visual_genome_m": True,
+    "caltech101_m": False,
+    "coco_val": True,
+    "vg_box_small": True,
+    "vg_box_medium": True,
+    "vg_box_large": True,
+}
+
+
+def region_voting_for(dataset: str, embedder: str) -> bool:
+    """Region voting needs **both** halves: boxes (dataset) and a patch grid (embedder).
+
+    Asserting the premise per *cell* rather than per dataset is the control for
+    the mis-specification behind #2877, #2897 and #2905, where a boxed dataset
+    paired with a single-vector embedder was reported as a region-voting arm
+    while it silently ran as binary voting.
+    """
+    return BOXED_BY_DATASET.get(dataset, False) and is_patch_embedder(embedder)
+
 
 # --- Styles per embedder kind ---
 PATCH_STYLES = os.environ.get("CALIB_PATCH_STYLES", "max_patch,max_patch_pca_hac").split(",")
@@ -116,6 +154,28 @@ ANCHORED_FOLD_COMBINES = [c for c in os.environ.get("CALIB_ANCHORED_FOLD_COMBINE
 ANCHORED_CHECKPOINTS = [
     int(c) for c in os.environ.get("CALIB_ANCHORED_CHECKPOINTS", "20,50,100,200,300").split(",") if c
 ]
+
+#: Inclusion values the **fold-anchored cut rules** are swept over (issue
+#: #2865), into the ``__cutincl.csv`` side frame.  Empty (the default) = off,
+#: and every other study runs exactly as before.
+#:
+#: Not to be confused with :data:`INCLUSION_SWEEP_KS`, which sweeps the
+#: *conformal* rule's ``alpha(k)`` budget.  This one asks a different question -
+#: which cut rule should answer the Inclusion knob at all - so its rows are
+#: scored at their own ``k``, not at :data:`INCLUSION`.
+#:
+#: The arms are :data:`ANCHORED_WEIGHTS` x :data:`ANCHORED_RULES` x
+#: :data:`ANCHORED_FOLD_COMBINES`, so a run that wants the #2865 candidate set
+#: sets ``CALIB_ANCHORED_RULES=mid,mid_tilt,rate,cross_tilt,q_tilt``.
+CUT_INCLUSION_KS = [int(k) for k in os.environ.get("CALIB_CUT_INCL_KS", "").split(",") if k.strip()]
+
+#: Step sizes the eval-only ``q_tilt`` rule expands over - its free parameter,
+#: in combined-fold-quantile units per inclusion step.  Every other rule ignores
+#: this.  Empty = the single placeholder default in
+#: ``vtscore.training.thresholds.FOLD_ANCHOR_QTILT_STEP``, which is a
+#: placeholder and not a measurement; a run that means to *place* the parameter
+#: has to pass a grid here.
+CUT_INCLUSION_QTILT_STEPS = [float(s) for s in os.environ.get("CALIB_CUT_INCL_QTILT_STEPS", "").split(",") if s.strip()]
 
 #: Calibration fold counts to score **counterfactually** at every step (issue
 #: #2897), on top of whatever :data:`CALIBRATE_COUNT` the run lives under.
@@ -187,9 +247,11 @@ def _opt_float(name: str) -> float | None:
 #: pick reads the threshold as a **rank position**: a *negative* offset raises
 #: the cut, moves it *up* the ranking, and returns *more* positives.
 #:
-#: Unset = the shipped default (-3, the interior optimum PR #2876 measured), so
-#: an unconfigured run measures what users get.  ``0`` is the pre-#2876 control,
-#: one threshold doing both jobs.
+#: Unset = whatever ``vtscore.training.thresholds`` currently ships, so an
+#: unconfigured run measures what users actually get.  Do not restate the value
+#: here: PR #2876 shipped -3, and it is **-1** today.  A number written into
+#: this comment goes stale silently and a study then mis-states its own
+#: baseline.  ``0`` is the pre-#2876 control, one threshold doing both jobs.
 ACQ_INCLUSION_OFFSET = _opt_int("CALIB_ACQ_INCLUSION_OFFSET")
 if ACQ_INCLUSION_OFFSET is None:
     from vtscore.training.thresholds import ACQUISITION_INCLUSION_OFFSET
@@ -233,6 +295,26 @@ def is_patch_embedder(embedder: str) -> bool:
 def styles_for_embedder(embedder: str) -> list[str]:
     """The style arms an embedder participates in."""
     return PATCH_STYLES if is_patch_embedder(embedder) else SINGLE_STYLES
+
+
+def styles_for(dataset: str, embedder: str) -> list[str]:
+    """The style arms one ``(dataset, embedder)`` cell runs.
+
+    A patch embedder only earns its patch styles where the dataset can supply
+    box supervision.  On a **boxless** dataset a Good vote has no box to pool,
+    so it falls back to the image-level vector, while every Bad vote floods the
+    full-image row **plus ~197 raw patches** as negatives.  No patch row is ever
+    positive, so the patch geometry teaches only "patch-like => negative", and
+    max-pooling it at inference buys nothing while re-opening the asymmetry
+    behind the boxless-``max_patch`` failure (perfect ranking, zero FPR,
+    catastrophic FNR -- see :mod:`vtscore.eval.patch_styles`).
+
+    If the user can only answer in booleans about whole images, then the Bad
+    pile and the haystack should be whole images too.
+    """
+    if is_patch_embedder(embedder) and not BOXED_BY_DATASET.get(dataset, False):
+        return SINGLE_STYLES
+    return styles_for_embedder(embedder)
 
 
 def embedders_for_dataset(dataset: str) -> list[str]:
@@ -311,8 +393,24 @@ def select_categories_by_scale(
     return sorted(selected), report
 
 
+#: Force a category-selection mode instead of inferring it from the medias.
+#: ``"prevalence"`` is what the already-box-banded ``vg_box_*`` sets want: they
+#: are a box-size axis by construction, so re-banding *within* one leaves most
+#: bands empty (wave 2 of #3129 collapsed to 5/4/2 categories out of 40).
+#: ``"scale"`` forces banding; unset infers as before.
+CATEGORY_MODE = os.environ.get("CALIB_CATEGORY_MODE", "").strip().lower()
+
+
 def select_categories(medias: dict, category_counts: dict[str, int]) -> tuple[list[str], dict]:
-    """Scale-stratified when boxed, else prevalence-spread."""
+    """Scale-stratified when boxed, else prevalence-spread.
+
+    ``CALIB_CATEGORY_MODE`` overrides the inference in either direction.
+    """
+    if CATEGORY_MODE == "prevalence":
+        return select_categories_by_prevalence(category_counts), {
+            "mode": "prevalence",
+            "reason": "forced by CALIB_CATEGORY_MODE (dataset is already banded on box size)",
+        }
     selected, report = select_categories_by_scale(medias, category_counts)
     if selected:
         report["mode"] = "scale_bands"

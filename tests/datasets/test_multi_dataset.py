@@ -449,8 +449,8 @@ class TestMultiDatasetAPI:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["ok"] is True
-        # The default audio embedder is registered in tests as "clap".
-        assert data["embedder"] == "clap"
+        # The default audio embedder is registered in tests as "clap_general".
+        assert data["embedder"] == "clap_general"
 
     def test_preload_embedder_unknown_dataset_returns_404(self, client):
         """Unknown dataset id is rejected with 404."""

@@ -38,6 +38,7 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from _cells_io import main_frame_files  # noqa: E402
 
 #: Vote-count windows the comparison aggregates over.  Below 6 votes the blend
 #: is pure GMM (full authority), 6-20 is the ramp, above 20 it is pure
@@ -83,7 +84,7 @@ def load_base_rows(results_dir: Path, label: str) -> pd.DataFrame:
     *operated at* counts — that is the threshold that drove the next Hard pick.
     """
     cells = results_dir / "cells"
-    files = sorted(p for p in cells.glob("task_*.csv") if "__sweep" not in p.name and "__cutdiag" not in p.name)
+    files = main_frame_files(cells)
     if not files:
         return pd.DataFrame()
     df = pd.concat([pd.read_csv(p) for p in files], ignore_index=True)

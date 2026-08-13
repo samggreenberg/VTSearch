@@ -297,10 +297,10 @@ embedder per media type should override the `is_default` property to return
 
 | File (under `vtscore/media/`) | Class | Embedder | Media type | Default |
 |---|---|---|---|---|
-| `audio/embedder_clap.py` | `AudioClapEmbedder` | `clap` | `audio` | ✅ |
+| `audio/embedder_clap_general.py` | `AudioClapGeneralEmbedder` | `clap_general` | `audio` | ✅ |
 | `audio/embedder_ast.py` | `AudioASTEmbedder` | `ast` | `audio` |  |
 | `audio/embedder_beats.py` | `AudioBEATsEmbedder` | `beats` | `audio` |  |
-| `audio/embedder_clap_general.py` | `AudioClapGeneralEmbedder` | `clap_general` | `audio` |  |
+| `audio/embedder_clap.py` | `AudioClapEmbedder` | `clap` | `audio` |  |
 | `audio/embedder_clap_music.py` | `AudioClapMusicEmbedder` | `clap_music` | `audio` |  |
 | `audio/embedder_paraspeechclap.py` | `AudioParaSpeechClapEmbedder` | `paraspeechclap` | `audio` |  |
 | `audio/embedder_whisper.py` | `AudioWhisperEncoderEmbedder` | `whisper_encoder` | `audio` |  |

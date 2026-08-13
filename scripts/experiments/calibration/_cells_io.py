@@ -18,6 +18,27 @@ from typing import Any
 
 _DROP_FIELDS = ("media_bytes", "thumbnail_bytes")
 
+#: Suffixes ``run_cells.py`` writes *beside* each cell's main frame, one per
+#: side frame.  These are separate long-format tables with their own columns, so
+#: an analyzer that concatenates them into the main frame gets a ragged
+#: DataFrame whose extra rows silently enter every aggregate.
+#:
+#: Kept in one place because the failure mode is invisible: ``glob("task_*.csv")``
+#: matches the side frames too, and each new side frame has historically had to
+#: be excluded by hand in ~8 analyzers - which is exactly as reliable as it
+#: sounds.  Add the suffix here when you add a frame, not at the call sites.
+SIDE_FRAME_SUFFIXES = ("__sweep", "__cutdiag", "__cutincl")
+
+
+def main_frame_files(cells_dir: str | Path) -> list[Path]:
+    """Every cell's **main** metric CSV under *cells_dir*, side frames excluded."""
+    return sorted(p for p in Path(cells_dir).glob("task_*.csv") if not any(s in p.name for s in SIDE_FRAME_SUFFIXES))
+
+
+def side_frame_files(cells_dir: str | Path, suffix: str) -> list[Path]:
+    """Every cell's side frame of one kind, e.g. ``suffix="__cutincl"``."""
+    return sorted(Path(cells_dir).glob(f"task_*{suffix}.csv"))
+
 
 def dump_medias(medias: dict[int, dict[str, Any]], path: str | Path) -> int:
     """Pickle *medias* minus the bulky raster fields; return bytes written."""

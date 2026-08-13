@@ -208,6 +208,32 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="thresholds.fold_anchored_fit_then_cut",
+        app="py:vtscore.training.thresholds.fold_anchored_gmm_threshold",
+        harness="vtscore/eval/voting_iterations.py::_cut_inclusion_arms",
+        kind="default",
+        note=(
+            "The app composes a fold-anchored threshold as fit_fold_anchored_cut(...) then "
+            "cut.threshold_at(inclusion). The #2865 sweep re-cuts ONE fit per anchor weight "
+            "across the whole (rule, combine, k) grid, so it calls those two halves itself "
+            "instead of calling this function per grid point. The two are identical only for as "
+            "long as this function has nothing BETWEEN the fit and the cut. If a stage is added "
+            "there - a clamp, a smoothing pass, a provenance-dependent substitution - the sweep "
+            "silently stops measuring the shipped estimator, and its rows would still look "
+            "perfectly reasonable. Re-check that the composition is still fit-then-cut."
+        ),
+        divergence=(
+            "INTENTIONAL: the harness does NOT reproduce this function's terminal fallbacks (the "
+            "final model's unanchored midpoint, then its median) when no fold yields a fit. Both "
+            "are inclusion-blind by construction, so they would enter the #2865 frame as arms "
+            "that trivially lose the knob-liveness comparison while saying nothing about the cut "
+            "rule under test; the sweep skips that anchor weight instead. Fitting once and "
+            "re-cutting is also what production itself does on an Inclusion slide "
+            "(recompute_detector_thresholds_for_inclusion), so the sweep measures the object the "
+            "app re-cuts rather than a chain of independent retrains."
+        ),
+    ),
+    Mirror(
         id="thresholds.rate_cut_no_root",
         app="py:vtscore.training.thresholds._rate_cut",
         harness="vtscore/eval/cut_rules.py::gaussian_cuts",
@@ -246,13 +272,71 @@ class MirrorError(Exception):
 # --------------------------------------------------------------------- digests
 
 
+def _source_slice(lines: list[str], start: tuple[int, int], end: tuple[int, int]) -> str:
+    """The literal source text between two `(row, col)` token positions."""
+    (srow, scol), (erow, ecol) = start, end
+    if srow == erow:
+        return lines[srow - 1][scol:ecol]
+    parts = [lines[srow - 1][scol:]]
+    parts.extend(lines[row - 1] for row in range(srow + 1, erow))
+    parts.append(lines[erow - 1][:ecol])
+    return "".join(parts)
+
+
+def _collapse_fstrings(tokens: list[tokenize.TokenInfo], lines: list[str]) -> list[tokenize.TokenInfo]:
+    """Re-join PEP 701's split f-string tokens into the one token <=3.11 emits.
+
+    Python 3.12 stopped tokenizing an f-string as a single STRING and started
+    emitting `FSTRING_START` / `FSTRING_MIDDLE` / `FSTRING_END` around the real
+    tokens of each replacement field.  That is a pure tokenizer change - the
+    code means the same thing - but it changes the token *text*, so a digest
+    taken on 3.12+ disagreed with one taken on 3.10/3.11 for any mirrored
+    function containing an f-string, and `--update` just moved the failure to
+    the other half of the supported range instead of converging (issue #3117).
+
+    Splicing the original source back out by token position restores the older
+    single-token form on every interpreter, so a pin travels between them.
+    """
+    start_type = getattr(tokenize, "FSTRING_START", None)
+    if start_type is None:  # <=3.11 already emits one STRING token.
+        return tokens
+    end_type = tokenize.FSTRING_END
+    out: list[tokenize.TokenInfo] = []
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok.type != start_type:
+            out.append(tok)
+            i += 1
+            continue
+        # Nested f-strings are legal on 3.12+, so match by depth, not first END.
+        depth = 0
+        j = i
+        while j < len(tokens):
+            if tokens[j].type == start_type:
+                depth += 1
+            elif tokens[j].type == end_type:
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        else:  # pragma: no cover - tokenize raises on an unterminated string first.
+            raise MirrorError("unterminated f-string while normalizing source")
+        end = tokens[j]
+        text = _source_slice(lines, tok.start, end.end)
+        out.append(tokenize.TokenInfo(tokenize.STRING, text, tok.start, end.end, tok.line))
+        i = j + 1
+    return out
+
+
 def _normalize_python(source: str) -> str:
     """Source text stripped of comments, docstrings and formatting.
 
     Token-based rather than AST-based on purpose: `ast.unparse` output is not
     guaranteed stable across the Python versions this repo supports (>=3.10),
     which would make the pins fail for whoever is not on the pinning machine's
-    interpreter.  Token text is.
+    interpreter.  Token text is *nearly* stable - see `_collapse_fstrings` for
+    the one place it isn't, and how that is normalized away.
 
     Magic trailing commas are dropped as well, so that `ruff format` wrapping a
     call across lines - which it will do for a change as innocent as a longer
@@ -261,7 +345,11 @@ def _normalize_python(source: str) -> str:
     skip = (tokenize.COMMENT, tokenize.NL, tokenize.ENCODING, tokenize.ENDMARKER)
     out: list[str] = []
     prev_meaningful: int | None = None
-    tokens = list(tokenize.generate_tokens(io.StringIO(textwrap.dedent(source) + "\n").readline))
+    text = textwrap.dedent(source) + "\n"
+    tokens = _collapse_fstrings(
+        list(tokenize.generate_tokens(io.StringIO(text).readline)),
+        text.splitlines(keepends=True),
+    )
     for i, tok in enumerate(tokens):
         if tok.type in skip:
             continue
