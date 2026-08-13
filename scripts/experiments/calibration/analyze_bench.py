@@ -162,7 +162,17 @@ print()
 print("=" * 100)
 print("COST OF A STEP (seconds)")
 print("=" * 100)
-print(df.groupby("arm")["elapsed_seconds"].agg(["mean", "median", "max"]).round(2).to_string())
+# `elapsed_seconds` is CUMULATIVE from the cell's start, so aggregating it directly
+# reports "how far into the cell was this step", not what a step costs. Difference it
+# within each cell first; the per-cell total is reported separately as wall time.
+cell_key = ["dataset", "embedder", "category", "seed"]
+ordered = df.sort_values(cell_key + ["t"])
+ordered["step_seconds"] = ordered.groupby(cell_key)["elapsed_seconds"].diff()
+per_step = ordered.groupby("arm")["step_seconds"].agg(["mean", "median", "max"]).round(2)
+per_cell = ordered.groupby(cell_key + ["arm"])["elapsed_seconds"].max().groupby("arm").agg(["median", "max"])
+per_step[["cell_median", "cell_max"]] = per_cell.round(1)
+print(per_step.to_string())
+print("(mean/median/max are per STEP; cell_* are whole-cell wall time, both in seconds)")
 
 # --- traces --------------------------------------------------------------
 print()

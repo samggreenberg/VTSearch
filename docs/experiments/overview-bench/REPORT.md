@@ -1,7 +1,7 @@
 # VTSearch overview benchmark: how each configuration behaves
 
 **Run:** 2026-08-12 · branch `claude/vts-benchmark` · arrays `496044` (wave 1),
-`496454` / `496673` (wave 2)
+`496454` (wave 2), `496673` (wave 2 re-run, drained 2026-08-13 00:00)
 **Data:** `/expscratch/sgreenberg/bench-{overview,vgbox,vgbox2}/results`
 
 This is a **characterization**, not a comparison. Nothing here is trying to pick
@@ -23,9 +23,17 @@ production `max_patch` geometry. Only sizing knobs were set.
 | haystack | `visual_genome_m` (4,193), `coco_val` (4,952), `caltech101_m` (838, boxless), `vg_box_{small,medium,large}` (12,000 each, banded on box area) |
 | category | 6–10 per dataset · 3 seeds · 150 votes |
 
-Wave 1: 189 cells / 26,538 steps. Wave 2: 99 cells / 14,042 steps. A wave-2
-re-run with prevalence-spread categories (270 cells) is in flight; its numbers
-slot into the same frame and are not yet included.
+Wave 1: 189 cells / 26,538 steps. Wave 2: 99 cells / 14,042 steps. **Wave 2
+re-run: 270 cells / 37,844 steps** — 10 prevalence-spread categories per box
+band, replacing the collapsed 5 / 4 / 2 selection wave 2 ran on.
+
+**Every `vg_box_*` number in this report is from the re-run**; wave 2's are
+superseded and kept in `ANALYSIS_TABLES_vgbox.txt` for comparison. The two are
+not interchangeable — the re-run's categories are more prevalent (0.047–0.054
+against 0.015–0.027), so costs are not comparable *across* the waves even though
+the arm ordering *within* each is. Where the two disagree, the re-run is the
+larger and better-constructed sample, and three of the report's original box-band
+claims did not survive it; each is called out where it appears.
 
 ---
 
@@ -44,15 +52,23 @@ Deep regime (t ≥ 100). cost = fpr + fnr. No ordering implied.
 | `visual_genome_m` | `siglip` | 0.3918 | 0.3006 | 0.0912 | 0.1113 | 0.428 | 0.898 | ~110 s |
 | `visual_genome_m` | `siglip2_l` | 0.3666 | 0.2438 | 0.1228 | 0.0960 | 0.457 | 0.899 | ~110 s |
 | `visual_genome_m` | `dinov3_patch` | 0.3242 | 0.1819 | 0.1423 | 0.1100 | 0.525 | 0.913 | ~17 min |
-| `vg_box_large` | `siglip` | 0.3677 | 0.2050 | 0.1628 | 0.0974 | 0.283 | 0.901 | ~40 s |
-| `vg_box_large` | `siglip2_l` | 0.3234 | 0.1591 | 0.1643 | 0.0709 | 0.277 | 0.906 | ~40 s |
-| `vg_box_large` | `dinov3_patch` | 0.3243 | 0.1554 | 0.1689 | 0.1241 | 0.300 | 0.940 | ~32 min |
-| `vg_box_medium` | `siglip` | 0.7471 | 0.4062 | 0.3409 | 0.0800 | 0.097 | 0.689 | ~40 s |
-| `vg_box_medium` | `siglip2_l` | 0.7365 | 0.3830 | 0.3535 | 0.0945 | 0.105 | 0.708 | ~40 s |
-| `vg_box_medium` | `dinov3_patch` | 0.5902 | 0.1725 | 0.4176 | 0.0885 | 0.143 | 0.789 | ~32 min |
-| `vg_box_small` | `siglip` | 0.7774 | 0.4131 | 0.3642 | 0.0934 | 0.093 | 0.668 | ~40 s |
-| `vg_box_small` | `siglip2_l` | 0.7391 | 0.4363 | 0.3028 | 0.0902 | 0.086 | 0.683 | ~40 s |
-| `vg_box_small` | `dinov3_patch` | 0.6463 | 0.4429 | 0.2035 | 0.1964 | 0.136 | 0.823 | ~32 min |
+| `vg_box_large` | `siglip` | 0.4574 | 0.2719 | 0.1856 | 0.0898 | 0.354 | 0.851 | ~2 min |
+| `vg_box_large` | `siglip2_l` | 0.4376 | 0.3342 | 0.1034 | 0.0932 | 0.359 | 0.868 | ~2 min |
+| `vg_box_large` | `dinov3_patch` | 0.3669 | 0.2062 | 0.1607 | 0.0928 | 0.405 | 0.906 | ~23 min |
+| `vg_box_medium` | `siglip` | 0.6297 | 0.3966 | 0.2331 | 0.1033 | 0.297 | 0.776 | ~2 min |
+| `vg_box_medium` | `siglip2_l` | 0.6036 | 0.3675 | 0.2362 | 0.0988 | 0.340 | 0.785 | ~2 min |
+| `vg_box_medium` | `dinov3_patch` | 0.4594 | 0.3426 | 0.1169 | 0.1085 | 0.391 | 0.881 | ~15 min |
+| `vg_box_small` | `siglip` | 0.6339 | 0.3654 | 0.2685 | 0.0943 | 0.221 | 0.755 | ~2 min |
+| `vg_box_small` | `siglip2_l` | 0.6479 | 0.4147 | 0.2332 | 0.1043 | 0.232 | 0.751 | ~2 min |
+| `vg_box_small` | `dinov3_patch` | 0.4910 | 0.3395 | 0.1514 | 0.0971 | 0.294 | 0.850 | ~15 min |
+
+The three `vg_box_*` sets are the **re-run** (`496673`); the rest is wave 1. The
+box-band rows sit at prevalence 0.047–0.054, the wave-1 rows at 0.026–0.071, and
+the superseded wave-2 box rows at 0.015–0.027 — so read down a column within a
+band rather than across the table, and never against wave 2's numbers.
+Wall-time is the median cell, and a step is what actually differs: **6.4–8.5 s
+for `dinov3_patch` against ~0.6 s whole-image**, an 11–13× per-step ratio that
+the per-cell figure understates.
 
 Zero-click typed query, same test splits (`dinov3_patch` has no text tower):
 
@@ -82,10 +98,11 @@ everywhere except COCO.
 within 0.02 of the premium encoder.
 
 **Where it comes apart:** as the target shrinks relative to the frame. Across the
-box bands its AP is 0.283 → 0.097 → 0.093 (large → medium → small) and AUROC
-0.901 → 0.689 → 0.668. At sub-patch scale it is close to uninformative, which is
-the expected consequence of pooling a whole image into one vector when the
-target occupies under 0.5 % of it.
+box bands its AP is 0.354 → 0.297 → 0.221 (large → medium → small) and AUROC
+0.851 → 0.776 → 0.755, against `dinov3_patch`'s 0.906 → 0.881 → 0.850. The
+degradation is the expected consequence of pooling a whole image into one vector
+when the target occupies under 0.5 % of it — and it is *steeper* than the patch
+arm's, which is the comparison that matters.
 
 ## `siglip2_l` — the premium whole-image encoder
 
@@ -98,36 +115,58 @@ profile. Same ~110 s. AP is higher on every non-saturated dataset (VG 0.457 vs
 fpr 0.301 → 0.244 while fnr rises 0.091 → 0.123. It is a less trigger-happy
 encoder, not merely a more accurate one.
 
-**It inherits `siglip`'s scale failure intact.** AP across box bands 0.277 →
-0.105 → 0.086 — the same collapse. Capacity does not substitute for geometry:
-whatever a bigger whole-image encoder buys, it is not the ability to see a
-sub-patch object.
+**It inherits `siglip`'s scale failure intact.** AP across box bands 0.359 →
+0.340 → 0.232, tracking `siglip`'s 0.354 → 0.297 → 0.221 far more closely than
+either tracks the patch arm. Capacity does not substitute for geometry: whatever
+a bigger whole-image encoder buys, it is not the ability to see a sub-patch
+object.
 
 ## `dinov3_patch` — patch geometry, and region voting where boxes exist
 
-**Behaves like:** a much better ranker with a much worse threshold, at ~10–30×
-the compute (17–32 min per run vs ~110 s / ~40 s).
+**Behaves like:** the best ranker in the study, and — once measured on a proper
+category sample — the best *cost* on every boxed set too, at 11–13× the compute
+per step (15–23 min per box-band run against ~2 min; 17–19 min on wave 1's sets).
 
 **Its ranking is the best measured, and the margin grows as targets shrink.** AP
-by box band: 0.300 → 0.143 → 0.136 against `siglip2_l`'s 0.277 → 0.105 → 0.086.
-AUROC 0.940 / 0.789 / 0.823 vs 0.906 / 0.708 / 0.683. On the large band its
-ranking edge is small; at medium and small it is proportionally large. The
-mechanism is straightforward: box supervision only carries information the
-whole-image vector lacks when the box is a small fraction of the frame. A box
-covering a third of the image *is* approximately the image.
+by box band: 0.405 → 0.391 → 0.294 against `siglip2_l`'s 0.359 → 0.340 → 0.232,
+a margin of +0.046 → +0.051 → +0.062. AUROC 0.906 / 0.881 / 0.850 vs 0.868 /
+0.785 / 0.751. The mechanism is straightforward: box supervision only carries
+information the whole-image vector lacks when the box is a small fraction of the
+frame. A box covering a third of the image *is* approximately the image.
 
-**Its threshold is its weak point, and this is the most useful thing the run
-says about it.** On `vg_box_large` it is the **only arm in the entire study with
-a positive `rule_inefficiency`** (+0.021, against −0.021 for `siglip2_l`), and
-its regret is 0.124 vs 0.071. So on large boxes it ranks better and cuts worse,
-and the two cancel to an identical cost (0.3243 vs 0.3234). Its discrimination
-advantage is real and **currently unconverted** — that is a calibration
-property, not a representation one.
+**It also wins on cost in every band**, by 0.071 (large), 0.144 (medium) and
+0.143 (small) against the best whole-image arm in that band. Its error budget is
+the reason: `fnr` is roughly half the whole-image arms' on medium and small
+(0.117 / 0.151
+against 0.233–0.269), so the patch geometry is buying recall on exactly the
+targets a whole-image vector dilutes.
+
+> **Wave 2 said otherwise on the large band, and the re-run overturns it.** On
+> the 5-category wave-2 sample, `dinov3_patch` on `vg_box_large` was the *only
+> arm in the study with a positive `rule_inefficiency`* (+0.021), its regret was
+> 0.124 against `siglip2_l`'s 0.071, and the ranking and threshold effects
+> cancelled to an identical cost (0.3243 vs 0.3234). At 10 categories none of
+> that reproduces: `rule_inefficiency` is **−0.011**, regret is 0.093 against
+> 0.093 — level — and the cost gap opens to 0.367 vs 0.438 in DINOv3's favour.
+> The "unconverted ranking advantage" was a property of five large-box
+> categories, not of the arm. What survives is the *ranking* claim, which the
+> larger sample strengthens.
+
+**Where a positive `rule_inefficiency` does show up** is the **medium** band, on
+all three encoders (+0.017 `dinov3_patch`, +0.010 `siglip`, +0.004 `siglip2_l`)
+— the only band where all three are positive, i.e. where the shipped cut rule is
+beaten by its own in-sample optimum regardless of representation. (`vg_box_small
+× siglip` is the one other positive, at +0.005; every remaining arm is negative.)
+That is a narrower and better-supported version of the same finding: the defect
+tracks the *band*, not the encoder.
 
 **Where it comes apart:** cold start and cost. `too_few_default` is 7.2 % on VG
-(worst of the three) and 18 % on the sub-patch band. On `vg_box_small` it is the
-only arm in either wave whose **regret grows with votes** (0.129 → 0.196). And
-it has **no text tower**, so there is no zero-click entry point for it at all.
+(worst of the three) and 5.8–16.1 % across the box bands — though on the
+sub-patch band the worst cold start is **`siglip2_l`'s** (16.1 %), not
+DINOv3's (9.9 %), another wave-2 claim the re-run reverses. Regret rising with
+votes does not reproduce either: on `vg_box_small × dinov3_patch` regret now
+*falls* 0.117 → 0.097 over the ramp. And it has **no text tower**, so there is
+no zero-click entry point for it at all.
 
 **On a boxless dataset it is not a patch model.** `caltech101_m × dinov3_patch`
 runs `whole_image` by construction: with no box, a Good vote has nothing to pool,
@@ -187,16 +226,21 @@ handful of positives is enough to fix a cut.
 # What moves the regime
 
 **Target scale** is the strongest axis in the study. Best-arm cost across the box
-bands runs 0.323 (large) → 0.590 (medium) → 0.646 (small), and AP 0.30 → 0.14 →
-0.14. Sub-patch retrieval is hard for every configuration; the patch geometry
+bands runs 0.367 (large) → 0.459 (medium) → 0.491 (small), and AP 0.41 → 0.39 →
+0.29. Sub-patch retrieval is hard for every configuration; the patch geometry
 reduces the damage but does not remove it. This is the first measurement of that
 band on a real sample — the full VG vocabulary has 643 sub-patch categories
 against 5 in the demo vocabulary.
 
+The monotone trend held across both samples, but its *shape* changed: on wave 2's
+five-per-band selection the large→medium step was a cliff (0.323 → 0.590), and on
+ten prevalence-spread categories it is a slope (0.367 → 0.459 → 0.491). Scale is
+still the strongest axis; it is not the step function the first sample drew.
+
 **Prevalence** governs whether the clicking loop functions at all. Median
 positives found in 150 votes is 4–11. One trace holds 3 positives for **120
 consecutive votes**; the slowest successful cell needed **80 votes to find its
-first**; seven cells never found one.
+first**; twelve cells across the three waves never found one.
 
 **Dataset saturation** is worth stating so it is not mistaken for a result.
 `caltech101_m` is at ceiling for all four configurations *and* for text (AP
@@ -209,27 +253,33 @@ first**; seven cells never found one.
 
 | mode | rate | where |
 |---|---|---|
-| **Total starvation** — no positive in 150 votes, cell emits nothing | 7 / 189 (3.7 %) wave 1; 0 / 99 wave 2 | rarest categories (`ball` 51/4193, `refrigerator` 101/4952, `sports ball` 169/4952) |
-| **Cold-start default threshold** (`too_few_default`) | 1–7 % wave 1; **17–20 %** on the sub-patch band | worst on `dinov3_patch` / small boxes |
-| **Degenerate step** | 0.04 % wave 1; **1.96 %** wave 2 | small/medium boxes |
-| **Regret rising with votes** | 1 arm | `vg_box_small × dinov3_patch` (0.129 → 0.196) |
-| **Cut fallback** | **0 / 40,580** | never observed |
+| **Total starvation** — no positive in 150 votes, cell emits nothing | 7 / 189 (3.7 %) wave 1; 0 / 99 wave 2; **5 / 270 (1.9 %)** re-run | rarest categories (`ball` 51/4193, `refrigerator` 101/4952, `sports ball` 169/4952, `intersection` 95/12000) |
+| **Cold-start default threshold** (`too_few_default`) | 1–7 % wave 1; **5.8–16.1 %** across the box bands | worst on small boxes; worst *arm* is `siglip2_l`, not `dinov3_patch` |
+| **Degenerate step** | 0.04 % wave 1; 1.96 % wave 2; **2.01 %** re-run | small/medium boxes |
+| **Regret rising with votes** | **0 arms** (was 1 in wave 2, did not reproduce) | — |
+| **Cut fallback** | **0 / 78,424** | never observed |
 
 A starved cell is **silent**: no row is ever emitted with `n_good == 0`, so it
-writes a header and exits 0. That is how these seven were nearly lost — they are
-reported, not excluded, and every average above is conditioned on the run having
-produced data at all.
+writes a header and exits 0. That is how the first seven were nearly lost — they
+are reported, not excluded, and every average above is conditioned on the run
+having produced data at all. The re-run's five were caught the same way, by the
+analyzer counting loaded cells separately from files found (265 vs 270).
 
 ---
 
 # Caveats
 
-- **Wave 2's category selection was collapsed by my error.** The scale-band
-  selector was left on for datasets already banded by box size, so it re-banded
-  within each set: 5 / 4 / 2 categories out of 40 available, with `vg_box_medium`
-  resting on two. The scale trend is large enough to survive it, but the medium
-  row is not a point estimate and no between-band difference under ~0.05 should
-  be read as real. The re-run (270 cells, 10 categories per set) is in flight.
+- **Wave 2's category selection was collapsed by my error, and the re-run
+  replaces it.** The scale-band selector was left on for datasets already banded
+  by box size, so it re-banded within each set: 5 / 4 / 2 categories out of 40
+  available, with `vg_box_medium` resting on two. The re-run (270 cells, 10
+  categories per set) is what every `vg_box_*` number here now comes from. The
+  scale trend survived; three narrower claims built on the medium and large rows
+  did not, which is the caveat working as intended rather than a surprise.
+- **The two box-band samples differ in prevalence**, 0.047–0.054 against
+  0.015–0.027, because the re-run spread categories by prevalence rather than
+  re-banding by size. Absolute costs therefore moved for reasons unrelated to
+  scale, and only within-sample arm ordering carries across.
 - Text queries are **raw category names** (`car_side`, `sports ball`) and
   `embed_text_enriched` was not used, so text numbers are a lower bound.
 - 3 seeds. Differences under ~0.02 in cost are not resolvable here.
@@ -241,9 +291,11 @@ produced data at all.
 
 1. **Compose typing and clicking** rather than choosing: seed a detector from a
    text ranking, especially for `dinov3_patch`, which cannot be typed at.
-2. **`dinov3_patch`'s unconverted ranking advantage** — a positive
-   `rule_inefficiency` on large boxes is a specific, addressable calibration
-   defect, not a property of the representation.
+2. **The medium band's positive `rule_inefficiency`** — on `vg_box_medium` the
+   shipped cut rule is beaten by its own in-sample optimum on all three encoders
+   (+0.017 / +0.010 / +0.004), the only band where that happens. This replaces
+   the wave-2 version of this item, which pinned the defect on `dinov3_patch` and
+   the large band and did not reproduce.
 3. **Acquisition is the scarce resource, not the cut rule** — `rule_inefficiency`
    is already negative nearly everywhere.
 4. **Make a starved run say so** — a `starved` column and a warning; this is the
@@ -329,8 +381,10 @@ This is the clearest actionable finding in the report.
 
 **Can draw boxes and can afford DINOv3.** The advantage is real (−0.042 cost vs
 `siglip2_l` on VG, −0.050 on COCO) and grows as targets shrink (see the box-band
-section), but it costs ~10× wall-clock, has the worst cold start
-(`too_few_default` 7.2 % on VG, 18 % on the sub-patch band), and cannot be
+section, where the re-run puts it ahead on cost in all three bands by 0.071 /
+0.144 / 0.157), but it costs 11–13× per step, has the worst cold start on VG
+(`too_few_default` 7.2 %, worst of the three) and 9.9 % on the sub-patch band,
+and cannot be
 seeded from text.
 
 ## Starvation is a property of the data, not the interaction
@@ -340,6 +394,20 @@ The binary arm starved on exactly the same two cells as the box-drawing arm —
 Identical categories and seeds. Whether the user draws boxes has no bearing on
 whether Autopilot ever surfaces a first positive; that is set by prevalence and
 the split.
+
+**The re-run extends this from the interaction to the encoder.** Its five starved
+cells are two (category, seed) pairs, and they starve *across embedders*:
+`vg_box_small`/`tip`/seed 2 starved on all three (`siglip`, `siglip2_l`,
+`dinov3_patch`), and `vg_box_large`/`intersection`/seed 0 on two of three. The
+third — `intersection` on `siglip` — is the exception that shows the mechanism
+rather than breaking it: it survived, but emitted only 63 of 150 steps, i.e. it
+found its first positive around vote 87. Starvation is set by the draw, not by
+what is doing the ranking. `intersection` is the rarest category in the large
+band (95 of 12,000, prevalence 0.008); `tip` is a free-text label whose positives
+are genuinely ambiguous.
+
+This is worth stating as a design consequence: **a starvation fix has to act on
+acquisition, because changing the encoder demonstrably does not move it.**
 
 ---
 
@@ -396,7 +464,8 @@ vocabulary artefact.
 `vg_box_large`: `barn` (57), `court` (429), `dresser` (94), `sheet` (174),
 `station` (157).
 
-**Wave 2, re-run** (prevalence spread, 10 per set):
+**Wave 2, re-run** (prevalence spread, 10 per set — the source of every
+`vg_box_*` number above; `tip` and `intersection` are the two that starved):
 `vg_box_small`: `nose` (2741), `glasses` (1259), `watch` (581), `camera` (461),
 `tip` (333), `outlet` (264), `drain` (178), `mask` (154), `mustache` (115),
 `tusks` (52).
