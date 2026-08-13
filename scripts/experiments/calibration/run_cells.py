@@ -75,8 +75,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     cell = cells[idx]
     ds, emb, cat, seed = cell["dataset"], cell["embedder"], cell["category"], cell["seed"]
-    styles = cfg.styles_for_embedder(emb)
-    region_voting = cfg.REGION_VOTING_BY_DATASET.get(ds, False)
+    styles = cfg.styles_for(ds, emb)
+    region_voting = cfg.region_voting_for(ds, emb)
     common.log(
         f"cell {idx}/{len(cells)}: dataset={ds} embedder={emb} category={cat} seed={seed} "
         f"styles={styles} head={cfg.HEAD or 'default (production)'} safe_thresholds={cfg.SAFE_THRESHOLDS} "
