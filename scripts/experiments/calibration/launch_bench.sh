@@ -71,6 +71,10 @@ ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
 # production geometry or silently adds a retired arm, so it must not depend on
 # the submitting shell's environment surviving into the job.
 ENVX="$ENVX CALIB_PATCH_STYLES=$CALIB_PATCH_STYLES"
+# Interaction axis: does the simulated user drag boxes, or only answer Good/Bad?
+# Explicit for the same reason CALIB_PATCH_STYLES is: it decides what was measured.
+ENVX="$ENVX CALIB_INTERACTION=${CALIB_INTERACTION:-boxes}"
+ENVX="$ENVX CALIB_CATEGORY_MODE=${CALIB_CATEGORY_MODE:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms this way).

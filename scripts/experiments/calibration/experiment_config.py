@@ -87,6 +87,16 @@ BOXED_BY_DATASET: dict[str, bool] = {
 }
 
 
+#: How the simulated user interacts.  ``"boxes"`` (default) lets a region-capable
+#: cell drag the ground-truth box; ``"binary"`` models the user who only ever
+#: answers Good/Bad on whole images, which is the common real constraint and was
+#: previously unmeasured on any boxed dataset.
+#:
+#: This is an INTERACTION axis, not a data axis: the dataset still has boxes, the
+#: embedder still has a patch grid, and the user simply does not use them.
+INTERACTION = os.environ.get("CALIB_INTERACTION", "boxes").strip().lower()
+
+
 def region_voting_for(dataset: str, embedder: str) -> bool:
     """Region voting needs **both** halves: boxes (dataset) and a patch grid (embedder).
 
@@ -95,6 +105,8 @@ def region_voting_for(dataset: str, embedder: str) -> bool:
     paired with a single-vector embedder was reported as a region-voting arm
     while it silently ran as binary voting.
     """
+    if INTERACTION == "binary":
+        return False
     return BOXED_BY_DATASET.get(dataset, False) and is_patch_embedder(embedder)
 
 
@@ -312,7 +324,7 @@ def styles_for(dataset: str, embedder: str) -> list[str]:
     If the user can only answer in booleans about whole images, then the Bad
     pile and the haystack should be whole images too.
     """
-    if is_patch_embedder(embedder) and not BOXED_BY_DATASET.get(dataset, False):
+    if is_patch_embedder(embedder) and (INTERACTION == "binary" or not BOXED_BY_DATASET.get(dataset, False)):
         return SINGLE_STYLES
     return styles_for_embedder(embedder)
 
