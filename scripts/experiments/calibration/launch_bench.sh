@@ -95,7 +95,7 @@ case "${1:-status}" in
 prepare)
   echo "CALIB_EXP=$CALIB_EXP"
   echo "datasets=$CALIB_DATASETS seeds=$CALIB_N_SEEDS per_band=$CALIB_N_PER_BAND"
-  submit prepare --job-name=bench-prep --mem=96G --cpus-per-task=8 \
+  submit prepare --job-name=bench-prep --mem="${CALIB_PREP_MEM:-96G}" --cpus-per-task=8 \
     --time=3:00:00 --partition="$PARTITION" --export=ALL \
     --output="$LOGS/prepare-%j.out" \
     --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py"
