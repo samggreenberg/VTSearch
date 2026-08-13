@@ -340,3 +340,168 @@ The binary arm starved on exactly the same two cells as the box-drawing arm —
 Identical categories and seeds. Whether the user draws boxes has no bearing on
 whether Autopilot ever surfaces a first positive; that is set by prevalence and
 the split.
+
+---
+
+# The datasets, their classes, and what the model actually gets wrong
+
+## What the `vg_box_*` sets are
+
+Not size tiers. `visual_genome_m`'s `_m` is a *dataset size* tier and says
+nothing about boxes; these three are a **box-area axis**, built specifically so
+the scale question could be asked.
+
+Bands are fractions of image area, anchored to the patch embedder's geometry
+rather than chosen round numbers — one DINOv3 patch is 1/196 of the image and
+the smallest HAC leaf is 1/12:
+
+| set | box area | meaning |
+|---|---|---|
+| `vg_box_small` | 0 → **1/196** (0.51 %) | below what the patch grid can resolve at all |
+| `vg_box_medium` | 1/196 → **1/12** (8.3 %) | resolvable by patches, smaller than one HAC leaf |
+| `vg_box_large` | 1/12 → **0.80** | above 80 % a box is not a region, it is the image (mirrors `MAX_VOTED_AREA`) |
+
+Construction (`scripts/experiments/pile/scan_vg_boxes.py`, PR #3123):
+
+- Scans the **whole VG source** — all ~108k images across `VG_100K` and
+  `VG_100K_2`, with the full free-text object vocabulary from `objects.json`.
+  Not the demo pipeline, which uses 100 curated categories over a 4 % slice.
+- `objects.json` stores boxes in **pixels** and carries no image dimensions, so
+  areas are normalised against dimensions read from each JPEG header.
+- **40 categories and 12,000 images per band**, categories stratified *within*
+  the band so a band is not silently all one size.
+- Categories whose union box is >1.5× a single instance are dropped — scattered
+  instances are not a region a user would drag.
+- Minimum 50 images per category.
+
+The motivating number: the demo vocabulary puts **5** categories in the
+sub-patch band; the full source has **643**. The "starved sub-patch band" was a
+vocabulary artefact.
+
+## Classes used, by dataset
+
+**Wave 1** — `visual_genome_m` (4,193 images, scale-banded): `ball` (51),
+`bed` (100), `bus` (67), `cat` (30), `laptop` (60), `nose` (146), `sink` (60),
+`sky` (793).
+
+`coco_val` (4,952, scale-banded): `bear` (49), `bed` (149), `cat` (184),
+`clock` (204), `microwave` (54), `refrigerator` (101), `sports ball` (169).
+
+`caltech101_m` (838, prevalence-spread): `airplanes` (228), `car_side` (35),
+`grand_piano` (28), `starfish` (24), `ibis` (23), `cougar_face` (20).
+
+**Wave 2, first run** (scale bands — the collapsed selection):
+`vg_box_small`: `hands` (799), `lips` (155), `mask` (154), `mustache` (115).
+`vg_box_medium`: `chest` (122), `collar` (369) — **only two**.
+`vg_box_large`: `barn` (57), `court` (429), `dresser` (94), `sheet` (174),
+`station` (157).
+
+**Wave 2, re-run** (prevalence spread, 10 per set):
+`vg_box_small`: `nose` (2741), `glasses` (1259), `watch` (581), `camera` (461),
+`tip` (333), `outlet` (264), `drain` (178), `mask` (154), `mustache` (115),
+`tusks` (52).
+`vg_box_medium`: `hair` (2628), `shorts` (987), `clock` (662), `lamp` (590),
+`truck` (507), `backpack` (346), `basket` (306), `frisbee` (231), `holder` (160),
+`chairs` (116).
+`vg_box_large`: `fence` (2621), `hill` (807), `lady` (591), `couch` (483),
+`court` (429), `walkway` (255), `runway` (202), `station` (157),
+`intersection` (95), `barn` (57).
+
+**Binary-voting arm**: same categories as wave 1's VG and COCO.
+
+## Are the errors the model's, or the labels'?
+
+Aggregate fpr cannot tell those apart, so the final step of five representative
+cells was dumped per-media: score, label, threshold, source image id, and every
+category the dataset annotates on that image.
+
+**The test.** Pick categories that *cannot* occur without the target — you
+cannot have clouds without sky. If the images the model flags are enriched for
+those relative to the images it correctly rejects, the "false" positives are
+largely un-annotated instances. Enrichment is measured against the model's own
+**true negatives**, so it is not confounded by the model merely preferring
+outdoor scenes: both groups are dataset-negative, and the only difference is
+what the model said.
+
+### `visual_genome_m` / `sky` — the labels are wrong
+
+| | `cloud`/`clouds` on FPs | on true negatives | enrichment |
+|---|---:|---:|---:|
+| `siglip` (682 FPs / 1021 TNs) | 6.6 % | 0.4 % | **16.8×** |
+| `dinov3_patch` (504 FPs / 1199 TNs) | 9.5 % | 0.1 % | **114×** |
+
+Outdoor context (`tree`, `building`, `grass`, `mountain`, `roof`, `water`,
+`field`, `road`) appears on **84 %** of false positives against 36–43 % of true
+negatives (~2×).
+
+Literal examples — VG annotates the clouds and omits the sky:
+
+```
+score   image        annotated categories
+0.7075  498364.jpg   cloud, grass, pole, road, sign, truck
+0.6568    4056.jpg   building, clouds, grass, pole, tree, water
+0.6346    4877.jpg   cloud, tree, trunk
+0.6291    4211.jpg   boat, building, bush, cloud, field, leaf, shadow, tree
+0.5781    2628.jpg   bird, clouds, leaf, mountain, shadow, tree, trunk
+```
+
+**These are missing labels, not model errors.** `sky` is 18.8 % prevalent as
+annotated; the true rate is plainly higher. Every `sky` number in this report —
+fpr 0.30, cost 0.39 — is therefore a *lower bound on the model* and an upper
+bound on its apparent error.
+
+The false negatives look genuine, and differ in kind: images that *do* carry a
+`sky` annotation but where sky is a thin strip behind a person or a building —
+`713003.jpg` (building, hat, line, man, people, shirt, sky, wall),
+`712994.jpg` (ear, face, hair, hand, horse, man, nose, people, shadow, shirt,
+sky). Small-region failures, which is consistent with the box-band result.
+
+### `coco_val` / `clock` — the model is wrong
+
+The same test is **not applicable**: COCO's 80-class vocabulary contains no term
+that entails `clock`, so there is nothing to be enriched for. But the evidence
+points the other way anyway. COCO's annotation is exhaustive over its classes,
+the false positives are indoor scenes with no plausible hidden clock
+(`chair`; `couch, tv`; `chair, couch, bed, remote, tv`), and only 46 of 2,364
+negatives are flagged at all — 1.9 %, versus VG `sky`'s 40 %.
+
+The false negatives are the informative half: images that *do* contain a clock,
+scored ~0.003–0.012, and every one is a cluttered scene where the clock is one
+small object among many —
+
+```
+0.0028  000000350148.jpg  person, carrot, chair, car, dining table, cake, clock, cup, fork, knife...
+0.0058  000000084674.jpg  person, couch, book, clock, donut, tv
+0.0099  000000441247.jpg  chair, vase, couch, dining table, orange, oven, person, backpack, banana...
+```
+
+That is a genuine **scale** failure by a whole-image encoder, and it is the same
+mechanism the `vg_box` bands measure directly.
+
+### `visual_genome_m` / `bus` — a threshold collapse
+
+The starkest single failure in the study: **1,210 of 2,030 negatives flagged
+(59.6 %) and 0 of 67 positives missed.** The threshold has fallen so far that
+almost everything passes. The ranking is not necessarily broken; the cut is.
+This is the over-inclusion signature of `siglip` (fpr ≫ fnr) in its extreme
+form, on a rare category (67 positives, 3.2 %).
+
+*A caution about one heuristic*: the error report flags false positives carrying
+a category name that contains the target, and for `bus` this matched 80 images
+annotated **`bush`**. That is a substring coincidence, not evidence — `bush`
+does not entail `bus`. It is reported here as a known false lead rather than
+quietly dropped, because the same heuristic is genuinely useful for annotation
+*granularity* cases and will keep firing.
+
+## What this means for the rest of the report
+
+- **VG-derived numbers are pessimistic by an unknown amount**, worst for common
+  scene categories (`sky`, and plausibly `tree`, `building`, `grass`). COCO
+  numbers do not have this problem.
+- Cross-dataset comparisons of *absolute* cost between VG and COCO are therefore
+  not safe. Within-dataset comparisons — which is what every configuration
+  contrast in this report is — remain valid, since all configurations see the
+  same labels.
+- **A label-noise audit belongs upstream of the next VG study**, not inside it.
+  The entailment test is cheap, mechanical, and now scripted
+  (`scripts/experiments/calibration/label_noise.py`).
