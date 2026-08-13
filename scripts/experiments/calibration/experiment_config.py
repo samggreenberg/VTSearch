@@ -393,8 +393,24 @@ def select_categories_by_scale(
     return sorted(selected), report
 
 
+#: Force a category-selection mode instead of inferring it from the medias.
+#: ``"prevalence"`` is what the already-box-banded ``vg_box_*`` sets want: they
+#: are a box-size axis by construction, so re-banding *within* one leaves most
+#: bands empty (wave 2 of #3129 collapsed to 5/4/2 categories out of 40).
+#: ``"scale"`` forces banding; unset infers as before.
+CATEGORY_MODE = os.environ.get("CALIB_CATEGORY_MODE", "").strip().lower()
+
+
 def select_categories(medias: dict, category_counts: dict[str, int]) -> tuple[list[str], dict]:
-    """Scale-stratified when boxed, else prevalence-spread."""
+    """Scale-stratified when boxed, else prevalence-spread.
+
+    ``CALIB_CATEGORY_MODE`` overrides the inference in either direction.
+    """
+    if CATEGORY_MODE == "prevalence":
+        return select_categories_by_prevalence(category_counts), {
+            "mode": "prevalence",
+            "reason": "forced by CALIB_CATEGORY_MODE (dataset is already banded on box size)",
+        }
     selected, report = select_categories_by_scale(medias, category_counts)
     if selected:
         report["mode"] = "scale_bands"
