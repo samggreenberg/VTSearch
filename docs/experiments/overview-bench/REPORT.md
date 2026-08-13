@@ -277,3 +277,111 @@ between-band difference smaller than ~0.05 should be read as real.
 Re-running wave 2 with `CALIB_N_CATEGORIES` on a prevalence spread (the boxless
 path) instead of scale bands is cheap — the pile cells are built — and is the
 first thing to do before anyone acts on these numbers.
+
+---
+
+# Text sort vs the clicked detector
+
+**What a user gets for free**: type the category name, sort the haystack by
+similarity to that text vector, cut it with the GMM threshold. Zero clicks. That
+is the baseline the trained detector has to beat, and nothing in this study had
+measured it.
+
+Scored through the harness's own `exemplar_sims` path with the text vector in
+place of the crop vector, so the typed query and the clicked detector are scored
+in the same geometry, on the same reproduced test split.
+
+**`dinov3_patch` has no text tower** — it is vision-only, `embed_text` returns
+`None`. Recorded as n/a, not silently skipped. This matters: see below.
+
+## Headline
+
+cost = fpr + fnr at the detector's own threshold; `det_t*` is the cost a user
+would see having voted that many times.
+
+| arm | text (0 clicks) | t=10 | t=25 | t=50 | t=100 | t=150 | text AP | det AP (final) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `caltech101_m` × `siglip` | 0.1612 | 0.0588 | 0.0053 | 0.0004 | 0.0013 | 0.0073 | 1.000 | 1.000 |
+| `caltech101_m` × `siglip2_l` | 0.0444 | 0.1557 | 0.0000 | 0.0000 | 0.0001 | 0.0030 | 1.000 | 1.000 |
+| `coco_val` × `siglip` | 0.3024 | 0.6393 | 0.4139 | 0.3047 | 0.2236 | 0.2115 | 0.707 | 0.700 |
+| `coco_val` × `siglip2_l` | 0.2768 | 0.4910 | 0.2970 | 0.2224 | 0.1876 | 0.2196 | 0.743 | 0.710 |
+| `visual_genome_m` × `siglip` | 0.4894 | 0.7293 | 0.5292 | 0.4672 | 0.3909 | 0.4130 | 0.496 | 0.430 |
+| `visual_genome_m` × `siglip2_l` | 0.3936 | 0.7464 | 0.4939 | 0.4611 | 0.3622 | 0.3763 | 0.544 | 0.461 |
+
+## The finding: clicking buys the threshold, not the ranking
+
+**Text ranks at least as well as the trained detector in every arm, and better
+on the hard one.** Average precision, typed query vs detector after 150 votes:
+
+| arm | text AP | detector AP | winner |
+|---|---:|---:|---|
+| `visual_genome_m` × `siglip` | **0.496** | 0.430 | **text, by 0.066** |
+| `visual_genome_m` × `siglip2_l` | **0.544** | 0.461 | **text, by 0.083** |
+| `coco_val` × `siglip2_l` | 0.743 | 0.710 | text, by 0.033 |
+| `coco_val` × `siglip` | 0.707 | 0.700 | tie |
+| `caltech101_m` × both | 1.000 | 1.000 | tie |
+
+On Visual Genome, **150 clicks produce a worse ranking than typing the word.**
+The detector still wins on *cost*, because it places a much better threshold —
+the GMM cut on text scores is poorly calibrated (text cost 0.489 against a text
+oracle far below it). So what the clicking loop is actually buying is
+**calibration, not discrimination**.
+
+That lands on exactly the same conclusion the regret decomposition reached from
+the other direction: `rule_inefficiency` is negative, the whole of regret is
+`calibration_shift`, and the scarce resource is positives. A loop that spends 150
+user actions to improve the *threshold* on a ranking it has made *worse* is
+solving the wrong half of the problem.
+
+## Crossover — how many clicks to beat typing
+
+| arm | median clicks to beat text | fastest | **never beats it** |
+|---|---:|---:|---:|
+| `caltech101_m` × `siglip` | 5.5 | 4 | 0 / 18 |
+| `caltech101_m` × `siglip2_l` | 6 | 5 | 0 / 18 |
+| `visual_genome_m` × `siglip` | 7 | 3 | **5 / 23 (22 %)** |
+| `coco_val` × `siglip2_l` | 14 | 5 | **3 / 19 (16 %)** |
+| `coco_val` × `siglip` | 18 | 5 | **4 / 19 (21 %)** |
+| `visual_genome_m` × `siglip2_l` | 21 | 2 | **5 / 24 (21 %)** |
+
+The median is encouraging — a handful of clicks usually beats a typed query. But
+**one cell in five never beats it in 150 votes**, and those are not random:
+
+| category | prevalence | text cost | detector @150 | text AP | det AP |
+|---|---:|---:|---:|---:|---:|
+| `coco_val` `cat` (siglip2_l) | 0.038 | **0.017** | 0.081 | 0.991 | 0.969 |
+| `visual_genome_m` `sky` (siglip) | 0.188 | **0.574** | 0.682 | 0.441 | 0.376 |
+| `visual_genome_m` `ball` (siglip2_l) | 0.012 | **0.490** | 0.648 | 0.392 | 0.199 |
+
+Two distinct failure shapes. **`cat` is text's win**: a common, visually
+distinctive noun that CLIP-style text alignment nails outright (AP 0.991) — the
+detector cannot improve on near-perfect and only adds threshold noise. **`ball`
+and `sky` are the detector's loss**: `ball` is the starving rare category from
+the coverage section, and `sky` is *19 % prevalent* yet the detector still ends
+worse than text — a category where clicking actively destroys a usable ranking.
+
+## The awkward part: the best arm cannot be typed at
+
+Wave 1's best arms on both boxed datasets were `dinov3_patch` (region voting).
+**DINOv3 has no text tower**, so the arm that wins on cost is precisely the one
+a user cannot bootstrap with a query — there is no zero-click starting point for
+it at all, and its cold start (`too_few_default` 7.2 % on VG, 18 % on the
+sub-patch band) is the worst of the three.
+
+The two facts fit together into a concrete product suggestion: **seed the
+DINOv3 detector from a SigLIP text query.** The pile already carries both
+embedders over the same medias, text gives a usable ranking at zero cost, and
+the thing the detector is good at — placing the threshold — is exactly what text
+is bad at. That is a hypothesis this benchmark motivates but does not test.
+
+## Caveats
+
+- The query is the **raw category name** (`car_side`, `sports ball`, `nose`).
+  A real user would phrase better, and `embed_text_enriched` exists and was not
+  used. These text numbers are therefore a **lower bound** on what text sort
+  can do — which strengthens the finding rather than weakening it.
+- The GMM cut is taken on the whole-haystack score distribution, which is what
+  the app sees; the detector's threshold is fit on its own calibration folds.
+  That asymmetry is real and is the point, not a confound.
+- `caltech101_m` is saturated for text too (AP 1.000), so its crossover numbers
+  say little.
