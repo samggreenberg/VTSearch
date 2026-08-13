@@ -576,3 +576,88 @@ message, which had to be amended.
 you are about to read — run it bare, then `echo $?`, then inspect `git log -1`
 to confirm the head actually moved. Use a run-unique path for `-F` message files
 (`/tmp/msg-<jobid>.txt`); `/tmp` on a shared login node is not yours alone.
+
+<!-- entry-sep -->
+
+## 2026-08-12 — memory, not CPU, is what you run out of (#3129)
+
+**What happened.** Every stage of this study asked for 64–96G without measuring
+anything. Actual peak RSS was ~1.1 GB for whole-image cells and ~14 GB for patch
+cells. The per-user cap is 1.07 TB, so `16 x 64G` claimed 95 % of it and three
+separate later submissions queued behind this study's own array.
+
+**Prevented?** *Yes* — `preflight.sh --mem --conc` computes the footprint against
+the tightest applicable QOS cap and fails at ≥90 %. Verified against tonight's
+exact configuration: `64G x 16` fails at 95 %, `24G x 11` passes at 25 %. Sizing
+guidance and measured RSS figures are in GRID-PLAYBOOK.md.
+
+## 2026-08-12 — two arrays, one job name (#3129)
+
+**What happened.** Both the wave-2 rerun and the binary-voting arm were submitted
+as `--job-name=bench-cells`. Every per-name query then spanned both runs —
+including the completion waiter this repo's own skill recommends
+(`squeue -u $USER -h -n JOBNAME`), whose count would have declared one run
+finished while the other was still going. It also made `squeue` output
+unreadable at a glance while triaging the memory jam.
+
+**Prevented?** *Yes* — `preflight.sh --job-name` fails when that name already has
+tasks queued or running.
+
+## 2026-08-12 — I quoted a maximum as if it were a mean (#3129)
+
+**What happened.** Asked for an ETA on a 270-cell array, I took the *slowest*
+patch cell from a previous grid (1913 s) and multiplied. That produced "~00:30"
+for something that finished nearer 23:00 — a 90-minute error, in the pessimistic
+direction, offered while proposing to cancel work to save time. The mean was
+~456 s and four cells of this grid had already finished at 12–14 minutes; I had
+the data and did not look at it.
+
+**Prevented?** *Advice only.* Two habits: quote ETAs from **this** grid's own
+completed cells, not a previous grid's; and when the distribution is wide, say so
+rather than collapsing it to one number. The existing rule — *never quote an ETA
+for a launch you have not confirmed started* — needs a sibling: **never quote one
+from a cell you have not timed here.**
+
+## 2026-08-12 — an assertion that fires after the write is not a guard (#3129)
+
+**What happened.** A patch script checked `assert "import os" in s` *after*
+`p.write_text(s)`. The assertion was correct and caught a real bug — the helper
+it inserted used `os.environ` in a module that never imports `os` — but it fired
+against an already-modified file, so it reported the problem instead of
+preventing it.
+
+**Prevented?** *Advice only.* Validate every precondition before the first
+mutation. Patch scripts that edit code in place should be idempotent *and*
+fail-closed: check anchors, check imports, then write.
+
+## 2026-08-12 — heredocs through ssh (#3129)
+
+**What happened.** Three separate attempts to send a Python or bash snippet
+through `ssh grid '... <<EOF ...'` were mangled by shell quoting — one silently
+produced a syntactically invalid script that only failed at run time.
+
+**Prevented?** *Advice only.* Write the script to a file locally and `scp` it.
+The round trip is cheaper than one debugging cycle, and the file is then a
+reviewable artifact rather than a string inside a command.
+
+<!-- entry-sep -->
+
+## 2026-08-12 — an idempotency guard matched the wrong occurrence (#3129)
+
+**What happened.** Twice in one session, a patch script guarded "have I already
+applied this?" on a substring that appears elsewhere in the target file, so it
+skipped the edit **and reported success**:
+
+* `if "vg_box_small" in s` matched the `BOXED_BY_DATASET` entry added by an
+  earlier patch, so the `DATASET_EMBEDDERS` registration never happened. The
+  verifier then reported PASS over an empty grid.
+* `if "--job-name" in s` matched the `sbatch --job-name=bench-prep` lines already
+  in the launcher, so the preflight flags were never wired.
+
+Both were caught only by inspecting the file afterwards. A patch that skips
+silently is worse than one that fails: it leaves the tree looking done.
+
+**Prevented?** *Advice only.* Guard on a string **unique to the insertion** — a
+new symbol name, or a literal marker from the inserted block — never on a token
+that could plausibly appear in the surrounding file. And verify the postcondition
+(grep for what you inserted) rather than trusting the script's own report.

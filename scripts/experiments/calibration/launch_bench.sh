@@ -57,6 +57,9 @@ CPUS="${CALIB_CPUS:-6}"
 TIME="${CALIB_TIME:-6:00:00}"
 PARTITION="${CALIB_PARTITION:-cpu}"
 CONC="${CALIB_CONC:-24}"
+# Distinct per experiment dir: two arrays sharing a --job-name break every
+# per-name query, including the completion waiter in the grid-experiments skill.
+JOB_NAME="${CALIB_JOB_NAME:-bench-$(basename "$CALIB_EXP")}"
 
 ENVX="export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS"
 ENVX="$ENVX VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
@@ -121,9 +124,10 @@ cells)
     echo "ERROR: could not determine cell count (got '$N')" >&2; exit 1
   fi
   echo "cells: $N (array 0-$((N-1))%$CONC on $PARTITION)"
-  bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod || {
+  bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod \
+    --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC" || {
     echo "PREFLIGHT FAILED" >&2; exit 2; }
-  submit cells --job-name=bench-cells --array="0-$((N-1))%$CONC" \
+  submit cells --job-name="$JOB_NAME" --array="0-$((N-1))%$CONC" \
     --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
     --partition="$PARTITION" --export=ALL \
     --output="$LOGS/cells-%A_%a.out" \

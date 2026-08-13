@@ -21,6 +21,9 @@ NEED_GB="${PREFLIGHT_NEED_GB:-5}"
 WARN_ONLY=0
 REPO="${VTS_REPO:-}"
 REGION_ARM=""
+JOB_NAME=""
+MEM_PER_TASK=""
+CONC=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -28,6 +31,9 @@ while [[ $# -gt 0 ]]; do
     --arms) ARMS="$2"; shift 2 ;;
     --need-gb) NEED_GB="$2"; shift 2 ;;
     --require-region-voting) REGION_ARM="$2"; shift 2 ;;
+    --job-name) JOB_NAME="$2"; shift 2 ;;
+    --mem) MEM_PER_TASK="$2"; shift 2 ;;
+    --conc) CONC="$2"; shift 2 ;;
     --warn-only) WARN_ONLY=1; shift ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
   esac
@@ -35,6 +41,7 @@ done
 [[ -n "$EXP" ]] || {
   echo "usage: preflight.sh --exp DIR [--arms a,b,c] [--need-gb N]" >&2
   echo "                    [--require-region-voting DATASET:EMBEDDER]" >&2
+  echo "                    [--job-name NAME] [--mem 64G] [--conc N]" >&2
   exit 2
 }
 
@@ -266,6 +273,79 @@ PY
       ;;
     *) say_fail "could not check patch styles: $STYLE_VERDICT" ;;
   esac
+fi
+
+# --- 8. Your own per-user memory allowance ----------------------------------
+# The cluster caps MEMORY per user, not only CPU.  An array that claims the whole
+# allowance does not fail - it just parks every later job of YOUR OWN behind it in
+# QOSMaxMemoryPerUser, which looks exactly like a busy cluster.  In #3129 this hit
+# three times in one evening (a prepare job, a second array throttled to 2 slots,
+# and five diagnostic jobs stuck 25 minutes), always self-inflicted.
+#
+# Size memory from a real cell's MaxRSS, not from a round number:
+#   sacct -j <jobid> --format=JobID,MaxRSS,Elapsed
+if [[ -n "$MEM_PER_TASK" && -n "$CONC" ]]; then
+  _to_mb() {
+    local v="${1^^}"; local n="${v%[GMT]*}"
+    case "$v" in *T) awk "BEGIN{print $n*1024*1024}";;
+                  *G) awk "BEGIN{print $n*1024}";;
+                  *M) echo "$n";;
+                  *)  echo "$n";; esac
+  }
+  req_mb=$(awk "BEGIN{print $(_to_mb "$MEM_PER_TASK") * $CONC}")
+  # Two QOS can bind and they disagree: the job's association QOS and the
+  # partition's.  In #3129 `squeue %q` said 4gpu_tier while the cpu partition
+  # carried cpu_limit (mem=1100000M) - and it was the partition's that produced
+  # QOSMaxMemoryPerUser.  Collect every candidate and use the TIGHTEST cap.
+  _qos_candidates() {
+    [[ -n "${PREFLIGHT_QOS:-}" ]] && { echo "$PREFLIGHT_QOS"; return; }
+    scontrol show partition "${PREFLIGHT_PARTITION:-cpu}" 2>/dev/null \
+      | grep -o 'QoS=[^ ]*' | cut -d= -f2
+    squeue -u "$USER" -h -o %q 2>/dev/null | sort -u
+    sacctmgr -n show assoc user="$USER" format=QOS%60 2>/dev/null | tr ',' '\n' | tr -d ' '
+  }
+  cap_mb=""
+  qos=""
+  while read -r q; do
+    [[ -z "$q" || "$q" == "N/A" || "$q" == "(null)" ]] && continue
+    c=$(sacctmgr -n show qos "$q" format=MaxTRESPU%60 2>/dev/null \
+        | tr ',' '\n' | grep -o 'mem=[0-9]*' | head -1 | cut -d= -f2)
+    [[ -z "$c" ]] && continue
+    if [[ -z "$cap_mb" ]] || [[ "$c" -lt "$cap_mb" ]]; then cap_mb="$c"; qos="$q"; fi
+  done < <(_qos_candidates | sort -u)
+
+  if [[ -z "$cap_mb" ]]; then
+    say_fail "per-user memory allowance: could not read the QOS cap - NOT CHECKED"
+    echo "        -> set PREFLIGHT_QOS=<qos> (or --warn-only if you accept the risk)"
+    echo "        -> an unreadable cap is not a passing cap; #3129 jammed on this three times"
+  else
+    pct=$(awk "BEGIN{printf \"%.0f\", 100*$req_mb/$cap_mb}")
+    human=$(awk "BEGIN{printf \"%.0f\", $req_mb/1024}")
+    caph=$(awk "BEGIN{printf \"%.0f\", $cap_mb/1024}")
+    if [[ "$pct" -ge 90 ]]; then
+      say_fail "this array claims ${human}G of your ${caph}G allowance under QOS ${qos} (${pct}%)"
+      echo "        -> your OWN later jobs will queue in QOSMaxMemoryPerUser behind it"
+      echo "        -> size --mem from a real cell (sacct MaxRSS), or lower --conc"
+    elif [[ "$pct" -ge 70 ]]; then
+      say_ok "per-user memory: ${human}G of ${caph}G (${pct}%) - tight, leaves little for other jobs"
+    else
+      say_ok "per-user memory: ${human}G of ${caph}G (${pct}%) under QOS ${qos}"
+    fi
+  fi
+fi
+
+# --- 9. A job name you are already using ------------------------------------
+# Two arrays submitted as the same --job-name silently break every per-name
+# query, including the completion waiter this repo's own skill recommends
+# (`squeue -u $USER -h -n JOBNAME`): its counts then span both arrays.
+if [[ -n "$JOB_NAME" ]]; then
+  n_same=$(squeue -u "$USER" -h -n "$JOB_NAME" -o %i 2>/dev/null | wc -l)
+  if [[ "$n_same" -gt 0 ]]; then
+    say_fail "job name '$JOB_NAME' already has $n_same task(s) queued/running"
+    echo "        -> per-name monitoring will conflate the two runs; pick a distinct name"
+  else
+    say_ok "job name '$JOB_NAME' is not already in the queue"
+  fi
 fi
 
 echo
