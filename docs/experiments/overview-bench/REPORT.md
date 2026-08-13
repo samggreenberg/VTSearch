@@ -1,387 +1,250 @@
-# VTSearch overview benchmark: what a current user actually gets
+# VTSearch overview benchmark: how each configuration behaves
 
-**Run:** 2026-08-12 · branch `claude/vts-benchmark` · array `496044`
-**Data:** `/expscratch/sgreenberg/bench-overview/results` · tables in `ANALYSIS_TABLES.txt`
+**Run:** 2026-08-12 · branch `claude/vts-benchmark` · arrays `496044` (wave 1),
+`496454` / `496673` (wave 2)
+**Data:** `/expscratch/sgreenberg/bench-{overview,vgbox,vgbox2}/results`
 
-Every *behavioural* knob is left at its shipped default — head `linear`,
-`safe_thresholds=False`, `calibrate_count=2`, acquisition inclusion offset
-`-1`, production `max_patch` geometry. Only sizing knobs (which datasets,
-embedders, categories, seeds) were set. That is what makes these numbers
-readable as a baseline rather than as an arm.
+This is a **characterization**, not a comparison. Nothing here is trying to pick
+a configuration to ship. The question is what each of them *does* — what it is
+good at, what it is bad at, and what regime moves it from one to the other. Where
+two configurations differ, the useful output is the mechanism behind the
+difference, not the sign of it.
 
-## The grid
+Every *behavioural* knob is at its shipped default — head `linear`,
+`safe_thresholds=False`, `calibrate_count=2`, acquisition inclusion offset `-1`,
+production `max_patch` geometry. Only sizing knobs were set.
 
-3 datasets × 3 embedders × 6–8 categories × 3 seeds × 150 votes = **189 cells,
-26,538 steps**. `siglip` (shipped default) and `siglip2_l` (premium) are
-whole-image; `dinov3_patch` carries the patch geometry and is the only
-embedder that can region-vote — and only on a boxed dataset.
+## What was exercised
 
-| dataset | medias | categories | region-voting |
-|---|---:|---|---|
-| `visual_genome_m` | 4,193 | 8, scale-banded | `dinov3_patch` only |
-| `coco_val` | 4,952 | 7, scale-banded | `dinov3_patch` only |
-| `caltech101_m` | 838 | 6, prevalence-spread | none (boxless) |
+| axis | levels |
+|---|---|
+| representation | `siglip` (shipped, whole-image, text-capable), `siglip2_l` (premium, whole-image, text-capable), `dinov3_patch` (patch geometry, region-voting where boxes exist, **no text tower**) |
+| acquisition | typed query (0 clicks, GMM cut) · Autopilot clicking (150 votes) |
+| haystack | `visual_genome_m` (4,193), `coco_val` (4,952), `caltech101_m` (838, boxless), `vg_box_{small,medium,large}` (12,000 each, banded on box area) |
+| category | 6–10 per dataset · 3 seeds · 150 votes |
 
-## Coverage — and what was dropped
+Wave 1: 189 cells / 26,538 steps. Wave 2: 99 cells / 14,042 steps. A wave-2
+re-run with prevalence-spread categories (270 cells) is in flight; its numbers
+slot into the same frame and are not yet included.
 
-**189/189 cells ran, 0 failed, 0 zero-byte. But only 182 carry data.**
+---
 
-Seven cells (3.7%) emitted a header and no rows. This is not a harness fault
-and not a disk incident: **no row is ever emitted with `n_good == 0`** (verified
-across all 26,538 rows — minimum `n_good` is 1). A cell emits its first row only
-once the first true positive has been found. Those seven runs **never surfaced a
-single positive in 150 votes.**
+# Reference numbers
 
-| cell | category | prevalence |
+Deep regime (t ≥ 100). cost = fpr + fnr. No ordering implied.
+
+| dataset | embedder | cost | fpr | fnr | regret | AP | AUROC | cell wall-time |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| `caltech101_m` | `siglip` | 0.0039 | 0.0039 | 0.0000 | 0.0039 | 1.000 | 1.000 | ~110 s |
+| `caltech101_m` | `siglip2_l` | 0.0013 | 0.0013 | 0.0000 | 0.0013 | 1.000 | 1.000 | ~110 s |
+| `caltech101_m` | `dinov3_patch` | 0.0047 | 0.0038 | 0.0009 | 0.0031 | 1.000 | 1.000 | ~110 s |
+| `coco_val` | `siglip` | 0.2177 | 0.0711 | 0.1466 | 0.0448 | 0.695 | 0.942 | ~110 s |
+| `coco_val` | `siglip2_l` | 0.2019 | 0.1154 | 0.0865 | 0.0618 | 0.711 | 0.955 | ~110 s |
+| `coco_val` | `dinov3_patch` | 0.1524 | 0.0920 | 0.0604 | 0.0496 | 0.787 | 0.976 | ~19 min |
+| `visual_genome_m` | `siglip` | 0.3918 | 0.3006 | 0.0912 | 0.1113 | 0.428 | 0.898 | ~110 s |
+| `visual_genome_m` | `siglip2_l` | 0.3666 | 0.2438 | 0.1228 | 0.0960 | 0.457 | 0.899 | ~110 s |
+| `visual_genome_m` | `dinov3_patch` | 0.3242 | 0.1819 | 0.1423 | 0.1100 | 0.525 | 0.913 | ~17 min |
+| `vg_box_large` | `siglip` | 0.3677 | 0.2050 | 0.1628 | 0.0974 | 0.283 | 0.901 | ~40 s |
+| `vg_box_large` | `siglip2_l` | 0.3234 | 0.1591 | 0.1643 | 0.0709 | 0.277 | 0.906 | ~40 s |
+| `vg_box_large` | `dinov3_patch` | 0.3243 | 0.1554 | 0.1689 | 0.1241 | 0.300 | 0.940 | ~32 min |
+| `vg_box_medium` | `siglip` | 0.7471 | 0.4062 | 0.3409 | 0.0800 | 0.097 | 0.689 | ~40 s |
+| `vg_box_medium` | `siglip2_l` | 0.7365 | 0.3830 | 0.3535 | 0.0945 | 0.105 | 0.708 | ~40 s |
+| `vg_box_medium` | `dinov3_patch` | 0.5902 | 0.1725 | 0.4176 | 0.0885 | 0.143 | 0.789 | ~32 min |
+| `vg_box_small` | `siglip` | 0.7774 | 0.4131 | 0.3642 | 0.0934 | 0.093 | 0.668 | ~40 s |
+| `vg_box_small` | `siglip2_l` | 0.7391 | 0.4363 | 0.3028 | 0.0902 | 0.086 | 0.683 | ~40 s |
+| `vg_box_small` | `dinov3_patch` | 0.6463 | 0.4429 | 0.2035 | 0.1964 | 0.136 | 0.823 | ~32 min |
+
+Zero-click typed query, same test splits (`dinov3_patch` has no text tower):
+
+| dataset | embedder | text cost | text AP | text AUROC |
+|---|---|---:|---:|---:|
+| `caltech101_m` | `siglip` / `siglip2_l` | 0.1612 / 0.0444 | 1.000 / 1.000 | — |
+| `coco_val` | `siglip` / `siglip2_l` | 0.3024 / 0.2768 | 0.707 / 0.743 | — |
+| `visual_genome_m` | `siglip` / `siglip2_l` | 0.4894 / 0.3936 | 0.496 / 0.544 | — |
+
+---
+
+# The representations
+
+## `siglip` — the shipped default
+
+**Behaves like:** a fast, text-addressable whole-image encoder that degrades
+gracefully. ~110 s per 150-vote run; a text tower, so a user can start from a
+typed query at zero cost.
+
+**Its error budget sits in false positives.** On VG its fpr (0.301) is 3.3× its
+fnr (0.091) — by far the most lopsided arm in the study. It is *including* too
+much, not missing things. That shape is stable across datasets: fpr ≥ fnr
+everywhere except COCO.
+
+**Where it holds up:** anything with a clean whole-image signature. On
+`caltech101_m` it is at ceiling (AP 1.000). On COCO its ranking (AP 0.695) is
+within 0.02 of the premium encoder.
+
+**Where it comes apart:** as the target shrinks relative to the frame. Across the
+box bands its AP is 0.283 → 0.097 → 0.093 (large → medium → small) and AUROC
+0.901 → 0.689 → 0.668. At sub-patch scale it is close to uninformative, which is
+the expected consequence of pooling a whole image into one vector when the
+target occupies under 0.5 % of it.
+
+## `siglip2_l` — the premium whole-image encoder
+
+**Behaves like:** `siglip` with a uniformly better ranking and the same cost
+profile. Same ~110 s. AP is higher on every non-saturated dataset (VG 0.457 vs
+0.428; COCO 0.711 vs 0.695), and its *text* ranking is better too (VG text AP
+0.544 vs 0.496).
+
+**It rebalances the error budget rather than only shrinking it.** On VG it moves
+fpr 0.301 → 0.244 while fnr rises 0.091 → 0.123. It is a less trigger-happy
+encoder, not merely a more accurate one.
+
+**It inherits `siglip`'s scale failure intact.** AP across box bands 0.277 →
+0.105 → 0.086 — the same collapse. Capacity does not substitute for geometry:
+whatever a bigger whole-image encoder buys, it is not the ability to see a
+sub-patch object.
+
+## `dinov3_patch` — patch geometry, and region voting where boxes exist
+
+**Behaves like:** a much better ranker with a much worse threshold, at ~10–30×
+the compute (17–32 min per run vs ~110 s / ~40 s).
+
+**Its ranking is the best measured, and the margin grows as targets shrink.** AP
+by box band: 0.300 → 0.143 → 0.136 against `siglip2_l`'s 0.277 → 0.105 → 0.086.
+AUROC 0.940 / 0.789 / 0.823 vs 0.906 / 0.708 / 0.683. On the large band its
+ranking edge is small; at medium and small it is proportionally large. The
+mechanism is straightforward: box supervision only carries information the
+whole-image vector lacks when the box is a small fraction of the frame. A box
+covering a third of the image *is* approximately the image.
+
+**Its threshold is its weak point, and this is the most useful thing the run
+says about it.** On `vg_box_large` it is the **only arm in the entire study with
+a positive `rule_inefficiency`** (+0.021, against −0.021 for `siglip2_l`), and
+its regret is 0.124 vs 0.071. So on large boxes it ranks better and cuts worse,
+and the two cancel to an identical cost (0.3243 vs 0.3234). Its discrimination
+advantage is real and **currently unconverted** — that is a calibration
+property, not a representation one.
+
+**Where it comes apart:** cold start and cost. `too_few_default` is 7.2 % on VG
+(worst of the three) and 18 % on the sub-patch band. On `vg_box_small` it is the
+only arm in either wave whose **regret grows with votes** (0.129 → 0.196). And
+it has **no text tower**, so there is no zero-click entry point for it at all.
+
+**On a boxless dataset it is not a patch model.** `caltech101_m × dinov3_patch`
+runs `whole_image` by construction: with no box, a Good vote has nothing to pool,
+so patch rows would be negatives-only and could teach nothing but "patch-like ⇒
+negative". It is DINOv3 used as a whole-image encoder, and it behaves like one
+(cost 0.0047, indistinguishable from the SigLIPs at ceiling).
+
+---
+
+# Typing and clicking supply different things
+
+The two acquisition modes are usually discussed as alternatives. The measurement
+says they are not the same kind of thing at all.
+
+**What a typed query supplies: discrimination, immediately, badly calibrated.**
+
+| arm | text AP | detector AP after 150 votes |
+|---|---:|---:|
+| `visual_genome_m` × `siglip` | 0.496 | 0.430 |
+| `visual_genome_m` × `siglip2_l` | 0.544 | 0.461 |
+| `coco_val` × `siglip2_l` | 0.743 | 0.710 |
+| `coco_val` × `siglip` | 0.707 | 0.700 |
+
+On Visual Genome the *ranking* after 150 clicks is worse than the ranking you get
+from typing the word. But text's operating point is poor: its GMM cut sits far
+from its own oracle, so text cost (0.489) is much worse than its ranking implies.
+
+**What the clicking loop supplies: calibration.** Its regret falls with votes and
+its `rule_inefficiency` is negative on every arm but one — the shipped cut rule
+already places a better threshold than the in-sample calibration optimum. The
+whole of regret is `calibration_shift`, the sim→test move.
+
+**So the two are complementary, and the composition is untested.** Text is good
+at the thing clicking is bad at (getting a usable ranking from nothing) and bad
+at the thing clicking is good at (placing the cut). This is sharpest for
+`dinov3_patch`: it has the best ranking, the worst cold start, and no text tower
+— while SigLIP text gives a usable ranking over the same medias in the pile for
+free. Seeding a DINOv3 detector from a SigLIP text query is the obvious thing
+this measurement points at, and nothing here tests it.
+
+**Where each mode fails, concretely:**
+
+| category | prevalence | text cost | detector @150 | text AP | det AP | what it shows |
+|---|---:|---:|---:|---:|---:|---|
+| `coco` `cat` | 0.038 | 0.017 | 0.081 | 0.991 | 0.969 | text at ceiling; clicking has nothing to add and adds threshold noise |
+| `vg` `sky` | 0.188 | 0.574 | 0.682 | 0.441 | 0.376 | 19 % prevalent, and clicking still degrades a usable ranking |
+| `vg` `ball` | 0.012 | 0.490 | 0.648 | 0.392 | 0.199 | rare; the clicking loop starves and the ranking collapses |
+| `coco` `bear` | 0.009 | 0.215 | 0.010 | — | 0.992 | clicking's best case: rare, visually clean, threshold is everything |
+
+Typed queries fail on **parts and mass nouns** (`nose`, `sky`, `ball`) and on
+awkward label strings; they succeed on **common distinctive nouns**. The clicking
+loop fails when **positives are too rare to accumulate** and succeeds when a
+handful of positives is enough to fix a cut.
+
+---
+
+# What moves the regime
+
+**Target scale** is the strongest axis in the study. Best-arm cost across the box
+bands runs 0.323 (large) → 0.590 (medium) → 0.646 (small), and AP 0.30 → 0.14 →
+0.14. Sub-patch retrieval is hard for every configuration; the patch geometry
+reduces the damage but does not remove it. This is the first measurement of that
+band on a real sample — the full VG vocabulary has 643 sub-patch categories
+against 5 in the demo vocabulary.
+
+**Prevalence** governs whether the clicking loop functions at all. Median
+positives found in 150 votes is 4–11. One trace holds 3 positives for **120
+consecutive votes**; the slowest successful cell needed **80 votes to find its
+first**; seven cells never found one.
+
+**Dataset saturation** is worth stating so it is not mistaken for a result.
+`caltech101_m` is at ceiling for all four configurations *and* for text (AP
+1.000). It characterizes the floor case — everything works when the task is easy
+— and nothing else.
+
+---
+
+# Failure modes observed
+
+| mode | rate | where |
 |---|---|---|
-| `coco_val` × all 3 embedders, seed 0 | `refrigerator` | 101 / 4,952 |
-| `coco_val` × all 3 embedders, seed 1 | `sports ball` | 169 / 4,952 |
-| `visual_genome_m` × `siglip`, seed 1 | `ball` | 51 / 4,193 |
+| **Total starvation** — no positive in 150 votes, cell emits nothing | 7 / 189 (3.7 %) wave 1; 0 / 99 wave 2 | rarest categories (`ball` 51/4193, `refrigerator` 101/4952, `sports ball` 169/4952) |
+| **Cold-start default threshold** (`too_few_default`) | 1–7 % wave 1; **17–20 %** on the sub-patch band | worst on `dinov3_patch` / small boxes |
+| **Degenerate step** | 0.04 % wave 1; **1.96 %** wave 2 | small/medium boxes |
+| **Regret rising with votes** | 1 arm | `vg_box_small × dinov3_patch` (0.129 → 0.196) |
+| **Cut fallback** | **0 / 40,580** | never observed |
 
-That the *same* (category, seed) fails across all three embedders says this is
-the sim/test draw and the acquisition loop, not the representation.
-
-**This is a finding, not an exclusion.** Read as a user-facing rate: on the
-rarest categories, roughly one run in twenty-seven is a total loss — 150 clicks,
-nothing found, no model. All averages below are over the 182 cells that produced
-data, which means they are conditioned on the run having worked at all and are
-therefore **optimistic**.
-
-## Headline (deep regime, t ≥ 100)
-
-cost = fpr + fnr; regret is against the oracle threshold on the same scores.
-
-| arm | cost | fpr | fnr | regret | oracle cost | AP | AUROC |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| `caltech101_m` × `siglip2_l` | 0.0013 | 0.0013 | 0.0000 | 0.0013 | 0.0000 | 1.000 | 1.000 |
-| `caltech101_m` × `siglip` | 0.0039 | 0.0039 | 0.0000 | 0.0039 | 0.0000 | 1.000 | 1.000 |
-| `caltech101_m` × `dinov3_patch` | 0.0047 | 0.0038 | 0.0009 | 0.0031 | 0.0016 | 1.000 | 1.000 |
-| `coco_val` × **`dinov3_patch`** | **0.1524** | 0.0920 | 0.0604 | 0.0496 | 0.1029 | 0.787 | 0.976 |
-| `coco_val` × `siglip2_l` | 0.2019 | 0.1154 | 0.0865 | 0.0618 | 0.1401 | 0.711 | 0.955 |
-| `coco_val` × `siglip` | 0.2177 | 0.0711 | 0.1466 | 0.0448 | 0.1729 | 0.695 | 0.942 |
-| `visual_genome_m` × **`dinov3_patch`** | **0.3242** | 0.1819 | 0.1423 | 0.1100 | 0.2142 | 0.525 | 0.913 |
-| `visual_genome_m` × `siglip2_l` | 0.3666 | 0.2438 | 0.1228 | 0.0960 | 0.2706 | 0.457 | 0.899 |
-| `visual_genome_m` × `siglip` | 0.3918 | 0.3006 | 0.0912 | 0.1113 | 0.2805 | 0.428 | 0.898 |
-
-### What works
-
-**Region voting wins wherever it is available.** `dinov3_patch` is the best arm
-on both boxed datasets — cost 0.152 vs 0.202/0.218 on COCO, 0.324 vs 0.367/0.392
-on VG — and it wins on ranking too (AP 0.787 vs 0.711/0.695; 0.525 vs
-0.457/0.428). It is the only arm whose Good votes carry box supervision, and it
-converts that into both a better ranking and a better operating point. This is
-now measured in **two** region-voting environments, not one.
-
-**The threshold machinery is clean.** Across 26,538 steps: `cut_fallback` fires
-**0** times, `degenerate` on **0.04%**, and 93–99% of steps take the `conformal`
-path. Whatever is wrong below is not the cut rule failing to compute.
-
-### What needs work
-
-**1. Positives are desperately scarce — this is the binding constraint.**
-Median positives found after 150 votes: **4** (caltech × siglip) to **11**
-(coco × siglip). The traces are worse than the medians suggest:
-
-```
-visual_genome_m x dinov3_patch, category=bed, prevalence=0.020
-  t=14  n_good=3 ... t=122 n_good=3 ... t=146 n_good=4
-```
-
-Three positives held for **120 consecutive votes**. The slowest successful cell
-(`visual_genome_m × siglip2_l`, `ball`) took **80 votes to find its first
-positive**. Seven cells never found one at all. Everything else in this report is
-downstream of that: a linear head fit on 3–7 positives is what produces the
-regret below.
-
-**2. Regret is calibration transfer, not the cut rule.** Decomposing regret into
-`rule_inefficiency + calibration_shift` on the two hard datasets:
-
-| arm | regret | rule_ineff | cal_shift | cal share |
-|---|---:|---:|---:|---:|
-| `visual_genome_m` × `dinov3_patch` | 0.1119 | −0.0041 | 0.1160 | 1.04 |
-| `visual_genome_m` × `siglip` | 0.1113 | −0.0220 | 0.1333 | 1.20 |
-| `coco_val` × `dinov3_patch` | 0.0496 | −0.0179 | 0.0675 | 1.36 |
-| `coco_val` × `siglip2_l` | 0.0618 | −0.0040 | 0.0658 | 1.07 |
-
-`rule_inefficiency` is **negative everywhere**: the shipped rule already picks a
-better cut than the in-sample calibration optimum. The entire regret — and
-slightly more — is `calibration_shift`, i.e. the sim→test move. This
-independently reproduces #2836's finding that the residual gap is transfer no
-cut rule can close. *Effort spent on smarter cut rules is effort spent on the
-term that is already negative.*
-
-(The caltech `cal_share` values of 9.8–77.6 in the raw tables are artefacts of a
-near-zero denominator on a saturated dataset — ignore them.)
-
-**3. `caltech101_m` is saturated and should be retired from this benchmark.**
-Cost 0.001–0.005, AP 1.000, AUROC 1.000 on all three embedders. It cannot
-distinguish anything and it drags every cross-dataset average toward zero.
-
-**4. Cold start is visible but small.** `too_few_default` covers 1–7% of steps
-(worst: VG × `dinov3_patch` at 7.2%), concentrated at low `t`. The first emitted
-step routinely shows a wild cost (e.g. 1.05, 0.95) before conformal takes over
-by t≈14.
-
-**5. Region voting costs ~10× per run.** Cumulative wall-clock per cell: ~110 s
-whole-image vs **17–19 min** patch (1,121 s max on COCO). Whether the cost
-table above justifies that is a product call, but it should be a conscious one.
-
-## The vote-count axis
-
-Cost falls steeply then flattens; regret flattens earlier and stays put.
-
-| arm | cost 1–20 | 21–50 | 51–100 | 101–150 | regret 1–20 | 101–150 |
-|---|---:|---:|---:|---:|---:|---:|
-| `visual_genome_m` × `dinov3_patch` | 0.484 | 0.383 | 0.345 | 0.324 | 0.169 | 0.110 |
-| `visual_genome_m` × `siglip` | 0.672 | 0.503 | 0.434 | 0.392 | 0.206 | 0.112 |
-| `coco_val` × `dinov3_patch` | 0.345 | 0.221 | 0.191 | 0.152 | 0.151 | 0.050 |
-| `coco_val` × `siglip` | 0.586 | 0.356 | 0.256 | 0.218 | 0.193 | 0.045 |
-
-Between 50 and 150 votes — two thirds of the clicks — VG × `dinov3_patch`
-improves cost by 0.021. **The second hundred votes buys almost nothing**, which
-is consistent with finding (1): those votes are nearly all Bad, and Bad votes
-past saturation add little.
-
-## Caveats
-
-- `caltech101_m × dinov3_patch` is a **new pairing** (not in `dev`). It is
-  DINOv3 as a whole-image embedder — no boxes, whole-image Good pile, whole-image
-  Bad pile, whole-image haystack.
-- **COCO's `sub_patch` band is under-populated**: 1 candidate (`sports ball`)
-  against a target of 2, so COCO's smallest-box band rests on one category —
-  and that category is one of the two that starved. `vg_box_small` (wave 2)
-  is the proper cover.
-- Averages are over the 182 cells that produced data, so they are conditioned on
-  the run having worked (see Coverage).
-- 3 seeds. Differences smaller than roughly 0.02 in cost should not be read as
-  real without a paired test.
-
-## Follow-ups worth filing
-
-1. **A zero-positive run is silent.** A cell that never finds a positive writes a
-   header and exits 0. It should say so — this is exactly the shape that hid
-   #2877. A one-line warning plus a `starved` column would make the 3.7% visible
-   without an analyst noticing a row-count discrepancy.
-2. **Acquisition, not calibration, is the frontier.** `rule_inefficiency` is
-   already negative; positives are the scarce resource. This is the same
-   direction #2876 found when decoupling the selector threshold.
-3. **Retire `caltech101_m`** from overview benchmarks; substitute a dataset that
-   discriminates.
+A starved cell is **silent**: no row is ever emitted with `n_good == 0`, so it
+writes a header and exits 0. That is how these seven were nearly lost — they are
+reported, not excluded, and every average above is conditioned on the run having
+produced data at all.
 
 ---
 
-# Wave 2 — the box-size banding axis
+# Caveats
 
-**Run:** array `496454`, drained 18:36:41 · `/expscratch/sgreenberg/bench-vgbox/results`
+- **Wave 2's category selection was collapsed by my error.** The scale-band
+  selector was left on for datasets already banded by box size, so it re-banded
+  within each set: 5 / 4 / 2 categories out of 40 available, with `vg_box_medium`
+  resting on two. The scale trend is large enough to survive it, but the medium
+  row is not a point estimate and no between-band difference under ~0.05 should
+  be read as real. The re-run (270 cells, 10 categories per set) is in flight.
+- Text queries are **raw category names** (`car_side`, `sports ball`) and
+  `embed_text_enriched` was not used, so text numbers are a lower bound.
+- 3 seeds. Differences under ~0.02 in cost are not resolvable here.
+- `caltech101_m × dinov3_patch` is a pairing not present in `dev`.
+- COCO's `sub_patch` band had 1 candidate against a target of 2, and that
+  category (`sports ball`) is one of the two that starved.
 
-99 cells / 14,042 steps over `vg_box_{small,medium,large}` — 12,000 images each,
-banded on voted-box area at the DINOv3 patch geometry (small = under one patch,
-1/196; medium → the smallest HAC leaf, 1/12; large → the 80 % cap), drawn from
-the **whole** VG source rather than the demo pipeline's curated vocabulary.
+# What this points at next
 
-**99/99 cells carry data. Zero starved** — against wave 1's seven. The
-purpose-built banded sets are better populated than the rare tail of
-`visual_genome_m` and `coco_val`, so no run failed to find a positive.
-
-## Headline (t ≥ 100)
-
-| arm | cost | fpr | fnr | regret | AP | AUROC |
-|---|---:|---:|---:|---:|---:|---:|
-| `vg_box_large` × `siglip2_l` | **0.3234** | 0.1591 | 0.1643 | 0.0709 | 0.277 | 0.906 |
-| `vg_box_large` × `dinov3_patch` | **0.3243** | 0.1554 | 0.1689 | 0.1241 | 0.300 | 0.940 |
-| `vg_box_large` × `siglip` | 0.3677 | 0.2050 | 0.1628 | 0.0974 | 0.283 | 0.901 |
-| `vg_box_medium` × **`dinov3_patch`** | **0.5902** | 0.1725 | 0.4176 | 0.0885 | 0.143 | 0.789 |
-| `vg_box_medium` × `siglip2_l` | 0.7365 | 0.3830 | 0.3535 | 0.0945 | 0.105 | 0.708 |
-| `vg_box_medium` × `siglip` | 0.7471 | 0.4062 | 0.3409 | 0.0800 | 0.097 | 0.689 |
-| `vg_box_small` × **`dinov3_patch`** | **0.6463** | 0.4429 | 0.2035 | 0.1964 | 0.136 | 0.823 |
-| `vg_box_small` × `siglip2_l` | 0.7391 | 0.4363 | 0.3028 | 0.0902 | 0.086 | 0.683 |
-| `vg_box_small` × `siglip` | 0.7774 | 0.4131 | 0.3642 | 0.0934 | 0.093 | 0.668 |
-
-## The finding: region voting earns its cost only when the target is small
-
-Difference in cost, whole-image best vs `dinov3_patch`:
-
-| band | best whole-image | `dinov3_patch` | dinov3 advantage |
-|---|---:|---:|---:|
-| large (> 33 % of image) | 0.3234 | 0.3243 | **−0.001 (tie)** |
-| medium (8–33 %) | 0.7365 | 0.5902 | **+0.146** |
-| small (< 0.5 %) | 0.7391 | 0.6463 | **+0.093** |
-
-On **large** boxes region voting buys nothing at the operating point: a box that
-covers a third of the image *is* roughly the whole image, so the whole-image
-vector already carries the signal — and `siglip2_l` matches it for ~1/10th the
-compute (401 s median per cell vs ~40 s).
-
-This is not "the patch model is worse there". Its **ranking is better**
-(AP 0.300 vs 0.277, AUROC 0.940 vs 0.906) and it is the only arm in either wave
-with a **positive `rule_inefficiency`** (+0.0208 vs −0.021 for `siglip2_l`), with
-regret 0.124 vs 0.071. So on large boxes `dinov3_patch` **ranks better and cuts
-worse, and the two cancel.** The ranking advantage is real and currently
-unrealised — a calibration problem, not a representation problem.
-
-Combined with wave 1 (where `dinov3_patch` won on both boxed datasets), the rule
-is: **region voting pays when the target is small relative to the frame, and is
-a wash when it is large.** That is a concrete product criterion for when to spend
-the ~10× — and it is exactly the question `vg_box_*` was built to answer.
-
-## Everything degrades with box size
-
-Cost rises monotonically as boxes shrink (best arm per band): **0.323 → 0.590 →
-0.646**, and ranking collapses: AP **0.30 → 0.14 → 0.14**, AUROC 0.94 → 0.79 →
-0.82. The sub-patch band is genuinely hard — and with 643 sub-patch categories in
-the full VG vocabulary (against 5 in the demo vocabulary), this is the first time
-that band has been measured on a real sample rather than an artefact.
-
-## Cold start gets much worse as boxes shrink
-
-`too_few_default` share of steps:
-
-| band | dinov3 | siglip | siglip2_l |
-|---|---:|---:|---:|
-| large | 4.4 % | 8.1 % | 6.5 % |
-| medium | 11.2 % | 8.3 % | 5.4 % |
-| small | **18.0 %** | **17.3 %** | **20.4 %** |
-
-On the small band roughly **one step in five** never reaches the conformal path.
-`degenerate` steps are also 50× wave 1's rate (**1.96 %** vs 0.04 %). The
-threshold machinery still never falls back (`cut_fallback` 0/14,042), but it is
-visibly working harder.
-
-## One wrong-way trend
-
-`vg_box_small × dinov3_patch` is the only arm whose **regret grows with votes**:
-0.129 (1–20) → 0.114 (21–50) → 0.209 (51–100) → **0.196 (101–150)**. Every other
-arm in both waves improves or flattens. More labels making calibration *worse* is
-the signature #2825 investigated; on the sub-patch band it appears to be live.
-Worth a follow-up rather than a conclusion — see the power caveat below.
-
-## Power caveat — read this before quoting wave 2
-
-**The banding comparison is under-powered, and the fault is mine.** I left the
-scale-band category selector on for datasets that are *already* box-banded, so it
-re-banded within each set and most bands came up empty. The result:
-
-| dataset | categories | cells |
-|---|---:|---|
-| `vg_box_large` | 5 (`barn, court, dresser, sheet, station`) | 15 |
-| `vg_box_small` | 4 (`hands, lips, mask, mustache`) | 12 |
-| `vg_box_medium` | **2** (`chest, collar`) | 6 |
-
-`vg_box_medium` rests on **two categories**. Each set has 40 available; a
-prevalence-spread selection would have used far more of them. The large-vs-small
-direction is big enough (0.32 vs 0.65) to survive this, and the
-region-voting crossover is consistent across two bands and echoed by wave 1, but
-**the medium row specifically should not be quoted as a point estimate**, and no
-between-band difference smaller than ~0.05 should be read as real.
-
-Re-running wave 2 with `CALIB_N_CATEGORIES` on a prevalence spread (the boxless
-path) instead of scale bands is cheap — the pile cells are built — and is the
-first thing to do before anyone acts on these numbers.
-
----
-
-# Text sort vs the clicked detector
-
-**What a user gets for free**: type the category name, sort the haystack by
-similarity to that text vector, cut it with the GMM threshold. Zero clicks. That
-is the baseline the trained detector has to beat, and nothing in this study had
-measured it.
-
-Scored through the harness's own `exemplar_sims` path with the text vector in
-place of the crop vector, so the typed query and the clicked detector are scored
-in the same geometry, on the same reproduced test split.
-
-**`dinov3_patch` has no text tower** — it is vision-only, `embed_text` returns
-`None`. Recorded as n/a, not silently skipped. This matters: see below.
-
-## Headline
-
-cost = fpr + fnr at the detector's own threshold; `det_t*` is the cost a user
-would see having voted that many times.
-
-| arm | text (0 clicks) | t=10 | t=25 | t=50 | t=100 | t=150 | text AP | det AP (final) |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `caltech101_m` × `siglip` | 0.1612 | 0.0588 | 0.0053 | 0.0004 | 0.0013 | 0.0073 | 1.000 | 1.000 |
-| `caltech101_m` × `siglip2_l` | 0.0444 | 0.1557 | 0.0000 | 0.0000 | 0.0001 | 0.0030 | 1.000 | 1.000 |
-| `coco_val` × `siglip` | 0.3024 | 0.6393 | 0.4139 | 0.3047 | 0.2236 | 0.2115 | 0.707 | 0.700 |
-| `coco_val` × `siglip2_l` | 0.2768 | 0.4910 | 0.2970 | 0.2224 | 0.1876 | 0.2196 | 0.743 | 0.710 |
-| `visual_genome_m` × `siglip` | 0.4894 | 0.7293 | 0.5292 | 0.4672 | 0.3909 | 0.4130 | 0.496 | 0.430 |
-| `visual_genome_m` × `siglip2_l` | 0.3936 | 0.7464 | 0.4939 | 0.4611 | 0.3622 | 0.3763 | 0.544 | 0.461 |
-
-## The finding: clicking buys the threshold, not the ranking
-
-**Text ranks at least as well as the trained detector in every arm, and better
-on the hard one.** Average precision, typed query vs detector after 150 votes:
-
-| arm | text AP | detector AP | winner |
-|---|---:|---:|---|
-| `visual_genome_m` × `siglip` | **0.496** | 0.430 | **text, by 0.066** |
-| `visual_genome_m` × `siglip2_l` | **0.544** | 0.461 | **text, by 0.083** |
-| `coco_val` × `siglip2_l` | 0.743 | 0.710 | text, by 0.033 |
-| `coco_val` × `siglip` | 0.707 | 0.700 | tie |
-| `caltech101_m` × both | 1.000 | 1.000 | tie |
-
-On Visual Genome, **150 clicks produce a worse ranking than typing the word.**
-The detector still wins on *cost*, because it places a much better threshold —
-the GMM cut on text scores is poorly calibrated (text cost 0.489 against a text
-oracle far below it). So what the clicking loop is actually buying is
-**calibration, not discrimination**.
-
-That lands on exactly the same conclusion the regret decomposition reached from
-the other direction: `rule_inefficiency` is negative, the whole of regret is
-`calibration_shift`, and the scarce resource is positives. A loop that spends 150
-user actions to improve the *threshold* on a ranking it has made *worse* is
-solving the wrong half of the problem.
-
-## Crossover — how many clicks to beat typing
-
-| arm | median clicks to beat text | fastest | **never beats it** |
-|---|---:|---:|---:|
-| `caltech101_m` × `siglip` | 5.5 | 4 | 0 / 18 |
-| `caltech101_m` × `siglip2_l` | 6 | 5 | 0 / 18 |
-| `visual_genome_m` × `siglip` | 7 | 3 | **5 / 23 (22 %)** |
-| `coco_val` × `siglip2_l` | 14 | 5 | **3 / 19 (16 %)** |
-| `coco_val` × `siglip` | 18 | 5 | **4 / 19 (21 %)** |
-| `visual_genome_m` × `siglip2_l` | 21 | 2 | **5 / 24 (21 %)** |
-
-The median is encouraging — a handful of clicks usually beats a typed query. But
-**one cell in five never beats it in 150 votes**, and those are not random:
-
-| category | prevalence | text cost | detector @150 | text AP | det AP |
-|---|---:|---:|---:|---:|---:|
-| `coco_val` `cat` (siglip2_l) | 0.038 | **0.017** | 0.081 | 0.991 | 0.969 |
-| `visual_genome_m` `sky` (siglip) | 0.188 | **0.574** | 0.682 | 0.441 | 0.376 |
-| `visual_genome_m` `ball` (siglip2_l) | 0.012 | **0.490** | 0.648 | 0.392 | 0.199 |
-
-Two distinct failure shapes. **`cat` is text's win**: a common, visually
-distinctive noun that CLIP-style text alignment nails outright (AP 0.991) — the
-detector cannot improve on near-perfect and only adds threshold noise. **`ball`
-and `sky` are the detector's loss**: `ball` is the starving rare category from
-the coverage section, and `sky` is *19 % prevalent* yet the detector still ends
-worse than text — a category where clicking actively destroys a usable ranking.
-
-## The awkward part: the best arm cannot be typed at
-
-Wave 1's best arms on both boxed datasets were `dinov3_patch` (region voting).
-**DINOv3 has no text tower**, so the arm that wins on cost is precisely the one
-a user cannot bootstrap with a query — there is no zero-click starting point for
-it at all, and its cold start (`too_few_default` 7.2 % on VG, 18 % on the
-sub-patch band) is the worst of the three.
-
-The two facts fit together into a concrete product suggestion: **seed the
-DINOv3 detector from a SigLIP text query.** The pile already carries both
-embedders over the same medias, text gives a usable ranking at zero cost, and
-the thing the detector is good at — placing the threshold — is exactly what text
-is bad at. That is a hypothesis this benchmark motivates but does not test.
-
-## Caveats
-
-- The query is the **raw category name** (`car_side`, `sports ball`, `nose`).
-  A real user would phrase better, and `embed_text_enriched` exists and was not
-  used. These text numbers are therefore a **lower bound** on what text sort
-  can do — which strengthens the finding rather than weakening it.
-- The GMM cut is taken on the whole-haystack score distribution, which is what
-  the app sees; the detector's threshold is fit on its own calibration folds.
-  That asymmetry is real and is the point, not a confound.
-- `caltech101_m` is saturated for text too (AP 1.000), so its crossover numbers
-  say little.
+1. **Compose typing and clicking** rather than choosing: seed a detector from a
+   text ranking, especially for `dinov3_patch`, which cannot be typed at.
+2. **`dinov3_patch`'s unconverted ranking advantage** — a positive
+   `rule_inefficiency` on large boxes is a specific, addressable calibration
+   defect, not a property of the representation.
+3. **Acquisition is the scarce resource, not the cut rule** — `rule_inefficiency`
+   is already negative nearly everywhere.
+4. **Make a starved run say so** — a `starved` column and a warning; this is the
+   shape that hid #2877.
