@@ -1,5 +1,8 @@
 # Pre-registration — does the loop keep improving past 150 votes?
 
+**Scored in [`RESULT-horizon-250.md`](RESULT-horizon-250.md)** — one expectation
+right, one wrong, one half wrong.
+
 Written before the 250-vote grid drained. The report's curves stop at 150 votes
 because that is where the original grid stopped, not because anything about the
 data or the method ends there. This run extends the horizon to 250.
