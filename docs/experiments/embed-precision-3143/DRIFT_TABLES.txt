@@ -1,0 +1,228 @@
+
+=== 1. Vector drift, 1 - cos vs fp32_l40s (per media) ===
+embedder     arm              precision          median        p95        max              mean ± SE    >1e-6
+siglip       autocast_l40s    autocast_fp16     9.2e-07    2.5e-06    2.4e-04      1.3e-06 ± 6.6e-08      44%
+siglip       bf16_l40s        bf16              7.3e-05    1.6e-04    6.1e-03      8.7e-05 ± 2.0e-06     100%
+siglip       fp16_l40s        fp16              1.3e-06    3.3e-06    8.1e-05      1.7e-06 ± 3.5e-08      74%
+siglip       fp16_v100        fp16              1.3e-06    3.6e-06    2.6e-04      1.8e-06 ± 7.1e-08      76%
+siglip       fp32_det_l40s    fp32                    0    2.2e-16    4.4e-16      3.9e-17 ± 1.2e-18       0%
+siglip       fp32_det_v100    fp32              7.6e-13    1.8e-12    4.8e-10      1.1e-12 ± 1.2e-13       0%
+siglip       fp32_notf32_l40s fp32                    0    2.2e-16    4.4e-16      3.9e-17 ± 1.2e-18       0%
+siglip       fp32_v100        fp32              7.6e-13    1.8e-12    4.8e-10      1.1e-12 ± 1.2e-13       0%
+siglip       fp32_v100_rack7n03 fp32              7.6e-13    1.8e-12    4.8e-10      1.1e-12 ± 1.2e-13       0%
+siglip2_l    autocast_l40s    autocast_fp16     2.0e-06    9.3e-06    1.9e-04      3.3e-06 ± 8.9e-08      92%
+siglip2_l    bf16_l40s        bf16              1.3e-04    3.2e-04    3.2e-03      1.6e-04 ± 2.0e-06     100%
+siglip2_l    fp16_l40s        fp16              2.9e-06    1.2e-05    3.5e-04      4.4e-06 ± 1.2e-07      99%
+siglip2_l    fp16_v100        fp16              1.5e-04    5.5e-04      0.013      2.1e-04 ± 5.3e-06     100%
+siglip2_l    fp32_det_l40s    fp32                    0    2.2e-16    4.4e-16      4.2e-17 ± 1.2e-18       0%
+siglip2_l    fp32_det_v100    fp32              1.5e-04    5.5e-04      0.011      2.1e-04 ± 5.0e-06     100%
+siglip2_l    fp32_notf32_l40s fp32                    0    2.2e-16    4.4e-16      4.2e-17 ± 1.2e-18       0%
+siglip2_l    fp32_v100        fp32              1.5e-04    5.5e-04      0.011      2.1e-04 ± 5.0e-06     100%
+siglip2_l    fp32_v100_rack7n03 fp32              2.7e-12    1.6e-11    1.6e-09      6.2e-12 ± 5.0e-13       0%
+
+=== 2. Drift relative to the cross-GPU floor ===
+The floor arm is the same fp32 math on a different card, so it is the drift
+that is not attributable to precision at all.
+  siglip: floor (median 1-cos) = 7.6e-13
+    fp16_l40s           1.3e-06  =   1.7e+06 x floor
+    fp16_v100           1.3e-06  =   1.8e+06 x floor
+    autocast_l40s       9.2e-07  =   1.2e+06 x floor
+    bf16_l40s           7.3e-05  =   9.7e+07 x floor
+    fp32_notf32_l40s          0  =         0 x floor
+    fp32_det_l40s             0  =         0 x floor
+    fp32_det_v100       7.6e-13  =         1 x floor
+    fp32_v100_rack7n03    7.6e-13  =         1 x floor
+  siglip2_l: floor (median 1-cos) = 1.5e-04
+    fp16_l40s           2.9e-06  =     0.019 x floor
+    fp16_v100           1.5e-04  =         1 x floor
+    autocast_l40s       2.0e-06  =     0.014 x floor
+    bf16_l40s           1.3e-04  =      0.87 x floor
+    fp32_notf32_l40s          0  =         0 x floor
+    fp32_det_l40s             0  =         0 x floor
+    fp32_det_v100       1.5e-04  =         1 x floor
+    fp32_v100_rack7n03    2.7e-12  =   1.8e-08 x floor
+
+=== 3. Retrieval-order stability (per category, paired) ===
+embedder     arm              source          n             Spearman ρ      top10      top50     top100  top1 same
+siglip       autocast_l40s    exemplar       89            1 ± 5.8e-07       100%       100%       100%        100%
+siglip       autocast_l40s    text_query    100            1 ± 9.9e-08       100%       100%       100%         99%
+siglip       bf16_l40s        exemplar       89            1 ± 7.5e-06        98%        99%        99%        100%
+siglip       bf16_l40s        text_query    100            1 ± 6.7e-06        98%        99%        99%         97%
+siglip       fp16_l40s        exemplar       89            1 ± 4.6e-07       100%       100%       100%        100%
+siglip       fp16_l40s        text_query    100            1 ± 1.4e-07       100%       100%       100%        100%
+siglip       fp16_v100        exemplar       89            1 ± 5.1e-07       100%       100%       100%        100%
+siglip       fp16_v100        text_query    100            1 ± 1.4e-07       100%       100%       100%        100%
+siglip       fp32_det_l40s    exemplar       89                  1 ± 0       100%       100%       100%        100%
+siglip       fp32_det_l40s    text_query    100                  1 ± 0       100%       100%       100%        100%
+siglip       fp32_det_v100    exemplar       89            1 ± 4.6e-11       100%       100%       100%        100%
+siglip       fp32_det_v100    text_query    100            1 ± 3.5e-11       100%       100%       100%        100%
+siglip       fp32_notf32_l40s exemplar       89                  1 ± 0       100%       100%       100%        100%
+siglip       fp32_notf32_l40s text_query    100                  1 ± 0       100%       100%       100%        100%
+siglip       fp32_v100        exemplar       89            1 ± 4.6e-11       100%       100%       100%        100%
+siglip       fp32_v100        text_query    100            1 ± 3.5e-11       100%       100%       100%        100%
+siglip       fp32_v100_rack7n03 exemplar       89            1 ± 4.6e-11       100%       100%       100%        100%
+siglip       fp32_v100_rack7n03 text_query    100            1 ± 3.4e-11       100%       100%       100%        100%
+siglip2_l    autocast_l40s    exemplar       89            1 ± 3.1e-07       100%       100%       100%        100%
+siglip2_l    autocast_l40s    text_query    100            1 ± 3.0e-07       100%       100%       100%        100%
+siglip2_l    bf16_l40s        exemplar       89            1 ± 1.2e-05        99%        99%        99%        100%
+siglip2_l    bf16_l40s        text_query    100            1 ± 1.3e-05        99%        98%        99%         98%
+siglip2_l    fp16_l40s        exemplar       89            1 ± 4.1e-07       100%       100%       100%        100%
+siglip2_l    fp16_l40s        text_query    100            1 ± 3.9e-07       100%       100%       100%        100%
+siglip2_l    fp16_v100        exemplar       89            1 ± 2.5e-05        98%        98%        99%        100%
+siglip2_l    fp16_v100        text_query    100            1 ± 1.6e-05        98%        99%        99%         97%
+siglip2_l    fp32_det_l40s    exemplar       89                  1 ± 0       100%       100%       100%        100%
+siglip2_l    fp32_det_l40s    text_query    100                  1 ± 0       100%       100%       100%        100%
+siglip2_l    fp32_det_v100    exemplar       89            1 ± 2.4e-05        98%        99%        99%        100%
+siglip2_l    fp32_det_v100    text_query    100            1 ± 1.6e-05        98%        99%        99%         98%
+siglip2_l    fp32_notf32_l40s exemplar       89                  1 ± 0       100%       100%       100%        100%
+siglip2_l    fp32_notf32_l40s text_query    100                  1 ± 0       100%       100%       100%        100%
+siglip2_l    fp32_v100        exemplar       89            1 ± 2.4e-05        98%        99%        99%        100%
+siglip2_l    fp32_v100        text_query    100            1 ± 1.6e-05        98%        99%        99%         98%
+siglip2_l    fp32_v100_rack7n03 exemplar       89            1 ± 7.6e-11       100%       100%       100%        100%
+siglip2_l    fp32_v100_rack7n03 text_query    100            1 ± 6.9e-11       100%       100%       100%        100%
+
+=== 4. Literal examples: the biggest rank moves ===
+A large move across a tiny score gap is a tie broken differently, not a
+retrieval failure.  The gap column is there so the two can be told apart.
+  siglip     fp32_v100      text_query  building       media       32 (2339.jpg                    ) rank  1867 ->  1868 (moved     1), score -0.017 -> -0.017, gap to next in ref 1.2e-08
+  siglip     fp32_v100      text_query  bike           media     3942 (498264.jpg                  ) rank  1527 ->  1528 (moved     1), score -0.014 -> -0.014, gap to next in ref 1.5e-09
+  siglip     fp32_v100      text_query  glass          media     3766 (498079.jpg                  ) rank  1543 ->  1542 (moved     1), score -0.014 -> -0.014, gap to next in ref 2.0e-06
+  siglip     fp32_v100      exemplar    grass          media     3748 (498061.jpg                  ) rank  2496 ->  2497 (moved     1), score 0.48 -> 0.48, gap to next in ref 2.1e-07
+  siglip     fp32_v100      exemplar    wall           media     3741 (498054.jpg                  ) rank  3173 ->  3172 (moved     1), score 0.46 -> 0.46, gap to next in ref 2.7e-05
+  siglip     fp32_v100      exemplar    boy            media     3619 (497926.jpg                  ) rank  2490 ->  2489 (moved     1), score 0.48 -> 0.48, gap to next in ref 9.1e-06
+  siglip     fp16_l40s      text_query  bus            media     3615 (497922.jpg                  ) rank  1805 ->  1864 (moved    59), score -0.016 -> -0.017, gap to next in ref 4.9e-06
+  siglip     fp16_l40s      text_query  building       media     1113 (3455.jpg                    ) rank  1612 ->  1587 (moved    25), score -0.015 -> -0.015, gap to next in ref 1.6e-06
+  siglip     fp16_l40s      text_query  girl           media     3920 (498242.jpg                  ) rank  1614 ->  1589 (moved    25), score -0.015 -> -0.015, gap to next in ref 2.6e-05
+  siglip     fp16_l40s      exemplar    chair          media     2949 (150386.jpg                  ) rank  2102 ->  2044 (moved    58), score 0.44 -> 0.44, gap to next in ref 6.4e-07
+  siglip     fp16_l40s      exemplar    building       media     1191 (3533.jpg                    ) rank  2099 ->  2049 (moved    50), score 0.44 -> 0.44, gap to next in ref 2.0e-05
+  siglip     fp16_l40s      exemplar    ear            media      347 (2661.jpg                    ) rank  2695 ->  2646 (moved    49), score 0.42 -> 0.42, gap to next in ref 1.8e-05
+  siglip     fp16_v100      text_query  bus            media     3615 (497922.jpg                  ) rank  1805 ->  1900 (moved    95), score -0.016 -> -0.017, gap to next in ref 4.9e-06
+  siglip     fp16_v100      text_query  building       media      542 (2866.jpg                    ) rank  1989 ->  1947 (moved    42), score -0.018 -> -0.017, gap to next in ref 1.7e-05
+  siglip     fp16_v100      text_query  building       media      972 (3312.jpg                    ) rank  2185 ->  2221 (moved    36), score -0.019 -> -0.019, gap to next in ref 4.8e-06
+  siglip     fp16_v100      exemplar    chair          media     2949 (150386.jpg                  ) rank  2102 ->  2042 (moved    60), score 0.44 -> 0.44, gap to next in ref 6.4e-07
+  siglip     fp16_v100      exemplar    building       media     1191 (3533.jpg                    ) rank  2099 ->  2049 (moved    50), score 0.44 -> 0.44, gap to next in ref 2.0e-05
+  siglip     fp16_v100      exemplar    bird           media     3308 (285800.jpg                  ) rank  2709 ->  2660 (moved    49), score 0.42 -> 0.42, gap to next in ref 1.1e-05
+  siglip     autocast_l40s  text_query  building       media      542 (2866.jpg                    ) rank  1989 ->  1944 (moved    45), score -0.018 -> -0.017, gap to next in ref 1.7e-05
+  siglip     autocast_l40s  text_query  bike           media     4163 (713030.jpg                  ) rank  1318 ->  1273 (moved    45), score -0.013 -> -0.012, gap to next in ref 5.9e-06
+  siglip     autocast_l40s  text_query  bus            media     3615 (497922.jpg                  ) rank  1805 ->  1765 (moved    40), score -0.016 -> -0.016, gap to next in ref 4.9e-06
+  siglip     autocast_l40s  exemplar    building       media     1191 (3533.jpg                    ) rank  2099 ->  2039 (moved    60), score 0.44 -> 0.44, gap to next in ref 2.0e-05
+  siglip     autocast_l40s  exemplar    chair          media     2949 (150386.jpg                  ) rank  2102 ->  2048 (moved    54), score 0.44 -> 0.44, gap to next in ref 6.4e-07
+  siglip     autocast_l40s  exemplar    ear            media      347 (2661.jpg                    ) rank  2695 ->  2645 (moved    50), score 0.42 -> 0.42, gap to next in ref 1.8e-05
+  siglip     bf16_l40s      text_query  bus            media     3615 (497922.jpg                  ) rank  1805 ->  1259 (moved   546), score -0.016 -> -0.012, gap to next in ref 4.9e-06
+  siglip     bf16_l40s      text_query  building       media      957 (3297.jpg                    ) rank  1539 ->  1684 (moved   145), score -0.014 -> -0.016, gap to next in ref 4.0e-06
+  siglip     bf16_l40s      text_query  bottle         media     2719 (61608.jpg                   ) rank  1695 ->  1839 (moved   144), score -0.015 -> -0.017, gap to next in ref 2.3e-06
+  siglip     bf16_l40s      exemplar    plate          media     2466 (4838.jpg                    ) rank  3115 ->  2925 (moved   190), score 0.47 -> 0.47, gap to next in ref 2.0e-05
+  siglip     bf16_l40s      exemplar    car            media      703 (3038.jpg                    ) rank  3275 ->  3108 (moved   167), score 0.46 -> 0.47, gap to next in ref 5.7e-05
+  siglip     bf16_l40s      exemplar    nose           media     2713 (61601.jpg                   ) rank  1740 ->  1573 (moved   167), score 0.51 -> 0.52, gap to next in ref 3.9e-06
+  siglip     fp32_notf32_l40s text_query  bus            media     4192 (713060.jpg                  ) rank  2923 ->  2923 (moved     0), score -0.032 -> -0.032, gap to next in ref 3.9e-05
+  siglip     fp32_notf32_l40s text_query  bag            media     4191 (713058.jpg                  ) rank  2083 ->  2083 (moved     0), score -0.021 -> -0.021, gap to next in ref 1.5e-05
+  siglip     fp32_notf32_l40s text_query  building       media     4190 (713057.jpg                  ) rank   860 ->   860 (moved     0), score -7.2e-03 -> -7.2e-03, gap to next in ref 1.7e-05
+  siglip     fp32_notf32_l40s exemplar    bus            media     4192 (713060.jpg                  ) rank  1845 ->  1845 (moved     0), score 0.6 -> 0.6, gap to next in ref 4.1e-05
+  siglip     fp32_notf32_l40s exemplar    bag            media     4191 (713058.jpg                  ) rank  3820 ->  3820 (moved     0), score 0.49 -> 0.49, gap to next in ref 4.1e-05
+  siglip     fp32_notf32_l40s exemplar    building       media     4190 (713057.jpg                  ) rank   239 ->   239 (moved     0), score 0.76 -> 0.76, gap to next in ref 4.8e-04
+  siglip     fp32_det_l40s  text_query  bus            media     4192 (713060.jpg                  ) rank  2923 ->  2923 (moved     0), score -0.032 -> -0.032, gap to next in ref 3.9e-05
+  siglip     fp32_det_l40s  text_query  bag            media     4191 (713058.jpg                  ) rank  2083 ->  2083 (moved     0), score -0.021 -> -0.021, gap to next in ref 1.5e-05
+  siglip     fp32_det_l40s  text_query  building       media     4190 (713057.jpg                  ) rank   860 ->   860 (moved     0), score -7.2e-03 -> -7.2e-03, gap to next in ref 1.7e-05
+  siglip     fp32_det_l40s  exemplar    bus            media     4192 (713060.jpg                  ) rank  1845 ->  1845 (moved     0), score 0.6 -> 0.6, gap to next in ref 4.1e-05
+  siglip     fp32_det_l40s  exemplar    bag            media     4191 (713058.jpg                  ) rank  3820 ->  3820 (moved     0), score 0.49 -> 0.49, gap to next in ref 4.1e-05
+  siglip     fp32_det_l40s  exemplar    building       media     4190 (713057.jpg                  ) rank   239 ->   239 (moved     0), score 0.76 -> 0.76, gap to next in ref 4.8e-04
+  siglip     fp32_det_v100  text_query  building       media       32 (2339.jpg                    ) rank  1867 ->  1868 (moved     1), score -0.017 -> -0.017, gap to next in ref 1.2e-08
+  siglip     fp32_det_v100  text_query  bike           media     3942 (498264.jpg                  ) rank  1527 ->  1528 (moved     1), score -0.014 -> -0.014, gap to next in ref 1.5e-09
+  siglip     fp32_det_v100  text_query  glass          media     3766 (498079.jpg                  ) rank  1543 ->  1542 (moved     1), score -0.014 -> -0.014, gap to next in ref 2.0e-06
+  siglip     fp32_det_v100  exemplar    grass          media     3748 (498061.jpg                  ) rank  2496 ->  2497 (moved     1), score 0.48 -> 0.48, gap to next in ref 2.1e-07
+  siglip     fp32_det_v100  exemplar    wall           media     3741 (498054.jpg                  ) rank  3173 ->  3172 (moved     1), score 0.46 -> 0.46, gap to next in ref 2.7e-05
+  siglip     fp32_det_v100  exemplar    boy            media     3619 (497926.jpg                  ) rank  2490 ->  2489 (moved     1), score 0.48 -> 0.48, gap to next in ref 9.1e-06
+  siglip     fp32_v100_rack7n03 text_query  building       media       32 (2339.jpg                    ) rank  1867 ->  1868 (moved     1), score -0.017 -> -0.017, gap to next in ref 1.2e-08
+  siglip     fp32_v100_rack7n03 text_query  bike           media     3942 (498264.jpg                  ) rank  1527 ->  1528 (moved     1), score -0.014 -> -0.014, gap to next in ref 1.5e-09
+  siglip     fp32_v100_rack7n03 text_query  glass          media     3766 (498079.jpg                  ) rank  1543 ->  1542 (moved     1), score -0.014 -> -0.014, gap to next in ref 2.0e-06
+  siglip     fp32_v100_rack7n03 exemplar    grass          media     3748 (498061.jpg                  ) rank  2496 ->  2497 (moved     1), score 0.48 -> 0.48, gap to next in ref 2.1e-07
+  siglip     fp32_v100_rack7n03 exemplar    wall           media     3741 (498054.jpg                  ) rank  3173 ->  3172 (moved     1), score 0.46 -> 0.46, gap to next in ref 2.7e-05
+  siglip     fp32_v100_rack7n03 exemplar    boy            media     3619 (497926.jpg                  ) rank  2490 ->  2489 (moved     1), score 0.48 -> 0.48, gap to next in ref 9.1e-06
+  siglip2_l  fp32_v100      text_query  bush           media      335 (2648.jpg                    ) rank  1038 ->  1917 (moved   879), score 0.019 -> 0.013, gap to next in ref 9.4e-06
+  siglip2_l  fp32_v100      text_query  clouds         media     3260 (285750.jpg                  ) rank  2739 ->  2314 (moved   425), score 7.2e-03 -> 9.9e-03, gap to next in ref 2.2e-05
+  siglip2_l  fp32_v100      text_query  clouds         media     1310 (3653.jpg                    ) rank  1608 ->  2014 (moved   406), score 0.015 -> 0.012, gap to next in ref 1.0e-05
+  siglip2_l  fp32_v100      exemplar    boat           media     1418 (3761.jpg                    ) rank  2850 ->  2467 (moved   383), score 0.4 -> 0.42, gap to next in ref 6.3e-05
+  siglip2_l  fp32_v100      exemplar    building       media     2093 (4451.jpg                    ) rank  2860 ->  2491 (moved   369), score 0.4 -> 0.42, gap to next in ref 9.0e-06
+  siglip2_l  fp32_v100      exemplar    cloud          media     1397 (3740.jpg                    ) rank  2808 ->  2478 (moved   330), score 0.4 -> 0.42, gap to next in ref 8.9e-06
+  siglip2_l  fp16_l40s      text_query  building       media     1592 (3936.jpg                    ) rank  2600 ->  2697 (moved    97), score 2.0e-03 -> 1.4e-03, gap to next in ref 2.6e-07
+  siglip2_l  fp16_l40s      text_query  building       media     2870 (150306.jpg                  ) rank  1795 ->  1876 (moved    81), score 7.6e-03 -> 6.9e-03, gap to next in ref 5.3e-05
+  siglip2_l  fp16_l40s      text_query  bike           media     4092 (712953.jpg                  ) rank  2949 ->  2872 (moved    77), score -6.3e-04 -> -9.8e-05, gap to next in ref 3.3e-06
+  siglip2_l  fp16_l40s      exemplar    building       media      159 (2466.jpg                    ) rank  1553 ->  1625 (moved    72), score 0.46 -> 0.46, gap to next in ref 4.0e-05
+  siglip2_l  fp16_l40s      exemplar    boy            media     3351 (285843.jpg                  ) rank   872 ->   926 (moved    54), score 0.48 -> 0.48, gap to next in ref 1.3e-05
+  siglip2_l  fp16_l40s      exemplar    box            media     1760 (4107.jpg                    ) rank  1609 ->  1561 (moved    48), score 0.46 -> 0.46, gap to next in ref 1.2e-05
+  siglip2_l  fp16_v100      text_query  bush           media      335 (2648.jpg                    ) rank  1038 ->  1914 (moved   876), score 0.019 -> 0.013, gap to next in ref 9.4e-06
+  siglip2_l  fp16_v100      text_query  clouds         media     3260 (285750.jpg                  ) rank  2739 ->  2323 (moved   416), score 7.2e-03 -> 9.9e-03, gap to next in ref 2.2e-05
+  siglip2_l  fp16_v100      text_query  clouds         media     1310 (3653.jpg                    ) rank  1608 ->  2008 (moved   400), score 0.015 -> 0.012, gap to next in ref 1.0e-05
+  siglip2_l  fp16_v100      exemplar    building       media     2518 (4891.jpg                    ) rank  2980 ->  2379 (moved   601), score 0.41 -> 0.43, gap to next in ref 1.5e-06
+  siglip2_l  fp16_v100      exemplar    bed            media     2509 (4882.jpg                    ) rank  2565 ->  2266 (moved   299), score 0.43 -> 0.44, gap to next in ref 3.1e-05
+  siglip2_l  fp16_v100      exemplar    arm            media     2188 (4548.jpg                    ) rank  1861 ->  1564 (moved   297), score 0.45 -> 0.46, gap to next in ref 3.4e-05
+  siglip2_l  autocast_l40s  text_query  building       media     2870 (150306.jpg                  ) rank  1795 ->  1881 (moved    86), score 7.6e-03 -> 6.9e-03, gap to next in ref 5.3e-05
+  siglip2_l  autocast_l40s  text_query  bush           media     2026 (4382.jpg                    ) rank  1676 ->  1744 (moved    68), score 8.4e-03 -> 8.0e-03, gap to next in ref 1.4e-05
+  siglip2_l  autocast_l40s  text_query  building       media      887 (3227.jpg                    ) rank  2403 ->  2339 (moved    64), score 3.3e-03 -> 3.8e-03, gap to next in ref 1.3e-05
+  siglip2_l  autocast_l40s  exemplar    building       media      159 (2466.jpg                    ) rank  1553 ->  1598 (moved    45), score 0.46 -> 0.46, gap to next in ref 4.0e-05
+  siglip2_l  autocast_l40s  exemplar    building       media      676 (3011.jpg                    ) rank  1890 ->  1926 (moved    36), score 0.45 -> 0.45, gap to next in ref 1.1e-05
+  siglip2_l  autocast_l40s  exemplar    boy            media     3351 (285843.jpg                  ) rank   872 ->   907 (moved    35), score 0.48 -> 0.48, gap to next in ref 1.3e-05
+  siglip2_l  bf16_l40s      text_query  building       media     1592 (3936.jpg                    ) rank  1595 ->  1154 (moved   441), score 0.015 -> 0.018, gap to next in ref 5.2e-06
+  siglip2_l  bf16_l40s      text_query  chair          media     1586 (3930.jpg                    ) rank  2014 ->  2401 (moved   387), score 0.012 -> 9.5e-03, gap to next in ref 1.0e-05
+  siglip2_l  bf16_l40s      text_query  bush           media     2026 (4382.jpg                    ) rank  1614 ->  1956 (moved   342), score 0.015 -> 0.012, gap to next in ref 9.1e-06
+  siglip2_l  bf16_l40s      exemplar    door           media     1704 (4050.jpg                    ) rank  2023 ->  2367 (moved   344), score 0.45 -> 0.43, gap to next in ref 9.0e-06
+  siglip2_l  bf16_l40s      exemplar    boat           media     1875 (4226.jpg                    ) rank  2709 ->  3025 (moved   316), score 0.42 -> 0.41, gap to next in ref 1.3e-04
+  siglip2_l  bf16_l40s      exemplar    building       media     1592 (3936.jpg                    ) rank  2805 ->  3033 (moved   228), score 0.42 -> 0.41, gap to next in ref 4.8e-05
+  siglip2_l  fp32_notf32_l40s text_query  bus            media     4192 (713060.jpg                  ) rank  3632 ->  3632 (moved     0), score -2.1e-04 -> -2.1e-04, gap to next in ref 3.1e-06
+  siglip2_l  fp32_notf32_l40s text_query  bag            media     4191 (713058.jpg                  ) rank   810 ->   810 (moved     0), score 0.032 -> 0.032, gap to next in ref 1.0e-05
+  siglip2_l  fp32_notf32_l40s text_query  building       media     4190 (713057.jpg                  ) rank  3694 ->  3694 (moved     0), score -1.4e-03 -> -1.4e-03, gap to next in ref 4.6e-06
+  siglip2_l  fp32_notf32_l40s exemplar    bus            media     4192 (713060.jpg                  ) rank  2642 ->  2642 (moved     0), score 0.52 -> 0.52, gap to next in ref 3.0e-05
+  siglip2_l  fp32_notf32_l40s exemplar    bag            media     4191 (713058.jpg                  ) rank  3994 ->  3994 (moved     0), score 0.42 -> 0.42, gap to next in ref 1.2e-04
+  siglip2_l  fp32_notf32_l40s exemplar    building       media     4190 (713057.jpg                  ) rank   390 ->   390 (moved     0), score 0.68 -> 0.68, gap to next in ref 4.3e-04
+  siglip2_l  fp32_det_l40s  text_query  bus            media     4192 (713060.jpg                  ) rank  3632 ->  3632 (moved     0), score -2.1e-04 -> -2.1e-04, gap to next in ref 3.1e-06
+  siglip2_l  fp32_det_l40s  text_query  bag            media     4191 (713058.jpg                  ) rank   810 ->   810 (moved     0), score 0.032 -> 0.032, gap to next in ref 1.0e-05
+  siglip2_l  fp32_det_l40s  text_query  building       media     4190 (713057.jpg                  ) rank  3694 ->  3694 (moved     0), score -1.4e-03 -> -1.4e-03, gap to next in ref 4.6e-06
+  siglip2_l  fp32_det_l40s  exemplar    bus            media     4192 (713060.jpg                  ) rank  2642 ->  2642 (moved     0), score 0.52 -> 0.52, gap to next in ref 3.0e-05
+  siglip2_l  fp32_det_l40s  exemplar    bag            media     4191 (713058.jpg                  ) rank  3994 ->  3994 (moved     0), score 0.42 -> 0.42, gap to next in ref 1.2e-04
+  siglip2_l  fp32_det_l40s  exemplar    building       media     4190 (713057.jpg                  ) rank   390 ->   390 (moved     0), score 0.68 -> 0.68, gap to next in ref 4.3e-04
+  siglip2_l  fp32_det_v100  text_query  bush           media      335 (2648.jpg                    ) rank  1038 ->  1917 (moved   879), score 0.019 -> 0.013, gap to next in ref 9.4e-06
+  siglip2_l  fp32_det_v100  text_query  clouds         media     3260 (285750.jpg                  ) rank  2739 ->  2314 (moved   425), score 7.2e-03 -> 9.9e-03, gap to next in ref 2.2e-05
+  siglip2_l  fp32_det_v100  text_query  clouds         media     1310 (3653.jpg                    ) rank  1608 ->  2014 (moved   406), score 0.015 -> 0.012, gap to next in ref 1.0e-05
+  siglip2_l  fp32_det_v100  exemplar    boat           media     1418 (3761.jpg                    ) rank  2850 ->  2467 (moved   383), score 0.4 -> 0.42, gap to next in ref 6.3e-05
+  siglip2_l  fp32_det_v100  exemplar    building       media     2093 (4451.jpg                    ) rank  2860 ->  2491 (moved   369), score 0.4 -> 0.42, gap to next in ref 9.0e-06
+  siglip2_l  fp32_det_v100  exemplar    cloud          media     1397 (3740.jpg                    ) rank  2808 ->  2478 (moved   330), score 0.4 -> 0.42, gap to next in ref 8.9e-06
+  siglip2_l  fp32_v100_rack7n03 text_query  fence          media     4123 (712987.jpg                  ) rank  2136 ->  2137 (moved     1), score 1.0e-03 -> 1.0e-03, gap to next in ref 1.2e-07
+  siglip2_l  fp32_v100_rack7n03 text_query  horse          media     4002 (498327.jpg                  ) rank  1641 ->  1640 (moved     1), score 5.1e-03 -> 5.1e-03, gap to next in ref 1.7e-05
+  siglip2_l  fp32_v100_rack7n03 text_query  bag            media     3828 (498145.jpg                  ) rank  1806 ->  1805 (moved     1), score 3.7e-03 -> 3.7e-03, gap to next in ref 6.7e-06
+  siglip2_l  fp32_v100_rack7n03 exemplar    plane          media     2961 (150398.jpg                  ) rank  1224 ->  1222 (moved     2), score 0.52 -> 0.52, gap to next in ref 5.7e-05
+  siglip2_l  fp32_v100_rack7n03 exemplar    building       media     4127 (712992.jpg                  ) rank   721 ->   722 (moved     1), score 0.54 -> 0.54, gap to next in ref 6.1e-07
+  siglip2_l  fp32_v100_rack7n03 exemplar    bag            media     3971 (498293.jpg                  ) rank  1962 ->  1961 (moved     1), score 0.49 -> 0.49, gap to next in ref 3.4e-05
+
+=== Pairwise median 1-cos — siglip ===
+       autocast_l40s      bf16_l40s      fp16_l40s      fp16_v100  fp32_det_l40s  fp32_det_v100      fp32_l40s fp32_notf32_l4      fp32_v100 fp32_v100_rack published_pile
+autocast_l40s                     -        7.5e-05        1.1e-06        1.1e-06        9.2e-07        9.2e-07        9.2e-07        9.2e-07        9.2e-07        9.2e-07        9.2e-07
+bf16_l40s                   7.5e-05              -        7.5e-05        7.5e-05        7.3e-05        7.3e-05        7.3e-05        7.3e-05        7.3e-05        7.3e-05        7.3e-05
+fp16_l40s                   1.1e-06        7.5e-05              -        8.1e-07        1.3e-06        1.3e-06        1.3e-06        1.3e-06        1.3e-06        1.3e-06        1.3e-06
+fp16_v100                   1.1e-06        7.5e-05        8.1e-07              -        1.3e-06        1.3e-06        1.3e-06        1.3e-06        1.3e-06        1.3e-06        1.3e-06
+fp32_det_l40s               9.2e-07        7.3e-05        1.3e-06        1.3e-06              -        7.6e-13              0              0        7.6e-13        7.6e-13        7.6e-13
+fp32_det_v100               9.2e-07        7.3e-05        1.3e-06        1.3e-06        7.6e-13              -        7.6e-13        7.6e-13              0              0              0
+fp32_l40s                   9.2e-07        7.3e-05        1.3e-06        1.3e-06              0        7.6e-13              -              0        7.6e-13        7.6e-13        7.6e-13
+fp32_notf32_l40s            9.2e-07        7.3e-05        1.3e-06        1.3e-06              0        7.6e-13              0              -        7.6e-13        7.6e-13        7.6e-13
+fp32_v100                   9.2e-07        7.3e-05        1.3e-06        1.3e-06        7.6e-13              0        7.6e-13        7.6e-13              -              0              0
+fp32_v100_rack7n03          9.2e-07        7.3e-05        1.3e-06        1.3e-06        7.6e-13              0        7.6e-13        7.6e-13              0              -              0
+published_pile              9.2e-07        7.3e-05        1.3e-06        1.3e-06        7.6e-13              0        7.6e-13        7.6e-13              0              0              -
+
+=== Pairwise median 1-cos — siglip2_l ===
+       autocast_l40s      bf16_l40s      fp16_l40s      fp16_v100  fp32_det_l40s  fp32_det_v100      fp32_l40s fp32_notf32_l4      fp32_v100 fp32_v100_rack published_pile
+autocast_l40s                     -        1.3e-04        1.6e-06        1.5e-04        2.0e-06        1.5e-04        2.0e-06        2.0e-06        1.5e-04        2.0e-06        2.0e-06
+bf16_l40s                   1.3e-04              -        1.3e-04        2.6e-04        1.3e-04        2.6e-04        1.3e-04        1.3e-04        2.6e-04        1.3e-04        1.3e-04
+fp16_l40s                   1.6e-06        1.3e-04              -        1.5e-04        2.9e-06        1.5e-04        2.9e-06        2.9e-06        1.5e-04        2.9e-06        2.9e-06
+fp16_v100                   1.5e-04        2.6e-04        1.5e-04              -        1.5e-04        2.8e-06        1.5e-04        1.5e-04        2.8e-06        1.5e-04        1.5e-04
+fp32_det_l40s               2.0e-06        1.3e-04        2.9e-06        1.5e-04              -        1.5e-04              0              0        1.5e-04        2.7e-12        2.7e-12
+fp32_det_v100               1.5e-04        2.6e-04        1.5e-04        2.8e-06        1.5e-04              -        1.5e-04        1.5e-04              0        1.5e-04        1.5e-04
+fp32_l40s                   2.0e-06        1.3e-04        2.9e-06        1.5e-04              0        1.5e-04              -              0        1.5e-04        2.7e-12        2.7e-12
+fp32_notf32_l40s            2.0e-06        1.3e-04        2.9e-06        1.5e-04              0        1.5e-04              0              -        1.5e-04        2.7e-12        2.7e-12
+fp32_v100                   1.5e-04        2.6e-04        1.5e-04        2.8e-06        1.5e-04              0        1.5e-04        1.5e-04              -        1.5e-04        1.5e-04
+fp32_v100_rack7n03          2.0e-06        1.3e-04        2.9e-06        1.5e-04        2.7e-12        1.5e-04        2.7e-12        2.7e-12        1.5e-04              -              0
+published_pile              2.0e-06        1.3e-04        2.9e-06        1.5e-04        2.7e-12        1.5e-04        2.7e-12        2.7e-12        1.5e-04              0              -
+
+wrote /expscratch/sgreenberg/precision-3143/results/pairwise_drift.csv
+
+wrote /expscratch/sgreenberg/precision-3143/results/drift.csv, rank_stability.csv, examples.json (reference fp32_l40s)
+
+wrote figures to /expscratch/sgreenberg/precision-3143/results/figures

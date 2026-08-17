@@ -177,9 +177,16 @@ ARMS: dict[str, dict[str, str]] = {
 #: The arm every drift figure is measured against.
 REFERENCE_ARM = "fp32_l40s"
 
-#: Arms whose *only* difference from the reference is the card.  Their drift is
-#: the floor; a treatment arm is only interesting above it.
-FLOOR_ARMS = ["fp32_v100"]
+#: Arms that run the *same fp32 math* as the reference and differ only in where
+#: or how it ran.  Originally one arm, called "the floor" on the assumption that
+#: same-math-different-card drift is negligible.  The measurement destroyed that
+#: assumption: these arms span **0 to 1.5e-4** on ``siglip2_l`` — twelve orders of
+#: magnitude — because one V100 part disagrees with everything else.
+#:
+#: So there is no single floor, and calling any one of them "the floor" is how the
+#: first version of the drift figure came to label the *outlier* as the baseline.
+#: They are marked as a group instead, and their spread is itself the finding.
+FLOOR_ARMS = ["fp32_v100", "fp32_v100_rack7n03", "fp32_notf32_l40s", "fp32_det_l40s", "fp32_det_v100"]
 
 #: The margin the calibration studies resolve (see docs/experiments/overview-bench).
 #: A precision change is adoptable only if the benchmark moves by less than this.
