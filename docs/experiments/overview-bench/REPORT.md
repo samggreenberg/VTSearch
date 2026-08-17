@@ -5,9 +5,12 @@
 (binary-voting arm), plus per-media error dumps (`496798`–`496802`, `507225`–`507230`)
 **Data:** `/expscratch/sgreenberg/bench-{overview,vgbox,vgbox2,binary,errors}/results`
 **Reproduce:** `analyze_bench.py` (tables), `analyze_bench_interaction.py`
-(binary vs boxes), `make_bench_figs.py` (every figure), `launch_errdump.sh` +
-`error_report.py` + `label_noise.py` (the examples) — all under
-`scripts/experiments/calibration/`.
+(binary vs boxes), `make_bench_figs.py` (the plots), `launch_errdump.sh` +
+`error_report.py` + `label_noise.py` (the error listings) and
+`make_error_sheets.py` (the image sheets — it runs on the cluster, where the
+source images are) — all under `scripts/experiments/calibration/`.
+**Reading copy:** [`docs/reports/2026-08-17-overview-bench.html`](../../reports/2026-08-17-overview-bench.html)
+is this document as one self-contained page, figures and photographs inlined.
 
 This is a **characterization**, not a comparison. Nothing here is trying to pick
 a configuration to ship. The question is what each of them *does* — what it is
@@ -351,6 +354,10 @@ score    image              annotated categories
 0.0851   000000325527.jpg   teddy bear
 ```
 
+![Eight false positives of a typed 'bear' query, most annotated teddy bear](figures/examples_text_bear_fp.jpg)
+
+*The typed query is not wrong about the pixels.*
+
 43 of the 626 false positives are annotated `teddy bear`. The typed query is not
 wrong about the pixels; "bear" and "teddy bear" are different COCO classes and
 the text tower does not know which one the user meant. **A user typing "bear"
@@ -375,11 +382,16 @@ on VG parts are lower bounds too.
 `caltech101_m` / `airplanes`, typed query — the clean case, and the reason a
 saturated dataset is still worth dumping. **Every false positive is a
 helicopter**: 13 of 13 for `siglip`, 16 of 17 for `siglip2_l` (the 17th is an
-elephant). Nothing is wrong with the labels and nothing is wrong with the
-ranking; a text query for "airplanes" simply lands on the nearest visual
-neighbour, and two Bad votes remove the whole error class — which is exactly what
-the clicked detector does on this dataset (mean cost 0.06 at 10 votes,
-0.005 by 15).
+elephant).
+
+![All 13 false positives of a typed 'airplanes' query on caltech101_m](figures/examples_text_airplanes_fp.jpg)
+
+*The entire error set of that query — 13 images, all of them helicopters.*
+
+Nothing is wrong with the labels and nothing is wrong with the ranking; a text
+query for "airplanes" simply lands on the nearest visual neighbour, and two Bad
+votes remove the whole error class — which is exactly what the clicked detector
+does on this dataset (mean cost 0.06 at 10 votes, 0.005 by 15).
 
 ---
 
@@ -493,6 +505,11 @@ score    image      annotated categories
 0.6854   3311.jpg   building, car, road, roof, tire
 0.6542   3201.jpg   bench, bush, car, fence, flower, grass, light, person, road, sidewalk
 ```
+
+![Eight of the 1,305 negatives the binary arm flags on VG / sky](figures/examples_sky_binary_fp.jpg)
+
+*Street scenes, mostly without sky annotated and several without much sky in
+them. Compare the boxed arm's false positives above: those were pictures of sky.*
 
 — which is the mechanism, not a coincidence: with no region to point at, the
 model is scoring "outdoor street photo", and the threshold then has to separate
@@ -626,7 +643,9 @@ and every category the dataset annotates on that image. Ten cells are dumped,
 plus a typed-query dump for all 42 (dataset, embedder, category) text arms. The
 full listings are committed beside this report: `ERROR_EXAMPLES.txt` (clicked
 detectors), `ERROR_EXAMPLES_text.txt` (typed queries) and `LABEL_NOISE.txt` (the
-entailment test) — what follows quotes from them.
+entailment test) — what follows quotes from them, and shows the images themselves
+so that "the label is missing" is a judgement you can make rather than one you
+have to take from me. Where the dataset has a box for the target, it is drawn.
 
 **The test.** Pick categories that *cannot* occur without the target — you
 cannot have clouds without sky, a face has a nose, and `sunglasses` **are**
@@ -658,6 +677,11 @@ score   image        annotated categories
 0.5781    2628.jpg   bird, clouds, leaf, mountain, shadow, tree, trunk
 ```
 
+![Eight of siglip's most confident sky false positives, with what VG annotates on each](figures/examples_sky_fp.jpg)
+
+*Every image the model was marked wrong on. Judge it yourself: the annotations
+under each are everything VG says is in that picture.*
+
 **These are missing labels, not model errors.** `sky` is 19 % prevalent as
 annotated; the true rate is plainly higher. Every `sky` number in this report is
 therefore a *lower bound on the model* and an upper bound on its apparent error.
@@ -667,6 +691,12 @@ The false negatives look genuine, and differ in kind: images that *do* carry a
 `713003.jpg` (building, hat, line, man, people, shirt, sky, wall),
 `712994.jpg` (ear, face, hair, hand, horse, man, nose, people, shadow, shirt,
 sky). Small-region failures, which is consistent with the box-band result.
+
+![Eight sky false negatives — images that do carry a sky annotation](figures/examples_sky_fn.jpg)
+
+*The other half of the same cell, and a different failure: sky is present, small,
+and behind the subject. This is the box-band result showing up inside a wave-1
+category.*
 
 ### `visual_genome_m` / `nose` — the same defect, on a part
 
@@ -717,6 +747,12 @@ labels  image              siglip          dinov3          annotated categories
  9      000000326082.jpg   0.052 < 0.17    0.585 >= 0.55   chair, couch, banana, bowl, clock, dining table, laptop, remote, tv
 ```
 
+![Eight clocks the whole-image arm missed and the box arm found, with the clock's box drawn](figures/examples_clock_rescued.jpg)
+
+*The yellow box is the clock. This is what "a whole-image vector dilutes a small
+target" looks like: the box arm scores 0.55–0.66 on exactly the images the
+whole-image arm scores 0.01–0.06 on.*
+
 The three that go the other way are the complement of the same mechanism — wide
 outdoor scenes where the clock is large and unambiguous (`000000036678.jpg`:
 `boat, clock`, siglip 0.879 against dinov3 0.521). This is a genuine **scale**
@@ -730,6 +766,11 @@ The starkest single failure in the study: **1,210 of 2,030 negatives flagged
 almost everything passes. The ranking is not necessarily broken; the cut is.
 This is the over-inclusion signature of `siglip` (fpr ≫ fnr) in its extreme form,
 on a rare category (67 positives, 3 %).
+
+![Eight of the 1,210 flagged negatives on VG / bus](figures/examples_bus_fp.jpg)
+
+*No buses, and no argument that the labels are wrong either — the ranking is
+sound and the cut has simply fallen through the floor.*
 
 *A caution about one heuristic*: the error report flags false positives carrying
 a category name that contains the target, and for `bus` this matched 80 images
@@ -753,6 +794,12 @@ score   image        annotated categories
 0.2824  2359272.jpg  logo, nose, tip
 0.2873  2367006.jpg  camera, horns, tip
 ```
+
+![Eight images the dataset calls tip positives, with the annotated box drawn](figures/examples_tip_pos.jpg)
+
+*The yellow box is what the dataset asked the model to find: a plane's nose, a
+church spire, a bollard, something on a giraffe. Nothing here is one visual
+class.*
 
 — and its false positives are `knee`, `chimney`, `numbers`, `logo`. "Tip" in VG's
 free-text vocabulary is the tip of *anything*: a nose, a horn, a wing, a shoe.
@@ -783,6 +830,11 @@ score   image        annotated categories
 0.6436  2378141.jpg  logo, sunglasses
 0.6429  2403437.jpg  sunglasses
 ```
+
+![Eight glasses false positives, most annotated sunglasses](figures/examples_glasses_fp.jpg)
+
+*A user who trained a "glasses" detector would accept these. The dataset splits
+one object across two labels, and the model is being scored against the split.*
 
 364 false positives in *each* arm are images annotated `sunglasses` and not
 `glasses`. A user who trained a "glasses" detector would count every one of them

@@ -29,6 +29,12 @@ from pathlib import Path
 import matplotlib
 
 matplotlib.use("Agg")
+# Vector output settings, for the SVG pass the HTML build consumes: keep text as
+# text (smaller, and selectable) and let matplotlib drop collinear points from
+# long line paths, which is most of the weight of a 170-trace plot.
+matplotlib.rcParams["svg.fonttype"] = "none"
+matplotlib.rcParams["path.simplify"] = True
+matplotlib.rcParams["path.simplify_threshold"] = 1.0
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
@@ -87,12 +93,25 @@ def boot_band(stack: np.ndarray, n_boot: int = 400, seed: int = 0) -> tuple[np.n
     return np.nanpercentile(means, 2.5, axis=0), np.nanpercentile(means, 97.5, axis=0)
 
 
+#: Also emit SVG beside each PNG. The HTML build picks whichever is smaller per
+#: figure, so a line plot ships as crisp vector art while the 170-trace spaghetti
+#: plot (huge as SVG) stays a bitmap.
+ALSO_SVG = False
+
+
 def _finish(fig, out: Path, note: str | None = None) -> None:
     if note:
         fig.text(0.5, -0.01, note, ha="center", va="top", fontsize=8, color="#555")
     fig.savefig(out, dpi=130, bbox_inches="tight")
+    if ALSO_SVG:
+        svg = out.with_suffix(".svg")
+        fig.savefig(svg, bbox_inches="tight")
+        # matplotlib leaves trailing spaces, which the repo's whitespace hook
+        # would rewrite - and a hook-rewritten artifact no longer matches what
+        # the generator produces.
+        svg.write_text("\n".join(line.rstrip() for line in svg.read_text().split("\n")))
     plt.close(fig)
-    print(f"  wrote {out}")
+    print(f"  wrote {out}{' (+svg)' if ALSO_SVG else ''}")
 
 
 def _label_bottom_row(axes, xlabel: str, ncols: int = 3) -> None:
@@ -427,7 +446,11 @@ def main() -> int:
     ap.add_argument("--vgbox", default="/expscratch/sgreenberg/bench-vgbox2/results")
     ap.add_argument("--binary", default="/expscratch/sgreenberg/bench-binary/results")
     ap.add_argument("--text-csv", default=None, help="text_baseline.csv (defaults to the wave-1 results dir's copy)")
+    ap.add_argument("--svg", action="store_true", help="also write an SVG beside each PNG (for the HTML build)")
     args = ap.parse_args()
+
+    global ALSO_SVG
+    ALSO_SVG = args.svg
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
