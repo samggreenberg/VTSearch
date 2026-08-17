@@ -117,6 +117,34 @@ Learned sort evaluation simulates voting, trains a binary classifier, then measu
 - **Recall:** Of actual positives, fraction predicted positive.
 - **F1:** Harmonic mean of precision and recall.
 
+### Seeing the errors behind the error rate
+
+An fpr says how often a configuration is wrong. It cannot say whether the
+**model** is wrong or the **label** is — and those have opposite remedies (fix
+the model vs. clean the dataset and re-run). Set `VTS_DUMP_TEST_SCORES` to a
+directory and any voting-iterations run writes one row per scored media —
+score, dataset label, threshold in force, source filename, and every category
+the dataset annotates on that media — with `VTS_DUMP_TAG` naming the file
+(`vtscore/eval/score_dumps.py`). It is off unless asked for: a dump is evidence
+for a handful of hand-picked cells, not something a 270-cell array should do.
+
+Two scripts read a dump directory:
+
+```bash
+# Ranked false positives / false negatives, with annotations, per cell.
+python scripts/experiments/calibration/error_report.py --dumps "$DUMPS"
+# The entailment test: are the flagged images enriched for categories that
+# cannot occur without the target (clouds without sky)?  If so the "false"
+# positives are missing labels.
+python scripts/experiments/calibration/label_noise.py --dumps "$DUMPS"
+```
+
+`scripts/experiments/calibration/text_baseline.py --dump-dir` writes the same
+schema for a *typed* query, so the zero-click path's errors are inspectable the
+same way. `scripts/experiments/calibration/launch_errdump.sh` re-runs chosen
+cells of a finished study with dumping on, reusing that study's category
+selection and exemplar crops so the dumped cell is the same cell.
+
 ## Visualisations
 
 When `--plot-dir` is set, the following charts are generated:
