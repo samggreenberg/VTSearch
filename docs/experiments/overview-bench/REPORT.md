@@ -70,6 +70,15 @@ Wall-time is the median cell, and a step is what actually differs: **6.4–8.5 s
 for `dinov3_patch` against ~0.6 s whole-image**, an 11–13× per-step ratio that
 the per-cell figure understates.
 
+**Every wall-time in this report is cache-warm and excludes the encoder.** The
+harness sources `pile_env.sh` and reads pre-embedded cells, so no forward pass
+runs during a cell — the per-step cost is the 150-vote loop over cached vectors,
+and the only encoder-dependent term in it is vector dimension. Read these
+numbers as *study* cost, never as the cost of deploying an encoder; the
+`dinov3_patch` step is 11–13× not because its backbone is large (it is a ViT-B,
+*smaller* than `siglip2_l`) but because each item carries a patch grid. See
+[Cost is two different things](#cost-is-two-different-things).
+
 Zero-click typed query, same test splits (`dinov3_patch` has no text tower):
 
 | dataset | embedder | text cost | text AP | text AUROC |
@@ -77,6 +86,46 @@ Zero-click typed query, same test splits (`dinov3_patch` has no text tower):
 | `caltech101_m` | `siglip` / `siglip2_l` | 0.1612 / 0.0444 | 1.000 / 1.000 | — |
 | `coco_val` | `siglip` / `siglip2_l` | 0.3024 / 0.2768 | 0.707 / 0.743 | — |
 | `visual_genome_m` | `siglip` / `siglip2_l` | 0.4894 / 0.3936 | 0.496 / 0.544 | — |
+
+---
+
+# Cost is two different things
+
+This report uses "cost" in two senses and they point in opposite directions.
+Everywhere except this section, **`cost` = fpr + fnr** — a labelling-error rate,
+with no compute in it. The wall-times are *study* cost on cached vectors. Neither
+is the cost of running an encoder, and a reader picking a configuration to deploy
+needs that third number, which the benchmark cannot see.
+
+Measured separately (2026-08-17, jobs `507149`/`507150`, 384 VG images through
+the real `vtscore` decode + processor + forward path):
+
+| stage, V100 · batch 32 · fp32 | `siglip` | `siglip2_l` |
+|---|---:|---:|
+| decode | 3.9 s (54 %) | 3.4 s (12 %) |
+| processor | 2.1 s (28 %) | 1.9 s (7 %) |
+| GPU forward | 1.3 s (18 %) | 22.1 s (81 %) |
+| throughput | 52.5 img/s | 14.0 img/s |
+
+**Forward-only, `siglip2_l` costs 17× `siglip`** (22.1 s vs 1.3 s), consistent
+with ~5× the parameters over ~3.7× the tokens. The pile build logs show only
+6.1× end-to-end (830 s vs 135 s for 12,000 images) because a fixed
+decode-and-preprocess tax — 82 % of the small model's run — dilutes it. So the
+indexing multiplier is a property of the *pipeline*, not the encoder: **~17× of
+GPU compute, 2–6× of wall-clock** depending on how much of the pipeline is
+overhead. The same multiplier applies per typed query at serve time, where it is
+user-visible latency rather than amortised indexing.
+
+The pile was built un-tuned — V100, fp32, batch 32, serial decode — and that is
+where the tax comes from, not from anything intrinsic. On an L40S with fp16,
+batch 64 and threaded decode the same 12,000 `siglip2_l` images take 112 s
+instead of 855 s (7.6×). Four fixes are filed: #3144 (the pile builds on the
+cluster's slowest GPU) and #3145 (decode is serial, so the GPU idles 82 % of a
+`siglip` run) are numerically safe; #3143 (fp32, no autocast) and #3146 (slow
+image processor) perturb the vectors and are gated on a drift experiment. Because
+the pile is a shared cache, **it must not be partially rebuilt** — a pile with
+some cells fp16 and some fp32 is a confound that would surface months later as an
+unexplained arm difference.
 
 ---
 
@@ -106,10 +155,18 @@ arm's, which is the comparison that matters.
 
 ## `siglip2_l` — the premium whole-image encoder
 
-**Behaves like:** `siglip` with a uniformly better ranking and the same cost
-profile. Same ~110 s. AP is higher on every non-saturated dataset (VG 0.457 vs
-0.428; COCO 0.711 vs 0.695), and its *text* ranking is better too (VG text AP
-0.544 vs 0.496).
+**Behaves like:** `siglip` with a uniformly better ranking and the same *error*
+profile — at **~17× the encode compute**. AP is higher on every non-saturated
+dataset (VG 0.457 vs 0.428; COCO 0.711 vs 0.695), and its *text* ranking is
+better too (VG text AP 0.544 vs 0.496).
+
+Its `cost` (= fpr + fnr) is within 0.03 of `siglip`'s on every dataset, which is
+what "same cost profile" means here and **all** it means. It is not a statement
+about compute: the ~110 s per run is identical to `siglip`'s only because the
+harness reads pre-embedded cells (see [Cost is two different
+things](#cost-is-two-different-things)). `siglip2_l` is
+`siglip2-so400m-patch14-384` against `siglip`'s `siglip-base-patch16-224` — ~5×
+the vision-tower parameters over ~3.7× the tokens.
 
 **It rebalances the error budget rather than only shrinking it.** On VG it moves
 fpr 0.301 → 0.244 while fnr rises 0.091 → 0.123. It is a less trigger-happy
@@ -126,6 +183,14 @@ object.
 **Behaves like:** the best ranker in the study, and — once measured on a proper
 category sample — the best *cost* on every boxed set too, at 11–13× the compute
 per step (15–23 min per box-band run against ~2 min; 17–19 min on wave 1's sets).
+
+Note which compute that is. Its per-step cost is 11–13× because every item
+carries a patch grid (a 3.65 GB cell against `siglip2_l`'s 59 MB); *encoding* it
+is cheap — a ViT-B at 297 s per 12,000 images, **2.8× faster than `siglip2_l`'s
+830 s** on the same job. DINOv3 is the expensive arm to search and the middling
+arm to index; `siglip2_l` is the reverse. The two rankings are inverted, so
+neither the wall-time column nor the per-step figure predicts what a deployment
+pays.
 
 **Its ranking is the best measured, and the margin grows as targets shrink.** AP
 by box band: 0.405 → 0.391 → 0.294 against `siglip2_l`'s 0.359 → 0.340 → 0.232,
@@ -368,16 +433,20 @@ of it that is weakest — which is also why it has no text tower to fall back on
 ## What this says per constraint
 
 **Compute-limited (stuck on `siglip`).** You lose ~0.026 cost against
-`siglip2_l` on VG and ~0.016 on COCO — small. Your characteristic failure is
-**over-inclusion**: fpr is 3.3× fnr on VG (0.301 vs 0.091), the most lopsided
-error budget in the study. The lever is the operating point, not the encoder.
-And `siglip` has a text tower, so a typed query gives you a usable ranking for
-free — see the text section.
+`siglip2_l` on VG and ~0.016 on COCO — small, and what you keep is real:
+`siglip2_l` costs **~17× the GPU compute per image** to index a corpus and the
+same multiplier per typed query at serve time. Nothing in the benchmark's
+wall-times shows that, because the encoder ran once into the pile long before any
+cell did. Your characteristic failure is **over-inclusion**: fpr is 3.3× fnr on
+VG (0.301 vs 0.091), the most lopsided error budget in the study. The lever is
+the operating point, not the encoder. And `siglip` has a text tower, so a typed
+query gives you a usable ranking for free — see the text section.
 
 **Box-averse (users answer Good/Bad only).** Your ceiling is `siglip2_l`, not
 DINOv3, and the gap to the shipped default is small (0.037 on VG, 0.016 on
-COCO). Spending on a patch encoder you cannot point at makes things **worse**.
-This is the clearest actionable finding in the report.
+COCO) — and costs ~17× the encode compute to close. Spending on a patch encoder
+you cannot point at makes things **worse**. This is the clearest actionable
+finding in the report.
 
 **Can draw boxes and can afford DINOv3.** The advantage is real (−0.042 cost vs
 `siglip2_l` on VG, −0.050 on COCO) and grows as targets shrink (see the box-band
