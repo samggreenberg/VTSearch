@@ -157,6 +157,23 @@ examples showed VG's `sky` labels are simply missing on 6.6-9.5% of the flagged
 images, and that `sunglasses` and `glasses` are the same object under two
 labels — neither of which any aggregate could have said.
 
+**On image data, show the images.** A listing of file ids is enough to count
+with and not enough to adjudicate with: "is this a missing label?" is a question
+about the picture. `make_error_sheets.py` renders the dumped rows as contact
+sheets — score, the dataset's own annotations under each thumbnail, and the
+target's ground-truth box drawn where the dataset has one — and it runs on the
+cluster, because that is where the source images are. A boxed sheet is often the
+whole argument: the `tip` "positives" are a plane's nose, a church spire and a
+bollard, which no amount of prose establishes as convincingly.
+
+**Give a long report a reading copy.** `REPORT.md` is the archive and renders
+inline on GitHub, but bitmap plots cannot be zoomed and a 900-line document wants
+a table of contents. `make_bench_html.py` builds a self-contained page under
+[`docs/reports/`](../../../docs/reports/) from the markdown — vector figures
+inlined, photographs embedded, one file. **Generate it, never hand-write it:** a
+second copy of the narrative drifts from the first, and the point is that both
+renderings say the same thing.
+
 Reports cite only analysis code that is **in the tree**: `scripts/check-docs.py`
 now enforces that for `docs/experiments/`. A report whose script never got
 committed cannot be reproduced or extended, however good its numbers were.
