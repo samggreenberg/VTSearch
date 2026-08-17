@@ -222,9 +222,23 @@ def main(argv: list[str] | None = None) -> int:
     )
     _assert_probe_matches_arm(arm, probe)
 
+    # Time each cell here rather than trusting the builder's ``embed_seconds``.
+    # That field reads 0 on this path and it is not a bug: the demo loader embeds
+    # *inside* ``load_demo_source``, so by the time ``embed_missing`` runs there
+    # is nothing left to do.  The wall time around the whole build_cell call is
+    # therefore the only honest per-cell number — and it is the one that answers
+    # the question that matters, because #3151 already overlapped decode with the
+    # forward. The forward-only 4.2x is an upper bound on a stage that is no
+    # longer the whole cost; what a user gets is this difference, end to end.
     summaries = []
     for emb in embedders:
-        summaries.append(build_pile.build_cell(args.dataset, emb, force=args.force))
+        t_cell = time.time()
+        summary = build_pile.build_cell(args.dataset, emb, force=args.force)
+        summary["wall_seconds"] = round(time.time() - t_cell, 1)
+        if summary.get("status") == "built" and summary.get("n_medias"):
+            summary["medias_per_second"] = round(summary["n_medias"] / max(summary["wall_seconds"], 1e-6), 1)
+        summaries.append(summary)
+        log(f"  {emb}: cell wall {summary['wall_seconds']}s ({summary.get('medias_per_second', '?')} medias/s)")
 
     # Text queries, embedded in the SAME precision as the gallery.  Retrieval is
     # cosine(query, gallery), so a study that perturbed only the gallery would be
