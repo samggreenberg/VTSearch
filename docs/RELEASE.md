@@ -84,10 +84,39 @@ Anything else stays open — a genuinely partial `Refs` is doing its job.
 
 - Skip it if it is already closed. Never reopen or re-close.
 - Close it with `state_reason: completed`.
+- **Strip the `dev` label in the same write.** `dev` means "fixed on `dev`, NOT yet on `main`" (see CLAUDE.md), and this close is the moment that stops being true. Pass `labels` explicitly with every label the issue keeps (`claude`, `experiment`, …) minus `dev`; `labels` *replaces* the whole set, so passing `[]` would wipe the rest. A `PreToolUse` hook blocks a `completed` close that keeps `dev` or omits the array.
 - Add a one-line comment noting it shipped to `main` in today's release and linking the fix PR (e.g. `Shipped to main in the 2026-07-14 release — fixed
   in #M.`). When the PR used a non-closing keyword, say so in that comment, so the mislabel is visible on the issue rather than silently corrected.
 
 **Report the reconciliation in chat**, briefly: which issues came from the closing bucket, which were closed after reconciliation (and under which PR keyword), and which non-closing references were deliberately left open. This is the only place a crossed wire between a PR keyword and an issue comment becomes visible, so do not collapse it to a bare count. If no qualifying issues are found, state that and do nothing.
+
+## 6b. Refresh the `dev` label between releases
+
+Step 6 is what *removes* `dev`. What puts it on is `scripts/reconcile-dev-labels.py`, and that runs **between** releases, not only at one: the label's whole job is to make the awaiting-release view (`is:issue is:open label:dev`) correct while the release is still weeks away. Run it whenever you want that view refreshed, and once more right after step 6 to confirm nothing was left behind.
+
+The script is a pure function from data to plan — it does no network I/O, because the GitHub REST API is unreachable from a Claude session (`GITHUB_TOKEN` is present but returns 403; GitHub access is intermediated by the MCP server). So gather the data first, then pipe it in:
+
+1. List the PRs merged into `dev` since the last release — the same `origin/main..origin/dev` window as step 3 — and read each one's **body**.
+2. List the repo's issues with their `labels` and `state`, and fetch each one's **comments** in chronological order (the API default).
+3. Assemble them into one JSON object and run the script:
+
+```json
+{
+  "release_prs": [{"number": 3128, "body": "... Closes #3077 ..."}],
+  "issues": [
+    {"number": 3077, "state": "open", "labels": ["claude"],
+     "comments": [{"body": "Addressed in #3128"}]}
+  ]
+}
+```
+
+```
+python scripts/reconcile-dev-labels.py --input plan-input.json
+```
+
+It prints four buckets. **Apply `ADD` and `REMOVE` directly** — they are unambiguous. **Do not apply `NEEDS REVIEW`**; read those issues yourself. An issue lands there when a fix pointer is not the newest comment, which is genuinely undecidable from the outside: the later comment may be a maintainer saying "thanks" or the reporter saying the fix does not work. Tagging would bury a dispute; skipping would silently drop the issue out of the awaiting-release view. That is the same "not silently skipped" principle step 6 applies to non-closing references.
+
+Add `--check` to make it exit non-zero when anything needs attention, and `--json` for machine-readable output.
 
 ## 7. Prune plan pointers for the closed issues
 
