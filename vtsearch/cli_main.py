@@ -801,10 +801,16 @@ def _run_autodetect(args, parser, importer, exporter) -> None:
     # progress callback from update_progress (which writes to a tracker
     # nothing reads in CLI mode) to an NDJSON emitter on stdout.
     from vtscore import cli_progress
+    from vtscore.concurrency.notifications import notifications
 
     cli_progress.set_format(args.progress_format)
     if args.progress_format == "json":
         set_progress_callback(cli_progress.progress_callback)
+    # Plugin notifications become toasts in the GUI; headless there is no
+    # browser to toast at, so print them instead. Without this the CLI is the
+    # one place where "keep going but tell the user" silently drops the second
+    # half of its promise.
+    notifications.subscribe(cli_progress.notification_subscriber)
 
     _authenticate_cli_user(args, parser)
 

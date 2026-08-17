@@ -2,7 +2,7 @@ import { Component, WritableSignal, inject, signal } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ProgressEventsService } from './progress-events.service';
 import { ConnectionStateService, ConnectionStatus } from './connection-state.service';
-import type { LoadingTask } from '../models/api.models';
+import type { LoadingTask, ServerNotification } from '../models/api.models';
 import { configureZoneless } from '../testing/zoneless-testbed';
 import { settleZoneless } from '../testing/settle-resource';
 
@@ -174,6 +174,50 @@ describe('ProgressEventsService liveness wiring', () => {
     es.emit('detector-loading-tasks', []);
     TestBed.tick();
     expect(state.completed).toBe(true);
+  });
+
+  // --- notification channel: one-off backend messages (#3132) ---
+
+  it('re-emits a notification frame on notifications$', () => {
+    const es = connectedSource();
+    const seen: ServerNotification[] = [];
+    TestBed.inject(ProgressEventsService).notifications$.subscribe((n) => seen.push(n));
+
+    es.emit('notification', {
+      id: 'note_ab_1',
+      level: 'warning',
+      message: 'Skipped 3 files',
+      detail: 'a, b, c',
+      source: 'Server Folder',
+    });
+
+    expect(seen.length).toBe(1);
+    expect(seen[0].message).toBe('Skipped 3 files');
+    expect(seen[0].level).toBe('warning');
+    expect(seen[0].source).toBe('Server Folder');
+  });
+
+  it('drops a notification frame with no message', () => {
+    // An empty toast tells the user nothing and still has to be dismissed.
+    const es = connectedSource();
+    const seen: ServerNotification[] = [];
+    TestBed.inject(ProgressEventsService).notifications$.subscribe((n) => seen.push(n));
+
+    es.emit('notification', { id: 'note_ab_2', level: 'info', message: '' });
+
+    expect(seen).toEqual([]);
+  });
+
+  it('does not replay an earlier notification to a late subscriber', () => {
+    // These are events, not state: a subscriber that arrives after the frame
+    // must not be handed a stale message to toast.
+    const es = connectedSource();
+    es.emit('notification', { id: 'note_ab_3', level: 'info', message: 'Already gone' });
+
+    const seen: ServerNotification[] = [];
+    TestBed.inject(ProgressEventsService).notifications$.subscribe((n) => seen.push(n));
+
+    expect(seen).toEqual([]);
   });
 
   it('keeps waiting while the task has not appeared yet', () => {

@@ -112,6 +112,32 @@ export interface ProgressEvent {
   [key: string]: unknown;
 }
 
+/**
+ * A one-off message the backend wants shown to the user, delivered on the
+ * `notification` channel of `/api/events` and rendered as a toast by
+ * `ToastService`.
+ *
+ * Backend: `vtscore/concurrency/notifications.py`. Any server-side code —
+ * most usefully a plugin that hit a recoverable problem and chose to carry
+ * on — calls `notify(...)` and every connected client receives this shape.
+ *
+ * Unlike `ProgressEvent` this is an event, not a snapshot: it is broadcast
+ * once, is never re-sent on a heartbeat, and is not replayed to a client that
+ * connects afterwards.
+ */
+export interface ServerNotification {
+  /** Unique per backend process; used as the toast's dedup key. */
+  id: string;
+  /** `error`/`warning` toasts stay until dismissed; the rest auto-dismiss. */
+  level: 'info' | 'success' | 'warning' | 'error';
+  message: string;
+  detail?: string | null;
+  /** Who spoke — usually a plugin's `display_name`. */
+  source?: string | null;
+  /** Unix seconds. */
+  timestamp?: number;
+}
+
 // --- Datasets ---
 
 /**

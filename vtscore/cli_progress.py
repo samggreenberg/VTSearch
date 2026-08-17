@@ -22,6 +22,11 @@ Event names emitted today:
 - ``progress``       - a tick from the embedding / loading stack
   fields: ``status`` (str), ``message`` (str?), ``current`` (int?),
   ``total`` (int?), ``pct`` (float? - only when total > 0)
+- ``notification``   - a non-fatal message a plugin wanted the user to see
+  (see :mod:`vtscore.concurrency.notifications`; in the GUI these become
+  toasts). The run continues either way, including at ``level="error"``.
+  fields: ``level`` (str), ``message`` (str), ``detail`` (str?),
+  ``source`` (str?)
 - ``error``          - fatal error; the process will exit non-zero
   fields: ``message`` (str)
 
@@ -36,7 +41,10 @@ from __future__ import annotations
 import json
 import sys
 from datetime import datetime, timezone
-from typing import Any, TextIO
+from typing import TYPE_CHECKING, Any, TextIO
+
+if TYPE_CHECKING:
+    from vtscore.concurrency.notifications import Notification
 
 #: Allowed values for ``--progress-format``.
 FORMATS = ("text", "json")
@@ -127,3 +135,45 @@ def progress_callback(status: str, message: str = "", current: int = 0, total: i
         fields["total"] = total
         fields["pct"] = round(current * 100 / total, 1)
     emit("progress", **fields)
+
+
+#: Prose label per notification level, for ``text`` mode. Mirrors the
+#: ``Error:`` prefix :func:`emit_error` already uses, so a reader does not have
+#: to learn a second vocabulary for the same severity ladder.
+_NOTIFICATION_LABEL = {
+    "info": "Note",
+    "success": "Done",
+    "warning": "Warning",
+    "error": "Error",
+}
+
+
+def notification_subscriber(notification: "Notification") -> None:
+    """Print a user notification, in whichever format the CLI is running.
+
+    Subscribed to :data:`vtscore.concurrency.notifications.notifications` for
+    the life of a CLI run so the messages plugins raise for the GUI's toasts
+    are not silently dropped in headless mode.
+
+    In ``text`` mode this writes one prose line to **stderr**, keeping stdout
+    reserved for the run's real output (an exporter's confirmation, a results
+    dump a caller may be piping). In ``json`` mode it writes a ``notification``
+    NDJSON record to **stdout** with the rest of the event stream, so one pipe
+    still captures everything.
+
+    Note that ``level="error"`` here is *not* :func:`emit_error`: a
+    notification never ends the run. It reports something the code decided to
+    continue past, which is the entire point of the notification channel.
+    """
+    label = _NOTIFICATION_LABEL.get(notification.level, "Note")
+    source = f" [{notification.source}]" if notification.source else ""
+    detail = f" - {notification.detail}" if notification.detail else ""
+    emit(
+        "notification",
+        text=f"{label}:{source} {notification.message}{detail}",
+        stream=None if _format == "json" else sys.stderr,
+        level=notification.level,
+        message=notification.message,
+        detail=notification.detail,
+        source=notification.source,
+    )

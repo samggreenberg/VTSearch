@@ -12,6 +12,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.concurrency.notifications`** - `notify()`, `Notification` and
+  `NotificationBroker`: a fan-out channel for one-off user-facing messages.
+  The progress trackers publish *state* and an exception ends the operation;
+  neither fits "we skipped 3 unreadable files but the other 900 imported
+  fine". `notify()` is the third option — keep going, and say so. Consumers
+  subscribe to the process-wide `notifications` broker (the app's SSE stream
+  and the CLI printer both do); with no subscriber the message is still
+  logged at a severity matching its level. `PluginBase.notify()` wraps it
+  with the plugin's `display_name` as the source. The call never raises: bad
+  levels degrade, long messages truncate, broken subscribers are swallowed.
+
 - **`vtscore.security.login`** - the `LoginProvider` ABC,
   `DefaultLoginProvider`, the process-wide `set_login_provider` /
   `get_login_provider` registry, `get_user_data_dir()` and

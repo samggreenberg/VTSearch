@@ -21,6 +21,8 @@ extractors).
     what the framework does to `field_values` before your plugin sees it
     (read this before writing any `.strip()` / `validate_url` /
     `validate_server_filepath` boilerplate)
+  - [Notifying the user (toasts)](#notifying-the-user-toasts): telling the
+    user something went sideways *without* failing the whole run
 - [Adding a Data Importer](#adding-a-data-importer)
 - [Adding a Datasource Importer](#adding-a-datasource-importer)
 - [Adding a Media Converter](#adding-a-media-converter)
@@ -229,6 +231,68 @@ first request, so a typo fails fast rather than shipping a literal
 placeholder into a filename. Every substituted value is run through
 `sanitize_template_value()`, so a detector named `../../etc/passwd`
 cannot escape the directory implied by an admin-configured template.
+
+### Notifying the user (toasts)
+
+Sometimes a plugin hits a problem that is worth *mentioning* but not worth
+*failing over*: an API that rate-limited you into partial results, a
+handful of files that would not decode, a field the remote schema no longer
+returns. Raising turns a mostly-successful run into a total failure and
+throws away the work that did succeed; logging alone means nobody finds
+out, because the user is looking at a browser and not at your server's
+stdout.
+
+`PluginBase.notify()` is the third option — keep going, and put a toast in
+front of the user:
+
+```python
+def run(self, field_values):
+    medias, skipped = self._load(field_values)
+    if skipped:
+        self.notify(
+            f"Skipped {len(skipped)} unreadable files",
+            level="warning",
+            detail=", ".join(skipped[:10]),
+        )
+    return medias
+```
+
+| Argument  | Description |
+|-----------|-------------|
+| `message` | Headline, one short sentence. Truncated at 300 characters |
+| `level`   | `"info"` (default), `"success"`, `"warning"`, or `"error"`. The first two fade after a few seconds; the last two stay until the user dismisses them |
+| `detail`  | Optional second line with the specifics — which files, which endpoint, how many. Truncated at 2000 characters |
+
+Your `display_name` is attached automatically as the notification's source,
+so the toast says which plugin spoke. Code that isn't a `PluginBase`
+subclass (an embedder, a processor, a route helper) calls the underlying
+function directly and passes its own label:
+
+```python
+from vtscore.concurrency.notifications import notify
+
+notify("Rate limited; returning partial results", level="warning", source="ACME API")
+```
+
+Four things to know before you rely on it:
+
+- **It cannot fail.** A bad `level` degrades to `"info"`, a long message is
+  truncated, and a broken listener is swallowed. Call it inside an `except`
+  block or a loop without wrapping it in its own `try`.
+- **It is not an error channel.** A problem that *does* invalidate the
+  result should still raise; the framework turns that into a proper error
+  the user cannot miss. `notify` is for the case where you chose to
+  continue.
+- **Delivery is live-only.** Every user with the app open when you call it
+  sees the toast; nobody who opens the app afterwards does. There is no
+  replay, so don't use it for anything that has to survive a page reload.
+- **Headless still works.** Under `python app.py --autodetect` the same
+  messages print (to stderr in text mode, as `notification` NDJSON records
+  in `--progress-format json`), so a CLI run does not silently lose them.
+
+See [`vtscore/docs/packages/concurrency.md`](../vtscore/docs/packages/concurrency.md)
+for the broker itself, and [`api/events.md`](api/events.md) for the SSE
+frame that carries it.
 
 ### PluginRegistry (Auto-Discovery)
 

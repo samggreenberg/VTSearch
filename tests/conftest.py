@@ -402,6 +402,13 @@ def reset_state():
 
     cli_progress.set_format("text")
 
+    # Drop notification subscribers: they are process-global, so a test that
+    # subscribes a collector (or drives the CLI, which subscribes a printer)
+    # would otherwise keep receiving every later test's notifications.
+    from vtscore.concurrency.notifications import notifications as _notifications
+
+    _notifications.clear_subscribers()
+
     _set_login_provider(_DefaultLoginProvider())
 
     _reset_ds_reg()

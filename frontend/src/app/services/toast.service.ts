@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject } from 'rxjs';
-import { LoadingTask } from '../models/api.models';
+import { LoadingTask, ServerNotification } from '../models/api.models';
 import { ProgressEventsService } from './progress-events.service';
 
 /**
@@ -23,7 +23,15 @@ export interface ErrorContext {
   timestamp: string;
 }
 
-export type ToastLevel = 'error' | 'success';
+/**
+ * Toast severities, in descending order of how hard they insist.
+ *
+ * `error` and `warning` stay on screen until the user dismisses them: both
+ * report that something did not go as asked, and a message the user missed is
+ * the same as a message never sent. `success` and `info` auto-dismiss — they
+ * confirm or narrate, and nothing is lost if they scroll past unread.
+ */
+export type ToastLevel = 'error' | 'warning' | 'success' | 'info';
 
 /**
  * Optional action button rendered next to the toast's dismiss. Used by
@@ -112,6 +120,9 @@ const SUCCESS_AUTO_DISMISS_MS = 5000;
  *    ``ErrorContext`` for the Details / Copy debug info actions.
  *  - SSE LoadingTask failures (via ``SseErrorRouterService``): emitted
  *    deduped per task_id.
+ *  - Backend notifications (the ``notification`` SSE channel): one-off
+ *    messages any server-side code — most often a plugin that hit a
+ *    recoverable problem and chose to continue — pushed with ``notify()``.
  *
  * Toasts stack (newest at the bottom) and stay until the user
  * dismisses them. Replaces the old single-banner ``ErrorService`` so a
@@ -132,6 +143,7 @@ export class ToastService {
 
     progressEvents.loadingTasks$.subscribe((tasks) => this.routeTaskErrors(tasks, 'dataset'));
     progressEvents.detectorLoadingTasks$.subscribe((tasks) => this.routeTaskErrors(tasks, 'detector'));
+    progressEvents.notifications$.subscribe((note) => this.routeServerNotification(note));
   }
 
   get toasts(): Toast[] {
@@ -152,8 +164,55 @@ export class ToastService {
     }
   }
 
+  /**
+   * Render a notification pushed by the backend (`notify()` in
+   * `vtscore/concurrency/notifications.py`), typically from a plugin that hit
+   * a recoverable problem and kept going.
+   *
+   * The `source` is folded into the detail line rather than the headline: the
+   * headline is the plugin's own sentence and should read as written, while
+   * "which part of the app is telling me this" is context.
+   */
+  private routeServerNotification(note: ServerNotification): void {
+    const detail = [note.source, note.detail].filter(Boolean).join(' — ') || undefined;
+    this.show(note.level, { message: note.message, detail, dedupKey: `server:${note.id}` });
+  }
+
   error(opts: ShowOptions): number {
     return this.push('error', opts);
+  }
+
+  /**
+   * Something went wrong but the operation carried on with a partial or
+   * degraded result. Stays up until dismissed, like {@link error}: the user
+   * is holding a result that is not quite what they asked for, and needs to
+   * know before they act on it.
+   */
+  warning(opts: ShowOptions): number {
+    return this.push('warning', opts);
+  }
+
+  /**
+   * Neutral news — "this happened, nothing is wrong". Auto-dismisses on the
+   * same timer as {@link success}.
+   */
+  info(opts: ShowOptions): number {
+    const autoDismissMs = opts.autoDismissMs ?? SUCCESS_AUTO_DISMISS_MS;
+    return this.push('info', opts, opts.countdown ? 0 : autoDismissMs);
+  }
+
+  /** Dispatch to the per-level method for a level only known at runtime. */
+  show(level: ToastLevel, opts: ShowOptions): number {
+    switch (level) {
+      case 'error':
+        return this.error(opts);
+      case 'warning':
+        return this.warning(opts);
+      case 'success':
+        return this.success(opts);
+      default:
+        return this.info(opts);
+    }
   }
 
   /**

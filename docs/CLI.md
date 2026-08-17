@@ -297,6 +297,22 @@ python app.py --autodetect --dataset data.pkl --settings settings.json --progres
 The two choices are `text` (default, prose) and `json` (NDJSON events). The
 event schema is defined in `vtscore.cli_progress`.
 
+A plugin can also raise a **notification** — a message it wants the user to
+see about something it decided not to fail on ("skipped 3 unreadable files").
+In the GUI those become toasts; on the command line they print as
+`Warning: [Server Folder] Skipped 3 unreadable files` on **stderr** in text
+mode, and as `notification` events on stdout in JSON mode:
+
+```bash
+python app.py --autodetect --dataset data.pkl --settings settings.json \
+    --progress-format json \
+  | jq -r 'select(.event == "notification") | "\(.level): \(.message)"'
+```
+
+A `notification` never ends the run, at any level — including
+`"level": "error"`, which reports something the code continued past. The
+fatal-error record is the separate `error` event.
+
 An exporter can format its results into a URL for a browser to open rather than
 delivering them anywhere (the built-in `open_url` exporter does exactly this).
 There is no browser on the command line, so the URL is printed under the

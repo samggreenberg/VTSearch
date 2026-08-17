@@ -6,11 +6,18 @@ event strings that ``/api/events`` streams to connected clients.
 
 Replaces the per-tracker REST polling endpoints (``/api/dataset/progress``,
 ``/api/sort/progress``, etc.) with a single push channel.
+
+The stream carries two kinds of channel. The tracker channels below are
+*state*: each has a current snapshot, sent on connect and re-sent on every
+heartbeat, so a dropped frame heals. The ``notification`` channel is
+*events* — one-off messages from :mod:`vtscore.concurrency.notifications`,
+with no snapshot to bootstrap or replay.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import queue
 import sys
@@ -19,6 +26,7 @@ import time
 import uuid
 from typing import Any, Callable, Generator
 
+from vtscore.concurrency.notifications import Notification, notifications
 from vtscore.concurrency.progress import (
     LoadingTasksTracker,
     ProgressTracker,
@@ -29,6 +37,8 @@ from vtscore.concurrency.progress import (
     loading_tasks,
     sort_progress,
 )
+
+logger = logging.getLogger(__name__)
 
 #: SSE heartbeat cadence. Also drives the periodic re-emit of every
 #: channel's snapshot: task channels so finished tasks vanish from clients
@@ -78,6 +88,12 @@ _TASK_CHANNELS: dict[str, LoadingTasksTracker] = {
     "loading-tasks": loading_tasks,
     "detector-loading-tasks": detector_loading_tasks,
 }
+
+#: SSE event name for one-off user notifications (toasts). Unlike the tracker
+#: channels it carries no snapshot: it is absent from :func:`initial_snapshot`
+#: and never re-emitted on a heartbeat, because a notification is a thing that
+#: happened once, not a state to converge on.
+NOTIFICATION_CHANNEL = "notification"
 
 
 def _default_max_connections() -> int:
@@ -180,9 +196,9 @@ def stream_progress_events(  # noqa: C901
     """Yield SSE-formatted strings for every progress channel until disconnect.
 
     Each connected client gets a private bounded queue; tracker subscriptions
-    push snapshots into the queue, and the generator drains it. On client
-    disconnect (the generator is closed by Flask/Werkzeug) the ``finally``
-    block unsubscribes so we don't leak callbacks.
+    and the notification broker push into the queue, and the generator drains
+    it. On client disconnect (the generator is closed by Flask/Werkzeug) the
+    ``finally`` block unsubscribes so we don't leak callbacks.
     """
     q: queue.Queue[tuple[str, Any]] = queue.Queue(maxsize=max_queue)
 
@@ -206,6 +222,16 @@ def stream_progress_events(  # noqa: C901
 
         return handler
 
+    def _notification_handler(notification: Notification) -> None:
+        try:
+            q.put_nowait((NOTIFICATION_CHANNEL, notification.to_dict()))
+        except queue.Full:
+            # Unlike a tracker snapshot, this frame has no later re-emit to
+            # heal the drop: the message is simply lost for this client. Say
+            # so in the log, which :func:`~vtscore.concurrency.notifications.notify`
+            # has already written the message to.
+            logger.warning("SSE queue full; dropped notification %s for one client", notification.id)
+
     for name, tracker in _TRACKER_CHANNELS.items():
         h = _make_tracker_handler(name)
         tracker.subscribe(h)
@@ -214,6 +240,8 @@ def stream_progress_events(  # noqa: C901
         h = _make_tasks_handler(name)
         tasks_tracker.subscribe(h)
         subscriptions.append((tasks_tracker, h))
+    notifications.subscribe(_notification_handler)
+    subscriptions.append((notifications, _notification_handler))
 
     try:
         # Send the SSE handshake comment immediately so the browser fires

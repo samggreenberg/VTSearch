@@ -337,6 +337,13 @@ def reset_contexts(tmp_path, monkeypatch):
 
     cli_progress.set_format("text")
 
+    # Drop notification subscribers: they are process-global, so a test that
+    # subscribes a collector (or drives the CLI, which subscribes a printer)
+    # would otherwise keep receiving every later test's notifications.
+    from vtscore.concurrency.notifications import notifications as _notifications
+
+    _notifications.clear_subscribers()
+
     # Redirect registry storage to tmp_path so tests can't pollute repo data/.
     from vtscore.datasets import registry as ds_reg_mod
     from vtscore.detectors import registry as det_reg_mod

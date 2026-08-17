@@ -5,6 +5,7 @@ import { filter, map, takeWhile } from 'rxjs/operators';
 import {
   LoadingTask,
   ProgressEvent,
+  ServerNotification,
   VotingIterationsResponse,
 } from '../models/api.models';
 import { ConnectionStateService } from './connection-state.service';
@@ -30,6 +31,15 @@ import { ConnectionStateService } from './connection-state.service';
  *  - `sort` -> ProgressEvent (text-sort)
  *  - `find` -> ProgressEvent (multi-dataset×detector /api/find)
  *  - `eval` -> ProgressEvent (train-and-score; consumers derive `done` themselves)
+ *  - `notification` -> ServerNotification (one-off message from server-side
+ *    code, typically a plugin reporting something it decided not to fail on;
+ *    surfaced as a toast by `ToastService`)
+ *
+ * Every channel above except `notification` carries *state*: a snapshot the
+ * backend re-sends on connect and on every heartbeat, so a dropped frame
+ * heals itself. `notification` carries *events*, so it is exposed as a
+ * `Subject` rather than a signal — there is no "current notification" to
+ * read, only ones that arrive while you are listening.
  */
 @Injectable({ providedIn: 'root' })
 export class ProgressEventsService implements OnDestroy {
@@ -73,6 +83,14 @@ export class ProgressEventsService implements OnDestroy {
    */
   private readonly serverResetSubject = new Subject<void>();
   readonly serverReset$ = this.serverResetSubject.asObservable();
+
+  /**
+   * One-off messages pushed by server-side code (see `ServerNotification`).
+   * A `Subject`, not a signal: these are events with no resting value, and a
+   * late subscriber must not be handed a stale one to re-toast.
+   */
+  private readonly notificationsSubject = new Subject<ServerNotification>();
+  readonly notifications$ = this.notificationsSubject.asObservable();
 
   private source: EventSource | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -165,6 +183,12 @@ export class ProgressEventsService implements OnDestroy {
     this.listen(es, 'sort', (e) => this._sort.set(this.parse<ProgressEvent>(e, {})));
     this.listen(es, 'find', (e) => this._find.set(this.parse<ProgressEvent>(e, {})));
     this.listen(es, 'eval', (e) => this._eval.set(this.parse<ProgressEvent>(e, {})));
+    this.listen(es, 'notification', (e) => {
+      const note = this.parse<ServerNotification | null>(e, null);
+      // A frame that failed to parse, or one with nothing to say, would render
+      // as an empty toast the user cannot act on — drop it instead.
+      if (note?.message) this.notificationsSubject.next(note);
+    });
     // The periodic `heartbeat` frame carries no payload we render; its sole
     // job is to keep the circuit breaker online (handled by `listen`'s
     // recordSuccess) during long, busy operations that aren't emitting

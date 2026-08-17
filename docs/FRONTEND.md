@@ -262,7 +262,7 @@ The ones worth knowing before changing anything:
 | `ActiveContextWatcherService` | Reacts when an active id disappears from the registry (deleted elsewhere) |
 | `ProgressEventsService` | The single `EventSource` over `/api/events`, fanned out per channel |
 | `ConnectionStateService` | Online/offline, and the probe that reopens the circuit breaker |
-| `ToastService` | Toasts, including the structured `ErrorContext` from failed requests |
+| `ToastService` | Toasts: four levels, the structured `ErrorContext` from failed requests, and the backend's `notification` channel |
 | `VtDialogService` | `confirm()` / `prompt()` as promises, rendered by `dialog-host` |
 | `NewThingFlowsService` | Singleton openers for the Add-Dataset / New-Detector flows |
 | `MediaMetadataCacheService` | Lazy batched fetch of full metadata for whatever is in the viewport |
@@ -480,10 +480,20 @@ it out to every consumer, replacing what used to be several REST polls.
 Channels: `server` (a per-connect `boot_id`, so a backend restart fires
 `serverReset$` and consumers can drop state keyed on dead `task_id`s),
 `dataset`, `loading-tasks`, `detector-loading-tasks`, `sort`, `find`, `eval`.
-Every channel carries the same `ProgressEvent` shape, so any of them can be
-rendered by `utils/format-progress.ts`. The channel state is held in signals —
-a signal write inside the SSE callback notifies Angular's scheduler directly,
-which is precisely what makes the pump work without zone.js.
+Every one of those carries the same `ProgressEvent` shape, so any of them can
+be rendered by `utils/format-progress.ts`. The channel state is held in
+signals — a signal write inside the SSE callback notifies Angular's scheduler
+directly, which is precisely what makes the pump work without zone.js.
+
+One channel breaks that mould: **`notification`**, carrying one-off messages
+any server-side code (most usefully a plugin that hit a recoverable problem
+and carried on) pushes with `notify()`. Those are *events*, not state — there
+is no "current notification" to re-read and none is replayed to a late
+listener — so the service exposes them as `notifications$`, a `Subject`
+rather than a signal, and `ToastService` subscribes to turn each into a toast
+of the matching level. See [`api/events.md`](api/events.md) for the payload
+and [`EXTENDING-plugins.md`](EXTENDING-plugins.md#notifying-the-user-toasts)
+for the producing side.
 
 Where a real poll is still needed, use `adaptivePoll()` from
 `services/adaptive-poll.ts` rather than `timer(0, n)` + `switchMap`. It runs
