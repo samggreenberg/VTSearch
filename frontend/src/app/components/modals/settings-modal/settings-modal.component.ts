@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, OnDestroy, OnInit, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
 import { forkJoin, Subject } from 'rxjs';
@@ -22,6 +22,7 @@ import type { AppSettings } from '../../../generated/api-client/models/app-setti
 import { EmbedderInfo, MediaTypeInfo } from '../../../models/api.models';
 import { Theme, ThemeService } from '../../../services/theme.service';
 import { formatVersion } from '../../../utils/format-date';
+import { BuildSkewService } from '../../../services/build-skew.service';
 import { VtDialogService } from '../../../services/dialog.service';
 import {
   browserPrefersReducedMotion,
@@ -70,6 +71,16 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
   showImporterModal = false;
   showExporterModal = false;
   readonly version = signal('');
+  private readonly buildSkew = inject(BuildSkewService);
+  /**
+   * The bundle's own build stamp, shown *only* when it disagrees with the
+   * server's. The `version` line above is the server's, so on a stale `static/`
+   * build it reads current while the browser runs older code (#2898); this is
+   * the line that says so where someone reporting a bug will actually look.
+   */
+  readonly staleBundleVersion = computed(() =>
+    this.buildSkew.skewed() ? formatVersion(this.buildSkew.bundleVersion) : '',
+  );
   readonly savedVisible = signal(false);
   private savedTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -113,6 +124,9 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.settings.set(res.settings);
         this.version.set(formatVersion(res.version.version));
+        // Feed the same reading to the skew service, so the stale-bundle chip
+        // is correct even if the startup check hasn't landed (or failed).
+        this.buildSkew.serverVersion.set((res.version.version || '').trim());
         this.mediaTypes.set(res.mediaTypes.media_types || []);
         const allEmbedders = res.embedders || [];
         // Group embedders by media_type_id with defaults first, matching

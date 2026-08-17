@@ -471,9 +471,21 @@
   }
 
   <div class="settings-actions" modal-footer>
-    @if (version()) {
-      <span class="settings-version" title="App version (UTC timestamp of the last dev to main merge). Include this when reporting issues.">v {{ version() }}</span>
-    }
+    <span class="settings-versions">
+      @if (version()) {
+        <span class="settings-version" title="App version (UTC timestamp of the last dev to main merge). Include this when reporting issues.">v {{ version() }}</span>
+      }
+      <!-- Only shown when the bundle in the browser was built from a different
+           commit than the server (#2898). The version beside it is the
+           *server's*, which looks current no matter how old the JavaScript is. -->
+      @if (staleBundleVersion(); as bundleVersion) {
+        <span
+          class="settings-version settings-version--stale"
+          [title]="'The JavaScript in your browser was built from ' + bundleVersion + ', but the server is ' + version() + '. Rebuild the frontend (cd frontend && npm run build:prod) and hard-reload this page.'"
+          >⚠ bundle v {{ bundleVersion }}</span
+        >
+      }
+    </span>
     <span class="settings-saved" [class.settings-saved--visible]="savedVisible()" role="status" aria-live="polite" title="Settings auto-save as you change them"><vt-icon type="check" [size]="14"></vt-icon> saved</span>
     <button class="btn btn--secondary" (click)="resetDefaults()" title="Reset all settings to their factory defaults">Default</button>
     <button class="btn btn--secondary" (click)="openImporter()" title="Import settings from a file">Import</button>

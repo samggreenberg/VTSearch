@@ -5,8 +5,9 @@
 # after a GUI change but weren't.
 #
 # This is a MANUAL pre-release / periodic chore, NOT a run-tests.sh gate: it
-# needs chromium and a running app, neither of which the standard test
-# container has. (The cheap, browser-free docs⇄manifest gate is wiring-check.py.)
+# needs a running app with the fixture datasets loaded, and it is far too slow
+# and machine-sensitive (font hinting, see below) to gate every test run.
+# (The cheap, browser-free docs⇄manifest gate is wiring-check.py.)
 #
 # Note: font hinting / anti-aliasing can introduce sub-pixel noise across
 # machines; treat a small number of near-zero-diff files as noise. A per-pixel

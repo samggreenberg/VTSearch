@@ -30,6 +30,7 @@ import { SettingsStateService } from './services/settings-state.service';
 import { ThemeService } from './services/theme.service';
 import { ToastService } from './services/toast.service';
 import { ActiveContextWatcherService } from './services/active-context-watcher.service';
+import { BuildSkewService } from './services/build-skew.service';
 import {
   NewThingFlowsService,
   ImporterFlowState,
@@ -116,6 +117,10 @@ export class AppComponent {
   constructor() {
     const activeContextWatcher = inject(ActiveContextWatcherService);
 
+    // Before anything else: if this bundle predates the server, say so. Every
+    // other symptom the user is about to hit ("that button does nothing") is
+    // downstream of it, and nothing else in the app can tell them (#2898).
+    inject(BuildSkewService).check();
     this.auth.checkStatus();
     this.hfAuth.refresh();
     this.handleHuggingFaceRedirect();

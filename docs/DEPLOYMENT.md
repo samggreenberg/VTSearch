@@ -1137,6 +1137,24 @@ package (`dnf install python3-opencv`), or `opencv-python` built from
 source. Everything else, including the whole video workflow, works with
 the stock wheel installed.
 
+### A feature you just pulled isn't in the UI ("out-of-date build")
+
+**Symptom**: a toast reading *"This page is running an out-of-date build"*, or a
+`⚠ bundle v …` chip beside the version in the Settings footer. Alternatively no
+warning at all, but a control that the docs describe is missing, does nothing,
+or behaves like an older release.
+
+**Cause**: `static/` is a build artifact and is not tracked by git, so pulling
+new code and restarting the server upgrades the *Python* side only. The browser
+keeps loading whichever bundle was last built. The version shown in Settings is
+the server's, so it looks current while the JavaScript is not.
+
+**Fix**: rebuild the frontend and hard-reload the page (Ctrl/Cmd-Shift-R — a
+normal reload can serve the old bundle from cache):
+```bash
+cd frontend && npm install && npm run build:prod
+```
+
 ### "No module named" errors
 
 **Symptom**: `ModuleNotFoundError` for a media type or importer package.
