@@ -105,7 +105,10 @@ def _finish(fig, out: Path, note: str | None = None) -> None:
     fig.savefig(out, dpi=130, bbox_inches="tight")
     if ALSO_SVG:
         svg = out.with_suffix(".svg")
-        fig.savefig(svg, bbox_inches="tight")
+        # No Date in the metadata: otherwise every regeneration rewrites all
+        # eight files with a new timestamp, and a committed artifact churns for
+        # reasons that have nothing to do with the data.
+        fig.savefig(svg, bbox_inches="tight", metadata={"Date": None})
         # matplotlib leaves trailing spaces, which the repo's whitespace hook
         # would rewrite - and a hook-rewritten artifact no longer matches what
         # the generator produces.
@@ -315,23 +318,28 @@ def fig_binary_vs_boxes(wave1: pd.DataFrame, binary: pd.DataFrame, out: Path) ->
     fig, axes = plt.subplots(1, len(datasets), figsize=(5.4 * len(datasets), 3.6), squeeze=False)
     for ax, ds in zip(axes[0], datasets, strict=True):
         series = [
-            (wave1[(wave1["dataset"] == ds) & (wave1["embedder"] == "siglip")], "siglip", "siglip binary", "-"),
+            (
+                wave1[(wave1["dataset"] == ds) & (wave1["embedder"] == "siglip")],
+                "siglip",
+                "siglip (no box possible)",
+                "-",
+            ),
             (
                 wave1[(wave1["dataset"] == ds) & (wave1["embedder"] == "siglip2_l")],
                 "siglip2_l",
-                "siglip2_l binary",
+                "siglip2_l (no box possible)",
                 "-",
             ),
             (
                 binary[binary["dataset"] == ds],
                 "dinov3_patch (binary)",
-                "dinov3_patch binary (no boxes)",
+                "dinov3_patch — box NOT drawn",
                 "-",
             ),
             (
                 wave1[(wave1["dataset"] == ds) & (wave1["embedder"] == "dinov3_patch")],
                 "dinov3_patch",
-                "dinov3_patch WITH boxes",
+                "dinov3_patch — box drawn",
                 "--",
             ),
         ]

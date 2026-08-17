@@ -164,7 +164,7 @@ draw — so every table above confounds them. To separate them, the patch encode
 own runs were repeated with region voting off: same haystacks, same categories,
 same seeds, same splits, differing only in whether a box is dragged.
 
-![Cost over votes for the binary and boxed arms](figures/fig_binary_vs_boxes.png)
+![Cost over votes with and without a drawn box, on the same cells](figures/fig_binary_vs_boxes.png)
 
 | haystack | contrast | Δcost | ΔAP | ΔAUROC |
 |---|---|---:|---:|---:|
