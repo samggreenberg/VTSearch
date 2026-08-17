@@ -37,6 +37,40 @@ cd "$(dirname "$0")"
 # invoked.
 _self="$(pwd)/$(basename "$0")"
 
+# Memory headroom check.
+#
+# The gates in this script are the memory-hungry part of the repo, not pytest:
+# `pyright` runs under node with a ~1.8 GB default heap, and the Angular
+# `build:prod` wants a comparable amount. On a small machine the run does not
+# fail cleanly — node aborts with "Ineffective mark-compacts near heap limit",
+# or the kernel's OOM killer takes whatever it likes, including the shell that
+# launched the run. That is not hypothetical either: a 3 GB box died this way
+# mid-`pyright`, and because the wrapper below reads 137 as its kill signal, the
+# corpse was labelled TESTS TIMED OUT rather than "out of memory".
+#
+# So say it up front, where it is still actionable. This warns rather than
+# blocks: the number below is the observed requirement, not a measured cliff,
+# and a machine under it may still finish.
+if [[ -z "${_VT_TIMEOUT_WRAPPED:-}" && -r /proc/meminfo ]]; then
+    _mem_avail_gb=$(awk '/^MemAvailable:/ {printf "%.1f", $2/1048576}' /proc/meminfo)
+    if [[ -n "$_mem_avail_gb" ]] && awk "BEGIN{exit !($_mem_avail_gb < 6)}"; then
+        echo "============================================================"
+        echo "LOW MEMORY: ${_mem_avail_gb}G available; a full run wants ~6G"
+        echo ""
+        echo "pyright (node, ~1.8G heap) and the Angular build are what need"
+        echo "it. Below this they tend to die as an OOM kill rather than a"
+        echo "test failure, and can take the session with them."
+        echo ""
+        echo "Run the suite on a bigger machine instead — on the GRID:"
+        echo "  sbatch --partition=cpu --cpus-per-task=8 --mem=32G \\"
+        echo "         --time=02:00:00 --wrap 'source gridenv.sh && ./run-tests.sh'"
+        echo "Or run one group at a time here (./run-tests.sh detectors),"
+        echo "which skips the frontend gates unless the group is core/frontend."
+        echo "============================================================"
+        echo ""
+    fi
+fi
+
 # Wall-clock cap on the whole run.
 #
 # A healthy full run is single-digit minutes (frontend gate ~3min, pytest ~35s,
