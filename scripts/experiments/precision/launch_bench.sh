@@ -35,7 +35,12 @@ source "$WT/gridenv.sh"
 export VTS_REPO="$WT"
 export VTS_PRECISION_STUDY="${VTS_PRECISION_STUDY:-/expscratch/$USER/precision-3143}"
 export VTS_PILE="${VTS_PILE:-/expscratch/$USER/vts-cache}"
-BENCH_ROOT="$VTS_PRECISION_STUDY/bench"
+# Overridable because a different GRID IS A DIFFERENT STUDY and needs its own
+# dir (grid-experiments skill).  The 6-seed grid and the 64-seed power run share
+# categories and code but are not the same study: pointing both at one dir would
+# let the resume logic read one grid's cells as the other's, and would let two
+# grids be analysed as one.
+BENCH_ROOT="${VTS_BENCH_ROOT:-$VTS_PRECISION_STUDY/bench}"
 
 # The candidate against the reference.  autocast is off the bench by default: it
 # is a *slower* implementation of the same idea, so it only earns a bench run if
