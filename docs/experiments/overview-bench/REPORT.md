@@ -623,7 +623,10 @@ category selection and exemplar crops so the dumped cell **is** the same cell �
 each job's log line is checked against the source run's). Each dump records, for
 every held-out media at the final step: score, label, threshold, source image id,
 and every category the dataset annotates on that image. Ten cells are dumped,
-plus a typed-query dump for all 42 (dataset, embedder, category) text arms.
+plus a typed-query dump for all 42 (dataset, embedder, category) text arms. The
+full listings are committed beside this report: `ERROR_EXAMPLES.txt` (clicked
+detectors), `ERROR_EXAMPLES_text.txt` (typed queries) and `LABEL_NOISE.txt` (the
+entailment test) — what follows quotes from them.
 
 **The test.** Pick categories that *cannot* occur without the target — you
 cannot have clouds without sky, a face has a nose, and `sunglasses` **are**
