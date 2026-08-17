@@ -72,6 +72,7 @@ COMMENT_POINTER = re.compile(
     re.IGNORECASE,
 )
 
+
 def _refs(pattern: re.Pattern[str], text: str) -> set[int]:
     return {int(m) for m in pattern.findall(text or "")}
 
