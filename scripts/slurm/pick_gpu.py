@@ -223,7 +223,9 @@ def main(argv: list[str] | None = None) -> int:
         for gpu_type in sorted(availability, key=lambda t: (types.index(t) if t in types else len(types), t)):
             avail = availability[gpu_type]
             mark = "" if gpu_type in types else "   (not a candidate)"
-            print(f"pick_gpu:   {avail.gpu_type:<8} {avail.free:>3} free / {avail.total:>3} total{mark}", file=sys.stderr)
+            print(
+                f"pick_gpu:   {avail.gpu_type:<8} {avail.free:>3} free / {avail.total:>3} total{mark}", file=sys.stderr
+            )
 
     gpu_type, reason = select_gpu_type(availability, types, need=max(1, args.need), fallback=fallback)
     print(gpu_type)

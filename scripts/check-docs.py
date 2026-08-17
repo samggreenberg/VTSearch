@@ -56,6 +56,10 @@ ALLOWED_PATHS: dict[str, str] = {
     "vtsearch/_version.txt": "baked into Docker images only; gitignored",
     "frontend/node_modules/": "npm install output",
     "frontend/src/app/api/": "generated API client (npm run generate-api-client)",
+    # Written by frontend/scripts/build-stamp.mjs from the prebuild/pretest
+    # hooks, so it is absent until the frontend has been built once -- and this
+    # gate runs before that build, so a cold container would otherwise fail here.
+    "frontend/src/app/generated/": "generated build stamp (frontend prebuild/pretest hook); gitignored",
     # Deliberately fictional paths in "here is how you would write your own"
     # examples. These must stay non-existent — that is the point of the example.
     "vtsearch/auth/my_provider.py": "fictional path in the auth extension guide",

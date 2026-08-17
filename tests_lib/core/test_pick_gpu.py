@@ -94,7 +94,9 @@ class TestParseNodeAvailability:
         assert pick_gpu.parse_node_availability(out) == {}
 
     def test_non_gpu_nodes_and_null_gres_are_skipped(self):
-        out = "\n".join([_node("cpu01", gres="(null)", used="(null)"), _node("n1", gres="gpu:v100:4", used="gpu:v100:2")])
+        out = "\n".join(
+            [_node("cpu01", gres="(null)", used="(null)"), _node("n1", gres="gpu:v100:4", used="gpu:v100:2")]
+        )
         avail = pick_gpu.parse_node_availability(out)
         assert set(avail) == {"v100"}
 
@@ -119,7 +121,9 @@ class TestParseNodeAvailability:
 
 
 class TestSelectGpuType:
-    def _avail(self, **kwargs: tuple[int, int]) -> dict[str, pick_gpu.Availability]:
+    # No return annotation: pick_gpu is loaded by path, so its Availability is a
+    # runtime attribute pyright cannot use in a type expression.
+    def _avail(self, **kwargs: tuple[int, int]):
         return {t: pick_gpu.Availability(t, free, total) for t, (free, total) in kwargs.items()}
 
     def test_prefers_the_fastest_type_that_is_free_not_the_most_free(self):
@@ -188,7 +192,9 @@ class TestMain:
         monkeypatch.setattr(
             pick_gpu,
             "_query_scontrol",
-            lambda: "\n".join([_node("n1", gres="gpu:l40s:8", used="gpu:l40s:0"), _node("n2", gres="gpu:v100:8", used="gpu:v100:0")]),
+            lambda: "\n".join(
+                [_node("n1", gres="gpu:l40s:8", used="gpu:l40s:0"), _node("n2", gres="gpu:v100:8", used="gpu:v100:0")]
+            ),
         )
         assert pick_gpu.main([]) == 0
         captured = capsys.readouterr()
@@ -207,7 +213,9 @@ class TestMain:
         monkeypatch.setattr(
             pick_gpu,
             "_query_scontrol",
-            lambda: "\n".join([_node("n1", gres="gpu:l40s:8", used="gpu:l40s:0"), _node("n2", gres="gpu:v100:8", used="gpu:v100:0")]),
+            lambda: "\n".join(
+                [_node("n1", gres="gpu:l40s:8", used="gpu:l40s:0"), _node("n2", gres="gpu:v100:8", used="gpu:v100:0")]
+            ),
         )
         assert pick_gpu.main([]) == 0
         assert capsys.readouterr().out.strip() == "v100"
@@ -217,7 +225,9 @@ class TestMain:
         monkeypatch.setattr(
             pick_gpu,
             "_query_scontrol",
-            lambda: "\n".join([_node("n1", gres="gpu:l40s:8", used="gpu:l40s:2"), _node("n2", gres="gpu:h100:4", used="gpu:h100:0")]),
+            lambda: "\n".join(
+                [_node("n1", gres="gpu:l40s:8", used="gpu:l40s:2"), _node("n2", gres="gpu:h100:4", used="gpu:h100:0")]
+            ),
         )
         assert pick_gpu.main(["--explain"]) == 0
         err = capsys.readouterr().err
