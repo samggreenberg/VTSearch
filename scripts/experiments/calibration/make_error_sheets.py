@@ -61,7 +61,7 @@ SHEETS: list[dict] = [
         "kind": "fp",
         "dataset": "visual_genome_m",
         "n": 8,
-        "title": "visual_genome_m / sky — `siglip`'s most confident FALSE positives",
+        "title": "visual_genome_m / sky — siglip's most confident FALSE positives",
         "note": "Every one has sky in it. VG annotated the clouds, the grass and the road, and left sky off.",
     },
     {
@@ -71,7 +71,7 @@ SHEETS: list[dict] = [
         "dataset": "visual_genome_m",
         "n": 8,
         "title": "visual_genome_m / sky — the false NEGATIVES, which are genuine misses",
-        "note": "These do carry a `sky` annotation, and the sky is a thin strip behind a person or a building.",
+        "note": "These do carry a sky annotation, and the sky is a thin strip behind a person or a building.",
     },
     {
         "name": "glasses_fp",
@@ -80,7 +80,7 @@ SHEETS: list[dict] = [
         "dataset": "vg_box_small",
         "n": 8,
         "title": "vg_box_small / glasses — false positives, and the label that should have matched",
-        "note": "364 of this arm's false positives are annotated `sunglasses`: one object under two labels.",
+        "note": "364 of this arm's false positives are annotated sunglasses: one object under two labels.",
     },
     {
         "name": "tip_pos",
@@ -116,7 +116,7 @@ SHEETS: list[dict] = [
         "kind": "fp",
         "dataset": "visual_genome_m",
         "n": 8,
-        "title": "visual_genome_m / sky — `dinov3_patch` with the BOX TAKEN AWAY",
+        "title": "visual_genome_m / sky — dinov3_patch with the BOX TAKEN AWAY",
         "note": "The same cell flags 1,305 of 1,703 negatives without a box against 504 with one; it is scoring 'outdoor street photo'.",
     },
     {
@@ -126,7 +126,7 @@ SHEETS: list[dict] = [
         "dataset": "coco_val",
         "n": 8,
         "title": "coco_val / bear — what a TYPED query flags",
-        "note": "43 of 626 false positives are annotated `teddy bear`, a different COCO class. A user typing 'bear' would call these hits.",
+        "note": "43 of 626 false positives are annotated teddy bear, a different COCO class. A user typing 'bear' would call these hits.",
     },
     {
         "name": "text_airplanes_fp",
