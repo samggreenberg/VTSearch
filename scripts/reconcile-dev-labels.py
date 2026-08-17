@@ -113,11 +113,7 @@ def _refs(pattern: re.Pattern[str], text: str) -> set[int]:
 
 def pull_requests(data: dict) -> list[tuple[int, str, str]]:
     """Flatten the PR lists into (number, body, kind) triples."""
-    return [
-        (pr.get("number"), pr.get("body") or "", kind)
-        for key, kind in PR_SOURCES
-        for pr in (data.get(key) or [])
-    ]
+    return [(pr.get("number"), pr.get("body") or "", kind) for key, kind in PR_SOURCES for pr in (data.get(key) or [])]
 
 
 def closing_targets(prs: list[tuple[int, str, str]]) -> dict[int, tuple[int, str]]:
