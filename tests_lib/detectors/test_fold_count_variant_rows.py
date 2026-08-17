@@ -29,7 +29,12 @@ from vtscore.eval.voting_iterations import _CALIBRATION_COLUMNS, simulate_voting
 from vtscore.training import thresholds as _thresholds
 
 # Reuse the synthetic planted-patch dataset builder from the Max-Patch tests.
+from .sweep_cache import memoize_sweep
 from .test_max_patch_style import _planted_dataset
+
+# Pinned to one worker so the memoized sweeps below actually hit the cache
+# under ``--dist loadgroup``.  See sweep_cache.py.
+pytestmark = pytest.mark.xdist_group("fold-count-variant-rows")
 
 _COUNTS = [1, 2, 4]
 
@@ -59,7 +64,7 @@ class _StubClock:
         return self._now
 
 
-def _run(
+def _run_uncached(
     *, fold_counts=None, calibrate_count=2, safe=False, seed=0, max_steps=10, region_voting=True, style="max_patch"
 ):
     medias, _ = _planted_dataset(n_per_cat=40, seed=seed)
@@ -77,6 +82,14 @@ def _run(
         emit_calibration_metrics=True,
         fold_count_variants=fold_counts,
     )
+
+
+#: Memoized view of :func:`_run_uncached`.  Six tests sweep the identical
+#: ``fold_counts=_COUNTS`` frame and read different columns of it.  Two callers
+#: deliberately stay on the uncached function: the determinism test (a cache hit
+#: would compare a list against itself) and the stub-clock test (whose rows are
+#: computed under a monkeypatched clock and must never enter a shared cache).
+_run = memoize_sweep(_run_uncached)
 
 
 def _base_rows(rows):
@@ -158,7 +171,9 @@ class TestFoldCountArms:
         grouped calibrator and the row-wise one.
         """
         monkeypatch.setattr(_thresholds, "time", _StubClock(_STUB_FOLD_SECONDS))
-        rows = _run(fold_counts=[1, 2, 8], calibrate_count=2, region_voting=region_voting, style=style)
+        # Uncached on purpose: these rows are billed by a stubbed clock, so they
+        # must not be memoized where a later test could pick them up.
+        rows = _run_uncached(fold_counts=[1, 2, 8], calibrate_count=2, region_voting=region_voting, style=style)
         base = _base_rows(rows)
         live = _arm_rows(rows, "folds_k2_xcal")
         screened = _arm_rows(rows, "folds_k8_xcal")
@@ -252,8 +267,10 @@ class TestFoldCountBinaryVoting:
 
 class TestFoldCountDeterminism:
     def test_two_runs_agree(self):
-        a = _run(fold_counts=_COUNTS)
-        b = _run(fold_counts=_COUNTS)
+        """Two *independent* sweeps must agree, so this bypasses the memoized
+        ``_run`` — a cache hit would compare one list against itself."""
+        a = _run_uncached(fold_counts=_COUNTS)
+        b = _run_uncached(fold_counts=_COUNTS)
         assert len(a) == len(b)
         for ra, rb in zip(a, b, strict=True):
             assert ra["gmm_variant"] == rb["gmm_variant"]

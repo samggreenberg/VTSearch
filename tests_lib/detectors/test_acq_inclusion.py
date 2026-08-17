@@ -20,7 +20,14 @@ from vtscore.training.thresholds import (
     fit_fold_anchored_cut,
 )
 
+from .sweep_cache import memoize_sweep
 from .test_max_patch_style import _planted_dataset
+
+# The offsets this file sweeps repeat across tests (``-2`` alone is asserted on
+# by three of them), so each distinct argument set is simulated once per worker
+# and this module is pinned to one worker for the cache to hit.  Rows are
+# shared and must stay read-only.  See sweep_cache.py.
+pytestmark = pytest.mark.xdist_group("acq-inclusion")
 
 
 def _base(rows):
@@ -40,6 +47,7 @@ def _base(rows):
     ]
 
 
+@memoize_sweep
 def _run(**kw):
     """A run on the established planted fixture, at a size that reaches the
     fold-anchored path (which needs enough votes to form calibration folds)."""
