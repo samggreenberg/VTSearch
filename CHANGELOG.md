@@ -15,6 +15,19 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Fixed
+
+- **Detector load can no longer hang forever at "Preparing".** Loading a
+  detector while the selected dataset was not yet (re)loaded — typical right
+  after an app restart, while the dataset was still being read from its
+  pickle — left the dashboard row stuck at "Loading detector · Step 1 of 3 ·
+  Preparing" indefinitely: Cancel did nothing, every retry reported "Detector
+  load already in progress", voting returned 409, and only a restart
+  recovered. The load now fails fast with a clean 409 (`dataset_not_loaded`)
+  in that case, any other failure before the background worker starts
+  releases the load reservation and surfaces an error on the row, and load
+  failures are written to the server log. (#3139)
+
 ### Changed
 
 - **Audio now defaults to the larger CLAP checkpoint.** New audio datasets and
