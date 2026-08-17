@@ -198,10 +198,7 @@ def main() -> int:
     for p in result["pairs"]:
         if p["verdict"] in ("distinct", "untestable") and p["co_images"] < MIN_CO_IMAGES:
             continue
-        log(
-            f"  {p['a']:<20}{p['b']:<20}{p['co_images']:>9}"
-            f"{p['a_on_b']:>9.3f}{p['b_on_a']:>9.3f}  {p['verdict']}"
-        )
+        log(f"  {p['a']:<20}{p['b']:<20}{p['co_images']:>9}{p['a_on_b']:>9.3f}{p['b_on_a']:>9.3f}  {p['verdict']}")
 
     counts: dict[str, int] = defaultdict(int)
     for p in result["pairs"]:

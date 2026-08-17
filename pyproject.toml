@@ -419,5 +419,6 @@ skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,s
 # camelCase TS mirror of the projection's rep_id field),
 # and stylistic spellings the project uses consistently (re-use,
 # pre-select, unparseable, invokable). usera = the "userA" persona in
-# design docs; teh = Yee Whye Teh in references.
-ignore-words-list = "clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,ans,repid,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,ser,lod,usera,teh,provence"
+# design docs; teh = Yee Whye Teh in references. mane/tread are object
+# parts in the VG scale-study exclusion vocabulary (pile_config).
+ignore-words-list = "clap,siglip,xclip,wrest,caller,recaller,medias,numer,denom,goup,ans,repid,invokable,unparseable,copys,re-use,re-used,re-uses,re-using,re-declaring,pre-select,pre-selects,pre-selected,fpr,ths,ot,te,ser,lod,usera,teh,provence,mane,tread"
