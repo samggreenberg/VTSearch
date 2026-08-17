@@ -1,0 +1,50 @@
+
+================================================================================================
+coco_siglip_clock  target='clock'   46 false positives vs 2318 true negatives
+================================================================================================
+  ENTAILING categories ['clock tower']:
+    present on   0.0% of false positives
+    present on   0.0% of true negatives
+    enrichment: NOT TESTABLE (the entailing categories appear on neither group;
+       this vocabulary has no term that entails 'clock')
+  CONTEXT categories (any of 4): 0.0% of FPs vs 0.0% of TNs  (infx)
+  most common co-annotations on false positives: person(19), car(13), chair(8), bed(8), boat(8), traffic light(7), tv(7), handbag(6), remote(6), truck(5), bicycle(4), bus(4)
+
+================================================================================================
+vg_dinov3_sky  target='sky'   504 false positives vs 1199 true negatives
+================================================================================================
+  ENTAILING categories ['cloud', 'clouds']:
+    present on   9.5% of false positives
+    present on   0.1% of true negatives
+    enrichment: 114.2x
+    -> the flagged images are enriched for things that CANNOT occur without 'sky';
+       these are largely MISSING LABELS, not model errors
+  CONTEXT categories (any of 8): 84.1% of FPs vs 43.4% of TNs  (1.94x)
+  most common co-annotations on false positives: building(287), window(262), tree(199), car(122), sign(105), wall(103), pole(88), road(86), man(86), sidewalk(84), person(78), street(73)
+
+================================================================================================
+vg_siglip_bus  target='bus'   1210 false positives vs 820 true negatives
+================================================================================================
+  ENTAILING categories ['bus stop', 'bus station']:
+    present on   0.0% of false positives
+    present on   0.0% of true negatives
+    enrichment: NOT TESTABLE (the entailing categories appear on neither group;
+       this vocabulary has no term that entails 'bus')
+  most common co-annotations on false positives: building(589), window(529), tree(377), sign(319), man(295), car(294), sky(275), wall(271), person(240), pole(239), light(224), road(219)
+
+================================================================================================
+vg_siglip_nose  target='nose'   552 false positives vs 1468 true negatives
+================================================================================================
+  most common co-annotations on false positives: window(165), man(154), wall(151), building(123), tree(114), shirt(111), door(94), table(90), glass(84), person(80), hair(78), sky(70)
+
+================================================================================================
+vg_siglip_sky  target='sky'   682 false positives vs 1021 true negatives
+================================================================================================
+  ENTAILING categories ['cloud', 'clouds']:
+    present on   6.6% of false positives
+    present on   0.4% of true negatives
+    enrichment: 16.8x
+    -> the flagged images are enriched for things that CANNOT occur without 'sky';
+       these are largely MISSING LABELS, not model errors
+  CONTEXT categories (any of 8): 84.0% of FPs vs 36.3% of TNs  (2.31x)
+  most common co-annotations on false positives: building(378), window(343), tree(266), car(183), sign(178), wall(149), sidewalk(143), pole(143), road(131), man(117), person(111), light(109)

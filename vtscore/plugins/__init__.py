@@ -41,6 +41,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Generic, Literal, TypeVar
 
+from vtscore.concurrency.notifications import Notification, notify
+
 FieldType = Literal[
     "file",
     "folder",
@@ -65,10 +67,12 @@ __all__ = [
     "EntryPointTombstone",
     "FieldOption",
     "FieldType",
+    "Notification",
     "PluginBase",
     "PluginField",
     "PluginRegistry",
     "make_plugin_registry",
+    "notify",
 ]
 
 
@@ -483,6 +487,47 @@ class PluginBase:
         importer) can override this to return a dataset-specific label.
         """
         return self.display_name
+
+    # -- User notifications -------------------------------------------------
+
+    def notify(
+        self,
+        message: str,
+        *,
+        level: str = "info",
+        detail: str | None = None,
+    ) -> Notification:
+        """Put a toast in front of every user currently watching the app.
+
+        The escape hatch for a problem that is worth telling the user about
+        but not worth failing over: a source that returned fewer rows than
+        asked for, a handful of files that would not decode, a remote API
+        that rate-limited us into partial results.  Raising would throw away
+        the work that *did* succeed; logging alone means nobody finds out.
+
+        The call cannot fail, so it is safe inside an ``except`` block or a
+        tight loop, and it never needs its own ``try``.  :attr:`display_name`
+        is attached as the notification's source, so the toast says which
+        plugin spoke.  See :mod:`vtscore.concurrency.notifications` for the
+        delivery semantics (live broadcast, no replay).
+
+        Args:
+            message: Headline, one short sentence.
+            level: ``"info"`` (default), ``"success"``, ``"warning"``, or
+                ``"error"``.  The first two fade on their own; the last two
+                stay until the user dismisses them.
+            detail: Optional second line carrying the specifics.
+
+        Example::
+
+            if skipped:
+                self.notify(
+                    f"Skipped {len(skipped)} unreadable files",
+                    level="warning",
+                    detail=", ".join(skipped[:10]),
+                )
+        """
+        return notify(message, level=level, detail=detail, source=self.display_name)
 
     # -- CLI support --------------------------------------------------------
 

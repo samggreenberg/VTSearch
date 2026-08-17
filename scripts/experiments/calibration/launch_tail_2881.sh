@@ -52,13 +52,21 @@ export CALIB_CPUS="${CALIB_CPUS:-4}"
 export CALIB_CONC="${CALIB_CONC:-40}"
 export CALIB_TIME="${CALIB_TIME:-1:30:00}"
 
-MAXPATCH="/exp/$USER/max-patch"
-export VTSEARCH_DATA_DIR="${VTSEARCH_DATA_DIR:-$MAXPATCH/datadir}"
-export VTSEARCH_MODELS_DIR="${VTSEARCH_MODELS_DIR:-$MAXPATCH/models}"
-export HF_HOME="${HF_HOME:-/exp/$USER/.cache/huggingface}"
+# The pile is the durable home for embeddings (#3121).  This used to default to
+# `/exp/$USER/max-patch/datadir`, an artifact named after a finished experiment --
+# which was archived and deleted in the 2026-08-12 cleanup, leaving the default
+# pointing at nothing.  Preflight check 10 is what catches that now.
+source "$WT/scripts/experiments/pile/pile_env.sh"
+export HF_HOME="${HF_HOME:-$VTSEARCH_MODELS_DIR}"
 
 LOGS="$CALIB_EXP/logs"
 mkdir -p "$LOGS"
+
+# The arms are identical to #2799's, so its prepare output (category counts in
+# prepare_info.json, exemplar-crop symlinks into the Max-Patch results) is
+# reusable verbatim -- there is no new embedding to do, and seeding from it skips
+# a GPU stage that would otherwise queue behind the 4-GPU QOS cap for nothing.
+REUSE="${TAIL_REUSE_PREPARE:-/exp/$USER/calibration-safe-linear/results}"
 
 # The gate, not a reminder.  It also resolves `import vtscore` the way a job does
 # and fails if it lands outside VTS_REPO -- which is exactly how #2846 ran a
@@ -66,7 +74,9 @@ mkdir -p "$LOGS"
 # that only *changes* behaviour (this one adds seven rules, so it would in fact
 # have been caught by the missing-symbol crash, but the next one may not) would
 # otherwise produce a clean, plausible, wrong table.
-bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms siglip,dinov3_patch || exit 1
+PREFLIGHT_ARGS=(--exp "$CALIB_EXP" --arms siglip,dinov3_patch)
+[[ -d "$REUSE" ]] && PREFLIGHT_ARGS+=(--reuse-prepare "$REUSE")
+bash "$WT/scripts/experiments/preflight.sh" "${PREFLIGHT_ARGS[@]}" || exit 1
 
 if [[ -n "${TAIL_WITH_THEORY:-}" ]]; then
   T=$(sbatch --parsable --job-name=tail-theory --mem=8G --cpus-per-task=4 \
@@ -75,11 +85,6 @@ if [[ -n "${TAIL_WITH_THEORY:-}" ]]; then
   echo "theory bench job: $T   -> $CALIB_RESULTS/theory/"
 fi
 
-# The arms are identical to #2799's, so its prepare output (category counts in
-# prepare_info.json, exemplar-crop symlinks into the Max-Patch results) is
-# reusable verbatim -- there is no new embedding to do, and seeding from it skips
-# a GPU stage that would otherwise queue behind the 4-GPU QOS cap for nothing.
-REUSE="${TAIL_REUSE_PREPARE:-/exp/$USER/calibration-safe-linear/results}"
 if [[ -f "$REUSE/prepare_info.json" ]]; then
   mkdir -p "$CALIB_RESULTS/cells" "$CALIB_RESULTS/crops"
   cp "$REUSE/prepare_info.json" "$CALIB_RESULTS/prepare_info.json"

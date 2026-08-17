@@ -22,7 +22,7 @@
 # threshold is the rank position Autopilot's Hard pick samples around), so a
 # larger K would have collected different votes.  That is launch_folds_2897_ab.sh.
 #
-# Design + pre-registered decision rules: docs/plans/calibration-fold-count-experiment.md
+# Design + pre-registered decision rules: docs/experiments/calibration-fold-count/REPORT.md
 #
 # Usage: bash launch_folds_2897.sh
 set -uo pipefail

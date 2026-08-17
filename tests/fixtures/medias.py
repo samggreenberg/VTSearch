@@ -8,8 +8,15 @@ from vtscore.config import DATA_DIR
 
 NUM_MEDIAS = 20
 from vtscore.embedding import embed_audio_file
+from vtscore.media import embedders_for_type
 from vtsearch.state import medias
 from vtscore.utils.hashing import content_md5
+
+#: The audio media type's default embedder, resolved from the registry rather
+#: than hard-coded, so the generated medias stay bound to whatever the app
+#: would bind them to.  Tests that need the name read it from here (or from
+#: ``media["embedder"]``) instead of spelling a checkpoint slug out.
+DEFAULT_AUDIO_EMBEDDER = embedders_for_type("audio")[0].name
 
 
 def _worker_suffix():
@@ -62,12 +69,12 @@ def init_medias():
         medias[i] = {
             "id": i,
             "media_type": "audio",
-            "embedder": "clap",
+            "embedder": DEFAULT_AUDIO_EMBEDDER,
             "frequency": freq,
             "duration": duration,
             "file_size": len(wav_bytes),
             "md5": content_md5(wav_bytes),
-            "embeddings": {"clap": embedding},
+            "embeddings": {DEFAULT_AUDIO_EMBEDDER: embedding},
             "media_bytes": wav_bytes,
             "thumbnail_bytes": thumbnail,
             "filename": fname,

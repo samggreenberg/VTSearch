@@ -9,12 +9,14 @@ from vtscore.concurrency.events import (
     _TASK_CHANNELS,
     _TRACKER_CHANNELS,
     BOOT_ID,
+    NOTIFICATION_CHANNEL,
     acquire_sse_slot,
     active_sse_connections,
     initial_snapshot,
     release_sse_slot,
     stream_progress_events,
 )
+from vtscore.concurrency.notifications import notifications, notify
 from vtscore.concurrency.progress import (
     LoadingTasksTracker,
     ProgressTracker,
@@ -632,3 +634,86 @@ class TestSseConnectionCapRoute:
             resp.close()
         # Closing the connection frees its slot.
         assert active_sse_connections() == 0
+
+
+class TestNotificationChannel:
+    """The ``notification`` channel: one-off messages, not a snapshot.
+
+    Everything else on the stream is state the client can re-read; these are
+    events that happen once. The tests below pin that difference, because the
+    two failure modes it guards against are silent: a notification that never
+    reaches a connected client, and one the heartbeat re-toasts forever.
+    """
+
+    def test_notifications_are_absent_from_the_initial_snapshot(self):
+        names = {f.split("\n", 1)[0].replace("event: ", "") for f in initial_snapshot()}
+        assert NOTIFICATION_CHANNEL not in names
+
+    def test_stream_yields_a_notification_published_while_connected(self):
+        gen = stream_progress_events(heartbeat_seconds=60.0, keepalive_seconds=60.0)
+        try:
+            _drain_connect_and_snapshot(gen)
+
+            notify("Skipped 3 files", level="warning", detail="a, b, c", source="Server Folder")
+
+            frame = next(gen)
+            assert frame.startswith(f"event: {NOTIFICATION_CHANNEL}\n"), f"unexpected frame {frame!r}"
+            payload = json.loads([ln for ln in frame.splitlines() if ln.startswith("data: ")][0].removeprefix("data: "))
+            assert payload["level"] == "warning"
+            assert payload["message"] == "Skipped 3 files"
+            assert payload["detail"] == "a, b, c"
+            assert payload["source"] == "Server Folder"
+            assert payload["id"]
+        finally:
+            gen.close()
+
+    def test_notification_is_not_replayed_on_heartbeat(self):
+        """A delivered notification must not come back on the next heartbeat.
+
+        The heartbeat re-emits every tracker snapshot so a client that dropped
+        a terminal frame heals (#2960). A notification has no snapshot to
+        re-emit, and re-sending one would pop the same toast every five
+        seconds forever.
+        """
+        gen = stream_progress_events(heartbeat_seconds=0.01, keepalive_seconds=60.0)
+        try:
+            _drain_connect_and_snapshot(gen)
+
+            notify("Told you once")
+            assert next(gen).startswith(f"event: {NOTIFICATION_CHANNEL}\n")
+
+            # One full heartbeat burst: the ping plus one snapshot per channel.
+            burst = [next(gen) for _ in range(1 + len(_TRACKER_CHANNELS) + len(_TASK_CHANNELS))]
+            assert burst[0].startswith("event: heartbeat\n")
+            assert not any(f.startswith(f"event: {NOTIFICATION_CHANNEL}\n") for f in burst)
+        finally:
+            gen.close()
+
+    def test_stream_unsubscribes_from_the_broker_on_close(self):
+        before = notifications.subscriber_count()
+        gen = stream_progress_events(heartbeat_seconds=60.0, keepalive_seconds=60.0)
+        try:
+            _drain_connect_and_snapshot(gen)
+            assert notifications.subscriber_count() == before + 1
+        finally:
+            gen.close()
+        assert notifications.subscriber_count() == before
+
+    def test_disconnected_client_misses_notifications_published_before_it_connects(self):
+        """No replay: a notification published with nobody listening is gone.
+
+        Pinned deliberately — it is the contract plugin authors have to design
+        against, not an accident to be "fixed" later by a replay buffer.
+        """
+        notify("Nobody heard this")
+
+        gen = stream_progress_events(heartbeat_seconds=60.0, keepalive_seconds=60.0)
+        try:
+            _drain_connect_and_snapshot(gen)
+            notify("But they hear this")
+
+            frame = next(gen)
+            payload = json.loads([ln for ln in frame.splitlines() if ln.startswith("data: ")][0].removeprefix("data: "))
+            assert payload["message"] == "But they hear this"
+        finally:
+            gen.close()

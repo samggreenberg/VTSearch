@@ -194,12 +194,31 @@
   align-items: center;
 }
 
-.settings-version {
+// Holds the server version and, when they disagree, the bundle version. The
+// auto margin lives here so the pair stays left-aligned as one group.
+.settings-versions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
   margin-right: auto;
+}
+
+.settings-version {
   font-size: var(--font-xs);
   font-family: var(--font-mono);
   color: var(--text-secondary);
   user-select: text;
+}
+
+// Only rendered when the browser's bundle disagrees with the server (#2898).
+// It sits right beside the server version it contradicts, so it has to read as
+// a warning rather than as a second, equally-valid version number.
+.settings-version--stale {
+  padding: 0 var(--space-xs);
+  border: 1px solid var(--warning-border);
+  border-radius: var(--radius-sm);
+  background: var(--warning-bg);
+  color: var(--text-warning);
 }
 
 .settings-saved {

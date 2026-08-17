@@ -1,4 +1,4 @@
-"""Audio embedder - CLAP General 2024 (laion/larger_clap_general)."""
+"""Audio embedder - CLAP General (laion/larger_clap_general), the audio default."""
 
 from __future__ import annotations
 
@@ -12,9 +12,14 @@ class AudioClapGeneralEmbedder(_ClapBase):
     * Audio files → 512-dimensional vectors via CLAP's audio encoder.
     * Text queries → 512-dimensional vectors via CLAP's text encoder.
 
-    Compared to the original ``laion/clap-htsat-unfused`` baseline, this
-    larger general-purpose checkpoint is trained on a broader audio mix
-    and tends to give stronger zero-shot transfer for general sounds.
+    The default audio embedder.  Compared to the original
+    ``laion/clap-htsat-unfused`` baseline (still shipped as ``clap``), this
+    larger general-purpose checkpoint is trained on a broader audio mix and
+    wins every measured comparison on the full ESC-50: text-sort mAP 0.869-0.895
+    vs 0.850-0.866, learned-sort mean F1 0.523-0.564 vs 0.457-0.529, and
+    leave-one-out 1-NN accuracy 0.973 vs 0.958.  The cost is ~2.1x the embedding
+    time and ~776 MB of weights against ``clap``'s ~614 MB, so ``clap`` remains
+    the explicit cheap/fast choice.
     """
 
     @property
@@ -23,7 +28,7 @@ class AudioClapGeneralEmbedder(_ClapBase):
 
     @property
     def display_name(self) -> str:
-        return "CLAP (general 2024)"
+        return "CLAP (general, larger)"
 
     @property
     def label(self) -> str:
@@ -32,6 +37,10 @@ class AudioClapGeneralEmbedder(_ClapBase):
     @property
     def model_id(self) -> str:
         return CLAP_GENERAL_MODEL_ID
+
+    @property
+    def is_default(self) -> bool:
+        return True
 
 
 EMBEDDER = AudioClapGeneralEmbedder()

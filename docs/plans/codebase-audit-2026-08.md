@@ -18,7 +18,7 @@ rejected.
 
 ---
 
-## Filed issues (8 still open; 54 shipped across the 2026-08-09 and 2026-08-11 releases)
+## Filed issues (1 still open)
 
 Severity and recommended implementer model in parentheses. Bodies — failure
 scenario, suggested fix, verifier's confirmation — live in the issues; this list
@@ -29,11 +29,9 @@ carries pointers only.
 
 ### App core (settings, auth, CLI)
 
-- [ ] #2930 — TrivialLoginProvider trusts unvalidated session usernames; with the default secret key this enables path traversal out of DATA_DIR (medium, Opus 4.8)
 
 ### State & concurrency
 
-- [ ] #2931 — JobManager.start() hard-requires Flask via vtsearch.auth; ./run-tests.sh vtscore-clean gate currently fails (medium, Opus 4.8)
 
 ### Training & detectors
 
@@ -49,7 +47,6 @@ carries pointers only.
 
 ### Projection, plugins & security utils
 
-- [ ] #2940 — PluginRegistry re-entrant discovery deadlocks; the _discovering guard is dead code behind a non-reentrant Lock (medium, Opus 4.8)
 
 ### Frontend — browse surface
 
@@ -63,7 +60,6 @@ carries pointers only.
 
 ### Frontend — styles & templates
 
-- [ ] #2951 — Dead CSS sweep: leftover rules in dashboard, resort-prompt-modal, center-panel (.swipe-hidden), and export-modal stylesheets (low, Haiku 4.5)
 
 ### Security
 

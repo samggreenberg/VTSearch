@@ -2,12 +2,13 @@ import { TestBed } from '@angular/core/testing';
 import { Subject } from 'rxjs';
 import { ErrorContext, Toast, ToastService } from './toast.service';
 import { ProgressEventsService } from './progress-events.service';
-import { LoadingTask } from '../models/api.models';
+import { LoadingTask, ServerNotification } from '../models/api.models';
 
 describe('ToastService', () => {
   let service: ToastService;
   let loadingTasks$: Subject<LoadingTask[]>;
   let detectorLoadingTasks$: Subject<LoadingTask[]>;
+  let notifications$: Subject<ServerNotification>;
 
   function task(overrides: Partial<LoadingTask>): LoadingTask {
     return {
@@ -25,10 +26,14 @@ describe('ToastService', () => {
   beforeEach(() => {
     loadingTasks$ = new Subject<LoadingTask[]>();
     detectorLoadingTasks$ = new Subject<LoadingTask[]>();
+    notifications$ = new Subject<ServerNotification>();
     TestBed.configureTestingModule({
       providers: [
         ToastService,
-        { provide: ProgressEventsService, useValue: { loadingTasks$, detectorLoadingTasks$ } },
+        {
+          provide: ProgressEventsService,
+          useValue: { loadingTasks$, detectorLoadingTasks$, notifications$ },
+        },
       ],
     });
     service = TestBed.inject(ToastService);
@@ -186,5 +191,94 @@ describe('ToastService', () => {
     expect(md).toContain('**Message:** plain');
     expect(md).not.toContain('**Status:**');
     expect(md).not.toContain('**Endpoint:**');
+  });
+
+  // --- levels ------------------------------------------------------------
+
+  it('warning() stays up until dismissed, like error()', async () => {
+    vi.useFakeTimers();
+    try {
+      service.warning({ message: 'partial results' });
+      expect(service.toasts[0].level).toBe('warning');
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(service.toasts.length).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('info() auto-dismisses on the success timer', async () => {
+    vi.useFakeTimers();
+    try {
+      service.info({ message: 'heads up' });
+      expect(service.toasts[0].level).toBe('info');
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(service.toasts).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('show() dispatches to the level it is handed', () => {
+    for (const level of ['error', 'warning', 'success', 'info'] as const) {
+      service.dismissAll();
+      service.show(level, { message: level });
+      expect(service.toasts[0].level).toBe(level);
+    }
+  });
+
+  // --- backend notifications (#3132) --------------------------------------
+
+  function notification(overrides: Partial<ServerNotification> = {}): ServerNotification {
+    return { id: 'note_ab_1', level: 'warning', message: 'Skipped 3 files', ...overrides };
+  }
+
+  it('renders a backend notification as a toast of the same level', () => {
+    notifications$.next(notification());
+
+    expect(service.toasts.length).toBe(1);
+    expect(service.toasts[0].level).toBe('warning');
+    expect(service.toasts[0].message).toBe('Skipped 3 files');
+  });
+
+  it('folds the source into the detail line, ahead of the detail', () => {
+    // The headline is the plugin's own sentence and reads as written; which
+    // part of the app spoke is context and belongs on the secondary line.
+    notifications$.next(notification({ source: 'Server Folder', detail: 'a, b, c' }));
+    expect(service.toasts[0].detail).toBe('Server Folder — a, b, c');
+  });
+
+  it('uses the source alone as the detail when there is no detail', () => {
+    notifications$.next(notification({ source: 'Server Folder' }));
+    expect(service.toasts[0].detail).toBe('Server Folder');
+  });
+
+  it('leaves the detail unset when neither source nor detail is given', () => {
+    notifications$.next(notification());
+    expect(service.toasts[0].detail).toBeUndefined();
+  });
+
+  it('dedups on the backend notification id, so a redelivered frame does not stack', () => {
+    notifications$.next(notification());
+    notifications$.next(notification());
+    expect(service.toasts.length).toBe(1);
+  });
+
+  it('stacks distinct notifications', () => {
+    notifications$.next(notification({ id: 'note_ab_1', message: 'first' }));
+    notifications$.next(notification({ id: 'note_ab_2', message: 'second' }));
+    expect(service.toasts.map((t) => t.message)).toEqual(['first', 'second']);
+  });
+
+  it('auto-dismisses an info notification but keeps an error one', async () => {
+    vi.useFakeTimers();
+    try {
+      notifications$.next(notification({ id: 'note_ab_1', level: 'info', message: 'fyi' }));
+      notifications$.next(notification({ id: 'note_ab_2', level: 'error', message: 'bad' }));
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(service.toasts.map((t) => t.message)).toEqual(['bad']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -3,7 +3,8 @@
 **Status:** Adopted at κ=0.3 with the `mid_tilt` cut (the measured midpoint at
 inclusion 0, rate-rule tilt away from it). Two known gaps remain: the fused
 path covers binary voting, where it does not beat the blend it replaced, and
-the inclusion tilt is unmeasured away from inclusion 0.
+the inclusion tilt is unmeasured away from inclusion 0 — the sweep that prices
+it is built and awaiting a GRID run (#2865).
 
 ## Background
 
@@ -45,11 +46,23 @@ folds.
 
 <!-- item-sep -->
 
-- [ ] #2865 — Inclusion-aware cut rule: `mid_tilt` (the issue's candidate 1)
-  is implemented and shipped; the inclusion sweep that prices the tilt against
-  the other candidates is still owed (Opus 4.8). Subsumes the
-  *"Deeper-than-inclusion-0 evidence for the cut rule"* item below, which is
-  the sweep it needs.
+- [ ] #2865 — Inclusion-aware cut rule: `mid_tilt` (the issue's candidate 1) is
+  shipped and the sweep apparatus is built (`launch_incl_2865.sh`,
+  `analyze_cutincl.py`, the `cross_tilt` / `q_tilt` eval-only arms). What
+  remains is **running it on the GRID and writing the report** (Opus 4.8).
+  It absorbs two items this plan used to carry separately: *deeper-than-
+  inclusion-0 evidence for the cut rule* (that is the sweep itself — both runs
+  scored every arm at inclusion 0, the one setting where the rule choice cannot
+  matter), and *inclusion resolution on cleanly separated haystacks*, which the
+  analyzer answers as a by-product via the per-environment knob-yield ceiling:
+  because the cut is carried to the final model as a quantile, a cut inside an
+  empty band between two well-separated modes realizes to the same threshold
+  however far it moves, and the ceiling table measures how often real data sits
+  in that flat regime.
+  Two things the run should settle beyond picking a rule: `q_tilt`'s step size
+  is a free parameter that has to be *fitted*, not assumed, and the incumbent's
+  own knob yield is unknown — `mid_tilt` may already be delivering most of the
+  slider, in which case the honest outcome is "keep it".
 
 <!-- item-sep -->
 
@@ -66,24 +79,6 @@ folds.
   change to the caller.
 
 <!-- item-sep -->
-
-- **Deeper-than-inclusion-0 evidence for the cut rule.** Both runs scored every
-  arm at inclusion 0, where the rate cut and the midpoint coincide for
-  equal-variance fits — so the winner was picked on the one inclusion where the
-  rule choice is least consequential, and the `rate` rule's clamp at the
-  inter-mean interval's edges was never priced. A sweep over inclusion is what
-  #2865 needs to choose its replacement rule; run it there rather than alone.
-
-<!-- item-sep -->
-
-- **Inclusion resolution on cleanly separated haystacks.** Because the cut is
-  carried to the final model as a *quantile*, every cut inside an empty band
-  between two well-separated modes realizes to the same threshold — so on a
-  cleanly separated dataset the Inclusion knob moves the cut without moving the
-  admitted set. This is the same "band the calibration data cannot resolve" the
-  conformal rule names, and it shrinks as the modes overlap (the realistic
-  case), but it is worth measuring how often real datasets sit in the flat
-  regime before deciding whether the knob needs a tie-break inside the band.
 
 <!-- item-sep -->
 

@@ -67,6 +67,10 @@ class TestResolveProjectionParams:
         params = resolve_projection_params(_ctx("clap"))
         assert (params.n_neighbors, params.min_dist) == (15, 0.10)
 
+    def test_default_audio_embedder_gets_the_same_tuned_pair(self):
+        params = resolve_projection_params(_ctx("clap_general"))
+        assert (params.n_neighbors, params.min_dist) == (15, 0.10)
+
     def test_untuned_embedder_falls_back_to_the_globals(self):
         params = resolve_projection_params(_ctx("siglip2"))
         assert params.n_neighbors == PROJECTION_N_NEIGHBORS

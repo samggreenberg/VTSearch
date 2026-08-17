@@ -28,7 +28,9 @@ regeneration command on mismatch.
 Region ids
 ----------
 Fixed ids: ``embedders``, ``embedder-files``, ``embedder-dims``,
-``media-types``, ``plugin-families``.  Parameterised ids:
+``media-types``, ``plugin-families``, ``lessons-index`` (the last one indexes
+``scripts/experiments/lessons/`` off the filesystem rather than a registry).
+Parameterised ids:
 ``plugins:<family>`` (roster of one plugin family, e.g.
 ``plugins:converters``) and ``demos:<type_id>`` (demo-dataset table of one
 media type, e.g. ``demos:audio``).  An unknown id is a hard error, and every
@@ -241,6 +243,46 @@ def build_demos(type_id: str) -> str:
     return _table(["Demo", "Description", "Download"], rows)
 
 
+LESSONS_DIR = REPO_ROOT / "scripts" / "experiments" / "lessons"
+LESSON_TITLE_RE = re.compile(r"^# (?P<date>\d{4}-\d{2}-\d{2})\s*—\s*(?P<title>.+)$")
+
+
+def build_lessons_index() -> str:
+    """Index of `scripts/experiments/lessons/`, newest first.
+
+    One incident per file is what keeps concurrent experiment branches from
+    conflicting: two studies each recording a lesson add two *different* files
+    rather than two appends to the same end of one.  This index is the price —
+    it is the one shared line, which is why it is generated: if two branches do
+    collide here, re-run the generator rather than merging the table by hand.
+    """
+    rows = []
+    # Newest day first; within a day, alphabetical, because the flat file it
+    # replaced recorded no finer ordering than the date.
+    for path in sorted(
+        LESSONS_DIR.glob("*.md"), key=lambda p: (p.name[:10], [-ord(c) for c in p.name[10:]]), reverse=True
+    ):
+        first = path.read_text(encoding="utf-8").splitlines()[0]
+        match = LESSON_TITLE_RE.match(first)
+        if not match:
+            raise SystemExit(
+                f"ERROR: {path.relative_to(REPO_ROOT)} must start with '# YYYY-MM-DD — title'; found {first!r}"
+            )
+        title = match.group("title")
+        issues = sorted(set(re.findall(r"#(\d+)", title)), key=int)
+        # The issue numbers are pulled out into their own column, so strip the
+        # now-duplicated trailing "(#1234)" the older titles carry.
+        stripped = re.sub(r"\s*\(#[\d\s/#]+\)\s*$", "", title).strip()
+        rows.append(
+            [
+                match.group("date"),
+                f"[{stripped}](lessons/{path.name})",
+                ", ".join(f"#{n}" for n in issues) or "—",
+            ]
+        )
+    return _table(["Date", "Lesson", "Issue"], rows)
+
+
 def build_region(region_id: str) -> str:
     fixed = {
         "embedders": build_embedders,
@@ -248,6 +290,7 @@ def build_region(region_id: str) -> str:
         "embedder-dims": build_embedder_dims,
         "media-types": build_media_types,
         "plugin-families": build_plugin_families,
+        "lessons-index": build_lessons_index,
     }
     if region_id in fixed:
         return fixed[region_id]()

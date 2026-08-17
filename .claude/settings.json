@@ -33,6 +33,15 @@
             "command": "if echo \"$TOOL_INPUT\" | grep -qE 'pytest|ng test|ng serve|npm run|npm test'; then bash ${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/ensure-test-deps.sh; fi"
           }
         ]
+      },
+      {
+        "matcher": "mcp__github__issue_write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/require-issue-labels.py"
+          }
+        ]
       }
     ]
   }

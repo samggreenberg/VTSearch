@@ -242,6 +242,7 @@ PROJECTION_MIN_DIST = 0.1
 # neighbourhood than the old global 15; large ``n_neighbors`` hurt every embedder.
 PROJECTION_DEFAULTS_BY_EMBEDDER: dict[str, tuple[int, float]] = {
     "clap": (15, 0.10),  # audio: flat separability peak across 10-30
+    "clap_general": (15, 0.10),  # same family, same flat audio peak
     "clip": (10, 0.05),  # image: the most n_neighbors-sensitive embedder
     "siglip": (10, 0.05),
     "siglip_l": (10, 0.05),

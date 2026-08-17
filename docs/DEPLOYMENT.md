@@ -327,15 +327,18 @@ offline deployments:
 
 | Model | Media type | HuggingFace ID | Approx. size |
 |-------|-----------|----------------|-------------|
-| CLAP | Audio (default) | `laion/clap-htsat-unfused` | ~1.1 GB |
+| CLAP General | Audio (default) | `laion/larger_clap_general` | ~1.4 GB |
 | SigLIP | Image (default) | `google/siglip-base-patch16-224` | ~400 MB |
 | CLIP | Image (alternative) | `openai/clip-vit-base-patch32` | ~600 MB |
 | X-CLIP | Video (default) | `microsoft/xclip-base-patch32` | ~1.2 GB |
 | E5 | Text (default) | `intfloat/e5-base-v2` | ~440 MB |
 
-**Total: ~3.8 GB** for the five models `download_models.sh` fetches (four
+**Total: ~4.1 GB** for the five models `download_models.sh` fetches (four
 defaults plus CLIP, the image alternative). At runtime, only the embedders a
-dataset or detector actually uses are loaded.
+dataset or detector actually uses are loaded. The smaller
+`laion/clap-htsat-unfused` checkpoint (the `clap` embedder, ~1.1 GB) is *not*
+prefetched: it is an alternative now, so it downloads on first use like any
+other non-default embedder.
 
 #### Alternative embedders
 
@@ -430,7 +433,7 @@ Run the provided script on a machine with internet access:
 ./scripts/download_models.sh [CACHE_DIR]
 ```
 
-This downloads all five embedding models (CLAP, SigLIP, CLIP, X-CLIP, E5) to `CACHE_DIR` (defaults to
+This downloads all five embedding models (CLAP General, SigLIP, CLIP, X-CLIP, E5) to `CACHE_DIR` (defaults to
 `data/models`). The script prints instructions for offline use when
 finished.
 
@@ -509,8 +512,8 @@ automatically on first startup.
 
 ```
 data/
-├── models/                           # HuggingFace model cache (~3.8 GB total)
-│   ├── models--laion--clap-htsat-unfused/
+├── models/                           # HuggingFace model cache (~4.1 GB total)
+│   ├── models--laion--larger_clap_general/
 │   ├── models--google--siglip-base-patch16-224/
 │   ├── models--openai--clip-vit-base-patch32/
 │   ├── models--microsoft--xclip-base-patch32/
@@ -1133,6 +1136,24 @@ that links the system OpenSSL instead of vendoring one — a distro
 package (`dnf install python3-opencv`), or `opencv-python` built from
 source. Everything else, including the whole video workflow, works with
 the stock wheel installed.
+
+### A feature you just pulled isn't in the UI ("out-of-date build")
+
+**Symptom**: a toast reading *"This page is running an out-of-date build"*, or a
+`⚠ bundle v …` chip beside the version in the Settings footer. Alternatively no
+warning at all, but a control that the docs describe is missing, does nothing,
+or behaves like an older release.
+
+**Cause**: `static/` is a build artifact and is not tracked by git, so pulling
+new code and restarting the server upgrades the *Python* side only. The browser
+keeps loading whichever bundle was last built. The version shown in Settings is
+the server's, so it looks current while the JavaScript is not.
+
+**Fix**: rebuild the frontend and hard-reload the page (Ctrl/Cmd-Shift-R — a
+normal reload can serve the old bundle from cache):
+```bash
+cd frontend && npm install && npm run build:prod
+```
 
 ### "No module named" errors
 

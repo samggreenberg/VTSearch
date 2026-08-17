@@ -151,9 +151,13 @@ describe('AutoDetectResultsModalComponent', () => {
     it('opens the URL in a new tab when clicked, never handing over the opener', async () => {
       withAutoExport({ exporter: 'open_url', success: true, open_url: 'https://example.com/r' });
       await flushInit();
-      const open = vi.spyOn(window, 'open').mockReturnValue(null);
+      // `noopener` in the features string would make `window.open` return null
+      // even on success, so the opener is severed on the handle instead (#2898).
+      const win = { closed: false, opener: {}, location: { href: '' }, close: vi.fn() };
+      const open = vi.spyOn(window, 'open').mockReturnValue(win as unknown as Window);
       (fixture.nativeElement.querySelector('.auto-export-open') as HTMLButtonElement).click();
-      expect(open).toHaveBeenCalledWith('https://example.com/r', '_blank', 'noopener');
+      expect(open).toHaveBeenCalledWith('https://example.com/r', '_blank');
+      expect(win.opener).toBeNull();
       open.mockRestore();
     });
 

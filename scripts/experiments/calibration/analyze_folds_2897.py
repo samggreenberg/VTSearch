@@ -15,7 +15,7 @@ is absent by construction.  The price of that pairing is the acquisition
 feedback the screen cannot see, which is what the A/B stage measures; pass the
 A/B run dirs as arguments to fold that check in.
 
-Pre-registered deliverables (``docs/plans/calibration-fold-count-experiment.md``):
+Pre-registered deliverables (``docs/experiments/calibration-fold-count/REPORT.md``):
 
 * **Benefit** - regret(K) and its paired delta vs production's K=2, per voting
   mode and vote window, with a Wilcoxon over cell means.
@@ -48,6 +48,7 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from _cells_io import main_frame_files  # noqa: E402
 from scipy.stats import mannwhitneyu, wilcoxon  # noqa: E402
 
 #: ``folds_k{K}_{xcal,blend}`` - the arms this analyzer owns.
@@ -99,7 +100,7 @@ def _md(df: pd.DataFrame) -> str:
 
 def load_cells(cells_dir: Path) -> pd.DataFrame:
     """Load the fold-count rows, reporting what was dropped rather than hiding it."""
-    files = sorted(p for p in cells_dir.glob("task_*.csv") if "__sweep" not in p.name and "__cutdiag" not in p.name)
+    files = main_frame_files(cells_dir)
     frames, empty, unreadable = [], 0, 0
     for p in files:
         if p.stat().st_size == 0:
@@ -445,7 +446,7 @@ def write_report(results: Path, levels, paired, knee, verd, ab) -> None:
         "at that K would have computed *for those votes*.  What they cannot show is",
         "the votes a different K would have collected - that is the A/B section.",
         "",
-        "Design + decision rules: `docs/plans/calibration-fold-count-experiment.md`.",
+        "Design + decision rules: `docs/experiments/calibration-fold-count/REPORT.md`.",
         "",
         "## Verdicts (mechanical; read the tables before believing them)",
         "",

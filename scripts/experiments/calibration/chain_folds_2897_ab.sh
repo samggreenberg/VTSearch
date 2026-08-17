@@ -5,7 +5,7 @@
 # job, so the second stage starts without anyone being awake to read the first.
 #
 # It does NOT decide anything: it reads the decision the analyzer already made
-# under the rules pre-registered in docs/plans/calibration-fold-count-experiment.md
+# under the rules pre-registered in docs/experiments/calibration-fold-count/REPORT.md
 # and recorded in `results/summary.json`, then acts on it.
 #
 #   * some voting mode's `h3_recommended_k` != 2  ->  launch arms {2} u {K*}

@@ -12,6 +12,17 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Added
 
+- **`vtscore.concurrency.notifications`** - `notify()`, `Notification` and
+  `NotificationBroker`: a fan-out channel for one-off user-facing messages.
+  The progress trackers publish *state* and an exception ends the operation;
+  neither fits "we skipped 3 unreadable files but the other 900 imported
+  fine". `notify()` is the third option — keep going, and say so. Consumers
+  subscribe to the process-wide `notifications` broker (the app's SSE stream
+  and the CLI printer both do); with no subscriber the message is still
+  logged at a severity matching its level. `PluginBase.notify()` wraps it
+  with the plugin's `display_name` as the source. The call never raises: bad
+  levels degrade, long messages truncate, broken subscribers are swallowed.
+
 - **`vtscore.security.login`** - the `LoginProvider` ABC,
   `DefaultLoginProvider`, the process-wide `set_login_provider` /
   `get_login_provider` registry, `get_user_data_dir()` and
@@ -35,6 +46,21 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`clap_general` is the default audio embedder**, replacing `clap`.
+  Measured on the full ESC-50 (2000 clips, all 50 categories),
+  `laion/larger_clap_general` wins every comparison against
+  `laion/clap-htsat-unfused`: text-sort mAP 0.869-0.895 vs 0.850-0.866,
+  learned-sort mean F1 0.523-0.564 vs 0.457-0.529, and leave-one-out 1-NN
+  accuracy 0.973 vs 0.958. `embedders_for_type("audio")[0]` and any caller
+  that passes `embedder=""`/`None` now resolve to `clap_general`.
+  `clap` is **not** removed - it stays a first-class explicit choice, ~2.1x
+  faster and ~20% smaller, and existing pickles and detector JSONs recording
+  `embedder: "clap"` keep resolving. Both are 512-d, so vectors from the two
+  are dimension-compatible but not interchangeable.
+- **The two general CLAP display names are now distinguishable.** `clap` reads
+  "CLAP (general, faster)" (was "CLAP (general audio)") and `clap_general`
+  reads "CLAP (general, larger)" (was "CLAP (general 2024)"); their progress
+  labels are "CLAP Fast" and "CLAP General".
 - **`fold_anchored_gmm_threshold` is the shipped decision threshold.** Per
   calibration fold, a semi-supervised 2-component mixture is fitted to that
   fold model's scores over the whole collection with the fold's *held-out*

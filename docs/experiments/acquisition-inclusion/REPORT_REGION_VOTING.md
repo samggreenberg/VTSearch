@@ -7,6 +7,166 @@ base dev `84789040` · branch `run/acq-region-2905` · GRID worktree
 `/home/hltcoe/sgreenberg/experiments/acq-region-2905` ·
 SLURM 481775–481781 · 3864/3864 cells, 0 failures, 0 zero-byte, ~5h, zero GPU**
 
+> # ⚠️ READ THIS FIRST — THE REGION-VOTING RESULT IN THIS REPORT IS NOT VALID
+>
+> **This run measured a harness bug. Do not cite its region-voting numbers, and
+> do not act on its mechanism findings.** The recommendation it produced
+> (`ACQUISITION_INCLUSION_OFFSET = -1`) still stands, but on *other* evidence —
+> see "What survives" below.
+>
+> **What happened.** Dev `b7d528d8` (**issue #2943**, landed 2026-08-09, two days
+> *after* this run) fixed `_score_pool`: on a patch dataset it scored each pool
+> item by its **whole-image** vector while every threshold — including the one
+> handed to the selector — was cut on the style's **region max-pooled** scores.
+> Autopilot's `hard` pick locates its cutoff with an absolute comparison
+> (`ranking[cid] <= threshold`), so the ranking and the cut have to live in one
+> score space, and on a patch dataset they did not.
+>
+> This run is `visual_genome_m × dinov3_patch` — a patch dataset — so it is
+> exactly the configuration the bug applies to. #2943 even added a warning to
+> `REPORT.md` saying **"Wait for #2943 before running it… that fix… made the
+> lever unmeasurable — the one thing this study is about."** This run predates
+> that warning. PR #2909 merged *after* the fix landed, so for a period `dev`
+> carried a fixed harness alongside a report written on the broken one.
+>
+> **The damage is asymmetric, which is what makes it fatal rather than noisy.**
+> Measured on this run's own cells (`bugcheck.py`), the fraction of steps whose
+> `acq_pool_percentile` sat pinned at exactly `1.0` — the cut above the *entire*
+> unlabelled pool, where the `hard` pick takes the top-ranked item no matter what
+> `k` is:
+>
+> | arm | steps pinned at 1.0 | ≥0.99 |
+> |---|---:|---:|
+> | `prod` (k=0, control) | 5.8% | 38.3% |
+> | **`acq_m3` (k=−3)** | **39.2%** | **79.2%** |
+> | `acq_p2` (k=+2, falsifier) | 1.5% | 9.6% |
+>
+> The **aggressive arms — the ones every decision here turns on — were clamped
+> against a ceiling on up to 39% of steps**, where raising `k` further changes
+> nothing about which item is sampled. The falsifier moves the cut *down*, away
+> from that ceiling, and so was measured cleanly. So the treatment was partly
+> inert exactly where it needed to be live, while the one contrast that appeared
+> to validate the mechanism (`prod` vs `acq_p2`) is the contrast the bug spared.
+>
+> **Confirmed against the fixed harness.** Re-running the identical cell (array
+> index 528 = `hand`, seed 0, same 48-seed declaration, same trajectory) on dev
+> `fd182d22a`:
+>
+> | | positives @100 | final cost | final AP |
+> |---|---:|---:|---:|
+> | this report (buggy) | 6 | 0.452 | 0.209 |
+> | fixed harness | **3** | **0.625** | **0.130** |
+>
+> Half the positives, a third more cost, a substantially worse ranking. The
+> direction matches #2943's description exactly — the simulated user was voting
+> on far more positive items than a real user would — and it explains this
+> report's most surprising headline number, `prod` finding **14** positives per
+> 100 votes against binary voting's 6. That gap was largely the bug.
+>
+> ## Specifically dead
+>
+> - **"The lever has almost no room to move"** (span +0.0127 against binary's
+>   +0.1213). Read here as a property of region voting's geometry — production
+>   already sampling at the 98.7th percentile. It is the saturation artefact.
+> - **"Tail-blurring is mode-invariant; head-sharpening is binary-only"** — the
+>   difference-in-differences (AP +0.0283 binary vs +0.0003 region, DiD −0.0281).
+>   The region side is confounded: with the cut pinned, `k=−2/−3/−4` were partly
+>   the *same arm*, so a flat response across them is what a clamped lever
+>   produces whether or not the effect is real.
+> - **Every per-arm and paired number in the region tables below**, including the
+>   ship-rule verdict that `-3` passes here, the positives 14 → 20, the oracle-cost
+>   rise, and the guardrail rates.
+> - **"Region voting starts far less starved (14 positives vs binary's 6)."**
+> - **"The decision endpoint is well measured here and genuinely barely moves."**
+>   The paired SD of 0.0709 is a real property of *this* data, but this data is
+>   the artefact.
+>
+> ## What survives
+>
+> - **The shipped `ACQUISITION_INCLUSION_OFFSET = -1`.** It does not depend on any
+>   region number. Both binary environments are `siglip`/`siglip2` with
+>   `patch_grid` on **0/4193** — verified in this run's own premise check — so they
+>   scored and cut in one space and #2943 never touched them. `-3` still ships on
+>   `coco_val × siglip2` and still fails on `visual_genome_m × siglip`, and `-1` is
+>   still the only value passing both.
+> - **"The disagreement runs along the environment, not the voting mode."** This
+>   leg never used region data: the largest split (`-3` ships on COCO, fails on VG)
+>   is *within* binary voting, which no mode gate can reach. It was sufficient for
+>   `-1` on its own. What is gone is the *corroboration* from a third environment.
+> - **The binary half of the starvation analysis**, and therefore **#2910**. Those
+>   slopes (AP response −0.0207 on log category prevalence, CI [−0.0259, −0.0159];
+>   −0.0402 on a leave-one-out baseline) were computed on **#2877's**
+>   `visual_genome_m × siglip` cells, which are unaffected. The region half of that
+>   comparison is now unknown rather than null.
+> - **The mean-reversion lesson** and the **preflight fixes** (`--require-region-voting`,
+>   and the arm-collision/zero-byte checks that had been scanning only
+>   `results-ab/`). All independent of the bug.
+> - **The premise check itself.** `patch_grid` on 4193/4193 was and is correct.
+>   This environment really does region-vote — the bug was downstream of that, in
+>   how the pool was scored, which is precisely why the premise gate could not
+>   catch it.
+>
+> ## The question a re-run must answer before spending 7 hours
+>
+> **Post-fix, does the lever move at all here?** On the fixed harness the same
+> cell shows `acq_pool_percentile` pinned at `1.0` on **60.6%** of steps at
+> `k=0` — *higher* than the buggy run, not lower. If `prod` already sits above the
+> whole pool on most steps, then `k=−3`, which raises the cut further, is
+> identical to `prod` on those same steps and the offset is **unmeasurable in this
+> environment** — which would itself be a legitimate answer to #2905, and a much
+> cheaper one than a full grid.
+>
+> A `k=0` vs `k=−3` probe over four cells (indices 528, 264, 792, 529) was
+> launched to settle this and **cancelled ~2.5 minutes short of writing output**,
+> so it is genuinely unanswered. Run it first. Do not launch the full grid until
+> it comes back positive.
+>
+> **A caution for whoever writes that probe's acceptance test.** Mine was wrong,
+> in a way worth not repeating: I pre-registered "pinning should *fall* after the
+> fix", and it rose. The `*_pool_percentile` columns were themselves computed in
+> the mismatched space before #2943 — that is why, in #2943's words, they "could
+> not reveal it" — so **they are not the same statistic on either side of the fix
+> and cannot be compared across it.** Judge the probe on whether the two *arms*
+> diverge from each other on the fixed harness (cut position, vote stream,
+> positives), never on whether a column moved relative to this report.
+>
+> ## How to resume
+>
+> Everything needed is in the repo and on disk; the run is ~7 h of cpu-partition
+> time and needs no GPU.
+>
+> 1. `scripts/experiments/calibration/launch_acq_region_2905.sh` is unchanged and
+>    still correct — 7 arms, 23 categories, seeds **declared at 48 and 24 run**, so
+>    a top-up is `--seeds 24-47` with every cell keeping its array index
+>    (`index = category × N_SEEDS + seed`; never move `N_SEEDS`).
+> 2. It gates on `preflight.sh --require-region-voting visual_genome_m:dinov3_patch`,
+>    which opens the pickle and refuses to submit without patch geometry. Keep that.
+> 3. Prepare is **reused, no GPU stage** — the `dinov3_patch` pickle and exemplar
+>    crops from the #2861 anchor-rate run, symlinked. Note it is a **pre-#2886
+>    pickle** and needs the `RegionVector` shim in `_cells_io.py` (now on dev via
+>    PR #2906) or it dies on cell 1.
+> 4. **Re-size from a fresh cell.** On the fixed harness a cell is 11m51s but peak
+>    RSS is **6.8 G**, up from 4.8 G — request 12 G, which lowers concurrency under
+>    the `cpu_limit` QOS (cpu=240, 2 charged per task), so the old ~6.7 h estimate
+>    at 120 concurrent no longer holds.
+> 5. Put the experiment under `/home/hltcoe/$USER/experiments/`, **not `/exp`** —
+>    that 50 G quota is ~92% full and 13 G of it is a `.venv` every `gridenv.sh`
+>    activates.
+> 6. `analyze_acq.py` needs no changes; run `selftest_analyze_acq.py` first (it
+>    plants a stuck lever and a failed falsifier). The mechanism scripts from this
+>    run — `deep.py`, `modes.py`, `starve.py`, `starve2.py`, `bugcheck.py` — are
+>    kept beside the old experiment dir and port over unchanged. `starve.py` is
+>    retained *deliberately* as the contaminated version `starve2.py` corrects.
+>
+> **Owner note (2026-08-12):** the study was stopped here at the owner's request —
+> the evaluation framework is being rewritten, so the re-run should wait for that
+> rather than land twice. Treat the arm table and the pre-registered endpoints as
+> settled and reusable; treat every region number below as void.
+>
+> — everything below this banner is the original report, preserved unedited except
+> for inline `⚠️ INVALID` markers, so the record of what was concluded and why
+> stays legible.
+
 ## The premise, verified before the run rather than after it
 
 `visual_genome_m × dinov3_patch × max_patch` carries **`patch_grid` on 4193/4193
@@ -23,6 +183,9 @@ visual_genome_m:dinov3_patch` opens the pickle and refuses to submit without the
 geometry. No fallback warning fired in any of 3864 cells.
 
 ## BLUF
+
+> ⚠️ **INVALID — measured on the pre-#2943 harness; see the banner at the top.**
+
 
 **Do not build the voting-mode gate. Ship `-1` globally and revert `-3`.**
 
@@ -51,6 +214,9 @@ So `-3` passes here on an endpoint that barely moves, while the endpoint the
 recommendation was built on says the effect is gone.
 
 ## Lever verification
+
+> ⚠️ **INVALID — measured on the pre-#2943 harness; see the banner at the top.**
+
 
 | arm | median `acq_pool_percentile` | shift vs control | steps where acq ≠ reporting |
 |---|---:|---:|---:|
@@ -81,6 +247,9 @@ votes, and the pinned arm doesn't:
 | `rank_pin` | 0.9986 | 0.9990 | 0.9995 | **0.0055** |
 
 ## Result
+
+> ⚠️ **INVALID — measured on the pre-#2943 harness; see the banner at the top.**
+
 
 541 trajectories per arm (11 of 552 cells never found a positive in 100 votes —
 the *same* 11 in every arm, so no arm is advantaged).
@@ -116,6 +285,9 @@ whose oracle cost does not degrade significantly.
 
 ## The decomposition: which half of the mechanism transferred
 
+> ⚠️ **INVALID — measured on the pre-#2943 harness; see the banner at the top.**
+
+
 Splitting final cost into `oracle_cost` (how separable the learned ranking is)
 and `regret = cost − oracle_cost` (how well the cut sits on it):
 
@@ -131,6 +303,9 @@ cost pressure is the *ranking* degrading. What is new is that it degrades
 **without the compensating gain at the head**.
 
 ### The controlled mode contrast
+
+> ⚠️ **INVALID — measured on the pre-#2943 harness; see the banner at the top.**
+
 
 #2877 and this run share the dataset, the **same 23 categories**, the same 24
 seeds and the same seven arms, so they pair cell-for-cell — the only controlled
@@ -161,6 +336,13 @@ exemplar draw, which is what makes the *response* comparable; it does not make
 the levels comparable.
 
 ## A correction I had to make to my own analysis
+
+> ⚠️ **PARTLY INVALID.** The *binary* half of this analysis stands — it was
+> computed on #2877's `visual_genome_m × siglip` cells, which #2943 never
+> touched, and it is what #2910 rests on. The *region* half used this run's
+> data, so "the region curve vanished" is now **unknown**, not null — and the
+> matched-prevalence comparison that concluded the modes differ is void.
+
 
 The obvious unifying story is that the offset is a **starvation remedy**: it
 pays where the detector has few positives, and region voting simply sits at the
@@ -223,6 +405,14 @@ agree — see below.
 
 ## Recommendation
 
+> ⚠️ **The recommendation stands; one of its two legs does not.** `-1` is
+> still right on the binary evidence alone (`-3` ships on COCO, fails on
+> VG×siglip). The "do not gate by voting mode" argument keeps its
+> environment-not-mode leg and loses its region-mechanism leg. The
+> implementation warning about `ctx.embedder_type` vs `_patch_embedder_for_snap`
+> is a code fact, independent of this run, and still applies.
+
+
 1. **Set `ACQUISITION_INCLUSION_OFFSET = -1`** (from `-3`), globally, ungated.
 2. **Do not add `ACQUISITION_INCLUSION_OFFSET_BY_MODE`.**
 3. **Record the asymmetry with `PRODUCTION_SCHEDULE_BY_MODE` as intended, not as
@@ -269,6 +459,9 @@ makes it travel with the estimator it applies to, resolved from the same snap in
 the same call as the schedule, so the two cannot drift.
 
 ## Guardrails and caveats
+
+> ⚠️ **INVALID — measured on the pre-#2943 harness; see the banner at the top.**
+
 
 - **The decision endpoint is well measured here, and it genuinely barely
   moves.** Paired SD on `final_cost` is **0.0709** — n=541 gives a half-width of

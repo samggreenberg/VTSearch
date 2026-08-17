@@ -62,6 +62,13 @@ Each analyzer has a self-test that runs it on fabricated cells with a planted
 answer, so a sign error is caught before an overnight run rather than after:
 `python selftest_analyze_ab.py`, `python selftest_analyze_cut.py`.
 
+Every analyzer discovers its input through `_cells_io.main_frame_files` /
+`side_frame_files` rather than globbing `task_*.csv` itself. That glob also
+matches the side frames (`__sweep`, `__cutdiag`, `__cutincl`), which are separate
+long-format tables — concatenating one into the main frame yields a ragged
+DataFrame whose extra rows enter every aggregate silently. Add a new side frame's
+suffix to `SIDE_FRAME_SUFFIXES` and every analyzer is correct by construction.
+
 `launch_all.sh` points `VTSEARCH_DATA_DIR` at the Max-Patch datadir so the shared
 embeddings pickles and demo data are read in place (the `siglip_l` pickles land
 alongside them harmlessly), and writes all study output under
@@ -113,6 +120,58 @@ Cost note: the fold-anchored arms score the sim set once per calibration fold
 per step (`calibrate_count=2` → two extra scoring passes); disable them with
 `CALIB_ANCHORED_FOLD_ARMS=0` for a cheap label-anchored-only run.
 
+## Cut-rule × Inclusion study (issue #2865)
+
+```bash
+cd /exp/$USER/projects/vts-calib/scripts/experiments/calibration
+python selftest_analyze_cutincl.py   # planted answer; run before the array
+bash launch_incl_2865.sh             # reuses the #2861 prepare stage
+python analyze_cutincl.py
+```
+
+Asks **which cut rule should answer the Inclusion knob**, which neither
+calibration run could: both scored every arm at inclusion 0, and inclusion 0 is
+the one setting where the rule choice cannot matter. Shipping the measured
+`κ=0.3, mid` verbatim therefore made the knob a *no-op* for every detector with
+usable folds — a midpoint of two component means never looks at the cost weights
+inclusion arrives as. `mid_tilt` (#2868) restored the tilt while reproducing the
+measured arm bit-for-bit at 0; this run prices that tilt.
+
+`CALIB_CUT_INCL_KS` turns on a side frame (`_CUT_INCLUSION_COLUMNS` →
+`task_<idx>__cutincl.csv`): one row per (step, fold-anchored arm, inclusion `k`),
+each scored under the cost weights of **its own** `k` and against the oracle at
+that same `k`, so regret is comparable along the knob as well as across arms.
+The arms are `CALIB_ANCHORED_WEIGHTS` × `CALIB_ANCHORED_RULES` ×
+`CALIB_ANCHORED_FOLD_COMBINES`, with `q_tilt` additionally expanded over
+`CALIB_CUT_INCL_QTILT_STEPS` (its step size is a free parameter, so the sweep
+has to *fit* it rather than assume one).
+
+Cost note: nearly free. The per-fold anchored EM depends on none of the swept
+axes, so one fit per anchor weight serves the whole (rule × combine × `k`) grid —
+the same no-refit re-cut the app does on a slider drag, which also makes the
+sweep measure the object production actually re-cuts.
+
+The analyzer reports the issue's two decision numbers: paired regret at each `k`
+against the shipped rule (bootstrapped over **cells**, since consecutive steps of
+one trajectory share a model), and how much of the knob survives as **distinct
+admitted sets** — a rule that moves the threshold without moving the included set
+has fixed nothing. It gates on *pointwise* regret rather than pooled, because an
+arm can win on average across the knob while being worse everywhere a user parks
+the slider; and it counts an arm harmed only past a `HARM_TOLERANCE` of 0.01
+(the margin PR #2891 pre-registered), since a bare significance test rejects even
+a perfect arm across ~100 intervals on multiplicity alone.
+
+A note on the candidate set, because the issue's own list has a redundancy in it:
+its **candidate 2** ("drop the mixture-weight factor: `lam = fnr/fpr` instead of
+`(fnr/fpr)·(w_lo/w_hi)`") describes what the existing `rate` rule *already*
+computes — the prior-odds factor in `rate`'s `lam` cancels the `w_lo/w_hi` inside
+`_rate_cut`'s `offset` exactly, so `rate` is prior-free and its interior root is
+invariant to the mixture weights at every inclusion (pinned by
+`tests_lib/detectors/test_cut_inclusion_sweep.py::TestRateIsPriorFree`). The rule
+that genuinely retains the priors is `cross_tilt`, added as the literal reading
+of candidate 2 so the issue's text gets priced too. Candidate 4 ("keep `mid`") is
+the `mid` arm, the honest null.
+
 ## Fold-count study (issue #2897)
 
 ```bash
@@ -148,7 +207,7 @@ position Autopilot's Hard pick samples around — which is why
 at its own K. Pass those arm dirs to the analyzer
 (`python analyze_folds_2897.py /exp/$USER/calibration-folds-2897-ab-k8`) to get
 the `screen_agrees` check. Analyzer: `analyze_folds_2897.py`; design and
-pre-registered decision rules: `docs/plans/calibration-fold-count-experiment.md`.
+pre-registered decision rules: `docs/experiments/calibration-fold-count/REPORT.md`.
 
 Not to be confused with the older `analyze_folds.py` / `launch_folds_2861.sh`,
 which moved the fold count to 4 only to unlock the anchored `qmean`/`qmedian`

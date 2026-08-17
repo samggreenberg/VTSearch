@@ -59,8 +59,6 @@ Fixing individual docs without the first two bullets buys about six weeks.
 
 <!-- item-sep -->
 
-- [ ] #2987 — Retire docs/HANDOFF.md (the stalest doc hub) and fix doc orphans (Opus 4.8)
-
 <!-- item-sep -->
 
 
@@ -72,8 +70,6 @@ Fixing individual docs without the first two bullets buys about six weeks.
 - [ ] #2990 — EXTENDING-processors.md omits the registration story, so its recipes cannot be wired in (Sonnet 5)
 
 <!-- item-sep -->
-
-- [ ] #2991 — ARCHITECTURE.md: false flask.g claim about the library tier, plus directory-map drift (Sonnet 5)
 
 <!-- item-sep -->
 
@@ -110,9 +106,9 @@ separately.
 
 <!-- item-sep -->
 
-- **The `run-tests.sh` gate list is still hand-maintained in three places.** CLAUDE.md's "What
-  `run-tests.sh` gates" table, `docs/HANDOFF.md`'s quality-tools paragraph and the script's own
-  usage header each restate the chain by hand; the first two were six gates stale before #2997.
+- **The `run-tests.sh` gate list is still hand-maintained in two places.** CLAUDE.md's "What
+  `run-tests.sh` gates" table and the script's own usage header each restate the chain by hand;
+  the table was six gates stale before #2997.
   This is the same inventory-drift shape as #2984, and it wants the same treatment — but note the
   cheaper shape fits better here: rather than *generating* the table, an invariant check could
   assert that the set of `echo "…"` stage banners in `run-tests.sh` matches the rows in CLAUDE.md's
@@ -137,7 +133,7 @@ separately.
 
 - **README.md — the media-type count is five, the code ships six.** The intro omits the `face`
   convert-in half type (`vtscore/media/face/media_type.py`, FaceNet identity space, provisioned by
-  `install.sh:855-867`). The same undercount appears in `docs/HANDOFF.md` and the vtscore docs.
+  `install.sh:855-867`). The same undercount appears in the vtscore docs.
 
 <!-- item-sep -->
 
@@ -151,21 +147,6 @@ separately.
   `vtscore/CHANGELOG.md` by contrast is actively maintained and should stay.
 
 <!-- item-sep -->
-
-- **ARCHITECTURE.md — inventory and description drift beyond the flask.g claim in #2991.**
-  `settings_models.py` is described as Marshmallow when it is pydantic; the theme enum is given as
-  three modes when there are four; `vtscore/media/base.py` is credited with ABCs that live
-  elsewhere; the exporter inventory omits `open_url` and `portable_detector`; request hooks and
-  error handlers are attributed to `app.py` after moving to `vtsearch/hooks.py` and `errors.py`.
-  Missing from the map: `gpu_backends.py`, `io.py`, `single_instance.py`, the signpost
-  (region-labeling) subsystem under `projection/`, half of `datasets/` (`archive_stream.py`,
-  `clipper_chain.py`), 13 of 18 `eval/` modules including `autopilot_flow.py`, and
-  `state/sort_results_cache.py`. Five server-tier settings keys are missing. `PluginRegistry`'s
-  entry-point discovery is described as directory-scan only. The auth section presents
-  `DefaultLoginProvider` as the sole built-in, omitting `TrivialLoginProvider` and
-  `ApiKeyLoginProvider`. Context resolution also accepts `dataset_id`/`detector_id` query params
-  as a header fallback, undocumented. Minor: a duplicated word in the ownership-tracking sentence;
-  the `DatasetContext` key-state table understates what a context holds.
 
 <!-- item-sep -->
 

@@ -14,20 +14,27 @@ is surfaced in ``threshold_provenance``, and everything is deterministic.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from vtscore.eval.cut_rules import CUT_KIND_MIDPOINT
 from vtscore.eval.voting_iterations import _CALIBRATION_COLUMNS, simulate_voting_iterations
 from vtscore.training.thresholds import CUT_KIND_CONTINUED, CUT_KIND_DEGENERATE_MIDPOINT, CUT_KIND_INTERIOR
 
 # Reuse the synthetic planted-patch dataset builders from the Max-Patch tests.
+from .sweep_cache import memoize_sweep
 from .test_max_patch_style import _planted_dataset
+
+# Three tests below read different columns of the identical default sweep, so
+# it is computed once per worker and this module is pinned to one worker for
+# that cache to hit.  Shared rows are read-only.  See sweep_cache.py.
+pytestmark = pytest.mark.xdist_group("anchored-variant-rows")
 
 _ANCHORED = "anchored_w10_mid"
 _FOLD = "fold_anchored_w10_mid_qmean"
 _RANK = "rank_transfer"
 
 
-def _run(seed=0, max_steps=12, fold_arms=True):
+def _run_uncached(seed=0, max_steps=12, fold_arms=True):
     medias, _ = _planted_dataset(n_per_cat=40, seed=seed)
     return simulate_voting_iterations(
         medias,
@@ -46,6 +53,11 @@ def _run(seed=0, max_steps=12, fold_arms=True):
         anchored_fold_combines=["qmean"],
         anchored_fold_arms=fold_arms,
     )
+
+
+#: Memoized view of :func:`_run_uncached`.  Every test that only *reads* the
+#: frame goes through this; ``test_deterministic`` deliberately does not.
+_run = memoize_sweep(_run_uncached)
 
 
 class TestAnchoredVariantRows:
@@ -115,14 +127,20 @@ class TestAnchoredVariantRows:
         assert _RANK not in variants
 
     def test_deterministic(self):
+        """Two *independent* sweeps must agree.
+
+        This deliberately bypasses the memoized ``_run``: the cache would hand
+        back the very same list twice and the assertion would hold no matter
+        how non-deterministic the harness became.
+        """
         thr_a = [
             (r["t"], r["gmm_variant"], r["threshold"])
-            for r in _run()
+            for r in _run_uncached()
             if r["gmm_variant"].startswith(("anchored", "fold_anchored", "rank"))
         ]
         thr_b = [
             (r["t"], r["gmm_variant"], r["threshold"])
-            for r in _run()
+            for r in _run_uncached()
             if r["gmm_variant"].startswith(("anchored", "fold_anchored", "rank"))
         ]
         assert thr_a == thr_b

@@ -16,6 +16,7 @@ measures the retired schedule blend.
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 from vtscore.eval.cut_rules import CUT_KIND_MIDPOINT
 from vtscore.eval.voting_iterations import (
@@ -33,7 +34,15 @@ from vtscore.training.thresholds import (
 )
 
 # Reuse the synthetic planted-patch dataset builders from the Max-Patch tests.
+from .sweep_cache import memoize_sweep
 from .test_max_patch_style import _planted_dataset
+
+# Nine of the tests below sweep ``max_patch`` at identical settings — five
+# reading only the metric rows, four also reading the decomposition frame — so
+# each of those two shapes is simulated once per worker and this module is
+# pinned to one worker for the cache to hit.  Shared rows are read-only.
+# See sweep_cache.py.
+pytestmark = pytest.mark.xdist_group("safe-gmm-variant-rows")
 
 _VARIANT_NAMES = {name for name, _fit, _rule in _SAFE_GMM_VARIANTS}
 #: Variants that must appear at every trainable step.  The label-reading
@@ -42,7 +51,7 @@ _VARIANT_NAMES = {name for name, _fit, _rule in _SAFE_GMM_VARIANTS}
 _ALWAYS_EMITTED = _VARIANT_NAMES - set(_ORACLE_VARIANTS)
 
 
-def _run_safe(style, seed=0, max_steps=16, diag_sink=None, **kw):
+def _run_safe_uncached(style, seed=0, max_steps=16, diag_sink=None, **kw):
     medias, _ = _planted_dataset(n_per_cat=40, seed=seed)
     return simulate_voting_iterations(
         medias,
@@ -58,6 +67,38 @@ def _run_safe(style, seed=0, max_steps=16, diag_sink=None, **kw):
         cut_diag_sink=diag_sink,
         **kw,
     )
+
+
+_run_safe_no_sink = memoize_sweep(_run_safe_uncached)
+
+
+@memoize_sweep
+def _run_safe_with_diag(style, **kw):
+    """A sweep that also collects the decomposition frame, as a cacheable pair.
+
+    The frame is delivered through a caller-owned list, which cannot be part of
+    a cache key — every caller passes a fresh empty one. Running the sweep with
+    a sink this wrapper owns, and returning ``(rows, diagnostics)``, makes the
+    whole result cacheable; :func:`_run_safe` replays the diagnostics into
+    whichever list the test handed in.
+    """
+    sink: list[dict] = []
+    rows = _run_safe_uncached(style, diag_sink=sink, **kw)
+    return rows, sink
+
+
+def _run_safe(style, seed=0, max_steps=16, diag_sink=None, **kw):
+    """Memoized sweep, with or without the decomposition frame.
+
+    Passing a sink is not a different simulation, only a different *view* of
+    one, so both shapes are cached; see :mod:`.sweep_cache` for why the results
+    must be treated as read-only.
+    """
+    if diag_sink is None:
+        return _run_safe_no_sink(style, seed=seed, max_steps=max_steps, **kw)
+    rows, diagnostics = _run_safe_with_diag(style, seed=seed, max_steps=max_steps, **kw)
+    diag_sink.extend(diagnostics)
+    return rows
 
 
 class TestSafeGmmVariantRows:

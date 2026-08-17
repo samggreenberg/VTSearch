@@ -5,7 +5,7 @@ This is the procedure the **Dev2Main** Routine follows to promote `dev` to `main
 > **Override for this procedure only:** the final release PR's `base` is
 > **`main`**, not `dev`. This is the one sanctioned exception to CLAUDE.md's
 > "never open a PR to `main`" rule — it applies solely to the release PR
-> opened in step 6, and only when running this runbook.
+> opened in step 5, and only when running this runbook.
 
 Work through the steps in order.
 
@@ -43,7 +43,7 @@ Run `git fetch origin --prune`, then summarize
 - If vulture was clean, append a single line: `vulture: clean.` Otherwise:
   `vulture: <N> findings triaged.`
 
-Use the summary verbatim as the PR body (step 6) and also output it in chat, written in plaintext, so the MD formatting can be copied.
+Use the summary verbatim as the PR body (step 5) and also output it in chat, written in plaintext, so the MD formatting can be copied.
 
 ## 4. Rebuild the punch-card graphic
 
@@ -63,19 +63,68 @@ Use the summary verbatim as the PR body (step 6) and also output it in chat, wri
 
 Now that the release PR is open, close the GitHub issues whose fixes are included in this `dev → main` batch. This is the counterpart to the per-fix rule in CLAUDE.md: individual fix PRs link their issue with a `Closes #N` keyword but leave it **open** (their merge to `dev` can't auto-close it), and this step is what finally closes it once the fix reaches `main`.
 
-**Find the issues to close** from this release's PRs:
+**Find the candidate issues** from this release's PRs:
 
 - List the pull requests merged into `dev` within this release range — the same `origin/main..origin/dev` window used for the summary in step 3 (inspect the merge commits in that range to get the PR numbers).
-- For each such PR, read its body and collect every issue it references with a **closing** keyword: `Closes #N`, `Fixes #N`, or `Resolves #N` (case-insensitive). **Skip** non-closing references (`Refs #N`, `Part of #N`)
-  — those are partial and must stay open.
+- For each such PR, read its body and collect **every** issue it references, keeping track of which keyword introduced each reference. Sort them into two buckets:
+  - **Closing** — `Closes #N`, `Fixes #N`, `Resolves #N` (case-insensitive).
+  - **Non-closing** — `Refs #N`, `Part of #N`, or a bare `#N` mention.
+- Then add a third bucket, the **orphan backstop**: list the repo's still-open issues and check each one's comments for a pointer at a PR in this release range (`Addressed in #M`, `Fixed in #M`, and similar). Collect any whose pointer names a PR in the range that never referenced it back. (To keep this cheap, it's enough to check issues updated since the previous release.) A pointer naming a **commit** rather than a PR (`Fixed on dev by <sha>`) belongs in this bucket too — resolve the SHA to its merge commit to find the PR, then reconcile it like any other orphan.
 
-**Then, for each collected issue that is still open:**
+Non-closing references are **not** silently skipped. A PR that finishes an issue but writes `Refs #N` would otherwise orphan it permanently: this step skips it, and because no later release re-examines an already-merged PR, nothing ever revisits it — the issue stays open forever while its fix is live in `main`. Real incident: #2940, #2930 and #2951 each shipped in the 2026-08-12 release under `Refs`, with an "Addressed in #M" comment on the issue, and all three stayed open. So the non-closing and orphan buckets get **reconciled** rather than dropped.
 
+**The hardest orphan is a duplicate.** #2911 shipped to `main` in the 2026-08-11 release and stayed open until 2026-08-17. It was a duplicate of #3025, the fix PR wrote `Closes #3025` only, and at release time #2911 had no comments and no PR references at all — so all three buckets were blind to it by construction, not by a keyword slip. No sweep rule recovers an issue that nothing on GitHub links to; that one is prevented upstream, by CLAUDE.md's duplicate rule. What this step *can* do is catch the late pointer: the resolving comment landed a day after the release, so an issue whose newest comment claims a fix by a PR or commit from **any earlier** release deserves a look, not just this one's.
+
+**Reconcile each issue in the non-closing and orphan buckets.** Read the issue (body *and* comments) alongside the PR, then close it only when **both** hold:
+
+- The PR (or a comment on the issue pointing at it) claims to address the issue **without qualification** — e.g. an `Addressed in #M` comment, or a PR body that plainly does everything the issue body asks.
+- Neither the PR body nor any later comment names work still owed **by that issue**. Scope the PR explicitly deferred into a plan file or a separate issue is no longer owed here and does not make it partial; likewise, an issue that was rescoped narrower counts as finished if the PR does all of what remains.
+
+Anything else stays open — a genuinely partial `Refs` is doing its job.
+
+**Then, for each issue to be closed (closing bucket, plus the reconciled ones):**
+
+- Skip it if it is already closed. Never reopen or re-close.
 - Close it with `state_reason: completed`.
+- **Strip the `dev` label in the same write.** `dev` means "fixed on `dev`, NOT yet on `main`" (see CLAUDE.md), and this close is the moment that stops being true. Pass `labels` explicitly with every label the issue keeps (`claude`, `experiment`, …) minus `dev`; `labels` *replaces* the whole set, so passing `[]` would wipe the rest. A `PreToolUse` hook blocks a `completed` close that keeps `dev` or omits the array.
 - Add a one-line comment noting it shipped to `main` in today's release and linking the fix PR (e.g. `Shipped to main in the 2026-07-14 release — fixed
-  in #M.`).
+  in #M.`). When the PR used a non-closing keyword, say so in that comment, so the mislabel is visible on the issue rather than silently corrected.
 
-Do not close any issue that isn't linked by a closing keyword from a PR in this batch, and don't reopen or re-close issues already closed. If no qualifying issues are found, state that in chat and do nothing.
+**Report the reconciliation in chat**, briefly: which issues came from the closing bucket, which were closed after reconciliation (and under which PR keyword), and which non-closing references were deliberately left open. This is the only place a crossed wire between a PR keyword and an issue comment becomes visible, so do not collapse it to a bare count. If no qualifying issues are found, state that and do nothing.
+
+## 6b. Refresh the `dev` label between releases
+
+Step 6 is what *removes* `dev`. What puts it on is `scripts/reconcile-dev-labels.py`, and that runs **between** releases, not only at one: the label's whole job is to make the awaiting-release view (`is:issue is:open label:dev`) correct while the release is still weeks away. Run it whenever you want that view refreshed, and once more right after step 6 to confirm nothing was left behind.
+
+The script is a pure function from data to plan — it does no network I/O, because the GitHub REST API is unreachable from a Claude session (`GITHUB_TOKEN` is present but returns 403; GitHub access is intermediated by the MCP server). So gather the data first, then pipe it in:
+
+1. List the PRs merged into `dev` since the last release — the same `origin/main..origin/dev` window as step 3 — and read each one's **body**.
+2. List the repo's issues with their `labels` and `state`, and fetch each one's **comments** in chronological order (the API default).
+3. Assemble them into one JSON object and run the script:
+
+```json
+{
+  "release_prs": [{"number": 3128, "body": "... Closes #3077 ..."}],
+  "issues": [
+    {"number": 3077, "state": "open", "labels": ["claude"],
+     "comments": [{"body": "Addressed in #3128"}]}
+  ]
+}
+```
+
+```
+python scripts/reconcile-dev-labels.py --input plan-input.json
+```
+
+It prints four buckets. **Apply `ADD` and `REMOVE` directly** — they are unambiguous. **Do not apply `NEEDS REVIEW`**; read those issues yourself. An issue lands there for one of three reasons, all genuinely undecidable from the outside:
+
+- **A fix pointer is not the newest comment.** The later comment may be a maintainer saying "thanks" or the reporter saying the fix does not work. Tagging would bury a dispute; skipping would silently drop the issue out of the awaiting-release view.
+- **A comment claims a fix by commit SHA** instead of `Addressed in #M`. The script has only the JSON you piped in, so it cannot map a commit to its PR — but the claim is real, so it is surfaced. Resolve it with `git log --ancestry-path <sha>..origin/dev --merges --oneline | tail -1` to find the merge that carried it, then re-run with a corrected pointer.
+- **The issue carries `dev` but nothing resolves it** — stale, or fixed in an earlier release.
+
+That is the same "not silently skipped" principle step 6 applies to non-closing references.
+
+Add `--check` to make it exit non-zero when anything needs attention, and `--json` for machine-readable output.
 
 ## 7. Prune plan pointers for the closed issues
 
