@@ -21,8 +21,20 @@ from vtscore.datasets.sources.local_archive_member import (
     SOURCE,
     LocalArchiveMemberSource,
 )
+from vtscore.embedding.binding import expected_dim_for_embedder
 
+#: Width used when a manifest declares no embedder (nothing to agree with).
 DIM = 8
+
+
+def _dim_for(embedder_name: str | None) -> int:
+    """Width a manifest naming *embedder_name* must use to be self-consistent.
+
+    Manifest reads reject an archive whose vectors contradict the embedder it
+    names, so a fixture cannot pair a real name with an arbitrary toy width.
+    Deriving the width keeps every fixture a *valid* manifest.
+    """
+    return expected_dim_for_embedder(embedder_name) or DIM
 
 
 def _make_manifest(
@@ -34,7 +46,7 @@ def _make_manifest(
     filenames=None,
 ) -> Path:
     rng = np.random.default_rng(3)
-    vectors = rng.standard_normal((len(members), DIM)).astype(np.float32)
+    vectors = rng.standard_normal((len(members), _dim_for(embedder_name))).astype(np.float32)
     archive = tmp_path / "shard.tar"
     arrays = {
         "vectors": vectors,
@@ -102,7 +114,7 @@ class TestFetchItem:
         fetched = src.fetch_item("a.mp4")
         assert fetched.path is None
         assert fetched.embedding is not None
-        assert fetched.embedding.shape == (DIM,)
+        assert fetched.embedding.shape == (_dim_for("xclip"),)
         assert fetched.embedder_name == "xclip"
 
     def test_unknown_key_returns_empty_fetch(self, tmp_path):

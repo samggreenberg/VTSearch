@@ -174,7 +174,8 @@ class PullWrestSource(MediaSource):
         Falls back to the single-item path for keys that are not
         ``self._content_id``.
         """
-        import numpy as np
+        from vtscore.embedding.binding import expected_dim_for_embedder  # noqa: PLC0415
+        from vtscore.embedding.precomputed import normalize_vector  # noqa: PLC0415
 
         # Collect items this source actually owns.
         owned = [k for k in keys if k == self._content_id]
@@ -190,8 +191,22 @@ class PullWrestSource(MediaSource):
                     cached = tmpdir / cid
                     cached.write_bytes(resp["data"])
 
+                    # A remote service's vector is as untrusted as a manifest's:
+                    # validate it here rather than letting a wrong-width or
+                    # non-finite row become a stored embedding.  This runs inside
+                    # the try, so a bad row degrades to the single-item fallback
+                    # below instead of aborting the whole batch.
                     raw_emb = resp.get("embedding")
-                    embedding = np.array(raw_emb, dtype=np.float32) if raw_emb else None
+                    embedding = (
+                        normalize_vector(
+                            raw_emb,
+                            label=f"PullWrest embedding for content id {cid!r}",
+                            expected_dim=expected_dim_for_embedder(resp.get("embedder_name", "")),
+                            expected_source=f"the width declared by embedder {resp.get('embedder_name', '')!r}",
+                        )
+                        if raw_emb
+                        else None
+                    )
 
                     extra: dict[str, Any] = {}
                     for field in ("file_size", "duration", "created_at"):

@@ -33,6 +33,7 @@ import sys
 import time
 import zipfile
 from collections import defaultdict
+from contextlib import contextmanager
 from pathlib import Path
 
 import pile_config as pc
@@ -312,6 +313,27 @@ def _load_demo(dataset: str, medias: dict[int, dict], embedder_name: str) -> Non
 # --------------------------------------------------------------------------
 
 
+@contextmanager
+def _embed_batch_size(embedder: str):
+    """Apply this embedder's batch size for the duration of the embed pass.
+
+    The app reads ``VTSEARCH_EMBED_BATCH_SIZE`` per bulk call, so one build
+    process can run each embedder at its own size rather than every model at
+    the shipped default of 32. An explicit env var wins: someone who set one
+    is tuning for the card in front of them, and the table cannot know that.
+    """
+    want = pc.embed_batch_size(embedder)
+    if want is None or os.environ.get("VTSEARCH_EMBED_BATCH_SIZE", "").strip():
+        yield
+        return
+    os.environ["VTSEARCH_EMBED_BATCH_SIZE"] = str(want)
+    log(f"  embed batch size {want}")
+    try:
+        yield
+    finally:
+        os.environ.pop("VTSEARCH_EMBED_BATCH_SIZE", None)
+
+
 def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
     """Build one cell, returning a summary record."""
     out = pc.cell_path(dataset, embedder)
@@ -340,7 +362,8 @@ def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
     from vtscore.datasets.stages.embedding import embed_missing  # noqa: PLC0415
 
     t1 = time.time()
-    embed_missing(medias, embedder)
+    with _embed_batch_size(embedder):
+        embed_missing(medias, embedder)
     embed_s = time.time() - t1
 
     n_patch = sum(1 for m in medias.values() if m.get("patch_grid") is not None)

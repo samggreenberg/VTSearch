@@ -135,7 +135,15 @@ def is_object_category(name: str) -> bool:
 
 
 #: Embedders in the pile. ``patch`` embedders attach ``patch_grid`` and are the
-#: only ones that can carry a region-voting arm.
+#: only ones that can carry a region-voting arm. ``batch`` is the GPU forward
+#: batch size (``VTSEARCH_EMBED_BATCH_SIZE``); the app's default of 32 is sized
+#: for a modest card and wastes a build GPU on a base-sized encoder, while a
+#: SO400M/384 model at 32 is already the heavy end. Sizes are per model, not per
+#: run, so a fatter card only means the whole table can move up.
+#:
+#: Batch size does not change what is embedded: in fp32 it shifts vectors by
+#: ~1e-7 through kernel selection, orders of magnitude below anything the
+#: studies resolve.
 #: Deliberately three, not five. ``siglip`` is the shipped default and
 #: ``siglip2_l`` the premium end; the middles (``siglip_l``, ``siglip2``) were
 #: dropped because a study learns little from interpolating between them, and
@@ -146,10 +154,19 @@ def is_object_category(name: str) -> bool:
 #: cannot be attributed to either alone. Rebuild a middle column if a result
 #: ever needs that split -- ``build_pile.py --embedders siglip2`` restores one.
 EMBEDDERS: dict[str, dict] = {
-    "siglip": {"patch": False},
-    "siglip2_l": {"patch": False},
-    "dinov3_patch": {"patch": True, "gated": True},
+    "siglip": {"patch": False, "batch": 128},
+    "siglip2_l": {"patch": False, "batch": 32},
+    # Patch embedders hold an (N, H, W, D) grid per image, not one vector, so
+    # they carry far more activation memory per item than their backbone size
+    # alone suggests.
+    "dinov3_patch": {"patch": True, "gated": True, "batch": 64},
 }
+
+
+def embed_batch_size(embedder: str) -> int | None:
+    """This embedder's ``VTSEARCH_EMBED_BATCH_SIZE``, or ``None`` for the default."""
+    val = EMBEDDERS.get(embedder, {}).get("batch")
+    return int(val) if val else None
 
 
 def cells() -> list[tuple[str, str]]:

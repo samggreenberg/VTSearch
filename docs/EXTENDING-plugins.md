@@ -676,6 +676,35 @@ If the source ships pre-computed vectors, prefer
 `self.custom_metadata_map[filename] = {"embedding": vec}`; the framework
 treats those as already-embedded and skips them.
 
+#### Pre-computed vectors are validated
+
+Whatever you put in `content_vectors` / `custom_metadata_map` is checked
+before it becomes a media's stored vector, by
+`vtscore.embedding.precomputed.normalize_vector`.  A vector must be a flat,
+finite, numeric row; it is coerced to `float32`, so a `float64` export or a
+half-precision embed is widened for you rather than leaving the dataset
+holding mixed dtypes.  Anything else — a ragged array, a `(3, 4)` block where
+a single row was expected, a `NaN` from a failed forward pass — raises
+`MismatchedVectorError` (a `ValueError` subclass) naming your file.
+
+This is stricter than it looks like it needs to be, for a reason: a bad
+vector does not fail where you introduced it.  A wrong-width row resurfaces
+much later as a bare `could not broadcast input array from shape (768,) into
+shape (1152,)` from inside the matrix builder, on an unrelated request that
+names neither your importer nor the file; and a non-finite row never raises at
+all, it silently poisons every score, threshold comparison and sort it reaches.
+
+Two related checks you will hit:
+
+- **Width vs. the embedder you name.** If you set `embedder="<name>"` (or ship
+  an `.npz` whose `embedder_name` says so), the vectors must match that
+  embedder's declared `embedding_dim`.  Declaring `siglip2_l` while shipping
+  768-dim rows is a self-contradiction, and it is rejected at import.
+- **Nameless vectors.** A vector supplied with no embedder name is stored under
+  a sentinel key and re-keyed to the embedder the load actually picked.  That
+  re-keying asserts the vector lives in that embedder's space, so it is
+  width-checked too — supply the name yourself if you know it.
+
 When building dicts directly, the importer should also override
 `build_origin()` to return an empty origin (since the default
 implementation captures dataset-level field values like query IDs that

@@ -127,6 +127,15 @@ when the task is easy, and nothing else. **Retire it from this sweep.**
 The patch arm's price is compute: **6.4–8.5 s per step against ~0.6 s
 whole-image**, an 11–13× ratio that the per-cell wall time understates.
 
+**Every wall-time here is cache-warm and excludes the encoder.** The harness
+sources `pile_env.sh` and reads pre-embedded cells, so no forward pass runs
+during a cell — the per-step cost is the 150-vote loop over cached vectors, and
+its only encoder-dependent term is vector dimension. Read these numbers as
+*study* cost, never as the cost of deploying an encoder: the `dinov3_patch` step
+is 11–13× not because its backbone is large (it is a ViT-B, *smaller* than
+`siglip2_l`) but because each item carries a patch grid. See [Cost is two
+different things](#cost-is-two-different-things).
+
 ## What this sample can and cannot resolve
 
 Paired per-run differences, deep regime, `mean ± SE`; **bold** is at least two
@@ -154,6 +163,55 @@ on an operating point this study cannot measure.
 +0.06 AP against the premium encoder), though the *growth* of that margin is not
 resolvable. Its cost advantage is: −0.16 ± 0.02 on sub-patch targets against
 −0.07 ± 0.04 on large ones.
+
+---
+
+# Cost is two different things
+
+This report uses "cost" in two senses and they point in opposite directions.
+Everywhere except this section, **`cost` = fpr + fnr** — a labelling-error rate,
+with no compute in it. The wall-times are *study* cost on cached vectors. Neither
+is the cost of running an encoder, and a reader picking a configuration to deploy
+needs that third number, which the benchmark cannot see.
+
+Measured separately (2026-08-17, jobs `507149`/`507150`, 384 Visual Genome images
+through the real `vtscore` decode + processor + forward path):
+
+| stage, V100 · batch 32 · fp32 | `siglip` | `siglip2_l` |
+|---|---:|---:|
+| decode | 3.9 s (54 %) | 3.4 s (12 %) |
+| processor | 2.1 s (28 %) | 1.9 s (7 %) |
+| GPU forward | 1.3 s (18 %) | 22.1 s (81 %) |
+| throughput | 52.5 img/s | 14.0 img/s |
+
+**Forward-only, `siglip2_l` costs 17× `siglip`** (22.1 s vs 1.3 s), consistent
+with ~5× the parameters over ~3.7× the tokens — it is
+`siglip2-so400m-patch14-384` against `siglip-base-patch16-224`. The pile build
+logs show only 6.1× end-to-end (830 s vs 135 s for 12,000 images) because a fixed
+decode-and-preprocess tax — 82 % of the small model's run — dilutes it. So the
+indexing multiplier is a property of the *pipeline*, not the encoder: **~17× of
+GPU compute, 2–6× of wall-clock** depending on how much of the pipeline is
+overhead. The same multiplier applies per typed query at serve time, where it is
+user-visible latency rather than amortised indexing.
+
+**Indexing and search rank the arms in opposite orders.** `dinov3_patch` is
+11–13× per step because every item carries a patch grid (a 3.65 GB cell against
+`siglip2_l`'s 59 MB); *encoding* it is cheap — a ViT-B at 297 s per 12,000
+images, **2.8× faster than `siglip2_l`'s 830 s** on the same job. DINOv3 is the
+expensive arm to search and the middling arm to index; `siglip2_l` is the
+reverse. Neither the wall-time column nor the per-step figure predicts what a
+deployment pays.
+
+The pile was built un-tuned — V100, fp32, batch 32, serial decode — and that is
+where the tax comes from, not from anything intrinsic. On an L40S with fp16,
+batch 64 and threaded decode the same 12,000 `siglip2_l` images take 112 s
+instead of 855 s (7.6×). Four fixes are filed: #3144 (the pile builds on the
+cluster's slowest GPU) and #3145 (decode is serial, so the GPU idles 82 % of a
+`siglip` run) are numerically safe; #3143 (fp32, no autocast) and #3146 (slow
+image processor) perturb the vectors and are gated on a drift experiment. Because
+the pile is a shared cache, **it must not be partially rebuilt** — a pile with
+some cells fp16 and some fp32 is a confound that would surface months later as an
+unexplained arm difference.
 
 ---
 
@@ -536,20 +594,24 @@ target scale: small objects in cluttered frames.
 Nobody picks freely, so the comparison that matters is within a constraint.
 
 **Compute-limited, stuck on `siglip`.** You lose nothing measurable in cost
-against the premium encoder; it buys ranking, not an operating point. Your
-characteristic failure is over-inclusion (fpr 3× fnr on Visual Genome), so the
-lever is the threshold, not the encoder. And you have a text tower: a typed query
-gives you a usable ranking for free, worth 45–97 clicks on Visual Genome.
+against the premium encoder; it buys ranking, not an operating point — and it
+buys it at **~17× the GPU compute per image** to index, and the same multiplier
+per typed query at serve time. Your characteristic failure is over-inclusion
+(fpr 3× fnr on Visual Genome), so the lever is the threshold, not the encoder.
+And you have a text tower: a typed query gives you a usable ranking for free,
+worth 45–97 clicks on Visual Genome.
 
 **Users who will not draw boxes.** Spending on a patch encoder you cannot point at
 makes things **worse** — 0.08–0.09 cost worse than the default you ship. This is
 the clearest actionable finding here. Choosing between the two whole-image
-encoders on cost grounds is not something this study can justify either way.
+encoders on cost grounds is not something this study can justify either way, so
+the ranking gain is what you are buying and ~17× the encode compute is the price.
 
 **Users who will draw, on hardware that can afford it.** The advantage is real and
 largest where targets are small (−0.14 to −0.16 cost on the two smaller bands,
 −0.05 to −0.07 elsewhere), and on sub-patch targets it is the difference between a
-working detector and none. It costs 11–13× per step, has the worst cold start on
+working detector and none. It costs 11–13× per step to *search* — though only
+about a third of `siglip2_l`'s compute to *index* — has the worst cold start on
 Visual Genome (`too_few_default` 7 %), and cannot be seeded from text.
 
 **Anyone, on small targets.** Expect cost near 0.5 at best, and expect a

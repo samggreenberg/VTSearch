@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from vtscore.embedding.precomputed import stack_vectors
 from vtscore.utils.scores import sigmoid_to_finite_array
 
 if TYPE_CHECKING:
@@ -88,7 +89,8 @@ def _scores_in_patch_space(snap: dict[int, dict[str, Any]] | None, embedder_name
       that space's full-image vectors (:func:`_score_all_media`), so it must
       train on those vectors too - flooding it with patch rows would mix two
       unrelated embedding spaces into one model (or, when their dimensions
-      differ, fail outright at ``np.stack``).
+      differ, fail outright with a
+      :class:`~vtscore.embedding.precomputed.MismatchedVectorError`).
     * ``None`` (no per-detector primary) keeps the dataset-level score
       precedence, where any media carrying a ``patch_grid`` takes the patch
       path - the pre-per-detector behaviour.
@@ -341,7 +343,7 @@ def train_and_threshold(
     from vtscore.training.blend_schedules import BlendContext
     from vtscore.training.mlp import LINEAR_HEAD
 
-    X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
+    X = torch.from_numpy(stack_vectors(X_list, label="training vector"))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
 
@@ -651,9 +653,9 @@ def _build_vote_xy(
     multi-embedder dataset therefore trains on that space's **full-image**
     vectors, exactly the rows it will be scored over; without the gate its Bad
     votes flooded patch-space rows (and its boxed Good votes pooled one) into a
-    model scored in a different space entirely - a ``np.stack`` ValueError when
-    the two dimensions differ, silent garbage negatives when they happen to
-    match.
+    model scored in a different space entirely - a
+    :class:`~vtscore.embedding.precomputed.MismatchedVectorError` when the two
+    dimensions differ, silent garbage negatives when they happen to match.
     """
     patch_rows = _scores_in_patch_space(clips_dict, embedder_name)
     if embedder_name is None:
@@ -885,7 +887,7 @@ def _train_and_score_xy(
     # reads vectors from this same space the X_list were assembled in.
     score_emb = detector_score_embedder(det_ctx, clips_dict)
 
-    X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
+    X = torch.from_numpy(stack_vectors(X_list, label="training vector"))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
 
@@ -1138,7 +1140,7 @@ def train_detector_from_origins(
     if len(X_list) < 2 or num_good == 0 or num_bad == 0:
         return None, 0.5
 
-    X = torch.from_numpy(np.stack(X_list).astype(np.float32, copy=False))
+    X = torch.from_numpy(stack_vectors(X_list, label="training vector"))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
     input_dim = X.shape[1]
 

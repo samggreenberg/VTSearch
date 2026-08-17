@@ -54,11 +54,27 @@ class TestRepoIsClean:
         assert gate.main([]) == 0
 
     def test_runs_fast_enough_to_gate(self):
+        """The gate must stay cheap enough to run on every invocation.
+
+        The bound is deliberately loose. This asserts on **wall clock**, and the
+        suite runs under ``pytest -n auto`` on whatever machine is free — on a
+        shared GRID node it measured 5.10 s against a 5.0 s bound while the same
+        call takes 0.8-1.9 s unloaded, so the tight bound failed a green branch
+        on a 2% overshoot caused entirely by contention. A wall-clock assertion
+        with no headroom is the same flakiness antipattern as a ``time.sleep``
+        synchronisation (see CLAUDE.md).
+
+        20 s still catches what the test is for — a gate that grew super-linear
+        in repo size, or reintroduced a per-file subprocess — because the
+        unloaded runtime would have to grow more than tenfold to reach it. It
+        just no longer fails on the machine being busy.
+        """
         import time
 
         start = time.perf_counter()
         gate.main([])
-        assert time.perf_counter() - start < 5.0
+        elapsed = time.perf_counter() - start
+        assert elapsed < 20.0, f"check-docs took {elapsed:.1f}s; it runs on every ./run-tests.sh invocation"
 
 
 class TestSlugify:

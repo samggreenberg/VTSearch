@@ -9,6 +9,9 @@ so we can assert:
   GPU forward in chunks of ``embed_batch_size``.
 * Per-image PIL-decode failures don't kill the batch.
 * The returned list aligns position-for-position with the input list.
+* The decode is threaded and runs one batch *ahead* of the forward, so
+  the GPU is not idle while PIL works, and the overlap does not disturb
+  slot alignment.
 * The same plumbing works for ``patch_forward_bulk`` on the patch
   embedders.
 
@@ -17,6 +20,7 @@ No model weights are loaded; these tests run on CPU in milliseconds.
 
 from __future__ import annotations
 
+import threading
 from pathlib import Path
 from unittest import mock
 
@@ -215,6 +219,215 @@ class TestBulkEmbedImageFilesHelper:
 
         # batch_size=2 over 3 items → 2 batches → 2 progress ticks.
         assert events == [("embedding", 2, 3), ("embedding", 3, 3)]
+
+
+# ---------------------------------------------------------------------------
+# Threaded, one-batch-ahead decode
+# ---------------------------------------------------------------------------
+
+
+def _record_decode_threads(monkeypatch, module) -> set[str]:
+    """Patch ``_load_pil`` to record which thread each decode ran on."""
+    threads: set[str] = set()
+    lock = threading.Lock()
+    real_load = module._load_pil
+
+    def recording_load(source):
+        with lock:
+            threads.add(threading.current_thread().name)
+        return real_load(source)
+
+    monkeypatch.setattr(module, "_load_pil", recording_load)
+    return threads
+
+
+class TestDecodePrefetch:
+    """The decode overlaps the forward instead of blocking in front of it."""
+
+    def test_next_batch_decodes_during_the_current_forward(self, tmp_path, monkeypatch):
+        """The whole point: the GPU forward and the next decode run together.
+
+        The forward for batch 0 blocks until *every* image has been decoded.
+        With the decode inline that can never happen - batch 1 is only read
+        after the forward returns - so a serial implementation fails on the
+        wait timeout rather than by an assertion on timing.
+        """
+        from vtscore.media.image import _image_bulk
+
+        paths = [tmp_path / f"img_{i}.png" for i in range(4)]
+        for p in paths:
+            _write_image(p)
+        medias = [_media(p) for p in paths]
+
+        monkeypatch.setenv("VTSEARCH_DECODE_WORKERS", "4")
+
+        all_decoded = threading.Event()
+        seen = 0
+        lock = threading.Lock()
+        real_load = _image_bulk._load_pil
+
+        def counting_load(source):
+            img = real_load(source)
+            nonlocal seen
+            with lock:
+                seen += 1
+                if seen == len(paths):
+                    all_decoded.set()
+            return img
+
+        monkeypatch.setattr(_image_bulk, "_load_pil", counting_load)
+
+        overlapped: list[bool] = []
+
+        def fake_forward(images):
+            overlapped.append(all_decoded.wait(timeout=10))
+            return np.zeros((len(images), 1), dtype=np.float32)
+
+        out = _image_bulk.bulk_embed_image_files(
+            medias,
+            forward_pil_batch=fake_forward,
+            batch_size=2,
+            on_progress=lambda *a, **kw: None,
+            label="test",
+        )
+
+        # Batch 1 finished decoding while batch 0's forward was still running.
+        assert overlapped[0] is True
+        assert all(v is not None for v in out)
+
+    def test_decode_runs_off_the_calling_thread(self, tmp_path, monkeypatch):
+        from vtscore.media.image import _image_bulk
+
+        paths = [tmp_path / f"img_{i}.png" for i in range(3)]
+        for p in paths:
+            _write_image(p)
+
+        monkeypatch.setenv("VTSEARCH_DECODE_WORKERS", "2")
+        threads = _record_decode_threads(monkeypatch, _image_bulk)
+
+        _image_bulk.bulk_embed_image_files(
+            [_media(p) for p in paths],
+            forward_pil_batch=lambda imgs: np.zeros((len(imgs), 1), dtype=np.float32),
+            batch_size=2,
+            on_progress=lambda *a, **kw: None,
+            label="test",
+        )
+
+        assert threading.current_thread().name not in threads
+
+    def test_zero_workers_decodes_inline(self, tmp_path, monkeypatch):
+        """``VTSEARCH_DECODE_WORKERS=0`` is the escape hatch back to serial."""
+        from vtscore.media.image import _image_bulk
+
+        paths = [tmp_path / f"img_{i}.png" for i in range(3)]
+        for p in paths:
+            _write_image(p)
+
+        monkeypatch.setenv("VTSEARCH_DECODE_WORKERS", "0")
+        threads = _record_decode_threads(monkeypatch, _image_bulk)
+
+        out = _image_bulk.bulk_embed_image_files(
+            [_media(p) for p in paths],
+            forward_pil_batch=lambda imgs: np.zeros((len(imgs), 1), dtype=np.float32),
+            batch_size=2,
+            on_progress=lambda *a, **kw: None,
+            label="test",
+        )
+
+        assert threads == {threading.current_thread().name}
+        assert all(v is not None for v in out)
+
+    def test_out_of_order_completion_keeps_slot_alignment(self, tmp_path, monkeypatch):
+        """A slow first decode must not shuffle images against their slots.
+
+        Image *i* is a solid grey of level ``40 * i``, and the fake forward
+        reads that level back out, so a mis-ordered batch is visible in the
+        output rather than merely possible. Image 0's decode is held until a
+        later one finishes, which forces the completion order to differ from
+        the submission order.
+        """
+        from vtscore.media.image import _image_bulk
+
+        levels = [0, 40, 80, 120]
+        paths = []
+        for i, level in enumerate(levels):
+            p = tmp_path / f"img_{i}.png"
+            _write_image(p, color=(level, level, level))
+            paths.append(p)
+
+        monkeypatch.setenv("VTSEARCH_DECODE_WORKERS", "4")
+
+        released = threading.Event()
+        real_load = _image_bulk._load_pil
+
+        def staggered_load(source):
+            first = Path(str(source)).name == "img_0.png"
+            if first:
+                # Blocks until one of the later decodes lands, so image 0's
+                # future is the last to resolve.
+                released.wait(timeout=10)
+            img = real_load(source)
+            if not first:
+                released.set()
+            return img
+
+        monkeypatch.setattr(_image_bulk, "_load_pil", staggered_load)
+
+        def fake_forward(images):
+            return np.array([[float(im.getpixel((0, 0))[0])] for im in images], dtype=np.float32)
+
+        out = _image_bulk.bulk_embed_image_files(
+            [_media(p) for p in paths],
+            forward_pil_batch=fake_forward,
+            batch_size=4,
+            on_progress=lambda *a, **kw: None,
+            label="test",
+        )
+
+        assert [float(v[0]) for v in out if v is not None] == [float(x) for x in levels]
+
+    def test_threaded_decode_failure_still_lands_in_its_own_slot(self, tmp_path, monkeypatch):
+        from vtscore.media.image import _image_bulk
+
+        good_a = tmp_path / "a.png"
+        good_b = tmp_path / "b.png"
+        _write_image(good_a)
+        _write_image(good_b)
+        bad = tmp_path / "bad.png"
+        bad.write_bytes(b"not a real image")
+
+        monkeypatch.setenv("VTSEARCH_DECODE_WORKERS", "4")
+
+        out = _image_bulk.bulk_embed_image_files(
+            [_media(good_a), _media(bad), _media(good_b)],
+            forward_pil_batch=lambda imgs: np.ones((len(imgs), 2), dtype=np.float32),
+            batch_size=4,
+            on_progress=lambda *a, **kw: None,
+            label="test",
+        )
+
+        assert [v is None for v in out] == [False, True, False]
+
+    def test_patch_forward_bulk_also_prefetches(self, tmp_path, monkeypatch):
+        from vtscore.media.image import _image_bulk
+
+        paths = [tmp_path / f"img_{i}.png" for i in range(3)]
+        for p in paths:
+            _write_image(p)
+
+        monkeypatch.setenv("VTSEARCH_DECODE_WORKERS", "2")
+        threads = _record_decode_threads(monkeypatch, _image_bulk)
+
+        out = _image_bulk.bulk_patch_forward_image_files(
+            [_media(p) for p in paths],
+            forward_pil_batch=lambda imgs: [{"i": i} for i, _ in enumerate(imgs)],
+            batch_size=2,
+            on_progress=lambda *a, **kw: None,
+            label="test",
+        )
+
+        assert threading.current_thread().name not in threads
+        assert len(out) == 3 and all(o is not None for o in out)
 
 
 # ---------------------------------------------------------------------------

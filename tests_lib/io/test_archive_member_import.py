@@ -14,12 +14,26 @@ import pytest
 from vtscore.datasets.archive_stream import archive_member_ref, read_member
 from vtscore.datasets.importers._npz_vectors import read_npz_archive_member_rows
 from vtscore.datasets.importers.local_archive_member import IMPORTER
+from vtscore.embedding.binding import expected_dim_for_embedder
 
 MEMBERS = {
     "chunk_a.mp4": b"AAAA-payload-a" * 16,
     "sub/chunk_b.mp4": b"BBBB-payload-b" * 16,
 }
+#: Width used when a manifest declares no embedder (nothing to agree with).
 DIM = 512
+
+
+def _dim_for(embedder_name: str | None) -> int:
+    """Width a manifest naming *embedder_name* must use to be self-consistent.
+
+    Manifest reads reject an archive whose vectors contradict the embedder it
+    names, so a fixture cannot pair a real name with an arbitrary toy width -
+    that combination is precisely the mislabelled manifest the guard exists to
+    catch. Deriving the width here keeps every fixture a *valid* manifest, so
+    these tests exercise the behaviour they are about rather than the guard.
+    """
+    return expected_dim_for_embedder(embedder_name) or DIM
 
 
 def _make_tar(tmp_path: Path) -> Path:
@@ -42,7 +56,7 @@ def _make_manifest(
 ) -> Path:
     members = members if members is not None else list(MEMBERS)
     rng = np.random.default_rng(7)
-    vectors = rng.standard_normal((len(members), DIM)).astype(np.float32)
+    vectors = rng.standard_normal((len(members), _dim_for(embedder_name))).astype(np.float32)
     manifest = tmp_path / "manifest.npz"
     archives = np.array(str(archive)) if scalar_archive else np.array([str(archive)] * len(members))
     arrays = {"vectors": vectors, "members": np.array(members), "archives": archives}
@@ -63,7 +77,7 @@ def _make_windowed_manifest(tmp_path: Path, archive: Path) -> Path:
     clip_starts = [s for _, s, _ in rows] + [float("nan")]  # NaN: whole-member row, no window
     clip_ends = [e for _, _, e in rows] + [float("nan")]
     rng = np.random.default_rng(11)
-    vectors = rng.standard_normal((len(members), DIM)).astype(np.float32)
+    vectors = rng.standard_normal((len(members), _dim_for("xclip"))).astype(np.float32)
     manifest = tmp_path / "windowed.npz"
     np.savez(
         manifest,
@@ -86,7 +100,7 @@ class TestManifestReader:
         assert {r["member"] for r in rows} == set(MEMBERS)
         for r in rows:
             assert Path(r["archive"]).name == "shard_000000.tar"
-            assert r["vector"].shape == (DIM,)
+            assert r["vector"].shape == (_dim_for("xclip"),)
         # filename defaults to the member basename.
         by_member = {r["member"]: r for r in rows}
         assert by_member["sub/chunk_b.mp4"]["filename"] == "chunk_b.mp4"
@@ -120,7 +134,7 @@ class TestImporter:
             assert "media_path" not in media or media["media_path"] is None
             # Precomputed embedding is carried, under the manifest's embedder.
             assert media["embedder"] == "xclip"
-            assert media["embeddings"]["xclip"].shape == (DIM,)
+            assert media["embeddings"]["xclip"].shape == (_dim_for("xclip"),)
             assert len(media["md5"]) == 32
             ref = media["archive_member"]
             assert Path(ref["path"]).name == "shard_000000.tar"
@@ -263,7 +277,7 @@ class TestWindowedManifest:
         manifest = tmp_path / "wid.npz"
         np.savez(
             manifest,
-            vectors=rng.standard_normal((2, DIM)).astype(np.float32),
+            vectors=rng.standard_normal((2, _dim_for("xclip"))).astype(np.float32),
             members=np.array(["chunk_a.mp4", "chunk_a.mp4"]),
             archives=np.array(str(archive)),
             window_id=np.array(["w0", "w1"]),
@@ -323,7 +337,7 @@ class TestLocalArchiveMemberSource:
         fetched = source.fetch_item("chunk_a.mp4")
         assert fetched.path is None
         assert fetched.embedding is not None
-        assert fetched.embedding.shape == (DIM,)
+        assert fetched.embedding.shape == (_dim_for("xclip"),)
         assert fetched.embedder_name == "xclip"
         # Re-supplied vector matches the in-memory embedding from import.
         np.testing.assert_array_equal(fetched.embedding, media["embeddings"]["xclip"])

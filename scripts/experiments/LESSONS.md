@@ -73,6 +73,7 @@ correct union of the two branches with no judgement involved.
 | Date | Lesson | Issue |
 |---|---|---|
 | 2026-08-17 | [a hardcoded GPU type is a pin that never reports its own cost](lessons/2026-08-17-a-hardcoded-gpu-type-is-a-pin-that.md) | #3144 |
+| 2026-08-17 | [a launcher that exits 1 with no output submitted nothing](lessons/2026-08-17-a-launcher-that-exits-1-with-no-output.md) | #3143 |
 | 2026-08-17 | [four decimals invented a finding](lessons/2026-08-17-four-decimals-invented-a-finding.md) | #3129 |
 | 2026-08-17 | [the report cited a script nobody committed](lessons/2026-08-17-the-report-cited-a-script-nobody-committed.md) | #3129 |
 | 2026-08-13 | [the report died on the laptop's RAM, not on the GRID's](lessons/2026-08-13-the-report-died-on-the-laptops-ram.md) | #3131 |

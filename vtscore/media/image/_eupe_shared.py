@@ -38,6 +38,7 @@ from vtscore.config import EUPE_MODEL_ID
 from vtscore.media.embedder import (
     IMPORT_MODULE_ESTIMATES,
     MediaEmbedder,
+    embed_autocast,
     embedder_load_setup,
     intercept_tqdm_progress,
     timed_progress,
@@ -133,7 +134,7 @@ class _EupeBase(MediaEmbedder):
                 weights=EUPE_MODEL_ID,
                 trust_repo=True,  # pyright: ignore[reportArgumentType]  # bool is valid at runtime; stubs only list str
             )
-        self._model = to_compute_device(self._model)
+        self._model = to_compute_device(self._model, allow_half=True)
         self._model.eval()
 
         # EUPE doesn't ship a HF AutoImageProcessor, so build the
@@ -198,9 +199,9 @@ class _EupeBase(MediaEmbedder):
 
             tensors = [self._preprocess(im.convert("RGB")) for im in images]
             batch = torch.stack(tensors, dim=0)
-            device = next(self._model.parameters()).device
-            batch = batch.to(device)
-            with torch.no_grad():
+            param = next(self._model.parameters())
+            batch = batch.to(device=param.device, dtype=param.dtype)
+            with torch.no_grad(), embed_autocast():
                 features = self._model.forward_features(batch)
             return features
         except Exception:
@@ -245,9 +246,9 @@ class _EupeBase(MediaEmbedder):
             import torch  # noqa: PLC0415
 
             tensor = self._preprocess(image).unsqueeze(0)
-            device = next(self._model.parameters()).device
-            tensor = tensor.to(device)
-            with torch.no_grad():
+            param = next(self._model.parameters())
+            tensor = tensor.to(device=param.device, dtype=param.dtype)
+            with torch.no_grad(), embed_autocast():
                 features = self._model.forward_features(tensor)
             return features
         except Exception:

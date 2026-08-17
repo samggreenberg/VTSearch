@@ -154,6 +154,7 @@ when one is in scope). Tests rely on this: they override
 | Constant                 | Default | Override env var              | Meaning                                                                                                          |
 |--------------------------|---------|-------------------------------|------------------------------------------------------------------------------------------------------------------|
 | `TORCH_THREADS`          | `1`     | `VTSEARCH_TORCH_THREADS`      | Native thread count for OpenMP / MKL / `torch.set_num_threads`. Default 1 keeps RSS low in constrained envs.     |
+| `DEFAULT_DECODE_WORKER_CAP` | `8`  | `VTSEARCH_DECODE_WORKERS`     | Ceiling on the image-decode prefetch pool (see `resolve_decode_workers()`). The pool itself is sized from the allocation, not this constant. |
 | `DEVICE`                 | `"auto"`| `VTSEARCH_DEVICE`             | Preferred compute device. `"auto"` resolves at call time; explicit `"cuda"`, `"cuda:0"`, `"cpu"`, `"mps"` are honoured, but a CUDA device the installed torch wheel can't actually run on falls back to `"cpu"`. |
 | `MAX_UPLOAD_MB`          | `2048`  | `VTSEARCH_MAX_UPLOAD_MB`      | HTTP body cap in megabytes (default 2 GiB). Oversized requests get HTTP 413. Set to `0` for unlimited (Flask's out-of-the-box behaviour). |
 | `TRAIN_EPOCHS`           | `200`   | `VTSEARCH_TRAIN_EPOCHS`       | Upper bound on head training epochs. `vtscore.training.mlp.train_model` may early-stop sooner.                   |
@@ -162,6 +163,25 @@ when one is in scope). Tests rely on this: they override
 | `MLP_HIDDEN_MIN`         | `8`     | -                             | Auto-sizing floor for MLP hidden width. Legacy MLP head only - the production linear head has none.              |
 | `MLP_HIDDEN_MAX`         | `32`    | -                             | Auto-sizing ceiling for MLP hidden width. Legacy MLP head only.                                                  |
 | `MLP_DROPOUT`            | `0.5`   | -                             | Dropout rate for trained MLPs. Ignored by the production linear head.                                            |
+
+### `allocated_cpus()` / `resolve_decode_workers()`
+
+`allocated_cpus()` answers "how many CPUs may this process actually run
+on", via `os.sched_getaffinity` (falling back to `os.cpu_count()` off
+Linux). That is deliberately *not* `os.cpu_count()`: a SLURM job holding
+`--cpus-per-task=8` on a 96-core node is entitled to 8, and the affinity
+mask is what reflects that.
+
+`resolve_decode_workers()` sizes the image-decode prefetch pool used by
+`vtscore.media.image._image_bulk` — the pool that decodes the next batch
+while the current batch's GPU forward runs. It returns
+`min(DEFAULT_DECODE_WORKER_CAP, allocated_cpus() - 1)`, floored at 1: one
+CPU is left for the calling thread, which runs the model processor and
+tensor marshalling. Read at call time, so it tracks an allocation the
+process only learns about after import.
+
+`VTSEARCH_DECODE_WORKERS` overrides the count outright; `0` disables the
+pool and decodes inline on the calling thread.
 
 ### `resolve_device()`
 
@@ -261,15 +281,17 @@ Every env var consulted by `vtscore.config`, in one place:
 | `VTSEARCH_DATA_DIR`         | Override `DATA_DIR`. Use to relocate state outside the repo.                                    |
 | `VTSEARCH_MODELS_DIR`       | Override `MODELS_CACHE_DIR`. Independent of `VTSEARCH_DATA_DIR`.                                |
 | `VTSEARCH_TORCH_THREADS`    | Set `TORCH_THREADS` (and therefore OMP / MKL caps). Floor of 1.                                 |
+| `VTSEARCH_DECODE_WORKERS`   | Override the image-decode prefetch pool size. `0` decodes inline. Read at call time, not import time. |
 | `VTSEARCH_DEVICE`           | Set `DEVICE`. `"auto"` is the default; pin to `"cuda"`, `"cuda:0"`, `"cpu"`, or `"mps"`.        |
 | `VTSEARCH_MAX_UPLOAD_MB`    | Set `MAX_UPLOAD_MB` (default 2048 MB). `0` = unlimited.                                         |
 | `VTSEARCH_TRAIN_EPOCHS`     | Set `TRAIN_EPOCHS` (head training upper bound).                                                 |
 | `VTSEARCH_TRAIN_PATIENCE`   | Set `TRAIN_PATIENCE` (early-stop patience). `0` disables.                                       |
 | `VTSEARCH_CALIBRATE_COUNT`  | Set `DEFAULT_CALIBRATE_COUNT` (first-run default; later writes go to per-user settings).        |
 
-All of these are read at import time. Setting them after `vtscore.config`
-has loaded has no effect; do the export before `python -m vtscore` /
-`python app.py` runs.
+All of these are read at import time except `VTSEARCH_DECODE_WORKERS`,
+which `resolve_decode_workers()` reads per call. Setting any of the
+others after `vtscore.config` has loaded has no effect; do the export
+before `python -m vtscore` / `python app.py` runs.
 
 ## Typical flow
 

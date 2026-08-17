@@ -20,6 +20,7 @@ LOGS="${PILE}/logs"
 # GPUs whose RAM is already reserved (GRID-PLAYBOOK section 1).
 MEM="${VTS_MEM:-24G}"
 TIME="${VTS_TIME:-8:00:00}"
+CPUS="${VTS_CPUS:-8}"
 
 mkdir -p "$LOGS"
 
@@ -28,6 +29,14 @@ ENVSET="$ENVSET && export VTS_REPO=$REPO VTS_PILE=$PILE"
 # Keep HF off /exp: one model download there fills the 50G quota.
 ENVSET="$ENVSET && export HF_HOME=$PILE/models VTSEARCH_MODELS_DIR=$PILE/models"
 ENVSET="$ENVSET && export VTSEARCH_DATA_DIR=$PILE/datadir && cd $HERE"
+
+# Spend the allocation the build job actually holds. VTSEARCH_TORCH_THREADS
+# defaults to 1 (vtscore/config.py), which is right for a constrained container
+# and wrong for a job holding $CPUS cores: the image processor's
+# resize/normalise runs on the CPU between decode and forward, and leaving it
+# single-threaded stalls the GPU behind it. The decode pool sizes itself from
+# the cpuset, so it needs no env var here.
+BUILDENV="$ENVSET && export VTSEARCH_TORCH_THREADS=$CPUS OMP_NUM_THREADS=$CPUS MKL_NUM_THREADS=$CPUS"
 
 # --- Stage 1: weights (CPU, blocking) -------------------------------------
 echo "=== prefetching weights (CPU) ==="
@@ -58,11 +67,11 @@ for ds in "${DATASETS[@]}"; do
     --job-name="pile-$ds" \
     --partition=gpu \
     --gres="gpu:${GPU_TYPE}:1" \
-    --cpus-per-task=8 \
+    --cpus-per-task="$CPUS" \
     --mem="$MEM" \
     --time="$TIME" \
     --output="$LOGS/pile-$ds-%j.out" \
-    --wrap "bash -lc '$ENVSET && python build_pile.py --datasets $ds'")
+    --wrap "bash -lc '$BUILDENV && python build_pile.py --datasets $ds'")
   # An empty job id means sbatch silently refused the request -- treat it as a
   # failure rather than reporting a launch that never happened (LESSONS.md).
   if [[ -z "$jid" ]]; then

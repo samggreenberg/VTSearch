@@ -162,6 +162,14 @@ implementation uses:
 | `timed_progress(cb, status, msg)` (`vtscore/media/embedder.py`) | Append `(Ns)` to a stuck progress message. |
 | `resolve_embed_batch_size(default)` (`vtscore/media/embedder.py`) | Read `$VTSEARCH_EMBED_BATCH_SIZE`.      |
 
+Image embedders additionally share `vtscore/media/image/_image_bulk.py`,
+which owns the decode half of the bulk pipeline: PIL-decode each media,
+hand the batch to the embedder's forward callable, and scatter the result
+back to the input slots. The decode runs on a thread pool **one batch
+ahead** of the forward — see
+[`resolve_decode_workers()`](config.md#allocated_cpus--resolve_decode_workers)
+for how the pool is sized and how to turn it off.
+
 ### `MediaClipper` - split one media into sub-medias of the same type
 
 `vtscore/media/clipper.py` - given one media dict, return one or more

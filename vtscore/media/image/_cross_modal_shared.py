@@ -29,7 +29,10 @@ import numpy as np
 
 from vtscore.media.embedder import (
     MediaEmbedder,
+    embed_autocast,
     extract_tensor as _extract_tensor,
+    to_float32,
+    to_model_inputs,
 )
 from vtscore.media.image._image_bulk import bulk_embed_image_files
 
@@ -90,11 +93,10 @@ class _CrossModalHFEmbedder(MediaEmbedder):
 
             image = image.convert("RGB")
             inputs = self._processor(images=image, return_tensors="pt")
-            device = next(self._model.parameters()).device
-            inputs = {k: v.to(device) for k, v in inputs.items()}
-            with torch.no_grad():
+            inputs = to_model_inputs(inputs, self._model)
+            with torch.no_grad(), embed_autocast():
                 outputs = self._model.get_image_features(**inputs)
-                embedding = _extract_tensor(outputs).detach().cpu().numpy()
+                embedding = to_float32(_extract_tensor(outputs).detach()).cpu().numpy()
             return embedding[0]
         except Exception:
             logging.getLogger(__name__).exception("Error embedding PIL image (%s)", self._label)
@@ -110,11 +112,10 @@ class _CrossModalHFEmbedder(MediaEmbedder):
 
         rgb = [im.convert("RGB") for im in images]
         inputs = self._processor(images=rgb, return_tensors="pt")
-        device = next(self._model.parameters()).device
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        with torch.no_grad():
+        inputs = to_model_inputs(inputs, self._model)
+        with torch.no_grad(), embed_autocast():
             outputs = self._model.get_image_features(**inputs)
-            return _extract_tensor(outputs).detach().cpu().numpy()
+            return to_float32(_extract_tensor(outputs).detach()).cpu().numpy()
 
     def _embed_media_bulk_impl(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
         if self._model is None:
@@ -139,10 +140,10 @@ class _CrossModalHFEmbedder(MediaEmbedder):
             import torch  # noqa: PLC0415
 
             inputs = self._processor(text=[text], return_tensors="pt", **self._text_processor_kwargs)
-            device = next(self._model.parameters()).device
-            inputs = {k: v.to(device) for k, v in inputs.items()}
-            with torch.no_grad():
-                text_vec = _extract_tensor(self._model.get_text_features(**inputs)).detach().cpu().numpy()[0]
+            inputs = to_model_inputs(inputs, self._model)
+            with torch.no_grad(), embed_autocast():
+                text_out = _extract_tensor(self._model.get_text_features(**inputs)).detach()
+                text_vec = to_float32(text_out).cpu().numpy()[0]
             return text_vec
         except Exception:
             logging.getLogger(__name__).exception("Error embedding text query for image (%s)", self._label)
