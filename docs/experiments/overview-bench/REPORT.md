@@ -372,6 +372,15 @@ Every one of these has a nose in it. VG annotated the eye and the hair and not
 the nose. This is the same defect as `sky` below, and it means the *text* numbers
 on VG parts are lower bounds too.
 
+`caltech101_m` / `airplanes`, typed query — the clean case, and the reason a
+saturated dataset is still worth dumping. **Every false positive is a
+helicopter**: 13 of 13 for `siglip`, 16 of 17 for `siglip2_l` (the 17th is an
+elephant). Nothing is wrong with the labels and nothing is wrong with the
+ranking; a text query for "airplanes" simply lands on the nearest visual
+neighbour, and two Bad votes remove the whole error class — which is exactly what
+the clicked detector does on this dataset (mean cost 0.06 at 10 votes,
+0.005 by 15).
+
 ---
 
 # What moves the regime

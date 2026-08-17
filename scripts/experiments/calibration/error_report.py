@@ -16,6 +16,19 @@ from pathlib import Path
 TOPK = 12
 
 
+def elide(categories: str, width: int = 78) -> str:
+    """Comma-list of *categories*, cut at a comma rather than mid-word.
+
+    Cutting mid-word turns the last label into a misspelling of itself, which the
+    spell-check gate then trips over in a generated file nobody would edit.
+    """
+    cats = categories.replace("|", ", ")
+    if len(cats) <= width:
+        return cats
+    kept = cats[:width].rsplit(", ", 1)[0]
+    return f"{kept}, ..."
+
+
 def load(path: Path) -> list[dict]:
     with path.open() as fh:
         return list(csv.DictReader(fh))
@@ -57,15 +70,13 @@ def main() -> int:
         print(f"  {'score':>8}  {'image':>12}   annotated categories on that image")
         print("  " + "-" * 100)
         for r in fps[: args.topk]:
-            cats = r["all_categories"].replace("|", ", ")
-            print(f"  {r['_s']:8.4f}  {r['filename']:>12}   {cats[:78]}")
+            print(f"  {r['_s']:8.4f}  {r['filename']:>12}   {elide(r['all_categories'])}")
 
         print(f"\n  TOP FALSE NEGATIVES (dataset says IS '{cat}', model least confident)")
         print(f"  {'score':>8}  {'image':>12}   annotated categories on that image")
         print("  " + "-" * 100)
         for r in fns[: args.topk]:
-            cats = r["all_categories"].replace("|", ", ")
-            print(f"  {r['_s']:8.4f}  {r['filename']:>12}   {cats[:78]}")
+            print(f"  {r['_s']:8.4f}  {r['filename']:>12}   {elide(r['all_categories'])}")
 
         # How many FPs carry a category that is plausibly the same thing?
         near = [r for r in fps if any(cat in c or c in cat for c in r["all_categories"].split("|") if c)]
