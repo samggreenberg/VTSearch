@@ -50,6 +50,60 @@ makes small-vs-large paired on *identical* negatives. Sample a fixed
 `n_pos`/`n_neg` per cell so prevalence cannot drift between bands — unequal
 prevalence is what already made wave 1 and wave 2 non-comparable.
 
+## Which classes are fit to be in *C*
+
+Supply is necessary and nowhere near sufficient. A scale study asks two things
+of a class that mere objecthood does not, and `pile_config.is_object_category`
+— which defines the published `vg_box_*` sets — tests neither:
+
+- **Its size must be its own.** A part's box is set by its host, so a "small
+  nose" is just a distant face. Banding it measures the host's distance and the
+  arm quietly becomes a different experiment.
+- **Its absence must be checkable.** Negatives are ~95% of *I* and rest on "no
+  instance here". For a part that is unverifiable at any scale — every image
+  with a person has a nose whether or not VG annotated one — so the negatives
+  are poisoned by construction and no amount of review repairs them. That is
+  the worst case for the correction pass, not a candidate for it.
+
+`pile_config.scale_study_exclusion` layers the stricter policy on top, keeping
+`is_object_category` intact so the published sets stay reproducible. It rejects
+**parts** (`nose`, `tip`, `hair`, `collar`, `roof`, `tree trunk`), **places**
+(`court`, `station`, `intersection` — a location has no principled box extent),
+**polysemous** bare names (`trunk`, `bat` — one string, several objects, so the
+class cannot be scored as one; matched whole-name, since a modifier is what
+resolves the ambiguity), and **pervasive** classes, measured against
+`PERVASIVE_PREVALENCE` rather than listed. `sky` needs no rule: it is already a
+mass noun and never entered `vg_box_*` in the first place.
+
+The shortlist **reports** these with reasons instead of dropping them silently.
+The list is curated, so a wrong exclusion shrinks the study and a wrong
+inclusion changes what it measures — both need a human to look.
+
+## Near-synonyms: measure the vocabulary, don't trust it
+
+`glasses` / `sunglasses` / `reading glasses` would be a genuinely interesting
+fine-grained target, but only if the labels can be trusted, and free text gives
+no guarantee that they can: the names might be nested, disjoint, or overlapping
+per annotator, and those want three different experiments.
+
+`scan_name_overlap.py` decides it from geometry rather than from strings. On
+images where both names appear, it asks how often an `a` box lands on the same
+pixels as a `b` box (IoU ≥ 0.5) — same pixels under two names means one object
+annotated twice:
+
+| overlap | verdict | consequence |
+|---|---|---|
+| high both ways | **alias** | one label split arbitrarily; each name's negatives are poisoned by the other until merged |
+| high one way only | **subtype** | a real fine-grained pair; the broad name's negatives are sound |
+| near zero | **distinct** | different objects that merely co-occur |
+| never co-annotated | **untestable** | genuinely unrelated and systematically split-by-annotator are indistinguishable here |
+
+This is the principled version of the heuristic the overview benchmark tripped
+over — flagging false positives whose annotations *contain* the target name,
+which for `bus` matched 80 images annotated `bush`. String similarity is not
+evidence about objects; box geometry is. (`--names bus,bush` refutes that lead
+directly.)
+
 ## How corrections get recorded
 
 Record them in **VG's own shape** — `(image_id, class, box)` — and merge over
@@ -82,8 +136,17 @@ rate after review is bounded rather than unknown.
   per-`(class, band)` histogram and `shortlist_scale_classes.py` ranks
   categories on their binding (minimum) per-band supply, flagging COCO overlap
   and prior benchmark coverage. Both need the VG source under `DEMO_CACHE`, so
-  the scan is a GRID job. Choosing *C* from its output is the gate on
-  everything below. (Sonnet 5)
+  the scan is a GRID job. Choosing *C* from its output — including a human pass
+  over the reported exclusions — is the gate on everything below. (Sonnet 5)
+
+<!-- item-sep -->
+
+- **Decide whether a fine-grained pair earns a place in *C*.** Run
+  `scan_name_overlap.py` over the shortlist plus the eyewear cluster; if a pair
+  comes back `subtype` with real support in all three bands, it is the most
+  interesting arm available — scale *and* fine-grained discrimination on one
+  class. If it comes back `alias`, the names must be merged before either is
+  usable. Cheap, and it decides a study design. (Sonnet 5)
 
 <!-- item-sep -->
 

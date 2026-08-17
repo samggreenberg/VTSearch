@@ -120,26 +120,40 @@ def coco_name(vg_name: str) -> str | None:
     return candidate if candidate in COCO_CLASSES else None
 
 
-def rank(scan: dict, floor: int, max_inflation: float) -> list[dict]:
+def rank(scan: dict, floor: int, max_inflation: float) -> tuple[list[dict], list[tuple[str, str, int]]]:
     """Categories clearing *floor* images in every band, best-supported first.
 
     Ranked on the **minimum** per-band count, because that is the binding
     constraint: a class with 8,000 large images and 6 small ones cannot carry a
     three-band contrast however abundant it looks overall.
+
+    Returns the survivors *and* the classes that had the supply but failed the
+    fitness policy, each with its reason. The rejects are returned rather than
+    dropped because they are the list a human has to sanity-check: a wrong
+    exclusion silently shrinks the study, and a wrong *inclusion* silently
+    changes what it measures.
     """
     meta, stats = scan["meta"], scan["categories"]
     n_total = int(meta["n_images_scanned"])
-    rows = []
+    rows: list[dict] = []
+    excluded: list[tuple[str, str, int]] = []
     for name, s in stats.items():
-        if not pc.is_object_category(name):
+        per_band = {b: int(s["bands"][b]) for b in pc.BOX_BANDS}
+        if min(per_band.values()) < floor:
             continue
         # A category whose union box is much larger than one instance is
         # scattered instances, not a region a user would drag -- and its band
         # assignment would describe the scatter, not the object.
         if s["union_inflation"] > max_inflation:
+            excluded.append((name, "scattered", min(per_band.values())))
             continue
-        per_band = {b: int(s["bands"][b]) for b in pc.BOX_BANDS}
-        if min(per_band.values()) < floor:
+        # Pervasiveness is a property of the corpus, so it is measured here
+        # rather than listed in the config.
+        reason = pc.scale_study_exclusion(name)
+        if reason is None and int(s["n_images"]) / n_total >= pc.PERVASIVE_PREVALENCE:
+            reason = "pervasive"
+        if reason is not None:
+            excluded.append((name, reason, min(per_band.values())))
             continue
         rows.append(
             {
@@ -158,7 +172,8 @@ def rank(scan: dict, floor: int, max_inflation: float) -> list[dict]:
             }
         )
     rows.sort(key=lambda r: (-r["min_band"], r["category"]))
-    return rows
+    excluded.sort(key=lambda e: (e[1], -e[2]))
+    return rows, excluded
 
 
 def main() -> int:
@@ -182,7 +197,7 @@ def main() -> int:
     if "categories" not in scan:
         raise SystemExit(f"{scan_path} predates per-band supply; re-run scan_vg_boxes.py")
 
-    rows = rank(scan, args.floor, args.max_inflation)
+    rows, excluded = rank(scan, args.floor, args.max_inflation)
     n_total = int(scan["meta"]["n_images_scanned"])
     print(f"scanned {n_total} images; {len(scan['categories'])} categories in the scan")
     print(f"{len(rows)} clear >= {args.floor} images in ALL THREE bands (inflation <= {args.max_inflation})\n")
@@ -196,6 +211,25 @@ def main() -> int:
             f"{r['category']:<18}{r['min_band']:>7}{b['small']:>8}{b['medium']:>8}{b['large']:>8}"
             f"{r['neg_pool']:>9}  {(r['coco'] or ''):<14}{'yes' if r['benchmarked'] else ''}"
         )
+
+    if excluded:
+        print(f"\n=== had the supply, failed the fitness policy ({len(excluded)}) -- CHECK THESE ===")
+        by_reason: dict[str, list[str]] = {}
+        for name, reason, _ in excluded:
+            by_reason.setdefault(reason, []).append(name)
+        blurb = {
+            "part": "size is the host's, and 'no nose here' is unverifiable wherever a person is",
+            "place": "a location, not a thing: the box has no principled extent",
+            "polysemous": "one string, several objects, so it cannot be scored as one class",
+            "pervasive": f"annotated on >= {pc.PERVASIVE_PREVALENCE:.0%} of images; thin, untrustworthy negatives",
+            "scattered": "union box far larger than one instance; the band describes the scatter",
+            "non_object": "attribute, frame relation, or mass noun (pile_config.is_object_category)",
+        }
+        for reason in sorted(by_reason):
+            names = sorted(by_reason[reason])
+            print(f"\n  {reason} -- {blurb.get(reason, '')}")
+            for i in range(0, len(names), 6):
+                print(f"    {', '.join(names[i : i + 6])}")
 
     n_coco = sum(1 for r in rows if r["coco"])
     n_bench = sum(1 for r in rows if r["benchmarked"])
