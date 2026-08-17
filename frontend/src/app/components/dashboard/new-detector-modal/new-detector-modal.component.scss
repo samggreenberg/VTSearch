@@ -177,6 +177,20 @@
   font-size: var(--font-lg);
 }
 
+// Marks a row in the example stack as an unlabeled seed (from a seed
+// importer) rather than a Good exemplar the user picked by hand.
+.example-seed-badge {
+  flex: 0 0 auto;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  font-size: var(--font-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 // Media picker view container.  Participates in the modal-body flex
 // chain (`flex: 1 1 auto; min-height: 0`) so the inner demo table can
 // claim remaining height instead of capping itself with a fixed

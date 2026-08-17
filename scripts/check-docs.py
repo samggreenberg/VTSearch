@@ -56,7 +56,10 @@ ALLOWED_PATHS: dict[str, str] = {
     "vtsearch/_version.txt": "baked into Docker images only; gitignored",
     "frontend/node_modules/": "npm install output",
     "frontend/src/app/api/": "generated API client (npm run generate-api-client)",
-    "frontend/src/app/generated/": "build stamp written by frontend/scripts/build-stamp.mjs (gitignored)",
+    # Written by frontend/scripts/build-stamp.mjs from the prebuild/pretest
+    # hooks, so it is absent until the frontend has been built once -- and this
+    # gate runs before that build, so a cold container would otherwise fail here.
+    "frontend/src/app/generated/": "generated build stamp (frontend prebuild/pretest hook); gitignored",
     # Another repository's tree. Backticked because it reads as a path, but it
     # is the evaluation-framework repo's, and nothing here will ever create it.
     "scripts/sod/": "lives in the evaluation-framework repo, not this one (#2847)",

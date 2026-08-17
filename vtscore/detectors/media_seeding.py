@@ -11,6 +11,12 @@ Two entry points, both keyed off the same example → origin identity:
   matches them to loaded dataset medias by MD5, and votes them good, so
   the same exemplars are usable for training against whatever dataset is
   active.
+
+Both skip examples flagged ``"labeled": False`` - the unlabeled seeds a
+:mod:`seed importer <vtscore.seed_importers>` contributes.  Those are
+queries, not verdicts: they steer the first sort (the label view ranks
+against the centroid of *every* media example, seeds included) without
+claiming the media is a hit.  See :func:`is_labeled_example`.
 """
 
 from __future__ import annotations
@@ -47,6 +53,22 @@ def _ensure_embedder(embedder, dataset_embedder_name: str, dataset_media_type: s
         avail = embedders_for_type(dataset_media_type)
         embedder = avail[0] if avail else None
     return embedder
+
+
+def is_labeled_example(ex: dict[str, Any]) -> bool:
+    """Whether *ex* asserts a ``good`` verdict, rather than merely seeding a query.
+
+    A media example the user picked by hand is a good vote they already
+    cast, so it becomes a ``good`` label.  A media example contributed by a
+    :mod:`seed importer <vtscore.seed_importers>` is "close but not quite"
+    by construction and carries ``"labeled": False``, so it must stay out
+    of the labelset and out of the vote dicts - it exists only to point the
+    first sort in the right direction.
+
+    Absence of the key means labeled: every example predating seed
+    importers, and every hand-picked one, is a verdict.
+    """
+    return bool(ex.get("labeled", True))
 
 
 def _real_example_origin(ex: dict[str, Any]) -> dict[str, Any] | None:
@@ -172,7 +194,9 @@ def labeled_elements_from_examples(examples: list[dict]) -> list["LabeledElement
       cache file leaves ``md5`` empty and costs nothing: origin is the
       preferred identity key either way.
 
-    Text examples are skipped - they are queries, not labeled media.  The
+    Text examples are skipped - they are queries, not labeled media - as
+    are unlabeled seeds (:func:`is_labeled_example`), which are queries
+    wearing a media example's clothes.  The
     origin / origin_name derivation is shared with
     :func:`seed_good_votes_from_examples`, so the label a create emits and
     the media a later seed inserts collapse onto one identity key instead of
@@ -185,7 +209,7 @@ def labeled_elements_from_examples(examples: list[dict]) -> list["LabeledElement
     server_media_dir = example_media_dir()
     elements: list[LabeledElement] = []
     for ex in examples:
-        if not isinstance(ex, dict) or ex.get("type") != "media":
+        if not isinstance(ex, dict) or ex.get("type") != "media" or not is_labeled_example(ex):
             continue
         filename = (ex.get("value") or "").strip()
         if not filename:
@@ -310,7 +334,12 @@ def _seed_one_example(
 def seed_good_votes_from_examples(examples: list[dict]) -> int:
     """Seed good votes from a model's media examples.
 
-    For each ``type: "media"`` example, reads the file from the current
+    Unlabeled seeds (:func:`is_labeled_example`) are skipped: they are not
+    verdicts, so they are neither voted good nor inserted into the dataset.
+    They still steer the first sort, which reads their ``example_media/``
+    files directly.
+
+    For each labeled ``type: "media"`` example, reads the file from the current
     user's ``example_media/`` cache (see
     :func:`~vtscore.security.path_validation.example_media_dir`, and
     re-fetching it from the example's ``origin`` when the cached file is
@@ -334,7 +363,9 @@ def seed_good_votes_from_examples(examples: list[dict]) -> int:
     from vtscore.state import cached_md5_lookup, snapshot_medias
 
     media_examples = [
-        ex for ex in examples if isinstance(ex, dict) and ex.get("type") == "media" and ex.get("value", "").strip()
+        ex
+        for ex in examples
+        if isinstance(ex, dict) and ex.get("type") == "media" and ex.get("value", "").strip() and is_labeled_example(ex)
     ]
     if not media_examples:
         return 0

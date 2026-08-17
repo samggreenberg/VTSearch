@@ -582,7 +582,9 @@ inline, e.g. `VTS_MEM=64G VTS_GPU=a100 vtsearch`:
 | `VTS_VENV` | `.venv` | Virtualenv to activate (relative to `VTS_DIR`, or absolute) |
 | `VTS_MODULE` | (none) | Environment module(s) to `module load` before activating the venv (space-separated). Needed when your venv is built from a module-provided Python, e.g. `VTS_MODULE="python/3.12.3"` |
 | `VTS_PART` | `gpu` | SLURM partition |
-| `VTS_GPU` | `l40s` | GPU type requested via `--gres=gpu:<type>:1` |
+| `VTS_GPU` | (auto-picked) | GPU type requested via `--gres=gpu:<type>:1`. Unset, the type is chosen from what is free (see below); set it to pin one |
+| `VTS_GPU_TYPES` | `a100 l40s v100` | Candidate types for the auto-pick, **fastest first** |
+| `VTS_GPU_FALLBACK` | `l40s` | Type to request when the scheduler can't be queried |
 | `VTS_CPUS` | `8` | CPU cores |
 | `VTS_MEM` | `48G` | Memory (headroom for two model loads in one process) |
 | `VTS_TIME` | `8:00:00` | Walltime |
@@ -596,12 +598,33 @@ inline, e.g. `VTS_MEM=64G VTS_GPU=a100 vtsearch`:
 | `VTS_DIR` | `/exp/$USER/projects/VTSearch` | Project dir to drop into on the login node |
 | `VTS_PORT` | (cluster-computed) | Forwarded port; defaults to the same per-user value the launcher binds. Set it only if you overrode `VTS_PORT` on the cluster too |
 
-Adjust `VTS_GPU`, `VTS_PART`, and the CUDA wheel passed to `install.sh` to match
-your cluster's hardware. To find the exact GPU type string for `VTS_GPU`, check
-a node's gres: `scontrol show node <node> | grep -i Gres` (e.g. `Gres=gpu:v100:8`
-→ use `VTS_GPU=v100`) or list partition gres with `sinfo -o '%P %G'`. Note
-`VTS_GPU` takes just the type (`v100`), not the full `gpu:v100:8` spec — the
-launcher adds the `gpu:` prefix and `:1` count itself.
+#### Which GPU type gets requested
+
+Many clusters (HLTCOE's included) reject an untyped `--gres=gpu:1`, so a type
+has to be named — and any single name is a pin that goes stale. Pinning the slow
+type costs a multiple on every embed (a V100 embeds `siglip2_l` **2.3×** slower
+than an L40S on identical fp32 code); pinning a scarce fast type has meant
+multi-day queue waits. So the launcher doesn't pin: it runs
+[`scripts/slurm/pick_gpu.py`](../scripts/slurm/pick_gpu.py), which reads
+`scontrol show node` and requests the **fastest type in `VTS_GPU_TYPES` that has
+a free GPU right now**, falling back to whatever is most available, then to the
+largest pool, then to `VTS_GPU_FALLBACK`. Run it by hand to see the reasoning:
+
+```bash
+python3 scripts/slurm/pick_gpu.py --explain
+```
+
+Set `VTS_GPU` to override it outright (nothing is queried then). Set
+`VTS_GPU_TYPES` to match your own hardware and QOS — the default omits
+`h100`/`h200` because the HLTCOE `4gpu_tier` QOS caps them at 0, and a job
+requesting a type your QOS forbids pends forever.
+
+Adjust `VTS_GPU_TYPES`, `VTS_PART`, and the CUDA wheel passed to `install.sh` to
+match your cluster's hardware. To find the exact GPU type strings, check a node's
+gres: `scontrol show node <node> | grep -i Gres` (e.g. `Gres=gpu:v100:8` → use
+`v100`) or list partition gres with `sinfo -o '%P %G'`. Note these variables take
+just the type (`v100`), not the full `gpu:v100:8` spec — the launcher adds the
+`gpu:` prefix and `:1` count itself.
 
 ## Running the tests
 

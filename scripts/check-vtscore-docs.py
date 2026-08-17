@@ -58,6 +58,7 @@ DOC_FOR: dict[str, str] = {
     "plugins": "plugins.md",
     "projection": "projection.md",
     "security": "security.md",
+    "seed_importers": "seed-importers.md",
     "single_instance.py": "runtime-modules.md",
     "state": "state.md",
     "sync": "sync.md",

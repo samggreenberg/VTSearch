@@ -1,13 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { HttpTestingController } from '@angular/common/http/testing';
-import { DatasourceImportFormComponent } from './datasource-import-form.component';
+import { PluginImportFormComponent } from './plugin-import-form.component';
 import { provideZoneless } from '../../testing/zoneless-testbed';
 import { provideHttpTesting } from '../../testing/test-providers';
+import { SeedImportersApiService } from '../../services/seed-importers-api.service';
 
-describe('DatasourceImportFormComponent', () => {
-  let component: DatasourceImportFormComponent;
-  let fixture: ComponentFixture<DatasourceImportFormComponent>;
+describe('PluginImportFormComponent (datasource-importer default binding)', () => {
+  let component: PluginImportFormComponent;
+  let fixture: ComponentFixture<PluginImportFormComponent>;
   let httpMock: HttpTestingController;
 
   function setImporter(importer: unknown): void {
@@ -17,11 +18,11 @@ describe('DatasourceImportFormComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [DatasourceImportFormComponent],
+      imports: [PluginImportFormComponent],
       providers: [...provideZoneless(), ...provideHttpTesting()],
     }).compileComponents();
 
-    fixture = TestBed.createComponent(DatasourceImportFormComponent);
+    fixture = TestBed.createComponent(PluginImportFormComponent);
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
   });
@@ -166,5 +167,70 @@ describe('DatasourceImportFormComponent', () => {
 
     expect(component.values).toEqual({ y: 'd' });
     expect(component.error()).toBe('');
+  });
+});
+
+describe('PluginImportFormComponent (rebound to another plugin family)', () => {
+  let component: PluginImportFormComponent;
+  let fixture: ComponentFixture<PluginImportFormComponent>;
+  let httpMock: HttpTestingController;
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [PluginImportFormComponent],
+      providers: [...provideZoneless(), ...provideHttpTesting()],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(PluginImportFormComponent);
+    component = fixture.componentInstance;
+    httpMock = TestBed.inject(HttpTestingController);
+    // Seed importers: the batch, unlabeled sibling of datasource importers.
+    fixture.componentRef.setInput('api', TestBed.inject(SeedImportersApiService));
+    fixture.componentRef.setInput('importer', {
+      name: 'holder',
+      fields: [{ key: 'cluster', field_type: 'select', dynamic_options: true, required: true }],
+    });
+    TestBed.tick();
+  });
+
+  afterEach(() => {
+    httpMock.verify();
+  });
+
+  it('routes dynamic options to the bound family, not the datasource default', () => {
+    const req = httpMock.expectOne('/api/seed-import/holder/options');
+    expect(req.request.body.field_key).toBe('cluster');
+    req.flush({ options: [{ value: 'c1', label: 'Cluster 1' }] });
+
+    expect(component.values['cluster']).toBe('c1');
+  });
+
+  it('routes the run to the bound family and emits its batch response', () => {
+    vi.spyOn(component.imported, 'emit');
+    httpMock.expectOne('/api/seed-import/holder/options').flush({ options: [] });
+    component.values['cluster'] = 'c1';
+
+    component.submit();
+
+    const req = httpMock.expectOne('/api/seed-import/holder');
+    expect(req.request.body).toEqual({ cluster: 'c1' });
+    const batch = { items: [{ filename: 'a.wav', original_name: 'near.wav' }], count: 1, truncated: false };
+    req.flush(batch);
+
+    expect(component.imported.emit).toHaveBeenCalledWith(batch);
+  });
+
+  it('uses the caller-supplied submit label and error fallback', () => {
+    fixture.componentRef.setInput('submitLabel', 'Add seeds');
+    fixture.componentRef.setInput('errorFallback', 'Failed to fetch seeds');
+    TestBed.tick();
+    httpMock.expectOne('/api/seed-import/holder/options').flush({ options: [] });
+    component.values['cluster'] = 'c1';
+
+    component.submit();
+    httpMock.expectOne('/api/seed-import/holder').flush(null, { status: 500, statusText: 'Boom' });
+
+    expect(component.submitLabel()).toBe('Add seeds');
+    expect(component.error()).toBe('Failed to fetch seeds');
   });
 });

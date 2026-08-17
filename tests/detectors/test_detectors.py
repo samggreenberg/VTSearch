@@ -1370,6 +1370,79 @@ class TestLoadModelEndpoint:
         res = client.post("/api/detectors/registry/load", json={"detector_id": "nope"})
         assert res.status_code == 404
 
+    def test_load_with_unloaded_dataset_header_409s_cleanly(self, client):
+        """An ``X-Dataset-Id`` naming an unloaded dataset must 409, not hang.
+
+        Regression test for issue #3139: the route resolved the dataset
+        context *after* reserving the load and creating the task row, so the
+        ``DatasetNotLoadedError`` → 409 leaked both — the row sat at
+        "Preparing" forever and every retry returned "already in progress"
+        until the app was restarted.
+        """
+        from vtscore.concurrency.progress import detector_loading_tasks
+
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "StallRepro", "media_type": "audio", "text_query": "test"},
+        )
+        detector_id = res.get_json()["detector"]["id"]
+
+        res = client.post(
+            "/api/detectors/registry/load",
+            json={"detector_id": detector_id},
+            headers={"X-Dataset-Id": "not_a_loaded_dataset"},
+        )
+        assert res.status_code == 409
+        assert res.get_json().get("code") == "dataset_not_loaded"
+        # No task row was created, so the dashboard shows no stuck spinner.
+        assert detector_loading_tasks.get_tracker(f"_detload_{detector_id}") is None
+
+        # The reservation was not leaked: a retry against a loaded dataset
+        # must start a real load (previously: "already in progress" forever).
+        res = _load_detector_and_wait(client, detector_id)
+        assert res.status_code == 200
+        assert res.get_json().get("message") == "Loading started"
+        from vtscore.detectors.registry import is_detector_loaded
+
+        assert is_detector_loaded(detector_id)
+
+    def test_load_setup_failure_releases_reservation(self, client, monkeypatch):
+        """A failure between reserving the load and spawning the worker must
+        release the reservation and retire the task row with an error.
+
+        Regression test for issue #3139's defensive half: until ``spawn``
+        succeeds there is no worker to run ``end_detector_load``, so the route
+        itself must clean up or the detector is stuck "in progress" forever.
+        """
+        import vtsearch.threading as vts_threading
+        from vtscore.concurrency.progress import detector_loading_tasks
+        from vtscore.detectors.registry import begin_detector_load, end_detector_load
+
+        res = client.post(
+            "/api/detectors/registry",
+            json={"name": "SpawnBoom", "media_type": "audio", "text_query": "test"},
+        )
+        detector_id = res.get_json()["detector"]["id"]
+
+        def _boom(*args, **kwargs):
+            raise RuntimeError("thread pool exhausted")
+
+        monkeypatch.setattr(vts_threading, "spawn", _boom)
+        res = client.post("/api/detectors/registry/load", json={"detector_id": detector_id})
+        assert res.status_code == 500
+
+        # The reservation was released, so a retry owns the load again.
+        assert begin_detector_load(detector_id) == "reserved"
+        end_detector_load(detector_id)
+
+        # The task row is finished and carries an error, so the dashboard
+        # briefly shows the failure instead of a stuck "Preparing" spinner.
+        task_id = f"_detload_{detector_id}"
+        assert detector_loading_tasks.is_finished(task_id)
+        tracker = detector_loading_tasks.get_tracker(task_id)
+        assert tracker is not None
+        assert tracker.get().get("error")
+
     def test_load_clears_previous_labels(self, client):
         """Loading model B must not carry over labels from model A."""
         from vtsearch.state import (

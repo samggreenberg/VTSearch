@@ -9,12 +9,13 @@
 # otherwise race to populate the same shared HF cache (see prefetch_models.py).
 set -euo pipefail
 
+SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 USER="${USER:-sgreenberg}"
 REPO="${VTS_REPO:-/exp/$USER/projects/vts-pile}"
 PILE="${VTS_PILE:-/expscratch/$USER/vts-cache}"
 HERE="$REPO/scripts/experiments/pile"
 LOGS="${PILE}/logs"
-GPU_TYPE="${VTS_GPU:-v100}"
+# GPU type is auto-picked from what is free, just before submitting (see below).
 # These sweeps peak well under 16G; a fatter request wedges the job off idle
 # GPUs whose RAM is already reserved (GRID-PLAYBOOK section 1).
 MEM="${VTS_MEM:-24G}"
@@ -37,6 +38,21 @@ srun --job-name=pile-prefetch --partition=cpu --cpus-per-task=4 --mem=8G --time=
 DATASETS=("${@:-visual_genome_m caltech101_m coco_val}")
 read -r -a DATASETS <<< "${DATASETS[@]}"
 
+# Pick the GPU type from what is actually free, and do it *here* rather than at
+# the top of the script: stage 1 blocks on the queue, so availability measured
+# before the prefetch is stale by the time we submit. This used to be a
+# hardcoded `v100`, which is how every pile cell built before 2026-08-17 got
+# embedded on the slowest GPU on the cluster while L40S/A100 nodes idled --
+# 2.3x slower for siglip2_l (issue #3144). VTS_GPU still overrides.
+PICK_GPU="$SELF_DIR/../../slurm/pick_gpu.py"
+GPU_TYPE=""
+if [[ -f "$PICK_GPU" ]] && command -v python3 >/dev/null 2>&1; then
+  GPU_TYPE="$(python3 "$PICK_GPU" --need "${#DATASETS[@]}" --explain || true)"
+fi
+# A missing picker (or python) must not sink the launch; l40s is the safe pin
+# -- never the slowest type, and the largest pool now that rack4n01 is back.
+GPU_TYPE="${GPU_TYPE:-${VTS_GPU:-l40s}}"
+
 for ds in "${DATASETS[@]}"; do
   jid=$(sbatch --parsable \
     --job-name="pile-$ds" \
@@ -53,7 +69,7 @@ for ds in "${DATASETS[@]}"; do
     echo "FAILED to submit $ds (empty job id)" >&2
     exit 1
   fi
-  echo "submitted $ds -> job $jid  (log: $LOGS/pile-$ds-$jid.out)"
+  echo "submitted $ds -> job $jid  (gpu:$GPU_TYPE, log: $LOGS/pile-$ds-$jid.out)"
 done
 
 echo

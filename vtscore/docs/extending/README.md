@@ -35,6 +35,8 @@ group to pick.
 | Family | Entry-point group | Sentinel | Base class | Purpose |
 |--------|-------------------|----------|------------|---------|
 | Dataset importers | `vtscore.importers` | `IMPORTER` | `DatasetImporter` | Pull media into a dataset from a source (folder, archive, API, etc.) |
+| Datasource importers | `vtscore.datasource_importers` | `DATASOURCE_IMPORTER` | `DataSourceImporter` | Fetch *one* media item on demand, so a user can supply an exemplar from a URL, a server path, a service |
+| Seed importers | `vtscore.seed_importers` | `SEED_IMPORTER` | `SeedImporter` | Contribute a *batch* of unlabeled seed media ("close but not quite") to a new blank detector |
 | Results exporters | `vtscore.exporters` | `EXPORTER` | `LabelsetExporter` | Send autodetect results or labels somewhere (file, webhook, email, …) |
 | Label importers | `vtscore.label_importers` | `LABEL_IMPORTER` | `LabelImporter` | One-shot pull of `(md5, label)` pairs from an external source |
 | Labelset sources | `vtscore.labelset_sources` | `LABELSET_SOURCE` | `LabelsetSource` | Bidirectional sync of a detector's labelset with an external store |
