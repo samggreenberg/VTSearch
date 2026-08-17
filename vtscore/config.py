@@ -8,6 +8,10 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # torch is imported lazily everywhere below, never at module scope
+    import torch
 
 # Data paths are anchored to the repository root, NOT to the current working
 # directory.  Without this, starting the app from a different CWD (systemd,
@@ -294,7 +298,7 @@ def embed_precision() -> str:
     return mode
 
 
-def embed_weight_dtype() -> "object | None":
+def embed_weight_dtype() -> "torch.dtype | None":
     """The dtype to *cast the weights* to, or ``None`` to leave them fp32.
 
     ``None`` for both ``fp32`` and the autocast modes - the latter keep fp32
@@ -308,7 +312,7 @@ def embed_weight_dtype() -> "object | None":
     return torch.float16 if mode == "fp16" else torch.bfloat16
 
 
-def embed_autocast_dtype() -> "object | None":
+def embed_autocast_dtype() -> "torch.dtype | None":
     """The dtype for a ``torch.autocast`` block, or ``None`` for no autocast."""
     half = _AUTOCAST_MODES.get(embed_precision())
     if half is None:
