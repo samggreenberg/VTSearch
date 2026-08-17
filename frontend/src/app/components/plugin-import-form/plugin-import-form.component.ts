@@ -1,62 +1,98 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, output, signal } from '@angular/core';
 
 import { FormsModule } from '@angular/forms';
+import { Observable } from 'rxjs';
 
-import { ImporterField, ImporterInfo } from '../../models/api.models';
-import {
-  DatasourceImportersApiService,
-  DatasourceImportResult,
-} from '../../services/datasource-importers-api.service';
+import { FieldOptions, ImporterField, ImporterInfo } from '../../models/api.models';
+import { DatasourceImportersApiService } from '../../services/datasource-importers-api.service';
 import { apiErrorMessage } from '../../utils/api-error';
 import { DynamicFieldOptions } from '../../utils/dynamic-field-options';
 import { FieldHintIconComponent } from '../field-hint-icon/field-hint-icon.component';
 import { FileBrowserComponent } from '../file-browser/file-browser.component';
 
-/** Dynamic form for one datasource importer, rendered from its declared
- *  plugin fields (the single-item sibling of the Add Dataset modal's
- *  generic importer form).  Submitting runs the importer server-side; the
- *  fetched item lands in ``example_media/`` and is emitted as
- *  ``{filename, original_name}`` for the caller to use as a media
- *  example.
+/** The two calls this form makes against whichever plugin family backs it.
  *
- *  Shared by every flow that picks a single example media item: the New
- *  Detector modal's example picker and the re-sort prompt modal's
- *  swap-the-exemplar picker. */
+ *  Both {@link DatasourceImportersApiService} and
+ *  {@link SeedImportersApiService} satisfy this structurally, so switching
+ *  families is a matter of binding a different service — the field
+ *  rendering, dynamic-option refresh, validation, and error handling are
+ *  identical across families because they all come from the same
+ *  {@link ImporterField} declarations. */
+export interface PluginImportApi {
+  run(
+    pluginName: string,
+    values: Record<string, string>,
+    file?: File,
+    fileFieldKey?: string,
+  ): Observable<unknown>;
+  getFieldOptions(
+    pluginName: string,
+    fieldKey: string,
+    values: Record<string, string>,
+  ): Observable<{ options: FieldOptions[] }>;
+}
+
+/** Dynamic form for one media-fetching plugin, rendered from its declared
+ *  plugin fields (the single-item sibling of the Add Dataset modal's
+ *  generic importer form).  Submitting runs the plugin server-side; what it
+ *  fetched lands in ``example_media/`` and is emitted for the caller to use.
+ *
+ *  Family-neutral: {@link api} decides which endpoints the form talks to.
+ *  It defaults to the datasource importers (fetch a *single* exemplar), and
+ *  the New Detector modal's Blank flow rebinds it to the seed importers
+ *  (fetch a *batch* of unlabeled seeds).  The emitted payload's shape is
+ *  therefore the bound family's, so callers narrow it themselves.
+ *
+ *  Used by the New Detector modal's example picker and seed tabs, and by
+ *  the re-sort prompt modal's swap-the-exemplar picker. */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  selector: 'vt-datasource-import-form',
+  selector: 'vt-plugin-import-form',
   standalone: true,
   imports: [FormsModule, FieldHintIconComponent, FileBrowserComponent],
-  templateUrl: './datasource-import-form.component.html',
-  styleUrl: './datasource-import-form.component.scss',
+  templateUrl: './plugin-import-form.component.html',
+  styleUrl: './plugin-import-form.component.scss',
 })
-export class DatasourceImportFormComponent {
-  private api = inject(DatasourceImportersApiService);
+export class PluginImportFormComponent {
+  private datasourceApi = inject(DatasourceImportersApiService);
 
-  /** The datasource importer whose fields to render. */
+  /** The plugin whose fields to render. */
   readonly importer = input.required<ImporterInfo>();
 
-  /** Emits the fetched item once the importer run succeeds. */
-  readonly imported = output<DatasourceImportResult>();
+  /** Which plugin family's endpoints to call.  Defaults to datasource
+   *  importers so the single-exemplar callers need no binding. */
+  readonly api = input<PluginImportApi>(this.datasourceApi);
+
+  /** Label of the submit button in its resting state. */
+  readonly submitLabel = input('Load');
+
+  /** Tooltip on the submit button. */
+  readonly submitTitle = input('Fetch this media item and use it as the example');
+
+  /** Message shown when the run fails without a server-supplied one. */
+  readonly errorFallback = input('Failed to fetch the media item');
+
+  /** Emits the bound family's run-response once the plugin run succeeds. */
+  readonly imported = output<unknown>();
 
   values: Record<string, string> = {};
   selectedFile: File | null = null;
   fileFieldKey: string | null = null;
   readonly submitting = signal(false);
   readonly error = signal('');
-  /** Option lists for the importer's ``dynamic_options`` fields. */
+  /** Option lists for the plugin's ``dynamic_options`` fields. */
   readonly fieldOptions = new DynamicFieldOptions((key, values) =>
-    this.api.getFieldOptions(this.importer().name, key, values),
+    this.api().getFieldOptions(this.importer().name, key, values),
   );
 
   constructor() {
-    // Re-seed the form whenever the parent selects a different importer.
+    // Re-seed the form whenever the parent selects a different plugin.
     effect(() => {
       this.resetFor(this.importer());
     });
   }
 
-  /** Typed view of the importer's plugin fields for the template. */
+  /** Typed view of the plugin's fields for the template. */
   get importerFields(): ImporterField[] {
     return (this.importer().fields ?? []) as ImporterField[];
   }
@@ -118,7 +154,7 @@ export class DatasourceImportFormComponent {
     if (!this.canSubmit) return;
     this.submitting.set(true);
     this.error.set('');
-    this.api
+    this.api()
       .run(
         this.importer().name,
         { ...this.values },
@@ -132,7 +168,7 @@ export class DatasourceImportFormComponent {
         },
         error: (err) => {
           this.submitting.set(false);
-          this.error.set(apiErrorMessage(err, 'Failed to fetch the media item'));
+          this.error.set(apiErrorMessage(err, this.errorFallback()));
         },
       });
   }

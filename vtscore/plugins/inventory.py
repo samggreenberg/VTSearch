@@ -182,6 +182,12 @@ def _load_label_importers() -> Iterable[Any]:
     return list_label_importers()
 
 
+def _load_seed_importers() -> Iterable[Any]:
+    from vtscore.seed_importers import list_seed_importers
+
+    return list_seed_importers()
+
+
 def _load_labelset_sources() -> Iterable[Any]:
     from vtscore.labels.sources import list_labelset_sources
 
@@ -232,6 +238,7 @@ _LIBRARY_FAMILIES: tuple[FamilyProvider, ...] = (
     FamilyProvider("datasource_importers", "Datasource importers", _load_datasource_importers),
     FamilyProvider("exporters", "Results exporters", _load_exporters),
     FamilyProvider("label_importers", "Label importers", _load_label_importers),
+    FamilyProvider("seed_importers", "Seed importers", _load_seed_importers),
     FamilyProvider("labelset_sources", "Labelset sources", _load_labelset_sources),
     FamilyProvider("converters", "Media converters", _load_converters, _converter_entry),
     FamilyProvider("media_sources", "Media sources", _load_media_sources),

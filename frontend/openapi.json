@@ -5517,6 +5517,65 @@
         ],
         "type": "object"
       },
+      "SeedImporterEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "fields": {
+            "items": {
+              "additionalProperties": {},
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "hidden_from_picker": {
+            "type": "boolean"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "max_items": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ui_mode": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "display_name",
+          "fields",
+          "hidden_from_picker",
+          "icon",
+          "max_items",
+          "name",
+          "ui_mode"
+        ],
+        "type": "object"
+      },
+      "SeedImportersListResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "importers": {
+            "items": {
+              "$ref": "#/components/schemas/SeedImporterEntry"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "importers"
+        ],
+        "type": "object"
+      },
       "ServerMediaFromMediaIdRequest": {
         "additionalProperties": false,
         "properties": {
@@ -15412,6 +15471,121 @@
         }
       ]
     },
+    "/api/seed-import/{importer_name}": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "importer_name",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Plugin-dependent body shape (JSON, or multipart when the importer\ndeclares ``file`` fields).  Every returned item's bytes are saved into\nthe per-user ``example_media/`` directory; the response lists one\n``{filename, original_name, origin}`` entry per saved seed.\n\nA run that returns more than the importer's ``max_items`` is truncated\nto that cap rather than filling the directory, and the response says\nso via ``truncated``.  An empty batch is a valid answer (``count: 0``),\nnot an error: \"nothing matched\" is something the user should see rather\nthan a failure that hides which field was too narrow.",
+        "operationId": "run_seed_import",
+        "responses": {
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Fetch a batch of unlabeled seed media via the named seed importer.",
+        "tags": [
+          "seed_importers"
+        ]
+      }
+    },
+    "/api/seed-import/{importer_name}/options": {
+      "parameters": [
+        {
+          "in": "path",
+          "name": "importer_name",
+          "required": true,
+          "schema": {
+            "minLength": 1,
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "description": "Same contract as ``POST /api/dataset/import/<name>/options``.",
+        "operationId": "seed_importer_field_options",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImporterFieldOptionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImporterFieldOptionsResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "description": "Unknown or non-dynamic field key."
+          },
+          "404": {
+            "description": "Unknown seed importer name."
+          },
+          "422": {
+            "$ref": "#/components/responses/UNPROCESSABLE_CONTENT"
+          },
+          "500": {
+            "description": "get_field_options did not return a list."
+          },
+          "501": {
+            "description": "Importer does not implement get_field_options."
+          },
+          "502": {
+            "description": "Remote service backing dynamic options raised an error."
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Return dropdown options for a dynamic-options field.",
+        "tags": [
+          "seed_importers"
+        ]
+      }
+    },
+    "/api/seed-importers": {
+      "get": {
+        "description": "Empty on a vanilla install: no seed importer ships in-tree, so the New\nDetector modal's Blank flow shows only its stock Text and media tabs\nuntil a third-party plugin registers one.",
+        "operationId": "list_seed_importers_route",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeedImportersListResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "List the available seed importers.",
+        "tags": [
+          "seed_importers"
+        ]
+      }
+    },
     "/api/server-media-files": {
       "get": {
         "operationId": "list_server_media_files",
@@ -16445,6 +16619,10 @@
     {
       "description": "Datasource importers: fetch a single media item into example_media/.",
       "name": "datasource_importers"
+    },
+    {
+      "description": "Seed importers: fetch a batch of unlabeled seed media into example_media/.",
+      "name": "seed_importers"
     },
     {
       "description": "App version and SPA / static-file serving.",

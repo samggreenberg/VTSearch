@@ -24,6 +24,9 @@ describe('NewDetectorModalComponent', () => {
     httpMock = TestBed.inject(HttpTestingController);
     TestBed.tick(); // run ngOnInit under zoneless (issues the init GETs)
 
+    // Seed importers back the extra Blank-flow example tabs; the family
+    // ships no built-ins, so the default answer is an empty roster.
+    httpMock.expectOne('/api/seed-importers').flush({ importers: [] });
     // Flush the media types request from ngOnInit
     httpMock.expectOne('/api/media-types').flush({
       media_types: [
@@ -419,6 +422,112 @@ describe('NewDetectorModalComponent', () => {
     req.flush({ ok: true, detector: { id: '789', name: 'Barks' } });
   });
 
+  // --- Seed importers: extra Blank-flow example tabs (issue #3140) ---
+
+  it('adds no example tabs when no seed importer is registered', () => {
+    expect(component.seedImporters()).toEqual([]);
+    expect(component.activeSeedImporter).toBeNull();
+  });
+
+  it('appends an imported batch to the stack as unlabeled seeds', () => {
+    component.mediaType.set('');
+
+    component.onSeedsImported({
+      count: 2,
+      truncated: false,
+      items: [
+        { filename: 'aaa.wav', original_name: 'near-miss-1.wav', origin: null },
+        { filename: 'bbb.wav', original_name: 'near-miss-2.wav', origin: null },
+      ],
+    });
+
+    expect(component.mediaExamples().map((e) => e.value)).toEqual(['aaa.wav', 'bbb.wav']);
+    expect(component.mediaExamples().every((e) => e.seed)).toBe(true);
+    // Media type is inferred from the original filename's extension.
+    expect(component.mediaExamples()[0].mediaType).toBe('audio');
+    // The stack is where the user prunes what arrived, so land them on it.
+    expect(component.exampleTab()).toBe('media');
+    expect(component.seedNotice()).toBe('Added 2 seeds.');
+  });
+
+  it('says so when a batch comes back empty or truncated', () => {
+    component.onSeedsImported({ count: 0, truncated: false, items: [] });
+    expect(component.mediaExamples()).toEqual([]);
+    expect(component.seedNotice()).toContain('no seeds');
+
+    component.onSeedsImported({
+      count: 1,
+      truncated: true,
+      items: [{ filename: 'aaa.wav', original_name: 'a.wav' }],
+    });
+    expect(component.seedNotice()).toContain("importer's limit");
+  });
+
+  it('marks seed examples labeled:false in the create payload', () => {
+    const origin = { importer: 'holder', params: { cluster: 'c1' } };
+    component.name.set('Near misses');
+    component.mediaType.set('image');
+    component.mediaExamples.set([
+      { value: 'hand.jpg', display: 'hand.jpg', mediaType: 'image', thumbFailed: false },
+      { value: 'seed.jpg', display: 'seed.jpg', mediaType: 'image', thumbFailed: false, origin, seed: true },
+    ]);
+
+    component.submit();
+
+    const req = httpMock.expectOne('/api/detectors/registry');
+    expect(req.request.body.examples).toEqual([
+      { type: 'media', value: 'hand.jpg' },
+      { type: 'media', value: 'seed.jpg', origin, labeled: false },
+    ]);
+    req.flush({ ok: true, detector: { id: '901', name: 'Near misses' } });
+  });
+
+  it('prefers a hand-picked exemplar over a seed for the legacy scalar', () => {
+    component.name.set('Mixed');
+    component.mediaType.set('image');
+    component.mediaExamples.set([
+      { value: 'seed.jpg', display: 'seed.jpg', mediaType: 'image', thumbFailed: false, seed: true },
+      { value: 'hand.jpg', display: 'hand.jpg', mediaType: 'image', thumbFailed: false },
+    ]);
+
+    component.submit();
+
+    const req = httpMock.expectOne('/api/detectors/registry');
+    expect(req.request.body.media_example).toBe('hand.jpg');
+    req.flush({ ok: true, detector: { id: '902', name: 'Mixed' } });
+  });
+
+  it('does not auto-name the detector after a seed', () => {
+    component.onSeedsImported({
+      count: 1,
+      truncated: false,
+      items: [{ filename: 'aaa.wav', original_name: 'near-miss.wav' }],
+    });
+    // A seed is "close but not quite", so naming after it would be wrong.
+    expect(component.name()).toBe('');
+
+    // A hand-picked exemplar arriving later still names it.
+    component.onDatasourceImported({ filename: 'bbb.wav', original_name: 'bark.wav' });
+    expect(component.name()).toBe('bark');
+  });
+
+  it('surfaces registered seed importers as example tabs', () => {
+    component.seedImporters.set([
+      { name: 'holder', display_name: 'Holder', description: 'Near misses' } as never,
+    ]);
+
+    component.setExampleTab('holder');
+
+    expect(component.exampleTab()).toBe('holder');
+    expect(component.activeSeedImporter?.name).toBe('holder');
+
+    // Switching back to a stock tab drops the plugin panel and its notice.
+    component.seedNotice.set('Added 2 seeds.');
+    component.setExampleTab('text');
+    expect(component.activeSeedImporter).toBeNull();
+    expect(component.seedNotice()).toBe('');
+  });
+
   // --- Trained tab: label-importer plugin field parity (issue #2597) ---
 
   it('fetches dynamic options when a Trained-tab importer is selected', () => {
@@ -635,6 +744,7 @@ describe('NewDetectorModalComponent with defaultMediaType', () => {
     httpMock = TestBed.inject(HttpTestingController);
     TestBed.tick(); // run ngOnInit under zoneless (issues the init GETs)
 
+    httpMock.expectOne('/api/seed-importers').flush({ importers: [] });
     httpMock.expectOne('/api/media-types').flush({
       media_types: [
         { type_id: 'audio', name: 'Audio', icon: 'audio' },
@@ -675,6 +785,7 @@ describe('NewDetectorModalComponent (semantic_only server)', () => {
     httpMock = TestBed.inject(HttpTestingController);
     TestBed.tick();
 
+    httpMock.expectOne('/api/seed-importers').flush({ importers: [] });
     httpMock.expectOne('/api/media-types').flush({
       media_types: [{ type_id: 'image', name: 'Image', icon: 'image' }],
     });

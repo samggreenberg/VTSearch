@@ -80,9 +80,34 @@
               [attr.aria-selected]="exampleTab() === 'media'"
               (click)="setExampleTab('media')"
               [title]="'Pick an example ' + exampleMediaTabLabel.toLowerCase() + ' to find more like it.'">{{ exampleMediaTabLabel }}</button>
+            <!-- One tab per registered seed importer (none on a vanilla
+                 install): a plugin-supplied batch of "close but not quite"
+                 media that steers the first sort without being voted Good. -->
+            @for (seedImp of seedImporters(); track seedImp.name) {
+              <button type="button" class="tab" role="tab"
+                [class.active]="exampleTab() === seedImp.name"
+                [attr.aria-selected]="exampleTab() === seedImp.name"
+                (click)="setExampleTab(seedImp.name)"
+                [title]="seedImp.description || ('Add unlabeled seed media from ' + (seedImp.display_name || seedImp.name) + '.')">{{ seedImp.display_name || seedImp.name }}</button>
+            }
           </div>
 
-          @if (exampleTab() === 'text') {
+          @if (activeSeedImporter; as seedImp) {
+            <div class="example-panel">
+              <p class="info-text">
+                Adds unlabeled <strong>seeds</strong>: media that are close to what you're after
+                without being it. They steer the first sort, and are not counted as Good votes.
+              </p>
+              <vt-plugin-import-form
+                [importer]="seedImp"
+                [api]="seedImportersApi"
+                submitLabel="Add seeds"
+                submitTitle="Fetch seed media and add them to this detector's examples"
+                errorFallback="Failed to fetch seeds"
+                (imported)="onSeedsImported($any($event))"
+              ></vt-plugin-import-form>
+            </div>
+          } @else if (exampleTab() === 'text') {
             <div class="example-panel">
               <div class="text-input-row">
                 <input
@@ -127,6 +152,10 @@
                         <svg class="example-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3zm2 7.5 2.5-3 1.75 2L10.5 6.5 13 11H4v-.5zM5.5 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg>
                       }
                       <span class="example-label" [title]="example.display">{{ example.display }}</span>
+                      @if (example.seed) {
+                        <span class="example-seed-badge"
+                          title="An unlabeled seed: it steers the first sort but is not counted as a Good vote.">Seed</span>
+                      }
                       <button type="button" class="btn btn--secondary btn--sm" (click)="removeMediaExample(i)" title="Remove this example">Remove</button>
                     </div>
                   }
@@ -139,6 +168,9 @@
                   sublabel="or click to upload from this computer"
                   (filesSelected)="onLocalFileDropped($event)"
                 ></vt-drop-zone>
+              }
+              @if (seedNotice()) {
+                <p class="info-text">{{ seedNotice() }}</p>
               }
             </div>
           }
@@ -470,10 +502,10 @@
            importer's declared plugin fields (server file, URL download,
            third-party datasource importers). -->
       @if (selectedDatasourceImporter; as dsImporter) {
-        <vt-datasource-import-form
+        <vt-plugin-import-form
           [importer]="dsImporter"
-          (imported)="onDatasourceImported($event)"
-        ></vt-datasource-import-form>
+          (imported)="onDatasourceImported($any($event))"
+        ></vt-plugin-import-form>
       }
 
       <!-- Demo file picker: appears after picking a demo from the table.

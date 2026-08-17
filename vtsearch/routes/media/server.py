@@ -75,6 +75,30 @@ def _get_server_media_dir() -> Path:
     return example_media_dir()
 
 
+def save_example_media_bytes(data: bytes, original_name: str) -> str:
+    """Write *data* into the per-user ``example_media/`` directory.
+
+    Returns the generated storage filename (a random hex name keeping
+    *original_name*'s suffix, since the suffix drives media-type inference
+    and decoding downstream).  The caller-supplied name is never used as a
+    path component, so a hostile filename from a plugin or a remote source
+    cannot escape the directory.
+
+    Shared by every route that materialises fetched bytes as an example:
+    the datasource-importer single fetch and the seed-importer batch, which
+    must agree on the naming and the destination or the resulting
+    ``{type: "media", value: <filename>}`` examples would not resolve.
+    """
+    import uuid
+
+    suffix = Path(original_name).suffix or ".bin"
+    safe_name = f"{uuid.uuid4().hex}{suffix}"
+    media_dir = _get_server_media_dir()
+    media_dir.mkdir(parents=True, exist_ok=True)
+    (media_dir / safe_name).write_bytes(data)
+    return safe_name
+
+
 @media_server_bp.route("/api/server-media-files/upload", methods=["POST"])
 @media_server_bp.response(201, ServerMediaUploadResponseSchema)
 @media_server_bp.alt_response(

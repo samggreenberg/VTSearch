@@ -265,15 +265,22 @@ The full `examples` list is persisted on both the detector JSON and the
 registry entry. Every **media** example additionally becomes a `good`
 `LabeledElement` in the detector's labelset right away (so `num_training`
 is the example count, not 0): a supplied exemplar is a vote the user
-already cast. Each label carries the example's durable `origin` when it has
+already cast. The exception is an example marked `"labeled": false` — an
+unlabeled *seed* from a [seed importer](medias.md#seed-importers), i.e. media that is
+close to the target without being it. A seed is persisted and steers the
+first sort like any other example, but produces no label and casts no vote,
+so a detector built from seeds alone starts at `num_training: 0`.
+Each label carries the example's durable `origin` when it has
 one (`url_download`, `server_file`, …), else the `example_media` sentinel;
 because labels are origin-keyed and dataset-agnostic, an `https://` exemplar
 is kept verbatim even when the dataset it is used against holds only local
 files. Text examples are queries, not media, and produce no labels.
 
-On detector load every media example is *also* seeded as a Good vote against
-the active dataset (matched by MD5, or embedded and inserted when absent), and
-Autopilot's Good phase sorts against the embedding centroid of all of them.
+On detector load every labeled media example is *also* seeded as a Good vote
+against the active dataset (matched by MD5, or embedded and inserted when
+absent); seeds are skipped there too. Autopilot's Good phase sorts against
+the embedding centroid of *all* the media examples, seeds included — that is
+the one thing a seed does do.
 
 → `{"ok": true, "detector": {...}}` (201)
 

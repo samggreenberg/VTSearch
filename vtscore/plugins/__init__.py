@@ -261,6 +261,7 @@ _PLUGIN_NAME_SUFFIXES: tuple[str, ...] = (
     "LabelsetExporter",
     "LabelImporter",
     "LabelsetSource",
+    "SeedImporter",
     "SettingsImporter",
     "SettingsExporter",
     "SettingsSource",
@@ -289,6 +290,7 @@ _PLUGIN_FAMILY_BASE_NAMES: frozenset[str] = frozenset(
         "LabelsetExporter",
         "LabelImporter",
         "LabelsetSource",
+        "SeedImporter",
         "SettingsImporter",
         "SettingsExporter",
         "SettingsSource",
@@ -310,6 +312,7 @@ _FAMILY_STOCK_ICONS: frozenset[str] = frozenset(
         "\U0001f4e5",  # datasource importer (inbox tray)
         "\U0001f4e4",  # labelset / settings exporter (outbox tray)
         "\U0001f3f7️",  # label importer (label)
+        "\U0001f331",  # seed importer (seedling)
         "\U0001f504",  # sync source (counterclockwise arrows)
         "⚙️",  # settings importer (gear)
     }

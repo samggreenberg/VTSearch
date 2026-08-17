@@ -86,6 +86,7 @@ from vtsearch.routes import (  # noqa: E402
     labels_bp,
     datasource_importers_bp,
     media_server_bp,
+    seed_importers_bp,
     medias_bp,
     datasets_listings_bp,
     datasets_load_bp,
@@ -236,6 +237,7 @@ api.register_blueprint(jobs_bp)
 api.register_blueprint(labels_bp)
 api.register_blueprint(media_server_bp)
 api.register_blueprint(datasource_importers_bp)
+api.register_blueprint(seed_importers_bp)
 api.register_blueprint(main_bp)
 api.register_blueprint(medias_bp)
 api.register_blueprint(sorting_bp)

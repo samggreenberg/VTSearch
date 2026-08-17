@@ -46,6 +46,19 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Seed importers: a new plugin family for unlabeled seed media.** An
+  external package can now contribute its own tab to the New Detector modal's
+  **Blank** flow, beside Text and the media picker, by registering a
+  `SeedImporter` in the `vtscore.seed_importers` entry-point group. Where a
+  label importer imports media that already carry a good/bad verdict, a seed
+  importer imports a *batch* of media with **no verdict** — items that are
+  "close but not quite" what the user is hunting for. Seeds are stored on the
+  detector as `{"type": "media", "value": …, "labeled": false}`: they steer
+  the first sort (Autopilot ranks against the centroid of every media
+  example) but never become a Good label or vote, so a detector seeded this
+  way starts untrained. Nothing ships in-tree, so an install with no such
+  plugin looks exactly as before. New endpoints: `GET /api/seed-importers`,
+  `POST /api/seed-import/<name>`, `POST /api/seed-import/<name>/options`.
 - **Server-side code can raise a toast.** A new `notify()`
   (`vtscore/concurrency/notifications.py`) lets any backend code — most
   usefully a plugin that hit a recoverable problem — tell the user something
