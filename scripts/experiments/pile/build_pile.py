@@ -361,6 +361,27 @@ def _vg_source() -> tuple[dict[int, Path], list, dict[int, tuple[int, int]]]:
     return paths, records, dims
 
 
+def _load_corrections() -> dict[tuple[int, str], dict]:
+    """``{(image_id, class): verdict}`` from the corrections file, if any.
+
+    Verdicts, not corrections: a row exists for every reviewed ``(image, class)``
+    pair whether or not the human disagreed, so review *coverage* is knowable.
+    Without that, "no bus here" and "nobody looked" are the same absence, and
+    every rate computed afterwards is biased by an unknown amount.
+
+    Written by ``ingest_slate.py``; absent until the first review lands, which
+    is why this returns empty rather than failing.
+    """
+    path = Path(os.environ.get("VTS_CORRECTIONS", pc.PILE / "corrections.json"))
+    if not path.exists():
+        return {}
+    rows = json.loads(path.read_text())
+    out: dict[tuple[int, str], dict] = {}
+    for r in rows:
+        out[(int(r["image_id"]), r["class"])] = r
+    return out
+
+
 def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
     """One pickle holding every ``(class, band)`` cell of the scale study (#3156).
 
@@ -394,42 +415,85 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
     cells = [pc.scale_cell(c, b) for c in pc.SCALE_CLASSES for b in bands]
 
     paths = _vg_image_paths()
+    _, records, dims = _vg_source()
 
-    # Labels come from COCO, not from VG. Measured on this very pool, VG's
-    # recall over C is 0.76 and 1.4% of the images it treats as negatives
-    # actually hold the object -- against 100 positives per cell that is ~54
-    # hidden positives in the negative pool, and 4.1% for `backpack` puts more
-    # real backpacks among the negatives than among the positives
-    # (`coco_anchor.py`, issue #3156). COCO annotates its 80 classes
-    # exhaustively and C was chosen entirely from them, so on the images VG
-    # sourced from COCO a negative means "COCO looked and found none" rather
-    # than "nobody mentioned it".
+    # --- labels: VG, repaired where a better reference exists ---------------
+    #
+    # VG's own annotation is not exhaustive: measured against COCO its recall
+    # over C is 0.61, and 1.35% of the images it treats as negatives actually
+    # hold the object -- ~54 hidden positives against 100 labelled ones per cell,
+    # and 4.1% for `backpack` puts more real backpacks among the negatives than
+    # among the positives (`coco_anchor.py`, issue #3156).
+    #
+    # 48% of VG's images ARE COCO images, and COCO annotates C exhaustively, so
+    # on that half the repair is free and total. The other half has no reference
+    # and is what the human slates are for (`make_audit_slate.py`); its verdicts
+    # arrive here through the same corrections file. The pool stays the whole of
+    # VG either way -- restricting it to the COCO half would make this a COCO
+    # subset with extra steps, losing VG's non-COCO diversity for nothing.
     image_data, instances = ca.ensure_sources(pc.PILE / "coco_anchor", fetch=False)
     truth = ca.coco_truth(instances, wanted)
     with image_data.open() as fh:
         coco_of = {int(m["image_id"]): int(m["coco_id"]) for m in json.load(fh) if m.get("coco_id")}
-    log(f"  {len(coco_of)} VG images carry a coco_id; {len(truth)} COCO images have exhaustive labels")
 
-    # class -> band -> [image_id], plus the boxes to stamp and the clean pool.
+    corrections = _load_corrections()
+    log(f"  {len(coco_of)} VG images carry a coco_id; {len(corrections)} human verdicts on file")
+
+    # image -> {class: [boxes]}, and whether the image's labels are exhaustive.
+    labels: dict[int, dict[str, list[list[float]]]] = {}
+    exhaustive: set[int] = set()
+    for rec in records:
+        iid = int(rec["image_id"])
+        if iid not in paths or dims.get(iid) is None:
+            continue
+        by_name: dict[str, list[list[float]]] = defaultdict(list)
+        for obj in rec.get("objects") or []:
+            names = obj.get("names") or []
+            if not names:
+                continue
+            name = str(names[0]).strip().lower()
+            if name not in wanted:
+                continue
+            x, y = float(obj.get("x", 0)), float(obj.get("y", 0))
+            w, h = float(obj.get("w", 0)), float(obj.get("h", 0))
+            if w > 0 and h > 0:
+                by_name[name].append([x, y, x + w, y + h])
+        labels[iid] = dict(by_name)
+
+    n_anchored = 0
+    for iid in labels:
+        cid = coco_of.get(iid)
+        ref = truth.get(cid) if cid is not None else None
+        if ref is None:
+            continue
+        # COCO's annotation REPLACES VG's for this image rather than merging
+        # with it: the two disagree in both directions, and only one of them is
+        # exhaustive. Keeping VG's extra boxes would reintroduce exactly the
+        # unverifiable labels this is repairing.
+        labels[iid] = {name: bs for name, bs in ref.items() if name in wanted}
+        exhaustive.add(iid)
+        n_anchored += 1
+
+    for (iid, name), verdict in corrections.items():
+        if iid not in labels:
+            continue
+        if verdict.get("present"):
+            labels[iid][name] = verdict.get("boxes") or labels[iid].get(name, [])
+        else:
+            labels[iid].pop(name, None)
+        exhaustive.add(iid)  # a human looked at this pair
+
+    log(f"  labels: {len(labels)} VG images, {n_anchored} repaired from COCO, {len(exhaustive)} with a verified pair")
+
+    # --- candidates ---------------------------------------------------------
     supply: dict[str, dict[str, list[int]]] = {c: {b: [] for b in bands} for c in pc.SCALE_CLASSES}
     boxes_for: dict[tuple[int, str], list[list[float]]] = {}
     clean: list[int] = []
-    anchored = 0
 
-    for iid, cid in sorted(coco_of.items()):
-        ref = truth.get(cid)
-        wh = ca.COCO_DIMS.get(cid)
-        if iid not in paths or ref is None or wh is None:
-            continue
-        W, H = wh
-        if W <= 0 or H <= 0:
-            continue
-        anchored += 1
+    for iid, by_name in labels.items():
+        W, H = dims[iid]
         area = float(W * H)
-        by_name = {name: bs for name, bs in ref.items() if name in wanted}
         if not by_name:
-            # COCO annotated this image and found none of C: a true negative for
-            # every cell, which is the whole point of building on this half.
             clean.append(iid)
             continue
         for name, bs in by_name.items():
@@ -450,7 +514,6 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
                     supply[name][band].append(iid)
                     boxes_for[(iid, pc.scale_cell(name, band))] = bs
                     break
-    log(f"  {anchored} images have an exhaustive COCO reference and a VG file on disk")
 
     rng = random.Random(0x5CA1E)  # deterministic sample, stable across rebuilds
     chosen: dict[str, list[int]] = {}
@@ -466,10 +529,15 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
             chosen[cell] = rng.sample(pool, min(pc.SCALE_N_POS, len(pool)))
 
     clean.sort()
-    negatives = rng.sample(clean, min(pc.SCALE_N_NEG, len(clean)))
+    # Draw spares beyond the designated pool. A human verdict can retire a
+    # contaminated negative later, and re-designating from spares costs a
+    # relabel rather than a re-embed of every cell.
+    drawn = rng.sample(clean, min(pc.SCALE_N_NEG + pc.SCALE_N_NEG_SPARE, len(clean)))
+    negatives, spares = drawn[: pc.SCALE_N_NEG], drawn[pc.SCALE_N_NEG :]
+    neg_set = set(negatives)
     log(
         f"  {sum(len(v) for v in chosen.values())} positives over {len(cells)} cells, "
-        f"{len(negatives)} shared negatives (from {len(clean)} clean images)"
+        f"{len(negatives)} shared negatives + {len(spares)} spares (from {len(clean)} clean images)"
     )
 
     # media id -> the cells it is a positive for. Negatives get every cell.
@@ -478,7 +546,7 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
         for iid in ids:
             positive_in[iid].append(cell)
 
-    for iid in sorted(set(positive_in) | set(negatives)):
+    for iid in sorted(set(positive_in) | set(negatives) | set(spares)):
         path = paths[iid]
         try:
             with Image.open(path) as im:
@@ -510,7 +578,7 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
             # A designated cell membership, not a closed world: a positive is
             # scorable only in the cells it was drawn for, and the shared
             # negatives are scorable everywhere.
-            "evaluable_categories": cats if cats else list(cells),
+            "evaluable_categories": cats if cats else (list(cells) if iid in neg_set else []),
             "regions": regions,
             "origin": {"importer": "vg_scale", "params": {"embedder": embedder_name, "labels": "coco"}},
             "origin_name": str(path),

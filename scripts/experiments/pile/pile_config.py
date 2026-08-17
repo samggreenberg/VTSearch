@@ -261,9 +261,9 @@ SCALE_CLASSES: tuple[str, ...] = (
 )
 
 #: Images per ``(class, band)`` cell, and the shared negative pool every cell
-#: draws from. ``bus@small`` binds the positive count: 84 anchored images is the
-#: smallest per-band supply in *C* under COCO's boxes, so 80 is the largest
-#: round number every one of the 36 cells can fill without replacement.
+#: draws from. The pool is the whole of VG, labelled by VG and repaired from
+#: COCO where an exhaustive reference exists, so the binding supply is the union
+#: of both halves; the builder logs any cell it cannot fill.
 #:
 #: Cells are **designated**, not inferred: each is exactly these positives plus
 #: this negative pool, and every other image in the pickle is excluded from it.
@@ -271,8 +271,12 @@ SCALE_CLASSES: tuple[str, ...] = (
 #: what makes small-vs-large a paired comparison rather than two datasets with
 #: different difficulty. Unequal prevalence between arms is what made wave 1 and
 #: wave 2 of the overview benchmark non-comparable.
-SCALE_N_POS = int(os.environ.get("VTS_SCALE_N_POS", "80"))
+SCALE_N_POS = int(os.environ.get("VTS_SCALE_N_POS", "100"))
 SCALE_N_NEG = int(os.environ.get("VTS_SCALE_N_NEG", "3900"))
+#: Extra negatives drawn into the pickle but designated into no cell. A human
+#: verdict can retire a contaminated negative later; re-designating from a spare
+#: is a relabel, while drawing a fresh one would mean re-embedding every cell.
+SCALE_N_NEG_SPARE = int(os.environ.get("VTS_SCALE_N_NEG_SPARE", "300"))
 
 
 def scale_cell(category: str, band: str) -> str:
