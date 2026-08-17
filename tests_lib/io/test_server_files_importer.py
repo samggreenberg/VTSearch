@@ -19,6 +19,7 @@ from vtscore.datasets.importers.server_files import (
     _read_paths_file,
     _symlink_paths,
 )
+from vtscore.embedding.binding import expected_dim_for_embedder
 from vtscore.embedding.media_vectors import media_embedding
 
 
@@ -192,7 +193,9 @@ def _make_archive_manifest(tmp_path: Path):
             tf.addfile(info, io.BytesIO(payload))
 
     rng = np.random.default_rng(11)
-    vectors = rng.standard_normal((len(members), 512)).astype(np.float32)
+    # A manifest naming ``xclip`` must ship xclip-width rows: the reader rejects
+    # an archive whose vectors contradict the embedder it declares.
+    vectors = rng.standard_normal((len(members), expected_dim_for_embedder("xclip") or 512)).astype(np.float32)
     manifest = tmp_path / "manifest.npz"
     np.savez(
         manifest,
