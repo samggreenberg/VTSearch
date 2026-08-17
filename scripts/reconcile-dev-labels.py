@@ -72,11 +72,6 @@ COMMENT_POINTER = re.compile(
     re.IGNORECASE,
 )
 
-# Any issue reference at all, used only to notice that a later comment is
-# talking about some other PR rather than re-pointing at the fix.
-ANY_REF = re.compile(r"#(\d+)")
-
-
 def _refs(pattern: re.Pattern[str], text: str) -> set[int]:
     return {int(m) for m in pattern.findall(text or "")}
 
@@ -123,8 +118,7 @@ def _pointer_verdict(issue: dict, release_numbers: set[int]) -> tuple[str, str] 
         return "resolved", f"newest comment points at #{pr_number}"
 
     return "review", (
-        f"pointer at #{pr_number} is followed by {len(trailing)} later comment(s); "
-        "check whether they dispute the fix"
+        f"pointer at #{pr_number} is followed by {len(trailing)} later comment(s); check whether they dispute the fix"
     )
 
 
@@ -147,7 +141,10 @@ def _classify(issue: dict, closers: dict[int, int], release_numbers: set[int]) -
     verdict = _pointer_verdict(issue, release_numbers)
     if verdict is None:
         if labelled:
-            return "review", "carries `dev` but no release PR or comment resolves it — stale, or fixed in an earlier release"
+            return (
+                "review",
+                "carries `dev` but no release PR or comment resolves it — stale, or fixed in an earlier release",
+            )
         return "none", "not resolved on dev"
 
     kind, detail = verdict

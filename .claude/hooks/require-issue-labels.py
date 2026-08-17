@@ -139,7 +139,7 @@ def _close_problems(args: dict) -> list[str]:
 
     if DEV_LABEL in labels:
         return [
-            f"KEEPS `{DEV_LABEL}` ON A CLOSED ISSUE: `{DEV_LABEL}` means \"on `dev`, NOT on `main`\". "
+            f'KEEPS `{DEV_LABEL}` ON A CLOSED ISSUE: `{DEV_LABEL}` means "on `dev`, NOT on `main`". '
             "Closing this issue is the act of shipping it to `main`, so the label is now false. "
             "Drop it from the `labels` array."
         ]
@@ -147,7 +147,7 @@ def _close_problems(args: dict) -> list[str]:
     if raw is None and str(args.get("state_reason") or "").strip().lower() == "completed":
         return [
             f"CLOSE DOES NOT STRIP `{DEV_LABEL}`: a `completed` close ships the fix to `main`, so "
-            f"`{DEV_LABEL}` (\"on `dev`, NOT on `main`\") must come off in the same write.\n"
+            f'`{DEV_LABEL}` ("on `dev`, NOT on `main`") must come off in the same write.\n'
             "  Pass `labels` explicitly. NOTE: `labels` REPLACES the whole set, so list every label "
             f"the issue should keep (`claude`, `experiment`, ...) and simply omit `{DEV_LABEL}`. "
             "Read the issue first if you do not already know its labels -- passing `[]` would wipe them.\n"

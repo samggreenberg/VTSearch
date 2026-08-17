@@ -164,7 +164,9 @@ class TestDevLabelOnClose:
 
     def test_create_path_rules_do_not_leak_onto_closes(self):
         """A close needs no `claude` label -- the issue may well be a human's."""
-        assert run_hook(self.close(state="closed", state_reason="completed", labels=["enhancement"])).returncode == ALLOW
+        assert (
+            run_hook(self.close(state="closed", state_reason="completed", labels=["enhancement"])).returncode == ALLOW
+        )
 
 
 class TestPassthrough:
