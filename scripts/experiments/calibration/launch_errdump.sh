@@ -27,7 +27,9 @@ source "$WT/gridenv.sh"
 source "$WT/scripts/experiments/pile/pile_env.sh"
 export VTS_REPO="$WT"
 
-PROFILE="${1:?usage: launch_errdump.sh {wave1|vgbox|binary|text} <idx:tag>...}"
+# No braces in this message: a `}` inside ${1:?...} ends the expansion early and
+# the rest of it lands in PROFILE.
+PROFILE="${1:?usage: launch_errdump.sh wave1|vgbox|binary|text  idx:tag ...}"
 shift
 
 # --- per-profile grid (must match the source run's sizing env) --------------
@@ -72,7 +74,7 @@ mkdir -p "$EXP/results/cells" "$DUMP" "$EXP/logs"
 if [[ "$PROFILE" == "text" ]]; then
   # Zero-click side of the same question: what does a *typed* query flag?
   # Same dump schema, so error_report.py / label_noise.py read both.
-  case "${1:?usage: launch_errdump.sh text {wave1|vgbox}}" in
+  case "${1:?usage: launch_errdump.sh text wave1|vgbox}" in
   wave1) SRC=/expscratch/$USER/bench-overview ;;
   vgbox) SRC=/expscratch/$USER/bench-vgbox2 ;;
   *) echo "text: unknown source run '$1'" >&2; exit 1 ;;
