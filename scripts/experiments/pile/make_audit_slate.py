@@ -1,19 +1,17 @@
 """Build per-class review slates for VTSearch, to audit the ground truth itself.
 
-``vg_scale`` takes its labels from COCO because VG's are not exhaustive
-(``coco_anchor.py``: VG recall 0.76 over *C*, 1.4% of its negatives actually
-positive). COCO is far better, but "far better" is not a number, and a report
-that assumes zero residual error is making the same mistake #3156 opened with —
-just one level up. So this builds a small, *stratified* slate per class that a
-human can label in VTSearch, from which the residual rate can be estimated
-rather than assumed.
+``vg_scale`` is the whole of VG, and only the 48% COCO also annotated has an
+exhaustive reference. On the other half VG's silence is the only evidence of
+absence — and VG's silence is measurably unreliable (``coco_anchor.py``: recall
+0.61 over *C*, 1.35% of its negatives actually positive). That half is what a
+human can fix and nothing else can, so this builds the slates for it.
 
 **Three strata, recorded per image, because they answer different questions:**
 
 * ``boundary`` — the highest-scoring images among the cell's **negatives**. A
-  COCO miss, if there is one, hides here: an image that looks exactly like a bus
-  image and is labelled as holding none. This stratum finds errors efficiently
-  and is **not** an unbiased sample of anything.
+  missing label, if there is one, hides here: an image that looks exactly like a
+  bus image and is labelled as holding none. This stratum finds errors
+  efficiently and is **not** an unbiased sample of anything.
 * ``random`` — a uniform sample of the same negatives. This one *is* unbiased,
   so it is what bounds the residual false-negative rate. Without it, finding
   three misses in the boundary stratum says nothing about the pool.
@@ -24,6 +22,12 @@ rather than assumed.
 Ranking uses the text tower, not a trained detector: it needs no votes to exist
 first, it costs one text embedding per class, and for "which negatives look like
 buses" it is entirely adequate.
+
+A minority of every negative stratum is drawn from the COCO-anchored half,
+where the answer is already known. Reviewing those corrects nothing, but it
+*scores the reviewer*, which is what turns the unanchored half's residual error
+into a bounded number. The reviewer cannot tell them apart: files are named by
+image id alone.
 
 Each class becomes a folder of JPEGs plus a manifest, ready for VTSearch's
 ``server_folder`` importer. Vote Good/Bad, export with ``server_json_file``, and
@@ -68,9 +72,16 @@ def main() -> int:
     ap.add_argument("--embedder", default="siglip", help="embedder the cell carries (for the text tower)")
     ap.add_argument("--out", default=str(pc.PILE / "slates"), help="output directory")
     ap.add_argument("--classes", default="", help="comma-separated subset of C (default: all)")
-    ap.add_argument("--boundary", type=int, default=15, help="top-scoring negatives per class")
-    ap.add_argument("--random", dest="n_random", type=int, default=10, help="uniform negatives per class")
-    ap.add_argument("--positive", type=int, default=5, help="positives per class, spread over the bands")
+    ap.add_argument("--boundary", type=int, default=200, help="top-scoring negatives per class")
+    ap.add_argument("--random", dest="n_random", type=int, default=70, help="uniform negatives per class")
+    ap.add_argument("--positive", type=int, default=30, help="positives per class, spread over the bands")
+    ap.add_argument(
+        "--anchor-frac",
+        type=float,
+        default=0.2,
+        help="share of each negative stratum drawn from COCO-anchored images, where the answer is "
+        "already known -- the calibration that turns 'we reviewed some' into a bounded residual",
+    )
     ap.add_argument("--seed", type=int, default=20260817, help="sampling seed")
     args = ap.parse_args()
 
@@ -112,10 +123,25 @@ def main() -> int:
         pos_of = {i: n for n, i in enumerate(ids)}
         scores = {i: float(mat[pos_of[i]] @ tvec) for i in negatives}
 
-        ranked = sorted(negatives, key=lambda i: -scores[i])
-        boundary = ranked[: args.boundary]
-        rest = [i for i in ranked[args.boundary :]]
-        uniform = rng.sample(rest, min(args.n_random, len(rest)))
+        # Split the negatives by whether an exhaustive reference already
+        # settles them. Reviewing an anchored image does not correct anything --
+        # COCO has already looked -- but it *scores the review itself*, which is
+        # the only way the unanchored half's residual error becomes a bounded
+        # number rather than a hope. So each stratum takes a minority of them.
+        anchored = [i for i in negatives if medias[i].get("labels_exhaustive")]
+        open_ = [i for i in negatives if not medias[i].get("labels_exhaustive")]
+        n_anchor_b = int(round(args.boundary * args.anchor_frac))
+        n_anchor_r = int(round(args.n_random * args.anchor_frac))
+
+        by_score = sorted(open_, key=lambda i: -scores[i])
+        anchor_by_score = sorted(anchored, key=lambda i: -scores[i])
+        boundary = by_score[: args.boundary - n_anchor_b] + anchor_by_score[:n_anchor_b]
+        chosen_b = set(boundary)
+        rest_open = [i for i in open_ if i not in chosen_b]
+        rest_anchor = [i for i in anchored if i not in chosen_b]
+        uniform = rng.sample(rest_open, min(args.n_random - n_anchor_r, len(rest_open))) + rng.sample(
+            rest_anchor, min(n_anchor_r, len(rest_anchor))
+        )
         # Spread the positive check over the bands rather than taking whichever
         # band happens to sort first: the box question is different at each size.
         per_band = max(1, args.positive // len(cells))
@@ -144,7 +170,14 @@ def main() -> int:
                         "stratum": stratum,
                         "cell": cell,
                         "text_score": round(scores.get(i, float("nan")), 4),
-                        "coco_says": "present" if cell else "absent",
+                        # What the dataset currently claims, and whether that
+                        # claim rests on an exhaustive reference. The reviewer
+                        # never sees either -- files are named by id alone --
+                        # so a calibration image is indistinguishable from a
+                        # correction one at voting time, which is what keeps
+                        # the calibration honest.
+                        "reference": "present" if cell else "absent",
+                        "exhaustive": "yes" if medias[i].get("labels_exhaustive") else "no",
                         "n_boxes": len(medias[i].get("regions") or []) if cell else 0,
                     }
                 )

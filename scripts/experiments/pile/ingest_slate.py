@@ -96,7 +96,8 @@ def main() -> int:
                         "class": c,
                         "stratum": row["stratum"],
                         "human": "present" if el.get("label") == "good" else "absent",
-                        "reference": row["coco_says"],
+                        "reference": row["reference"],
+                        "exhaustive": row["exhaustive"],
                         "box": el.get("region_box"),
                         "text_score": float(row["text_score"]),
                         "export": Path(path).name,
@@ -110,6 +111,17 @@ def main() -> int:
     by: dict[tuple[str, str], int] = defaultdict(int)
     for v in verdicts:
         by[(v["stratum"], f"{v['reference']}->{v['human']}")] += 1
+
+    # The calibration: on images COCO already settled, a disagreement is the
+    # reviewer's error, not a correction. Reported separately -- folding it into
+    # the correction counts would let annotator noise masquerade as label noise.
+    cal = [v for v in verdicts if v["exhaustive"] == "yes"]
+    if cal:
+        wrong = sum(1 for v in cal if v["human"] != v["reference"])
+        print(
+            f"\ncalibration: {len(cal)} pairs with an exhaustive reference, {wrong} disagreements "
+            f"({wrong / len(cal):.3f}) -- reviewer error rate, not label noise"
+        )
 
     print(f"\n{len(verdicts)} verdicts\n")
     hdr = f"{'stratum':<10}{'agree':>8}{'ref absent, human present':>28}{'ref present, human absent':>28}{'rate':>9}"
