@@ -50,6 +50,10 @@
   line-height: 1.4;
   animation: toast-slide-in 180ms ease-out;
 
+  // Level accents. The base .toast is styled for `error` (the level that
+  // existed first); each other level re-tints the same four surfaces — border,
+  // left edge, icon, title — rather than restyling the toast, so a new level
+  // is a colour swap and nothing else can drift between them.
   &.toast--success {
     border-color: var(--color-good);
     border-left-color: var(--color-good);
@@ -59,6 +63,30 @@
     .toast__btn:hover {
       background: var(--good-bg);
       border-color: var(--color-good);
+    }
+  }
+
+  &.toast--warning {
+    border-color: var(--warning-border);
+    border-left-color: var(--text-warning);
+
+    .toast__icon { color: var(--text-warning); }
+    .toast__title { color: var(--text-warning); }
+    .toast__btn:hover {
+      background: var(--warning-bg);
+      border-color: var(--warning-border);
+    }
+  }
+
+  &.toast--info {
+    border-color: var(--accent-highlight-border);
+    border-left-color: var(--accent);
+
+    .toast__icon { color: var(--accent); }
+    .toast__title { color: var(--text-primary); }
+    .toast__btn:hover {
+      background: var(--accent-highlight-bg);
+      border-color: var(--accent-highlight-border);
     }
   }
 

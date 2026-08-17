@@ -23,6 +23,7 @@ true of `vtscore.security`.
 | `vtscore/concurrency/async_jobs.py` | Single-slot async job manager: coalescing background tasks with a result slot |
 | `vtscore/concurrency/progress.py` | `ProgressTracker`, `LoadingTasksTracker`, the module-level singletons, cooperative cancellation |
 | `vtscore/concurrency/events.py` | Server-Sent Events stream over the progress channels |
+| `vtscore/concurrency/notifications.py` | `notify()` - one-off user-facing messages, rendered as toasts by the app |
 | `vtscore/concurrency/gate.py` | `ConcurrencyGate` - a semaphore whose limit is re-read on every acquisition |
 | `vtscore/concurrency/memory_budget.py` | Cap fan-out so peak per-worker memory fits a fraction of available RAM |
 
@@ -36,6 +37,7 @@ true of `vtscore.security`.
 - [Memory budget](#memory-budget)
 - [`ConcurrencyGate`](#concurrencygate)
 - [`events.py`](#eventspy)
+- [User notifications](#user-notifications)
 
 ---
 
@@ -450,3 +452,57 @@ Heartbeats every 5 seconds keep the connection alive and re-emit the
 task channels so clients see finished tasks vanish once the stale-prune
 window elapses. This module is thin wiring - most library consumers
 don't need to touch it.
+
+It also carries one channel that is *not* a tracker: `NOTIFICATION_CHANNEL`
+(`"notification"`), fed by the broker below. It is absent from
+`initial_snapshot()` and never re-emitted on a heartbeat, because a
+notification is something that happened once rather than a state to
+converge on.
+
+---
+
+## User notifications
+
+`vtscore/concurrency/notifications.py` answers a question the trackers
+can't: how does code tell the user something *without stopping*?
+
+A tracker publishes state, and an exception ends the operation. Neither
+fits "we skipped 3 unreadable files but the other 900 imported fine" -
+raising throws away the 900, and a log line is written where nobody is
+looking. `notify()` is the third option: keep going, and put the message
+in front of the user (a toast in the app; a stderr line under the CLI).
+
+```python
+from vtscore.concurrency.notifications import notify
+
+notify(
+    "Skipped 3 unreadable files",
+    level="warning",                       # info | success | warning | error
+    detail="page_2.pdf, page_9.pdf, notes.pdf",
+    source="Server Folder",
+)
+```
+
+| Name | Description |
+|------|-------------|
+| `notify(message, *, level="info", detail=None, source=None) -> Notification` | Publish and log one message. Never raises |
+| `Notification` | Frozen dataclass: `id`, `level`, `message`, `detail`, `source`, `timestamp`, `.to_dict()` |
+| `NotificationBroker` | `subscribe` / `unsubscribe` / `publish` / `subscriber_count` / `clear_subscribers` |
+| `notifications` | The process-wide broker singleton |
+
+Plugin authors get the same thing with `source` prefilled - see
+[`plugins.md`](plugins.md) and `PluginBase.notify`.
+
+**Delivery is live-only.** Every client with an open `/api/events` stream
+at the moment of the call receives the frame; one that connects a moment
+later does not, and there is no replay buffer. Notifications narrate work
+the user is currently watching. Anything that has to survive a page reload
+belongs in a task's terminal payload or in persisted state instead.
+
+**It cannot fail.** An unknown `level` degrades to `"info"`, an over-long
+message is truncated, a blank message is logged but not shown, and a
+subscriber that raises is swallowed. A call whose whole purpose is to
+*avoid* interrupting the caller must not become the interruption.
+
+**It always logs**, at a severity matching the level, so a headless run
+still has a record when no browser is attached.
