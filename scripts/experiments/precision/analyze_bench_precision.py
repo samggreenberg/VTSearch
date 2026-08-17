@@ -36,8 +36,12 @@ import pandas as pd  # noqa: E402
 
 import precision_config as pcfg  # noqa: E402
 
-#: The metrics a ship decision actually reads.
-METRICS = [
+#: The metrics a ship decision actually reads.  Split by whether the 0.005
+#: decision margin even *applies*: it is a margin on error RATES in [0, 1].
+#: Comparing it to a count of positives is a category error — the first run of
+#: this analysis duly reported "n_good EXCEEDS MARGIN" for a difference of 0.87
+#: positives, which says nothing about 0.005 and reads as if it did.
+RATE_METRICS = [
     "cost",
     "regret",
     "average_precision",
@@ -45,8 +49,10 @@ METRICS = [
     "fpr",
     "rule_inefficiency",
     "calibration_shift",
-    "n_good",
 ]
+#: Reported with the same paired ±SE, but never against the rate margin.
+COUNT_METRICS = ["n_good"]
+METRICS = [*RATE_METRICS, *COUNT_METRICS]
 
 CELL_KEY = ["dataset", "embedder", "category", "seed", "style"]
 PAIR_KEY = [*CELL_KEY, "t"]
@@ -176,7 +182,16 @@ def main(argv: list[str] | None = None) -> int:
             mean = float(per_cell["diff"].mean())
             se = float(per_cell["diff"].std(ddof=1) / np.sqrt(n)) if n > 1 else float("nan")
             # A null is only a null if it is resolvable.
-            if not np.isfinite(se):
+            if metric in COUNT_METRICS:
+                # A count is not a rate: the margin does not apply to it.  Say
+                # whether the difference is resolvable at all instead.
+                if not np.isfinite(se):
+                    verdict = "count — unresolvable"
+                elif abs(mean) > 2 * se:
+                    verdict = f"count: {abs(mean) / se:.1f} SE from zero"
+                else:
+                    verdict = "count: within noise"
+            elif not np.isfinite(se):
                 verdict = "single cell — unresolvable"
             elif abs(mean) + 2 * se < args.margin:
                 verdict = "below margin (resolved)"
@@ -217,6 +232,25 @@ def main(argv: list[str] | None = None) -> int:
                 se = per_cell.std(ddof=1) / np.sqrt(len(per_cell)) if len(per_cell) > 1 else float("nan")
                 parts.append(f"{metric} {pm(float(per_cell.mean()), float(se))}")
             log(f"  {emb:14s} ({g.groupby(CELL_KEY).ngroups:3d} cells)  " + "   ".join(parts))
+
+        # If the margin could not be resolved, say what it would take.  "We could
+        # not resolve it" is not "it is not there", and a reader deciding whether
+        # to buy more cells needs the number, not the verdict alone.
+        unresolved = [r for r in rows if r["metric"] in RATE_METRICS and r["verdict"] == "cannot resolve at this n"]
+        if unresolved:
+            log("")
+            log(f"Power: {len(unresolved)} rate metric(s) could not be resolved against the {args.margin} margin.")
+            log("Cells needed for 2*SE < margin, at this between-cell spread:")
+            for r in unresolved:
+                if not np.isfinite(r["se"]) or r["se"] <= 0:
+                    continue
+                # SE scales as 1/sqrt(n); solve 2*SE*sqrt(n_have/n_need) = margin.
+                need = r["n_cells"] * (2 * r["se"] / args.margin) ** 2
+                log(f"  {r['metric']:22s} have {r['n_cells']:4d} cells (SE {sig2(r['se'])}) -> need ~{need:.0f}")
+            log("A 3e-6 vector change reroutes the vote sequence, so the trajectory")
+            log("decorrelates and the per-cell spread is set by that, not by the")
+            log("perturbation size. This test bounds a SYSTEMATIC effect; it cannot be")
+            log("made tight cheaply.")
 
         out = root / f"paired_{arm}_vs_{ref}.csv"
         pd.DataFrame(rows).to_csv(out, index=False)
