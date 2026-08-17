@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, select_next
 from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector
-from vtscore.eval.labels import media_is_positive, region_box_for_category
+from vtscore.eval.labels import evaluable_pool, media_is_positive, region_box_for_category
 from vtscore.eval.score_dumps import maybe_dump_predictions
 from vtscore.eval.trainers import _cross_calibrated_threshold, _parse_trainer_spec
 from vtscore.training.blend_schedules import BlendContext
@@ -2607,6 +2607,12 @@ def simulate_voting_iterations(  # noqa: C901
         cold-start degenerates turned out to be.
     """
     import numpy as np  # noqa: PLC0415
+
+    # One filter for the whole cell, before anything reads a label: on a
+    # scale-banded dataset an image can hold the category at the wrong size,
+    # and every "not positive means negative" test below would score it as a
+    # negative.  A no-op for every dataset that does not designate its cells.
+    clips_dict = evaluable_pool(clips_dict, target_category)
 
     rng = np.random.RandomState(seed)
     # Note: no torch.manual_seed() here - train_model handles its own
