@@ -63,21 +63,65 @@ so one allocation processes a *series* of units on the GPU it grabbed**:
   redundant embedding, **not** the per-unit compute (the model-training/scoring
   sims dominate and don't shrink).
 
-## 4. Cache aggressively; keep `/exp` tiny
+## 4. Know which mount you are on
 
-- Node-local **`/scratch/jobs/$USER/$SLURM_JOB_ID`** is per-job, ephemeral, and
-  large (**[HLTCOE]** ~286 G). Embed there.
+**[HLTCOE]** Three mounts, three jobs. Putting work on the wrong one is the most
+common self-inflicted wound here.
+
+| mount | size | use it for |
+|---|---|---|
+| `/exp/$USER` | **50 G** | the checkout and its venv. Nothing else. |
+| `/expscratch/$USER` | **500 G**, flash | the embedding pile, study outputs, archives |
+| `/scratch/jobs/$USER/$SLURM_JOB_ID` | ~286 G, node-local | per-job temp; wiped when the job ends |
+| `/exp/scale26` | 25 T, shared | staged source datasets (read-mostly, ~94% full) |
+
+- **`/exp` is a small quota** and the venv alone is ~13 G of it. Write no study
+  output there at all — an ENOSPC kills the whole array mid-run.
+- **`/expscratch` is where data lives**, and it is fast (~85 MB/s rsync, flash).
+  Treat it as **purgeable**: keep the rebuild path in the repo so anything there
+  can be regenerated from staged sources.
+- **`HF_HOME` leak:** the grid shell points `HF_HOME` at `/exp`; one model
+  download then fills the quota. Point it at the pile's models dir
+  (`pile_env.sh` does this) or at node scratch in run wrappers.
 - **Reuse one `--cache-dir` across a chunk's units.** Across e.g. object classes
   the negative pools are ~the same images ("images without class X" overlap
   heavily), so a shared cache embeds each image ~once per chunk instead of once
   per unit. This is the main payoff of §3's chunking.
-- **`/exp` is a small quota** (**[HLTCOE]** ~50 G, chronically ~98% full). Write
-  only **small, trace-free outputs** there (per-run `results.jsonl`), never
-  per-step traces/PNGs — those blow ENOSPC and kill the whole array mid-run. Pull
-  results off `/exp` to durable storage (your laptop, a project dir) promptly;
-  don't treat `/exp` as durable.
-- **`HF_HOME` leak:** the grid shell often points `HF_HOME` at `/exp`; one model
-  download then fills the quota. Hard-set `HF_HOME` to node scratch in run wrappers.
+
+## 4a. Use the shared pile; do not embed your own copy
+
+`/expscratch/$USER/vts-cache` holds a `(dataset, embedder)` grid that is already
+embedded. `source scripts/experiments/pile/pile_env.sh` points
+`VTSEARCH_DATA_DIR` / `VTSEARCH_MODELS_DIR` / `HF_HOME` at it, and a study then
+reads cells in place instead of re-embedding. Full docs:
+`scripts/experiments/pile/README.md`.
+
+**Datasets.** `visual_genome_m` (4193, boxed), `caltech101_m` (838, boxless),
+`coco_val` (4952, boxed), and the box-size-banded VG sets `vg_box_small` /
+`vg_box_medium` / `vg_box_large` (12000 each, boxed), drawn from the whole VG
+source rather than the demo pipeline's 4% slice.
+
+**Embedders.** `siglip` (768-d, the shipped default), `siglip2_l` (1152-d,
+premium) and `dinov3_patch` (768-d). Differing dims mean `siglip` and
+`siglip2_l` galleries are **not** interchangeable. The middle rungs
+(`siglip_l`, `siglip2`) were dropped deliberately — see the pile README for the
+tradeoff that buys.
+
+**Which arms can region-vote.** Region voting drags a ground-truth box and pools
+it over a patch grid, so it needs **both** halves:
+
+| | boxed dataset | patch embedder | region-votes? |
+|---|:--:|:--:|:--:|
+| `visual_genome_m` / `coco_val` / `vg_box_*` x `dinov3_patch` | yes | yes | **yes** |
+| any boxed dataset x `siglip` or `siglip2_l` | yes | no | no — **binary** |
+| `caltech101_m` x anything | no | — | no — **binary** |
+
+`dinov3_patch` is the only patch-capable embedder, so it is the only way to get
+a region arm. **A boxed dataset on a single-vector embedder does not error — it
+silently runs as binary voting**, which has now cost three studies (#2877,
+#2897, #2905). Assert the geometry rather than trusting the arm table:
+`build_pile.py --verify` checks that every region-capable cell actually carries
+`patch_grid`, and `launch_*.sh` has a `--require-region-voting` preflight.
 
 ## 5. Monitor from the GRID, not from your laptop
 

@@ -661,3 +661,83 @@ silently is worse than one that fails: it leaves the tree looking done.
 new symbol name, or a literal marker from the inserted block — never on a token
 that could plausibly appear in the surrounding file. And verify the postcondition
 (grep for what you inserted) rather than trusting the script's own report.
+
+<!-- entry-sep -->
+
+## 2026-08-12 — #3121 a missing demo symlink refetches, and hands you a smaller dataset
+**Cost:** ~35 min (one 20-minute GPU cell rebuilt, plus the diagnosis).
+
+**What broke.** Building the shared pile on `/expscratch`, only `embeddings/`
+was copied across — not the datadir's `visual_genome -> /exp/scale26/...`
+symlink. The demo downloaders treat a **missing** extraction dir as "not
+downloaded yet", so the job cheerfully started re-downloading Visual Genome from
+the internet, got a partial archive, and embedded **1662 of 4193 medias** into a
+cell that then verified as perfectly healthy. Nothing errored. Had it not been
+caught, every cross-embedder comparison on VG would have compared a 1662-media
+population against 4193-media siblings.
+
+The tell was not an error but an **arithmetic disagreement between cells that
+should be identical**: same dataset, same source, different `len(medias)`.
+
+**Now prevented by** `pile_config.require_demo_source` (refuses to build a demo
+cell when the source dir is missing — or *empty*, which the downloaders read as
+"download complete") and `build_pile.py --verify`, which cross-checks that a
+dataset's cells agree on media count and names the odd ones out.
+
+<!-- entry-sep -->
+
+## 2026-08-12 — #3121 `VAR=x cmd1 && cmd2` sets VAR for cmd1 only
+**Cost:** ~15 min, but the exposure was much larger than the cost.
+
+**What broke.** The pile scripts located their own checkout via `VTS_REPO`. In
+`VTS_REPO=... python build.py --verify && python build.py --bands`, the shell
+applies the assignment to the **first** command only, so the second ran without
+it, skipped its `sys.path` insert, and resolved `import vtscore` through the
+venv's editable install — pointing at the *main* checkout, **592 commits stale**
+and missing embedders the pile uses. It surfaced as a confusing `ImportError`.
+
+That was the lucky outcome. A stale-but-compatible tree would not have raised at
+all; it would have embedded cells with different code, silently.
+
+**Now prevented by** deriving the checkout from `__file__` instead of an env var,
+and asserting at startup that `vtscore` actually resolved inside this checkout
+(`assert_vtscore_is_this_checkout`). **Generalise it:** a script that needs a
+particular tree should *verify* it got that tree, not *request* it.
+
+<!-- entry-sep -->
+
+## 2026-08-12 — #3121 prefetching weights where the loader does not look
+**Cost:** ~10 min and 7.6 G of wasted download.
+
+**What broke.** Weights were prefetched with a bare `snapshot_download(...)`,
+which writes to `HF_HOME/hub`. The embedders load with
+`cache_dir=<VTSEARCH_MODELS_DIR>`, which puts `models--*` at the top of that
+dir. The two never met: the jobs saw no cached weights, and three parallel GPU
+jobs would each have re-downloaded into the same directory, racing.
+
+**Now prevented by** passing `cache_dir=` explicitly in `prefetch_models.py`.
+**Still advice:** a prefetch stage is only worth having if it writes where the
+consumer reads — verify by listing the directory the consumer will actually
+open, not by trusting that the download reported success.
+
+<!-- entry-sep -->
+
+## 2026-08-12 — #3121 a dataset's *name* is not its sampling axis
+**Cost:** none — caught while reading, before it shaped a study.
+
+**What broke.** Nothing yet, which is the point. `visual_genome_m` was being
+read as "the medium-**box** subset of VG". It is not: `_s`/`_m`/`_l` is a
+**dataset size tier** (a `slice_frac` window over the source) applied uniformly
+across ~10 demo datasets, and `caltech101_m` — a boxless dataset — carries the
+same suffix. Box size enters the harness somewhere else entirely, as a
+*category-selection* axis (`select_categories_by_scale`).
+
+Reading it the other way would have silently answered a scale question with a
+sampling artefact. Related: that demo view is also why the sub-patch band looked
+starved — its 100 curated categories put **5** in the sub-patch band, against
+**643** in the full VG source. A vocabulary chosen for recognisability is not a
+sample of scales.
+
+**Still advice.** When a dataset id encodes a variant, confirm what the variant
+*is* before treating it as the axis under study — and prefer building the axis
+explicitly (`vg_box_small/medium/large`) over inferring it from a name.
