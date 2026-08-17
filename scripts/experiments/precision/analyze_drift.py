@@ -69,13 +69,26 @@ def pm(mean: float, se: float) -> str:
 # --------------------------------------------------------------------------
 
 
+#: Synthetic arm name for the cell already in the shared pile.  It belongs in the
+#: matrix because two of this study's own measurements disagreed about it: the
+#: L40S fp32 rebuild reproduced it to 2.7e-12, yet the V100 fp32 arm sits 1.5e-4
+#: from that same rebuild — and `sacct` says job 495266 built it on a **V100**.
+#: All three cannot be true, and only a direct three-way comparison says which
+#: measurement is wrong. Placing it as an arm is how it gets compared to both.
+PUBLISHED = "published_pile"
+
+
+def cell_for(arm: str, embedder: str) -> Path:
+    return pcfg.shared_cell(embedder) if arm == PUBLISHED else pcfg.arm_cell(arm, embedder)
+
+
 def load_arm(arm: str, embedder: str) -> tuple[list[int], np.ndarray, dict]:
     """``(ids, (N, D) unit-norm float64, medias)`` for one arm x embedder cell."""
     from _cells_io import load_medias  # noqa: PLC0415
 
     from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 
-    medias = load_medias(pcfg.arm_cell(arm, embedder))
+    medias = load_medias(cell_for(arm, embedder))
     ids, rows = [], []
     for mid in sorted(medias):
         vec = media_embedding(medias[mid])
@@ -291,7 +304,7 @@ def pairwise(embedders: list[str], arms: list[str], outdir: Path) -> "pd.DataFra
     """
     rows = []
     for emb in embedders:
-        present = [a for a in arms if pcfg.arm_cell(a, emb).exists()]
+        present = [a for a in arms if cell_for(a, emb).exists()]
         mats = {}
         for a in present:
             _, mat, _ = load_arm(a, emb)
@@ -476,6 +489,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--arms", default=",".join(pcfg.ARMS))
     ap.add_argument("--no-figures", action="store_true")
     ap.add_argument("--pairwise", action="store_true", help="also print the full arm x arm drift matrix")
+    ap.add_argument(
+        "--include-published",
+        action="store_true",
+        help="add the shared pile's existing cell to the pairwise matrix as an arm",
+    )
     ap.add_argument("--outdir", default=str(pcfg.results_dir()))
     args = ap.parse_args(argv)
 
@@ -487,7 +505,7 @@ def main(argv: list[str] | None = None) -> int:
     drift, ranks, examples = analyse(embedders, arms)
     report(drift, ranks, examples)
     if args.pairwise:
-        pairwise(embedders, arms, outdir)
+        pairwise(embedders, [*arms, PUBLISHED] if args.include_published else arms, outdir)
 
     drift.to_csv(outdir / "drift.csv", index=False)
     ranks.to_csv(outdir / "rank_stability.csv", index=False)
