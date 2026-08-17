@@ -144,8 +144,16 @@ distribution: the mean of a long-tailed drift is the number that hides the tail.
 | `siglip2_l` | `fp16_v100` | 2.8e-06 | 1.2e-05 | 3.9e-04 | 4.6e-06 ± 1.6e-07 |
 | `siglip2_l` | `bf16_l40s` | 1.3e-04 | 3.2e-04 | 3.2e-03 | 1.6e-04 ± 2.0e-06 |
 
-Figures: `figures/drift_siglip.png`, `figures/drift_siglip2_l.png` (bar = median,
-whisker = p95, log scale, floor arm in grey).
+![Vector drift by arm, siglip2_l](figures/drift_siglip2_l.png)
+
+![Vector drift by arm, siglip](figures/drift_siglip.png)
+
+Bar = median, whisker = p95, log scale. **Grey marks the arms running the same
+fp32 math as the reference** — and their spread is itself the result: on
+`siglip2_l` they run from exactly 0 (`fp32_notf32_l40s`, `fp32_det_l40s`) through
+2.7e-12 (`fp32_v100_rack7n03`) to 1.5e-04 (`fp32_v100`, `fp32_det_v100`). The
+first version of this figure called `fp32_v100` "the floor" and so presented the
+defect as the baseline; there is no single floor.
 
 Three readings:
 
@@ -187,10 +195,16 @@ Against the same node's fp32:
 | `siglip` | `bf16_l40s` | text query | 100 | 1 ± 6.7e-06 | 98% | 99% | 99% | **97%** |
 | `siglip2_l` | `bf16_l40s` | text query | 100 | 1 ± 1.3e-05 | 99% | 98% | 99% | **98%** |
 
-Figures: `figures/rank_stability_exemplar.png`,
-`figures/rank_stability_text_query.png` (one dot per category, bar = mean — the
-average alone would hide a single category that fell apart), and
-`figures/topk_overlap.png`.
+![Per-category rank stability, exemplar source](figures/rank_stability_exemplar.png)
+
+![Per-category rank stability, text-query source](figures/rank_stability_text_query.png)
+
+![Top-k overlap against the reference](figures/topk_overlap.png)
+
+One dot per category, bar = mean — the average alone would hide a single category
+that fell apart. Note that these are plotted against the *reference* arm, so the
+V100 rows carry the node displacement of §5 on top of their precision change; the
+within-node numbers are the table above.
 
 `bf16` is the only arm that changes the **top-1 result**, on 2–3% of categories.
 For a search tool that is the visible failure: the first thing the user sees.
@@ -441,6 +455,26 @@ Four readings, in order of what they license:
 cells), `average_precision` on 0.04%, and the threshold was chosen the same way
 on **100%** of steps. That combination is the mechanism restated: the decision
 *rule* never changes, the *trajectory* always does.
+
+![Paired cost, mean trajectory and per-cell differences](figures/paired_cost_fp16_l40s_vs_fp32_l40s.png)
+
+![Paired average precision](figures/paired_average_precision_fp16_l40s_vs_fp32_l40s.png)
+
+Left: mean trajectory for both arms. Right: **every cell's paired difference as a
+thin line**, the mean in black, the ±0.005 margin dashed. The per-cell spread is
+what the power section is about — individual cells swing well past the margin in
+both directions while the mean sits near zero.
+
+## Raw artifacts in this directory
+
+| file | what |
+|---|---|
+| `DRIFT_TABLES.txt` | full drift + rank tables, all 10 arms, with the pairwise matrices |
+| `BENCH_TABLES.txt` | the 6-seed paired benchmark |
+| `BENCH_POWER_TABLES.txt` | the 64-seed paired benchmark |
+| `drift.csv` | per-arm drift distribution |
+| `pairwise_drift.csv` | every arm-pair distance, including the published pile cell |
+| `examples.json` | every literal rank-move example, with filenames and score gaps |
 
 ---
 
