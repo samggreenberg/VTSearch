@@ -98,6 +98,64 @@ def test_torch_threads_constant_clamps_to_one(monkeypatch):
     assert config.TORCH_THREADS == 1
 
 
+def test_decode_workers_sized_from_allocation(monkeypatch):
+    """The pool leaves one CPU for the calling thread."""
+    import vtscore.config as config
+
+    monkeypatch.delenv("VTSEARCH_DECODE_WORKERS", raising=False)
+    monkeypatch.setattr(config, "allocated_cpus", lambda: 8)
+    assert config.resolve_decode_workers() == 7
+
+
+def test_decode_workers_capped(monkeypatch):
+    """A fat node does not get a proportionally fat pool."""
+    import vtscore.config as config
+
+    monkeypatch.delenv("VTSEARCH_DECODE_WORKERS", raising=False)
+    monkeypatch.setattr(config, "allocated_cpus", lambda: 96)
+    assert config.resolve_decode_workers() == config.DEFAULT_DECODE_WORKER_CAP
+
+
+def test_decode_workers_floor_of_one_on_a_single_cpu(monkeypatch):
+    """One CPU still gets one worker: it overlaps decode with the forward."""
+    import vtscore.config as config
+
+    monkeypatch.delenv("VTSEARCH_DECODE_WORKERS", raising=False)
+    monkeypatch.setattr(config, "allocated_cpus", lambda: 1)
+    assert config.resolve_decode_workers() == 1
+
+
+def test_decode_workers_env_override(monkeypatch):
+    import vtscore.config as config
+
+    monkeypatch.setattr(config, "allocated_cpus", lambda: 8)
+    monkeypatch.setenv("VTSEARCH_DECODE_WORKERS", "3")
+    assert config.resolve_decode_workers() == 3
+
+
+def test_decode_workers_zero_disables_the_pool(monkeypatch):
+    import vtscore.config as config
+
+    monkeypatch.setattr(config, "allocated_cpus", lambda: 8)
+    monkeypatch.setenv("VTSEARCH_DECODE_WORKERS", "0")
+    assert config.resolve_decode_workers() == 0
+
+
+def test_decode_workers_invalid_env_falls_back(monkeypatch):
+    import vtscore.config as config
+
+    monkeypatch.setattr(config, "allocated_cpus", lambda: 4)
+    monkeypatch.setenv("VTSEARCH_DECODE_WORKERS", "lots")
+    assert config.resolve_decode_workers() == 3
+
+
+def test_allocated_cpus_is_positive():
+    """Whatever the platform, the answer is a usable worker count."""
+    import vtscore.config as config
+
+    assert config.allocated_cpus() >= 1
+
+
 def test_max_upload_mb_default(monkeypatch):
     """``MAX_UPLOAD_MB`` defaults to a bounded 2 GiB cap, not unlimited."""
     monkeypatch.delenv("VTSEARCH_MAX_UPLOAD_MB", raising=False)

@@ -33,6 +33,54 @@ MODELS_CACHE_DIR = (
 # (``torch.set_num_threads``).
 TORCH_THREADS = max(1, int(os.environ.get("VTSEARCH_TORCH_THREADS", "1")))
 
+# Upper bound on the image-decode prefetch pool (see
+# :func:`resolve_decode_workers`).  Decode throughput saturates well before a
+# fat node's core count, and every extra worker holds one more decoded bitmap,
+# so the pool is capped rather than scaled to whatever the box happens to have.
+DEFAULT_DECODE_WORKER_CAP = 8
+
+
+def allocated_cpus() -> int:
+    """How many CPUs this process may actually run on.
+
+    ``os.cpu_count()`` reports the *machine's* cores, which is the wrong number
+    on a shared box: a SLURM job asking for ``--cpus-per-task=8`` on a 96-core
+    node is entitled to 8, and sizing a pool from 96 would oversubscribe the
+    allocation.  ``os.sched_getaffinity`` reflects the cgroup/affinity mask the
+    scheduler actually imposed, so it is the allocation.  Falls back to
+    ``cpu_count()`` on platforms without it (macOS, Windows).
+    """
+    try:
+        return max(1, len(os.sched_getaffinity(0)))
+    except AttributeError:
+        return max(1, os.cpu_count() or 1)
+
+
+def resolve_decode_workers(cap: int = DEFAULT_DECODE_WORKER_CAP) -> int:
+    """Threads used to decode images ahead of the GPU forward during bulk embed.
+
+    Bulk image embedding used to decode a batch on the calling thread, run the
+    forward, then decode the next batch, so nothing overlapped and the GPU sat
+    idle through every decode.  On a small model that is most of the wall clock
+    (measured: 82% idle for base SigLIP on a V100).  Pillow's decode releases
+    the GIL in C, so a plain thread pool both parallelises a batch's decode and
+    overlaps it with the previous batch's forward — see
+    :mod:`vtscore.media.image._image_bulk`.
+
+    Sized from :func:`allocated_cpus`, minus one for the calling thread (which
+    runs the processor and tensor marshalling while the pool decodes), capped at
+    *cap*.  Override with ``VTSEARCH_DECODE_WORKERS``; ``0`` disables the
+    prefetch entirely and decodes inline on the calling thread.
+    """
+    raw = os.environ.get("VTSEARCH_DECODE_WORKERS", "").strip()
+    if raw:
+        try:
+            return max(0, int(raw))
+        except ValueError:
+            pass
+    return max(1, min(cap, allocated_cpus() - 1))
+
+
 # Preferred compute device for embedding and training.  ``"auto"`` resolves
 # to ``"cuda"`` when a GPU is visible to PyTorch and ``"cpu"`` otherwise;
 # explicit values like ``"cuda"``, ``"cuda:0"``, ``"cpu"``, or ``"mps"`` are
