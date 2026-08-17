@@ -579,6 +579,10 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
             # scorable only in the cells it was drawn for, and the shared
             # negatives are scorable everywhere.
             "evaluable_categories": cats if cats else (list(cells) if iid in neg_set else []),
+            # Whether this image's labels rest on an exhaustive reference (COCO,
+            # or a human who looked). False means VG's silence is the only
+            # evidence of absence -- which is what the review slates target.
+            "labels_exhaustive": iid in exhaustive,
             "regions": regions,
             "origin": {"importer": "vg_scale", "params": {"embedder": embedder_name, "labels": "coco"}},
             "origin_name": str(path),
