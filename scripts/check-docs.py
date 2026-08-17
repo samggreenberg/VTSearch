@@ -56,6 +56,10 @@ ALLOWED_PATHS: dict[str, str] = {
     "vtsearch/_version.txt": "baked into Docker images only; gitignored",
     "frontend/node_modules/": "npm install output",
     "frontend/src/app/api/": "generated API client (npm run generate-api-client)",
+    "frontend/src/app/generated/": "build stamp written by frontend/scripts/build-stamp.mjs (gitignored)",
+    # Another repository's tree. Backticked because it reads as a path, but it
+    # is the evaluation-framework repo's, and nothing here will ever create it.
+    "scripts/sod/": "lives in the evaluation-framework repo, not this one (#2847)",
     # Deliberately fictional paths in "here is how you would write your own"
     # examples. These must stay non-existent — that is the point of the example.
     "vtsearch/auth/my_provider.py": "fictional path in the auth extension guide",
@@ -65,20 +69,22 @@ ALLOWED_PATHS: dict[str, str] = {
 }
 
 # Documents exempt from the PATH check (only PATH — links, anchors, leaks and
-# fences are still policed everywhere). Both trees legitimately name paths that
-# do not exist in this checkout:
+# fences are still policed everywhere):
 #
 #   docs/plans/       describes work not yet done, so it names the files and
 #                     report paths the work *will* create. Demanding those exist
 #                     would invert the point of a plan.
-#   */experiments/    archival run records. They cite the scratch directory a
-#                     run lived in on the cluster and the throwaway scripts that
-#                     drove it, neither of which is in the repo.
-PATH_SKIP_PREFIXES = (
-    "docs/plans/",
-    "docs/experiments/",
-    "scripts/experiments/",
-)
+#
+# `docs/experiments/` and `scripts/experiments/` used to be exempt too, on the
+# grounds that a run record cites its cluster scratch dir and the throwaway
+# scripts that drove it. The scratch dirs are fine without an exemption — they
+# are absolute paths, or relative ones like `agg/x.csv` whose first component is
+# not a tracked top-level directory, so `looks_like_repo_path` never claims
+# them. The *scripts* were the real hole, and they should not be throwaway: the
+# overview-bench report cited an analysis script that had never been committed,
+# which made its most checkable finding impossible to reproduce and the gate
+# said nothing. A report may only cite analysis code that is in the tree.
+PATH_SKIP_PREFIXES = ("docs/plans/",)
 
 # Exempt from the PLAN check: this checker and its test are the one place in the
 # tree that must name plan paths which deliberately do not resolve — an example

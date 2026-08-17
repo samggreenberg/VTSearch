@@ -5,44 +5,64 @@ banded on the axis the user actually spends (votes), plus per-cell traces.
 
 Everything it drops is counted and printed: analysing N-of-M while reporting
 neither number is how a disk incident becomes a wrong verdict.
+
+Arm-vs-arm differences are reported **paired** (same category, same seed, same
+split) with a standard error, because that is the only form in which the size of
+a difference is readable. An unpaired mean of 0.0462 against 0.0508 invites a
+"the margin grows" claim that a +-0.03 standard error cannot support; the paired
+contrast says plainly which comparisons the sample can resolve and which it
+cannot.
 """
 
 import sys
 from pathlib import Path
 
 import pandas as pd
+from bench_cells import load_cells, paired_contrasts
 
 RESULTS = Path(sys.argv[1] if len(sys.argv) > 1 else "/expscratch/sgreenberg/bench-overview/results")
 CELLS = RESULTS / "cells"
 EXPECTED = int(sys.argv[2]) if len(sys.argv) > 2 else 189
+TABLES = Path(sys.argv[3]) if len(sys.argv) > 3 else RESULTS / "ANALYSIS_TABLES.txt"
 
 pd.set_option("display.width", 200)
 pd.set_option("display.max_columns", 50)
 
 
-def load() -> tuple[pd.DataFrame, dict]:
-    files = sorted(f for f in CELLS.glob("task_*.csv") if not any(k in f.name for k in ("sweep", "cutdiag", "cutincl")))
-    frames, bad = [], []
-    for f in files:
-        try:
-            df = pd.read_csv(f)
-            if df.empty:
-                bad.append((f.name, "empty"))
-                continue
-            frames.append(df)
-        except Exception as exc:  # noqa: BLE001
-            bad.append((f.name, repr(exc)[:60]))
-    prov = {"files_found": len(files), "expected": EXPECTED, "unreadable": bad}
-    return (pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()), prov
+class _Tee:
+    """Print to the terminal *and* to the tables file in one pass.
+
+    The old version told you the tables were "also written to" a path it never
+    wrote to; whoever ran it had to remember to redirect. A file the script
+    claims to write should exist.
+    """
+
+    def __init__(self, *streams):
+        self._streams = streams
+
+    def write(self, data: str) -> int:
+        for s in self._streams:
+            s.write(data)
+        return len(data)
+
+    def flush(self) -> None:
+        for s in self._streams:
+            s.flush()
 
 
-df, prov = load()
+TABLES.parent.mkdir(parents=True, exist_ok=True)
+_tables_fh = TABLES.open("w")
+sys.stdout = _Tee(sys.__stdout__, _tables_fh)
+
+
+df, prov = load_cells(RESULTS, quiet=True)
 
 print("=" * 100)
 print("COVERAGE")
 print("=" * 100)
-print(f"cell files found : {prov['files_found']} / {prov['expected']} expected")
-print(f"unreadable/empty : {len(prov['unreadable'])} {prov['unreadable'][:5]}")
+print(f"cell files found : {prov['files_found']} / {EXPECTED} expected")
+print(f"header-only      : {len(prov['header_only'])} starved cells {prov['header_only'][:5]}")
+print(f"unreadable       : {len(prov['unreadable'])} {prov['unreadable'][:5]}")
 print(f"rows loaded      : {len(df)}")
 if df.empty:
     sys.exit("no rows")
@@ -160,6 +180,14 @@ print(st.to_string())
 
 print()
 print("=" * 100)
+print("PAIRED ARM CONTRASTS - deep regime, same (category, seed) on both sides")
+print("=" * 100)
+print("mean difference +- standard error over paired cells; |mean| < 2*SE is NOT resolvable here")
+pairs = paired_contrasts(deep)
+print(pairs.to_string(index=False) if not pairs.empty else "(only one embedder in this run; nothing to pair)")
+
+print()
+print("=" * 100)
 print("COST OF A STEP (seconds)")
 print("=" * 100)
 # `elapsed_seconds` is CUMULATIVE from the cell's start, so aggregating it directly
@@ -210,5 +238,6 @@ for ds, emb in picks:
     step = max(1, len(one) // 12)
     print(one[trace_cols].iloc[::step].round(4).to_string(index=False))
 
-out = RESULTS / "ANALYSIS_TABLES.txt"
-print(f"\n(tables also written to {out})")
+print(f"\n(these tables were also written to {TABLES})")
+sys.stdout = sys.__stdout__  # put the real stream back before the file goes away
+_tables_fh.close()

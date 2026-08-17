@@ -16,16 +16,26 @@ import argparse
 import csv
 from pathlib import Path
 
-# Categories that logically entail the target.
+# Categories that logically entail the target: if the image carries one of
+# these, the target is present whether or not it was annotated. Two kinds
+# qualify, and both are entailment for this test's purpose:
+#   - a part or a consequence ("clouds" cannot appear without sky; a "face" has
+#     a nose),
+#   - a narrower name for the same object ("sunglasses" ARE glasses), which is
+#     how a free-text vocabulary splits one thing across several labels.
 ENTAILS = {
     "sky": ["cloud", "clouds"],
     "bus": ["bus stop", "bus station"],
     "clock": ["clock tower"],
+    "nose": ["face"],
+    "glasses": ["sunglasses", "eyeglasses"],
 }
 # Weaker signal: the target's typical context.
 CONTEXT = {
     "sky": ["tree", "building", "grass", "mountain", "roof", "water", "field", "road"],
     "clock": ["wall", "tower", "desk", "table"],
+    "nose": ["eye", "eyes", "hair", "mouth", "head", "ear"],
+    "glasses": ["eyes", "eye", "nose", "hair", "cap", "mouth"],
 }
 
 
