@@ -20,7 +20,9 @@ from vtscore.embedding.matrix import (
     get_embedding_matrix_for_snap,
     get_embedding_submatrix,
     invalidate_embedding_matrix,
+    media_score_rows,
 )
+from vtscore.embedding.precomputed import MismatchedVectorError
 from vtscore.state.core import DatasetContext, _state_lock, set_thread_dataset_context
 
 
@@ -531,3 +533,103 @@ class TestEmbeddingMatrixSidecar:
         # still mmap the stale pre-rewrite values.
         _, mat_path = matrix_mod._emb_sidecar_paths(self._pkl_path(dataset_id))
         assert np.load(mat_path)[0, 0] == 42.0
+
+
+class TestMixedDimensionsRaiseALocatableError:
+    """A dataset holding vectors of two widths must fail with a message that names them.
+
+    Ingestion validation (:mod:`vtscore.embedding.precomputed`) is supposed to
+    make this state unreachable, but a dataset can still arrive at it by another
+    route - a pickle written before that validation existed, or a third-party
+    importer writing ``media["embeddings"]`` directly.  When it does, the raw
+    numpy failure is ``could not broadcast input array from shape (768,) into
+    shape (1152,)``: no cid, no filename, no embedder, on whatever request
+    happened to rebuild the matrix.  These tests pin the replacement.
+    """
+
+    @staticmethod
+    def _mixed_ctx(name: str) -> DatasetContext:
+        ctx = DatasetContext(name)
+        ctx.medias[1] = {
+            "id": 1,
+            "embedder": "e5",
+            "filename": "first.txt",
+            "embeddings": {"e5": np.ones(4, dtype=np.float32)},
+        }
+        ctx.medias[2] = {
+            "id": 2,
+            "embedder": "e5",
+            "filename": "odd-one-out.txt",
+            "embeddings": {"e5": np.ones(7, dtype=np.float32)},
+        }
+        return ctx
+
+    def test_matrix_build_names_the_offending_media_and_both_widths(self):
+        ctx = self._mixed_ctx("test_mixed_dims_matrix")
+        with pytest.raises(MismatchedVectorError) as exc:
+            get_embedding_matrix(ctx)
+        msg = str(exc.value)
+        assert "media 2" in msg
+        assert "odd-one-out.txt" in msg
+        assert "7" in msg and "4" in msg
+
+    def test_submatrix_build_raises_too(self):
+        ctx = self._mixed_ctx("test_mixed_dims_submatrix")
+        with pytest.raises(MismatchedVectorError, match="odd-one-out.txt"):
+            get_embedding_submatrix(ctx, [1, 2])
+
+    def test_prefers_origin_name_over_filename(self):
+        ctx = self._mixed_ctx("test_mixed_dims_origin_name")
+        ctx.medias[2]["origin_name"] = "shards.tar::odd.jpg"
+        with pytest.raises(MismatchedVectorError, match=r"shards\.tar::odd\.jpg"):
+            get_embedding_matrix(ctx)
+
+    def test_uniform_widths_still_build_normally(self):
+        ctx = DatasetContext("test_uniform_dims")
+        ctx.medias[1] = {"id": 1, "embedder": "e5", "embeddings": {"e5": np.ones(4, dtype=np.float32)}}
+        ctx.medias[2] = {"id": 2, "embedder": "e5", "embeddings": {"e5": np.zeros(4, dtype=np.float32)}}
+        ids, mat = get_embedding_matrix(ctx)
+        assert ids == [1, 2]
+        assert mat.shape == (2, 4)
+
+    def test_float16_stored_vector_is_still_accepted(self):
+        """Width is what must match; a half-precision row is widened, not refused.
+
+        This is the shape issue #3143's fp16 work would produce, and it must
+        remain a non-event: the matrix is float32 and numpy widens on assignment.
+        """
+        ctx = DatasetContext("test_fp16_rows")
+        ctx.medias[1] = {"id": 1, "embedder": "e5", "embeddings": {"e5": np.ones(4, dtype=np.float16)}}
+        ctx.medias[2] = {"id": 2, "embedder": "e5", "embeddings": {"e5": np.zeros(4, dtype=np.float32)}}
+        _ids, mat = get_embedding_matrix(ctx)
+        assert mat.dtype == np.float32
+        assert mat[0, 0] == 1.0
+
+
+class TestPatchGridWidthMismatch:
+    def test_cls_vector_and_patch_grid_must_share_a_space(self):
+        """``media_score_rows`` max-pools the two together, so they must agree."""
+        media = {
+            "id": 5,
+            "filename": "mixed.jpg",
+            "embedder": "dinov3_patch",
+            "embeddings": {"dinov3_patch": np.ones(4, dtype=np.float32)},
+            "patch_grid": np.ones((2, 2, 9), dtype=np.float16),
+        }
+        with pytest.raises(MismatchedVectorError) as exc:
+            media_score_rows(media, "dinov3_patch")
+        msg = str(exc.value)
+        assert "mixed.jpg" in msg
+        assert "4" in msg and "9" in msg
+
+    def test_matching_widths_stack_cls_row_then_patches(self):
+        media = {
+            "id": 5,
+            "embedder": "dinov3_patch",
+            "embeddings": {"dinov3_patch": np.ones(3, dtype=np.float32)},
+            "patch_grid": np.zeros((2, 2, 3), dtype=np.float16),
+        }
+        rows = media_score_rows(media, "dinov3_patch")
+        assert rows is not None
+        assert rows.shape == (5, 3)  # 1 CLS row + 2x2 patches
+        assert rows[0, 0] == 1.0

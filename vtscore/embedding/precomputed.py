@@ -109,6 +109,18 @@ def _as_numeric_array(vec: Any, label: str) -> np.ndarray:
     return arr
 
 
+def _to_float32(arr: np.ndarray) -> np.ndarray:
+    """Narrow *arr* to contiguous ``float32``, letting overflow become ``inf`` quietly.
+
+    A ``float64`` value too large for single precision casts to ``inf``, which
+    numpy reports as a ``RuntimeWarning``.  That warning is noise here: the very
+    next step is :func:`_reject_non_finite`, which turns the ``inf`` into a
+    message that actually explains what went wrong and what to do about it.
+    """
+    with np.errstate(over="ignore", invalid="ignore"):
+        return np.ascontiguousarray(arr, dtype=np.float32)
+
+
 def _reject_non_finite(arr: np.ndarray, label: str, *, row_axis: bool = False) -> None:
     """Raise unless every entry of the already-``float32`` *arr* is finite.
 
@@ -161,7 +173,7 @@ def normalize_vector(
         )
     if arr.size == 0:
         raise MismatchedVectorError(f"{label}: vector is empty (zero-length), so it carries no embedding.")
-    out = np.ascontiguousarray(arr, dtype=np.float32)
+    out = _to_float32(arr)
     _reject_non_finite(out, label)
     if expected_dim is not None and int(out.shape[0]) != expected_dim:
         raise MismatchedVectorError(_dim_mismatch_message(label, int(out.shape[0]), expected_dim, expected_source))
@@ -193,7 +205,7 @@ def normalize_vector_block(
         )
     if arr.shape[1] == 0:
         raise MismatchedVectorError(f"{label}: vectors are zero-width (shape {arr.shape}), so they carry no embedding.")
-    out = np.ascontiguousarray(arr, dtype=np.float32)
+    out = _to_float32(arr)
     _reject_non_finite(out, label, row_axis=True)
     if expected_dim is not None and int(out.shape[1]) != expected_dim:
         raise MismatchedVectorError(_dim_mismatch_message(label, int(out.shape[1]), expected_dim, expected_source))
