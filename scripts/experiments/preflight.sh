@@ -12,7 +12,7 @@
 # warnings for the cases where you genuinely mean it (resuming a partial run).
 #
 # See scripts/experiments/GRID-PLAYBOOK.md for the SLURM-resource side of this
-# (memory sizing, QOS caps, chunking) and LESSONS.md for the incident log.
+# (memory sizing, QOS caps, chunking) and LESSONS.md / lessons/ for the incident log.
 set -uo pipefail
 
 EXP=""
