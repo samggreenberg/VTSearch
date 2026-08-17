@@ -52,6 +52,9 @@ COCO_ANN_URL = "http://images.cocodataset.org/annotations/annotations_trainval20
 
 VG_ROOT = pc.DEMO_CACHE / "visual_genome"
 
+#: ``{coco_image_id: (width, height)}``, filled by :func:`coco_truth`.
+COCO_DIMS: dict[int, tuple[int, int]] = {}
+
 
 def log(msg: str) -> None:
     print(f"[anchor] {msg}", flush=True)
@@ -128,6 +131,9 @@ def coco_truth(instances: list[Path], classes: set[str]) -> dict[int, dict[str, 
         wanted = {c["id"]: c["name"] for c in data["categories"] if c["name"] in classes}
         for img in data["images"]:
             truth.setdefault(int(img["id"]), {})
+            # COCO carries the dimensions, so banding an anchored image needs no
+            # JPEG header read at all.
+            COCO_DIMS[int(img["id"])] = (int(img["width"]), int(img["height"]))
         for ann in data["annotations"]:
             name = wanted.get(ann["category_id"])
             if name is None:
@@ -171,6 +177,12 @@ def main() -> int:
     ap.add_argument("--fetch", action="store_true", help="download missing sources")
     ap.add_argument("--out", default="", help="write the per-image verdicts as JSON")
     ap.add_argument("--pool", default="", help="restrict to the image ids in this vg_scale pickle")
+    ap.add_argument(
+        "--bands",
+        action="store_true",
+        help="also report per-(class, band) supply using COCO's boxes, i.e. what a "
+        "dataset built on the anchored half alone could fill",
+    )
     args = ap.parse_args()
 
     anchor = Path(args.anchor_dir)
@@ -255,6 +267,52 @@ def main() -> int:
         "\nVG recall = of the objects COCO annotates, the share VG also annotates."
         "\nneg noise = of the images VG treats as negatives, the share that actually hold one."
     )
+
+    if args.bands:
+        # What could a dataset built on the anchored half ALONE hold? Its labels
+        # would be exhaustive by construction -- a negative is an image COCO
+        # annotated and found none in, not merely one nobody mentioned it on --
+        # so it needs no correction pass at all. The question is only supply.
+        print(f"\n=== per-band supply on the {anchored} anchored images, COCO boxes ===")
+        hdr2 = f"{'class':<12}{'small':>8}{'medium':>8}{'large':>8}{'over':>7}{'scatter':>9}{'min':>7}"
+        print(hdr2)
+        print("-" * len(hdr2))
+        worst = None
+        for c in pc.SCALE_CLASSES:
+            counts = dict.fromkeys((*pc.BOX_BANDS, "oversize"), 0)
+            scattered = 0
+            for vg_id, cid in coco_of.items():
+                if pool is not None and vg_id not in pool:
+                    continue
+                ref = truth.get(cid)
+                wh = COCO_DIMS.get(cid)
+                if not ref or wh is None or c not in ref:
+                    continue
+                area = float(wh[0] * wh[1])
+                bs = ref[c]
+                union = (
+                    max(0.0, max(b[2] for b in bs) - min(b[0] for b in bs))
+                    * max(0.0, max(b[3] for b in bs) - min(b[1] for b in bs))
+                    / area
+                )
+                largest = max((b[2] - b[0]) * (b[3] - b[1]) for b in bs) / area
+                if union > largest * pc.BAND_MAX_INFLATION:
+                    scattered += 1
+                    continue
+                for band, (lo, hi) in pc.BOX_BANDS.items():
+                    if lo <= union < hi:
+                        counts[band] += 1
+                        break
+                else:
+                    counts["oversize"] += 1
+            mn = min(counts[b] for b in pc.BOX_BANDS)
+            worst = mn if worst is None else min(worst, mn)
+            print(
+                f"{c:<12}{counts['small']:>8}{counts['medium']:>8}{counts['large']:>8}"
+                f"{counts['oversize']:>7}{scattered:>9}{mn:>7}"
+            )
+        print("-" * len(hdr2))
+        print(f"binding per-band supply across C: {worst}  (n_pos must not exceed it)")
 
     if args.out:
         Path(args.out).write_text(
