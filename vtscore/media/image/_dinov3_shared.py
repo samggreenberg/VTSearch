@@ -26,6 +26,7 @@ from vtscore.config import DINOV3_MODEL_ID
 from vtscore.media.embedder import (
     IMPORT_MODULE_ESTIMATES,
     MediaEmbedder,
+    embed_autocast,
     embedder_load_setup,
     hf_token,
     intercept_tqdm_progress,
@@ -33,6 +34,8 @@ from vtscore.media.embedder import (
     load_pretrained_local_first,
     timed_progress,
     to_compute_device,
+    to_float32,
+    to_model_inputs,
 )
 from vtscore.media.image._image_bulk import bulk_embed_image_files
 from vtscore.media.patch_embed import PatchEmbedOutput, hf_vit_to_patch_output
@@ -118,7 +121,7 @@ class _Dinov3Base(MediaEmbedder):
                 on_progress=self._on_progress,
                 **extra_kwargs,
             )
-        self._model = to_compute_device(self._model)
+        self._model = to_compute_device(self._model, allow_half=True)
         self._model.eval()
         self._on_progress("loading", "Loading DINOv3 image processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
@@ -151,15 +154,14 @@ class _Dinov3Base(MediaEmbedder):
 
             image = image.convert("RGB")
             inputs = self._processor(images=image, return_tensors="pt")
-            device = next(self._model.parameters()).device
-            inputs = {k: v.to(device) for k, v in inputs.items()}
-            with torch.no_grad():
+            inputs = to_model_inputs(inputs, self._model)
+            with torch.no_grad(), embed_autocast():
                 outputs = self._model(**inputs)
                 # DINOv3 returns hidden states with the CLS token at index 0.
                 # Use it as the single-vector image representation (this is the
                 # representation linear-probed in the DINOv3 paper).
                 cls_token = outputs.last_hidden_state[:, 0]
-                embedding = cls_token.detach().cpu().numpy()
+                embedding = to_float32(cls_token.detach()).cpu().numpy()
             return embedding[0]
         except Exception:
             logging.getLogger(__name__).exception("Error embedding PIL image (DINOv3)")
@@ -171,12 +173,11 @@ class _Dinov3Base(MediaEmbedder):
 
         rgb = [im.convert("RGB") for im in images]
         inputs = self._processor(images=rgb, return_tensors="pt")
-        device = next(self._model.parameters()).device
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        with torch.no_grad():
+        inputs = to_model_inputs(inputs, self._model)
+        with torch.no_grad(), embed_autocast():
             outputs = self._model(**inputs)
             cls = outputs.last_hidden_state[:, 0]
-            return cls.detach().cpu().numpy()
+            return to_float32(cls.detach()).cpu().numpy()
 
     def _embed_media_bulk_impl(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
         if self._model is None:
@@ -198,9 +199,8 @@ class _Dinov3Base(MediaEmbedder):
 
         rgb = [im.convert("RGB") for im in images]
         inputs = self._processor(images=rgb, return_tensors="pt")
-        device = next(self._model.parameters()).device
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-        with torch.no_grad():
+        inputs = to_model_inputs(inputs, self._model)
+        with torch.no_grad(), embed_autocast():
             outputs = self._model(**inputs, output_attentions=True)
         return [
             hf_vit_to_patch_output(
@@ -234,9 +234,8 @@ class _Dinov3Base(MediaEmbedder):
             import torch  # noqa: PLC0415
 
             inputs = self._processor(images=image, return_tensors="pt")
-            device = next(self._model.parameters()).device
-            inputs = {k: v.to(device) for k, v in inputs.items()}
-            with torch.no_grad():
+            inputs = to_model_inputs(inputs, self._model)
+            with torch.no_grad(), embed_autocast():
                 outputs = self._model(**inputs, output_attentions=True)
             return hf_vit_to_patch_output(outputs, num_register_tokens=_DINOV3_NUM_REGISTER_TOKENS)
         except Exception:

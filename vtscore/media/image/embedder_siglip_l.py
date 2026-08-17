@@ -19,11 +19,13 @@ from vtscore.config import SIGLIP_L_MODEL_ID, SIGLIP_L_PRETRAINED
 from vtscore.media.embedder import (
     IMPORT_MODULE_ESTIMATES,
     MediaEmbedder,
+    embed_autocast,
     embedder_load_setup,
     intercept_tqdm_progress,
     intercept_weight_loading_progress,
     timed_progress,
     to_compute_device,
+    to_float32,
 )
 from vtscore.media.image._image_bulk import bulk_embed_image_files
 
@@ -105,7 +107,7 @@ class ImageSiglipLEmbedder(MediaEmbedder):
             )
             tokenizer = open_clip.get_tokenizer(SIGLIP_L_MODEL_ID)
         model.eval()
-        self._model = to_compute_device(model)
+        self._model = to_compute_device(model, allow_half=True)
         self._preprocess = preprocess
         self._tokenizer = tokenizer
 
@@ -158,11 +160,13 @@ class ImageSiglipLEmbedder(MediaEmbedder):
         """
         import torch  # noqa: PLC0415
 
-        device = next(self._model.parameters()).device
-        batch = torch.stack([self._preprocess(im.convert("RGB")) for im in images]).to(device)
-        with torch.no_grad():
+        param = next(self._model.parameters())
+        batch = torch.stack([self._preprocess(im.convert("RGB")) for im in images]).to(
+            device=param.device, dtype=param.dtype
+        )
+        with torch.no_grad(), embed_autocast():
             features = self._model.encode_image(batch)
-        return features.detach().cpu().numpy()
+        return to_float32(features.detach()).cpu().numpy()
 
     def _embed_media_bulk_impl(self, medias: list[dict]) -> list[Optional[np.ndarray]]:
         if self._model is None:
@@ -187,9 +191,10 @@ class ImageSiglipLEmbedder(MediaEmbedder):
             import torch  # noqa: PLC0415
 
             device = next(self._model.parameters()).device
+            # Token ids are integer: they follow the device but never the dtype.
             tokens = self._tokenizer([text]).to(device)
-            with torch.no_grad():
-                text_vec = self._model.encode_text(tokens).detach().cpu().numpy()[0]
+            with torch.no_grad(), embed_autocast():
+                text_vec = to_float32(self._model.encode_text(tokens).detach()).cpu().numpy()[0]
             return text_vec
         except Exception:
             logging.getLogger(__name__).exception("Error embedding text query for image (SigLIP-L)")

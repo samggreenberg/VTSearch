@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import functools
+import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -209,6 +210,112 @@ def resolve_device() -> str:
     if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
         return "mps"
     return "cpu"
+
+
+# Compute precision for the *embedding* forward pass.  Every image embedder used
+# to load fp32 and run with no autocast, which on a V100 means 15.7 TFLOPS of
+# fp32 instead of 125 TFLOPS on the fp16 tensor cores - measured at 4.2x for
+# ``siglip2_l`` (issue #3143).
+#
+# The default is deliberately ``"fp32"``, i.e. exactly the old behaviour.  Half
+# precision *changes the vectors* (cosine similarities shift by ~1e-3, against a
+# ~1e-7 fp32 kernel-selection noise floor), and the calibration studies resolve
+# effects of 0.005, so it cannot be turned on silently: the whole pre-embedded
+# pile and every published result (#3129) are fp32, and a pile with some cells
+# fp16 and some fp32 is a confound that would surface months later as an
+# unexplained arm difference.  Flipping this default is gated on the #3143
+# measurement; until then it is the experiment's knob and the user's escape
+# hatch, in both directions.
+#
+# Modes:
+#
+# * ``fp32``   - full precision (default; unchanged behaviour).
+# * ``fp16``   - cast the weights.  Fastest: no per-op cast overhead, and the
+#                weights themselves halve, which is what lets a bigger batch fit.
+# * ``bf16``   - cast the weights to bfloat16.  Wider exponent, fewer mantissa
+#                bits than fp16; needs sm_80+ (a V100 is sm_70, so fp16 only).
+# * ``autocast_fp16`` / ``autocast_bf16`` - keep fp32 weights and wrap the
+#                forward in ``torch.autocast``, which keeps the reduction-heavy
+#                ops (softmax, layer norm) in fp32.  Numerically the safer half,
+#                slower than a weight cast.
+# * ``auto``   - ``bf16`` where supported, else ``fp16``, else ``fp32``.
+EMBED_PRECISION = os.environ.get("VTSEARCH_EMBED_PRECISION", "fp32").strip().lower()
+
+#: Modes that keep fp32 weights and cast per-op inside ``torch.autocast``.
+_AUTOCAST_MODES = {"autocast_fp16": "fp16", "autocast_bf16": "bf16"}
+_PRECISION_MODES = {"fp32", "fp16", "bf16", "auto", *_AUTOCAST_MODES}
+
+
+def _bf16_supported() -> bool:
+    """True when the resolved device can actually run bfloat16 kernels."""
+    try:
+        import torch  # noqa: PLC0415
+    except ImportError:
+        return False
+    if not resolve_device().startswith("cuda"):
+        return False
+    try:
+        return bool(torch.cuda.is_bf16_supported())
+    except Exception:
+        return False
+
+
+def embed_precision() -> str:
+    """The effective embedding precision: one of :data:`_PRECISION_MODES` minus ``auto``.
+
+    Half precision is a **CUDA-only** win here, so every half mode degrades to
+    ``"fp32"`` off CUDA rather than being honoured: fp16 on a CPU tensor is
+    emulated and slower than the fp32 it replaced, which would make the escape
+    hatch a performance trap on exactly the hosts that need the most help.  An
+    unknown mode also degrades to ``"fp32"`` with a warning - a typo in an env
+    var must not silently change what gets embedded.
+    """
+    mode = EMBED_PRECISION
+    if mode not in _PRECISION_MODES:
+        logging.getLogger(__name__).warning(
+            "VTSEARCH_EMBED_PRECISION=%r is not one of %s; using fp32",
+            mode,
+            ", ".join(sorted(_PRECISION_MODES)),
+        )
+        return "fp32"
+    if mode == "fp32":
+        return "fp32"
+    if not resolve_device().startswith("cuda"):
+        return "fp32"
+    if mode == "auto":
+        return "bf16" if _bf16_supported() else "fp16"
+    if mode in ("bf16", "autocast_bf16") and not _bf16_supported():
+        # Say so: silently substituting fp16 for the bf16 someone asked for
+        # would put a different numeric format in a study that named one.
+        logging.getLogger(__name__).warning(
+            "VTSEARCH_EMBED_PRECISION=%s but this device has no bfloat16 support; using fp32", mode
+        )
+        return "fp32"
+    return mode
+
+
+def embed_weight_dtype() -> "object | None":
+    """The dtype to *cast the weights* to, or ``None`` to leave them fp32.
+
+    ``None`` for both ``fp32`` and the autocast modes - the latter keep fp32
+    master weights on purpose and cast per-op instead.
+    """
+    mode = embed_precision()
+    if mode not in ("fp16", "bf16"):
+        return None
+    import torch  # noqa: PLC0415
+
+    return torch.float16 if mode == "fp16" else torch.bfloat16
+
+
+def embed_autocast_dtype() -> "object | None":
+    """The dtype for a ``torch.autocast`` block, or ``None`` for no autocast."""
+    half = _AUTOCAST_MODES.get(embed_precision())
+    if half is None:
+        return None
+    import torch  # noqa: PLC0415
+
+    return torch.float16 if half == "fp16" else torch.bfloat16
 
 
 # Server-side file access is governed by the active login provider, not a
