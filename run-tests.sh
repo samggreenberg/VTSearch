@@ -521,13 +521,31 @@ for _log in ${_lane_logs[@]+"${_lane_logs[@]}"}; do
     rm -f "$_log"
 done
 
-if [[ ${#_failed_lanes[@]} -gt 0 ]]; then
+# Final verdict banner. With lanes reporting after pytest, pytest's own
+# summary is no longer the last thing printed — this banner is, so "read the
+# last ====-bordered block" stays the way to read a run's outcome.
+echo ""
+echo "============================================================"
+if [[ ${#_failed_lanes[@]} -gt 0 || $_pytest_status -ne 0 ]]; then
+    _verdict_parts=()
+    if [[ $_pytest_status -ne 0 ]]; then
+        _verdict_parts+=("pytest")
+    fi
+    for _i in ${_failed_lanes[@]+"${_failed_lanes[@]}"}; do
+        _verdict_parts+=("${_lane_names[$_i]}")
+    done
+    _joined=$(IFS=", "; echo "${_verdict_parts[*]}")
+    echo "RUN FAILED: $_joined"
+    echo "============================================================"
+    if [[ $_pytest_status -ne 0 ]]; then
+        exit $_pytest_status
+    fi
     exit 1
 fi
-if [[ $_pytest_status -ne 0 ]]; then
-    exit $_pytest_status
+if $_run_pytest; then
+    echo "RUN PASSED (all gates green; pytest summary above)"
+else
+    echo "RUN PASSED (frontend-only; no Python tests in the 'frontend' group)"
 fi
-if ! $_run_pytest; then
-    echo "Frontend-only run complete (no Python tests in the 'frontend' group)."
-fi
+echo "============================================================"
 exit 0
