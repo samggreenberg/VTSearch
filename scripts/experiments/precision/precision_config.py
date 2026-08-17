@@ -151,6 +151,27 @@ ARMS: dict[str, dict[str, str]] = {
         "deterministic": "on",
         "role": "diagnostic — its V100 twin; do the two cards now agree?",
     },
+    # cuDNN algorithm selection REFUTED too: both `det` arms came out
+    # bit-identical to their own card's fp32 (exactly 0), so the 1.5e-4 split is
+    # stable and reproducible, not a nondeterministic algorithm choice.
+    #
+    # Which leaves the sharpest remaining clue.  The published cell was built by
+    # job 495266 on **rack7n03**; both V100 arms here landed on **rack5n03**.
+    # SLURM calls both `gres/gpu:v100`, but that is a *type* label, not a device:
+    # this cluster's V100s include SXM2 and PCIE parts with different SM counts,
+    # and a different SM count means different kernel tiling and a different
+    # accumulation order.  If `gres/gpu:v100` is not one device, then "the card"
+    # was never the right axis — the node is.
+    #
+    # This arm pins the node the published cell was built on.  If it lands on the
+    # L40S cluster, the pile is reproducible per *node*, and #3144's auto-pick —
+    # which requests a type — cannot guarantee a reproducible rebuild.
+    "fp32_v100_rack7n03": {
+        "precision": "fp32",
+        "gpu": "v100",
+        "node": "rack7n03",
+        "role": "diagnostic — the exact node the published cell was built on",
+    },
 }
 
 #: The arm every drift figure is measured against.

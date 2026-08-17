@@ -47,12 +47,23 @@ CPUS="${VTS_PRECISION_CPUS:-8}"
 TIME="${VTS_PRECISION_TIME:-2:00:00}"
 
 ARMS_ALL="fp32_l40s fp32_v100 fp16_l40s fp16_v100 autocast_l40s bf16_l40s"
+# Diagnostics added mid-run; not part of the pre-registered six.
+ARMS_DIAG="fp32_notf32_l40s fp32_det_l40s fp32_det_v100 fp32_v100_rack7n03"
 
 arm_gpu() {
   case "$1" in
     *_l40s) echo l40s ;;
-    *_v100) echo v100 ;;
+    *_v100|*_v100_*) echo v100 ;;
     *) echo "unknown GPU for arm $1" >&2; return 1 ;;
+  esac
+}
+
+# Some diagnostic arms pin a specific NODE, not just a GPU type: `gres/gpu:v100`
+# is a type label and this cluster's V100s are not all the same part.
+arm_node() {
+  case "$1" in
+    *_rack*) echo "${1##*_}" ;;
+    *) echo "" ;;
   esac
 }
 
@@ -66,12 +77,16 @@ BUILDENV="$BUILDENV VTSEARCH_TORCH_THREADS=$CPUS OMP_NUM_THREADS=$CPUS MKL_NUM_T
 # filter refuses the job, which looks exactly like a queued job (#2897 lost both
 # arms this way, and #2905's --gres=none refusal did it again).
 submit_arm() {
-  local arm="$1" gpu jid
+  local arm="$1" gpu node jid
   gpu="$(arm_gpu "$arm")"
+  node="$(arm_node "$arm")"
+  local -a extra=()
+  [[ -n "$node" ]] && extra+=(--nodelist="$node")
   jid=$(sbatch --parsable \
     --job-name="prec-$arm" \
     --partition=gpu \
     --gres="gpu:${gpu}:1" \
+    "${extra[@]}" \
     --cpus-per-task="$CPUS" \
     --mem="$MEM" \
     --time="$TIME" \
@@ -83,7 +98,7 @@ submit_arm() {
     return 1
   fi
   echo "$jid" > "$LOGS/.jobid_$arm"
-  echo "$arm -> job $jid  (gpu:$gpu, log: $LOGS/$arm-$jid.out)"
+  echo "$arm -> job $jid  (gpu:$gpu${node:+ node:$node}, log: $LOGS/$arm-$jid.out)"
 }
 
 preflight() {
