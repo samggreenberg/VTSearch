@@ -69,9 +69,11 @@ Now that the release PR is open, close the GitHub issues whose fixes are include
 - For each such PR, read its body and collect **every** issue it references, keeping track of which keyword introduced each reference. Sort them into two buckets:
   - **Closing** — `Closes #N`, `Fixes #N`, `Resolves #N` (case-insensitive).
   - **Non-closing** — `Refs #N`, `Part of #N`, or a bare `#N` mention.
-- Then add a third bucket, the **orphan backstop**: list the repo's still-open issues and check each one's comments for a pointer at a PR in this release range (`Addressed in #M`, `Fixed in #M`, and similar). Collect any whose pointer names a PR in the range that never referenced it back. (To keep this cheap, it's enough to check issues updated since the previous release.)
+- Then add a third bucket, the **orphan backstop**: list the repo's still-open issues and check each one's comments for a pointer at a PR in this release range (`Addressed in #M`, `Fixed in #M`, and similar). Collect any whose pointer names a PR in the range that never referenced it back. (To keep this cheap, it's enough to check issues updated since the previous release.) A pointer naming a **commit** rather than a PR (`Fixed on dev by <sha>`) belongs in this bucket too — resolve the SHA to its merge commit to find the PR, then reconcile it like any other orphan.
 
 Non-closing references are **not** silently skipped. A PR that finishes an issue but writes `Refs #N` would otherwise orphan it permanently: this step skips it, and because no later release re-examines an already-merged PR, nothing ever revisits it — the issue stays open forever while its fix is live in `main`. Real incident: #2940, #2930 and #2951 each shipped in the 2026-08-12 release under `Refs`, with an "Addressed in #M" comment on the issue, and all three stayed open. So the non-closing and orphan buckets get **reconciled** rather than dropped.
+
+**The hardest orphan is a duplicate.** #2911 shipped to `main` in the 2026-08-11 release and stayed open until 2026-08-17. It was a duplicate of #3025, the fix PR wrote `Closes #3025` only, and at release time #2911 had no comments and no PR references at all — so all three buckets were blind to it by construction, not by a keyword slip. No sweep rule recovers an issue that nothing on GitHub links to; that one is prevented upstream, by CLAUDE.md's duplicate rule. What this step *can* do is catch the late pointer: the resolving comment landed a day after the release, so an issue whose newest comment claims a fix by a PR or commit from **any earlier** release deserves a look, not just this one's.
 
 **Reconcile each issue in the non-closing and orphan buckets.** Read the issue (body *and* comments) alongside the PR, then close it only when **both** hold:
 
@@ -114,7 +116,13 @@ The script is a pure function from data to plan — it does no network I/O, beca
 python scripts/reconcile-dev-labels.py --input plan-input.json
 ```
 
-It prints four buckets. **Apply `ADD` and `REMOVE` directly** — they are unambiguous. **Do not apply `NEEDS REVIEW`**; read those issues yourself. An issue lands there when a fix pointer is not the newest comment, which is genuinely undecidable from the outside: the later comment may be a maintainer saying "thanks" or the reporter saying the fix does not work. Tagging would bury a dispute; skipping would silently drop the issue out of the awaiting-release view. That is the same "not silently skipped" principle step 6 applies to non-closing references.
+It prints four buckets. **Apply `ADD` and `REMOVE` directly** — they are unambiguous. **Do not apply `NEEDS REVIEW`**; read those issues yourself. An issue lands there for one of three reasons, all genuinely undecidable from the outside:
+
+- **A fix pointer is not the newest comment.** The later comment may be a maintainer saying "thanks" or the reporter saying the fix does not work. Tagging would bury a dispute; skipping would silently drop the issue out of the awaiting-release view.
+- **A comment claims a fix by commit SHA** instead of `Addressed in #M`. The script has only the JSON you piped in, so it cannot map a commit to its PR — but the claim is real, so it is surfaced. Resolve it with `git log --ancestry-path <sha>..origin/dev --merges --oneline | tail -1` to find the merge that carried it, then re-run with a corrected pointer.
+- **The issue carries `dev` but nothing resolves it** — stale, or fixed in an earlier release.
+
+That is the same "not silently skipped" principle step 6 applies to non-closing references.
 
 Add `--check` to make it exit non-zero when anything needs attention, and `--json` for machine-readable output.
 
