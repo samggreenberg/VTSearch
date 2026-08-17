@@ -49,9 +49,20 @@ sentinels this file used to carry protect concurrent *deletions*, which is a
 different problem; nothing anchors two appends at EOF.) One file per incident
 removes the shared line: two studies add two different files and merge cleanly.
 
-The index below is the one line that is still shared, which is why it is
-**generated**. If two branches do collide on it, re-run the generator rather
-than merging the table by hand.
+The index below is the one thing still shared, which is why it is **generated**.
+Two branches that each add a lesson on the same day do still collide on its
+table — and *only* on its table; the entry files themselves arrive intact, which
+is the half that used to cost prose merges. Resolve it by regenerating, never by
+hand-merging the rows:
+
+```bash
+git merge origin/dev                       # CONFLICT in LESSONS.md, and only there
+python scripts/gen-docs-inventories.py     # rewrites the table from both sides' files
+git add scripts/experiments/LESSONS.md && git commit
+```
+
+Both entry files are already in the tree by then, so the regenerated table is the
+correct union of the two branches with no judgement involved.
 
 ## The log
 
