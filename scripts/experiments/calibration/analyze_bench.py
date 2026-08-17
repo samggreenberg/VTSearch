@@ -1,5 +1,8 @@
 """Analysis for the production-defaults overview benchmark.
 
+    python analyze_bench.py <results> [expected_cells] [tables_out] [deep_from]
+
+
 Reports cost = fnr + fpr and calibration regret against the oracle threshold,
 banded on the axis the user actually spends (votes), plus per-cell traces.
 
@@ -24,6 +27,10 @@ RESULTS = Path(sys.argv[1] if len(sys.argv) > 1 else "/expscratch/sgreenberg/ben
 CELLS = RESULTS / "cells"
 EXPECTED = int(sys.argv[2]) if len(sys.argv) > 2 else 189
 TABLES = Path(sys.argv[3]) if len(sys.argv) > 3 else RESULTS / "ANALYSIS_TABLES.txt"
+#: First vote of the deep-regime window. Derived from the run's own horizon (its
+#: last third) unless given, so a 250-vote study is not summarised on the window
+#: a 150-vote study happened to use.
+DEEP_FROM = int(sys.argv[4]) if len(sys.argv) > 4 else 0
 
 pd.set_option("display.width", 200)
 pd.set_option("display.max_columns", 50)
@@ -41,8 +48,12 @@ class _Tee:
         self._streams = streams
 
     def write(self, data: str) -> int:
-        for s in self._streams:
-            s.write(data)
+        # pandas pads table rows to a fixed width, and the repo's pre-commit hook
+        # strips that trailing whitespace - which would leave the committed
+        # tables differing from what this script emits. Strip it here instead.
+        stripped = "\n".join(line.rstrip() for line in data.split("\n"))
+        for stream in self._streams:
+            stream.write(data if stream is sys.__stdout__ else stripped)
         return len(data)
 
     def flush(self) -> None:
@@ -74,6 +85,9 @@ print(
     f"max={df.groupby(['dataset', 'embedder', 'category', 'seed']).size().max()}"
 )
 print(f"styles           : {sorted(df['style'].unique())}")
+HORIZON = int(df["t"].max())
+DEEP_FROM = DEEP_FROM or int(round(HORIZON * 2 / 3))
+print(f"horizon          : {HORIZON} votes; deep regime = t >= {DEEP_FROM}")
 print(f"heads            : {sorted(df['head'].unique())}")
 
 # Region voting is a property of the cell, not a flag we trust: patch style on a
@@ -83,9 +97,9 @@ df["region"] = df["style"].ne("whole_image")
 
 print()
 print("=" * 100)
-print("HEADLINE - deep regime (t >= 100), cost = fpr + fnr, regret vs oracle threshold")
+print(f"HEADLINE - deep regime (t >= {DEEP_FROM}), cost = fpr + fnr, regret vs oracle threshold")
 print("=" * 100)
-deep = df[df["t"] >= 100]
+deep = df[df["t"] >= DEEP_FROM]
 g = (
     deep.groupby("arm")
     .agg(
@@ -107,7 +121,11 @@ print()
 print("=" * 100)
 print("BANDED ON VOTES SPENT - the axis the user actually pays")
 print("=" * 100)
-bands = [(1, 20), (21, 50), (51, 100), (101, 150)]
+# Vote bands: fixed early edges (that is where the curve moves) plus a final
+# band that stretches to whatever horizon this run used.
+bands = [(1, 20), (21, 50), (51, 100), (101, min(150, HORIZON))]
+if HORIZON > 150:
+    bands.append((151, HORIZON))
 rows = []
 for lo, hi in bands:
     sub = df[(df["t"] >= lo) & (df["t"] <= hi)]
@@ -137,7 +155,7 @@ if dec.empty:
 else:
     print(f"rows with a decomposition: {len(dec)} / {len(df)}")
     d = (
-        dec[dec["t"] >= 100]
+        dec[dec["t"] >= DEEP_FROM]
         .groupby("arm")
         .agg(
             regret=("regret", "mean"),

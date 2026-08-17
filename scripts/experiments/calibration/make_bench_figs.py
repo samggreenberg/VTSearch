@@ -59,7 +59,13 @@ DATASET_ORDER = [
     "vg_box_small",
 ]
 BAND_ORDER = ["vg_box_large", "vg_box_medium", "vg_box_small"]
+#: The vote axis. Set from the data in `main()` - a study run to 250 votes must
+#: not be plotted on a 150-vote grid, which would silently crop the very steps it
+#: was run to measure.
 T_GRID = np.arange(2, 151)
+#: First vote of the "deep regime" summaries. Also set from the data: it is the
+#: last third of the horizon, so the window means the same thing at any length.
+DEEP_FROM = 100
 
 
 def interp_cell(cell: pd.DataFrame, metric: str, grid: np.ndarray = T_GRID) -> np.ndarray:
@@ -243,7 +249,7 @@ def fig_positives(df: pd.DataFrame, out: Path) -> None:
         ax.axis("off")
     _label_bottom_row(axes, "votes cast (t)")
     axes[0].set_ylabel("positives held (median, 10-90%)")
-    fig.suptitle("What the loop is actually given: positives accumulated per 150 votes", y=1.0)
+    fig.suptitle(f"What the loop is actually given: positives accumulated over {T_GRID[-1]} votes", y=1.0)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
     _finish(fig, out, "Log y axis. The dotted diagonal is the unreachable ceiling where every vote is a positive.")
 
@@ -252,7 +258,7 @@ def fig_positives(df: pd.DataFrame, out: Path) -> None:
 # 4. the scale axis
 # --------------------------------------------------------------------------
 def fig_scale_bands(df: pd.DataFrame, out: Path) -> None:
-    deep = df[(df["t"] >= 100) & df["dataset"].isin(BAND_ORDER)]
+    deep = df[(df["t"] >= DEEP_FROM) & df["dataset"].isin(BAND_ORDER)]
     if deep.empty:
         return
     fig, axes = plt.subplots(1, 3, figsize=(12.6, 3.4))
@@ -275,7 +281,7 @@ def fig_scale_bands(df: pd.DataFrame, out: Path) -> None:
         ax.set_ylabel(label, fontsize=9)
         ax.grid(alpha=0.3)
     axes[0].legend(fontsize=8, frameon=False)
-    fig.suptitle("Target scale: box area as a fraction of the image (deep regime, t >= 100)", y=1.02)
+    fig.suptitle(f"Target scale: box area as a fraction of the image (deep regime, t >= {DEEP_FROM})", y=1.02)
     fig.tight_layout()
     _finish(fig, out, "10 prevalence-spread categories per band, 3 seeds; bars are standard error over cells.")
 
@@ -284,7 +290,7 @@ def fig_scale_bands(df: pd.DataFrame, out: Path) -> None:
 # 5. where the error budget sits
 # --------------------------------------------------------------------------
 def fig_error_budget(df: pd.DataFrame, out: Path) -> None:
-    deep = df[df["t"] >= 100]
+    deep = df[df["t"] >= DEEP_FROM]
     datasets = [d for d in DATASET_ORDER if d in set(deep["dataset"])]
     embs = sorted(deep["embedder"].unique(), key=lambda e: list(COLOR).index(e) if e in COLOR else 9)
     fig, ax = plt.subplots(figsize=(1.9 * len(datasets) + 2, 4.0))
@@ -305,7 +311,7 @@ def fig_error_budget(df: pd.DataFrame, out: Path) -> None:
     ax.set_ylabel("cost = fpr + fnr (solid = fpr, hatched = fnr)")
     ax.grid(alpha=0.3, axis="y")
     ax.legend(fontsize=7, frameon=False, ncol=len(embs))
-    ax.set_title("Which error each configuration makes (deep regime, t >= 100)", fontsize=11)
+    ax.set_title(f"Which error each configuration makes (deep regime, t >= {DEEP_FROM})", fontsize=11)
     fig.tight_layout()
     _finish(fig, out, "Bar height is cost; the split says whether an arm over-includes (fpr) or misses (fnr).")
 
@@ -416,7 +422,7 @@ def _grouped_bars(ax, deep: pd.DataFrame, metric: str, datasets: list[str], embs
 
 
 def fig_regret_decomposition(df: pd.DataFrame, out: Path) -> None:
-    deep = df[(df["t"] >= 100)].dropna(subset=["rule_inefficiency", "calibration_shift"])
+    deep = df[(df["t"] >= DEEP_FROM)].dropna(subset=["rule_inefficiency", "calibration_shift"])
     if deep.empty:
         print("  (no decomposition rows; skipping the regret figure)")
         return
@@ -455,6 +461,9 @@ def main() -> int:
     ap.add_argument("--binary", default="/expscratch/sgreenberg/bench-binary/results")
     ap.add_argument("--text-csv", default=None, help="text_baseline.csv (defaults to the wave-1 results dir's copy)")
     ap.add_argument("--svg", action="store_true", help="also write an SVG beside each PNG (for the HTML build)")
+    ap.add_argument(
+        "--deep-from", type=int, default=None, help="first vote of the deep-regime window (default: last third)"
+    )
     args = ap.parse_args()
 
     global ALSO_SVG
@@ -462,11 +471,16 @@ def main() -> int:
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
+    global T_GRID, DEEP_FROM
     print("loading cells:")
     wave1, _ = load_cells(Path(args.wave1))
     vgbox, _ = load_cells(Path(args.vgbox))
     binary, _ = load_cells(Path(args.binary), embedder_suffix=" (binary)")
     boxed = pd.concat([wave1, vgbox], ignore_index=True)
+    horizon = int(max(df["t"].max() for df in (wave1, vgbox, binary) if not df.empty))
+    T_GRID = np.arange(2, horizon + 1)
+    DEEP_FROM = args.deep_from if args.deep_from else int(round(horizon * 2 / 3))
+    print(f"horizon: {horizon} votes; deep regime from t={DEEP_FROM}")
     text_csv = Path(args.text_csv) if args.text_csv else Path(args.wave1) / "text_baseline.csv"
 
     print("figures:")

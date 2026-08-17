@@ -8,6 +8,7 @@ rows loaded      : 37844
 distinct cells   : 265
 steps per cell   : min=7 median=148 max=149
 styles           : ['max_patch', 'whole_image']
+horizon          : 150 votes; deep regime = t >= 100
 heads            : ['linear']
 
 ====================================================================================================
