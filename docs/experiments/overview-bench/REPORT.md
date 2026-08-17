@@ -22,9 +22,10 @@ production `max_patch` geometry. Only sizing knobs were set.
 **On the numbers.** Two significant digits, because that is what 3 seeds
 support: differences are quoted **paired** (same category, same seed, same
 split) with a standard error, and a difference smaller than twice its standard
-error is called unresolved rather than dressed in a third decimal. Three of this
-report's earlier claims did not survive being written that way, and each is
-marked where it appears.
+error is called unresolved rather than dressed in a third decimal. **Four of this
+report's earlier claims did not survive being written that way** — two encoder
+comparisons, the growth of DINOv3's ranking margin, and the medium band's cut-rule
+defect — and each is marked where it appears.
 
 ## What was exercised
 
@@ -822,7 +823,8 @@ arms' fpr, and the sub-patch band is where it matters most.
    text ranking, especially for `dinov3_patch`, which cannot be typed at. The
    crossing table says a typed query is worth 45–97 votes on VG.
 2. **Acquisition is the scarce resource, not the cut rule** — `rule_inefficiency`
-   is negative on 15 of 18 arms, and 6 % of cells spend 150 votes on ≤2
+   is negative on 14 of 18 arms (−0.014 ± 0.004 pooled), and 6 % of cells spend
+   150 votes on ≤2
    positives. Everything about the ramp figures says the same thing.
 3. **Clean the vocabulary before the next VG run**: merge near-synonyms
    (`glasses`/`sunglasses`), drop semantically empty labels (`tip`), and treat
@@ -835,5 +837,5 @@ arms' fpr, and the sub-patch band is where it matters most.
 5. **Make a starved run say so** — a `starved` column and a warning; this is the
    shape that hid #2877. Effective starvation (≤2 positives at t=150) deserves
    the same flag.
-6. **Retire `caltech101_m`** from this sweep: saturated for all four
-   configurations and for text.
+6. **Retire `caltech101_m`** from this sweep: saturated for all three
+   representations and for text.
