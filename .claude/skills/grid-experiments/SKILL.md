@@ -33,6 +33,11 @@ mistakes that cost the most queue time in #3129: an array that claims your whole
 GRID-PLAYBOOK.md for measured RSS per cell type), and a **job name you are
 already using**, which silently breaks the per-name completion waiter below.
 
+Add `--reuse-prepare "$PREPARE_DIR"` when you are skipping a GPU prepare stage by
+reusing a finished study's output. It checks that every `crops/` entry still
+resolves — the links point into the study that generated them, and `readlink -f`
+recreates them happily after that study is archived (#2881).
+
 It refuses to pass when the results dir already holds another grid's cells,
 when the *actual* mount is low on space, when zero-byte cells from a previous
 incident would be skipped by resume, or when `VTS_REPO` is unset or points at a
