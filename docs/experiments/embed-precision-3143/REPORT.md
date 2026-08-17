@@ -73,7 +73,9 @@ under test is precision; the **card is crossed with it deliberately**, because
 `dinov3_patch` is excluded on purpose, and not for cost: its patch grids are
 **already stored `float16`** (`vtscore/datasets/stages/embedding.py`), so its
 region path is quantised to half before any of this. It is the arm where fp16
-compute is least likely to matter and a null would be least informative.
+compute is least likely to matter and a null would be least informative — but
+nobody has measured what that *storage* cast costs the max-pooled region score,
+which is a different question and is filed as **#3159**.
 
 **Nothing touched the shared pile.** Each arm built its own side pile; weights
 were read from the shared `models` dir so no arm re-downloaded.
@@ -269,24 +271,61 @@ SXM2 and PCIE parts with different SM counts, and a different SM count means
 different tiling and a different accumulation order. `fp32_v100_rack7n03` pins the
 exact node the published cell was built on to test that.
 
-<!-- RACK7N03 RESULT -->
+## Resolved: one specific V100 part is the outlier
+
+It is the node, and it is one device. `gres/gpu:v100` covers at least two parts:
+
+| node | GPU as torch reports it | `siglip` | `siglip2_l` |
+|---|---|---:|---:|
+| rack7n03 | **Tesla V100S-PCIE-32GB** | 123 s | 380 s |
+| rack5n03 | **Tesla V100-SXM2-32GB-LS** | 144 s | 442 s |
+
+Both `sm_70`, both `gres/gpu:v100`, ~15% apart in throughput — and SLURM cannot
+distinguish them. Pinning rack7n03:
+
+| `siglip2_l` fp32 | vs `published_pile` | vs `fp32_l40s` | vs `fp32_v100` (rack5n03) |
+|---|---|---|---|
+| `fp32_v100_rack7n03` | **0.0 — bit-identical** | 2.7e-12 | 1.5e-04 |
+| `fp32_v100` (rack5n03) | 1.5e-04 | 1.5e-04 | – |
+
+**The V100S-PCIE part reproduces the published cell bit-for-bit**, and agrees with
+the L40S to 2.7e-12. So three of the four devices tested (L40S, V100S-PCIE) agree
+to ~1e-12, and **one specific part — the V100-SXM2-32GB-LS on rack5n03 — differs
+by 1.5e-04** on `siglip2_l` while agreeing to 7.6e-13 on `siglip`.
+
+That closes the puzzle in the direction that makes the pile look *better* and the
+scheduler look *worse*: the published cell is exactly reproducible, on the node
+that built it. Nothing about the pile is corrupt. What is not safe is assuming
+that "the same GPU type" means the same arithmetic.
+
+The remaining unknown is narrow and no longer blocking: *why* that one part
+differs. Both hypotheses that were testable from here are refuted (TF32, cuDNN
+algorithm selection), and the candidates left — a capability-selected attention
+backend, or GEMM tiling that differs with SM count — need a targeted numerics
+probe rather than another pile build.
 
 ## Why this matters beyond #3143
 
-- **#3144's stated premise is not established.** PR #3150 landed a GPU auto-pick
-  on the grounds that cross-GPU fp32 drift is "~1e-7 — far below anything the
-  studies resolve. This one is safe to land on its own." For `siglip2_l` the
-  measured figure is 1.5e-04. The auto-pick is a good *performance* change (§2
-  confirms 1.9–2.5×), but it means **the node now varies per rebuild**, so a pile
-  rebuild is not numerically reproducible for that cell.
-- **The shared pile may already be mixed.** Its `visual_genome_m__siglip.pkl` is
-  dated 2026-07-29 (inherited from an older study) and its `siglip2_l` cell
-  2026-08-12. They do not agree about which hardware produced them.
+- **#3144's stated premise does not hold.** PR #3150 landed a GPU auto-pick on
+  the grounds that cross-GPU fp32 drift is "~1e-7 — far below anything the
+  studies resolve. This one is safe to land on its own." For `siglip2_l` on one
+  of the two V100 parts the measured figure is **1.5e-04**, three orders of
+  magnitude larger and 30× the 0.005 the studies resolve when it reaches a
+  score. The auto-pick remains a good *performance* change (§2 independently
+  confirms 1.9–2.5×) — but it requests a **type**, and a type is not a device, so
+  **a pile rebuild under it is not numerically reproducible**.
+- **`pick_gpu.py` cannot express what it needs to.** Nothing in
+  `scontrol`/`--gres` distinguishes a V100S-PCIE from a V100-SXM2-LS. A study
+  that needs numeric reproducibility has to pin `--nodelist`, or at minimum
+  *record* `torch.cuda.get_device_name()` so a later reader can tell whether two
+  cells are comparable. This study's `provenance.json` does; the pile's build
+  does not.
 - **It reframes this study's own question.** "Is fp16 safe?" is bounded above by
-  something already shipped and unremarked: switching nodes perturbs `siglip2_l`
-  **50× harder** than switching to fp16.
+  something already shipped and unremarked: on that one part, plain fp32
+  perturbs `siglip2_l` **50× harder** than fp16 does on a fixed node.
 
-Filed as a follow-up rather than resolved here.
+Filed as **#3160** rather than resolved here — the fix is a
+scheduling/provenance change, not a numerics change, and it belongs with #3144.
 
 ---
 
@@ -331,7 +370,9 @@ reroutes the vote sequence, so trajectories decorrelate even though the decision
 **`n_good` is the one resolvable difference**: fp16 finished with 0.87 fewer
 positives per cell (9.3 → 8.5), 2.3 SE from zero, unadjusted for testing eight
 metrics. #3129 found positives to be the binding constraint on these runs, so
-this is worth a follow-up — not a blocker, but not nothing either.
+this is worth a follow-up — not a blocker, but not nothing either. Filed as
+**#3158**, which also names the check that would dissolve it (whether the effect
+halves toward zero at the 64-seed n).
 
 ## Power: why the issue's criterion needed a bigger run
 
