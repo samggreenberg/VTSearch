@@ -18,8 +18,9 @@ issue is not cluttered with a label that is true of every shipped fix.
 
 The rule reuses step 6's own resolution logic, which is fiddly in exactly the
 ways prose hides: closing keywords must be told apart from `Refs`/`Part of`,
-`Partially addressed in #M` must not read as `Addressed in #M`, and a comment
-posted *after* a fix pointer may or may not dispute it. Getting any of those
+`Partially addressed in #M` must not read as `Addressed in #M`, a comment
+posted *after* a fix pointer may or may not dispute it, and a pointer naming a
+commit instead of a PR cannot be resolved here at all. Getting any of those
 subtly wrong silently corrupts the awaiting-release view. Encoding it here
 makes it testable; see tests/core/test_reconcile_dev_labels.py.
 
@@ -69,6 +70,18 @@ CLOSING_REF = re.compile(r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b[:\s]+#(
 # work that is NOT finished — from reading as a resolution.
 COMMENT_POINTER = re.compile(
     r"(?<!ly )\b(?:addressed|fixed|resolved|shipped|handled)\s+(?:in|by)\s+#(\d+)",
+    re.IGNORECASE,
+)
+
+# The same claim, but naming a commit instead of a PR ("Fixed on `dev` by
+# `de9ae81ac`"). A SHA cannot be mapped to a release PR from this input, so
+# such a comment is surfaced for review rather than resolved -- see
+# `_sha_pointer`. The gap between the verb and the SHA absorbs interjections
+# like "on `dev`", and excludes `#` so a well-formed `#M` pointer can never
+# land here instead.
+SHA_POINTER = re.compile(
+    r"(?<!ly )\b(?:addressed|fixed|resolved|shipped|handled)\b[^.\n#]{0,40}?"
+    r"\b(?:in|by)\s+(?:commit\s+)?`?([0-9a-f]{7,40})`?\b",
     re.IGNORECASE,
 )
 
@@ -123,6 +136,25 @@ def _pointer_verdict(issue: dict, release_numbers: set[int]) -> tuple[str, str] 
     )
 
 
+def _sha_pointer(issue: dict) -> str | None:
+    """Return the commit named by the newest SHA-form fix claim, if any.
+
+    CLAUDE.md prescribes `Addressed in #M` -- a *PR number* -- precisely because
+    a bare commit SHA cannot be mapped back to a release PR from this input.
+    But a comment saying "Fixed on `dev` by `de9ae81ac`" plainly claims a fix,
+    and reporting it as "not resolved on dev" is the script guessing, in the
+    one direction it is meant never to guess: silently. #2911 sat open through
+    a release exactly this way -- its fix was on `main` while the awaiting-
+    release view showed nothing at all. So the claim is surfaced and a human
+    maps the commit to its PR.
+    """
+    for comment in reversed(issue.get("comments") or []):
+        found = SHA_POINTER.findall(comment.get("body") or "")
+        if found:
+            return found[-1]
+    return None
+
+
 def _classify(issue: dict, closers: dict[int, int], release_numbers: set[int]) -> tuple[str, str]:
     """Return (action, reason) for one issue. Action is add/remove/review/none."""
     number = issue.get("number")
@@ -141,6 +173,12 @@ def _classify(issue: dict, closers: dict[int, int], release_numbers: set[int]) -
 
     verdict = _pointer_verdict(issue, release_numbers)
     if verdict is None:
+        sha = _sha_pointer(issue)
+        if sha:
+            return "review", (
+                f"a comment claims a fix by commit `{sha}` rather than `Addressed in #M`; "
+                "map the commit to its PR by hand, then re-run"
+            )
         if labelled:
             return (
                 "review",

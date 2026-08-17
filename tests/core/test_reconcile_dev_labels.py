@@ -8,7 +8,9 @@ resolution logic, whose sharp edges are the point of testing it:
 * `Partially addressed in #M` is the documented marker for work still owed,
   and must not read as `Addressed in #M`;
 * a comment posted *after* a fix pointer is ambiguous -- it may be chatter or
-  a dispute -- and the script must surface it rather than guess either way.
+  a dispute -- and the script must surface it rather than guess either way;
+* a pointer naming a *commit* rather than a PR cannot be resolved from this
+  input, and must be surfaced rather than reported as settled.
 
 Getting any of these wrong corrupts the awaiting-release view silently, which
 is exactly the failure mode the script exists to prevent.
@@ -142,6 +144,70 @@ class TestMostRecentCommentRule:
         prs = [{"number": 3128, "body": "Closes #3077"}]
         comments = ["Addressed in #3128", "Thanks!"]
         assert 3077 in plan_for(prs, [issue(3077, comments=comments)])["add"]
+
+
+class TestCommitShaPointers:
+    """A fix claimed by commit SHA is surfaced, never reported as settled.
+
+    Regression cover for #2911, which shipped to `main` with its only pointer
+    reading "Fixed on `dev` by `de9ae81ac`". That matched no pattern, so the
+    script reported "not resolved on dev" -- indistinguishable from an issue
+    nobody had started -- and the release sweep had nothing to go on.
+    """
+
+    PRS = [{"number": 3128, "body": "Refs #3077"}]
+
+    @pytest.mark.parametrize(
+        "comment",
+        [
+            "Fixed on `dev` by `de9ae81ac`",
+            "Fixed in de9ae81ac",
+            "Addressed by commit `de9ae81acaafb9e267996e6096ff9b59c140b8e8`",
+            "Resolved on dev by de9ae81a",
+        ],
+    )
+    def test_sha_pointer_is_flagged_for_review(self, comment):
+        result = plan_for(self.PRS, [issue(3077, comments=[comment])])
+        assert 3077 in result["review"]
+        assert 3077 not in result["none"]
+
+    def test_the_review_reason_names_the_commit(self):
+        result = plan_for(self.PRS, [issue(3077, comments=["Fixed on `dev` by `de9ae81ac`"])])
+        assert "de9ae81ac" in result["review"][3077]
+
+    def test_a_proper_pr_pointer_still_resolves_and_is_not_downgraded(self):
+        """The `#M` form is the documented one; it must not be dragged into review."""
+        assert 3077 in plan_for(self.PRS, [issue(3077, comments=["Addressed in #3128"])])["add"]
+
+    def test_partially_addressed_by_commit_does_not_resolve_either(self):
+        """The `(?<!ly )` guard applies to the SHA form too."""
+        comment = "Partially addressed by `de9ae81ac` — still open: the video arm."
+        assert 3077 in plan_for(self.PRS, [issue(3077, comments=[comment])])["none"]
+
+    def test_prose_mentioning_a_commit_without_a_fix_claim_is_ignored(self):
+        """Not every SHA in a comment is a resolution."""
+        comment = "This regressed somewhere around de9ae81ac, still bisecting."
+        assert 3077 in plan_for(self.PRS, [issue(3077, comments=[comment])])["none"]
+
+    def test_a_newer_pr_pointer_beats_an_older_sha_pointer(self):
+        comments = ["Fixed on `dev` by `de9ae81ac`", "Addressed in #3128"]
+        assert 3077 in plan_for(self.PRS, [issue(3077, comments=comments)])["add"]
+
+    def test_a_closed_issue_with_a_sha_pointer_is_not_flagged(self):
+        """Closed is closed; the backstop only guards the open pile."""
+        result = plan_for(self.PRS, [issue(3077, state="closed", comments=["Fixed by `de9ae81ac`"])])
+        assert 3077 in result["none"]
+
+    def test_check_exits_nonzero_so_the_claim_cannot_pass_silently(self):
+        data = {"release_prs": self.PRS, "issues": [issue(3077, comments=["Fixed on `dev` by `de9ae81ac`"])]}
+        result = subprocess.run(  # noqa: S603  # interpreter + repo-local script path, no shell
+            [sys.executable, str(SCRIPT), "--check"],
+            input=json.dumps(data),
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        assert result.returncode == 1
 
 
 class TestRemovalAndStaleness:

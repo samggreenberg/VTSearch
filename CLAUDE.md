@@ -57,7 +57,7 @@ When your change resolves a GitHub issue, **link the PR back to that issue** so 
 
 - Put a closing keyword in the **PR body**: `Closes #N` (or `Fixes #N` / `Resolves #N`). This populates GitHub's "Linked issues" sidebar and the issue timeline. Reference every issue the PR resolves; use one keyword per issue (`Closes #12, closes #15`), not a comma-list after a single `Closes`.
 - If the PR only *partly* addresses an issue, use a non-closing reference instead — `Refs #N` / `Part of #N` — so it links without implying the issue is done.
-- Also drop a one-line comment on the issue pointing at the PR (e.g. "Addressed in #M"), so someone reading the issue sees the fix even before it merges.
+- Also drop a one-line comment on the issue pointing at the PR (e.g. "Addressed in #M"), so someone reading the issue sees the fix even before it merges. **Name the PR number, never a bare commit SHA.** "Fixed on `dev` by `de9ae81ac`" reads fine to a human and is invisible to the machinery: `scripts/reconcile-dev-labels.py` matches `#M`, so a SHA-only pointer used to report as "not resolved on dev" — indistinguishable from an issue nobody had started. The script now surfaces SHA pointers as `NEEDS REVIEW` rather than swallowing them, but that is a backstop that costs a human a lookup; write `#M` and it costs nothing. A SHA is a fine *addition* ("Addressed in #3051 (`de9ae81ac`)"), never the only pointer.
 
 **The PR keyword is the load-bearing signal, and the issue comment must agree with it.** The `dev`→`main` sweep (step 6 of `docs/RELEASE.md`) decides what to close by reading **PR bodies**, not issue comments — so the keyword you pick is what determines whether the issue ever gets closed. `Refs #N` on a PR that actually finishes the issue is not a harmless understatement: the sweep reads it as "still partial", skips the issue, and *nothing revisits it in a later release*. The issue stays open forever while its fix is live in `main`.
 
@@ -73,6 +73,20 @@ Use `Refs` only when you can name the work that remains on **that issue**. Resco
 If you catch yourself writing "Addressed in #M" on the issue while the PR body says `Refs`, one of the two is wrong — fix it before merging.
 
 **Do not close the issue yourself.** The closing keyword will **not** auto-close the issue on merge, because GitHub only auto-closes keyword-linked issues when the PR merges into the **default branch** (`main`), and our PRs target **`dev`**. That is intentional: an issue stays open while its fix lives only on `dev`, and is closed only once the fix reaches `main` (i.e. is actually shipped to users). The `dev`→`main` merge Routine is what sweeps the now-shipped issues closed (with `state_reason: completed`); a per-fix Claude session must not close the issue early. So: link and comment, but leave the issue open.
+
+## Duplicate issues: search before filing, link the moment you find one
+
+**Search the tracker before opening an issue.** Use `search_issues` on the symptom — a failing test's name, an error string, the file path — not on your own phrasing of the diagnosis. Two sessions hitting the same bug a day apart will describe it differently (one calls it flaky, the other calls it systematically wrong) while naming the identical test, so the symptom is what actually matches and the diagnosis is what actually diverges.
+
+**A duplicate that is never linked is worse than a noisy tracker**, because the `dev`→`main` sweep resolves issues through PR bodies and issue comments. When the fix PR names only one of the pair, the other has *nothing* pointing at it: no closing keyword, no `Refs`, no comment. All three of `docs/RELEASE.md` step 6's buckets are blind to it by construction, and no later release re-examines an already-merged PR. It stays open forever while its fix is live in `main`. That is exactly how #2911 sat open for six days after shipping, and the only reason it was caught is that someone asked about it directly.
+
+So when you find that two issues are the same bug:
+
+- **Fixing both at once** — put a closing keyword for **each** in the PR body (`Closes #12, closes #15`), and comment `Addressed in #M` on both. One PR legitimately closes N issues; the sweep handles that fine.
+- **Discovering the duplicate before any fix** — close the *newer* one with `state_reason: "duplicate"` and `duplicate_of: <older number>`, and keep the older one as the survivor. GitHub renders the link natively, and it is the survivor that the fix PR then references. Do not close the older one as duplicate of the newer just because the newer has a better write-up; fold the better write-up into the survivor's body instead.
+- **Discovering it after the fix already shipped** — comment `Addressed in #M` on the orphan naming the fix PR, and close it `completed` (stripping `dev` if present, per the label rules below). This is the one case where a per-fix session closes an issue itself rather than leaving it to the sweep: the sweep's window is `origin/main..origin/dev`, and a fix already on `main` has fallen out the far end of it, so nothing will ever pick the issue up again.
+
+The general shape: an issue is only ever resolved by something that *names its number*. If you know a number is resolved and nothing on GitHub says so, write the pointer yourself.
 
 ## Issues vs `docs/plans/`: one item, one home (CRITICAL)
 
