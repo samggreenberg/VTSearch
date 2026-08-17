@@ -1,8 +1,9 @@
 """Tests for scripts/reconcile-dev-labels.py.
 
-The script decides which open issues are "fixed on `dev`, not yet on `main`"
-and therefore carry the `dev` label. It reuses docs/RELEASE.md step 6's
-resolution logic, whose sharp edges are the point of testing it:
+The script decides which open issues have no development left in them -- the
+problem is solved and only git merges remain -- and therefore carry the `dev`
+label. It reuses docs/RELEASE.md step 6's resolution logic, whose sharp edges
+are the point of testing it:
 
 * a closing keyword means resolved; `Refs` / `Part of` / a bare `#N` do not;
 * `Partially addressed in #M` is the documented marker for work still owed,
@@ -10,10 +11,14 @@ resolution logic, whose sharp edges are the point of testing it:
 * a comment posted *after* a fix pointer is ambiguous -- it may be chatter or
   a dispute -- and the script must surface it rather than guess either way;
 * a pointer naming a *commit* rather than a PR cannot be resolved from this
-  input, and must be surfaced rather than reported as settled.
+  input, and must be surfaced rather than reported as settled;
+* an *open* fix PR resolves an issue just as a merged one does (the label
+  tracks "solved", not "merged"), while a PR closed *without* merging un-solves
+  it and must take the label back off.
 
-Getting any of these wrong corrupts the awaiting-release view silently, which
-is exactly the failure mode the script exists to prevent.
+Getting any of these wrong silently corrupts both views the label powers:
+`-label:dev` (what a human should pick up next) and `label:dev` (solved,
+waiting only on merges).
 """
 
 import importlib.util
@@ -47,9 +52,22 @@ def issue(number: int, *, state: str = "open", labels: list[str] | None = None, 
     }
 
 
-def plan_for(prs: list[dict], issues: list[dict]) -> dict[str, dict[int, str]]:
+def plan_for(
+    prs: list[dict],
+    issues: list[dict],
+    *,
+    open_prs: list[dict] | None = None,
+    abandoned_prs: list[dict] | None = None,
+) -> dict[str, dict[int, str]]:
     """Reconcile, then flatten each bucket to {issue number: reason}."""
-    raw = mod.reconcile({"release_prs": prs, "issues": issues})
+    raw = mod.reconcile(
+        {
+            "release_prs": prs,
+            "open_prs": open_prs or [],
+            "abandoned_prs": abandoned_prs or [],
+            "issues": issues,
+        }
+    )
     return {action: {number: reason for number, reason in entries} for action, entries in raw.items()}
 
 
@@ -208,6 +226,98 @@ class TestCommitShaPointers:
             timeout=30,
         )
         assert result.returncode == 1
+
+
+class TestOpenFixPrs:
+    """The label tracks "solved", not "merged", so an open fix PR resolves an issue.
+
+    This is the widened front edge: `dev` used to require a merge into `dev`,
+    which no session ever observes, so nothing applied the label in practice.
+    From a planning perspective an issue solved in an open PR has exactly as
+    little left to think about as one already merged.
+    """
+
+    def test_an_open_pr_closing_an_issue_resolves_it(self):
+        result = plan_for([], [issue(3081)], open_prs=[{"number": 3160, "body": "Closes #3081"}])
+        assert 3081 in result["add"]
+
+    def test_the_reason_distinguishes_an_open_pr_from_a_merged_one(self):
+        result = plan_for([], [issue(3081)], open_prs=[{"number": 3160, "body": "Closes #3081"}])
+        assert "open PR #3160" in result["add"][3081]
+
+    def test_a_comment_pointing_at_an_open_pr_resolves_it(self):
+        """The `Addressed in #M` comment lands before the merge, and counts."""
+        result = plan_for(
+            [],
+            [issue(3081, comments=["Addressed in #3160"])],
+            open_prs=[{"number": 3160, "body": "Refs #3081"}],
+        )
+        assert 3081 in result["add"]
+
+    def test_a_non_closing_open_pr_still_does_not_resolve(self):
+        """Widening which PRs count does not weaken which keywords count."""
+        result = plan_for([], [issue(3081)], open_prs=[{"number": 3160, "body": "Refs #3081"}])
+        assert 3081 in result["none"]
+
+
+class TestAbandonedFixPrs:
+    """A fix PR closed without merging un-solves its issue, so the label comes off.
+
+    This removal case only exists because the label goes on before the merge:
+    under the old "merged into `dev`" meaning there was no window in which a
+    labelled issue could lose its fix.
+    """
+
+    ABANDONED = [{"number": 3155, "body": "Closes #3090"}]
+
+    def test_labelled_issue_whose_fix_pr_was_abandoned_loses_the_label(self):
+        result = plan_for([], [issue(3090, labels=["claude", "dev"])], abandoned_prs=self.ABANDONED)
+        assert 3090 in result["remove"]
+
+    def test_the_removal_reason_names_the_abandoned_pr(self):
+        result = plan_for([], [issue(3090, labels=["claude", "dev"])], abandoned_prs=self.ABANDONED)
+        assert "#3155" in result["remove"][3090]
+
+    def test_an_unlabelled_issue_with_an_abandoned_fix_needs_no_change(self):
+        """It is already in the human queue, which is where it belongs."""
+        result = plan_for([], [issue(3090, labels=["claude"])], abandoned_prs=self.ABANDONED)
+        assert 3090 in result["none"]
+
+    def test_an_abandoned_comment_pointer_also_removes(self):
+        result = plan_for(
+            [],
+            [issue(3090, labels=["dev"], comments=["Addressed in #3155"])],
+            abandoned_prs=[{"number": 3155, "body": "Refs #3090"}],
+        )
+        assert 3090 in result["remove"]
+
+    def test_a_superseding_open_pr_beats_the_abandoned_one(self):
+        """Take two of a fix keeps the issue solved; the dead claim must not win."""
+        result = plan_for(
+            [],
+            [issue(3090, labels=["claude", "dev"])],
+            open_prs=[{"number": 3170, "body": "Closes #3090"}],
+            abandoned_prs=self.ABANDONED,
+        )
+        assert 3090 in result["none"]
+        assert 3090 not in result["remove"]
+
+    def test_a_superseding_merged_pr_beats_the_abandoned_one(self):
+        result = plan_for(
+            [{"number": 3180, "body": "Closes #3090"}],
+            [issue(3090)],
+            abandoned_prs=self.ABANDONED,
+        )
+        assert 3090 in result["add"]
+
+    def test_an_abandoned_pr_does_not_flag_an_unrelated_labelled_issue_for_review(self):
+        """Only the issue the dead PR claimed is affected."""
+        result = plan_for(
+            [{"number": 3180, "body": "Closes #3077"}],
+            [issue(3077, labels=["dev"])],
+            abandoned_prs=self.ABANDONED,
+        )
+        assert 3077 in result["none"]
 
 
 class TestRemovalAndStaleness:

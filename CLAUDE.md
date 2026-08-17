@@ -57,22 +57,23 @@ When your change resolves a GitHub issue, **link the PR back to that issue** so 
 
 - Put a closing keyword in the **PR body**: `Closes #N` (or `Fixes #N` / `Resolves #N`). This populates GitHub's "Linked issues" sidebar and the issue timeline. Reference every issue the PR resolves; use one keyword per issue (`Closes #12, closes #15`), not a comma-list after a single `Closes`.
 - If the PR only *partly* addresses an issue, use a non-closing reference instead — `Refs #N` / `Part of #N` — so it links without implying the issue is done.
-- Also drop a one-line comment on the issue pointing at the PR (e.g. "Addressed in #M"), so someone reading the issue sees the fix even before it merges. **Name the PR number, never a bare commit SHA.** "Fixed on `dev` by `de9ae81ac`" reads fine to a human and is invisible to the machinery: `scripts/reconcile-dev-labels.py` matches `#M`, so a SHA-only pointer used to report as "not resolved on dev" — indistinguishable from an issue nobody had started. The script now surfaces SHA pointers as `NEEDS REVIEW` rather than swallowing them, but that is a backstop that costs a human a lookup; write `#M` and it costs nothing. A SHA is a fine *addition* ("Addressed in #3051 (`de9ae81ac`)"), never the only pointer.
+- Also drop a one-line comment on the issue pointing at the PR (e.g. "Addressed in #M"), so someone reading the issue sees the fix even before it merges. **Name the PR number, never a bare commit SHA.** "Fixed on `dev` by `de9ae81ac`" reads fine to a human and is invisible to the machinery: `scripts/reconcile-dev-labels.py` matches `#M`, so a SHA-only pointer used to report as unresolved — indistinguishable from an issue nobody had started. The script now surfaces SHA pointers as `NEEDS REVIEW` rather than swallowing them, but that is a backstop that costs a human a lookup; write `#M` and it costs nothing. A SHA is a fine *addition* ("Addressed in #3051 (`de9ae81ac`)"), never the only pointer.
+- **Add the `dev` label** to every issue the PR fully resolves, in the same motion. It means "no problem-solving left here" and is what keeps the issue out of the human work queue from the moment the fix exists — see the `dev` section below.
 
 **The PR keyword is the load-bearing signal, and the issue comment must agree with it.** The `dev`→`main` sweep (step 6 of `docs/RELEASE.md`) decides what to close by reading **PR bodies**, not issue comments — so the keyword you pick is what determines whether the issue ever gets closed. `Refs #N` on a PR that actually finishes the issue is not a harmless understatement: the sweep reads it as "still partial", skips the issue, and *nothing revisits it in a later release*. The issue stays open forever while its fix is live in `main`.
 
 So make the two statements match, and default to `Closes` whenever the PR finishes the issue:
 
-| The PR… | PR body | Issue comment |
-|---|---|---|
-| fully resolves the issue | `Closes #N` | `Addressed in #M` |
-| does part of it, more is still owed | `Refs #N` / `Part of #N` | `Partially addressed in #M — still open: <what's left>` |
+| The PR… | PR body | Issue comment | `dev` label |
+|---|---|---|---|
+| fully resolves the issue | `Closes #N` | `Addressed in #M` | **add it** |
+| does part of it, more is still owed | `Refs #N` / `Part of #N` | `Partially addressed in #M — still open: <what's left>` | leave it off |
 
 Use `Refs` only when you can name the work that remains on **that issue**. Rescoping counts as finishing: if you narrowed the issue's body and the PR does all of what's left, that's `Closes`. Deferred scope that has been moved into a plan file or a separate issue is no longer owed by this issue, so it doesn't make the PR partial either.
 
 If you catch yourself writing "Addressed in #M" on the issue while the PR body says `Refs`, one of the two is wrong — fix it before merging.
 
-**Do not close the issue yourself.** The closing keyword will **not** auto-close the issue on merge, because GitHub only auto-closes keyword-linked issues when the PR merges into the **default branch** (`main`), and our PRs target **`dev`**. That is intentional: an issue stays open while its fix lives only on `dev`, and is closed only once the fix reaches `main` (i.e. is actually shipped to users). The `dev`→`main` merge Routine is what sweeps the now-shipped issues closed (with `state_reason: completed`); a per-fix Claude session must not close the issue early. So: link and comment, but leave the issue open.
+**Do not close the issue yourself.** The closing keyword will **not** auto-close the issue on merge, because GitHub only auto-closes keyword-linked issues when the PR merges into the **default branch** (`main`), and our PRs target **`dev`**. That is intentional: an issue stays open while its fix lives only on `dev`, and is closed only once the fix reaches `main` (i.e. is actually shipped to users). The `dev`→`main` merge Routine is what sweeps the now-shipped issues closed (with `state_reason: completed`); a per-fix Claude session must not close the issue early. So: link, comment, and label — but leave the issue open. The `dev` label is what stops that still-open issue from being offered to the next person looking for work.
 
 ## Duplicate issues: search before filing, link the moment you find one
 
@@ -138,26 +139,30 @@ That asymmetry is the whole design. It only works if Claude is exhaustive: a Cla
 
 The point is scheduling: `label:experiment` is the queue of work that needs machine time booked, and `-label:experiment` is what can be picked up right now. See the `grid-experiments` skill for how those runs are actually launched.
 
-### `dev` — fixed on `dev`, not yet on `main`
+### `dev` — the development is done; only merges remain
 
-`dev` means **the fix has merged to `dev` but has not shipped to `main`.** Unlike `claude` and `experiment`, it is **not applied at creation time** and is never something you decide when filing — it is a *status* the release machinery maintains.
+`dev` means **there is no problem-solving left on this issue.** It has been figured out, a fix PR carries it, and everything still owed is a git merge — into `dev`, and then into `main` at the next release. Unlike `claude` and `experiment`, it is **not applied at creation time** and is never something you decide when filing — it is a *status*.
 
-It exists to make an otherwise invisible state visible. A fix PR targets `dev`, and GitHub only auto-closes a keyword-linked issue when the PR merges into the **default** branch (`main`), so a fixed issue stays open until the release sweep closes it. Without this label there is no way to tell "waiting for the next release" apart from "nobody has started it". The awaiting-release view is:
+Its job is to keep solved work out of the queue a human picks from. That queue is the primary view:
 
 ```
-is:issue is:open label:dev
+is:issue is:open -label:dev    # what a human should work on next
+is:issue is:open label:dev     # solved; waiting only on merges
 ```
 
-**The label is transient, not a historical fact.** It goes on when the fix merges to `dev`, and comes off in the same write that closes the issue (`docs/RELEASE.md` step 6). A closed issue must never carry it: by then the fix is on `main` too, so the label would assert something false, and a reopened issue would wrongly appear in the awaiting-release view. `is:open` already filters the closed pile for free, so letting it linger would buy nothing.
+**Solved-in-an-open-PR counts as done.** The label deliberately does *not* wait for the merge. "Fixed in a branch, PR open" and "merged into `dev`" are different facts about git but the same fact about people: neither has any thinking left in it, so neither should be offered to someone asking what to work on. Waiting for the merge would also make the label untriggerable in practice — no session is around to observe a merge happening, which is exactly why the label used to go unapplied for weeks at a time.
 
-Two rules bind you directly:
+**The label is transient, not a historical fact.** It goes on when the fix PR is opened and comes off whenever that stops being true — in the write that closes the issue (`docs/RELEASE.md` step 6), or if the fix falls through. A closed issue must never carry it: the label would assert something false, and a reopened issue would wrongly read as solved.
 
-- **Closing an issue strips `dev`.** Pass `labels` explicitly on a `completed` close. Note that `labels` *replaces* the whole set, so list every label the issue keeps (`claude`, `experiment`, …) and omit `dev` — passing `[]` would wipe the rest. A `PreToolUse` hook blocks a close that keeps the label or omits the array.
-- **Do not apply it by hand from a fix session.** When you open a fix PR the merge hasn't happened yet, so the issue is not on `dev` and labeling it would be a lie for as long as the PR sits unmerged. Applying it is `scripts/reconcile-dev-labels.py`'s job.
+Three rules bind you directly:
 
-That script encodes `docs/RELEASE.md` step 6's resolution logic — closing keywords vs. `Refs`, `Partially addressed in #M` vs. `Addressed in #M`, and the ambiguity of a comment posted *after* a fix pointer — and reconciles the label in both directions. It is a pure function from data to plan: the GitHub REST API is unreachable from a Claude session (`GITHUB_TOKEN` is present but 403s, since GitHub access is intermediated by the MCP server), so gather the PR and issue data with the `github` MCP tools and pipe it in. See `docs/RELEASE.md` for the recipe.
+- **Apply it when you open the fix PR**, in the same motion as the `Addressed in #M` comment (see "Linking a fix PR to its GitHub issue" above). Pass `labels` explicitly with the issue's existing labels plus `dev` — `labels` *replaces* the whole set, so read the issue first if you don't already know them.
+- **Take it back off if the fix falls through.** If your PR is closed without merging, or review concludes the fix is wrong and the issue needs solving again, strip `dev` — the issue belongs back in the human queue. This is the one removal a fix session does itself.
+- **Closing an issue strips `dev`.** Pass `labels` explicitly on a `completed` close, listing every label the issue keeps (`claude`, `experiment`, …) and omitting `dev`; passing `[]` would wipe the rest. A `PreToolUse` hook blocks a close that keeps the label or omits the array.
 
-**A comment after the fix pointer is never guessed at.** If someone comments below an `Addressed in #M` pointer, the script reports the issue as needing review rather than tagging or skipping it. The later comment might be a maintainer saying "thanks" or the reporter saying the fix doesn't work; tagging would bury a dispute, and skipping would silently drop the issue out of the awaiting-release view. Ambiguity gets surfaced, not resolved by a coin flip.
+`scripts/reconcile-dev-labels.py` is the backstop for all three — it catches issues a session forgot to label, issues whose fix PR was abandoned, and stale labels left behind by a close. It encodes `docs/RELEASE.md` step 6's resolution logic — closing keywords vs. `Refs`, `Partially addressed in #M` vs. `Addressed in #M`, and the ambiguity of a comment posted *after* a fix pointer. It is a pure function from data to plan: the GitHub REST API is unreachable from a Claude session (`GITHUB_TOKEN` is present but 403s, since GitHub access is intermediated by the MCP server), so gather the PR and issue data with the `github` MCP tools and pipe it in. See `docs/RELEASE.md` for the recipe.
+
+**A comment after the fix pointer is never guessed at.** If someone comments below an `Addressed in #M` pointer, the script reports the issue as needing review rather than tagging or skipping it. The later comment might be a maintainer saying "thanks" or the reporter saying the fix doesn't work; tagging would bury a dispute (hiding an issue that still needs solving), and skipping would leave solved work in the human queue. Ambiguity gets surfaced, not resolved by a coin flip.
 
 ## Recommend a Claude model in every issue you file
 

@@ -1,28 +1,40 @@
 #!/usr/bin/env python3
 """Decide which issues should carry the `dev` label, and which should lose it.
 
-`dev` means **fixed on `dev`, not yet on `main`** — the window between a fix
-merging and the release that ships it. Because a fix PR targets `dev`, GitHub
-never auto-closes its issue (that only happens on the default branch), so
-without this label there is no way to tell "waiting for release" apart from
-"nobody has started it". The awaiting-release view is:
+`dev` means **the development on this issue is done** — the problem has been
+solved, a fix PR carries it, and nothing remains but git merges (into `dev`,
+and then into `main` at the next release). Its job is to keep a solved issue
+out of the queue a human picks from:
 
-    is:issue is:open label:dev
+    is:issue is:open -label:dev    # what someone should pick up next
+    is:issue is:open label:dev     # solved; waiting only on merges
 
-The label is **transient**: `docs/RELEASE.md` step 6 strips it in the same
-write that closes the issue. So it is a precise status at all times rather
-than a historical fact — a reopened issue is automatically clean, and a closed
-issue is not cluttered with a label that is true of every shipped fix.
+## Why the label goes on at fix-PR time, not at merge time
+
+`dev` used to mean the narrower "merged into `dev`, not yet on `main`", which
+made the label's only honest trigger a merge — an event no session observes,
+so in practice nothing ever applied it. The wider meaning is both truer to
+what the label is *for* and self-triggering: from a planning perspective
+"solved in an open PR" and "merged to `dev`" are the same state, because
+neither has any problem-solving left in it. So the fix session applies the
+label when it opens the PR, in the same motion as its `Addressed in #M`
+comment (see CLAUDE.md), and this script is the backstop that catches what a
+session forgot and reconciles the other direction.
+
+Widening the front edge adds a removal case the narrow meaning could not
+have: a fix PR that is **closed without merging** un-solves its issue, and the
+label has to come off so the issue returns to the human queue. That is why
+`abandoned_prs` is part of the input.
 
 ## Why this is a script and not a runbook paragraph
 
-The rule reuses step 6's own resolution logic, which is fiddly in exactly the
-ways prose hides: closing keywords must be told apart from `Refs`/`Part of`,
-`Partially addressed in #M` must not read as `Addressed in #M`, a comment
-posted *after* a fix pointer may or may not dispute it, and a pointer naming a
-commit instead of a PR cannot be resolved here at all. Getting any of those
-subtly wrong silently corrupts the awaiting-release view. Encoding it here
-makes it testable; see tests/core/test_reconcile_dev_labels.py.
+The rule reuses docs/RELEASE.md step 6's own resolution logic, which is fiddly
+in exactly the ways prose hides: closing keywords must be told apart from
+`Refs`/`Part of`, `Partially addressed in #M` must not read as `Addressed in
+#M`, a comment posted *after* a fix pointer may or may not dispute it, and a
+pointer naming a commit instead of a PR cannot be resolved here at all.
+Getting any of those subtly wrong silently corrupts both views above.
+Encoding it here makes it testable; see tests/core/test_reconcile_dev_labels.py.
 
 ## Why it takes input instead of fetching
 
@@ -40,7 +52,9 @@ to plan, and whoever *does* hold credentials supplies the data:
 Input schema (unknown keys are ignored, so richer API payloads pipe in as-is):
 
     {
-      "release_prs": [ {"number": 3128, "body": "... Closes #3077 ..."} ],
+      "release_prs":   [ {"number": 3128, "body": "... Closes #3077 ..."} ],
+      "open_prs":      [ {"number": 3160, "body": "... Closes #3081 ..."} ],
+      "abandoned_prs": [ {"number": 3155, "body": "... Closes #3090 ..."} ],
       "issues": [
         {"number": 3077, "state": "open", "labels": ["claude"],
          "comments": [ {"body": "Addressed in #3128"} ]}
@@ -48,8 +62,11 @@ Input schema (unknown keys are ignored, so richer API payloads pipe in as-is):
     }
 
 `release_prs` are the PRs merged into `dev` since the last release — the same
-`origin/main..origin/dev` window step 6 uses. `comments` must be in chronological
-order (oldest first), which is what the GitHub API returns by default.
+`origin/main..origin/dev` window step 6 uses. `open_prs` are the PRs currently
+open against `dev`; `abandoned_prs` are those closed without merging. Only
+`issues` and at least one PR list need be present. `comments` must be in
+chronological order (oldest first), which is what the GitHub API returns by
+default.
 """
 
 from __future__ import annotations
@@ -60,6 +77,11 @@ import re
 import sys
 
 DEV_LABEL = "dev"
+
+# Where each PR list sits on the live/dead axis. A "live" claim means a fix
+# exists and is still on its way in; a "dead" one means it fell through.
+PR_SOURCES = (("release_prs", "merged"), ("open_prs", "open"), ("abandoned_prs", "abandoned"))
+DEAD_KIND = "abandoned"
 
 # `Closes #12, closes #15` is the documented multi-issue form, so the keyword
 # is matched per-reference rather than once per line.
@@ -74,11 +96,10 @@ COMMENT_POINTER = re.compile(
 )
 
 # The same claim, but naming a commit instead of a PR ("Fixed on `dev` by
-# `de9ae81ac`"). A SHA cannot be mapped to a release PR from this input, so
-# such a comment is surfaced for review rather than resolved -- see
-# `_sha_pointer`. The gap between the verb and the SHA absorbs interjections
-# like "on `dev`", and excludes `#` so a well-formed `#M` pointer can never
-# land here instead.
+# `de9ae81ac`"). A SHA cannot be mapped to a PR from this input, so such a
+# comment is surfaced for review rather than resolved -- see `_sha_pointer`.
+# The gap between the verb and the SHA absorbs interjections like "on `dev`",
+# and excludes `#` so a well-formed `#M` pointer can never land here instead.
 SHA_POINTER = re.compile(
     r"(?<!ly )\b(?:addressed|fixed|resolved|shipped|handled)\b[^.\n#]{0,40}?"
     r"\b(?:in|by)\s+(?:commit\s+)?`?([0-9a-f]{7,40})`?\b",
@@ -90,38 +111,48 @@ def _refs(pattern: re.Pattern[str], text: str) -> set[int]:
     return {int(m) for m in pattern.findall(text or "")}
 
 
-def closing_targets(release_prs: list[dict]) -> dict[int, int]:
-    """Map issue number -> PR number, for issues a release PR claims to close.
+def pull_requests(data: dict) -> list[tuple[int, str, str]]:
+    """Flatten the PR lists into (number, body, kind) triples."""
+    return [
+        (pr.get("number"), pr.get("body") or "", kind)
+        for key, kind in PR_SOURCES
+        for pr in (data.get(key) or [])
+    ]
+
+
+def closing_targets(prs: list[tuple[int, str, str]]) -> dict[int, tuple[int, str]]:
+    """Map issue number -> (PR number, kind), for issues a PR claims to close.
 
     Only closing keywords count. `Refs #N` / `Part of #N` / a bare `#N` mean
-    work is still owed on that issue, so it is not resolved on `dev`.
+    work is still owed on that issue, so its development is not done.
     """
-    targets: dict[int, int] = {}
-    for pr in release_prs:
-        for issue in _refs(CLOSING_REF, pr.get("body") or ""):
-            targets.setdefault(issue, pr.get("number"))
+    targets: dict[int, tuple[int, str]] = {}
+    for number, body, kind in prs:
+        for issue in _refs(CLOSING_REF, body):
+            targets.setdefault(issue, (number, kind))
     return targets
 
 
-def _pointer_verdict(issue: dict, release_numbers: set[int]) -> tuple[str, str] | None:
+def _pointer_verdict(issue: dict, live_numbers: set[int]) -> tuple[str, str] | None:
     """Classify an issue's comments as a fix pointer, a disputed one, or neither.
 
     Returns (verdict, detail) where verdict is "resolved" or "review", or None
-    when no comment points at a PR in this release at all.
+    when no comment points at a live PR at all.
 
     The newest comment wins. A pointer that is *not* the newest comment is
     ambiguous by construction: the later comment might be a maintainer saying
     "thanks", or it might be the reporter saying the fix does not work. Guessing
-    either way is wrong -- silently tagging buries a dispute, silently skipping
-    drops the issue out of the awaiting-release view with no signal -- so the
-    ambiguous case is surfaced for a human instead.
+    either way is wrong -- silently tagging buries a dispute (and hides an issue
+    that still needs solving from the human queue), while silently skipping
+    leaves solved work in that queue -- so the ambiguous case is surfaced for a
+    human instead.
     """
     comments = issue.get("comments") or []
     hits = [
         (i, pr)
         for i, comment in enumerate(comments)
         for pr in _refs(COMMENT_POINTER, comment.get("body") or "")
-        if pr in release_numbers
+        if pr in live_numbers
     ]
     if not hits:
         return None
@@ -136,17 +167,25 @@ def _pointer_verdict(issue: dict, release_numbers: set[int]) -> tuple[str, str] 
     )
 
 
+def _dead_pointer(issue: dict, dead_numbers: set[int]) -> int | None:
+    """Return a PR that a comment claims fixed this issue but which never merged."""
+    for comment in issue.get("comments") or []:
+        for pr in _refs(COMMENT_POINTER, comment.get("body") or ""):
+            if pr in dead_numbers:
+                return pr
+    return None
+
+
 def _sha_pointer(issue: dict) -> str | None:
     """Return the commit named by the newest SHA-form fix claim, if any.
 
     CLAUDE.md prescribes `Addressed in #M` -- a *PR number* -- precisely because
-    a bare commit SHA cannot be mapped back to a release PR from this input.
-    But a comment saying "Fixed on `dev` by `de9ae81ac`" plainly claims a fix,
-    and reporting it as "not resolved on dev" is the script guessing, in the
-    one direction it is meant never to guess: silently. #2911 sat open through
-    a release exactly this way -- its fix was on `main` while the awaiting-
-    release view showed nothing at all. So the claim is surfaced and a human
-    maps the commit to its PR.
+    a bare commit SHA cannot be mapped back to a PR from this input. But a
+    comment saying "Fixed on `dev` by `de9ae81ac`" plainly claims a fix, and
+    reporting it as unsolved is the script guessing, in the one direction it is
+    meant never to guess: silently. #2911 sat open through a release exactly
+    this way -- its fix was on `main` while no view showed it anywhere. So the
+    claim is surfaced and a human maps the commit to its PR.
     """
     for comment in reversed(issue.get("comments") or []):
         found = SHA_POINTER.findall(comment.get("body") or "")
@@ -155,7 +194,17 @@ def _sha_pointer(issue: dict) -> str | None:
     return None
 
 
-def _classify(issue: dict, closers: dict[int, int], release_numbers: set[int]) -> tuple[str, str]:
+def _describe(pr_number: int, kind: str, issue_number: int) -> str:
+    article = "open PR" if kind == "open" else "merged PR"
+    return f"{article} #{pr_number} claims `Closes #{issue_number}`"
+
+
+def _classify(
+    issue: dict,
+    closers: dict[int, tuple[int, str]],
+    live_numbers: set[int],
+    dead_numbers: set[int],
+) -> tuple[str, str]:
     """Return (action, reason) for one issue. Action is add/remove/review/none."""
     number = issue.get("number")
     labelled = DEV_LABEL in {str(item).strip().lower() for item in (issue.get("labels") or [])}
@@ -166,13 +215,23 @@ def _classify(issue: dict, closers: dict[int, int], release_numbers: set[int]) -
             return "remove", "issue is closed but still carries `dev` — the closing write did not strip it"
         return "none", "closed, no label"
 
-    if number in closers:
-        if labelled:
-            return "none", f"already labelled; closed by #{closers[number]}"
-        return "add", f"#{closers[number]} claims `Closes #{number}`"
+    claim = closers.get(number)
+    if claim and claim[1] != DEAD_KIND:
+        detail = _describe(claim[0], claim[1], number)
+        return ("none", f"already labelled; {detail}") if labelled else ("add", detail)
 
-    verdict = _pointer_verdict(issue, release_numbers)
+    verdict = _pointer_verdict(issue, live_numbers)
     if verdict is None:
+        # Nothing live claims this issue. Did something dead claim it?
+        dead_pr = claim[0] if claim else _dead_pointer(issue, dead_numbers)
+        if dead_pr is not None:
+            if labelled:
+                return "remove", (
+                    f"its fix PR #{dead_pr} was closed without merging — the development is owed again, "
+                    "so the issue belongs back in the human queue"
+                )
+            return "none", f"claimed only by #{dead_pr}, which was closed without merging"
+
         sha = _sha_pointer(issue)
         if sha:
             return "review", (
@@ -182,9 +241,9 @@ def _classify(issue: dict, closers: dict[int, int], release_numbers: set[int]) -
         if labelled:
             return (
                 "review",
-                "carries `dev` but no release PR or comment resolves it — stale, or fixed in an earlier release",
+                "carries `dev` but no PR or comment resolves it — stale, or fixed in an earlier release",
             )
-        return "none", "not resolved on dev"
+        return "none", "no fix PR claims it"
 
     kind, detail = verdict
     if kind == "review":
@@ -194,13 +253,14 @@ def _classify(issue: dict, closers: dict[int, int], release_numbers: set[int]) -
 
 def reconcile(data: dict) -> dict[str, list[tuple[int, str]]]:
     """Group every issue into add / remove / review / none, with a reason each."""
-    release_prs = data.get("release_prs") or []
-    closers = closing_targets(release_prs)
-    release_numbers = {pr.get("number") for pr in release_prs}
+    prs = pull_requests(data)
+    closers = closing_targets(prs)
+    live_numbers = {number for number, _, kind in prs if kind != DEAD_KIND}
+    dead_numbers = {number for number, _, kind in prs if kind == DEAD_KIND}
 
     plan: dict[str, list[tuple[int, str]]] = {"add": [], "remove": [], "review": [], "none": []}
     for issue in data.get("issues") or []:
-        action, reason = _classify(issue, closers, release_numbers)
+        action, reason = _classify(issue, closers, live_numbers, dead_numbers)
         plan[action].append((issue.get("number"), reason))
     for bucket in plan.values():
         bucket.sort()
@@ -243,7 +303,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: input is not valid JSON: {exc}", file=sys.stderr)
         return 2
     if not isinstance(data, dict):
-        print("error: input must be a JSON object with `release_prs` and `issues` keys", file=sys.stderr)
+        print("error: input must be a JSON object with PR list(s) and an `issues` key", file=sys.stderr)
         return 2
 
     plan = reconcile(data)
