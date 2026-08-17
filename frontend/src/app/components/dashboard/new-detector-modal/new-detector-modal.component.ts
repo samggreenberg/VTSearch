@@ -37,11 +37,15 @@ import {
 } from '../../modals/media-crop-modal/media-crop-modal.component';
 import { DropZoneComponent } from '../../drop-zone/drop-zone.component';
 import { SourcePickerComponent } from '../dataset-importer-modal/source-picker/source-picker.component';
-import { DatasourceImportFormComponent } from '../../datasource-import-form/datasource-import-form.component';
+import { PluginImportFormComponent } from '../../plugin-import-form/plugin-import-form.component';
 import {
   DatasourceImportersApiService,
   DatasourceImportResult,
 } from '../../../services/datasource-importers-api.service';
+import {
+  SeedImportersApiService,
+  SeedImportResult,
+} from '../../../services/seed-importers-api.service';
 import { ColMeta, ManagedColumns } from '../../../utils/managed-columns';
 import { apiErrorMessage } from '../../../utils/api-error';
 import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
@@ -49,6 +53,13 @@ import { DynamicFieldOptions } from '../../../utils/dynamic-field-options';
 type ModalView = 'main' | 'media-picker';
 type ModalTab = 'blank' | 'trained';
 type TrainedSubView = 'picker' | 'form';
+
+/** Which example kind the Blank form is filling in: the stock text query,
+ *  the stock media stack, or one registered seed importer (keyed by its
+ *  plugin name). Text and media examples are mutually exclusive, and a
+ *  seed importer contributes into the media stack, so this only tracks
+ *  which panel is on screen. */
+type ExampleTab = 'text' | 'media' | (string & {});
 
 /** One picked media example in the blank-detector form's vertical stack. */
 interface MediaExampleItem {
@@ -60,6 +71,11 @@ interface MediaExampleItem {
   mediaType: string;
   /** True once the thumbnail endpoint failed; falls back to the icon. */
   thumbFailed: boolean;
+  /** True for an unlabeled seed contributed by a seed importer: "close but
+   *  not quite", so it steers the first sort without being submitted as a
+   *  Good vote. Sent as ``labeled: false`` on the example. Absent/false for
+   *  an exemplar the user picked by hand, which *is* a Good vote. */
+  seed?: boolean;
   /** Durable origin dict reported by a datasource importer (URL, server
    *  path); sent with the example so the seeded media points back at its
    *  real source. Absent for uploads and other non-re-derivable picks. */
@@ -70,7 +86,7 @@ interface MediaExampleItem {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, DatasourceImportFormComponent, FieldHintIconComponent, ProgressBarComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
@@ -82,6 +98,10 @@ export class NewDetectorModalComponent implements OnInit {
   private datasetsUiApi = inject(DatasetsUiApiService);
   private sortingApi = inject(SortingApiService);
   private datasourceImportersApi = inject(DatasourceImportersApiService);
+  /** Public: bound straight into ``<vt-plugin-import-form [api]>`` so a seed
+   *  importer's fields render through the same generic form the datasource
+   *  importers use. */
+  readonly seedImportersApi = inject(SeedImportersApiService);
   private labelImportersApi = inject(LabelImportersApiService);
   private progressEvents = inject(ProgressEventsService);
   private settingsState = inject(SettingsStateService);
@@ -121,7 +141,11 @@ export class NewDetectorModalComponent implements OnInit {
   /** Which example kind the user is filling in. Text and media examples are
    *  mutually exclusive, so the blank-detector form shows one at a time behind
    *  a tab; this tracks the active tab. Defaults to text (the quick path). */
-  readonly exampleTab = signal<'text' | 'media'>('text');
+  readonly exampleTab = signal<ExampleTab>('text');
+  /** Seed importers registered on this server, one extra tab apiece beside
+   *  Text and the media tab. Empty on a vanilla install (the family ships no
+   *  built-ins), so the tab bar looks exactly as it did before. */
+  readonly seedImporters = signal<ImporterInfo[]>([]);
   readonly mediaTypes = signal<string[]>([]);
   readonly mediaTypeInfos = signal<MediaTypeInfo[]>([]);
   readonly submitting = signal(false);
@@ -271,6 +295,12 @@ export class NewDetectorModalComponent implements OnInit {
 
   ngOnInit(): void {
     this.embedderCaps.ensureLoaded();
+    // Seed importers are a plugin family with no in-tree members, so this
+    // usually resolves to an empty list and adds no tabs. A failure is
+    // silent for the same reason: the stock Text / media tabs still work.
+    this.seedImportersApi.list().subscribe({
+      next: (res) => this.seedImporters.set((res.importers || []).filter((imp) => !imp['hidden_from_picker'])),
+    });
     this.datasetsListingsApi.getMediaTypes().subscribe({
       next: (res) => {
         this.mediaTypeInfos.set(res.media_types || []);
@@ -335,16 +365,20 @@ export class NewDetectorModalComponent implements OnInit {
 
   /** Append a picked media example to the stack. Clears any pending text
    *  (text and media examples are mutually exclusive), switches to the
-   *  media tab, and auto-fills the name from the first example. */
+   *  media tab, and auto-fills the name from the first example.
+   *
+   *  ``seed`` marks an unlabeled seed contributed by a seed importer, which
+   *  rides in the same stack but is submitted with ``labeled: false``. */
   private addMediaExample(
     value: string,
     display: string,
     mediaType: string,
     origin?: Record<string, unknown> | null,
+    seed = false,
   ): void {
     this.mediaExamples.update((list) => [
       ...list,
-      { value, display, mediaType, thumbFailed: false, origin: origin ?? null },
+      { value, display, mediaType, thumbFailed: false, origin: origin ?? null, seed },
     ]);
     this.pendingText.set('');
     this.exampleTab.set('media');
@@ -376,10 +410,14 @@ export class NewDetectorModalComponent implements OnInit {
 
   /** Auto-derive the detector name from the picked example while the user
    *  hasn't typed into the name field. Lets the user fill the form
-   *  top-down and leave Name blank. */
+   *  top-down and leave Name blank.
+   *
+   *  Seeds are skipped: a seed is "close but not quite" by construction, so
+   *  naming the detector after one would name it after the wrong thing. A
+   *  seeds-only stack leaves Name for the user to fill. */
   private autoFillNameFromExample(): void {
     if (this.nameTouched) return;
-    const first = this.mediaExamples()[0];
+    const first = this.mediaExamples().find((ex) => !ex.seed);
     if (first?.display) {
       this.name.set(this.sanitizeName(this.nameFromFilename(first.display)));
     } else if (this.pendingText()) {
@@ -393,6 +431,7 @@ export class NewDetectorModalComponent implements OnInit {
     // drops any previously selected media example so the two never coexist.
     if (this.hasMediaExample) {
       this.clearMediaExample();
+      this.seedNotice.set('');
     }
     if (!this.nameTouched) {
       this.name.set(this.sanitizeName(value));
@@ -561,11 +600,51 @@ export class NewDetectorModalComponent implements OnInit {
     this.error.set('');
   }
 
-  /** Switch between the Text and media example tabs in the blank-detector form. */
-  setExampleTab(tab: 'text' | 'media'): void {
+  /** Switch between the Text, media, and seed-importer tabs in the
+   *  blank-detector form. */
+  setExampleTab(tab: ExampleTab): void {
     if (this.submitting()) return;
     this.exampleTab.set(tab);
     this.error.set('');
+    this.seedNotice.set('');
+  }
+
+  /** The seed importer whose tab is active, or null on the stock tabs. */
+  get activeSeedImporter(): ImporterInfo | null {
+    const tab = this.exampleTab();
+    return this.seedImporters().find((imp) => imp.name === tab) ?? null;
+  }
+
+  /** Outcome line shown after a seed run ("Added 12 seeds"), so a run that
+   *  matched nothing — or that got truncated at the plugin's cap — says so
+   *  instead of looking like it silently did nothing. */
+  readonly seedNotice = signal('');
+
+  /** A seed importer returned a batch: append every saved item to the media
+   *  stack as an unlabeled seed and land the user on the stack so they can
+   *  see (and prune) what arrived. */
+  onSeedsImported(result: SeedImportResult): void {
+    const items = result?.items ?? [];
+    for (const item of items) {
+      const display = item.original_name || item.filename;
+      this.addMediaExample(
+        item.filename,
+        display,
+        this.mediaType() || this.mediaTypeFromFilename(display),
+        item.origin,
+        true,
+      );
+    }
+    if (items.length === 0) {
+      this.seedNotice.set('That returned no seeds. Try widening the search.');
+      return;
+    }
+    const noun = items.length === 1 ? 'seed' : 'seeds';
+    this.seedNotice.set(
+      result.truncated
+        ? `Added ${items.length} ${noun} (the importer's limit; the rest were dropped).`
+        : `Added ${items.length} ${noun}.`,
+    );
   }
 
   /** Label for the media example tab: "Image", "Audio", "Video", etc. (the
@@ -1162,14 +1241,22 @@ export class NewDetectorModalComponent implements OnInit {
     this.error.set('');
 
     const textQuery = mediaExamples.length === 0 ? pendingTrimmed : '';
-    const mediaExample = mediaExamples[0]?.value || '';
+    // The legacy scalar is the detector's headline exemplar (dashboard
+    // display, Autopilot fallback), so prefer a hand-picked one over a
+    // seed — a seed is deliberately not the thing being hunted.
+    const mediaExample = (mediaExamples.find((ex) => !ex.seed) ?? mediaExamples[0])?.value || '';
     const examplesPayload = textQuery
       ? [{ type: 'text', value: textQuery }]
-      : mediaExamples.map((ex) =>
-          // The origin key is additive: examples without one keep the
-          // legacy {type, value} shape and seed via the sentinel path.
-          ex.origin ? { type: 'media', value: ex.value, origin: ex.origin } : { type: 'media', value: ex.value },
-        );
+      : mediaExamples.map((ex) => ({
+          type: 'media',
+          value: ex.value,
+          // Both extra keys are additive: an example without either keeps
+          // the legacy {type, value} shape. `origin` makes the example
+          // re-derivable; `labeled: false` marks an unlabeled seed, which
+          // steers the first sort without becoming a Good vote.
+          ...(ex.origin ? { origin: ex.origin } : {}),
+          ...(ex.seed ? { labeled: false } : {}),
+        }));
 
     this.detectorsRegistryApi
       .registerDetector({

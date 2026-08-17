@@ -28,12 +28,26 @@ class TestGatherPlugins:
         inv = gather_plugins()
         assert set(inv.keys()) == set(FAMILIES)
 
+    #: Families that deliberately ship no built-in, because they exist purely
+    #: as an extension point for third-party entry points.  Anything else
+    #: coming back empty means auto-discovery regressed.
+    EXTENSION_POINT_ONLY = {"seed_importers"}
+
     def test_each_family_has_entries(self):
-        # The codebase ships built-ins for every family; if one comes back
-        # empty something has broken auto-discovery.
         inv = gather_plugins()
         for family in FAMILIES:
+            if family in self.EXTENSION_POINT_ONLY:
+                continue
             assert inv[family], f"family {family!r} is empty; discovery regressed?"
+
+    def test_extension_point_only_families_are_registered_but_empty(self):
+        # An empty roster is the point for these, but the family must still be
+        # enumerable: that is what gives it a CLI flag, a hidden-plugins key,
+        # and a listing route to serve.
+        inv = gather_plugins()
+        for family in self.EXTENSION_POINT_ONLY:
+            assert family in inv, f"family {family!r} is not registered"
+            assert inv[family] == []
 
     def test_importers_include_server_folder(self):
         inv = gather_plugins()

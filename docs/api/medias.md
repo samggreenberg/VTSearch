@@ -583,6 +583,60 @@ image bytes, an audio waveform PNG, or a video mid-frame PNG (binary, not JSON).
 400 (filename escapes the media dir), 404 (not found / no thumbnail for the
 type), 500 (generation failed).
 
+### Seed importers
+
+A **seed importer** is a plugin that contributes a *batch* of unlabeled seed
+media — items that are "close but not quite" what the user is hunting for —
+to a new blank detector. No seed importer ships in-tree; the family is an
+extension point third-party packages register into (see
+[`EXTENDING-plugins.md` § Adding a Seed Importer](../EXTENDING-plugins.md#adding-a-seed-importer)).
+
+```
+GET /api/seed-importers
+```
+
+→ `{"importers": [{"name": ..., "display_name": ..., "icon": ..., "fields": [...], "max_items": 100, ...}]}`
+
+`{"importers": []}` on a vanilla install.
+
+```
+POST /api/seed-import/{importer_name}
+```
+
+**Body:** plugin-dependent — the fields the named importer declares (JSON, or
+multipart when it declares a `file` field). Not described in the OpenAPI spec
+for that reason; see [Routes absent from the spec](../API.md#routes-absent-from-the-spec).
+
+Runs the importer and saves each returned item's bytes into the per-user
+`example_media/` directory.
+
+→
+```json
+{
+  "items": [
+    {"filename": "abc123.wav", "original_name": "near-miss-1.wav", "origin": null}
+  ],
+  "count": 1,
+  "truncated": false
+}
+```
+
+Each item plugs into the detector-example model as
+`{"type": "media", "value": <filename>, "labeled": false}` — the `labeled`
+flag is what keeps a seed a query rather than a Good vote (see
+[Register detector](detectors.md#register-detector)). `truncated` is
+`true` when the importer returned more than its `max_items` cap and the tail
+was dropped. `count: 0` is a valid "nothing matched" answer, not an error.
+
+400 (bad user input), 404 (unknown importer), 422 (missing/invalid field),
+501 (`run` not implemented), 502 (upstream/source failure).
+
+```
+POST /api/seed-import/{importer_name}/options
+```
+
+Dynamic select options, same contract as the dataset-importer variant.
+
 ### Seed votes from examples
 
 ```

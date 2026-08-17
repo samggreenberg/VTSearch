@@ -32,6 +32,7 @@ surface, worked examples, and gotchas.
 | `vtscore.embedding` | Embedder loaders, torch runtime, cached `(N, D)` matrix | [packages/embedding.md](packages/embedding.md) |
 | `vtscore.datasets` | Origins, labelsets, loaders, importers, media sources | [packages/datasets.md](packages/datasets.md) |
 | `vtscore.datasource_importers` | Single-item importers for exemplar media | [packages/datasource-importers.md](packages/datasource-importers.md) |
+| `vtscore.seed_importers` | Batch importers for *unlabeled* seed media | [packages/seed-importers.md](packages/seed-importers.md) |
 | `vtscore.training` | Head (linear / MLP) / threshold / SVM / region-similarity primitives | [packages/training.md](packages/training.md) |
 | `vtscore.detectors` | Detector lifecycle: train, store, score, labelset sync | [packages/detectors.md](packages/detectors.md) |
 | `vtscore.eval` | Offline evaluation: text-sort, learned-sort, voting iterations | [packages/eval.md](packages/eval.md) |

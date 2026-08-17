@@ -1,11 +1,11 @@
-<div class="datasource-import-form">
+<div class="plugin-import-form">
   @if (importer().description) {
     <p class="info-text">{{ importer().description }}</p>
   }
 
   @for (field of importerFields; track field.key) {
     <div class="form-group">
-      <label class="col-label" [for]="'dsi-' + field.key"
+      <label class="col-label" [for]="'pif-' + field.key"
         [title]="field.description || field.label || field.key">
         {{ field.label || field.key }}
         @if (field.required) {
@@ -25,7 +25,7 @@
         ></vt-file-browser>
       } @else if (field.field_type === 'file') {
         <input
-          [id]="'dsi-' + field.key"
+          [id]="'pif-' + field.key"
           type="file"
           class="form-input"
           [accept]="field.accept || ''"
@@ -34,49 +34,49 @@
         />
       } @else if (field.field_type === 'password') {
         <input
-          [id]="'dsi-' + field.key"
+          [id]="'pif-' + field.key"
           type="password"
           class="form-input"
           [(ngModel)]="values[field.key]"
-          [name]="'dsi-' + field.key"
+          [name]="'pif-' + field.key"
           [placeholder]="field.placeholder || field.description || field.label || field.key"
           [title]="field.description || field.label || field.key"
         />
       } @else if (field.field_type === 'email') {
         <input
-          [id]="'dsi-' + field.key"
+          [id]="'pif-' + field.key"
           type="email"
           class="form-input"
           [(ngModel)]="values[field.key]"
-          [name]="'dsi-' + field.key"
+          [name]="'pif-' + field.key"
           [placeholder]="field.placeholder || field.description || field.label || field.key"
           [title]="field.description || field.label || field.key"
         />
       } @else if (field.field_type === 'url') {
         <input
-          [id]="'dsi-' + field.key"
+          [id]="'pif-' + field.key"
           type="url"
           class="form-input"
           [(ngModel)]="values[field.key]"
-          [name]="'dsi-' + field.key"
+          [name]="'pif-' + field.key"
           [placeholder]="field.placeholder || field.description || field.label || field.key"
           [title]="field.description || field.label || field.key"
           (keydown.enter)="$event.preventDefault(); submit()"
         />
       } @else if (field.field_type === 'select' && field.allow_free_text) {
         <input
-          [id]="'dsi-' + field.key"
+          [id]="'pif-' + field.key"
           type="text"
           class="form-input"
-          [attr.list]="'dsi-' + field.key + '-list'"
+          [attr.list]="'pif-' + field.key + '-list'"
           [(ngModel)]="values[field.key]"
-          [name]="'dsi-' + field.key"
+          [name]="'pif-' + field.key"
           [disabled]="!!fieldOptions.loading()[field.key]"
           [placeholder]="fieldOptions.loading()[field.key] ? 'Loading…' : (field.placeholder || field.description || field.label || field.key)"
           [title]="field.description || field.label || field.key"
           (ngModelChange)="onFieldChanged(field.key)"
         />
-        <datalist [id]="'dsi-' + field.key + '-list'">
+        <datalist [id]="'pif-' + field.key + '-list'">
           @for (opt of fieldOptions.optionsFor(field); track opt.value) {
             <option [value]="opt.value">{{ opt.label }}</option>
           }
@@ -86,10 +86,10 @@
         }
       } @else if (field.field_type === 'select') {
         <select
-          [id]="'dsi-' + field.key"
+          [id]="'pif-' + field.key"
           class="form-select"
           [(ngModel)]="values[field.key]"
-          [name]="'dsi-' + field.key"
+          [name]="'pif-' + field.key"
           [title]="field.description || field.label || field.key"
           (ngModelChange)="onFieldChanged(field.key)"
           [disabled]="!!fieldOptions.loading()[field.key] || (!!field.dynamic_options && fieldOptions.optionsFor(field).length === 0)"
@@ -108,11 +108,11 @@
         }
       } @else if (field.field_type === 'number') {
         <input
-          [id]="'dsi-' + field.key"
+          [id]="'pif-' + field.key"
           type="number"
           class="form-input"
           [(ngModel)]="values[field.key]"
-          [name]="'dsi-' + field.key"
+          [name]="'pif-' + field.key"
           [placeholder]="field.placeholder || field.description || field.label || field.key"
           [title]="field.description || field.label || field.key"
           [attr.min]="field.min || null"
@@ -121,7 +121,7 @@
         />
       } @else if (field.field_type === 'checkbox') {
         <input
-          [id]="'dsi-' + field.key"
+          [id]="'pif-' + field.key"
           type="checkbox"
           [checked]="values[field.key] === 'true'"
           (change)="values[field.key] = $any($event.target).checked ? 'true' : 'false'"
@@ -129,11 +129,11 @@
         />
       } @else {
         <input
-          [id]="'dsi-' + field.key"
+          [id]="'pif-' + field.key"
           type="text"
           class="form-input"
           [(ngModel)]="values[field.key]"
-          [name]="'dsi-' + field.key"
+          [name]="'pif-' + field.key"
           [placeholder]="field.placeholder || field.description || field.label || field.key"
           [title]="field.description || field.label || field.key"
           (keydown.enter)="$event.preventDefault(); submit()"
@@ -147,9 +147,9 @@
     class="btn btn--primary load-btn"
     [disabled]="!canSubmit"
     (click)="submit()"
-    title="Fetch this media item and use it as the example"
+    [title]="submitTitle()"
   >
-    @if (submitting()) { Loading… } @else { Load }
+    @if (submitting()) { Loading… } @else { {{ submitLabel() }} }
   </button>
 
   @if (error()) {

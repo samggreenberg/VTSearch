@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, inject, input, output, signal } fro
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
-import { DatasourceImportFormComponent } from '../../datasource-import-form/datasource-import-form.component';
+import { PluginImportFormComponent } from '../../plugin-import-form/plugin-import-form.component';
 import { DatasetsCrudApiService } from '../../../services/datasets-crud-api.service';
 import { DatasetsListingsApiService } from '../../../services/datasets-listings-api.service';
 import { DatasetsUiApiService } from '../../../services/datasets-ui-api.service';
@@ -31,7 +31,7 @@ type ModalView = 'prompt' | 'media-picker';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-resort-prompt-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, IconComponent, DatasourceImportFormComponent],
+  imports: [FormsModule, ModalComponent, IconComponent, PluginImportFormComponent],
   templateUrl: './resort-prompt-modal.component.html',
   styleUrl: './resort-prompt-modal.component.scss',
 })
