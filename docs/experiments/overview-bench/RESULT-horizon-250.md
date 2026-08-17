@@ -90,7 +90,7 @@ boxes, **all bit-identical** — except one cell.
 identical, but the **threshold** differs by up to 0.026 and cost through it by
 0.020. The category is saturated — positives near 1.0, negatives near 0 — which
 leaves the mixture fit that places the cut ill-conditioned, so a float-level
-difference between machines flips it. Filed as its own issue; it is why
+difference between machines flips it. Filed as #3166; it is why
 `caltech101_m` is excluded from the whole-image numbers above, and one more
 reason to retire that haystack from this sweep.
 
