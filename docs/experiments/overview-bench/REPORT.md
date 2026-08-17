@@ -5,12 +5,15 @@
 (binary-voting arm), plus per-media error dumps (`496798`–`496802`, `507225`–`507230`)
 **Data:** `/expscratch/sgreenberg/bench-{overview,vgbox,vgbox2,binary,errors}/results`
 **Reproduce:** `analyze_bench.py` (tables), `analyze_bench_interaction.py`
-(binary vs boxes), `make_bench_figs.py` (the plots), `launch_errdump.sh` +
+(binary vs boxes), `make_bench_figs.py --svg` (the plots, PNG for this page and
+SVG for the reading copy below), `launch_errdump.sh` +
 `error_report.py` + `label_noise.py` (the error listings) and
 `make_error_sheets.py` (the image sheets — it runs on the cluster, where the
 source images are) — all under `scripts/experiments/calibration/`.
 **Reading copy:** [`docs/reports/2026-08-17-overview-bench.html`](../../reports/2026-08-17-overview-bench.html)
-is this document as one self-contained page, figures and photographs inlined.
+is this document as one self-contained page — plots as zoomable vector art,
+photographs embedded. It is **generated** from this file by `make_bench_html.py`;
+edit the report, then re-run the script so the two cannot disagree.
 
 This is a **characterization**, not a comparison. Nothing here is trying to pick
 a configuration to ship. The question is what each of them *does* — what it is
