@@ -128,25 +128,63 @@ annotated `car, clouds` and has a bus front and centre). Review them in
 descending detector score, plus a uniform random stratum so the residual noise
 rate after review is bounded rather than unknown.
 
+## What the scan measured (2026-08-17)
+
+Run on the GRID as jobs `509905` and `509971` (CPU-only, ~70 s each) against the
+full VG source; artifacts under `/expscratch/sgreenberg/vgscale-3156/`
+(`vg_box_scale_bands.json`, `shortlist_*.json`, `name_overlap.json`).
+
+**The construction is viable.** Of 4628 categories with >= 20 images, 534 hold
+>= 50 images in *every* band and 310 hold >= 100 — so one class list held fixed
+across three sizes is not supply-limited.
+
+**But the per-class scatter filter cost the study its best classes, `bus`
+included.** `union_inflation` is a per-*class* median, and a class that often
+appears several times per image fails it however compact any single image is:
+`bus` scores 1.71 against a 1.5 cap and is dropped, together with 30 of the 65
+COCO classes present. That is the wrong 30 to lose — a shared class is the only
+one whose VG miss rate can be measured against COCO's exhaustive annotation for
+free.
+
+Scatter is a property of an *image*, not of a class, so the scan now also counts
+an image only when its union box is within `BAND_MAX_INFLATION` of that image's
+own largest instance (`bands_compact`; `shortlist_scale_classes.py --compact`).
+The non-compact remainder is *excluded* from the cell, exactly like a wrong-band
+image — it is not turned into a negative.
+
+| floor 50, all three bands | classes | of which COCO |
+|---|---:|---:|
+| per-class median inflation | 196 | 15 |
+| per-image compact union | 305 | 41 |
+
+Nothing is lost by the switch: every COCO class the per-class rule kept survives
+it, and 26 more come back. It is cheap for the recovered classes — 90% of `bus`
+images are compact, giving 112 / 782 / 2137 images across small / medium /
+large. It is expensive only for classes that really are scattered (`person`
+0.66, `car` 0.71), which is the intended effect.
+
+**The eyewear arm does not earn a place.** `glasses` vs `sunglasses` overlap at
+IoU >= 0.5 on only 0.20 of boxes each way over 280 co-annotated images —
+`mixed`, not the clean `subtype` a fine-grained arm would need, and not the
+alias the overview benchmark assumed either. `eyeglasses` vs `glasses` does come
+back `alias` (0.32 / 0.31), so those two names must be merged before either is
+used. Separately, `bus` vs `bush` is refuted outright: 87 co-annotated images,
+**0.00** box overlap both ways. String similarity was never evidence.
+
 ## Open work
 
 <!-- item-sep -->
 
-- **Run the supply scan and pick *C*.** `scan_vg_boxes.py` now emits the
-  per-`(class, band)` histogram and `shortlist_scale_classes.py` ranks
-  categories on their binding (minimum) per-band supply, flagging COCO overlap
-  and prior benchmark coverage. Both need the VG source under `DEMO_CACHE`, so
-  the scan is a GRID job. Choosing *C* from its output — including a human pass
-  over the reported exclusions — is the gate on everything below. (Sonnet 5)
+- **Pick *C*.** ~~Run the supply scan~~ — done, see above; the ranking is in
+  `shortlist_compact_floor100.json`. Choosing *C* from it, including a human
+  pass over the reported exclusions, is still the gate on everything below.
+  (human)
 
 <!-- item-sep -->
 
-- **Decide whether a fine-grained pair earns a place in *C*.** Run
-  `scan_name_overlap.py` over the shortlist plus the eyewear cluster; if a pair
-  comes back `subtype` with real support in all three bands, it is the most
-  interesting arm available — scale *and* fine-grained discrimination on one
-  class. If it comes back `alias`, the names must be merged before either is
-  usable. Cheap, and it decides a study design. (Sonnet 5)
+- ~~**Decide whether a fine-grained pair earns a place in *C*.**~~ Measured:
+  no pair in the top 30 plus the eyewear cluster came back `subtype`, so the
+  fine-grained arm is dropped and `eyeglasses` is merged into `glasses`.
 
 <!-- item-sep -->
 
