@@ -24,11 +24,25 @@ from tests_lib.flask_blocker import install_if_requested as _install_flask_block
 
 _install_flask_blocker()
 
+# Cap native math threads BEFORE numpy/torch are imported, mirroring the top of
+# ``app.py``.  The app tier gets this for free (``tests/conftest.py`` imports
+# ``app``), but a ``tests_lib``-only run never does, and the fallback
+# (``ensure_torch_configured``) only fires from embedder paths the suite stubs
+# out — so torch fell back to one intra-op thread *per core*.  Under ``-n auto``
+# that is workers x cores native threads fighting over the same cores, and it
+# is not a small effect: ``pytest tests_lib/detectors`` alone went 130s -> 51s
+# on a 4-vCPU box when these were set.  Resolved the same way ``app.py`` does
+# so an explicit ``VTSEARCH_TORCH_THREADS`` override still wins.
+import os  # noqa: E402
+
+_torch_threads = str(max(1, int(os.environ.get("VTSEARCH_TORCH_THREADS", "1"))))
+os.environ.setdefault("OMP_NUM_THREADS", _torch_threads)
+os.environ.setdefault("MKL_NUM_THREADS", _torch_threads)
+
 from pathlib import Path  # noqa: E402
 from unittest.mock import patch  # noqa: E402
 
 import numpy as np  # noqa: E402
-import os  # noqa: E402
 import pytest  # noqa: E402
 
 import vtscore.config as config  # noqa: E402
@@ -336,6 +350,13 @@ def reset_contexts(tmp_path, monkeypatch):
     from vtscore import cli_progress
 
     cli_progress.set_format("text")
+
+    # Drop notification subscribers: they are process-global, so a test that
+    # subscribes a collector (or drives the CLI, which subscribes a printer)
+    # would otherwise keep receiving every later test's notifications.
+    from vtscore.concurrency.notifications import notifications as _notifications
+
+    _notifications.clear_subscribers()
 
     # Redirect registry storage to tmp_path so tests can't pollute repo data/.
     from vtscore.datasets import registry as ds_reg_mod

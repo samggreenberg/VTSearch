@@ -159,6 +159,57 @@ class TestProgressCallback:
         assert "total" not in event
 
 
+class TestNotificationSubscriber:
+    """The headless sink for the notifications the GUI renders as toasts."""
+
+    def _note(self, **kwargs):
+        from vtscore.concurrency.notifications import Notification
+
+        defaults = {"id": "note_1", "level": "warning", "message": "Skipped 3 files"}
+        return Notification(**{**defaults, **kwargs})
+
+    def test_text_mode_writes_one_line_to_stderr(self, capsys):
+        cli_progress.notification_subscriber(self._note(detail="a, b, c", source="Server Folder"))
+        captured = capsys.readouterr()
+        # stdout stays clean: a caller may be piping an exporter's output.
+        assert captured.out == ""
+        assert captured.err == "Warning: [Server Folder] Skipped 3 files - a, b, c\n"
+
+    def test_text_mode_omits_absent_source_and_detail(self, capsys):
+        cli_progress.notification_subscriber(self._note(level="info", message="All good"))
+        assert capsys.readouterr().err == "Note: All good\n"
+
+    @pytest.mark.parametrize(
+        "level,label",
+        [("info", "Note"), ("success", "Done"), ("warning", "Warning"), ("error", "Error")],
+    )
+    def test_text_mode_labels_each_level(self, capsys, level, label):
+        cli_progress.notification_subscriber(self._note(level=level, message="Hi"))
+        assert capsys.readouterr().err == f"{label}: Hi\n"
+
+    def test_json_mode_emits_notification_event_on_stdout(self, capsys):
+        cli_progress.set_format("json")
+        cli_progress.notification_subscriber(self._note(detail="a, b, c", source="Server Folder"))
+        captured = capsys.readouterr()
+        assert captured.err == ""
+        event = json.loads(captured.out.strip())
+        assert event["event"] == "notification"
+        assert event["level"] == "warning"
+        assert event["message"] == "Skipped 3 files"
+        assert event["detail"] == "a, b, c"
+        assert event["source"] == "Server Folder"
+
+    def test_notify_reaches_the_cli_once_subscribed(self, capsys):
+        from vtscore.concurrency.notifications import notifications, notify
+
+        notifications.subscribe(cli_progress.notification_subscriber)
+        try:
+            notify("Partial results", level="warning", source="Remote API")
+        finally:
+            notifications.unsubscribe(cli_progress.notification_subscriber)
+        assert capsys.readouterr().err == "Warning: [Remote API] Partial results\n"
+
+
 # ---------------------------------------------------------------------------
 # End-to-end tests; autodetect emits the documented events
 # ---------------------------------------------------------------------------

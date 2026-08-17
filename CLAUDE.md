@@ -101,6 +101,8 @@ This is why closing an issue by hand didn't previously "trickle back": the item 
 
 **Every GitHub issue you create must carry the `claude` label**, and the `experiment` label when it applies. Apply them at creation time (`labels: ["claude", …]`), not as a follow-up edit. If a label is missing from the repo, applying it via the issues API creates it automatically — do not skip a label because it doesn't exist yet.
 
+A third label, **`dev`**, is a release *status* rather than something you choose when filing — it is applied and removed by the release machinery. Read its section below before closing any issue.
+
 ### `claude` — who filed it
 
 `claude` means **this issue was written by Claude, not by a human.** It is not a topic tag and has nothing to do with what the issue is about (nearly every issue here concerns Claude-adjacent work; that is never why the label goes on).
@@ -121,6 +123,27 @@ That asymmetry is the whole design. It only works if Claude is exhaustive: a Cla
 - It is orthogonal to `claude` — a human-filed research idea gets `experiment` alone; a Claude-filed sweep gets both.
 
 The point is scheduling: `label:experiment` is the queue of work that needs machine time booked, and `-label:experiment` is what can be picked up right now. See the `grid-experiments` skill for how those runs are actually launched.
+
+### `dev` — fixed on `dev`, not yet on `main`
+
+`dev` means **the fix has merged to `dev` but has not shipped to `main`.** Unlike `claude` and `experiment`, it is **not applied at creation time** and is never something you decide when filing — it is a *status* the release machinery maintains.
+
+It exists to make an otherwise invisible state visible. A fix PR targets `dev`, and GitHub only auto-closes a keyword-linked issue when the PR merges into the **default** branch (`main`), so a fixed issue stays open until the release sweep closes it. Without this label there is no way to tell "waiting for the next release" apart from "nobody has started it". The awaiting-release view is:
+
+```
+is:issue is:open label:dev
+```
+
+**The label is transient, not a historical fact.** It goes on when the fix merges to `dev`, and comes off in the same write that closes the issue (`docs/RELEASE.md` step 6). A closed issue must never carry it: by then the fix is on `main` too, so the label would assert something false, and a reopened issue would wrongly appear in the awaiting-release view. `is:open` already filters the closed pile for free, so letting it linger would buy nothing.
+
+Two rules bind you directly:
+
+- **Closing an issue strips `dev`.** Pass `labels` explicitly on a `completed` close. Note that `labels` *replaces* the whole set, so list every label the issue keeps (`claude`, `experiment`, …) and omit `dev` — passing `[]` would wipe the rest. A `PreToolUse` hook blocks a close that keeps the label or omits the array.
+- **Do not apply it by hand from a fix session.** When you open a fix PR the merge hasn't happened yet, so the issue is not on `dev` and labeling it would be a lie for as long as the PR sits unmerged. Applying it is `scripts/reconcile-dev-labels.py`'s job.
+
+That script encodes `docs/RELEASE.md` step 6's resolution logic — closing keywords vs. `Refs`, `Partially addressed in #M` vs. `Addressed in #M`, and the ambiguity of a comment posted *after* a fix pointer — and reconciles the label in both directions. It is a pure function from data to plan: the GitHub REST API is unreachable from a Claude session (`GITHUB_TOKEN` is present but 403s, since GitHub access is intermediated by the MCP server), so gather the PR and issue data with the `github` MCP tools and pipe it in. See `docs/RELEASE.md` for the recipe.
+
+**A comment after the fix pointer is never guessed at.** If someone comments below an `Addressed in #M` pointer, the script reports the issue as needing review rather than tagging or skipping it. The later comment might be a maintainer saying "thanks" or the reporter saying the fix doesn't work; tagging would bury a dispute, and skipping would silently drop the issue out of the awaiting-release view. Ambiguity gets surfaced, not resolved by a coin flip.
 
 ## Recommend a Claude model in every issue you file
 
@@ -259,7 +282,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 ## Commands
 
 - **Run tests (CPU, fast)**: `./run-tests.sh` (runs every gate listed under "What `run-tests.sh` gates" below, then pytest)
-- **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; **every** invocation runs the full non-pytest gate chain first, so a group run is not a way to skip the linters; `core` and `frontend` additionally run the frontend build + `npm audit`, and `frontend` alone also runs the Vitest unit suite)
+- **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; every invocation runs the cheap serial gates — linters, doc checks, snapshot drift — first, but a group run **skips the heavy whole-repo gates** (pyright, pip-audit, and the frontend gates unless the group is `core`/`frontend`) to keep the inner loop fast; it says so in its output. `VTSEARCH_FULL_GATES=1` forces them. A **full** `./run-tests.sh` runs everything and is mandatory before pushing. `core` and `frontend` additionally run the frontend build + `npm audit`, and `frontend` alone also runs the Vitest unit suite)
 - **Run tests with coverage**: `VTSEARCH_COVERAGE=1 ./run-tests.sh` (opt-in; adds ~10-20% overhead)
 - **Run multiple groups**: `./run-tests.sh core sorting api`
 - **Run tests with extra args**: `./run-tests.sh core -- -x --tb=long` (args after `--` go to pytest)
@@ -289,27 +312,39 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 
 ## What `run-tests.sh` gates
 
-There is no CI: `./run-tests.sh` is the only gate, so it front-loads a long chain of checks and stops at the first failure with a `TESTS BLOCKED: ...` banner naming which one. **This list is derived from `run-tests.sh`; when you add or remove a gate there, update it here in the same commit.** In script order:
+There is no CI: a **full** `./run-tests.sh` is the only gate, and it still runs every check. **This list is derived from `run-tests.sh`; when you add or remove a gate there, update it here in the same commit.** The run is staged: cheap gates run serially and stop at the first failure with a `TESTS BLOCKED: ...` banner naming which one; the heavy, mutually independent gates then run **concurrently with pytest**, each runs to completion, and every failure is reported (so one pass surfaces every problem instead of one per rerun). A final `RUN PASSED` / `RUN FAILED: <gates>` banner closes the run.
 
-| # | Gate | Command it runs | Notes |
-|---|------|-----------------|-------|
-| 0 | Wall-clock cap | re-`exec`s itself under `timeout` | `VTSEARCH_TEST_TIMEOUT` (default **1800s = 30 min**) bounds the *whole* run, every stage included. `VTSEARCH_TEST_TIMEOUT=0` opts out for a deliberately long run (GPU, coverage sweep). |
-| 1 | Dep install | `.claude/hooks/ensure-test-deps.sh` | Minutes on a cold container, near-instant after. |
-| 2 | Lint | `ruff check .` | |
-| 3 | Format | `ruff format --check .` | Fix with `ruff format .`. |
-| 4 | Spelling | `codespell --toml pyproject.toml` | |
-| 5 | Documentation | `scripts/check-docs.py` | Pure invariants over every tracked markdown file: relative links, `#anchors` (GitHub slug rules), backticked repo paths, absolute-path leaks, `docs/plans/*.md` citations **anywhere in the tree**, and broken code fences. Nothing to re-pin; fix the doc, or add an allowlist entry with a reason. |
-| 6 | Dependencies | `python -m deptry .` | |
-| 7 | Known CVEs | `pip-audit` | Audits the resolved venv, not the requirements files. `PIP_AUDIT_IGNORE` in the script lists advisories with no upstream fix; re-audit and remove an entry once a patched release exists. |
-| 8 | Types | `pyright` (pinned via `PYRIGHT_PYTHON_FORCE_VERSION`) | Scope is `pyrightconfig.json`. |
-| 9 | OpenAPI snapshot drift | `scripts/dump_openapi.py` diffed against `frontend/openapi.json` | The generated TS client is built from this snapshot. Regenerate with `npm run regenerate-openapi-snapshot` and commit the result. |
-| 10 | Dockerfiles | `scripts/check-dockerfiles.py` | |
-| 11 | User-docs screenshot wiring | `scripts/screenshots/wiring-check.py` | Browser-free; the pixel-diff (`check.sh`) stays a manual chore. Also what makes the reshoot queue un-rottable. |
-| 12 | Eval/app sync | `scripts/check-eval-app-sync.py` | Re-pin with `--update` **after** reconciling the harness. |
-| 13 | Frontend build | `cd frontend && npm run build:prod` | Full run, or the `core` / `frontend` groups. Any `▲ [WARNING]` line is a hard failure. Skipped with a notice if `frontend/node_modules` is absent. |
-| 14 | Frontend audit | `cd frontend && npm audit --omit=dev` | Same trigger as the build. Prod deps only — dev-only advisories don't ship. |
-| 15 | Frontend unit tests | `cd frontend && npm run test:ci` | Full run or the `frontend` group **only** — deliberately off the fast `core` path. |
-| 16 | Python tests | `pytest tests/ tests_lib/ -n auto --dist loadgroup` | Skipped entirely when `frontend` is the only requested group. |
+Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s = 30 min**, `0` opts out for a deliberately long run) and `.claude/hooks/ensure-test-deps.sh` (minutes on a cold container, near-instant after).
+
+**Stage 1 — cheap gates, serial, fail-fast (~10s total, every invocation):**
+
+| Gate | Command it runs | Notes |
+|------|-----------------|-------|
+| Lint | `ruff check .` | |
+| Format | `ruff format --check .` | Fix with `ruff format .`. |
+| Spelling | `codespell --toml pyproject.toml` | |
+| Documentation | `scripts/check-docs.py` | Pure invariants over every tracked markdown file: relative links, `#anchors` (GitHub slug rules), backticked repo paths, absolute-path leaks, `docs/plans/*.md` citations **anywhere in the tree**, and broken code fences. Nothing to re-pin; fix the doc, or add an allowlist entry with a reason. |
+| Dependencies | `python -m deptry .` | |
+| OpenAPI snapshot drift | `scripts/dump_openapi.py` diffed against `frontend/openapi.json` | The generated TS client is built from this snapshot. Regenerate with `npm run regenerate-openapi-snapshot` and commit the result. |
+| Doc inventories | `scripts/gen-docs-inventories.py --check` | Regenerate with `python scripts/gen-docs-inventories.py` and commit the result. |
+| Dockerfiles | `scripts/check-dockerfiles.py` | |
+| User-docs screenshot wiring | `scripts/screenshots/wiring-check.py` | Browser-free; the pixel-diff (`check.sh`) stays a manual chore. Also what makes the reshoot queue un-rottable. |
+| vtscore package docs | `scripts/check-vtscore-docs.py` | |
+| Eval/app sync | `scripts/check-eval-app-sync.py` | Re-pin with `--update` **after** reconciling the harness. |
+
+**Stage 2 — frontend production build, serial (full run and the `core` / `frontend` groups):** `cd frontend && npm run build:prod`. Any `▲ [WARNING]` line is a hard failure. Runs *before* pytest because some tests serve the built bundle out of `static/`. Skipped with a notice if `frontend/node_modules` is absent.
+
+**Stage 3 — heavy gates, concurrent with pytest (pytest streams in the foreground; lane results print after it):**
+
+| Gate | Command it runs | When | Notes |
+|------|-----------------|------|-------|
+| Types | `pyright` (pinned via `PYRIGHT_PYTHON_FORCE_VERSION`) | Full run only | Scope is `pyrightconfig.json`. |
+| Known CVEs | `pip-audit` | Full run only | Audits the resolved venv, not the requirements files. `PIP_AUDIT_IGNORE` in the script lists advisories with no upstream fix; re-audit and remove an entry once a patched release exists. |
+| Frontend audit | `cd frontend && npm audit --omit=dev` | Full run, `core`, `frontend` | Prod deps only — dev-only advisories don't ship. |
+| Frontend unit tests | `cd frontend && npm run test:ci` | Full run or `frontend` **only** — deliberately off the fast `core` path | Headless Vitest. |
+| Python tests | `pytest tests/ tests_lib/ -n auto --dist loadgroup` | Every run except a `frontend`-only group | |
+
+**Group runs skip the whole-repo stage-3 gates** (pyright, pip-audit, and the frontend gates unless the group asks for them) so the edit/test loop stays in the seconds — the skip is announced in the output, and `VTSEARCH_FULL_GATES=1` forces the complete chain on a group run. Stage 1 runs on every invocation. This is a deliberate trade: the fast inner loop may miss a type error or CVE, which is why **a full `./run-tests.sh` remains mandatory before pushing.**
 
 ## Test Groups
 
@@ -354,11 +389,11 @@ Testing can crash the session. To avoid losing work, follow this workflow:
 1. **Commit and push before running tests.** Before running `pytest` or any test command, commit all current changes and push to your working branch. Use a message like `"WIP: pre-test checkpoint"` if the work isn't finalized yet.
 2. **Start the run in the foreground with the maximum timeout, and never *launch* it with `run_in_background`.** The test command has a slow startup phase: `ensure-test-deps.sh` installs dependencies (~1-2 min on first run), then `conftest.py` imports `app.py` and generates test media/embeddings before any tests execute. There may be no output for several minutes; this is normal, and is not a sign that output capture is broken.
 
-   **Pass `600000` ms (10 minutes) — the Bash tool's maximum — and expect a cold full run to exceed it anyway.** A measured cold `./run-tests.sh` is ~11 minutes: ~7 for dep install plus the linter/pyright/pip-audit/snapshot gates and the frontend build + `npm audit` + Vitest, then ~3.5 minutes of pytest. (The old "at least 5 minutes" suggestion cut healthy runs off mid-gate.) When the tool's cap is hit the harness moves the run to the background rather than killing it — that is fine; wait for the completion notification and read the output file it names. What matters is that you *started* it in the foreground so the harness tracks it.
+   **Pass `600000` ms (10 minutes) — the Bash tool's maximum.** A measured warm full `./run-tests.sh` is ~3.5 minutes on a 4-vCPU box (the heavy gates — pyright, pip-audit, the Vitest suite — run concurrently with pytest, so the wall clock is close to pytest's own); a cold container adds ~3 minutes of dep install up front. A cold run can still brush the cap — that is fine: when the tool's cap is hit the harness moves the run to the background rather than killing it; wait for the completion notification and read the output file it names. What matters is that you *started* it in the foreground so the harness tracks it.
 
    Two consequences worth knowing before you run it:
    - **Do not pipe the run through `tail`/`grep`.** If the harness backgrounds a pipeline, nothing flushes until the whole pipeline ends, so the output file sits empty and you can't watch progress. Run the script bare and read the tail of the output file afterwards.
-   - **A run that outlives the tool's cap is not a timeout.** The script has its own 30-minute wall-clock cap (`VTSEARCH_TEST_TIMEOUT`) and prints a distinctive `TESTS TIMED OUT` banner when *it* fires. Absent that banner, the run is still healthy. To stay inside 10 minutes, run one group at a time — a group run skips the frontend gates unless it is `core` or `frontend`.
+   - **A run that outlives the tool's cap is not a timeout.** The script has its own 30-minute wall-clock cap (`VTSEARCH_TEST_TIMEOUT`) and prints a distinctive `TESTS TIMED OUT` banner when *it* fires. Absent that banner, the run is still healthy. To stay well inside 10 minutes, run one group at a time — a group run skips the heavy whole-repo gates (pyright, pip-audit, and the frontend gates unless the group is `core`/`frontend`) and typically finishes in well under a minute warm.
 3. **If tests fail and fixes are needed**, make the fixes, then commit and push again before re-running tests.
 4. **Repeat** until tests pass. Every cycle of fixes should be committed and pushed before the next test run.
 
@@ -366,11 +401,13 @@ This ensures work is recoverable if the session crashes during a test run.
 
 ## Reading Test Results (IMPORTANT)
 
-The test suite prints a clear summary as its very last output:
-- `ALL 1600 TESTS PASSED (3 skipped, total: 1603)` → all good
-- `TESTS FAILED: 2 failed, 0 errors, 1598 passed, 3 skipped (total: 1603)` → 2 failures
+A `./run-tests.sh` run prints its verdict as its very last output, in a `====`-bordered block:
+- `RUN PASSED (all gates green; pytest summary above)` → all good
+- `RUN FAILED: pytest, pyright` → those gates failed; each failing gate's `TESTS BLOCKED` banner and log tail were printed above
 
-**ONLY look at this final summary block** (bordered by `====` lines) to determine pass/fail. Many test names contain the word "error" (e.g., `test_memory_errors.py`, `TestErrorResponseFormat`). These test **error-handling behavior**; they are not failures.
+Because the heavy gates run concurrently with pytest and report after it, pytest's own summary block (`ALL 1600 TESTS PASSED (3 skipped, total: 1603)` / `TESTS FAILED: 2 failed, ...`) sits *above* the lane report in a full run — it is still the place to read pytest's counts, and it is the last output of a bare `pytest` invocation.
+
+**ONLY look at these summary blocks** (bordered by `====` lines) to determine pass/fail. Many test names contain the word "error" (e.g., `test_memory_errors.py`, `TestErrorResponseFormat`). These test **error-handling behavior**; they are not failures.
 
 **Do NOT scan test names or output for the word "error" to detect failures.** A line like:
 ```

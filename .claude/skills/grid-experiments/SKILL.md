@@ -16,7 +16,7 @@ Three companions, each with a different job:
 |---|---|---|
 | `scripts/experiments/preflight.sh` | **Blocks** the checkable mistakes | Before submitting arms |
 | `scripts/experiments/GRID-PLAYBOOK.md` | SLURM resource practice (memory, QOS, chunking) | When sizing a sweep |
-| `scripts/experiments/LESSONS.md` | Incident log — what broke, what it cost | Read once; **append when something breaks** |
+| `scripts/experiments/LESSONS.md` | Incident log index; entries are `lessons/*.md`, one per incident | Read once; **add a file when something breaks** |
 
 ## Before launching
 
@@ -32,6 +32,11 @@ mistakes that cost the most queue time in #3129: an array that claims your whole
 **per-user memory** allowance (memory is the binding quota here, not CPU — see
 GRID-PLAYBOOK.md for measured RSS per cell type), and a **job name you are
 already using**, which silently breaks the per-name completion waiter below.
+
+Add `--reuse-prepare "$PREPARE_DIR"` when you are skipping a GPU prepare stage by
+reusing a finished study's output. It checks that every `crops/` entry still
+resolves — the links point into the study that generated them, and `readlink -f`
+recreates them happily after that study is archived (#2881).
 
 It refuses to pass when the results dir already holds another grid's cells,
 when the *actual* mount is low on space, when zero-byte cells from a previous
@@ -109,11 +114,13 @@ pass against code you did not write.
 
 ## When something breaks
 
-**Append an entry to `scripts/experiments/LESSONS.md`** — same day, while the
-mechanism is still clear. Keep the cost in it, and say plainly whether it is now
-*prevented* (a preflight check, a code change) or still only *advice*. A lesson
-without a control will recur; saying so is more useful than implying it is
-handled.
+**Add a file to `scripts/experiments/lessons/`**, named `YYYY-MM-DD-short-slug.md` — same day, while
+the mechanism is still clear — then re-run `python scripts/gen-docs-inventories.py`
+to refresh the index in `LESSONS.md`. One incident per file, so that two studies
+recording lessons in parallel do not conflict. Keep the cost in it, and say
+plainly whether it is now *prevented* (a preflight check, a code change) or still
+only *advice*. A lesson without a control will recur; saying so is more useful
+than implying it is handled.
 
 If the failure is mechanically checkable, add a check to `preflight.sh` rather
 than a paragraph anywhere.

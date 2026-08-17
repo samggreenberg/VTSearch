@@ -62,7 +62,11 @@ export class BuildSkewService {
       next: ({ version }) => {
         this.serverVersion.set((version || '').trim());
         if (!this.skewed()) return;
-        this.toast.error({
+        // `warning`, not `error`: the app is working, it is just working from
+        // older code than the server — a degraded result the user is holding
+        // without knowing it, which is exactly what that level is for. It also
+        // stays up until dismissed, which this needs.
+        this.toast.warning({
           message: 'This page is running an out-of-date build',
           detail:
             `The server is version ${this.serverVersion()}, but the JavaScript in your browser ` +

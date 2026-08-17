@@ -24,12 +24,20 @@ from vtscore.eval.calibration_metrics import inclusion_weights, operating_cost
 from vtscore.eval.voting_iterations import _CUT_INCLUSION_COLUMNS, simulate_voting_iterations
 
 # Reuse the synthetic planted-patch dataset builders from the Max-Patch tests.
+from .sweep_cache import memoize_sweep
 from .test_max_patch_style import _planted_dataset
+
+# Six of the tests below sweep the identical default frame and assert on
+# different columns of it, so the sweep is memoized per worker and this module
+# is pinned to one worker for the cache to hit.  Rows handed back are shared:
+# read them, never mutate them.  See sweep_cache.py.
+pytestmark = pytest.mark.xdist_group("cut-inclusion-sweep")
 
 _KS = [-4, -2, 0, 2, 4]
 _RULES = ["mid", "mid_tilt", "rate", "cross_tilt", "q_tilt"]
 
 
+@memoize_sweep
 def _run(seed=0, max_steps=12, ks=None, rules=None, qtilt_steps=None):
     medias, _ = _planted_dataset(n_per_cat=40, seed=seed)
     sink: list[dict] = []

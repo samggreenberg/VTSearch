@@ -28,7 +28,13 @@ tracker, so clients do not need a separate REST bootstrap call.
 | `sort` | progress object | `sort_progress` (text sort) |
 | `find` | progress object | `find_progress` (multi-dataset Find) |
 | `eval` | progress object | `eval_progress` (train-and-score) |
+| `notification` | notification object | `notify()` — one-off messages from server-side code; rendered as toasts |
 | `heartbeat` | `{ "ts": <unix seconds> }` | periodic liveness ping (every ~5s) |
+
+Every channel except `notification` carries **state**: a snapshot sent on
+connect and re-sent on every heartbeat, so a dropped frame heals itself.
+`notification` carries **events** — see [Notification object
+shape](#notification-object-shape) for what that costs.
 
 ### Progress object shape
 
@@ -83,6 +89,40 @@ ingest (see [detectors.md](detectors.md) and [io.md](io.md)) publishes
 `ingest_result` — `{"ingested", "applied", "unresolved", "failed"}`, with only
 `ingested` present on the detector-import path.
 
+### Notification object shape
+
+```json
+{
+  "id": "note_4eb45583_7",
+  "level": "warning",
+  "message": "Skipped 3 unreadable files",
+  "detail": "page_2.pdf, page_9.pdf, notes.pdf",
+  "source": "Server Folder",
+  "timestamp": 1731000000.123
+}
+```
+
+A one-off message from server-side code — typically a plugin that hit a
+recoverable problem and chose to carry on rather than fail the whole
+operation. Published with `notify()`
+(`vtscore/concurrency/notifications.py`); the Angular client turns each one
+into a toast via `ToastService`. `level` is one of `info`, `success`,
+`warning`, `error`; the first two auto-dismiss, the last two stay until the
+user closes them. `detail` and `source` may be `null`.
+
+Unlike every other channel this one has no snapshot, which has three
+consequences worth designing around:
+
+- **No bootstrap.** It is absent from the connect-time snapshot.
+- **No replay.** A notification published while nobody is connected is gone;
+  a client connecting a second later does not receive it.
+- **No heal.** Each client's queue is bounded, and a notification dropped
+  when that queue is full is not re-sent by the heartbeat the way a tracker
+  snapshot is. The backend logs the drop.
+
+Every open client receives every notification, including a second browser
+tab — there is no per-session routing.
+
 ## Frame format
 
 ```
@@ -124,6 +164,10 @@ es.addEventListener('dataset', (e) => {
 });
 es.addEventListener('loading-tasks', (e) => {
   setActiveTasks(JSON.parse(e.data));
+});
+es.addEventListener('notification', (e) => {
+  const { level, message, detail } = JSON.parse(e.data);
+  showToast(level, message, detail);
 });
 ```
 

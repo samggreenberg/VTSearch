@@ -65,6 +65,14 @@ def main() -> int:
         "--no-header",
         "-n",
         "auto",
+        # Must match run-tests.sh's scheduler. Plain `load` scattering ignores
+        # `@pytest.mark.xdist_group`, which several modules here depend on for
+        # speed: the real-UMAP fits pay umap-learn's ~30s numba JIT compile once
+        # per worker that draws one instead of once per run, and the eval-sweep
+        # modules recompute their memoized sweeps on every worker they land on
+        # (tests_lib/detectors/sweep_cache.py) rather than simulating once.
+        "--dist",
+        "loadgroup",
         "-m",
         "not gpu and not slow",
         *sys.argv[1:],

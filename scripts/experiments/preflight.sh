@@ -12,7 +12,7 @@
 # warnings for the cases where you genuinely mean it (resuming a partial run).
 #
 # See scripts/experiments/GRID-PLAYBOOK.md for the SLURM-resource side of this
-# (memory sizing, QOS caps, chunking) and LESSONS.md for the incident log.
+# (memory sizing, QOS caps, chunking) and LESSONS.md / lessons/ for the incident log.
 set -uo pipefail
 
 EXP=""
@@ -21,6 +21,7 @@ NEED_GB="${PREFLIGHT_NEED_GB:-5}"
 WARN_ONLY=0
 REPO="${VTS_REPO:-}"
 REGION_ARM=""
+REUSE_PREPARE=""
 JOB_NAME=""
 MEM_PER_TASK=""
 CONC=""
@@ -31,6 +32,7 @@ while [[ $# -gt 0 ]]; do
     --arms) ARMS="$2"; shift 2 ;;
     --need-gb) NEED_GB="$2"; shift 2 ;;
     --require-region-voting) REGION_ARM="$2"; shift 2 ;;
+    --reuse-prepare) REUSE_PREPARE="$2"; shift 2 ;;
     --job-name) JOB_NAME="$2"; shift 2 ;;
     --mem) MEM_PER_TASK="$2"; shift 2 ;;
     --conc) CONC="$2"; shift 2 ;;
@@ -41,6 +43,7 @@ done
 [[ -n "$EXP" ]] || {
   echo "usage: preflight.sh --exp DIR [--arms a,b,c] [--need-gb N]" >&2
   echo "                    [--require-region-voting DATASET:EMBEDDER]" >&2
+  echo "                    [--reuse-prepare RESULTS_DIR]" >&2
   echo "                    [--job-name NAME] [--mem 64G] [--conc N]" >&2
   exit 2
 }
@@ -345,6 +348,58 @@ if [[ -n "$JOB_NAME" ]]; then
     echo "        -> per-name monitoring will conflate the two runs; pick a distinct name"
   else
     say_ok "job name '$JOB_NAME' is not already in the queue"
+  fi
+fi
+
+# --- 10. The embeddings the jobs will actually read ---------------------------
+# Launchers hardcode a default VTSEARCH_DATA_DIR pointing at whichever study dir
+# happened to hold the pickles when they were written (`/exp/$USER/max-patch/
+# datadir` in most of them).  Those dirs get archived and deleted; the launcher
+# does not notice, because nothing reads the data dir until a cell runs, and a
+# cell that cannot find its pickle fails one cell at a time inside a 552-cell
+# array - which reads as "a few flaky cells", not "the whole run is pointed at
+# nothing".  The pile (scripts/experiments/pile/pile_env.sh) is the durable home;
+# this check is what says whether the variable actually points at it.
+if [[ -n "${VTSEARCH_DATA_DIR:-}" ]]; then
+  if [[ ! -d "$VTSEARCH_DATA_DIR" ]]; then
+    say_fail "VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR does not exist"
+    echo "        -> source scripts/experiments/pile/pile_env.sh, or point it at a real datadir"
+  elif [[ ! -d "$VTSEARCH_DATA_DIR/embeddings" ]]; then
+    say_fail "VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR has no embeddings/ subdirectory"
+  else
+    npkl=$(find "$VTSEARCH_DATA_DIR/embeddings" -maxdepth 1 -name '*.pkl' 2>/dev/null | wc -l)
+    if [[ "$npkl" -eq 0 ]]; then
+      say_fail "no .pkl files in $VTSEARCH_DATA_DIR/embeddings - the cells have nothing to read"
+    else
+      say_ok "VTSEARCH_DATA_DIR holds $npkl embedding pickles"
+    fi
+  fi
+else
+  say_ok "VTSEARCH_DATA_DIR unset (jobs will use the repo default)"
+fi
+
+# --- 11. A reused prepare whose symlinks still resolve -------------------------
+# Reusing a finished study's prepare output is the standard way to skip a GPU
+# stage.  But those `crops/` entries are *symlinks* into the study that generated
+# them, and when that study is archived the links dangle.  The copy step in the
+# launchers resolves them with `readlink -f`, which happily returns a path that
+# no longer exists - so the reuse "succeeds", the link is recreated dangling, and
+# the failure surfaces much later as missing exemplars.  `-e` follows the link,
+# so this is the one-line check that `readlink -f` is not.
+if [[ -n "$REUSE_PREPARE" ]]; then
+  if [[ ! -f "$REUSE_PREPARE/prepare_info.json" ]]; then
+    say_fail "--reuse-prepare $REUSE_PREPARE has no prepare_info.json"
+  else
+    dangling=0
+    for f in "$REUSE_PREPARE"/crops/*; do
+      [[ -e "$f" ]] || { dangling=$((dangling + 1)); echo "        dangling: $f -> $(readlink "$f" 2>/dev/null)"; }
+    done
+    if [[ "$dangling" -gt 0 ]]; then
+      say_fail "$dangling crop symlink(s) in $REUSE_PREPARE/crops do not resolve"
+      echo "        -> the source study was probably archived; repoint them at the archive's real files"
+    else
+      say_ok "reused prepare at $REUSE_PREPARE resolves (prepare_info.json + crops)"
+    fi
   fi
 fi
 

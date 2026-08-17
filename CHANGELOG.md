@@ -46,6 +46,20 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Server-side code can raise a toast.** A new `notify()`
+  (`vtscore/concurrency/notifications.py`) lets any backend code — most
+  usefully a plugin that hit a recoverable problem — tell the user something
+  happened *without* failing the operation: "skipped 3 unreadable files",
+  "the remote API rate-limited us, results are partial". The message is
+  broadcast over a new `notification` channel on `/api/events` and rendered
+  as a toast; toasts gained `warning` and `info` levels alongside the
+  existing `error` and `success`. Plugin subclasses get `self.notify(...)`
+  with their display name attached. Headless runs print the same messages
+  (stderr in text mode, `notification` NDJSON records under
+  `--progress-format json`). Delivery is live-only — there is no replay for
+  a client that connects afterwards. See
+  [`docs/EXTENDING-plugins.md`](docs/EXTENDING-plugins.md#notifying-the-user-toasts).
+
 - **The app now tells you when your browser is running an out-of-date build.**
   `static/` is a build artifact that git does not track, so pulling new code and
   restarting the server used to leave the browser loading whichever bundle was
