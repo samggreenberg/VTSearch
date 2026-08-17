@@ -14,9 +14,9 @@ as it ships; it is not trying to pick a winner.
   the boxes away and the patch encoder is *worse than the cheap default we
   already ship*. It is also the difference between a detector and no detector at
   all: on sub-patch targets, a quarter of whole-image runs never work.
-- **Target scale is the strongest axis in the study.** Cost climbs from 0.37 to
-  0.49 as the target shrinks from a twelfth of the frame to under half a percent
-  of it, and no configuration escapes it.
+- **Target scale is the strongest axis in the study.** Best-arm cost climbs from
+  0.37 to 0.49 as the target falls from more than a twelfth of the frame to less
+  than half a percent of it, and no configuration escapes it.
 - **Positives, not thresholds, are the binding constraint.** 150 clicks buy a
   median of 4–11 positive examples, and 6 % of runs end on two or fewer.
   Meanwhile the shipped cut rule already beats the best threshold fittable on the
