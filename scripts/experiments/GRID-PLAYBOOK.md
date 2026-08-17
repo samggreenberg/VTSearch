@@ -3,7 +3,9 @@
 Practical, hard-won ops notes for running the `scripts/experiments/*` sweeps on
 the JHU-HLTCOE GRID (a shared SLURM cluster) — and the older `scripts/sod`
 sweeps, which live **only on the `evaluation-framework` branch** and are not
-present on `dev` (see `LESSONS.md`, the 2026-08-07 entry, and
+present on `dev` (see
+[`lessons/2026-08-07-a-five-seed-check-nearly-produced-a-wrong.md`](lessons/2026-08-07-a-five-seed-check-nearly-produced-a-wrong.md)
+and
 `docs/experiments/spike-check-2847/REPORT.md` for why that harness can't be
 pointed at `dev`). The patterns are general; HLTCOE-specific values are marked
 **[HLTCOE]**. Read this before launching a big sweep — most of it was learned by
@@ -16,8 +18,9 @@ study, and the `grid-experiments` skill ties all three together:
   mechanically checkable (results-dir collisions, the wrong mount's free space,
   a stale worktree).
 - **`LESSONS.md`** — the incident log: what broke on real studies, what it cost,
-  and whether it is now prevented or still only advice. Append when something
-  breaks.
+  and whether it is now prevented or still only advice. It indexes
+  `lessons/`, one file per incident; when something breaks, add a file there and
+  re-run `python scripts/gen-docs-inventories.py`.
 
 ## 1. Right-size `--mem` (the #1 silent time-sink)
 
