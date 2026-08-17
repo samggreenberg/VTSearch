@@ -38,12 +38,9 @@ An empty table means "no known-stale shots" — the desired resting state.
 
 ## Queue
 
-The full shot set (20 shots × 2 themes) was re-rendered on 2026-07-29, so
-every row flagged before then is drained. One row survives, because a
-re-render alone cannot fix it: `find-stats` needs a *fixture* the harness
-doesn't build.
+One row survives, because a re-render alone cannot fix it: `find-stats` needs a
+*fixture* the harness doesn't build.
 
 | Shot id | Embedded in | Why it's stale | Flagged |
 |---------|-------------|----------------|---------|
-| `export-picker` | USER_GUIDE.md#exporting-your-work | The export tab bar gained an **Open in Website** tab (the `open_url` exporter, issue #2855), so the framed tab row no longer matches the captured PNG. | 2026-08-06 |
 | `find-stats` | USER_GUIDE.md#find-scoring-and-verifying | The Detector Stats modal gained a **Training-domain overlap** section (coverage-atlas domain-shift): when another dataset with a matching embedder is loaded, a reference picker + a chip reading "N% of this dataset looks atypical vs &lt;dataset&gt; — likely domain shift / largely in-domain" now render above "Detector Accuracy". The 2026-07-29 reshoot did **not** drain this: the section only renders when a second dataset sharing the shot dataset's embedder is loaded, and `ensure-fixtures.mjs` builds `syn-imgs` (SigLIP) and `syn-patch` (DINOv2-patch) — different embedders, so no reference is offered. Draining this row needs a second SigLIP image dataset in the fixture set first. | 2026-07-20 |
