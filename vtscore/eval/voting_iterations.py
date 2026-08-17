@@ -48,6 +48,7 @@ from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, select_next
 from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector
 from vtscore.eval.labels import media_is_positive, region_box_for_category
+from vtscore.eval.score_dumps import maybe_dump_predictions
 from vtscore.eval.trainers import _cross_calibrated_threshold, _parse_trainer_spec
 from vtscore.training.blend_schedules import BlendContext
 from vtscore.training.mlp import LINEAR_HEAD, _auto_hidden_dim, train_model
@@ -672,6 +673,8 @@ def _evaluate_on_test(
 
     fpr = fp / total_neg if total_neg > 0 else 0.0
     fnr = fn / total_pos if total_pos > 0 else 0.0
+
+    maybe_dump_predictions(clips_dict, test_ids, scores, true_labels, threshold, target_category, suffix="__eval")
 
     fpr_weight, fnr_weight = _inclusion_weights(inclusion)
     cost = fpr_weight * fpr + fnr_weight * fnr
@@ -1444,6 +1447,8 @@ def _calibration_metric_rows(
 
     # --- Base pooling (max): the arm's real operating point. ---
     base_scores = cm.segment_max_pool(flat, seg)
+    # dump: calibration path -- `ids` is aligned with base_scores and labels.
+    maybe_dump_predictions(clips_dict, list(ids), base_scores, list(labels), threshold, target_category)
     base_cal_scores = np.array([s for scores, _ in fold_orderings for s in scores]) if fold_orderings else None
     base_cal_labels = np.array([lb for _, labels_ in fold_orderings for lb in labels_]) if fold_orderings else None
     base = _operating_metrics(

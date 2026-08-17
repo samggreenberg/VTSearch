@@ -147,6 +147,16 @@ describe('DatasetImporterModalComponent', () => {
   });
 
   afterEach(() => {
+    // The generic form's `suggested-name` lookup is debounced on a REAL timer,
+    // so whether it lands before a test ends is a race with how fast the
+    // machine is — it made this file fail intermittently on a loaded node with
+    // "Expected no open requests, found 1: POST .../suggested-name". Drain it
+    // here rather than leaving every test in the file timing-dependent: the
+    // name hint is not what any of these tests assert, and the picker's own
+    // spec covers it properly.
+    httpMock
+      .match((req) => req.url.endsWith('/suggested-name'))
+      .forEach((req) => req.flush({ dataset_name: 'suggested' }));
     httpMock.verify();
   });
 

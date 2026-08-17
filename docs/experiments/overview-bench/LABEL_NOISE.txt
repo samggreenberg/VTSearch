@@ -1,5 +1,16 @@
 
 ================================================================================================
+coco_dinov3_clock  target='clock'   62 false positives vs 2302 true negatives
+================================================================================================
+  ENTAILING categories ['clock tower']:
+    present on   0.0% of false positives
+    present on   0.0% of true negatives
+    enrichment: NOT TESTABLE (the entailing categories appear on neither group;
+       this vocabulary has no term that entails 'clock')
+  CONTEXT categories (any of 4): 0.0% of FPs vs 0.0% of TNs  (infx)
+  most common co-annotations on false positives: person(32), chair(18), couch(15), tv(15), dining table(12), potted plant(11), cup(10), book(10), remote(9), bed(8), bottle(8), sink(7)
+
+================================================================================================
 coco_siglip_clock  target='clock'   46 false positives vs 2318 true negatives
 ================================================================================================
   ENTAILING categories ['clock tower']:
@@ -23,6 +34,18 @@ vg_dinov3_sky  target='sky'   504 false positives vs 1199 true negatives
   most common co-annotations on false positives: building(287), window(262), tree(199), car(122), sign(105), wall(103), pole(88), road(86), man(86), sidewalk(84), person(78), street(73)
 
 ================================================================================================
+vg_dinov3_sky_binary  target='sky'   1305 false positives vs 398 true negatives
+================================================================================================
+  ENTAILING categories ['cloud', 'clouds']:
+    present on   3.6% of false positives
+    present on   0.5% of true negatives
+    enrichment: 7.2x
+    -> the flagged images are enriched for things that CANNOT occur without 'sky';
+       these are largely MISSING LABELS, not model errors
+  CONTEXT categories (any of 8): 61.8% of FPs vs 34.4% of TNs  (1.80x)
+  most common co-annotations on false positives: building(514), window(499), wall(353), tree(351), man(292), sign(244), car(243), shirt(222), person(214), light(199), pole(178), sidewalk(176)
+
+================================================================================================
 vg_siglip_bus  target='bus'   1210 false positives vs 820 true negatives
 ================================================================================================
   ENTAILING categories ['bus stop', 'bus station']:
@@ -35,6 +58,13 @@ vg_siglip_bus  target='bus'   1210 false positives vs 820 true negatives
 ================================================================================================
 vg_siglip_nose  target='nose'   552 false positives vs 1468 true negatives
 ================================================================================================
+  ENTAILING categories ['face']:
+    present on   5.1% of false positives
+    present on   2.2% of true negatives
+    enrichment: 2.3x
+    -> the flagged images are enriched for things that CANNOT occur without 'nose';
+       these are largely MISSING LABELS, not model errors
+  CONTEXT categories (any of 6): 21.2% of FPs vs 8.7% of TNs  (2.43x)
   most common co-annotations on false positives: window(165), man(154), wall(151), building(123), tree(114), shirt(111), door(94), table(90), glass(84), person(80), hair(78), sky(70)
 
 ================================================================================================
@@ -48,3 +78,32 @@ vg_siglip_sky  target='sky'   682 false positives vs 1021 true negatives
        these are largely MISSING LABELS, not model errors
   CONTEXT categories (any of 8): 84.0% of FPs vs 36.3% of TNs  (2.31x)
   most common co-annotations on false positives: building(378), window(343), tree(266), car(183), sign(178), wall(149), sidewalk(143), pole(143), road(131), man(117), person(111), light(109)
+
+================================================================================================
+vgsmall_dinov3_glasses  target='glasses'   2863 false positives vs 2500 true negatives
+================================================================================================
+  ENTAILING categories ['sunglasses', 'eyeglasses']:
+    present on  12.7% of false positives
+    present on   0.6% of true negatives
+    enrichment: 22.7x
+    -> the flagged images are enriched for things that CANNOT occur without 'glasses';
+       these are largely MISSING LABELS, not model errors
+  CONTEXT categories (any of 6): 41.6% of FPs vs 42.5% of TNs  (0.98x)
+  most common co-annotations on false positives: cap(500), nose(479), logo(400), mouth(369), sunglasses(364), ball(324), hands(253), wrist(227), watch(218), eyes(182), camera(159), knee(133)
+
+================================================================================================
+vgsmall_siglip_glasses  target='glasses'   3937 false positives vs 1426 true negatives
+================================================================================================
+  ENTAILING categories ['sunglasses', 'eyeglasses']:
+    present on   9.1% of false positives
+    present on   1.3% of true negatives
+    enrichment: 7.2x
+    -> the flagged images are enriched for things that CANNOT occur without 'glasses';
+       these are largely MISSING LABELS, not model errors
+  CONTEXT categories (any of 6): 39.4% of FPs vs 49.3% of TNs  (0.80x)
+  most common co-annotations on false positives: nose(772), logo(540), cap(518), mouth(475), sunglasses(360), ball(349), hands(303), eyes(273), wrist(235), watch(228), license plate(178), camera(177)
+
+================================================================================================
+vgsmall_siglip_tip  target='tip'   1995 false positives vs 3837 true negatives
+================================================================================================
+  most common co-annotations on false positives: nose(414), glasses(292), logo(280), mouth(251), cap(248), sunglasses(201), ball(168), wrist(162), hands(157), watch(155), eyes(154), bracelet(88)

@@ -182,13 +182,28 @@ class TestPathCheck:
         text = "Override `resolve_file(origin, origin_name, filename) ->\nPath | None` (`vtscore/state/gone.py`).\n"
         assert checks(text) == ["PATH"]
 
-    def test_plans_and_experiments_are_exempt(self):
-        # Plans name files their work has not created yet; experiment reports
-        # name a cluster scratch dir. Neither is a claim about this checkout.
+    def test_plans_are_exempt(self):
+        # A plan names files its work has not created yet; that is not a claim
+        # about this checkout.
         text = "Write the report to `docs/experiments/not-yet/REPORT.md`."
         assert run(text, REPO_ROOT / "docs" / "plans" / "__synthetic__.md") == []
-        assert run(text, REPO_ROOT / "docs" / "experiments" / "__synthetic__.md") == []
         assert checks(text) == ["PATH"]
+
+    def test_an_experiment_report_may_not_cite_a_script_that_is_not_in_the_tree(self):
+        # Experiment reports are NOT exempt. A report that cites its analysis
+        # script is claiming the run can be reproduced; when the script was
+        # never committed (overview-bench, `label_noise.py`) the claim is false
+        # and nothing caught it.
+        doc = REPO_ROOT / "docs" / "experiments" / "__synthetic__.md"
+        assert checks("Scripted in `scripts/experiments/calibration/gone.py`.", doc) == ["PATH"]
+
+    def test_an_experiment_reports_scratch_paths_are_still_fine(self):
+        # The reason the blanket exemption existed: a run record cites the
+        # cluster dir it lived in and the artifacts it wrote there. Those are
+        # not repo paths, and the top-level-directory rule already skips them.
+        doc = REPO_ROOT / "docs" / "experiments" / "__synthetic__.md"
+        text = "Aggregates in `agg/cut_contrasts.csv`, cells in `cells/task_*.csv`, run in `results-ab/`."
+        assert checks(text, doc) == []
 
 
 class TestLeakCheck:

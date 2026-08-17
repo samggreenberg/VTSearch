@@ -45,6 +45,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", required=True, help="experiment results dir (for prepare_info.json)")
     ap.add_argument("--out", required=True)
+    ap.add_argument(
+        "--dump-dir",
+        default=None,
+        help="Also write per-media text predictions here (same schema as VTS_DUMP_TEST_SCORES), "
+        "so a typed query's errors can be inspected the same way a detector's are.",
+    )
     args = ap.parse_args()
 
     from sklearn.metrics import average_precision_score, roc_auc_score
@@ -52,6 +58,7 @@ def main() -> int:
     from vtscore.embedding import embed_text_query
     from vtscore.eval.labels import media_is_positive
     from vtscore.eval.patch_styles import resolve_style
+    from vtscore.eval.score_dumps import write_prediction_dump
     from vtscore.training.thresholds import calculate_gmm_threshold
 
     from vtscore.datasets import loader as _loader  # isort: skip
@@ -103,6 +110,19 @@ def main() -> int:
                     tset = set(test_ids)
                     mask = np.asarray([i in tset for i in ids])
                     y, s = labels[mask], scores[mask]
+                    if args.dump_dir and seed == cfg.SEEDS[0]:
+                        # One seed is enough: the ranking and the cut are
+                        # seed-independent here (text scores every media once),
+                        # so only which medias land in the test half moves.
+                        write_prediction_dump(
+                            Path(args.dump_dir) / f"text__{ds}__{emb}__{cat.replace(' ', '_')}.csv",
+                            medias,
+                            [i for i in ids if i in tset],
+                            s,
+                            y,
+                            gmm_cut,
+                            cat,
+                        )
                     npos, nneg = int(y.sum()), int((1 - y).sum())
                     if npos == 0 or nneg == 0:
                         continue

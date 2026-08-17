@@ -1,0 +1,883 @@
+
+========================================================================================================
+text__caltech101_m__siglip2_l__airplanes   target='airplanes'   threshold=0.0514
+  test set: 419 medias, 117 positive (27.9%)
+  false positives: 17/302 negatives   false negatives: 0/117 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'airplanes')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0886  helicopter/image_0035.jpg
+    0.0816  helicopter/image_0031.jpg
+    0.0789  helicopter/image_0014.jpg
+    0.0755  helicopter/image_0027.jpg
+    0.0749  helicopter/image_0030.jpg
+
+  TOP FALSE NEGATIVES (dataset says IS 'airplanes', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__caltech101_m__siglip2_l__car_side   target='car_side'   threshold=0.0797
+  test set: 419 medias, 22 positive (5.3%)
+  false positives: 0/397 negatives   false negatives: 0/22 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'car_side')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+  TOP FALSE NEGATIVES (dataset says IS 'car_side', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__caltech101_m__siglip2_l__cougar_face   target='cougar_face'   threshold=0.0936
+  test set: 419 medias, 11 positive (2.6%)
+  false positives: 0/408 negatives   false negatives: 0/11 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'cougar_face')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+  TOP FALSE NEGATIVES (dataset says IS 'cougar_face', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__caltech101_m__siglip2_l__grand_piano   target='grand_piano'   threshold=0.0766
+  test set: 419 medias, 12 positive (2.9%)
+  false positives: 0/407 negatives   false negatives: 0/12 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'grand_piano')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+  TOP FALSE NEGATIVES (dataset says IS 'grand_piano', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__caltech101_m__siglip2_l__ibis   target='ibis'   threshold=0.0736
+  test set: 419 medias, 15 positive (3.6%)
+  false positives: 9/404 negatives   false negatives: 0/15 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'ibis')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.1083  flamingo/image_0012.jpg
+    0.0981  flamingo/image_0014.jpg
+    0.0939  flamingo/image_0027.jpg
+    0.0917  flamingo/image_0011.jpg
+    0.0908  flamingo/image_0015.jpg
+
+  TOP FALSE NEGATIVES (dataset says IS 'ibis', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__caltech101_m__siglip2_l__starfish   target='starfish'   threshold=0.0183
+  test set: 419 medias, 12 positive (2.9%)
+  false positives: 73/407 negatives   false negatives: 0/12 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'starfish')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0654  hawksbill/image_0038.jpg
+    0.0641  crab/image_0030.jpg
+    0.0610  hawksbill/image_0040.jpg
+    0.0570  hawksbill/image_0022.jpg
+    0.0567  crab/image_0021.jpg
+
+  TOP FALSE NEGATIVES (dataset says IS 'starfish', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__caltech101_m__siglip__airplanes   target='airplanes'   threshold=0.0199
+  test set: 419 medias, 117 positive (27.9%)
+  false positives: 13/302 negatives   false negatives: 0/117 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'airplanes')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0487  helicopter/image_0035.jpg
+    0.0412  helicopter/image_0014.jpg
+    0.0401  helicopter/image_0027.jpg
+    0.0382  helicopter/image_0019.jpg
+    0.0355  helicopter/image_0030.jpg
+
+  TOP FALSE NEGATIVES (dataset says IS 'airplanes', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__caltech101_m__siglip__car_side   target='car_side'   threshold=0.0429
+  test set: 419 medias, 22 positive (5.3%)
+  false positives: 0/397 negatives   false negatives: 0/22 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'car_side')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+  TOP FALSE NEGATIVES (dataset says IS 'car_side', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__caltech101_m__siglip__cougar_face   target='cougar_face'   threshold=0.0231
+  test set: 419 medias, 11 positive (2.6%)
+  false positives: 60/408 negatives   false negatives: 0/11 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'cougar_face')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0572  airplanes/image_0264.jpg
+    0.0507  helicopter/image_0028.jpg
+    0.0501  airplanes/image_0253.jpg
+    0.0480  airplanes/image_0236.jpg
+    0.0460  airplanes/image_0266.jpg
+
+  TOP FALSE NEGATIVES (dataset says IS 'cougar_face', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__caltech101_m__siglip__grand_piano   target='grand_piano'   threshold=0.0141
+  test set: 419 medias, 12 positive (2.9%)
+  false positives: 39/407 negatives   false negatives: 0/12 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'grand_piano')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0423  chandelier/image_0039.jpg
+    0.0416  chandelier/image_0022.jpg
+    0.0352  sunflower/image_0026.jpg
+    0.0345  trilobite/image_0030.jpg
+    0.0317  trilobite/image_0033.jpg
+
+  TOP FALSE NEGATIVES (dataset says IS 'grand_piano', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__caltech101_m__siglip__ibis   target='ibis'   threshold=0.0025
+  test set: 419 medias, 15 positive (3.6%)
+  false positives: 189/404 negatives   false negatives: 0/15 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'ibis')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0791  flamingo/image_0014.jpg
+    0.0734  flamingo/image_0027.jpg
+    0.0601  flamingo/image_0010.jpg
+    0.0577  flamingo/image_0016.jpg
+    0.0563  flamingo/image_0015.jpg
+
+  TOP FALSE NEGATIVES (dataset says IS 'ibis', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__caltech101_m__siglip__starfish   target='starfish'   threshold=-0.0082
+  test set: 419 medias, 12 positive (2.9%)
+  false positives: 80/407 negatives   false negatives: 0/12 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'starfish')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0444  hawksbill/image_0038.jpg
+    0.0442  trilobite/image_0016.jpg
+    0.0439  hawksbill/image_0041.jpg
+    0.0433  trilobite/image_0014.jpg
+    0.0422  hawksbill/image_0031.jpg
+
+  TOP FALSE NEGATIVES (dataset says IS 'starfish', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__coco_val__siglip2_l__bear   target='bear'   threshold=0.0296
+  test set: 2476 medias, 24 positive (1.0%)
+  false positives: 509/2452 negatives   false negatives: 0/24 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'bear')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.1240  000000410880.jpg   car, chair, sports ball, bench, person, teddy bear
+    0.1194  000000446703.jpg   teddy bear
+    0.1146  000000106330.jpg   teddy bear
+    0.1127  000000534601.jpg   teddy bear
+    0.1116  000000175443.jpg   potted plant, teddy bear
+
+  TOP FALSE NEGATIVES (dataset says IS 'bear', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+  NOTE: 44/509 false positives carry a category whose name contains or is contained by 'bear' -> likely annotation granularity, not model error
+    000000410880.jpg  score=0.1240  matched: ['teddy bear']
+    000000446703.jpg  score=0.1194  matched: ['teddy bear']
+    000000106330.jpg  score=0.1146  matched: ['teddy bear']
+    000000534601.jpg  score=0.1127  matched: ['teddy bear']
+    000000175443.jpg  score=0.1116  matched: ['teddy bear']
+    000000325527.jpg  score=0.1103  matched: ['teddy bear']
+
+========================================================================================================
+text__coco_val__siglip2_l__bed   target='bed'   threshold=0.0119
+  test set: 2476 medias, 68 positive (2.7%)
+  false positives: 748/2408 negatives   false negatives: 0/68 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'bed')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0964  000000095707.jpg   cake, bowl, knife, dining table
+    0.0891  000000532901.jpg   chair, couch, vase
+    0.0819  000000222317.jpg   couch, dog, remote
+    0.0726  000000435208.jpg   person, chair, clock, couch, cup, dining table, keyboard, laptop, mouse, tv
+    0.0716  000000180798.jpg   cell phone
+
+  TOP FALSE NEGATIVES (dataset says IS 'bed', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__coco_val__siglip2_l__cat   target='cat'   threshold=0.0586
+  test set: 2476 medias, 92 positive (3.7%)
+  false positives: 7/2384 negatives   false negatives: 1/92 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'cat')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0890  000000096001.jpg   book, bowl, umbrella
+    0.0875  000000203294.jpg   person, backpack, bus, handbag, truck
+    0.0821  000000385997.jpg   bottle, sports ball, bed, chair, dog, potted plant, vase
+    0.0736  000000371749.jpg   remote, person, couch, dog
+    0.0642  000000283785.jpg   person, book, teddy bear
+
+  TOP FALSE NEGATIVES (dataset says IS 'cat', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0430  000000149222.jpg   person, tv, carrot, cat, keyboard, mouse
+
+========================================================================================================
+text__coco_val__siglip2_l__clock   target='clock'   threshold=0.0440
+  test set: 2476 medias, 112 positive (4.5%)
+  false positives: 12/2364 negatives   false negatives: 45/112 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'clock')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0598  000000280325.jpg   parking meter
+    0.0529  000000333956.jpg   bench, parking meter
+    0.0510  000000462643.jpg   cell phone, person
+    0.0497  000000388927.jpg   person, cell phone
+    0.0489  000000328683.jpg   parking meter, potted plant
+
+  TOP FALSE NEGATIVES (dataset says IS 'clock', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0045  000000294783.jpg   book, backpack, bed, clock, couch, suitcase
+   -0.0015  000000015956.jpg   clock, horse, person
+   -0.0013  000000199771.jpg   person, sandwich, cup, book, bottle, bowl, clock, knife
+    0.0010  000000007795.jpg   bed, clock, remote
+    0.0038  000000258883.jpg   pizza, bowl, clock, person
+
+========================================================================================================
+text__coco_val__siglip2_l__microwave   target='microwave'   threshold=0.0044
+  test set: 2476 medias, 31 positive (1.3%)
+  false positives: 876/2445 negatives   false negatives: 0/31 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'microwave')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0920  000000213086.jpg   book, oven, person, vase
+    0.0910  000000485424.jpg   bottle, cup, oven, suitcase
+    0.0879  000000192191.jpg   oven, pizza
+    0.0850  000000407960.jpg   bowl, cat, oven
+    0.0840  000000410487.jpg   oven
+
+  TOP FALSE NEGATIVES (dataset says IS 'microwave', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__coco_val__siglip2_l__refrigerator   target='refrigerator'   threshold=-0.0058
+  test set: 2476 medias, 52 positive (2.1%)
+  false positives: 886/2424 negatives   false negatives: 3/52 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'refrigerator')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0745  000000319696.jpg   bottle, clock, microwave, potted plant, teddy bear
+    0.0736  000000426253.jpg   bottle, microwave
+    0.0690  000000447169.jpg   bottle, chair, clock, oven
+    0.0678  000000283717.jpg   oven, microwave
+    0.0659  000000485424.jpg   bottle, cup, oven, suitcase
+
+  TOP FALSE NEGATIVES (dataset says IS 'refrigerator', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0259  000000026690.jpg   person, refrigerator, skateboard
+   -0.0082  000000177015.jpg   couch, cat, laptop, person, refrigerator
+   -0.0070  000000213547.jpg   bottle, person, cake, clock, horse, refrigerator
+
+========================================================================================================
+text__coco_val__siglip2_l__sports_ball   target='sports ball'   threshold=0.0149
+  test set: 2476 medias, 79 positive (3.2%)
+  false positives: 464/2397 negatives   false negatives: 3/79 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'sports ball')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0890  000000279774.jpg   person, chair, baseball bat
+    0.0863  000000158227.jpg   baseball bat, person
+    0.0846  000000512776.jpg   person, baseball glove
+    0.0817  000000485480.jpg   person, baseball bat, baseball glove
+    0.0800  000000462031.jpg   person, baseball bat
+
+  TOP FALSE NEGATIVES (dataset says IS 'sports ball', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0011  000000308476.jpg   bear, sports ball
+    0.0053  000000410880.jpg   car, chair, sports ball, bench, person, teddy bear
+    0.0140  000000382030.jpg   dining table, potted plant, sports ball, umbrella
+
+========================================================================================================
+text__coco_val__siglip__bear   target='bear'   threshold=0.0091
+  test set: 2476 medias, 24 positive (1.0%)
+  false positives: 626/2452 negatives   false negatives: 0/24 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'bear')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0970  000000410880.jpg   car, chair, sports ball, bench, person, teddy bear
+    0.0893  000000106330.jpg   teddy bear
+    0.0880  000000286660.jpg   person, teddy bear
+    0.0851  000000325527.jpg   teddy bear
+    0.0838  000000530624.jpg   bed, dog
+
+  TOP FALSE NEGATIVES (dataset says IS 'bear', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+  NOTE: 43/626 false positives carry a category whose name contains or is contained by 'bear' -> likely annotation granularity, not model error
+    000000410880.jpg  score=0.0970  matched: ['teddy bear']
+    000000106330.jpg  score=0.0893  matched: ['teddy bear']
+    000000286660.jpg  score=0.0880  matched: ['teddy bear']
+    000000325527.jpg  score=0.0851  matched: ['teddy bear']
+    000000094185.jpg  score=0.0836  matched: ['teddy bear']
+    000000057150.jpg  score=0.0817  matched: ['teddy bear']
+
+========================================================================================================
+text__coco_val__siglip__bed   target='bed'   threshold=-0.0006
+  test set: 2476 medias, 68 positive (2.7%)
+  false positives: 630/2408 negatives   false negatives: 2/68 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'bed')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0636  000000532901.jpg   chair, couch, vase
+    0.0581  000000039477.jpg   book, potted plant, couch, tv, vase
+    0.0564  000000020553.jpg   bottle, teddy bear, chair, cup, dining table, umbrella, vase
+    0.0555  000000491497.jpg   book, chair, couch, tv
+    0.0536  000000222317.jpg   couch, dog, remote
+
+  TOP FALSE NEGATIVES (dataset says IS 'bed', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0196  000000542776.jpg   bed, bird, book, person
+   -0.0081  000000422670.jpg   person, bed, book
+
+========================================================================================================
+text__coco_val__siglip__cat   target='cat'   threshold=0.0276
+  test set: 2476 medias, 92 positive (3.7%)
+  false positives: 51/2384 negatives   false negatives: 5/92 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'cat')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0684  000000376442.jpg   teddy bear, toilet
+    0.0652  000000110784.jpg   bus, person, truck
+    0.0644  000000461036.jpg   bear
+    0.0641  000000186449.jpg   person, backpack, suitcase, bench, handbag
+    0.0625  000000088951.jpg   bench, dog, person
+
+  TOP FALSE NEGATIVES (dataset says IS 'cat', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0015  000000565391.jpg   car, cat, truck
+    0.0117  000000149222.jpg   person, tv, carrot, cat, keyboard, mouse
+    0.0125  000000366141.jpg   cat, chair, couch, tv
+    0.0209  000000278463.jpg   book, bottle, cat, cell phone, cup, laptop, potted plant
+    0.0224  000000269314.jpg   banana, cat
+
+========================================================================================================
+text__coco_val__siglip__clock   target='clock'   threshold=-0.0054
+  test set: 2476 medias, 112 positive (4.5%)
+  false positives: 383/2364 negatives   false negatives: 27/112 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'clock')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0535  000000333956.jpg   bench, parking meter
+    0.0472  000000396729.jpg   bed, book, bowl, cell phone, remote
+    0.0423  000000201646.jpg   chair, couch, person, remote
+    0.0391  000000280325.jpg   parking meter
+    0.0384  000000388927.jpg   person, cell phone
+
+  TOP FALSE NEGATIVES (dataset says IS 'clock', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0427  000000294783.jpg   book, backpack, bed, clock, couch, suitcase
+   -0.0390  000000199771.jpg   person, sandwich, cup, book, bottle, bowl, clock, knife
+   -0.0354  000000568195.jpg   fork, person, bottle, cake, clock, dining table, knife
+   -0.0310  000000350148.jpg   person, carrot, chair, car, dining table, cake, clock, cup, fork, knife, ...
+   -0.0306  000000183049.jpg   book, clock
+
+========================================================================================================
+text__coco_val__siglip__microwave   target='microwave'   threshold=-0.0152
+  test set: 2476 medias, 31 positive (1.3%)
+  false positives: 977/2445 negatives   false negatives: 0/31 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'microwave')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0721  000000192191.jpg   oven, pizza
+    0.0667  000000485424.jpg   bottle, cup, oven, suitcase
+    0.0635  000000213086.jpg   book, oven, person, vase
+    0.0623  000000407960.jpg   bowl, cat, oven
+    0.0608  000000410487.jpg   oven
+
+  TOP FALSE NEGATIVES (dataset says IS 'microwave', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__coco_val__siglip__refrigerator   target='refrigerator'   threshold=-0.0290
+  test set: 2476 medias, 52 positive (2.1%)
+  false positives: 860/2424 negatives   false negatives: 3/52 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'refrigerator')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0578  000000447169.jpg   bottle, chair, clock, oven
+    0.0550  000000109976.jpg   bottle, oven, microwave
+    0.0531  000000529966.jpg   orange, bowl
+    0.0528  000000283717.jpg   oven, microwave
+    0.0486  000000098018.jpg   bowl, vase, spoon
+
+  TOP FALSE NEGATIVES (dataset says IS 'refrigerator', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0604  000000026690.jpg   person, refrigerator, skateboard
+   -0.0476  000000177015.jpg   couch, cat, laptop, person, refrigerator
+   -0.0379  000000213547.jpg   bottle, person, cake, clock, horse, refrigerator
+
+========================================================================================================
+text__coco_val__siglip__sports_ball   target='sports ball'   threshold=-0.0085
+  test set: 2476 medias, 79 positive (3.2%)
+  false positives: 519/2397 negatives   false negatives: 5/79 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'sports ball')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0652  000000328337.jpg   frisbee, person
+    0.0608  000000507015.jpg   person, baseball glove
+    0.0573  000000153229.jpg   person, frisbee
+    0.0569  000000253695.jpg   baseball glove, person
+    0.0568  000000462031.jpg   person, baseball bat
+
+  TOP FALSE NEGATIVES (dataset says IS 'sports ball', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0308  000000308476.jpg   bear, sports ball
+   -0.0188  000000410880.jpg   car, chair, sports ball, bench, person, teddy bear
+   -0.0147  000000382030.jpg   dining table, potted plant, sports ball, umbrella
+   -0.0137  000000385997.jpg   bottle, sports ball, bed, chair, dog, potted plant, vase
+   -0.0091  000000190236.jpg   bottle, book, cup, keyboard, tv, mouse, backpack, chair, laptop, ...
+
+========================================================================================================
+text__visual_genome_m__siglip2_l__ball   target='ball'   threshold=0.0255
+  test set: 2097 medias, 24 positive (1.1%)
+  false positives: 745/2073 negatives   false negatives: 5/24 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'ball')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0999    498116.jpg   boy, hat, head, man
+    0.0985    713052.jpg   boy, cap, car, fence, foot, grass, hat, man, pants, shirt
+    0.0948    498192.jpg   grass, hat, man
+    0.0896    498208.jpg   field, head, woman
+    0.0891    150288.jpg   grass, plate
+
+  TOP FALSE NEGATIVES (dataset says IS 'ball', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0031      4683.jpg   ball, building, car, clouds, glass, road, roof, wall
+    0.0032      3256.jpg   ball, building, girl, pole, sky, umbrella, water, woman
+    0.0103    285914.jpg   bag, ball, fence, field, grass, jacket, man, person, sheep, shirt, tree
+    0.0182      2899.jpg   ball, building, car, man, sidewalk, street, tree
+    0.0200      3569.jpg   ball, ear, eye, face, head, neck, nose, shadow, shirt
+
+========================================================================================================
+text__visual_genome_m__siglip2_l__bed   target='bed'   threshold=0.0203
+  test set: 2097 medias, 44 positive (2.1%)
+  false positives: 464/2053 negatives   false negatives: 1/44 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'bed')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.1212    498393.jpg   wall
+    0.1065      4645.jpg   wall, window
+    0.1013      4048.jpg   floor, tile
+    0.1010      4067.jpg   box, flower, table
+    0.0955      3522.jpg   box, floor, wall, window
+
+  TOP FALSE NEGATIVES (dataset says IS 'bed', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0112    713034.jpg   bed, chair, door, hair, man, shirt, wall, woman
+
+========================================================================================================
+text__visual_genome_m__siglip2_l__bus   target='bus'   threshold=0.0311
+  test set: 2097 medias, 67 positive (3.2%)
+  false positives: 739/2030 negatives   false negatives: 0/67 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'bus')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.1228      3078.jpg   door, tire, window
+    0.1204      4125.jpg   cap, man, person
+    0.1145    150330.jpg   door, girl, hair, jacket, man, mountain, pants, sky, tire, truck, window, ...
+    0.1098    497921.jpg   car, grass, light, man, sign, tree, truck, window
+    0.1088    498326.jpg   car, clouds
+
+  TOP FALSE NEGATIVES (dataset says IS 'bus', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+  NOTE: 47/739 false positives carry a category whose name contains or is contained by 'bus' -> likely annotation granularity, not model error
+        3692.jpg  score=0.0704  matched: ['bush']
+        2546.jpg  score=0.0694  matched: ['bush']
+      498409.jpg  score=0.0613  matched: ['bush']
+        2829.jpg  score=0.0605  matched: ['bush']
+        2993.jpg  score=0.0604  matched: ['bush']
+        3287.jpg  score=0.0590  matched: ['bush']
+
+========================================================================================================
+text__visual_genome_m__siglip2_l__cat   target='cat'   threshold=0.0227
+  test set: 2097 medias, 13 positive (0.6%)
+  false positives: 365/2084 negatives   false negatives: 0/13 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'cat')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.1095    285758.jpg   eye, face, nose
+    0.0998    285981.jpg   arm, bear, bed, cap, ear, eye, nose
+    0.0749     61571.jpg   dog, door, wall
+    0.0583    498337.jpg   building, car, horse, tire
+    0.0575      2653.jpg   grass
+
+  TOP FALSE NEGATIVES (dataset says IS 'cat', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__visual_genome_m__siglip2_l__laptop   target='laptop'   threshold=0.0187
+  test set: 2097 medias, 31 positive (1.5%)
+  false positives: 361/2066 negatives   false negatives: 2/31 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'laptop')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.1310    498100.jpg   chair, clouds, floor, sky, table, wall, water
+    0.1182      3683.jpg   clock, cup, glass, wall
+    0.1091    107940.jpg   cap, window
+    0.1024    285860.jpg   flower, wall
+    0.0937    498268.jpg   bag, bench, foot, grass, man
+
+  TOP FALSE NEGATIVES (dataset says IS 'laptop', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0119    286032.jpg   cow, eye, floor, laptop, man, nose, shoe, wall
+    0.0142      4662.jpg   flower, laptop, light, table, wall
+
+========================================================================================================
+text__visual_genome_m__siglip2_l__nose   target='nose'   threshold=0.0098
+  test set: 2097 medias, 77 positive (3.7%)
+  false positives: 854/2020 negatives   false negatives: 22/77 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'nose')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0851      4954.jpg   ear, eye, hair, hand, shirt, wall, woman
+    0.0790      3506.jpg   ear, eye, hair, man, wall
+    0.0739      3659.jpg   bag, eye, face, hair, man
+    0.0726      3604.jpg   hair, neck, wall, woman
+    0.0715      3537.jpg   ear, eye, hair, man, shirt
+
+  TOP FALSE NEGATIVES (dataset says IS 'nose', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0304    498129.jpg   arm, eye, face, flower, hair, hand, head, leg, man, nose, people, shadow, ...
+   -0.0239      2663.jpg   field, grass, leg, nose, sky, tail, zebra
+   -0.0140    712953.jpg   bike, cow, ear, face, nose, sign, sky, tire, woman
+   -0.0116      2649.jpg   field, grass, leg, nose, shadow, tail, tree, zebra
+   -0.0082     61589.jpg   cow, ear, eye, field, leg, nose, tree
+
+========================================================================================================
+text__visual_genome_m__siglip2_l__sink   target='sink'   threshold=0.0171
+  test set: 2097 medias, 31 positive (1.5%)
+  false positives: 722/2066 negatives   false negatives: 1/31 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'sink')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.1278    498135.jpg   bag, bowl, glass, leg, wall
+    0.1260    107969.jpg   wall
+    0.1249    498149.jpg   bottle, flower, person
+    0.0999      4052.jpg   floor, flower, wall
+    0.0985    498054.jpg   wall, floor, light
+
+  TOP FALSE NEGATIVES (dataset says IS 'sink', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0040      4159.jpg   floor, sink, wall, window
+
+========================================================================================================
+text__visual_genome_m__siglip2_l__sky   target='sky'   threshold=0.0243
+  test set: 2097 medias, 394 positive (18.8%)
+  false positives: 537/1703 negatives   false negatives: 107/394 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'sky')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.1187      2520.jpg   field, tree
+    0.1165      2526.jpg   car, grass
+    0.1145      2508.jpg   car, grass, road
+    0.1087      2461.jpg   building, fence, field, light, plane, window
+    0.1054      2716.jpg   car, road
+
+  TOP FALSE NEGATIVES (dataset says IS 'sky', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0173    286028.jpg   bus, clouds, light, pole, shirt, sign, sky, street, tire, wheel, window
+   -0.0144    150308.jpg   bus, car, hat, man, sky, street, tree, truck
+   -0.0135      4504.jpg   building, car, letter, road, sky, street, tree, window
+   -0.0091    150361.jpg   building, door, fence, letter, light, line, road, shadow, sky, track, train, ...
+   -0.0077    150408.jpg   bag, building, bus, car, clouds, jacket, light, person, road, sidewalk, sky, ...
+
+========================================================================================================
+text__visual_genome_m__siglip__ball   target='ball'   threshold=0.0107
+  test set: 2097 medias, 24 positive (1.1%)
+  false positives: 912/2073 negatives   false negatives: 4/24 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'ball')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0849      3041.jpg   pole, sidewalk
+    0.0706    498208.jpg   field, head, woman
+    0.0667    498294.jpg   fence, field, pants, people, person, shirt, shoe, tree
+    0.0661      2447.jpg   bag, building, hair, man, person, shirt, wall
+    0.0658    285827.jpg   arm, building, hand, light, shirt, umbrella, window
+
+  TOP FALSE NEGATIVES (dataset says IS 'ball', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0113    285914.jpg   bag, ball, fence, field, grass, jacket, man, person, sheep, shirt, tree
+   -0.0073      4683.jpg   ball, building, car, clouds, glass, road, roof, wall
+    0.0060      3256.jpg   ball, building, girl, pole, sky, umbrella, water, woman
+    0.0072      2899.jpg   ball, building, car, man, sidewalk, street, tree
+
+========================================================================================================
+text__visual_genome_m__siglip__bed   target='bed'   threshold=0.0019
+  test set: 2097 medias, 44 positive (2.1%)
+  false positives: 780/2053 negatives   false negatives: 0/44 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'bed')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0999    498393.jpg   wall
+    0.0791      4645.jpg   wall, window
+    0.0766      4048.jpg   floor, tile
+    0.0694    498162.jpg   bottle, cup, light, wall, window
+    0.0637      4640.jpg   floor, wall, window
+
+  TOP FALSE NEGATIVES (dataset says IS 'bed', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+========================================================================================================
+text__visual_genome_m__siglip__bus   target='bus'   threshold=0.0041
+  test set: 2097 medias, 67 positive (3.2%)
+  false positives: 810/2030 negatives   false negatives: 3/67 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'bus')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0935      3078.jpg   door, tire, window
+    0.0890      4125.jpg   cap, man, person
+    0.0855    150330.jpg   door, girl, hair, jacket, man, mountain, pants, sky, tire, truck, window, ...
+    0.0842    497921.jpg   car, grass, light, man, sign, tree, truck, window
+    0.0817      4127.jpg   arm, building, man, person, wall, window
+
+  TOP FALSE NEGATIVES (dataset says IS 'bus', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0076      3939.jpg   building, bus, road, roof, tree, window
+   -0.0018    150433.jpg   bus, cap, car, hat, jacket, man, pants, person, skis, tree, woman
+    0.0011    498284.jpg   boat, building, bus, grass, roof, tree, wall, water, window
+
+  NOTE: 54/810 false positives carry a category whose name contains or is contained by 'bus' -> likely annotation granularity, not model error
+        3692.jpg  score=0.0628  matched: ['bush']
+        3409.jpg  score=0.0552  matched: ['bush']
+        3778.jpg  score=0.0519  matched: ['bush']
+        2750.jpg  score=0.0493  matched: ['bush']
+        3287.jpg  score=0.0477  matched: ['bush']
+        2602.jpg  score=0.0449  matched: ['bush']
+
+========================================================================================================
+text__visual_genome_m__siglip__cat   target='cat'   threshold=-0.0038
+  test set: 2097 medias, 13 positive (0.6%)
+  false positives: 852/2084 negatives   false negatives: 1/13 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'cat')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0807    285981.jpg   arm, bear, bed, cap, ear, eye, nose
+    0.0770    285758.jpg   eye, face, nose
+    0.0572      4036.jpg   chair, dog
+    0.0431     61571.jpg   dog, door, wall
+    0.0404      4577.jpg   eye, fence, grass, head, rock, tree, wall, water
+
+  TOP FALSE NEGATIVES (dataset says IS 'cat', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0216    150534.jpg   car, cat, door, fence, sign, table, window
+
+========================================================================================================
+text__visual_genome_m__siglip__laptop   target='laptop'   threshold=-0.0112
+  test set: 2097 medias, 31 positive (1.5%)
+  false positives: 542/2066 negatives   false negatives: 3/31 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'laptop')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0901    285860.jpg   flower, wall
+    0.0746    497978.jpg   bottle, man, table
+    0.0727    107940.jpg   cap, window
+    0.0697      3683.jpg   clock, cup, glass, wall
+    0.0662    497927.jpg   table
+
+  TOP FALSE NEGATIVES (dataset says IS 'laptop', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0273    285862.jpg   laptop, table
+   -0.0220    286032.jpg   cow, eye, floor, laptop, man, nose, shoe, wall
+   -0.0191      4662.jpg   flower, laptop, light, table, wall
+
+========================================================================================================
+text__visual_genome_m__siglip__nose   target='nose'   threshold=-0.0223
+  test set: 2097 medias, 77 positive (3.7%)
+  false positives: 946/2020 negatives   false negatives: 19/77 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'nose')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0646      3616.jpg   eye, shadow, woman
+    0.0617      3604.jpg   hair, neck, wall, woman
+    0.0596      4954.jpg   ear, eye, hair, hand, shirt, wall, woman
+    0.0581    285781.jpg   box, chair, eye, hair, shirt, wall
+    0.0577      3659.jpg   bag, eye, face, hair, man
+
+  TOP FALSE NEGATIVES (dataset says IS 'nose', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0483      4033.jpg   bottle, cup, light, nose
+   -0.0401    150269.jpg   grass, tree, trunk, zebra, leg, head, nose
+   -0.0400    498129.jpg   arm, eye, face, flower, hair, hand, head, leg, man, nose, people, shadow, ...
+   -0.0376    150437.jpg   bottle, bowl, glass, hair, hand, man, nose, sign, table
+   -0.0340    285676.jpg   eye, fence, giraffe, line, nose, tail
+
+========================================================================================================
+text__visual_genome_m__siglip__sink   target='sink'   threshold=-0.0020
+  test set: 2097 medias, 31 positive (1.5%)
+  false positives: 927/2066 negatives   false negatives: 1/31 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'sink')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0965    498135.jpg   bag, bowl, glass, leg, wall
+    0.0950    107969.jpg   wall
+    0.0916    498149.jpg   bottle, flower, person
+    0.0765     61516.jpg   door, sidewalk, tile, wall, window
+    0.0741    713029.jpg   bottle, floor
+
+  TOP FALSE NEGATIVES (dataset says IS 'sink', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0114      4159.jpg   floor, sink, wall, window
+
+========================================================================================================
+text__visual_genome_m__siglip__sky   target='sky'   threshold=-0.0355
+  test set: 2097 medias, 394 positive (18.8%)
+  false positives: 674/1703 negatives   false negatives: 68/394 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'sky')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0804      2520.jpg   field, tree
+    0.0752      2461.jpg   building, fence, field, light, plane, window
+    0.0712      2508.jpg   car, grass, road
+    0.0672      2526.jpg   car, grass
+    0.0641      2683.jpg   cow, field, tree
+
+  TOP FALSE NEGATIVES (dataset says IS 'sky', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+   -0.0699      3991.jpg   car, door, sky, street, tree, truck, window
+   -0.0659      3186.jpg   building, door, light, pole, sky, window
+   -0.0651      3576.jpg   car, cloud, clouds, grass, line, nose, people, person, sign, sky, wheel, ...
+   -0.0648    498137.jpg   building, face, hair, hand, jacket, letter, man, neck, pole, sidewalk, sign, ...
+   -0.0635      4428.jpg   building, fence, field, leaf, pole, sky, tree, window
