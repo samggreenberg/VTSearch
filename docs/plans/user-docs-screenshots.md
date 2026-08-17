@@ -137,10 +137,12 @@ stub randomness the UI exposes (never rely on unseeded draws).
    diff.
 4. Commit the regenerated PNGs. `check.sh` is the optional pre-release tripwire.
 
-### The reshoot queue (for no-browser sessions)
+### The reshoot queue (for sessions that can't render)
 
-The standard cloud container has no chromium, so a session that changes the GUI
-usually can't run `refresh.sh`. It instead records the affected shot id(s) in
+The cloud container ships a chromium (under `PLAYWRIGHT_BROWSERS_PATH`), so most
+GUI-changing sessions *can* run `refresh.sh` and should. When one can't — no
+browser, or a shot needing a fixture `ensure-fixtures.mjs` doesn't build — it
+instead records the affected shot id(s) in
 **`docs/user/screenshots-reshoot-queue.md`** — a tracked list of known-stale
 shots. `wiring-check.py` validates every queued id is a real manifest id, so the
 queue can't reference a renamed/deleted shot. A later browser-capable session

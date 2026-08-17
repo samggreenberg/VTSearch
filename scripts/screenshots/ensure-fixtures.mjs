@@ -14,12 +14,12 @@
  *
  * Usage:  node ensure-fixtures.mjs   (APP env overrides the URL)
  */
-import { chromium } from 'playwright';
+import { launchChromium } from './launch.mjs';
 
 const APP = process.env.APP || 'http://localhost:5000';
 const log = (...a) => console.log('[fixtures]', ...a);
 
-const browser = await chromium.launch();
+const browser = await launchChromium();
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const goDash = async () => {

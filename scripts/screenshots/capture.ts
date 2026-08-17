@@ -15,7 +15,9 @@
  *   APP=http://localhost:5000 tsx capture.ts          # override app URL
  */
 
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import { type Browser, type BrowserContext, type Page } from 'playwright';
+// @ts-expect-error - plain .mjs helper, shared with ensure-fixtures.mjs
+import { launchChromium } from './launch.mjs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { mkdir } from 'node:fs/promises';
@@ -281,7 +283,7 @@ async function captureShot(browser: Browser, shot: Shot, theme: Theme): Promise<
 
 async function main() {
   await mkdir(ASSETS, { recursive: true });
-  const browser = await chromium.launch();
+  const browser: Browser = await launchChromium();
   const results: { id: string; theme: Theme; ok: boolean; err?: string }[] = [];
   try {
     for (const shot of shots) {

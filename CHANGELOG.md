@@ -46,6 +46,14 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **The app now tells you when your browser is running an out-of-date build.**
+  `static/` is a build artifact that git does not track, so pulling new code and
+  restarting the server used to leave the browser loading whichever bundle was
+  last built — silently, since the version in Settings is the *server's* and
+  looks current regardless. The bundle now carries the commit it was built from,
+  and a mismatch raises a toast naming both versions and the rebuild command,
+  plus a `⚠ bundle v …` chip beside the version in the Settings footer.
+
 - `vtscore` library distribution with its own [README](vtscore/README.md) and
   [CHANGELOG](vtscore/CHANGELOG.md). See the
   [package reference](vtscore/docs/README.md#package-reference) for the
