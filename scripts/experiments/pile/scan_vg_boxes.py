@@ -79,10 +79,17 @@ def _image_paths() -> dict[int, Path]:
 
 
 def _read_dims(paths: dict[int, Path], workers: int = 16) -> dict[int, tuple[int, int]]:
-    """``{image_id: (w, h)}``, cached to disk. Header-only reads, threaded."""
+    """``{image_id: (w, h)}``, cached to disk. Header-only reads, threaded.
+
+    Unreadable images are cached as ``null`` rather than omitted. Without them
+    the cache holds fewer entries than there are files (170 of VG's 108,245 are
+    corrupt), so a "is it complete?" length check could never pass and the cache
+    was silently rebuilt on every run by every caller.
+    """
     if DIMS_CACHE.exists():
-        cached = {int(k): tuple(v) for k, v in json.loads(DIMS_CACHE.read_text()).items()}
-        if len(cached) >= len(paths):
+        raw = json.loads(DIMS_CACHE.read_text())
+        if len(raw) >= len(paths):
+            cached = {int(k): tuple(v) for k, v in raw.items() if v}
             log(f"reusing cached dims for {len(cached)} images")
             return cached  # type: ignore[return-value]
 
@@ -98,14 +105,19 @@ def _read_dims(paths: dict[int, Path], workers: int = 16) -> dict[int, tuple[int
 
     t0 = time.time()
     dims: dict[int, tuple[int, int]] = {}
+    misses: list[int] = []
     with ThreadPoolExecutor(max_workers=workers) as ex:
         for i, (iid, size) in enumerate(ex.map(one, paths.items(), chunksize=256), 1):
             if size:
                 dims[iid] = size
+            else:
+                misses.append(iid)
             if i % 20000 == 0:
                 log(f"  dims {i}/{len(paths)} ({time.time() - t0:.0f}s)")
     log(f"read dims for {len(dims)}/{len(paths)} images in {time.time() - t0:.0f}s")
-    DIMS_CACHE.write_text(json.dumps({str(k): list(v) for k, v in dims.items()}))
+    on_disk: dict[str, list[int] | None] = {str(k): list(v) for k, v in dims.items()}
+    on_disk.update({str(iid): None for iid in misses})
+    DIMS_CACHE.write_text(json.dumps(on_disk))
     return dims
 
 

@@ -330,9 +330,11 @@ def _vg_source() -> tuple[dict[int, Path], list, dict[int, tuple[int, int]]]:
     cache = pc.PILE / "vg_image_dims.json"
     dims: dict[int, tuple[int, int]] = {}
     if cache.exists():
-        cached = {int(k): tuple(v) for k, v in json.loads(cache.read_text()).items()}
-        if len(cached) >= len(paths):
-            dims = cached  # type: ignore[assignment]
+        raw = json.loads(cache.read_text())
+        # Unreadable images are cached as null, so a complete cache has one
+        # entry per file (see scan_vg_boxes._read_dims).
+        if len(raw) >= len(paths):
+            dims = {int(k): tuple(v) for k, v in raw.items() if v}  # type: ignore[misc]
     if not dims:
         log("  no dims cache; reading JPEG headers")
 
