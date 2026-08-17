@@ -18,6 +18,12 @@
 # opposite for every launcher whose GPU choice is incidental — here it is not).
 set -euo pipefail
 
+# `set -e` can abort anywhere, including mid-preflight -- which is how this
+# launcher once exited 1 with no output at all and no job submitted (see
+# lessons/2026-08-17-a-launcher-that-exits-1-with-no-output.md).  An ERR trap
+# makes an abort name itself, so "no output" can never again read as a quiet pass.
+trap 'echo "ABORTED: $0 line $LINENO exited $? -- NOTHING WAS SUBMITTED" >&2' ERR
+
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WT="$(cd "$HERE/../../.." && pwd)"
 
