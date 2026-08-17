@@ -133,6 +133,7 @@ def is_object_category(name: str) -> bool:
         return False
     return tokens[-1] not in NON_OBJECT_CATEGORIES and name not in NON_OBJECT_CATEGORIES
 
+
 #: Embedders in the pile. ``patch`` embedders attach ``patch_grid`` and are the
 #: only ones that can carry a region-voting arm.
 #: Deliberately three, not five. ``siglip`` is the shipped default and
