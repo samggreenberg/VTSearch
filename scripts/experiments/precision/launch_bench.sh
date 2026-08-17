@@ -161,7 +161,7 @@ status)
   for arm in ${ARMS//,/ }; do
     d="$BENCH_ROOT/$arm/results/cells"
     n=$(ls "$d" 2>/dev/null | grep -c 'task_[0-9]*\.csv$' || echo 0)
-    z=$(find "$d" -name 'task_*.csv' -size 0 2>/dev/null | wc -l)
+    z=$(find "$d" -name 'task_*.csv' -size 0 2>/dev/null | wc -l || true)
     echo "  $arm: $n cells written, $z zero-byte (resume would SKIP those)"
   done
   ;;

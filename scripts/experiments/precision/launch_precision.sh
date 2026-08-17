@@ -108,7 +108,8 @@ preflight() {
   # A zero-byte cell from a previous incident counts as "done" to the resume
   # path, so it would be skipped rather than rebuilt.
   local zero
-  zero=$(find "$VTS_PRECISION_STUDY/piles" -name '*.pkl' -size 0 2>/dev/null | wc -l)
+  mkdir -p "$VTS_PRECISION_STUDY/piles"
+  zero=$(find "$VTS_PRECISION_STUDY/piles" -name '*.pkl' -size 0 2>/dev/null | wc -l || true)
   if [[ "$zero" -gt 0 ]]; then
     echo "FAIL: $zero zero-byte cell(s) under $VTS_PRECISION_STUDY/piles — resume would SKIP them:" >&2
     find "$VTS_PRECISION_STUDY/piles" -name '*.pkl' -size 0 2>/dev/null >&2
@@ -152,8 +153,8 @@ status)
   squeue -u "$USER" -o "%.10i %.16j %.9T %.11M %.6D %R" | grep -E 'prec-|JOBID' || echo "(no prec-* jobs)"
   echo "=== cells built ==="
   for arm in $ARMS_ALL; do
-    n=$(ls "$VTS_PRECISION_STUDY/piles/$arm/datadir/embeddings"/*.pkl 2>/dev/null | wc -l)
-    z=$(find "$VTS_PRECISION_STUDY/piles/$arm/datadir/embeddings" -name '*.pkl' -size 0 2>/dev/null | wc -l)
+    n=$(ls "$VTS_PRECISION_STUDY/piles/$arm/datadir/embeddings"/*.pkl 2>/dev/null | wc -l || true)
+    z=$(find "$VTS_PRECISION_STUDY/piles/$arm/datadir/embeddings" -name '*.pkl' -size 0 2>/dev/null | wc -l || true)
     prov=$([[ -f "$VTS_PRECISION_STUDY/piles/$arm/provenance.json" ]] && echo "provenance" || echo "-")
     printf '  %-16s %s/%s cells  %-10s %s\n' "$arm" "$n" "$(echo "$EMBEDDERS" | tr ',' ' ' | wc -w)" "$prov" \
       "$([[ "$z" -gt 0 ]] && echo "** $z ZERO-BYTE **" || echo "")"
