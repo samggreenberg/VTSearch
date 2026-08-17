@@ -1,0 +1,38 @@
+==============================================================================================================
+HORIZON COMPARISON — 150 votes against 250
+==============================================================================================================
+/expscratch/sgreenberg/bench-overview/results: 189 cells, 182 with data, 7 never found a positive
+/expscratch/sgreenberg/bench-h250/wave1/results: 189 cells, 184 with data, 5 never found a positive
+
+OVERLAP CHECK: 26538 shared steps, largest absolute difference 0.0264
+  -> ** THE RUNS DIVERGE: the comparison below is between different draws, not horizons **
+
+RUNS THAT ONLY STARTED PAST VOTE 150: 2
+  first positive around vote 159: coco_val / siglip2_l / sports ball / 1
+  first positive around vote 224: visual_genome_m / siglip / ball / 1
+  (each of these was reported as a starved run at the shorter horizon)
+
+WHAT VOTES 151-250 BOUGHT — paired per cell, mean +- SE over 182 cells
+negative cost / positive AP = the longer horizon is better; |mean| < 2*SE is not resolvable
+           metric  votes 101-150  votes 201-250         change resolvable
+             cost          0.201          0.195 -0.007 +-0.003         no
+              fpr          0.124          0.136 +0.011 +-0.005        yes
+              fnr          0.077          0.059 -0.018 +-0.004        yes
+average_precision          0.709          0.708 -0.001 +-0.001         no
+            auroc          0.949          0.954 +0.004 +-0.001        yes
+           n_good          8.756         10.029 +1.273 +-0.198        yes
+
+BY ARM
+        dataset     embedder  cells  cost_old  cost_new         d_cost d_positives
+   caltech101_m dinov3_patch     18     0.005     0.010 +0.005 +-0.002        +0.0
+   caltech101_m       siglip     18     0.004     0.009 +0.005 +-0.001        +0.0
+   caltech101_m    siglip2_l     18     0.001     0.004 +0.003 +-0.001        +0.0
+       coco_val dinov3_patch     19     0.152     0.160 +0.007 +-0.008        +1.2
+       coco_val       siglip     19     0.218     0.199 -0.019 +-0.007        +2.2
+       coco_val    siglip2_l     19     0.202     0.203 +0.001 +-0.010        +1.1
+visual_genome_m dinov3_patch     24     0.324     0.299 -0.025 +-0.013        +2.7
+visual_genome_m       siglip     23     0.392     0.371 -0.021 +-0.018        +1.8
+visual_genome_m    siglip2_l     24     0.367     0.360 -0.006 +-0.008        +1.6
+
+RUNS STILL NOT WORKING (window cost > 0.9): 1 at the old horizon -> 0 at the new one
+cells improved by >0.01: 51, unchanged: 79, worse by >0.01: 52
