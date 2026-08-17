@@ -61,6 +61,25 @@ def _apply_tf32(setting: str | None) -> None:
     log(f"  TF32 {'enabled' if allow else 'DISABLED'} (cudnn and matmul)")
 
 
+def _apply_deterministic(setting: str | None) -> None:
+    """Restrict cuDNN to reproducible algorithms when the arm asks for it.
+
+    cuDNN chooses a convolution algorithm per (shape, card) from heuristics, and
+    they do not carry equal fp32 error — Winograd is visibly looser than
+    implicit-GEMM. Two cards picking differently for one geometry and identically
+    for another would produce exactly the split measured here: `siglip2_l` fp32
+    disagreeing across cards at 1.5e-4 while `siglip` agrees at 7.6e-13.
+    """
+    if setting is None:
+        return
+    import torch
+
+    on = setting == "on"
+    torch.backends.cudnn.deterministic = on
+    torch.backends.cudnn.benchmark = not on
+    log(f"  cuDNN deterministic={'ON' if on else 'off'}, benchmark={'off' if on else 'on'}")
+
+
 def _probe(embedders: list[str]) -> dict:
     """Resolve the precision and load each embedder, recording real dtypes."""
     import torch
@@ -97,6 +116,9 @@ def _probe(embedders: list[str]) -> dict:
         info["cudnn_allow_tf32"] = bool(torch.backends.cudnn.allow_tf32)
         info["matmul_allow_tf32"] = bool(torch.backends.cuda.matmul.allow_tf32)
         info["tf32_capable"] = major >= 8
+        info["cudnn_deterministic"] = bool(torch.backends.cudnn.deterministic)
+        info["cudnn_benchmark"] = bool(torch.backends.cudnn.benchmark)
+        info["cudnn_version"] = getattr(torch.backends.cudnn, "version", lambda: None)()
 
     for name in embedders:
         emb = get_embedder(name)
@@ -241,6 +263,7 @@ def main(argv: list[str] | None = None) -> int:
 
     t0 = time.time()
     _apply_tf32(pcfg.ARMS[arm].get("tf32"))
+    _apply_deterministic(pcfg.ARMS[arm].get("deterministic"))
     probe = _probe(embedders)
     log(
         f"probe: requested={probe['requested']} resolved={probe['resolved']} "

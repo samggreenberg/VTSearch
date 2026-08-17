@@ -123,6 +123,34 @@ ARMS: dict[str, dict[str, str]] = {
         "tf32": "off",
         "role": "diagnostic — fp32 with TF32 disabled; does it match the V100?",
     },
+    # TF32 was REFUTED: `fp32_notf32_l40s` came out **bit-identical** to
+    # `fp32_l40s` (median 1-cos exactly 0.0, mean 4e-17), so TF32 was never
+    # active in the fp32 arms and cannot explain anything.  Recorded here rather
+    # than deleted, because a refuted hypothesis with a measurement behind it is
+    # what stops the report asserting a plausible wrong cause.
+    #
+    # Next suspect: **cuDNN algorithm selection**.  SigLIP's patch embedding is a
+    # conv2d, and cuDNN picks an algorithm per (shape, card) from heuristics.
+    # Winograd carries visibly more fp32 error than implicit-GEMM, so two cards
+    # choosing differently for the SO400M/384 geometry would disagree at ~1e-4
+    # while agreeing at ~1e-13 wherever they happen to pick the same one — which
+    # is exactly the split observed (`siglip2_l` 1.5e-4, `siglip` 7.6e-13).
+    #
+    # `deterministic` restricts cuDNN to reproducible algorithms.  If the two
+    # cards agree under it and disagree without it, algorithm selection is the
+    # mechanism.
+    "fp32_det_l40s": {
+        "precision": "fp32",
+        "gpu": "l40s",
+        "deterministic": "on",
+        "role": "diagnostic — fp32, cuDNN restricted to deterministic algorithms",
+    },
+    "fp32_det_v100": {
+        "precision": "fp32",
+        "gpu": "v100",
+        "deterministic": "on",
+        "role": "diagnostic — its V100 twin; do the two cards now agree?",
+    },
 }
 
 #: The arm every drift figure is measured against.
