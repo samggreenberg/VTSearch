@@ -72,6 +72,8 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-08-17 | [four decimals invented a finding](lessons/2026-08-17-four-decimals-invented-a-finding.md) | #3129 |
+| 2026-08-17 | [the report cited a script nobody committed](lessons/2026-08-17-the-report-cited-a-script-nobody-committed.md) | #3129 |
 | 2026-08-13 | [the report died on the laptop's RAM, not on the GRID's](lessons/2026-08-13-the-report-died-on-the-laptops-ram.md) | #3131 |
 | 2026-08-12 | [a column the fix redefines cannot be the fix's acceptance test](lessons/2026-08-12-a-column-the-fix-redefines-cannot.md) | #2905 |
 | 2026-08-12 | [#3121 a dataset's *name* is not its sampling axis](lessons/2026-08-12-a-datasets-name-is-not-its-sampling-axis.md) | #3121 |
