@@ -100,6 +100,29 @@ ARMS: dict[str, dict[str, str]] = {
         "gpu": "l40s",
         "role": "candidate — wider exponent; needs sm_80+, so no V100 twin",
     },
+    # Added mid-run, to explain a result the first six arms produced rather than
+    # to test half precision at all.  `fp32_v100` vs `fp32_l40s` — the same fp32
+    # code on two cards — came out at median 1-cos 1.5e-4 on `siglip2_l` while
+    # `siglip` agreed to 7.6e-13.  A 1e-4 disagreement between two *fp32* runs is
+    # the size of the fp16 effect this study exists to measure, so it had to be
+    # explained before any of it could be read.
+    #
+    # The suspect is TF32: `torch.backends.cudnn.allow_tf32` defaults to **True**,
+    # so convolutions (SigLIP's patch embedding is a conv2d) run at 10 mantissa
+    # bits on a TF32-capable card.  An L40S is sm_89 and has TF32; a V100 is
+    # sm_70 and does not, so it runs true fp32.  That makes "fp32" mean two
+    # different things across the two cards, which is not a precision effect and
+    # not a kernel-selection rounding difference — it is a third format nobody
+    # asked for.
+    #
+    # This arm is fp32 with TF32 turned OFF on the L40S.  If the hypothesis holds
+    # it lands on `fp32_v100`, not on `fp32_l40s`.
+    "fp32_notf32_l40s": {
+        "precision": "fp32",
+        "gpu": "l40s",
+        "tf32": "off",
+        "role": "diagnostic — fp32 with TF32 disabled; does it match the V100?",
+    },
 }
 
 #: The arm every drift figure is measured against.

@@ -41,6 +41,26 @@ def log(msg: str) -> None:
     print(f"[precision] {msg}", flush=True)
 
 
+def _apply_tf32(setting: str | None) -> None:
+    """Honour an arm's ``tf32`` field before a single kernel runs.
+
+    ``torch.backends.cudnn.allow_tf32`` defaults to **True**, so on a TF32-capable
+    card (sm_80+) every convolution — SigLIP's patch embedding included — silently
+    runs at 10 mantissa bits while the same code on a V100 (sm_70) runs true fp32.
+    That is how two arms both labelled "fp32" came out 1.5e-4 apart on
+    ``siglip2_l``: not a precision effect, not kernel-selection rounding, but a
+    third numeric format the arm table never named.
+    """
+    if setting is None:
+        return
+    import torch
+
+    allow = setting != "off"
+    torch.backends.cudnn.allow_tf32 = allow
+    torch.backends.cuda.matmul.allow_tf32 = allow
+    log(f"  TF32 {'enabled' if allow else 'DISABLED'} (cudnn and matmul)")
+
+
 def _probe(embedders: list[str]) -> dict:
     """Resolve the precision and load each embedder, recording real dtypes."""
     import torch
@@ -72,6 +92,11 @@ def _probe(embedders: list[str]) -> dict:
         info["gpu_name"] = torch.cuda.get_device_name(0)
         info["gpu_capability"] = f"sm_{major}{minor}"
         info["bf16_supported"] = bool(torch.cuda.is_bf16_supported())
+        # Recorded because "fp32" is not one format across cards: cuDNN's TF32
+        # default makes a conv 10-mantissa-bit on sm_80+ and true fp32 on sm_70.
+        info["cudnn_allow_tf32"] = bool(torch.backends.cudnn.allow_tf32)
+        info["matmul_allow_tf32"] = bool(torch.backends.cuda.matmul.allow_tf32)
+        info["tf32_capable"] = major >= 8
 
     for name in embedders:
         emb = get_embedder(name)
@@ -215,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     build_pile.assert_vtscore_is_this_checkout()
 
     t0 = time.time()
+    _apply_tf32(pcfg.ARMS[arm].get("tf32"))
     probe = _probe(embedders)
     log(
         f"probe: requested={probe['requested']} resolved={probe['resolved']} "
