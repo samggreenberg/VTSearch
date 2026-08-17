@@ -278,6 +278,64 @@ def analyse(embedders: list[str], arms: list[str]) -> tuple[pd.DataFrame, pd.Dat
     return pd.DataFrame(drift_rows), pd.DataFrame(rank_rows), examples
 
 
+def pairwise(embedders: list[str], arms: list[str], outdir: Path) -> "pd.DataFrame":
+    """Full arm x arm median drift, per embedder.
+
+    Distance-to-the-reference is not enough once the reference itself is in
+    question.  The first six arms showed ``fp32_v100`` sitting 1.5e-4 from
+    ``fp32_l40s`` on ``siglip2_l`` — two arms that differ only in the card, both
+    labelled fp32.  Which of the two is the outlier cannot be read off a column
+    of distances to one of them; it needs the matrix, where a *cluster* is
+    visible.  If TF32 is the cause, ``fp32_notf32_l40s`` sits with the V100 and
+    apart from ``fp32_l40s``, and no reference-relative table would say so.
+    """
+    rows = []
+    for emb in embedders:
+        present = [a for a in arms if pcfg.arm_cell(a, emb).exists()]
+        mats = {}
+        for a in present:
+            _, mat, _ = load_arm(a, emb)
+            mats[a] = mat
+        for i, a in enumerate(present):
+            for b in present[i + 1 :]:
+                if mats[a].shape != mats[b].shape:
+                    continue
+                d = vector_drift(mats[a], mats[b])
+                rows.append(
+                    {
+                        "embedder": emb,
+                        "arm_a": a,
+                        "arm_b": b,
+                        "median": float(np.median(d)),
+                        "p95": float(np.quantile(d, 0.95)),
+                        "max": float(d.max()),
+                    }
+                )
+    df = pd.DataFrame(rows)
+    if df.empty:
+        log("no pairwise rows")
+        return df
+
+    for emb in sorted(df["embedder"].unique()):
+        sub = df[df["embedder"] == emb]
+        present = sorted(set(sub["arm_a"]) | set(sub["arm_b"]))
+        log("")
+        log(f"=== Pairwise median 1-cos — {emb} ===")
+        log("      " + " ".join(f"{a[:14]:>14s}" for a in present))
+        lookup = {}
+        for _, r in sub.iterrows():
+            lookup[(r["arm_a"], r["arm_b"])] = r["median"]
+            lookup[(r["arm_b"], r["arm_a"])] = r["median"]
+        for a in present:
+            cells = []
+            for b in present:
+                cells.append("             -" if a == b else f"{sig2(lookup.get((a, b), float('nan'))):>14s}")
+            log(f"{a[:20]:20s} " + " ".join(cells))
+    df.to_csv(outdir / "pairwise_drift.csv", index=False)
+    log(f"\nwrote {outdir}/pairwise_drift.csv")
+    return df
+
+
 def report(drift: pd.DataFrame, ranks: pd.DataFrame, examples: list[dict]) -> None:
     if drift.empty:
         log("no drift rows — nothing to report")
@@ -417,6 +475,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--embedders", default=",".join(pcfg.EMBEDDERS))
     ap.add_argument("--arms", default=",".join(pcfg.ARMS))
     ap.add_argument("--no-figures", action="store_true")
+    ap.add_argument("--pairwise", action="store_true", help="also print the full arm x arm drift matrix")
     ap.add_argument("--outdir", default=str(pcfg.results_dir()))
     args = ap.parse_args(argv)
 
@@ -427,6 +486,8 @@ def main(argv: list[str] | None = None) -> int:
 
     drift, ranks, examples = analyse(embedders, arms)
     report(drift, ranks, examples)
+    if args.pairwise:
+        pairwise(embedders, arms, outdir)
 
     drift.to_csv(outdir / "drift.csv", index=False)
     ranks.to_csv(outdir / "rank_stability.csv", index=False)
