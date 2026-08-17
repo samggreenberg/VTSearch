@@ -112,8 +112,8 @@ class TestExperimentLabel:
         assert "MISSING `experiment`" in result.stderr
 
 
-class TestDevLabelOnClose:
-    """`dev` means "on `dev`, NOT on `main`", so a close must strip it.
+class TestSolvedLabelOnClose:
+    """`solved` means "development done, only merges remain", so a close must strip it.
 
     The hook only ever sees the call's arguments, never the issue's current
     state, so the enforceable form is "a completing close must state its label
@@ -127,39 +127,39 @@ class TestDevLabelOnClose:
         args.update(overrides)
         return {"tool_name": "mcp__github__issue_write", "tool_input": args}
 
-    def test_completed_close_carrying_dev_is_blocked(self):
-        result = run_hook(self.close(state="closed", state_reason="completed", labels=["claude", "dev"]))
+    def test_completed_close_carrying_solved_is_blocked(self):
+        result = run_hook(self.close(state="closed", state_reason="completed", labels=["claude", "solved"]))
         assert result.returncode == BLOCK
-        assert "KEEPS `dev` ON A CLOSED ISSUE" in result.stderr
+        assert "KEEPS `solved` ON A CLOSED ISSUE" in result.stderr
 
     def test_completed_close_without_explicit_labels_is_blocked(self):
         result = run_hook(self.close(state="closed", state_reason="completed"))
         assert result.returncode == BLOCK
-        assert "CLOSE DOES NOT STRIP `dev`" in result.stderr
+        assert "CLOSE DOES NOT STRIP `solved`" in result.stderr
 
     def test_the_denial_warns_that_labels_replaces_the_whole_set(self):
         """Passing `[]` to satisfy the hook would silently wipe `claude`."""
         result = run_hook(self.close(state="closed", state_reason="completed"))
         assert "REPLACES the whole set" in result.stderr
 
-    def test_completed_close_with_labels_minus_dev_is_allowed(self):
+    def test_completed_close_with_labels_minus_solved_is_allowed(self):
         assert run_hook(self.close(state="closed", state_reason="completed", labels=["claude"])).returncode == ALLOW
 
     def test_an_issue_with_no_labels_left_can_still_be_closed(self):
         assert run_hook(self.close(state="closed", state_reason="completed", labels=[])).returncode == ALLOW
 
-    def test_dev_is_blocked_on_any_close_not_just_completed(self):
-        """A not_planned close carrying `dev` is just as false a statement."""
-        result = run_hook(self.close(state="closed", state_reason="not_planned", labels=["claude", "dev"]))
+    def test_solved_is_blocked_on_any_close_not_just_completed(self):
+        """A not_planned close carrying `solved` is just as false a statement."""
+        result = run_hook(self.close(state="closed", state_reason="not_planned", labels=["claude", "solved"]))
         assert result.returncode == BLOCK
-        assert "KEEPS `dev` ON A CLOSED ISSUE" in result.stderr
+        assert "KEEPS `solved` ON A CLOSED ISSUE" in result.stderr
 
     def test_non_completed_close_does_not_require_explicit_labels(self):
         """Only the release sweep must strip; a not_planned close need not restate labels."""
         assert run_hook(self.close(state="closed", state_reason="not_planned")).returncode == ALLOW
 
-    def test_dev_label_matching_is_case_insensitive(self):
-        result = run_hook(self.close(state="closed", state_reason="completed", labels=["claude", "DEV"]))
+    def test_solved_label_matching_is_case_insensitive(self):
+        result = run_hook(self.close(state="closed", state_reason="completed", labels=["claude", "SOLVED"]))
         assert result.returncode == BLOCK
 
     def test_create_path_rules_do_not_leak_onto_closes(self):
