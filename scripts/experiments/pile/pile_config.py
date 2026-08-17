@@ -134,6 +134,90 @@ def is_object_category(name: str) -> bool:
     return tokens[-1] not in NON_OBJECT_CATEGORIES and name not in NON_OBJECT_CATEGORIES
 
 
+#: Extra exclusions for a **same-class-across-scale-bands** study, keyed by head
+#: noun and carrying the reason. Deliberately separate from
+#: :func:`is_object_category`, which defines the published ``vg_box_*`` sets and
+#: must keep defining them; this is a stricter policy layered on top for the new
+#: construction, so the old numbers stay reproducible.
+#:
+#: The extra bar exists because a scale study asks two things of a class that
+#: mere objecthood does not:
+#:
+#: * **Its size must be its own.** A part's box is set by its host, so a "small
+#:   nose" is just a distant face -- banding it measures the host's distance,
+#:   not the object's scale, and the arm silently becomes a different experiment.
+#: * **Its absence must be checkable.** The negative pool is ~95% of the images
+#:   and rests on "no instance here". For a part that is unverifiable at any
+#:   scale: every image with a person has a nose whether or not VG annotated
+#:   one, so the negatives are poisoned by construction and no amount of review
+#:   fixes it. That is the worst case for the correction pass, not a candidate
+#:   for it.
+#:
+#: Curated, not inferred -- and reported rather than applied silently, because
+#: silent automated judgements about VG's vocabulary are what #3156 is about.
+SCALE_STUDY_EXCLUSIONS: dict[str, str] = {
+    # Individuated only by a host object. Size tracks the host; absence is
+    # unverifiable wherever the host appears.
+    **dict.fromkeys(
+        """nose ear ears eye eyes face head hair mouth lip lips chin cheek forehead eyebrow
+        eyebrows neck chest shoulder shoulders arm arms hand hands finger fingers thumb leg legs
+        foot feet knee elbow wrist ankle waist hip tail paw paws hoof hooves horn horns tusk tusks
+        beak snout mane fur skin tooth teeth tongue mustache moustache beard sideburns""".split(),
+        "part",
+    ),
+    # Parts of artefacts: same two failures, non-anatomical.
+    **dict.fromkeys(
+        """collar sleeve sleeves cuff pocket zipper hem waistband strap straps buckle handle knob
+        spout lid rim brim blade tread stem tip base""".split(),
+        "part",
+    ),
+    # A location rather than a thing: the box has no principled extent (where
+    # does an intersection begin?), so its area is an annotator choice and the
+    # band it lands in is noise.
+    **dict.fromkeys(
+        """court courtyard intersection station runway walkway crossing crosswalk driveway alley
+        parking lot yard park playground platform entrance exit doorway hallway corridor stairway
+        staircase kitchen bathroom bedroom room office restaurant store shop market""".split(),
+        "place",
+    ),
+    # Parts of a plant or structure: same failure as anatomy.
+    **dict.fromkeys("""trunk branch twig root roof chimney railing banister step steps""".split(), "part"),
+}
+
+#: One string, several objects: "find the trunk in the middleground" is not one
+#: question, so the class cannot be scored as one. Matched on the **whole name**
+#: rather than the head noun, because a modifier is precisely what resolves the
+#: ambiguity -- bare ``bat`` is unusable, ``baseball bat`` is a perfectly good
+#: class. (Head-noun matching would reject both, and misreport the reason for
+#: ``tree trunk``, which is unfit for being a *part*, not for being ambiguous.)
+POLYSEMOUS_NAMES: frozenset[str] = frozenset(
+    """trunk bat mouse pitcher crane tie nail bow plate glass iron seal pen""".split()
+)
+
+#: A class annotated on more than this share of all images is treated as
+#: pervasive: its negative pool is both thin and least trustworthy, since a
+#: ubiquitous thing is exactly what an annotator stops bothering to mark. `sky`
+#: is the worked example -- 18.8% prevalent as annotated, plainly higher in
+#: truth (`docs/experiments/overview-bench/REPORT.md`). Measured, not listed,
+#: because which names are pervasive is a property of the corpus.
+PERVASIVE_PREVALENCE = float(os.environ.get("VTS_PERVASIVE_PREVALENCE", "0.10"))
+
+
+def scale_study_exclusion(name: str) -> str | None:
+    """Why *name* is unfit for a scale-band study, or ``None`` if it is fit.
+
+    Head-noun matched, like :func:`is_object_category`, so ``left eye`` and
+    ``bus station`` are caught while ``eyeglasses`` and ``gas station wall``
+    are judged on their own heads.
+    """
+    if not is_object_category(name):
+        return "non_object"
+    if name in POLYSEMOUS_NAMES:
+        return "polysemous"
+    tokens = name.replace("-", " ").split()
+    return SCALE_STUDY_EXCLUSIONS.get(tokens[-1]) or SCALE_STUDY_EXCLUSIONS.get(name)
+
+
 #: Embedders in the pile. ``patch`` embedders attach ``patch_grid`` and are the
 #: only ones that can carry a region-voting arm. ``batch`` is the GPU forward
 #: batch size (``VTSEARCH_EMBED_BATCH_SIZE``); the app's default of 32 is sized

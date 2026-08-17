@@ -184,7 +184,7 @@ def _band_categories(band: str) -> list[str]:
     scan_path = pc.PILE / "vg_box_scale.json"
     if not scan_path.exists():
         raise SystemExit(f"missing {scan_path}; run scan_vg_boxes.py first")
-    stats = json.loads(scan_path.read_text())
+    stats = json.loads(scan_path.read_text())["categories"]
     lo, hi = pc.BOX_BANDS[band]
 
     pool = [

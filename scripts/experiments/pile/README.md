@@ -71,6 +71,23 @@ Rebuild the scan behind them with `python scan_vg_boxes.py` (writes
 `vg_box_scale.json`; caches image dims, since `objects.json` stores boxes in
 pixels and carries no image dimensions).
 
+**Banding by median puts each category in exactly one band**, so these three
+sets carry disjoint vocabularies and a small-vs-large difference confounds box
+size with class identity. The scan therefore also emits each category's full
+per-band histogram, and `shortlist_scale_classes.py` ranks the categories with
+real support at *every* size — the input to a construction that holds the class
+list fixed and varies only scale.
+
+Supply alone does not qualify a class: `pile_config.scale_study_exclusion`
+additionally rejects **parts** (a "small nose" is a distant face, and "no nose
+here" is unverifiable wherever a person is), **places** (no principled box
+extent), bare **polysemous** names, and **pervasive** classes. The shortlist
+prints those with reasons rather than dropping them quietly. And
+`scan_name_overlap.py` settles whether two names denote one object by box IoU
+rather than by string similarity — the trap that made the benchmark's error
+report match `bush` for `bus`. See
+[`docs/plans/vg-scale-bands-and-corrections.md`](../../../docs/plans/vg-scale-bands-and-corrections.md).
+
 Verified separation, measured with `--bands`: 38/40 of `vg_box_small`'s
 categories fall in `sub_patch`, 40/40 of `vg_box_medium` in `patch_to_leaf`,
 33/40 of `vg_box_large` in `leaf_to_4x`. The handful of strays are a
