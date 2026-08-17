@@ -40,7 +40,7 @@ def run_hook(payload: dict) -> subprocess.CompletedProcess:
 
 
 def create(body: str = PLAIN_BODY, labels: list[str] | None = None, **overrides) -> dict:
-    args = {"method": "create", "owner": "samggreenberg", "repo": "vtsearch", "title": "A title", "body": body}
+    args: dict = {"method": "create", "owner": "samggreenberg", "repo": "vtsearch", "title": "A title", "body": body}
     if labels is not None:
         args["labels"] = labels
     args.update(overrides)
