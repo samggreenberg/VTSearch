@@ -750,13 +750,18 @@ scattered instances but not semantically empty labels.
 
 ### `vg_box_small` / `glasses` — one object, two labels
 
-The sub-patch band's enormous false-positive rates are partly a vocabulary split.
-Both arms' flagged images are heavily enriched for `sunglasses`:
+This cell is the sub-patch band's over-inclusion in its extreme form, and it is
+also the band's clearest patch-vs-whole-image contrast: `siglip` flags **3,937 of
+5,363 negatives (73 %)** and misses 22 of 637 positives; `dinov3_patch` flags
+**2,863 (53 %)** and misses 43. Both are floods, and part of both floods is a
+vocabulary split — the flagged images are heavily enriched for `sunglasses`:
 
 | | `sunglasses` on FPs | on true negatives | enrichment |
 |---|---:|---:|---:|
 | `siglip` (3,937 FPs / 1,426 TNs) | 9.1 % | 1.3 % | **7×** |
-| `dinov3_patch` (2,919 FPs / 2,444 TNs) | 12.5 % | 0.6 % | **22×** |
+| `dinov3_patch` (2,863 FPs / 2,500 TNs) | 12.7 % | 0.6 % | **23×** |
+
+`siglip`'s most confident false positives on this cell:
 
 ```
 score   image        annotated categories
@@ -766,7 +771,7 @@ score   image        annotated categories
 0.6429  2403437.jpg  sunglasses
 ```
 
-Around 360 false positives per arm are images annotated `sunglasses` and not
+364 false positives in *each* arm are images annotated `sunglasses` and not
 `glasses`. A user who trained a "glasses" detector would count every one of them
 as correct. Unlike `sky`, this is not a *missing* label — it is the same object
 under a second name, which is what a free-text vocabulary does. It is also
