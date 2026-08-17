@@ -101,6 +101,8 @@ This is why closing an issue by hand didn't previously "trickle back": the item 
 
 **Every GitHub issue you create must carry the `claude` label**, and the `experiment` label when it applies. Apply them at creation time (`labels: ["claude", …]`), not as a follow-up edit. If a label is missing from the repo, applying it via the issues API creates it automatically — do not skip a label because it doesn't exist yet.
 
+A third label, **`dev`**, is a release *status* rather than something you choose when filing — it is applied and removed by the release machinery. Read its section below before closing any issue.
+
 ### `claude` — who filed it
 
 `claude` means **this issue was written by Claude, not by a human.** It is not a topic tag and has nothing to do with what the issue is about (nearly every issue here concerns Claude-adjacent work; that is never why the label goes on).
@@ -121,6 +123,27 @@ That asymmetry is the whole design. It only works if Claude is exhaustive: a Cla
 - It is orthogonal to `claude` — a human-filed research idea gets `experiment` alone; a Claude-filed sweep gets both.
 
 The point is scheduling: `label:experiment` is the queue of work that needs machine time booked, and `-label:experiment` is what can be picked up right now. See the `grid-experiments` skill for how those runs are actually launched.
+
+### `dev` — fixed on `dev`, not yet on `main`
+
+`dev` means **the fix has merged to `dev` but has not shipped to `main`.** Unlike `claude` and `experiment`, it is **not applied at creation time** and is never something you decide when filing — it is a *status* the release machinery maintains.
+
+It exists to make an otherwise invisible state visible. A fix PR targets `dev`, and GitHub only auto-closes a keyword-linked issue when the PR merges into the **default** branch (`main`), so a fixed issue stays open until the release sweep closes it. Without this label there is no way to tell "waiting for the next release" apart from "nobody has started it". The awaiting-release view is:
+
+```
+is:issue is:open label:dev
+```
+
+**The label is transient, not a historical fact.** It goes on when the fix merges to `dev`, and comes off in the same write that closes the issue (`docs/RELEASE.md` step 6). A closed issue must never carry it: by then the fix is on `main` too, so the label would assert something false, and a reopened issue would wrongly appear in the awaiting-release view. `is:open` already filters the closed pile for free, so letting it linger would buy nothing.
+
+Two rules bind you directly:
+
+- **Closing an issue strips `dev`.** Pass `labels` explicitly on a `completed` close. Note that `labels` *replaces* the whole set, so list every label the issue keeps (`claude`, `experiment`, …) and omit `dev` — passing `[]` would wipe the rest. A `PreToolUse` hook blocks a close that keeps the label or omits the array.
+- **Do not apply it by hand from a fix session.** When you open a fix PR the merge hasn't happened yet, so the issue is not on `dev` and labeling it would be a lie for as long as the PR sits unmerged. Applying it is `scripts/reconcile-dev-labels.py`'s job.
+
+That script encodes `docs/RELEASE.md` step 6's resolution logic — closing keywords vs. `Refs`, `Partially addressed in #M` vs. `Addressed in #M`, and the ambiguity of a comment posted *after* a fix pointer — and reconciles the label in both directions. It is a pure function from data to plan: the GitHub REST API is unreachable from a Claude session (`GITHUB_TOKEN` is present but 403s, since GitHub access is intermediated by the MCP server), so gather the PR and issue data with the `github` MCP tools and pipe it in. See `docs/RELEASE.md` for the recipe.
+
+**A comment after the fix pointer is never guessed at.** If someone comments below an `Addressed in #M` pointer, the script reports the issue as needing review rather than tagging or skipping it. The later comment might be a maintainer saying "thanks" or the reporter saying the fix doesn't work; tagging would bury a dispute, and skipping would silently drop the issue out of the awaiting-release view. Ambiguity gets surfaced, not resolved by a coin flip.
 
 ## Recommend a Claude model in every issue you file
 
