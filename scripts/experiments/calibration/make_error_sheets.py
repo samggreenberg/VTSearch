@@ -14,7 +14,7 @@ nothing else:
     python make_error_sheets.py --dumps /expscratch/$USER/bench-errors/dumps \\
         --out /expscratch/$USER/bench-errors/sheets
 
-Then copy the PNGs into the study's `figures/` directory. Sheets are declared in
+Then copy the JPEGs into the study's `figures/` directory. Sheets are declared in
 `SHEETS` below, one per claim the report makes about a *kind* of error.
 """
 
@@ -52,7 +52,7 @@ IMAGE_ROOTS: dict[str, list[Path]] = {
 #: pickles are 3.6 GB and carry the identical `regions`).
 BOX_PICKLES = {ds: DATA / f"embeddings/{ds}__siglip.pkl" for ds in IMAGE_ROOTS}
 
-THUMB = 340  # px on the long edge; enough to judge a small object, small on disk
+THUMB = 300  # px on the long edge; enough to judge a small object, small on disk
 
 SHEETS: list[dict] = [
     {
@@ -263,7 +263,10 @@ def draw_sheet(spec: dict, rows: list[dict], boxes: dict[str, list[dict]], out: 
     fig.suptitle(spec["title"], fontsize=11, y=1.0)
     fig.text(0.5, -0.01, spec["note"], ha="center", va="top", fontsize=8.5, color="#555", wrap=True)
     fig.tight_layout(rect=(0, 0, 1, 0.97))
-    fig.savefig(out, dpi=110, bbox_inches="tight")
+    # JPEG, not PNG: these are photographs, and a nine-sheet set is 9.5 MB as
+    # PNG against ~2 MB as JPEG - which decides whether they can be inlined in a
+    # self-contained HTML page at all.
+    fig.savefig(out, dpi=100, bbox_inches="tight", pil_kwargs={"quality": 82, "optimize": True})
     plt.close(fig)
     print(f"  wrote {out} ({out.stat().st_size // 1024} KB, {len(rows)} images)")
     return True
@@ -296,7 +299,7 @@ def main() -> int:
             if ds not in box_cache:
                 box_cache[ds] = load_boxes(ds)
             boxes = box_cache[ds]
-        draw_sheet(spec, rows, boxes, out / f"examples_{spec['name']}.png")
+        draw_sheet(spec, rows, boxes, out / f"examples_{spec['name']}.jpg")
     return 0
 
 
