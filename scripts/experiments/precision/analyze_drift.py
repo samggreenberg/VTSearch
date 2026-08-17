@@ -358,13 +358,21 @@ def pairwise(embedders: list[str], arms: list[str], outdir: Path) -> "pd.DataFra
     return df
 
 
-def report(drift: pd.DataFrame, ranks: pd.DataFrame, examples: list[dict]) -> None:
+def report(drift: pd.DataFrame, ranks: pd.DataFrame, examples: list[dict], ref_arm: str = pcfg.REFERENCE_ARM) -> None:
+    """Print the tables, labelled with the reference they were actually taken against.
+
+    The reference is threaded through rather than read from the config, because
+    the first ``--reference fp32_v100`` run printed a table headed "vs
+    fp32_l40s" while differencing against the V100. A mislabelled table is worse
+    than a missing one: it gets archived and read later as if the header were
+    true.
+    """
     if drift.empty:
         log("no drift rows — nothing to report")
         return
 
     # --- the floor, first: every other number is read relative to it --------
-    log("\n=== 1. Vector drift, 1 - cos vs %s (per media) ===" % pcfg.REFERENCE_ARM)
+    log(f"\n=== 1. Vector drift, 1 - cos vs {ref_arm} (per media) ===")
     log(
         f"{'embedder':12s} {'arm':16s} {'precision':14s} {'median':>10s} {'p95':>10s} {'max':>10s} {'mean ± SE':>22s} {'>1e-6':>8s}"
     )
@@ -468,7 +476,7 @@ def figures(drift: pd.DataFrame, ranks: pd.DataFrame, outdir: Path) -> None:
                 ax.plot([i - 0.25, i + 0.25], [g["spearman"].mean()] * 2, color="k", lw=2)
                 labels.append(f"{emb}\n{arm}")
             ax.set_xticks(range(len(labels)), labels, fontsize=7)
-            ax.set_ylabel("Spearman ρ vs fp32 ordering")
+            ax.set_ylabel("Spearman ρ vs the reference ordering")
             ax.set_title(f"Retrieval-order stability per category — {source}\n(dot = one category, bar = mean)")
             ax.axhline(1.0, color="#999", ls=":", lw=1)
             fig.tight_layout()
@@ -482,7 +490,7 @@ def figures(drift: pd.DataFrame, ranks: pd.DataFrame, outdir: Path) -> None:
                 TOPKS, [g[f"top{k}_overlap"].mean() for k in TOPKS], marker="o", label=f"{emb} {arm} {source}", lw=1.2
             )
         ax.set_xlabel("k")
-        ax.set_ylabel("mean top-k overlap with fp32")
+        ax.set_ylabel("mean top-k overlap with the reference")
         ax.set_title("How much of the head survives a precision change")
         ax.legend(fontsize=6)
         fig.tight_layout()
@@ -517,7 +525,7 @@ def main(argv: list[str] | None = None) -> int:
     arms = [a for a in args.arms.split(",") if a]
 
     drift, ranks, examples = analyse(embedders, arms, ref_arm=args.reference)
-    report(drift, ranks, examples)
+    report(drift, ranks, examples, ref_arm=args.reference)
     if args.pairwise:
         pairwise(embedders, [*arms, PUBLISHED] if args.include_published else arms, outdir)
 
