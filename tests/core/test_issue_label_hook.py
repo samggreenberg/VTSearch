@@ -30,7 +30,7 @@ PLAIN_BODY = "The Back button in the importer modal is left-aligned but should u
 
 
 def run_hook(payload: dict) -> subprocess.CompletedProcess:
-    return subprocess.run(
+    return subprocess.run(  # noqa: S603  # interpreter + repo-local hook path, no shell
         [sys.executable, str(HOOK)],
         input=json.dumps(payload),
         capture_output=True,
@@ -131,7 +131,7 @@ class TestPassthrough:
         ids=["empty", "blank", "garbage", "list", "null", "string"],
     )
     def test_unparseable_payloads_allow(self, raw):
-        result = subprocess.run(
+        result = subprocess.run(  # noqa: S603  # interpreter + repo-local hook path, no shell
             [sys.executable, str(HOOK)], input=raw, capture_output=True, text=True, timeout=30
         )
         assert result.returncode == ALLOW
