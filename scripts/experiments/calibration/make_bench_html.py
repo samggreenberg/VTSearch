@@ -331,6 +331,12 @@ def main() -> int:
 
     body, toc = convert(body_md, report.parent)
     toc_html = "".join(f'<li><a href="#{slug}">{html.escape(text)}</a></li>' for slug, text in toc)
+    toc_block = f'<nav class="toc"><strong>Contents</strong><ol>{toc_html}</ol></nav>'
+    # The lead - everything before the first section heading - goes ABOVE the
+    # contents. A reader's first screen should be the findings, not a 22-item
+    # index of where the findings are.
+    split = body.find("<h1 ")
+    body = (body[:split] + toc_block + body[split:]) if split > 0 else toc_block + body
     generated_from = report.as_posix()
 
     page = f"""<!doctype html>
@@ -348,7 +354,6 @@ def main() -> int:
   <h1>{html.escape(title)}</h1>
   <p>{inline(args.subtitle)}</p>
 </header>
-<nav class="toc"><strong>Contents</strong><ol>{toc_html}</ol></nav>
 {body}
 <footer class="foot">
   Generated from <code>{html.escape(generated_from)}</code> by

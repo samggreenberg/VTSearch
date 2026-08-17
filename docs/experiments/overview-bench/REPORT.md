@@ -1,69 +1,102 @@
-# VTSearch overview benchmark: how each configuration behaves
+# VTSearch at production defaults: what each configuration gives a user
 
-**Run:** 2026-08-12 · branch `claude/vts-benchmark` · arrays `496044` (wave 1),
-`496454` (wave 2), `496673` (wave 2 re-run, drained 2026-08-13 00:00), `496762`
-(binary-voting arm), plus per-media error dumps (`496798`–`496802`, `507225`–`507230`)
-**Data:** `/expscratch/sgreenberg/bench-{overview,vgbox,vgbox2,binary,errors}/results`
-**Reproduce:** `analyze_bench.py` (tables), `analyze_bench_interaction.py`
-(binary vs boxes), `make_bench_figs.py --svg` (the plots, PNG for this page and
-SVG for the reading copy below), `launch_errdump.sh` +
-`error_report.py` + `label_noise.py` (the error listings) and
-`make_error_sheets.py` (the image sheets — it runs on the cluster, where the
-source images are) — all under `scripts/experiments/calibration/`.
-**Reading copy:** [`docs/reports/2026-08-17-overview-bench.html`](../../reports/2026-08-17-overview-bench.html)
-is this document as one self-contained page — plots as zoomable vector art,
-photographs embedded. It is **generated** from this file by `make_bench_html.py`;
-edit the report, then re-run the script so the two cannot disagree.
+Everything here was run with every *behavioural* knob at its shipped value —
+`linear` head, `safe_thresholds=False`, `calibrate_count=2`, acquisition
+inclusion offset `-1`, production `max_patch` geometry — across three
+representations, six haystacks, and both ways a user can answer (Good/Bad on
+whole images, or a drawn box), against a typed query as the zero-click
+alternative. 490 runs of the loop, 70,631 scored steps. It characterizes the tool
+as it ships; it is not trying to pick a winner.
 
-This is a **characterization**, not a comparison. Nothing here is trying to pick
-a configuration to ship. The question is what each of them *does* — what it is
-good at, what it is bad at, and what regime moves it from one to the other. Where
-two configurations differ, the useful output is the mechanism behind the
-difference, not the sign of it.
+**What it found.**
 
-Every *behavioural* knob is at its shipped default — head `linear`,
-`safe_thresholds=False`, `calibrate_count=2`, acquisition inclusion offset `-1`,
-production `max_patch` geometry. Only sizing knobs were set.
+- **A drawn box is worth more than a better encoder, and by a wide margin.** Take
+  the boxes away and the patch encoder is *worse than the cheap default we
+  already ship*. It is also the difference between a detector and no detector at
+  all: on sub-patch targets, a quarter of whole-image runs never work.
+- **Target scale is the strongest axis in the study.** Cost climbs from 0.37 to
+  0.49 as the target shrinks from a twelfth of the frame to under half a percent
+  of it, and no configuration escapes it.
+- **Positives, not thresholds, are the binding constraint.** 150 clicks buy a
+  median of 4–11 positive examples, and 6 % of runs end on two or fewer.
+  Meanwhile the shipped cut rule already beats the best threshold fittable on the
+  data it can see.
+- **Typing and clicking are not alternatives — they are complements**, and
+  nothing in the product composes them. A typed query is worth 45–97 clicks on
+  Visual Genome, and it is the only entry point the patch encoder cannot use.
+- **The labels are a real part of the measured error.** On Visual Genome, images
+  the model is scored wrong on demonstrably contain the target; this report shows
+  them, so you can judge that for yourself.
 
-**On the numbers.** Two significant digits, because that is what 3 seeds
-support: differences are quoted **paired** (same category, same seed, same
-split) with a standard error, and a difference smaller than twice its standard
-error is called unresolved rather than dressed in a third decimal. **Four of this
-report's earlier claims did not survive being written that way** — two encoder
-comparisons, the growth of DINOv3's ranking margin, and the medium band's cut-rule
-defect — and each is marked where it appears.
+That last one bounds everything else, so read the numbers below as *what a user
+experiences*, not as the ceiling of what the models can do.
 
-## What was exercised
+---
+
+# What was measured
 
 | axis | levels |
 |---|---|
 | representation | `siglip` (shipped, whole-image, text-capable), `siglip2_l` (premium, whole-image, text-capable), `dinov3_patch` (patch geometry, region-voting where boxes exist, **no text tower**) |
-| acquisition | typed query (0 clicks, GMM cut) · Autopilot clicking (150 votes) |
-| interaction | Good/Bad on whole images · Good votes carry a drawn box |
-| haystack | `visual_genome_m` (4,193), `coco_val` (4,952), `caltech101_m` (838, boxless), `vg_box_{small,medium,large}` (12,000 each, banded on box area) |
-| category | 6–10 per dataset · 3 seeds · 150 votes |
+| interaction | Good/Bad on whole images · Good votes carry the object's box |
+| acquisition | Autopilot clicking, 150 votes · typed query, 0 clicks (GMM cut) |
+| haystack | `coco_val` (4,952), `visual_genome_m` (4,193), `caltech101_m` (838, boxless), `vg_box_{small,medium,large}` (12,000 each, banded on box area) |
+| sampling | 6–10 categories per haystack · 3 seeds · 150 votes each |
 
-Wave 1: 189 cells / 26,538 steps. Wave 2: 99 cells / 14,042 steps. **Wave 2
-re-run: 270 cells / 37,844 steps** — 10 prevalence-spread categories per box
-band, replacing the collapsed 5 / 4 / 2 selection wave 2 ran on. Binary arm: 45
-cells. Loaded: 182/189, 265/270, 43/45 — the rest are *starved* cells that never
-found a positive and so never emitted a row (see Failure modes).
+One run is one (haystack, representation, category, seed) cell, scored at every
+step. `cost = fpr + fnr` on a held-out half; `regret` is cost against a perfectly
+placed threshold on the same ranking; "deep regime" means votes 100–150.
 
-**Every `vg_box_*` number in this report is from the re-run**; wave 2's are
-superseded and kept in `ANALYSIS_TABLES_vgbox.txt` for comparison. The two are
-not interchangeable — the re-run's categories are more prevalent (0.05 against
-0.02), so costs are not comparable *across* the waves even though the arm
-ordering *within* each is.
+**How to read the numbers.** Two significant digits, because that is what three
+seeds support. Arm-vs-arm differences are quoted **paired** — same category, same
+seed, same split — with a standard error, and a difference smaller than twice its
+standard error is reported as unresolved rather than given a third decimal.
 
 ---
 
-# Reference numbers
+# What a run looks like
 
-Deep regime (t ≥ 100). cost = fpr + fnr. `oracle` is the cost the same ranking
-would reach with a perfectly placed threshold, so `cost − oracle` is what the
-threshold costs and `oracle` is what the ranking costs. No ordering implied.
+![Mean cost against votes cast, per haystack, one line per representation](figures/fig_cost_vs_votes.png)
 
-| dataset | embedder | cost | oracle | fpr | fnr | AP | AUROC | cell wall-time |
+The end of each curve is the number a summary table would report. The interesting
+part is not the end:
+
+- **On COCO the premium encoder's whole value is early.** At 10 votes `siglip2_l`
+  sits at cost 0.49 against `siglip`'s 0.64; by 40 votes the gap is 0.07, and by
+  150 the two have crossed (0.22 vs 0.21).
+- **On Visual Genome that early advantage does not exist** (0.75 vs 0.73 at 10
+  votes), which is worth knowing before paying for the bigger encoder.
+- **On the box bands the ramp is over by t≈60.** `vg_box_small × siglip` goes
+  0.89 → 0.71 in the first 60 votes and 0.71 → 0.64 in the next 90. More clicks
+  are not the lever there.
+
+## Which error each configuration makes
+
+![Cost split into fpr and fnr for every arm](figures/fig_error_budget.png)
+
+Bar height is cost; the split says whether an arm over-includes or misses.
+`siglip` **over-includes**: on Visual Genome its fpr (0.30) is three times its
+fnr (0.09), the most lopsided budget in the study. `siglip2_l` rebalances rather
+than only shrinking it (fpr 0.30 → 0.24, fnr 0.09 → 0.12). `dinov3_patch` with
+boxes is the only arm whose fnr falls sharply on small targets — it buys recall
+exactly where a whole-image vector dilutes the object.
+
+Over-inclusion has an extreme form worth seeing, because it is a *threshold*
+failure rather than a ranking one. On `visual_genome_m` / `bus`, one run flags
+**1,210 of 2,030 negatives (60 %) and misses none of the 67 positives**:
+
+![Eight of the 1,210 flagged negatives on VG / bus](figures/examples_bus_fp.jpg)
+
+*No buses, and no argument that the labels are wrong either — the ranking is
+sound and the cut has simply fallen through the floor.*
+
+## Reference numbers
+
+Deep regime (t ≥ 100). `oracle` is the cost this same ranking would reach with a
+perfectly placed threshold, so `oracle` is what the ranking costs and
+`cost − oracle` is what the threshold costs.
+
+| haystack | representation | cost | oracle | fpr | fnr | AP | AUROC | cell wall-time |
 |---|---|---:|---:|---:|---:|---:|---:|---:|
 | `caltech101_m` | `siglip` | 0.00 | 0.00 | 0.00 | 0.00 | 1.00 | 1.00 | ~110 s |
 | `caltech101_m` | `siglip2_l` | 0.00 | 0.00 | 0.00 | 0.00 | 1.00 | 1.00 | ~110 s |
@@ -84,23 +117,22 @@ threshold costs and `oracle` is what the ranking costs. No ordering implied.
 | `vg_box_small` | `siglip2_l` | 0.65 | 0.54 | 0.41 | 0.23 | 0.23 | 0.75 | ~2 min |
 | `vg_box_small` | `dinov3_patch` | 0.49 | 0.39 | 0.34 | 0.15 | 0.29 | 0.85 | ~15 min |
 
-`caltech101_m` is at ceiling: every arm's cost there is between 0.001 and 0.005
-and the differences (±0.002 paired) mean nothing. It characterizes the floor
-case — everything works when the task is easy — and nothing else. **Retire it
-from the next sweep.**
+Read down a column within a haystack, not across haystacks: prevalence differs
+(0.03–0.07 across these sets) and so do the categories.
 
-The box-band rows sit at prevalence 0.05, the wave-1 rows at 0.03–0.07 — so read
-down a column within a band rather than across the table. Wall-time is the
-median cell, and a step is what actually differs: **6.4–8.5 s for
-`dinov3_patch` against ~0.6 s whole-image**, an 11–13× per-step ratio that the
-per-cell figure understates.
+`caltech101_m` is at ceiling — every arm between cost 0.001 and 0.005, AP 1.00,
+and the differences are ±0.002. It shows the floor case, that everything works
+when the task is easy, and nothing else. **Retire it from this sweep.**
 
-## What the sample can and cannot resolve
+The patch arm's price is compute: **6.4–8.5 s per step against ~0.6 s
+whole-image**, an 11–13× ratio that the per-cell wall time understates.
 
-Paired per-cell differences, deep regime, `mean ± SE` (full table in
-`ANALYSIS_TABLES*.txt`; **bold** = at least 2 SE from zero):
+## What this sample can and cannot resolve
 
-| dataset | contrast | Δcost | ΔAP | ΔAUROC |
+Paired per-run differences, deep regime, `mean ± SE`; **bold** is at least two
+standard errors from zero.
+
+| haystack | contrast | Δcost | ΔAP | ΔAUROC |
 |---|---|---:|---:|---:|
 | `coco_val` | `dinov3` − `siglip` | **−0.07 ± 0.03** | **+0.09 ± 0.03** | **+0.03 ± 0.01** |
 | `coco_val` | `dinov3` − `siglip2_l` | −0.05 ± 0.03 | +0.08 ± 0.03 | **+0.02 ± 0.01** |
@@ -112,52 +144,132 @@ Paired per-cell differences, deep regime, `mean ± SE` (full table in
 | `vg_box_medium` | `dinov3` − `siglip2_l` | **−0.14 ± 0.04** | +0.05 ± 0.03 | **+0.10 ± 0.02** |
 | `vg_box_small` | `dinov3` − `siglip2_l` | **−0.16 ± 0.02** | **+0.06 ± 0.02** | **+0.10 ± 0.02** |
 
-Two things follow immediately, and both revise what this report used to say:
+**The two whole-image encoders are not separable on cost anywhere** — every
+contrast between them is inside its own noise. What the premium encoder buys is
+*ranking*, and even that is one marginal effect on Visual Genome plus a
+resolvable one on medium boxes. Choose between them on price or on ranking, not
+on an operating point this study cannot measure.
 
-- **`siglip` and `siglip2_l` are not separable on cost anywhere.** Every
-  contrast between them is inside its own noise (worst case +0.04 ± 0.03). What
-  the premium encoder buys is *ranking*, and even there it is one marginal
-  effect (VG AP −0.04 ± 0.03) plus a resolvable one on the medium band. The
-  earlier phrasing — "you lose ~0.026 cost on VG, ~0.016 on COCO" — quoted three
-  decimals of a number this run cannot measure.
-- **DINOv3's ranking margin over the premium encoder is positive in all three
-  box bands (+0.04, +0.05, +0.06) but its *growth* is not resolvable.** What is
-  resolvable is that its *cost* advantage is much larger on the two smaller
-  bands than on the large one (−0.16 ± 0.02 vs −0.07 ± 0.04). So "the advantage
-  grows as targets shrink" survives on cost and, on AP, only as an ordering.
+**The patch arm's ranking advantage is positive in every band** (+0.04, +0.05,
++0.06 AP against the premium encoder), though the *growth* of that margin is not
+resolvable. Its cost advantage is: −0.16 ± 0.02 on sub-patch targets against
+−0.07 ± 0.04 on large ones.
 
 ---
 
-# Cost over the ramp
+# The box is worth more than the encoder
 
-![Mean cost against votes cast, per dataset, one line per embedder](figures/fig_cost_vs_votes.png)
+Region voting needs two things at once — a patch embedder *and* a user willing to
+draw — so every table above confounds them. To separate them, the patch encoder's
+own runs were repeated with region voting off: same haystacks, same categories,
+same seeds, same splits, differing only in whether a box is dragged.
 
-The deep-regime table is only the right-hand edge of this figure, and the edge
-is not where the differences are:
+![Cost over votes for the binary and boxed arms](figures/fig_binary_vs_boxes.png)
 
-- **On COCO the premium encoder's whole value is early.** At 10 votes
-  `siglip2_l` sits at cost 0.49 against `siglip`'s 0.64; by 40 votes the gap is
-  0.07, and by 150 the two have crossed (0.22 vs 0.21). A deep-regime table
-  reports the crossing point and calls them equal.
-- **On VG that early advantage does not exist** (0.75 vs 0.73 at 10 votes), which
-  is worth knowing before paying for the bigger encoder.
-- **On the box bands the ramp is over by t≈60.** `vg_box_small × siglip` goes
-  0.89 → 0.71 in the first 60 votes and 0.71 → 0.64 in the next 90. Asking the
-  user for a hundred more clicks is not the lever there.
+| haystack | contrast | Δcost | ΔAP | ΔAUROC |
+|---|---|---:|---:|---:|
+| `visual_genome_m` | `dinov3` no boxes − `dinov3` boxes | **+0.16 ± 0.03** | **−0.12 ± 0.03** | **−0.06 ± 0.01** |
+| `visual_genome_m` | `dinov3` no boxes − `siglip` | **+0.09 ± 0.03** | −0.02 ± 0.02 | **−0.04 ± 0.01** |
+| `coco_val` | `dinov3` no boxes − `dinov3` boxes | **+0.14 ± 0.03** | **−0.15 ± 0.03** | **−0.04 ± 0.01** |
+| `coco_val` | `dinov3` no boxes − `siglip` | **+0.08 ± 0.04** | −0.05 ± 0.04 | −0.01 ± 0.01 |
 
-![The same cost curves with one line per individual run](figures/fig_cost_traces.png)
+Positive means the box-free arm is worse. Two readings, both actionable:
 
-**This is the figure the means were hiding.** Every whole-image configuration has
-runs that sit flat near cost 1.0 for all 150 votes. The mean says `vg_box_small ×
-siglip` is 0.63 and implies a typical run near 0.63; what is actually there is a
-mixture of runs that work and runs that never start, and the second kind is set
-by whether Autopilot ever surfaced positives (red dots mark a run's first scored
-step — some are past vote 100).
+- **Almost the whole DINOv3 advantage is box supervision, not encoder quality.**
+  Removing the box costs it 0.14–0.16 cost and 0.12–0.15 AP.
+- **Without boxes it is worse than the cheap default we ship**, by 0.08–0.09
+  cost, the largest resolvable encoder effect in the study. If your users will not
+  draw, a patch encoder is not a weaker version of the win; it is a regression.
 
-Counting the stuck runs — cells whose deep-regime cost stays above 0.9 — turns
-that into a number, and into the most practically useful thing the box bands say:
+**What "worse" looks like on one run.** `visual_genome_m` / `sky`, the same cell
+run both ways:
 
-| dataset | `siglip` | `siglip2_l` | `dinov3_patch` |
+| | threshold | false positives | false negatives |
+|---|---:|---:|---:|
+| `dinov3_patch` **with boxes** | 0.54 | 504 / 1,703 | 50 / 394 |
+| `dinov3_patch` **without** | 0.38 | **1,305 / 1,703 (77 %)** | 28 / 394 |
+
+Remove the box and the arm floods: it flags three quarters of the negatives,
+buying 22 recovered positives with 800 extra false positives.
+
+![Eight of the 1,305 negatives the box-free arm flags on VG / sky](figures/examples_sky_binary_fp.jpg)
+
+*Street scenes, mostly without sky annotated and several without much sky in
+them. The boxed arm's false positives, further down, are pictures of sky.*
+
+The mechanism is what the models are. DINOv3 is self-supervised and vision-only:
+its strength is spatial correspondence between patches, and its whole-image
+vector was never trained to separate semantic categories the way SigLIP's
+language-contrastive embedding was. Give it a region to point at and that
+strength is usable; take the region away and you are using the part of it that is
+weakest — which is also why it has no text tower to fall back on.
+
+One boundary condition: on a **boxless** haystack the patch arm is not a patch
+model at all. With no box a Good vote has nothing to pool, so patch rows would be
+negatives-only and could teach nothing but "patch-like ⇒ negative". On
+`caltech101_m` it runs whole-image by construction, and behaves like it.
+
+---
+
+# Target scale sets the difficulty
+
+The three `vg_box_*` haystacks exist to ask this one question. They are not size
+*tiers* of a dataset; they are a **box-area axis**, built by scanning the whole
+Visual Genome source (~108k images, full free-text object vocabulary) and banding
+categories by how much of the frame the object occupies, anchored to the patch
+embedder's own geometry — one DINOv3 patch is 1/196 of an image, and the smallest
+HAC leaf is 1/12:
+
+| haystack | box area | meaning |
+|---|---|---|
+| `vg_box_small` | 0 → **1/196** (0.5 %) | below what the patch grid can resolve at all |
+| `vg_box_medium` | 1/196 → **1/12** (8 %) | resolvable by patches, smaller than one HAC leaf |
+| `vg_box_large` | 1/12 → **0.80** | above 80 % a box is not a region, it is the image |
+
+![Cost, AP and fnr against box-area band](figures/fig_scale_bands.png)
+
+Best-arm cost runs **0.37 (large) → 0.46 (medium) → 0.49 (small)** and AP 0.41 →
+0.39 → 0.29. Sub-patch retrieval is hard for every configuration; patch geometry
+reduces the damage without removing it. This is also the first measurement of that
+band on a realistic sample: the demo vocabulary puts **5** categories under one
+patch, the full source has **643**.
+
+The mechanism is visible one image at a time. On COCO `clock` the whole-image arm
+misses 48 of 112 clocks and the box arm misses 21 — and **30 of the clocks the
+whole-image arm missed, the box arm found** (3 go the other way):
+
+![Eight clocks the whole-image arm missed and the box arm found, with the clock's box drawn](figures/examples_clock_rescued.jpg)
+
+*The yellow box is the clock. This is what "a whole-image vector dilutes a small
+target" looks like: the box arm scores 0.55–0.66 on exactly the images the
+whole-image arm scores 0.01–0.06 on.*
+
+The three that go the other way are the same mechanism in reverse — wide outdoor
+scenes where the clock is large and unambiguous (`000000036678.jpg`:
+`boat, clock`, whole-image 0.879 against boxed 0.521).
+
+---
+
+# Positives are the binding constraint
+
+![Positives accumulated against votes cast](figures/fig_positives.png)
+
+150 clicks buy a median of **4–11 positive examples**, and a tenth of runs finish
+on 2–5. Against the dotted diagonal — the unreachable ceiling where every vote is
+a positive — the whole study happens in the bottom decade of that plot. The loop
+is not threshold-limited, it is example-limited.
+
+Averages hide what that does to an individual run:
+
+![The cost curves with one line per individual run](figures/fig_cost_traces.png)
+
+**Every whole-image configuration has runs that sit flat near cost 1.0 for all
+150 votes.** The mean says `vg_box_small × siglip` is 0.63 and implies a typical
+run near 0.63; what is actually there is a mixture of runs that work and runs
+that never start. Counting the ones that never start — deep-regime cost above 0.9
+— turns that into the most practical thing the box bands say:
+
+| haystack | `siglip` | `siglip2_l` | `dinov3_patch` |
 |---|---:|---:|---:|
 | `vg_box_large` | 3 / 30 | 3 / 29 | **0 / 29** |
 | `vg_box_medium` | 5 / 30 | 3 / 30 | **0 / 30** |
@@ -165,146 +277,53 @@ that into a number, and into the most practically useful thing the box bands say
 | `visual_genome_m` | 1 / 23 | 0 / 24 | 0 / 24 |
 | `coco_val`, `caltech101_m` | 0 | 0 | 0 |
 
-A quarter of whole-image runs on the sub-patch band never work at all, and the
-patch geometry removes almost all of them. That is a different claim from "mean
-cost is 0.14 lower", and a more actionable one: the box is not buying a slightly
-better detector, it is buying **a detector instead of none** on a fifth to a
-quarter of runs.
+A quarter of whole-image runs on sub-patch targets never work at all, and the box
+removes almost all of them. **On those targets the box is not buying a slightly
+better detector; it is buying a detector instead of none.**
 
-Concretely, from the traces:
+Individual runs, for the shape of it:
 
 | the run | what it did |
 |---|---|
-| `vg_box_small` / `mustache` / seed 0 / `siglip` | found its first positive at **vote 144**; 7 scored steps in 150 votes, all at cost 1.00 |
-| `vg_box_large` / `intersection` / seed 1 / `dinov3_patch` | first positive at **vote 119** |
-| `vg_box_medium` / `chairs` / seed 2 / `siglip2_l` | ran all 150 votes holding **exactly one** positive; cost 1.00 throughout |
-| `vg_box_small` / `mask` / seed 1 / `siglip` | same shape: one positive, 149 steps, cost 1.00 |
-| `caltech101_m` / `cougar_face` / seed 0 / `siglip` | held **3** positives for 147 steps and reached cost **0.00** |
+| `vg_box_small` / `mustache` / `siglip` | found its first positive at **vote 144**; 7 scored steps in 150 votes, all at cost 1.00 |
+| `vg_box_large` / `intersection` / `dinov3_patch` | first positive at **vote 119** |
+| `vg_box_medium` / `chairs` / `siglip2_l` | ran all 150 votes holding **exactly one** positive; cost 1.00 throughout |
+| `caltech101_m` / `cougar_face` / `siglip` | held **3** positives for 147 steps and reached cost **0.00** |
 
-Six cells finished 150 votes with a single positive. The last row is the
-control: a tiny positive set is not by itself fatal — on an easy haystack three
-positives are enough for a perfect cut. It is few positives *plus* a hard
-haystack that produces the flat-at-1.0 runs.
+The last row is the control: few positives is not by itself fatal — on an easy
+haystack three are enough for a perfect cut. It is few positives *plus* a hard
+haystack that produces a flat-at-1.0 run.
 
----
+## How often the loop fails outright
 
-# The representations
+| mode | rate | where |
+|---|---|---|
+| **No positive at all in 150 votes** — the run produces nothing | **14 / 504 runs (2.8 %)** | the rarest categories (`ball` 51/4193, `refrigerator` 101/4952, `sports ball` 169/4952, `intersection` 95/12000, `tip` 333/12000) |
+| **Two or fewer positives** at vote 150 | **27 / 447 (6.0 %)**, six of them exactly one | every haystack except COCO; cost pinned near 1.0 |
+| **Cold-start default threshold** (`too_few_default`) | 1–7 % of steps on the whole-image haystacks, **6–16 %** on the box bands | worst on small boxes, and the worst *arm* there is `siglip2_l` (16 %), not `dinov3_patch` (10 %) |
+| **Degenerate step** | 0.04 % whole-image, 0.11 % without boxes, **2.0 %** on the box bands | small and medium boxes |
+| **Threshold fell back to a default cut** | **0 / 70,631 steps** | never observed |
 
-## `siglip` — the shipped default
-
-**Behaves like:** a fast, text-addressable whole-image encoder that degrades
-gracefully. ~110 s per 150-vote run; a text tower, so a user can start from a
-typed query at zero cost.
-
-**Its error budget sits in false positives.** On VG its fpr (0.30) is 3× its fnr
-(0.09) — by far the most lopsided arm in the study. It is *including* too much,
-not missing things. That shape is stable across datasets: fpr ≥ fnr everywhere
-except COCO.
-
-![Cost split into fpr and fnr for every arm](figures/fig_error_budget.png)
-
-**Where it holds up:** anything with a clean whole-image signature. On
-`caltech101_m` it is at ceiling. On COCO its ranking (AP 0.69) is within noise of
-the premium encoder (−0.02 ± 0.01).
-
-**Where it comes apart:** as the target shrinks relative to the frame. Across the
-box bands its AP falls 0.35 → 0.30 → 0.22 and AUROC 0.85 → 0.78 → 0.76, against
-`dinov3_patch`'s 0.91 → 0.88 → 0.85. Pooling a whole image into one vector
-cannot preserve an object that occupies under 0.5 % of it — and the literal
-version of that failure is in [the label-noise section](#coco_val--clock--the-model-is-wrong-and-the-boxes-fix-it):
-30 of the 112 `clock` images this arm missed on COCO are found by the patch arm,
-and they are precisely the cluttered ones.
-
-## `siglip2_l` — the premium whole-image encoder
-
-**Behaves like:** `siglip` with a slightly better ranking and no measurable cost
-difference. Same ~110 s. AP is higher on every non-saturated dataset (VG 0.46 vs
-0.43; COCO 0.71 vs 0.69) and its *text* ranking is better (VG text AP 0.54 vs
-0.50), but no cost contrast against `siglip` in this study clears its own
-standard error.
-
-**It rebalances the error budget rather than only shrinking it.** On VG it moves
-fpr 0.30 → 0.24 while fnr rises 0.09 → 0.12. It is a less trigger-happy encoder,
-not merely a more accurate one.
-
-**It inherits `siglip`'s scale failure intact.** AP across box bands 0.36 → 0.34
-→ 0.23, tracking `siglip`'s 0.35 → 0.30 → 0.22 far more closely than either
-tracks the patch arm. Capacity does not substitute for geometry: whatever a
-bigger whole-image encoder buys, it is not the ability to see a sub-patch object.
-It also has the **worst cold start** on the sub-patch band (`too_few_default` on
-16 % of steps, against DINOv3's 10 %).
-
-## `dinov3_patch` — patch geometry, and region voting where boxes exist
-
-**Behaves like:** the best ranker in the study and the best cost on every boxed
-set, at 11–13× the compute per step (15–23 min per box-band run against ~2 min).
-
-**Its ranking is the best measured, on every dataset and every band**, by
-+0.04 to +0.10 AP paired against the whole-image arms, and by AUROC on all of
-them. The mechanism is straightforward: box supervision only carries information
-the whole-image vector lacks when the box is a small fraction of the frame. A box
-covering a third of the image *is* approximately the image — which is why the
-margin is smallest on `vg_box_large`.
-
-**It also wins on cost in every band**, by 0.07 (large), 0.14 (medium) and 0.16
-(small) against the premium whole-image arm; the medium and small figures are
-several standard errors from zero, the large one is not. Its error budget is the
-reason: `fnr` is roughly half the whole-image arms' on medium and small (0.12 /
-0.15 against 0.23–0.27), so the patch geometry is buying recall on exactly the
-targets a whole-image vector dilutes.
-
-> **Wave 2 said otherwise on the large band, and the re-run overturns it.** On
-> the 5-category wave-2 sample, `dinov3_patch` on `vg_box_large` was the *only
-> arm in the study with a positive `rule_inefficiency`*, its regret was 0.12
-> against `siglip2_l`'s 0.07, and the ranking and threshold effects cancelled to
-> an identical cost. At 10 categories none of that reproduces: `rule_inefficiency`
-> is negative, regret is level at 0.09 both sides, and the cost gap opens to 0.37
-> vs 0.44 in DINOv3's favour. The "unconverted ranking advantage" was a property
-> of five large-box categories, not of the arm.
-
-**Where it comes apart:** cost and cold start. `too_few_default` fires on 7 % of
-VG steps and 6–10 % across the box bands, and it has **no text tower**, so there
-is no zero-click entry point for it at all.
-
-**On a boxless dataset it is not a patch model.** `caltech101_m × dinov3_patch`
-runs `whole_image` by construction: with no box, a Good vote has nothing to pool,
-so patch rows would be negatives-only and could teach nothing but "patch-like ⇒
-negative". It is DINOv3 used as a whole-image encoder, and it behaves like one.
-
-## Where the shipped cut rule stands
-
-![Regret split into calibration shift and rule inefficiency](figures/fig_regret_decomposition.png)
-
-Regret against a perfectly placed threshold runs 0.00–0.11 by arm, and
-**essentially all of it is `calibration_shift`** — the move from the simulated
-half to the test half. Pooled over all 441 cells with a decomposition,
-`calibration_shift` is +0.097 ± 0.005 while `rule_inefficiency` (what the shipped
-rule loses against the best threshold fitted on the data it can actually see) is
-**−0.014 ± 0.004**: the shipped cut is already *better* than its own in-sample
-optimum, by four standard errors. This reproduces
-[#2836](../gmm-cut/REPORT.md) — acquisition, not the cut rule, is the frontier.
-
-`rule_inefficiency` is negative on 14 of 18 arms. The four positive ones are the
-three `vg_box_medium` arms (+0.017, +0.009, +0.004) and `vg_box_small × siglip`
-(+0.005) — and **none of them is even 1.5 SE from zero**; the medium band pooled
-across its three encoders is +0.010 ± 0.006. Earlier drafts of this report
-promoted "the medium band beats the shipped cut rule" to a follow-up on the
-strength of those three same-signed means. Three coin flips agreeing is what a
-band-level effect and no effect at all both look like at this sample size, so it
-is listed below as a check to run, not a finding.
+Starvation is a property of the data, not of the interaction or the encoder. The
+box-free arm starved on exactly the same two cells as its boxed twin
+(`coco_val`/`refrigerator`/seed 0 and `coco_val`/`sports ball`/seed 1), and on the
+box bands the starved cells are two (category, seed) pairs that starve *across all
+three representations*: `vg_box_small`/`tip`/seed 2 on every one, and
+`vg_box_large`/`intersection`/seed 0 on two of three, where the third survived
+only by finding its first positive around vote 87. **A starvation fix has to act
+on acquisition — changing the encoder demonstrably does not move it.**
 
 ---
 
 # Typing and clicking supply different things
 
-The two acquisition modes are usually discussed as alternatives. The measurement
-says they are not the same kind of thing at all.
+These two are usually discussed as alternatives. They are not the same kind of
+thing at all: a typed query hands you *discrimination* immediately and calibrates
+badly; the clicking loop hands you *calibration* and needs examples to do it.
 
 ![Typed-query cost against the clicked detector's ramp](figures/fig_text_vs_detector.png)
 
-**What a typed query supplies: discrimination, immediately, badly calibrated.**
-
-| arm | text AP | detector AP after 150 votes | votes for the detector's cost to stay under the typed cost |
+| arm | text AP | detector AP after 150 votes | votes until the detector's cost stays below the typed cost |
 |---|---:|---:|---:|
 | `caltech101_m` × `siglip` | 1.00 | 1.00 | 6 |
 | `caltech101_m` × `siglip2_l` | 1.00 | 1.00 | 17 |
@@ -313,401 +332,126 @@ says they are not the same kind of thing at all.
 | `visual_genome_m` × `siglip` | 0.50 | 0.43 | 45 |
 | `visual_genome_m` × `siglip2_l` | 0.54 | 0.46 | 97 |
 
-On Visual Genome the *ranking* after 150 clicks is worse than the ranking you get
-from typing the word. But text's operating point is poor: its GMM cut sits far
-from its own oracle, so text cost (0.49 on VG) is much worse than its ranking
-implies — and it still takes 45–97 votes for the clicked detector to beat that
-badly-calibrated zero-click baseline and stay beaten.
+On Visual Genome the ranking after 150 clicks is *worse* than the ranking you get
+from typing the category name. Text's operating point is what lets the clicked
+detector win at all: its GMM cut sits far from its own oracle, so text cost (0.49
+on VG) is much worse than its ranking implies — and it still takes 45–97 votes to
+beat that badly-calibrated zero-click baseline and stay beaten.
 
-**What the clicking loop supplies: calibration.** Its regret falls with votes and
-its `rule_inefficiency` is negative nearly everywhere.
+**So they are complements, and nothing composes them.** Text is good at what
+clicking is bad at (a usable ranking from nothing) and bad at what clicking is
+good at (placing the cut). It is sharpest for `dinov3_patch`: best ranking, worst
+cold start, and **no text tower at all** — while SigLIP text would give a usable
+ranking over the very same media for free.
 
-**So the two are complementary, and the composition is untested.** Text is good
-at the thing clicking is bad at (getting a usable ranking from nothing) and bad
-at the thing clicking is good at (placing the cut). This is sharpest for
-`dinov3_patch`: best ranking, worst cold start, no text tower — while SigLIP text
-gives a usable ranking over the same medias in the pile for free. Seeding a
-DINOv3 detector from a SigLIP text query is the obvious thing this measurement
-points at, and nothing here tests it.
+## Where each mode fails
 
-## What each mode fails on, with the failures
-
-| category | embedder | prevalence | text cost | detector @150 | text AP | det AP | what it shows |
+| category | representation | prevalence | text cost | detector @150 | text AP | det AP | what it shows |
 |---|---|---:|---:|---:|---:|---:|---|
 | `coco` `cat` | `siglip2_l` | 0.04 | **0.02** | 0.08 | 0.99 | 0.97 | text at ceiling; 150 clicks make it *worse* — they can only add threshold noise |
 | `vg` `sky` | `siglip` | 0.19 | **0.57** | 0.68 | 0.44 | 0.38 | 19 % prevalent, and clicking still degrades a usable ranking; never crosses in any seed |
-| `vg` `ball` | `siglip` | 0.01 | **0.57** | 0.91 | 0.18 | 0.11 | rare: the loop starves (1 of 3 seeds emitted nothing at all) and the ranking collapses |
+| `vg` `ball` | `siglip` | 0.01 | **0.57** | 0.91 | 0.18 | 0.11 | rare: the loop starves (one seed of three produced nothing) and the ranking collapses |
 | `coco` `bear` | `siglip` | 0.01 | 0.27 | **0.01** | 0.83 | 0.99 | clicking's best case: rare, visually clean, crosses at 5–15 votes |
 
-(Both sides are means over the 3 seeds; the detector columns average only the
-seeds that produced a row, which for `ball` is 2 of 3.)
-
-Typed queries fail on **parts and mass nouns** and on **words the dataset uses
-for something else**. Both are visible in the dumps rather than inferable from
-the numbers:
-
-`coco_val` / `bear`, typed query — 626 of 2,452 negatives flagged, and the
-confident end of that list is one thing:
-
-```
-score    image              annotated categories
-0.0970   000000410880.jpg   car, chair, sports ball, bench, person, teddy bear
-0.0893   000000106330.jpg   teddy bear
-0.0880   000000286660.jpg   person, teddy bear
-0.0851   000000325527.jpg   teddy bear
-```
+Typed queries fail in two ways the numbers alone do not explain, so here they
+are. **A word the dataset uses for something else** — a typed "bear" on COCO
+flags 626 of 2,452 negatives, and the confident end of that list is one thing:
 
 ![Eight false positives of a typed 'bear' query, most annotated teddy bear](figures/examples_text_bear_fp.jpg)
 
-*The typed query is not wrong about the pixels.*
+*The typed query is not wrong about the pixels: 43 of those false positives are
+annotated `teddy bear`, a different COCO class. A user typing "bear" would call
+them hits — and two Bad votes settle what no amount of prompt engineering can,
+which is why the clicked detector reaches cost 0.01 on this category.*
 
-43 of the 626 false positives are annotated `teddy bear`. The typed query is not
-wrong about the pixels; "bear" and "teddy bear" are different COCO classes and
-the text tower does not know which one the user meant. **A user typing "bear"
-would call these hits.** The clicked detector on the same category reaches cost
-0.01 — because two Bad votes on teddy bears settle the question that no amount of
-prompt engineering can.
-
-`visual_genome_m` / `nose`, typed query — its top false positives are portraits:
-
-```
-score    image        annotated categories
-0.0646   3616.jpg     eye, shadow, woman
-0.0617   3604.jpg     hair, neck, wall, woman
-0.0596   4954.jpg     ear, eye, hair, hand, shirt, wall, woman
-0.0577   3659.jpg     bag, eye, face, hair, man
-```
-
-Every one of these has a nose in it. VG annotated the eye and the hair and not
-the nose. This is the same defect as `sky` below, and it means the *text* numbers
-on VG parts are lower bounds too.
-
-`caltech101_m` / `airplanes`, typed query — the clean case, and the reason a
-saturated dataset is still worth dumping. **Every false positive is a
-helicopter**: 13 of 13 for `siglip`, 16 of 17 for `siglip2_l` (the 17th is an
-elephant).
+**The nearest visual neighbour**, which is the same story with no label ambiguity
+at all:
 
 ![All 13 false positives of a typed 'airplanes' query on caltech101_m](figures/examples_text_airplanes_fp.jpg)
 
-*The entire error set of that query — 13 images, all of them helicopters.*
-
-Nothing is wrong with the labels and nothing is wrong with the ranking; a text
-query for "airplanes" simply lands on the nearest visual neighbour, and two Bad
-votes remove the whole error class — which is exactly what the clicked detector
-does on this dataset (mean cost 0.06 at 10 votes, 0.005 by 15).
+*Every false positive of a typed "airplanes" query — 13 of 13 for `siglip`, 16 of
+17 for `siglip2_l`. All helicopters (bar one elephant). Nothing is wrong with the
+labels or the ranking; the query simply lands next door, and two Bad votes delete
+the entire error class.*
 
 ---
 
-# What moves the regime
+# The cut rule is not the frontier
 
-**Target scale** is the strongest axis in the study.
+![Regret split into calibration shift and rule inefficiency](figures/fig_regret_decomposition.png)
 
-![Cost, AP and fnr against box-area band](figures/fig_scale_bands.png)
+Regret against a perfectly placed threshold runs 0.00–0.11 by arm, and
+essentially all of it is **calibration shift** — the move from the half the
+detector was calibrated on to the half it is scored on. Pooled over all 441 runs
+that carry the decomposition, calibration shift is **+0.097 ± 0.005** while
+**rule inefficiency is −0.014 ± 0.004**: the shipped cut is *better* than the
+best threshold fittable on the data it can actually see, by four standard errors.
 
-Best-arm cost across the bands runs 0.37 (large) → 0.46 (medium) → 0.49 (small),
-and AP 0.41 → 0.39 → 0.29. Sub-patch retrieval is hard for every configuration;
-the patch geometry reduces the damage but does not remove it. This is the first
-measurement of that band on a real sample — the full VG vocabulary has 643
-sub-patch categories against 5 in the demo vocabulary.
+Rule inefficiency is negative on 14 of 18 arms. The four positive ones are all
+the `vg_box_medium` arms plus `vg_box_small × siglip`, and none is even 1.5
+standard errors from zero (the medium band pools to +0.010 ± 0.006) — a
+same-signed coincidence at this sample size, not a defect to chase.
 
-The monotone trend held across both samples, but its *shape* changed: on wave 2's
-five-per-band selection the large→medium step was a cliff (0.32 → 0.59); on ten
-prevalence-spread categories it is a slope. Scale is still the strongest axis; it
-is not the step function the first sample drew.
-
-**Prevalence governs whether the clicking loop functions at all.**
-
-![Positives accumulated against votes cast](figures/fig_positives.png)
-
-Median positives found in 150 votes is 4–11 — the loop spends 150 clicks to
-train on fewer than a dozen examples of what the user wants, and a tenth of
-cells finish 150 votes on 2–5 positives. Read against the dotted diagonal
-(the unreachable ceiling where every vote is a positive), the whole study is
-happening in the bottom decade of that plot. **This, not the cut rule, is the
-binding constraint** — and it is the same conclusion the regret decomposition
-reaches from the other side.
+The consequence for planning: a smarter cut rule optimises a term that is already
+negative. Acquisition is where the headroom is, which is the same conclusion the
+positives plot reaches from the other side.
 
 ---
 
-# Failure modes observed
+# The labels bound what any of this can show
 
-| mode | rate | where |
-|---|---|---|
-| **Total starvation** — no positive in 150 votes, cell emits nothing | 7 / 189 (3.7 %) wave 1; 0 / 99 wave 2; **5 / 270 (1.9 %)** re-run; 2 / 45 binary | rarest categories (`ball` 51/4193, `refrigerator` 101/4952, `sports ball` 169/4952, `intersection` 95/12000, `tip` 333/12000) |
-| **Effective starvation** — reached t=150 holding ≤2 positives | **27 / 447** cells (6.0 %), of which **6** held exactly one | every dataset except COCO; cost pinned near 1.0 (see the trace figure) |
-| **Cold-start default threshold** (`too_few_default`) | 1–7 % wave 1; **6–16 %** across the box bands | worst on small boxes; worst *arm* is `siglip2_l` (16 %), not `dinov3_patch` (10 %) |
-| **Degenerate step** | 0.04 % wave 1; **2.0 %** re-run | small/medium boxes |
-| **Regret rising with votes** | **0 arms** (was 1 in wave 2, did not reproduce) | — |
-| **Cut fallback** | **0 / 78,424** | never observed |
+An aggregate fpr cannot say whether the *model* is wrong or the *label* is, and
+those have opposite remedies: one means more work on the model, the other means
+cleaning the dataset and re-running. Ten runs were therefore re-scored with
+per-media dumping on — score, dataset label, threshold in force, source image, and
+every category the dataset annotates on that image — plus a typed-query dump for
+all 42 (haystack, representation, category) text arms. The full listings are
+committed beside this report (`ERROR_EXAMPLES.txt`, `ERROR_EXAMPLES_text.txt`,
+`LABEL_NOISE.txt`); what follows shows the images, with the target's box drawn
+where the dataset has one, so the judgement is yours rather than mine.
 
-A starved cell is **silent**: no row is ever emitted with `n_good == 0`, so it
-writes a header and exits 0. That is how the first seven were nearly lost — they
-are reported, not excluded, and every average above is conditioned on the run
-having produced data at all. The re-run's five were caught by the analyzer
-counting loaded cells separately from files found (265 vs 270).
-
----
-
-# The constraint scenarios
-
-Nobody gets to pick freely. Some environments cannot run the premium encoder;
-some users will not draw boxes; real text queries are not the toy ones. So the
-comparison that matters is *within* a constraint, not across.
-
-Region voting needs **both** a patch embedder and a user willing to draw. That
-makes the interaction axis measurable independently of the encoder axis, which
-every earlier table in this report confounded:
-
-| | binary only (Good/Bad on whole images) | draws boxes |
-|---|---|---|
-| `siglip` | measured | impossible — no patch grid |
-| `siglip2_l` | measured | impossible |
-| `dinov3_patch` | **measured (array 496762)** | measured |
-
-`dinov3_patch` binary was run on the *same* datasets, categories, seeds and
-splits as its box-drawing counterpart — cell-for-cell paired, differing only in
-whether a box is dragged.
-
-## Strip the boxes and the expensive encoder finishes last
-
-![Cost over votes for the binary and boxed arms](figures/fig_binary_vs_boxes.png)
-
-Paired contrasts, deep regime (positive Δcost = the binary arm is worse;
-`analyze_bench_interaction.py`):
-
-| dataset | contrast | Δcost | ΔAP | ΔAUROC |
-|---|---|---:|---:|---:|
-| `visual_genome_m` | `dinov3` binary − `dinov3` boxes | **+0.16 ± 0.03** | **−0.12 ± 0.03** | **−0.06 ± 0.01** |
-| `visual_genome_m` | `dinov3` binary − `siglip` binary | **+0.09 ± 0.03** | −0.02 ± 0.02 | **−0.04 ± 0.01** |
-| `coco_val` | `dinov3` binary − `dinov3` boxes | **+0.14 ± 0.03** | **−0.15 ± 0.03** | **−0.04 ± 0.01** |
-| `coco_val` | `dinov3` binary − `siglip` binary | **+0.08 ± 0.04** | −0.05 ± 0.04 | −0.01 ± 0.01 |
-
-So essentially the whole DINOv3 advantage reported earlier in this document is
-**box supervision, not encoder quality.** Read as a constraint: *if your users
-will not draw boxes, DINOv3 is not a weaker version of the win — it is worse than
-the default you already ship*, by 0.08–0.09 cost, which is the largest
-resolvable encoder effect in the study. (Correction to the earlier phrasing: it
-is worse on **cost** and on **AUROC**; the AP difference against `siglip` is
-inside the noise, so "worse on ranking too" was over-read from unpaired means.)
-
-**What "worse" looks like on one cell.** `visual_genome_m` / `sky` / seed 0, the
-same cell run both ways:
-
-| | threshold | false positives | false negatives |
-|---|---:|---:|---:|
-| `dinov3_patch` **with boxes** | 0.54 | 504 / 1,703 | 50 / 394 |
-| `dinov3_patch` **binary** | 0.38 | **1,305 / 1,703 (77 %)** | 28 / 394 |
-
-Remove the box and the arm floods: it flags three quarters of the negatives,
-buying 22 recovered positives with 800 extra false positives. Its confident false
-positives are street scenes with no sky annotated —
-
-```
-score    image      annotated categories
-0.6981   3350.jpg   bench, bus, bush, car, flower, line, sidewalk
-0.6854   3311.jpg   building, car, road, roof, tire
-0.6542   3201.jpg   bench, bush, car, fence, flower, grass, light, person, road, sidewalk
-```
-
-![Eight of the 1,305 negatives the binary arm flags on VG / sky](figures/examples_sky_binary_fp.jpg)
-
-*Street scenes, mostly without sky annotated and several without much sky in
-them. Compare the boxed arm's false positives above: those were pictures of sky.*
-
-— which is the mechanism, not a coincidence: with no region to point at, the
-model is scoring "outdoor street photo", and the threshold then has to separate
-sky-containing street photos from sky-free ones on a signal that barely
-distinguishes them. (Part of this is VG's labels again: 3.6 % of the flagged
-images are annotated `clouds`, 7× the rate among the images it correctly rejects.)
-
-The mechanism is consistent with what the models are. DINOv3 is self-supervised
-and vision-only: its strength is spatial correspondence between patches, and its
-whole-image vector was never trained to separate semantic categories the way
-SigLIP's language-contrastive embedding was. Give it a region to point at and
-that spatial strength is usable; take the region away and you are using the part
-of it that is weakest — which is also why it has no text tower to fall back on.
-
-## What this says per constraint
-
-**Compute-limited (stuck on `siglip`).** You lose nothing measurable in cost
-against `siglip2_l`; the premium encoder buys ranking, not an operating point.
-Your characteristic failure is **over-inclusion**: fpr is 3× fnr on VG, the most
-lopsided error budget in the study. The lever is the operating point, not the
-encoder. And `siglip` has a text tower, so a typed query gives you a usable
-ranking for free.
-
-**Box-averse (users answer Good/Bad only).** Spending on a patch encoder you
-cannot point at makes things **worse** — this is the clearest actionable finding
-in the report. Choosing between the two whole-image encoders on cost grounds is
-not something this run can justify either way; pick on ranking (`siglip2_l`) or on
-price (`siglip`).
-
-**Can draw boxes and can afford DINOv3.** The advantage is real (−0.14 to −0.16
-cost on the two smaller box bands, −0.05 to −0.07 elsewhere) and largest where
-targets are small, but it costs 11–13× per step, has the worst cold start on VG
-(`too_few_default` 7 %) and cannot be seeded from text.
-
-## Starvation is a property of the data, not the interaction
-
-The binary arm starved on exactly the same two cells as the box-drawing arm —
-`coco_val`/`refrigerator`/seed 0 and `coco_val`/`sports ball`/seed 1 — 2 of 45.
-Identical categories and seeds. Whether the user draws boxes has no bearing on
-whether Autopilot ever surfaces a first positive; that is set by prevalence and
-the split.
-
-**The re-run extends this from the interaction to the encoder.** Its five starved
-cells are two (category, seed) pairs, and they starve *across embedders*:
-`vg_box_small`/`tip`/seed 2 starved on all three, and
-`vg_box_large`/`intersection`/seed 0 on two of three. The third — `intersection`
-on `siglip` — is the exception that shows the mechanism rather than breaking it:
-it survived, but emitted only 63 of 150 steps, i.e. it found its first positive
-around vote 87. Starvation is set by the draw, not by what is doing the ranking.
-
-**A starvation fix has to act on acquisition, because changing the encoder
-demonstrably does not move it.**
-
----
-
-# The datasets, their classes, and what the model actually gets wrong
-
-## What the `vg_box_*` sets are
-
-Not size tiers. `visual_genome_m`'s `_m` is a *dataset size* tier and says
-nothing about boxes; these three are a **box-area axis**, built specifically so
-the scale question could be asked.
-
-Bands are fractions of image area, anchored to the patch embedder's geometry
-rather than chosen round numbers — one DINOv3 patch is 1/196 of the image and
-the smallest HAC leaf is 1/12:
-
-| set | box area | meaning |
-|---|---|---|
-| `vg_box_small` | 0 → **1/196** (0.5 %) | below what the patch grid can resolve at all |
-| `vg_box_medium` | 1/196 → **1/12** (8 %) | resolvable by patches, smaller than one HAC leaf |
-| `vg_box_large` | 1/12 → **0.80** | above 80 % a box is not a region, it is the image (mirrors `MAX_VOTED_AREA`) |
-
-Construction (`scripts/experiments/pile/scan_vg_boxes.py`, PR #3123):
-
-- Scans the **whole VG source** — all ~108k images across `VG_100K` and
-  `VG_100K_2`, with the full free-text object vocabulary from `objects.json`.
-  Not the demo pipeline, which uses 100 curated categories over a 4 % slice.
-- `objects.json` stores boxes in **pixels** and carries no image dimensions, so
-  areas are normalised against dimensions read from each JPEG header.
-- **40 categories and 12,000 images per band**, categories stratified *within*
-  the band so a band is not silently all one size.
-- Categories whose union box is >1.5× a single instance are dropped — scattered
-  instances are not a region a user would drag.
-- Minimum 50 images per category.
-
-The motivating number: the demo vocabulary puts **5** categories in the
-sub-patch band; the full source has **643**. The "starved sub-patch band" was a
-vocabulary artefact.
-
-## Classes used, by dataset
-
-**Wave 1** — `visual_genome_m` (4,193 images, scale-banded): `ball` (51),
-`bed` (100), `bus` (67), `cat` (30), `laptop` (60), `nose` (146), `sink` (60),
-`sky` (793).
-
-`coco_val` (4,952, scale-banded): `bear` (49), `bed` (149), `cat` (184),
-`clock` (204), `microwave` (54), `refrigerator` (101), `sports ball` (169).
-
-`caltech101_m` (838, prevalence-spread): `airplanes` (228), `car_side` (35),
-`grand_piano` (28), `starfish` (24), `ibis` (23), `cougar_face` (20).
-
-**Wave 2, first run** (scale bands — the collapsed selection):
-`vg_box_small`: `hands` (799), `lips` (155), `mask` (154), `mustache` (115).
-`vg_box_medium`: `chest` (122), `collar` (369) — **only two**.
-`vg_box_large`: `barn` (57), `court` (429), `dresser` (94), `sheet` (174),
-`station` (157).
-
-**Wave 2, re-run** (prevalence spread, 10 per set — the source of every
-`vg_box_*` number above; `tip` and `intersection` are the two that starved):
-`vg_box_small`: `nose` (2741), `glasses` (1259), `watch` (581), `camera` (461),
-`tip` (333), `outlet` (264), `drain` (178), `mask` (154), `mustache` (115),
-`tusks` (52).
-`vg_box_medium`: `hair` (2628), `shorts` (987), `clock` (662), `lamp` (590),
-`truck` (507), `backpack` (346), `basket` (306), `frisbee` (231), `holder` (160),
-`chairs` (116).
-`vg_box_large`: `fence` (2621), `hill` (807), `lady` (591), `couch` (483),
-`court` (429), `walkway` (255), `runway` (202), `station` (157),
-`intersection` (95), `barn` (57).
-
-**Binary-voting arm**: same categories as wave 1's VG and COCO.
-
-## Are the errors the model's, or the labels'?
-
-Aggregate fpr cannot tell those apart, so selected cells were re-run with
-per-media dumping on (`launch_errdump.sh`, which reuses the original run's
-category selection and exemplar crops so the dumped cell **is** the same cell —
-each job's log line is checked against the source run's). Each dump records, for
-every held-out media at the final step: score, label, threshold, source image id,
-and every category the dataset annotates on that image. Ten cells are dumped,
-plus a typed-query dump for all 42 (dataset, embedder, category) text arms. The
-full listings are committed beside this report: `ERROR_EXAMPLES.txt` (clicked
-detectors), `ERROR_EXAMPLES_text.txt` (typed queries) and `LABEL_NOISE.txt` (the
-entailment test) — what follows quotes from them, and shows the images themselves
-so that "the label is missing" is a judgement you can make rather than one you
-have to take from me. Where the dataset has a box for the target, it is drawn.
-
-**The test.** Pick categories that *cannot* occur without the target — you
-cannot have clouds without sky, a face has a nose, and `sunglasses` **are**
+**The test** is entailment: pick categories that cannot occur without the target —
+you cannot have clouds without sky, a face has a nose, and `sunglasses` *are*
 glasses. If the images the model flags are enriched for those relative to the
 images it correctly rejects, the "false" positives are largely un-annotated
-instances. Enrichment is measured against the model's own **true negatives**, so
-it is not confounded by the model merely preferring outdoor scenes: both groups
-are dataset-negative, and the only difference is what the model said.
+instances. Enrichment is measured against the model's own true negatives, so it is
+not confounded by the model merely preferring outdoor scenes: both groups are
+dataset-negative, and the only difference is what the model said.
 
-### `visual_genome_m` / `sky` — the labels are wrong
+## `visual_genome_m` / `sky` — the labels are wrong
 
-| | `cloud`/`clouds` on FPs | on true negatives | enrichment |
+| | `cloud`/`clouds` on false positives | on true negatives | enrichment |
 |---|---:|---:|---:|
-| `siglip` (682 FPs / 1021 TNs) | 6.6 % | 0.4 % | **17×** |
-| `dinov3_patch` (504 FPs / 1199 TNs) | 9.5 % | 0.1 % | **114×** |
+| `siglip` (682 FPs / 1,021 TNs) | 6.6 % | 0.4 % | **17×** |
+| `dinov3_patch` (504 FPs / 1,199 TNs) | 9.5 % | 0.1 % | **114×** |
 
 Outdoor context (`tree`, `building`, `grass`, `mountain`, `roof`, `water`,
 `field`, `road`) appears on **84 %** of false positives against 36–43 % of true
-negatives (~2×).
-
-Literal examples — VG annotates the clouds and omits the sky:
-
-```
-score   image        annotated categories
-0.7075  498364.jpg   cloud, grass, pole, road, sign, truck
-0.6568    4056.jpg   building, clouds, grass, pole, tree, water
-0.6346    4877.jpg   cloud, tree, trunk
-0.6291    4211.jpg   boat, building, bush, cloud, field, leaf, shadow, tree
-0.5781    2628.jpg   bird, clouds, leaf, mountain, shadow, tree, trunk
-```
+negatives.
 
 ![Eight of siglip's most confident sky false positives, with what VG annotates on each](figures/examples_sky_fp.jpg)
 
-*Every image the model was marked wrong on. Judge it yourself: the annotations
-under each are everything VG says is in that picture.*
+*Every image the model is scored wrong on. Judge it yourself: the annotations
+under each are everything Visual Genome says is in that picture.*
 
-**These are missing labels, not model errors.** `sky` is 19 % prevalent as
-annotated; the true rate is plainly higher. Every `sky` number in this report is
-therefore a *lower bound on the model* and an upper bound on its apparent error.
+`sky` is 19 % prevalent as annotated and the true rate is plainly higher, so every
+`sky` number here is a lower bound on the model and an upper bound on its apparent
+error.
 
-The false negatives look genuine, and differ in kind: images that *do* carry a
-`sky` annotation but where sky is a thin strip behind a person or a building —
-`713003.jpg` (building, hat, line, man, people, shirt, sky, wall),
-`712994.jpg` (ear, face, hair, hand, horse, man, nose, people, shadow, shirt,
-sky). Small-region failures, which is consistent with the box-band result.
+The false negatives are a different thing, and genuine:
 
 ![Eight sky false negatives — images that do carry a sky annotation](figures/examples_sky_fn.jpg)
 
-*The other half of the same cell, and a different failure: sky is present, small,
-and behind the subject. This is the box-band result showing up inside a wave-1
-category.*
+*Sky is present, small, and behind the subject — the same small-region failure the
+box bands measure in aggregate.*
 
-### `visual_genome_m` / `nose` — the same defect, on a part
+## `visual_genome_m` / `nose` — the same defect, on a part
 
-`nose` is the other wave-1 category whose fpr looks catastrophic (552 of 2,020
-negatives flagged). `face` — which entails a nose — appears on 5.1 % of the
-flagged images against 2.2 % of the correctly-rejected ones (2.3×), and the
-weaker facial context (`eye`, `eyes`, `hair`, `mouth`, `head`, `ear`) on 21 %
-against 9 % (2.4×). The confident false positives are all portraits:
+`nose` is the other category whose fpr looks catastrophic (552 of 2,020 negatives
+flagged). `face` — which entails a nose — appears on 5.1 % of the flagged images
+against 2.2 % of the correctly-rejected ones (2.3×), and facial context (`eye`,
+`eyes`, `hair`, `mouth`, `head`, `ear`) on 21 % against 9 %. The confident false
+positives are all portraits:
 
 ```
 score   image      annotated categories
@@ -717,192 +461,187 @@ score   image      annotated categories
 0.6779  4954.jpg   ear, eye, hair, hand, shirt, wall, woman
 ```
 
-Its false negatives, by contrast, are animals and distant faces (`zebra`,
-`cow`, a rider on a `horse`) — genuine misses of a small region.
+Its false negatives, by contrast, are animals and distant faces (`zebra`, `cow`, a
+rider on a `horse`) — real misses of a small region.
 
-### `coco_val` / `clock` — the model is wrong, and the boxes fix it
+## `vg_box_small` / `glasses` — one object, two labels
 
-The entailment test is **not applicable** here: COCO's 80-class vocabulary
-contains no term that entails `clock`, so there is nothing to be enriched for.
-The evidence points the other way anyway. COCO's annotation is exhaustive over
-its classes, only 46 of 2,364 negatives are flagged at all (2 %, against VG
-`sky`'s 40 %), and the false positives are indoor scenes with no plausible
-hidden clock (`chair`; `couch, tv`; `chair, couch, bed, remote, tv`).
+This is the sub-patch band's over-inclusion at its most extreme, and also its
+clearest patch-vs-whole-image contrast: `siglip` flags **3,937 of 5,363 negatives
+(73 %)** and misses 22 of 637 positives; `dinov3_patch` flags **2,863 (53 %)** and
+misses 43. Part of both floods is a vocabulary split — the flagged images are
+heavily enriched for `sunglasses`:
 
-The false negatives are the informative half, and the paired dump makes the
-mechanism explicit. Same cell, same split, whole-image against boxes:
-
-| | threshold | false negatives | false positives |
-|---|---:|---:|---:|
-| `siglip` (whole image) | 0.17 | **48 / 112** | 46 / 2,364 |
-| `dinov3_patch` (boxes) | 0.55 | **21 / 112** | 62 / 2,364 |
-
-**30 of the clocks `siglip` misses, the box arm finds** (3 go the other way), and
-they are the cluttered scenes — the more the frame holds, the more a single
-pooled vector dilutes the clock:
-
-```
-labels  image              siglip          dinov3          annotated categories
-14      000000441247.jpg   0.010 < 0.17    0.555 >= 0.55   chair, vase, couch, dining table, orange, oven, person, backpack, banana, ...
-12      000000074209.jpg   0.029 < 0.17    0.657 >= 0.55   chair, apple, bottle, bowl, orange, banana, clock, cup, dining table, oven, ...
-10      000000435208.jpg   0.024 < 0.17    0.567 >= 0.55   person, chair, clock, couch, cup, dining table, keyboard, laptop, mouse, tv
-10      000000000139.jpg   0.055 < 0.17    0.560 >= 0.55   chair, vase, book, person, tv, clock, dining table, microwave, potted plant, ...
- 9      000000326082.jpg   0.052 < 0.17    0.585 >= 0.55   chair, couch, banana, bowl, clock, dining table, laptop, remote, tv
-```
-
-![Eight clocks the whole-image arm missed and the box arm found, with the clock's box drawn](figures/examples_clock_rescued.jpg)
-
-*The yellow box is the clock. This is what "a whole-image vector dilutes a small
-target" looks like: the box arm scores 0.55–0.66 on exactly the images the
-whole-image arm scores 0.01–0.06 on.*
-
-The three that go the other way are the complement of the same mechanism — wide
-outdoor scenes where the clock is large and unambiguous (`000000036678.jpg`:
-`boat, clock`, siglip 0.879 against dinov3 0.521). This is a genuine **scale**
-failure by a whole-image encoder, measured on individual images, and it is the
-same mechanism the `vg_box` bands measure in aggregate.
-
-### `visual_genome_m` / `bus` — a threshold collapse
-
-The starkest single failure in the study: **1,210 of 2,030 negatives flagged
-(60 %) and 0 of 67 positives missed.** The threshold has fallen so far that
-almost everything passes. The ranking is not necessarily broken; the cut is.
-This is the over-inclusion signature of `siglip` (fpr ≫ fnr) in its extreme form,
-on a rare category (67 positives, 3 %).
-
-![Eight of the 1,210 flagged negatives on VG / bus](figures/examples_bus_fp.jpg)
-
-*No buses, and no argument that the labels are wrong either — the ranking is
-sound and the cut has simply fallen through the floor.*
-
-*A caution about one heuristic*: the error report flags false positives carrying
-a category name that contains the target, and for `bus` this matched 80 images
-annotated **`bush`**. That is a substring coincidence, not evidence — `bush` does
-not entail `bus`. It is reported here as a known false lead rather than quietly
-dropped, because the same heuristic is genuinely useful for annotation
-*granularity* cases, and the next section is one.
-
-### `vg_box_small` / `tip` — the label is not a thing
-
-`tip` is one of the two categories that starved (all three embedders, seed 2),
-and its surviving cells are the worst in the study: `siglip` misses **116 of 168**
-positives and still flags 1,995 of 5,832 negatives. The dump says why. Its
-positives carry no other annotation at all —
-
-```
-score   image        annotated categories
-0.2468  2395810.jpg  tip
-0.2492     1797.jpg  tip
-0.2744  2353249.jpg  nose, tip
-0.2824  2359272.jpg  logo, nose, tip
-0.2873  2367006.jpg  camera, horns, tip
-```
-
-![Eight images the dataset calls tip positives, with the annotated box drawn](figures/examples_tip_pos.jpg)
-
-*The yellow box is what the dataset asked the model to find: a plane's nose, a
-church spire, a bollard, something on a giraffe. Nothing here is one visual
-class.*
-
-— and its false positives are `knee`, `chimney`, `numbers`, `logo`. "Tip" in VG's
-free-text vocabulary is the tip of *anything*: a nose, a horn, a wing, a shoe.
-There is no visual class here to learn, so this cell is not measuring a detector,
-it is measuring a label. **Categories like this should be filtered out of a
-prevalence-spread selection** — the `scan_vg_boxes.py` union-box filter catches
-scattered instances but not semantically empty labels.
-
-### `vg_box_small` / `glasses` — one object, two labels
-
-This cell is the sub-patch band's over-inclusion in its extreme form, and it is
-also the band's clearest patch-vs-whole-image contrast: `siglip` flags **3,937 of
-5,363 negatives (73 %)** and misses 22 of 637 positives; `dinov3_patch` flags
-**2,863 (53 %)** and misses 43. Both are floods, and part of both floods is a
-vocabulary split — the flagged images are heavily enriched for `sunglasses`:
-
-| | `sunglasses` on FPs | on true negatives | enrichment |
+| | `sunglasses` on false positives | on true negatives | enrichment |
 |---|---:|---:|---:|
 | `siglip` (3,937 FPs / 1,426 TNs) | 9.1 % | 1.3 % | **7×** |
 | `dinov3_patch` (2,863 FPs / 2,500 TNs) | 12.7 % | 0.6 % | **23×** |
 
-`siglip`'s most confident false positives on this cell:
-
-```
-score   image        annotated categories
-0.6674  2406087.jpg  sunglasses
-0.6553  2383235.jpg  earring, ring, sunglasses, teeth
-0.6436  2378141.jpg  logo, sunglasses
-0.6429  2403437.jpg  sunglasses
-```
-
 ![Eight glasses false positives, most annotated sunglasses](figures/examples_glasses_fp.jpg)
 
-*A user who trained a "glasses" detector would accept these. The dataset splits
-one object across two labels, and the model is being scored against the split.*
+*A user who trained a "glasses" detector would accept these. 364 false positives
+in each arm are images annotated `sunglasses` and not `glasses`: the dataset
+splits one object across two labels and the model is scored against the split.*
 
-364 false positives in *each* arm are images annotated `sunglasses` and not
-`glasses`. A user who trained a "glasses" detector would count every one of them
-as correct. Unlike `sky`, this is not a *missing* label — it is the same object
-under a second name, which is what a free-text vocabulary does. It is also
-mechanically fixable: merging near-synonym labels before the run would move both
-arms' fpr, and the sub-patch band is where it matters most.
+Unlike `sky` this is not a *missing* label but the same object under a second
+name, which is what a free-text vocabulary does — and it is mechanically fixable
+by merging near-synonyms before a run.
 
-## What this means for the rest of the report
+## `vg_box_small` / `tip` — the label is not a thing
 
-- **VG-derived numbers are pessimistic by an unknown amount**, worst for common
-  scene categories (`sky`, and plausibly `tree`, `building`, `grass`), for parts
-  (`nose`), and for split vocabularies (`glasses`/`sunglasses`). COCO numbers do
+`tip` is one of the two categories that starved outright, and its surviving runs
+are the worst in the study: `siglip` misses **116 of 168** positives and still
+flags 1,995 of 5,832 negatives. The dump says why — the positives carry no other
+annotation, and the false positives are `knee`, `chimney`, `numbers`, `logo`:
+
+![Eight images the dataset calls tip positives, with the annotated box drawn](figures/examples_tip_pos.jpg)
+
+*The yellow box is what the dataset asked the model to find: a plane's nose, a
+church spire, a bollard, something in the foliage beside a giraffe. "Tip" in a
+free-text vocabulary is the tip of anything, so there is no visual class here to
+learn — and the giraffe box looks like a bad annotation on top of that.*
+
+This run is not measuring a detector, it is measuring a label. **Categories like
+it should be filtered out of a category selection**; the box-area scan already
+drops categories whose instances are scattered, but not ones that are
+semantically empty.
+
+## `coco_val` / `clock` — here the model really is wrong
+
+The entailment test does not apply on COCO: its 80-class vocabulary has no term
+that entails `clock`, so there is nothing to be enriched for. The evidence points
+the other way anyway. COCO's annotation is exhaustive over its classes, only 46 of
+2,364 negatives are flagged at all (2 %, against `sky`'s 40 %), and the false
+positives are indoor scenes with no plausible hidden clock (`chair`;
+`couch, tv`; `chair, couch, bed, remote, tv`). The failure is the one shown under
+target scale: small objects in cluttered frames.
+
+## What that means for the rest of these numbers
+
+- **Visual Genome numbers are pessimistic by an unknown amount** — worst for
+  common scene categories (`sky`, and plausibly `tree`, `building`, `grass`), for
+  parts (`nose`), and for split vocabularies (`glasses`/`sunglasses`). COCO does
   not have this problem.
-- Cross-dataset comparisons of *absolute* cost between VG and COCO are therefore
-  not safe. Within-dataset comparisons — which is what every configuration
-  contrast in this report is — remain valid, since all configurations see the
-  same labels.
-- **A label audit belongs upstream of the next VG study**, not inside it. The
-  entailment test is cheap, mechanical, and scripted
-  (`scripts/experiments/calibration/label_noise.py`); the synonym-merge and the
-  empty-label filter are the two concrete fixes it points at.
+- **Absolute cost is therefore not comparable between Visual Genome and COCO.**
+  Within-haystack comparisons — which is what every configuration contrast here
+  is — are unaffected, since all configurations see the same labels.
+- **A label audit belongs upstream of the next Visual Genome study**, not inside
+  it. The entailment test is cheap, mechanical and scripted
+  (`scripts/experiments/calibration/label_noise.py`).
 
 ---
 
-# Caveats
+# Reading it under a constraint
 
-- **Wave 2's category selection was collapsed by my error, and the re-run
-  replaces it.** The scale-band selector was left on for datasets already banded
-  by box size, so it re-banded within each set: 5 / 4 / 2 categories out of 40
-  available, with `vg_box_medium` resting on two. The re-run (270 cells, 10
-  categories per set) is what every `vg_box_*` number here now comes from.
-- **The two box-band samples differ in prevalence** (0.05 against 0.02), because
-  the re-run spread categories by prevalence rather than re-banding by size.
-  Absolute costs moved for reasons unrelated to scale; only within-sample arm
-  ordering carries across.
-- Text queries are **raw category names** (`car_side`, `sports ball`) and
-  `embed_text_enriched` was not used, so text numbers are a lower bound.
-- 3 seeds. Every difference is quoted paired with a standard error for this
-  reason; unpaired differences under ~0.05 in cost are not resolvable at all.
-- `caltech101_m × dinov3_patch` is a pairing not present in `dev`.
-- COCO's `sub_patch` band had 1 candidate against a target of 2, and that
-  category (`sports ball`) is one of the two that starved.
-- The error dumps are **one seed of one category per cell** — they are evidence
-  about a mechanism, not a rate. The rates they sit beside come from the full run.
+Nobody picks freely, so the comparison that matters is within a constraint.
+
+**Compute-limited, stuck on `siglip`.** You lose nothing measurable in cost
+against the premium encoder; it buys ranking, not an operating point. Your
+characteristic failure is over-inclusion (fpr 3× fnr on Visual Genome), so the
+lever is the threshold, not the encoder. And you have a text tower: a typed query
+gives you a usable ranking for free, worth 45–97 clicks on Visual Genome.
+
+**Users who will not draw boxes.** Spending on a patch encoder you cannot point at
+makes things **worse** — 0.08–0.09 cost worse than the default you ship. This is
+the clearest actionable finding here. Choosing between the two whole-image
+encoders on cost grounds is not something this study can justify either way.
+
+**Users who will draw, on hardware that can afford it.** The advantage is real and
+largest where targets are small (−0.14 to −0.16 cost on the two smaller bands,
+−0.05 to −0.07 elsewhere), and on sub-patch targets it is the difference between a
+working detector and none. It costs 11–13× per step, has the worst cold start on
+Visual Genome (`too_few_default` 7 %), and cannot be seeded from text.
+
+**Anyone, on small targets.** Expect cost near 0.5 at best, and expect a
+meaningful fraction of sessions to produce nothing usable. Sub-patch retrieval is
+not a solved regime.
+
+---
 
 # What this points at next
 
-1. **Compose typing and clicking** rather than choosing: seed a detector from a
-   text ranking, especially for `dinov3_patch`, which cannot be typed at. The
-   crossing table says a typed query is worth 45–97 votes on VG.
-2. **Acquisition is the scarce resource, not the cut rule** — `rule_inefficiency`
-   is negative on 14 of 18 arms (−0.014 ± 0.004 pooled), and 6 % of cells spend
-   150 votes on ≤2
-   positives. Everything about the ramp figures says the same thing.
-3. **Clean the vocabulary before the next VG run**: merge near-synonyms
+1. **Compose typing and clicking** rather than choosing between them: seed a
+   detector from a text ranking, especially for `dinov3_patch`, which cannot be
+   typed at and has the worst cold start. A typed query is worth 45–97 votes on
+   Visual Genome.
+2. **Spend the next effort on acquisition, not on cut rules.** Rule inefficiency
+   is already negative (−0.014 ± 0.004 pooled), while 6 % of runs finish on two or
+   fewer positives and 2.8 % on none.
+3. **Clean the vocabulary before the next Visual Genome run**: merge near-synonyms
    (`glasses`/`sunglasses`), drop semantically empty labels (`tip`), and treat
-   `sky`-like scene categories as lower bounds. This is the cheapest measurable
-   improvement available and it needs no new arm.
-4. **Check, don't assume, the medium band's positive `rule_inefficiency`** —
-   all three `vg_box_medium` encoders come out positive (pooled +0.010 ± 0.006)
-   where everything else is negative. That is a same-signed coincidence at this
-   sample size; more seeds on that band alone would settle it cheaply.
-5. **Make a starved run say so** — a `starved` column and a warning; this is the
-   shape that hid #2877. Effective starvation (≤2 positives at t=150) deserves
-   the same flag.
-6. **Retire `caltech101_m`** from this sweep: saturated for all three
+   scene categories like `sky` as lower bounds. Cheapest measurable improvement
+   available, and it needs no new arm.
+4. **Make a starved run say so.** A run that never finds a positive currently
+   emits no row at all; it should emit a `starved` flag and a warning, and the
+   same goes for finishing on two or fewer positives.
+5. **Retire `caltech101_m`** from this sweep — saturated for all three
    representations and for text.
+6. **Re-check the medium band's cut rule with more seeds** if it matters: all
+   three encoders come out positive there (+0.010 ± 0.006 pooled) where
+   everything else is negative, which is suggestive and not yet resolvable.
+
+---
+
+# How this was run
+
+**Runs.** 504 cells over three grids: the whole-image haystacks (189 cells,
+26,538 steps), the box-area bands (270 cells, 37,844 steps), and the boxes-off arm
+on `visual_genome_m` and `coco_val` (45 cells, 6,249 steps). 490 cells produced
+data; the other 14 never found a positive, which is the starvation rate reported
+above rather than an exclusion. Arrays `496044`, `496673`, `496762`; per-media
+dumps `496798`–`496802` and `507225`–`507230`; results under
+`/expscratch/sgreenberg/bench-{overview,vgbox2,binary,errors}/results`.
+
+**Categories.** Selected per haystack before the run and held fixed across
+representations and seeds; the count of positive images is in brackets.
+
+- `visual_genome_m` — `ball` (51), `bed` (100), `bus` (67), `cat` (30),
+  `laptop` (60), `nose` (146), `sink` (60), `sky` (793).
+- `coco_val` — `bear` (49), `bed` (149), `cat` (184), `clock` (204),
+  `microwave` (54), `refrigerator` (101), `sports ball` (169).
+- `caltech101_m` — `airplanes` (228), `car_side` (35), `grand_piano` (28),
+  `starfish` (24), `ibis` (23), `cougar_face` (20).
+- `vg_box_small` — `nose` (2741), `glasses` (1259), `watch` (581), `camera` (461),
+  `tip` (333), `outlet` (264), `drain` (178), `mask` (154), `mustache` (115),
+  `tusks` (52).
+- `vg_box_medium` — `hair` (2628), `shorts` (987), `clock` (662), `lamp` (590),
+  `truck` (507), `backpack` (346), `basket` (306), `frisbee` (231),
+  `holder` (160), `chairs` (116).
+- `vg_box_large` — `fence` (2621), `hill` (807), `lady` (591), `couch` (483),
+  `court` (429), `walkway` (255), `runway` (202), `station` (157),
+  `intersection` (95), `barn` (57).
+- The boxes-off arm uses the `visual_genome_m` and `coco_val` lists above.
+
+**How the box bands were built** (`scripts/experiments/pile/scan_vg_boxes.py`):
+scan all ~108k Visual Genome images across `VG_100K` and `VG_100K_2` with the full
+free-text vocabulary from `objects.json`; normalise pixel boxes against dimensions
+read from each JPEG header; take 40 categories and 12,000 images per band,
+stratified *within* the band so a band is not silently all one size; drop
+categories whose union box exceeds 1.5× a single instance, since scattered
+instances are not a region a user would drag; require at least 50 images per
+category.
+
+**Limits worth knowing.**
+
+- Three seeds. Every difference is quoted paired with a standard error for that
+  reason; unpaired differences under ~0.05 in cost are not resolvable at all.
+- Text queries are **raw category names** (`car_side`, `sports ball`);
+  `embed_text_enriched` was not used, so text numbers are a lower bound.
+- `caltech101_m × dinov3_patch` is a pairing not present in `dev`.
+- The error dumps are one seed of one category per cell: evidence about a
+  mechanism, not a rate. The rates beside them come from the full run.
+- COCO's sub-patch band had one candidate category against a target of two, and
+  that category (`sports ball`) is one of the two that starved.
+
+**Reproduce.** All under `scripts/experiments/calibration/`: `analyze_bench.py`
+(tables), `analyze_bench_interaction.py` (boxes vs no boxes),
+`make_bench_figs.py --svg` (plots — PNG for this page, SVG for the reading copy),
+`launch_errdump.sh` + `error_report.py` + `label_noise.py` (error listings and the
+entailment test), `make_error_sheets.py` (the image sheets; it runs on the
+cluster, where the source images are). Generated tables are committed beside this
+file as `ANALYSIS_TABLES*.txt`.
+
+**Reading copy.** [`docs/reports/2026-08-17-overview-bench.html`](../../reports/2026-08-17-overview-bench.html)
+is this document as one self-contained page — plots as zoomable vector art,
+photographs embedded. It is **generated** from this file by `make_bench_html.py`;
+edit the report, then re-run the script so the two cannot disagree.
