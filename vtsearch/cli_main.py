@@ -429,7 +429,7 @@ def _maybe_run_pipeline(args, parser, remaining) -> None:
         sys.exit(0)
 
 
-def _register_plugin_cli_args(args, parser):
+def _register_plugin_cli_args(args, parser: argparse.ArgumentParser):
     """Look up ``--importer``/``--exporter`` and register their plugin flags.
 
     Returns the ``(importer, exporter)`` plugin instances (``None`` when the
