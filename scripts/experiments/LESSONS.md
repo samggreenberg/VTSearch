@@ -47,7 +47,8 @@ lesson meant two appends to the same end of the same file, which git cannot
 reconcile no matter how the entries are separated. (The `<!-- entry-sep -->`
 sentinels this file used to carry protect concurrent *deletions*, which is a
 different problem; nothing anchors two appends at EOF.) One file per incident
-removes the shared line: two studies add two different files and merge cleanly.
+takes the *prose* out of the shared path: two studies now add two different
+files, and nothing either of them wrote has to be merged against the other.
 
 The index below is the one thing still shared, which is why it is **generated**.
 Two branches that each add a lesson on the same day do still collide on its
