@@ -390,10 +390,20 @@ def report(drift: pd.DataFrame, ranks: pd.DataFrame, examples: list[dict], ref_a
         sub = drift[drift["embedder"] == emb]
         floor = sub[sub["arm"].isin(pcfg.FLOOR_ARMS)]
         if floor.empty:
-            log(f"  {emb}: NO FLOOR ARM PRESENT — treatment drifts have no denominator")
+            log(f"  {emb}: NO SAME-MATH ARM PRESENT — treatment drifts have no denominator")
             continue
-        f_med = float(floor["median"].iloc[0])
-        log(f"  {emb}: floor (median 1-cos) = {sig2(f_med)}")
+        # There is no single floor: the same-math arms span 0 to 1.5e-4 (one V100
+        # part disagrees with every other device). Report the range, and divide by
+        # the SMALLEST — the largest is a defect, not a noise floor, and dividing
+        # by it would make every treatment look free.
+        lo_row = floor.loc[floor["median"].idxmin()]
+        hi_row = floor.loc[floor["median"].idxmax()]
+        f_med = float(lo_row["median"])
+        log(
+            f"  {emb}: same-math arms span {sig2(float(lo_row['median']))} ({lo_row['arm']}) "
+            f"to {sig2(float(hi_row['median']))} ({hi_row['arm']})"
+        )
+        log(f"    dividing by the smallest, {lo_row['arm']} = {sig2(f_med)}:")
         for _, r in sub[~sub["arm"].isin(pcfg.FLOOR_ARMS)].iterrows():
             ratio = r["median"] / f_med if f_med > 0 else float("inf")
             log(f"    {r['arm']:16s} {sig2(r['median']):>10s}  = {sig2(ratio):>9s} x floor")
@@ -458,7 +468,10 @@ def figures(drift: pd.DataFrame, ranks: pd.DataFrame, outdir: Path) -> None:
         ax.set_yticks(y, sub["arm"])
         ax.set_xscale("log")
         ax.set_xlabel(f"1 - cos vs {pcfg.REFERENCE_ARM}  (bar = median, whisker = p95)")
-        ax.set_title(f"Vector drift — {emb} on {pcfg.DATASET}\ngrey = cross-GPU fp32 floor")
+        ax.set_title(
+            f"Vector drift — {emb} on {pcfg.DATASET}\n"
+            "grey = the SAME fp32 math, elsewhere (their spread is the finding)"
+        )
         fig.tight_layout()
         fig.savefig(outdir / f"drift_{emb}.png", dpi=150)
         plt.close(fig)
