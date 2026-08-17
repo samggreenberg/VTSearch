@@ -65,7 +65,14 @@ DATASETS: dict[str, dict] = {
     # replacement for `vg_box_*` -- those measured what they measured and stay
     # reproducible -- but the two are not comparable: disjoint vocabularies
     # against a fixed one.
-    "vg_scale": {"boxed": True, "kind": "vg_scale"},
+    #
+    # Drawn from the half of VG that COCO sourced, and labelled from COCO's
+    # exhaustive annotation rather than VG's free text, because VG's own labels
+    # cannot support the construction: measured on this pool its recall over C
+    # is 0.76, and 1.4% of the images it calls negative actually hold the object
+    # (`coco_anchor.py`). At 80 positives per cell that would be ~54 hidden
+    # positives sitting in the negatives.
+    "vg_scale": {"boxed": True, "kind": "vg_scale", "labels": "coco"},
 }
 
 #: Box-size bands, as a fraction of image area, anchored to the patch
@@ -254,9 +261,9 @@ SCALE_CLASSES: tuple[str, ...] = (
 )
 
 #: Images per ``(class, band)`` cell, and the shared negative pool every cell
-#: draws from. ``stop sign`` binds the positive count: 104 images in its small
-#: band is the smallest per-band supply in *C*, so 100 is the largest round
-#: number every one of the 36 cells can fill without replacement.
+#: draws from. ``bus@small`` binds the positive count: 84 anchored images is the
+#: smallest per-band supply in *C* under COCO's boxes, so 80 is the largest
+#: round number every one of the 36 cells can fill without replacement.
 #:
 #: Cells are **designated**, not inferred: each is exactly these positives plus
 #: this negative pool, and every other image in the pickle is excluded from it.
@@ -264,7 +271,7 @@ SCALE_CLASSES: tuple[str, ...] = (
 #: what makes small-vs-large a paired comparison rather than two datasets with
 #: different difficulty. Unequal prevalence between arms is what made wave 1 and
 #: wave 2 of the overview benchmark non-comparable.
-SCALE_N_POS = int(os.environ.get("VTS_SCALE_N_POS", "100"))
+SCALE_N_POS = int(os.environ.get("VTS_SCALE_N_POS", "80"))
 SCALE_N_NEG = int(os.environ.get("VTS_SCALE_N_NEG", "3900"))
 
 

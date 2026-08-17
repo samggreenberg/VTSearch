@@ -302,6 +302,20 @@ def _load_vg_band(band: str, medias: dict[int, dict], embedder_name: str) -> Non
         }
 
 
+def _vg_image_paths() -> dict[int, Path]:
+    """``{image_id: path}`` over both VG image dirs."""
+    vg_root = pc.DEMO_CACHE / "visual_genome"
+    paths: dict[int, Path] = {}
+    for d in (vg_root / "VG_100K", vg_root / "VG_100K_2"):
+        for p in d.iterdir():
+            if p.suffix.lower() == ".jpg":
+                try:
+                    paths[int(p.stem)] = p
+                except ValueError:
+                    continue
+    return paths
+
+
 def _vg_source() -> tuple[dict[int, Path], list, dict[int, tuple[int, int]]]:
     """``(image paths, objects.json records, image dims)`` for the whole VG source.
 
@@ -313,20 +327,11 @@ def _vg_source() -> tuple[dict[int, Path], list, dict[int, tuple[int, int]]]:
 
     from PIL import Image  # noqa: PLC0415
 
-    vg_root = pc.DEMO_CACHE / "visual_genome"
-    objects_json = vg_root / "objects.json"
+    objects_json = pc.DEMO_CACHE / "visual_genome" / "objects.json"
     if not objects_json.exists():
         raise SystemExit(f"missing {objects_json}")
 
-    paths: dict[int, Path] = {}
-    for d in (vg_root / "VG_100K", vg_root / "VG_100K_2"):
-        for p in d.iterdir():
-            if p.suffix.lower() == ".jpg":
-                try:
-                    paths[int(p.stem)] = p
-                except ValueError:
-                    continue
-
+    paths = _vg_image_paths()
     cache = pc.PILE / "vg_image_dims.json"
     dims: dict[int, tuple[int, int]] = {}
     if cache.exists():
@@ -373,46 +378,58 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
     therefore has identical prevalence and identical negatives, so a
     small-vs-large difference is a paired contrast on one class rather than two
     datasets of different difficulty.
+
+    **The labels are COCO's, and the pool is the half of VG that can carry
+    them.** VG's own annotation is not exhaustive and measurably fails this
+    construction -- see the note in the body and ``coco_anchor.py``.
     """
     import random  # noqa: PLC0415
 
     from PIL import Image  # noqa: PLC0415
 
+    import coco_anchor as ca  # noqa: PLC0415
+
     wanted = set(pc.SCALE_CLASSES)
     bands = list(pc.BOX_BANDS)
     cells = [pc.scale_cell(c, b) for c in pc.SCALE_CLASSES for b in bands]
 
-    paths, records, dims = _vg_source()
-    log(f"  scanning {len(records)} VG records for {len(wanted)} classes")
+    paths = _vg_image_paths()
+
+    # Labels come from COCO, not from VG. Measured on this very pool, VG's
+    # recall over C is 0.76 and 1.4% of the images it treats as negatives
+    # actually hold the object -- against 100 positives per cell that is ~54
+    # hidden positives in the negative pool, and 4.1% for `backpack` puts more
+    # real backpacks among the negatives than among the positives
+    # (`coco_anchor.py`, issue #3156). COCO annotates its 80 classes
+    # exhaustively and C was chosen entirely from them, so on the images VG
+    # sourced from COCO a negative means "COCO looked and found none" rather
+    # than "nobody mentioned it".
+    image_data, instances = ca.ensure_sources(pc.PILE / "coco_anchor", fetch=False)
+    truth = ca.coco_truth(instances, wanted)
+    with image_data.open() as fh:
+        coco_of = {int(m["image_id"]): int(m["coco_id"]) for m in json.load(fh) if m.get("coco_id")}
+    log(f"  {len(coco_of)} VG images carry a coco_id; {len(truth)} COCO images have exhaustive labels")
 
     # class -> band -> [image_id], plus the boxes to stamp and the clean pool.
     supply: dict[str, dict[str, list[int]]] = {c: {b: [] for b in bands} for c in pc.SCALE_CLASSES}
     boxes_for: dict[tuple[int, str], list[list[float]]] = {}
     clean: list[int] = []
+    anchored = 0
 
-    for rec in records:
-        iid = int(rec["image_id"])
-        wh = dims.get(iid)
-        if iid not in paths or wh is None:
+    for iid, cid in sorted(coco_of.items()):
+        ref = truth.get(cid)
+        wh = ca.COCO_DIMS.get(cid)
+        if iid not in paths or ref is None or wh is None:
             continue
         W, H = wh
         if W <= 0 or H <= 0:
             continue
+        anchored += 1
         area = float(W * H)
-        by_name: dict[str, list[list[float]]] = defaultdict(list)
-        for obj in rec.get("objects") or []:
-            names = obj.get("names") or []
-            if not names:
-                continue
-            name = str(names[0]).strip().lower()
-            if name not in wanted:
-                continue
-            x, y = float(obj.get("x", 0)), float(obj.get("y", 0))
-            w, h = float(obj.get("w", 0)), float(obj.get("h", 0))
-            if w > 0 and h > 0:
-                by_name[name].append([x, y, x + w, y + h])
+        by_name = {name: bs for name, bs in ref.items() if name in wanted}
         if not by_name:
-            # Holds none of C at any size: a sound negative for every cell.
+            # COCO annotated this image and found none of C: a true negative for
+            # every cell, which is the whole point of building on this half.
             clean.append(iid)
             continue
         for name, bs in by_name.items():
@@ -433,6 +450,7 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
                     supply[name][band].append(iid)
                     boxes_for[(iid, pc.scale_cell(name, band))] = bs
                     break
+    log(f"  {anchored} images have an exhaustive COCO reference and a VG file on disk")
 
     rng = random.Random(0x5CA1E)  # deterministic sample, stable across rebuilds
     chosen: dict[str, list[int]] = {}
@@ -494,7 +512,7 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
             # negatives are scorable everywhere.
             "evaluable_categories": cats if cats else list(cells),
             "regions": regions,
-            "origin": {"importer": "vg_scale", "params": {"embedder": embedder_name}},
+            "origin": {"importer": "vg_scale", "params": {"embedder": embedder_name, "labels": "coco"}},
             "origin_name": str(path),
         }
 
