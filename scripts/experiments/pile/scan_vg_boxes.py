@@ -79,10 +79,17 @@ def _image_paths() -> dict[int, Path]:
 
 
 def _read_dims(paths: dict[int, Path], workers: int = 16) -> dict[int, tuple[int, int]]:
-    """``{image_id: (w, h)}``, cached to disk. Header-only reads, threaded."""
+    """``{image_id: (w, h)}``, cached to disk. Header-only reads, threaded.
+
+    Unreadable images are cached as ``null`` rather than omitted. Without them
+    the cache holds fewer entries than there are files (170 of VG's 108,245 are
+    corrupt), so a "is it complete?" length check could never pass and the cache
+    was silently rebuilt on every run by every caller.
+    """
     if DIMS_CACHE.exists():
-        cached = {int(k): tuple(v) for k, v in json.loads(DIMS_CACHE.read_text()).items()}
-        if len(cached) >= len(paths):
+        raw = json.loads(DIMS_CACHE.read_text())
+        if len(raw) >= len(paths):
+            cached = {int(k): tuple(v) for k, v in raw.items() if v}
             log(f"reusing cached dims for {len(cached)} images")
             return cached  # type: ignore[return-value]
 
@@ -98,14 +105,19 @@ def _read_dims(paths: dict[int, Path], workers: int = 16) -> dict[int, tuple[int
 
     t0 = time.time()
     dims: dict[int, tuple[int, int]] = {}
+    misses: list[int] = []
     with ThreadPoolExecutor(max_workers=workers) as ex:
         for i, (iid, size) in enumerate(ex.map(one, paths.items(), chunksize=256), 1):
             if size:
                 dims[iid] = size
+            else:
+                misses.append(iid)
             if i % 20000 == 0:
                 log(f"  dims {i}/{len(paths)} ({time.time() - t0:.0f}s)")
     log(f"read dims for {len(dims)}/{len(paths)} images in {time.time() - t0:.0f}s")
-    DIMS_CACHE.write_text(json.dumps({str(k): list(v) for k, v in dims.items()}))
+    on_disk: dict[str, list[int] | None] = {str(k): list(v) for k, v in dims.items()}
+    on_disk.update({str(iid): None for iid in misses})
+    DIMS_CACHE.write_text(json.dumps(on_disk))
     return dims
 
 
@@ -149,6 +161,14 @@ def scan(min_images: int) -> dict:
     n_images: dict[str, int] = defaultdict(int)
     # category -> {band: how many images hold this category at that size}
     bands: dict[str, dict[str, int]] = defaultdict(lambda: dict.fromkeys((*pc.BOX_BANDS, "oversize"), 0))
+    # Same histogram, but counting only images where the union box is COMPACT:
+    # within `BAND_MAX_INFLATION` of this image's own largest instance. A class
+    # is scattered *in an image*, not in general -- one bus in the foreground is
+    # a foreground bus however many other images hold four scattered buses. The
+    # per-class `union_inflation` filter drops the whole class on that evidence,
+    # which costs 30 of the 65 COCO classes (`bus` among them, at 1.71).
+    bands_compact: dict[str, dict[str, int]] = defaultdict(lambda: dict.fromkeys((*pc.BOX_BANDS, "oversize"), 0))
+    n_compact: dict[str, int] = defaultdict(int)
     n_scanned = 0
 
     for rec in records:
@@ -181,6 +201,10 @@ def scan(min_images: int) -> dict:
             instance[name].extend((b[2] - b[0]) * (b[3] - b[1]) / area for b in boxes)
             n_images[name] += 1
             bands[name][_band_of(union_area)] += 1
+            largest = max((b[2] - b[0]) * (b[3] - b[1]) for b in boxes) / area
+            if union_area <= largest * pc.BAND_MAX_INFLATION:
+                n_compact[name] += 1
+                bands_compact[name][_band_of(union_area)] += 1
 
     stats = {}
     for name, areas in voted.items():
@@ -197,6 +221,11 @@ def scan(min_images: int) -> dict:
             # complement, `meta.n_images_scanned - n_images`: an image holding
             # no instance of the category at any size.
             "bands": dict(bands[name]),
+            # Positives under the per-image rule: the non-compact remainder is
+            # *excluded* from the cell, not turned into a negative.
+            "bands_compact": dict(bands_compact[name]),
+            "n_compact": n_compact[name],
+            "compact_frac": n_compact[name] / n_images[name],
         }
     log(f"{len(stats)} categories with >= {min_images} images (of {len(voted)} distinct names)")
     return {
@@ -247,7 +276,11 @@ def main() -> int:
     log("=== categories present in ALL THREE bands (the new construction) ===")
     for floor in (25, 50, 100, 200):
         viable = [c for c, s in stats.items() if min(s["bands"][b] for b in pc.BOX_BANDS) >= floor]
-        log(f"  >= {floor:4d} images in every band: {len(viable):5d} categories")
+        compact = [c for c, s in stats.items() if min(s["bands_compact"][b] for b in pc.BOX_BANDS) >= floor]
+        log(
+            f"  >= {floor:4d} images in every band: {len(viable):5d} categories "
+            f"({len(compact)} counting only compact-union images)"
+        )
     log("  (rank and filter them with shortlist_scale_classes.py)")
     return 0
 

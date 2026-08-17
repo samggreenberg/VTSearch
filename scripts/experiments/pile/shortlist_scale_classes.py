@@ -120,7 +120,9 @@ def coco_name(vg_name: str) -> str | None:
     return candidate if candidate in COCO_CLASSES else None
 
 
-def rank(scan: dict, floor: int, max_inflation: float) -> tuple[list[dict], list[tuple[str, str, int]]]:
+def rank(
+    scan: dict, floor: int, max_inflation: float, compact: bool = False
+) -> tuple[list[dict], list[tuple[str, str, int]]]:
     """Categories clearing *floor* images in every band, best-supported first.
 
     Ranked on the **minimum** per-band count, because that is the binding
@@ -137,14 +139,19 @@ def rank(scan: dict, floor: int, max_inflation: float) -> tuple[list[dict], list
     n_total = int(meta["n_images_scanned"])
     rows: list[dict] = []
     excluded: list[tuple[str, str, int]] = []
+    key = "bands_compact" if compact else "bands"
     for name, s in stats.items():
-        per_band = {b: int(s["bands"][b]) for b in pc.BOX_BANDS}
+        if key not in s:
+            raise SystemExit("scan predates per-image compactness; re-run scan_vg_boxes.py")
+        per_band = {b: int(s[key][b]) for b in pc.BOX_BANDS}
         if min(per_band.values()) < floor:
             continue
         # A category whose union box is much larger than one instance is
         # scattered instances, not a region a user would drag -- and its band
         # assignment would describe the scatter, not the object.
-        if s["union_inflation"] > max_inflation:
+        # Under --compact the scatter is filtered per image, so the per-class
+        # test would drop classes whose surviving images are all compact.
+        if not compact and s["union_inflation"] > max_inflation:
             excluded.append((name, "scattered", min(per_band.values())))
             continue
         # Pervasiveness is a property of the corpus, so it is measured here
@@ -186,6 +193,12 @@ def main() -> int:
         default=pc.BAND_MAX_INFLATION,
         help=f"drop categories whose union box exceeds this multiple of one instance (default {pc.BAND_MAX_INFLATION})",
     )
+    ap.add_argument(
+        "--compact",
+        action="store_true",
+        help="count only images whose union box is within --max-inflation of their own largest "
+        "instance, instead of dropping the whole class on its median inflation",
+    )
     ap.add_argument("--n", type=int, default=40, help="how many rows to print (default 40)")
     ap.add_argument("--out", default="", help="also write the full ranking as JSON")
     args = ap.parse_args()
@@ -197,10 +210,11 @@ def main() -> int:
     if "categories" not in scan:
         raise SystemExit(f"{scan_path} predates per-band supply; re-run scan_vg_boxes.py")
 
-    rows, excluded = rank(scan, args.floor, args.max_inflation)
+    rows, excluded = rank(scan, args.floor, args.max_inflation, compact=args.compact)
     n_total = int(scan["meta"]["n_images_scanned"])
     print(f"scanned {n_total} images; {len(scan['categories'])} categories in the scan")
-    print(f"{len(rows)} clear >= {args.floor} images in ALL THREE bands (inflation <= {args.max_inflation})\n")
+    rule = "compact-union images only" if args.compact else f"class inflation <= {args.max_inflation}"
+    print(f"{len(rows)} clear >= {args.floor} images in ALL THREE bands ({rule})\n")
 
     hdr = f"{'category':<18}{'min':>7}{'small':>8}{'medium':>8}{'large':>8}{'negpool':>9}  {'coco':<14}bench"
     print(hdr)

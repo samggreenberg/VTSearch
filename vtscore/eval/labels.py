@@ -15,6 +15,14 @@ Two dataset shapes are supported:
 A media is multi-label iff it has a ``"categories"`` key; otherwise the legacy
 single-label path is used.  Existing datasets have no ``"categories"`` key, so
 their behavior is unchanged.
+
+**The closed world has a hole in it.** "Not positive" means "negative" only
+where the annotation is exhaustive over the category.  A scale-banded dataset
+breaks that: an image holding a *large* bus is not a positive for ``bus@small``,
+but calling it a negative penalises a detector for finding a real bus.  Such a
+media is *excluded* from that cell — neither positive nor negative — which
+:func:`media_is_evaluable` reports and every pool-building caller must honour.
+See ``docs/plans/vg-scale-bands-and-corrections.md``.
 """
 
 from __future__ import annotations
@@ -35,6 +43,39 @@ def media_is_positive(media: dict[str, Any], category: str) -> bool:
     if cats is not None:
         return category in cats
     return media.get("category") == category
+
+
+def media_is_evaluable(media: dict[str, Any], category: str) -> bool:
+    """Return ``True`` if *media* may be scored as a positive **or** a negative.
+
+    Media carrying an ``"evaluable_categories"`` list belong to a dataset whose
+    cells are explicitly designated — a scale-banded set, where an image can
+    hold the category at the wrong size and is therefore neither.  Anything not
+    named in that list is *excluded* from the cell.
+
+    Every other media is evaluable everywhere, which is the closed-world
+    behaviour every existing dataset relies on: no key, no change.
+
+    Callers build pools with this **before** splitting into positives and
+    negatives, because an excluded media that survives into a pool is silently
+    scored as a negative — the exact error issue #3156 is about.
+    """
+    ok = media.get("evaluable_categories")
+    if ok is None:
+        return True
+    return category in ok
+
+
+def evaluable_pool(medias: dict[Any, dict[str, Any]], category: str) -> dict[Any, dict[str, Any]]:
+    """*medias* restricted to those scorable for *category*.
+
+    The one-line form of the rule above, for the callers that hold a whole pool
+    and want it filtered once per cell rather than per media.  Returns *medias*
+    itself when nothing is excluded, so the common path copies nothing.
+    """
+    if all(m.get("evaluable_categories") is None for m in medias.values()):
+        return medias
+    return {cid: m for cid, m in medias.items() if media_is_evaluable(m, category)}
 
 
 def region_box_for_category(media: dict[str, Any], category: str) -> Optional[tuple[float, float, float, float]]:

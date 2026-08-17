@@ -60,6 +60,12 @@ DATASETS: dict[str, dict] = {
     "vg_box_small": {"boxed": True, "kind": "vg_band", "band": "small"},
     "vg_box_medium": {"boxed": True, "kind": "vg_band", "band": "medium"},
     "vg_box_large": {"boxed": True, "kind": "vg_band", "band": "large"},
+    # The same-class-across-bands set (#3156). One pickle, one class list, one
+    # negative pool; the band lives on the category name (`bus@small`). Not a
+    # replacement for `vg_box_*` -- those measured what they measured and stay
+    # reproducible -- but the two are not comparable: disjoint vocabularies
+    # against a fixed one.
+    "vg_scale": {"boxed": True, "kind": "vg_scale"},
 }
 
 #: Box-size bands, as a fraction of image area, anchored to the patch
@@ -216,6 +222,61 @@ def scale_study_exclusion(name: str) -> str | None:
         return "polysemous"
     tokens = name.replace("-", " ").split()
     return SCALE_STUDY_EXCLUSIONS.get(tokens[-1]) or SCALE_STUDY_EXCLUSIONS.get(name)
+
+
+#: The class list *C* for the same-class-across-bands study (issue #3156).
+#:
+#: Chosen by the owner on 2026-08-17 from the measured shortlist
+#: (``shortlist_scale_classes.py --compact --floor 100``), out of the 24
+#: candidates that were simultaneously: supported at >= 100 images in all three
+#: bands, free of a measured alias partner and of plural-form ambiguity, and
+#: **also a COCO-2017 class**. That last property is what makes the correction
+#: pass affordable: COCO val2017 is exhaustively annotated over these names, so
+#: VG's miss rate -- and our own annotators' accuracy -- can be scored against it
+#: with no extra human review.
+#:
+#: Deliberately *not* derived at build time from the scan. Which classes a human
+#: can annotate consistently is a judgement, and re-deriving it would silently
+#: change what the study measures whenever the scan is re-run.
+SCALE_CLASSES: tuple[str, ...] = (
+    "clock",
+    "bird",
+    "boat",
+    "umbrella",
+    "kite",
+    "book",
+    "dog",
+    "backpack",
+    "knife",
+    "bicycle",
+    "bus",
+    "stop sign",
+)
+
+#: Images per ``(class, band)`` cell, and the shared negative pool every cell
+#: draws from. ``stop sign`` binds the positive count: 104 images in its small
+#: band is the smallest per-band supply in *C*, so 100 is the largest round
+#: number every one of the 36 cells can fill without replacement.
+#:
+#: Cells are **designated**, not inferred: each is exactly these positives plus
+#: this negative pool, and every other image in the pickle is excluded from it.
+#: Prevalence is therefore identical in all 36 cells by construction, which is
+#: what makes small-vs-large a paired comparison rather than two datasets with
+#: different difficulty. Unequal prevalence between arms is what made wave 1 and
+#: wave 2 of the overview benchmark non-comparable.
+SCALE_N_POS = int(os.environ.get("VTS_SCALE_N_POS", "100"))
+SCALE_N_NEG = int(os.environ.get("VTS_SCALE_N_NEG", "3900"))
+
+
+def scale_cell(category: str, band: str) -> str:
+    """The band-suffixed category name a harness cell is keyed on.
+
+    One pickle carries all three bands, distinguished by this suffix, because a
+    cell is already ``(dataset, category)`` -- so the bands need no harness
+    change, embedding is done once instead of three times, and the bands are
+    paired on identical negatives.
+    """
+    return f"{category}@{band}"
 
 
 #: Embedders in the pile. ``patch`` embedders attach ``patch_grid`` and are the

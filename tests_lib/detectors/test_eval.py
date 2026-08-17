@@ -572,6 +572,70 @@ class TestMediaIsPositive:
         assert media_is_positive(media, "man") is False
 
 
+class TestMediaIsEvaluable:
+    """The third value: an image that is neither a positive nor a negative.
+
+    A scale-banded dataset carries the same class at several sizes, so an image
+    holding a *large* bus is not a ``bus@small`` positive — and must not become
+    a ``bus@small`` negative either, or the detector is penalised for finding a
+    real bus (issue #3156).
+    """
+
+    def test_absent_key_is_evaluable_everywhere(self):
+        from vtscore.eval.labels import media_is_evaluable
+
+        # Every existing dataset: closed world, unchanged behaviour.
+        media = {"category": "man", "categories": ["man", "apple"]}
+        assert media_is_evaluable(media, "man") is True
+        assert media_is_evaluable(media, "banana") is True
+
+    def test_wrong_band_image_is_excluded_not_negative(self):
+        from vtscore.eval.labels import media_is_evaluable, media_is_positive
+
+        media = {
+            "category": "bus@large",
+            "categories": ["bus@large"],
+            "evaluable_categories": ["bus@large"],
+        }
+        # It is a positive for its own cell...
+        assert media_is_positive(media, "bus@large") is True
+        assert media_is_evaluable(media, "bus@large") is True
+        # ...and neither a positive NOR a negative for the other bands: the
+        # closed-world test alone would call it a negative, which is the bug.
+        assert media_is_positive(media, "bus@small") is False
+        assert media_is_evaluable(media, "bus@small") is False
+
+    def test_shared_negative_is_evaluable_in_every_cell(self):
+        from vtscore.eval.labels import media_is_evaluable, media_is_positive
+
+        media = {
+            "category": "",
+            "categories": [],
+            "evaluable_categories": ["bus@small", "bus@large", "dog@small"],
+        }
+        for cell in ("bus@small", "bus@large", "dog@small"):
+            assert media_is_evaluable(media, cell) is True
+            assert media_is_positive(media, cell) is False
+
+    def test_evaluable_pool_drops_excluded_media(self):
+        from vtscore.eval.labels import evaluable_pool
+
+        medias = {
+            1: {"categories": ["bus@small"], "evaluable_categories": ["bus@small"]},
+            2: {"categories": ["bus@large"], "evaluable_categories": ["bus@large"]},
+            3: {"categories": [], "evaluable_categories": ["bus@small", "bus@large"]},
+        }
+        assert sorted(evaluable_pool(medias, "bus@small")) == [1, 3]
+        assert sorted(evaluable_pool(medias, "bus@large")) == [2, 3]
+
+    def test_evaluable_pool_is_identity_without_the_key(self):
+        from vtscore.eval.labels import evaluable_pool
+
+        # The common path must not copy the dict — these pools are large.
+        medias = {1: {"categories": ["man"]}, 2: {"category": "apple"}}
+        assert evaluable_pool(medias, "man") is medias
+
+
 class TestEvalMultiLabel:
     """eval_text_sort / eval_learned_sort over multi-label medias."""
 

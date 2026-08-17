@@ -128,42 +128,34 @@ annotated `car, clouds` and has a bus front and centre). Review them in
 descending detector score, plus a uniform random stratum so the residual noise
 rate after review is bounded rather than unknown.
 
+## Background the remaining work depends on
+
+*C* is the twelve classes in `pile_config.SCALE_CLASSES` — every one also a
+COCO-2017 class, which is what makes the correction pass affordable: COCO
+val2017 is exhaustively annotated over exactly these names, so VG's miss rate
+and our own annotators' accuracy can both be scored against it without extra
+review. The measured supply behind the choice is
+`/expscratch/sgreenberg/vgscale-3156/` (`vg_box_scale_bands.json`,
+`shortlist_*.json`, `name_overlap.json`).
+
+Two measurements constrain what comes next:
+
+- **Scatter is filtered per image, not per class.** A class that often appears
+  several times per image fails a per-class inflation median however compact any
+  single image is, which cost the shortlist 30 of the 65 COCO classes (`bus`
+  among them, at 1.71). The cell rule is therefore per image, and a non-compact
+  image is *excluded* rather than counted as a negative.
+- **No fine-grained pair survived.** No candidate pair came back `subtype`, so
+  there is no fine-grained arm; `eyeglasses` is an alias of `glasses` and would
+  have to be merged before either name is usable.
+
 ## Open work
 
 <!-- item-sep -->
 
-- **Run the supply scan and pick *C*.** `scan_vg_boxes.py` now emits the
-  per-`(class, band)` histogram and `shortlist_scale_classes.py` ranks
-  categories on their binding (minimum) per-band supply, flagging COCO overlap
-  and prior benchmark coverage. Both need the VG source under `DEMO_CACHE`, so
-  the scan is a GRID job. Choosing *C* from its output — including a human pass
-  over the reported exclusions — is the gate on everything below. (Sonnet 5)
-
 <!-- item-sep -->
 
-- **Decide whether a fine-grained pair earns a place in *C*.** Run
-  `scan_name_overlap.py` over the shortlist plus the eyewear cluster; if a pair
-  comes back `subtype` with real support in all three bands, it is the most
-  interesting arm available — scale *and* fine-grained discrimination on one
-  class. If it comes back `alias`, the names must be merged before either is
-  usable. Cheap, and it decides a study design. (Sonnet 5)
-
 <!-- item-sep -->
-
-- **Three-valued labels in the eval harness.** `media_is_evaluable(media,
-  category)` beside `media_is_positive`, and per-cell pool filtering at the
-  three entry points above. Needs a `vtscore/eval/labels.py` test for the
-  wrong-band case, and an `MIRRORS` review — the harness's notion of ground
-  truth is changing, not the app's algorithm. (Opus 4.8 — a silent
-  mis-classification here invalidates every number downstream.)
-
-<!-- item-sep -->
-
-- **The `vg_scale` builder.** One pickle over *C*, band-suffixed category names,
-  per-class exclusion sets, fixed `n_pos`/`n_neg` per cell. Replaces the three
-  `vg_box_*` entries in `pile_config.DATASETS`; the published `vg_box_*` numbers
-  stay valid for what they measured and are not comparable to the new sets.
-  (Sonnet 5)
 
 <!-- item-sep -->
 
