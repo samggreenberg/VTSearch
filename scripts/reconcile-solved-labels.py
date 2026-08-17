@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
-"""Decide which issues should carry the `dev` label, and which should lose it.
+"""Decide which issues should carry the `solved` label, and which should lose it.
 
-`dev` means **the development on this issue is done** — the problem has been
+`solved` means **the development on this issue is done** — the problem has been
 solved, a fix PR carries it, and nothing remains but git merges (into `dev`,
 and then into `main` at the next release). Its job is to keep a solved issue
 out of the queue a human picks from:
 
-    is:issue is:open -label:dev    # what someone should pick up next
-    is:issue is:open label:dev     # solved; waiting only on merges
+    is:issue is:open -label:solved    # what someone should pick up next
+    is:issue is:open label:solved     # solved; waiting only on merges
 
 ## Why the label goes on at fix-PR time, not at merge time
 
-`dev` used to mean the narrower "merged into `dev`, not yet on `main`", which
-made the label's only honest trigger a merge — an event no session observes,
-so in practice nothing ever applied it. The wider meaning is both truer to
-what the label is *for* and self-triggering: from a planning perspective
+The label used to be called `dev` and to mean the narrower "merged into the
+`dev` branch, not yet on `main`", which made its only honest trigger a merge —
+an event no session observes, so in practice nothing ever applied it. The
+wider meaning is both truer to what the label is *for* and self-triggering:
+from a planning perspective
 "solved in an open PR" and "merged to `dev`" are the same state, because
 neither has any problem-solving left in it. So the fix session applies the
 label when it opens the PR, in the same motion as its `Addressed in #M`
@@ -34,7 +35,7 @@ in exactly the ways prose hides: closing keywords must be told apart from
 #M`, a comment posted *after* a fix pointer may or may not dispute it, and a
 pointer naming a commit instead of a PR cannot be resolved here at all.
 Getting any of those subtly wrong silently corrupts both views above.
-Encoding it here makes it testable; see tests/core/test_reconcile_dev_labels.py.
+Encoding it here makes it testable; see tests/core/test_reconcile_solved_labels.py.
 
 ## Why it takes input instead of fetching
 
@@ -44,10 +45,10 @@ intermediated by the MCP server. So this script is a pure function from data
 to plan, and whoever *does* hold credentials supplies the data:
 
     # in a Claude session: gather via the github MCP tools, then
-    python scripts/reconcile-dev-labels.py --input plan-input.json
+    python scripts/reconcile-solved-labels.py --input plan-input.json
 
     # on a machine with the gh CLI: see docs/RELEASE.md for the recipe
-    gh ... | python scripts/reconcile-dev-labels.py
+    gh ... | python scripts/reconcile-solved-labels.py
 
 Input schema (unknown keys are ignored, so richer API payloads pipe in as-is):
 
@@ -76,7 +77,7 @@ import json
 import re
 import sys
 
-DEV_LABEL = "dev"
+SOLVED_LABEL = "solved"
 
 # Where each PR list sits on the live/dead axis. A "live" claim means a fix
 # exists and is still on its way in; a "dead" one means it fell through.
@@ -203,12 +204,12 @@ def _classify(
 ) -> tuple[str, str]:
     """Return (action, reason) for one issue. Action is add/remove/review/none."""
     number = issue.get("number")
-    labelled = DEV_LABEL in {str(item).strip().lower() for item in (issue.get("labels") or [])}
+    labelled = SOLVED_LABEL in {str(item).strip().lower() for item in (issue.get("labels") or [])}
     is_open = str(issue.get("state") or "open").lower() == "open"
 
     if not is_open:
         if labelled:
-            return "remove", "issue is closed but still carries `dev` — the closing write did not strip it"
+            return "remove", "issue is closed but still carries `solved` — the closing write did not strip it"
         return "none", "closed, no label"
 
     claim = closers.get(number)
@@ -237,7 +238,7 @@ def _classify(
         if labelled:
             return (
                 "review",
-                "carries `dev` but no PR or comment resolves it — stale, or fixed in an earlier release",
+                "carries `solved` but no PR or comment resolves it — stale, or fixed in an earlier release",
             )
         return "none", "no fix PR claims it"
 
@@ -265,11 +266,11 @@ def reconcile(data: dict) -> dict[str, list[tuple[int, str]]]:
 
 def render(plan: dict[str, list[tuple[int, str]]]) -> str:
     headings = [
-        ("add", f"ADD `{DEV_LABEL}`"),
-        ("remove", f"REMOVE `{DEV_LABEL}`"),
+        ("add", f"ADD `{SOLVED_LABEL}`"),
+        ("remove", f"REMOVE `{SOLVED_LABEL}`"),
         ("review", "NEEDS REVIEW (ambiguous — do not guess)"),
     ]
-    lines = ["", "dev-label reconciliation", "=" * 40]
+    lines = ["", "solved-label reconciliation", "=" * 40]
     for key, heading in headings:
         entries = plan[key]
         lines.append(f"\n{heading} ({len(entries)})")

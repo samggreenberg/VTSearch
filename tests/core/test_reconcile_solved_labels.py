@@ -1,8 +1,8 @@
-"""Tests for scripts/reconcile-dev-labels.py.
+"""Tests for scripts/reconcile-solved-labels.py.
 
 The script decides which open issues have no development left in them -- the
-problem is solved and only git merges remain -- and therefore carry the `dev`
-label. It reuses docs/RELEASE.md step 6's resolution logic, whose sharp edges
+problem is solved and only git merges remain -- and therefore carry the
+`solved` label. It reuses docs/RELEASE.md step 6's resolution logic, whose sharp edges
 are the point of testing it:
 
 * a closing keyword means resolved; `Refs` / `Part of` / a bare `#N` do not;
@@ -17,8 +17,8 @@ are the point of testing it:
   it and must take the label back off.
 
 Getting any of these wrong silently corrupts both views the label powers:
-`-label:dev` (what a human should pick up next) and `label:dev` (solved,
-waiting only on merges).
+`-label:solved` (what a human should pick up next) and `label:solved`
+(solved, waiting only on merges).
 """
 
 import importlib.util
@@ -29,11 +29,11 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "reconcile-dev-labels.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "reconcile-solved-labels.py"
 
 
 def _load():
-    spec = importlib.util.spec_from_file_location("reconcile_dev_labels", SCRIPT)
+    spec = importlib.util.spec_from_file_location("reconcile_solved_labels", SCRIPT)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -72,7 +72,7 @@ def plan_for(
 
 
 class TestClosingKeywords:
-    """Only a closing keyword means the issue is finished on `dev`."""
+    """Only a closing keyword means the issue's development is finished."""
 
     @pytest.mark.parametrize("keyword", ["Closes", "closes", "Fixes", "fixed", "Resolves", "RESOLVED"])
     def test_closing_keywords_resolve(self, keyword):
@@ -97,7 +97,7 @@ class TestClosingKeywords:
 
     def test_already_labelled_issue_needs_no_change(self):
         prs = [{"number": 3128, "body": "Closes #3077"}]
-        assert 3077 in plan_for(prs, [issue(3077, labels=["claude", "dev"])])["none"]
+        assert 3077 in plan_for(prs, [issue(3077, labels=["claude", "solved"])])["none"]
 
     def test_the_reason_names_the_pr(self):
         prs = [{"number": 3128, "body": "Closes #3077"}]
@@ -169,7 +169,7 @@ class TestCommitShaPointers:
 
     Regression cover for #2911, which shipped to `main` with its only pointer
     reading "Fixed on `dev` by `de9ae81ac`". That matched no pattern, so the
-    script reported "not resolved on dev" -- indistinguishable from an issue
+    script reported it as unresolved -- indistinguishable from an issue
     nobody had started -- and the release sweep had nothing to go on.
     """
 
@@ -231,7 +231,7 @@ class TestCommitShaPointers:
 class TestOpenFixPrs:
     """The label tracks "solved", not "merged", so an open fix PR resolves an issue.
 
-    This is the widened front edge: `dev` used to require a merge into `dev`,
+    This is the widened front edge: the label used to require a merge into `dev`,
     which no session ever observes, so nothing applied the label in practice.
     From a planning perspective an issue solved in an open PR has exactly as
     little left to think about as one already merged.
@@ -271,11 +271,11 @@ class TestAbandonedFixPrs:
     ABANDONED = [{"number": 3155, "body": "Closes #3090"}]
 
     def test_labelled_issue_whose_fix_pr_was_abandoned_loses_the_label(self):
-        result = plan_for([], [issue(3090, labels=["claude", "dev"])], abandoned_prs=self.ABANDONED)
+        result = plan_for([], [issue(3090, labels=["claude", "solved"])], abandoned_prs=self.ABANDONED)
         assert 3090 in result["remove"]
 
     def test_the_removal_reason_names_the_abandoned_pr(self):
-        result = plan_for([], [issue(3090, labels=["claude", "dev"])], abandoned_prs=self.ABANDONED)
+        result = plan_for([], [issue(3090, labels=["claude", "solved"])], abandoned_prs=self.ABANDONED)
         assert "#3155" in result["remove"][3090]
 
     def test_an_unlabelled_issue_with_an_abandoned_fix_needs_no_change(self):
@@ -286,7 +286,7 @@ class TestAbandonedFixPrs:
     def test_an_abandoned_comment_pointer_also_removes(self):
         result = plan_for(
             [],
-            [issue(3090, labels=["dev"], comments=["Addressed in #3155"])],
+            [issue(3090, labels=["solved"], comments=["Addressed in #3155"])],
             abandoned_prs=[{"number": 3155, "body": "Refs #3090"}],
         )
         assert 3090 in result["remove"]
@@ -295,7 +295,7 @@ class TestAbandonedFixPrs:
         """Take two of a fix keeps the issue solved; the dead claim must not win."""
         result = plan_for(
             [],
-            [issue(3090, labels=["claude", "dev"])],
+            [issue(3090, labels=["claude", "solved"])],
             open_prs=[{"number": 3170, "body": "Closes #3090"}],
             abandoned_prs=self.ABANDONED,
         )
@@ -314,7 +314,7 @@ class TestAbandonedFixPrs:
         """Only the issue the dead PR claimed is affected."""
         result = plan_for(
             [{"number": 3180, "body": "Closes #3077"}],
-            [issue(3077, labels=["dev"])],
+            [issue(3077, labels=["solved"])],
             abandoned_prs=self.ABANDONED,
         )
         assert 3077 in result["none"]
@@ -323,9 +323,9 @@ class TestAbandonedFixPrs:
 class TestRemovalAndStaleness:
     """The label is transient, so the script reconciles in both directions."""
 
-    def test_closed_issue_still_carrying_dev_is_flagged_for_removal(self):
+    def test_closed_issue_still_carrying_solved_is_flagged_for_removal(self):
         prs = [{"number": 3128, "body": "Closes #3077"}]
-        result = plan_for(prs, [issue(3077, state="closed", labels=["claude", "dev"])])
+        result = plan_for(prs, [issue(3077, state="closed", labels=["claude", "solved"])])
         assert 3077 in result["remove"]
 
     def test_closed_issue_without_the_label_needs_no_change(self):
@@ -333,11 +333,11 @@ class TestRemovalAndStaleness:
 
     def test_open_issue_labelled_but_unresolved_is_flagged_for_review(self):
         """Stale from a prior release, or the label was applied by hand in error."""
-        assert 3077 in plan_for([], [issue(3077, labels=["dev"])])["review"]
+        assert 3077 in plan_for([], [issue(3077, labels=["solved"])])["review"]
 
-    def test_dev_label_matching_is_case_insensitive(self):
+    def test_solved_label_matching_is_case_insensitive(self):
         prs = [{"number": 3128, "body": "Closes #3077"}]
-        assert 3077 in plan_for(prs, [issue(3077, labels=["DEV"])])["none"]
+        assert 3077 in plan_for(prs, [issue(3077, labels=["SOLVED"])])["none"]
 
 
 class TestCommandLine:
