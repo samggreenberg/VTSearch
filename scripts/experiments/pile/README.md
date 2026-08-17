@@ -157,3 +157,12 @@ Weights are prefetched in a separate CPU stage because parallel GPU jobs would
 otherwise race on the shared HF cache, and because the embedders load with
 `cache_dir=<VTSEARCH_MODELS_DIR>` — prefetching to the HF default instead leaves
 weights the jobs cannot see.
+
+The GPU **type** is not pinned. `launch_pile.sh` calls
+[`pick_gpu.py`](../../slurm/pick_gpu.py) after the prefetch returns (availability
+measured before a blocking queue wait is stale) and requests the fastest type
+with enough free GPUs for the jobs it is about to submit. This used to be a
+hardcoded `v100`, which is why every cell built before 2026-08-17 was embedded on
+the slowest GPU on the cluster — 2.3× slower for `siglip2_l` than the L40S nodes
+sitting idle beside it. Set `VTS_GPU` to pin a type anyway; see
+[`docs/SETUP.md`](../../../docs/SETUP.md#which-gpu-type-gets-requested).
