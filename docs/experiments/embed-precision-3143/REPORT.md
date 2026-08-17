@@ -38,7 +38,7 @@ turned up two things that matter more than the answer:
 |---|---|
 | Does fp16 change the vectors? | Yes, by **2.9e-6** (`siglip2_l`) / **1.3e-6** (`siglip`) median 1−cos, within a fixed node. |
 | Does it change retrieval order? | No. Spearman ρ = **1 ± 4e-7**, top-10/50/100 overlap **100%**, same top-1 item on every category. |
-| Does it change the benchmark? | No systematic effect resolvable; see the power section. Point estimates straddle zero with **opposing signs by embedder**. |
+| Does it change the benchmark? | No detectable effect at 1013 paired cells (largest 1.3 SE). `regret` is **resolved below** the 0.005 margin; `cost` (+0.0028 ± 0.0023) and AP (−0.00085 ± 0.0021) are centred within 0.003 but their intervals graze it. |
 | Is it worth adopting? | **On `siglip2_l` yes** (2.0–2.5× for 2.9e-6). **On `siglip` there is nothing to buy** (0.99×). |
 | Should the default flip globally? | **No.** A global flip pays a real (if tiny) numeric cost on the default embedder for zero speed, and would strand the fp32 pile. |
 | Which implementation? | **Weight cast** (`fp16`). `autocast_fp16` drifts slightly *less* (2.0e-6) but is slower (1.55× vs 2.03×). **`bf16` is disqualified**: 1.3e-4 drift, as disruptive as changing hardware. |
@@ -144,8 +144,16 @@ distribution: the mean of a long-tailed drift is the number that hides the tail.
 | `siglip2_l` | `fp16_v100` | 2.8e-06 | 1.2e-05 | 3.9e-04 | 4.6e-06 ± 1.6e-07 |
 | `siglip2_l` | `bf16_l40s` | 1.3e-04 | 3.2e-04 | 3.2e-03 | 1.6e-04 ± 2.0e-06 |
 
-Figures: `figures/drift_siglip.png`, `figures/drift_siglip2_l.png` (bar = median,
-whisker = p95, log scale, floor arm in grey).
+![Vector drift by arm, siglip2_l](figures/drift_siglip2_l.png)
+
+![Vector drift by arm, siglip](figures/drift_siglip.png)
+
+Bar = median, whisker = p95, log scale. **Grey marks the arms running the same
+fp32 math as the reference** — and their spread is itself the result: on
+`siglip2_l` they run from exactly 0 (`fp32_notf32_l40s`, `fp32_det_l40s`) through
+2.7e-12 (`fp32_v100_rack7n03`) to 1.5e-04 (`fp32_v100`, `fp32_det_v100`). The
+first version of this figure called `fp32_v100` "the floor" and so presented the
+defect as the baseline; there is no single floor.
 
 Three readings:
 
@@ -187,10 +195,16 @@ Against the same node's fp32:
 | `siglip` | `bf16_l40s` | text query | 100 | 1 ± 6.7e-06 | 98% | 99% | 99% | **97%** |
 | `siglip2_l` | `bf16_l40s` | text query | 100 | 1 ± 1.3e-05 | 99% | 98% | 99% | **98%** |
 
-Figures: `figures/rank_stability_exemplar.png`,
-`figures/rank_stability_text_query.png` (one dot per category, bar = mean — the
-average alone would hide a single category that fell apart), and
-`figures/topk_overlap.png`.
+![Per-category rank stability, exemplar source](figures/rank_stability_exemplar.png)
+
+![Per-category rank stability, text-query source](figures/rank_stability_text_query.png)
+
+![Top-k overlap against the reference](figures/topk_overlap.png)
+
+One dot per category, bar = mean — the average alone would hide a single category
+that fell apart. Note that these are plotted against the *reference* arm, so the
+V100 rows carry the node displacement of §5 on top of their precision change; the
+within-node numbers are the table above.
 
 `bf16` is the only arm that changes the **top-1 result**, on 2–3% of categories.
 For a search tool that is the visible failure: the first thing the user sees.
@@ -370,9 +384,10 @@ reroutes the vote sequence, so trajectories decorrelate even though the decision
 **`n_good` is the one resolvable difference**: fp16 finished with 0.87 fewer
 positives per cell (9.3 → 8.5), 2.3 SE from zero, unadjusted for testing eight
 metrics. #3129 found positives to be the binding constraint on these runs, so
-this is worth a follow-up — not a blocker, but not nothing either. Filed as
-**#3158**, which also names the check that would dissolve it (whether the effect
-halves toward zero at the 64-seed n).
+this looked worth a follow-up — not a blocker, but not nothing either. Filed as
+**#3158**, which named the check that would dissolve it: whether the effect
+shrinks toward zero at the 64-seed n. **It did** — see below. #3158 is closed on
+that measurement.
 
 ## Power: why the issue's criterion needed a bigger run
 
@@ -393,7 +408,73 @@ Those are affordable, so the criterion was met rather than excused: a **64-seed,
 2048-cell** run followed, in its own study dir (a different grid is a different
 study).
 
-<!-- POWER RUN RESULT -->
+## 64-seed grid (2048 cells) — the criterion, met and not met
+
+1024 cell files per arm, all present, no zero-byte cells, no failed array tasks.
+**11 cells were header-only in both arms at identical indices** (`task_0001`,
+`task_0013`, `task_0017`, …) — systematic, not a disk incident, and paired-safe:
+**1013 paired cells, 146,730 paired steps**.
+
+| metric | ref | arm | paired diff ± SE | verdict |
+|---|---:|---:|---|---|
+| cost | 0.39 | 0.39 | +0.0028 ± 0.0023 | cannot resolve |
+| **regret** | 0.10 | 0.10 | **+0.00026 ± 0.0019** | **below margin (resolved)** |
+| average_precision | 0.45 | 0.45 | −0.00085 ± 0.0021 | cannot resolve |
+| fnr | 0.15 | 0.16 | +0.0035 ± 0.0027 | cannot resolve |
+| fpr | 0.24 | 0.24 | −0.00070 ± 0.0031 | cannot resolve |
+| rule_inefficiency | −0.012 | −0.010 | +0.0015 ± 0.0021 | cannot resolve |
+| calibration_shift | 0.11 | 0.11 | −0.0011 ± 0.0020 | cannot resolve |
+| n_good (count) | 8.8 | 8.8 | **−0.0034 ± 0.11** | within noise |
+
+Per embedder, `cost`: `siglip` +0.0042 ± 0.0033 (504 cells), `siglip2_l`
++0.0014 ± 0.0033 (509 cells). Both now the same sign — **the 6-seed grid's
+opposing signs were noise**, which is what the larger n was for.
+
+Four readings, in order of what they license:
+
+1. **No metric shows a detectable effect.** The largest is `cost` at 1.2 SE and
+   `fnr` at 1.3 SE. Nothing here is significant at any conventional threshold.
+2. **Strict equivalence at 0.005 is demonstrated for `regret` only.** For `cost`
+   the 95% interval reaches +0.0074 and for `average_precision` −0.0051, so both
+   graze the margin. Note *why*: `2·SE` is 0.0046 and 0.0042 — **both inside the
+   margin**. The intervals cross it because the point estimates are not exactly
+   zero, not because the run is underpowered. More cells shrink the SE and would
+   not move the centre.
+3. **Failing an equivalence test is not detecting an effect**, and the distinction
+   is the whole content of this section. The honest summary is: fp16 moves the
+   shipped decision metrics by **less than 0.003 in expectation**, with a
+   confidence interval that cannot quite exclude 0.005 on two of seven metrics.
+   Anyone who wants a clean two-sided equivalence result on `cost` needs a
+   different experiment, not a bigger one — see the trajectory note below.
+4. **`n_good` dissolved.** −0.87 ± 0.38 at n=95 became **−0.0034 ± 0.11** at
+   n=1013 — a factor of 250 smaller and centred on zero. The 6-seed result was a
+   multiplicity artifact of testing eight metrics, exactly as #3158 suspected;
+   that issue is answered and closed on this measurement.
+
+`cost` was bit-identical on 5.7% of steps (up from 3.5%, as expected with more
+cells), `average_precision` on 0.04%, and the threshold was chosen the same way
+on **100%** of steps. That combination is the mechanism restated: the decision
+*rule* never changes, the *trajectory* always does.
+
+![Paired cost, mean trajectory and per-cell differences](figures/paired_cost_fp16_l40s_vs_fp32_l40s.png)
+
+![Paired average precision](figures/paired_average_precision_fp16_l40s_vs_fp32_l40s.png)
+
+Left: mean trajectory for both arms. Right: **every cell's paired difference as a
+thin line**, the mean in black, the ±0.005 margin dashed. The per-cell spread is
+what the power section is about — individual cells swing well past the margin in
+both directions while the mean sits near zero.
+
+## Raw artifacts in this directory
+
+| file | what |
+|---|---|
+| `DRIFT_TABLES.txt` | full drift + rank tables, all 10 arms, with the pairwise matrices |
+| `BENCH_TABLES.txt` | the 6-seed paired benchmark |
+| `BENCH_POWER_TABLES.txt` | the 64-seed paired benchmark |
+| `drift.csv` | per-arm drift distribution |
+| `pairwise_drift.csv` | every arm-pair distance, including the published pile cell |
+| `examples.json` | every literal rank-move example, with filenames and score gaps |
 
 ---
 
