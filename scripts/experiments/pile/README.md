@@ -71,6 +71,14 @@ Rebuild the scan behind them with `python scan_vg_boxes.py` (writes
 `vg_box_scale.json`; caches image dims, since `objects.json` stores boxes in
 pixels and carries no image dimensions).
 
+**Banding by median puts each category in exactly one band**, so these three
+sets carry disjoint vocabularies and a small-vs-large difference confounds box
+size with class identity. The scan therefore also emits each category's full
+per-band histogram, and `shortlist_scale_classes.py` ranks the categories with
+real support at *every* size — the input to a construction that holds the class
+list fixed and varies only scale. See
+[`docs/plans/vg-scale-bands-and-corrections.md`](../../../docs/plans/vg-scale-bands-and-corrections.md).
+
 Verified separation, measured with `--bands`: 38/40 of `vg_box_small`'s
 categories fall in `sub_patch`, 40/40 of `vg_box_medium` in `patch_to_leaf`,
 33/40 of `vg_box_large` in `leaf_to_4x`. The handful of strays are a
