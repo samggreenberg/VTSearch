@@ -193,8 +193,17 @@ def biggest_flips(ref_scores, arm_scores, ids, medias, n=3) -> list[dict]:
 # --------------------------------------------------------------------------
 
 
-def analyse(embedders: list[str], arms: list[str]) -> tuple[pd.DataFrame, pd.DataFrame, list[dict]]:
-    ref_arm = pcfg.REFERENCE_ARM
+def analyse(
+    embedders: list[str], arms: list[str], ref_arm: str = pcfg.REFERENCE_ARM
+) -> tuple[pd.DataFrame, pd.DataFrame, list[dict]]:
+    """Drift and rank stability of every arm against *ref_arm*.
+
+    The reference is a parameter because the pairwise matrix showed the arms
+    clustering **by card**: differencing a V100 arm against the L40S fp32
+    reference measures the card displacement, not the precision change, and
+    reported fp16-on-V100 as three orders of magnitude worse than it is. A
+    precision claim has to be made against the same card's fp32.
+    """
     drift_rows: list[dict] = []
     rank_rows: list[dict] = []
     examples: list[dict] = []
@@ -494,6 +503,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="add the shared pile's existing cell to the pairwise matrix as an arm",
     )
+    ap.add_argument(
+        "--reference",
+        default=pcfg.REFERENCE_ARM,
+        help="arm every difference is taken against (use the SAME-CARD fp32 arm for a precision claim)",
+    )
     ap.add_argument("--outdir", default=str(pcfg.results_dir()))
     args = ap.parse_args(argv)
 
@@ -502,15 +516,20 @@ def main(argv: list[str] | None = None) -> int:
     embedders = [e for e in args.embedders.split(",") if e]
     arms = [a for a in args.arms.split(",") if a]
 
-    drift, ranks, examples = analyse(embedders, arms)
+    drift, ranks, examples = analyse(embedders, arms, ref_arm=args.reference)
     report(drift, ranks, examples)
     if args.pairwise:
         pairwise(embedders, [*arms, PUBLISHED] if args.include_published else arms, outdir)
 
-    drift.to_csv(outdir / "drift.csv", index=False)
-    ranks.to_csv(outdir / "rank_stability.csv", index=False)
+    suffix = "" if args.reference == pcfg.REFERENCE_ARM else f"_vs_{args.reference}"
+    if not drift.empty:
+        drift["reference"] = args.reference
+    if not ranks.empty:
+        ranks["reference"] = args.reference
+    drift.to_csv(outdir / f"drift{suffix}.csv", index=False)
+    ranks.to_csv(outdir / f"rank_stability{suffix}.csv", index=False)
     (outdir / "examples.json").write_text(json.dumps(examples, indent=2) + "\n")
-    log(f"\nwrote {outdir}/drift.csv, rank_stability.csv, examples.json")
+    log(f"\nwrote {outdir}/drift{suffix}.csv, rank_stability{suffix}.csv, examples.json (reference {args.reference})")
 
     if not args.no_figures:
         figures(drift, ranks, outdir / "figures")
