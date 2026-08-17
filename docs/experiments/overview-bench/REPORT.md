@@ -81,14 +81,29 @@ than only shrinking it (fpr 0.30 → 0.24, fnr 0.09 → 0.12). `dinov3_patch` wi
 boxes is the only arm whose fnr falls sharply on small targets — it buys recall
 exactly where a whole-image vector dilutes the object.
 
-Over-inclusion has an extreme form worth seeing, because it is a *threshold*
-failure rather than a ranking one. On `visual_genome_m` / `bus`, one run flags
-**1,210 of 2,030 negatives (60 %) and misses none of the 67 positives**:
+Over-inclusion has an extreme form worth seeing. On `visual_genome_m` / `bus`,
+one run flags **1,210 of 2,030 negatives (60 %) and misses none of the 67
+positives**. No cut rule survives that, whatever the ranking underneath is doing:
 
 ![Eight of the 1,210 flagged negatives on VG / bus](figures/examples_bus_fp.jpg)
 
-*No buses, and no argument that the labels are wrong either — the ranking is
-sound and the cut has simply fallen through the floor.*
+*Read the pictures, not the caption I first wrote for them: **at least three of
+these eight contain a bus**. 498326.jpg is an articulated trolleybus filling the
+frame, annotated `car, clouds`; 3078.jpg is a red double-decker with `Metroline`
+across its side, annotated `door, tire, window`; 286074.jpg has several, smaller.
+The rest look like genuine errors — a box truck, traffic lights, bunting.*
+
+So this cell is two failures at once, and only one of them is the model's. The
+threshold has collapsed — 60 % of negatives passing with zero misses is not a
+defensible operating point — **and** the negatives it is being scored against are
+partly mislabelled, so its fpr of 0.60 overstates even the collapse. `bus` is
+therefore not a clean example of "the model is wrong"; the only clean one in this
+report is [`coco_val` / `clock`](#coco_val--clock--here-the-model-really-is-wrong),
+where the annotation is exhaustive over the class.
+
+This one was caught by a reader looking at the sheet, which is the argument for
+printing the images rather than the file ids: the aggregate said 60 % and my own
+caption said "no buses", and a glance at eight pictures overturned both.
 
 ## Reference numbers
 
@@ -576,16 +591,24 @@ target scale: small objects in cluttered frames.
 
 ## What that means for the rest of these numbers
 
-- **Visual Genome numbers are pessimistic by an unknown amount** — worst for
-  common scene categories (`sky`, and plausibly `tree`, `building`, `grass`), for
-  parts (`nose`), and for split vocabularies (`glasses`/`sunglasses`). COCO does
-  not have this problem.
+- **Visual Genome numbers are pessimistic by an unknown amount** — and not only
+  for the categories where you would expect it. Scene categories (`sky`, and
+  plausibly `tree`, `building`, `grass`), parts (`nose`) and split vocabularies
+  (`glasses`/`sunglasses`) are the predictable cases, but `bus` shows that even a
+  large, unambiguous, frame-filling **object** goes unannotated: a double-decker
+  with its operator's name across the side is labelled `door, tire, window`. No
+  category on this dataset can be assumed clean. COCO does not have this problem,
+  because its annotation is exhaustive over its 80 classes.
 - **Absolute cost is therefore not comparable between Visual Genome and COCO.**
   Within-haystack comparisons — which is what every configuration contrast here
   is — are unaffected, since all configurations see the same labels.
 - **A label audit belongs upstream of the next Visual Genome study**, not inside
   it. The entailment test is cheap, mechanical and scripted
-  (`scripts/experiments/calibration/label_noise.py`).
+  (`scripts/experiments/calibration/label_noise.py`) — but note that it only
+  finds misses it has a co-occurring category for. It cannot catch `bus`, because
+  nothing in the vocabulary entails a bus; only looking did. Corrected
+  annotations are being built in #3156, and every Visual Genome number here
+  should be re-measured against them.
 
 ---
 
