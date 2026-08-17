@@ -348,7 +348,8 @@ export const SHOTS: Shot[] = [
       await h.enterLabelView();
       await page.locator('.export-btn').first().click();
       await page.waitForSelector('.export-section', { timeout: 15000 });
-      await h.wait(900);
+      await page.locator('.export-tab', { hasText: 'Server CSV File' }).click();
+      await h.wait(600);
     },
   },
   {
