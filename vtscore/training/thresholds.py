@@ -749,20 +749,36 @@ def gmm_cut_from_fit(fit: GmmFit1D, rule: str, fpr_weight: float = 1.0, fnr_weig
     ``"mid"`` never reports a kind: the midpoint of two means is defined for
     every fit, so it has no fallback branch to distinguish.
 
+    ``"cross_tilt"`` is **eval-only** (issue #2865's candidate 2, as literally
+    specified): the same solve at ``lam = fnr/fpr``, i.e. the Bayes
+    misclassification-*count* boundary - mixture weights kept as class priors -
+    tilted by the cost ratio.  It exists because ``"rate"``, despite the
+    surrounding prose, does *not* read the mixture weights: the prior-odds
+    factor in its ``lam`` cancels the ``w_lo/w_hi`` inside :func:`_rate_cut`'s
+    ``offset`` exactly, leaving the cut invariant to the weights at every
+    inclusion (only the out-of-interval continuation *slope* still averages the
+    variances by them).  So "drop the mixture-weight factor from ``rate``" -
+    #2865's stated candidate - is a no-op, and the rule that genuinely *does*
+    read the acquisition-biased weights is this one.  Do not ship it without a
+    measurement: retaining the prior odds is precisely what #2836 identified as
+    the bias in the ``cross`` rule #2833 reverted.
+
     ``"mid_tilt"`` (the shipped fold-level rule, :data:`FOLD_ANCHOR_CUT_RULE`)
-    is deliberately *not* accepted here: it is defined in fold-quantile space
-    over a :class:`FoldAnchoredCut`'s combined folds
-    (:meth:`FoldAnchoredCut._quantile_at`), so it has no per-fit, score-space
-    form for this function to apply.
+    and ``"q_tilt"`` (eval-only) are deliberately *not* accepted here: both are
+    defined in fold-quantile space over a :class:`FoldAnchoredCut`'s combined
+    folds (:meth:`FoldAnchoredCut._quantile_at`), so they have no per-fit,
+    score-space form for this function to apply.
     """
     if rule == "mid":
         return fit.midpoint(), CUT_KIND_INTERIOR
-    if rule == "rate":
+    if rule in ("rate", "cross_tilt"):
         if not (fpr_weight > 0.0 and fnr_weight > 0.0 and fit.w_hi > 0.0):
             return fit.midpoint(), CUT_KIND_DEGENERATE_MIDPOINT
-        lam = (fnr_weight / fpr_weight) * (fit.w_lo / fit.w_hi)
+        lam = fnr_weight / fpr_weight
+        if rule == "rate":
+            lam *= fit.w_lo / fit.w_hi
         return _rate_cut(fit.w_lo, fit.mu_lo, fit.var_lo, fit.w_hi, fit.mu_hi, fit.var_hi, lam=lam)
-    raise ValueError(f"unknown cut rule {rule!r}; expected 'mid' or 'rate'")
+    raise ValueError(f"unknown cut rule {rule!r}; expected 'mid', 'rate' or 'cross_tilt'")
 
 
 def rank_transfer(
@@ -824,6 +840,23 @@ FOLD_ANCHOR_CUT_RULE = "mid_tilt"
 #: shipped ``calibrate_count=2`` the mean and the median coincide.
 FOLD_ANCHOR_COMBINE = "qmean"
 
+#: Step size of the **eval-only** ``"q_tilt"`` cut rule (issue #2865's candidate
+#: 3), in units of combined-fold quantile per inclusion step.
+#:
+#: ``q_tilt`` decouples the Inclusion knob from the mixture entirely: it takes
+#: the measured midpoint's combined fold quantile and shifts it by a fixed
+#: amount per step of the knob, so the admitted fraction moves by construction
+#: rather than by whatever the fitted Gaussians happen to imply.  That makes it
+#: the simplest rule that cannot be inclusion-blind - and its price is this free
+#: parameter, which has no principled value and must be *fitted*.
+#:
+#: **This default is a placeholder, not a measurement.**  0.02 means "one
+#: inclusion step moves the cut by two percentage points of the haystack", which
+#: is the right order of magnitude for the shipped ``mid_tilt`` rule's own
+#: realised tilt but is otherwise arbitrary.  #2865's sweep varies it; nothing
+#: should ship at this value on the strength of it being written down here.
+FOLD_ANCHOR_QTILT_STEP = 0.02
+
 
 @dataclass(frozen=True, eq=False)
 class FoldAnchoredCut:
@@ -855,6 +888,9 @@ class FoldAnchoredCut:
     n_anchored: int
     cut_rule: str = FOLD_ANCHOR_CUT_RULE
     combine: str = FOLD_ANCHOR_COMBINE
+    #: Only read by the eval-only ``"q_tilt"`` rule; see
+    #: :data:`FOLD_ANCHOR_QTILT_STEP`.
+    qtilt_step: float = FOLD_ANCHOR_QTILT_STEP
 
     @property
     def provenance(self) -> str:
@@ -890,13 +926,39 @@ class FoldAnchoredCut:
         cut contributes a zero shift (its ``rate`` cut falls back to the
         midpoint at every weight), degrading that fold to plain ``mid`` rather
         than poisoning the tilt.
+
+        ``"q_tilt"`` (**eval-only**, issue #2865's candidate 3) is the same
+        shape with the mixture taken out of the tilt: ``q = q_mid - step *
+        log2(fnr/fpr)``.  The log-cost ratio *is* the inclusion value for
+        weights from :func:`inclusion_cost_weights`, so this reads "shift the
+        admitted fraction by :attr:`qtilt_step` per step of the knob" - also
+        identically ``q_mid`` at inclusion 0, also monotone, but moving the
+        admitted set *by construction* rather than by whatever the fitted
+        Gaussians happen to imply.  Its step size is a free parameter with no
+        principled value (:data:`FOLD_ANCHOR_QTILT_STEP`), which is the whole of
+        what it trades away for that guarantee.
         """
         if self.cut_rule == "mid_tilt":
             q_mid = self._combined_fold_quantile("mid", 1.0, 1.0)
             q_rate = self._combined_fold_quantile("rate", fpr_weight, fnr_weight)
             q_rate_zero = self._combined_fold_quantile("rate", *inclusion_cost_weights(0))
             return q_mid + (q_rate - q_rate_zero)
+        if self.cut_rule == "q_tilt":
+            q_mid = self._combined_fold_quantile("mid", 1.0, 1.0)
+            return q_mid - self.qtilt_step * math.log2(fnr_weight / fpr_weight)
         return self._combined_fold_quantile(self.cut_rule, fpr_weight, fnr_weight)
+
+    def quantile_at(self, inclusion_value: int) -> float:
+        """The combined fold quantile this estimator admits at *inclusion_value*.
+
+        :meth:`threshold_at` realizes this quantile on the final model's
+        haystack; reading it directly separates "did the rule move the cut" from
+        "did the haystack have anything there to move past", which is the
+        distinction the #2865 sweep turns on - on a cleanly separated haystack a
+        whole band of the knob can move the quantile while realizing the same
+        threshold and the same admitted set.
+        """
+        return self._quantile_at(*inclusion_cost_weights(inclusion_value))
 
     def threshold_at(self, inclusion_value: int) -> float:
         """The threshold this estimator cuts at *inclusion_value*.

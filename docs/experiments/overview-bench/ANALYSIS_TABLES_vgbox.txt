@@ -1,0 +1,112 @@
+====================================================================================================
+COVERAGE
+====================================================================================================
+cell files found : 99 / 99 expected
+unreadable/empty : 0 []
+rows loaded      : 14042
+distinct cells   : 99
+steps per cell   : min=7 median=149 max=149
+styles           : ['max_patch', 'whole_image']
+heads            : ['linear']
+
+====================================================================================================
+HEADLINE - deep regime (t >= 100), cost = fpr + fnr, regret vs oracle threshold
+====================================================================================================
+                              n_steps  prevalence    cost     fpr     fnr  regret  oracle_cost      AP   auroc
+arm
+vg_box_large x siglip2_l          765      0.0152  0.3234  0.1591  0.1643  0.0709       0.2525  0.2766  0.9059
+vg_box_large x dinov3_patch       765      0.0152  0.3243  0.1554  0.1689  0.1241       0.2002  0.3001  0.9395
+vg_box_large x siglip             765      0.0152  0.3677  0.2050  0.1628  0.0974       0.2704  0.2826  0.9012
+vg_box_medium x dinov3_patch      306      0.0205  0.5902  0.1725  0.4176  0.0885       0.5017  0.1432  0.7887
+vg_box_small x dinov3_patch       612      0.0255  0.6463  0.4429  0.2035  0.1964       0.4500  0.1357  0.8232
+vg_box_medium x siglip2_l         306      0.0205  0.7365  0.3830  0.3535  0.0945       0.6420  0.1048  0.7077
+vg_box_small x siglip2_l          612      0.0255  0.7391  0.4363  0.3028  0.0902       0.6489  0.0855  0.6830
+vg_box_medium x siglip            306      0.0205  0.7471  0.4062  0.3409  0.0800       0.6672  0.0972  0.6892
+vg_box_small x siglip             568      0.0267  0.7774  0.4131  0.3642  0.0934       0.6840  0.0932  0.6679
+
+====================================================================================================
+BANDED ON VOTES SPENT - the axis the user actually pays
+====================================================================================================
+                                cost                          regret
+votes                           1-20 101-150   21-50  51-100    1-20 101-150   21-50  51-100
+arm
+vg_box_large x dinov3_patch   0.6085  0.3234  0.4917  0.3732  0.2335  0.1234  0.1838  0.1431
+vg_box_large x siglip         0.7542  0.3671  0.5191  0.3988  0.1764  0.0972  0.1705  0.1096
+vg_box_large x siglip2_l      0.7454  0.3225  0.5060  0.3900  0.1696  0.0711  0.1349  0.0770
+vg_box_medium x dinov3_patch  0.7634  0.5895  0.7252  0.7043  0.1380  0.0882  0.1476  0.1637
+vg_box_medium x siglip        0.9483  0.7465  0.8814  0.8005  0.1413  0.0798  0.1288  0.0833
+vg_box_medium x siglip2_l     0.9074  0.7358  0.7721  0.7503  0.1103  0.0938  0.0680  0.0861
+vg_box_small x dinov3_patch   0.7511  0.6456  0.6662  0.6814  0.1289  0.1959  0.1136  0.2091
+vg_box_small x siglip         0.9394  0.7769  0.8701  0.8224  0.1097  0.0933  0.0857  0.1032
+vg_box_small x siglip2_l      0.9257  0.7388  0.8716  0.7762  0.1089  0.0902  0.0932  0.0881
+
+====================================================================================================
+WHERE THE REGRET COMES FROM (rule inefficiency vs calibration shift)
+====================================================================================================
+rows with a decomposition: 12506 / 14042
+                              regret  rule_ineff  cal_shift  cal_share
+arm
+vg_box_large x dinov3_patch   0.1241      0.0208     0.1033     0.8324
+vg_box_large x siglip         0.0974     -0.0115     0.1089     1.1182
+vg_box_large x siglip2_l      0.0713     -0.0207     0.0921     1.2906
+vg_box_medium x dinov3_patch  0.0885     -0.0434     0.1319     1.4908
+vg_box_medium x siglip        0.0800     -0.0079     0.0879     1.0991
+vg_box_medium x siglip2_l     0.0945     -0.0052     0.0997     1.0545
+vg_box_small x dinov3_patch   0.1964     -0.0199     0.2163     1.1015
+vg_box_small x siglip         0.0925     -0.0012     0.0937     1.0132
+vg_box_small x siglip2_l      0.0947     -0.0014     0.0961     1.0148
+
+====================================================================================================
+FAILURE MODES - how the threshold was chosen
+====================================================================================================
+threshold_provenance          conformal  too_few_default
+arm
+vg_box_large x dinov3_patch        95.6              4.4
+vg_box_large x siglip              91.9              8.1
+vg_box_large x siglip2_l           93.5              6.5
+vg_box_medium x dinov3_patch       88.8             11.2
+vg_box_medium x siglip             91.7              8.3
+vg_box_medium x siglip2_l          94.6              5.4
+vg_box_small x dinov3_patch        82.0             18.0
+vg_box_small x siglip              82.7             17.3
+vg_box_small x siglip2_l           79.6             20.4
+
+degenerate steps : 275 / 14042 (1.96%)
+cut_fallback     : 0 / 14042 (0.00%)
+deep steps with fpr==0 : 7 / 5005 (0.14%)  [mean fnr there: 1.0000]
+
+====================================================================================================
+STARVATION - do runs actually find positives?
+====================================================================================================
+                              cells  median_good  zero_good  median_t  pct_zero_good
+arm
+vg_box_large x dinov3_patch      15          7.0          0     150.0            0.0
+vg_box_large x siglip            15          9.0          0     150.0            0.0
+vg_box_large x siglip2_l         15          7.0          0     150.0            0.0
+vg_box_medium x dinov3_patch      6          7.0          0     150.0            0.0
+vg_box_medium x siglip            6          6.0          0     150.0            0.0
+vg_box_medium x siglip2_l         6          7.0          0     150.0            0.0
+vg_box_small x dinov3_patch      12          4.0          0     150.0            0.0
+vg_box_small x siglip            12          5.0          0     150.0            0.0
+vg_box_small x siglip2_l         12          4.0          0     150.0            0.0
+
+====================================================================================================
+COST OF A STEP (seconds)
+====================================================================================================
+                                mean  median      max
+arm
+vg_box_large x dinov3_patch   456.35  401.26  1913.25
+vg_box_large x siglip          73.82   72.27   134.01
+vg_box_large x siglip2_l       84.84   83.29   140.84
+vg_box_medium x dinov3_patch  489.58  419.08  1742.73
+vg_box_medium x siglip         77.41   76.39   133.57
+vg_box_medium x siglip2_l      89.58   88.78   153.98
+vg_box_small x dinov3_patch   564.38  466.06  1996.33
+vg_box_small x siglip          92.85   92.36   172.54
+vg_box_small x siglip2_l       92.52   89.03   173.60
+
+====================================================================================================
+INDIVIDUAL TRACES
+====================================================================================================
+
+(tables also written to /expscratch/sgreenberg/bench-vgbox/results/ANALYSIS_TABLES.txt)

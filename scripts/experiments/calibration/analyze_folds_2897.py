@@ -48,6 +48,7 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from _cells_io import main_frame_files  # noqa: E402
 from scipy.stats import mannwhitneyu, wilcoxon  # noqa: E402
 
 #: ``folds_k{K}_{xcal,blend}`` - the arms this analyzer owns.
@@ -99,7 +100,7 @@ def _md(df: pd.DataFrame) -> str:
 
 def load_cells(cells_dir: Path) -> pd.DataFrame:
     """Load the fold-count rows, reporting what was dropped rather than hiding it."""
-    files = sorted(p for p in cells_dir.glob("task_*.csv") if "__sweep" not in p.name and "__cutdiag" not in p.name)
+    files = main_frame_files(cells_dir)
     frames, empty, unreadable = [], 0, 0
     for p in files:
         if p.stat().st_size == 0:

@@ -26,14 +26,14 @@ import sys
 cache_dir = sys.argv[1]
 
 # ------------------------------------------------------------------
-# 1. CLAP  (audio):  laion/clap-htsat-unfused
+# 1. CLAP General  (audio, default):  laion/larger_clap_general
 # ------------------------------------------------------------------
-print("\n[1/5] Downloading CLAP model (laion/clap-htsat-unfused) ...")
+print("\n[1/5] Downloading CLAP General model (laion/larger_clap_general) ...")
 from transformers import ClapModel, ClapProcessor
 
-ClapModel.from_pretrained("laion/clap-htsat-unfused", cache_dir=cache_dir)
-ClapProcessor.from_pretrained("laion/clap-htsat-unfused", cache_dir=cache_dir)
-print("  CLAP done.")
+ClapModel.from_pretrained("laion/larger_clap_general", cache_dir=cache_dir)
+ClapProcessor.from_pretrained("laion/larger_clap_general", cache_dir=cache_dir)
+print("  CLAP General done.")
 
 # ------------------------------------------------------------------
 # 2. SigLIP  (image, default):  google/siglip-base-patch16-224

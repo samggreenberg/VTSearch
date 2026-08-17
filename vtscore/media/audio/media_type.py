@@ -293,7 +293,9 @@ def generate_waveform_thumbnail_from_file(file_path: Path, *, size: int = _THUMB
 class AudioMediaType(MediaType):
     """Handles audio medias - file import, HTTP serving, and demo datasets.
 
-    Embedding is handled by :class:`~vtscore.media.audio.embedder_clap.AudioClapEmbedder`.
+    Embedding is handled by
+    :class:`~vtscore.media.audio.embedder_clap_general.AudioClapGeneralEmbedder`
+    (the default) or any of the other registered audio embedders.
     """
 
     #: Audio renders a waveform PNG (``generate_waveform_thumbnail``), so it is

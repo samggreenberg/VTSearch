@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -54,6 +54,7 @@ from vtscore.training.mlp import LINEAR_HEAD, _auto_hidden_dim, train_model
 from vtscore.training.thresholds import (
     ACQUISITION_INCLUSION_OFFSET,
     CUT_KIND_INTERIOR,
+    FOLD_ANCHOR_QTILT_STEP,
     NO_GOOD_THRESHOLD,
     acquisition_inclusion,
     anchored_gmm_fit,
@@ -311,6 +312,44 @@ _INCLUSION_SWEEP_COLUMNS: tuple[str, ...] = (
     "sweep_fpr",
     "sweep_fnr",
     "excess_fnr",
+)
+
+#: Column order for the **cut-rule x inclusion** side frame (issue #2865): one
+#: row per (step, fold-anchored arm, inclusion ``k``), written to its own CSV.
+#:
+#: Distinct from :data:`_INCLUSION_SWEEP_COLUMNS`, which sweeps the *conformal*
+#: rule's budget and asks whether its ``alpha(k)`` guarantee holds.  This frame
+#: sweeps the **fold-anchored** estimator's cut *rules* and asks which one
+#: should answer the knob at all - so every row is scored under the cost weights
+#: **of its own k** (not the run's reporting inclusion), against the oracle at
+#: that same k, which is what makes an arm's regret comparable across the knob.
+#:
+#: ``admitted_frac`` is the second decision number and the one with no analogue
+#: anywhere else in the harness: a rule that moves the *threshold* without
+#: moving the *admitted set* has not restored the knob.  Because the cut is
+#: carried to the final model as a quantile, a whole band of the slider can
+#: realize to one admitted set on a cleanly separated haystack - so the
+#: analyzer's headline is how many distinct admitted sets survive across the
+#: nominal range, per arm.
+_CUT_INCLUSION_COLUMNS: tuple[str, ...] = (
+    *_IDENT_COLUMNS,
+    "arm",
+    "cut_rule",
+    "anchor_weight",
+    "combine",
+    "qtilt_step",
+    "inclusion_k",
+    "fold_quantile",
+    "cut_threshold",
+    "cut_cost",
+    "cut_fpr",
+    "cut_fnr",
+    "k_oracle_threshold",
+    "k_oracle_cost",
+    "cut_regret",
+    "admitted_frac",
+    "n_admitted",
+    "n_test",
 )
 
 
@@ -1279,11 +1318,11 @@ def _anchored_variant_rows(
         if fit is None:
             continue
         for rule in rules:
-            if rule == "mid_tilt":
-                # Fold-level rule, defined in fold-quantile space: a single
+            if rule in ("mid_tilt", "q_tilt"):
+                # Fold-level rules, defined in fold-quantile space: a single
                 # label-anchored fit has no folds to tilt across.  The fold
-                # family below sweeps it; here it is skipped rather than fed to
-                # gmm_cut_from_fit, which (correctly) rejects it.
+                # family below sweeps them; here they are skipped rather than
+                # fed to gmm_cut_from_fit, which (correctly) rejects them.
                 continue
             cut, cut_kind = gmm_cut_from_fit(fit, rule, wf, wn)
             emit(f"anchored_w{weight:g}_{rule}", cut, provenance, cut_kind)
@@ -1513,6 +1552,151 @@ def _inclusion_sweep_rows(
             }
         )
     return out
+
+
+def _cut_inclusion_rows(
+    details: dict[str, Any],
+    base_scores: "np.ndarray",
+    base_labels: "np.ndarray",
+    fold_haystacks: list,
+    sim_scores: list[float],
+    ks: list[int],
+    weights: list[float],
+    rules: list[str],
+    fold_combines: list[str],
+    qtilt_steps: list[float],
+) -> list[dict[str, Any]]:
+    """Sweep the fold-anchored cut *rules* across the whole Inclusion knob (#2865).
+
+    The shipped ``mid`` cut was picked by two calibration runs that scored every
+    arm at inclusion 0, and a bare midpoint ignores the cost weights inclusion
+    arrives as - so it made the knob a no-op for every detector with usable
+    folds.  ``mid_tilt`` was shipped to restore the tilt while reproducing the
+    measured arm exactly at 0, but the *tilt* has never been priced against its
+    alternatives.  This frame is that measurement.
+
+    **Nearly free, and faithful for the same reason.**  The expensive part of a
+    fold-anchored threshold is the per-fold anchored EM, and it does not depend
+    on the cut rule, the combine, or the inclusion - so the fit is taken **once
+    per anchor weight** via the app's own :func:`fit_fold_anchored_cut`, and
+    every (rule, combine, k) point re-cuts it through the app's own
+    :meth:`~vtscore.training.thresholds.FoldAnchoredCut.threshold_at`.  That is
+    not merely cheaper than calling
+    :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold` per point,
+    it is exactly what production does when the user drags the slider
+    (:func:`vtscore.state.core.recompute_detector_thresholds_for_inclusion`
+    re-cuts a cached estimator with no refit), so the sweep measures the object
+    the app actually re-cuts rather than a chain of independent retrains.
+
+    A weight whose fit fails outright contributes no rows.  The terminal
+    fallbacks :func:`fold_anchored_gmm_threshold` applies in that case
+    (final-model unanchored midpoint, then its median) are deliberately *not*
+    reproduced here: both are inclusion-blind by construction, so they would
+    enter this frame as arms that trivially lose the knob-liveness comparison
+    while saying nothing about the rule under test.
+
+    Every row is scored under the cost weights of **its own** ``k`` and against
+    the oracle cut at that same ``k`` - the run's reporting inclusion does not
+    enter - so regret is comparable along the knob as well as across arms.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval.calibration_metrics import inclusion_weights, operating_cost, oracle_cut  # noqa: PLC0415
+
+    fold_orderings = details.get("fold_orderings") or []
+    if not fold_orderings or not fold_haystacks or not ks:
+        return []
+
+    n_folds = min(len(fold_haystacks), len(fold_orderings))
+    fold_hay, orderings = fold_haystacks[:n_folds], fold_orderings[:n_folds]
+    final_scores = np.asarray(sim_scores, dtype=np.float64)
+    base_scores = np.asarray(base_scores, dtype=np.float64)
+    base_labels = np.asarray(base_labels, dtype=np.float64)
+    n_test = int(base_scores.size)
+
+    # The oracle depends only on k, not on the arm - hoist it out of the arm
+    # loop so a 5-rule x 8-weight grid pays for it once per k rather than 40x.
+    oracle_by_k = {}
+    for k in ks:
+        wf, wn = inclusion_weights(k)
+        o_thr, o_cost, _o_fpr, _o_fnr = oracle_cut(base_scores, base_labels, wf, wn)
+        oracle_by_k[k] = (wf, wn, o_thr, o_cost)
+
+    arms = _cut_inclusion_arms(fold_hay, orderings, final_scores, weights, rules, fold_combines, qtilt_steps)
+
+    out: list[dict[str, Any]] = []
+    for arm, arm_cut in arms:
+        for k in ks:
+            wf, wn, o_thr, o_cost = oracle_by_k[k]
+            thr = arm_cut.threshold_at(k)
+            if not np.isfinite(thr):
+                continue
+            cost, fpr, fnr = operating_cost(base_scores, base_labels, thr, wf, wn)
+            n_admitted = int(np.count_nonzero(base_scores >= thr))
+            out.append(
+                {
+                    **arm,
+                    "inclusion_k": k,
+                    "fold_quantile": _r(arm_cut.quantile_at(k)),
+                    "cut_threshold": _r(float(thr)),
+                    "cut_cost": _r(cost),
+                    "cut_fpr": _r(fpr),
+                    "cut_fnr": _r(fnr),
+                    "k_oracle_threshold": _r(float(o_thr)),
+                    "k_oracle_cost": _r(o_cost),
+                    "cut_regret": _r(cost - o_cost),
+                    "admitted_frac": _r(n_admitted / n_test if n_test else 0.0),
+                    "n_admitted": n_admitted,
+                    "n_test": n_test,
+                }
+            )
+    return out
+
+
+def _cut_inclusion_arms(
+    fold_hay: list,
+    orderings: list[tuple[list[float], list[float]]],
+    final_scores: "np.ndarray",
+    weights: list[float],
+    rules: list[str],
+    fold_combines: list[str],
+    qtilt_steps: list[float],
+) -> "list[tuple[dict[str, Any], Any]]":
+    """The ``(identity columns, re-cut estimator)`` pairs the #2865 sweep scores.
+
+    One anchored fit per *weight* - the only expensive step, and the only one
+    that depends on none of the swept axes - re-cut into every (rule, combine,
+    step) arm by :func:`dataclasses.replace`.  A weight whose fit fails
+    contributes no arms.
+    """
+    from vtscore.training.thresholds import fit_fold_anchored_cut  # noqa: PLC0415
+
+    arms: list[tuple[dict[str, Any], Any]] = []
+    for weight in weights:
+        cut = fit_fold_anchored_cut(fold_hay, orderings, final_scores, anchor_weight=weight)
+        if cut is None:
+            continue
+        for rule in rules:
+            # ``q_tilt`` alone carries a free step size, so it is the only rule
+            # that expands over ``qtilt_steps``; the others take a NaN step so
+            # the whole frame keeps one row shape.
+            steps = list(qtilt_steps) if rule == "q_tilt" else [float("nan")]
+            for combine in fold_combines:
+                for step in steps:
+                    arm_cut = replace(cut, cut_rule=rule, combine=combine)
+                    name = f"fold_anchored_w{weight:g}_{rule}_{combine}"
+                    if rule == "q_tilt":
+                        arm_cut = replace(arm_cut, qtilt_step=step)
+                        name += f"_s{step:g}"
+                    ident = {
+                        "arm": name,
+                        "cut_rule": rule,
+                        "anchor_weight": weight,
+                        "combine": combine,
+                        "qtilt_step": _r(step),
+                    }
+                    arms.append((ident, arm_cut))
+    return arms
 
 
 # ------------------------------------------------------------------
@@ -2224,6 +2408,9 @@ def simulate_voting_iterations(  # noqa: C901
     anchored_fold_arms: bool = True,
     anchored_fold_combines: Optional[list[str]] = None,
     fold_count_variants: Optional[list[int]] = None,
+    cut_inclusion_ks: Optional[list[int]] = None,
+    cut_inclusion_sink: Optional[list[dict[str, Any]]] = None,
+    cut_inclusion_qtilt_steps: Optional[list[float]] = None,
     acq_inclusion_offset: int = ACQUISITION_INCLUSION_OFFSET,
     acq_rank_percentile: Optional[float] = None,
 ) -> list[dict[str, Any]]:
@@ -2318,6 +2505,22 @@ def simulate_voting_iterations(  # noqa: C901
             follows the text sort (top items for the initial goods, the sort's
             cutoff for the initial bads); ``None`` (default) means the dataset
             has no text sort, so autopilot seeds from random known-good examples.
+        cut_inclusion_ks: Inclusion values the **fold-anchored cut rules** are
+            swept over for issue #2865, into *cut_inclusion_sink* (columns
+            :data:`_CUT_INCLUSION_COLUMNS`).  Orthogonal to
+            *inclusion_sweep_ks*, which sweeps the conformal rule's budget: this
+            one asks which cut rule should answer the Inclusion knob, so its
+            rows are scored at their own ``k`` rather than at *inclusion*.  The
+            arms come from *anchored_weights* x *anchored_rules* x
+            *anchored_fold_combines*, so ``anchored_rules=["mid", "mid_tilt",
+            "rate", "cross_tilt", "q_tilt"]`` is the candidate set the issue
+            names.  ``None`` (default) = off, and every other study is unchanged.
+        cut_inclusion_sink: List the #2865 rows are appended to.  Required for
+            *cut_inclusion_ks* to do anything.
+        cut_inclusion_qtilt_steps: Step sizes the eval-only ``q_tilt`` rule is
+            expanded over (its free parameter; every other rule ignores this).
+            Defaults to the single placeholder
+            :data:`~vtscore.training.thresholds.FOLD_ANCHOR_QTILT_STEP`.
         acq_inclusion_offset: Cut the threshold handed to the **selector** at
             ``inclusion + acq_inclusion_offset``, leaving reporting and every
             metric at *inclusion* so arms stay comparable.  Defaults to
@@ -2911,6 +3114,27 @@ def simulate_voting_iterations(  # noqa: C901
             if inclusion_sweep_ks and sweep_sink is not None:
                 for sr in _inclusion_sweep_rows(details, base_scores, base_labels, inclusion_sweep_ks):
                     sweep_sink.append({**base_row, **sr})
+            # The #2865 cut-rule x inclusion sweep, into its own side sink.
+            # Needs the per-fold sim scores the fold-anchored arms use, so it
+            # rides the same `sim_pooled_scores is not None` gate they do.
+            if cut_inclusion_ks and cut_inclusion_sink is not None and sim_pooled_scores is not None:
+                for cr in _cut_inclusion_rows(
+                    details,
+                    base_scores,
+                    base_labels,
+                    sim_fold_haystacks,
+                    sim_pooled_scores,
+                    cut_inclusion_ks,
+                    weights=anchored_weights if anchored_weights is not None else list(_ANCHORED_WEIGHTS),
+                    rules=anchored_rules if anchored_rules is not None else list(_ANCHORED_RULES),
+                    fold_combines=(
+                        anchored_fold_combines if anchored_fold_combines is not None else list(_ANCHORED_FOLD_COMBINES)
+                    ),
+                    qtilt_steps=(
+                        cut_inclusion_qtilt_steps if cut_inclusion_qtilt_steps is not None else [FOLD_ANCHOR_QTILT_STEP]
+                    ),
+                ):
+                    cut_inclusion_sink.append({**base_row, **cr})
         else:
             rows.append({**base_row, **metrics, **timing_cols})
 

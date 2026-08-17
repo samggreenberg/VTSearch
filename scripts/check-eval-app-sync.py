@@ -208,6 +208,32 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="thresholds.fold_anchored_fit_then_cut",
+        app="py:vtscore.training.thresholds.fold_anchored_gmm_threshold",
+        harness="vtscore/eval/voting_iterations.py::_cut_inclusion_arms",
+        kind="default",
+        note=(
+            "The app composes a fold-anchored threshold as fit_fold_anchored_cut(...) then "
+            "cut.threshold_at(inclusion). The #2865 sweep re-cuts ONE fit per anchor weight "
+            "across the whole (rule, combine, k) grid, so it calls those two halves itself "
+            "instead of calling this function per grid point. The two are identical only for as "
+            "long as this function has nothing BETWEEN the fit and the cut. If a stage is added "
+            "there - a clamp, a smoothing pass, a provenance-dependent substitution - the sweep "
+            "silently stops measuring the shipped estimator, and its rows would still look "
+            "perfectly reasonable. Re-check that the composition is still fit-then-cut."
+        ),
+        divergence=(
+            "INTENTIONAL: the harness does NOT reproduce this function's terminal fallbacks (the "
+            "final model's unanchored midpoint, then its median) when no fold yields a fit. Both "
+            "are inclusion-blind by construction, so they would enter the #2865 frame as arms "
+            "that trivially lose the knob-liveness comparison while saying nothing about the cut "
+            "rule under test; the sweep skips that anchor weight instead. Fitting once and "
+            "re-cutting is also what production itself does on an Inclusion slide "
+            "(recompute_detector_thresholds_for_inclusion), so the sweep measures the object the "
+            "app re-cuts rather than a chain of independent retrains."
+        ),
+    ),
+    Mirror(
         id="thresholds.rate_cut_no_root",
         app="py:vtscore.training.thresholds._rate_cut",
         harness="vtscore/eval/cut_rules.py::gaussian_cuts",

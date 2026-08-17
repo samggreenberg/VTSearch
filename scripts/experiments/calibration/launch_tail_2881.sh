@@ -55,7 +55,7 @@ export CALIB_TIME="${CALIB_TIME:-1:30:00}"
 # The pile is the durable home for embeddings (#3121).  This used to default to
 # `/exp/$USER/max-patch/datadir`, an artifact named after a finished experiment --
 # which was archived and deleted in the 2026-08-12 cleanup, leaving the default
-# pointing at nothing.  Preflight check 7 is what catches that now.
+# pointing at nothing.  Preflight check 10 is what catches that now.
 source "$WT/scripts/experiments/pile/pile_env.sh"
 export HF_HOME="${HF_HOME:-$VTSEARCH_MODELS_DIR}"
 

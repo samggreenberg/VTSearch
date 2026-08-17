@@ -1,0 +1,165 @@
+
+========================================================================================================
+coco_siglip_clock   target='clock'   threshold=0.1661
+  test set: 2476 medias, 112 positive (4.5%)
+  false positives: 46/2364 negatives   false negatives: 48/112 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'clock')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.7446  000000471991.jpg   chair
+    0.6369  000000560312.jpg   couch, tv
+    0.5571  000000378139.jpg   bicycle, car, boat, person
+    0.4985  000000546823.jpg   person, umbrella, car, handbag, horse, bicycle
+    0.4641  000000218091.jpg   chair, couch, bed, remote, tv
+    0.4358  000000418696.jpg   traffic light, car, truck
+    0.4351  000000138639.jpg   person, car, handbag, bicycle, traffic light
+    0.3663  000000001993.jpg   chair, bed, dining table
+    0.3374  000000442323.jpg   bed, chair, remote, suitcase, tv
+    0.3327  000000419601.jpg   book, couch, chair, bed
+
+  TOP FALSE NEGATIVES (dataset says IS 'clock', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.0028  000000350148.jpg   person, carrot, chair, car, dining table, cake, clock, cup, fork, knife, sandw
+    0.0051  000000198641.jpg   laptop, tv, cat, clock, keyboard
+    0.0058  000000084674.jpg   person, couch, book, clock, donut, tv
+    0.0063  000000568195.jpg   fork, person, bottle, cake, clock, dining table, knife
+    0.0070  000000427034.jpg   dog, clock, laptop, person
+    0.0077  000000468332.jpg   person, bench, cake, car, clock, dining table
+    0.0099  000000441247.jpg   chair, vase, couch, dining table, orange, oven, person, backpack, banana, bott
+    0.0102  000000512657.jpg   person, remote, clock, couch, surfboard
+    0.0119  000000447169.jpg   bottle, chair, clock, oven
+    0.0124  000000322352.jpg   chair, vase, potted plant, clock, dining table
+
+========================================================================================================
+vg_dinov3_sky   target='sky'   threshold=0.5412
+  test set: 2097 medias, 394 positive (18.8%)
+  false positives: 504/1703 negatives   false negatives: 50/394 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'sky')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.5837      2492.jpg   mountain, road, shadow, tree
+    0.5829      4973.jpg   building, chair, glass, man, pants, people, person, pole, roof, shirt, sidewal
+    0.5824    150398.jpg   plane, tire
+    0.5808      2541.jpg   field, grass, leaf, tree
+    0.5800      3199.jpg   building
+    0.5799      3924.jpg   door, person, tree
+    0.5795      4211.jpg   boat, building, bush, cloud, field, leaf, shadow, tree
+    0.5788      3442.jpg   building, grass, line, road, roof, shadow, tree, wall, water, window
+    0.5781      2628.jpg   bird, clouds, leaf, mountain, shadow, tree, trunk
+    0.5779    497989.jpg   building, plane, pole, tail, tree, water, window
+
+  TOP FALSE NEGATIVES (dataset says IS 'sky', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.4966    713003.jpg   building, hat, line, man, people, shirt, sky, wall
+    0.4973      4528.jpg   car, fence, sky
+    0.5041     61520.jpg   arm, building, cap, cup, fence, hair, light, man, shirt, sky, window
+    0.5049      2813.jpg   line, man, shadow, sidewalk, sign, sky
+    0.5069     61528.jpg   ear, giraffe, head, sky, tree
+    0.5073      4625.jpg   floor, sky, table, trunk, wall
+    0.5085    107928.jpg   branch, ear, foot, giraffe, grass, hair, head, leg, neck, sky, tail, tree
+    0.5103      3139.jpg   building, car, door, plate, sky, snow, window
+    0.5150      3991.jpg   car, door, sky, street, tree, truck, window
+    0.5154    498136.jpg   flower, leaf, man, person, sign, sky, umbrella, wall, window, woman
+
+========================================================================================================
+vg_siglip_bus   target='bus'   threshold=0.3581
+  test set: 2097 medias, 67 positive (3.2%)
+  false positives: 1210/2030 negatives   false negatives: 0/67 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'bus')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.6441    498326.jpg   car, clouds
+    0.6320      2997.jpg   building, window
+    0.6296      3078.jpg   door, tire, window
+    0.6132    286074.jpg   clouds, fence, light, line, man, person, plate, pole, window
+    0.6058    497921.jpg   car, grass, light, man, sign, tree, truck, window
+    0.5975    286076.jpg   bike, building, car, light, line, man, people, road, sidewalk, sign
+    0.5955    498258.jpg   building, window
+    0.5954    150395.jpg   building, clock, flower, hand, roof, sign, sky, wall
+    0.5926    498063.jpg   leaf, tree
+    0.5910      3077.jpg   building, car, clock, hair, line, road, sidewalk, tower, tree, truck, window,
+
+  TOP FALSE NEGATIVES (dataset says IS 'bus', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+
+  NOTE: 80/1210 false positives carry a category whose name contains or is contained by 'bus' -> likely annotation granularity, not model error
+        3155.jpg  score=0.5829  matched: ['bush']
+      150274.jpg  score=0.5752  matched: ['bush']
+      285778.jpg  score=0.5516  matched: ['bush']
+        2993.jpg  score=0.5449  matched: ['bush']
+      498048.jpg  score=0.5446  matched: ['bush']
+        3287.jpg  score=0.5431  matched: ['bush']
+
+========================================================================================================
+vg_siglip_nose   target='nose'   threshold=0.3577
+  test set: 2097 medias, 77 positive (3.7%)
+  false positives: 552/2020 negatives   false negatives: 7/77 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'nose')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.7787      3537.jpg   ear, eye, hair, man, shirt
+    0.7253      3591.jpg   eye, face, hair, man
+    0.7130      3616.jpg   eye, shadow, woman
+    0.6779      4954.jpg   ear, eye, hair, hand, shirt, wall, woman
+    0.6679      3506.jpg   ear, eye, hair, man, wall
+    0.6637      3604.jpg   hair, neck, wall, woman
+    0.6483      3659.jpg   bag, eye, face, hair, man
+    0.6213      3596.jpg   building, clouds, shadow, tree, wheel, window
+    0.6029    498167.jpg   building, man, shirt, wall
+    0.5783    285796.jpg   floor, flower, glass, man, neck, plane, shirt, sign, tail, window
+
+  TOP FALSE NEGATIVES (dataset says IS 'nose', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.3002    712953.jpg   bike, cow, ear, face, nose, sign, sky, tire, woman
+    0.3058    107951.jpg   cap, foot, hat, horse, jacket, man, nose, shadow, shoe, tree
+    0.3395    285985.jpg   head, mountain, nose, rock, roof, tree
+    0.3407    498278.jpg   ear, eye, face, fence, girl, hand, horse, jacket, nose, pants, pole, tree
+    0.3425      3666.jpg   car, field, grass, nose, tail, tire, tower, tree, wheel, window
+    0.3470      2657.jpg   bird, eye, grass, leg, nose
+    0.3554    150269.jpg   grass, tree, trunk, zebra, leg, head, nose
+
+========================================================================================================
+vg_siglip_sky   target='sky'   threshold=0.4541
+  test set: 2097 medias, 394 positive (18.8%)
+  false positives: 682/1703 negatives   false negatives: 75/394 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'sky')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.7075    498364.jpg   cloud, grass, pole, road, sign, truck
+    0.6621    498074.jpg   leaf, pole, track, train, tree, water
+    0.6568      4056.jpg   building, clouds, grass, pole, tree, water
+    0.6453    286007.jpg   building, wall
+    0.6346      4877.jpg   cloud, tree, trunk
+    0.6329      4681.jpg   boat, building, tree, wall, water
+    0.6301    498267.jpg   boat, building, letter, water, window
+    0.6291      4211.jpg   boat, building, bush, cloud, field, leaf, shadow, tree
+    0.6286      3199.jpg   building
+    0.6239      2602.jpg   bush, sidewalk, tree, window
+
+  TOP FALSE NEGATIVES (dataset says IS 'sky', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.3193    713003.jpg   building, hat, line, man, people, shirt, sky, wall
+    0.3400      4263.jpg   chair, foot, girl, glass, grass, hand, jacket, leg, man, mountain, pants, peop
+    0.3494    150360.jpg   building, bus, bush, car, flower, horse, light, man, pants, road, roof, shirt,
+    0.3625    712994.jpg   ear, face, hair, hand, horse, man, nose, people, shadow, shirt, sky
+    0.3674      2363.jpg   girl, hair, jacket, man, pants, people, person, shirt, shoe, sky, tree, woman
+    0.3928      4981.jpg   building, car, man, pole, shirt, sign, sky, street, tree, wall
+    0.3939     61578.jpg   bag, boy, building, clock, face, glass, leaf, pants, roof, shirt, shoe, sky
+    0.3955    285722.jpg   boy, face, grass, hand, kite, leaf, letter, pants, person, sky, tree
+    0.3963      4450.jpg   bike, boy, cap, girl, head, leaf, man, people, person, road, shirt, sky, tree,
+    0.3970      3455.jpg   building, door, hair, jacket, man, pants, people, person, shoe, sidewalk, sky,

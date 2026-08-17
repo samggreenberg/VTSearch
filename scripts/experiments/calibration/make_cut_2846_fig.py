@@ -6,7 +6,6 @@ the repair *fires* (fallback rate falls) but what it buys depends on the tilt.
 
 from __future__ import annotations
 
-import glob
 from pathlib import Path
 
 import matplotlib
@@ -15,6 +14,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+
+from _cells_io import main_frame_files
 
 # dataviz palette, validated (categorical slots 1-2; diverging blue<->red)
 BLUE, ORANGE, RED = "#2a78d6", "#eb6834", "#d03b3b"
@@ -30,9 +31,7 @@ rng = np.random.default_rng(2846)
 
 
 def load() -> pd.DataFrame:
-    files = sorted(
-        p for p in glob.glob(str(RESULTS / "cells" / "task_*.csv")) if "__sweep" not in p and "__cutdiag" not in p
-    )
+    files = main_frame_files(RESULTS / "cells")
     df = pd.concat([pd.read_csv(p) for p in files], ignore_index=True)
     df["gmm_variant"] = df["gmm_variant"].fillna("")
     df["arm"] = df["dataset"] + "/" + df["embedder"] + "/" + df["style"]

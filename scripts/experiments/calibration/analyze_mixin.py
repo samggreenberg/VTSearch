@@ -31,6 +31,7 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+from _cells_io import main_frame_files  # noqa: E402
 
 #: The window every headline number is computed over: the app's first trained
 #: detector appears at 7 votes, and the production ramp ends at 20.  Below 7 no
@@ -57,7 +58,7 @@ def load_cells(results: Path) -> pd.DataFrame:
     study that quietly analyses 1295 of 1344 cells while reporting neither
     number is exactly how a disk incident turns into a wrong verdict.
     """
-    files = sorted((results / "cells").glob("task_*.csv"))
+    files = main_frame_files(results / "cells")
     files = [f for f in files if not f.name.endswith("__sweep.csv")]
     if not files:
         raise SystemExit(f"no cell CSVs under {results / 'cells'}")
