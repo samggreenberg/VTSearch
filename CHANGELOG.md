@@ -30,6 +30,21 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Bad pre-computed vectors are now rejected at import, with an error that says
+  what is wrong.** Importing an `.npz` manifest of pre-computed embeddings used
+  to accept anything: vectors of the wrong width for the embedder the manifest
+  named, `NaN`/infinite rows from a failed embed, ragged archives, `float64` or
+  half-precision exports. None of those failed at import. A wrong-width row
+  surfaced later as `could not broadcast input array from shape (768,) into
+  shape (1152,)` on an unrelated search, naming neither the file nor the
+  manifest; a non-finite row never raised at all and silently corrupted every
+  score and threshold it touched. Manifests are now checked as they are read —
+  including against the declared embedder's own dimension, so an archive that
+  says `siglip2_l` while shipping 768-dim rows is caught immediately — and
+  vectors are widened to `float32`, so a half-precision or double-precision
+  export imports cleanly instead of leaving the dataset mixed. If a dataset
+  still ends up holding two widths, sorting and training now name the offending
+  item and both dimensions instead of failing with a bare numpy shape error.
 - **Audio now defaults to the larger CLAP checkpoint.** New audio datasets and
   text queries use `clap_general` (`laion/larger_clap_general`, shown as "CLAP
   (general, larger)") instead of `clap`. It wins every measured retrieval

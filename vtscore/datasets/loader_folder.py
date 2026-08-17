@@ -28,6 +28,7 @@ from vtscore.datasets.loader import (
     _pop_md5_key,
 )
 from vtscore.embedding.media_vectors import init_embeddings
+from vtscore.embedding.precomputed import normalize_vector
 from vtscore.security.path_validation import (
     glob_top_level,
     iter_glob_top_level,
@@ -314,15 +315,42 @@ def _resolve_file_embedding(
     is recorded on the media; ``""`` is returned when the caller doesn't
     know the embedder (the framework embed stage will stamp its own name
     when embedding is ``None``).
+
+    Whatever a hit yields is validated by
+    :func:`~vtscore.embedding.precomputed.normalize_vector` before it is
+    returned.  ``content_vectors`` and ``custom_metadata_map`` are the
+    documented channels for a *third-party* importer plugin to ship vectors it
+    computed elsewhere (see
+    :meth:`~vtscore.datasets.importers.base.core.DatasetImporter.yield_precomputed`),
+    so unlike an internally-produced embedding nothing guarantees their shape,
+    dtype or finiteness.  Validating here - once per file, at the only point
+    those dicts become a media's stored vector - keeps a plugin's bad row from
+    becoming a numpy broadcast error inside the matrix builder on some later
+    request.
     """
     cm_embedding = _get_embedding_value(file_cm) if file_cm else None
     if cm_embedding is not None:
-        return cm_embedding, ""
-    if content_vectors and rel_path in content_vectors:
-        return content_vectors[rel_path], content_embedder_name
-    if content_vectors and file_name in content_vectors:
-        return content_vectors[file_name], content_embedder_name
+        return _validated_precomputed(cm_embedding, f"custom_metadata embedding for {rel_path!r}"), ""
+    for key in (rel_path, file_name):
+        if content_vectors and key in content_vectors:
+            vec = _validated_precomputed(content_vectors[key], f"pre-computed vector for {key!r}")
+            return vec, content_embedder_name
     return None, ""
+
+
+def _validated_precomputed(value: Any, label: str) -> Any:
+    """Validate a pre-computed entry, which may be a vector *or* a per-embedder dict.
+
+    A per-embedder ``vectors_<name>`` NPZ import supplies one vector per bound
+    embedder as a ready-made ``{embedder_name: vector}`` dict (see
+    :func:`~vtscore.embedding.media_vectors.init_embeddings`), so both shapes
+    reach this point.  Each column is validated on its own: a trio archive's
+    columns are *meant* to differ in width (siglip is 1152-dim, dinov3_patch is
+    768-dim), so the only sound check is per-embedder, never across the dict.
+    """
+    if isinstance(value, dict):
+        return {name: normalize_vector(vec, label=f"{label} [embedder {name!r}]") for name, vec in value.items()}
+    return normalize_vector(value, label=label)
 
 
 def _resolve_file_md5(

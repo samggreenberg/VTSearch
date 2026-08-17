@@ -67,6 +67,8 @@ from collections.abc import Sequence
 from typing import Any, Iterator
 
 from vtscore.datasets.importers.base import DatasetImporter, PluginField, SourceSpec
+from vtscore.embedding.binding import expected_dim_for_embedder
+from vtscore.embedding.precomputed import normalize_vector
 from vtscore.plugins import FieldOption
 from vtscore.media import all_folder_names
 
@@ -138,6 +140,17 @@ def _build_media(
     content_id = record["contentID"]
     media_id = record["mediaID"]
     media_url = record["media_url"]
+    # DataWrest's vector is external input: validate it (shape, dtype,
+    # finiteness, and width against the embedder it names) before it becomes a
+    # stored embedding, so a bad row fails on the record that produced it rather
+    # than as a broadcast error inside the matrix builder later.
+    embedder_name = embedding_info["embedder"]
+    embedding = normalize_vector(
+        embedding_info["embedding"],
+        label=f"ReCaller embedding for content id {content_id!r}",
+        expected_dim=expected_dim_for_embedder(embedder_name),
+        expected_source=f"the width declared by embedder {embedder_name!r}",
+    )
     origin = {
         "importer": importer_name,
         "params": {
@@ -151,8 +164,8 @@ def _build_media(
         "media_type": media_type,
         "filename": content_id,
         "md5": record["md5"],
-        "embeddings": {embedding_info["embedder"]: embedding_info["embedding"]},
-        "embedder": embedding_info["embedder"],
+        "embeddings": {embedder_name: embedding},
+        "embedder": embedder_name,
         "media_bytes": media_bytes,
         "media_path": None,
         "media_url": media_url,
