@@ -81,6 +81,33 @@ def _capabilities(embedder_name: str) -> tuple[bool, bool, bool]:
     )
 
 
+def expected_dim_for_embedder(embedder_name: str | None) -> int | None:
+    """Return the declared output width of *embedder_name*, or ``None`` if unknown.
+
+    Reads :attr:`~vtscore.media.embedder.MediaEmbedder.embedding_dim`, which is
+    descriptor metadata - no weights are downloaded and no model is loaded, so
+    this is cheap enough to call on every manifest read.  ``None`` for a blank
+    or unregistered name, or an embedder that declares no fixed width; callers
+    treat that as "nothing to check against" rather than an error, since a
+    manifest of pre-computed vectors is allowed not to name its embedder at all.
+
+    This is what lets a mislabelled manifest be caught at the door: a ``.npz``
+    that says ``embedder_name="siglip2_l"`` but ships 768-dim rows is
+    contradicting itself, and the contradiction is visible without loading a
+    single model.
+    """
+    name = (embedder_name or "").strip()
+    if not name:
+        return None
+
+    from vtscore.media import get_embedder  # noqa: PLC0415 - avoid import cycle
+
+    try:
+        return get_embedder(name).embedding_dim
+    except KeyError:
+        return None
+
+
 def embedder_type(embedder_name: str | None) -> str:
     """Classify *embedder_name* into one of the three detector embedder types.
 

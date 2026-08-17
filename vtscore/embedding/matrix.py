@@ -39,6 +39,7 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 
 from vtscore.embedding.media_vectors import media_embedder_names, media_embedding, primary_embedder_name
+from vtscore.embedding.precomputed import MismatchedVectorError, require_dim
 from vtscore.state.core import _state_lock
 
 if TYPE_CHECKING:
@@ -82,6 +83,18 @@ def _require_embedding(cid: int, media: dict[str, Any], embedder_name: str | Non
     return emb
 
 
+def _vector_label(cid: int, media: dict[str, Any], embedder_name: str | None) -> str:
+    """Human-locatable name for one media's vector, for a mismatch message.
+
+    Prefers the media's origin name / filename over the bare content id: the id
+    is an internal integer the user has no way to look up, whereas the filename
+    is the row they can go and find in the manifest that supplied it.
+    """
+    who = media.get("origin_name") or media.get("filename") or "?"
+    suffix = f" under embedder {embedder_name!r}" if embedder_name else ""
+    return f"media {cid} ({who}){suffix}"
+
+
 def _stack_embeddings(
     sorted_ids: list[int],
     source: dict[int, dict[str, Any]],
@@ -92,12 +105,33 @@ def _stack_embeddings(
     Rows follow *sorted_ids* order, pulling each media's vector via
     :func:`_require_embedding` (which routes through the dict-keyed accessor).
     Raises ``ValueError`` naming the first media that lacks a vector.
+
+    Each row's width is checked against the first row's before it is assigned.
+    Ingestion is supposed to make a mixed-width dataset impossible (see
+    :mod:`vtscore.embedding.precomputed`), but a dataset can still acquire one
+    by other routes - a pickle written before that validation existed, or a
+    third-party importer that writes ``media["embeddings"]`` directly - and
+    without the check numpy reports only
+
+        could not broadcast input array from shape (768,) into shape (1152,)
+
+    which names neither the media nor the embedder, on a request that has
+    nothing to do with where the bad vector came from.  The check is one
+    attribute read per media against an ``(N, D)`` allocation and a full copy,
+    so it costs nothing measurable on the hot path.
     """
     first_emb = np.asarray(_require_embedding(sorted_ids[0], source[sorted_ids[0]], embedder_name), dtype=np.float32)
     dim = int(first_emb.shape[-1])
     matrix = np.empty((len(sorted_ids), dim), dtype=np.float32)
     for i, cid in enumerate(sorted_ids):
-        matrix[i] = _require_embedding(cid, source[cid], embedder_name)
+        vec = _require_embedding(cid, source[cid], embedder_name)
+        require_dim(
+            vec,
+            dim,
+            label=_vector_label(cid, source[cid], embedder_name),
+            expected_source=f"matching {_vector_label(sorted_ids[0], source[sorted_ids[0]], embedder_name)}",
+        )
+        matrix[i] = vec
     return matrix
 
 
@@ -441,7 +475,20 @@ def media_score_rows(
     flat = arr.reshape(-1, arr.shape[-1])
     if emb is None:
         return flat
-    return np.concatenate([np.asarray(emb, dtype=dtype).reshape(1, -1), flat], axis=0)
+    cls_row = np.asarray(emb, dtype=dtype).reshape(1, -1)
+    if cls_row.shape[1] != flat.shape[1]:
+        # The image-level vector and the patch grid must live in the same space
+        # for a max-pool over them to mean anything.  np.concatenate would report
+        # only an axis-1 dimension mismatch, so say which two things disagree.
+        raise MismatchedVectorError(
+            f"media {media.get('id', '?')} ({media.get('origin_name') or media.get('filename') or '?'}): "
+            f"its image-level vector is {cls_row.shape[1]}-dimensional but its patch grid is "
+            f"{flat.shape[1]}-dimensional. MaxPatch scoring max-pools the two together, so they must come "
+            f"from the same embedder"
+            + (f" (expected {embedder_name!r})" if embedder_name else "")
+            + ". Re-embed this dataset so the image-level and patch vectors are produced by one model."
+        )
+    return np.concatenate([cls_row, flat], axis=0)
 
 
 def media_row_box(media: dict[str, Any], row_index: int) -> list[float] | None:
@@ -531,14 +578,26 @@ def _build_region_arrays(
     np.cumsum(counts[:-1], out=starts[1:])
     total = int(counts.sum())
 
-    # Pass 2: allocate once and fill each media's slice in place.
+    # Pass 2: allocate once and fill each media's slice in place.  Each media's
+    # rows are width-checked against the first media's before assignment, for
+    # the same reason as in ``_stack_embeddings``: the raw failure here is a
+    # bare numpy broadcast error naming neither the media nor the embedder.
     first = media_score_rows(snap[sorted_ids[0]], patch_embedder_name, dtype=np.float16)
     assert first is not None  # guaranteed by the _require_embedding pass above
-    region_matrix = np.empty((total, int(first.shape[1])), dtype=np.float16)
+    dim = int(first.shape[1])
+    region_matrix = np.empty((total, dim), dtype=np.float16)
     region_matrix[: first.shape[0]] = first
     for mi, cid in enumerate(sorted_ids[1:], start=1):
         rows = media_score_rows(snap[cid], patch_embedder_name, dtype=np.float16)
         assert rows is not None
+        if int(rows.shape[1]) != dim:
+            raise MismatchedVectorError(
+                f"{_vector_label(cid, snap[cid], patch_embedder_name)}: contributes "
+                f"{int(rows.shape[1])}-dimensional score rows, but "
+                f"{_vector_label(sorted_ids[0], snap[sorted_ids[0]], patch_embedder_name)} is {dim}-dimensional. "
+                "Every media in a dataset must be scored in one embedding space; this dataset mixes two. "
+                "Re-import the odd media with vectors from the same embedder, or rebuild the dataset."
+            )
         start = int(starts[mi])
         region_matrix[start : start + rows.shape[0]] = rows
 

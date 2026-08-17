@@ -403,7 +403,8 @@ def _cache_region_vectors(
     the skip is load-bearing: a semantic- or structural-locked detector is
     scored against its own space's full-image vectors, so flooding it with the
     dataset's patch grid would train it on a different embedding space (and
-    blow up at ``np.stack`` outright when the two dimensions differ).  Both
+    raise :class:`~vtscore.embedding.precomputed.MismatchedVectorError` outright
+    when the two dimensions differ).  Both
     caches stay empty, and :func:`build_xy_from_labelset` falls back to the
     single image-level vector per element.
     """
