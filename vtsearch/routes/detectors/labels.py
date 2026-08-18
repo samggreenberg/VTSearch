@@ -131,10 +131,14 @@ def save_detector_labels(name: str):
     active-dataset keys and thus leave the persisted labelset untouched, but
     the ``@require_*_header`` decorators reject it up front regardless.
     """
-    from vtscore.datasets.labelset import LabelSet, media_element_key
+    from vtscore.datasets.labelset import LabelSet
     from vtscore.detectors.dataset_sync import validated_vote_snapshot
     from vtscore.detectors.input_spec import extract_input_spec_from_medias
-    from vtscore.detectors.label_sync import _label_sync_write_lock, _merge_labelsets_across_datasets
+    from vtscore.detectors.label_sync import (
+        _label_sync_write_lock,
+        _merge_labelsets_across_datasets,
+        active_dataset_lookups,
+    )
 
     # The read→compose→write below races the loaded-detector label sync (and
     # the other detector-JSON writers), so it runs under the same lock.
@@ -160,18 +164,15 @@ def save_detector_labels(name: str):
             vote_region_boxes=snap.vote_region_boxes,
         )
 
-        # Origin keys for *every* media in the active dataset (voted or not).
-        # Existing labelset entries matching one of these keys are "owned" by
+        # Lookup tables over *every* media in the active dataset (voted or not).
+        # Existing labelset entries that resolve against them are "owned" by
         # the active dataset and get reconciled against the current votes;
-        # entries that don't match were accumulated under other datasets and
-        # are preserved verbatim by the merge.
+        # entries that resolve to nothing were accumulated under other datasets
+        # and are preserved verbatim by the merge.
         existing_ls = LabelSet.from_dict(data.get("labelset") or {})
-        current_dataset_keys = set()
-        for media in medias_snap.values():
-            key = media_element_key(media)
-            if key is not None:
-                current_dataset_keys.add(key)
-        labelset = _merge_labelsets_across_datasets(existing_ls, current_ls, current_dataset_keys)
+        labelset = _merge_labelsets_across_datasets(
+            existing_ls, current_ls, active_dataset_lookups(medias_snap)
+        )
         data["labelset"] = labelset.to_dict()
 
         # Capture the active dataset's clipper into the detector's input_spec
@@ -217,20 +218,27 @@ def _merge_entries_into_labelset(existing_ls, label_entries: list[dict]) -> tupl
     """Merge imported label entries into ``existing_ls`` in place, deduping.
 
     Iterates ``label_entries``, skipping entries whose label isn't ``good`` or
-    ``bad`` and entries whose ``(md5, label)`` pair already exists in the
-    labelset.  Each accepted entry is appended to ``existing_ls.elements`` and
-    recorded so the caller can resolve/apply it later.
+    ``bad``.  An entry whose media is already in the labelset **replaces** that
+    element (last write wins) rather than being appended beside it, so one
+    media never holds two elements under one detector (issue #3174); a re-import
+    that merely restates the label it already carries is skipped instead.
 
-    Returns ``(applied, skipped, new_entries)`` matching the legacy counts and
-    list that the route built inline.
+    "Already in the labelset" is the union of the element's identities -
+    origin *and* md5, per
+    :func:`~vtscore.datasets.labelset.element_identity_keys` - so an entry
+    naming the same file by a different origin still collapses onto it.
+
+    Returns ``(applied, skipped, new_entries)``: ``new_entries`` are the raw
+    dicts the caller resolves and applies to the loaded detector's votes.
     """
-    from vtscore.datasets.labelset import LabeledElement
+    from vtscore.datasets.labelset import LabeledElement, element_identity_keys
 
-    # Build a set of existing (md5, label) pairs for dedup
-    existing_keys: set[tuple[str, str]] = set()
-    for el in existing_ls.elements:
-        if el.md5:
-            existing_keys.add((el.md5, el.label))
+    # Map every identity an existing element answers to onto its position, so
+    # an incoming entry that matches by *either* origin or md5 finds it.
+    index: dict[tuple, int] = {}
+    for pos, el in enumerate(existing_ls.elements):
+        for key in element_identity_keys(el):
+            index.setdefault(key, pos)
 
     applied = 0
     skipped = 0
@@ -240,15 +248,20 @@ def _merge_entries_into_labelset(existing_ls, label_entries: list[dict]) -> tupl
         if label not in ("good", "bad"):
             skipped += 1
             continue
-        md5 = entry.get("md5", "")
-        if md5 and (md5, label) in existing_keys:
-            skipped += 1
-            continue
         elem = LabeledElement.from_dict(entry)
-        existing_ls.elements.append(elem)
+        keys = element_identity_keys(elem)
+        pos = next((index[k] for k in keys if k in index), None)
+        if pos is not None:
+            if existing_ls.elements[pos].label == label:
+                skipped += 1
+                continue
+            existing_ls.elements[pos] = elem
+        else:
+            pos = len(existing_ls.elements)
+            existing_ls.elements.append(elem)
+        for key in keys:
+            index.setdefault(key, pos)
         new_entries.append(entry)
-        if md5:
-            existing_keys.add((md5, label))
         applied += 1
 
     return applied, skipped, new_entries

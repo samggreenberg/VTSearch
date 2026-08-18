@@ -754,7 +754,7 @@ def find_corrections_to_detector():
     the Stats note can say so; the retrained detector takes effect the next time
     the dataset is scored.
     """
-    from vtscore.datasets.labelset import LabelSet, element_key
+    from vtscore.datasets.labelset import LabelSet, element_identity_keys
     from vtscore.detectors.dataset_sync import _detector_file_mtime, validated_vote_snapshot
     from vtscore.detectors.input_spec import extract_input_spec_from_medias
     from vtscore.detectors.label_sync import _label_sync_write_lock
@@ -815,9 +815,17 @@ def find_corrections_to_detector():
 
         # Merge: a correction supersedes any prior entry for the same source media
         # (so a culled false-positive flips its old "good" entry to "bad").
-        corr_keys = {element_key(el) for el in corrections_ls.elements}
-        corr_keys.discard(None)
-        merged_elements = [el for el in existing_ls.elements if element_key(el) not in corr_keys]
+        # "Same source media" is the union of identities the element could carry
+        # - origin *and* md5 - because a prior entry may name the file by a
+        # different origin than the active dataset does (issue #3174); matching
+        # on the preferred key alone would leave the stale entry in place and
+        # store the media twice, with contradicting labels.
+        corr_keys: set = set()
+        for el in corrections_ls.elements:
+            corr_keys.update(element_identity_keys(el))
+        merged_elements = [
+            el for el in existing_ls.elements if not any(k in corr_keys for k in element_identity_keys(el))
+        ]
         merged_elements.extend(corrections_ls.elements)
         merged = LabelSet(merged_elements)
 
