@@ -72,6 +72,8 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-08-18 | [a string-replace edit that matched nothing, an hour later](lessons/2026-08-18-a-string-replace-that-matched-nothing.md) | #3160 |
+| 2026-08-18 | [an env var read once at init measured nothing](lessons/2026-08-18-an-env-var-read-once-measured-nothing.md) | #3160 |
 | 2026-08-17 | [a hardcoded GPU type is a pin that never reports its own cost](lessons/2026-08-17-a-hardcoded-gpu-type-is-a-pin-that.md) | #3144 |
 | 2026-08-17 | [a launcher that exits 1 with no output submitted nothing](lessons/2026-08-17-a-launcher-that-exits-1-with-no-output.md) | #3143 |
 | 2026-08-17 | [four decimals invented a finding](lessons/2026-08-17-four-decimals-invented-a-finding.md) | #3129 |
