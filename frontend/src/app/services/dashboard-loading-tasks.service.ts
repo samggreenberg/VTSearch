@@ -75,7 +75,10 @@ export class DashboardLoadingTasksService {
    * completed task's association fields (e.g. its ``dataset_id``) without a
    * second poll — used by the combine-datasets summary toast.
    */
-  private datasetPollCallbacks: Array<{ taskId: string; cb: (completedTasks: LoadingTask[]) => void }> = [];
+  private datasetPollCallbacks: Array<{
+    taskId: string;
+    cb: (completedTasks: LoadingTask[]) => void;
+  }> = [];
   private detectorPollCallbacks: Array<() => void> = [];
 
   constructor() {
@@ -94,7 +97,9 @@ export class DashboardLoadingTasksService {
     // drop the per-task sets, and clear inline error rows that
     // reference vanished tasks. The next non-idle SSE snapshot will
     // re-engage polling cleanly via the constructor subscriptions above.
-    this.progressEvents.serverReset$.subscribe(() => this.resetOnBackendRestart());
+    this.progressEvents.serverReset$.subscribe(() =>
+      this.resetOnBackendRestart(),
+    );
   }
 
   private resetOnBackendRestart(): void {
@@ -123,6 +128,14 @@ export class DashboardLoadingTasksService {
     if (this._cancellingTaskIds().has(taskId)) return;
     const next = new Set(this._cancellingTaskIds());
     next.add(taskId);
+    this._cancellingTaskIds.set(next);
+  }
+
+  private unmarkCancelling(taskId: string): void {
+    const current = this._cancellingTaskIds();
+    if (!current.has(taskId)) return;
+    const next = new Set(current);
+    next.delete(taskId);
     this._cancellingTaskIds.set(next);
   }
 
@@ -161,7 +174,9 @@ export class DashboardLoadingTasksService {
   /** Loading tasks that have no matching dataset row (new imports, etc.). */
   get orphanLoadingTasks(): LoadingTask[] {
     const datasetIds = new Set(this.datasetState.datasets.map((d) => d.id));
-    return this.loadingTasks.filter((t) => !t.dataset_id || !datasetIds.has(t.dataset_id));
+    return this.loadingTasks.filter(
+      (t) => !t.dataset_id || !datasetIds.has(t.dataset_id),
+    );
   }
 
   getInlineTask(datasetId: string): LoadingTask | undefined {
@@ -172,7 +187,10 @@ export class DashboardLoadingTasksService {
     return this.detectorLoadingTasks.find((t) => t.detector_id === modelId);
   }
 
-  startProgressPolling(awaitTaskId?: string, onComplete?: (completedTasks: LoadingTask[]) => void): void {
+  startProgressPolling(
+    awaitTaskId?: string,
+    onComplete?: (completedTasks: LoadingTask[]) => void,
+  ): void {
     // Register any task we've been told to expect.  See the field
     // comment on `awaitedTaskIds` for why this is needed.
     if (awaitTaskId) {
@@ -181,7 +199,10 @@ export class DashboardLoadingTasksService {
     // Registered on the service (not captured by the loop) so it fires
     // even when the early-return below is taken - see the field comment.
     if (onComplete) {
-      this.datasetPollCallbacks.push({ taskId: awaitTaskId ?? '', cb: onComplete });
+      this.datasetPollCallbacks.push({
+        taskId: awaitTaskId ?? '',
+        cb: onComplete,
+      });
     }
     // If polling is already active, don't restart; the existing loop
     // already covers all tasks.  This avoids clearing completedTaskIds
@@ -192,67 +213,70 @@ export class DashboardLoadingTasksService {
     this.datasetPollingActive = true;
     this.completedTaskIds.clear();
 
-    this.progressEvents.loadingTasks$
-      .pipe(takeUntil(this.polling$))
-      .subscribe({
-        next: (tasks: LoadingTask[]) => {
-          // Any task we were waiting for has now shown up in the SSE
-          // stream; drop it from the awaited set so the bail-out check
-          // below can fire as soon as the stream goes quiet.
-          for (const t of tasks) {
-            this.awaitedTaskIds.delete(t.task_id);
-          }
+    this.progressEvents.loadingTasks$.pipe(takeUntil(this.polling$)).subscribe({
+      next: (tasks: LoadingTask[]) => {
+        // Any task we were waiting for has now shown up in the SSE
+        // stream; drop it from the awaited set so the bail-out check
+        // below can fire as soon as the stream goes quiet.
+        for (const t of tasks) {
+          this.awaitedTaskIds.delete(t.task_id);
+        }
 
-          // Separate active from finished. Failed tasks are surfaced
-          // globally by SseErrorRouterService → ToastService; we just
-          // keep them in the inline list so the row still shows the
-          // dashed loading bar with the error text.
-          const active = tasks.filter((t) => t.status !== 'idle');
-          const errored = tasks.filter((t) => t.status === 'idle' && !!t.error);
-          const failed = errored.filter((t) => t.error !== 'Cancelled');
+        // Separate active from finished. Failed tasks are surfaced
+        // globally by SseErrorRouterService → ToastService; we just
+        // keep them in the inline list so the row still shows the
+        // dashed loading bar with the error text.
+        const active = tasks.filter((t) => t.status !== 'idle');
+        const errored = tasks.filter((t) => t.status === 'idle' && !!t.error);
+        const failed = errored.filter((t) => t.error !== 'Cancelled');
 
-          this._loadingTasks.set([...active, ...failed]);
-          this.pruneCancelling(new Set(active.map((t) => t.task_id)));
+        this._loadingTasks.set([...active, ...failed]);
+        this.pruneCancelling(new Set(active.map((t) => t.task_id)));
 
-          // Detect tasks that just completed successfully so we can
-          // refresh the registry immediately (not only when ALL finish).
-          const justFinished = tasks.filter(
-            (t) => t.status === 'idle' && !t.error && !this.completedTaskIds.has(t.task_id),
-          );
-          for (const t of justFinished) {
-            this.completedTaskIds.add(t.task_id);
-          }
-          if (justFinished.length > 0) {
+        // Detect tasks that just completed successfully so we can
+        // refresh the registry immediately (not only when ALL finish).
+        const justFinished = tasks.filter(
+          (t) =>
+            t.status === 'idle' &&
+            !t.error &&
+            !this.completedTaskIds.has(t.task_id),
+        );
+        for (const t of justFinished) {
+          this.completedTaskIds.add(t.task_id);
+        }
+        if (justFinished.length > 0) {
+          this.datasetState.refresh();
+          this.achievements.refresh();
+        }
+
+        this.datasetState.setLoading(active.length > 0);
+
+        if (active.length === 0 && this.awaitedTaskIds.size === 0) {
+          // No more active tasks and no awaited task pending; stop
+          // polling.
+          this.polling$.next();
+          this.datasetPollingActive = false;
+          // Refresh unless we just did (justFinished already triggered it)
+          if (justFinished.length === 0) {
             this.datasetState.refresh();
-            this.achievements.refresh();
           }
-
-          this.datasetState.setLoading(active.length > 0);
-
-          if (active.length === 0 && this.awaitedTaskIds.size === 0) {
-            // No more active tasks and no awaited task pending; stop
-            // polling.
-            this.polling$.next();
-            this.datasetPollingActive = false;
-            // Refresh unless we just did (justFinished already triggered it)
-            if (justFinished.length === 0) {
-              this.datasetState.refresh();
-            }
-            // Fire every registered completion callback whose own task
-            // didn't fail.  Callbacks without a task id (legacy callers)
-            // keep the old "any failure suppresses" gate.
-            const callbacks = this.datasetPollCallbacks;
-            this.datasetPollCallbacks = [];
-            const failedIds = new Set(failed.map((t) => t.task_id));
-            for (const entry of callbacks) {
-              const suppressed = entry.taskId ? failedIds.has(entry.taskId) : failed.length > 0;
-              if (!suppressed) {
-                entry.cb(tasks);
-              }
+          // Fire every registered completion callback whose own task
+          // didn't fail.  Callbacks without a task id (legacy callers)
+          // keep the old "any failure suppresses" gate.
+          const callbacks = this.datasetPollCallbacks;
+          this.datasetPollCallbacks = [];
+          const failedIds = new Set(failed.map((t) => t.task_id));
+          for (const entry of callbacks) {
+            const suppressed = entry.taskId
+              ? failedIds.has(entry.taskId)
+              : failed.length > 0;
+            if (!suppressed) {
+              entry.cb(tasks);
             }
           }
-        },
-      });
+        }
+      },
+    });
   }
 
   startDetectorProgressPolling(onComplete?: () => void): void {
@@ -280,7 +304,10 @@ export class DashboardLoadingTasksService {
 
           // Detect tasks that just completed successfully
           const justFinished = tasks.filter(
-            (t) => t.status === 'idle' && !t.error && !this.completedModelTaskIds.has(t.task_id),
+            (t) =>
+              t.status === 'idle' &&
+              !t.error &&
+              !this.completedModelTaskIds.has(t.task_id),
           );
           for (const t of justFinished) {
             this.completedModelTaskIds.add(t.task_id);
@@ -310,11 +337,21 @@ export class DashboardLoadingTasksService {
 
   cancelLoadingTask(taskId: string): void {
     this.markCancelling(taskId);
-    this.datasetsRegistryApi.cancelTask(taskId).subscribe();
+    // A cancel that reached nothing answers 409 (the task had already
+    // finished, or its progress was stale with no worker behind it — see
+    // POST /api/dataset/cancel). The row is not cancelling in that case, so
+    // drop the flag rather than leaving it stuck on "Cancelling…"; the
+    // backend clears the stale progress itself, so the row leaves on the next
+    // SSE snapshot.
+    this.datasetsRegistryApi.cancelTask(taskId).subscribe({
+      error: () => this.unmarkCancelling(taskId),
+    });
   }
 
   dismissLoadingTask(taskId: string): void {
-    this._loadingTasks.set(this.loadingTasks.filter((t) => t.task_id !== taskId));
+    this._loadingTasks.set(
+      this.loadingTasks.filter((t) => t.task_id !== taskId),
+    );
   }
 
   cancelDetectorLoadingTask(taskId: string): void {
