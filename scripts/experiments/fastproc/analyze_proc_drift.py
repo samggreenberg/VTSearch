@@ -289,10 +289,21 @@ def report(adj: pd.DataFrame, drift: pd.DataFrame, ranks: pd.DataFrame, examples
         f_med = float(floor["median"].min())
         f_max = float(floor["max"].max())
         log(f"  {emb}: floor {sig2(f_med)} median, {sig2(f_max)} max ({', '.join(floor['arm'])})")
+        if f_med == 0:
+            # A zero floor is the best possible outcome and the worst possible
+            # denominator: every ratio is infinite, so the treatment is quoted
+            # against the floor's *worst* row instead.  Saying "x floor" against
+            # a zero would print the same infinity for a 1e-16 change and a 1e-3
+            # one — and an earlier version of this line printed the floor's
+            # description on the treatment rows, which read as though the
+            # treatment itself were zero.
+            log("    the floor is exactly 0 at the median: the same code on the same node")
+            log("    reproduces bit-for-bit, so all of the below is treatment, not noise.")
+            log(f"    quoted against the floor's worst row ({sig2(f_max)}) instead:")
         for _, r in sub[~sub["arm"].isin(fcfg.FLOOR_ARMS)].iterrows():
-            ratio = (r["median"] / f_med) if f_med > 0 else float("inf")
-            shown = "exactly 0 — the pipeline is deterministic" if f_med == 0 else f"{sig2(ratio)} x floor"
-            log(f"    {r['arm']:14s} {sig2(r['median']):>10s}  {shown}")
+            denom = f_med if f_med > 0 else f_max
+            ratio = (r["median"] / denom) if denom > 0 else float("inf")
+            log(f"    {r['arm']:14s} median {sig2(r['median']):>10s}  = {sig2(ratio):>9s} x floor")
 
     tq = drift.get("text_query_max_delta")
     if tq is not None and tq.notna().any():
