@@ -50,6 +50,46 @@ produce bit-identical GEMM, conv and SDPA results at the tower's shapes. What
 differs at the op level is the *L40S and A100* (a different GEMM hash), and
 those are the cards whose embeddings agree with the reference.
 
+## RESOLVED: it is the host CPU, not the GPU
+
+Four measurements, in the order they close the question:
+
+1. **Same pixels → same answer.** `rack5n03` (the "outlier" V100-SXM2-LS) was fed
+   `rack7n03`'s preprocessed tensor: all 27 vision blocks **bit-identical**,
+   image features bit-identical. Given the same input the two V100 parts compute
+   the same thing.
+2. **The pixels differ.** 12.3% of elements, dominant magnitude exactly
+   **7.843e-03 = 2/255** — one 8-bit level (image 0, channel 0 at (8,326):
+   191 vs 192). Same transformers 5.12.1, same `SiglipImageProcessor`, same 4
+   threads.
+3. **The axis is AVX-512 vs AVX2.** rack7n03 (Xeon Gold 5218R) and rack4n02
+   (EPYC 9534) are bit-identical to each other; rack5n03 (Xeon E5-2698 v4,
+   Broadwell, no AVX-512) is the odd one. Forcing `ATEN_CPU_CAPABILITY=avx2` on
+   rack7n03 **reproduced rack5n03's pixels exactly** — PyTorch's CPU kernel
+   dispatch in the uint8 resize.
+4. **Pinning it fixes the cell, for free.** With `ATEN_CPU_CAPABILITY=avx2` on
+   both hosts, `siglip2_l` goes from median 1−cos 1.3e-04 (0% of rows identical)
+   to **median 0, max 8.9e-16, 76% of rows bit-identical**. The resize also got
+   *faster*: 256 images in 1.75 s vs 2.36 s.
+
+`siglip` (224px) is identical across the same two hosts, which is why #3143 saw
+the effect only on SO400M/384.
+
+**Consequence for #3144:** its premise was right about the GPU and the auto-pick
+is not the defect. Cross-part GPU disagreement, measured with the input pinned,
+is ~1e-15 — below fp16's 2.9e-06 by nine orders. What is not safe is an
+unpinned *host*.
+
+## Shipped from this
+
+- `launch_pile.sh` pins `ATEN_CPU_CAPABILITY=${VTS_CPU_CAPABILITY:-avx2}`.
+- Provenance sidecars record `cpu` and `aten_cpu_capability` beside the device,
+  and `--provenance` flags a pile that mixes build environments.
+- `VTS_GPU_NODE` still pins the node, now as a belt-and-braces for an exact
+  rebuild rather than as the fix.
+
+## Superseded
+
 ## The finding that changed the question
 
 The v1 mechanism probe recorded a **preprocessing** difference: on `rack5n03`
