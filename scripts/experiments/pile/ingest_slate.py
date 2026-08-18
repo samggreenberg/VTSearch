@@ -43,15 +43,29 @@ def log(msg: str) -> None:
     print(f"[ingest] {msg}", flush=True)
 
 
-def load_manifests(slates: Path) -> tuple[dict[tuple[int, str], dict], dict[str, str]]:
-    """``({(image_id, class): row}, {class: folder name})`` over every slate."""
-    out: dict[tuple[int, str], dict] = {}
+#: Which stratum wins when the same (image, class) was reviewed twice. The
+#: boxed re-issue supersedes the bare thumbnail: it is the same question asked
+#: in a form the reviewer could actually answer (`make_positive_slate.py`).
+STRATUM_RANK = {"positive": 0, "boundary": 0, "random": 0, "positive_boxed": 1}
+
+
+def load_manifests(roots: list[Path]) -> tuple[dict[tuple[int, str, str], dict], dict[str, str]]:
+    """``({(image_id, class, detector): row}, {detector: folder name})``.
+
+    Keyed by detector as well as class because a class can be reviewed through
+    more than one detector -- the bare slate and the boxed positive re-issue --
+    and their rows must not overwrite each other before the ranking above is
+    applied.
+    """
+    out: dict[tuple[int, str, str], dict] = {}
     folders: dict[str, str] = {}
-    for man in sorted(slates.glob("*/manifest.csv")):
-        with man.open() as fh:
-            for row in csv.DictReader(fh):
-                out[(int(row["image_id"]), row["class"])] = row
-                folders[row["class"]] = man.parent.name
+    for root in roots:
+        for man in sorted(root.glob("*/manifest.csv")):
+            with man.open() as fh:
+                for row in csv.DictReader(fh):
+                    det = row.get("detector") or row["class"]
+                    out[(int(row["image_id"]), row["class"], det)] = row
+                    folders[det] = man.parent.name
     return out, folders
 
 
@@ -126,15 +140,19 @@ def main() -> int:
         help="pull votes straight from a running VTSearch instead of a file export, "
         "e.g. --api http://rack7n03:11850 (one detector per class, named after it)",
     )
-    ap.add_argument("--slates", default=str(pc.PILE / "slates"), help="slate dir from make_audit_slate.py")
+    ap.add_argument(
+        "--slates",
+        default=str(pc.PILE / "slates"),
+        help="slate dir(s) from make_audit_slate.py / make_positive_slate.py, comma-separated",
+    )
     ap.add_argument("--out", default="", help="write the verdict rows here")
     ap.add_argument("--class", dest="klass", default="", help="the class this export reviews (else inferred)")
     args = ap.parse_args()
 
-    manifests, folders = load_manifests(Path(args.slates))
+    manifests, folders = load_manifests([Path(p) for p in args.slates.split(",") if p])
     if not manifests:
         raise SystemExit(f"no manifests under {args.slates}; run make_audit_slate.py first")
-    log(f"{len(manifests)} slate entries over {len({c for _, c in manifests})} classes")
+    log(f"{len(manifests)} slate entries over {len({c for _, c, _ in manifests})} classes, {len(folders)} detectors")
 
     if not args.export and not args.api:
         raise SystemExit("pass --export <file/glob> or --api <base-url>")
@@ -142,25 +160,28 @@ def main() -> int:
     # (label of the source, its elements, the class it reviews)
     sources: list[tuple[str, list[dict], str]] = []
     if args.api:
-        for c in sorted(folders):
+        det_class = {det: c for (_, c, det) in manifests}
+        for det in sorted(folders):
+            c = det_class[det]
             if args.klass and c != args.klass:
                 continue
-            els = read_api(args.api, c)
-            sources.append((f"api:{c}", els, c))
+            els = read_api(args.api, det)
+            sources.append((f"api:{det}", els, c, det))
     for path in sorted(glob.glob(args.export)) if args.export else []:
         els = read_export(Path(path))
-        sources.append((Path(path).name, els, class_of(Path(path), els, folders, args.klass)))
+        det = class_of(Path(path), els, folders, args.klass)
+        sources.append((Path(path).name, els, {c for (_, c, d) in manifests if d == det}.pop(), det))
 
     verdicts: list[dict] = []
     unmatched = 0
-    for source, elements, c in sources:
+    for source, elements, c, det in sources:
         for el in elements:
             name = Path(el.get("filename") or el.get("origin_name") or "").stem
             if not name.isdigit():
                 unmatched += 1
                 continue
             iid = int(name)
-            row = manifests.get((iid, c))
+            row = manifests.get((iid, c, det))
             if row is None:
                 unmatched += 1
                 continue
@@ -196,6 +217,13 @@ def main() -> int:
         if prev is None:
             merged[key] = v
             continue
+        rank_prev = STRATUM_RANK.get(prev["stratum"], 0)
+        rank_new = STRATUM_RANK.get(v["stratum"], 0)
+        if rank_new > rank_prev:
+            merged[key] = v  # the boxed re-issue supersedes; not a conflict
+            continue
+        if rank_new < rank_prev:
+            continue
         if prev["human"] != v["human"]:
             conflicts += 1
         if prev.get("box") is None and v.get("box") is not None:
@@ -228,7 +256,7 @@ def main() -> int:
     for v in verdicts:
         done[v["class"]] += 1
     total: dict[str, int] = defaultdict(int)
-    for _, c in manifests:
+    for _, c, _det in manifests:
         total[c] += 1
     if done:
         print("progress (distinct images voted, duplicates already collapsed):")
@@ -240,7 +268,7 @@ def main() -> int:
     hdr = f"{'stratum':<10}{'agree':>8}{'ref absent, human present':>28}{'ref present, human absent':>28}{'rate':>9}"
     print(hdr)
     print("-" * len(hdr))
-    for stratum in ("random", "boundary", "positive"):
+    for stratum in ("random", "boundary", "positive", "positive_boxed"):
         agree = by[(stratum, "absent->absent")] + by[(stratum, "present->present")]
         miss = by[(stratum, "absent->present")]
         over = by[(stratum, "present->absent")]
