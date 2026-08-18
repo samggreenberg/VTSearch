@@ -16,10 +16,15 @@ numpy
 requests
 tqdm
 scikit-learn
-# SigLIP 2 + DINOv3 require recent transformers ( >= 4.49 ships SigLIP 2,
-# and DINOv3's HF wrapper landed in the same window ). Pin a known-good
-# floor instead of "latest" so the image is reproducible.
-transformers>=4.49.0
+# SigLIP 2 + DINOv3 need a recent transformers, and the range needs a
+# **ceiling** as well as a floor: transformers v5 moved the plain
+# `SiglipImageProcessor` name onto the torchvision implementation and renamed
+# the PIL one to `SiglipImageProcessorPil`. That is not a cosmetic rename -- on
+# the shipped default embedder the two disagree on **58% of preprocessed
+# pixels**, by up to two 8-bit levels (issue #3160, 64 VG images), so an
+# unbounded range means two installs of the same commit can embed the same
+# image differently. A floor alone is not reproducibility.
+transformers>=5.0.0,<6
 pandas
 
 # ── Eval / visualization ────────────────────────────────────────────

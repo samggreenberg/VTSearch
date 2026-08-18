@@ -25,6 +25,7 @@ from typing import Any, Callable
 
 import numpy as np
 
+from vtscore.embedding.stack import embedding_stack
 from vtscore.config import EMBEDDINGS_DIR  # noqa: F401  - re-exported & patched in tests
 from vtscore.datasets.metadata import (  # noqa: F401  - re-exported for consumers
     load_audio_metadata_from_folders,
@@ -49,6 +50,24 @@ ProgressCallback = Callable[[str, str, int, int], None]
 # ---------------------------------------------------------------------------
 # Shared helpers (used by loader_folder / loader_pickle / loader_demo)
 # ---------------------------------------------------------------------------
+
+
+def _loaded_embedder(name: str | None):
+    """The embedder singleton for *name*, only if its models are already loaded.
+
+    Never triggers a load: this runs at save time, purely to record which
+    preprocessing classes were resolved. An embedder that is not loaded records
+    ``None`` rather than paying for a model load to describe itself.
+    """
+    if not name:
+        return None
+    try:
+        from vtscore.media import get_embedder  # noqa: PLC0415
+
+        emb = get_embedder(name)
+    except Exception:  # noqa: BLE001 -- provenance must never fail a save
+        return None
+    return emb if getattr(emb, "_processor", None) is not None else None
 
 
 def _default_progress() -> ProgressCallback:
@@ -335,6 +354,12 @@ def export_dataset_to_file(
     meta = {
         "format_version": 1,
         "embedder": embedder,
+        # Which software/hardware produced these vectors (#3160). The embedder
+        # *name* does not pin the arithmetic: the transformers range this repo
+        # allows admits two image-processor implementations that disagree on 58%
+        # of preprocessed pixels for the default embedder. Recorded so two
+        # datasets can be told apart; nothing reads it to make a decision.
+        "embedding_stack": embedding_stack(_loaded_embedder(embedder)),
         "text_embedder": text_embedder,
         "patch_embedder": patch_embedder,
         "structural_embedder": structural_embedder,
