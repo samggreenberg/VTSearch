@@ -487,6 +487,62 @@ def gmm_fit_array(scores: "list[float] | np.ndarray") -> np.ndarray:
     return arr
 
 
+def snap_cut_to_sample(cut: float, sorted_scores: np.ndarray) -> float:
+    """Canonicalise *cut* to the empty interval of *sorted_scores* it falls in.
+
+    A threshold that lands strictly between two adjacent observed scores is
+    **unidentifiable**: every value in that open interval admits exactly the
+    same items, so which one a fit happens to produce carries no information -
+    only float noise.  This maps the whole interval to its midpoint, so the
+    returned cut is a function of the two bracketing *data* values rather than
+    of the last bits of an EM fit.
+
+    That is the fix for issue #3166.  On a **saturated** score distribution -
+    positives near 1.0, negatives near 0, nothing in between - the interval is
+    enormous, and the un-canonicalised cut slides freely across it: the
+    fold-anchored estimator realises its combined quantile with
+    ``np.quantile``, which interpolates *linearly* between adjacent order
+    statistics, so a difference of ``dq`` in the quantile moves the threshold by
+    ``dq * (n - 1) * gap``.  With ``n`` ~ 9k and a unit-wide gap that is a gain
+    of ~9000x: a sub-part-per-million wobble in the quantile - well within what
+    differing BLAS kernels or thread counts produce between two machines -
+    became the 0.026 threshold difference issue #3166 measured between two runs
+    that agreed bit-for-bit on every other column.  Snapping removes the gain
+    entirely: the threshold cannot move until the quantile crosses a whole
+    order statistic, at which point the admitted set really has changed.
+
+    **Decision-exact by construction.**  The snap only ever moves a cut inside
+    an interval containing no observed score, so ``score >= threshold`` gives
+    the identical verdict on every element of *sorted_scores*.  A cut that
+    coincides with an observed score is already canonical and is returned
+    unchanged - moving it would flip that score's (and its duplicates') verdict,
+    which is the one case where the exact value does carry information.
+
+    Args:
+        cut: The candidate threshold.
+        sorted_scores: The sample the threshold will be applied to, **sorted
+            ascending**.  Empty or non-finite inputs are passed through.
+
+    Returns:
+        The canonical representative of *cut*'s admitted set.  Out-of-support
+        cuts (below every score, or above every score) have no bracketing pair
+        to snap to and are returned unchanged.
+    """
+    if sorted_scores.size == 0 or not math.isfinite(cut):
+        return float(cut)
+    i = int(np.searchsorted(sorted_scores, cut, side="left"))
+    # ``i == 0`` / ``i == size``: the cut sits off the end of the support, so
+    # there is no empty *interval* bracketing it - only an unbounded ray, which
+    # has no midpoint.  ``sorted_scores[i] == cut``: the cut is exactly on an
+    # observed score, where the value is identifiable (it decides that score's
+    # own verdict) and must be left alone.
+    if i == 0 or i == sorted_scores.size:
+        return float(cut)
+    if float(sorted_scores[i]) == cut:
+        return float(cut)
+    return (float(sorted_scores[i - 1]) + float(sorted_scores[i])) / 2.0
+
+
 def fit_score_gmm(arr: np.ndarray) -> GmmFit1D | None:
     """Fit a deterministic 2-component GMM to a 1-D score array.
 
@@ -572,7 +628,8 @@ def _anchored_em(
 
     *x* is the free (unlabelled) sample, *a_lo* / *a_hi* the anchor scores
     clamped to the low / high component.  Pure numpy, log-domain E-step, fixed
-    iteration order - deterministic for fixed inputs by construction.  Only
+    iteration order, and no BLAS calls (see the M-step comment) - deterministic
+    for fixed inputs, and reproducible across machines with it.  Only
     numerical failure (non-finite parameters) returns ``None`` here; semantic
     degeneracy (inverted means, collapsed component) is judged by the caller so
     it can name the reason.
@@ -609,16 +666,21 @@ def _anchored_em(
         m_hi = float(r[:, 1].sum()) + lam * n_hi
         if not (m_lo > 0.0 and m_hi > 0.0):
             return None
+        # ``np.sum`` rather than ``@``: a dot product is dispatched to BLAS,
+        # whose accumulation order depends on the kernel the CPU selects and on
+        # the thread count, so the same input can differ in its last bits
+        # between two machines.  numpy's own pairwise reduction does not
+        # (issue #3166).  The extra temporaries are one ``x``-sized array each.
         mu_new = np.array(
             [
-                (float(r[:, 0] @ x) + lam * sum_a_lo) / m_lo,
-                (float(r[:, 1] @ x) + lam * sum_a_hi) / m_hi,
+                (float(np.sum(r[:, 0] * x)) + lam * sum_a_lo) / m_lo,
+                (float(np.sum(r[:, 1] * x)) + lam * sum_a_hi) / m_hi,
             ]
         )
         var_new = np.array(
             [
-                (float(r[:, 0] @ (x - mu_new[0]) ** 2) + lam * float(((a_lo - mu_new[0]) ** 2).sum())) / m_lo,
-                (float(r[:, 1] @ (x - mu_new[1]) ** 2) + lam * float(((a_hi - mu_new[1]) ** 2).sum())) / m_hi,
+                (float(np.sum(r[:, 0] * (x - mu_new[0]) ** 2)) + lam * float(((a_lo - mu_new[0]) ** 2).sum())) / m_lo,
+                (float(np.sum(r[:, 1] * (x - mu_new[1]) ** 2)) + lam * float(((a_hi - mu_new[1]) ** 2).sum())) / m_hi,
             ]
         )
         var_new = np.maximum(var_new, var_floor)
@@ -973,6 +1035,19 @@ class FoldAnchoredCut:
         tilts the crossing itself; plain ``"mid"`` ignores the weights and is
         constant in inclusion.
 
+        The realized value is finally canonicalised by
+        :func:`snap_cut_to_sample`, so a cut landing between two adjacent
+        haystack scores reports the midpoint of that empty interval rather than
+        wherever ``np.quantile``'s linear interpolation put it.  That is
+        decision-exact - the admitted set is identical either way - and it is
+        what makes the threshold **reproducible**: without it, interpolating
+        across an empty interval multiplies any wobble in *q* by
+        ``(n - 1) * gap``, which on a saturated distribution turned a
+        sub-part-per-million cross-machine difference into a visible threshold
+        move (issue #3166).  The cost is that the threshold now steps rather
+        than slides *within* one order-statistic band, which is honest: the
+        admitted set was constant across that band all along.
+
         **Monotone by construction**, so the included sets stay nested
         (everything included at ``k`` stays included at ``k + 1``) - the
         contract that makes "cut off at Inclusion 1, verify up to Inclusion 4"
@@ -982,10 +1057,12 @@ class FoldAnchoredCut:
         the exits stay monotone *and strictly moving* - issue #2896), the
         empirical quantile of that cut in its fold's haystack, the mean/median
         across folds, the ``mid_tilt`` composition (a constant plus a
-        monotone-in-inclusion shift), and realizing a quantile on the final
-        haystack.  The only plateau in the chain is the honest boundary where
-        a cut runs off its haystack's support and the quantile pins at 0 or 1
-        - crucially, the acquisition offset
+        monotone-in-inclusion shift), realizing a quantile on the final
+        haystack, and the snap (which maps each order-statistic band to its own
+        midpoint, so it is non-decreasing).  The plateaus in the chain are the
+        honest ones - a band of the knob over which the *admitted set* does not
+        change, including the boundary where a cut runs off its haystack's
+        support and the quantile pins at 0 or 1 - crucially, the acquisition offset
         (:data:`ACQUISITION_INCLUSION_OFFSET`) therefore stays a real gap
         across the slider instead of silently collapsing wherever the tilt
         used to saturate.
@@ -993,7 +1070,8 @@ class FoldAnchoredCut:
         if self.final_haystack.size == 0:
             return 0.5
         q = self._quantile_at(*inclusion_cost_weights(inclusion_value))
-        return float(np.quantile(self.final_haystack, min(1.0, max(0.0, q))))
+        realized = float(np.quantile(self.final_haystack, min(1.0, max(0.0, q))))
+        return snap_cut_to_sample(realized, self.final_haystack)
 
 
 def fit_fold_anchored_cut(
@@ -1112,7 +1190,8 @@ def fold_anchored_gmm_threshold(
     final_arr = gmm_fit_array(final_scores)
     fallback_fit = fit_score_gmm(final_arr) if final_arr.size >= 2 else None
     if fallback_fit is not None:
-        return fallback_fit.midpoint(), "fold_fallback_final_unanchored"
+        cut = snap_cut_to_sample(fallback_fit.midpoint(), np.sort(final_arr))
+        return cut, "fold_fallback_final_unanchored"
     if final_arr.size:
         return float(np.median(final_arr)), "fold_fallback_final_median"
     return 0.5, "fold_fallback_final_median"
@@ -1137,6 +1216,11 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
     (seed-42) random subsample - the two-Gaussian fit is unchanged in practice
     but the cost no longer grows with the dataset size.
 
+    The midpoint is canonicalised by :func:`snap_cut_to_sample` against the same
+    sample, so a cut landing between two adjacent scores reports the midpoint of
+    that empty interval instead of a value only the EM fit's last bits decide
+    (issue #3166).  The verdict on every score in the sample is unchanged.
+
     Args:
         scores: List of model confidence scores, expected to follow a bimodal distribution.
 
@@ -1154,7 +1238,7 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
         # If GMM fails, return median (of the subsample when one was taken -
         # representative of the full distribution and keeps this path bounded).
         return float(np.median(arr))
-    return fit.midpoint()
+    return snap_cut_to_sample(fit.midpoint(), np.sort(arr))
 
 
 def _score_rows_digest(score_rows_by_group: dict | None) -> bytes | None:
@@ -1988,6 +2072,10 @@ def fit_gmm_threshold(scores: list[float]) -> tuple[float, GmmFit1D | None]:
     (issue #2841) need the component means, so this returns both from one EM
     fit.  ``None`` accompanies the 0.5 / median fallbacks, where there is no
     fit to speak of and a schedule must degrade to the plain blend.
+
+    The cut is :func:`snap_cut_to_sample`-canonicalised exactly as
+    :func:`calculate_gmm_threshold`'s is, so the two agree; the *fit* is
+    returned unsnapped, since the schedules read its component geometry.
     """
     if len(scores) < 2:
         return 0.5, None
@@ -1995,7 +2083,7 @@ def fit_gmm_threshold(scores: list[float]) -> tuple[float, GmmFit1D | None]:
     fit = fit_score_gmm(arr)
     if fit is None:
         return float(np.median(arr)), None
-    return fit.midpoint(), fit
+    return snap_cut_to_sample(fit.midpoint(), np.sort(arr)), fit
 
 
 def calculate_safe_threshold(
