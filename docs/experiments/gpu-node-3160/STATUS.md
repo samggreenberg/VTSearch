@@ -25,6 +25,31 @@ dropped VPN. Nothing else is queued; the GPU probes are finished.
   Two defects found in the probe itself, both fixed in v2 (below).
 - **Code**: per-cell provenance + `VTS_GPU_NODE` pinning are committed.
 
+## Census result (18 of 21 nodes; 3 a100 nodes still queued behind the GPU quota)
+
+`gres/gpu:v100` covers **two parts, and the outlier is the majority**:
+
+| device | cap | SMs | nodes | `siglip2_l` vs rack7n03 |
+|---|---|---:|---:|---:|
+| Tesla V100S-PCIE-32GB | sm_70 | 80 | 4 | **0** |
+| Tesla V100-SXM2-32GB-LS | sm_70 | 80 | **9** | **1.3e-04** |
+| NVIDIA L40S | sm_89 | 142 | 2 | 5.3e-07 |
+| NVIDIA A100-PCIE-40GB / A100 80GB PCIe | sm_80 | 108 | 3 (of 6) | 2.1e-12 |
+
+So a `gpu:v100` pile rebuild lands on the non-reproducing part about **two times
+in three** (9 of 13 nodes, 72 of 110 GPUs). `gpu:a100` also covers two parts,
+but they agree with each other to 2.1e-12 — it is not that a type label is
+always unsafe, it is that this one is.
+
+All nine SXM2-LS nodes report the **same** 1.3e-04, and every V100 reports
+**exactly 0** on `siglip`: the effect is a property of the part, not of a sick
+machine, and it is specific to the SO400M/384 geometry.
+
+And the bare ops **refute the tiling hypothesis**: all 13 V100s — both parts —
+produce bit-identical GEMM, conv and SDPA results at the tower's shapes. What
+differs at the op level is the *L40S and A100* (a different GEMM hash), and
+those are the cards whose embeddings agree with the reference.
+
 ## The finding that changed the question
 
 The v1 mechanism probe recorded a **preprocessing** difference: on `rack5n03`
