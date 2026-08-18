@@ -99,6 +99,10 @@ def host_record() -> dict:
         "torch_num_threads": torch.get_num_threads(),
         "torch_num_interop_threads": torch.get_num_interop_threads(),
         "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
+        # The AVX-512 hypothesis is testable only downwards: an AVX-512 host can
+        # be told to dispatch as AVX2, and if that reproduces the AVX2 host's
+        # pixels the instruction path is named.
+        "aten_cpu_capability": os.environ.get("ATEN_CPU_CAPABILITY"),
         "vtsearch_torch_threads": os.environ.get("VTSEARCH_TORCH_THREADS"),
         "transformers": _version("transformers"),
         "torchvision": _version("torchvision"),
@@ -232,6 +236,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--images", type=int, default=8)
     ap.add_argument("--embedder", default="siglip2_l")
     ap.add_argument(
+        "--tag",
+        default="",
+        help="suffix on the output dir, so several runs on ONE node (different CPU dispatch, different embedder) do not overwrite each other",
+    )
+    ap.add_argument(
         "--pixels",
         default="",
         help="a pixels.npy written by another node: run the forward on ITS tensor as well as this node's own",
@@ -245,7 +254,7 @@ def main(argv: list[str] | None = None) -> int:
     from vtscore.media import get_embedder
 
     node = socket.gethostname()
-    out_dir = Path(args.out) / node
+    out_dir = Path(args.out) / f"{node}{args.tag}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     initialize_models()

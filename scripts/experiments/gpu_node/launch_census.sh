@@ -81,6 +81,14 @@ mechanism)
   # VTS_MECH_PIXELS points at another node's pixels.npy so this run also does the
   # forward on an *identical* input tensor; VTS_MECH_DEP chains a second round
   # behind the round that produces it, so the pair runs unattended.
+  # VTS_MECH_TAG names the run when a node is probed more than once;
+  # VTS_MECH_EXPORT injects env (e.g. ATEN_CPU_CAPABILITY=avx2) into the job.
+  TAG=""
+  [[ -n "${VTS_MECH_TAG:-}" ]] && TAG="--tag ${VTS_MECH_TAG}"
+  EXPORT=""
+  [[ -n "${VTS_MECH_EXPORT:-}" ]] && EXPORT="export ${VTS_MECH_EXPORT} && "
+  EMB=""
+  [[ -n "${VTS_MECH_EMBEDDER:-}" ]] && EMB="--embedder ${VTS_MECH_EMBEDDER}"
   PIX=""
   [[ -n "${VTS_MECH_PIXELS:-}" ]] && PIX="--pixels ${VTS_MECH_PIXELS}"
   DEP=()
@@ -94,11 +102,11 @@ mechanism)
       --cpus-per-task=4 --mem=24G --time=1:00:00 \
       "${DEP[@]}" \
       --output="$LOGS/mech-$node-%j.out" \
-      --wrap "bash -lc '$ENVSET && cd $HERE && python probe_mechanism.py --out $MECH $PIX'")
+      --wrap "bash -lc '$ENVSET && ${EXPORT}cd $HERE && python probe_mechanism.py --out $MECH $PIX $TAG $EMB'")
     if ! [[ "$jid" =~ ^[0-9]+$ ]]; then
       echo "FAILED to submit $node (empty job id) -- NOT LAUNCHED" >&2; exit 1
     fi
-    echo "submitted mechanism $node ($type) -> job $jid"
+    echo "submitted mechanism $node${VTS_MECH_TAG:-} ($type) -> job $jid"
   done
   ;;
 
