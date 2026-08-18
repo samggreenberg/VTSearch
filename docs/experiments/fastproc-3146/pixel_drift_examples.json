@@ -1,0 +1,362 @@
+[
+  {
+    "embedder": "siglip",
+    "arm": "auto/cpu",
+    "file": "1159532.jpg",
+    "source_size": [
+      400,
+      600
+    ],
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "frac_of_range": 0.0
+  },
+  {
+    "embedder": "siglip",
+    "arm": "auto/cpu",
+    "file": "1159533.jpg",
+    "source_size": [
+      1024,
+      680
+    ],
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "frac_of_range": 0.0
+  },
+  {
+    "embedder": "siglip",
+    "arm": "auto/cpu",
+    "file": "1159534.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "frac_of_range": 0.0
+  },
+  {
+    "embedder": "siglip",
+    "arm": "auto/cpu",
+    "file": "1159535.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "frac_of_range": 0.0
+  },
+  {
+    "embedder": "siglip",
+    "arm": "auto/cpu",
+    "file": "1159536.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "frac_of_range": 0.0
+  },
+  {
+    "embedder": "siglip",
+    "arm": "pil/cpu",
+    "file": "1159398.jpg",
+    "source_size": [
+      1024,
+      715
+    ],
+    "max_abs": 0.007843196392059326,
+    "mean_abs": 1.2933090147271287e-05,
+    "frac_of_range": 0.003921598196029663
+  },
+  {
+    "embedder": "siglip",
+    "arm": "pil/cpu",
+    "file": "1159413.jpg",
+    "source_size": [
+      1024,
+      683
+    ],
+    "max_abs": 0.007843196392059326,
+    "mean_abs": 2.1215582819422707e-05,
+    "frac_of_range": 0.003921598196029663
+  },
+  {
+    "embedder": "siglip",
+    "arm": "pil/cpu",
+    "file": "1159410.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.007843196392059326,
+    "mean_abs": 2.4297252821270376e-05,
+    "frac_of_range": 0.003921598196029663
+  },
+  {
+    "embedder": "siglip",
+    "arm": "pil/cpu",
+    "file": "1159409.jpg",
+    "source_size": [
+      1024,
+      685
+    ],
+    "max_abs": 0.007843196392059326,
+    "mean_abs": 1.861792043200694e-05,
+    "frac_of_range": 0.003921598196029663
+  },
+  {
+    "embedder": "siglip",
+    "arm": "pil/cpu",
+    "file": "1159408.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.007843196392059326,
+    "mean_abs": 1.5173513020272367e-05,
+    "frac_of_range": 0.003921598196029663
+  },
+  {
+    "embedder": "siglip",
+    "arm": "torchvision/cuda",
+    "file": "1159300.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.07843136787414551,
+    "mean_abs": 0.000923494400922209,
+    "frac_of_range": 0.039215683937072754
+  },
+  {
+    "embedder": "siglip",
+    "arm": "torchvision/cuda",
+    "file": "1159449.jpg",
+    "source_size": [
+      1024,
+      683
+    ],
+    "max_abs": 0.07058823108673096,
+    "mean_abs": 0.0010236386442556977,
+    "frac_of_range": 0.03529411554336548
+  },
+  {
+    "embedder": "siglip",
+    "arm": "torchvision/cuda",
+    "file": "1159268.jpg",
+    "source_size": [
+      676,
+      900
+    ],
+    "max_abs": 0.07058823108673096,
+    "mean_abs": 0.0008500795811414719,
+    "frac_of_range": 0.03529411554336548
+  },
+  {
+    "embedder": "siglip",
+    "arm": "torchvision/cuda",
+    "file": "1159422.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.0627450942993164,
+    "mean_abs": 0.0008886887226253748,
+    "frac_of_range": 0.0313725471496582
+  },
+  {
+    "embedder": "siglip",
+    "arm": "torchvision/cuda",
+    "file": "1159305.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.0627450942993164,
+    "mean_abs": 0.0009015064570121467,
+    "frac_of_range": 0.0313725471496582
+  },
+  {
+    "embedder": "siglip2_l",
+    "arm": "auto/cpu",
+    "file": "1159532.jpg",
+    "source_size": [
+      400,
+      600
+    ],
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "frac_of_range": 0.0
+  },
+  {
+    "embedder": "siglip2_l",
+    "arm": "auto/cpu",
+    "file": "1159533.jpg",
+    "source_size": [
+      1024,
+      680
+    ],
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "frac_of_range": 0.0
+  },
+  {
+    "embedder": "siglip2_l",
+    "arm": "auto/cpu",
+    "file": "1159534.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "frac_of_range": 0.0
+  },
+  {
+    "embedder": "siglip2_l",
+    "arm": "auto/cpu",
+    "file": "1159535.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "frac_of_range": 0.0
+  },
+  {
+    "embedder": "siglip2_l",
+    "arm": "auto/cpu",
+    "file": "1159536.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.0,
+    "mean_abs": 0.0,
+    "frac_of_range": 0.0
+  },
+  {
+    "embedder": "siglip2_l",
+    "arm": "pil/cpu",
+    "file": "1159532.jpg",
+    "source_size": [
+      400,
+      600
+    ],
+    "max_abs": 0.007843196392059326,
+    "mean_abs": 0.0012415774399414659,
+    "frac_of_range": 0.003921598196029663
+  },
+  {
+    "embedder": "siglip2_l",
+    "arm": "pil/cpu",
+    "file": "1159533.jpg",
+    "source_size": [
+      1024,
+      680
+    ],
+    "max_abs": 0.007843196392059326,
+    "mean_abs": 0.0011072986526414752,
+    "frac_of_range": 0.003921598196029663
+  },
+  {
+    "embedder": "siglip2_l",
+    "arm": "pil/cpu",
+    "file": "1159534.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.007843196392059326,
+    "mean_abs": 0.000999464187771082,
+    "frac_of_range": 0.003921598196029663
+  },
+  {
+    "embedder": "siglip2_l",
+    "arm": "pil/cpu",
+    "file": "1159535.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.007843196392059326,
+    "mean_abs": 0.0010557420318946242,
+    "frac_of_range": 0.003921598196029663
+  },
+  {
+    "embedder": "siglip2_l",
+    "arm": "pil/cpu",
+    "file": "1159536.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.007843196392059326,
+    "mean_abs": 0.0010850010439753532,
+    "frac_of_range": 0.003921598196029663
+  },
+  {
+    "embedder": "siglip2_l",
+    "arm": "torchvision/cuda",
+    "file": "1159463.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.007843166589736938,
+    "mean_abs": 5.017559033149155e-06,
+    "frac_of_range": 0.003921583294868469
+  },
+  {
+    "embedder": "siglip2_l",
+    "arm": "torchvision/cuda",
+    "file": "1159470.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.007843166589736938,
+    "mean_abs": 4.39701307186624e-06,
+    "frac_of_range": 0.003921583294868469
+  },
+  {
+    "embedder": "siglip2_l",
+    "arm": "torchvision/cuda",
+    "file": "107921.jpg",
+    "source_size": [
+      1024,
+      683
+    ],
+    "max_abs": 0.007843166589736938,
+    "mean_abs": 5.318968305800809e-07,
+    "frac_of_range": 0.003921583294868469
+  },
+  {
+    "embedder": "siglip2_l",
+    "arm": "torchvision/cuda",
+    "file": "107918.jpg",
+    "source_size": [
+      1024,
+      768
+    ],
+    "max_abs": 0.007843166589736938,
+    "mean_abs": 5.425346898846328e-06,
+    "frac_of_range": 0.003921583294868469
+  },
+  {
+    "embedder": "siglip2_l",
+    "arm": "torchvision/cuda",
+    "file": "1159284.jpg",
+    "source_size": [
+      1024,
+      576
+    ],
+    "max_abs": 0.007843166589736938,
+    "mean_abs": 2.6772138426167658e-06,
+    "frac_of_range": 0.003921583294868469
+  }
+]

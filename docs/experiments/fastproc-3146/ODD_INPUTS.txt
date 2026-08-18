@@ -1,0 +1,73 @@
+
+=== siglip (google/siglip-base-patch16-224) ===
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 1, 1]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 1, 1]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 900, 3]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 900, 3]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+  torchvision/cpu   SiglipImageProcessor         12 modes, 0 direct-path failures
+  pil/cpu   SiglipImageProcessorPil      12 modes, 0 direct-path failures
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 1, 1]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 1, 1]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 900, 3]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 900, 3]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+  torchvision/cuda  SiglipImageProcessor         12 modes, 0 direct-path failures
+
+=== siglip2_l (google/siglip2-so400m-patch14-384) ===
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 1, 1]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 1, 1]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 900, 3]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 900, 3]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+  torchvision/cpu   SiglipImageProcessor         12 modes, 4 direct-path failures
+  pil/cpu   SiglipImageProcessorPil      12 modes, 8 direct-path failures
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 1, 1]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 1, 1]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 900, 3]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+[transformers] The channel dimension is ambiguous. Got image shape torch.Size([3, 900, 3]). Assuming channels are the first dimension. Use the [input_data_format](https://huggingface.co/docs/transformers/main/internal/image_processing_utils#transformers.image_transforms.rescale.input_data_format) parameter to assign the channel dimension.
+  torchvision/cuda  SiglipImageProcessor         12 modes, 4 direct-path failures
+
+=== per-mode outcome (corpus path = converted to RGB first) ===
+embedder   mode                                pil/cpu    torchvision/cpu   torchvision/cuda
+siglip     RGB (baseline)                         same               same               same
+siglip     L (grayscale)                      1.08e+00           1.08e+00           1.08e+00
+siglip     LA (grayscale+alpha)               1.08e+00           1.08e+00           1.08e+00
+siglip     P (palette)                        4.31e-01           4.31e-01           4.39e-01
+siglip     PA (palette+alpha)                 4.31e-01           4.31e-01           4.39e-01
+siglip     CMYK                                   same               same               same
+siglip     RGBA                                   same               same               same
+siglip     I;16 (16-bit)                      1.08e+00           1.08e+00           1.08e+00
+siglip     1 (bilevel)                        1.22e+00           1.22e+00           1.22e+00
+siglip     EXIF orientation=6                 5.57e-01           5.57e-01           5.49e-01
+siglip     1x1                                1.71e+00           1.71e+00           1.71e+00
+siglip     3x900 (sliver)                     1.17e+00           1.17e+00           1.17e+00
+siglip2_l  RGB (baseline)                         same               same               same
+siglip2_l  L (grayscale)                      1.33e+00           1.33e+00           1.33e+00
+siglip2_l  LA (grayscale+alpha)               1.33e+00           1.33e+00           1.33e+00
+siglip2_l  P (palette)                        6.51e-01           6.51e-01           6.51e-01
+siglip2_l  PA (palette+alpha)                 6.51e-01           6.51e-01           6.51e-01
+siglip2_l  CMYK                                   same               same               same
+siglip2_l  RGBA                                   same               same               same
+siglip2_l  I;16 (16-bit)                      1.33e+00           1.33e+00           1.33e+00
+siglip2_l  1 (bilevel)                        1.80e+00           1.80e+00           1.80e+00
+siglip2_l  EXIF orientation=6                 9.49e-01           9.49e-01           9.49e-01
+siglip2_l  1x1                                1.69e+00           1.69e+00           1.69e+00
+siglip2_l  3x900 (sliver)                     1.29e+00           1.29e+00           1.29e+00
+
+=== direct path (raw PIL mode, no convert) — failures only ===
+  siglip2_l  torchvision/cpu   LA (grayscale+alpha)     ValueError: Unable to infer channel dimension format
+  siglip2_l  torchvision/cpu   PA (palette+alpha)       ValueError: Unable to infer channel dimension format
+  siglip2_l  torchvision/cpu   CMYK                     ValueError: Unable to infer channel dimension format
+  siglip2_l  torchvision/cpu   RGBA                     ValueError: Unable to infer channel dimension format
+  siglip2_l  pil/cpu   L (grayscale)            ValueError: mean must have 1 elements if it is an iterable, got 3
+  siglip2_l  pil/cpu   LA (grayscale+alpha)     ValueError: mean must have 2 elements if it is an iterable, got 3
+  siglip2_l  pil/cpu   P (palette)              ValueError: mean must have 1 elements if it is an iterable, got 3
+  siglip2_l  pil/cpu   PA (palette+alpha)       ValueError: mean must have 2 elements if it is an iterable, got 3
+  siglip2_l  pil/cpu   CMYK                     ValueError: mean must have 4 elements if it is an iterable, got 3
+  siglip2_l  pil/cpu   RGBA                     ValueError: mean must have 4 elements if it is an iterable, got 3
+  siglip2_l  pil/cpu   I;16 (16-bit)            ValueError: mean must have 1 elements if it is an iterable, got 3
+  siglip2_l  pil/cpu   1 (bilevel)              ValueError: mean must have 1 elements if it is an iterable, got 3
+  siglip2_l  torchvision/cuda  LA (grayscale+alpha)     ValueError: Unable to infer channel dimension format
+  siglip2_l  torchvision/cuda  PA (palette+alpha)       ValueError: Unable to infer channel dimension format
+  siglip2_l  torchvision/cuda  CMYK                     ValueError: Unable to infer channel dimension format
+  siglip2_l  torchvision/cuda  RGBA                     ValueError: Unable to infer channel dimension format
+
+wrote /expscratch/sgreenberg/fastproc-3146/results/odd_inputs.csv

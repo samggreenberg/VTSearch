@@ -1,0 +1,404 @@
+# The fast image processor was already on: what actually costs, and what actually drifts
+
+**Run:** 2026-08-18 · branch `claude/fast-processor-3146` · GPU jobs `511474`,
+`511740`–`511742` (side piles), `513573` (timing), `514463` (dispatch matrix),
+`511921` (pixel + odd-input probes) · bench arrays `513423`/`513432`/`513440`
+**Data:** `/expscratch/sgreenberg/fastproc-3146/{piles,results,bench}`
+**Code:** `scripts/experiments/fastproc/`
+
+Issue [#3146](https://github.com/samggreenberg/VTSearch/issues/3146) reports that
+every image embedder builds its processor with no `use_fast` argument, concludes
+they are all on the slow PIL/numpy resize path, and asks for three things before
+flipping `use_fast=True`: a pile cell rebuilt both ways with cosine drift and
+rank correlation, a benchmark arm re-run both ways against the study margins, and
+a check that the fast path handles CMYK, palette, EXIF-rotated and grayscale
+inputs.
+
+**The premise is false, and it is false in a way worth more than the answer.**
+Under the installed `transformers` 5.12.1, v5 **removed the `Fast` suffix on
+image processors**: `SiglipImageProcessor` *is* the torchvision implementation
+and the slow one was renamed `SiglipImageProcessorPil`. Passing nothing already
+selects torchvision. `use_fast` is itself deprecated in favour of `backend=`, and
+`use_fast=True` on an explicitly-named concrete class is a no-op. The flip the
+issue proposes has already happened — silently, through a `transformers>=4.49`
+pin that spans the version where the default changed.
+
+That was not settled by reading a class name. The reference arm here is a
+torchvision rebuild of the published pile cell, and it reproduces it to
+**7.6e-13** (`siglip`) and **2.7e-12** (`siglip2_l`), while the PIL arm sits at
+2.4e-06 and 1.5e-04. The pile is torchvision-built. Every embedder in the tree
+has been on the fast path all along.
+
+So the study was re-aimed at the two questions that remain, and both have
+answers:
+
+1. **The issue's *other* proposed fix — moving resize/normalise to the GPU — is
+   the live candidate**, and it is worth **1.68× ± 0.04** on `siglip`'s embed
+   path. But the embed path is only ~21% of a pile cell, so that is **1.09× per
+   cell**, and on `siglip2_l` it is 1.08× embed-path and ~1.02× per cell.
+2. **The backend is a second unrecorded axis on the shared pile**, alongside the
+   device axis [#3160](https://github.com/samggreenberg/VTSearch/issues/3160) is
+   chasing, and a *larger* one. A host that resolved `transformers` 4.x produces
+   different vectors from the same code and weights, by 1.5e-04 on `siglip2_l` —
+   50× the fp16 perturbation #3143 measured, and nothing in the pile records
+   which backend built any cell.
+
+<!-- BENCH VERDICT PLACEHOLDER -->
+
+---
+
+## Contents
+
+- [What the arms are, and why they are not the issue's arms](#what-the-arms-are-and-why-they-are-not-the-issues-arms)
+- [1. Which backend built the pile?](#1-which-backend-built-the-pile)
+- [2. Cost: the stage, the embed path, and the cell](#2-cost-the-stage-the-embed-path-and-the-cell)
+- [3. Drift: vectors and retrieval order](#3-drift-vectors-and-retrieval-order)
+- [4. The dispatch confound, and how it resolves](#4-the-dispatch-confound-and-how-it-resolves)
+- [5. Awkward inputs: the checklist comes out backwards](#5-awkward-inputs-the-checklist-comes-out-backwards)
+- [6. The benchmark](#6-the-benchmark)
+- [Recommendations](#recommendations)
+- [What this does not license](#what-this-does-not-license)
+- [Reproducing](#reproducing)
+
+---
+
+## What the arms are, and why they are not the issue's arms
+
+Four arms, backend × device, **all pinned to one node** (`rack4n01`, L40S,
+AMD EPYC 9534):
+
+| arm | backend | device | role |
+|---|---|---|---|
+| `tv_cpu` | torchvision | cpu | **reference** — what ships today, named explicitly instead of resolved |
+| `tv_cpu_rep` | torchvision | cpu | **floor** — the reference arm run twice; its drift is the noise |
+| `pil_cpu` | pil | cpu | the path #3146 believed was shipped, and what `transformers<5` resolves to |
+| `tv_cuda` | torchvision | cuda | **candidate** — resize/normalise on the GPU |
+
+Two embedders: `siglip` (the shipped default) and `siglip2_l` (where the
+processor share is largest). `dinov3_patch` is excluded for a measured reason
+rather than a budget one: **transformers ships no PIL implementation for
+DINOv3**, so asked for `backend="pil"` it warns and hands back torchvision. A
+`pil` arm there would be the reference arm under a different label — the exact
+unasserted-premise failure of #2877.
+
+**The node is pinned, not the GPU type.** #3160 established that `gres/gpu:v100`
+is two different devices and that the swap alone moves `siglip2_l` fp32 by
+1.5e-04 — the size of the effects measured here. `tv_cpu_rep` is what proves the
+pinning worked, and it came out at **exactly 0** median `1 − cos` (max 4.4e-16,
+pure float64 normalisation noise). The pipeline is deterministic on one node, so
+every number below is treatment rather than noise.
+
+**Every arm asserts its own premise.** transformers *warns and continues* when a
+backend is unavailable rather than raising, so the default outcome of an
+impossible request is a mislabelled arm. `build_arm.py` records the processor
+class actually loaded, the device the pixel tensor actually came back on, and the
+transformers version that decided both, and refuses to build a cell when any
+contradicts the arm table. `check_arms.py` re-checks it from the provenance on
+disk rather than from what the launcher intended.
+
+---
+
+## 1. Which backend built the pile?
+
+Nothing else in this report means anything until this resolves, because the
+study exists to correct a premise that was read from source.
+
+| embedder | arm | median `1 − cos` vs the published cell | max |
+|---|---|---:|---:|
+| `siglip` | `tv_cpu` | **7.6e-13** | 4.8e-10 |
+| `siglip` | `tv_cpu_rep` | **7.6e-13** | 4.8e-10 |
+| `siglip` | `pil_cpu` | 2.4e-06 | 4.7e-03 |
+| `siglip` | `tv_cuda` | 1.2e-04 | 5.5e-03 |
+| `siglip2_l` | `tv_cpu` | **2.7e-12** | 1.6e-09 |
+| `siglip2_l` | `tv_cpu_rep` | **2.7e-12** | 1.6e-09 |
+| `siglip2_l` | `pil_cpu` | 1.5e-04 | 1.1e-02 |
+| `siglip2_l` | `tv_cuda` | 5.4e-08 | 1.4e-03 |
+
+The torchvision rebuild reproduces the published cell to float noise; the PIL
+rebuild does not. **The pile is torchvision-built.**
+
+Two independent corroborations, neither engineered: those two floor figures
+(7.6e-13, 2.7e-12) are the *same numbers* #3143's L40S fp32 rebuild produced
+against the same cells, and the residual is the cross-device fp32 floor rather
+than a backend difference — the published cells were built on V100 nodes and
+these arms on an L40S.
+
+---
+
+## 2. Cost: the stage, the embed path, and the cell
+
+The issue projects the processor at 28% of `siglip`'s wall clock today and 68%
+once #3143 and #3145 land. That projection is of the **embed path**, and it
+assumed the PIL backend. Both halves need restating.
+
+**The processor stage in isolation** (384 real VG images, batch 32, L40S,
+`pixel_drift.py`):
+
+| embedder | pil/cpu | torchvision/cpu (shipped) | torchvision/cuda |
+|---|---:|---:|---:|
+| `siglip` | 6.29 ms/img | 2.09 ms/img | **0.56 ms/img** |
+| `siglip2_l` | 6.83 ms/img | 2.12 ms/img | **0.56 ms/img** |
+
+So torchvision is 3.0–3.2× faster than PIL at the stage, and CUDA a further
+3.8×. But a stage ratio is not a user-visible ratio, and this study's first
+attempt to say so was wrong in an instructive way: the side-pile builds gave one
+wall-clock number per arm, `tv_cuda` came out 1.20× — and `tv_cpu_rep`, *the same
+code as the reference*, came out **1.08×**. Run-to-run noise on a shared cluster
+was the size of the claimed effect.
+
+**End to end, 5 interleaved reps** (`timing_arms.py`, arms run A,B,C,A,B,C… in
+one process on one GPU so node-load drift hits every arm equally):
+
+| embedder | arm | median (1500 medias) | speedup vs shipped |
+|---|---|---:|---:|
+| `siglip` | `pil_cpu` | 12.71 s ± 0.02 | **0.52× ± 0.01** |
+| `siglip` | `tv_cpu` (shipped) | 6.65 s ± 0.15 | — |
+| `siglip` | `tv_cuda` | 3.95 s ± 0.02 | **1.68× ± 0.04** |
+| `siglip2_l` | `pil_cpu` | 48.80 s ± 0.28 | 0.87× ± 0.01 |
+| `siglip2_l` | `tv_cpu` (shipped) | 42.55 s ± 0.28 | — |
+| `siglip2_l` | `tv_cuda` | 39.57 s ± 0.18 | 1.08× ± 0.01 |
+
+![End-to-end embed cost per arm](figures/cost_speedup.png)
+
+*Bars are the median of 5 interleaved reps with the standard error; every
+individual rep is drawn as a dot. Read the dots, not just the bars: the reason
+this figure exists is that a single run per arm reported a 1.20× that the spread
+cannot support. This is the **embed path** — `bulk_embed_image_files` over 1500
+medias — and does **not** license a claim about how long a pile cell takes; see
+the next figure for that denominator. It also does not generalise across hosts:
+the processor runs on the CPU, and this node has 256 cores.*
+
+**The two denominators differ by a factor of five**, which is the whole reason
+the issue's projection and this measurement disagree:
+
+![Where a pile cell's wall clock goes](figures/cost_breakdown.png)
+
+*Stacked from the measured embed-path time and the measured processor time
+against the measured cell wall time (86.8 s and 182.4 s, from each arm's
+`provenance.json`). The processor is **47% of `siglip`'s embed path but 10% of
+its cell**, and only **7% of `siglip2_l`'s embed path**. The issue's 28–68% band
+is an embed-path number and is roughly right for `siglip`; it is the cell that
+decides what a user waits for. The "rest of the cell" segment is demo-dataset
+load and is specific to how the pile builds — a production import spends its time
+differently, so do not read the 10% as a general figure.*
+
+So the honest statement about GPU preprocessing: **1.68× on `siglip`'s embed
+path, 1.09× per pile cell, and essentially nothing on `siglip2_l`** (1.08×
+embed-path, ~1.02× per cell), whose forward dominates its own budget.
+
+---
+
+## 3. Drift: vectors and retrieval order
+
+Every arm against the shipped path, paired by media id, 4193 medias:
+
+| embedder | arm | median | p95 | max | mean ± SE | >1e-6 |
+|---|---|---:|---:|---:|---:|---:|
+| `siglip` | `tv_cpu_rep` | **0** | 2.2e-16 | 4.4e-16 | 3.9e-17 ± 1.2e-18 | 0% |
+| `siglip` | `pil_cpu` | 2.4e-06 | 1.3e-05 | 4.7e-03 | 5.3e-06 ± 1.1e-06 | 87% |
+| `siglip` | `tv_cuda` | 1.2e-04 | 4.1e-04 | 5.5e-03 | 1.6e-04 ± 2.6e-06 | 100% |
+| `siglip2_l` | `tv_cpu_rep` | **0** | 2.2e-16 | 4.4e-16 | 4.2e-17 ± 1.2e-18 | 0% |
+| `siglip2_l` | `pil_cpu` | 1.5e-04 | 5.5e-04 | 1.1e-02 | 2.1e-04 ± 5.0e-06 | 100% |
+| `siglip2_l` | `tv_cuda` | 5.4e-08 | 6.4e-06 | 1.4e-03 | 2.0e-06 ± 3.7e-07 | 17% |
+
+**The two models invert.** PIL costs `siglip2_l` 1.5e-04 and `siglip` only
+2.4e-06; CUDA costs `siglip` 1.2e-04 and `siglip2_l` only 5.4e-08. A headline
+quoted from either model alone is wrong for the other. §4 explains the mechanism.
+
+A control worth stating because it could have gone the other way: the **text
+tower is untouched** — the maximum absolute difference between any two arms'
+query vectors is exactly 0, so every ranking change below is attributable to the
+gallery rather than assumed to be.
+
+![Input perturbation against output drift](figures/pixel_vs_vector.png)
+
+*Three of the four arm×model points sit at **exactly** one 8-bit level on the x
+axis (2/255 = 7.8e-03) and span **three orders of magnitude** on the y axis. That
+is the finding: the size of the pixel perturbation does not predict the size of
+the vector drift, because what matters is how many pixels move and where, not how
+far any one of them moves. Do not read a trend line into four points; the figure
+is a scatter of four measurements, not a regression.*
+
+**Retrieval order survives well but not perfectly.** Spearman ρ against the
+reference ordering is 1 to five digits for every arm and both query sources
+(text query and exemplar), over 100 and 89 categories respectively. The
+user-visible quantity is coarser and more informative:
+
+![Top-1 and top-10 stability](figures/topk_and_top1.png)
+
+*Solid bars are the share of categories whose **first result is unchanged**;
+faded bars are mean top-10 overlap. The y axis starts at 90% because every arm is
+high and the gaps are what matter. The standout is `siglip` under `tv_cuda` on
+text queries: **95% top-1 unchanged**, i.e. one category in twenty returns a
+different first result. Per-category points, not per-media, so this does not say
+what fraction of *users* would notice.*
+
+**Literal examples**, so a reader can judge whether a move is a retrieval failure
+or a tie broken differently (`examples.json`):
+
+| arm | category | media | rank | score | gap to next in ref |
+|---|---|---|---|---|---:|
+| `siglip` `tv_cuda` | building | 2164 (`4523.jpg`) | 2417 → 1689 | −7.9e-03 → −3.0e-03 | 8.9e-06 |
+| `siglip` `tv_cuda` | plate | 2409 (`4781.jpg`) | 1452 → 1790 | −1.1e-03 → −3.7e-03 | 1.2e-05 |
+| `siglip2_l` `pil_cpu` | bush | 335 (`2648.jpg`) | 1038 → 1916 | 0.019 → 0.013 | 9.4e-06 |
+| `siglip` `pil_cpu` | flower | 163 (`2470.jpg`) | 1982 → 1601 | −3.9e-03 → 7.8e-04 | 4.9e-05 |
+
+Every one of these moves hundreds of places across a score gap of ~1e-05. These
+are ties being broken differently in the flat middle of a ranking, not the head
+of the ranking rearranging — which is exactly what the 98–100% top-10 overlap
+says from the other direction. The `tv_cpu_rep` rows in `examples.json` all read
+`moved 0`, as they must.
+
+---
+
+## 4. The dispatch confound, and how it resolves
+
+#3160 found that PyTorch's CPU kernel dispatch changes the preprocessed pixels:
+an AVX-512 host and an AVX2 host disagree on 12.3% of elements, with the dominant
+magnitude 7.843e-03 — **exactly one 8-bit level**, the same magnitude as this
+study's PIL-vs-torchvision difference. On a fleet that does not pin dispatch the
+two axes are indistinguishable at the pixel level, which would make every number
+in §3 partly an artifact of which host happened to run the arms.
+
+The arms here all ran on one node, so dispatch is constant *across* them — but
+the reference is still dispatch-specific. `dispatch_matrix.py` emits pixel
+tensors under the default dispatch and under a forced `ATEN_CPU_CAPABILITY=avx2`
+in two processes and compares the full pairwise matrix.
+
+**Reported as the fraction of elements that differ, not the max.** Max-|Δ| is
+useless here: resampling disagreements land on whole 8-bit levels, so *every*
+pair — backend, dispatch, device — reads exactly 7.8e-03. The first version of
+this matrix was six identical numbers, which reads as "these are all the same
+effect" and actually means "this statistic is saturated".
+
+| comparison | `siglip` (224px) | `siglip2_l` (384px) |
+|---|---:|---:|
+| torchvision moves with dispatch | **0.00%** | 13.71% |
+| PIL moves with dispatch | **0.00%** | **0.00%** |
+| PIL vs torchvision @avx512 | 53.27% | 59.14% |
+| PIL vs torchvision @avx2 | 53.27% | 52.89% |
+| CUDA vs torchvision/cpu @avx512 | 11.48% | **0.03%** |
+
+Four things fall out:
+
+- **PIL never moves with dispatch**, on either model — it is not an ATen kernel.
+  #3160's mechanism predicted this and it holds.
+- **`siglip` at 224px is fully dispatch-invariant**, so its backend numbers are
+  host-independent. `siglip2_l` at 384px moves on 13.71% of elements under a
+  forced AVX2, against #3160's 12.3% measured across two hosts.
+- **The backend axis is ~4× the dispatch axis and survives both settings**
+  (52.89–59.14% vs 13.71%), so §3's numbers stand as backend numbers.
+- **CUDA sides with AVX-512.** At 384px the GPU resample and the AVX-512 CPU
+  resample differ on 0.03% of elements — essentially the same operation — while
+  AVX2 differs on 13.71%. At 224px it reverses. *That is the mechanism behind the
+  inversion in §3*: `tv_cuda` is nearly free on `siglip2_l` because it agrees
+  with the CPU kernel there, and expensive on `siglip` because it does not.
+
+**The axes are nested, not independent**, and this correction changed the
+conclusion rather than confirming it. Jaccard over the differing-index sets is
+0.231, which reads as "independent". It is not: **99.8% of the pixels dispatch
+moves are also moved by the backend** (33.5M px vs 7.8M px, 7.75M shared). Both
+changes flip the same population of rounding-boundary pixels, one more
+aggressively than the other. So the backend difference does not reduce to
+dispatch — it is several times larger and survives both settings — but its exact
+magnitude is host-dependent, and is quoted here with the CPU capability attached.
+
+---
+
+## 5. Awkward inputs: the checklist comes out backwards
+
+The issue asks for confirmation that the fast path handles CMYK, palette,
+EXIF-rotated and grayscale inputs, "since `decode_bounded_rgb` hands it whatever
+the corpus contains". Reading the decoder changes the question:
+`decode_bounded_rgb` ends in an unconditional `img.convert("RGB")`, and both bulk
+forward paths call `im.convert("RGB")` again — **on the corpus path the processor
+never sees a CMYK or palette image at all.**
+
+`odd_inputs.py` checks both paths across eleven input classes:
+
+- **Corpus path** (converted to RGB first): every backend produces **identical**
+  output for RGB, grayscale, grayscale+alpha, palette, palette+alpha, CMYK, RGBA,
+  16-bit, bilevel, EXIF-rotated, 1×1 and a 3×900 sliver. Nothing raises. The
+  backend change is safe on every input the corpus can contain.
+- **Direct path** (raw PIL mode, as `embed_pil_image` and the extractor can
+  reach): **PIL is the more fragile backend, not the less.** For `siglip2_l`,
+  torchvision raises on 4 modes (LA, PA, CMYK, RGBA — "Unable to infer channel
+  dimension format") while PIL raises on 8 (those plus L, P, 16-bit and bilevel —
+  "mean must have N elements"). `siglip` raises on none, under any backend.
+
+So the fast path handles **strictly more** than the slow one. No production
+exposure either way, because our own conversion happens first — but the safety
+comes from *our* `convert("RGB")`, not from the processor, and `siglip2_l` would
+raise without it.
+
+**EXIF orientation is not handled anywhere.** Nothing in
+`vtscore/media/image/decode.py` calls `exif_transpose`, so a rotated JPEG reaches
+the model un-rotated. That is a real, pre-existing defect and worth its own
+issue — but it is **constant across backends**, so it is reported here and
+excluded from the arm comparison rather than allowed to look like a treatment
+effect.
+
+---
+
+## 6. The benchmark
+
+<!-- BENCH SECTION PLACEHOLDER -->
+
+---
+
+## Recommendations
+
+<!-- RECOMMENDATIONS PLACEHOLDER -->
+
+---
+
+## What this does not license
+
+- **One dataset, one node, one transformers version.** `visual_genome_m` on
+  `rack4n01` under 5.12.1. The dispatch matrix bounds the host sensitivity for
+  these two models; it does not bound corpus sensitivity, and a corpus of
+  differently-sized images would resample differently.
+- **Two embedders, both whole-image.** `dinov3_patch` is the region-voting
+  embedder and is untested here; it has no PIL arm by construction, but its
+  `device="cuda"` behaviour is unknown and its patch grids are stored float16
+  already.
+- **The timing is CPU-bound and this node has 256 cores.** The processor runs on
+  the calling thread; a host with fewer cores gives the GPU arm a larger win.
+  The issue's own ~2.0 s per 384 images was measured on a V100 node and is
+  consistent with torchvision there, not with PIL.
+- **Per-category, not per-user.** The 95% top-1 figure is over categories. What
+  fraction of real queries would return a different first result is a different
+  measurement.
+- **The pixel fractions and the cosine drifts are not proportional.** The
+  backend moves 4× as many pixels as dispatch does on `siglip2_l` and produces a
+  similar cosine drift, so pixel counts bound the effect rather than predict it.
+
+---
+
+## Reproducing
+
+```bash
+# side piles, one arm per GPU job, all pinned to one node
+bash scripts/experiments/fastproc/launch_fastproc.sh arms
+bash scripts/experiments/fastproc/launch_fastproc.sh check      # structural gate
+
+# analyses
+python scripts/experiments/fastproc/analyze_proc_drift.py       # drift + rank + adjudication
+python scripts/experiments/fastproc/pixel_drift.py --n 384      # perturbation at the input
+python scripts/experiments/fastproc/timing_arms.py --reps 5     # end-to-end cost, interleaved
+python scripts/experiments/fastproc/odd_inputs.py               # the input checklist
+
+# the backend/dispatch separation (two processes, on purpose)
+python scripts/experiments/fastproc/dispatch_matrix.py --emit --tag avx512
+ATEN_CPU_CAPABILITY=avx2 python scripts/experiments/fastproc/dispatch_matrix.py --emit --tag avx2
+python scripts/experiments/fastproc/dispatch_matrix.py --compare
+
+# benchmark
+bash scripts/experiments/fastproc/launch_bench.sh prepare
+bash scripts/experiments/fastproc/launch_bench.sh verify-pairing
+bash scripts/experiments/fastproc/launch_bench.sh cells
+bash scripts/experiments/fastproc/launch_bench.sh analyze
+
+# figures
+python scripts/experiments/fastproc/make_fastproc_figs.py --svg
+```
