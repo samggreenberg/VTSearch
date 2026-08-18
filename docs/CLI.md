@@ -144,6 +144,13 @@ skipped entirely (with a note). When a converter fans one media out into several
 media by **max**: the video is a positive hit when *any* of its frames clears the
 threshold, and it surfaces as a single hit on the video, not one per frame.
 
+**The CLI scores a media exactly as the GUI does.** Both go through one row
+builder (`scoring_rows_for_snap`), so on a patch dataset a media's score is the
+max over its score rows — image-level vector plus every raw patch — not the
+image-level vector alone. That is also the geometry the detector's threshold was
+calibrated on, so a CLI run and a GUI Find agree on which media clear it (issue
+#3180).
+
 **Matching the detector's clipper granularity.** A detector trained on a
 specific clipper (its `input_spec.clipper` — e.g. 2-second audio tiles, or an
 image grid) is **re-clipped at scoring time** when the loaded dataset wasn't
