@@ -61,8 +61,12 @@ def draw_with_inset(src: Path, box: tuple[float, float, float, float], dest: Pat
         bw, bh = max(1.0, x1 - x0), max(1.0, y1 - y0)
 
         # The crop is padded around the box so the object keeps its context --
-        # a box cropped exactly to its edges is often unrecognisable.
-        pad = max(bw, bh) * 0.6
+        # a box cropped exactly to its edges is often unrecognisable, and for a
+        # sub-patch object it is a smudge at any magnification. What makes a
+        # 20-pixel backpack identifiable is seeing the person wearing it, so the
+        # padding has a floor in absolute image terms rather than being a
+        # multiple of a tiny box.
+        pad = max(max(bw, bh) * 0.6, min(W, H) * 0.10)
         cx0, cy0 = max(0, int(x0 - pad)), max(0, int(y0 - pad))
         cx1, cy1 = min(W, int(x1 + pad)), min(H, int(y1 + pad))
         cx1, cy1 = max(cx1, cx0 + 2), max(cy1, cy0 + 2)
