@@ -84,9 +84,17 @@ unasserted-premise failure of #2877.
 **The node is pinned, not the GPU type.** #3160 established that `gres/gpu:v100`
 is two different devices and that the swap alone moves `siglip2_l` fp32 by
 1.5e-04 — the size of the effects measured here. `tv_cpu_rep` is what proves the
-pinning worked, and it came out at **exactly 0** median `1 − cos` (max 4.4e-16,
-pure float64 normalisation noise). The pipeline is deterministic on one node, so
-every number below is treatment rather than noise.
+pinning worked, and it is stronger than "close": the two arms' stored float32
+vectors are **bit-identical**, all 4193 × 768 and 4193 × 1152 of them, on both
+embedders. The 4.4e-16 that appears as its "max drift" below is float64
+arithmetic inside the analyser, not a difference in the data.
+
+That has a practical consequence worth stating, because it is the reason there
+is no fourth benchmark arm: the calibration harness is deterministic given the
+vectors and the seed, and the arms are paired on identical categories, seeds and
+splits, so a benchmark run on bit-identical vectors would return the reference's
+numbers exactly. The benchmark's floor is zero **by construction** rather than
+by measurement, and spending 96 cells to observe that would buy nothing.
 
 **Every arm asserts its own premise.** transformers *warns and continues* when a
 backend is unavailable rather than raising, so the default outcome of an
@@ -204,6 +212,18 @@ Every arm against the shipped path, paired by media id, 4193 medias:
 **The two models invert.** PIL costs `siglip2_l` 1.5e-04 and `siglip` only
 2.4e-06; CUDA costs `siglip` 1.2e-04 and `siglip2_l` only 5.4e-08. A headline
 quoted from either model alone is wrong for the other. §4 explains the mechanism.
+
+![Vector drift by arm, siglip](figures/drift_siglip.png)
+
+![Vector drift by arm, siglip2_l](figures/drift_siglip2_l.png)
+
+*Bar is the median `1 − cos` against the shipped path, line runs to the p95, log
+axis. The floor arm has **no bar** on purpose: its median is exactly zero, and an
+earlier version of this figure substituted a small epsilon so a bar could be
+drawn, which rendered the zero floor at ~5e-07 — visually the same order as
+`pil_cpu`'s real 2.4e-06, and precisely backwards. A log axis cannot show zero;
+saying so is better than drawing a value that does not exist. Note the axes
+differ between the two panels, so compare within a panel, not across.*
 
 A control worth stating because it could have gone the other way: the **text
 tower is untouched** — the maximum absolute difference between any two arms'
