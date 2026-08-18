@@ -95,6 +95,15 @@ def _probe(embedders: list[str]) -> dict:
         major, minor = torch.cuda.get_device_capability(0)
         info["gpu_name"] = torch.cuda.get_device_name(0)
         info["gpu_capability"] = f"sm_{major}{minor}"
+        # Pinning --nodelist pins the node, not the GPU within it, and this
+        # node has 8 L40S.  `gres/gpu:v100` turning out to be two different
+        # parts (#3160) is the same assumption one level up, so the part is
+        # recorded rather than trusted: a straggler then shows up as a labelled
+        # group instead of as inflated variance in the floor arm.
+        props = torch.cuda.get_device_properties(0)
+        info["gpu_multi_processor_count"] = int(props.multi_processor_count)
+        info["gpu_total_memory"] = int(props.total_memory)
+        info["gpu_uuid"] = str(getattr(props, "uuid", "") or "")
 
     # A 3-channel probe image at a size nothing divides evenly, so the resize is
     # a real resample rather than a crop or a no-op.
