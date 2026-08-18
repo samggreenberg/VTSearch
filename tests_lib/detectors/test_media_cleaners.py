@@ -222,8 +222,8 @@ class TestCleanerRegistry:
     def test_to_dict_carries_default_enabled(self, registered_cleaners):
         from vtscore.media import get_cleaner
 
-        assert get_cleaner("image_exif_orient").to_dict()["default_enabled"] is True
-        assert get_cleaner("text_test_upper").to_dict()["default_enabled"] is False
+        assert get_cleaner("image_edge_trim").to_dict()["default_enabled"] is False
+        assert get_cleaner("text_test_suffix").to_dict()["default_enabled"] is True
 
     def test_clip_wraps_clean_as_one_output(self, registered_cleaners):
         from vtscore.media import get_cleaner
@@ -759,10 +759,12 @@ class TestOriginalPayloadPersistence:
 
 
 class TestImageExifOrientCleaner:
-    def test_defaults_on(self):
+    def test_defaults_off(self):
+        """Opt-in: every decode already applies the tag, so baking it into the
+        stored bytes buys nothing inside VTSearch and costs a lossy re-encode."""
         from vtscore.media import get_cleaner
 
-        assert get_cleaner("image_exif_orient").default_enabled is True
+        assert get_cleaner("image_exif_orient").default_enabled is False
 
     def test_rotates_and_clears_the_tag(self):
         from PIL import Image
