@@ -555,6 +555,14 @@ def _device_record() -> dict:
 
     rec: dict = {
         "hostname": os.uname().nodename,
+        # The host, not the card, turned out to be the axis (#3160): PyTorch's
+        # CPU kernel dispatch decides how the 384px resize rounds, and an AVX2
+        # host disagrees with an AVX-512 one on 12.3% of pixels by one 8-bit
+        # level -- which is the whole of the 1.5e-04 that #3143 attributed to the
+        # GPU. Pinning the dispatch removes it; recording it explains a cell that
+        # was built before the pin.
+        "cpu": _cpu_model(),
+        "aten_cpu_capability": os.environ.get("ATEN_CPU_CAPABILITY"),
         "slurm_job": os.environ.get("SLURM_JOB_ID"),
         "slurm_gres": os.environ.get("SLURM_JOB_GRES") or os.environ.get("SBATCH_GRES"),
         "precision_requested": EMBED_PRECISION,
@@ -595,6 +603,17 @@ def _device_record() -> dict:
         }
     )
     return rec
+
+
+def _cpu_model() -> str | None:
+    """The host CPU model string, or None where /proc/cpuinfo is not readable."""
+    try:
+        for line in Path("/proc/cpuinfo").read_text().splitlines():
+            if line.startswith("model name"):
+                return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return None
 
 
 def _transformers_version() -> str | None:
@@ -931,18 +950,18 @@ def provenance_report(backfill: bool = False) -> int:
                 rec.get("fingerprint", {}).get("vectors_sha256", "")[:12],
             )
         )
-        devices[dev.get("gpu_name") or "unknown"].append(f"{ds}x{emb}")
+        devices[(dev.get("gpu_name") or "unknown", dev.get("aten_cpu_capability"))].append(f"{ds}x{emb}")
 
-    log(f"{'dataset':<18} {'embedder':<14} {'device':<26} {'node':<10} {'commit':<10} vectors")
+    log(f"{'dataset':<18} {'embedder':<14} {'device':<26} {'node':<10} {'dispatch':<9} {'commit':<10} vectors")
     for row in sorted(rows):
-        log("{:<18} {:<14} {:<26} {:<10} {:<10} {}".format(*row))
+        log("{:<18} {:<14} {:<26} {:<10} {:<9} {:<10} {}".format(*row))
     if missing:
         log(f"\n{len(missing)} cell(s) with NO provenance (run --backfill-provenance): {', '.join(missing)}")
     if len(devices) > 1:
-        log(f"\nthis pile MIXES {len(devices)} devices -- cells built on different devices are not")
-        log("bit-comparable, and on siglip2_l the measured spread between V100 parts is 1.5e-04 (#3160):")
-        for name, cells in sorted(devices.items()):
-            log(f"  {name:<26} {len(cells)} cell(s)")
+        log(f"\nthis pile MIXES {len(devices)} build environments. The measured cost of mixing")
+        log("hosts is 1.5e-04 median 1-cos on siglip2_l when CPU dispatch is unpinned (#3160):")
+        for (name, cap), cells in sorted(devices.items(), key=lambda kv: str(kv[0])):
+            log(f"  {str(name):<26} dispatch={cap or 'unpinned':<9} {len(cells)} cell(s)")
     return 0
 
 

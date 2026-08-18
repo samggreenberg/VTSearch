@@ -39,6 +39,19 @@ ENVSET="$ENVSET && export VTSEARCH_DATA_DIR=$PILE/datadir && cd $HERE"
 # the cpuset, so it needs no env var here.
 BUILDENV="$ENVSET && export VTSEARCH_TORCH_THREADS=$CPUS OMP_NUM_THREADS=$CPUS MKL_NUM_THREADS=$CPUS"
 
+# Pin PyTorch's CPU kernel dispatch. This is what actually makes a pile cell
+# reproducible across machines (#3160): the 384px resize in the image processor
+# rounds differently under AVX-512 than under AVX2, and an unpinned build
+# disagrees with itself across hosts on 12.3% of pixels by one 8-bit level --
+# which propagates to 1.5e-04 median 1-cos on siglip2_l, 50x what switching the
+# whole forward to fp16 costs. Measured on rack7n03: pinning it made the two
+# hosts' vectors agree to 8.9e-16 (from 1.3e-04), and the resize itself got
+# *faster* (256 images in 1.75s vs 2.36s), so the determinism is free.
+# `avx2` rather than `avx512` because it is the floor every x86 host here can
+# reach; a host that cannot do AVX2 would still diverge, and its cells would say
+# so in their provenance.
+BUILDENV="$BUILDENV ATEN_CPU_CAPABILITY=${VTS_CPU_CAPABILITY:-avx2}"
+
 # --- Stage 1: weights (CPU, blocking) -------------------------------------
 echo "=== prefetching weights (CPU) ==="
 srun --job-name=pile-prefetch --partition=cpu --cpus-per-task=4 --mem=8G --time=2:00:00 \
