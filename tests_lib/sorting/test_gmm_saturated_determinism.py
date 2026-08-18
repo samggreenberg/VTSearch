@@ -90,9 +90,7 @@ class TestSaturatedThresholdIsStable:
 
     def _cut(self, mu_lo, haystack):
         fit = GmmFit1D(w_lo=0.91, mu_lo=mu_lo, var_lo=1e-6, w_hi=0.09, mu_hi=1.0, var_hi=1e-6)
-        return FoldAnchoredCut(
-            fits=(fit,), fold_haystacks=(haystack,), final_haystack=haystack, n_anchored=1
-        )
+        return FoldAnchoredCut(fits=(fit,), fold_haystacks=(haystack,), final_haystack=haystack, n_anchored=1)
 
     def test_float_level_fit_wobble_leaves_the_threshold_bit_identical(self):
         """The regression: pre-#3166 this slid smoothly across the empty gap."""
@@ -154,20 +152,23 @@ class TestSnappedCutPreservesTheAdmittedSet:
     """Canonicalising must not change what a detector calls Good."""
 
     @pytest.mark.parametrize("seed", [0, 1, 2])
-    def test_gmm_threshold_admits_exactly_the_unsnapped_set(self, seed):
-        scores = saturated_scores(seed=seed)
-        arr = gmm_fit_array(scores.tolist())
-        fit = fit_score_gmm(arr)
-        assert fit is not None
-        assert admitted(arr, calculate_gmm_threshold(scores.tolist())) == admitted(arr, fit.midpoint())
+    def test_fold_anchored_threshold_admits_the_same_items_as_the_raw_quantile(self, seed):
+        haystack = np.sort(saturated_scores(seed=seed))
+        fit = GmmFit1D(w_lo=0.91, mu_lo=0.0, var_lo=1e-6, w_hi=0.09, mu_hi=1.0, var_hi=1e-6)
+        cut = FoldAnchoredCut(fits=(fit,), fold_haystacks=(haystack,), final_haystack=haystack, n_anchored=1)
+        for k in range(-3, 4):
+            raw = float(np.quantile(haystack, min(1.0, max(0.0, cut.quantile_at(k)))))
+            assert admitted(haystack, cut.threshold_at(k)) == admitted(haystack, raw)
 
-    def test_non_saturated_distribution_is_barely_moved(self):
-        """On a distribution with interior mass the gaps are ~1/n, so is the snap."""
-        rng = np.random.default_rng(7)
-        scores = np.clip(
-            np.concatenate([rng.normal(0.3, 0.1, 5000), rng.normal(0.7, 0.1, 5000)]), 0.0, 1.0
-        )
-        arr = gmm_fit_array(scores.tolist())
-        fit = fit_score_gmm(arr)
+    def test_the_plain_gmm_cut_is_left_unsnapped(self):
+        """``calculate_gmm_threshold`` is ``fit.midpoint()``: unit gain, nothing to fix.
+
+        Snapping it would break the recomposition identity the eval harness leans
+        on (re-cut one fit, reproduce the app) and, above ``_GMM_MAX_SAMPLES``,
+        would snap against a subsample whose empty intervals are not empty in the
+        full population.  The amplifier is ``np.quantile``, and only that.
+        """
+        scores = saturated_scores(seed=9)
+        fit = fit_score_gmm(gmm_fit_array(scores.tolist()))
         assert fit is not None
-        assert calculate_gmm_threshold(scores.tolist()) == pytest.approx(fit.midpoint(), abs=1e-3)
+        assert calculate_gmm_threshold(scores.tolist()) == fit.midpoint()

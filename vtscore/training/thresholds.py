@@ -518,6 +518,20 @@ def snap_cut_to_sample(cut: float, sorted_scores: np.ndarray) -> float:
     unchanged - moving it would flip that score's (and its duplicates') verdict,
     which is the one case where the exact value does carry information.
 
+    **Applied only where the chain has gain**, i.e. at
+    :meth:`FoldAnchoredCut.threshold_at`, whose ``np.quantile`` interpolation is
+    the amplifier.  :func:`calculate_gmm_threshold` and :func:`fit_gmm_threshold`
+    deliberately do *not* snap: their cut is ``fit.midpoint()``, a smooth
+    function of the fitted means, so an ulp of wobble in the fit buys an ulp of
+    wobble in the cut and there is nothing to amplify.  Snapping them would also
+    cost more than it bought - it would break the ``calculate_gmm_threshold(s) ==
+    fit_score_gmm(gmm_fit_array(s)).midpoint()`` recomposition identity the eval
+    harness relies on to re-cut one fit and reproduce the app, and above
+    :data:`_GMM_MAX_SAMPLES` it would snap against a *subsample*, whose empty
+    intervals are not empty in the full population.  ``threshold_at`` has
+    neither problem: it snaps against exactly the array its own quantile was
+    realised on.
+
     Args:
         cut: The candidate threshold.
         sorted_scores: The sample the threshold will be applied to, **sorted
@@ -1190,8 +1204,7 @@ def fold_anchored_gmm_threshold(
     final_arr = gmm_fit_array(final_scores)
     fallback_fit = fit_score_gmm(final_arr) if final_arr.size >= 2 else None
     if fallback_fit is not None:
-        cut = snap_cut_to_sample(fallback_fit.midpoint(), np.sort(final_arr))
-        return cut, "fold_fallback_final_unanchored"
+        return fallback_fit.midpoint(), "fold_fallback_final_unanchored"
     if final_arr.size:
         return float(np.median(final_arr)), "fold_fallback_final_median"
     return 0.5, "fold_fallback_final_median"
@@ -1216,11 +1229,6 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
     (seed-42) random subsample - the two-Gaussian fit is unchanged in practice
     but the cost no longer grows with the dataset size.
 
-    The midpoint is canonicalised by :func:`snap_cut_to_sample` against the same
-    sample, so a cut landing between two adjacent scores reports the midpoint of
-    that empty interval instead of a value only the EM fit's last bits decide
-    (issue #3166).  The verdict on every score in the sample is unchanged.
-
     Args:
         scores: List of model confidence scores, expected to follow a bimodal distribution.
 
@@ -1238,7 +1246,7 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
         # If GMM fails, return median (of the subsample when one was taken -
         # representative of the full distribution and keeps this path bounded).
         return float(np.median(arr))
-    return snap_cut_to_sample(fit.midpoint(), np.sort(arr))
+    return fit.midpoint()
 
 
 def _score_rows_digest(score_rows_by_group: dict | None) -> bytes | None:
@@ -2072,10 +2080,6 @@ def fit_gmm_threshold(scores: list[float]) -> tuple[float, GmmFit1D | None]:
     (issue #2841) need the component means, so this returns both from one EM
     fit.  ``None`` accompanies the 0.5 / median fallbacks, where there is no
     fit to speak of and a schedule must degrade to the plain blend.
-
-    The cut is :func:`snap_cut_to_sample`-canonicalised exactly as
-    :func:`calculate_gmm_threshold`'s is, so the two agree; the *fit* is
-    returned unsnapped, since the schedules read its component geometry.
     """
     if len(scores) < 2:
         return 0.5, None
@@ -2083,7 +2087,7 @@ def fit_gmm_threshold(scores: list[float]) -> tuple[float, GmmFit1D | None]:
     fit = fit_score_gmm(arr)
     if fit is None:
         return float(np.median(arr)), None
-    return snap_cut_to_sample(fit.midpoint(), np.sort(arr)), fit
+    return fit.midpoint(), fit
 
 
 def calculate_safe_threshold(

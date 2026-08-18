@@ -94,6 +94,18 @@ difference between machines flips it. Filed as #3166; it is why
 `caltech101_m` is excluded from the whole-image numbers above, and one more
 reason to retire that haystack from this sweep.
 
+**Resolved in #3166**, and the fit turned out not to be the culprit: the
+threshold is realized as `np.quantile` of the final haystack at the combined
+fold quantile, and that interpolates *linearly* between adjacent order
+statistics. Across the empty interval of a saturated distribution the
+interpolation has gain `(n - 1) * gap` — at `n` ~ 9k and a near-unit gap, a
+quantile difference of 2.9e-6 lands exactly on the 0.026 observed here. The cut
+is now snapped to the midpoint of the empty interval it falls in, which is
+decision-exact (no item changes side) and removes the gain, so the threshold
+cannot move until the admitted set really does. Runs before and after the fix
+are therefore not threshold-comparable on saturated cells; every other column
+is unaffected.
+
 Grids: `/expscratch/sgreenberg/bench-h250/{wave1,vgbox,binary}/results`, arrays
 `507700` (cancelled at 143 / 270), `507713` (189 / 189), `507722` (45 / 45), zero
 task failures. Reproduce with `analyze_horizon.py <short_results> <long_results>`.
