@@ -134,11 +134,7 @@ def save_detector_labels(name: str):
     from vtscore.datasets.labelset import LabelSet
     from vtscore.detectors.dataset_sync import validated_vote_snapshot
     from vtscore.detectors.input_spec import extract_input_spec_from_medias
-    from vtscore.detectors.label_sync import (
-        _label_sync_write_lock,
-        _merge_labelsets_across_datasets,
-        active_dataset_lookups,
-    )
+    from vtscore.detectors.label_sync import _label_sync_write_lock, _merge_labelsets_across_datasets
 
     # The read→compose→write below races the loaded-detector label sync (and
     # the other detector-JSON writers), so it runs under the same lock.
@@ -164,15 +160,12 @@ def save_detector_labels(name: str):
             vote_region_boxes=snap.vote_region_boxes,
         )
 
-        # Lookup tables over *every* media in the active dataset (voted or not).
-        # Existing labelset entries that resolve against them are "owned" by
-        # the active dataset and get reconciled against the current votes;
-        # entries that resolve to nothing were accumulated under other datasets
-        # and are preserved verbatim by the merge.
+        # Existing labelset entries that resolve into the active dataset are
+        # "owned" by it and get reconciled against the current votes; entries
+        # that resolve to nothing were accumulated under other datasets and are
+        # preserved verbatim by the merge.
         existing_ls = LabelSet.from_dict(data.get("labelset") or {})
-        labelset = _merge_labelsets_across_datasets(
-            existing_ls, current_ls, active_dataset_lookups(medias_snap)
-        )
+        labelset = _merge_labelsets_across_datasets(existing_ls, current_ls, medias_snap)
         data["labelset"] = labelset.to_dict()
 
         # Capture the active dataset's clipper into the detector's input_spec

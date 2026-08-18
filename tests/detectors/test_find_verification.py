@@ -346,6 +346,39 @@ class TestCorrectionsToDetector:
         assert get_active_detector_context().find_eval_stale is False
         assert client.get("/api/find/stats").get_json()["stale"] is False
 
+    def test_correction_supersedes_an_md5_matched_entry(self, client):
+        """A correction replaces the media's prior entry even when that entry
+        names the file by a different origin (issue #3174).
+
+        Matching on ``element_key`` alone left the stale entry in place, so the
+        labelset ended up holding the same media twice with contradicting
+        labels - and training saw both bags.
+        """
+        self._setup_find(client)
+
+        # Replace one media's entry with a stale, md5-only record of the same
+        # bytes: same file, different provenance, so ``element_key`` differs.
+        stale_id = next(iter(app_module.medias))
+        stale_md5 = app_module.medias[stale_id]["md5"]
+        path = _detector_path("corrections-model")
+        data = _read_detector(path)
+        assert data is not None
+        data["labelset"]["labels"] = [el for el in data["labelset"]["labels"] if el.get("md5") != stale_md5] + [
+            {"md5": stale_md5, "label": "good", "origin_name": "elsewhere.wav"}
+        ]
+        _write_detector(path, data)
+
+        # Flip the detector's call on that media so it becomes a correction.
+        ctx = get_active_detector_context()
+        opposite = "bad" if ctx.find_initial_labels.get(stale_id) == "good" else "good"
+        assert client.post(f"/api/medias/{stale_id}/vote", json={"target": opposite}).status_code == 200
+
+        assert client.post("/api/find/corrections-to-detector").status_code == 200
+
+        entries = [el for el in self._labelset_labels("corrections-model") if el.get("md5") == stale_md5]
+        assert len(entries) == 1, f"labelset stored the same media twice: {entries}"
+        assert entries[0]["label"] == opposite
+
 
 class TestReScoreKeepsVerifiedVotes:
     """Re-scoring must not overwrite a human-verified vote (#2928).
