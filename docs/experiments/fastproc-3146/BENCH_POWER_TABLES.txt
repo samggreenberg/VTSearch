@@ -1,0 +1,49 @@
+############ tv_cpu vs tv_cuda ############
+================================================================================================
+COVERAGE — everything dropped is counted, not silently excluded
+================================================================================================
+  tv_cpu           1024 cell files, 146742 rows, 1013 distinct cells, 11 unusable [('task_0001.csv', 'header only'), ('task_0013.csv', 'header only'), ('task_0017.csv', 'header only')]
+  tv_cuda          1024 cell files, 146755 rows, 1013 distinct cells, 11 unusable [('task_0001.csv', 'header only'), ('task_0013.csv', 'header only'), ('task_0017.csv', 'header only')]
+
+================================================================================================
+tv_cuda  vs  tv_cpu   (paired; margin = 0.005)
+================================================================================================
+paired steps: 146708  paired cells: 1013  (ref had 1013, arm had 1013)
+steps where cost is bit-identical: 5.4%  (7881/146708)
+steps where average_precision is bit-identical: 0.1%  (106/146708)
+steps choosing the threshold the same way: 99.9%
+
+Deep regime (t >= 100), paired difference per CELL then averaged.
+SE is over cells, not steps: steps within a cell are autocorrelated and a
+step-level SE would be anti-conservative (#2825).
+
+metric                   ref mean   arm mean         paired diff ± SE  cells                      verdict
+cost                         0.39       0.39          0.0027 ± 0.0023   1013     cannot resolve at this n
+regret                        0.1        0.1         -1.1e-04 ± 0.002   1013      below margin (resolved)
+average_precision            0.45       0.44         -0.0038 ± 0.0021   1013     cannot resolve at this n
+fnr                          0.15       0.16          0.0047 ± 0.0027   1013     cannot resolve at this n
+fpr                          0.24       0.23          -0.002 ± 0.0032   1013     cannot resolve at this n
+rule_inefficiency          -0.012      -0.01          0.0013 ± 0.0021    990     cannot resolve at this n
+calibration_shift            0.11       0.11          -0.0015 ± 0.002    990     cannot resolve at this n
+n_good                        8.8        8.7            -0.097 ± 0.12   1013          count: within noise
+
+Same difference, split by embedder (a pooled average across a crossover
+is precisely the number that hides it):
+  siglip         (504 cells)  cost 0.0018 ± 0.0032   regret -6.2e-04 ± 0.0028   average_precision -0.0052 ± 0.0029
+  siglip2_l      (509 cells)  cost 0.0036 ± 0.0034   regret 3.9e-04 ± 0.0028   average_precision -0.0024 ± 0.0032
+
+Power: 6 rate metric(s) could not be resolved against the 0.005 margin.
+Cells needed for 2*SE < margin, at this between-cell spread:
+  cost                   have 1013 cells (SE 0.0023) -> need ~882
+  average_precision      have 1013 cells (SE 0.0021) -> need ~747
+  fnr                    have 1013 cells (SE 0.0027) -> need ~1142
+  fpr                    have 1013 cells (SE 0.0032) -> need ~1612
+  rule_inefficiency      have  990 cells (SE 0.0021) -> need ~697
+  calibration_shift      have  990 cells (SE 0.002) -> need ~630
+A 3e-6 vector change reroutes the vote sequence, so the trajectory
+decorrelates and the per-cell spread is set by that, not by the
+perturbation size. This test bounds a SYSTEMATIC effect; it cannot be
+made tight cheaply.
+
+wrote /expscratch/sgreenberg/fastproc-3146/bench-power/paired_tv_cuda_vs_tv_cpu.csv
+wrote figures to /expscratch/sgreenberg/fastproc-3146/bench-power/figures
