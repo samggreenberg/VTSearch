@@ -43,7 +43,12 @@ answers:
    50× the fp16 perturbation #3143 measured, and nothing in the pile records
    which backend built any cell.
 
-<!-- BENCH VERDICT PLACEHOLDER -->
+**The benchmark cannot resolve either change at 96 cells** — every rate metric's
+paired difference is smaller than twice its standard error, and the margin needs
+~1100 cells. What *is* well-powered is the decision layer: the arms choose the
+threshold identically on **99.9%** (`tv_cuda`) and **99.8%** (`pil_cpu`) of
+13,600+ paired steps. A 64-seed power run on the `tv_cuda` contrast is in
+flight.
 
 ---
 
@@ -362,13 +367,142 @@ effect.
 
 ## 6. The benchmark
 
-<!-- BENCH SECTION PLACEHOLDER -->
+### What the 6-seed grid resolves, and what it does not
+
+96 cells per arm, 6 seeds × 8 categories × 2 embedders, paired on
+`(dataset, embedder, category, seed, style)` with pairing verified before the
+array ran: identical categories, order, populations and exemplar candidates.
+
+**95 usable cells per arm, not 96.** `task_0001` — category `ball`, seed 1,
+`siglip` — produced **zero rows in every arm**: the category has too little
+signal at that seed for the run to take a single step. It is identical across
+arms so the pairing is unaffected, and the analyser counts it rather than
+dropping it silently. A header-only CSV passes `find -size +0`, which is how
+#3129 nearly lost a cell count.
+
+The well-powered result first:
+
+| contrast | steps choosing the threshold the same way |
+|---|---:|
+| `tv_cuda` vs shipped | **99.9%** |
+| `pil_cpu` vs shipped | **99.8%** |
+
+Over 13,627 and 13,620 paired steps. This is the decision layer, and it barely
+moves.
+
+The deep-regime rate metrics (votes 100–150), paired per cell:
+
+| metric | `tv_cuda` vs shipped | `pil_cpu` vs shipped |
+|---|---:|---:|
+| cost | 0.0012 ± 0.0087 | −0.0088 ± 0.0080 |
+| regret | −0.0027 ± 0.0072 | −0.0023 ± 0.0072 |
+| average precision | 3.0e-04 ± 0.0073 | 0.0045 ± 0.0061 |
+| fpr | −0.0038 ± 0.011 | −0.0055 ± 0.011 |
+| fnr | 0.0050 ± 0.0080 | −0.0033 ± 0.0076 |
+
+**Every one of these is "cannot resolve at this n", and that is a statement
+about the grid rather than about the arms.** Each difference is smaller than
+twice its standard error, so this grid cannot tell any of them from zero — but
+neither can it certify them as *below* 0.005, which is what an adoption decision
+needs. Saying "no significant difference" here would be the false-null the
+report standard exists to prevent.
+
+The power requirement is explicit: at the measured between-cell spread,
+`2·SE < 0.005` needs **~1137 cells** for cost on the `tv_cuda` contrast and ~983
+on the `pil_cpu` one, against the 95 in hand. This is the same wall #3143 hit at
+95 cells, and for the same mechanical reason: a vector change of any size
+reroutes the *vote sequence*, so two arms' trajectories decorrelate and the
+per-cell spread is set by that rather than by the size of the perturbation. **A
+tighter answer cannot be bought cheaply**; it has to be bought with cells.
+
+Split by embedder, because a pooled average across a crossover is the number
+that hides it:
+
+| contrast | `siglip` (47 cells) | `siglip2_l` (48 cells) |
+|---|---:|---:|
+| `tv_cuda` cost | 0.012 ± 0.0092 | −0.0089 ± 0.015 |
+| `pil_cpu` cost | −0.0059 ± 0.010 | −0.012 ± 0.013 |
+
+The signs differ between embedders on the `tv_cuda` contrast, in the direction
+§3 and §4 predict — `siglip` is the model GPU preprocessing actually perturbs —
+but neither half is resolvable either, so this is a consistency check on the
+mechanism, not evidence for it.
+
+### The power run
+
+A 64-seed grid on the decisive contrast (`tv_cpu` vs `tv_cuda`, ~1024 cells per
+arm) is running in its own results dir, `bench-power/`, chained under job
+`515904`. A different grid is a different study: sharing one results dir would
+let resume read one grid's cells as the other's.
+
+<!-- POWER RESULT PLACEHOLDER -->
+
+### What this says about a confound in a *different* study
+
+`pil_cpu` is not a shipping candidate — nobody proposes moving to PIL. It is in
+the grid because it is the closest available proxy for a live confound found by
+#3160 while this study ran: the shared pile's `vg_box_small` cells were built on
+an AVX2-only host while `vg_box_medium` and `vg_box_large` were built on
+AVX-512 hosts, so the three box-size bands that #3129 and #3156 compare against
+each other were **not preprocessed identically**.
+
+The magnitudes line up: #3160's AVX2-vs-AVX-512 effect on `siglip2_l` is
+~1.3e-04 median `1 − cos`, and `pil_cpu` against the shipped path is 1.5e-04.
+Different causes, different pixel populations, the same downstream drift. So the
+`pil_cpu` bench arm bounds what a ~1.5e-04 preprocessing drift does to the
+decision layer, and the answer is that it changes the threshold choice on 0.2%
+of steps and moves no rate metric detectably at 95 cells.
+
+Two limits on reading that across: this grid runs `visual_genome_m`, not the
+`vg_box_*` bands, and the pixel populations differ by ~4× even where the cosine
+drift matches — so it bounds the effect rather than measuring theirs. A direct
+test is a `vg_box_small` `siglip2_l` rebuild under AVX-512 followed by re-running
+the #3129 band contrast.
 
 ---
 
 ## Recommendations
 
-<!-- RECOMMENDATIONS PLACEHOLDER -->
+**1. Close #3146's proposed fix as already done, and say why it is not a
+no-op finding.** `use_fast=True` changes nothing under the installed
+transformers; the torchvision path has been live since whenever this host
+resolved a v5 wheel. That is not "nothing happened" — it is a **1.9× embed-path
+speedup on `siglip` that arrived unattributed**, and a change of vectors that
+nothing recorded.
+
+**2. Name the backend explicitly rather than resolving it.** The knob is landed
+and defaults to `auto`, which passes nothing and reproduces the pile
+byte-for-byte. The recommendation is to change that default to `torchvision`,
+because `requirements/image-embedders.txt` pins only `transformers>=4.49` and
+the default flips inside that range — so today two hosts can embed the same
+image differently with nothing anywhere saying so. Naming it costs nothing if
+the difference does not matter and is essential if it does. This is the one
+change here worth making regardless of how the power run lands.
+
+**3. Do not adopt GPU preprocessing yet, and probably not at all for
+`siglip2_l`.** It is worth 1.68× on `siglip`'s embed path but only **1.09× per
+pile cell**, and on `siglip2_l` essentially nothing. Against that it moves the
+top-1 result on **5% of `siglip` text queries** and drifts vectors by 1.2e-04 —
+50× fp16's cost, for a fraction of fp16's benefit on the model that gains most.
+Adopting it would also mean rebuilding the entire pile, since a partially
+GPU-preprocessed pile is exactly the confound this study exists to document. The
+power run decides whether the benchmark tolerates it; the cost/benefit argues
+against it either way for `siglip2_l`.
+
+**4. Record the backend in pile provenance.** #3160's sidecar is being extended
+to carry `transformers.__version__` and the resolved processor class alongside
+the device and CPU capability. That is the durable fix: the failure here was
+never that a wrong value was chosen, it was that no value was written down.
+
+**5. File the EXIF defect separately.** Nothing in the decode path applies EXIF
+orientation, so rotated JPEGs reach every image model un-rotated. It is
+constant across backends and therefore out of scope for this study, but it is a
+real correctness bug affecting all image embedders and deserves its own issue.
+
+**6. `dinov3_patch` is untested here and is the one that matters most for the
+`vg_box_*` bands.** It has no PIL backend so the version-skew question cannot
+arise for it, but its `device="cuda"` behaviour is unmeasured and it is the
+region-voting embedder.
 
 ---
 
