@@ -407,6 +407,20 @@ neither can it certify them as *below* 0.005, which is what an adoption decision
 needs. Saying "no significant difference" here would be the false-null the
 report standard exists to prevent.
 
+![Paired cost trajectory, tv_cuda vs shipped](figures/paired_cost_tv_cuda_vs_tv_cpu.png)
+
+![Paired cost trajectory, pil_cpu vs shipped](figures/paired_cost_pil_cpu_vs_tv_cpu.png)
+
+*Left: mean `cost` over votes spent — the axis a user actually spends — one line
+per arm. Right: the **paired per-cell difference**, one thin line per cell, with
+the mean in black and the 0.005 decision margin dashed. This pair is the whole
+power story in one picture: the mean sits on zero from about vote 20 onward,
+while individual cells swing by ±0.5, because a vector change of any size
+reroutes the vote sequence and decorrelates the two trajectories. The spread is
+what sets the standard error, and it is why ~1100 cells are needed rather than
+95. Do **not** read the right panel as "the arms differ wildly" — each thin line
+is a single run's difference, and their mean is the estimate.*
+
 The power requirement is explicit: at the measured between-cell spread,
 `2·SE < 0.005` needs **~1137 cells** for cost on the `tv_cuda` contrast and ~983
 on the `pil_cpu` one, against the 95 in hand. This is the same wall #3143 hit at
