@@ -1984,9 +1984,7 @@ class TestCancelIngest:
         let a *finished* import look exactly like a wedged one (#3167).
         """
         resp = client.post("/api/dataset/cancel")
-        assert resp.status_code == 409, (
-            f"nothing was running; the cancel delivered nothing, got {resp.status_code}"
-        )
+        assert resp.status_code == 409, f"nothing was running; the cancel delivered nothing, got {resp.status_code}"
         data = resp.get_json()
         assert data["ok"] is False
         assert data["targets"] == []
