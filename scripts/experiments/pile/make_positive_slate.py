@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import random
 import sys
 from pathlib import Path
 
@@ -96,7 +97,8 @@ def draw_with_inset(src: Path, box: tuple[float, float, float, float], dest: Pat
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--cell", default=str(pc.EMBEDDINGS / "vg_scale__siglip.pkl"))
-    ap.add_argument("--slates", default=str(pc.PILE.parent / "vgscale-3156" / "slates"))
+    ap.add_argument("--per-band", type=int, default=10, help="positives per band per class")
+    ap.add_argument("--seed", type=int, default=20260818)
     ap.add_argument("--out", default=str(pc.PILE.parent / "vgscale-3156" / "slates_pos"))
     args = ap.parse_args()
 
@@ -111,46 +113,48 @@ def main() -> int:
     out_root.mkdir(parents=True, exist_ok=True)
 
     index = []
-    for man in sorted(Path(args.slates).glob("*/manifest.csv")):
-        rows = [r for r in csv.DictReader(man.open()) if r["stratum"] == "positive"]
-        if not rows:
-            continue
-        cls = rows[0]["class"]
-        cdir = out_root / man.parent.name
-        cdir.mkdir(parents=True, exist_ok=True)
+    rng = random.Random(args.seed)
+    for cls in pc.SCALE_CLASSES:
+        # Sample from the CURRENT cell rather than from an earlier slate's
+        # manifest: a rebuild can move an image between bands (fixing the
+        # coordinate-space bug moved most of them), and a manifest written
+        # against the old pickle would ask the reviewer to confirm a box the
+        # dataset no longer holds.
         written = []
-        for r in rows:
-            iid = int(r["image_id"])
-            cell = r["cell"]
-            media = medias.get(iid)
-            src = paths.get(iid)
-            if media is None or src is None:
-                continue
-            boxes = [x["box"] for x in (media.get("regions") or []) if x.get("label") == cell]
-            if not boxes:
-                continue
-            box = (
-                min(b[0] for b in boxes),
-                min(b[1] for b in boxes),
-                max(b[2] for b in boxes),
-                max(b[3] for b in boxes),
-            )
-            draw_with_inset(src, box, cdir / f"{iid}.jpg")
-            written.append(
-                {
-                    "image_id": iid,
-                    "class": cls,
-                    # A distinct stratum so a boxed verdict supersedes the bare
-                    # one the reviewer cast on the same pair.
-                    "stratum": "positive_boxed",
-                    "cell": cell,
-                    "text_score": r["text_score"],
-                    "reference": "present",
-                    "exhaustive": r["exhaustive"],
-                    "n_boxes": r["n_boxes"],
-                    "detector": f"{cls} positives",
-                }
-            )
+        for band in pc.BOX_BANDS:
+            cell = pc.scale_cell(cls, band)
+            pool = [i for i, m in medias.items() if cell in (m.get("categories") or [])]
+            for iid in rng.sample(pool, min(args.per_band, len(pool))):
+                media = medias[iid]
+                src = paths.get(iid)
+                boxes = [x["box"] for x in (media.get("regions") or []) if x.get("label") == cell]
+                if src is None or not boxes:
+                    continue
+                box = (
+                    min(b[0] for b in boxes),
+                    min(b[1] for b in boxes),
+                    max(b[2] for b in boxes),
+                    max(b[3] for b in boxes),
+                )
+                cdir = out_root / cls.replace(" ", "_")
+                cdir.mkdir(parents=True, exist_ok=True)
+                draw_with_inset(src, box, cdir / f"{iid}.jpg")
+                written.append(
+                    {
+                        "image_id": iid,
+                        "class": cls,
+                        "stratum": "positive_boxed",
+                        "cell": cell,
+                        "text_score": 0.0,
+                        "reference": "present",
+                        "exhaustive": "yes" if media.get("labels_exhaustive") else "no",
+                        "n_boxes": len(boxes),
+                        "detector": f"{cls} positives",
+                    }
+                )
+        if not written:
+            continue
+        cdir = out_root / cls.replace(" ", "_")
         with (cdir / "manifest.csv").open("w", newline="") as fh:
             w = csv.DictWriter(fh, fieldnames=list(written[0]))
             w.writeheader()
