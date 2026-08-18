@@ -41,14 +41,43 @@ def log(msg: str) -> None:
     print(f"[ingest] {msg}", flush=True)
 
 
-def load_manifests(slates: Path) -> dict[tuple[int, str], dict]:
-    """``{(image_id, class): manifest row}`` over every slate on disk."""
+def load_manifests(slates: Path) -> tuple[dict[tuple[int, str], dict], dict[str, str]]:
+    """``({(image_id, class): row}, {class: folder name})`` over every slate."""
     out: dict[tuple[int, str], dict] = {}
+    folders: dict[str, str] = {}
     for man in sorted(slates.glob("*/manifest.csv")):
         with man.open() as fh:
             for row in csv.DictReader(fh):
                 out[(int(row["image_id"]), row["class"])] = row
-    return out
+                folders[row["class"]] = man.parent.name
+    return out, folders
+
+
+def class_of(path: Path, elements: list[dict], folders: dict[str, str], explicit: str) -> str:
+    """Which class this export is a review of.
+
+    An export **cannot** be attributed by image id: the slates share images
+    (801 of 3,600 rows are an image that appears under a second class), so a
+    Good vote in the `bus` dataset would otherwise be recorded as a `dog`
+    verdict too. The slate folder is what disambiguates, read from the
+    importer's own origin, then from the file name, and never guessed.
+    """
+    if explicit:
+        if explicit not in folders:
+            raise SystemExit(f"--class {explicit!r} is not one of {sorted(folders)}")
+        return explicit
+    blob = " ".join(json.dumps(el.get("origin") or "") + " " + str(el.get("origin_name") or "") for el in elements[:50])
+    hits = {c for c, folder in folders.items() if f"/{folder}/" in blob or f"/{folder}" in blob}
+    if len(hits) == 1:
+        return hits.pop()
+    stem = path.stem.lower()
+    hits = {c for c, folder in folders.items() if folder.lower() in stem}
+    if len(hits) == 1:
+        return hits.pop()
+    raise SystemExit(
+        f"{path.name}: cannot tell which class this export reviews "
+        f"(origin paths and file name match {sorted(hits) or 'nothing'}). Pass --class."
+    )
 
 
 def read_export(path: Path) -> list[dict]:
@@ -66,9 +95,10 @@ def main() -> int:
     ap.add_argument("--export", required=True, help="exported JSON (glob allowed)")
     ap.add_argument("--slates", default=str(pc.PILE / "slates"), help="slate dir from make_audit_slate.py")
     ap.add_argument("--out", default="", help="write the verdict rows here")
+    ap.add_argument("--class", dest="klass", default="", help="the class this export reviews (else inferred)")
     args = ap.parse_args()
 
-    manifests = load_manifests(Path(args.slates))
+    manifests, folders = load_manifests(Path(args.slates))
     if not manifests:
         raise SystemExit(f"no manifests under {args.slates}; run make_audit_slate.py first")
     log(f"{len(manifests)} slate entries over {len({c for _, c in manifests})} classes")
@@ -77,33 +107,31 @@ def main() -> int:
     unmatched = 0
     for path in sorted(glob.glob(args.export)):
         elements = read_export(Path(path))
+        c = class_of(Path(path), elements, folders, args.klass)
         for el in elements:
             name = Path(el.get("filename") or el.get("origin_name") or "").stem
             if not name.isdigit():
                 unmatched += 1
                 continue
             iid = int(name)
-            # One export is one detector, i.e. one class; the slate says which.
-            hits = [(i, c) for (i, c) in manifests if i == iid]
-            if not hits:
+            row = manifests.get((iid, c))
+            if row is None:
                 unmatched += 1
                 continue
-            for _, c in hits:
-                row = manifests[(iid, c)]
-                verdicts.append(
-                    {
-                        "image_id": iid,
-                        "class": c,
-                        "stratum": row["stratum"],
-                        "human": "present" if el.get("label") == "good" else "absent",
-                        "reference": row["reference"],
-                        "exhaustive": row["exhaustive"],
-                        "box": el.get("region_box"),
-                        "text_score": float(row["text_score"]),
-                        "export": Path(path).name,
-                    }
-                )
-        log(f"  {Path(path).name}: {len(elements)} labelled elements")
+            verdicts.append(
+                {
+                    "image_id": iid,
+                    "class": c,
+                    "stratum": row["stratum"],
+                    "human": "present" if el.get("label") == "good" else "absent",
+                    "reference": row["reference"],
+                    "exhaustive": row["exhaustive"],
+                    "box": el.get("region_box"),
+                    "text_score": float(row["text_score"]),
+                    "export": Path(path).name,
+                }
+            )
+        log(f"  {Path(path).name}: {len(elements)} labelled elements, class {c!r}")
     if unmatched:
         log(f"  WARNING {unmatched} exported elements matched no slate entry")
 
