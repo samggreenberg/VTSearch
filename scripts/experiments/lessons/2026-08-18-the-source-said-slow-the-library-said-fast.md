@@ -71,3 +71,39 @@ and resolved implementation classes that produced it*, which is what #3160's
 provenance sidecar is being extended to do as a result of this incident. Until
 existing cells are backfilled, the honest status of every cell in the shared
 pile is "built on an unknown device by an unknown transformers".
+
+---
+
+**Postscript (same day): two summary statistics with the same failure shape.**
+The study that came out of this incident then hit the identical problem twice
+more, one level down, and both would have shipped as findings.
+
+*Max-|Δ| saturates.* Resampling disagreements in an 8-bit pipeline land on whole
+levels, so `max|Δpixel|` reads **exactly 7.843e-03 = 2/255** for any pair that
+differs at all. The first backend×dispatch matrix was six identical numbers,
+which reads as "these are all the same effect" and means "this statistic cannot
+see the difference". Fraction-of-elements separated them (53–59% vs 13.7%).
+
+*Jaccard hides nesting.* Replacing max with a set comparison then gave 0.231,
+about to be written up as "independent axes". It was not: **99.8% of the pixels
+CPU dispatch moves are also moved by the backend** — the index is low only
+because one set is 4.3× larger. Containment, not Jaccard, distinguishes nested
+from independent, and the two license different claims.
+
+Both statistics were defensible in the abstract and wrong for this data. The
+generalisable rule is narrow enough to act on: **before quoting a summary
+statistic, ask what value it takes when the effect is maximal and when it is
+minimal.** A statistic whose range is one point (the saturated max) or whose
+value is dominated by set sizes rather than overlap (Jaccard on very unequal
+sets) is not measuring the thing you are about to name it.
+
+**And the figure equivalent, which is worse because it is silent.** The drift
+figure could not draw a zero median on a log axis, so it substituted a small
+epsilon — rendering the *exactly-zero* reproduction floor as a bar at ~5e-07,
+visually comparable to the treatment's real 2.4e-06, inverting the study's main
+result. The code comment said a caption would explain the substitution; no
+caption can rescue a bar drawn at a value that does not exist. Zero now gets a
+marker and a label. Four *other* figure edits in the same session silently
+matched nothing because `ruff format` had reflowed the target between commits:
+the edit reports success and the PNG regenerates byte-identical. **Only
+re-reading the rendered image caught any of it.**

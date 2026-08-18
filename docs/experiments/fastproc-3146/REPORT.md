@@ -43,12 +43,13 @@ answers:
    50× the fp16 perturbation #3143 measured, and nothing in the pile records
    which backend built any cell.
 
-**The benchmark cannot resolve either change at 96 cells** — every rate metric's
-paired difference is smaller than twice its standard error, and the margin needs
-~1100 cells. What *is* well-powered is the decision layer: the arms choose the
-threshold identically on **99.9%** (`tv_cuda`) and **99.8%** (`pil_cpu`) of
-13,600+ paired steps. A 64-seed power run on the `tv_cuda` contrast is in
-flight.
+**The benchmark does not clear GPU preprocessing for adoption.** At 1013 paired
+cells only `regret` resolves below the 0.005 margin; `cost` (0.0027 ± 0.0023)
+and `fnr` (0.0047 ± 0.0027) have upper confidence bounds of 0.0073 and 0.0101,
+so the effect is small but not demonstrably below what the calibration studies
+resolve. The decision layer barely moves — the arms choose the threshold
+identically on **99.9%** of 146,708 paired steps — but "small" is not the bar an
+adoption decision uses.
 
 ---
 
@@ -449,7 +450,51 @@ arm) is running in its own results dir, `bench-power/`, chained under job
 `515904`. A different grid is a different study: sharing one results dir would
 let resume read one grid's cells as the other's.
 
-<!-- POWER RESULT PLACEHOLDER -->
+**1013 usable cells per arm** of 1024 (6 seeds → 64), paired, pairing verified
+before the array ran. Eleven cells produced zero rows in **both** arms
+identically: six are `siglip` × `ball` at different seeds, plus `cat` ×2,
+`sink`, and `ball`/`cat` on `siglip2_l`. Those categories are near-degenerate in
+this grid rather than broken, and the analyser counts them rather than dropping
+them.
+
+The extra cells did what they were bought to do — the standard error on `cost`
+fell from 0.0087 to **0.0023**, a factor of 3.8 against the √10.7 = 3.3 the cell
+count predicts. What they revealed is not a flat null:
+
+| metric | paired diff ± SE | verdict |
+|---|---:|---|
+| **regret** | **−1.1e-04 ± 0.0020** | **below margin (resolved)** |
+| cost | 0.0027 ± 0.0023 | cannot resolve |
+| average precision | −0.0038 ± 0.0021 | cannot resolve |
+| fnr | 0.0047 ± 0.0027 | cannot resolve |
+| fpr | −0.0020 ± 0.0032 | cannot resolve |
+| rule inefficiency | 0.0013 ± 0.0021 | cannot resolve |
+| calibration shift | −0.0015 ± 0.0020 | cannot resolve |
+
+**Ten times the cells moved exactly one metric across the line, and the reason
+matters.** "Below margin" requires `|diff| + 2·SE < 0.005`. The standard errors
+are now small enough — 2·SE is 0.0046 on cost — but the *point estimates* are
+not near zero: cost sits at 0.0027 and fnr at 0.0047, so their upper confidence
+bounds are 0.0073 and 0.0101. At 1013 cells we can say the effect is small; we
+**cannot** say it is below the margin the calibration studies resolve, and for
+`fnr` the upper bound is twice that margin.
+
+That is a different statement from the 96-cell grid's, and a more useful one.
+The 96-cell result was "this grid cannot see it". The 1013-cell result is "the
+effect is probably real and probably close to the margin" — which is exactly the
+regime where adopting a change on a null would be a mistake.
+
+The threshold-agreement figure is unchanged at **99.9%** over 146,708 paired
+steps, and the split by embedder shows no crossover (cost 0.0018 ± 0.0032 on
+`siglip`, 0.0036 ± 0.0034 on `siglip2_l`).
+
+![Paired cost trajectory at 1013 cells](figures/power_paired_cost_tv_cuda_vs_tv_cpu.png)
+
+*The same contrast as above with 10.7× the cells. The mean (black) is visibly
+tighter around zero than the 96-cell version, while the per-cell spread is
+unchanged — that is the point. More cells buy precision on the mean and buy
+nothing on the spread, because the spread is trajectory decorrelation rather
+than measurement noise.*
 
 ### What this says about a confound in a *different* study
 
@@ -493,15 +538,21 @@ image differently with nothing anywhere saying so. Naming it costs nothing if
 the difference does not matter and is essential if it does. This is the one
 change here worth making regardless of how the power run lands.
 
-**3. Do not adopt GPU preprocessing yet, and probably not at all for
-`siglip2_l`.** It is worth 1.68× on `siglip`'s embed path but only **1.09× per
-pile cell**, and on `siglip2_l` essentially nothing. Against that it moves the
-top-1 result on **5% of `siglip` text queries** and drifts vectors by 1.2e-04 —
-50× fp16's cost, for a fraction of fp16's benefit on the model that gains most.
-Adopting it would also mean rebuilding the entire pile, since a partially
-GPU-preprocessed pile is exactly the confound this study exists to document. The
-power run decides whether the benchmark tolerates it; the cost/benefit argues
-against it either way for `siglip2_l`.
+**3. Do not adopt GPU preprocessing.** The power run declined to clear it: at
+1013 paired cells only `regret` resolves below the margin, while `cost` and
+`fnr` have upper bounds of 0.0073 and 0.0101 against a 0.005 bar. Set that
+against what it buys — 1.68× on `siglip`'s embed path but **1.09× per pile
+cell**, and essentially nothing on `siglip2_l` — and against what it costs: the
+top-1 result changes on **5% of `siglip` text queries**, vectors drift 1.2e-04
+(50× fp16's perturbation, for a fraction of fp16's benefit), and adoption means
+rebuilding the entire pile, because a partially GPU-preprocessed pile is exactly
+the confound this study exists to document.
+
+The honest summary is not "it is harmful" — it is that a 9% per-cell speedup
+does not buy the right to a change we cannot show is below the decision margin.
+If the embed path ever becomes the binding constraint (it is not today; see §2),
+this is worth revisiting with a corpus-specific measurement rather than
+inherited.
 
 **4. Record the backend in pile provenance.** #3160's sidecar is being extended
 to carry `transformers.__version__` and the resolved processor class alongside
