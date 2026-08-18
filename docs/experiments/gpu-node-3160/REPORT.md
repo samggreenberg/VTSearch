@@ -306,7 +306,32 @@ shift and cannot be made tight cheaply.
 
 ## 5.1 Replication
 
-<!-- filled in when arrays 515932/515956 drain, ~13:35 -->
+**Pending** — arrays `515932`/`515956`, analysis chained as `515978`, which writes
+`/expscratch/$USER/gpu-node-3160/BENCH_REP_TABLES.txt`. A fresh grid: `siglip2_l`
+only, 256 seeds, ~2048 treated cells per arm — 2× the treated *n* of §5 and
+**independent of it**, not pooled with it.
+
+The reading is fixed here, before the number exists, because the one result at
+stake is a 2.6-SE line among seven metrics and that is exactly the situation in
+which a rule chosen afterwards is worthless:
+
+- **`rule_inefficiency` reproduces** (same sign, ≥2 SE, comparable magnitude to
+  −0.0057) → it is real, and a ~1.5e-04 preprocessing perturbation *does* reach a
+  shipped decision metric. That would make the `vg_box_small` ISA split in §6 a
+  live contaminant of #3129/#3156's band comparison, and a rebuild of that band
+  under the pin becomes the recommendation rather than an option.
+- **It shrinks toward zero** (|diff| well under 0.003, or the sign flips) → it was
+  a multiplicity artifact of testing seven metrics, exactly as #3143's `n_good`
+  was at n=95, and §5's summary stands unqualified: no shipped decision metric
+  moves detectably.
+- **It stays ~2 SE without shrinking** → unresolved, and the honest report is
+  that it is unresolved. Do not pool the two grids to manufacture significance;
+  they are separate studies by construction (different seed counts, different
+  embedder set), and pooling them would be the same error as reading §5's
+  half-placebo pooled row as if it described the treated arm.
+
+Whichever holds, §5's other six metrics are unaffected: they are centred within
+0.003 with 2·SE ≈ 0.005 and the replication cannot move that.
 
 ---
 
