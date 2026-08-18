@@ -11,14 +11,16 @@ import logging
 import sys
 from pathlib import Path
 from collections.abc import Iterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 
 from vtscore import cli_progress
 
 from vtscore.datasets.loader import apply_custom_metadata_md5, load_dataset_from_pickle
 from vtscore.utils.hits import build_media_hit
-from vtscore.utils.scores import sigmoid_to_finite_scores
+
+if TYPE_CHECKING:
+    from vtscore.detectors.training import ScoringRows
 
 logger = logging.getLogger(__name__)
 
@@ -283,6 +285,7 @@ def _score_medias_with_detectors(
     from collections import defaultdict  # noqa: PLC0415
 
     from vtscore.detectors.converter_routing import route_and_embed  # noqa: PLC0415
+    from vtscore.detectors.training import scoring_rows_for_snap  # noqa: PLC0415
 
     # Detectors sharing a (target type, embedder, re-clip spec) share one
     # routed+clipped+embedded snapshot, so a dataset scored by two image/siglip
@@ -302,8 +305,8 @@ def _score_medias_with_detectors(
     for (target_type, embedder_name, clipper, clipper_params_items), det_names in groups.items():
         if not target_type:
             # Legacy detector with no declared media_type: score every media
-            # directly, one hit per media (raises on a missing embedding). The
-            # matrix is built in the detectors' shared score embedder
+            # directly, one hit per media (media with no usable vector are
+            # skipped and reported). The rows are built in the shared score embedder
             # (``embedder_name`` is part of this group's key, so every detector
             # here trained in it), not each media's primary vector - on a trio
             # dataset those differ. Typed detectors take the routing path below.
@@ -318,14 +321,20 @@ def _score_medias_with_detectors(
         )
         if not scoring_medias:
             continue
+        # One row build per group; every head in the group forwards the same
+        # rows, so anything the builder had to skip is announced once here
+        # rather than once per detector.
+        rows = scoring_rows_for_snap(scoring_medias, embedder_name or None)
+        _emit_skipped_medias(_skipped_ids(scoring_medias, rows.ids), embedder_name)
+        if not rows.ids:
+            continue
         for det_name in det_names:
             results[det_name] = _score_one_detector(
                 det_name,
                 detector_mlps[det_name],
                 medias,
-                scoring_medias,
+                rows,
                 scoring_to_source,
-                embedder_name,
             )
 
     if results:
@@ -334,6 +343,21 @@ def _score_medias_with_detectors(
         record_achievement("find", len(medias) * len(results))
 
     return results
+
+
+def _skipped_ids(snapshot: dict[int, dict[str, Any]], scored_ids: list[int]) -> list[int]:
+    """The ids in *snapshot* that the row builder could not score.
+
+    :func:`~vtscore.detectors.training.scoring_rows_for_snap` drops a media it
+    cannot build a row for and reports the survivors as ``rows.ids``, so the
+    difference between the two *is* the skip list - no second pass over the
+    snapshot, and no way for the reported skips to disagree with what was
+    actually scored.
+    """
+    if len(scored_ids) == len(snapshot):
+        return []
+    scored = set(scored_ids)
+    return [cid for cid in sorted(snapshot) if cid not in scored]
 
 
 def _emit_skipped_medias(skipped: list[int], embedder_name: str = "") -> None:
@@ -369,36 +393,37 @@ def _score_direct_all(
     """Score *det_names* directly against every media's *embedder_name* vector.
 
     The legacy path for detectors that declare no ``media_type``: they score
-    whatever embeddings the dataset already holds, one hit per media.  The
-    matrix is built in *embedder_name* - the concrete space these detectors
-    trained in, shared across the group - so a trio dataset whose primary vector
-    differs from that space is scored correctly rather than against each media's
-    primary vector; empty *embedder_name* falls back to the primary vector, the
+    whatever embeddings the dataset already holds, one hit per media.  The rows
+    are built in *embedder_name* - the concrete space these detectors trained
+    in, shared across the group - so a trio dataset whose primary vector differs
+    from that space is scored correctly rather than against each media's primary
+    vector; empty *embedder_name* falls back to the primary vector, the
     single-embedder behaviour.  Media with no usable vector in that space are
     skipped and reported, not fatal (issue #3179): a folder where one image
     failed to embed should cost that one item, not the whole run.  The
     ``strict=True`` zip guards against an id/score length mismatch (audit M11).
+
+    Scoring goes through :func:`~vtscore.detectors.training.scoring_rows_for_snap`
+    + :func:`~vtscore.detectors.training.score_rows_with_model`, i.e. the same
+    geometry the GUI's Find scores at and the same one the detector's threshold
+    was cut on - on a patch dataset that is the max over the media's patch rows,
+    not the image-level vector alone (issue #3180).  The rows are built once for
+    the whole group and re-forwarded per head.
     """
-    import torch  # noqa: PLC0415
+    from vtscore.detectors.training import score_rows_with_model, scoring_rows_for_snap  # noqa: PLC0415
 
-    from vtscore.embedding.matrix import get_embedding_matrix_for_snap, scoreable_snapshot  # noqa: PLC0415
-
-    medias, skipped = scoreable_snapshot(medias, embedder_name or None)
-    _emit_skipped_medias(skipped, embedder_name)
-    if not medias:
+    rows = scoring_rows_for_snap(medias, embedder_name or None)
+    all_ids = rows.ids
+    _emit_skipped_medias(_skipped_ids(medias, all_ids), embedder_name)
+    if not all_ids:
         return {}
-
-    all_ids, all_embs = get_embedding_matrix_for_snap(medias, embedder_name or None)
-    X_all = torch.from_numpy(all_embs)
 
     out: dict[str, dict[str, Any]] = {}
     for det_name in det_names:
         info = detector_mlps[det_name]
         mlp = info["mlp"]
         threshold = info["threshold"]
-        with torch.no_grad():
-            X_in = X_all.to(next(mlp.parameters()).device)
-            scores = sigmoid_to_finite_scores(mlp(X_in))
+        scores, _best_region = score_rows_with_model(mlp, rows)
 
         positive_hits: list[dict[str, Any]] = []
         negative_hits: list[dict[str, Any]] = []
@@ -425,47 +450,39 @@ def _score_one_detector(
     det_name: str,
     info: dict[str, Any],
     source_medias: dict[int, dict[str, Any]],
-    scoring_medias: dict[int, dict[str, Any]],
+    rows: "ScoringRows",
     scoring_to_source: dict[int, int],
-    embedder_name: str,
 ) -> dict[str, Any]:
     """Score one detector over a routed snapshot and fold scores to source media.
 
-    Runs the MLP over *scoring_medias* (already embedded in the detector's
-    space), then reduces per-clip scores to one score per source media via
-    ``max`` and builds the hit from the *source* media so a video routed through
-    ``video2image`` surfaces as a single hit on the video, not one per frame.
+    Runs the head over *rows* - the scoring geometry of the routed snapshot,
+    built once per detector group by
+    :func:`~vtscore.detectors.training.scoring_rows_for_snap` - then reduces
+    per-clip scores to one score per source media via ``max`` and builds the hit
+    from the *source* media so a video routed through ``video2image`` surfaces
+    as a single hit on the video, not one per frame.
 
-    ``route_and_embed`` has already dropped the clips it could not embed, so the
-    filter here catches only the residue it does not check for - a vector whose
-    *width* disagrees with the rest (a stale pre-computed vector from another
-    model).  Same policy either way: skip the item, score the rest.
+    Because the rows come from the shared builder, a patch dataset is scored by
+    max-pooling each media's patch rows, exactly as the GUI's Find does and as
+    the threshold this compares against was cut (issue #3180).  That builder is
+    also what drops a clip it cannot score: ``route_and_embed`` has already
+    dropped the ones it could not embed, leaving only the residue it does not
+    check for - a vector whose *width* disagrees with the rest (a stale
+    pre-computed vector from another model).  Same policy either way: skip the
+    item, score the rest (issue #3179).  The caller announces the skips once for
+    the group, since the rows - and therefore the skips - are shared by every
+    head in it.
     """
-    import torch  # noqa: PLC0415
-
-    from vtscore.embedding.matrix import get_embedding_matrix_for_snap, scoreable_snapshot  # noqa: PLC0415
+    from vtscore.detectors.training import score_rows_with_model  # noqa: PLC0415
 
     mlp = info["mlp"]
     threshold = info["threshold"]
-    scoring_medias, skipped = scoreable_snapshot(scoring_medias, embedder_name or None)
-    _emit_skipped_medias(skipped, embedder_name)
-    if not scoring_medias:
-        return {
-            "detector_name": det_name,
-            "threshold": round(threshold, 4),
-            "total_hits": 0,
-            "hits": [],
-            "negative_hits": [],
-        }
-    ids, embs = get_embedding_matrix_for_snap(scoring_medias, embedder_name or None)
-    with torch.no_grad():
-        X_in = torch.from_numpy(embs).to(next(mlp.parameters()).device)
-        scores = sigmoid_to_finite_scores(mlp(X_in))
+    scores, _best_region = score_rows_with_model(mlp, rows)
 
     # Aggregate clip-level scores back to the source media, keeping the best
     # (max) score per source.
     best_by_source: dict[int, float] = {}
-    for scoring_id, score in zip(ids, scores, strict=True):
+    for scoring_id, score in zip(rows.ids, scores, strict=True):
         src_id = scoring_to_source[scoring_id]
         prev = best_by_source.get(src_id)
         if prev is None or score > prev:

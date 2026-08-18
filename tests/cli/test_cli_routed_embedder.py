@@ -70,10 +70,24 @@ class TestScoreDirectRoutesEmbedder:
         out = _score_direct_all(["d"], detector_mlps, _trio_medias(), "dinov3_patch")
         assert _hit_ids(out["d"]) == {1}
 
-    def test_default_embedder_is_primary(self):
+    def test_single_embedder_default_unchanged(self):
         detector_mlps = {"d": {"mlp": _fires_on_dim1_mlp(), "threshold": 0.5}}
-        # No embedder name → primary (siglip) space, where the verdicts flip:
-        # media 2 is e1 (Good), media 1 is e0 (Bad).  Guards that the fix leaves
-        # the single-embedder default untouched.
-        out = _score_direct_all(["d"], detector_mlps, _trio_medias(), "")
+        # One bound embedder: the unnamed default is that embedder, which is
+        # also the primary.  Guards that threading the name through left the
+        # single-embedder case - the overwhelmingly common one - untouched.
+        medias = _trio_medias()
+        for media in medias.values():
+            del media["embeddings"]["dinov3_patch"]
+        out = _score_direct_all(["d"], detector_mlps, medias, "")
         assert _hit_ids(out["d"]) == {2}
+
+    def test_default_embedder_is_the_dataset_score_embedder(self):
+        detector_mlps = {"d": {"mlp": _fires_on_dim1_mlp(), "threshold": 0.5}}
+        # No embedder name on a *trio* dataset → the dataset's score embedder
+        # (structural ▸ patch ▸ text), which is dinov3_patch here, so media 1
+        # is the hit.  That resolution is not a free choice: it is what the
+        # threshold's own haystack pass uses (``_score_all_media`` with no
+        # detector primary), so scoring under any other rule would compare
+        # scores from one space against a cut measured in another (#3180).
+        out = _score_direct_all(["d"], detector_mlps, _trio_medias(), "")
+        assert _hit_ids(out["d"]) == {1}

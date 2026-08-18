@@ -147,6 +147,8 @@ NON_FINITE_SCORE_SENTINEL: float = -1.0
 def sigmoid_to_finite_scores(logits, *, default=NON_FINITE_SCORE_SENTINEL) -> list[float]: ...
 def sigmoid_to_finite_array(logits, *, default=NON_FINITE_SCORE_SENTINEL) -> np.ndarray: ...
 def finite_or(value, default=NON_FINITE_SCORE_SENTINEL) -> float: ...
+def scored_mask(scores) -> np.ndarray: ...
+def scored_only(scores) -> np.ndarray: ...
 ```
 
 A trained head can emit `NaN` logits when training destabilises - bad
@@ -172,6 +174,19 @@ in `.numpy()` instead of `.tolist()`, avoiding a pure-Python,
 GIL-holding O(N) pass that matters on the background training thread.
 `finite_or` is the defensive guard for already-stored floats such as
 `DetectorContext.last_learned_scores`.
+
+`scored_mask` / `scored_only` are the other side of the sentinel: they
+say which entries of a score list are *observations* at all. The
+sentinel means "this media could not be scored", which is a different
+statement from "this media scored low", so anything that fits a
+distribution - every threshold estimator in
+`vtscore.training.thresholds` - drops it first. Skipping that step is
+not a rounding error but a sign flip: a spike a full unit below the
+sigmoid range pulls the fitted cut under zero, where every real score
+clears it and the detector reports the whole dataset as a hit (issue
+#3180). `scored_mask` returns the mask rather than the filtered array so
+a caller holding a score list *and* its labels (a calibration ordering)
+drops the same positions from both.
 
 ---
 

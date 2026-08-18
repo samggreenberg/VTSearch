@@ -17,6 +17,25 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **CLI autodetect no longer reports every media as a hit, and no longer
+  disagrees with the GUI's Find.** A run against a dataset and detector that
+  the GUI cut at ~0.475 came back with a threshold of `-0.375` and a positive
+  hit for every image. Two separate defects were behind it. First, a media the
+  detector head cannot score (a corrupt vector, a destabilised fit) is recorded
+  at the `-1.0` sentinel — deliberately outside the sigmoid range so it can
+  never clear a threshold — and those sentinels were being fed to the threshold
+  estimators as if they were scores. A spike a full unit below the range pulls
+  the fitted cut under zero, at which point every real score clears it: 2%
+  unscorable media moved a threshold from `+0.58` to `-0.50` and a 30-of-600
+  shortlist to 588 of 600. Every estimator now fits on the scorable population
+  only — fold haystacks, held-out anchors, the pooled conformal orderings, and
+  the blend's GMM — and the run warns, naming the count, when media had to be
+  excluded. Second, CLI scoring forwarded each media's image-level vector while
+  the threshold it compared against (and the GUI) max-pool the media's patch
+  rows; on a patch dataset that is a different distribution, enough to turn a
+  GUI Find's dozens of hits into zero CLI hits. Both now build their rows
+  through the same builder. (#3180)
+
 - **One image that fails to embed no longer aborts a CLI run.** Every CLI
   scoring path fed the raw media chunk straight to the embedding-matrix
   builders, which raise on a media with no vector (`ValueError`, from

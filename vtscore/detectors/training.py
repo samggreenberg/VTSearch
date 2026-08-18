@@ -14,7 +14,7 @@ pool and origin-based file resolution that are detector-specific.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import numpy as np
 
@@ -23,6 +23,9 @@ from vtscore.utils.scores import sigmoid_to_finite_array
 
 if TYPE_CHECKING:
     import torch.nn as nn
+
+
+log = logging.getLogger(__name__)
 
 
 def _score_embedder_for_snap(snap: dict[int, dict[str, Any]] | None) -> str | None:
@@ -211,12 +214,31 @@ def _fused_threshold(
     ``det_ctx.anchored_cut_cache`` so an Inclusion slide can re-cut it without
     refitting or re-scoring anything (see
     :func:`vtscore.state.core.recompute_detector_thresholds_for_inclusion`).
+
+    **Unscorable media never reach the fit.**  A media the head cannot score
+    (a broken vector, a destabilised model) is recorded at
+    :data:`~vtscore.utils.scores.NON_FINITE_SCORE_SENTINEL`, a full unit below
+    the sigmoid range; both estimators drop those before fitting, and both do
+    it *inside* the shared :mod:`vtscore.training.thresholds` functions, so the
+    eval harness's default arm inherits the same population without copying
+    anything.  Only the warning below lives here, where the media count is a
+    thing the user can act on.
     """
     from vtscore.training.thresholds import (  # noqa: PLC0415
         NO_GOOD_THRESHOLD,
         calculate_safe_threshold,
         fit_fold_anchored_cut,
     )
+    from vtscore.utils.scores import scored_only  # noqa: PLC0415
+
+    n_unscorable = len(final_scores) - int(scored_only(final_scores).size)
+    if n_unscorable:
+        log.warning(
+            "threshold fit: %d of %d media could not be scored and are excluded from the "
+            "population estimate (check for media with broken embeddings)",
+            n_unscorable,
+            len(final_scores),
+        )
 
     cut = None
     if folds.fallback is None:
@@ -733,27 +755,47 @@ def _forward_sigmoid_chunked(model: nn.Sequential, matrix: np.ndarray) -> np.nda
     return out
 
 
-def _score_all_media(
-    model: nn.Sequential,
+class ScoringRows(NamedTuple):
+    """The ``(media, row)`` matrix one snapshot is scored over.
+
+    ``ids`` are the media ids in sorted order; ``matrix`` holds one row per
+    ``(media, score row)`` pair; ``media_index`` maps each row to its media's
+    index in ``ids`` and ``region_index`` to its position within that media's
+    :func:`vtscore.embedding.matrix.media_score_rows` stack.  Built once by
+    :func:`scoring_rows_for_snap` and reusable across every head that scores
+    the same snapshot in the same space (:func:`score_rows_with_model`).
+    """
+
+    ids: list[int]
+    matrix: np.ndarray
+    media_index: np.ndarray
+    region_index: np.ndarray
+
+
+def scoring_rows_for_snap(
     clips_dict: dict[int, dict[str, Any]],
     embedder_name: str | None = None,
-) -> tuple[list[int], list[float], list[int]]:
-    """Score every media in *clips_dict* with the trained detector head.
+) -> ScoringRows:
+    """Build the rows every media in *clips_dict* is scored over.
 
-    Patch datasets (those whose media expose a ``patch_grid``) are scored by
-    flattening every media's :func:`vtscore.embedding.matrix.media_score_rows`
-    stack - image-level vector + all ``H*W`` raw patches - into one matrix,
-    running one chunked forward pass, then max-pooling per media, so the
-    winning row's index can be surfaced for UI overlays.  Plain datasets fall
-    back to the cached embedding matrix.
+    Patch datasets (those whose media expose a ``patch_grid``) contribute every
+    media's :func:`vtscore.embedding.matrix.media_score_rows` stack - image-level
+    vector + all ``H*W`` raw patches - so the head's score for a media is the max
+    over its rows.  Plain datasets contribute one row per media, from the cached
+    embedding matrix.
 
-    *embedder_name* is the detector's primary embedder (the space the MLP was
-    trained in).  When it is given, patch max-pooling is used **only** if that
+    *embedder_name* is the detector's primary embedder (the space the head was
+    trained in).  When it is given, the patch rows are used **only** if that
     primary is the dataset's patch-slot embedder - a detector scoring in the
     text or structural space of a multi-embedder dataset must score against
     that space's full-image vectors, not the patch grid.  When ``None`` (the
     pre-per-detector behaviour) any media carrying a ``patch_grid`` takes the
     patch path, matching the dataset-level score precedence.
+
+    Split out from :func:`_score_all_media` so a caller with several heads over
+    one snapshot - the CLI's per-group detector scoring - builds the rows once,
+    and so no caller has to re-derive the patch gate (or the skip policy below)
+    for itself.
 
     Media that carry no usable vector in that space are **skipped**, not fatal:
     the builders raise on one (no vector, or a row of the wrong width), and this
@@ -764,7 +806,9 @@ def _score_all_media(
     and one bound embedder of a multi-embedder dataset can have failed on media
     another succeeded on - so a single unembeddable image must cost one skipped
     item, not the whole run (issue #3179).  Every caller reads the media list
-    back off *all_ids*, so a shorter list flows through unchanged.
+    back off :attr:`ScoringRows.ids`, so a shorter list flows through unchanged
+    - which is also how a caller names what was skipped, without this having to
+    report it.
 
     The filter runs **on the failure path only**, not as a pre-pass: this is the
     per-vote retrain path over the whole dataset (and ``_fused_threshold`` calls
@@ -772,14 +816,11 @@ def _score_all_media(
     tax every vote on a 300k-media dataset to catch a case that the load
     pipeline has already made impossible there.  A clean snapshot pays nothing
     and keeps its cached-matrix fast path.
-
-    Returns ``(all_ids, scores_per_media, best_row_index_per_media)``.
     """
     from vtscore.embedding.matrix import (  # noqa: PLC0415
         get_embedding_matrix_for_snap,
         get_region_matrix_for_snap,
         scoreable_snapshot,
-        segmented_max_pool,
     )
 
     resolved = embedder_name if embedder_name is not None else _score_embedder_for_snap(clips_dict)
@@ -790,19 +831,19 @@ def _score_all_media(
         clips_dict, embedder_name
     )
 
-    def _build(snapshot: dict[int, dict[str, Any]]) -> tuple[list[int], np.ndarray, np.ndarray, np.ndarray]:
+    def _build(snapshot: dict[int, dict[str, Any]]) -> ScoringRows:
         if has_regions:
             # One row per (media, score row) pair, built once and cached on the
             # dataset context (the patch vectors never change between votes -
             # only the MLP weights do), so online retraining no longer rebuilds
             # a multi-million-row matrix on every vote.
-            return get_region_matrix_for_snap(snapshot)
+            return ScoringRows(*get_region_matrix_for_snap(snapshot))
         ids, matrix = get_embedding_matrix_for_snap(snapshot, resolved)
         n = len(ids)
-        return ids, matrix, np.arange(n, dtype=np.int64), np.zeros(n, dtype=np.int64)
+        return ScoringRows(ids, matrix, np.arange(n, dtype=np.int64), np.zeros(n, dtype=np.int64))
 
     try:
-        all_ids, X_np, media_index_per_row, region_index_per_row = _build(clips_dict)
+        rows = _build(clips_dict)
     except ValueError:
         # Both refusals land here: the missing-vector ``ValueError`` and the
         # wrong-width ``MismatchedVectorError`` that subclasses it.  Filter
@@ -811,24 +852,66 @@ def _score_all_media(
         # image-level row per media in that space), the resolved score embedder
         # otherwise - then rebuild.  A rebuild that still refuses is a different
         # problem and propagates.
-        clips_dict, skipped = scoreable_snapshot(clips_dict, resolved, region_rows=has_regions)
-        logging.getLogger(__name__).warning(
+        survivors, skipped = scoreable_snapshot(clips_dict, resolved, region_rows=has_regions)
+        log.warning(
             "Scoring skipped %d media with no usable vector under %r: %s%s",
             len(skipped),
             resolved or "(primary)",
             skipped[:10],
             "…" if len(skipped) > 10 else "",
         )
-        if not clips_dict:
-            return [], [], []
-        all_ids, X_np, media_index_per_row, region_index_per_row = _build(clips_dict)
+        if not survivors:
+            empty_rows = np.empty((0,), dtype=np.int64)
+            return ScoringRows([], np.empty((0, 0), dtype=np.float32), empty_rows, empty_rows)
+        rows = _build(survivors)
 
-    if not all_ids:
-        return [], [], []
+    if int(rows.matrix.shape[0]) != int(rows.media_index.size):
+        # Deliberately outside the retry above: a builder that hands back an id
+        # list and a matrix of different lengths is not the "this media has no
+        # vector" case that filtering fixes, and rebuilding would only hide it
+        # for one round. Left alone it surfaces as an out-of-bounds `reduceat`
+        # deep in the max-pool, or - worse, under a plain zip - as silently
+        # truncated scores (audit M11). Fail here, naming both counts.
+        raise ValueError(
+            f"scoring rows for {len(rows.ids)} media claim {rows.media_index.size} rows "
+            f"but the matrix holds {rows.matrix.shape[0]}; the embedding matrix and its id list disagree."
+        )
+    return rows
 
-    flat_scores = _forward_sigmoid_chunked(model, X_np)
-    scores, best_region = segmented_max_pool(flat_scores, media_index_per_row, region_index_per_row, len(all_ids))
-    return all_ids, scores, best_region
+
+def score_rows_with_model(model: nn.Sequential, rows: ScoringRows) -> tuple[list[float], list[int]]:
+    """Forward *rows* through *model* and max-pool them down to one score per media.
+
+    Returns ``(scores_per_media, best_row_index_per_media)``; the winning row's
+    index is what surfaces the best-match overlay in the UI.
+    """
+    from vtscore.embedding.matrix import segmented_max_pool  # noqa: PLC0415
+
+    if not rows.ids:
+        return [], []
+    flat_scores = _forward_sigmoid_chunked(model, rows.matrix)
+    return segmented_max_pool(flat_scores, rows.media_index, rows.region_index, len(rows.ids))
+
+
+def _score_all_media(
+    model: nn.Sequential,
+    clips_dict: dict[int, dict[str, Any]],
+    embedder_name: str | None = None,
+) -> tuple[list[int], list[float], list[int]]:
+    """Score every media in *clips_dict* with the trained detector head.
+
+    The composition of :func:`scoring_rows_for_snap` and
+    :func:`score_rows_with_model`, and **the** definition of what a detector
+    scores a media at: every path that turns a head into per-media scores -
+    online voting, Find, the population estimator behind the threshold, and CLI
+    autodetect - goes through it, so none of them can score a media at a
+    different geometry than the threshold was cut on.
+
+    Returns ``(all_ids, scores_per_media, best_row_index_per_media)``.
+    """
+    rows = scoring_rows_for_snap(clips_dict, embedder_name)
+    scores, best_region = score_rows_with_model(model, rows)
+    return rows.ids, scores, best_region
 
 
 def _format_results(
