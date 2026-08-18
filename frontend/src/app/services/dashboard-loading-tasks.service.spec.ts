@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { of, Subject } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 
 import { DashboardLoadingTasksService } from './dashboard-loading-tasks.service';
 import { AchievementsService } from './achievements.service';
@@ -24,6 +24,7 @@ describe('DashboardLoadingTasksService', () => {
   let loadingTasks$: Subject<LoadingTask[]>;
   let detectorLoadingTasks$: Subject<LoadingTask[]>;
   let serverReset$: Subject<void>;
+  let datasetsRegistryApiStub: { cancelTask: ReturnType<typeof vi.fn> };
 
   function task(overrides: Partial<LoadingTask>): LoadingTask {
     return {
@@ -54,7 +55,7 @@ describe('DashboardLoadingTasksService', () => {
       setLoading: vi.fn(),
     };
     const achievementsStub = { refresh: vi.fn() };
-    const datasetsRegistryApiStub = { cancelTask: vi.fn(() => of(null)) };
+    datasetsRegistryApiStub = { cancelTask: vi.fn(() => of(null)) };
     const detectorsRegistryApiStub = { cancelDetectorLoadingTask: vi.fn(() => of(null)) };
 
     configureZoneless({
@@ -167,6 +168,20 @@ describe('DashboardLoadingTasksService', () => {
     // Backend finished cancelling: the task goes idle (with the Cancelled
     // sentinel that gets filtered out), leaving the active list → flag clears.
     loadingTasks$.next([task({ task_id: 'load-1', error: 'Cancelled' })]);
+    expect(service.isCancelling('load-1')).toBe(false);
+  });
+
+  it('clears the cancelling flag when the backend refuses the cancel', () => {
+    // POST /api/dataset/cancel/<id> answers 409 when the cancel reached
+    // nothing — the task had already finished, or its progress was stale with
+    // no worker behind it. The row is not cancelling, so it must not be left
+    // sitting on "Cancelling…".
+    datasetsRegistryApiStub.cancelTask.mockReturnValueOnce(throwError(() => ({ status: 409 })));
+    service.startProgressPolling();
+    loadingTasks$.next([task({ task_id: 'load-1', status: 'running' })]);
+
+    service.cancelLoadingTask('load-1');
+
     expect(service.isCancelling('load-1')).toBe(false);
   });
 

@@ -1976,12 +1976,19 @@ class TestEmptyLoadBackstop:
 class TestCancelIngest:
     """Tests for the POST /api/dataset/cancel endpoint."""
 
-    def test_cancel_endpoint_returns_ok(self, client):
-        """POST /api/dataset/cancel should return ok."""
+    def test_cancel_with_nothing_running_refuses(self, client):
+        """A cancel that reaches nothing must say so, not report success.
+
+        Cancellation is cooperative, so the flag only means anything if a
+        worker is around to observe it.  Answering ``ok`` regardless is what
+        let a *finished* import look exactly like a wedged one (#3167).
+        """
         resp = client.post("/api/dataset/cancel")
-        assert resp.status_code == 200
+        assert resp.status_code == 409, f"nothing was running; the cancel delivered nothing, got {resp.status_code}"
         data = resp.get_json()
-        assert data["ok"] is True
+        assert data["ok"] is False
+        assert data["targets"] == []
+        assert "nothing to cancel" in data["message"].lower()
 
     def test_cancel_sets_event(self, client):
         """POST /api/dataset/cancel should set the cancellation event."""

@@ -635,6 +635,16 @@ dataset loads share one embedder without their trackers crossing — a mis-route
 callback would not merely mis-draw a bar, since trackers call `check_cancelled()`
 and would abort the wrong load.
 
+That process-wide default is the app's *dataset* progress channel, which nothing
+else terminates: a sink cannot see when the work it is narrating ends.  So
+`load_models()` terminates it itself — an unscoped load reports as usual and
+then sends one `idle` tick on the way out (`MediaEmbedder._orphan_progress`).
+Background warm-ups that should not appear on any channel say so explicitly with
+`with emb.silent_progress():` (the smart-preload threads, the post-import
+embedder warm-up).  Skipping either is how a *finished* import came to look
+identical to a wedged one, with the dataset channel parked on "Loading SigLIP
+processor…" and no loader thread anywhere in the process (#3167).
+
 ### The plugin systems
 
 **Pattern:** Each `PluginRegistry`-backed plugin family uses the same

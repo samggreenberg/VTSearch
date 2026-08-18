@@ -13,7 +13,7 @@ from flask_smorest import Blueprint, abort
 
 from vtscore.concurrency.progress import (
     cancel_dataset_progress,
-    loading_tasks as _loading_tasks,
+    cancel_dataset_task,
 )
 from vtsearch.schemas.datasets import (
     CancelDatasetLoadResponseSchema,
@@ -54,22 +54,40 @@ def dataset_status():
 
 @datasets_status_bp.route("/api/dataset/cancel", methods=["POST"])
 @datasets_status_bp.response(200, CancelDatasetLoadResponseSchema)
+@datasets_status_bp.alt_response(
+    409,
+    schema=CancelDatasetLoadResponseSchema,
+    description="The cancel reached nothing: no operation was running, or the progress it claimed was stale.",
+)
 def cancel_dataset_load():
     """Cancel dataset load/import operations.
 
-    Cancels all active loading tasks and the legacy global tracker.
+    Cancels all active loading tasks and the legacy global tracker, then waits
+    briefly for one of them to act on the flag.  Cancellation is cooperative,
+    so a flag set with no worker left to observe it stops nothing; answering
+    ``ok`` in that case is what let a *finished* import keep looking like a
+    wedged one (#3167).  A cancel that reached nothing answers ``409``, and any
+    stale progress it found is cleared on the way out.
     """
-    _loading_tasks.cancel_all()
-    cancel_dataset_progress()
-    return {"ok": True}
+    report = cancel_dataset_progress()
+    return (report, 409) if not report["ok"] else report
 
 
 @datasets_status_bp.route("/api/dataset/cancel/<task_id>", methods=["POST"])
 @datasets_status_bp.response(200, CancelDatasetLoadResponseSchema)
-@datasets_status_bp.alt_response(404, description="No active task with the supplied id.")
+@datasets_status_bp.alt_response(404, description="No task with the supplied id.")
+@datasets_status_bp.alt_response(
+    409,
+    schema=CancelDatasetLoadResponseSchema,
+    description="The task was not running, or its progress was stale (no live worker).",
+)
 def cancel_dataset_load_task(task_id: str):
-    """Cancel a specific dataset loading task."""
-    ok = _loading_tasks.cancel_task(task_id)
-    if not ok:
+    """Cancel a specific dataset loading task.
+
+    Same honesty contract as ``POST /api/dataset/cancel``, narrowed to one
+    task.
+    """
+    report = cancel_dataset_task(task_id)
+    if report is None:
         abort(404, message="Task not found")
-    return {"ok": True}
+    return (report, 409) if not report["ok"] else report
