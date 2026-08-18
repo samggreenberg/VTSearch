@@ -11,14 +11,16 @@ import logging
 import sys
 from pathlib import Path
 from collections.abc import Iterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 
 from vtscore import cli_progress
 
 from vtscore.datasets.loader import apply_custom_metadata_md5, load_dataset_from_pickle
 from vtscore.utils.hits import build_media_hit
-from vtscore.utils.scores import sigmoid_to_finite_scores
+
+if TYPE_CHECKING:
+    from vtscore.detectors.training import ScoringRows
 
 logger = logging.getLogger(__name__)
 
@@ -283,6 +285,7 @@ def _score_medias_with_detectors(
     from collections import defaultdict  # noqa: PLC0415
 
     from vtscore.detectors.converter_routing import route_and_embed  # noqa: PLC0415
+    from vtscore.detectors.training import scoring_rows_for_snap  # noqa: PLC0415
 
     # Detectors sharing a (target type, embedder, re-clip spec) share one
     # routed+clipped+embedded snapshot, so a dataset scored by two image/siglip
@@ -318,14 +321,15 @@ def _score_medias_with_detectors(
         )
         if not scoring_medias:
             continue
+        # One row build per group; every head in the group forwards the same rows.
+        rows = scoring_rows_for_snap(scoring_medias, embedder_name or None)
         for det_name in det_names:
             results[det_name] = _score_one_detector(
                 det_name,
                 detector_mlps[det_name],
                 medias,
-                scoring_medias,
+                rows,
                 scoring_to_source,
-                embedder_name,
             )
 
     if results:
@@ -345,30 +349,33 @@ def _score_direct_all(
     """Score *det_names* directly against every media's *embedder_name* vector.
 
     The legacy path for detectors that declare no ``media_type``: they score
-    whatever embeddings the dataset already holds, one hit per media.  The
-    matrix is built in *embedder_name* - the concrete space these detectors
-    trained in, shared across the group - so a trio dataset whose primary vector
-    differs from that space is scored correctly rather than against each media's
-    primary vector; empty *embedder_name* falls back to the primary vector, the
+    whatever embeddings the dataset already holds, one hit per media.  The rows
+    are built in *embedder_name* - the concrete space these detectors trained
+    in, shared across the group - so a trio dataset whose primary vector differs
+    from that space is scored correctly rather than against each media's primary
+    vector; empty *embedder_name* falls back to the primary vector, the
     single-embedder behaviour.  A media that lacks that vector raises (via
-    ``get_embedding_matrix_for_snap``) rather than silently scoring NaN, and the
+    ``scoring_rows_for_snap``) rather than silently scoring NaN, and the
     ``strict=True`` zip guards against an id/score length mismatch (audit M11).
+
+    Scoring goes through :func:`~vtscore.detectors.training.scoring_rows_for_snap`
+    + :func:`~vtscore.detectors.training.score_rows_with_model`, i.e. the same
+    geometry the GUI's Find scores at and the same one the detector's threshold
+    was cut on - on a patch dataset that is the max over the media's patch rows,
+    not the image-level vector alone (issue #3180).  The rows are built once for
+    the whole group and re-forwarded per head.
     """
-    import torch  # noqa: PLC0415
+    from vtscore.detectors.training import scoring_rows_for_snap, score_rows_with_model  # noqa: PLC0415
 
-    from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
-
-    all_ids, all_embs = get_embedding_matrix_for_snap(medias, embedder_name or None)
-    X_all = torch.from_numpy(all_embs)
+    rows = scoring_rows_for_snap(medias, embedder_name or None)
+    all_ids = rows.ids
 
     out: dict[str, dict[str, Any]] = {}
     for det_name in det_names:
         info = detector_mlps[det_name]
         mlp = info["mlp"]
         threshold = info["threshold"]
-        with torch.no_grad():
-            X_in = X_all.to(next(mlp.parameters()).device)
-            scores = sigmoid_to_finite_scores(mlp(X_in))
+        scores, _best_region = score_rows_with_model(mlp, rows)
 
         positive_hits: list[dict[str, Any]] = []
         negative_hits: list[dict[str, Any]] = []
@@ -395,32 +402,32 @@ def _score_one_detector(
     det_name: str,
     info: dict[str, Any],
     source_medias: dict[int, dict[str, Any]],
-    scoring_medias: dict[int, dict[str, Any]],
+    rows: "ScoringRows",
     scoring_to_source: dict[int, int],
-    embedder_name: str,
 ) -> dict[str, Any]:
     """Score one detector over a routed snapshot and fold scores to source media.
 
-    Runs the MLP over *scoring_medias* (already embedded in the detector's
-    space), then reduces per-clip scores to one score per source media via
-    ``max`` and builds the hit from the *source* media so a video routed through
-    ``video2image`` surfaces as a single hit on the video, not one per frame.
-    """
-    import torch  # noqa: PLC0415
+    Runs the head over *rows* - the scoring geometry of the routed snapshot,
+    built once per detector group by
+    :func:`~vtscore.detectors.training.scoring_rows_for_snap` - then reduces
+    per-clip scores to one score per source media via ``max`` and builds the hit
+    from the *source* media so a video routed through ``video2image`` surfaces
+    as a single hit on the video, not one per frame.
 
-    from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+    Because the rows come from the shared builder, a patch dataset is scored by
+    max-pooling each media's patch rows, exactly as the GUI's Find does and as
+    the threshold this compares against was cut (issue #3180).
+    """
+    from vtscore.detectors.training import score_rows_with_model  # noqa: PLC0415
 
     mlp = info["mlp"]
     threshold = info["threshold"]
-    ids, embs = get_embedding_matrix_for_snap(scoring_medias, embedder_name or None)
-    with torch.no_grad():
-        X_in = torch.from_numpy(embs).to(next(mlp.parameters()).device)
-        scores = sigmoid_to_finite_scores(mlp(X_in))
+    scores, _best_region = score_rows_with_model(mlp, rows)
 
     # Aggregate clip-level scores back to the source media, keeping the best
     # (max) score per source.
     best_by_source: dict[int, float] = {}
-    for scoring_id, score in zip(ids, scores, strict=True):
+    for scoring_id, score in zip(rows.ids, scores, strict=True):
         src_id = scoring_to_source[scoring_id]
         prev = best_by_source.get(src_id)
         if prev is None or score > prev:
