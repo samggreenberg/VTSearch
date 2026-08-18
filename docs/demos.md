@@ -7,7 +7,7 @@ This is the reference catalogue of every demo dataset VTSearch can download and 
   <img src="user/assets/importer-picker.light.png" alt="The Demo importer with the Synthetic Media generator and the Downloaded Media catalogue" width="720" />
 </picture>
 
-Datasets are grouped by media type below. Each demo comes in size variants — **S** / **M** / **L** (progressively larger samples) and **A** (all items in the underlying dataset). Sizes are downloaded once and cached, so reloads are instant (the **Download** column is the raw-source download estimate; size variants of the same demo share one download, and **—** marks demos that need no network download at all, like the synthetic generators). On multi-user servers the downloaded sources can be shared between data dirs — see [DEPLOYMENT.md](DEPLOYMENT.md#sharing-demo-downloads-between-data-dirs-multi-user-servers).
+Datasets are grouped by media type below. Each demo comes in size variants — **S** / **M** / **L** (progressively larger samples) and **A** (all items in the underlying dataset). Sizes are downloaded once and cached, so reloads are instant (the **Download** column is the raw-source download estimate; size variants of the same demo usually share one download, and **—** marks demos that need no network download at all, like the synthetic generators). The three long-form audio demos are the exception — see the note under the Audio table. On multi-user servers the downloaded sources can be shared between data dirs — see [DEPLOYMENT.md](DEPLOYMENT.md#sharing-demo-downloads-between-data-dirs-multi-user-servers).
 
 The tables below are generated from the demo-dataset registry (each media type's `demo_datasets` declaration), so they always match what the app actually offers.
 
@@ -39,9 +39,27 @@ The tables below are generated from the demo-dataset registry (each media type's
 | **clotho_m** | Real-world Freesound clips for text search | ~1200 MB |
 | **clotho_l** | Real-world Freesound clips for text search | ~1200 MB |
 | **clotho_a** | Real-world Freesound clips for text search | ~1200 MB |
+| **apollo11_audio_s** | Long NASA mission loops — Quindar beeps, alarms, applause | ~10120 MB |
+| **apollo11_audio_m** | Long NASA mission loops — Quindar beeps, alarms, applause | ~10120 MB |
+| **apollo11_audio_l** | Long NASA mission loops — Quindar beeps, alarms, applause | ~10120 MB |
+| **apollo11_audio_a** | Long NASA mission loops — Quindar beeps, alarms, applause | ~10120 MB |
+| **birdvox_full_night_s** | 10min chunks of all-night birdsong — sub-second flight calls | ~5650 MB |
+| **birdvox_full_night_m** | 10min chunks of all-night birdsong — sub-second flight calls | ~5650 MB |
+| **birdvox_full_night_l** | 10min chunks of all-night birdsong — sub-second flight calls | ~5650 MB |
+| **birdvox_full_night_a** | 10min chunks of all-night birdsong — sub-second flight calls | ~5650 MB |
+| **nixon_tapes_s** | Secret-taping-system conversations (rough audio, by design) | ~10200 MB |
+| **nixon_tapes_m** | Secret-taping-system conversations (rough audio, by design) | ~10200 MB |
+| **nixon_tapes_l** | Secret-taping-system conversations (rough audio, by design) | ~10200 MB |
+| **nixon_tapes_a** | Secret-taping-system conversations (rough audio, by design) | ~10200 MB |
 | **synthetic_world_audio** | Pre-baked 4-level toponymy (Continent → Country → State → City) with cheating ground-truth signposts — no download, loads instantly. | — |
 
 <!-- END GENERATED: demos:audio -->
+
+> **Long-form audio demos.** **Apollo 11 Mission Audio**, **BirdVox Full Night**, and **Nixon White House Tapes** are hours-long unlabelled recordings, imported as one undifferentiated bucket so you clip them yourself — the point is finding discrete events (a Quindar beep, a bird's flight call, a telephone ring) scattered through the runtime, rather than classifying a clip whose label is the whole clip.
+>
+> Because these sources run to several gigabytes, **each size variant downloads only its own slice** rather than the whole source: the **Download** column above is the full-source figure, so (S) costs roughly a twelfth of it for Apollo and Nixon, and a sixth for BirdVox. Start with (S) — the default audio clipper tiles every recording into overlapping 10-second segments, so even a small slice becomes a few thousand searchable clips, and the (A) variants become tens of thousands.
+>
+> BirdVox ships as six ~10-hour FLAC files, which are segmented into 10-minute chunks on download (a ten-hour file can't be handed to the clipper as a single item). Nixon tapes are served by NARA one MP3 per recorded conversation; only some tape numbers are online, so the demo lists numbers verified to serve audio.
 
 ## Image
 

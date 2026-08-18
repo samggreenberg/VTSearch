@@ -148,6 +148,27 @@ not list every commit. Use `git log` for the full history.
 
 ### Added
 
+- **Three long-form audio demos: Apollo 11, BirdVox Full Night, and the Nixon
+  White House Tapes.** Every audio demo so far was a corpus of short labelled
+  clips (ESC-50, GTZAN, UrbanSound8K) or, in TUT's case, 32 four-minute street
+  soundscapes. These three are hours-long *unlabelled* recordings where the
+  interesting content is discrete events scattered through the runtime — the
+  Quindar beeps, master alarms and MOCR applause in 174 hours of NASA mission
+  loops; the sub-second bird flight calls in six ten-hour night recordings from
+  BirdVox-full-night; the telephone rings, laughter and room noise under 12
+  tapes' worth of Nixon's secret taping system. Each loads as one
+  undifferentiated bucket, so you clip it yourself, vote on a handful of hits,
+  and let the detector rank the rest. All three sources are freely
+  redistributable (CC PD Mark, Creative Commons, and US federal public domain
+  respectively).
+
+  Unlike the older demos, **each size variant downloads only its own slice** of
+  the source rather than the whole thing — at 5-10 GB apiece that difference
+  matters, so (S) costs a twelfth (Apollo, Nixon) or a sixth (BirdVox) of the
+  figure shown in [`docs/demos.md`](docs/demos.md). BirdVox's ten-hour FLAC
+  units are segmented into 10-minute chunks as they download, since a ten-hour
+  file cannot be handed to the clipper as a single item.
+
 - **Seed importers: a new plugin family for unlabeled seed media.** An
   external package can now contribute its own tab to the New Detector modal's
   **Blank** flow, beside Text and the media picker, by registering a
