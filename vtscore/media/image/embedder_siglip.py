@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtscore.config import SIGLIP_MODEL_ID
+from vtscore.config import SIGLIP_MODEL_ID, image_processor_load_kwargs
 from vtscore.media.embedder import (
     IMPORT_MODULE_ESTIMATES,
     embedder_load_setup,
@@ -81,10 +81,23 @@ class ImageSiglipEmbedder(_CrossModalHFEmbedder):
         self._model = to_compute_device(self._model, allow_half=True)
         self._on_progress("loading", "Loading SigLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
-            from transformers import SiglipImageProcessor, SiglipTokenizer  # noqa: PLC0415
+            from transformers import AutoImageProcessor, SiglipTokenizer  # noqa: PLC0415
 
+            # ``AutoImageProcessor`` rather than the concrete ``SiglipImageProcessor``:
+            # naming a class pins this to whatever that name means in the installed
+            # transformers, and that meaning *changed* — v5 removed the ``Fast``
+            # suffix, so ``SiglipImageProcessor`` went from being the PIL
+            # implementation to being the torchvision one, silently.  The concrete
+            # class also cannot honour a backend request: asked for ``pil`` it warns
+            # and hands back torchvision anyway, so the knob above would be inert
+            # here alone.  Auto resolves from the model config like every other
+            # embedder in this package (#3146).
             image_processor = load_pretrained_local_first(
-                SiglipImageProcessor.from_pretrained, SIGLIP_MODEL_ID, cache_dir=cache_dir, token=hf_token()
+                AutoImageProcessor.from_pretrained,
+                SIGLIP_MODEL_ID,
+                cache_dir=cache_dir,
+                token=hf_token(),
+                **image_processor_load_kwargs(),
             )
             tokenizer = load_pretrained_local_first(
                 SiglipTokenizer.from_pretrained, SIGLIP_MODEL_ID, cache_dir=cache_dir, token=hf_token()

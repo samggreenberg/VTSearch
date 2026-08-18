@@ -322,6 +322,121 @@ def embed_autocast_dtype() -> "torch.dtype | None":
     return torch.float16 if half == "fp16" else torch.bfloat16
 
 
+# Image-processor resize/normalise: which backend runs it, and on which device.
+#
+# Issue #3146 assumed every image embedder was on the slow PIL/numpy path
+# because none of them passes ``use_fast``.  Measured against the installed
+# transformers (5.12.x) that is **false**: v5 removed the ``Fast`` suffix, so
+# ``SiglipImageProcessor`` *is* the torchvision implementation and the slow one
+# was renamed ``SiglipImageProcessorPil``.  Passing nothing already selects
+# torchvision, and ``use_fast`` is itself deprecated in favour of ``backend=``.
+#
+# What that leaves is two knobs worth having, for two different reasons.
+#
+# ``VTSEARCH_IMAGE_PROCESSOR_BACKEND`` exists mostly to *pin* the thing that
+# silently changed under us.  ``transformers>=4.49`` is the only pin in
+# ``requirements/image-embedders.txt``, and the two sides of that range
+# disagree about which backend is the default — so the same code, same weights
+# and same image produce different pixels depending on which transformers a
+# host resolved.  The whole pre-embedded pile is one backend's output; naming
+# it is what makes a rebuild reproducible rather than dependent on a resolver.
+#
+# ``VTSEARCH_IMAGE_PROCESSOR_DEVICE`` is the actual performance knob, and it is
+# the half of #3146's proposed fix that is still live: the torchvision backend
+# accepts ``device=``, which runs resize/normalise on the GPU instead of the
+# calling thread.  It is *not* free numerically — GPU resampling differs from
+# CPU torchvision by more than CPU torchvision differs from PIL — so like the
+# precision knob it defaults to the old behaviour and its adoption is gated on
+# the #3146 measurement.
+#
+# Both default to ``"auto"``, which passes nothing and is byte-for-byte the
+# behaviour that built the pile.
+#
+# * ``auto``        - pass nothing; whatever the installed transformers picks.
+# * ``torchvision`` - the fast, tensor-based implementation.
+# * ``pil``         - the legacy PIL/numpy implementation.  Not every
+#                     architecture ships one (DINOv3 does not), and transformers
+#                     falls back to torchvision with a warning when it is asked
+#                     for one that does not exist — so this is a request, not a
+#                     guarantee, and callers that care must assert the class
+#                     they actually got.
+IMAGE_PROCESSOR_BACKEND = os.environ.get("VTSEARCH_IMAGE_PROCESSOR_BACKEND", "auto").strip().lower()
+
+#: * ``auto`` - pass nothing; the processor returns CPU tensors (today's behaviour).
+#: * ``cpu``  - explicit CPU.
+#: * ``cuda`` - resize/normalise on the GPU.  Degrades to ``auto`` off CUDA
+#:              rather than raising: an escape hatch that crashes on a laptop is
+#:              not an escape hatch.
+IMAGE_PROCESSOR_DEVICE = os.environ.get("VTSEARCH_IMAGE_PROCESSOR_DEVICE", "auto").strip().lower()
+
+_PROCESSOR_BACKENDS = {"auto", "pil", "torchvision"}
+_PROCESSOR_DEVICES = {"auto", "cpu", "cuda"}
+
+
+def _transformers_backend_kwarg() -> str:
+    """``"backend"`` on transformers>=5, ``"use_fast"`` on 4.x, ``""`` if neither.
+
+    The spelling of this argument changed *and* its default flipped across the
+    ``>=4.49`` range we pin, which is precisely why the backend is worth naming
+    explicitly.  Resolved at call time from the installed version rather than
+    assumed, because guessing wrong here fails silently: an unknown kwarg is
+    swallowed into ``**kwargs`` by several processor classes.
+    """
+    try:
+        import transformers  # noqa: PLC0415
+    except ImportError:
+        return ""
+    try:
+        major = int(str(transformers.__version__).split(".")[0])
+    except ValueError:
+        return "backend"
+    return "backend" if major >= 5 else "use_fast"
+
+
+def image_processor_load_kwargs() -> dict[str, object]:
+    """Kwargs for ``*ImageProcessor.from_pretrained`` selecting the backend.
+
+    Empty for ``auto``, which is the default and reproduces the pile.
+    """
+    mode = IMAGE_PROCESSOR_BACKEND
+    if mode not in _PROCESSOR_BACKENDS:
+        logging.getLogger(__name__).warning(
+            "VTSEARCH_IMAGE_PROCESSOR_BACKEND=%r is not one of %s; passing nothing",
+            mode,
+            ", ".join(sorted(_PROCESSOR_BACKENDS)),
+        )
+        return {}
+    if mode == "auto":
+        return {}
+    kwarg = _transformers_backend_kwarg()
+    if not kwarg:
+        return {}
+    if kwarg == "backend":
+        return {"backend": mode}
+    return {"use_fast": mode == "torchvision"}
+
+
+def image_processor_call_kwargs() -> dict[str, object]:
+    """Kwargs for the processor *call* placing resize/normalise on a device.
+
+    Empty for ``auto`` and off CUDA, so the default path is unchanged and a
+    CPU-only host never asks for a device it does not have.
+    """
+    mode = IMAGE_PROCESSOR_DEVICE
+    if mode not in _PROCESSOR_DEVICES:
+        logging.getLogger(__name__).warning(
+            "VTSEARCH_IMAGE_PROCESSOR_DEVICE=%r is not one of %s; passing nothing",
+            mode,
+            ", ".join(sorted(_PROCESSOR_DEVICES)),
+        )
+        return {}
+    if mode == "auto":
+        return {}
+    if mode == "cuda" and not resolve_device().startswith("cuda"):
+        return {}
+    return {"device": mode}
+
+
 # Server-side file access is governed by the active login provider, not a
 # configurable allow-list.  In single-user / no-auth mode the lone trusted user
 # may read from and write to any server-readable path (server-path importers,

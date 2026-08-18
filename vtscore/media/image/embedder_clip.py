@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtscore.config import CLIP_MODEL_ID
+from vtscore.config import CLIP_MODEL_ID, image_processor_load_kwargs
 from vtscore.media.embedder import (
     IMPORT_MODULE_ESTIMATES,
     embedder_load_setup,
@@ -75,7 +75,11 @@ class ImageClipEmbedder(_CrossModalHFEmbedder):
         self._on_progress("loading", "Loading CLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = load_pretrained_local_first(
-                CLIPProcessor.from_pretrained, CLIP_MODEL_ID, cache_dir=cache_dir, token=hf_token()
+                CLIPProcessor.from_pretrained,
+                CLIP_MODEL_ID,
+                cache_dir=cache_dir,
+                token=hf_token(),
+                **image_processor_load_kwargs(),
             )
 
 

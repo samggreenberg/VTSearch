@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtscore.config import SIGLIP2_L_MODEL_ID
+from vtscore.config import SIGLIP2_L_MODEL_ID, image_processor_load_kwargs
 from vtscore.media.embedder import (
     IMPORT_MODULE_ESTIMATES,
     embedder_load_setup,
@@ -88,7 +88,11 @@ class ImageSiglip2LEmbedder(_CrossModalHFEmbedder):
         self._on_progress("loading", "Loading SigLIP2-L processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = load_pretrained_local_first(
-                AutoProcessor.from_pretrained, SIGLIP2_L_MODEL_ID, cache_dir=cache_dir, token=hf_token()
+                AutoProcessor.from_pretrained,
+                SIGLIP2_L_MODEL_ID,
+                cache_dir=cache_dir,
+                token=hf_token(),
+                **image_processor_load_kwargs(),
             )
 
 
