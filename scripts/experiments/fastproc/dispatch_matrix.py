@@ -218,10 +218,30 @@ def compare(outdir: Path) -> int:
                     f"  differing-pixel sets, backend vs dispatch: Jaccard {inter / union:.3f}"
                     f"  (backend {int(back.sum())} px, dispatch {int(disp.sum())} px, shared {int(inter)})"
                 )
-                if disp.sum() > 0:
-                    log(
-                        f"  of the pixels dispatch moves, {inter / float(disp.sum()) * 100:.1f}% are also moved by the backend"
-                    )
+                if disp.sum() == 0:
+                    log("  dispatch moves no pixels at this resolution, so there is no set to")
+                    log("  compare: the backend is the only axis here and the number above is")
+                    log("  host-independent.")
+                else:
+                    contained = inter / float(disp.sum())
+                    log(f"  of the pixels dispatch moves, {contained * 100:.1f}% are also moved by the backend")
+                    # Jaccard alone would call this "independent" because the
+                    # backend set is several times larger, and that reading is
+                    # wrong.  Containment is the statistic that distinguishes
+                    # NESTED from INDEPENDENT, and the two license different
+                    # claims: nested means both changes are flipping the same
+                    # population of rounding-boundary pixels, one more
+                    # aggressively than the other, so the axes are not the same
+                    # axis but they are not unrelated either.
+                    if contained > 0.9:
+                        log("  => NESTED, not independent: dispatch flips a SUBSET of the pixels the")
+                        log("     backend flips. Both are rounding at the same boundaries, so the")
+                        log("     backend difference does not reduce to dispatch (it is several times")
+                        log("     larger and survives both settings) but its exact size is")
+                        log("     host-dependent. Quote it with the host's CPU capability attached.")
+                    elif contained < 0.3:
+                        log("  => INDEPENDENT: the two changes move largely different pixels and")
+                        log("     share only a step size, which the 8-bit pipeline forces on both.")
     return 0
 
 
