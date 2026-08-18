@@ -29,12 +29,14 @@ from PIL import Image
 
 VG_SOURCE = Path("/exp/scale26/datasets/external/vtsearch-demos/visual_genome")
 
-#: (embedder name, HF id, the pair of processor classes to compare).
-#: The app resolves the *plain* name, so that is the "shipped" arm.
-MODELS = {
-    "siglip": ("google/siglip-base-patch16-224", "SiglipImageProcessor", "SiglipImageProcessorPil"),
-    "siglip2_l": ("google/siglip2-so400m-patch14-384", "Siglip2ImageProcessor", "Siglip2ImageProcessorPil"),
-}
+#: Embedders to probe. The processor class is **not** hardcoded: the shipped arm
+#: is whatever the app's own loader resolves, and the comparison arm is that
+#: class's `...Pil` counterpart. Guessing the class gets it wrong -- `siglip2_l`
+#: loads through `AutoProcessor`, and for the so400m-patch14-384 checkpoint that
+#: resolves to SigLIP *1*'s `SiglipImageProcessor` (a 3x384x384 tensor), not to
+#: `Siglip2ImageProcessor` (a 256x768 patch sequence). Comparing the class the
+#: app does not use measures a path no user takes.
+MODELS = ("siglip", "siglip2_l")
 
 
 def log(msg: str) -> None:
@@ -67,12 +69,25 @@ def main(argv: list[str] | None = None) -> int:
     }
     log(f"transformers {out['transformers']}, dispatch {out['cpu_capability']}, {len(pil)} images")
 
-    for name, (model_id, shipped_cls, pil_cls) in MODELS.items():
-        tensors = {}
-        for label, cls_name in (("shipped", shipped_cls), ("pil", pil_cls)):
-            cls = getattr(transformers, cls_name)
-            proc = cls.from_pretrained(model_id)
-            tensors[label] = proc(images=pil, return_tensors="pt")["pixel_values"].double().numpy()
+    from vtscore.embedding import initialize_models
+    from vtscore.media import get_embedder
+
+    initialize_models()
+    for name in MODELS:
+        emb = get_embedder(name)
+        emb.load_models()
+        shipped_proc = emb._processor  # noqa: SLF001 -- a probe, deliberately reading what the app resolved
+        image_proc = getattr(shipped_proc, "image_processor", shipped_proc)
+        shipped_cls = type(image_proc).__name__
+        pil_cls = f"{shipped_cls}Pil"
+        model_id = emb.model_id
+        if not hasattr(transformers, pil_cls):
+            log(f"  {name:<10} no {pil_cls} in transformers {transformers.__version__}; skipped")
+            continue
+
+        tensors = {"shipped": image_proc(images=pil, return_tensors="pt")["pixel_values"].double().numpy()}
+        pil_proc = getattr(transformers, pil_cls).from_pretrained(model_id)
+        tensors["pil"] = pil_proc(images=pil, return_tensors="pt")["pixel_values"].double().numpy()
         a, b = tensors["shipped"], tensors["pil"]
         d = np.abs(a - b)
         ne = d > 0
