@@ -56,23 +56,15 @@ describe('DashboardLoadingTasksService', () => {
     };
     const achievementsStub = { refresh: vi.fn() };
     datasetsRegistryApiStub = { cancelTask: vi.fn(() => of(null)) };
-    const detectorsRegistryApiStub = {
-      cancelDetectorLoadingTask: vi.fn(() => of(null)),
-    };
+    const detectorsRegistryApiStub = { cancelDetectorLoadingTask: vi.fn(() => of(null)) };
 
     configureZoneless({
       providers: [
         { provide: ProgressEventsService, useValue: progressEventsStub },
         { provide: DatasetStateService, useValue: datasetStateStub },
         { provide: AchievementsService, useValue: achievementsStub },
-        {
-          provide: DatasetsRegistryApiService,
-          useValue: datasetsRegistryApiStub,
-        },
-        {
-          provide: DetectorsRegistryApiService,
-          useValue: detectorsRegistryApiStub,
-        },
+        { provide: DatasetsRegistryApiService, useValue: datasetsRegistryApiStub },
+        { provide: DetectorsRegistryApiService, useValue: detectorsRegistryApiStub },
       ],
     });
 
@@ -97,10 +89,7 @@ describe('DashboardLoadingTasksService', () => {
     ]);
     expect(onComplete).not.toHaveBeenCalled();
 
-    loadingTasks$.next([
-      task({ task_id: 'import-1' }),
-      task({ task_id: 'load-1' }),
-    ]);
+    loadingTasks$.next([task({ task_id: 'import-1' }), task({ task_id: 'load-1' })]);
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
 
@@ -126,10 +115,7 @@ describe('DashboardLoadingTasksService', () => {
     ]);
     // The unrelated import fails; the dataset load succeeds. Promotion of
     // the successfully loaded dataset must not be held hostage.
-    loadingTasks$.next([
-      task({ task_id: 'import-1', error: 'disk full' }),
-      task({ task_id: 'load-1' }),
-    ]);
+    loadingTasks$.next([task({ task_id: 'import-1', error: 'disk full' }), task({ task_id: 'load-1' })]);
 
     expect(onComplete).toHaveBeenCalledTimes(1);
   });
@@ -144,10 +130,7 @@ describe('DashboardLoadingTasksService', () => {
       task({ task_id: 'load-1', status: 'running' }),
       task({ task_id: 'load-2', status: 'running' }),
     ]);
-    loadingTasks$.next([
-      task({ task_id: 'load-1' }),
-      task({ task_id: 'load-2' }),
-    ]);
+    loadingTasks$.next([task({ task_id: 'load-1' }), task({ task_id: 'load-2' })]);
 
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).toHaveBeenCalledTimes(1);
@@ -161,9 +144,7 @@ describe('DashboardLoadingTasksService', () => {
 
   it('fires detector onComplete registered while detector polling is already active (regression)', () => {
     // A detector load is in flight → constructor auto-starts the loop.
-    detectorLoadingTasks$.next([
-      task({ task_id: 'det-other', status: 'running' }),
-    ]);
+    detectorLoadingTasks$.next([task({ task_id: 'det-other', status: 'running' })]);
 
     const onComplete = vi.fn();
     service.startDetectorProgressPolling(onComplete);
@@ -195,9 +176,7 @@ describe('DashboardLoadingTasksService', () => {
     // nothing — the task had already finished, or its progress was stale with
     // no worker behind it. The row is not cancelling, so it must not be left
     // sitting on "Cancelling…".
-    datasetsRegistryApiStub.cancelTask.mockReturnValueOnce(
-      throwError(() => ({ status: 409 })),
-    );
+    datasetsRegistryApiStub.cancelTask.mockReturnValueOnce(throwError(() => ({ status: 409 })));
     service.startProgressPolling();
     loadingTasks$.next([task({ task_id: 'load-1', status: 'running' })]);
 
@@ -213,9 +192,7 @@ describe('DashboardLoadingTasksService', () => {
     service.cancelDetectorLoadingTask('det-1');
     expect(service.isCancelling('det-1')).toBe(true);
 
-    detectorLoadingTasks$.next([
-      task({ task_id: 'det-1', error: 'Cancelled' }),
-    ]);
+    detectorLoadingTasks$.next([task({ task_id: 'det-1', error: 'Cancelled' })]);
     expect(service.isCancelling('det-1')).toBe(false);
   });
 
