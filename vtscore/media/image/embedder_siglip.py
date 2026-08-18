@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtscore.config import SIGLIP_MODEL_ID, image_processor_load_kwargs
+from vtscore.config import SIGLIP_MODEL_ID, image_processor_load_kwargs, verify_image_processor_backend
 from vtscore.media.embedder import (
     IMPORT_MODULE_ESTIMATES,
     embedder_load_setup,
@@ -103,6 +103,7 @@ class ImageSiglipEmbedder(_CrossModalHFEmbedder):
                 SiglipTokenizer.from_pretrained, SIGLIP_MODEL_ID, cache_dir=cache_dir, token=hf_token()
             )
             self._processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
+        verify_image_processor_backend(self._processor, embedder="SigLIP")
 
 
 EMBEDDER = ImageSiglipEmbedder()

@@ -48,6 +48,27 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Image preprocessing now names its backend instead of inheriting one.**
+  Every image embedder builds its processor by asking `transformers` for the
+  `torchvision` backend outright (`VTSEARCH_IMAGE_PROCESSOR_BACKEND`, new
+  default `torchvision`; set `auto` for the previous behaviour). Nothing in the
+  code used to say which implementation resized and normalised an image, and
+  the answer changed *inside* the version range we pin: `transformers` 5
+  removed the `Fast` suffix, so the bare `SiglipImageProcessor` means the PIL
+  implementation below 5 and the torchvision one at 5+, while
+  `requirements/image-embedders.txt` asks only for `>=4.49`. The two are not
+  interchangeable — they disagree on 53–59% of pixel elements and by a median
+  `1 − cos` of ~1.5e-04 on `siglip2_l`, 50× the perturbation half precision
+  causes — so two hosts resolving different wheels produced different vectors
+  from identical code and weights, with nothing recording which. **On a
+  `transformers` 5 host this changes nothing** (the pre-embedded pile is
+  torchvision-built, reproduced to 7.6e-13). **On a 4.x host it changes the
+  vectors**, which is the point: that host was quietly disagreeing with the
+  pile and now agrees with it. Because a backend request is a request and not a
+  guarantee — DINOv3 ships no PIL implementation, and `transformers` warns and
+  falls back rather than raising — each embedder now reads back the class it
+  actually loaded and logs a warning naming itself when it differs. (#3173)
+
 - **Bad pre-computed vectors are now rejected at import, with an error that says
   what is wrong.** Importing an `.npz` manifest of pre-computed embeddings used
   to accept anything: vectors of the wrong width for the embedder the manifest

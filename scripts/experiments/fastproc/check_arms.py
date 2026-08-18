@@ -50,11 +50,10 @@ def ok(msg: str) -> None:
 
 
 def backend_of(class_name: str, transformers_major: int) -> str:
-    if class_name.endswith("Pil"):
-        return "pil"
-    if class_name.endswith("Fast"):
-        return "torchvision"
-    return "torchvision" if transformers_major >= 5 else "pil"
+    """Delegates to the app — see ``build_arm._backend_of`` for why."""
+    from vtscore.config import processor_backend_from_class_name
+
+    return processor_backend_from_class_name(class_name, transformers_major) or "torchvision"
 
 
 def main() -> int:

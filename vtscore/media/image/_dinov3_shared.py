@@ -22,7 +22,12 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
-from vtscore.config import DINOV3_MODEL_ID, image_processor_call_kwargs, image_processor_load_kwargs
+from vtscore.config import (
+    DINOV3_MODEL_ID,
+    image_processor_call_kwargs,
+    image_processor_load_kwargs,
+    verify_image_processor_backend,
+)
 from vtscore.media.embedder import (
     IMPORT_MODULE_ESTIMATES,
     MediaEmbedder,
@@ -132,6 +137,7 @@ class _Dinov3Base(MediaEmbedder):
                 token=hf_token(),
                 **image_processor_load_kwargs(),
             )
+        verify_image_processor_backend(self._processor, embedder="DINOv3")
 
     def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
         if self._model is None:
