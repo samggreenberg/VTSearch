@@ -102,7 +102,10 @@ def host_record() -> dict:
         # The AVX-512 hypothesis is testable only downwards: an AVX-512 host can
         # be told to dispatch as AVX2, and if that reproduces the AVX2 host's
         # pixels the instruction path is named.
-        "aten_cpu_capability": os.environ.get("ATEN_CPU_CAPABILITY"),
+        "cpu_capability": str(torch.backends.cpu.get_cpu_capability())
+        if hasattr(getattr(torch.backends, "cpu", None), "get_cpu_capability")
+        else None,
+        "aten_cpu_capability_requested": os.environ.get("ATEN_CPU_CAPABILITY"),
         "vtsearch_torch_threads": os.environ.get("VTSEARCH_TORCH_THREADS"),
         "transformers": _version("transformers"),
         "torchvision": _version("torchvision"),

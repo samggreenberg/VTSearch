@@ -562,7 +562,12 @@ def _device_record() -> dict:
         # GPU. Pinning the dispatch removes it; recording it explains a cell that
         # was built before the pin.
         "cpu": _cpu_model(),
-        "aten_cpu_capability": os.environ.get("ATEN_CPU_CAPABILITY"),
+        # What the process RESOLVED, not what was asked for. `ATEN_CPU_CAPABILITY`
+        # is advisory: an unsupported or misspelled value is ignored in silence,
+        # so echoing the request would record a pin that never took. Both are
+        # written; a reader can see a request that did not land.
+        "cpu_capability": _cpu_capability(),
+        "aten_cpu_capability_requested": os.environ.get("ATEN_CPU_CAPABILITY"),
         "slurm_job": os.environ.get("SLURM_JOB_ID"),
         "slurm_gres": os.environ.get("SLURM_JOB_GRES") or os.environ.get("SBATCH_GRES"),
         "precision_requested": EMBED_PRECISION,
@@ -603,6 +608,14 @@ def _device_record() -> dict:
         }
     )
     return rec
+
+
+def _cpu_capability() -> str | None:
+    """The CPU kernel ISA torch is actually dispatching to (``AVX512``/``AVX2``/...)."""
+    import torch  # noqa: PLC0415
+
+    getter = getattr(getattr(torch.backends, "cpu", None), "get_cpu_capability", None)
+    return str(getter()) if getter else None
 
 
 def _cpu_model() -> str | None:
@@ -950,7 +963,7 @@ def provenance_report(backfill: bool = False) -> int:
                 rec.get("fingerprint", {}).get("vectors_sha256", "")[:12],
             )
         )
-        devices[(dev.get("gpu_name") or "unknown", dev.get("aten_cpu_capability"))].append(f"{ds}x{emb}")
+        devices[(dev.get("gpu_name") or "unknown", dev.get("cpu_capability"))].append(f"{ds}x{emb}")
 
     log(f"{'dataset':<18} {'embedder':<14} {'device':<26} {'node':<10} {'dispatch':<9} {'commit':<10} vectors")
     for row in sorted(rows):
@@ -961,7 +974,7 @@ def provenance_report(backfill: bool = False) -> int:
         log(f"\nthis pile MIXES {len(devices)} build environments. The measured cost of mixing")
         log("hosts is 1.5e-04 median 1-cos on siglip2_l when CPU dispatch is unpinned (#3160):")
         for (name, cap), cells in sorted(devices.items(), key=lambda kv: str(kv[0])):
-            log(f"  {str(name):<26} dispatch={cap or 'unpinned':<9} {len(cells)} cell(s)")
+            log(f"  {str(name):<26} dispatch={cap or 'unrecorded':<10} {len(cells)} cell(s)")
     return 0
 
 

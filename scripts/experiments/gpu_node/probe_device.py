@@ -74,7 +74,8 @@ def device_info() -> dict:
         # resize, not to the card, so the CPU and its dispatch mode belong in
         # any record that claims to say whether two runs are comparable.
         "cpu": _cpu_model(),
-        "aten_cpu_capability": os.environ.get("ATEN_CPU_CAPABILITY"),
+        "cpu_capability": _cpu_capability(),
+        "aten_cpu_capability_requested": os.environ.get("ATEN_CPU_CAPABILITY"),
         "transformers": _version("transformers"),
         "torchvision": _version("torchvision"),
     }
@@ -97,6 +98,14 @@ def device_info() -> dict:
         }
     )
     return info
+
+
+def _cpu_capability() -> str | None:
+    """The ISA torch actually dispatches CPU kernels to; the env var is only a request."""
+    import torch
+
+    getter = getattr(getattr(torch.backends, "cpu", None), "get_cpu_capability", None)
+    return str(getter()) if getter else None
 
 
 def _cpu_model() -> str | None:
