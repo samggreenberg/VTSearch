@@ -17,6 +17,25 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A detector's labelset no longer stores the same media twice.** After one
+  pass over a 300-image dataset a detector reported `num_training: 356` — 300
+  distinct images, 56 of them held as a duplicate pair. The two halves of the
+  labelset round-trip disagreed on what "the same media" means: loading a
+  detector turned an entry into a vote when it matched a dataset item by
+  origin **or** content hash, while saving decided an entry belonged to the
+  active dataset by comparing origins alone. Anything that matched only on its
+  hash — an exemplar carrying the `example_media` sentinel, a label imported
+  from a plain md5 list, a label saved under another dataset's importer — was
+  restored as a vote, re-emitted as a fresh element, and kept beside its
+  original. Both writers now use the same origin-or-hash resolution, so a
+  re-vote updates the existing element instead of appending, and a labelset
+  that already carries duplicates collapses on the next write. Two related
+  leaks went with it: the Find "add corrections to detector" fold left the
+  stale entry in place beside its correction (one media, two contradicting
+  labels), and a drawn Good region was erased whenever a detector reload
+  resynced the labelset, because the restored vote came back image-level.
+  Duplicated entries were also double-weighted at training time. (#3174)
+
 - **A finished dataset import no longer looks like a wedged one.** An import
   that had already succeeded — pickle written, dataset registered — kept the
   progress channel parked on its last message ("Loading SigLIP processor…")
