@@ -595,9 +595,11 @@ def _device_record() -> dict:
         {
             "gpu_name": torch.cuda.get_device_name(0),
             "gpu_capability": f"sm_{major}{minor}",
-            # SM count is the field the leading hypothesis for #3160 runs on:
-            # different SM counts mean different GEMM tiling and a different
-            # accumulation order at the same shape.
+            # SM count was #3143's leading hypothesis for the drift (different
+            # tiling, different accumulation order). It is not the cause -- the
+            # two V100 parts have 80 SMs each and produce bit-identical GEMMs --
+            # but it stays in the record because it is the cheapest way to tell
+            # two cards apart that share a name.
             "multi_processor_count": props.multi_processor_count,
             "total_memory_gb": round(props.total_memory / 1e9, 1),
             "cudnn_version": torch.backends.cudnn.version(),
@@ -675,12 +677,16 @@ def _git_commit() -> str | None:
     return out.stdout.strip() or None
 
 
-def cell_fingerprint(dataset: str, embedder: str) -> dict:
+def cell_fingerprint(dataset: str, embedder: str, medias: dict | None = None) -> dict:
     """A hash of the cell's vectors, in a fixed media-id order.
 
     The point of the hash is that it survives the cell it describes: a rebuild
     can be compared against it without keeping the old 900 MB pickle, which is
     exactly the check a purge-and-rebuild needs and cannot otherwise make.
+
+    ``medias`` lets a fresh build hand over what it already has; the patch cells
+    are 3.5 GB on disk, and re-reading one purely to hash it would add minutes
+    and a second copy in RAM to every build.
     """
     import hashlib  # noqa: PLC0415
 
@@ -688,7 +694,8 @@ def cell_fingerprint(dataset: str, embedder: str) -> dict:
 
     from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 
-    medias = _cells_io().load_medias(pc.cell_path(dataset, embedder))
+    if medias is None:
+        medias = _cells_io().load_medias(pc.cell_path(dataset, embedder))
     ids = sorted(medias)
     vecs = [media_embedding(medias[i]) for i in ids]
     arr = np.stack([np.asarray(v, dtype=np.float32) for v in vecs if v is not None])
@@ -701,7 +708,7 @@ def cell_fingerprint(dataset: str, embedder: str) -> dict:
     }
 
 
-def write_provenance(dataset: str, embedder: str, summary: dict) -> Path:
+def write_provenance(dataset: str, embedder: str, summary: dict, medias: dict | None = None) -> Path:
     """Write the per-cell provenance sidecar."""
     record = {
         "dataset": dataset,
@@ -711,7 +718,7 @@ def write_provenance(dataset: str, embedder: str, summary: dict) -> Path:
         "device": _device_record(),
         "preprocessing": _processor_record(embedder),
         "cell_summary": {k: v for k, v in summary.items() if k != "status"},
-        "fingerprint": cell_fingerprint(dataset, embedder),
+        "fingerprint": cell_fingerprint(dataset, embedder, medias),
     }
     path = pc.provenance_path(dataset, embedder)
     path.write_text(json.dumps(record, indent=2) + "\n")
@@ -771,7 +778,7 @@ def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
         "embed_seconds": round(embed_s, 1),
         "wall_seconds": round(total_s, 1),
     }
-    write_provenance(dataset, embedder, summary)
+    write_provenance(dataset, embedder, summary, medias)
     return summary
 
 
