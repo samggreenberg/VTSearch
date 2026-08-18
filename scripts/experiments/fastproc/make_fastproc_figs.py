@@ -106,10 +106,15 @@ def fig_cost_speedup(results: Path, outdir: Path, svg: bool) -> None:
         base = np.median(samples.get((emb, fcfg.REFERENCE_ARM), [np.nan]))
         for x, m in zip(xs, meds):
             ax.text(x, m, f"{base / m:.2f}x", ha="center", va="bottom", fontsize=8)
-    fig.suptitle("End-to-end embed cost — bars are median ± SE, dots are individual reps", fontsize=10)
-    # tight_layout AFTER suptitle, with a reserved top band: the default leaves
-    # the per-axes titles overlapping it.
-    fig.tight_layout(rect=(0, 0, 1, 0.90))
+    # tight_layout(rect=...) is undone by savefig(bbox_inches="tight"), which
+    # recomputes the bounding box from scratch.  Placing the suptitle ABOVE the
+    # axes (y > 1) works WITH the tight bbox instead of against it.
+    fig.tight_layout()
+    fig.suptitle(
+        "End-to-end embed cost — bars are median ± SE, dots are individual reps",
+        fontsize=10,
+        y=1.04,
+    )
     save(fig, outdir, "cost_speedup", svg)
 
 
@@ -266,10 +271,12 @@ def fig_topk_and_top1(results: Path, outdir: Path, svg: bool) -> None:
             fontsize=6.5,
             loc="lower left",
         )
+    fig.tight_layout()
     fig.suptitle(
         "What a user would notice — solid = the first result is unchanged, faded = top-10 overlap\n"
         "y axis starts at 90%: every arm is high, and the gaps are what matter",
         fontsize=9,
+        y=1.08,
     )
     save(fig, outdir, "topk_and_top1", svg)
 
