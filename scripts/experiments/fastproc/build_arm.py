@@ -128,22 +128,18 @@ def _probe(embedders: list[str]) -> dict:
     return info
 
 
-#: Class-name suffix that marks the PIL implementation in transformers v5.  In
-#: v4 the polarity was the other way round (``…ImageProcessorFast`` was the
-#: torchvision one and the bare name was PIL), which is the whole confusion.
-_PIL_SUFFIX = "Pil"
-_FAST_SUFFIX = "Fast"
-
-
 def _backend_of(class_name: str, transformers_major: int) -> str:
-    if class_name.endswith(_PIL_SUFFIX):
-        return "pil"
-    if class_name.endswith(_FAST_SUFFIX):
-        return "torchvision"
-    # A bare name means torchvision on v5 and PIL on v4 — the rename is exactly
-    # the thing that has to be version-aware, so it is resolved here and nowhere
-    # else.
-    return "torchvision" if transformers_major >= 5 else "pil"
+    """Delegates to the app so the harness cannot drift from what it measures.
+
+    The class-name rename (``…Pil`` / ``…Fast`` / bare, the last of which flips
+    meaning at transformers 5) is decoded in exactly one place,
+    :func:`vtscore.config.processor_backend_from_class_name`, which the app
+    itself uses to verify every processor it loads.  A copy here would be a
+    second definition of the study's own treatment variable.
+    """
+    from vtscore.config import processor_backend_from_class_name
+
+    return processor_backend_from_class_name(class_name, transformers_major) or "torchvision"
 
 
 def _assert_probe_matches_arm(arm: str, info: dict) -> None:

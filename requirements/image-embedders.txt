@@ -28,6 +28,17 @@ scikit-learn
 # SigLIP 2 + DINOv3 require recent transformers ( >= 4.49 ships SigLIP 2,
 # and DINOv3's HF wrapper landed in the same window ). Pin a known-good
 # floor instead of "latest" so the image is reproducible.
+#
+# The floor deliberately stays at 4.49 even though the *default image-processor
+# backend flips inside this range*: transformers 5 removed the `Fast` suffix, so
+# the bare `SiglipImageProcessor` means the PIL implementation below 5 and the
+# torchvision one at 5+, and the two disagree on 53-59% of pixel elements
+# (#3146). Raising the floor to >=5 is not the fix, because it only governs what
+# *installs*. Since #3173 the app names the backend outright
+# (`VTSEARCH_IMAGE_PROCESSOR_BACKEND`, default `torchvision`), and the request is
+# spelled for whichever version is present (`backend=` on 5, `use_fast=` on
+# 4.x) — so both sides of this range now resize identically, which is the
+# property a floor could never give us in someone's existing environment.
 transformers>=4.49.0
 pandas
 
@@ -45,10 +56,11 @@ umap-learn
 # ── PyTorch (CPU) ────────────────────────────────────────────────────
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch>=2.0.0
-# DINOv2 / DINOv3 use `AutoImageProcessor`, which transformers loads via
-# the torchvision backend (`use_fast=True` default in recent releases).
-# Without torchvision the processor import raises ImportError at build
-# time, so install the matching CPU wheel.
+# Every image embedder now asks for the torchvision image-processor
+# backend by name rather than inheriting a default (#3173), so torchvision
+# is a hard requirement of the preprocessing path and not just of DINOv2 /
+# DINOv3's `AutoImageProcessor`. Without it the processor import raises
+# ImportError at build time, so install the matching CPU wheel.
 torchvision
 
 # ── Image media type ─────────────────────────────────────────────────

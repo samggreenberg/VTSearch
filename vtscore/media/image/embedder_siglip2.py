@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtscore.config import SIGLIP2_MODEL_ID, image_processor_load_kwargs
+from vtscore.config import SIGLIP2_MODEL_ID, image_processor_load_kwargs, verify_image_processor_backend
 from vtscore.media.embedder import (
     IMPORT_MODULE_ESTIMATES,
     embedder_load_setup,
@@ -87,6 +87,7 @@ class ImageSiglip2Embedder(_CrossModalHFEmbedder):
                 token=hf_token(),
                 **image_processor_load_kwargs(),
             )
+        verify_image_processor_backend(self._processor, embedder="SigLIP 2")
 
 
 EMBEDDER = ImageSiglip2Embedder()
