@@ -1,0 +1,24 @@
+ok:   tv_cpu x siglip: SiglipImageProcessor on cpu
+ok:   tv_cpu x siglip2_l: SiglipImageProcessor on cpu
+ok:   tv_cpu_rep x siglip: SiglipImageProcessor on cpu
+ok:   tv_cpu_rep x siglip2_l: SiglipImageProcessor on cpu
+ok:   pil_cpu x siglip: SiglipImageProcessorPil on cpu
+ok:   pil_cpu x siglip2_l: SiglipImageProcessorPil on cpu
+ok:   tv_cuda x siglip: SiglipImageProcessor on cuda:0
+ok:   tv_cuda x siglip2_l: SiglipImageProcessor on cuda:0
+ok:   every arm ran on rack4n01
+ok:   identical CPU allocation across arms: ('8', '8')
+ok:   siglip: all 4 arms cover 4193 medias
+ok:   siglip2_l: all 4 arms cover 4193 medias
+
+--- reference rebuild vs the published pile cell (reported, not gated) ---
+  siglip       tv_cpu         median 1-cos 7.574e-13  max 4.762e-10    0.0% identical
+  siglip       tv_cpu_rep     median 1-cos 7.574e-13  max 4.762e-10    0.0% identical
+  siglip       pil_cpu        median 1-cos 2.429e-06  max 4.694e-03    0.0% identical
+  siglip       tv_cuda        median 1-cos 1.171e-04  max 5.543e-03    0.0% identical
+  siglip2_l    tv_cpu         median 1-cos 2.726e-12  max 1.615e-09    0.0% identical
+  siglip2_l    tv_cpu_rep     median 1-cos 2.726e-12  max 1.615e-09    0.0% identical
+  siglip2_l    pil_cpu        median 1-cos 1.484e-04  max 1.128e-02    0.0% identical
+  siglip2_l    tv_cuda        median 1-cos 5.427e-08  max 1.414e-03    0.0% identical
+
+all structural checks passed
