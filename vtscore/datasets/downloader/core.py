@@ -110,6 +110,62 @@ TUT_SOUND_EVENTS_2017_ARCHIVES = (
 # development split is intentionally skipped - the eval split alone is a
 # GTZAN-sized demo.
 CLOTHO_EVAL_URL = "https://zenodo.org/records/3490684/files/clotho_audio_evaluation.7z"
+
+# Apollo 11 mission audio (Internet Archive item ``Apollo11Audio``, CC PD Mark
+# 1.0): 103 MP3 tracks totalling ~174 hours of NASA loop recordings - launch
+# director, flight director, Public Affairs Office and air-to-ground channels,
+# median track ~85 min.  Long-form material whose *discrete* targets are what
+# make it a detector playground: Quindar tones (the 2525/2475 Hz beeps that
+# bracket every capcom transmission), squelch bursts, master-alarm chimes,
+# applause in the MOCR, and the PAO announcer cutting over loop chatter.
+#
+# The item's file list is fetched from the metadata API rather than hard-coded:
+# track names are irregular (``11-03301.mp3``, ``155-AAA.mp3``,
+# ``11-03703_1_OF_6.mp3``, ...) and only the API knows their byte sizes, which
+# the per-file progress needs.  Sorting by name makes the resulting manifest
+# deterministic, so the S/M/L/A slices stay stable across loads.
+APOLLO11_AUDIO_ITEM = "Apollo11Audio"
+ARCHIVE_ORG_METADATA_URL = "https://archive.org/metadata"
+ARCHIVE_ORG_DOWNLOAD_URL = "https://archive.org/download"
+#: Internet Archive ``format`` label for the derived MP3s (the WAV/FLAC
+#: originals are ~3x larger for no gain on a CLAP-embedded demo).
+APOLLO11_AUDIO_FORMAT = "VBR MP3"
+
+# BirdVox-full-night (Zenodo record 1172143): six ~10-hour FLAC recordings from
+# autonomous units near Ithaca NY on the night of 2015-09-23, holding 35402
+# avian flight calls from ~25 passerine species.  The canonical needle-in-a-
+# haystack corpus: each target is a sub-second chirp buried in hours of insect
+# noise, wind and distant traffic.
+#
+# A 10-hour FLAC cannot be handed to the clipper as one media (decoding it
+# yields multi-GB of float samples), so each unit is segmented into
+# ``BIRDVOX_SEGMENT_SECONDS`` FLAC chunks on download and the source file is
+# deleted.  The chunks stay long enough to be worth clipping yourself, which is
+# the point of the demo.
+BIRDVOX_FULL_NIGHT_UNITS = ("unit01", "unit02", "unit03", "unit05", "unit07", "unit10")
+BIRDVOX_FULL_NIGHT_URL_TEMPLATE = (
+    "https://zenodo.org/records/1172143/files/BirdVox-full-night_audio_{unit}.flac?download=1"
+)
+#: Length of each segmented chunk, in seconds (10 minutes).
+BIRDVOX_SEGMENT_SECONDS = 600
+
+# Nixon White House Tapes: the secret taping system's recordings, digitized by
+# NARA and served as one MP3 per *conversation* from catalog.archives.gov.
+# Public domain (US federal government work).  Discrete targets abound -
+# telephone rings and the operator picking up, the recorder's start-up thump,
+# laughter, doors, the room's 60 Hz hum coming and going - all under famously
+# atrocious audio, which is itself the interesting part: a detector trained on
+# a few examples has to find the event rather than the tape.
+#
+# The per-conversation MP3 URLs carry per-tape NARA catalog ids that cannot be
+# derived, so each selected tape's index page is scraped for them at download
+# time.  Only some tape numbers have audio online (NARA is still working
+# through declassification), so the manifest lists numbers verified to serve
+# conversations rather than the full 001-949 range.
+NIXON_TAPES_PAGE_URL = "https://www.nixonlibrary.gov/white-house-tapes"
+NIXON_TAPE_NUMBERS = ("001", "002", "003", "004", "006", "007", "009", "011", "012", "013", "014", "015")
+#: Matches the conversation MP3s embedded in a tape's page.
+NIXON_TAPE_MP3_PATTERN = r"https://catalog\.archives\.gov/medialz/[^\"']+?\.mp3"
 OXFORD_FLOWERS_URL = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/102flowers.tgz"
 OXFORD_FLOWERS_LABELS_URL = "https://www.robots.ox.ac.uk/~vgg/data/flowers/102/imagelabels.mat"
 FOOD101_URL = "http://data.vision.ee.ethz.ch/cvl/food-101.tar.gz"
@@ -226,6 +282,14 @@ URBANSOUND8K_DOWNLOAD_SIZE_MB = 6000
 # Dev audio.1 (~1.1 GB) + audio.2 (~213 MB) + eval audio (~388 MB).
 TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB = 1730
 CLOTHO_EVAL_DOWNLOAD_SIZE_MB = 1200
+# 103 MP3 tracks, ~10.1 GB in total; a size variant only downloads its own
+# slice of the manifest, so (S) costs ~800 MB rather than the full figure.
+APOLLO11_AUDIO_DOWNLOAD_SIZE_MB = 10120
+# Six FLAC units, ~950 MB each.  Segmented in place, so peak disk is roughly
+# the download figure (the source file is removed once its chunks are written).
+BIRDVOX_FULL_NIGHT_DOWNLOAD_SIZE_MB = 5650
+# ~154 conversations per tape averaging ~5.5 MB, over 12 tapes.
+NIXON_TAPES_DOWNLOAD_SIZE_MB = 10200
 OXFORD_FLOWERS_DOWNLOAD_SIZE_MB = 330
 FOOD101_DOWNLOAD_SIZE_MB = 5000
 EUROSAT_DOWNLOAD_SIZE_MB = 90

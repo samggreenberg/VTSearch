@@ -498,12 +498,25 @@ class AudioMediaType(MediaType):
     # compositional-scene playground for natural-language text->audio search.
     _CLOTHO_CATEGORIES = ["sound"]
 
+    # The three long-form demos below share a shape: hours-long unlabelled
+    # recordings in one undifferentiated bucket, where the interesting content
+    # is *discrete events scattered through the runtime* rather than a clip
+    # whose label is the whole clip.  That is what makes them detector
+    # playgrounds - you clip, listen, vote on a handful of hits, and let the
+    # ranker find the rest.
+    _APOLLO11_CATEGORIES = ["mission_audio"]
+    _BIRDVOX_CATEGORIES = ["night_recording"]
+    _NIXON_CATEGORIES = ["conversation"]
+
     @property
     def demo_datasets(self) -> list:
         from vtscore.datasets.downloader import (  # noqa: PLC0415
+            APOLLO11_AUDIO_DOWNLOAD_SIZE_MB,
+            BIRDVOX_FULL_NIGHT_DOWNLOAD_SIZE_MB,
             CLOTHO_EVAL_DOWNLOAD_SIZE_MB,
             ESC50_DOWNLOAD_SIZE_MB,
             GTZAN_DOWNLOAD_SIZE_MB,
+            NIXON_TAPES_DOWNLOAD_SIZE_MB,
             SPEECH_COMMANDS_V2_DOWNLOAD_SIZE_MB,
             TUT_SOUND_EVENTS_2017_DOWNLOAD_SIZE_MB,
             URBANSOUND8K_DOWNLOAD_SIZE_MB,
@@ -522,6 +535,18 @@ class AudioMediaType(MediaType):
         clotho_folder = DATA_DIR / "clotho"
         clotho_desc = "Real-world Freesound clips for text search"
         clotho_total = 1045
+        # Apollo 11: 103 MP3 tracks, ~174 h of mission loops (median ~85 min).
+        apollo_folder = DATA_DIR / "apollo11_audio"
+        apollo_desc = "Long NASA mission loops — Quindar beeps, alarms, applause"
+        apollo_total = 103
+        # BirdVox: 6 ten-hour units, segmented into 10-minute chunks on download.
+        birdvox_folder = DATA_DIR / "birdvox_full_night"
+        birdvox_desc = "10min chunks of all-night birdsong — sub-second flight calls"
+        birdvox_total = 360
+        # Nixon: 12 tapes' worth of conversations, one MP3 per conversation.
+        nixon_folder = DATA_DIR / "nixon_tapes"
+        nixon_desc = "Secret-taping-system conversations (rough audio, by design)"
+        nixon_total = 1917
         return [
             DemoDataset(
                 id="esc50_s",
@@ -767,6 +792,150 @@ class AudioMediaType(MediaType):
                 download_size_mb=CLOTHO_EVAL_DOWNLOAD_SIZE_MB,
             ),
             DemoDataset(
+                id="apollo11_audio_s",
+                label="Apollo 11 Mission Audio (S)",
+                description=apollo_desc,
+                categories=self._APOLLO11_CATEGORIES,
+                source="apollo11_audio",
+                required_folder=apollo_folder,
+                slice_frac_start=0.0,
+                slice_frac_end=1 / 12,
+                items_per_category=apollo_total,
+                download_size_mb=APOLLO11_AUDIO_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="apollo11_audio_m",
+                label="Apollo 11 Mission Audio (M)",
+                description=apollo_desc,
+                categories=self._APOLLO11_CATEGORIES,
+                source="apollo11_audio",
+                required_folder=apollo_folder,
+                slice_frac_start=1 / 12,
+                slice_frac_end=3 / 12,
+                items_per_category=apollo_total,
+                download_size_mb=APOLLO11_AUDIO_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="apollo11_audio_l",
+                label="Apollo 11 Mission Audio (L)",
+                description=apollo_desc,
+                categories=self._APOLLO11_CATEGORIES,
+                source="apollo11_audio",
+                required_folder=apollo_folder,
+                slice_frac_start=3 / 12,
+                slice_frac_end=None,
+                items_per_category=apollo_total,
+                download_size_mb=APOLLO11_AUDIO_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="apollo11_audio_a",
+                label="Apollo 11 Mission Audio (A)",
+                description=apollo_desc,
+                categories=self._APOLLO11_CATEGORIES,
+                source="apollo11_audio",
+                required_folder=apollo_folder,
+                slice_frac_start=0.0,
+                slice_frac_end=None,
+                items_per_category=apollo_total,
+                download_size_mb=APOLLO11_AUDIO_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="birdvox_full_night_s",
+                label="BirdVox Full Night (S)",
+                description=birdvox_desc,
+                categories=self._BIRDVOX_CATEGORIES,
+                source="birdvox_full_night",
+                required_folder=birdvox_folder,
+                slice_frac_start=0.0,
+                slice_frac_end=1 / 6,
+                items_per_category=birdvox_total,
+                download_size_mb=BIRDVOX_FULL_NIGHT_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="birdvox_full_night_m",
+                label="BirdVox Full Night (M)",
+                description=birdvox_desc,
+                categories=self._BIRDVOX_CATEGORIES,
+                source="birdvox_full_night",
+                required_folder=birdvox_folder,
+                slice_frac_start=1 / 6,
+                slice_frac_end=3 / 6,
+                items_per_category=birdvox_total,
+                download_size_mb=BIRDVOX_FULL_NIGHT_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="birdvox_full_night_l",
+                label="BirdVox Full Night (L)",
+                description=birdvox_desc,
+                categories=self._BIRDVOX_CATEGORIES,
+                source="birdvox_full_night",
+                required_folder=birdvox_folder,
+                slice_frac_start=3 / 6,
+                slice_frac_end=None,
+                items_per_category=birdvox_total,
+                download_size_mb=BIRDVOX_FULL_NIGHT_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="birdvox_full_night_a",
+                label="BirdVox Full Night (A)",
+                description=birdvox_desc,
+                categories=self._BIRDVOX_CATEGORIES,
+                source="birdvox_full_night",
+                required_folder=birdvox_folder,
+                slice_frac_start=0.0,
+                slice_frac_end=None,
+                items_per_category=birdvox_total,
+                download_size_mb=BIRDVOX_FULL_NIGHT_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="nixon_tapes_s",
+                label="Nixon White House Tapes (S)",
+                description=nixon_desc,
+                categories=self._NIXON_CATEGORIES,
+                source="nixon_tapes",
+                required_folder=nixon_folder,
+                slice_frac_start=0.0,
+                slice_frac_end=1 / 12,
+                items_per_category=nixon_total,
+                download_size_mb=NIXON_TAPES_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="nixon_tapes_m",
+                label="Nixon White House Tapes (M)",
+                description=nixon_desc,
+                categories=self._NIXON_CATEGORIES,
+                source="nixon_tapes",
+                required_folder=nixon_folder,
+                slice_frac_start=1 / 12,
+                slice_frac_end=3 / 12,
+                items_per_category=nixon_total,
+                download_size_mb=NIXON_TAPES_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="nixon_tapes_l",
+                label="Nixon White House Tapes (L)",
+                description=nixon_desc,
+                categories=self._NIXON_CATEGORIES,
+                source="nixon_tapes",
+                required_folder=nixon_folder,
+                slice_frac_start=3 / 12,
+                slice_frac_end=None,
+                items_per_category=nixon_total,
+                download_size_mb=NIXON_TAPES_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
+                id="nixon_tapes_a",
+                label="Nixon White House Tapes (A)",
+                description=nixon_desc,
+                categories=self._NIXON_CATEGORIES,
+                source="nixon_tapes",
+                required_folder=nixon_folder,
+                slice_frac_start=0.0,
+                slice_frac_end=None,
+                items_per_category=nixon_total,
+                download_size_mb=NIXON_TAPES_DOWNLOAD_SIZE_MB,
+            ),
+            DemoDataset(
                 id="synthetic_world_audio",
                 label="Synthetic World Map (signposts demo)",
                 description=(
@@ -891,6 +1060,66 @@ class AudioMediaType(MediaType):
             category = categories[0] if categories else "street"
             by_cat = {category: [(p, {"category": category, "path": p}) for p in sorted(audio_dir.rglob("*.wav"))]}
             return _sliced_by_category(by_cat), audio_dir
+
+        if source == "apollo11_audio":
+            from vtscore.datasets.downloader import (  # noqa: PLC0415
+                apollo11_audio_manifest,
+                download_apollo11_audio,
+            )
+
+            # Slice the manifest *before* downloading: at ~10 GB for the full
+            # item, a size variant has no business fetching anything outside
+            # its own slice (see the note in downloader/audio.py).
+            tracks = demo_slice(
+                apollo11_audio_manifest(),
+                slice_start,
+                slice_end,
+                slice_frac_start,
+                slice_frac_end,
+            )
+            audio_dir = download_apollo11_audio(tracks, on_progress=on_progress)
+            category = categories[0] if categories else "mission_audio"
+            paths = [audio_dir / name for name, _size in tracks]
+            return [(p, {"category": category, "path": p}) for p in paths if p.exists()], audio_dir
+
+        if source == "birdvox_full_night":
+            from vtscore.datasets.downloader import (  # noqa: PLC0415
+                birdvox_full_night_manifest,
+                download_birdvox_full_night,
+            )
+
+            units = demo_slice(
+                birdvox_full_night_manifest(),
+                slice_start,
+                slice_end,
+                slice_frac_start,
+                slice_frac_end,
+            )
+            base_dir = download_birdvox_full_night(units, on_progress=on_progress)
+            # The download segments each ~10-hour unit into 10-minute chunks;
+            # one media per chunk, all in one undifferentiated bucket.
+            category = categories[0] if categories else "night_recording"
+            paths = sorted(p for unit in units for p in (base_dir / unit).glob("*.flac"))
+            return [(p, {"category": category, "path": p}) for p in paths], base_dir
+
+        if source == "nixon_tapes":
+            from vtscore.datasets.downloader import (  # noqa: PLC0415
+                download_nixon_tapes,
+                nixon_tape_manifest,
+            )
+
+            tapes = demo_slice(
+                nixon_tape_manifest(),
+                slice_start,
+                slice_end,
+                slice_frac_start,
+                slice_frac_end,
+            )
+            base_dir = download_nixon_tapes(tapes, on_progress=on_progress)
+            # One media per recorded conversation, one undifferentiated bucket.
+            category = categories[0] if categories else "conversation"
+            paths = sorted(p for tape in tapes for p in (base_dir / tape).glob("*.mp3"))
+            return [(p, {"category": category, "path": p}) for p in paths], base_dir
 
         if source == "clotho":
             from vtscore.datasets.downloader import download_clotho  # noqa: PLC0415
