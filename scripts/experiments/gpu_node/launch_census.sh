@@ -3,6 +3,7 @@
 #
 #   bash launch_census.sh submit          # one job per node, pinned with --nodelist
 #   bash launch_census.sh submit rack7n03 # just these nodes (a smoke test first)
+#   bash launch_census.sh mechanism rack5n03 rack7n03   # deep probe, named nodes
 #   bash launch_census.sh status
 #   bash launch_census.sh analyze
 #
@@ -72,8 +73,29 @@ submit)
   echo "$n node jobs submitted"
   ;;
 
+mechanism)
+  # The deep probe (probe_mechanism.py) answers *why*, so it only needs the two
+  # nodes that disagree plus one from a third device -- not the pool.
+  MECH="$STUDY/mechanism"
+  mkdir -p "$MECH"
+  for node in "${@:2}"; do
+    type=$(sinfo -h -N -n "$node" -o "%G" | head -1 | sed -E 's/.*gpu:([A-Za-z0-9_.-]+):.*/\1/')
+    if [[ -z "$type" ]]; then echo "cannot resolve a GPU type for $node" >&2; exit 1; fi
+    jid=$(sbatch --parsable \
+      --job-name="mech-$node" \
+      --partition=gpu --nodelist="$node" --gres="gpu:$type:1" \
+      --cpus-per-task=4 --mem=24G --time=1:00:00 \
+      --output="$LOGS/mech-$node-%j.out" \
+      --wrap "bash -lc '$ENVSET && cd $HERE && python probe_mechanism.py --out $MECH'")
+    if ! [[ "$jid" =~ ^[0-9]+$ ]]; then
+      echo "FAILED to submit $node (empty job id) -- NOT LAUNCHED" >&2; exit 1
+    fi
+    echo "submitted mechanism $node ($type) -> job $jid"
+  done
+  ;;
+
 status)
-  squeue -u "$USER" -o "%.10i %.20j %.9T %.11M %R" | grep -E 'census|JOBID' || echo "(no census jobs queued)"
+  squeue -u "$USER" -o "%.10i %.20j %.9T %.11M %R" | grep -E 'census|mech|JOBID' || echo "(no census jobs queued)"
   echo "nodes done: $(ls "$CENSUS"/*/device.json 2>/dev/null | wc -l)"
   ;;
 
@@ -83,5 +105,5 @@ analyze)
   ;;
 
 *)
-  echo "usage: $0 {submit|status|analyze}" >&2; exit 1 ;;
+  echo "usage: $0 {submit [nodes...]|mechanism <nodes...>|status|analyze}" >&2; exit 1 ;;
 esac
