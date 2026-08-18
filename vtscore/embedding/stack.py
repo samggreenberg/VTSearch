@@ -5,9 +5,13 @@ the same way, and the differences are large enough to matter:
 
 - **The image processor changed under a version range we allow.** transformers
   v5 moved the plain ``SiglipImageProcessor`` name onto the torchvision
-  implementation and renamed the PIL one to ``SiglipImageProcessorPil``. On the
-  shipped default embedder the two disagree on **58% of preprocessed pixels**,
-  by up to two 8-bit levels (issue #3160, measured on 64 VG images).
+  implementation and renamed the PIL one to ``SiglipImageProcessorPil``. The two
+  disagree on **58% of preprocessed pixels** for the shipped default embedder
+  and **63%** for ``siglip2_l`` (issue #3160, 64 VG images). Quote the *mean*
+  with that, not the max: max saturates at a quantization level (both read
+  ~1-2 levels and cannot be ranked), while the mean over differing pixels is
+  0.005 of a level for the default against 0.21 for ``siglip2_l`` — the default
+  is touched broadly but ~43x more gently.
 - **CPU kernel dispatch changes the resize.** An AVX2 host and an AVX-512 host
   disagree on 12.3% of pixels at 384px, each by exactly one 8-bit level, which
   is where #3143's "cross-GPU drift" actually came from. 224px is unaffected.

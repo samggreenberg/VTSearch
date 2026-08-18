@@ -357,7 +357,8 @@ def export_dataset_to_file(
         # Which software/hardware produced these vectors (#3160). The embedder
         # *name* does not pin the arithmetic: the two image-processor
         # implementations transformers ships disagree on 58% of preprocessed
-        # pixels for the default embedder, and CPU dispatch moves another 12% at
+        # pixels for the default embedder (mean 0.005 of an 8-bit level) and 63%
+        # for siglip2_l (mean 0.21), and CPU dispatch moves another 12% at
         # 384px. #3173 names the backend so the choice stops being inherited;
         # this records what the run actually resolved, which is the half that
         # tells two existing datasets apart. Nothing reads it to make a decision.
