@@ -181,6 +181,32 @@ def main() -> int:
     if unmatched:
         log(f"  WARNING {unmatched} exported elements matched no slate entry")
 
+    # One verdict per (image, class). A labelset can hold the same media twice:
+    # observed 56 of 300 images duplicated in one detector, Bad votes as exact
+    # copies and Good votes as a boxed entry plus an image-level one -- the app
+    # appends a LabeledElement per vote event rather than replacing (#3168).
+    # Counting both would double-weight a fifth of the review, so collapse
+    # them, preferring the entry that carries a box because that is the one
+    # that can place the image in a band.
+    merged: dict[tuple[int, str], dict] = {}
+    conflicts = 0
+    for v in verdicts:
+        key = (v["image_id"], v["class"])
+        prev = merged.get(key)
+        if prev is None:
+            merged[key] = v
+            continue
+        if prev["human"] != v["human"]:
+            conflicts += 1
+        if prev.get("box") is None and v.get("box") is not None:
+            merged[key] = v
+    dropped = len(verdicts) - len(merged)
+    if dropped:
+        log(f"  collapsed {dropped} duplicate labels into {len(merged)} distinct (image, class) verdicts")
+    if conflicts:
+        log(f"  WARNING {conflicts} images carry BOTH a Good and a Bad vote -- kept the boxed one")
+    verdicts = sorted(merged.values(), key=lambda v: (v["class"], v["image_id"]))
+
     # Per stratum, per direction. Never pooled across strata.
     by: dict[tuple[str, str], int] = defaultdict(int)
     for v in verdicts:
@@ -198,6 +224,19 @@ def main() -> int:
         )
 
     print(f"\n{len(verdicts)} verdicts\n")
+    done: dict[str, int] = defaultdict(int)
+    for v in verdicts:
+        done[v["class"]] += 1
+    total: dict[str, int] = defaultdict(int)
+    for _, c in manifests:
+        total[c] += 1
+    if done:
+        print("progress (distinct images voted, duplicates already collapsed):")
+        for c in sorted(total):
+            n = done.get(c, 0)
+            mark = " done" if n >= total[c] else ""
+            print(f"  {c:<12}{n:>5} / {total[c]}{mark}")
+        print()
     hdr = f"{'stratum':<10}{'agree':>8}{'ref absent, human present':>28}{'ref present, human absent':>28}{'rate':>9}"
     print(hdr)
     print("-" * len(hdr))
