@@ -359,20 +359,38 @@ def figures(drift: pd.DataFrame, ranks: pd.DataFrame, outdir: Path, ref_arm: str
             continue
         fig, ax = plt.subplots(figsize=(7.5, 3.4))
         y = np.arange(len(sub))
-        # A zero-median floor cannot be drawn on a log axis; substituting the
-        # smallest positive drift keeps the bar visible and the caption says so.
-        floor_pos = sub["median"][sub["median"] > 0]
-        eps = float(floor_pos.min()) / 10 if len(floor_pos) else 1e-16
-        vals = sub["median"].where(sub["median"] > 0, eps)
-        ax.barh(y, vals, color=["#999" if a in fcfg.FLOOR_ARMS else "#2b6cb0" for a in sub["arm"]])
+        # A zero median cannot be drawn on a log axis at all, and the obvious
+        # workaround is a lie: substituting a small epsilon renders the floor as
+        # a BAR, at a position a reader compares against the treatment bars.  The
+        # first version of this figure drew the exactly-zero floor at ~5e-07 --
+        # visually the same order as pil_cpu's real 2.4e-06 -- which inverts the
+        # single most important result in the study.  Zero gets a marker and a
+        # label saying it is zero, never a bar.
+        pos = sub["median"][sub["median"] > 0]
+        left = (float(pos.min()) / 100) if len(pos) else 1e-18
+        ax.set_xscale("log")
+        ax.set_xlim(left, max(float(sub["p95"].max()), float(pos.max()) if len(pos) else 1e-3) * 3)
+        for yi, (arm, med, p95) in enumerate(zip(sub["arm"], sub["median"], sub["p95"])):
+            color = "#999" if arm in fcfg.FLOOR_ARMS else "#2b6cb0"
+            if med > 0:
+                ax.barh(yi, med - left, left=left, color=color)
+                if p95 > med:
+                    ax.plot([med, p95], [yi, yi], color="#333", lw=1.2)
+            else:
+                ax.plot([left], [yi], marker="|", ms=14, mew=2.5, color=color)
+                ax.annotate(
+                    f"median exactly 0  (max {sig2(float(sub['max'].iloc[yi]))})",
+                    (left, yi),
+                    textcoords="offset points",
+                    xytext=(10, 0),
+                    va="center",
+                    fontsize=7.5,
+                    color="#444",
+                )
         ax.set_yticks(
             y, [f"{a}\n{b}/{d}" for a, b, d in zip(sub["arm"], sub["backend"], sub["proc_device"])], fontsize=7
         )
-        for yi, (m, p) in enumerate(zip(sub["median"], sub["p95"])):
-            if p > 0:
-                ax.plot([max(m, eps), p], [yi, yi], color="#333", lw=1.2)
-        ax.set_xscale("log")
-        ax.set_xlabel(f"1 - cos vs {ref_arm}   (bar = median, line to p95)")
+        ax.set_xlabel(f"1 - cos vs {ref_arm}   (bar = median, line to p95; log axis)")
         ax.set_title(
             f"Vector drift — {emb} on {fcfg.DATASET}\ngrey = the SAME code on the SAME node, run twice (the floor)"
         )
