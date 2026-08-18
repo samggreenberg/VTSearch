@@ -1,0 +1,292 @@
+# A type is not a device — and the device was never the problem
+
+**Run:** 2026-08-18 · branch `claude/gpu-provenance-3160` · census jobs `511303`–`511385`,
+mechanism `511770`–`511772` / `514200`–`514202` / `514749`–`514750`, dispatch cost
+`514688`/`514689`, bench arrays `511229`/`511258`
+**Data:** `/expscratch/sgreenberg/gpu-node-3160/{census,mechanism,bench,cpuinfo,figures}`
+**Code:** `scripts/experiments/gpu_node/`
+
+Issue [#3160](https://github.com/samggreenberg/VTSearch/issues/3160) was filed out
+of [#3143](../embed-precision-3143/REPORT.md) §5, which measured two nodes both
+answering to `gres/gpu:v100` producing `siglip2_l` vectors **1.5e-04** apart —
+50× what switching the whole forward to fp16 costs, and 30× the 0.005 the
+calibration studies resolve. #3143 localised it to one V100 part and left the
+cause open, with two candidates: a capability-selected attention backend, or
+GEMM tiling that follows SM count.
+
+**Both candidates are wrong, and so is the frame.** The GPU is not involved. Two
+V100 parts fed the same input compute `siglip2_l` **bit-identically, at every one
+of 27 blocks**. The divergence enters on the host, in image preprocessing: the
+384px resize rounds differently under AVX-512 than under AVX2, and the nine
+"outlier" nodes are exactly the nine whose CPUs have no AVX-512.
+
+---
+
+# Verdict
+
+| question | answer |
+|---|---|
+| Is it the GPU? | **No.** Given identical pixels, the two V100 parts agree bit-for-bit — all 27 blocks and the image features. |
+| Then what? | **CPU kernel dispatch in the resize.** AVX2 and AVX-512 hosts disagree on **12.3%** of preprocessed pixels, each by exactly one 8-bit level. |
+| How sure? | Forcing `ATEN_CPU_CAPABILITY=avx2` on an AVX-512 host reproduces the AVX2 host's pixels **exactly**. |
+| Which cells can it touch? | Only `siglip2_l`. Its 384px input diverges; `siglip` and `dinov3_patch` at 224px are **bit-identical** across the same hosts (0.00% of elements). |
+| How much of the fleet? | **9 of 20** GPU nodes are AVX2-only — including **9 of 13** `gpu:v100` nodes. A `gpu:v100` pile rebuild lands on the other side of the split about two times in three. |
+| Is #3144's premise wrong? | **No — it was right about the GPU.** With the input pinned, cross-part GPU disagreement is ~1e-15 in 1−cos. The auto-pick is not the defect. |
+| Is there a fix? | **Yes, and it is cheap.** Pinning `ATEN_CPU_CAPABILITY=avx2` in the pile build makes two hosts' vectors agree to 8.9e-16 (from 1.3e-04) and makes the resize **26% faster** on an AVX-512 host (2.18 ± 0.02 s → 1.62 ± 0.02 s per 256 images). |
+| Does the drift reach a decision? | See §5 — the paired benchmark. |
+
+**Recommendation.** Pin the dispatch in pile builds (shipped here), record the
+host and the resolved capability per cell (shipped here), and treat
+`VTS_GPU_NODE` as a belt-and-braces for an exact rebuild rather than as the fix.
+Do not rebuild the pile on account of the *card*.
+
+---
+
+# 1. What was run
+
+Four measurements, in the order they narrow the question.
+
+| # | what | scale |
+|---|---|---|
+| 1 | **Census** — every GPU node the picker can hand out embeds the same fixed 256 VG images | 20 nodes (h100/h200 excluded: the `4gpu_tier` QOS caps them at 0, so they are not candidates) |
+| 2 | **Mechanism** — per-block hidden states under each forced SDPA backend, plus a node fed *another node's* pixels | 3 nodes × 5 backends × 2 pixel sources |
+| 3 | **Dispatch** — the same probes with `ATEN_CPU_CAPABILITY=avx2`, and the cost of that pin | 2 hosts, 4–7 timed processes each |
+| 4 | **Benchmark** — production defaults, only the gallery's build host differing | 2 arms × 2048 cells |
+
+## The premise, checked before anything else
+
+#3143's claim is the input to this study, so it was re-measured from the two
+piles' own pickles rather than assumed:
+
+| embedder | median 1−cos | max | rows bit-identical |
+|---|---:|---:|---:|
+| `siglip2_l` | **1.5e-04** | 1.1e-02 | **0%** |
+| `siglip` | **0** | 1.3e-15 | 78% |
+
+That `siglip` figure is what makes it a usable **placebo** in §5, and the max on
+`siglip2_l` is worth noting: some images move by 1.1e-02 in cosine, two orders
+above the median.
+
+---
+
+# 2. The census: what a type label covers
+
+`gres/gpu:v100` is two parts, and `gpu:a100` is two parts, but only one of those
+splits matters.
+
+| device | cap | SMs | nodes | median 1−cos vs `rack7n03` (`siglip2_l`) |
+|---|---|---:|---:|---:|
+| Tesla V100S-PCIE-32GB | sm_70 | 80 | 4 | **0** |
+| Tesla V100-SXM2-32GB-LS | sm_70 | 80 | **9** | **1.3e-04** |
+| NVIDIA L40S | sm_89 | 142 | 2 | 5.3e-07 |
+| NVIDIA A100-PCIE-40GB | sm_80 | 108 | 3 | 2.1e-12 |
+| NVIDIA A100 80GB PCIe | sm_80 | 108 | 2 | 2.1e-12 |
+
+Read as a *card* story this says the V100-SXM2-LS is broken. It is not, and two
+things in the same data already say so:
+
+- **The bare ops disagree with the vectors.** All 13 V100s — both parts —
+  produce **bit-identical** GEMM (four shapes), conv and SDPA results at the
+  tower's shapes. The cards that *do* differ on bare ops (L40S, A100: distinct
+  hashes at every GEMM shape) are the ones whose embeddings agree to 1e-12.
+- **The split is 9 vs 4 on a label that has nothing to do with the card.** The
+  nine SXM2-LS nodes are DGX-1 boxes, and every one of them carries an
+  **Intel Xeon E5-2698 v4** (Broadwell — no AVX-512). The four V100S-PCIE nodes
+  carry Xeon Gold 5218R; the L40S nodes carry EPYC 9534; the A100 nodes carry
+  Gold 6248R/6338. All of those have AVX-512.
+
+The correspondence is exact: **9 of 9 AVX2-only hosts show 1.3e-04; 11 of 11
+AVX-512 hosts show ≤ 5.3e-07.**
+
+![Census: drift by node, coloured by CPU ISA](figures/census_by_isa.png)
+
+Each point is one node's median 1−cos against `rack7n03` over the same 256
+images. Colour is the host's CPU ISA, shape is the GPU part. **The colours
+separate cleanly and the shapes do not** — the four blue squares and the nine red
+circles are the same GPU generation, the same SM count, and the same driver.
+
+---
+
+# 3. The mechanism: the GPU is innocent
+
+The decisive arm ships one node's preprocessed tensor to another and runs the
+forward there, so the *only* thing that differs is the machine.
+
+| `rack5n03` (AVX2 host) was fed | first differing block | image features |
+|---|---|---|
+| its own pixels | **block 0**, rising to rel L2 9.2e-03 by the last block | differ |
+| `rack7n03`'s pixels | **none — all 27 identical** | **bit-identical** |
+
+![Per-block divergence, own pixels vs the reference node's pixels](figures/layer_divergence.png)
+
+The red dashed line on the floor is the result. (`rack4n02`'s two lines coincide
+because its own pixels *are* the reference tensor — bit-identical preprocessing —
+so its residual ~1e-04 relative L2 is a real L40S-vs-V100 GPU difference, worth
+5.3e-07 in median 1−cos and the only genuine card effect anywhere in this study.)
+
+Both of #3143's surviving hypotheses are therefore refuted, and so is the
+premise underneath them:
+
+- **SDPA backend selection** — `math` and `efficient` were forced explicitly on
+  both nodes (`flash` and `cudnn` are unavailable on sm_70 fp32). Every backend
+  gives the same answer, and the same divergence. It is not the backend.
+- **GEMM tiling by SM count** — both parts have 80 SMs and produce bit-identical
+  GEMMs; and the divergence is present at **block 0**, before depth can
+  accumulate.
+
+## Where it actually enters
+
+The preprocessed tensors themselves differ, and in a very particular way:
+
+| comparison | elements differing | max \|Δ\| |
+|---|---:|---:|
+| `rack5n03` (AVX2) vs `rack7n03` (AVX-512) | **12.3%** (436,830 of 3,538,944) | 7.843e-03 |
+| `rack4n02` (EPYC, AVX-512) vs `rack7n03` | **0.00%** | 0 |
+
+**7.843e-03 is exactly 2/255** — one 8-bit level on the [−1, 1] scale. Literal
+example: image `107899.jpg`, channel 0, position (8, 326) is **191** on the
+AVX-512 hosts and **192** on the AVX2 host. Every disagreement is a rounding
+boundary landing on the other side.
+
+![Pixel differences: one 8-bit level, in textured regions](figures/pixel_diff.png)
+
+A caution on that statistic, which cost a neighbouring study a table of six
+identical numbers: **max |Δ| is saturated here.** Any 8-bit resampling
+disagreement — dispatch, backend, CPU-vs-GPU — reads exactly 7.843e-03, so the
+max says nothing about which effect you are looking at. The informative
+statistics are the *fraction* of elements and *which* elements.
+
+## Named: CPU kernel dispatch
+
+`ATEN_CPU_CAPABILITY=avx2` forces torch to use AVX2 kernels on a host that has
+AVX-512. On `rack7n03`:
+
+| | vs `rack7n03` default | vs `rack5n03` (real AVX2 host) |
+|---|---|---|
+| `rack7n03` forced to AVX2 | differs on 12.3% | **IDENTICAL** |
+
+An AVX-512 host told to dispatch as AVX2 reproduces the AVX2 host's pixels
+bit-for-bit. That is the cause, stated as tightly as this cluster allows.
+
+**Why only `siglip2_l`:** the divergence is in the resize, and only the 384px
+geometry hits the divergent path.
+
+| embedder | input | elements differing across the two hosts |
+|---|---|---:|
+| `siglip2_l` | 3×384×384 | **12.3%** |
+| `siglip` | 3×224×224 | **0.00%** |
+| `dinov3_patch` | 3×224×224 | **0.00%** |
+
+This answers #3143's other loose end — "specific to the SO400M/384 geometry" —
+without any appeal to the model at all. It also bounds the blast radius: the
+**region-voting embedder is unaffected**.
+
+---
+
+# 4. The fix, and what it costs
+
+With the dispatch pinned on both hosts, the two *different GPU parts* agree:
+
+| `siglip2_l`, `rack5n03` vs `rack7n03` | median 1−cos | max | rows bit-identical |
+|---|---:|---:|---:|
+| as shipped (dispatch free) | 1.3e-04 | 2.2e-03 | 0% |
+| `ATEN_CPU_CAPABILITY=avx2` on both | **0** | **8.9e-16** | **76%** |
+
+The residual 8.9e-16 is the same size as `siglip`'s cross-host residual (1.1e-15,
+80% of rows identical) and is the honest measure of **cross-part GPU
+disagreement**: nine orders below fp16's 2.9e-06, and far below anything any
+study resolves. **#3144's premise was correct**; it was the attribution in #3143
+§5 that was wrong.
+
+**Cost of the pin**, measured as alternating *processes* (5 reps × 3 timings),
+256 images:
+
+| host | default | forced AVX2 |
+|---|---|---|
+| `rack7n03` (Xeon Gold 5218R, AVX-512) | 2.18 ± 0.02 s (resolves `AVX512`) | **1.62 ± 0.02 s** |
+| `rack5n03` (Xeon E5-2698 v4, AVX2) | 1.31 ± 0.03 s (resolves `AVX2`) | same — nothing to pin |
+
+Pinning is **26% faster** on the AVX-512 host, not slower. That is a real result
+and not a rounding artifact (SEs are 1% of the mean), but it is also not why the
+pin is right: reproducibility would be worth paying for.
+
+> **The first attempt at this measurement was wrong, and said so itself.** It
+> flipped `ATEN_CPU_CAPABILITY` between reps *inside one process* and reported
+> −0.9% — because torch reads the variable once, at init. It self-caught only
+> because it printed the **resolved** capability and a pixel checksum beside each
+> rep: `cap now AVX512` under a request for AVX2, and an identical checksum under
+> both. This is exactly why the provenance sidecar records
+> `cpu_capability` (resolved) alongside `aten_cpu_capability_requested`.
+
+---
+
+# 5. The benchmark: does 1.5e-04 reach a decision?
+
+<!-- filled in when arrays 511229/511258 drain -->
+
+---
+
+# 6. What this means for the existing pile
+
+The shared pile predates all provenance, but the build node is recoverable:
+`sacct` still holds the `pile-<dataset>` jobs. `--backfill-provenance` now
+stamps it as `hostname_recovered` (never as `hostname` — it is inferred from a
+job name, and an ambiguous dataset is left blank rather than guessed):
+
+| dataset | built on | ISA | `siglip2_l` cell affected? |
+|---|---|---|---|
+| `visual_genome_m`, `caltech101_m`, `coco_val` | rack7n03 | AVX-512 | — |
+| `vg_box_medium`, `vg_box_large` | rack7n03 | AVX-512 | — |
+| **`vg_box_small`** | **rack8n06** | **AVX2 only** | **yes** |
+| `vg_scale` | rack4n02 | AVX-512 | — |
+
+**The three box-size bands were not preprocessed identically.** `vg_box_small`'s
+`siglip2_l` cell sits on the other side of the split from `vg_box_medium` and
+`vg_box_large`, which are compared against it directly in #3129 and #3156. The
+`siglip` and `dinov3_patch` cells of all three bands are unaffected (224px), so
+the region-voting arm of those studies is clean.
+
+Whether this matters for a band comparison is the §5 question restated, on a
+different corpus. It is filed rather than acted on here.
+
+---
+
+# 7. What shipped
+
+- **Per-cell provenance** (`build_pile.py`): device name, capability, SM count,
+  driver, torch/cuDNN, **CPU model**, **resolved CPU capability**, requested
+  capability, transformers version, resolved processor classes, precision, node,
+  SLURM job, commit — plus a `vectors_sha256` **fingerprint**, which is the field
+  that lets a rebuild be checked against a cell that no longer exists.
+  `--provenance` prints the table and flags a pile that mixes build
+  environments; `--backfill-provenance` stamps the 21 existing cells.
+- **Dispatch pinned in pile builds** (`launch_pile.sh`):
+  `ATEN_CPU_CAPABILITY=${VTS_CPU_CAPABILITY:-avx2}`.
+- **Node pinning** (`launch_pile.sh`): `VTS_GPU_NODE=<node>` sets `--nodelist`
+  and derives the gres type from the node, for an exact rebuild.
+
+The transformers/processor fields came from the concurrent #3146 study, which
+independently found that `transformers` v5 silently moved every image processor
+to the torchvision path with only `transformers>=4.49` pinned. Its dispatch
+matrix confirmed both predictions this study makes — PIL is dispatch-invariant
+(0.00%), and 224px is dispatch-invariant (0.00%) — and added one this study
+could not see: at 384px the **CUDA** resize agrees with AVX-512 (0.03% of
+elements) and disagrees with AVX2 (13.71%), so moving preprocessing to the GPU
+is a second route to the same reproducibility.
+
+---
+
+# 8. Reproducing
+
+```bash
+cd scripts/experiments/gpu_node
+bash launch_census.sh submit                   # one job per GPU node
+bash launch_census.sh analyze
+bash launch_census.sh mechanism rack7n03       # writes pixels.npy
+VTS_MECH_PIXELS=<...>/mechanism/rack7n03/pixels.npy \
+  bash launch_census.sh mechanism rack5n03 rack4n02
+python analyze_mechanism.py --mechanism <study>/mechanism
+python make_figures.py --study <study> --out figures
+bash launch_nodebench.sh prepare && bash launch_nodebench.sh verify-pairing
+bash launch_nodebench.sh cells && bash launch_nodebench.sh analyze
+```
