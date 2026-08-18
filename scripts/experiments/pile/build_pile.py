@@ -561,6 +561,15 @@ def _device_record() -> dict:
         "precision_resolved": embed_precision(),
         "torch": torch.__version__,
         "cuda_runtime": getattr(torch.version, "cuda", None),
+        # The node is not the only unrecorded axis. `requirements/image-embedders.txt`
+        # pins `transformers>=4.49`, and v5 renamed the image processors: the plain
+        # name is now the torchvision implementation and the PIL one moved to a
+        # `Pil` suffix. So two hosts resolving different versions preprocess the
+        # same image differently -- measured at 7.8e-3 max abs in pixels between
+        # the two paths, well above the 1.5e-04 device effect this record was
+        # written for. Recording the version and the class that actually loaded
+        # costs nothing and makes that axis visible too.
+        "transformers": _transformers_version(),
         "commit": _git_commit(),
     }
     if not torch.cuda.is_available():
@@ -586,6 +595,34 @@ def _device_record() -> dict:
         }
     )
     return rec
+
+
+def _transformers_version() -> str | None:
+    try:
+        import transformers  # noqa: PLC0415
+    except ImportError:
+        return None
+    return getattr(transformers, "__version__", None)
+
+
+def _processor_record(embedder: str) -> dict:
+    """The preprocessing classes this embedder actually resolved to.
+
+    Best effort: an embedder with no HF processor (or one that failed to load)
+    records nulls rather than sinking a build that has already produced a cell.
+    """
+    try:
+        from vtscore.media import get_embedder  # noqa: PLC0415
+
+        emb = get_embedder(embedder)
+        proc = getattr(emb, "_processor", None)
+        image_proc = getattr(proc, "image_processor", None)
+        return {
+            "processor_class": type(proc).__name__ if proc is not None else None,
+            "image_processor_class": type(image_proc).__name__ if image_proc is not None else None,
+        }
+    except Exception as exc:  # noqa: BLE001 -- provenance must never fail a build
+        return {"processor_class": None, "image_processor_class": None, "error": repr(exc)[:120]}
 
 
 def _git_commit() -> str | None:
@@ -640,6 +677,7 @@ def write_provenance(dataset: str, embedder: str, summary: dict) -> Path:
         "cell": pc.cell_path(dataset, embedder).name,
         "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "device": _device_record(),
+        "preprocessing": _processor_record(embedder),
         "cell_summary": {k: v for k, v in summary.items() if k != "status"},
         "fingerprint": cell_fingerprint(dataset, embedder),
     }
