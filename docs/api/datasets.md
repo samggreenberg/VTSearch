@@ -116,7 +116,7 @@ GET /api/cleaners
 **Query:** `?media_type=image` (optional): filter by `type_id` or
 `folder_import_name`.
 
-→ `{"cleaners": [{"name": "image_exif_orient", "media_type": "image", "display_name": "EXIF Orientation", "default_enabled": false, "description": "Rewrite photos upright in their stored bytes…"}]}`
+→ `{"cleaners": [{"name": "image_exif_orient", "media_type": "image", "display_name": "EXIF Orientation", "default_enabled": true, "description": "Rotate photos to their EXIF display orientation…"}]}`
 
 *Cleaners* are the optional 1-to-1 cleanup gates every imported item of a media
 type can pass through before it is embedded (see

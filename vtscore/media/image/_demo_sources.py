@@ -1088,7 +1088,7 @@ def _load_synthetic_toponymy(clips, embedder, on_progress, demo_origin) -> None:
 def _embed_file_images(selected, clips, embedder, on_progress, demo_origin, skip_embedding=False) -> None:
     """Embed a list of (img_path, category) tuples into ``clips``."""
 
-    from vtscore.media.image.decode import upright_size  # noqa: PLC0415
+    from PIL import Image  # noqa: PLC0415
 
     if not skip_embedding:
         _ensure_image_embedder_loaded(embedder, on_progress)
@@ -1113,7 +1113,8 @@ def _embed_file_images(selected, clips, embedder, on_progress, demo_origin, skip
         with open(img_path, "rb") as f:
             image_bytes = f.read()
         try:
-            width, height = upright_size(img_path)
+            with Image.open(img_path) as img:
+                width, height = img.width, img.height
         except Exception:
             width, height = None, None
         clips[clip_id] = {
@@ -1259,8 +1260,9 @@ def _embed_vg_images(selected, clips, embedder, on_progress, demo_origin, skip_e
     a store-only ``regions`` list of normalized ground-truth boxes.
     """
 
+    from PIL import Image  # noqa: PLC0415
+
     from vtscore.media.embedder import media_from_path  # noqa: PLC0415
-    from vtscore.media.image.decode import upright_size  # noqa: PLC0415
 
     if not skip_embedding:
         _ensure_image_embedder_loaded(embedder, on_progress)
@@ -1284,7 +1286,8 @@ def _embed_vg_images(selected, clips, embedder, on_progress, demo_origin, skip_e
         with open(img_path, "rb") as f:
             image_bytes = f.read()
         try:
-            width, height = upright_size(img_path)
+            with Image.open(img_path) as img:
+                width, height = img.width, img.height
         except Exception:
             width, height = None, None
         clips[clip_id] = {
@@ -1320,8 +1323,9 @@ def _embed_openlogo_images(selected, clips, embedder, on_progress, demo_origin, 
     Evaluation flow score against ground truth).
     """
 
+    from PIL import Image  # noqa: PLC0415
+
     from vtscore.media.embedder import media_from_path  # noqa: PLC0415
-    from vtscore.media.image.decode import upright_size  # noqa: PLC0415
 
     if not skip_embedding:
         _ensure_image_embedder_loaded(embedder, on_progress)
@@ -1345,7 +1349,8 @@ def _embed_openlogo_images(selected, clips, embedder, on_progress, demo_origin, 
         with open(img_path, "rb") as f:
             image_bytes = f.read()
         try:
-            width, height = upright_size(img_path)
+            with Image.open(img_path) as img:
+                width, height = img.width, img.height
         except Exception:
             width, height = None, None
         clips[clip_id] = {

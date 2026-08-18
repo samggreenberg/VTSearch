@@ -8,6 +8,7 @@ side.
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 from typing import Any
 
@@ -22,8 +23,7 @@ def crop_file_bytes(
     *params* must be a dict matching the clipper's bounds:
 
     * Audio: ``{"start": float, "end": float}`` - seconds.
-    * Image: ``{"box": [x1, y1, x2, y2]}`` - pixel coords in the original
-      image, as displayed (i.e. after EXIF orientation).
+    * Image: ``{"box": [x1, y1, x2, y2]}`` - pixel coords in the original image.
 
     Raises :class:`ValueError` for unsupported media types or invalid params.
     Raises :class:`FileNotFoundError` if *file_path* does not exist.
@@ -45,17 +45,16 @@ def crop_file_bytes(
         return clipped[0].get("media_bytes", media_bytes)
 
     if media_type == "image":
+        from PIL import Image  # noqa: PLC0415
+
         from vtscore.media.image.clipper import ImageBboxClipper
-        from vtscore.media.image.decode import upright_size  # noqa: PLC0415
 
         box = params.get("box")
         if box is None or len(box) != 4:
             raise ValueError("box must be a 4-tuple [x1, y1, x2, y2]")
         clipper = ImageBboxClipper(box)
-        # Displayed dimensions, matching how the box was drawn: the browser
-        # applies EXIF orientation, so a box over a rotated photo is in upright
-        # space and the clipper decodes upright to match.
-        width, height = upright_size(media_bytes)
+        with Image.open(io.BytesIO(media_bytes)) as img:
+            width, height = img.size
         media = {
             "id": 0,
             "media_type": "image",

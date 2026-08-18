@@ -13,6 +13,7 @@ pool and origin-based file resolution that are detector-specific.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -402,21 +403,30 @@ def train_and_threshold(
     else:
         model = train_model(X, y, input_dim, hidden_dim=hidden_dim)
 
+    # Fit the population estimator on the *inference* score distribution.
+    # `_score_all_media` is the same call scoring makes
+    # (`score_media_with_model`), so on a patch dataset the mixture sees the
+    # region max-pooled per-media scores the threshold will actually cut.
+    # Scoring the image-level embedding matrix instead fitted it on a
+    # systematically lower distribution (the region max is ≥ the single
+    # image-level row), biasing the cut low → over-inclusion on
+    # region-voting detectors.  Plain single-vector datasets take
+    # `_score_all_media`'s embedding-matrix fallback, so their behaviour is
+    # unchanged.  *embedder_name* is forwarded as-is (not pre-resolved) so
+    # the region-vs-plain gating matches inference exactly.
+    # Mirrors `_train_and_score_xy` and
+    # `eval.voting_iterations._safe_threshold_for_step`.
+    #
+    # `_score_all_media` skips media it cannot score, so an empty score list
+    # means the haystack contributed nothing to fit on - either there was no
+    # snap at all, or none of its media carry a usable vector in this space
+    # (the CLI importer path, where the chunk is embedded later, per detector
+    # group, by `route_and_embed`).  Both take the no-haystack branch rather
+    # than fitting the estimator on an empty distribution.
+    all_scores: list[float] = []
     if snap:
-        # Fit the population estimator on the *inference* score distribution.
-        # `_score_all_media` is the same call scoring makes
-        # (`score_media_with_model`), so on a patch dataset the mixture sees the
-        # region max-pooled per-media scores the threshold will actually cut.
-        # Scoring the image-level embedding matrix instead fitted it on a
-        # systematically lower distribution (the region max is ≥ the single
-        # image-level row), biasing the cut low → over-inclusion on
-        # region-voting detectors.  Plain single-vector datasets take
-        # `_score_all_media`'s embedding-matrix fallback, so their behaviour is
-        # unchanged.  *embedder_name* is forwarded as-is (not pre-resolved) so
-        # the region-vs-plain gating matches inference exactly.
-        # Mirrors `_train_and_score_xy` and
-        # `eval.voting_iterations._safe_threshold_for_step`.
         _all_ids, all_scores, _best_region = _score_all_media(model, snap, embedder_name)
+    if snap and all_scores:
         threshold = _fused_threshold(
             threshold,
             folds,
@@ -745,11 +755,30 @@ def _score_all_media(
     pre-per-detector behaviour) any media carrying a ``patch_grid`` takes the
     patch path, matching the dataset-level score precedence.
 
+    Media that carry no usable vector in that space are **skipped**, not fatal:
+    the builders raise on one (no vector, or a row of the wrong width), and this
+    catches that, drops the offending media via
+    :func:`~vtscore.embedding.matrix.scoreable_snapshot`, and rebuilds from what
+    is left.  A snapshot is not the dataset's own medias dict - the CLI scores
+    importer output that never went through the load pipeline's drop-none stage,
+    and one bound embedder of a multi-embedder dataset can have failed on media
+    another succeeded on - so a single unembeddable image must cost one skipped
+    item, not the whole run (issue #3179).  Every caller reads the media list
+    back off *all_ids*, so a shorter list flows through unchanged.
+
+    The filter runs **on the failure path only**, not as a pre-pass: this is the
+    per-vote retrain path over the whole dataset (and ``_fused_threshold`` calls
+    it once more per calibration fold), where an unconditional O(N) scan would
+    tax every vote on a 300k-media dataset to catch a case that the load
+    pipeline has already made impossible there.  A clean snapshot pays nothing
+    and keeps its cached-matrix fast path.
+
     Returns ``(all_ids, scores_per_media, best_row_index_per_media)``.
     """
     from vtscore.embedding.matrix import (  # noqa: PLC0415
         get_embedding_matrix_for_snap,
         get_region_matrix_for_snap,
+        scoreable_snapshot,
         segmented_max_pool,
     )
 
@@ -760,17 +789,39 @@ def _score_all_media(
     has_regions = any(clips_dict[cid].get("patch_grid") is not None for cid in clips_dict) and _scores_in_patch_space(
         clips_dict, embedder_name
     )
-    if has_regions:
-        # One row per (media, score row) pair, built once and cached on the
-        # dataset context (the patch vectors never change between votes -
-        # only the MLP weights do), so online retraining no longer rebuilds
-        # a multi-million-row matrix on every vote.
-        all_ids, X_np, media_index_per_row, region_index_per_row = get_region_matrix_for_snap(clips_dict)
-    else:
-        all_ids, X_np = get_embedding_matrix_for_snap(clips_dict, resolved)
-        n = len(all_ids)
-        media_index_per_row = np.arange(n, dtype=np.int64)
-        region_index_per_row = np.zeros(n, dtype=np.int64)
+
+    def _build(snapshot: dict[int, dict[str, Any]]) -> tuple[list[int], np.ndarray, np.ndarray, np.ndarray]:
+        if has_regions:
+            # One row per (media, score row) pair, built once and cached on the
+            # dataset context (the patch vectors never change between votes -
+            # only the MLP weights do), so online retraining no longer rebuilds
+            # a multi-million-row matrix on every vote.
+            return get_region_matrix_for_snap(snapshot)
+        ids, matrix = get_embedding_matrix_for_snap(snapshot, resolved)
+        n = len(ids)
+        return ids, matrix, np.arange(n, dtype=np.int64), np.zeros(n, dtype=np.int64)
+
+    try:
+        all_ids, X_np, media_index_per_row, region_index_per_row = _build(clips_dict)
+    except ValueError:
+        # Both refusals land here: the missing-vector ``ValueError`` and the
+        # wrong-width ``MismatchedVectorError`` that subclasses it.  Filter
+        # against the same key the chosen builder reads - the patch-slot
+        # embedder for the region path (``_build_region_arrays`` requires an
+        # image-level row per media in that space), the resolved score embedder
+        # otherwise - then rebuild.  A rebuild that still refuses is a different
+        # problem and propagates.
+        clips_dict, skipped = scoreable_snapshot(clips_dict, resolved, region_rows=has_regions)
+        logging.getLogger(__name__).warning(
+            "Scoring skipped %d media with no usable vector under %r: %s%s",
+            len(skipped),
+            resolved or "(primary)",
+            skipped[:10],
+            "…" if len(skipped) > 10 else "",
+        )
+        if not clips_dict:
+            return [], [], []
+        all_ids, X_np, media_index_per_row, region_index_per_row = _build(clips_dict)
 
     if not all_ids:
         return [], [], []

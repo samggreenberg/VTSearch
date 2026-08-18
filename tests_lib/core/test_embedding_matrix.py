@@ -633,3 +633,99 @@ class TestPatchGridWidthMismatch:
         assert rows is not None
         assert rows.shape == (5, 3)  # 1 CLS row + 2x2 patches
         assert rows[0, 0] == 1.0
+
+
+class TestScoreableSnapshot:
+    """``scoreable_snapshot`` is the pre-filter that turns a fatal matrix build
+    into a skipped item (issue #3179).  It answers exactly the two questions
+    the builder raises on: is there a vector at all, and is it a 1-D row of the
+    same width as the rest?
+    """
+
+    @staticmethod
+    def _media(cid: int, vec, name: str = "e5") -> dict:
+        return {
+            "id": cid,
+            "embedder": name,
+            "embeddings": {} if vec is None else {name: vec},
+            "filename": f"m{cid}.wav",
+        }
+
+    def test_media_without_a_vector_is_dropped(self):
+        from vtscore.embedding.matrix import scoreable_snapshot
+
+        snap = {
+            1: self._media(1, np.ones(4, dtype=np.float32)),
+            2: self._media(2, None),
+            3: self._media(3, np.zeros(4, dtype=np.float32)),
+        }
+        scoreable, dropped = scoreable_snapshot(snap)
+        assert dropped == [2]
+        assert sorted(scoreable) == [1, 3]
+        # And what survives builds a matrix without raising.
+        ids, mat = get_embedding_matrix_for_snap(scoreable)
+        assert ids == [1, 3]
+        assert mat.shape == (2, 4)
+
+    def test_wrong_width_vector_is_dropped(self):
+        """The ``require_dim`` / ``MismatchedVectorError`` half of #3179."""
+        from vtscore.embedding.matrix import scoreable_snapshot
+
+        snap = {
+            1: self._media(1, np.ones(4, dtype=np.float32)),
+            2: self._media(2, np.ones(8, dtype=np.float32)),
+            3: self._media(3, np.zeros(4, dtype=np.float32)),
+        }
+        # Unfiltered, this is the crash the issue reports.
+        with pytest.raises(MismatchedVectorError):
+            get_embedding_matrix_for_snap(snap)
+
+        scoreable, dropped = scoreable_snapshot(snap)
+        assert dropped == [2]
+        ids, mat = get_embedding_matrix_for_snap(scoreable)
+        assert ids == [1, 3]
+        assert mat.shape == (2, 4)
+
+    def test_non_row_vector_is_dropped(self):
+        from vtscore.embedding.matrix import scoreable_snapshot
+
+        snap = {
+            1: self._media(1, np.ones(4, dtype=np.float32)),
+            2: self._media(2, np.ones((2, 4), dtype=np.float32)),
+        }
+        scoreable, dropped = scoreable_snapshot(snap)
+        assert dropped == [2]
+        assert sorted(scoreable) == [1]
+
+    def test_named_embedder_keys_the_check(self):
+        """A media embedded by one bound embedder but not the other is dropped
+        only from the space it is missing - the multi-embedder shape of the
+        same failure."""
+        from vtscore.embedding.matrix import scoreable_snapshot
+
+        snap = {
+            1: {
+                "id": 1,
+                "embedder": "siglip",
+                "embeddings": {"siglip": np.ones(4, dtype=np.float32), "e5": np.ones(4, dtype=np.float32)},
+            },
+            2: {"id": 2, "embedder": "siglip", "embeddings": {"siglip": np.ones(4, dtype=np.float32)}},
+        }
+        kept_siglip, dropped_siglip = scoreable_snapshot(snap, "siglip")
+        assert dropped_siglip == [] and sorted(kept_siglip) == [1, 2]
+
+        kept_e5, dropped_e5 = scoreable_snapshot(snap, "e5")
+        assert dropped_e5 == [2] and sorted(kept_e5) == [1]
+
+    def test_everything_unusable_yields_an_empty_snapshot(self):
+        from vtscore.embedding.matrix import scoreable_snapshot
+
+        snap = {1: self._media(1, None), 2: self._media(2, None)}
+        scoreable, dropped = scoreable_snapshot(snap)
+        assert scoreable == {}
+        assert dropped == [1, 2]
+
+    def test_empty_snapshot(self):
+        from vtscore.embedding.matrix import scoreable_snapshot
+
+        assert scoreable_snapshot({}) == ({}, [])

@@ -267,6 +267,7 @@ changes (bumped on every `medias` mutation).
 def get_embedding_matrix(ctx: DatasetContext) -> tuple[list[int], np.ndarray]: ...
 def invalidate_embedding_matrix(ctx: DatasetContext) -> None: ...
 def get_embedding_matrix_for_snap(snap: dict) -> tuple[list[int], np.ndarray]: ...
+def scoreable_snapshot(snap: dict, embedder_name: str | None = None) -> tuple[dict, list[int]]: ...
 ```
 
 (`vtscore/embedding/matrix.py`.)
@@ -302,7 +303,27 @@ sidecar - both are reserved for the hot primary path. A name that
 happens to equal the primary collapses back onto the cached path.
 
 An empty dataset returns `([], np.empty((0, 0), dtype=np.float32))`; a
-media missing the requested vector raises `ValueError`.
+media missing the requested vector raises `ValueError`, and one whose
+vector is the wrong width raises `MismatchedVectorError`.
+
+### Skipping what can't be scored
+
+Those raises are right for the dataset's *own* matrix: the load
+pipeline's drop-none stage has already removed vector-less media, so a
+raise there is a real invariant break. They are wrong for an arbitrary
+snapshot handed to the scorer, which carries no such guarantee — the CLI
+scores importer output that never went through that stage, and one bound
+embedder of a multi-embedder dataset can have failed on media another
+succeeded on.
+
+`scoreable_snapshot(snap, embedder_name=None, *, region_rows=False)`
+answers the two questions the builders raise on — is there a vector, and
+is it a 1-D row of the same width as the rest — and returns
+`(scoreable, dropped_ids)`. Scoring paths filter first and score what is
+left, so one unembeddable image costs one skipped item and a log line
+rather than the whole run. Set `region_rows` to key the check on the
+snapshot's patch-slot embedder, which is what the region-row matrix
+reads.
 
 Convert to torch with `torch.from_numpy(matrix)` for a zero-copy
 view. The matrix is contiguous, so it's safe to slice without

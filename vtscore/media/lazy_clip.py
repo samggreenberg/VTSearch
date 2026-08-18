@@ -240,13 +240,10 @@ def _apply_recipe(source_bytes: bytes, recipe: tuple, media: dict[str, Any]) -> 
 
         return _wav_slice(source_bytes, recipe[1], recipe[2])
     if kind == "image":
-        from vtscore.media.image.decode import open_upright  # noqa: PLC0415
+        from PIL import Image  # noqa: PLC0415
 
         box = recipe[1]
-        # Upright decode, matching the clipper that produced the recorded box:
-        # re-cropping the raw sensor bitmap would rebuild a rotated photo's clip
-        # from the wrong region.
-        with open_upright(io.BytesIO(source_bytes)) as img:
+        with Image.open(io.BytesIO(source_bytes)) as img:
             fmt = img.format or "PNG"
             cropped = img.crop(box)
             buf = io.BytesIO()

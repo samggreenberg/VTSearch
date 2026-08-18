@@ -336,6 +336,30 @@ def _score_medias_with_detectors(
     return results
 
 
+def _emit_skipped_medias(skipped: list[int], embedder_name: str = "") -> None:
+    """Tell the user which media were left out of a scoring pass, and why.
+
+    Skipping is the deliberate policy for a media the scorer cannot embed - a
+    corrupt image, an unresolvable thin path, a vector of the wrong width - so
+    one bad file doesn't abort a long run (issue #3179).  Silent skipping would
+    be worse than the crash it replaces, though: the exported hit count would
+    just be quietly short.  So every skip is announced on the CLI's own event
+    stream, where ``--format json`` consumers can see it too.
+    """
+    if not skipped:
+        return
+    cli_progress.emit(
+        "medias_skipped",
+        text=(
+            f"Skipped {len(skipped)} media with no usable embedding under "
+            f"{embedder_name or '(primary)'}: {skipped[:10]}{'…' if len(skipped) > 10 else ''}"
+        ),
+        skipped=len(skipped),
+        skipped_ids=skipped[:100],
+        embedder=embedder_name,
+    )
+
+
 def _score_direct_all(
     det_names: list[str],
     detector_mlps: dict[str, dict[str, Any]],
@@ -350,13 +374,19 @@ def _score_direct_all(
     trained in, shared across the group - so a trio dataset whose primary vector
     differs from that space is scored correctly rather than against each media's
     primary vector; empty *embedder_name* falls back to the primary vector, the
-    single-embedder behaviour.  A media that lacks that vector raises (via
-    ``get_embedding_matrix_for_snap``) rather than silently scoring NaN, and the
+    single-embedder behaviour.  Media with no usable vector in that space are
+    skipped and reported, not fatal (issue #3179): a folder where one image
+    failed to embed should cost that one item, not the whole run.  The
     ``strict=True`` zip guards against an id/score length mismatch (audit M11).
     """
     import torch  # noqa: PLC0415
 
-    from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+    from vtscore.embedding.matrix import get_embedding_matrix_for_snap, scoreable_snapshot  # noqa: PLC0415
+
+    medias, skipped = scoreable_snapshot(medias, embedder_name or None)
+    _emit_skipped_medias(skipped, embedder_name)
+    if not medias:
+        return {}
 
     all_ids, all_embs = get_embedding_matrix_for_snap(medias, embedder_name or None)
     X_all = torch.from_numpy(all_embs)
@@ -405,13 +435,28 @@ def _score_one_detector(
     space), then reduces per-clip scores to one score per source media via
     ``max`` and builds the hit from the *source* media so a video routed through
     ``video2image`` surfaces as a single hit on the video, not one per frame.
+
+    ``route_and_embed`` has already dropped the clips it could not embed, so the
+    filter here catches only the residue it does not check for - a vector whose
+    *width* disagrees with the rest (a stale pre-computed vector from another
+    model).  Same policy either way: skip the item, score the rest.
     """
     import torch  # noqa: PLC0415
 
-    from vtscore.embedding.matrix import get_embedding_matrix_for_snap  # noqa: PLC0415
+    from vtscore.embedding.matrix import get_embedding_matrix_for_snap, scoreable_snapshot  # noqa: PLC0415
 
     mlp = info["mlp"]
     threshold = info["threshold"]
+    scoring_medias, skipped = scoreable_snapshot(scoring_medias, embedder_name or None)
+    _emit_skipped_medias(skipped, embedder_name)
+    if not scoring_medias:
+        return {
+            "detector_name": det_name,
+            "threshold": round(threshold, 4),
+            "total_hits": 0,
+            "hits": [],
+            "negative_hits": [],
+        }
     ids, embs = get_embedding_matrix_for_snap(scoring_medias, embedder_name or None)
     with torch.no_grad():
         X_in = torch.from_numpy(embs).to(next(mlp.parameters()).device)

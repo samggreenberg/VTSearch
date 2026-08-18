@@ -58,7 +58,7 @@ class ImageTilingClipper(MediaClipper):
         return "Tile each image into equidistant square crops along the longer axis."
 
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
-        from vtscore.media.image.decode import open_upright  # noqa: PLC0415
+        from PIL import Image  # noqa: PLC0415
 
         width = media.get("width")
         height = media.get("height")
@@ -73,10 +73,7 @@ class ImageTilingClipper(MediaClipper):
         if width == tile_size and height == tile_size:
             return [media]
 
-        # Upright decode: ``width``/``height`` above are the displayed
-        # dimensions, so tiling a sideways phone photo against the raw sensor
-        # bitmap would slice along the wrong axis.
-        img = open_upright(io.BytesIO(media_bytes))
+        img = Image.open(io.BytesIO(media_bytes))
 
         if width >= height:
             # Landscape: tile along the x-axis.
@@ -157,15 +154,13 @@ class ImageBboxClipper(MediaClipper):
         return self._box
 
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
-        from vtscore.media.image.decode import open_upright  # noqa: PLC0415
+        from PIL import Image  # noqa: PLC0415
 
         media_bytes = media.get("media_bytes")
         if media_bytes is None:
             return [media]
 
-        # Upright decode: the box is in the media's displayed coordinate space
-        # (its stored ``width``/``height``), not the raw sensor bitmap's.
-        img = open_upright(io.BytesIO(media_bytes))
+        img = Image.open(io.BytesIO(media_bytes))
         img_w, img_h = img.size
 
         x1 = max(0, min(self._box[0], img_w))
@@ -344,17 +339,14 @@ class ImageObjectClipper(MediaClipper):
         return (ix1, iy1, ix2, iy2)
 
     def clip(self, media: dict[str, Any]) -> list[dict[str, Any]]:
-        from vtscore.media.image.decode import open_upright  # noqa: PLC0415
+        from PIL import Image  # noqa: PLC0415
 
         media_bytes = media.get("media_bytes")
         if media_bytes is None:
             return [media]
 
-        # Upright decode so detected boxes — and the ``clip_box`` recorded from
-        # them — live in the same space as the media's stored dimensions.
-        with open_upright(io.BytesIO(media_bytes)) as src:
-            fmt = src.format or "PNG"
-            img = src.convert("RGB")
+        img = Image.open(io.BytesIO(media_bytes)).convert("RGB")
+        fmt = Image.open(io.BytesIO(media_bytes)).format or "PNG"
         img_w, img_h = img.size
 
         self._load_model()
