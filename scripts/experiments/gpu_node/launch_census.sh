@@ -84,13 +84,13 @@ mechanism)
   # VTS_MECH_TAG names the run when a node is probed more than once;
   # VTS_MECH_EXPORT injects env (e.g. ATEN_CPU_CAPABILITY=avx2) into the job.
   TAG=""
-  [[ -n "${VTS_MECH_TAG:-}" ]] && TAG="--tag ${VTS_MECH_TAG}"
+  [[ -n "${VTS_MECH_TAG:-}" ]] && TAG="--tag=${VTS_MECH_TAG}"
   EXPORT=""
   [[ -n "${VTS_MECH_EXPORT:-}" ]] && EXPORT="export ${VTS_MECH_EXPORT} && "
   EMB=""
-  [[ -n "${VTS_MECH_EMBEDDER:-}" ]] && EMB="--embedder ${VTS_MECH_EMBEDDER}"
+  [[ -n "${VTS_MECH_EMBEDDER:-}" ]] && EMB="--embedder=${VTS_MECH_EMBEDDER}"
   PIX=""
-  [[ -n "${VTS_MECH_PIXELS:-}" ]] && PIX="--pixels ${VTS_MECH_PIXELS}"
+  [[ -n "${VTS_MECH_PIXELS:-}" ]] && PIX="--pixels=${VTS_MECH_PIXELS}"
   DEP=()
   [[ -n "${VTS_MECH_DEP:-}" ]] && DEP=(--dependency="${VTS_MECH_DEP}")
   for node in "${@:2}"; do
