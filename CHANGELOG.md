@@ -36,6 +36,22 @@ not list every commit. Use `git log` for the full history.
   GUI Find's dozens of hits into zero CLI hits. Both now build their rows
   through the same builder. (#3180)
 
+- **One image that fails to embed no longer aborts a CLI run.** Every CLI
+  scoring path fed the raw media chunk straight to the embedding-matrix
+  builders, which raise on a media with no vector (`ValueError`, from
+  `vtscore/embedding/matrix.py`) or one whose vector is the wrong width
+  (`MismatchedVectorError`, from `vtscore/embedding/precomputed.py`). Those
+  raises are correct for the dataset's own matrix — the load pipeline has
+  already dropped vector-less media by then — but not for a snapshot handed to
+  the scorer, so a single corrupt or undecodable file took the whole run down
+  with it. The scoring paths now filter first and score what is left, matching
+  the drop-and-log policy the load pipeline and converter routing already used,
+  and each skip is announced on the CLI event stream (`medias_skipped`) so a
+  short hit count is never silent. This also fixes
+  `--autodetect --importer …`, which failed on *every* run: the safe-threshold
+  population pass scored the chunk before anything had been embedded, so it hit
+  the same raise on the first media. (#3179)
+
 - **A detector's labelset no longer stores the same media twice.** After one
   pass over a 300-image dataset a detector reported `num_training: 356` — 300
   distinct images, 56 of them held as a duplicate pair. The two halves of the

@@ -320,6 +320,18 @@ A `notification` never ends the run, at any level — including
 `"level": "error"`, which reports something the code continued past. The
 fatal-error record is the separate `error` event.
 
+A media the scorer cannot embed — a corrupt image, an unresolvable thin path, a
+pre-computed vector of the wrong width — is **skipped**, not fatal: one bad file
+must not take a long run down with it. Each skip is reported as a
+`medias_skipped` event carrying the count and the first of the affected ids, so
+a hit count that is short of the file count is never silent:
+
+```bash
+python app.py --autodetect --importer server_folder --path /data/images \
+    --media-type image --settings settings.json --progress-format json \
+  | jq -r 'select(.event == "medias_skipped") | .text'
+```
+
 An exporter can format its results into a URL for a browser to open rather than
 delivering them anywhere (the built-in `open_url` exporter does exactly this).
 There is no browser on the command line, so the URL is printed under the

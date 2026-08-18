@@ -305,8 +305,8 @@ def _score_medias_with_detectors(
     for (target_type, embedder_name, clipper, clipper_params_items), det_names in groups.items():
         if not target_type:
             # Legacy detector with no declared media_type: score every media
-            # directly, one hit per media (raises on a missing embedding). The
-            # matrix is built in the detectors' shared score embedder
+            # directly, one hit per media (media with no usable vector are
+            # skipped and reported). The rows are built in the shared score embedder
             # (``embedder_name`` is part of this group's key, so every detector
             # here trained in it), not each media's primary vector - on a trio
             # dataset those differ. Typed detectors take the routing path below.
@@ -321,8 +321,13 @@ def _score_medias_with_detectors(
         )
         if not scoring_medias:
             continue
-        # One row build per group; every head in the group forwards the same rows.
+        # One row build per group; every head in the group forwards the same
+        # rows, so anything the builder had to skip is announced once here
+        # rather than once per detector.
         rows = scoring_rows_for_snap(scoring_medias, embedder_name or None)
+        _emit_skipped_medias(_skipped_ids(scoring_medias, rows.ids), embedder_name)
+        if not rows.ids:
+            continue
         for det_name in det_names:
             results[det_name] = _score_one_detector(
                 det_name,
@@ -340,6 +345,45 @@ def _score_medias_with_detectors(
     return results
 
 
+def _skipped_ids(snapshot: dict[int, dict[str, Any]], scored_ids: list[int]) -> list[int]:
+    """The ids in *snapshot* that the row builder could not score.
+
+    :func:`~vtscore.detectors.training.scoring_rows_for_snap` drops a media it
+    cannot build a row for and reports the survivors as ``rows.ids``, so the
+    difference between the two *is* the skip list - no second pass over the
+    snapshot, and no way for the reported skips to disagree with what was
+    actually scored.
+    """
+    if len(scored_ids) == len(snapshot):
+        return []
+    scored = set(scored_ids)
+    return [cid for cid in sorted(snapshot) if cid not in scored]
+
+
+def _emit_skipped_medias(skipped: list[int], embedder_name: str = "") -> None:
+    """Tell the user which media were left out of a scoring pass, and why.
+
+    Skipping is the deliberate policy for a media the scorer cannot embed - a
+    corrupt image, an unresolvable thin path, a vector of the wrong width - so
+    one bad file doesn't abort a long run (issue #3179).  Silent skipping would
+    be worse than the crash it replaces, though: the exported hit count would
+    just be quietly short.  So every skip is announced on the CLI's own event
+    stream, where ``--format json`` consumers can see it too.
+    """
+    if not skipped:
+        return
+    cli_progress.emit(
+        "medias_skipped",
+        text=(
+            f"Skipped {len(skipped)} media with no usable embedding under "
+            f"{embedder_name or '(primary)'}: {skipped[:10]}{'…' if len(skipped) > 10 else ''}"
+        ),
+        skipped=len(skipped),
+        skipped_ids=skipped[:100],
+        embedder=embedder_name,
+    )
+
+
 def _score_direct_all(
     det_names: list[str],
     detector_mlps: dict[str, dict[str, Any]],
@@ -354,8 +398,9 @@ def _score_direct_all(
     in, shared across the group - so a trio dataset whose primary vector differs
     from that space is scored correctly rather than against each media's primary
     vector; empty *embedder_name* falls back to the primary vector, the
-    single-embedder behaviour.  A media that lacks that vector raises (via
-    ``scoring_rows_for_snap``) rather than silently scoring NaN, and the
+    single-embedder behaviour.  Media with no usable vector in that space are
+    skipped and reported, not fatal (issue #3179): a folder where one image
+    failed to embed should cost that one item, not the whole run.  The
     ``strict=True`` zip guards against an id/score length mismatch (audit M11).
 
     Scoring goes through :func:`~vtscore.detectors.training.scoring_rows_for_snap`
@@ -365,10 +410,13 @@ def _score_direct_all(
     not the image-level vector alone (issue #3180).  The rows are built once for
     the whole group and re-forwarded per head.
     """
-    from vtscore.detectors.training import scoring_rows_for_snap, score_rows_with_model  # noqa: PLC0415
+    from vtscore.detectors.training import score_rows_with_model, scoring_rows_for_snap  # noqa: PLC0415
 
     rows = scoring_rows_for_snap(medias, embedder_name or None)
     all_ids = rows.ids
+    _emit_skipped_medias(_skipped_ids(medias, all_ids), embedder_name)
+    if not all_ids:
+        return {}
 
     out: dict[str, dict[str, Any]] = {}
     for det_name in det_names:
@@ -416,7 +464,14 @@ def _score_one_detector(
 
     Because the rows come from the shared builder, a patch dataset is scored by
     max-pooling each media's patch rows, exactly as the GUI's Find does and as
-    the threshold this compares against was cut (issue #3180).
+    the threshold this compares against was cut (issue #3180).  That builder is
+    also what drops a clip it cannot score: ``route_and_embed`` has already
+    dropped the ones it could not embed, leaving only the residue it does not
+    check for - a vector whose *width* disagrees with the rest (a stale
+    pre-computed vector from another model).  Same policy either way: skip the
+    item, score the rest (issue #3179).  The caller announces the skips once for
+    the group, since the rows - and therefore the skips - are shared by every
+    head in it.
     """
     from vtscore.detectors.training import score_rows_with_model  # noqa: PLC0415
 

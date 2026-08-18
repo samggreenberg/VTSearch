@@ -26,6 +26,15 @@ described as logical-bug-audit M11.  On numpy 2.x
 propagates through every downstream consumer (always-False threshold
 compares, NaN-poisoned sort, JSON ``NaN`` in the response).  Raising
 turns that into a loud, locatable failure naming the offending cid.
+
+That strictness is right for the *dataset's own* matrix, where the load
+pipeline's ``_drop_none_embeddings_stage`` has already removed vector-less
+media, but wrong for an arbitrary snapshot handed to the scorer: the CLI
+scores importer output that never went through that stage, and one bound
+embedder of a multi-embedder dataset can legitimately have failed on media
+another succeeded on.  :func:`scoreable_snapshot` is what those callers use to
+skip the unusable items *before* the build, so a single failed image costs one
+skipped item and a log line instead of the whole run.
 """
 
 from __future__ import annotations
@@ -81,6 +90,74 @@ def _require_embedding(cid: int, media: dict[str, Any], embedder_name: str | Non
             "This usually means an importer or re-embed step silently failed."
         )
     return emb
+
+
+def _row_width(vec: Any) -> int | None:
+    """Return *vec*'s width when it is a 1-D row, else ``None``.
+
+    Cheap by design (one ``.shape`` read, no copy): this is the per-media test
+    :func:`scoreable_snapshot` runs over a whole dataset, so it must not touch
+    the vector's contents.  A ``None``, a scalar, or a 2-D block all answer
+    ``None`` - none of them can be assigned into a matrix row.
+    """
+    if vec is None:
+        return None
+    shape = getattr(vec, "shape", None)
+    if shape is None:
+        try:
+            shape = np.shape(vec)
+        except Exception:
+            return None
+    return int(shape[0]) if len(shape) == 1 else None
+
+
+def scoreable_snapshot(
+    snap: dict[int, dict[str, Any]],
+    embedder_name: str | None = None,
+    *,
+    region_rows: bool = False,
+) -> tuple[dict[int, dict[str, Any]], list[int]]:
+    """Split *snap* into the media that can be scored and the ids that cannot.
+
+    Returns ``(scoreable, dropped_ids)``.  A media is scoreable when it carries
+    a vector under *embedder_name* (its primary when unnamed) **and** that
+    vector is a 1-D row whose width matches the first scoreable media's - the
+    two conditions the matrix builder enforces by raising, via
+    :func:`_require_embedding` and :func:`require_dim` respectively.
+
+    Filtering *before* the build is what turns "one image failed to embed" from
+    an aborted run into a skipped item.  The builders stay strict on purpose:
+    on the app's own dataset the load pipeline's ``_drop_none_embeddings_stage``
+    has already removed vector-less media, so a raise there is a real invariant
+    break worth hearing about.  A *snapshot* handed to the scorer carries no
+    such guarantee - the CLI scores importer output that was never run through
+    that stage, and a multi-embedder dataset can legitimately hold media that
+    one bound embedder failed on while another succeeded - so the scoring paths
+    filter first and score what is left, mirroring the drop-and-log policy of
+    ``_drop_none_embeddings_stage`` and
+    :func:`~vtscore.detectors.converter_routing.route_and_embed`.
+
+    With *region_rows* set the check is run against the snapshot's **patch-slot**
+    embedder instead, matching what :func:`_build_region_arrays` reads for the
+    image-level row of every media in a region-row matrix.
+    """
+    key = _patch_embedder_for_region_snap(snap) if region_rows else _collapse_to_primary(snap, embedder_name)
+    scoreable: dict[int, dict[str, Any]] = {}
+    dropped: list[int] = []
+    width: int | None = None
+    for cid in sorted(snap.keys()):
+        media = snap[cid]
+        row_width = _row_width(media_embedding(media, key))
+        if row_width is None:
+            dropped.append(cid)
+            continue
+        if width is None:
+            width = row_width
+        if row_width != width:
+            dropped.append(cid)
+            continue
+        scoreable[cid] = media
+    return scoreable, dropped
 
 
 def _vector_label(cid: int, media: dict[str, Any], embedder_name: str | None) -> str:
