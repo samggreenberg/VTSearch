@@ -240,15 +240,20 @@ def main() -> int:
     for v in verdicts:
         by[(v["stratum"], f"{v['reference']}->{v['human']}")] += 1
 
-    # The calibration: on images COCO already settled, a disagreement is the
-    # reviewer's error, not a correction. Reported separately -- folding it into
-    # the correction counts would let annotator noise masquerade as label noise.
+    # The calibration: pairs where COCO has already looked. A disagreement here
+    # is NOT "the reviewer was wrong" -- it is reviewer error, COCO error, and
+    # definition drift summed together, and nothing in this data separates them.
+    # COCO is measurably better than VG (recall 0.61 vs COCO over C) but it is
+    # not a gold standard: the same review already found images COCO annotates
+    # as empty that plainly hold the object. Report it as disagreement, and
+    # leave the decomposition to a third opinion on the disagreeing pairs.
     cal = [v for v in verdicts if v["exhaustive"] == "yes"]
     if cal:
         wrong = sum(1 for v in cal if v["human"] != v["reference"])
         print(
-            f"\ncalibration: {len(cal)} pairs with an exhaustive reference, {wrong} disagreements "
-            f"({wrong / len(cal):.3f}) -- reviewer error rate, not label noise"
+            f"\ncalibration: {len(cal)} pairs COCO has settled, {wrong} DISAGREEMENTS "
+            f"({wrong / len(cal):.3f}) -- reviewer error + COCO error + definition drift, "
+            f"not attributable without adjudication"
         )
 
     print(f"\n{len(verdicts)} verdicts\n")
