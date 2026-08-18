@@ -47,22 +47,26 @@ case "${1:-status}" in
 submit)
   n=0
   ONLY="${*:2}"
+  CTAG=""
+  [[ -n "${VTS_CENSUS_TAG:-}" ]] && CTAG="--tag=${VTS_CENSUS_TAG}"
+  CEXPORT=""
+  [[ -n "${VTS_CENSUS_EXPORT:-}" ]] && CEXPORT="export ${VTS_CENSUS_EXPORT} && "
   for type in $TYPES; do
     while read -r node state; do
       if [[ -n "$ONLY" ]] && [[ " $ONLY " != *" $node "* ]]; then continue; fi
       case "$state" in
         *drain*|*down*|*maint*|*resv*) echo "skip $node ($state)"; continue ;;
       esac
-      out="$CENSUS/$node"
+      out="$CENSUS/$node${VTS_CENSUS_TAG:-}"
       if [[ -f "$out/device.json" ]] && [[ -z "${VTS_FORCE:-}" ]]; then
         echo "have $node already (VTS_FORCE=1 to redo)"; continue
       fi
       jid=$(sbatch --parsable \
-        --job-name="census-$node" \
+        --job-name="census-$node${VTS_CENSUS_TAG:-}" \
         --partition=gpu --nodelist="$node" --gres="gpu:$type:1" \
         --cpus-per-task=4 --mem=24G --time=1:00:00 \
         --output="$LOGS/census-$node-%j.out" \
-        --wrap "bash -lc '$ENVSET && cd $HERE && python probe_device.py --out $CENSUS --images $IMAGES'")
+        --wrap "bash -lc '$ENVSET && ${CEXPORT}cd $HERE && python probe_device.py --out $CENSUS --images $IMAGES $CTAG'")
       if ! [[ "$jid" =~ ^[0-9]+$ ]]; then
         echo "FAILED to submit $node (empty job id) -- NOT LAUNCHED" >&2; exit 1
       fi

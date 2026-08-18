@@ -70,6 +70,13 @@ def device_info() -> dict:
         "torch": torch.__version__,
         "cuda_runtime": getattr(torch.version, "cuda", None),
         "cudnn_version": torch.backends.cudnn.version(),
+        # The host half: #3160 resolved to CPU kernel dispatch in the image
+        # resize, not to the card, so the CPU and its dispatch mode belong in
+        # any record that claims to say whether two runs are comparable.
+        "cpu": _cpu_model(),
+        "aten_cpu_capability": os.environ.get("ATEN_CPU_CAPABILITY"),
+        "transformers": _version("transformers"),
+        "torchvision": _version("torchvision"),
     }
     if not torch.cuda.is_available():
         info["error"] = "no CUDA device visible"
@@ -90,6 +97,23 @@ def device_info() -> dict:
         }
     )
     return info
+
+
+def _cpu_model() -> str | None:
+    try:
+        for line in Path("/proc/cpuinfo").read_text().splitlines():
+            if line.startswith("model name"):
+                return line.split(":", 1)[1].strip()
+    except OSError:
+        pass
+    return None
+
+
+def _version(mod: str) -> str | None:
+    try:
+        return __import__(mod).__version__
+    except Exception:  # noqa: BLE001 -- a missing optional dep is a fact, not a crash
+        return None
 
 
 def _driver_version() -> str | None:
@@ -178,10 +202,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", required=True, help="census root; results land in <out>/<hostname>/")
     ap.add_argument("--images", type=int, default=256)
     ap.add_argument("--embedders", default="siglip,siglip2_l")
+    ap.add_argument(
+        "--tag", default="", help="suffix on the output dir, for a second run of one node under different env"
+    )
     args = ap.parse_args(argv)
 
     node = socket.gethostname()
-    out_dir = Path(args.out) / node
+    out_dir = Path(args.out) / f"{node}{args.tag}"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     info = device_info()
