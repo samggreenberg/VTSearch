@@ -65,6 +65,47 @@ def _stamp(tensor) -> dict:
     }
 
 
+def host_record() -> dict:
+    """The *host* half of the provenance, which v1 of this probe did not take.
+
+    v1 assumed the pixels entering the tower were a constant and only varied the
+    device. They are not: `rack5n03` preprocesses the same JPEGs into a different
+    tensor than `rack7n03` and the L40S, which agree exactly. So the CPU, the
+    thread counts and the preprocessing stack are part of the measurement.
+    """
+    import platform
+
+    import torch
+
+    cpu = None
+    try:
+        for line in Path("/proc/cpuinfo").read_text().splitlines():
+            if line.startswith("model name"):
+                cpu = line.split(":", 1)[1].strip()
+                break
+    except OSError:
+        pass
+
+    def _version(mod: str) -> str | None:
+        try:
+            return __import__(mod).__version__
+        except Exception:  # noqa: BLE001 -- a missing optional dep is a fact, not a crash
+            return None
+
+    return {
+        "cpu": cpu,
+        "cpu_count": os.cpu_count(),
+        "platform": platform.platform(),
+        "torch_num_threads": torch.get_num_threads(),
+        "torch_num_interop_threads": torch.get_num_interop_threads(),
+        "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
+        "vtsearch_torch_threads": os.environ.get("VTSEARCH_TORCH_THREADS"),
+        "transformers": _version("transformers"),
+        "torchvision": _version("torchvision"),
+        "PIL": _version("PIL"),
+    }
+
+
 def _images(n: int) -> list[Path]:
     files = sorted((VG_SOURCE / "VG_100K").glob("*.jpg"), key=lambda p: int(p.stem))
     if not files:
@@ -72,15 +113,32 @@ def _images(n: int) -> list[Path]:
     return files[:n]
 
 
-def _inputs(images: list[Path], emb):
-    """The shipped preprocessing path, so what enters the tower is what a build feeds it."""
+def _preprocess(images: list[Path], emb):
+    """The shipped preprocessing path, **before** anything is moved to the GPU.
+
+    Returned on the CPU on purpose: the question v2 exists to answer is whether
+    two nodes already disagree here, which a tensor stamped after the device move
+    cannot distinguish from a disagreement introduced by the move.
+    """
     from PIL import Image
 
+    pil = [Image.open(p).convert("RGB") for p in images]
+    return emb._processor(images=pil, return_tensors="pt")  # noqa: SLF001 -- a probe
+
+
+def _to_device(inputs, emb):
     from vtscore.media.embedder import to_model_inputs
 
-    pil = [Image.open(p).convert("RGB") for p in images]
-    inputs = emb._processor(images=pil, return_tensors="pt")  # noqa: SLF001 -- a probe
     return to_model_inputs(inputs, emb._model)  # noqa: SLF001
+
+
+def _processor_classes(emb) -> dict:
+    proc = getattr(emb, "_processor", None)
+    image_proc = getattr(proc, "image_processor", None)
+    return {
+        "processor_class": type(proc).__name__ if proc is not None else None,
+        "image_processor_class": type(image_proc).__name__ if image_proc is not None else None,
+    }
 
 
 def _encoder_layers(model):
@@ -142,8 +200,17 @@ def tower_layers(emb, inputs, backend: str | None) -> dict:
         for h in handles:
             h.remove()
 
-    tensor = out[0] if isinstance(out, tuple) else out
-    return {"block_path": path, "n_layers": len(layers), "layers": captured, "image_features": _stamp(tensor)}
+    # `get_image_features` returns a model-output object on this transformers
+    # version, not a bare tensor; v1 stamped it directly, threw inside the
+    # per-backend loop, and lost every layer it had just captured.
+    from vtscore.media.embedder import extract_tensor
+
+    return {
+        "block_path": path,
+        "n_layers": len(layers),
+        "layers": captured,
+        "image_features": _stamp(extract_tensor(out)),
+    }
 
 
 def gemm_shapes() -> dict:
@@ -164,8 +231,14 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", required=True)
     ap.add_argument("--images", type=int, default=8)
     ap.add_argument("--embedder", default="siglip2_l")
+    ap.add_argument(
+        "--pixels",
+        default="",
+        help="a pixels.npy written by another node: run the forward on ITS tensor as well as this node's own",
+    )
     args = ap.parse_args(argv)
 
+    import numpy as np
     import torch
 
     from vtscore.embedding import initialize_models
@@ -188,25 +261,47 @@ def main(argv: list[str] | None = None) -> int:
         "gpu_capability": "sm_%d%d" % torch.cuda.get_device_capability(0),
         "multi_processor_count": props.multi_processor_count,
         "torch": torch.__version__,
+        "host": host_record(),
+        "preprocessing": _processor_classes(emb),
         "gemm": gemm_shapes(),
     }
-    log(f"{node}: {record['gpu_name']} ({record['multi_processor_count']} SMs)")
+    log(f"{node}: {record['gpu_name']} ({record['multi_processor_count']} SMs) on {record['host']['cpu']}")
 
     images = _images(args.images)
-    inputs = _inputs(images, emb)
+    own = _preprocess(images, emb)
+    px = own["pixel_values"]
+    np.save(out_dir / "pixels.npy", px.numpy())
     record["input"] = {
         "images": [p.name for p in images],
-        "tensors": {k: _stamp(v) for k, v in inputs.items() if hasattr(v, "detach")},
+        "own_cpu": {k: _stamp(v) for k, v in own.items() if hasattr(v, "detach")},
     }
 
-    for backend in (None, "math", "efficient", "flash", "cudnn"):
-        key = backend or "default"
-        try:
-            record.setdefault("backends", {})[key] = tower_layers(emb, inputs, backend)
-            log(f"  backend {key}: ok")
-        except Exception as exc:  # noqa: BLE001 -- an unsupported backend is a result, not a crash
-            record.setdefault("backends", {})[key] = {"error": repr(exc)[:200]}
-            log(f"  backend {key}: unavailable ({exc!r:.80})")
+    runs = [("own", own)]
+    if args.pixels:
+        # The decisive arm: the *reference node's* pixels, run through this
+        # node's GPU. If the features then match the reference, every bit of the
+        # divergence entered before the GPU did and the card is innocent.
+        ref_px = torch.from_numpy(np.load(args.pixels))
+        supplied = dict(own)
+        supplied["pixel_values"] = ref_px
+        record["input"]["reference_cpu"] = _stamp(ref_px)
+        record["input"]["reference_path"] = args.pixels
+        record["input"]["reference_matches_own"] = bool(torch.equal(ref_px, px))
+        log(
+            f"  reference pixels {'MATCH' if record['input']['reference_matches_own'] else 'DIFFER FROM'} this node's own"
+        )
+        runs.append(("reference_pixels", supplied))
+
+    for label, inputs in runs:
+        moved = _to_device(inputs, emb)
+        for backend in (None, "math", "efficient", "flash", "cudnn"):
+            key = backend or "default"
+            try:
+                record.setdefault(label, {})[key] = tower_layers(emb, moved, backend)
+                log(f"  {label}/{key}: ok")
+            except Exception as exc:  # noqa: BLE001 -- an unsupported backend is a result, not a crash
+                record.setdefault(label, {})[key] = {"error": repr(exc)[:200]}
+                log(f"  {label}/{key}: unavailable ({exc!r:.80})")
 
     (out_dir / "mechanism.json").write_text(json.dumps(record, indent=2) + "\n")
     log(f"wrote {out_dir / 'mechanism.json'}")
