@@ -67,12 +67,6 @@ def main(argv: list[str] | None = None) -> int:
             f"  {node:<10} {r['gpu_name']:<26} {r['gpu_capability']}  {r['multi_processor_count']} SMs  torch {r['torch']}"
         )
 
-    log("\n=== input tensors (must be identical, or nothing below means anything) ===")
-    for node, r in sorted(recs.items()):
-        for key, st in (r.get("input", {}).get("tensors") or {}).items():
-            same = st["sha256"] == ref["input"]["tensors"][key]["sha256"]
-            log(f"  {node:<10} {key:<20} {st['sha256']}  {'same as reference' if same else 'DIFFERS FROM REFERENCE'}")
-
     log(f"\n=== bare ops vs {args.reference} ===")
     for shape in sorted(ref.get("gemm", {})):
         line = [f"  {shape:<20}"]
@@ -86,29 +80,52 @@ def main(argv: list[str] | None = None) -> int:
             line.append(f"{node}: {mark}")
         log("  ".join(line))
 
+    log("\n=== preprocessing (does the same JPEG become the same tensor?) ===")
+    ref_px = ref["input"]["own_cpu"]["pixel_values"]
+    for node, r in sorted(recs.items()):
+        host = r.get("host", {})
+        px = r["input"]["own_cpu"]["pixel_values"]
+        same = px["sha256"] == ref_px["sha256"]
+        log(
+            f"  {node:<10} {'IDENTICAL' if same else 'DIFFERS'}  rel {sig(rel(ref_px['proj'], px['proj'])):<10} "
+            f"absmax {px['absmax']:.6g}  {r.get('preprocessing', {}).get('image_processor_class')}  "
+            f"transformers {host.get('transformers')}  threads {host.get('torch_num_threads')}"
+        )
+        log(f"             cpu: {host.get('cpu')}")
+
     rows = []
     for node, r in sorted(recs.items()):
         if node == args.reference:
             continue
         log(f"\n=== {node} vs {args.reference} ===")
-        for backend in sorted(set(ref.get("backends", {})) & set(r.get("backends", {}))):
-            a, b = ref["backends"][backend], r["backends"][backend]
-            if "error" in a or "error" in b:
-                log(f"  {backend:<10} unavailable on one side ({a.get('error') or b.get('error')})"[:110])
+        for label in ("own", "reference_pixels"):
+            if label not in r:
                 continue
-            layers = sorted(set(a["layers"]) & set(b["layers"]), key=int)
-            first = next((i for i in layers if a["layers"][i]["sha256"] != b["layers"][i]["sha256"]), None)
-            feats_same = a["image_features"]["sha256"] == b["image_features"]["sha256"]
-            profile = [(int(i), rel(a["layers"][i]["proj"], b["layers"][i]["proj"])) for i in layers]
-            rows.extend({"node": node, "backend": backend, "layer": i, "rel_l2": v} for i, v in profile)
-            shape = "identical" if first is None else f"first differing block = {first} of {len(layers)}"
-            log(
-                f"  {backend:<10} {shape:<34} image_features {'IDENTICAL' if feats_same else 'differ'} "
-                f"(rel {sig(rel(a['image_features']['proj'], b['image_features']['proj']))})"
-            )
-            steps = " ".join(f"{i}:{sig(v)}" for i, v in profile[: min(len(profile), 8)])
-            log(f"             blocks 0-7 rel L2: {steps}")
-            log(f"             last block rel L2: {sig(profile[-1][1])}")
+            # The reference node ran only its own pixels, and its own pixels ARE
+            # the reference tensor -- so both of this node's runs are compared
+            # against the same reference forward.
+            a_all, b_all = ref.get("own", {}), r[label]
+            note = "this node's own pixels" if label == "own" else "the REFERENCE node's pixels"
+            log(f"  -- {label}: {note}")
+            for backend in sorted(set(a_all) & set(b_all)):
+                a, b = a_all[backend], b_all[backend]
+                if "error" in a or "error" in b:
+                    log(f"     {backend:<10} unavailable ({(a.get('error') or b.get('error'))[:70]})")
+                    continue
+                layers = sorted(set(a["layers"]) & set(b["layers"]), key=int)
+                first = next((i for i in layers if a["layers"][i]["sha256"] != b["layers"][i]["sha256"]), None)
+                feats_same = a["image_features"]["sha256"] == b["image_features"]["sha256"]
+                profile = [(int(i), rel(a["layers"][i]["proj"], b["layers"][i]["proj"])) for i in layers]
+                rows.extend(
+                    {"node": node, "pixels": label, "backend": backend, "layer": i, "rel_l2": v} for i, v in profile
+                )
+                shape = "every block identical" if first is None else f"first differing block {first}/{len(layers)}"
+                log(
+                    f"     {backend:<10} {shape:<28} features {'IDENTICAL' if feats_same else 'differ'} "
+                    f"(rel {sig(rel(a['image_features']['proj'], b['image_features']['proj']))})"
+                )
+                head = " ".join(f"{i}:{sig(v)}" for i, v in profile[:6])
+                log(f"                blocks 0-5 rel L2: {head}   last: {sig(profile[-1][1])}")
 
     if args.csv and rows:
         import csv
