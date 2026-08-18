@@ -198,13 +198,19 @@ class TestImageEdgeTrimCleaner:
         media = _image_media(_padded(400, 400, (4, 4, 396, 396), (255, 255, 255), (30, 30, 200)))
         assert get_cleaner("image_edge_trim").clean(media) is media
 
-    def test_crop_preserves_an_unbaked_exif_orientation(self):
-        """Trimming must not silently un-rotate a photo.
+    def test_trims_the_margins_the_viewer_sees_not_the_sensor_ones(self):
+        """A rotated photo is trimmed in *display* space.
 
-        ``image_edge_trim`` can run with ``image_exif_orient`` switched off, in
-        which case the payload still carries an orientation tag that viewers
-        honour.  Dropping it during the re-encode would leave the trimmed copy
-        displayed sideways.
+        The stored bitmap here has a black letterbox above and below a red band,
+        but its EXIF orientation says to rotate 90 degrees — so what anyone
+        actually sees is a *pillarbox*, black to the left and right.  Trimming
+        the sensor bitmap would shave the wrong two edges and leave the visible
+        bars untouched, and would also report dimensions transposed from the
+        media's stored ``width``/``height``.
+
+        The re-encoded copy must not carry the orientation tag onward either:
+        the pixels are upright now, so a viewer honouring the tag would rotate
+        an already-rotated image a second time.
         """
         img = _padded(400, 400, (0, 100, 400, 300), (0, 0, 0), (200, 30, 30))
         exif = Image.Exif()
@@ -215,8 +221,14 @@ class TestImageEdgeTrimCleaner:
 
         out = get_cleaner("image_edge_trim").clean(media)
         assert out is not media
+        # Upright, the 400x200 content band stands on end: the *horizontal*
+        # axis is the one that loses its bars.  (JPEG ringing smears the
+        # boundary a few pixels, so the width is checked as a band.)
+        assert out["height"] == 400
+        assert 190 <= out["width"] <= 215
         with Image.open(io.BytesIO(out["media_bytes"])) as trimmed:
-            assert trimmed.getexif().get(274) == 6
+            assert trimmed.size == (out["width"], out["height"])
+            assert trimmed.getexif().get(274) is None
 
 
 class TestEdgeTrimIsSharedWithThumbnails:

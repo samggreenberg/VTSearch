@@ -135,7 +135,7 @@ class ImageMediaType(MediaType):
     # ------------------------------------------------------------------
 
     def load_media_data(self, file_path: Path, media_bytes: bytes | None = None) -> dict:
-        from vtscore.media.image.decode import open_image  # noqa: PLC0415
+        from vtscore.media.image.decode import upright_size  # noqa: PLC0415
         from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
 
         if media_bytes is None:
@@ -144,10 +144,11 @@ class ImageMediaType(MediaType):
         try:
             # Header-only read, and the bomb ceiling is lifted, so an enormous
             # source reports its true dimensions instead of being refused.
-            # These stay *native* size: the stored bytes are the untouched
-            # original, and crop/clip boxes are expressed against them.
-            with open_image(media_bytes) as img:
-                width, height = img.width, img.height
+            # These are the *displayed* dimensions: the stored bytes are the
+            # untouched original, but every decode applies EXIF orientation, so
+            # a portrait photo shot sideways must report portrait here or the
+            # crop/clip boxes expressed against these numbers land rotated.
+            width, height = upright_size(media_bytes)
         except Exception:
             width, height = None, None
         # Precompute the grid/list thumbnail at ingest so the request path
@@ -175,7 +176,7 @@ class ImageMediaType(MediaType):
         thumb = media.get("thumbnail_bytes")
         if thumb:
             return thumb
-        from vtscore.media.image.decode import open_image  # noqa: PLC0415
+        from vtscore.media.image.decode import upright_size  # noqa: PLC0415
         from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
 
         data = self._resolve_media_bytes(media)
@@ -184,9 +185,8 @@ class ImageMediaType(MediaType):
         if media.get("width") is None or media.get("height") is None:
             try:
                 # Header-only read with the bomb ceiling lifted, mirroring
-                # load_media_data: dimensions stay native size.
-                with open_image(data) as img:
-                    media["width"], media["height"] = img.width, img.height
+                # load_media_data: dimensions are EXIF-upright.
+                media["width"], media["height"] = upright_size(data)
             except Exception:
                 pass
         result = make_image_thumbnail(data)

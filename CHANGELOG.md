@@ -17,6 +17,24 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **Rotated photos are no longer processed sideways.** A JPEG carrying an EXIF
+  orientation tag — the ordinary output of a phone camera, which stores the
+  sensor frame plus "rotate me" rather than rotating pixels — reached the
+  embedder, OCR, face detection and every crop path 90/180/270 degrees from the
+  way the browser (and every other photo viewer) displays it. Nothing errored;
+  the picture was simply the wrong way up in a space nobody looks at directly,
+  so a sideways photo embedded as a sideways photo and landed in the wrong part
+  of the vector space. Orientation is now applied once, in the image decode
+  layer, so every consumer sees the same upright pixels; a media's stored
+  `width`/`height` are the displayed dimensions to match, and cropping, lazy
+  clip resolution and cross-dataset origin resolution decode upright so a box
+  drawn on screen cuts the region the user drew. The `image_exif_orient`
+  cleaner still exists for anyone who wants the rotation baked into the *stored
+  bytes* (for tools outside VTSearch that ignore EXIF), but it is now off by
+  default: it costs a lossy re-encode and no longer changes anything VTSearch
+  itself sees. Images already imported keep the dimensions and embeddings they
+  were ingested with; re-import a rotated corpus to pick up the fix. (#3172)
+
 - **A detector's labelset no longer stores the same media twice.** After one
   pass over a 300-image dataset a detector reported `num_training: 356` — 300
   distinct images, 56 of them held as a duplicate pair. The two halves of the
