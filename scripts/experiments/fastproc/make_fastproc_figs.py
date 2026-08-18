@@ -199,9 +199,25 @@ def fig_pixel_vs_vector(results: Path, outdir: Path, svg: bool) -> None:
     # One 8-bit level: the quantum both a backend change and a CPU-dispatch
     # change produce, so it is the natural unit for the x axis (#3160).
     ax.axvline(2 / 255, color="#c53030", ls="--", lw=1)
-    ax.text(2 / 255, ax.get_ylim()[1], " one 8-bit level (2/255)", color="#c53030", fontsize=7, va="top", rotation=90)
     ax.set_xscale("log")
     ax.set_yscale("log")
+    # Widen BEFORE annotating: three of the four arms sit at exactly one 8-bit
+    # level, so the default limits pin them against the spine and the label
+    # lands on top of a data label.  That crowding is itself the finding --
+    # identical input perturbation, three orders of magnitude of output drift --
+    # so the axis has to leave room to show it rather than hide it.
+    lo, hi = ax.get_xlim()
+    ax.set_xlim(lo * 0.45, hi * 1.6)
+    ax.text(
+        2 / 255 * 0.88,
+        ax.get_ylim()[0],
+        "one 8-bit level (2/255)",
+        color="#c53030",
+        fontsize=7,
+        va="bottom",
+        ha="right",
+        rotation=90,
+    )
     ax.set_xlabel("perturbation at the input (max |Δpixel| in the median image)")
     ax.set_ylabel("perturbation at the output (median 1 − cos)")
     ax.set_title(
