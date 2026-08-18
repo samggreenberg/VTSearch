@@ -37,6 +37,7 @@ import matplotlib  # noqa: E402
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+from matplotlib.patches import Patch  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
@@ -106,6 +107,9 @@ def fig_cost_speedup(results: Path, outdir: Path, svg: bool) -> None:
         for x, m in zip(xs, meds):
             ax.text(x, m, f"{base / m:.2f}x", ha="center", va="bottom", fontsize=8)
     fig.suptitle("End-to-end embed cost — bars are median ± SE, dots are individual reps", fontsize=10)
+    # tight_layout AFTER suptitle, with a reserved top band: the default leaves
+    # the per-axes titles overlapping it.
+    fig.tight_layout(rect=(0, 0, 1, 0.90))
     save(fig, outdir, "cost_speedup", svg)
 
 
@@ -235,7 +239,17 @@ def fig_topk_and_top1(results: Path, outdir: Path, svg: bool) -> None:
         ax.axhline(100, color="#999", ls=":", lw=1)
         ax.set_ylabel("% of categories")
         ax.set_title(f"{source}", fontsize=9)
-        ax.legend(fontsize=6.5, loc="lower left")
+        # Neutral swatches: bar COLOUR encodes the arm, bar SHADE encodes the
+        # metric, so a legend drawn in one arm's colour would assert a mapping
+        # that is not there.
+        ax.legend(
+            handles=[
+                Patch(facecolor="#4a5568", label="top-1 unchanged"),
+                Patch(facecolor="#4a5568", alpha=0.45, label="top-10 overlap"),
+            ],
+            fontsize=6.5,
+            loc="lower left",
+        )
     fig.suptitle(
         "What a user would notice — solid = the first result is unchanged, faded = top-10 overlap\n"
         "y axis starts at 90%: every arm is high, and the gaps are what matter",
