@@ -147,11 +147,16 @@ def fig_cost_breakdown(results: Path, outdir: Path, svg: bool) -> None:
         ax.barh(i, cell_s, color="#e2e8f0", label="rest of the pile cell" if i == 0 else None)
         ax.barh(i, embed_s, color="#90cdf4", label="embed path (decode+processor+forward)" if i == 0 else None)
         ax.barh(i, proc_s, color="#2b6cb0", label="image processor alone" if i == 0 else None)
+        # Anchored to the axis, not to the bar end: anchoring to the bar put the
+        # short bar's label inside the plot and the long bar's outside it, which
+        # reads as two different kinds of annotation for the same quantity.
         ax.text(
-            cell_s,
+            0.99,
             i,
-            f"  processor = {proc_s / cell_s * 100:.0f}% of the cell, {proc_s / embed_s * 100:.0f}% of the embed path",
+            f"processor = {proc_s / cell_s * 100:.0f}% of the cell, {proc_s / embed_s * 100:.0f}% of the embed path  ",
+            transform=ax.get_yaxis_transform(),
             va="center",
+            ha="right",
             fontsize=8,
         )
     ax.set_yticks(range(len(labels)), labels)
