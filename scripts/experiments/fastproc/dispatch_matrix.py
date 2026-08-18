@@ -135,21 +135,32 @@ def compare(outdir: Path) -> int:
     for emb, variants in sorted(by_emb.items()):
         names = sorted(variants)
         mats = {k: np.load(v) for k, v in variants.items()}
-        log(f"\n=== {emb}: pairwise max |delta pixel| ===")
+        log(f"\n=== {emb}: pairwise pixel disagreement ===")
         log("One 8-bit level is 2/255 = 7.8e-03; that is the magnitude BOTH the backend")
         log("change and the AVX-512/AVX2 dispatch change produce, which is why they can")
         log("only be told apart in a matrix like this one.")
+        # MAX ABS SATURATES and is the wrong headline here.  Resampling
+        # disagreements are quantised to whole 8-bit levels, so on a 384px model
+        # *every* pair -- backend, dispatch, device -- comes out at exactly
+        # 7.8e-03, and a matrix of identical numbers reads as "these are all the
+        # same effect" when it in fact means "this statistic cannot see the
+        # difference".  The separating quantity is how MANY elements differ, so
+        # that is the matrix, with max kept underneath for scale.
         w = max(len(n) for n in names) + 1
+        log("  % of elements that differ (max |delta| beneath):")
         log(" " * w + " ".join(f"{n:>22s}" for n in names))
         for a in names:
-            cells = []
+            cells, maxes = [], []
             for b in names:
                 if mats[a].shape != mats[b].shape:
                     cells.append(f"{'shape!':>22s}")
+                    maxes.append(f"{'':>22s}")
                     continue
-                d = float(np.abs(mats[a] - mats[b]).max())
-                cells.append(f"{sig2(d):>22s}")
+                d = np.abs(mats[a] - mats[b])
+                cells.append(f"{float((d > 0).mean()) * 100:21.2f}%")
+                maxes.append(f"{sig2(float(d.max())):>22s}")
             log(f"{a:{w}s}" + " ".join(cells))
+            log(" " * w + " ".join(maxes))
 
         # The question the matrix exists to answer, stated as a comparison
         # rather than left for the reader to compute.
@@ -157,24 +168,31 @@ def compare(outdir: Path) -> int:
         tv2 = mats.get("torchvision_cpu@avx2")
         pil512 = mats.get("pil_cpu@avx512")
         pil2 = mats.get("pil_cpu@avx2")
+
+        def frac(a, b):
+            return float((np.abs(a - b) > 0).mean())
+
         if tv512 is not None and tv2 is not None:
-            d = float(np.abs(tv512 - tv2).max())
+            f = frac(tv512, tv2)
             log(
-                f"\n  torchvision moves with dispatch: max {sig2(d)}"
-                + ("  (dispatch-invariant at this resolution)" if d == 0 else "")
+                f"\n  torchvision moves with dispatch: {f * 100:.2f}% of elements"
+                + ("  (dispatch-invariant at this resolution)" if f == 0 else "")
             )
         if pil512 is not None and pil2 is not None:
-            d = float(np.abs(pil512 - pil2).max())
+            f = frac(pil512, pil2)
             log(
-                f"  PIL moves with dispatch:         max {sig2(d)}"
-                + ("  (as predicted — PIL is not an ATen kernel)" if d == 0 else "  ** UNEXPECTED **")
+                f"  PIL moves with dispatch:         {f * 100:.2f}% of elements"
+                + ("  (as predicted - PIL is not an ATen kernel)" if f == 0 else "  ** UNEXPECTED **")
             )
         if tv512 is not None and tv2 is not None and pil512 is not None:
-            near_512 = float(np.abs(pil512 - tv512).max())
-            near_2 = float(np.abs(pil512 - tv2).max())
-            log(f"  PIL vs torchvision@avx512: {sig2(near_512)}")
-            log(f"  PIL vs torchvision@avx2:   {sig2(near_2)}")
-            if near_2 < near_512 * 0.5:
+            near_512, near_2 = frac(pil512, tv512), frac(pil512, tv2)
+            log(f"  PIL vs torchvision@avx512: {near_512 * 100:.2f}% of elements")
+            log(f"  PIL vs torchvision@avx2:   {near_2 * 100:.2f}% of elements")
+            if near_512 == 0 or near_2 == 0:
+                log("  => one of these is EXACT: the backend and dispatch axes are the same")
+                log("     axis at this resolution. Re-quote the backend numbers against a")
+                log("     dispatch-pinned reference.")
+            elif near_2 < near_512 * 0.5:
                 log("  => PIL sits CLOSER to torchvision under AVX2: part of what this study")
                 log("     calls a backend difference is a dispatch difference. Re-quote the")
                 log("     backend numbers against a dispatch-pinned reference.")
