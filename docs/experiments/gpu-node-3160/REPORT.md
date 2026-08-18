@@ -48,7 +48,7 @@ Four measurements, in the order they narrow the question.
 
 | # | what | scale |
 |---|---|---|
-| 1 | **Census** — every GPU node the picker can hand out embeds the same fixed 256 VG images | 20 nodes (h100/h200 excluded: the `4gpu_tier` QOS caps them at 0, so they are not candidates) |
+| 1 | **Census** — every GPU node the picker can hand out embeds the same fixed 256 VG images | **20 of 21** nodes (h100/h200 excluded: the `4gpu_tier` QOS caps them at 0, so they are not candidates) |
 | 2 | **Mechanism** — per-block hidden states under each forced SDPA backend, plus a node fed *another node's* pixels | 3 nodes × 5 backends × 2 pixel sources |
 | 3 | **Dispatch** — the same probes with `ATEN_CPU_CAPABILITY=avx2`, and the cost of that pin | 2 hosts, 4–7 timed processes each |
 | 4 | **Benchmark** — production defaults, only the gallery's build host differing | 2 arms × 2048 cells |
@@ -97,6 +97,13 @@ things in the same data already say so:
 
 The correspondence is exact: **9 of 9 AVX2-only hosts show 1.3e-04; 11 of 11
 AVX-512 hosts show ≤ 5.3e-07.**
+
+**One node was not measured**, and it is named rather than quietly absent:
+`rack7n05` (A100 80GB PCIe) never got a slot before the GPU tier was handed to a
+concurrent study. Its CPU *was* read — Xeon Gold 6338, AVX-512 — and it is the
+same configuration as `rack8n05` and `rack10n07`, both of which were probed and
+sit at 2.1e-12. So the census covers 20 of 21 candidate nodes and 13 of 13
+`gpu:v100` nodes, which is the group the question is about.
 
 ![Census: drift by node, coloured by CPU ISA](figures/census_by_isa.png)
 
