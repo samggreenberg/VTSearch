@@ -77,7 +77,9 @@ class TestSuccessfulLoadParksItsChannels:
     def test_task_tracker_leaves_loading(self, isolated_settings, tmp_path):
         task_id = _run_load(tmp_path)
         try:
-            snapshot = loading_tasks.get_tracker(task_id).get()
+            tracker = loading_tasks.get_tracker(task_id)
+            assert tracker is not None, "the finished task should still be listed"
+            snapshot = tracker.get()
             assert snapshot["status"] == "idle", (
                 "a load that finished must say so; parking on the last 'loading' "
                 f"message is what made a success look like a hang, got {snapshot!r}"
