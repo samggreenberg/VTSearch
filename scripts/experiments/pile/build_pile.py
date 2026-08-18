@@ -914,6 +914,37 @@ def report_bands() -> int:
     return 0
 
 
+def _sacct_build_nodes() -> dict[str, str]:
+    """dataset -> node, recovered from SLURM's accounting of the ``pile-*`` jobs.
+
+    Cells built before the sidecar existed are not anonymous after all: the build
+    ran as ``pile-<dataset>`` and ``sacct`` still knows which node took it. This
+    is recorded as ``hostname_recovered``, never as ``hostname`` -- it is an
+    inference from a job name, and one ambiguous dataset (two completed jobs) is
+    left out rather than guessed. It matters because the node determines the CPU,
+    and the CPU determines how the 384px resize rounds (#3160).
+    """
+    import subprocess  # noqa: PLC0415, S404 -- fixed argv, no shell
+
+    try:
+        out = subprocess.run(  # noqa: S603
+            ["sacct", "-X", "-S", "2026-01-01", "-n", "-P", "--format=JobName,NodeList,State"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return {}
+    seen: dict[str, set[str]] = defaultdict(set)
+    for line in out.stdout.splitlines():
+        parts = line.split("|")
+        if len(parts) < 3 or not parts[0].startswith("pile-") or parts[2] != "COMPLETED":
+            continue
+        seen[parts[0][len("pile-") :]].add(parts[1])
+    return {ds: next(iter(nodes)) for ds, nodes in seen.items() if len(nodes) == 1}
+
+
 def provenance_report(backfill: bool = False) -> int:
     """Show which device built each cell -- and, with ``--backfill-provenance``,
     stamp what is still knowable for the cells built before this existed.
@@ -925,6 +956,7 @@ def provenance_report(backfill: bool = False) -> int:
     the cell?" from an unanswerable question into a hash comparison.
     """
     rows, missing, devices = [], [], defaultdict(list)
+    recovered = _sacct_build_nodes() if backfill else {}
     for ds, emb in pc.cells():
         cell = pc.cell_path(ds, emb)
         if not cell.exists():
@@ -941,6 +973,8 @@ def provenance_report(backfill: bool = False) -> int:
                     "backfilled": True,
                     "device": {
                         "gpu_name": None,
+                        "hostname_recovered": recovered.get(ds),
+                        "recovered_from": "sacct pile-<dataset> job" if recovered.get(ds) else None,
                         "note": "unknown: cell predates per-cell provenance (#3160)",
                     },
                     "cell_summary": {"megabytes": round(stat.st_size / 1e6, 1)},
@@ -953,12 +987,18 @@ def provenance_report(backfill: bool = False) -> int:
                 continue
         rec = json.loads(path.read_text())
         dev = rec.get("device", {})
+        if backfill and not dev.get("hostname") and not dev.get("hostname_recovered") and recovered.get(ds):
+            dev["hostname_recovered"] = recovered[ds]
+            dev["recovered_from"] = "sacct pile-<dataset> job"
+            rec["device"] = dev
+            path.write_text(json.dumps(rec, indent=2) + "\n")
+            log(f"recovered build node for {ds} x {emb}: {recovered[ds]}")
         rows.append(
             (
                 ds,
                 emb,
                 dev.get("gpu_name") or "unknown",
-                dev.get("hostname") or "-",
+                dev.get("hostname") or (f"{dev['hostname_recovered']}?" if dev.get("hostname_recovered") else "-"),
                 str(dev.get("cpu_capability") or "-"),
                 (dev.get("commit") or "-")[:9],
                 rec.get("fingerprint", {}).get("vectors_sha256", "")[:12],
