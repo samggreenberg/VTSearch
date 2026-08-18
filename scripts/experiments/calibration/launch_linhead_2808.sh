@@ -184,13 +184,17 @@ cells)
     DEPS="${DEPS:+$DEPS:}$J"
   done
 
+  # SPIKE_PRODUCTION_ARM is set explicitly: the analyzer defaults it to the LAST
+  # arm, which here is B_converged - the counterfactual, not production.  Left
+  # to the default, every 'production' number in the report would name the arm
+  # that is not shipped.
   # Analysis runs GRID-side on afterany so it fires whether or not every cell
   # succeeded - and so it survives the laptop going away.  It must report what
   # it dropped, which is why it runs even on partial arms.
   submit analyze --dependency=afterany:"$DEPS" --job-name=lin2808-analyze \
     --mem=16G --cpus-per-task=4 --time=1:00:00 --partition=cpu --export=ALL \
     --output="$LOGS/analyze-%j.out" \
-    --wrap="source $WT/gridenv.sh && $ENVX && export SPIKE_ARMS=${ARM_ORDER[*]} SPIKE_OUT=$CALIB_EXP/analysis && cd $HERE && python analyze_spikes.py"
+    --wrap="source $WT/gridenv.sh && $ENVX && export SPIKE_ARMS='${ARM_ORDER[*]}' SPIKE_CONTROL_ARM=C_mlp SPIKE_PRODUCTION_ARM=A_shipped SPIKE_OUT=$CALIB_EXP/analysis && cd $HERE && python analyze_spikes.py"
   ;;
 
 chain)
