@@ -8,7 +8,7 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # torch is imported lazily everywhere below, never at module scope
     import torch
@@ -393,10 +393,16 @@ def _transformers_backend_kwarg() -> str:
     return "backend" if major >= 5 else "use_fast"
 
 
-def image_processor_load_kwargs() -> dict[str, object]:
+def image_processor_load_kwargs() -> dict[str, Any]:
     """Kwargs for ``*ImageProcessor.from_pretrained`` selecting the backend.
 
     Empty for ``auto``, which is the default and reproduces the pile.
+
+    ``Any`` rather than the more honest ``str | bool``: splatting a
+    ``dict[str, X]`` into a call makes a type checker treat *every* remaining
+    parameter as possibly receiving ``X``, so a narrower annotation here reports
+    six errors at the call sites about ``on_progress`` — a parameter this dict
+    never supplies.
     """
     mode = IMAGE_PROCESSOR_BACKEND
     if mode not in _PROCESSOR_BACKENDS:
@@ -416,7 +422,7 @@ def image_processor_load_kwargs() -> dict[str, object]:
     return {"use_fast": mode == "torchvision"}
 
 
-def image_processor_call_kwargs() -> dict[str, object]:
+def image_processor_call_kwargs() -> dict[str, Any]:
     """Kwargs for the processor *call* placing resize/normalise on a device.
 
     Empty for ``auto`` and off CUDA, so the default path is unchanged and a
