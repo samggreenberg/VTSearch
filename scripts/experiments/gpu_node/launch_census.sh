@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # #3160, part 1: census every GPU node the picker can hand out.
 #
-#   bash launch_census.sh submit     # one job per node, pinned with --nodelist
+#   bash launch_census.sh submit          # one job per node, pinned with --nodelist
+#   bash launch_census.sh submit rack7n03 # just these nodes (a smoke test first)
 #   bash launch_census.sh status
 #   bash launch_census.sh analyze
 #
@@ -44,8 +45,10 @@ nodes_of_type() {
 case "${1:-status}" in
 submit)
   n=0
+  ONLY="${*:2}"
   for type in $TYPES; do
     while read -r node state; do
+      if [[ -n "$ONLY" ]] && [[ " $ONLY " != *" $node "* ]]; then continue; fi
       case "$state" in
         *drain*|*down*|*maint*|*resv*) echo "skip $node ($state)"; continue ;;
       esac
