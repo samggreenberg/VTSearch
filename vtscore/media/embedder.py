@@ -23,6 +23,7 @@ __all__ = [
     "DEFAULT_EMBED_BATCH_SIZE",
     "IMPORT_MODULE_ESTIMATES",
     "MediaEmbedder",
+    "embed_autocast",
     "embedder_load_setup",
     "extract_tensor",
     "intercept_tqdm_progress",
@@ -32,6 +33,8 @@ __all__ = [
     "resolve_embed_batch_size",
     "timed_progress",
     "to_compute_device",
+    "to_float32",
+    "to_model_inputs",
 ]
 
 
@@ -124,7 +127,7 @@ def extract_tensor(output: object):
     return output[0]  # type: ignore[index]
 
 
-def to_compute_device(model: Any) -> Any:
+def to_compute_device(model: Any, allow_half: bool = False) -> Any:
     """Move a freshly loaded embedding *model* onto the resolved compute device.
 
     Replaces the hardcoded ``model.to("cpu")`` every embedder used to run at
@@ -143,10 +146,87 @@ def to_compute_device(model: Any) -> Any:
       pulling results back with ``.detach().cpu().numpy()``.
 
     Returns the moved model so callers can write ``self._model = to_compute_device(self._model)``.
-    """
-    from vtscore.config import resolve_device  # noqa: PLC0415
 
-    return model.to(resolve_device())
+    Pass ``allow_half=True`` to additionally honour ``VTSEARCH_EMBED_PRECISION``
+    by casting the weights (see :func:`vtscore.config.embed_weight_dtype`).  It
+    is opt-in per embedder rather than global because the precision measurement
+    behind it (#3143) covers the **image** encoders only: the audio, video and
+    face backbones share this helper, and casting a model whose numerics nobody
+    has measured would be a silent change to what it produces.  Half precision
+    is off by default in any case, so an embedder that has not opted in is
+    unaffected either way.
+    """
+    from vtscore.config import embed_weight_dtype, resolve_device  # noqa: PLC0415
+
+    model = model.to(resolve_device())
+    if allow_half:
+        dtype = embed_weight_dtype()
+        if dtype is not None:
+            model = model.to(dtype)
+    return model
+
+
+@contextlib.contextmanager
+def embed_autocast() -> Any:
+    """Wrap an embedding forward in ``torch.autocast`` when so configured.
+
+    A no-op unless ``VTSEARCH_EMBED_PRECISION`` names an ``autocast_*`` mode.
+    Unlike a weight cast, autocast keeps fp32 master weights and lets torch
+    choose per op, holding the reduction-heavy ones (softmax, layer norm) in
+    fp32 — numerically the safer half of the two, and the slower one.
+
+    Both paths still return **fp32** vectors: only the compute is half, never
+    the stored embedding (see :func:`to_float32`).  Storing half vectors would
+    change every downstream matrix's dtype, which is a different change with a
+    different blast radius than the one #3143 measured.
+    """
+    from vtscore.config import embed_autocast_dtype, resolve_device  # noqa: PLC0415
+
+    dtype = embed_autocast_dtype()
+    if dtype is None:
+        yield
+        return
+    import torch  # noqa: PLC0415
+
+    device_type = resolve_device().split(":")[0]
+    with torch.autocast(device_type=device_type, dtype=dtype):
+        yield
+
+
+def to_model_inputs(inputs: Any, model: Any) -> dict:
+    """Move processor *inputs* onto *model*'s device **and** floating dtype.
+
+    Replaces the ``{k: v.to(device) for ...}`` every embedder wrote by hand.
+    The dtype half is what a weight cast needs: fp16 weights fed fp32
+    ``pixel_values`` raise ``expected scalar type Half but found Float`` in the
+    patch-embedding conv, so the pixels have to follow the weights.
+
+    Only floating tensors are cast.  ``input_ids`` / ``attention_mask`` are
+    integer and casting them to half would corrupt token ids outright — quietly,
+    for ids above 2048, which is most of a real vocabulary.
+    """
+    device = next(model.parameters()).device
+    dtype = next(model.parameters()).dtype
+    out = {}
+    for key, val in inputs.items():
+        if hasattr(val, "is_floating_point") and val.is_floating_point():
+            out[key] = val.to(device=device, dtype=dtype)
+        elif hasattr(val, "to"):
+            out[key] = val.to(device)
+        else:
+            out[key] = val
+    return out
+
+
+def to_float32(tensor: Any) -> Any:
+    """Upcast a possibly-half tensor back to fp32 before it leaves the GPU.
+
+    Half precision is a *compute* choice; the embedding contract is fp32.
+    Numpy would otherwise carry a ``float16`` array straight into the dataset
+    pickles and the embedding matrices, silently halving the precision of
+    everything stored rather than only of the forward pass.
+    """
+    return tensor.float() if hasattr(tensor, "float") else tensor
 
 
 @contextlib.contextmanager
@@ -793,8 +873,11 @@ class _ThreadLocalProgress:
     thread*, which is exactly what every save-and-restore call site wants.  A
     thread that never assigned anything reads the process-wide default
     (:meth:`MediaEmbedder.set_default_progress_callback`), so background work
-    with no explicit callback — the smart-preload thread, say — still reports
-    into the host application's progress sink.
+    with no explicit callback still reports into the host application's
+    progress sink.  That fallback narrates work the sink cannot see the end of,
+    so a model load taken through it is terminated explicitly by
+    :meth:`MediaEmbedder._orphan_progress`; background warm-ups that want no
+    progress surface at all should say so with :meth:`MediaEmbedder.silent_progress`.
     """
 
     def __get__(self, obj: "MediaEmbedder | None", objtype: type | None = None) -> Any:
@@ -870,6 +953,49 @@ class MediaEmbedder(ABC):
             yield
         finally:
             slot.local.cb = prev
+
+    def silent_progress(self):
+        """Suppress this embedder's progress for the calling thread.
+
+        Sugar over :meth:`progress_scope` for background warm-ups that have no
+        progress surface of their own (the smart-preload threads, the
+        post-import embedder warm-up).  Without it those calls fall through to
+        the process-wide default sink, which in the app is the dataset-import
+        channel — see :meth:`_orphan_progress`.
+        """
+        return self.progress_scope(_noop_progress)
+
+    @contextlib.contextmanager
+    def _orphan_progress(self):
+        """Publish a terminal ``idle`` for a model load nobody is watching.
+
+        A thread that installed no :meth:`progress_scope` still reports through
+        the process-wide default sink, which the app wires to the global
+        ``dataset_progress`` tracker — the SSE ``dataset`` channel.  That sink
+        has no idea when the work it is narrating ends, so an unscoped
+        ``load_models`` left the channel parked on its last "Loading … processor…"
+        message forever: an import that had *succeeded* looked exactly like a
+        wedged one, and only a profiler could tell them apart (#3167).
+
+        The load itself is the boundary that knows when the work ends, so it is
+        where the terminal state belongs.  For the duration of an unscoped load
+        this pins the default sink as the thread's own callback (so a nested
+        ``load_models`` doesn't re-arm the same wrapper) and, in a ``finally``,
+        sends one ``idle`` tick to say the phase is over.
+
+        A caller that installed a scope owns its own channel and is left alone;
+        so is a sink that is already the no-op default.
+        """
+        slot = _progress_slot(self)
+        if getattr(slot.local, "cb", None) is not None or slot.default is _noop_progress:
+            yield
+            return
+        sink = slot.default
+        with self.progress_scope(sink):
+            try:
+                yield
+            finally:
+                sink("idle", "", 0, 0)
 
     # ------------------------------------------------------------------
     # Identity
@@ -1022,10 +1148,14 @@ class MediaEmbedder(ABC):
         thread performs the actual load; others wait and then return
         immediately (the subclass ``_load_models_impl`` checks
         ``self._model is not None``).
+
+        A load whose caller installed no :meth:`progress_scope` reports through
+        the process-wide default sink and is terminated there on the way out;
+        see :meth:`_orphan_progress`.
         """
         if getattr(self, "_model", None) is not None:
             return
-        with self._model_load_lock:
+        with self._orphan_progress(), self._model_load_lock:
             try:
                 self._load_models_impl()
             except ImportError as exc:

@@ -45,13 +45,20 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", required=True, help="experiment results dir (for prepare_info.json)")
     ap.add_argument("--out", required=True)
+    ap.add_argument(
+        "--dump-dir",
+        default=None,
+        help="Also write per-media text predictions here (same schema as VTS_DUMP_TEST_SCORES), "
+        "so a typed query's errors can be inspected the same way a detector's are.",
+    )
     args = ap.parse_args()
 
     from sklearn.metrics import average_precision_score, roc_auc_score
 
     from vtscore.embedding import embed_text_query
-    from vtscore.eval.labels import media_is_positive
+    from vtscore.eval.labels import evaluable_pool, media_is_positive
     from vtscore.eval.patch_styles import resolve_style
+    from vtscore.eval.score_dumps import write_prediction_dump
     from vtscore.training.thresholds import calculate_gmm_threshold
 
     from vtscore.datasets import loader as _loader  # isort: skip
@@ -89,20 +96,38 @@ def main() -> int:
                     rows.append({"dataset": ds, "embedder": emb, "category": cat, "supports_text": 0})
                     continue
 
+                # The same pool the voting harness scores this cell on: a
+                # wrong-band image is not a negative, so it is not a text-sort
+                # negative either.
+                medias_cat = evaluable_pool(medias, cat)
+
                 # Same scorer the seed phase uses, text vector in place of a crop.
-                sims = style.exemplar_sims(medias, np.asarray(tvec, dtype=np.float32))
-                ids = sorted(medias.keys())
+                sims = style.exemplar_sims(medias_cat, np.asarray(tvec, dtype=np.float32))
+                ids = sorted(medias_cat.keys())
                 scores = np.asarray([float(sims[i]) for i in ids], dtype=np.float64)
-                labels = np.asarray([1 if media_is_positive(medias[i], cat) else 0 for i in ids])
+                labels = np.asarray([1 if media_is_positive(medias_cat[i], cat) else 0 for i in ids])
 
                 # The app cuts the haystack it can see: every media, not a split.
                 gmm_cut = float(calculate_gmm_threshold([float(s) for s in scores]))
 
                 for seed in cfg.SEEDS:
-                    _, test_ids = _split(medias, cfg.SIM_FRACTION, seed)
+                    _, test_ids = _split(medias_cat, cfg.SIM_FRACTION, seed)
                     tset = set(test_ids)
                     mask = np.asarray([i in tset for i in ids])
                     y, s = labels[mask], scores[mask]
+                    if args.dump_dir and seed == cfg.SEEDS[0]:
+                        # One seed is enough: the ranking and the cut are
+                        # seed-independent here (text scores every media once),
+                        # so only which medias land in the test half moves.
+                        write_prediction_dump(
+                            Path(args.dump_dir) / f"text__{ds}__{emb}__{cat.replace(' ', '_')}.csv",
+                            medias,
+                            [i for i in ids if i in tset],
+                            s,
+                            y,
+                            gmm_cut,
+                            cat,
+                        )
                     npos, nneg = int(y.sum()), int((1 - y).sum())
                     if npos == 0 or nneg == 0:
                         continue

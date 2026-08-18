@@ -69,10 +69,10 @@
            third-party datasource importers). -->
       @if (selectedDatasourceImporter; as dsImporter) {
         <p class="picker-instructions">Fetch a media example with <strong>{{ dsImporter.display_name || dsImporter.name }}</strong>:</p>
-        <vt-datasource-import-form
+        <vt-plugin-import-form
           [importer]="dsImporter"
-          (imported)="onDatasourceImported($event)"
-        ></vt-datasource-import-form>
+          (imported)="onDatasourceImported($any($event))"
+        ></vt-plugin-import-form>
       }
 
       @if (!selectedDatasourceImporter && selectedSource && !fileBrowsing && !browseLoading() && browseItems().length > 0) {

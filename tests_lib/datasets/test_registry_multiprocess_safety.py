@@ -121,3 +121,63 @@ class TestRegistryMultiprocessSafety:
             t.join()
 
         assert len(_read_disk_ids()) == n
+
+
+class TestRegistryReadsSeeDiskWrites:
+    """Reads must reflect the manifest on disk, not a cache frozen at startup (#3167).
+
+    Writes have merged correctly since the fix above, but *reads* filled the
+    in-memory cache once and thereafter refreshed it only from this process's
+    own mutations.  A dataset registered by anyone else — a CLI autodetect run
+    against the same data dir, a second server — was therefore invisible until
+    the process restarted: the API flatly denied the existence of a dataset
+    sitting fully registered on disk, which is the same "every signal says
+    nothing happened" ambiguity as a progress channel that never terminates.
+    """
+
+    def test_list_datasets_picks_up_a_sibling_write(self):
+        registry.reset_for_tests()
+        a = registry.register_dataset(name="A", media_type="audio", num_items=1, pkl_path="a.pkl")
+        assert {e["id"] for e in registry.list_datasets()} == {a["id"]}
+
+        _commit_sibling_entry("sibling-b")
+
+        assert {e["id"] for e in registry.list_datasets()} == {a["id"], "sibling-b"}, (
+            "a registration committed by another process must be visible without a restart"
+        )
+
+    def test_get_dataset_picks_up_a_sibling_write(self):
+        registry.reset_for_tests()
+        registry.register_dataset(name="A", media_type="audio", num_items=1, pkl_path="a.pkl")
+        assert registry.get_dataset("sibling-b") is None
+
+        _commit_sibling_entry("sibling-b")
+
+        entry = registry.get_dataset("sibling-b")
+        assert entry is not None and entry["name"] == "sibling", (
+            f"the entry is on disk; the API must not deny it exists, got {entry!r}"
+        )
+
+    def test_list_datasets_picks_up_a_sibling_deletion(self):
+        registry.reset_for_tests()
+        a = registry.register_dataset(name="A", media_type="audio", num_items=1, pkl_path="a.pkl")
+        registry.register_dataset(name="B", media_type="audio", num_items=1, pkl_path="b.pkl")
+
+        remaining = [e for e in json.loads(registry.REGISTRY_PATH.read_text(encoding="utf-8")) if e["id"] == a["id"]]
+        registry.REGISTRY_PATH.write_text(json.dumps(remaining), encoding="utf-8")
+
+        assert {e["id"] for e in registry.list_datasets()} == {a["id"]}
+
+    def test_unchanged_manifest_is_not_re_read(self, monkeypatch):
+        """The freshness check is a stat, not a re-parse on every read."""
+        registry.reset_for_tests()
+        registry.register_dataset(name="A", media_type="audio", num_items=1, pkl_path="a.pkl")
+
+        reads = []
+        real_load = registry._load
+        monkeypatch.setattr(registry, "_load", lambda: (reads.append(1), real_load())[1])
+
+        registry.list_datasets()
+        registry.list_datasets()
+
+        assert reads == [], f"an unchanged manifest should not be parsed again, got {len(reads)} reads"

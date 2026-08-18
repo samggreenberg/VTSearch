@@ -16,6 +16,9 @@
 # executable, e.g.
 #     cp scripts/slurm/vtsearch-slurm.sh ~/.local/bin/vtsearch && chmod +x ~/.local/bin/vtsearch
 #
+# The GPU type is auto-picked from what is free (see pick_gpu.py, read out of
+# the checkout at $VTS_DIR when this script has been copied away from it).
+#
 # Override any default with an env var, e.g.:  VTS_MEM=64G VTS_GPU=a100 vtsearch
 set -u
 
@@ -33,7 +36,6 @@ VENV=${VTS_VENV:-.venv}
 # e.g.  VTS_MODULE="python/3.12.3" vtsearch
 MODULE=${VTS_MODULE:-}
 PART=${VTS_PART:-gpu}       # SLURM partition
-GPU=${VTS_GPU:-l40s}        # GPU type for --gres=gpu:<type>:1
 CPUS=${VTS_CPUS:-8}         # CPU cores
 MEM=${VTS_MEM:-48G}         # memory (one app.py needs headroom for two model loads)
 TIME=${VTS_TIME:-8:00:00}   # walltime
@@ -42,6 +44,25 @@ TIME=${VTS_TIME:-8:00:00}   # walltime
 # the port from your UID so it's stable across sessions and the tunnel script
 # computes the same value. Range 10000-29999 stays below the OS ephemeral range.
 PORT=${VTS_PORT:-$((10000 + $(id -u) % 20000))}
+
+# --- GPU type ---------------------------------------------------------------
+# Ask the scheduler which type to request instead of pinning one: a pin is wrong
+# in one direction or the other. Pinning the slow type wastes 2.3x on every
+# embed; pinning a scarce fast type once meant ~5-day queue waits (issue #3144).
+# VTS_GPU still wins outright -- pick_gpu.py returns it without querying.
+#
+# This script is meant to be COPIED to ~/.local/bin/vtsearch, so it cannot
+# assume the picker sits beside it. Look next to the script first (running it
+# from the checkout), then inside $DIR, then give up quietly and pin l40s.
+PICK_GPU=""
+for candidate in "$(dirname "$0")/pick_gpu.py" "$DIR/scripts/slurm/pick_gpu.py"; do
+    [ -f "$candidate" ] && { PICK_GPU="$candidate"; break; }
+done
+GPU=""
+if [ -n "$PICK_GPU" ] && command -v python3 >/dev/null 2>&1; then
+    GPU=$(VTS_PART="$PART" python3 "$PICK_GPU")
+fi
+GPU=${GPU:-${VTS_GPU:-l40s}}
 
 echo ">>> Requesting 1x $GPU, $CPUS cores, $MEM, ${TIME} walltime on partition '$PART'..."
 echo ">>> (this may queue; once it lands, VTSearch starts and prints its node + tunnel hint)"

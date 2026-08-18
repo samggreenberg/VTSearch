@@ -54,11 +54,27 @@ class TestRepoIsClean:
         assert gate.main([]) == 0
 
     def test_runs_fast_enough_to_gate(self):
+        """The gate must stay cheap enough to run on every invocation.
+
+        The bound is deliberately loose. This asserts on **wall clock**, and the
+        suite runs under ``pytest -n auto`` on whatever machine is free — on a
+        shared GRID node it measured 5.10 s against a 5.0 s bound while the same
+        call takes 0.8-1.9 s unloaded, so the tight bound failed a green branch
+        on a 2% overshoot caused entirely by contention. A wall-clock assertion
+        with no headroom is the same flakiness antipattern as a ``time.sleep``
+        synchronisation (see CLAUDE.md).
+
+        20 s still catches what the test is for — a gate that grew super-linear
+        in repo size, or reintroduced a per-file subprocess — because the
+        unloaded runtime would have to grow more than tenfold to reach it. It
+        just no longer fails on the machine being busy.
+        """
         import time
 
         start = time.perf_counter()
         gate.main([])
-        assert time.perf_counter() - start < 5.0
+        elapsed = time.perf_counter() - start
+        assert elapsed < 20.0, f"check-docs took {elapsed:.1f}s; it runs on every ./run-tests.sh invocation"
 
 
 class TestSlugify:
@@ -166,13 +182,28 @@ class TestPathCheck:
         text = "Override `resolve_file(origin, origin_name, filename) ->\nPath | None` (`vtscore/state/gone.py`).\n"
         assert checks(text) == ["PATH"]
 
-    def test_plans_and_experiments_are_exempt(self):
-        # Plans name files their work has not created yet; experiment reports
-        # name a cluster scratch dir. Neither is a claim about this checkout.
+    def test_plans_are_exempt(self):
+        # A plan names files its work has not created yet; that is not a claim
+        # about this checkout.
         text = "Write the report to `docs/experiments/not-yet/REPORT.md`."
         assert run(text, REPO_ROOT / "docs" / "plans" / "__synthetic__.md") == []
-        assert run(text, REPO_ROOT / "docs" / "experiments" / "__synthetic__.md") == []
         assert checks(text) == ["PATH"]
+
+    def test_an_experiment_report_may_not_cite_a_script_that_is_not_in_the_tree(self):
+        # Experiment reports are NOT exempt. A report that cites its analysis
+        # script is claiming the run can be reproduced; when the script was
+        # never committed (overview-bench, `label_noise.py`) the claim is false
+        # and nothing caught it.
+        doc = REPO_ROOT / "docs" / "experiments" / "__synthetic__.md"
+        assert checks("Scripted in `scripts/experiments/calibration/gone.py`.", doc) == ["PATH"]
+
+    def test_an_experiment_reports_scratch_paths_are_still_fine(self):
+        # The reason the blanket exemption existed: a run record cites the
+        # cluster dir it lived in and the artifacts it wrote there. Those are
+        # not repo paths, and the top-level-directory rule already skips them.
+        doc = REPO_ROOT / "docs" / "experiments" / "__synthetic__.md"
+        text = "Aggregates in `agg/cut_contrasts.csv`, cells in `cells/task_*.csv`, run in `results-ab/`."
+        assert checks(text, doc) == []
 
 
 class TestLeakCheck:

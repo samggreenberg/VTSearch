@@ -547,7 +547,12 @@ def smart_preload_in_background() -> None:
                 emb = get_embedder(emb_name)
                 if getattr(emb, "_model", None) is not None:
                     continue
-                emb.load_models()
+                # A speculative warm-up is not an operation the user started,
+                # so it gets no progress surface: unscoped it would narrate
+                # itself on the app's global dataset channel and read as an
+                # import that never ends (#3167).
+                with emb.silent_progress():
+                    emb.load_models()
             except Exception:
                 pass
 
@@ -604,7 +609,10 @@ def preload_embedder_for_dataset(dataset_id: str) -> str:
             emb = get_embedder(emb_name)
             if getattr(emb, "_model", None) is not None:
                 return
-            emb.load_models()
+            # Silent for the same reason as smart_preload_in_background: the
+            # user selected a row, they did not start an import.
+            with emb.silent_progress():
+                emb.load_models()
         except Exception:
             pass
 

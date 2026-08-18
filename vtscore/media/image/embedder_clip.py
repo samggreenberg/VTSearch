@@ -71,7 +71,7 @@ class ImageClipEmbedder(_CrossModalHFEmbedder):
                 token=hf_token(),
                 on_progress=self._on_progress,
             )
-        self._model = to_compute_device(self._model)
+        self._model = to_compute_device(self._model, allow_half=True)
         self._on_progress("loading", "Loading CLIP processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = load_pretrained_local_first(

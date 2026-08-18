@@ -373,7 +373,9 @@ def _promote_in_background(
             gc.collect()
             loading_tasks.mark_finished(task_id)
 
-    threading.Thread(target=task, daemon=True).start()
+    worker = threading.Thread(target=task, daemon=True)
+    loading_tasks.set_worker(task_id, worker)
+    worker.start()
     return task_id
 
 

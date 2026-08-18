@@ -13,6 +13,7 @@ import logging
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, Callable
 
+from vtscore.embedding.binding import expected_dim_for_embedder
 from vtscore.embedding.matrix import invalidate_embedding_matrix
 from vtscore.embedding.media_vectors import (
     EMBEDDINGS_KEY,
@@ -22,6 +23,7 @@ from vtscore.embedding.media_vectors import (
     media_embedding,
     set_media_embedding,
 )
+from vtscore.embedding.precomputed import require_dim
 
 from vtscore.datasets.stages._common import _STATUS_TO_STEP, _TOTAL_LOAD_STEPS
 
@@ -109,16 +111,33 @@ def _stamp_requested_embedder(medias: dict[int, dict[str, Any]], embedder_name: 
 
     Only media whose embedder name is blank are touched; an importer-set name is
     never overwritten.  A no-op when *embedder_name* is blank (no pick to stamp).
+
+    **The stamp is checked, not assumed.**  Re-keying is an assertion that the
+    nameless vector belongs to *embedder_name*'s space, and a manifest whose
+    vectors came from a different model would make that assertion false - after
+    which the media is indistinguishable from a correctly-labelled one, and the
+    mismatch only surfaces as a broadcast error deep in the matrix builder.  So
+    when the embedder declares a width, a vector that disagrees with it is
+    rejected here, naming both widths.
     """
     if not embedder_name:
         return
-    for m in medias.values():
+    expected_dim = expected_dim_for_embedder(embedder_name)
+    for mid, m in medias.items():
         if m.get("embedder"):
             continue
         embs = m.get(EMBEDDINGS_KEY)
         if not isinstance(embs, dict) or UNKNOWN_EMBEDDER_KEY not in embs:
             continue
-        vec = embs.pop(UNKNOWN_EMBEDDER_KEY)
+        vec = embs[UNKNOWN_EMBEDDER_KEY]
+        if expected_dim is not None:
+            require_dim(
+                vec,
+                expected_dim,
+                label=f"pre-computed vector for media {mid} ({m.get('origin_name') or m.get('filename') or '?'})",
+                expected_source=f"the width declared by embedder {embedder_name!r}",
+            )
+        embs.pop(UNKNOWN_EMBEDDER_KEY)
         embs.setdefault(embedder_name, vec)
         m["embedder"] = embedder_name
 
@@ -129,10 +148,19 @@ def _noop_progress(status: str, message: str = "", current: int = 0, total: int 
 
 
 def _ensure_model_loaded(emb, on_progress: Callable[[str, str, int, int], None]) -> None:
-    """Load the embedder's models if not already loaded, announcing progress."""
+    """Load the embedder's models if not already loaded, announcing progress.
+
+    The load runs inside :meth:`~vtscore.media.embedder.MediaEmbedder.progress_scope`
+    so the model's own "Loading … processor…" ticks land on *this* load's
+    tracker, next to every other phase of the import.  Unscoped they fall
+    through to the embedder's process-wide default sink — the global
+    ``dataset_progress`` singleton — which belongs to no particular import and
+    so shows the right message on the wrong channel (#3167).
+    """
     if getattr(emb, "_model", None) is None:
         on_progress("loading", "Loading embedding model…", 0, 0)
-        emb.load_models()
+        with emb.progress_scope(on_progress):
+            emb.load_models()
 
 
 def _missing_for_embedder(

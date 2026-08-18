@@ -2,11 +2,13 @@
 COVERAGE
 ====================================================================================================
 cell files found : 45 / 45 expected
-unreadable/empty : 2 [('task_0039.csv', 'empty'), ('task_0043.csv', 'empty')]
+header-only      : 2 starved cells ['task_0039.csv', 'task_0043.csv']
+unreadable       : 0 []
 rows loaded      : 6249
 distinct cells   : 43
 steps per cell   : min=101 median=147 max=149
 styles           : ['whole_image']
+horizon          : 150 votes; deep regime = t >= 100
 heads            : ['linear']
 
 ====================================================================================================
@@ -56,12 +58,19 @@ coco_val x dinov3_patch            19          8.0          0     150.0         
 visual_genome_m x dinov3_patch     24          6.0          0     150.0            0.0
 
 ====================================================================================================
+PAIRED ARM CONTRASTS - deep regime, same (category, seed) on both sides
+====================================================================================================
+mean difference +- standard error over paired cells; |mean| < 2*SE is NOT resolvable here
+(only one embedder in this run; nothing to pair)
+
+====================================================================================================
 COST OF A STEP (seconds)
 ====================================================================================================
-                                 mean  median     max
+                                mean  median   max  cell_median  cell_max
 arm
-coco_val x dinov3_patch         62.31   61.55  124.47
-visual_genome_m x dinov3_patch  61.22   59.81  122.47
+coco_val x dinov3_patch         0.61    0.61  0.77        107.8     124.5
+visual_genome_m x dinov3_patch  0.63    0.62  0.77        105.7     122.5
+(mean/median/max are per STEP; cell_* are whole-cell wall time, both in seconds)
 
 ====================================================================================================
 INDIVIDUAL TRACES
@@ -83,4 +92,4 @@ INDIVIDUAL TRACES
 134       5    129 0.4567 0.4340 0.0227  0.2965             0.7688            conformal           0
 146       5    141 0.4426 0.4199 0.0227  0.2790             0.7724            conformal           0
 
-(tables also written to /expscratch/sgreenberg/bench-binary/results/ANALYSIS_TABLES.txt)
+(these tables were also written to docs/experiments/overview-bench/ANALYSIS_TABLES_binary.txt)

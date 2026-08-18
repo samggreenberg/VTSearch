@@ -520,6 +520,67 @@ class DatasourceImportResponseSchema(ServerMediaUploadResponseSchema):
     origin = fields.Dict(dump_default=None, allow_none=True)
 
 
+class SeedImporterEntrySchema(Schema):
+    """One entry in ``GET /api/seed-importers``.
+
+    Mirrors :meth:`vtscore.seed_importers.base.SeedImporter.to_dict`; the
+    ``fields`` array's inner shape mirrors
+    :meth:`vtscore.plugins.PluginField.to_dict` but is declared as
+    ``fields.Dict()`` for the same reason as
+    :class:`DatasourceImporterEntrySchema`.
+    """
+
+    name = fields.String(required=True)
+    display_name = fields.String(required=True)
+    description = fields.String(required=True)
+    icon = fields.String(required=True)
+    ui_mode = fields.String(required=True)
+    hidden_from_picker = fields.Boolean(required=True)
+    #: Cap on how many seeds one run contributes; the run route truncates to it.
+    max_items = fields.Integer(required=True)
+    # Renamed to avoid shadowing :attr:`marshmallow.Schema.fields`;
+    # ``data_key`` / ``attribute`` keep the wire name as ``"fields"``.
+    plugin_fields = fields.List(
+        fields.Dict(),
+        required=True,
+        data_key="fields",
+        attribute="fields",
+    )
+
+
+class SeedImportersListResponseSchema(Schema):
+    """Response for ``GET /api/seed-importers``.
+
+    No ``tabs``: each seed importer *is* its own tab in the New Detector
+    modal's Blank flow, so there is no shared category bar to declare.
+    """
+
+    importers = fields.List(fields.Nested(SeedImporterEntrySchema), required=True)
+
+
+class SeedImportItemSchema(ServerMediaUploadResponseSchema):
+    """One saved seed in a ``POST /api/seed-import/<name>`` response.
+
+    Same ``{filename, original_name}`` contract as the upload endpoint,
+    plus the item's durable ``origin`` when the importer reports one.
+    """
+
+    origin = fields.Dict(dump_default=None, allow_none=True)
+
+
+class SeedImportResponseSchema(Schema):
+    """Response for ``POST /api/seed-import/<name>``.
+
+    ``truncated`` is ``True`` when the importer returned more than its
+    :attr:`~vtscore.seed_importers.base.SeedImporter.max_items` cap and the
+    tail was dropped, so the UI can say so rather than silently under-seeding.
+    """
+
+    items = fields.List(fields.Nested(SeedImportItemSchema), required=True)
+    count = fields.Integer(required=True)
+    truncated = fields.Boolean(required=True)
+
+
 __all__ = [
     "DatasourceImportResponseSchema",
     "DatasourceImporterEntrySchema",
@@ -536,6 +597,10 @@ __all__ = [
     "MediaVariantQuerySchema",
     "MediaVoteRequestSchema",
     "MediaVoteResponseSchema",
+    "SeedImportItemSchema",
+    "SeedImportResponseSchema",
+    "SeedImporterEntrySchema",
+    "SeedImportersListResponseSchema",
     "ServerMediaFromMediaIdRequestSchema",
     "ServerMediaListResponseSchema",
     "ServerMediaUploadResponseSchema",

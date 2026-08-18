@@ -33,6 +33,7 @@ import sys
 import time
 import zipfile
 from collections import defaultdict
+from contextlib import contextmanager
 from pathlib import Path
 
 import pile_config as pc
@@ -183,7 +184,7 @@ def _band_categories(band: str) -> list[str]:
     scan_path = pc.PILE / "vg_box_scale.json"
     if not scan_path.exists():
         raise SystemExit(f"missing {scan_path}; run scan_vg_boxes.py first")
-    stats = json.loads(scan_path.read_text())
+    stats = json.loads(scan_path.read_text())["categories"]
     lo, hi = pc.BOX_BANDS[band]
 
     pool = [
@@ -301,6 +302,203 @@ def _load_vg_band(band: str, medias: dict[int, dict], embedder_name: str) -> Non
         }
 
 
+def _vg_source() -> tuple[dict[int, Path], list, dict[int, tuple[int, int]]]:
+    """``(image paths, objects.json records, image dims)`` for the whole VG source.
+
+    Dims come from ``scan_vg_boxes.py``'s cache when it exists (it always does
+    in practice -- the scan is what chooses the classes), and are read from the
+    JPEG headers otherwise, which costs ~30 s.
+    """
+    from concurrent.futures import ThreadPoolExecutor  # noqa: PLC0415
+
+    from PIL import Image  # noqa: PLC0415
+
+    vg_root = pc.DEMO_CACHE / "visual_genome"
+    objects_json = vg_root / "objects.json"
+    if not objects_json.exists():
+        raise SystemExit(f"missing {objects_json}")
+
+    paths: dict[int, Path] = {}
+    for d in (vg_root / "VG_100K", vg_root / "VG_100K_2"):
+        for p in d.iterdir():
+            if p.suffix.lower() == ".jpg":
+                try:
+                    paths[int(p.stem)] = p
+                except ValueError:
+                    continue
+
+    cache = pc.PILE / "vg_image_dims.json"
+    dims: dict[int, tuple[int, int]] = {}
+    if cache.exists():
+        raw = json.loads(cache.read_text())
+        # Unreadable images are cached as null, so a complete cache has one
+        # entry per file (see scan_vg_boxes._read_dims).
+        if len(raw) >= len(paths):
+            dims = {int(k): tuple(v) for k, v in raw.items() if v}  # type: ignore[misc]
+    if not dims:
+        log("  no dims cache; reading JPEG headers")
+
+        def one(item):
+            iid, path = item
+            try:
+                with Image.open(path) as im:
+                    return iid, im.size
+            except Exception:  # noqa: BLE001 - a corrupt file just drops out
+                return iid, None
+
+        with ThreadPoolExecutor(max_workers=16) as ex:
+            for iid, size in ex.map(one, paths.items(), chunksize=256):
+                if size:
+                    dims[iid] = size
+
+    with objects_json.open() as fh:
+        records = json.load(fh)
+    return paths, records, dims
+
+
+def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
+    """One pickle holding every ``(class, band)`` cell of the scale study (#3156).
+
+    The construction, in one paragraph: one image pool and one class list
+    (:data:`pile_config.SCALE_CLASSES`); for a class *c* and band *B* an image is
+    a **positive** when its compact union box for *c* falls in *B*, a
+    **negative** when it holds no instance of any class in *C*, and **excluded**
+    otherwise -- it holds *c* at some other size, so scoring it as a negative
+    would penalise a detector for finding a real bus, which is what #3156 is
+    about. Exclusion is carried per media as ``evaluable_categories`` and
+    honoured by ``vtscore.eval.labels.evaluable_pool``.
+
+    Cells are *designated* rather than inferred: exactly ``SCALE_N_POS``
+    positives and one shared pool of ``SCALE_N_NEG`` negatives each. Every cell
+    therefore has identical prevalence and identical negatives, so a
+    small-vs-large difference is a paired contrast on one class rather than two
+    datasets of different difficulty.
+    """
+    import random  # noqa: PLC0415
+
+    from PIL import Image  # noqa: PLC0415
+
+    wanted = set(pc.SCALE_CLASSES)
+    bands = list(pc.BOX_BANDS)
+    cells = [pc.scale_cell(c, b) for c in pc.SCALE_CLASSES for b in bands]
+
+    paths, records, dims = _vg_source()
+    log(f"  scanning {len(records)} VG records for {len(wanted)} classes")
+
+    # class -> band -> [image_id], plus the boxes to stamp and the clean pool.
+    supply: dict[str, dict[str, list[int]]] = {c: {b: [] for b in bands} for c in pc.SCALE_CLASSES}
+    boxes_for: dict[tuple[int, str], list[list[float]]] = {}
+    clean: list[int] = []
+
+    for rec in records:
+        iid = int(rec["image_id"])
+        wh = dims.get(iid)
+        if iid not in paths or wh is None:
+            continue
+        W, H = wh
+        if W <= 0 or H <= 0:
+            continue
+        area = float(W * H)
+        by_name: dict[str, list[list[float]]] = defaultdict(list)
+        for obj in rec.get("objects") or []:
+            names = obj.get("names") or []
+            if not names:
+                continue
+            name = str(names[0]).strip().lower()
+            if name not in wanted:
+                continue
+            x, y = float(obj.get("x", 0)), float(obj.get("y", 0))
+            w, h = float(obj.get("w", 0)), float(obj.get("h", 0))
+            if w > 0 and h > 0:
+                by_name[name].append([x, y, x + w, y + h])
+        if not by_name:
+            # Holds none of C at any size: a sound negative for every cell.
+            clean.append(iid)
+            continue
+        for name, bs in by_name.items():
+            ux0 = min(b[0] for b in bs)
+            uy0 = min(b[1] for b in bs)
+            ux1 = max(b[2] for b in bs)
+            uy1 = max(b[3] for b in bs)
+            union = max(0.0, ux1 - ux0) * max(0.0, uy1 - uy0) / area
+            largest = max((b[2] - b[0]) * (b[3] - b[1]) for b in bs) / area
+            # Scattered instances in *this* image: the union box describes the
+            # scatter rather than the object, so the image is excluded from
+            # every band of this class rather than banded by a box no user
+            # would drag.
+            if union > largest * pc.BAND_MAX_INFLATION:
+                continue
+            for band, (lo, hi) in pc.BOX_BANDS.items():
+                if lo <= union < hi:
+                    supply[name][band].append(iid)
+                    boxes_for[(iid, pc.scale_cell(name, band))] = bs
+                    break
+
+    rng = random.Random(0x5CA1E)  # deterministic sample, stable across rebuilds
+    chosen: dict[str, list[int]] = {}
+    for c in pc.SCALE_CLASSES:
+        for band in bands:
+            pool = sorted(supply[c][band])
+            cell = pc.scale_cell(c, band)
+            if len(pool) < pc.SCALE_N_POS:
+                # Say so rather than quietly building a smaller cell: unequal
+                # prevalence between bands is the defect this construction
+                # exists to remove.
+                log(f"  UNDER-SUPPLIED {cell}: {len(pool)} positives (wanted {pc.SCALE_N_POS})")
+            chosen[cell] = rng.sample(pool, min(pc.SCALE_N_POS, len(pool)))
+
+    clean.sort()
+    negatives = rng.sample(clean, min(pc.SCALE_N_NEG, len(clean)))
+    log(
+        f"  {sum(len(v) for v in chosen.values())} positives over {len(cells)} cells, "
+        f"{len(negatives)} shared negatives (from {len(clean)} clean images)"
+    )
+
+    # media id -> the cells it is a positive for. Negatives get every cell.
+    positive_in: dict[int, list[str]] = defaultdict(list)
+    for cell, ids in chosen.items():
+        for iid in ids:
+            positive_in[iid].append(cell)
+
+    for iid in sorted(set(positive_in) | set(negatives)):
+        path = paths[iid]
+        try:
+            with Image.open(path) as im:
+                W, H = im.size
+            data = path.read_bytes()
+        except Exception:  # noqa: BLE001 - a corrupt file just drops out
+            continue
+        if W <= 0 or H <= 0:
+            continue
+        cats = sorted(positive_in.get(iid, []))
+        regions = [
+            {"box": [b[0] / W, b[1] / H, b[2] / W, b[3] / H], "label": cell}
+            for cell in cats
+            for b in boxes_for.get((iid, cell), [])
+        ]
+        medias[iid] = {
+            "id": iid,
+            "media_type": "image",
+            "embedder": embedder_name,
+            "duration": 0,
+            "file_size": 0,
+            "md5": "",
+            "embeddings": {},
+            "media_bytes": data,
+            "media_string": None,
+            "filename": path.name,
+            "category": cats[0] if cats else "",
+            "categories": cats,
+            # A designated cell membership, not a closed world: a positive is
+            # scorable only in the cells it was drawn for, and the shared
+            # negatives are scorable everywhere.
+            "evaluable_categories": cats if cats else list(cells),
+            "regions": regions,
+            "origin": {"importer": "vg_scale", "params": {"embedder": embedder_name}},
+            "origin_name": str(path),
+        }
+
+
 def _load_demo(dataset: str, medias: dict[int, dict], embedder_name: str) -> None:
     from vtscore.datasets.loader_demo import load_demo_dataset  # noqa: PLC0415
 
@@ -310,6 +508,27 @@ def _load_demo(dataset: str, medias: dict[int, dict], embedder_name: str) -> Non
 # --------------------------------------------------------------------------
 # Build
 # --------------------------------------------------------------------------
+
+
+@contextmanager
+def _embed_batch_size(embedder: str):
+    """Apply this embedder's batch size for the duration of the embed pass.
+
+    The app reads ``VTSEARCH_EMBED_BATCH_SIZE`` per bulk call, so one build
+    process can run each embedder at its own size rather than every model at
+    the shipped default of 32. An explicit env var wins: someone who set one
+    is tuning for the card in front of them, and the table cannot know that.
+    """
+    want = pc.embed_batch_size(embedder)
+    if want is None or os.environ.get("VTSEARCH_EMBED_BATCH_SIZE", "").strip():
+        yield
+        return
+    os.environ["VTSEARCH_EMBED_BATCH_SIZE"] = str(want)
+    log(f"  embed batch size {want}")
+    try:
+        yield
+    finally:
+        os.environ.pop("VTSEARCH_EMBED_BATCH_SIZE", None)
 
 
 def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
@@ -332,6 +551,8 @@ def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
         _load_coco(medias, embedder)
     elif kind == "vg_band":
         _load_vg_band(pc.DATASETS[dataset]["band"], medias, embedder)
+    elif kind == "vg_scale":
+        _load_vg_scale(medias, embedder)
     else:
         pc.require_demo_source(dataset)
         _load_demo(dataset, medias, embedder)
@@ -340,7 +561,8 @@ def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
     from vtscore.datasets.stages.embedding import embed_missing  # noqa: PLC0415
 
     t1 = time.time()
-    embed_missing(medias, embedder)
+    with _embed_batch_size(embedder):
+        embed_missing(medias, embedder)
     embed_s = time.time() - t1
 
     n_patch = sum(1 for m in medias.values() if m.get("patch_grid") is not None)

@@ -49,6 +49,15 @@ Don't burn time trying to grab premium GPUs your tier can't touch — check the 
 and if you need a GPU *now*, request an allowed type that's actually idle
 (`sinfo -p gpu -O NodeHost,Gres,GresUsed,StateCompact`).
 
+**Don't hardcode the type in a launcher, either.** This cluster rejects an
+untyped `--gres=gpu:1`, so a type must be named — but a named type is a pin that
+outlives its reason in both directions: `v100` silently cost 2.3x on every
+`siglip2_l` embed while L40S nodes idled, and `l40s` once meant ~5-day waits back
+when only two L40S nodes existed. `python3 scripts/slurm/pick_gpu.py --explain`
+answers the question above from `scontrol` and prints its reasoning; new
+launchers should call it rather than picking a favourite
+(`GRES="gpu:$(python3 "$REPO/scripts/slurm/pick_gpu.py"):1"`).
+
 ## 3. Prefer fewer, longer allocations over one-per-task
 
 A naive `--array=0-N` with one element per unit of work **re-enters the scheduler

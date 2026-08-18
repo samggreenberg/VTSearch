@@ -1,0 +1,30 @@
+==============================================================================================================
+HORIZON COMPARISON — 150 votes against 250
+==============================================================================================================
+/expscratch/sgreenberg/bench-binary/results: 45 cells, 43 with data, 2 never found a positive
+/expscratch/sgreenberg/bench-h250/binary/results: 45 cells, 44 with data, 1 never found a positive
+
+OVERLAP CHECK: 6249 shared steps, largest absolute difference 0
+  -> the long run reproduces the short one step for step
+
+RUNS THAT ONLY STARTED PAST VOTE 150: 1
+  first positive around vote 232: coco_val / dinov3_patch / refrigerator / 0
+  (each of these was reported as a starved run at the shorter horizon)
+
+WHAT VOTES 151-250 BOUGHT — paired per cell, mean +- SE over 43 cells
+negative cost / positive AP = the longer horizon is better; |mean| < 2*SE is not resolvable
+           metric  votes 101-150  votes 201-250         change resolvable
+             cost          0.400          0.381 -0.019 +-0.012         no
+              fpr          0.263          0.271 +0.008 +-0.017         no
+              fnr          0.137          0.109 -0.027 +-0.009        yes
+average_precision          0.508          0.523 +0.015 +-0.008         no
+            auroc          0.892          0.900 +0.009 +-0.003        yes
+           n_good          8.850         10.544 +1.694 +-0.395        yes
+
+BY ARM
+        dataset     embedder  cells  cost_old  cost_new         d_cost d_positives
+       coco_val dinov3_patch     19     0.293     0.261 -0.032 +-0.020        +1.1
+visual_genome_m dinov3_patch     24     0.484     0.475 -0.009 +-0.015        +2.2
+
+RUNS STILL NOT WORKING (window cost > 0.9): 0 at the old horizon -> 0 at the new one
+cells improved by >0.01: 20, unchanged: 8, worse by >0.01: 15

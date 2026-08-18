@@ -28,6 +28,7 @@ from vtscore.datasets.importers._npz_vectors import (
     read_npz_multi_vectors,
     write_npz_multi_vectors,
 )
+from vtscore.embedding.binding import expected_dim_for_embedder
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.datasets.importers.server_files import (
     ServerFilesDatasetImporter,
@@ -157,6 +158,19 @@ class TestReadNpzEmbedderName:
 # ---------------------------------------------------------------------------
 
 
+def _col(embedder_name: str, n_rows: int, offset: float = 0.0) -> np.ndarray:
+    """A ``vectors_<name>`` column of the width *embedder_name* actually declares.
+
+    Manifest reads reject a column whose width contradicts the embedder its key
+    names - that combination is the mislabelled-archive case the guard exists to
+    catch (see ``tests_lib/io/test_precomputed_vector_validation.py``).  So a
+    fixture that wants a *valid* trio archive has to use the real width; *offset*
+    keeps each column's values distinguishable.
+    """
+    dim = expected_dim_for_embedder(embedder_name) or 4
+    return np.arange(n_rows * dim, dtype=np.float32).reshape(n_rows, dim) + offset
+
+
 # ---------------------------------------------------------------------------
 # read_npz_multi_vectors / write_npz_multi_vectors (per-embedder trio layout)
 # ---------------------------------------------------------------------------
@@ -171,8 +185,8 @@ class TestReadNpzMultiVectors:
         assert read_npz_multi_vectors(npz) is None
 
     def test_reads_per_embedder_columns(self, tmp_path):
-        siglip = np.arange(6, dtype=np.float32).reshape(2, 3)
-        patch = (np.arange(8, dtype=np.float32) + 100).reshape(2, 4)
+        siglip = _col("siglip", 2)
+        patch = _col("dinov3_patch", 2, offset=100.0)
         npz = tmp_path / "multi.npz"
         np.savez(
             npz,
@@ -193,8 +207,8 @@ class TestReadNpzMultiVectors:
         np.savez(
             npz,
             filenames=np.array(["a.jpg"]),
-            vectors_siglip=np.zeros((1, 3), dtype=np.float32),
-            vectors_dinov3_patch=np.zeros((1, 4), dtype=np.float32),
+            vectors_siglip=_col("siglip", 1),
+            vectors_dinov3_patch=_col("dinov3_patch", 1),
             embedder_name=np.array("dinov3_patch"),
         )
         _mapping, primary = _read_multi(npz)
@@ -207,7 +221,7 @@ class TestReadNpzMultiVectors:
         np.savez(
             npz,
             filenames=np.array(["a.jpg"]),
-            vectors_siglip=np.zeros((1, 3), dtype=np.float32),
+            vectors_siglip=_col("siglip", 1),
             embedder_name=np.array("clip"),
         )
         _mapping, primary = _read_multi(npz)
@@ -220,7 +234,7 @@ class TestReadNpzMultiVectors:
         np.savez(
             npz,
             filenames=np.array(["a.jpg"]),
-            vectors_dinov3_patch=np.zeros((1, 4), dtype=np.float32),
+            vectors_dinov3_patch=_col("dinov3_patch", 1),
         )
         mapping, _primary = _read_multi(npz)
         assert set(mapping["a.jpg"]) == {"dinov3_patch"}
@@ -230,14 +244,14 @@ class TestReadNpzMultiVectors:
         np.savez(
             npz,
             filenames=np.array(["a.jpg", "b.jpg"]),
-            vectors_siglip=np.zeros((1, 3), dtype=np.float32),  # only 1 row for 2 files
+            vectors_siglip=_col("siglip", 1),  # only 1 row for 2 files
         )
         with pytest.raises(ValueError, match="mismatched lengths"):
             read_npz_multi_vectors(npz)
 
     def test_missing_filenames_raises(self, tmp_path):
         npz = tmp_path / "multi.npz"
-        np.savez(npz, vectors_siglip=np.zeros((2, 3), dtype=np.float32))
+        np.savez(npz, vectors_siglip=_col("siglip", 2))
         with pytest.raises(ValueError, match="filenames"):
             read_npz_multi_vectors(npz)
 
@@ -249,14 +263,16 @@ class TestReadNpzMultiVectors:
 class TestWriteNpzMultiVectors:
     def test_round_trips_through_reader(self, tmp_path):
         rng = np.random.default_rng(7)
+        siglip_dim = expected_dim_for_embedder("siglip") or 3
+        patch_dim = expected_dim_for_embedder("dinov3_patch") or 4
         mapping = {
             "a.jpg": {
-                "siglip": rng.standard_normal(3).astype(np.float32),
-                "dinov3_patch": rng.standard_normal(4).astype(np.float32),
+                "siglip": rng.standard_normal(siglip_dim).astype(np.float32),
+                "dinov3_patch": rng.standard_normal(patch_dim).astype(np.float32),
             },
             "b.jpg": {
-                "siglip": rng.standard_normal(3).astype(np.float32),
-                "dinov3_patch": rng.standard_normal(4).astype(np.float32),
+                "siglip": rng.standard_normal(siglip_dim).astype(np.float32),
+                "dinov3_patch": rng.standard_normal(patch_dim).astype(np.float32),
             },
         }
         npz = tmp_path / "out.npz"
@@ -270,11 +286,12 @@ class TestWriteNpzMultiVectors:
                 np.testing.assert_array_equal(read_back[fname][emb], vec)
 
     def test_compressed_round_trips(self, tmp_path):
-        mapping = {"a.jpg": {"siglip": np.ones(3, dtype=np.float32)}}
+        dim = expected_dim_for_embedder("siglip") or 3
+        mapping = {"a.jpg": {"siglip": np.ones(dim, dtype=np.float32)}}
         npz = tmp_path / "out.npz"
         write_npz_multi_vectors(npz, mapping, compressed=True)
         read_back, _primary = _read_multi(npz)
-        np.testing.assert_array_equal(read_back["a.jpg"]["siglip"], np.ones(3, dtype=np.float32))
+        np.testing.assert_array_equal(read_back["a.jpg"]["siglip"], np.ones(dim, dtype=np.float32))
 
     def test_empty_mapping_raises(self, tmp_path):
         with pytest.raises(ValueError, match="empty"):
@@ -531,8 +548,8 @@ class TestServerFilesMultiVectorsEndToEnd:
         np.savez(
             npz,
             filenames=np.array([str(src_a), str(src_b)]),
-            vectors_clap=np.arange(8, dtype=np.float32).reshape(2, 4),
-            vectors_ast=(np.arange(8, dtype=np.float32) + 50).reshape(2, 4),
+            vectors_clap=_col("clap", 2),
+            vectors_ast=_col("ast", 2, offset=50.0),
             embedder_name=np.array("clap"),
         )
         paths, path_to_vector, embedder_name = _read_npz_paths_file(npz)
@@ -546,8 +563,8 @@ class TestServerFilesMultiVectorsEndToEnd:
         media['embeddings'], with the scalar embedder_name as the primary."""
         src_a, src_b = self._write_wavs(tmp_path)
         rng = np.random.default_rng(3)
-        clap = rng.standard_normal((2, 512)).astype(np.float32)
-        ast = rng.standard_normal((2, 512)).astype(np.float32)
+        clap = rng.standard_normal((2, expected_dim_for_embedder("clap") or 512)).astype(np.float32)
+        ast = rng.standard_normal((2, expected_dim_for_embedder("ast") or 512)).astype(np.float32)
         npz = tmp_path / "multi.npz"
         np.savez(
             npz,

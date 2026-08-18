@@ -36,6 +36,18 @@ Layout 3 (per-embedder) is detected first (any ``vectors_<name>`` key), then
 the standard ``filenames`` + ``vectors`` layout, and finally the per-key
 layout.  ``allow_pickle`` is disabled to avoid loading arbitrary Python
 objects from untrusted archives.
+
+**Every vector these readers return has been validated** (see
+:mod:`vtscore.embedding.precomputed`): it is a finite, contiguous, 1-D
+``float32`` row, and - when the archive names an embedder whose width VTSearch
+knows - its width matches that embedder's
+:attr:`~vtscore.media.embedder.MediaEmbedder.embedding_dim`.  This is the door
+an outside vector comes through, and it is the only cheap place to check: a
+manifest is read once, whereas the width mismatch it would otherwise introduce
+resurfaces on *every* subsequent scoring request as a bare numpy broadcast error
+that names neither the media nor the manifest.  Rejecting here also pins the
+dtype, so a ``float64`` research export or a half-precision embed cannot leave a
+dataset holding mixed-dtype vectors.
 """
 
 from __future__ import annotations
@@ -45,6 +57,9 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+
+from vtscore.embedding.binding import expected_dim_for_embedder
+from vtscore.embedding.precomputed import normalize_vector, normalize_vector_block, stack_vectors
 
 
 _FILENAMES_KEYS = ("filenames", "names", "paths", "filename")
@@ -122,6 +137,45 @@ def validate_manifest_embedder_name(
     )
 
 
+def _validated_vector_block(
+    arr: Any,
+    *,
+    npz_path: Path,
+    vectors_key: str,
+    embedder_name: str = "",
+) -> np.ndarray:
+    """Validate an ``(N, D)`` manifest vectors array, checking width against its embedder.
+
+    One vectorised pass rejects a ragged / non-2-D / zero-width / non-finite
+    block and pins the dtype to ``float32``, so a ``float64`` research export or
+    a half-precision embed can never reach ``media["embeddings"]`` in its
+    original dtype.  When the archive names an embedder whose width we know, a
+    disagreement is caught here - at the door, naming the manifest - rather than
+    surfacing later as a broadcast error inside the matrix builder.
+    """
+    return normalize_vector_block(
+        arr,
+        label=f"NPZ manifest {npz_path} array {vectors_key!r}",
+        expected_dim=expected_dim_for_embedder(embedder_name),
+        expected_source=f"the width declared by embedder {embedder_name!r}" if embedder_name else "",
+    )
+
+
+def _archive_embedder_name(data) -> str:
+    """Return the scalar ``embedder_name`` / ``embedder`` value in *data*, or ``""``.
+
+    The in-archive counterpart of :func:`read_npz_embedder_name` (which opens the
+    file itself); used by the readers that already hold an open handle so a
+    manifest is not read twice just to learn the name its vectors must match.
+    """
+    key_set = set(data.files)
+    for key in _EMBEDDER_NAME_KEYS:
+        if key in key_set:
+            val = data[key]
+            return (str(val) if val.ndim == 0 else str(val.flat[0])).strip()
+    return ""
+
+
 def is_archive_member_manifest(npz_path: Path) -> bool:
     """Return ``True`` if *npz_path* is a no-extraction **archive-member** manifest.
 
@@ -176,23 +230,56 @@ def read_npz_filenames_and_vectors(npz_path: Path) -> dict[str, np.ndarray]:
                     f"NPZ '{filenames_key}' and '{vectors_key}' have mismatched lengths "
                     f"({len(names_arr)} vs {len(vecs_arr)})"
                 )
+            vecs_arr = _validated_vector_block(
+                vecs_arr, npz_path=p, vectors_key=vectors_key, embedder_name=_archive_embedder_name(data)
+            )
             mapping: dict[str, np.ndarray] = {}
             for i, raw_name in enumerate(names_arr):
                 name = str(raw_name).strip()
                 if not name:
                     continue
-                mapping[name] = np.asarray(vecs_arr[i])
+                mapping[name] = vecs_arr[i]
             if not mapping:
                 raise ValueError(f"NPZ '{filenames_key}' array is empty")
             return mapping
 
-        # Per-key layout: every archive key is a filename.
-        if not keys:
-            raise ValueError(f"NPZ archive {p} is empty")
-        mapping = {}
-        for k in keys:
-            mapping[k] = np.asarray(data[k])
-        return mapping
+        return _read_per_key_vectors(data, keys, p)
+
+
+def _read_per_key_vectors(data, keys: list[str], p: Path) -> dict[str, np.ndarray]:
+    """Read the per-key layout, where every archive key is a filename.
+
+    Unlike the ``filenames`` + ``vectors`` block layout there is no single array
+    to validate in one pass, and nothing structural forces the entries to agree
+    on a width - so each is validated individually and checked against the
+    archive's declared embedder (or, failing that, the first entry).  That is
+    what turns "one row in this archive is 768-dim" into a message naming the
+    offending key instead of a broadcast failure several requests later.
+    """
+    if not keys:
+        raise ValueError(f"NPZ archive {p} is empty")
+    embedder_name = _archive_embedder_name(data)
+    expected_dim = expected_dim_for_embedder(embedder_name)
+    # Name where the width we compare against came from, so the message points at
+    # the thing the user can change: a declared embedder if the archive names one,
+    # otherwise simply "whatever the first entry was".
+    expected_source = (
+        f"the width declared by embedder {embedder_name!r}"
+        if expected_dim is not None
+        else f"matching the first entry {keys[0]!r}"
+    )
+    mapping: dict[str, np.ndarray] = {}
+    for k in keys:
+        vec = normalize_vector(
+            data[k],
+            label=f"NPZ archive {p} entry {k!r}",
+            expected_dim=expected_dim,
+            expected_source=expected_source,
+        )
+        if expected_dim is None:
+            expected_dim = int(vec.shape[0])
+        mapping[k] = vec
+    return mapping
 
 
 def _multi_vectors_embedder_name(key: str) -> str:
@@ -241,7 +328,12 @@ def _multi_vector_columns(data, p: Path) -> tuple[dict[str, np.ndarray], np.ndar
         arr = data[key]
         if len(arr) != n:
             raise ValueError(f"NPZ '{key}' and '{filenames_key}' have mismatched lengths ({len(arr)} vs {n})")
-        columns[emb_name] = arr
+        # Each column is validated against *its own* embedder's declared width.
+        # Columns legitimately differ from one another (siglip is 1152-dim while
+        # dinov3_patch is 768-dim), so the only meaningful width check here is
+        # per-column - which is exactly the check that catches a trio archive
+        # whose columns were written under the wrong keys.
+        columns[emb_name] = _validated_vector_block(arr, npz_path=p, vectors_key=key, embedder_name=emb_name)
     return columns, names_arr
 
 
@@ -341,7 +433,14 @@ def write_npz_multi_vectors(
 
     arrays: dict[str, np.ndarray] = {"filenames": np.array(filenames)}
     for emb_name in embedder_names:
-        arrays[f"vectors_{emb_name}"] = np.stack([np.asarray(mapping[f][emb_name]) for f in filenames])
+        # stack_vectors rather than np.stack: a dataset whose media disagree on
+        # width would otherwise be written out as "all input arrays must have the
+        # same shape", which names neither the embedder nor the offending file.
+        arrays[f"vectors_{emb_name}"] = stack_vectors(
+            [mapping[f][emb_name] for f in filenames],
+            label=f"write_npz_multi_vectors column {emb_name!r}",
+            row_labels=filenames,
+        )
     if primary_embedder:
         arrays["embedder_name"] = np.array(primary_embedder)
 
@@ -427,6 +526,9 @@ def _manifest_columns(data, p: Path) -> dict[str, Any]:
         raise ValueError(f"NPZ '{members_key}' and '{vectors_key}' have mismatched lengths ({n} vs {len(vecs_arr)})")
     if archives_key is None:
         raise ValueError(f"NPZ manifest {p} must contain an archives array (one of {_ARCHIVES_KEYS})")
+    vecs_arr = _validated_vector_block(
+        vecs_arr, npz_path=p, vectors_key=vectors_key, embedder_name=_archive_embedder_name(data)
+    )
 
     return {
         "vectors": vecs_arr,

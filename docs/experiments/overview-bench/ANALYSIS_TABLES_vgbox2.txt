@@ -2,11 +2,13 @@
 COVERAGE
 ====================================================================================================
 cell files found : 270 / 270 expected
-unreadable/empty : 5 [('task_0014.csv', 'empty'), ('task_0044.csv', 'empty'), ('task_0074.csv', 'empty'), ('task_0234.csv', 'empty'), ('task_0264.csv', 'empty')]
+header-only      : 5 starved cells ['task_0014.csv', 'task_0044.csv', 'task_0074.csv', 'task_0234.csv', 'task_0264.csv']
+unreadable       : 0 []
 rows loaded      : 37844
 distinct cells   : 265
 steps per cell   : min=7 median=148 max=149
 styles           : ['max_patch', 'whole_image']
+horizon          : 150 votes; deep regime = t >= 100
 heads            : ['linear']
 
 ====================================================================================================
@@ -91,6 +93,21 @@ vg_box_small x siglip            29          6.0          0     150.0           
 vg_box_small x siglip2_l         29          7.0          0     150.0            0.0
 
 ====================================================================================================
+PAIRED ARM CONTRASTS - deep regime, same (category, seed) on both sides
+====================================================================================================
+mean difference +- standard error over paired cells; |mean| < 2*SE is NOT resolvable here
+      dataset                 contrast  n_cells           cost average_precision          auroc
+ vg_box_large    dinov3_patch - siglip       29 -0.072 +-0.029    +0.037 +-0.017 +0.041 +-0.013
+ vg_box_large dinov3_patch - siglip2_l       29 -0.071 +-0.039    +0.043 +-0.018 +0.038 +-0.011
+ vg_box_large       siglip - siglip2_l       29 +0.001 +-0.037    +0.006 +-0.013 -0.002 +-0.009
+vg_box_medium    dinov3_patch - siglip       30 -0.170 +-0.037    +0.094 +-0.033 +0.105 +-0.019
+vg_box_medium dinov3_patch - siglip2_l       30 -0.144 +-0.036    +0.051 +-0.034 +0.096 +-0.018
+vg_box_medium       siglip - siglip2_l       30 +0.026 +-0.021    -0.043 +-0.014 -0.009 +-0.014
+ vg_box_small    dinov3_patch - siglip       29 -0.154 +-0.027    +0.079 +-0.016 +0.098 +-0.019
+ vg_box_small dinov3_patch - siglip2_l       29 -0.157 +-0.024    +0.062 +-0.017 +0.099 +-0.022
+ vg_box_small       siglip - siglip2_l       29 -0.003 +-0.020    -0.016 +-0.016 +0.001 +-0.012
+
+====================================================================================================
 COST OF A STEP (seconds)
 ====================================================================================================
                               mean  median    max  cell_median  cell_max
@@ -110,4 +127,4 @@ vg_box_small x siglip2_l      0.59    0.65   0.82        130.5     169.8
 INDIVIDUAL TRACES
 ====================================================================================================
 
-(tables also written to /expscratch/sgreenberg/bench-vgbox2/results/ANALYSIS_TABLES.txt)
+(these tables were also written to docs/experiments/overview-bench/ANALYSIS_TABLES_vgbox2.txt)

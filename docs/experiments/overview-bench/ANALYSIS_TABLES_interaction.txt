@@ -1,0 +1,30 @@
+==============================================================================================================
+BINARY vs BOXES - the interaction axis, isolated
+==============================================================================================================
+/expscratch/sgreenberg/bench-binary/results: 45 cells, 43 with data, 2 starved, 0 unreadable
+/expscratch/sgreenberg/bench-overview/results: 189 cells, 182 with data, 7 starved, 0 unreadable
+starved cells in the binary arm: ['task_0039.csv', 'task_0043.csv']
+
+DEEP-REGIME MEANS (t >= 100)
+                                        cost    fpr    fnr  average_precision  auroc
+dataset         embedder
+coco_val        dinov3_patch           0.152  0.092  0.060              0.787  0.976
+                dinov3_patch (binary)  0.293  0.207  0.086              0.642  0.937
+                siglip                 0.218  0.071  0.147              0.695  0.942
+                siglip2_l              0.202  0.115  0.087              0.711  0.955
+visual_genome_m dinov3_patch           0.324  0.182  0.142              0.525  0.913
+                dinov3_patch (binary)  0.484  0.307  0.177              0.401  0.856
+                siglip                 0.392  0.301  0.091              0.428  0.898
+                siglip2_l              0.367  0.244  0.123              0.457  0.899
+
+PAIRED CONTRASTS - same (category, seed); mean difference +- standard error
+positive cost / negative AP = the binary arm is WORSE
+        dataset                             contrast  n_cells           cost            fpr            fnr average_precision          auroc
+       coco_val dinov3_patch (binary) - dinov3_patch       19 +0.141 +-0.028 +0.115 +-0.030 +0.026 +-0.015    -0.145 +-0.031 -0.039 +-0.009
+       coco_val       dinov3_patch (binary) - siglip       19 +0.075 +-0.037 +0.136 +-0.045 -0.060 +-0.031    -0.053 +-0.036 -0.006 +-0.008
+       coco_val    dinov3_patch (binary) - siglip2_l       19 +0.091 +-0.036 +0.091 +-0.046 -0.000 +-0.027    -0.069 +-0.040 -0.018 +-0.010
+visual_genome_m dinov3_patch (binary) - dinov3_patch       24 +0.160 +-0.028 +0.125 +-0.029 +0.035 +-0.023    -0.124 +-0.027 -0.057 +-0.012
+visual_genome_m       dinov3_patch (binary) - siglip       23 +0.088 +-0.033 +0.015 +-0.051 +0.072 +-0.026    -0.021 +-0.016 -0.038 +-0.009
+visual_genome_m    dinov3_patch (binary) - siglip2_l       24 +0.117 +-0.030 +0.063 +-0.034 +0.054 +-0.028    -0.056 +-0.030 -0.043 +-0.009
+
+A difference smaller than twice its standard error is not resolvable by this sample.

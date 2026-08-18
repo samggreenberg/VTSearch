@@ -598,9 +598,7 @@ def _run_detector_load_task(
                 remove_loaded_detector_id(detector_id)
                 tracker.update("idle", "", 0, 0, error="Cancelled", step=None, total_steps=None)
             except Exception as e:
-                import traceback as _tb
-
-                _tb.print_exc()
+                logger.exception("Detector load for %s failed", detector_id)
                 from vtsearch.state import unregister_detector_context as _unreg
 
                 _unreg(detector_id)
@@ -657,6 +655,94 @@ def _reembed_or_ack_loaded_detector(detector_id: str, entry: dict) -> dict:
     return {"ok": True, "labels_restored": 0, "examples_seeded": 0}
 
 
+def _start_detector_load(detector_id: str, entry: dict, thread_ds_ctx) -> dict:
+    """Spawn the background load for a freshly-reserved detector.
+
+    Called by :func:`load_detector_route` after ``begin_detector_load``
+    returned ``"reserved"``: the caller owns the load reservation, and this
+    helper hands it off to the worker thread.  Until ``spawn`` succeeds, only
+    this request can release the reservation and retire the task row, so any
+    failure here must do that cleanup itself — skipping it left the detector
+    stuck "in progress" forever: every retry attached to a worker that didn't
+    exist, Cancel had nothing to cancel, and only an app restart recovered
+    (issue #3139).
+    """
+    from vtscore import timing
+    from vtscore.concurrency.progress import detector_loading_tasks
+    from vtscore.detectors.registry import end_detector_load
+    from vtsearch.state import DetectorContext
+
+    task_id = f"_detload_{detector_id}"
+    timing_recorder = None
+    try:
+        # Build the context but do NOT register it yet: the worker publishes it
+        # into the global store only after labels/embeddings/MLP are populated,
+        # so no concurrent request can observe a torn, empty-then-filling
+        # detector.
+        det_ctx = DetectorContext(
+            detector_id,
+            name=entry.get("name", ""),
+            media_type=entry.get("media_type", ""),
+        )
+
+        det_media_type = entry.get("media_type", "")
+        det_embedder = entry.get("embedder", "") or ""
+        n_labels = int(entry.get("num_training") or 0)
+
+        tracker = detector_loading_tasks.create_task(
+            task_id,
+            entry.get("name", detector_id),
+            detector_id=detector_id,
+            media_type=det_media_type,
+            step_weights=timing.step_weights(
+                _DETECTOR_LOAD_TASK, media_type=det_media_type, embedder=det_embedder, n=n_labels
+            ),
+        )
+        timing_recorder = timing.record_task(
+            tracker, _DETECTOR_LOAD_TASK, media_type=det_media_type, embedder=det_embedder
+        )
+        timing_recorder.start()
+        timing_recorder.set_scale(n=n_labels)
+        tracker.update("loading", "Preparing…", 0, 0, step=1, total_steps=_LOAD_STEPS)
+
+        det_name = entry.get("name", "")
+
+        def load_task():
+            try:
+                _run_detector_load_task(
+                    detector_id=detector_id,
+                    det_ctx=det_ctx,
+                    thread_ds_ctx=thread_ds_ctx,
+                    det_name=det_name,
+                    tracker=tracker,
+                    task_id=task_id,
+                )
+            finally:
+                # The worker reports failures on the tracker rather than
+                # raising, so the tracker — not an exception — is what says
+                # whether these timings describe a real load or an aborted one.
+                timing_recorder.finish(ok=not tracker.get().get("error"))
+
+        from vtsearch.threading import spawn
+
+        spawn(load_task, name=f"det-load-{detector_id[:8]}")
+    except Exception:
+        logger.exception("Detector load for %s failed before the worker started", detector_id)
+        end_detector_load(detector_id)
+        if timing_recorder is not None:
+            timing_recorder.finish(ok=False)
+        leaked_tracker = detector_loading_tasks.get_tracker(task_id)
+        if leaked_tracker is not None:
+            leaked_tracker.update("idle", "", 0, 0, error="Detector load failed to start", step=None, total_steps=None)
+            detector_loading_tasks.mark_finished(task_id)
+        raise
+    return {
+        "ok": True,
+        "message": "Loading started",
+        "task_id": str(task_id),
+    }
+
+
 @detectors_registry_bp.route("/api/detectors/registry/load", methods=["POST"])
 @detectors_registry_bp.arguments(DetectorRegistryLoadRequestSchema)
 @detectors_registry_bp.response(200, DetectorRegistryLoadResponseSchema)
@@ -674,7 +760,6 @@ def load_detector_route(body: dict):
         get_detector,
     )
     from vtsearch.state import (
-        DetectorContext,
         bad_votes,
         good_votes,
     )
@@ -694,6 +779,17 @@ def load_detector_route(body: dict):
     if detector_id is None:
         return _unload_active_detector()
 
+    from vtsearch.state import get_active_context
+
+    # Snapshot the dataset context BEFORE reserving the load.  When the
+    # request's ``X-Dataset-Id`` names a registered-but-unloaded dataset
+    # (typical right after an app restart, while the dataset is still being
+    # re-loaded from its pickle), ``get_active_context`` raises
+    # ``DatasetNotLoadedError`` → a clean 409.  Resolving it after
+    # ``begin_detector_load`` leaked the reservation and a forever-"Preparing"
+    # task row that only an app restart could clear (issue #3139).
+    thread_ds_ctx = get_active_context()
+
     # Atomically decide our role, closing the check-then-act race where two
     # concurrent loads both saw the detector unloaded (the loaded flag is only
     # set at the end of the loader) and spawned twin loaders.
@@ -708,68 +804,7 @@ def load_detector_route(body: dict):
     if load_role == "loaded":
         return _reembed_or_ack_loaded_detector(detector_id, entry)
 
-    from vtscore.concurrency.progress import detector_loading_tasks
-
-    # Build the context but do NOT register it yet: the worker publishes it into
-    # the global store only after labels/embeddings/MLP are populated, so no
-    # concurrent request can observe a torn, empty-then-filling detector.
-    det_ctx = DetectorContext(
-        detector_id,
-        name=entry.get("name", ""),
-        media_type=entry.get("media_type", ""),
-    )
-
-    from vtscore import timing
-
-    det_media_type = entry.get("media_type", "")
-    det_embedder = entry.get("embedder", "") or ""
-    n_labels = int(entry.get("num_training") or 0)
-
-    task_id = f"_detload_{detector_id}"
-    tracker = detector_loading_tasks.create_task(
-        task_id,
-        entry.get("name", detector_id),
-        detector_id=detector_id,
-        media_type=det_media_type,
-        step_weights=timing.step_weights(
-            _DETECTOR_LOAD_TASK, media_type=det_media_type, embedder=det_embedder, n=n_labels
-        ),
-    )
-    timing_recorder = timing.record_task(tracker, _DETECTOR_LOAD_TASK, media_type=det_media_type, embedder=det_embedder)
-    timing_recorder.start()
-    timing_recorder.set_scale(n=n_labels)
-    tracker.update("loading", "Preparing…", 0, 0, step=1, total_steps=_LOAD_STEPS)
-
-    det_name = entry.get("name", "")
-
-    from vtsearch.state import get_active_context
-
-    _thread_ds_ctx = get_active_context()
-
-    def load_task():
-        try:
-            _run_detector_load_task(
-                detector_id=detector_id,
-                det_ctx=det_ctx,
-                thread_ds_ctx=_thread_ds_ctx,
-                det_name=det_name,
-                tracker=tracker,
-                task_id=task_id,
-            )
-        finally:
-            # The worker reports failures on the tracker rather than raising,
-            # so the tracker — not an exception — is what says whether these
-            # timings describe a real load or an aborted one.
-            timing_recorder.finish(ok=not tracker.get().get("error"))
-
-    from vtsearch.threading import spawn
-
-    spawn(load_task, name=f"det-load-{detector_id[:8]}")
-    return {
-        "ok": True,
-        "message": "Loading started",
-        "task_id": str(task_id),
-    }
+    return _start_detector_load(detector_id, entry, thread_ds_ctx)
 
 
 # ---------------------------------------------------------------------------

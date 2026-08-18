@@ -1,5 +1,39 @@
 
 ========================================================================================================
+coco_dinov3_clock   target='clock'   threshold=0.5503
+  test set: 2476 medias, 112 positive (4.5%)
+  false positives: 62/2364 negatives   false negatives: 21/112 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'clock')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.6151  000000519039.jpg   truck
+    0.6059  000000297085.jpg   teddy bear, tv, cat
+    0.5989  000000532761.jpg   chair, couch, mouse, potted plant, remote, tv
+    0.5962  000000350054.jpg   teddy bear, cat, tv
+    0.5950  000000241602.jpg   bottle, sink, potted plant, toilet, vase
+    0.5908  000000511999.jpg   person, car, train
+    0.5907  000000554266.jpg   bed, person
+    0.5895  000000341058.jpg   chair, bottle, dining table, umbrella
+    0.5809  000000335800.jpg   traffic light
+    0.5781  000000145020.jpg   person, teddy bear
+
+  TOP FALSE NEGATIVES (dataset says IS 'clock', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.4992  000000350148.jpg   person, carrot, chair, car, dining table, cake, clock, cup, fork, knife, ...
+    0.5014  000000223188.jpg   clock, cow, person
+    0.5080  000000290179.jpg   bus, person, boat, car, clock, truck
+    0.5084  000000468332.jpg   person, bench, cake, car, clock, dining table
+    0.5105  000000319696.jpg   bottle, clock, microwave, potted plant, teddy bear
+    0.5153  000000491366.jpg   remote, clock, person, couch, keyboard, tv
+    0.5205  000000036678.jpg   boat, clock
+    0.5244  000000001296.jpg   person, cell phone, clock
+    0.5299  000000198641.jpg   laptop, tv, cat, clock, keyboard
+    0.5308  000000007795.jpg   bed, clock, remote
+
+========================================================================================================
 coco_siglip_clock   target='clock'   threshold=0.1661
   test set: 2476 medias, 112 positive (4.5%)
   false positives: 46/2364 negatives   false negatives: 48/112 positives
@@ -22,13 +56,13 @@ coco_siglip_clock   target='clock'   threshold=0.1661
   TOP FALSE NEGATIVES (dataset says IS 'clock', model least confident)
      score         image   annotated categories on that image
   ----------------------------------------------------------------------------------------------------
-    0.0028  000000350148.jpg   person, carrot, chair, car, dining table, cake, clock, cup, fork, knife, sandw
+    0.0028  000000350148.jpg   person, carrot, chair, car, dining table, cake, clock, cup, fork, knife, ...
     0.0051  000000198641.jpg   laptop, tv, cat, clock, keyboard
     0.0058  000000084674.jpg   person, couch, book, clock, donut, tv
     0.0063  000000568195.jpg   fork, person, bottle, cake, clock, dining table, knife
     0.0070  000000427034.jpg   dog, clock, laptop, person
     0.0077  000000468332.jpg   person, bench, cake, car, clock, dining table
-    0.0099  000000441247.jpg   chair, vase, couch, dining table, orange, oven, person, backpack, banana, bott
+    0.0099  000000441247.jpg   chair, vase, couch, dining table, orange, oven, person, backpack, banana, ...
     0.0102  000000512657.jpg   person, remote, clock, couch, surfboard
     0.0119  000000447169.jpg   bottle, chair, clock, oven
     0.0124  000000322352.jpg   chair, vase, potted plant, clock, dining table
@@ -43,7 +77,7 @@ vg_dinov3_sky   target='sky'   threshold=0.5412
      score         image   annotated categories on that image
   ----------------------------------------------------------------------------------------------------
     0.5837      2492.jpg   mountain, road, shadow, tree
-    0.5829      4973.jpg   building, chair, glass, man, pants, people, person, pole, roof, shirt, sidewal
+    0.5829      4973.jpg   building, chair, glass, man, pants, people, person, pole, roof, shirt, ...
     0.5824    150398.jpg   plane, tire
     0.5808      2541.jpg   field, grass, leaf, tree
     0.5800      3199.jpg   building
@@ -68,6 +102,40 @@ vg_dinov3_sky   target='sky'   threshold=0.5412
     0.5154    498136.jpg   flower, leaf, man, person, sign, sky, umbrella, wall, window, woman
 
 ========================================================================================================
+vg_dinov3_sky_binary   target='sky'   threshold=0.3753
+  test set: 2097 medias, 394 positive (18.8%)
+  false positives: 1305/1703 negatives   false negatives: 28/394 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'sky')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.6981      3350.jpg   bench, bus, bush, car, flower, line, sidewalk
+    0.6854      3311.jpg   building, car, road, roof, tire
+    0.6542      3201.jpg   bench, bush, car, fence, flower, grass, light, line, person, road, sidewalk, ...
+    0.6493      2584.jpg   building, fence, grass, leaf, light, mountain, sidewalk, tree
+    0.6281      3200.jpg   building, car, door, fence, grass, leaf, man, pole, shirt, tree, window
+    0.6268      2951.jpg   bench, branch, fence, flower, person, shadow, sidewalk, tree, trunk
+    0.6243      3308.jpg   leaf, tree
+    0.6239      3248.jpg   building, car, clouds, leaf, light, line, pole, road, tree, trunk, window
+    0.6125      3272.jpg   building, car, sign, tire, tree, truck
+    0.6103      3602.jpg   jacket, pants, person, sidewalk, sign
+
+  TOP FALSE NEGATIVES (dataset says IS 'sky', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.2782    498206.jpg   foot, girl, hand, jacket, leg, pants, pole, shirt, shoe, sky, snow
+    0.2815      3991.jpg   car, door, sky, street, tree, truck, window
+    0.2933      4725.jpg   bush, chair, door, grass, roof, sidewalk, sky, tree, window
+    0.2997    150414.jpg   arm, jacket, line, pants, skis, sky, snow, tree
+    0.3010      4734.jpg   leaf, roof, shadow, sky, snow, tree, window
+    0.3072      4708.jpg   clouds, door, leaf, roof, sky, tree, wall, window
+    0.3181    286012.jpg   cloud, jacket, pants, person, pole, roof, skis, sky, snow, woman
+    0.3308     61600.jpg   man, pole, shadow, skis, sky, snow, tree
+    0.3329      2413.jpg   building, car, light, line, person, road, sidewalk, sky, wall, window
+    0.3393      2875.jpg   bag, bike, building, hand, pants, pole, road, shirt, sign, sky, wall, wheel, ...
+
+========================================================================================================
 vg_siglip_bus   target='bus'   threshold=0.3581
   test set: 2097 medias, 67 positive (3.2%)
   false positives: 1210/2030 negatives   false negatives: 0/67 positives
@@ -85,7 +153,7 @@ vg_siglip_bus   target='bus'   threshold=0.3581
     0.5955    498258.jpg   building, window
     0.5954    150395.jpg   building, clock, flower, hand, roof, sign, sky, wall
     0.5926    498063.jpg   leaf, tree
-    0.5910      3077.jpg   building, car, clock, hair, line, road, sidewalk, tower, tree, truck, window,
+    0.5910      3077.jpg   building, car, clock, hair, line, road, sidewalk, tower, tree, truck, window, ...
 
   TOP FALSE NEGATIVES (dataset says IS 'bus', model least confident)
      score         image   annotated categories on that image
@@ -154,12 +222,130 @@ vg_siglip_sky   target='sky'   threshold=0.4541
      score         image   annotated categories on that image
   ----------------------------------------------------------------------------------------------------
     0.3193    713003.jpg   building, hat, line, man, people, shirt, sky, wall
-    0.3400      4263.jpg   chair, foot, girl, glass, grass, hand, jacket, leg, man, mountain, pants, peop
-    0.3494    150360.jpg   building, bus, bush, car, flower, horse, light, man, pants, road, roof, shirt,
+    0.3400      4263.jpg   chair, foot, girl, glass, grass, hand, jacket, leg, man, mountain, pants, ...
+    0.3494    150360.jpg   building, bus, bush, car, flower, horse, light, man, pants, road, roof, ...
     0.3625    712994.jpg   ear, face, hair, hand, horse, man, nose, people, shadow, shirt, sky
     0.3674      2363.jpg   girl, hair, jacket, man, pants, people, person, shirt, shoe, sky, tree, woman
     0.3928      4981.jpg   building, car, man, pole, shirt, sign, sky, street, tree, wall
     0.3939     61578.jpg   bag, boy, building, clock, face, glass, leaf, pants, roof, shirt, shoe, sky
     0.3955    285722.jpg   boy, face, grass, hand, kite, leaf, letter, pants, person, sky, tree
-    0.3963      4450.jpg   bike, boy, cap, girl, head, leaf, man, people, person, road, shirt, sky, tree,
-    0.3970      3455.jpg   building, door, hair, jacket, man, pants, people, person, shoe, sidewalk, sky,
+    0.3963      4450.jpg   bike, boy, cap, girl, head, leaf, man, people, person, road, shirt, sky, ...
+    0.3970      3455.jpg   building, door, hair, jacket, man, pants, people, person, shoe, sidewalk, ...
+
+========================================================================================================
+vgsmall_dinov3_glasses   target='glasses'   threshold=0.5201
+  test set: 6000 medias, 637 positive (10.6%)
+  false positives: 2863/5363 negatives   false negatives: 43/637 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'glasses')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.6465   2332460.jpg   camera
+    0.6445   2387346.jpg   sunglasses
+    0.6420    498390.jpg   logo
+    0.6418   2323457.jpg   sunglasses
+    0.6389   2387598.jpg   tag, mouth, nose
+    0.6380   2381804.jpg   cap, lips, mouth, nose
+    0.6367   2369727.jpg   sunglasses
+    0.6360   2316777.jpg   ball, logo, nose
+    0.6354   2377932.jpg   watch, wrist
+    0.6346   2329356.jpg   wrist, cap
+
+  TOP FALSE NEGATIVES (dataset says IS 'glasses', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.4724   2338149.jpg   glasses
+    0.4734   2332452.jpg   glasses
+    0.4738   2357502.jpg   glasses
+    0.4754   2410683.jpg   glasses
+    0.4758   2324529.jpg   drain, glasses
+    0.4793   2364120.jpg   glasses, nose
+    0.4794   2412735.jpg   glasses
+    0.4795   2390842.jpg   glasses
+    0.4802   2344070.jpg   glasses
+    0.4809   1592998.jpg   glasses
+
+  NOTE: 364/2863 false positives carry a category whose name contains or is contained by 'glasses' -> likely annotation granularity, not model error
+     2387346.jpg  score=0.6445  matched: ['sunglasses']
+     2323457.jpg  score=0.6418  matched: ['sunglasses']
+     2369727.jpg  score=0.6367  matched: ['sunglasses']
+     2327330.jpg  score=0.6322  matched: ['sunglasses']
+     2378141.jpg  score=0.6283  matched: ['sunglasses']
+     2404085.jpg  score=0.6280  matched: ['sunglasses']
+
+========================================================================================================
+vgsmall_siglip_glasses   target='glasses'   threshold=0.3602
+  test set: 6000 medias, 637 positive (10.6%)
+  false positives: 3937/5363 negatives   false negatives: 22/637 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'glasses')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.6748   1591916.jpg   cap, wrist
+    0.6723   2401506.jpg   bracelet, camera, sunglasses, watch, wrist
+    0.6674   2406087.jpg   sunglasses
+    0.6553   2383235.jpg   earring, ring, sunglasses, teeth
+    0.6519   2325289.jpg   bracelet, earring, watch, wrist
+    0.6504   2397716.jpg   bracelet, logo, watch
+    0.6497   2414622.jpg   nose, teeth
+    0.6480   2319973.jpg   eyebrows, eyes, left eye, mouth, mustache, nose, teeth
+    0.6466   2372109.jpg   bracelet, cap
+    0.6448   2404810.jpg   eyebrows
+
+  TOP FALSE NEGATIVES (dataset says IS 'glasses', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.3235   2359064.jpg   glasses, tusks
+    0.3238   2363159.jpg   cap, glasses, mouth, nose
+    0.3245   2356641.jpg   glasses
+    0.3256   2405620.jpg   glasses
+    0.3317   2375466.jpg   glasses
+    0.3322   2406445.jpg   glasses
+    0.3343   2333967.jpg   glasses
+    0.3407   2335574.jpg   cap, glasses
+    0.3410   2364120.jpg   glasses, nose
+    0.3434   2393150.jpg   glasses
+
+  NOTE: 360/3937 false positives carry a category whose name contains or is contained by 'glasses' -> likely annotation granularity, not model error
+     2401506.jpg  score=0.6723  matched: ['sunglasses']
+     2406087.jpg  score=0.6674  matched: ['sunglasses']
+     2383235.jpg  score=0.6553  matched: ['sunglasses']
+     2368079.jpg  score=0.6401  matched: ['sunglasses']
+     2373702.jpg  score=0.6336  matched: ['sunglasses']
+     2377409.jpg  score=0.6317  matched: ['sunglasses']
+
+========================================================================================================
+vgsmall_siglip_tip   target='tip'   threshold=0.3664
+  test set: 6000 medias, 168 positive (2.8%)
+  false positives: 1995/5832 negatives   false negatives: 116/168 positives
+========================================================================================================
+
+  TOP FALSE POSITIVES (model most confident, dataset says NOT 'tip')
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.6207   2358264.jpg   knee
+    0.5728   2396309.jpg   sunglasses
+    0.5673   2325539.jpg   cap, chimney, numbers
+    0.5591   2406267.jpg   logo, numbers
+    0.5533   2331770.jpg   bolts, chimney
+    0.5436   2367558.jpg   numbers
+    0.5425   2397099.jpg   numbers
+    0.5363   2327483.jpg   logo
+    0.5348   2417985.jpg   chimney, numbers
+    0.5296   2355499.jpg   sunglasses
+
+  TOP FALSE NEGATIVES (dataset says IS 'tip', model least confident)
+     score         image   annotated categories on that image
+  ----------------------------------------------------------------------------------------------------
+    0.2468   2395810.jpg   tip
+    0.2492      1797.jpg   tip
+    0.2744   2353249.jpg   nose, tip
+    0.2800   2366649.jpg   tip
+    0.2824   2359272.jpg   logo, nose, tip
+    0.2832   2380837.jpg   tip
+    0.2850   2342648.jpg   tip
+    0.2873   2367006.jpg   camera, horns, tip
+    0.2878   2364832.jpg   tip
+    0.2894   2331424.jpg   tip

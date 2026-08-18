@@ -141,12 +141,27 @@ else
     branch=$(git -C "$REPO" rev-parse --abbrev-ref HEAD)
     git -C "$REPO" fetch -q origin 2>/dev/null
     local_sha=$(git -C "$REPO" rev-parse HEAD)
-    remote_sha=$(git -C "$REPO" rev-parse "origin/$branch" 2>/dev/null || echo "")
-    if [[ -n "$remote_sha" && "$local_sha" != "$remote_sha" ]]; then
-      say_fail "worktree is not at origin/$branch (local ${local_sha:0:8}, remote ${remote_sha:0:8})"
-      echo "        -> the code you committed is not the code that will run"
+    if [[ "$branch" == "HEAD" ]]; then
+      # Detached, which is how a run pins an exact commit. `--abbrev-ref` returns
+      # the literal string "HEAD" there, so the old comparison silently became
+      # "must equal origin/HEAD" - i.e. the default branch - and failed every
+      # legitimate feature-branch run with "the code you committed is not the
+      # code that will run". What actually matters is that the commit EXISTS on
+      # origin, so it can be fetched and re-run later.
+      if [[ -n "$(git -C "$REPO" branch -r --contains "$local_sha" 2>/dev/null)" ]]; then
+        say_ok "detached at ${local_sha:0:8}, which is pushed to origin"
+      else
+        say_fail "detached at ${local_sha:0:8}, which is NOT on origin"
+        echo "        -> the code that will run cannot be recovered from the remote"
+      fi
     else
-      say_ok "worktree matches origin/$branch"
+      remote_sha=$(git -C "$REPO" rev-parse "origin/$branch" 2>/dev/null || echo "")
+      if [[ -n "$remote_sha" && "$local_sha" != "$remote_sha" ]]; then
+        say_fail "worktree is not at origin/$branch (local ${local_sha:0:8}, remote ${remote_sha:0:8})"
+        echo "        -> the code you committed is not the code that will run"
+      else
+        say_ok "worktree matches origin/$branch"
+      fi
     fi
     if [[ -n "$(git -C "$REPO" status --porcelain --untracked-files=no)" ]]; then
       say_fail "worktree has uncommitted tracked changes - the run would be unreproducible"

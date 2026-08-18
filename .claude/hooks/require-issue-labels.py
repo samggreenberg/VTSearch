@@ -17,9 +17,10 @@ ways -- and issue #3127 was filed unlabeled by hitting the first one:
 A hook is immune to both: it runs at tool-call time, from the checkout as of
 session start, and it does not need to be remembered.
 
-The hook has a second job at the other end of an issue's life: the `dev` label
-(docs/RELEASE.md step 6) means "fixed on `dev`, NOT yet on `main`", so it must
-come off in the write that closes the issue. See `_close_problems`.
+The hook has a second job at the other end of an issue's life: the `solved` label
+(docs/RELEASE.md step 6) means "the development is done; only merges remain",
+so it must come off in the write that closes the issue -- that close *is* the
+last merge landing. See `_close_problems`.
 
 Contract: read the PreToolUse payload on stdin, exit 2 to block (stderr is fed
 back to Claude as the reason), exit 0 to allow. Anything unexpected -- a
@@ -41,7 +42,7 @@ import sys
 
 TOOL_SUFFIX = "issue_write"
 
-DEV_LABEL = "dev"
+SOLVED_LABEL = "solved"
 
 OPT_OUT = re.compile(r"<!--\s*not-an-experiment\s*:", re.IGNORECASE)
 
@@ -119,11 +120,12 @@ def _looks_like_an_experiment(text: str) -> bool:
 
 
 def _close_problems(args: dict) -> list[str]:
-    """Guard the `dev` label on a completing close (the docs/RELEASE.md step-6 sweep).
+    """Guard the `solved` label on a completing close (the docs/RELEASE.md step-6 sweep).
 
-    `dev` means "fixed on `dev`, NOT yet on `main`", so it must not survive the
-    close that ships the fix -- a closed issue still carrying it asserts
-    something false, and the awaiting-release view (`is:open label:dev`) is only
+    `solved` means "the development is done; only merges remain", so it must not
+    survive the close that lands the last of those merges -- a closed issue
+    still carrying it asserts something false, and the views it powers
+    (`is:open -label:solved`, what a human should work on next) are only
     trustworthy if the strip is reliable.
 
     The hook sees the call's arguments, never the issue's current state, so it
@@ -137,21 +139,21 @@ def _close_problems(args: dict) -> list[str]:
     raw = args.get("labels")
     labels = {str(item).strip().lower() for item in (raw or [])}
 
-    if DEV_LABEL in labels:
+    if SOLVED_LABEL in labels:
         return [
-            f'KEEPS `{DEV_LABEL}` ON A CLOSED ISSUE: `{DEV_LABEL}` means "on `dev`, NOT on `main`". '
-            "Closing this issue is the act of shipping it to `main`, so the label is now false. "
+            f'KEEPS `{SOLVED_LABEL}` ON A CLOSED ISSUE: `{SOLVED_LABEL}` means "solved, waiting only on merges". '
+            "Closing this issue is the act of landing the last merge, so the label is now false. "
             "Drop it from the `labels` array."
         ]
 
     if raw is None and str(args.get("state_reason") or "").strip().lower() == "completed":
         return [
-            f"CLOSE DOES NOT STRIP `{DEV_LABEL}`: a `completed` close ships the fix to `main`, so "
-            f'`{DEV_LABEL}` ("on `dev`, NOT on `main`") must come off in the same write.\n'
+            f"CLOSE DOES NOT STRIP `{SOLVED_LABEL}`: a `completed` close ships the fix to `main`, so "
+            f'`{SOLVED_LABEL}` ("solved, waiting only on merges") must come off in the same write.\n'
             "  Pass `labels` explicitly. NOTE: `labels` REPLACES the whole set, so list every label "
-            f"the issue should keep (`claude`, `experiment`, ...) and simply omit `{DEV_LABEL}`. "
+            f"the issue should keep (`claude`, `experiment`, ...) and simply omit `{SOLVED_LABEL}`. "
             "Read the issue first if you do not already know its labels -- passing `[]` would wipe them.\n"
-            f"  If the issue never had `{DEV_LABEL}`, passing its existing labels unchanged satisfies this."
+            f"  If the issue never had `{SOLVED_LABEL}`, passing its existing labels unchanged satisfies this."
         ]
 
     return []
@@ -190,8 +192,8 @@ CREATE_FOOTER = (
 )
 
 CLOSE_FOOTER = (
-    "\nSee docs/RELEASE.md step 6. `dev` is a transient status, not a historical fact:\n"
-    "  it goes ON when the fix merges to `dev`, and comes OFF in the write that closes the issue."
+    "\nSee docs/RELEASE.md step 6. `solved` is a transient status, not a historical fact:\n"
+    "  it goes ON when the fix PR is opened, and comes OFF in the write that closes the issue."
 )
 
 
@@ -206,7 +208,7 @@ def main() -> int:
         headline = "BLOCKED: this issue is missing a required label (CLAUDE.md, 'Label every issue you file')."
     elif method == "update":
         found, footer = _close_problems(args), CLOSE_FOOTER
-        headline = f"BLOCKED: this close mishandles the `{DEV_LABEL}` label."
+        headline = f"BLOCKED: this close mishandles the `{SOLVED_LABEL}` label."
     else:
         return 0
 

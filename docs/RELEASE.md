@@ -86,25 +86,30 @@ Anything else stays open — a genuinely partial `Refs` is doing its job.
 
 - Skip it if it is already closed. Never reopen or re-close.
 - Close it with `state_reason: completed`.
-- **Strip the `dev` label in the same write.** `dev` means "fixed on `dev`, NOT yet on `main`" (see CLAUDE.md), and this close is the moment that stops being true. Pass `labels` explicitly with every label the issue keeps (`claude`, `experiment`, …) minus `dev`; `labels` *replaces* the whole set, so passing `[]` would wipe the rest. A `PreToolUse` hook blocks a `completed` close that keeps `dev` or omits the array.
+- **Strip the `solved` label in the same write.** `solved` means "the development is done; only merges remain" (see CLAUDE.md), and this close is the moment the last merge lands — so the label has nothing left to say. Pass `labels` explicitly with every label the issue keeps (`claude`, `experiment`, …) minus `solved`; `labels` *replaces* the whole set, so passing `[]` would wipe the rest. A `PreToolUse` hook blocks a `completed` close that keeps `solved` or omits the array.
 - Add a one-line comment noting it shipped to `main` in today's release and linking the fix PR (e.g. `Shipped to main in the 2026-07-14 release — fixed
   in #M.`). When the PR used a non-closing keyword, say so in that comment, so the mislabel is visible on the issue rather than silently corrected.
 
 **Report the reconciliation in chat**, briefly: which issues came from the closing bucket, which were closed after reconciliation (and under which PR keyword), and which non-closing references were deliberately left open. This is the only place a crossed wire between a PR keyword and an issue comment becomes visible, so do not collapse it to a bare count. If no qualifying issues are found, state that and do nothing.
 
-## 6b. Refresh the `dev` label between releases
+## 6b. Audit the `solved` label
 
-Step 6 is what *removes* `dev`. What puts it on is `scripts/reconcile-dev-labels.py`, and that runs **between** releases, not only at one: the label's whole job is to make the awaiting-release view (`is:issue is:open label:dev`) correct while the release is still weeks away. Run it whenever you want that view refreshed, and once more right after step 6 to confirm nothing was left behind.
+`solved` means "the development is done; only merges remain", and the fix session applies it when it opens the PR (CLAUDE.md). So by the time you get here the label should already be right, and this step is an **audit**: `scripts/reconcile-solved-labels.py` catches issues a session forgot to label, issues whose fix PR was later abandoned, and stale labels left behind by step 6's closes.
+
+Run it right after step 6 to confirm nothing was left behind. It is also worth running **between** releases — the views it keeps honest (`is:issue is:open -label:solved`, what a human should pick up next) matter most while the release is still weeks away.
 
 The script is a pure function from data to plan — it does no network I/O, because the GitHub REST API is unreachable from a Claude session (`GITHUB_TOKEN` is present but returns 403; GitHub access is intermediated by the MCP server). So gather the data first, then pipe it in:
 
-1. List the PRs merged into `dev` since the last release — the same `origin/main..origin/dev` window as step 3 — and read each one's **body**.
-2. List the repo's issues with their `labels` and `state`, and fetch each one's **comments** in chronological order (the API default).
-3. Assemble them into one JSON object and run the script:
+1. List the PRs merged into `dev` since the last release — the same `origin/main..origin/dev` window as step 3 — and read each one's **body**. These are `release_prs`.
+2. List the PRs currently **open** against `dev` (`open_prs`) and those **closed without merging** since the last release (`abandoned_prs`), with their bodies. The open ones are why an issue can be labelled before any merge; the abandoned ones are the only way a label comes off outside a close.
+3. List the repo's issues with their `labels` and `state`, and fetch each one's **comments** in chronological order (the API default).
+4. Assemble them into one JSON object and run the script:
 
 ```json
 {
   "release_prs": [{"number": 3128, "body": "... Closes #3077 ..."}],
+  "open_prs": [{"number": 3160, "body": "... Closes #3081 ..."}],
+  "abandoned_prs": [{"number": 3155, "body": "... Closes #3090 ..."}],
   "issues": [
     {"number": 3077, "state": "open", "labels": ["claude"],
      "comments": [{"body": "Addressed in #3128"}]}
@@ -113,14 +118,14 @@ The script is a pure function from data to plan — it does no network I/O, beca
 ```
 
 ```
-python scripts/reconcile-dev-labels.py --input plan-input.json
+python scripts/reconcile-solved-labels.py --input plan-input.json
 ```
 
 It prints four buckets. **Apply `ADD` and `REMOVE` directly** — they are unambiguous. **Do not apply `NEEDS REVIEW`**; read those issues yourself. An issue lands there for one of three reasons, all genuinely undecidable from the outside:
 
-- **A fix pointer is not the newest comment.** The later comment may be a maintainer saying "thanks" or the reporter saying the fix does not work. Tagging would bury a dispute; skipping would silently drop the issue out of the awaiting-release view.
+- **A fix pointer is not the newest comment.** The later comment may be a maintainer saying "thanks" or the reporter saying the fix does not work. Tagging would bury a dispute — hiding an issue that still needs solving — while skipping would leave solved work in the human queue.
 - **A comment claims a fix by commit SHA** instead of `Addressed in #M`. The script has only the JSON you piped in, so it cannot map a commit to its PR — but the claim is real, so it is surfaced. Resolve it with `git log --ancestry-path <sha>..origin/dev --merges --oneline | tail -1` to find the merge that carried it, then re-run with a corrected pointer.
-- **The issue carries `dev` but nothing resolves it** — stale, or fixed in an earlier release.
+- **The issue carries `solved` but nothing resolves it** — stale, or fixed in an earlier release.
 
 That is the same "not silently skipped" principle step 6 applies to non-closing references.
 

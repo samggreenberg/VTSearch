@@ -126,6 +126,14 @@ export class DashboardLoadingTasksService {
     this._cancellingTaskIds.set(next);
   }
 
+  private unmarkCancelling(taskId: string): void {
+    const current = this._cancellingTaskIds();
+    if (!current.has(taskId)) return;
+    const next = new Set(current);
+    next.delete(taskId);
+    this._cancellingTaskIds.set(next);
+  }
+
   /** Drop any cancelling flag whose task is no longer active — the backend has
    *  finished unwinding it, so the row is about to leave the table. */
   private pruneCancelling(activeTaskIds: Set<string>): void {
@@ -310,7 +318,15 @@ export class DashboardLoadingTasksService {
 
   cancelLoadingTask(taskId: string): void {
     this.markCancelling(taskId);
-    this.datasetsRegistryApi.cancelTask(taskId).subscribe();
+    // A cancel that reached nothing answers 409 (the task had already
+    // finished, or its progress was stale with no worker behind it — see
+    // POST /api/dataset/cancel). The row is not cancelling in that case, so
+    // drop the flag rather than leaving it stuck on "Cancelling…"; the backend
+    // clears the stale progress itself, so the row leaves on the next SSE
+    // snapshot.
+    this.datasetsRegistryApi.cancelTask(taskId).subscribe({
+      error: () => this.unmarkCancelling(taskId),
+    });
   }
 
   dismissLoadingTask(taskId: string): void {

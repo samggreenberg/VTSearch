@@ -1,0 +1,49 @@
+================================================================================================
+COVERAGE — everything dropped is counted, not silently excluded
+================================================================================================
+  fp32_l40s          96 cell files,  13628 rows,   95 distinct cells, 1 unusable [('task_0001.csv', 'header only')]
+  fp16_l40s          96 cell files,  13628 rows,   95 distinct cells, 1 unusable [('task_0001.csv', 'header only')]
+
+================================================================================================
+fp16_l40s  vs  fp32_l40s   (paired; margin = 0.005)
+================================================================================================
+paired steps: 13626  paired cells: 95  (ref had 95, arm had 95)
+steps where cost is bit-identical: 3.5%  (471/13626)
+steps where average_precision is bit-identical: 0.0%  (3/13626)
+steps choosing the threshold the same way: 100.0%
+
+Deep regime (t >= 100), paired difference per CELL then averaged.
+SE is over cells, not steps: steps within a cell are autocorrelated and a
+step-level SE would be anti-conservative (#2825).
+
+metric                   ref mean   arm mean         paired diff ± SE  cells                      verdict
+cost                         0.38       0.38         -0.0059 ± 0.0076     95     cannot resolve at this n
+regret                        0.1        0.1        -2.6e-04 ± 0.0064     95     cannot resolve at this n
+average_precision            0.44       0.46           0.011 ± 0.0077     95     cannot resolve at this n
+fnr                          0.14       0.13          -0.0037 ± 0.009     95     cannot resolve at this n
+fpr                          0.25       0.24          -0.0022 ± 0.011     95     cannot resolve at this n
+rule_inefficiency          -0.019     -0.012          0.0063 ± 0.0063     94     cannot resolve at this n
+calibration_shift            0.12       0.11         -0.0065 ± 0.0073     94     cannot resolve at this n
+n_good                        9.3        8.5             -0.87 ± 0.38     95      count: 2.3 SE from zero
+
+Same difference, split by embedder (a pooled average across a crossover
+is precisely the number that hides it):
+  siglip         ( 47 cells)  cost 0.0044 ± 0.01   regret 0.006 ± 0.008   average_precision 0.0096 ± 0.0094
+  siglip2_l      ( 48 cells)  cost -0.016 ± 0.011   regret -0.0064 ± 0.01   average_precision 0.013 ± 0.012
+
+Power: 7 rate metric(s) could not be resolved against the 0.005 margin.
+Cells needed for 2*SE < margin, at this between-cell spread:
+  cost                   have   95 cells (SE 0.0076) -> need ~878
+  regret                 have   95 cells (SE 0.0064) -> need ~626
+  average_precision      have   95 cells (SE 0.0077) -> need ~897
+  fnr                    have   95 cells (SE 0.009) -> need ~1226
+  fpr                    have   95 cells (SE 0.011) -> need ~1698
+  rule_inefficiency      have   94 cells (SE 0.0063) -> need ~592
+  calibration_shift      have   94 cells (SE 0.0073) -> need ~798
+A 3e-6 vector change reroutes the vote sequence, so the trajectory
+decorrelates and the per-cell spread is set by that, not by the
+perturbation size. This test bounds a SYSTEMATIC effect; it cannot be
+made tight cheaply.
+
+wrote /expscratch/sgreenberg/precision-3143/bench/paired_fp16_l40s_vs_fp32_l40s.csv
+wrote figures to /expscratch/sgreenberg/precision-3143/bench/figures

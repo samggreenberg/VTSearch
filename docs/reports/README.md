@@ -4,6 +4,10 @@ Standalone HTML study write-ups: self-contained pages (charts and figures
 inlined) that explain a measurement to a reader rather than to the harness. Open
 them in a browser — GitHub renders raw HTML as source.
 
+Most are hand-written. A page marked **generated** is built from its study's
+`REPORT.md` by a committed script, so the narrative has one source and the two
+cannot drift: edit the report, re-run the script, commit both.
+
 **The other archive.** [`docs/experiments/`](../experiments/) holds the per-study
 `REPORT.md` files, generated tables and raw CSVs. The two are complementary: an
 `experiments/` report is the record of what a run produced; a `reports/` page is
@@ -19,3 +23,4 @@ Add a row here whenever you add a report — an unlinked report is an unread one
 | [Structural search on screenshots & scans](2026-07-13-screenshot-iconography.html) | 2026-07-13 | The OpenLogo follow-up on flat rasters. **Verdict:** SIFT is the bottleneck on line art (5.1% vs SuperPoint+LightGlue's 41% true-pair verify); SP+LG as ranker beats SigLIP on both document corpora — the first time structural search wins on a real corpus. Plus: 3-DoF is a free precision win, LightGlue needs its own inlier floor (~24), and 224 px tiling rescues small targets. | [`structural-embedder.md`](../plans/structural-embedder.md) |
 | [MLP vs SVM — should VTSearch swap its ranker?](2026-07-22-mlp-vs-svm-ranker.html) | 2026-07-22 | Would a linear or RBF SVM rank better than the detector MLP? 150 voting trajectories, ≤200 votes each. **Verdict:** keep the MLP. | [`docs/experiments/mlp-vs-svm/`](../experiments/mlp-vs-svm/), `scripts/experiments/mlp_vs_svm/` |
 | [Tuning the map — per-embedder UMAP defaults for VTSBrowse](2026-07-22-vtsbrowse-umap-tuning.html) | 2026-07-22 | How should UMAP's dials be set for the Browse projection? ~5,000 scored fits over 23 embed sets. **Verdict:** `n_neighbors` tracks the embedder (10 image / 15 audio), `min_dist` barely matters, and compaction consistently costs layout quality — so it ships off. | [`vtsbrowse-empirical-tuning.md`](../plans/vtsbrowse-empirical-tuning.md), [`vtsbrowse.md`](../plans/vtsbrowse.md) |
+| [Overview benchmark — what each shipped configuration behaves like](2026-08-17-overview-bench.html) | 2026-08-17 | **Generated** from [`docs/experiments/overview-bench/REPORT.md`](../experiments/overview-bench/REPORT.md) by `scripts/experiments/calibration/make_bench_html.py`. Production defaults across the pile: 3 representations × 6 haystacks × typed-vs-clicked, 504 cells. **Verdict:** a characterization — the *box* is worth more than the encoder (24 % of whole-image runs on sub-patch targets never work at all, against 3 % with boxes), positives are the binding constraint, and VG's own labels bound how good any of these numbers can look. Every error claim carries the photographs behind it. | [`docs/experiments/overview-bench/`](../experiments/overview-bench/REPORT.md), `scripts/experiments/calibration/` |

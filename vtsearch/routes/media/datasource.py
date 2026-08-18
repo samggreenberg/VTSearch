@@ -27,9 +27,6 @@ on the example, keeping the item re-fetchable after the cache file is gone.
 
 from __future__ import annotations
 
-import uuid
-from pathlib import Path
-
 from flask_smorest import Blueprint, abort
 
 from vtscore.datasource_importers import get_datasource_importer, list_datasource_importers
@@ -83,7 +80,7 @@ def run_datasource_import(importer_name: str):
     contract, along with the item's durable ``origin`` when the importer
     reports one (``null`` otherwise).
     """
-    from vtsearch.routes.media.server import _get_server_media_dir
+    from vtsearch.routes.media.server import save_example_media_bytes
 
     importer, err = get_plugin_or_404(
         get_datasource_importer, list_datasource_importers, importer_name, "datasource importer"
@@ -106,11 +103,7 @@ def run_datasource_import(importer_name: str):
     if not item.data:
         abort(502, message=f"Datasource importer '{importer_name}' returned no data")
 
-    suffix = Path(item.filename).suffix or ".bin"
-    safe_name = f"{uuid.uuid4().hex}{suffix}"
-    media_dir = _get_server_media_dir()
-    media_dir.mkdir(parents=True, exist_ok=True)
-    (media_dir / safe_name).write_bytes(item.data)
+    safe_name = save_example_media_bytes(item.data, item.filename)
 
     return (
         DatasourceImportResponseSchema().dump(

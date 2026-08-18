@@ -60,6 +60,12 @@ DATASETS: dict[str, dict] = {
     "vg_box_small": {"boxed": True, "kind": "vg_band", "band": "small"},
     "vg_box_medium": {"boxed": True, "kind": "vg_band", "band": "medium"},
     "vg_box_large": {"boxed": True, "kind": "vg_band", "band": "large"},
+    # The same-class-across-bands set (#3156). One pickle, one class list, one
+    # negative pool; the band lives on the category name (`bus@small`). Not a
+    # replacement for `vg_box_*` -- those measured what they measured and stay
+    # reproducible -- but the two are not comparable: disjoint vocabularies
+    # against a fixed one.
+    "vg_scale": {"boxed": True, "kind": "vg_scale"},
 }
 
 #: Box-size bands, as a fraction of image area, anchored to the patch
@@ -134,8 +140,155 @@ def is_object_category(name: str) -> bool:
     return tokens[-1] not in NON_OBJECT_CATEGORIES and name not in NON_OBJECT_CATEGORIES
 
 
+#: Extra exclusions for a **same-class-across-scale-bands** study, keyed by head
+#: noun and carrying the reason. Deliberately separate from
+#: :func:`is_object_category`, which defines the published ``vg_box_*`` sets and
+#: must keep defining them; this is a stricter policy layered on top for the new
+#: construction, so the old numbers stay reproducible.
+#:
+#: The extra bar exists because a scale study asks two things of a class that
+#: mere objecthood does not:
+#:
+#: * **Its size must be its own.** A part's box is set by its host, so a "small
+#:   nose" is just a distant face -- banding it measures the host's distance,
+#:   not the object's scale, and the arm silently becomes a different experiment.
+#: * **Its absence must be checkable.** The negative pool is ~95% of the images
+#:   and rests on "no instance here". For a part that is unverifiable at any
+#:   scale: every image with a person has a nose whether or not VG annotated
+#:   one, so the negatives are poisoned by construction and no amount of review
+#:   fixes it. That is the worst case for the correction pass, not a candidate
+#:   for it.
+#:
+#: Curated, not inferred -- and reported rather than applied silently, because
+#: silent automated judgements about VG's vocabulary are what #3156 is about.
+SCALE_STUDY_EXCLUSIONS: dict[str, str] = {
+    # Individuated only by a host object. Size tracks the host; absence is
+    # unverifiable wherever the host appears.
+    **dict.fromkeys(
+        """nose ear ears eye eyes face head hair mouth lip lips chin cheek forehead eyebrow
+        eyebrows neck chest shoulder shoulders arm arms hand hands finger fingers thumb leg legs
+        foot feet knee elbow wrist ankle waist hip tail paw paws hoof hooves horn horns tusk tusks
+        beak snout mane fur skin tooth teeth tongue mustache moustache beard sideburns""".split(),
+        "part",
+    ),
+    # Parts of artefacts: same two failures, non-anatomical.
+    **dict.fromkeys(
+        """collar sleeve sleeves cuff pocket zipper hem waistband strap straps buckle handle knob
+        spout lid rim brim blade tread stem tip base""".split(),
+        "part",
+    ),
+    # A location rather than a thing: the box has no principled extent (where
+    # does an intersection begin?), so its area is an annotator choice and the
+    # band it lands in is noise.
+    **dict.fromkeys(
+        """court courtyard intersection station runway walkway crossing crosswalk driveway alley
+        parking lot yard park playground platform entrance exit doorway hallway corridor stairway
+        staircase kitchen bathroom bedroom room office restaurant store shop market""".split(),
+        "place",
+    ),
+    # Parts of a plant or structure: same failure as anatomy.
+    **dict.fromkeys("""trunk branch twig root roof chimney railing banister step steps""".split(), "part"),
+}
+
+#: One string, several objects: "find the trunk in the middleground" is not one
+#: question, so the class cannot be scored as one. Matched on the **whole name**
+#: rather than the head noun, because a modifier is precisely what resolves the
+#: ambiguity -- bare ``bat`` is unusable, ``baseball bat`` is a perfectly good
+#: class. (Head-noun matching would reject both, and misreport the reason for
+#: ``tree trunk``, which is unfit for being a *part*, not for being ambiguous.)
+POLYSEMOUS_NAMES: frozenset[str] = frozenset(
+    """trunk bat mouse pitcher crane tie nail bow plate glass iron seal pen""".split()
+)
+
+#: A class annotated on more than this share of all images is treated as
+#: pervasive: its negative pool is both thin and least trustworthy, since a
+#: ubiquitous thing is exactly what an annotator stops bothering to mark. `sky`
+#: is the worked example -- 18.8% prevalent as annotated, plainly higher in
+#: truth (`docs/experiments/overview-bench/REPORT.md`). Measured, not listed,
+#: because which names are pervasive is a property of the corpus.
+PERVASIVE_PREVALENCE = float(os.environ.get("VTS_PERVASIVE_PREVALENCE", "0.10"))
+
+
+def scale_study_exclusion(name: str) -> str | None:
+    """Why *name* is unfit for a scale-band study, or ``None`` if it is fit.
+
+    Head-noun matched, like :func:`is_object_category`, so ``left eye`` and
+    ``bus station`` are caught while ``eyeglasses`` and ``gas station wall``
+    are judged on their own heads.
+    """
+    if not is_object_category(name):
+        return "non_object"
+    if name in POLYSEMOUS_NAMES:
+        return "polysemous"
+    tokens = name.replace("-", " ").split()
+    return SCALE_STUDY_EXCLUSIONS.get(tokens[-1]) or SCALE_STUDY_EXCLUSIONS.get(name)
+
+
+#: The class list *C* for the same-class-across-bands study (issue #3156).
+#:
+#: Chosen by the owner on 2026-08-17 from the measured shortlist
+#: (``shortlist_scale_classes.py --compact --floor 100``), out of the 24
+#: candidates that were simultaneously: supported at >= 100 images in all three
+#: bands, free of a measured alias partner and of plural-form ambiguity, and
+#: **also a COCO-2017 class**. That last property is what makes the correction
+#: pass affordable: COCO val2017 is exhaustively annotated over these names, so
+#: VG's miss rate -- and our own annotators' accuracy -- can be scored against it
+#: with no extra human review.
+#:
+#: Deliberately *not* derived at build time from the scan. Which classes a human
+#: can annotate consistently is a judgement, and re-deriving it would silently
+#: change what the study measures whenever the scan is re-run.
+SCALE_CLASSES: tuple[str, ...] = (
+    "clock",
+    "bird",
+    "boat",
+    "umbrella",
+    "kite",
+    "book",
+    "dog",
+    "backpack",
+    "knife",
+    "bicycle",
+    "bus",
+    "stop sign",
+)
+
+#: Images per ``(class, band)`` cell, and the shared negative pool every cell
+#: draws from. ``stop sign`` binds the positive count: 104 images in its small
+#: band is the smallest per-band supply in *C*, so 100 is the largest round
+#: number every one of the 36 cells can fill without replacement.
+#:
+#: Cells are **designated**, not inferred: each is exactly these positives plus
+#: this negative pool, and every other image in the pickle is excluded from it.
+#: Prevalence is therefore identical in all 36 cells by construction, which is
+#: what makes small-vs-large a paired comparison rather than two datasets with
+#: different difficulty. Unequal prevalence between arms is what made wave 1 and
+#: wave 2 of the overview benchmark non-comparable.
+SCALE_N_POS = int(os.environ.get("VTS_SCALE_N_POS", "100"))
+SCALE_N_NEG = int(os.environ.get("VTS_SCALE_N_NEG", "3900"))
+
+
+def scale_cell(category: str, band: str) -> str:
+    """The band-suffixed category name a harness cell is keyed on.
+
+    One pickle carries all three bands, distinguished by this suffix, because a
+    cell is already ``(dataset, category)`` -- so the bands need no harness
+    change, embedding is done once instead of three times, and the bands are
+    paired on identical negatives.
+    """
+    return f"{category}@{band}"
+
+
 #: Embedders in the pile. ``patch`` embedders attach ``patch_grid`` and are the
-#: only ones that can carry a region-voting arm.
+#: only ones that can carry a region-voting arm. ``batch`` is the GPU forward
+#: batch size (``VTSEARCH_EMBED_BATCH_SIZE``); the app's default of 32 is sized
+#: for a modest card and wastes a build GPU on a base-sized encoder, while a
+#: SO400M/384 model at 32 is already the heavy end. Sizes are per model, not per
+#: run, so a fatter card only means the whole table can move up.
+#:
+#: Batch size does not change what is embedded: in fp32 it shifts vectors by
+#: ~1e-7 through kernel selection, orders of magnitude below anything the
+#: studies resolve.
 #: Deliberately three, not five. ``siglip`` is the shipped default and
 #: ``siglip2_l`` the premium end; the middles (``siglip_l``, ``siglip2``) were
 #: dropped because a study learns little from interpolating between them, and
@@ -146,10 +299,19 @@ def is_object_category(name: str) -> bool:
 #: cannot be attributed to either alone. Rebuild a middle column if a result
 #: ever needs that split -- ``build_pile.py --embedders siglip2`` restores one.
 EMBEDDERS: dict[str, dict] = {
-    "siglip": {"patch": False},
-    "siglip2_l": {"patch": False},
-    "dinov3_patch": {"patch": True, "gated": True},
+    "siglip": {"patch": False, "batch": 128},
+    "siglip2_l": {"patch": False, "batch": 32},
+    # Patch embedders hold an (N, H, W, D) grid per image, not one vector, so
+    # they carry far more activation memory per item than their backbone size
+    # alone suggests.
+    "dinov3_patch": {"patch": True, "gated": True, "batch": 64},
 }
+
+
+def embed_batch_size(embedder: str) -> int | None:
+    """This embedder's ``VTSEARCH_EMBED_BATCH_SIZE``, or ``None`` for the default."""
+    val = EMBEDDERS.get(embedder, {}).get("batch")
+    return int(val) if val else None
 
 
 def cells() -> list[tuple[str, str]]:

@@ -81,12 +81,20 @@ def _exemplar_crops(medias: dict, categories: list[str], embedder) -> tuple[dict
     boxless datasets use whole images.  With ``embedder=None`` (reuse path) every
     crop degrades to the whole-image vector.
     """
-    from vtscore.eval.labels import media_is_positive, region_box_for_category  # noqa: PLC0415
+    from vtscore.eval.labels import (  # noqa: PLC0415
+        evaluable_pool,
+        media_is_positive,
+        region_box_for_category,
+    )
 
     vectors: dict[str, object] = {}
     candidates: dict[str, list[int]] = {}
     for cat in categories:
-        pos = [cid for cid in sorted(medias) if media_is_positive(medias[cid], cat)]
+        # Wrong-band images are excluded from the cell, so they must not seed it
+        # either: an exemplar crop taken from one is a crop of the right object
+        # at the wrong scale.
+        medias_cat = evaluable_pool(medias, cat)
+        pos = [cid for cid in sorted(medias_cat) if media_is_positive(medias_cat[cid], cat)]
         boxed = [cid for cid in pos if region_box_for_category(medias[cid], cat) is not None]
         pool = boxed or pos
         if not pool:

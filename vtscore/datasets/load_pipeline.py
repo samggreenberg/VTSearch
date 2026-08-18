@@ -319,8 +319,13 @@ def _warmup_embedder_async(media_dict: dict) -> None:
         if emb is None:
             return
         try:
-            emb.load_models()
-            emb.embed_text("warmup")
+            # Explicitly silent: this thread has no progress surface (see the
+            # docstring), and an unscoped load would narrate itself on the
+            # global dataset channel instead — a phantom import, right as the
+            # real one finished (#3167).
+            with emb.silent_progress():
+                emb.load_models()
+                emb.embed_text("warmup")
         except Exception:
             pass
 
@@ -361,6 +366,52 @@ def _handle_load_failure(
             traceback.print_exc()
     gc.collect()
     tracker.update("idle", "", 0, 0, error=error, step=None, total_steps=None)
+
+
+def _park_load_terminal(tracker, n_items: int) -> None:
+    """Park *tracker* at a terminal state once the load thread has unwound.
+
+    The failure paths already do this — :func:`_handle_load_failure` writes
+    ``idle`` plus an ``error`` — but the success path historically wrote
+    nothing, so a load that finished cleanly left its tracker on whatever
+    "loading …" message happened to fire last.  Nothing ever cleared it:
+    :meth:`~vtscore.concurrency.progress.LoadingTasksTracker.has_active_tasks`
+    stayed true until the finished entry aged out, the dashboard's
+    just-finished test (``status == "idle" && !error``) never fired so the
+    registry refresh waited on the prune instead, and every external signal
+    kept saying "still importing" about a thread that had exited (#3167).
+
+    Terminal states belong in a ``finally``.  A tracker that already carries an
+    error is left alone: that failure *is* its terminal state.
+    """
+    if tracker.get().get("error"):
+        return
+    tracker.update(
+        "idle",
+        f"Loaded {n_items} item(s)",
+        n_items,
+        n_items,
+        step=_TOTAL_LOAD_STEPS,
+        total_steps=_TOTAL_LOAD_STEPS,
+    )
+
+
+def _park_global_progress_if_orphaned() -> None:
+    """Park the legacy global tracker when nothing is left to keep it moving.
+
+    ``dataset_progress`` is the SSE ``dataset`` channel and is written by any
+    library path that reports progress without a per-thread callback.  Those
+    callers each terminate their own work now, but the channel is the one
+    surface a user reads as "is this server busy?", so the last load out of the
+    door also checks it: a non-idle channel with no loading task behind it is a
+    phantom by definition, and leaving it up is what made a finished import
+    indistinguishable from a wedged one (#3167).
+    """
+    if loading_tasks.has_active_tasks():
+        return
+    if dataset_progress.get().get("status") == "idle":
+        return
+    dataset_progress.update("idle", "", 0, 0)
 
 
 def _run_origin_load_in_background(
@@ -601,9 +652,16 @@ def _run_origin_load_in_background(
             if size_mb is None:
                 size_mb = resolve_download_size_mb(dataset_id)
             timing_recorder.finish(n=len(ctx.medias), size_mb=size_mb, ok=not tracker.get().get("error"))
+            _park_load_terminal(tracker, len(ctx.medias))
             loading_tasks.mark_finished(task_id)
+            _park_global_progress_if_orphaned()
 
-    threading.Thread(target=task, daemon=True).start()
+    # Registered before the thread starts so a cancel arriving in the same
+    # instant can tell "not started yet" from "nothing here"; see
+    # ``LoadingTasksTracker.set_worker``.
+    worker = threading.Thread(target=task, daemon=True)
+    loading_tasks.set_worker(task_id, worker)
+    worker.start()
     return task_id
 
 
@@ -903,5 +961,6 @@ def _stage_importer_in_background(importer, field_values: dict, label: str = "")
                 loading_tasks.mark_finished(task_id)
 
     thread = threading.Thread(target=stage_task, daemon=True)
+    loading_tasks.set_worker(task_id, thread)
     thread.start()
     return task_id
