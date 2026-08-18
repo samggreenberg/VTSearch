@@ -220,7 +220,10 @@ MIRRORS: list[Mirror] = [
             "long as this function has nothing BETWEEN the fit and the cut. If a stage is added "
             "there - a clamp, a smoothing pass, a provenance-dependent substitution - the sweep "
             "silently stops measuring the shipped estimator, and its rows would still look "
-            "perfectly reasonable. Re-check that the composition is still fit-then-cut."
+            "perfectly reasonable. Re-check that the composition is still fit-then-cut. "
+            "Checked at #3166: the empty-interval snap that fixed the saturated-distribution "
+            "threshold went INSIDE threshold_at, not between the fit and the cut, precisely so "
+            "the sweep picks it up for free and this composition stayed untouched."
         ),
         divergence=(
             "INTENTIONAL: the harness does NOT reproduce this function's terminal fallbacks (the "
