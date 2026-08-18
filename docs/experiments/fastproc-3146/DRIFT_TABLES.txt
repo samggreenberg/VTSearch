@@ -1,0 +1,96 @@
+
+=== 0. Which arm built the published pile? ===
+Nothing below this table means anything until it resolves: the study exists
+because the shipped path was misidentified from the source, and only agreement
+with the cell actually in the shared pile settles which backend produced it.
+embedder     arm              median 1-cos          max   identical  note
+siglip       tv_cpu                7.6e-13      4.8e-10          0%
+siglip       tv_cpu_rep            7.6e-13      4.8e-10          0%
+siglip       pil_cpu               2.4e-06      4.7e-03          0%
+siglip       tv_cuda               1.2e-04      5.5e-03          0%
+siglip2_l    tv_cpu                2.7e-12      1.6e-09          0%
+siglip2_l    tv_cpu_rep            2.7e-12      1.6e-09          0%
+siglip2_l    pil_cpu               1.5e-04        0.011          0%
+siglip2_l    tv_cuda               5.4e-08      1.4e-03          0%
+
+=== 1. Vector drift vs tv_cpu (per media, 1 - cos) ===
+embedder     arm            backend/dev            median        p95        max              mean ± SE    >1e-6
+siglip       tv_cpu_rep     torchvision/cpu             0    2.2e-16    4.4e-16      3.9e-17 ± 1.2e-18       0%
+siglip       pil_cpu        pil/cpu               2.4e-06    1.3e-05    4.7e-03      5.3e-06 ± 1.1e-06      87%
+siglip       tv_cuda        torchvision/cuda      1.2e-04    4.1e-04    5.5e-03      1.6e-04 ± 2.6e-06     100%
+siglip2_l    tv_cpu_rep     torchvision/cpu             0    2.2e-16    4.4e-16      4.2e-17 ± 1.2e-18       0%
+siglip2_l    pil_cpu        pil/cpu               1.5e-04    5.5e-04      0.011      2.1e-04 ± 5.0e-06     100%
+siglip2_l    tv_cuda        torchvision/cuda      5.4e-08    6.4e-06    1.4e-03      2.0e-06 ± 3.7e-07      17%
+
+=== 2. Drift relative to the reproduction floor ===
+The floor arm is the SAME code on the SAME node, run twice, so its drift is
+pipeline nondeterminism and nothing else.  A treatment number without this
+denominator is unreadable: 1e-3 means one thing against a floor of 0 and
+another against a floor of 1e-4.
+  siglip: floor 0 median, 4.4e-16 max (tv_cpu_rep)
+    pil_cpu           2.4e-06  exactly 0 — the pipeline is deterministic
+    tv_cuda           1.2e-04  exactly 0 — the pipeline is deterministic
+  siglip2_l: floor 0 median, 4.4e-16 max (tv_cpu_rep)
+    pil_cpu           1.5e-04  exactly 0 — the pipeline is deterministic
+    tv_cuda           5.4e-08  exactly 0 — the pipeline is deterministic
+
+  text-tower control: max |delta| between arms' query vectors = 0  (identical, as expected — the image processor cannot reach it)
+
+=== 3. Retrieval-order stability (per category, paired) ===
+embedder     arm            source          n             Spearman ρ      top10      top50     top100  top1 same
+siglip       pil_cpu        exemplar       89            1 ± 4.9e-07       100%       100%       100%        100%
+siglip       pil_cpu        text_query    100            1 ± 3.5e-07        99%       100%       100%         99%
+siglip       tv_cpu_rep     exemplar       89                  1 ± 0       100%       100%       100%        100%
+siglip       tv_cpu_rep     text_query    100                  1 ± 0       100%       100%       100%        100%
+siglip       tv_cuda        exemplar       89            1 ± 1.6e-05        98%        98%        99%        100%
+siglip       tv_cuda        text_query    100            1 ± 9.8e-06        98%        99%        99%         95%
+siglip2_l    pil_cpu        exemplar       89            1 ± 2.3e-05        98%        99%        99%        100%
+siglip2_l    pil_cpu        text_query    100            1 ± 1.6e-05        98%        99%        99%         98%
+siglip2_l    tv_cpu_rep     exemplar       89                  1 ± 0       100%       100%       100%        100%
+siglip2_l    tv_cpu_rep     text_query    100                  1 ± 0       100%       100%       100%        100%
+siglip2_l    tv_cuda        exemplar       89            1 ± 2.9e-07       100%       100%       100%        100%
+siglip2_l    tv_cuda        text_query    100            1 ± 1.8e-07       100%       100%       100%        100%
+
+=== 4. Literal examples: the biggest rank moves ===
+A large move across a tiny score gap is a tie broken differently, not a
+retrieval failure.  The gap column is there so the two can be told apart.
+  siglip     tv_cpu_rep   text_query  boy            media     4185 (713052.jpg                  ) rank   248 ->   248 (moved     0), score 8.7e-03 -> 8.7e-03, gap to next in ref 1.5e-05
+  siglip     tv_cpu_rep   text_query  bag            media     4186 (713053.jpg                  ) rank  3442 ->  3442 (moved     0), score -0.039 -> -0.039, gap to next in ref 2.0e-06
+  siglip     tv_cpu_rep   text_query  building       media     4187 (713054.jpg                  ) rank  1363 ->  1363 (moved     0), score -0.014 -> -0.014, gap to next in ref 3.0e-06
+  siglip     tv_cpu_rep   exemplar    boy            media     4185 (713052.jpg                  ) rank  1912 ->  1912 (moved     0), score 0.6 -> 0.6, gap to next in ref 1.4e-05
+  siglip     tv_cpu_rep   exemplar    bag            media     4186 (713053.jpg                  ) rank  1067 ->  1067 (moved     0), score 0.65 -> 0.65, gap to next in ref 6.0e-05
+  siglip     tv_cpu_rep   exemplar    building       media     4187 (713054.jpg                  ) rank   335 ->   335 (moved     0), score 0.74 -> 0.74, gap to next in ref 6.4e-04
+  siglip     pil_cpu      text_query  flower         media      163 (2470.jpg                    ) rank  1982 ->  1601 (moved   381), score -3.9e-03 -> 7.8e-04, gap to next in ref 4.9e-05
+  siglip     pil_cpu      text_query  building       media     1079 (3420.jpg                    ) rank  1760 ->  1731 (moved    29), score -1.2e-03 -> -9.4e-04, gap to next in ref 1.9e-05
+  siglip     pil_cpu      text_query  building       media      542 (2866.jpg                    ) rank  3213 ->  3185 (moved    28), score -0.021 -> -0.02, gap to next in ref 2.0e-06
+  siglip     pil_cpu      exemplar    flower         media      163 (2470.jpg                    ) rank  1847 ->  2278 (moved   431), score 0.52 -> 0.5, gap to next in ref 8.7e-06
+  siglip     pil_cpu      exemplar    building       media     1379 (3722.jpg                    ) rank  1898 ->  1852 (moved    46), score 0.52 -> 0.52, gap to next in ref 1.6e-05
+  siglip     pil_cpu      exemplar    building       media     2226 (4588.jpg                    ) rank  2123 ->  2086 (moved    37), score 0.51 -> 0.51, gap to next in ref 1.1e-05
+  siglip     tv_cuda      text_query  building       media     2164 (4523.jpg                    ) rank  2417 ->  1689 (moved   728), score -7.9e-03 -> -3.0e-03, gap to next in ref 8.9e-06
+  siglip     tv_cuda      text_query  plate          media     2409 (4781.jpg                    ) rank  1452 ->  1790 (moved   338), score -1.1e-03 -> -3.7e-03, gap to next in ref 1.2e-05
+  siglip     tv_cuda      text_query  building       media     2303 (4670.jpg                    ) rank  1402 ->  1676 (moved   274), score -7.4e-04 -> -2.9e-03, gap to next in ref 1.3e-05
+  siglip     tv_cuda      exemplar    building       media     2385 (4756.jpg                    ) rank  2219 ->  2582 (moved   363), score 0.55 -> 0.54, gap to next in ref 2.3e-05
+  siglip     tv_cuda      exemplar    flower         media     1879 (4230.jpg                    ) rank  1866 ->  2155 (moved   289), score 0.56 -> 0.56, gap to next in ref 6.6e-05
+  siglip     tv_cuda      exemplar    bus            media     1301 (3644.jpg                    ) rank  2689 ->  2955 (moved   266), score 0.53 -> 0.53, gap to next in ref 6.7e-06
+  siglip2_l  tv_cpu_rep   text_query  boy            media     4185 (713052.jpg                  ) rank   136 ->   136 (moved     0), score 0.055 -> 0.055, gap to next in ref 9.6e-06
+  siglip2_l  tv_cpu_rep   text_query  bag            media     4186 (713053.jpg                  ) rank  3427 ->  3427 (moved     0), score 2.7e-03 -> 2.7e-03, gap to next in ref 2.3e-06
+  siglip2_l  tv_cpu_rep   text_query  building       media     4187 (713054.jpg                  ) rank  1714 ->  1714 (moved     0), score 0.019 -> 0.019, gap to next in ref 8.5e-06
+  siglip2_l  tv_cpu_rep   exemplar    boy            media     4185 (713052.jpg                  ) rank  1458 ->  1458 (moved     0), score 0.58 -> 0.58, gap to next in ref 1.7e-05
+  siglip2_l  tv_cpu_rep   exemplar    bag            media     4186 (713053.jpg                  ) rank  1150 ->  1150 (moved     0), score 0.6 -> 0.6, gap to next in ref 8.0e-06
+  siglip2_l  tv_cpu_rep   exemplar    building       media     4187 (713054.jpg                  ) rank  1093 ->  1093 (moved     0), score 0.61 -> 0.61, gap to next in ref 9.6e-06
+  siglip2_l  pil_cpu      text_query  bush           media      335 (2648.jpg                    ) rank  1038 ->  1916 (moved   878), score 0.019 -> 0.013, gap to next in ref 9.4e-06
+  siglip2_l  pil_cpu      text_query  clouds         media     3260 (285750.jpg                  ) rank  2739 ->  2324 (moved   415), score 7.2e-03 -> 9.8e-03, gap to next in ref 2.2e-05
+  siglip2_l  pil_cpu      text_query  clouds         media     1310 (3653.jpg                    ) rank  1608 ->  2023 (moved   415), score 0.015 -> 0.012, gap to next in ref 1.0e-05
+  siglip2_l  pil_cpu      exemplar    building       media     2518 (4891.jpg                    ) rank  2980 ->  2391 (moved   589), score 0.41 -> 0.43, gap to next in ref 1.5e-06
+  siglip2_l  pil_cpu      exemplar    bed            media     2509 (4882.jpg                    ) rank  2565 ->  2255 (moved   310), score 0.43 -> 0.44, gap to next in ref 3.1e-05
+  siglip2_l  pil_cpu      exemplar    shadow         media     1515 (3858.jpg                    ) rank  2173 ->  1890 (moved   283), score 0.44 -> 0.45, gap to next in ref 5.1e-06
+  siglip2_l  tv_cuda      text_query  arm            media     2294 (4660.jpg                    ) rank  1411 ->  1236 (moved   175), score 6.7e-03 -> 8.1e-03, gap to next in ref 2.7e-05
+  siglip2_l  tv_cuda      text_query  bag            media     3276 (285766.jpg                  ) rank  1253 ->  1165 (moved    88), score 7.9e-03 -> 8.6e-03, gap to next in ref 1.7e-07
+  siglip2_l  tv_cuda      text_query  car            media     1421 (3764.jpg                    ) rank  2476 ->  2554 (moved    78), score -6.0e-04 -> -1.1e-03, gap to next in ref 4.6e-06
+  siglip2_l  tv_cuda      exemplar    bag            media     3783 (498099.jpg                  ) rank  1236 ->  1274 (moved    38), score 0.58 -> 0.58, gap to next in ref 1.6e-04
+  siglip2_l  tv_cuda      exemplar    bottle         media     2293 (4659.jpg                    ) rank  3374 ->  3338 (moved    36), score 0.46 -> 0.46, gap to next in ref 2.1e-05
+  siglip2_l  tv_cuda      exemplar    arm            media     3214 (285702.jpg                  ) rank  3043 ->  3076 (moved    33), score 0.48 -> 0.48, gap to next in ref 6.6e-05
+
+wrote /expscratch/sgreenberg/fastproc-3146/results/adjudication.csv, drift.csv, rank_stability.csv, examples.json
+
+wrote figures to /expscratch/sgreenberg/fastproc-3146/results/figures

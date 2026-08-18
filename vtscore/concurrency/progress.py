@@ -610,6 +610,8 @@ class LoadingTasksTracker:
                 "name": name,
                 "created_at": time.time(),
                 "finished_at": None,
+                # Filled in by :meth:`set_worker` once the caller has its thread.
+                "worker": None,
                 "dataset_id": dataset_id,
                 "media_type": media_type,
                 "detector_id": detector_id,
@@ -664,6 +666,47 @@ class LoadingTasksTracker:
             tasks = list(self._tasks.values())
         for entry in tasks:
             entry["tracker"].cancel()
+
+    def set_worker(self, task_id: str, thread: threading.Thread) -> None:
+        """Record the thread running *task_id*, so cancellation can be honest.
+
+        Cancellation is cooperative: :meth:`ProgressTracker.cancel` only sets a
+        flag, and *something has to be running* to observe it.  Knowing whether
+        a worker is still alive is what lets a cancel distinguish "it will stop
+        shortly" from "there is nobody here to stop" instead of answering both
+        with the same cheerful ``ok`` (#3167).
+
+        Register the thread *before* starting it; a task with no registered
+        worker reads as not running.
+        """
+        with self._lock:
+            entry = self._tasks.get(task_id)
+            if entry:
+                entry["worker"] = thread
+
+    def worker_alive(self, task_id: str) -> bool:
+        """Return ``True`` if *task_id* has a registered worker still running."""
+        with self._lock:
+            entry = self._tasks.get(task_id)
+        worker = entry.get("worker") if entry else None
+        return bool(worker is not None and worker.is_alive())
+
+    def any_worker_alive(self) -> bool:
+        """Return ``True`` if any registered worker thread is still running."""
+        with self._lock:
+            entries = list(self._tasks.values())
+        return any(e.get("worker") is not None and e["worker"].is_alive() for e in entries)
+
+    def active_task_ids(self) -> list[str]:
+        """Return the ids of tasks whose tracker still claims to be working.
+
+        "Claims" is deliberate: a stale tracker looks exactly like a running
+        one from here, which is why :func:`cancel_dataset_progress` cross-checks
+        each id against :meth:`worker_alive` before reporting what it did.
+        """
+        with self._lock:
+            entries = list(self._tasks.items())
+        return [tid for tid, e in entries if e["tracker"].get()["status"] != "idle"]
 
     def set_dataset_id(self, task_id: str, dataset_id: str) -> None:
         """Associate a loading task with its final registry dataset ID."""
@@ -832,14 +875,164 @@ def get_progress() -> dict[str, Any]:
     return dataset_progress.get()
 
 
-def cancel_dataset_progress() -> None:
-    """Signal the current dataset operation(s) to cancel.
+#: Name used for the legacy global :data:`dataset_progress` singleton in a
+#: cancellation report, where every other entry is a loading-task id.
+LEGACY_PROGRESS_TARGET = "dataset_progress"
 
-    Cancels all active per-task loading trackers as well as the legacy
-    global singleton (used by staging operations).
+#: How long :func:`cancel_dataset_progress` waits for a worker to act on the
+#: flag before reporting what it saw. Cooperative cancellation normally lands
+#: within one progress tick (well under a second); a worker that has not
+#: finished by then is classified by whether its thread is still alive, not by
+#: the clock, so this only has to be long enough to avoid calling a prompt
+#: cancel "pending".
+CANCEL_ACK_GRACE_SECONDS = 2.0
+
+#: Poll interval while waiting for acknowledgement.
+_CANCEL_POLL_SECONDS = 0.02
+
+
+def _cancel_acknowledged(target: str) -> bool:
+    """Return ``True`` once *target* has reached a terminal state."""
+    if target == LEGACY_PROGRESS_TARGET:
+        return dataset_progress.get()["status"] == "idle"
+    if loading_tasks.is_finished(target):
+        return True
+    tracker = loading_tasks.get_tracker(target)
+    # A task that has been pruned out of the tracker is as stopped as it gets.
+    return tracker is None or tracker.get()["status"] == "idle"
+
+
+def _park_unresponsive(target: str) -> None:
+    """Clear a progress entry that claims work no living thread is doing.
+
+    Refusing to lie about the cancel is only half the fix: the phantom that
+    made the refusal necessary is still on screen, and it will still be there
+    tomorrow. Nothing is going to clear it — that is what "no worker" means —
+    so the request that proved it stale clears it.
     """
+    if target == LEGACY_PROGRESS_TARGET:
+        dataset_progress.update("idle", "", 0, 0)
+        return
+    tracker = loading_tasks.get_tracker(target)
+    if tracker is not None:
+        tracker.update(
+            "idle",
+            "",
+            0,
+            0,
+            error="Abandoned: no worker was running this operation.",
+        )
+    loading_tasks.mark_finished(target)
+
+
+def _cancel_report(targets: list[str], grace_seconds: float) -> dict[str, Any]:
+    """Wait out the grace period and classify every target in *targets*."""
+    report: dict[str, Any] = {
+        "ok": False,
+        "targets": list(targets),
+        "acknowledged": [],
+        "pending": [],
+        "unresponsive": [],
+        "message": "",
+    }
+    if not targets:
+        report["message"] = "Nothing to cancel: no dataset operation is running."
+        return report
+
+    deadline = time.monotonic() + max(0.0, grace_seconds)
+    outstanding = list(targets)
+    while True:
+        outstanding = [t for t in outstanding if not _cancel_acknowledged(t)]
+        if not outstanding or time.monotonic() >= deadline:
+            break
+        time.sleep(_CANCEL_POLL_SECONDS)
+
+    still = set(outstanding)
+    report["acknowledged"] = [t for t in targets if t not in still]
+    any_alive = loading_tasks.any_worker_alive()
+    for target in outstanding:
+        alive = any_alive if target == LEGACY_PROGRESS_TARGET else loading_tasks.worker_alive(target)
+        report["pending" if alive else "unresponsive"].append(target)
+    for target in report["unresponsive"]:
+        _park_unresponsive(target)
+
+    report["ok"] = bool(report["acknowledged"] or report["pending"])
+    stopped = len(report["acknowledged"])
+    stopping = len(report["pending"])
+    stale = len(report["unresponsive"])
+    if report["ok"]:
+        parts = []
+        if stopped:
+            parts.append(f"{stopped} stopped")
+        if stopping:
+            parts.append(f"{stopping} still stopping")
+        if stale:
+            parts.append(f"{stale} stale entr{'y' if stale == 1 else 'ies'} cleared")
+        report["message"] = "Cancelled: " + ", ".join(parts) + "."
+    else:
+        report["message"] = (
+            f"Nothing acknowledged the cancel: {stale} progress "
+            f"entr{'y' if stale == 1 else 'ies'} claimed work with no worker running it. "
+            "The operation had already finished or died; the stale progress has been cleared."
+        )
+    return report
+
+
+def cancel_dataset_progress(grace_seconds: float = CANCEL_ACK_GRACE_SECONDS) -> dict[str, Any]:
+    """Signal the current dataset operation(s) to cancel, and report the outcome.
+
+    Cancels all active per-task loading trackers as well as the legacy global
+    singleton (used by staging operations), then waits up to *grace_seconds*
+    for someone to act on the flag.
+
+    Cancellation is cooperative — :meth:`ProgressTracker.cancel` sets an event
+    and :meth:`ProgressTracker.check_cancelled` has to be *reached* by a
+    running thread — so setting the flag says nothing about whether anything
+    will happen.  Reporting success unconditionally therefore answered the one
+    question a stuck-looking import raises ("is anything actually running?")
+    with the same word either way (#3167).
+
+    Returns a report with:
+
+    ``targets``
+        every id that claimed to be working when the cancel arrived, using
+        :data:`LEGACY_PROGRESS_TARGET` for the global singleton.
+    ``acknowledged``
+        targets that reached a terminal state within the grace period.
+    ``pending``
+        targets still running, with a live worker thread that will observe the
+        flag; the cancel was delivered, it just has not landed yet.
+    ``unresponsive``
+        targets whose progress claimed work no live thread was doing.  These
+        are stale trackers, not running jobs; they are parked at ``idle`` so
+        the phantom does not outlive the request that exposed it.
+    ``ok``
+        ``True`` when at least one target acknowledged or is pending — i.e.
+        when the cancel actually reached something.
+    """
+    targets = loading_tasks.active_task_ids()
+    if dataset_progress.get()["status"] != "idle":
+        targets.append(LEGACY_PROGRESS_TARGET)
+
     loading_tasks.cancel_all()
     dataset_progress.cancel()
+
+    return _cancel_report(targets, grace_seconds)
+
+
+def cancel_dataset_task(task_id: str, grace_seconds: float = CANCEL_ACK_GRACE_SECONDS) -> dict[str, Any] | None:
+    """Cancel one loading task and report the outcome, or ``None`` if unknown.
+
+    Same contract as :func:`cancel_dataset_progress`, narrowed to a single
+    task: a task whose tracker still claims work but whose worker thread has
+    exited is reported as ``unresponsive`` rather than cancelled.
+    """
+    tracker = loading_tasks.get_tracker(task_id)
+    if tracker is None:
+        return None
+    targets = [task_id] if tracker.get()["status"] != "idle" else []
+    tracker.cancel()
+    return _cancel_report(targets, grace_seconds)
 
 
 def check_dataset_cancelled() -> None:

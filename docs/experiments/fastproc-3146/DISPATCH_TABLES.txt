@@ -1,0 +1,68 @@
+tag=avx512 node=rack4n01
+  ATEN_CPU_CAPABILITY=(unset)
+  cpu=AMD EPYC 9534 64-Core Processor  isa=avx2,avx512f
+  wrote siglip__torchvision_cpu__avx512.npy  shape=(128, 3, 224, 224)
+  wrote siglip__pil_cpu__avx512.npy  shape=(128, 3, 224, 224)
+  wrote siglip__torchvision_cuda__avx512.npy  shape=(128, 3, 224, 224)
+  wrote siglip2_l__torchvision_cpu__avx512.npy  shape=(128, 3, 384, 384)
+  wrote siglip2_l__pil_cpu__avx512.npy  shape=(128, 3, 384, 384)
+  wrote siglip2_l__torchvision_cuda__avx512.npy  shape=(128, 3, 384, 384)
+tag=avx2 node=rack4n01
+  ATEN_CPU_CAPABILITY=avx2
+  cpu=AMD EPYC 9534 64-Core Processor  isa=avx2,avx512f
+  wrote siglip__torchvision_cpu__avx2.npy  shape=(128, 3, 224, 224)
+  wrote siglip__pil_cpu__avx2.npy  shape=(128, 3, 224, 224)
+  wrote siglip__torchvision_cuda__avx2.npy  shape=(128, 3, 224, 224)
+  wrote siglip2_l__torchvision_cpu__avx2.npy  shape=(128, 3, 384, 384)
+  wrote siglip2_l__pil_cpu__avx2.npy  shape=(128, 3, 384, 384)
+  wrote siglip2_l__torchvision_cuda__avx2.npy  shape=(128, 3, 384, 384)
+--- env__avx2.txt
+    node=rack4n01
+    ATEN_CPU_CAPABILITY=avx2
+    cpu=AMD EPYC 9534 64-Core Processor
+    isa=avx2,avx512f
+    torch=2.6.0+cu124
+--- env__avx512.txt
+    node=rack4n01
+    ATEN_CPU_CAPABILITY=
+    cpu=AMD EPYC 9534 64-Core Processor
+    isa=avx2,avx512f
+    torch=2.6.0+cu124
+
+=== siglip: pairwise max |delta pixel| ===
+One 8-bit level is 2/255 = 7.8e-03; that is the magnitude BOTH the backend
+change and the AVX-512/AVX2 dispatch change produce, which is why they can
+only be told apart in a matrix like this one.
+                                  pil_cpu@avx2         pil_cpu@avx512   torchvision_cpu@avx2 torchvision_cpu@avx512  torchvision_cuda@avx2 torchvision_cuda@avx512
+pil_cpu@avx2                                 0                      0                7.8e-03                7.8e-03                  0.071                  0.071
+pil_cpu@avx512                               0                      0                7.8e-03                7.8e-03                  0.071                  0.071
+torchvision_cpu@avx2                   7.8e-03                7.8e-03                      0                      0                  0.071                  0.071
+torchvision_cpu@avx512                 7.8e-03                7.8e-03                      0                      0                  0.071                  0.071
+torchvision_cuda@avx2                    0.071                  0.071                  0.071                  0.071                      0                      0
+torchvision_cuda@avx512                  0.071                  0.071                  0.071                  0.071                      0                      0
+
+  torchvision moves with dispatch: max 0  (dispatch-invariant at this resolution)
+  PIL moves with dispatch:         max 0  (as predicted — PIL is not an ATen kernel)
+  PIL vs torchvision@avx512: 7.8e-03
+  PIL vs torchvision@avx2:   7.8e-03
+  => the backend difference does NOT collapse under either dispatch:
+     it is a separate axis and this study's numbers stand as backend numbers.
+
+=== siglip2_l: pairwise max |delta pixel| ===
+One 8-bit level is 2/255 = 7.8e-03; that is the magnitude BOTH the backend
+change and the AVX-512/AVX2 dispatch change produce, which is why they can
+only be told apart in a matrix like this one.
+                                  pil_cpu@avx2         pil_cpu@avx512   torchvision_cpu@avx2 torchvision_cpu@avx512  torchvision_cuda@avx2 torchvision_cuda@avx512
+pil_cpu@avx2                                 0                      0                7.8e-03                7.8e-03                7.8e-03                7.8e-03
+pil_cpu@avx512                               0                      0                7.8e-03                7.8e-03                7.8e-03                7.8e-03
+torchvision_cpu@avx2                   7.8e-03                7.8e-03                      0                7.8e-03                7.8e-03                7.8e-03
+torchvision_cpu@avx512                 7.8e-03                7.8e-03                7.8e-03                      0                7.8e-03                7.8e-03
+torchvision_cuda@avx2                  7.8e-03                7.8e-03                7.8e-03                7.8e-03                      0                      0
+torchvision_cuda@avx512                7.8e-03                7.8e-03                7.8e-03                7.8e-03                      0                      0
+
+  torchvision moves with dispatch: max 7.8e-03
+  PIL moves with dispatch:         max 0  (as predicted — PIL is not an ATen kernel)
+  PIL vs torchvision@avx512: 7.8e-03
+  PIL vs torchvision@avx2:   7.8e-03
+  => the backend difference does NOT collapse under either dispatch:
+     it is a separate axis and this study's numbers stand as backend numbers.

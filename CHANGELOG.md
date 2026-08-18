@@ -17,6 +17,24 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A finished dataset import no longer looks like a wedged one.** An import
+  that had already succeeded — pickle written, dataset registered — kept the
+  progress channel parked on its last message ("Loading SigLIP processor…")
+  indefinitely, with no loader thread left in the process. Three things fed
+  that: a model load taken through the app-wide progress sink narrated itself
+  on the dataset channel and never said it had finished, the load task's
+  success path wrote no terminal state (only its failure paths did), and
+  `POST /api/dataset/cancel` answered `{"ok": true}` while doing nothing,
+  because cancellation is cooperative and there was no worker left to observe
+  the flag. Model loads now terminate whatever channel they borrowed
+  (background warm-ups are silent, and an import's model load reports on the
+  import's own row); a load parks its tracker when the work ends, whichever
+  way it ended; and cancel reports what it actually reached — `409` with
+  `ok: false` when it reached nothing, clearing the stale progress on the way
+  out. The dataset registry also re-reads its manifest when the file on disk
+  changes, so a dataset registered by another process (a CLI `--autodetect`
+  run against the same data dir) is listed without a restart. (#3167)
+
 - **Detector load can no longer hang forever at "Preparing".** Loading a
   detector while the selected dataset was not yet (re)loaded — typical right
   after an app restart, while the dataset was still being read from its

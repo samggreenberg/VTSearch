@@ -554,7 +554,7 @@ loaded via `spec_from_file_location` so discovery still works.
 
 | Attribute       | Type               | Description                         |
 |-----------------|--------------------|-------------------------------------|
-| `_on_progress`  | `ProgressCallback` | Progress callback (default: no-op). Process-wide default set via `set_progress_callback()`; **reads and writes are per-thread**, so wrap a temporary redirect in `with emb.progress_scope(cb):` rather than saving/restoring by hand. Embedders are singletons — a process-wide swap would cross concurrent loads' progress bars and cancellations. |
+| `_on_progress`  | `ProgressCallback` | Progress callback (default: no-op). Process-wide default set via `set_progress_callback()`; **reads and writes are per-thread**, so wrap a temporary redirect in `with emb.progress_scope(cb):` rather than saving/restoring by hand. Embedders are singletons — a process-wide swap would cross concurrent loads' progress bars and cancellations. A background warm-up with no progress surface should use `with emb.silent_progress():`; an unscoped `load_models()` reports on the process-wide default and parks it `idle` when it returns. |
 
 ### Built-in embedders
 

@@ -300,17 +300,62 @@ class TestLoadingTasksMediaType:
 
 
 class TestCancelTaskEndpoint:
-    """Test the /api/dataset/cancel/<task_id> endpoint."""
+    """Test the /api/dataset/cancel/<task_id> endpoint.
 
-    def test_cancel_existing_task(self, client):
+    Cancellation is cooperative: the endpoint sets a flag, and something has
+    to be *running* to observe it.  So the response distinguishes a cancel
+    that reached a live worker from one that reached nothing at all — the
+    ambiguity that made a finished import look wedged (#3167).
+    """
+
+    def test_cancel_running_task_reports_it_was_delivered(self, client):
         pt = loading_tasks.create_task("cancel_test", "CancelDS")
+        pt.update("loading", "Working…", 10, 100)
+        stop = threading.Event()
+        worker = threading.Thread(target=stop.wait, daemon=True)
+        loading_tasks.set_worker("cancel_test", worker)
+        worker.start()
         try:
             resp = client.post("/api/dataset/cancel/cancel_test")
             assert resp.status_code == 200
-            assert resp.get_json()["ok"] is True
+            data = resp.get_json()
+            assert data["ok"] is True
+            assert data["pending"] == ["cancel_test"], f"the worker is alive and will observe the flag, got {data!r}"
             assert pt.is_cancelled
         finally:
+            stop.set()
+            worker.join(timeout=5)
             loading_tasks.remove_task("cancel_test")
+
+    def test_cancel_task_whose_worker_is_gone_refuses(self, client):
+        """A tracker claiming work with no live worker is stale, not running."""
+        pt = loading_tasks.create_task("stale_test", "StaleDS")
+        pt.update("loading", "Loading SigLIP processor…", 0, 0)
+        dead = threading.Thread(target=lambda: None, daemon=True)
+        loading_tasks.set_worker("stale_test", dead)
+        dead.start()
+        dead.join(timeout=5)
+        try:
+            resp = client.post("/api/dataset/cancel/stale_test")
+            assert resp.status_code == 409, f"no thread remained to act on the flag, got {resp.status_code}"
+            data = resp.get_json()
+            assert data["ok"] is False
+            assert data["unresponsive"] == ["stale_test"]
+            assert pt.get()["status"] == "idle", (
+                f"the phantom that forced the refusal should be cleared, not left on screen, got {pt.get()!r}"
+            )
+        finally:
+            loading_tasks.remove_task("stale_test")
+
+    def test_cancel_idle_task_refuses(self, client):
+        """An already-finished task has nothing left to cancel."""
+        loading_tasks.create_task("idle_test", "IdleDS")
+        try:
+            resp = client.post("/api/dataset/cancel/idle_test")
+            assert resp.status_code == 409
+            assert resp.get_json()["ok"] is False
+        finally:
+            loading_tasks.remove_task("idle_test")
 
     def test_cancel_nonexistent_returns_404(self, client):
         resp = client.post("/api/dataset/cancel/nonexistent_task")
