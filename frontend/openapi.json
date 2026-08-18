@@ -845,12 +845,44 @@
       "CancelDatasetLoadResponse": {
         "additionalProperties": false,
         "properties": {
+          "acknowledged": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "message": {
+            "type": "string"
+          },
           "ok": {
             "type": "boolean"
+          },
+          "pending": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "targets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "unresponsive": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
           }
         },
         "required": [
-          "ok"
+          "acknowledged",
+          "message",
+          "ok",
+          "pending",
+          "targets",
+          "unresponsive"
         ],
         "type": "object"
       },
@@ -9428,7 +9460,7 @@
     },
     "/api/dataset/cancel": {
       "post": {
-        "description": "Cancels all active loading tasks and the legacy global tracker.",
+        "description": "Cancels all active loading tasks and the legacy global tracker, then waits\nbriefly for one of them to act on the flag.  Cancellation is cooperative,\nso a flag set with no worker left to observe it stops nothing; answering\n``ok`` in that case is what let a *finished* import keep looking like a\nwedged one (#3167).  A cancel that reached nothing answers ``409``, and any\nstale progress it found is cleared on the way out.",
         "operationId": "cancel_dataset_load",
         "responses": {
           "200": {
@@ -9440,6 +9472,16 @@
               }
             },
             "description": "OK"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelDatasetLoadResponse"
+                }
+              }
+            },
+            "description": "The cancel reached nothing: no operation was running, or the progress it claimed was stale."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
@@ -9464,6 +9506,7 @@
         }
       ],
       "post": {
+        "description": "Same honesty contract as ``POST /api/dataset/cancel``, narrowed to one\ntask.",
         "operationId": "cancel_dataset_load_task",
         "responses": {
           "200": {
@@ -9477,7 +9520,17 @@
             "description": "OK"
           },
           "404": {
-            "description": "No active task with the supplied id."
+            "description": "No task with the supplied id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CancelDatasetLoadResponse"
+                }
+              }
+            },
+            "description": "The task was not running, or its progress was stale (no live worker)."
           },
           "default": {
             "$ref": "#/components/responses/DEFAULT_ERROR"
