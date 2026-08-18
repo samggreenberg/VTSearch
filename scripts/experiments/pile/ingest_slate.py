@@ -205,7 +205,7 @@ def main() -> int:
     # One verdict per (image, class). A labelset can hold the same media twice:
     # observed 56 of 300 images duplicated in one detector, Bad votes as exact
     # copies and Good votes as a boxed entry plus an image-level one -- the app
-    # appends a LabeledElement per vote event rather than replacing (#3168).
+    # appends a LabeledElement per vote event rather than replacing (#3174).
     # Counting both would double-weight a fifth of the review, so collapse
     # them, preferring the entry that carries a box because that is the one
     # that can place the image in a band.
