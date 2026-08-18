@@ -199,6 +199,29 @@ def compare(outdir: Path) -> int:
             else:
                 log("  => the backend difference does NOT collapse under either dispatch:")
                 log("     it is a separate axis and this study's numbers stand as backend numbers.")
+
+            # Fractions alone cannot prove two effects are different populations
+            # -- they could differ in size and still be nested.  Both effects are
+            # quantisation in an 8-bit pipeline, so ONE LEVEL is the only
+            # magnitude either can produce and the shared step size is forced,
+            # carrying no information about shared cause.  What is not forced is
+            # WHICH pixels move, so compare the index sets directly: a Jaccard
+            # near 1 would mean the backend change and the dispatch change touch
+            # the same pixels and are one axis; near 0 means they are independent
+            # axes that merely share a quantum.
+            back = np.abs(pil512 - tv512) > 0
+            disp = np.abs(tv512 - tv2) > 0
+            inter = float((back & disp).sum())
+            union = float((back | disp).sum())
+            if union > 0:
+                log(
+                    f"  differing-pixel sets, backend vs dispatch: Jaccard {inter / union:.3f}"
+                    f"  (backend {int(back.sum())} px, dispatch {int(disp.sum())} px, shared {int(inter)})"
+                )
+                if disp.sum() > 0:
+                    log(
+                        f"  of the pixels dispatch moves, {inter / float(disp.sum()) * 100:.1f}% are also moved by the backend"
+                    )
     return 0
 
 
