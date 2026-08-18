@@ -57,10 +57,7 @@ dependencies = [
     # threadpool-controller warm-up (also a scikit-learn dependency).
     "threadpoolctl",
     "umap-learn",
-    # Bounded above as well as below: the v5 processor rename changes which
-    # resampler the default embedder gets, and with it 58% of its preprocessed
-    # pixels (#3160). See requirements/image-embedders.txt.
-    "transformers>=5.0.0,<6",
+    "transformers",
     # Imported directly by vtscore.media.embedder for the Hub metadata
     # preflight (also a transformers dependency).
     "huggingface_hub",

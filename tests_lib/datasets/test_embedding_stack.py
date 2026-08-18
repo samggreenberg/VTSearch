@@ -11,8 +11,24 @@ class TestEmbeddingStack:
         stack = embedding_stack()
         # transformers and torch decide which resampler runs and how it rounds;
         # the whole point of the field is that these are recorded, not assumed.
-        for key in ("torch", "transformers", "torchvision", "pillow", "cpu_capability", "device"):
+        for key in (
+            "torch",
+            "transformers",
+            "torchvision",
+            "pillow",
+            "cpu_capability",
+            "device",
+            "image_processor_backend",
+            "image_processor_device",
+        ):
             assert key in stack
+
+    def test_records_the_backend_that_was_requested(self):
+        # The knob #3146 added is a *request*; the resolved class is recorded
+        # separately, so a pin that did not take is visible rather than assumed.
+        from vtscore import config
+
+        assert embedding_stack()["image_processor_backend"] == str(config.IMAGE_PROCESSOR_BACKEND)
 
     def test_missing_information_is_null_not_guessed(self):
         stack = embedding_stack()

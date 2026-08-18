@@ -355,10 +355,12 @@ def export_dataset_to_file(
         "format_version": 1,
         "embedder": embedder,
         # Which software/hardware produced these vectors (#3160). The embedder
-        # *name* does not pin the arithmetic: the transformers range this repo
-        # allows admits two image-processor implementations that disagree on 58%
-        # of preprocessed pixels for the default embedder. Recorded so two
-        # datasets can be told apart; nothing reads it to make a decision.
+        # *name* does not pin the arithmetic: the two image-processor
+        # implementations transformers ships disagree on 58% of preprocessed
+        # pixels for the default embedder, and CPU dispatch moves another 12% at
+        # 384px. #3173 names the backend so the choice stops being inherited;
+        # this records what the run actually resolved, which is the half that
+        # tells two existing datasets apart. Nothing reads it to make a decision.
         "embedding_stack": embedding_stack(_loaded_embedder(embedder)),
         "text_embedder": text_embedder,
         "patch_embedder": patch_embedder,

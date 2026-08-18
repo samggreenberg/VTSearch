@@ -17,9 +17,7 @@ numpy
 requests
 tqdm
 scikit-learn
-# Bounded for the same reason as requirements/image-embedders.txt: the v5
-# processor rename changes the pixels the default embedder sees (#3160).
-transformers>=5.0.0,<6
+transformers
 pandas
 
 # ── Eval / visualization ────────────────────────────────────────────

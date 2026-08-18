@@ -36,6 +36,17 @@ def _version(module: str) -> str | None:
         return None
 
 
+def _config_value(name: str) -> str | None:
+    """Read a vtscore.config setting without making this module import-heavy."""
+    try:
+        from vtscore import config  # noqa: PLC0415
+
+        value = getattr(config, name, None)
+    except Exception:  # noqa: BLE001
+        return None
+    return str(value) if value is not None else None
+
+
 def _cpu_capability() -> str | None:
     """The CPU kernel ISA torch dispatches to (``AVX512`` / ``AVX2`` / ``DEFAULT``).
 
@@ -82,6 +93,12 @@ def embedding_stack(embedder: Any = None) -> dict[str, Any]:
     must never be the reason an import fails.
     """
     stack: dict[str, Any] = {
+        # What was *asked for* (#3146's knob) next to what actually resolved
+        # (the class name below). A request that did not land is the failure
+        # mode both #3146 and #3160 hit, so recording only one of the two is
+        # what made those confounds invisible.
+        "image_processor_backend": _config_value("IMAGE_PROCESSOR_BACKEND"),
+        "image_processor_device": _config_value("IMAGE_PROCESSOR_DEVICE"),
         "torch": _version("torch"),
         "transformers": _version("transformers"),
         "torchvision": _version("torchvision"),
