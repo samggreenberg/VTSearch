@@ -552,9 +552,26 @@ class DatasetStatusResponseSchema(Schema):
 
 
 class CancelDatasetLoadResponseSchema(Schema):
-    """Response for ``POST /api/dataset/cancel`` and ``/cancel/<task_id>``."""
+    """Response for ``POST /api/dataset/cancel`` and ``/cancel/<task_id>``.
+
+    Cancellation is cooperative, so ``ok`` reports whether the flag actually
+    reached something that can act on it — not merely that it was set.  The
+    lists say which operations did what; see
+    :func:`vtscore.concurrency.progress.cancel_dataset_progress`.  A request
+    that reached nothing answers ``409`` with ``ok: false``.
+    """
 
     ok = fields.Boolean(required=True)
+    message = fields.String(required=True)
+    #: Everything that claimed to be working when the cancel arrived.
+    targets = fields.List(fields.String(), required=True)
+    #: Targets that reached a terminal state within the grace period.
+    acknowledged = fields.List(fields.String(), required=True)
+    #: Targets still running, whose live worker will observe the flag.
+    pending = fields.List(fields.String(), required=True)
+    #: Targets whose progress claimed work no live thread was doing. Stale
+    #: trackers, now cleared — not operations that were stopped.
+    unresponsive = fields.List(fields.String(), required=True)
 
 
 # ---------------------------------------------------------------------------

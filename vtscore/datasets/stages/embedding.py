@@ -148,10 +148,19 @@ def _noop_progress(status: str, message: str = "", current: int = 0, total: int 
 
 
 def _ensure_model_loaded(emb, on_progress: Callable[[str, str, int, int], None]) -> None:
-    """Load the embedder's models if not already loaded, announcing progress."""
+    """Load the embedder's models if not already loaded, announcing progress.
+
+    The load runs inside :meth:`~vtscore.media.embedder.MediaEmbedder.progress_scope`
+    so the model's own "Loading … processor…" ticks land on *this* load's
+    tracker, next to every other phase of the import.  Unscoped they fall
+    through to the embedder's process-wide default sink — the global
+    ``dataset_progress`` singleton — which belongs to no particular import and
+    so shows the right message on the wrong channel (#3167).
+    """
     if getattr(emb, "_model", None) is None:
         on_progress("loading", "Loading embedding model…", 0, 0)
-        emb.load_models()
+        with emb.progress_scope(on_progress):
+            emb.load_models()
 
 
 def _missing_for_embedder(

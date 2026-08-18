@@ -50,9 +50,15 @@ _T = TypeVar("_T")
 # ``file_lock``; this lock only serialises threads within one process.
 _lock = threading.RLock()
 
-# In-memory cache - loaded once from disk, refreshed from disk on every
-# mutation (see :func:`_read_modify_write`).
+# In-memory cache - refreshed from disk on every mutation (see
+# :func:`_read_modify_write`) and whenever the manifest on disk no longer
+# matches the stamp the cache was built from (see :func:`_ensure_loaded`).
 _entries: list[dict[str, Any]] | None = None
+
+# ``(mtime_ns, size)`` of the manifest the cache was built from, or ``None``
+# when the file did not exist.  Compared on every read so a write by another
+# process is picked up immediately.
+_entries_stamp: tuple[int, int] | None = None
 
 # The set of dataset IDs that are currently loaded in memory.
 _loaded_ids: set[str] = set()
@@ -87,11 +93,35 @@ def _save(entries: list[dict[str, Any]]) -> None:
     atomic_write_json(REGISTRY_PATH, entries)
 
 
+def _manifest_stamp() -> tuple[int, int] | None:
+    """Return ``(mtime_ns, size)`` for the manifest, or ``None`` if absent."""
+    try:
+        stat = REGISTRY_PATH.stat()
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_size)
+
+
 def _ensure_loaded() -> list[dict[str, Any]]:
-    """Return the in-memory cache, loading from disk on first call."""
-    global _entries
-    if _entries is None:
+    """Return the in-memory cache, re-reading it whenever disk has moved on.
+
+    The cache used to be filled once and thereafter refreshed only by this
+    process's own mutations, which made every *read* blind to a write by
+    anyone else — a CLI autodetect run against the same data dir (the very
+    case :func:`_read_modify_write` takes a cross-process lock for), a second
+    server, a hand-edited manifest.  A dataset could then sit on disk, fully
+    registered, while ``GET /api/datasets/registry`` reported it did not exist
+    until the process was restarted: the same "every signal says nothing
+    happened" ambiguity as a progress channel that never terminates (#3167).
+
+    A stat per read is cheap next to the JSON parse it usually skips, and the
+    stamp makes the re-read happen exactly when the file has actually changed.
+    """
+    global _entries, _entries_stamp
+    stamp = _manifest_stamp()
+    if _entries is None or stamp != _entries_stamp:
         _entries = _load()
+        _entries_stamp = stamp
     return _entries
 
 
@@ -109,13 +139,14 @@ def _read_modify_write(mutator: Callable[[list[dict[str, Any]]], _T]) -> _T:
     call's result.  The list is always persisted and swapped into the in-memory
     cache, so the cache converges to disk truth on every mutation.
     """
-    global _entries
+    global _entries, _entries_stamp
     with file_lock(REGISTRY_PATH):
         entries = _load()
         result = mutator(entries)
         _save(entries)
         with _lock:
             _entries = entries
+            _entries_stamp = _manifest_stamp()
     return result
 
 
@@ -407,8 +438,9 @@ def set_readers(dataset_id: str, readers: list[str], requesting_user: str) -> tu
 
 def reset_for_tests() -> None:
     """Reset the in-memory cache (for test isolation)."""
-    global _entries
+    global _entries, _entries_stamp
     with _lock:
         _entries = None
+        _entries_stamp = None
         _loaded_ids.clear()
         _loading_ids.clear()
