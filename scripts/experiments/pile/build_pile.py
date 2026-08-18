@@ -959,6 +959,7 @@ def provenance_report(backfill: bool = False) -> int:
                 emb,
                 dev.get("gpu_name") or "unknown",
                 dev.get("hostname") or "-",
+                str(dev.get("cpu_capability") or "-"),
                 (dev.get("commit") or "-")[:9],
                 rec.get("fingerprint", {}).get("vectors_sha256", "")[:12],
             )
