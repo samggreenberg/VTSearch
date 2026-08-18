@@ -65,7 +65,7 @@ def _patch_medias() -> dict[int, dict]:
     }
 
 
-def _fires_on_dim1_mlp() -> nn.Module:
+def _fires_on_dim1_mlp() -> nn.Sequential:
     linear = nn.Linear(DIM, 1)
     with torch.no_grad():
         linear.weight.copy_(torch.tensor([[0.0, 10.0, 0.0, 0.0]]))
@@ -73,7 +73,7 @@ def _fires_on_dim1_mlp() -> nn.Module:
     return nn.Sequential(linear).eval()
 
 
-def _pooled_score(model: nn.Module, media: dict) -> float:
+def _pooled_score(model: nn.Sequential, media: dict) -> float:
     """The max over this media's own score rows - what the GUI reports."""
     rows = torch.from_numpy(np.asarray(media_score_rows(media, "dinov3_patch"), dtype=np.float32))
     with torch.no_grad():

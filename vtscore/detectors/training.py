@@ -810,6 +810,15 @@ def scoring_rows_for_snap(
         n = len(all_ids)
         media_index_per_row = np.arange(n, dtype=np.int64)
         region_index_per_row = np.zeros(n, dtype=np.int64)
+    if int(X_np.shape[0]) != int(media_index_per_row.size):
+        # A matrix builder that hands back an id list and a matrix of different
+        # lengths would otherwise surface as an out-of-bounds `reduceat` deep in
+        # the max-pool, or - worse, under a plain zip - as silently truncated
+        # scores (audit M11). Fail here, naming both counts.
+        raise ValueError(
+            f"scoring rows for {len(all_ids)} media claim {media_index_per_row.size} rows "
+            f"but the matrix holds {X_np.shape[0]}; the embedding matrix and its id list disagree."
+        )
     return ScoringRows(all_ids, X_np, media_index_per_row, region_index_per_row)
 
 
