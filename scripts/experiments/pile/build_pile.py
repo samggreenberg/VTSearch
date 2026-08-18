@@ -460,12 +460,22 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
                 by_name[name].append([x, y, x + w, y + h])
         labels[iid] = dict(by_name)
 
+    # The pixel space each image's boxes live in. VG ships DOWNSCALED copies of
+    # the COCO originals -- 500 px wide against COCO's 640, on 95% of the
+    # overlap -- so a COCO box normalised by the VG file's dimensions lands in
+    # the wrong place and with the wrong extent. Normalise every box by the
+    # dimensions of the image its coordinates were measured on.
+    box_dims: dict[int, tuple[int, int]] = dict(dims)
     n_anchored = 0
     for iid in labels:
         cid = coco_of.get(iid)
         ref = truth.get(cid) if cid is not None else None
         if ref is None:
             continue
+        wh = ca.COCO_DIMS.get(cid)
+        if wh is None:
+            continue
+        box_dims[iid] = wh
         # COCO's annotation REPLACES VG's for this image rather than merging
         # with it: the two disagree in both directions, and only one of them is
         # exhaustive. Keeping VG's extra boxes would reintroduce exactly the
@@ -491,7 +501,7 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
     clean: list[int] = []
 
     for iid, by_name in labels.items():
-        W, H = dims[iid]
+        W, H = box_dims[iid]
         area = float(W * H)
         if not by_name:
             clean.append(iid)
@@ -550,12 +560,17 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
         path = paths[iid]
         try:
             with Image.open(path) as im:
-                W, H = im.size
+                vw, vh = im.size
             data = path.read_bytes()
         except Exception:  # noqa: BLE001 - a corrupt file just drops out
             continue
-        if W <= 0 or H <= 0:
+        if vw <= 0 or vh <= 0:
             continue
+        # Normalised region boxes are resolution-independent, so they must be
+        # divided by the size of the image the coordinates came from -- which is
+        # the COCO original for a repaired image, not the VG copy carrying the
+        # pixels.
+        W, H = box_dims[iid]
         cats = sorted(positive_in.get(iid, []))
         regions = [
             {"box": [b[0] / W, b[1] / H, b[2] / W, b[3] / H], "label": cell}
@@ -715,6 +730,42 @@ def verify() -> int:
             state = "UNEXPECTED-PATCH"
             problems.append(f"{ds} x {emb}: single-vector embedder carries patch grids")
         rows.append((ds, emb, state, str(n), f"{n_patch}/{n}", dim))
+
+    # A banded cell's NAME asserts the size of its boxes, so the stored box has
+    # to agree with it. That is what catches a coordinate-space mistake: VG
+    # ships 500 px copies of COCO's 640 px originals, and normalising a COCO box
+    # by the VG file's dimensions leaves every box shifted and mis-scaled while
+    # every other check still passes -- the medias load, the vectors are there,
+    # the patch grids are there, and the boxes are quietly pointing at the wrong
+    # pixels. Recomputing the band from the box is cheap and would have caught
+    # it at build time instead of via a human noticing a box drawn on snow.
+    for ds, emb in pc.cells():
+        if pc.DATASETS.get(ds, {}).get("kind") != "vg_scale":
+            continue
+        path = pc.cell_path(ds, emb)
+        if not path.exists():
+            continue
+        medias = io.load_medias(path)
+        bad = 0
+        checked = 0
+        for m in medias.values():
+            for cell in m.get("categories") or []:
+                boxes = [r["box"] for r in (m.get("regions") or []) if r.get("label") == cell]
+                if not boxes:
+                    continue
+                area = (max(b[2] for b in boxes) - min(b[0] for b in boxes)) * (
+                    max(b[3] for b in boxes) - min(b[1] for b in boxes)
+                )
+                lo, hi = pc.BOX_BANDS[cell.rsplit("@", 1)[1]]
+                checked += 1
+                if not (lo <= area < hi):
+                    bad += 1
+        if checked and bad:
+            problems.append(
+                f"{ds} x {emb}: {bad}/{checked} region boxes fall outside the band their cell "
+                f"name claims -- boxes and bands were measured in different pixel spaces"
+            )
+        break  # one embedder is enough; the boxes are identical across cells
 
     # A dataset's cells must all cover the same medias, or cross-embedder
     # comparisons silently compare different populations. This is not
