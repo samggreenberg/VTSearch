@@ -51,7 +51,13 @@ def draw_with_inset(src: Path, box: tuple[float, float, float, float], dest: Pat
     with Image.open(src) as im:
         im = im.convert("RGB")
         W, H = im.size
-        x0, y0, x1, y1 = (box[0] * W, box[1] * H, box[2] * W, box[3] * H)
+        # VG boxes are not guaranteed to lie inside their image -- some run past
+        # the edge, and a few are inverted -- so clamp before any arithmetic
+        # that assumes a well-formed rectangle.
+        x0, x1 = sorted((box[0] * W, box[2] * W))
+        y0, y1 = sorted((box[1] * H, box[3] * H))
+        x0, x1 = max(0.0, min(x0, W - 1.0)), max(1.0, min(x1, float(W)))
+        y0, y1 = max(0.0, min(y0, H - 1.0)), max(1.0, min(y1, float(H)))
         bw, bh = max(1.0, x1 - x0), max(1.0, y1 - y0)
 
         # The crop is padded around the box so the object keeps its context --
@@ -59,7 +65,8 @@ def draw_with_inset(src: Path, box: tuple[float, float, float, float], dest: Pat
         pad = max(bw, bh) * 0.6
         cx0, cy0 = max(0, int(x0 - pad)), max(0, int(y0 - pad))
         cx1, cy1 = min(W, int(x1 + pad)), min(H, int(y1 + pad))
-        crop = im.crop((cx0, cy0, cx1, cy1))
+        cx1, cy1 = max(cx1, cx0 + 2), max(cy1, cy0 + 2)
+        crop = im.crop((cx0, cy0, min(cx1, W), min(cy1, H)))
 
         target = int(min(W, H) * INSET_FRAC)
         zoom = max(MIN_ZOOM, target / max(crop.width, crop.height))
