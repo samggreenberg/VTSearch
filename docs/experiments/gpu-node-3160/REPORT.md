@@ -229,7 +229,84 @@ pin is right: reproducibility would be worth paying for.
 
 # 5. The benchmark: does 1.5e-04 reach a decision?
 
-<!-- filled in when arrays 511229/511258 drain -->
+Production defaults on both arms; the **only** difference is which host built the
+gallery. 2048 cells per arm, 4096 array tasks, **all COMPLETED, zero zero-byte
+cells**. 21 cells per arm were header-only at *identical* indices (`task_0001`,
+`task_0013`, `task_0017`, …) — systematic and paired-safe, the same shape #3143
+saw. **2027 paired cells per arm, 294,970 paired steps.**
+
+## The placebo is what licenses the rest
+
+Half the grid is `siglip`, whose two piles agree to a median of exactly 0. It has
+no cause to move, and it does not:
+
+| metric (deep, t ≥ 100) | `siglip` (placebo, 1009 cells) | `siglip2_l` (treated, 1018 cells) |
+|---|---:|---:|
+| cost | +0.00002 ± 0.00007 | −0.0015 ± 0.0024 |
+| regret | +0.00006 ± 0.00010 | −0.0025 ± 0.0021 |
+| average_precision | −0.00016 ± 0.00009 | −0.0030 ± 0.0023 |
+| fnr | −0.00033 ± 0.00015 | +0.0029 ± 0.0025 |
+| fpr | +0.00035 ± 0.00019 | −0.0044 ± 0.0034 |
+| rule_inefficiency | +0.00015 ± 0.00008 | **−0.0057 ± 0.0022** |
+| calibration_shift | −0.00009 ± 0.00013 | +0.0030 ± 0.0021 |
+
+The placebo's SEs are **~25× tighter** than the treated arm's, and every one of
+its metrics resolves below the margin. That is the design working: when the
+vectors are the same, this bench returns approximately exact zeros, so the spread
+on the treated arm is the drift's doing and not the harness's.
+
+It is also visible step by step. On the placebo, `cost` is **bit-identical on
+99.2%** of steps; on the treated arm, **3.6%**:
+
+| | `siglip` (placebo) | `siglip2_l` (treated) |
+|---|---:|---:|
+| `cost` identical | 99.2% | **3.6%** |
+| `average_precision` identical | 98.8% | **0.0%** |
+| `n_good` identical | 99.6% | 35.8% |
+| threshold identical | 98.7% | 5.5% |
+
+The placebo's 0.8% of non-identical steps is itself worth a line: those two piles
+differ only at **1e-15**, and that is already enough to reroute a vote sequence
+occasionally. A trajectory is not a stable thing to compare; a *distribution over
+cells* is, which is why the SE is taken over cells.
+
+## What the treated arm says
+
+**No metric is significant, and the pooled table overstates the case.** The
+analyzer's pooled rows report five of seven metrics "resolved below margin" —
+but that pool is half placebo, so it averages a real contrast with a guaranteed
+zero. **The per-embedder split above is the result; the pooled row is an
+artifact of the grid's shape.** On the treated embedder alone, not one metric
+resolves below 0.005, because 2·SE is ≈0.005 on its own.
+
+The honest summary: **a 1.5e-04 preprocessing drift moves the shipped decision
+metrics by less than about 0.006 in expectation, with no metric distinguishable
+from zero after accounting for having tested seven.**
+
+One line deserves a flag rather than a claim. `rule_inefficiency` at
+**−0.0057 ± 0.0022** is 2.6 SE from zero — p ≈ 0.009 unadjusted, ≈ 0.06 under a
+Bonferroni correction for seven metrics (and the metrics are correlated, so that
+is conservative). #3143 met this exact shape: a 2.3-SE `n_good` effect at n=95
+that became −0.0034 ± 0.11 at n=1013 — a multiplicity artifact, filed and closed
+on the bigger measurement. **A replication is running** (`515932`/`515956`):
+a fresh grid, treated embedder only, 256 seeds → ~2048 treated cells per arm,
+which is 2× this run's treated n and independent of it rather than pooled.
+§5.1 records the outcome.
+
+![Paired cost](figures/paired_cost_fp32_v100_vs_fp32_v100_rack7n03.png)
+
+![Paired average precision](figures/paired_average_precision_fp32_v100_vs_fp32_v100_rack7n03.png)
+
+Left panel: the mean trajectory for both arms, which lie on top of each other.
+Right: **every cell's paired difference as a thin line**, the mean in black, the
+±0.005 margin dashed — individual cells swing well past the margin in both
+directions while the mean sits near zero. That spread is trajectory
+decorrelation, not effect size, and it is why this test bounds a *systematic*
+shift and cannot be made tight cheaply.
+
+## 5.1 Replication
+
+<!-- filled in when arrays 515932/515956 drain, ~13:35 -->
 
 ---
 
