@@ -66,7 +66,13 @@ def fig_census(study: Path, out: Path, reference: str = "rack7n03") -> None:
     rows.sort(key=lambda r: (r[4], -r[1], r[0]))
     fig, ax = plt.subplots(figsize=(9.5, 6.2))
     colors = {"AVX-512": "#3b7dd8", "AVX2 only": "#d1495b", "unknown": "#888888"}
-    markers = {"Tesla V100-SXM2-32GB-LS": "o", "Tesla V100S-PCIE-32GB": "s", "NVIDIA L40S": "^"}
+    markers = {
+        "Tesla V100-SXM2-32GB-LS": "o",
+        "Tesla V100S-PCIE-32GB": "s",
+        "NVIDIA L40S": "^",
+        "NVIDIA A100-PCIE-40GB": "D",
+        "NVIDIA A100 80GB PCIe": "D",
+    }
     floor = 1e-13
     for i, (node, drift, gpu, _model, isa) in enumerate(rows):
         ax.scatter(
@@ -86,14 +92,15 @@ def fig_census(study: Path, out: Path, reference: str = "rack7n03") -> None:
     ax.set_xscale("log")
     ax.set_xlabel(f"median 1 − cos vs {reference}   (siglip2_l, 256 VG images, fp32)")
     ax.axvline(0.005, color="#444", ls="--", lw=1)
-    ax.text(0.005, len(rows) - 0.5, " 0.005 decision margin", fontsize=8, va="top", color="#444")
+    ax.text(0.005, -1.6, "0.005 decision\nmargin", fontsize=8, ha="center", va="top", color="#444")
     ax.axvline(2.9e-6, color="#777", ls=":", lw=1)
-    ax.text(2.9e-6, len(rows) - 0.5, " fp16 costs 2.9e-6", fontsize=8, va="top", color="#777")
+    ax.text(2.9e-6, -1.6, "fp16 costs\n2.9e-6", fontsize=8, ha="center", va="top", color="#777")
     handles = [plt.Line2D([], [], marker="o", ls="", color=c, label=k) for k, c in colors.items() if k != "unknown"]
-    handles += [
-        plt.Line2D([], [], marker=m, ls="", color="#333", label=k.replace("Tesla ", "").replace("NVIDIA ", ""))
-        for k, m in markers.items()
-    ]
+    seen_markers: dict[str, str] = {}
+    for gpu, marker in markers.items():
+        label = "A100 (either part)" if marker == "D" else gpu.replace("Tesla ", "").replace("NVIDIA ", "")
+        seen_markers.setdefault(marker, label)
+    handles += [plt.Line2D([], [], marker=m, ls="", color="#333", label=lbl) for m, lbl in seen_markers.items()]
     ax.legend(handles=handles, fontsize=8, loc="lower right", framealpha=0.95)
     ax.set_title(
         "The host's CPU ISA predicts the drift; the GPU part does not\n"
