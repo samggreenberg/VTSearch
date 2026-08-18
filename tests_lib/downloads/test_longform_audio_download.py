@@ -93,15 +93,12 @@ class TestDownloadApollo11Audio:
             patch.object(dl_module.core, "DATA_DIR", tmp_path),
             patch.object(dl_module.core, "download_file_with_progress", _download),
         ):
-            result = dl_module.download_apollo11_audio(
-                [("11-03301.mp3", 100)], on_progress=lambda *a: None
-            )
+            result = dl_module.download_apollo11_audio([("11-03301.mp3", 100)], on_progress=lambda *a: None)
 
         assert result == tmp_path / "apollo11_audio"
         assert [p.name for p in result.glob("*.mp3")] == ["11-03301.mp3"]
         assert requested == [
-            f"{dl_module.core.ARCHIVE_ORG_DOWNLOAD_URL}/"
-            f"{dl_module.core.APOLLO11_AUDIO_ITEM}/11-03301.mp3"
+            f"{dl_module.core.ARCHIVE_ORG_DOWNLOAD_URL}/{dl_module.core.APOLLO11_AUDIO_ITEM}/11-03301.mp3"
         ]
         # The .part staging file is renamed away, never left behind.
         assert not list(result.glob("*.part"))
@@ -351,9 +348,7 @@ class TestDownloadNixonTapes:
             base = dl_module.download_nixon_tapes(["001"], on_progress=lambda *a: None)
 
         assert base == tmp_path / "nixon_tapes"
-        assert [p.name for p in (base / "001").glob("*.mp3")] == [
-            "37-wht-conversation-001-001-pa.mp3"
-        ]
+        assert [p.name for p in (base / "001").glob("*.mp3")] == ["37-wht-conversation-001-001-pa.mp3"]
         assert not (base / "001.partial").exists()
 
     def test_tape_with_no_audio_online_is_skipped_not_fatal(self, tmp_path):
