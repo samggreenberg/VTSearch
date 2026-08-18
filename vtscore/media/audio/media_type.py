@@ -999,6 +999,74 @@ class AudioMediaType(MediaType):
         # Bytes ride inline in the pickle — no external media dir.
         return None
 
+    def _collect_longform_audio_files(
+        self,
+        source: str,
+        categories: list,
+        slice_start: int,
+        slice_end: int | None,
+        slice_frac_start: float | None,
+        slice_frac_end: float | None,
+        on_progress,
+    ):
+        """Resolve a long-form demo source → ``(audio_files, audio_dir)``, else ``None``.
+
+        Apollo 11, BirdVox-full-night and the Nixon tapes are hours-long
+        unlabelled recordings running to 5-10 GB apiece, so they invert the
+        order the other demos use: the *manifest* is sliced first and only the
+        selected items are downloaded, rather than pulling the whole source and
+        slicing afterwards.  Each loads as one undifferentiated bucket - the
+        events worth finding are scattered inside the recordings, so there is
+        nothing to label at the file level.
+
+        Returns ``None`` when *source* is not one of the three, leaving
+        :meth:`_collect_audio_files` to handle it.
+        """
+
+        def _bucket(paths: list, default_category: str, audio_dir: Path):
+            category = categories[0] if categories else default_category
+            return [(p, {"category": category, "path": p}) for p in paths], audio_dir
+
+        def _select(items: list):
+            return demo_slice(items, slice_start, slice_end, slice_frac_start, slice_frac_end)
+
+        if source == "apollo11_audio":
+            from vtscore.datasets.downloader import (  # noqa: PLC0415
+                apollo11_audio_manifest,
+                download_apollo11_audio,
+            )
+
+            tracks = _select(apollo11_audio_manifest())
+            audio_dir = download_apollo11_audio(tracks, on_progress=on_progress)
+            paths = [audio_dir / name for name, _size in tracks]
+            return _bucket([p for p in paths if p.exists()], "mission_audio", audio_dir)
+
+        if source == "birdvox_full_night":
+            from vtscore.datasets.downloader import (  # noqa: PLC0415
+                birdvox_full_night_manifest,
+                download_birdvox_full_night,
+            )
+
+            units = _select(birdvox_full_night_manifest())
+            base_dir = download_birdvox_full_night(units, on_progress=on_progress)
+            # The download segments each ~10-hour unit into 10-minute chunks.
+            paths = sorted(p for unit in units for p in (base_dir / unit).glob("*.flac"))
+            return _bucket(paths, "night_recording", base_dir)
+
+        if source == "nixon_tapes":
+            from vtscore.datasets.downloader import (  # noqa: PLC0415
+                download_nixon_tapes,
+                nixon_tape_manifest,
+            )
+
+            tapes = _select(nixon_tape_manifest())
+            base_dir = download_nixon_tapes(tapes, on_progress=on_progress)
+            # NARA serves one MP3 per recorded conversation.
+            paths = sorted(p for tape in tapes for p in (base_dir / tape).glob("*.mp3"))
+            return _bucket(paths, "conversation", base_dir)
+
+        return None
+
     def _collect_audio_files(
         self,
         source: str,
@@ -1061,65 +1129,17 @@ class AudioMediaType(MediaType):
             by_cat = {category: [(p, {"category": category, "path": p}) for p in sorted(audio_dir.rglob("*.wav"))]}
             return _sliced_by_category(by_cat), audio_dir
 
-        if source == "apollo11_audio":
-            from vtscore.datasets.downloader import (  # noqa: PLC0415
-                apollo11_audio_manifest,
-                download_apollo11_audio,
-            )
-
-            # Slice the manifest *before* downloading: at ~10 GB for the full
-            # item, a size variant has no business fetching anything outside
-            # its own slice (see the note in downloader/audio.py).
-            tracks = demo_slice(
-                apollo11_audio_manifest(),
-                slice_start,
-                slice_end,
-                slice_frac_start,
-                slice_frac_end,
-            )
-            audio_dir = download_apollo11_audio(tracks, on_progress=on_progress)
-            category = categories[0] if categories else "mission_audio"
-            paths = [audio_dir / name for name, _size in tracks]
-            return [(p, {"category": category, "path": p}) for p in paths if p.exists()], audio_dir
-
-        if source == "birdvox_full_night":
-            from vtscore.datasets.downloader import (  # noqa: PLC0415
-                birdvox_full_night_manifest,
-                download_birdvox_full_night,
-            )
-
-            units = demo_slice(
-                birdvox_full_night_manifest(),
-                slice_start,
-                slice_end,
-                slice_frac_start,
-                slice_frac_end,
-            )
-            base_dir = download_birdvox_full_night(units, on_progress=on_progress)
-            # The download segments each ~10-hour unit into 10-minute chunks;
-            # one media per chunk, all in one undifferentiated bucket.
-            category = categories[0] if categories else "night_recording"
-            paths = sorted(p for unit in units for p in (base_dir / unit).glob("*.flac"))
-            return [(p, {"category": category, "path": p}) for p in paths], base_dir
-
-        if source == "nixon_tapes":
-            from vtscore.datasets.downloader import (  # noqa: PLC0415
-                download_nixon_tapes,
-                nixon_tape_manifest,
-            )
-
-            tapes = demo_slice(
-                nixon_tape_manifest(),
-                slice_start,
-                slice_end,
-                slice_frac_start,
-                slice_frac_end,
-            )
-            base_dir = download_nixon_tapes(tapes, on_progress=on_progress)
-            # One media per recorded conversation, one undifferentiated bucket.
-            category = categories[0] if categories else "conversation"
-            paths = sorted(p for tape in tapes for p in (base_dir / tape).glob("*.mp3"))
-            return [(p, {"category": category, "path": p}) for p in paths], base_dir
+        longform = self._collect_longform_audio_files(
+            source,
+            categories,
+            slice_start,
+            slice_end,
+            slice_frac_start,
+            slice_frac_end,
+            on_progress,
+        )
+        if longform is not None:
+            return longform
 
         if source == "clotho":
             from vtscore.datasets.downloader import download_clotho  # noqa: PLC0415
