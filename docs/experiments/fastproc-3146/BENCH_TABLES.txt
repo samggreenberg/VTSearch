@@ -1,0 +1,100 @@
+############ tv_cpu vs tv_cuda ############
+================================================================================================
+COVERAGE — everything dropped is counted, not silently excluded
+================================================================================================
+  tv_cpu             96 cell files,  13628 rows,   95 distinct cells, 1 unusable [('task_0001.csv', 'header only')]
+  tv_cuda            96 cell files,  13630 rows,   95 distinct cells, 1 unusable [('task_0001.csv', 'header only')]
+
+================================================================================================
+tv_cuda  vs  tv_cpu   (paired; margin = 0.005)
+================================================================================================
+paired steps: 13627  paired cells: 95  (ref had 95, arm had 95)
+steps where cost is bit-identical: 3.1%  (416/13627)
+steps where average_precision is bit-identical: 0.0%  (6/13627)
+steps choosing the threshold the same way: 99.9%
+
+Deep regime (t >= 100), paired difference per CELL then averaged.
+SE is over cells, not steps: steps within a cell are autocorrelated and a
+step-level SE would be anti-conservative (#2825).
+
+metric                   ref mean   arm mean         paired diff ± SE  cells                      verdict
+cost                         0.38       0.38          0.0012 ± 0.0087     95     cannot resolve at this n
+regret                        0.1      0.099         -0.0027 ± 0.0072     95     cannot resolve at this n
+average_precision            0.44       0.44         3.0e-04 ± 0.0073     95     cannot resolve at this n
+fnr                          0.14       0.14            0.005 ± 0.008     95     cannot resolve at this n
+fpr                          0.25       0.24          -0.0038 ± 0.011     95     cannot resolve at this n
+rule_inefficiency          -0.019    -0.0089          0.0098 ± 0.0065     94     cannot resolve at this n
+calibration_shift            0.12       0.11          -0.012 ± 0.0066     94     cannot resolve at this n
+n_good                        9.3        8.7             -0.65 ± 0.37     95          count: within noise
+
+Same difference, split by embedder (a pooled average across a crossover
+is precisely the number that hides it):
+  siglip         ( 47 cells)  cost 0.012 ± 0.0092   regret 4.7e-04 ± 0.0084   average_precision -0.011 ± 0.0082
+  siglip2_l      ( 48 cells)  cost -0.0089 ± 0.015   regret -0.0057 ± 0.012   average_precision 0.011 ± 0.012
+
+Power: 7 rate metric(s) could not be resolved against the 0.005 margin.
+Cells needed for 2*SE < margin, at this between-cell spread:
+  cost                   have   95 cells (SE 0.0087) -> need ~1137
+  regret                 have   95 cells (SE 0.0072) -> need ~781
+  average_precision      have   95 cells (SE 0.0073) -> need ~812
+  fnr                    have   95 cells (SE 0.008) -> need ~979
+  fpr                    have   95 cells (SE 0.011) -> need ~1857
+  rule_inefficiency      have   94 cells (SE 0.0065) -> need ~638
+  calibration_shift      have   94 cells (SE 0.0066) -> need ~661
+A 3e-6 vector change reroutes the vote sequence, so the trajectory
+decorrelates and the per-cell spread is set by that, not by the
+perturbation size. This test bounds a SYSTEMATIC effect; it cannot be
+made tight cheaply.
+
+wrote /expscratch/sgreenberg/fastproc-3146/bench/paired_tv_cuda_vs_tv_cpu.csv
+wrote figures to /expscratch/sgreenberg/fastproc-3146/bench/figures
+############ tv_cpu vs pil_cpu ############
+================================================================================================
+COVERAGE — everything dropped is counted, not silently excluded
+================================================================================================
+  tv_cpu             96 cell files,  13628 rows,   95 distinct cells, 1 unusable [('task_0001.csv', 'header only')]
+  pil_cpu            96 cell files,  13623 rows,   95 distinct cells, 1 unusable [('task_0001.csv', 'header only')]
+
+================================================================================================
+pil_cpu  vs  tv_cpu   (paired; margin = 0.005)
+================================================================================================
+paired steps: 13620  paired cells: 95  (ref had 95, arm had 95)
+steps where cost is bit-identical: 2.8%  (383/13620)
+steps where average_precision is bit-identical: 0.0%  (6/13620)
+steps choosing the threshold the same way: 99.8%
+
+Deep regime (t >= 100), paired difference per CELL then averaged.
+SE is over cells, not steps: steps within a cell are autocorrelated and a
+step-level SE would be anti-conservative (#2825).
+
+metric                   ref mean   arm mean         paired diff ± SE  cells                      verdict
+cost                         0.38       0.37          -0.0088 ± 0.008     95     cannot resolve at this n
+regret                        0.1        0.1         -0.0023 ± 0.0072     95     cannot resolve at this n
+average_precision            0.44       0.45          0.0045 ± 0.0061     95     cannot resolve at this n
+fnr                          0.13       0.13         -0.0033 ± 0.0076     95     cannot resolve at this n
+fpr                          0.25       0.24          -0.0055 ± 0.011     95     cannot resolve at this n
+rule_inefficiency          -0.019     -0.012          0.0068 ± 0.0066     94     cannot resolve at this n
+calibration_shift            0.12       0.11         -0.0096 ± 0.0071     94     cannot resolve at this n
+n_good                        9.3          9             -0.34 ± 0.41     95          count: within noise
+
+Same difference, split by embedder (a pooled average across a crossover
+is precisely the number that hides it):
+  siglip         ( 47 cells)  cost -0.0059 ± 0.01   regret 0.0038 ± 0.0087   average_precision 0.0086 ± 0.0077
+  siglip2_l      ( 48 cells)  cost -0.012 ± 0.013   regret -0.0083 ± 0.012   average_precision 4.3e-04 ± 0.0095
+
+Power: 7 rate metric(s) could not be resolved against the 0.005 margin.
+Cells needed for 2*SE < margin, at this between-cell spread:
+  cost                   have   95 cells (SE 0.008) -> need ~983
+  regret                 have   95 cells (SE 0.0072) -> need ~792
+  average_precision      have   95 cells (SE 0.0061) -> need ~567
+  fnr                    have   95 cells (SE 0.0076) -> need ~888
+  fpr                    have   95 cells (SE 0.011) -> need ~1911
+  rule_inefficiency      have   94 cells (SE 0.0066) -> need ~646
+  calibration_shift      have   94 cells (SE 0.0071) -> need ~768
+A 3e-6 vector change reroutes the vote sequence, so the trajectory
+decorrelates and the per-cell spread is set by that, not by the
+perturbation size. This test bounds a SYSTEMATIC effect; it cannot be
+made tight cheaply.
+
+wrote /expscratch/sgreenberg/fastproc-3146/bench/paired_pil_cpu_vs_tv_cpu.csv
+wrote figures to /expscratch/sgreenberg/fastproc-3146/bench/figures

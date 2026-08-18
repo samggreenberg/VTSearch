@@ -1,0 +1,9 @@
+embedder,backend_requested,device,processor_class,backend_resolved,backend_honoured,shape,seconds,ms_per_image,pixel_min,pixel_max,drift_max,drift_max_median,drift_mean,drift_mean_p95,pixel_range,drift_max_frac_range,drift_mean_frac_range,frac_images_identical
+siglip,auto,cpu,SiglipImageProcessor,torchvision,True,"[384, 3, 224, 224]",0.8417,2.192,-1.0,1.0,0.0,0.0,0.0,0.0,2.0,0.0,0.0,1.0
+siglip,torchvision,cpu,SiglipImageProcessor,torchvision,True,"[384, 3, 224, 224]",0.8041,2.094,-1.0,1.0,,,,,,,,
+siglip,pil,cpu,SiglipImageProcessorPil,pil,True,"[384, 3, 224, 224]",2.4151,6.289,-1.0,1.0,0.007843196392059326,0.007843196392059326,1.836079354688991e-05,2.7870493795489892e-05,2.0,0.003921598196029663,9.180396773444954e-06,0.0
+siglip,torchvision,cuda,SiglipImageProcessor,torchvision,True,"[384, 3, 224, 224]",0.2138,0.557,-1.0,1.0,0.07843136787414551,0.023529410362243652,0.0009055137634277344,0.0010376805439591408,2.0,0.039215683937072754,0.0004527568817138672,0.0
+siglip2_l,auto,cpu,SiglipImageProcessor,torchvision,True,"[384, 3, 384, 384]",0.8851,2.305,-1.0,1.0,0.0,0.0,0.0,0.0,2.0,0.0,0.0,1.0
+siglip2_l,torchvision,cpu,SiglipImageProcessor,torchvision,True,"[384, 3, 384, 384]",0.8127,2.116,-1.0,1.0,,,,,,,,
+siglip2_l,pil,cpu,SiglipImageProcessorPil,pil,True,"[384, 3, 384, 384]",2.6227,6.83,-1.0,1.0,0.007843196392059326,0.007843196392059326,0.0010773645481094718,0.001238503260537982,2.0,0.003921598196029663,0.0005386822740547359,0.0
+siglip2_l,torchvision,cuda,SiglipImageProcessor,torchvision,True,"[384, 3, 384, 384]",0.2135,0.556,-1.0,1.0,0.007843166589736938,0.007843151688575745,2.338545073143905e-06,5.470559699460864e-06,2.0,0.003921583294868469,1.1692725365719525e-06,0.0390625
