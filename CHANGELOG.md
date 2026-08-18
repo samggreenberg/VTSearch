@@ -17,23 +17,21 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
-- **Rotated photos are no longer processed sideways.** A JPEG carrying an EXIF
-  orientation tag — the ordinary output of a phone camera, which stores the
-  sensor frame plus "rotate me" rather than rotating pixels — reached the
-  embedder, OCR, face detection and every crop path 90/180/270 degrees from the
-  way the browser (and every other photo viewer) displays it. Nothing errored;
-  the picture was simply the wrong way up in a space nobody looks at directly,
-  so a sideways photo embedded as a sideways photo and landed in the wrong part
-  of the vector space. Orientation is now applied once, in the image decode
-  layer, so every consumer sees the same upright pixels; a media's stored
-  `width`/`height` are the displayed dimensions to match, and cropping, lazy
-  clip resolution and cross-dataset origin resolution decode upright so a box
-  drawn on screen cuts the region the user drew. The `image_exif_orient`
-  cleaner still exists for anyone who wants the rotation baked into the *stored
-  bytes* (for tools outside VTSearch that ignore EXIF), but it is now off by
-  default: it costs a lossy re-encode and no longer changes anything VTSearch
-  itself sees. Images already imported keep the dimensions and embeddings they
-  were ingested with; re-import a rotated corpus to pick up the fix. (#3172)
+- **One image that fails to embed no longer aborts a CLI run.** Every CLI
+  scoring path fed the raw media chunk straight to the embedding-matrix
+  builders, which raise on a media with no vector (`ValueError`, from
+  `vtscore/embedding/matrix.py`) or one whose vector is the wrong width
+  (`MismatchedVectorError`, from `vtscore/embedding/precomputed.py`). Those
+  raises are correct for the dataset's own matrix — the load pipeline has
+  already dropped vector-less media by then — but not for a snapshot handed to
+  the scorer, so a single corrupt or undecodable file took the whole run down
+  with it. The scoring paths now filter first and score what is left, matching
+  the drop-and-log policy the load pipeline and converter routing already used,
+  and each skip is announced on the CLI event stream (`medias_skipped`) so a
+  short hit count is never silent. This also fixes
+  `--autodetect --importer …`, which failed on *every* run: the safe-threshold
+  population pass scored the chunk before anything had been embedded, so it hit
+  the same raise on the first media. (#3179)
 
 - **A detector's labelset no longer stores the same media twice.** After one
   pass over a 300-image dataset a detector reported `num_training: 356` — 300

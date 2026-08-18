@@ -478,14 +478,13 @@ def _clip_image_to_bytes(file_path: Path, clip_box: str) -> tuple[bytes, str]:
     """Crop an image to the comma-separated ``clip_box``.  Returns ``(bytes, suffix)``."""
     import io as _io
 
-    from vtscore.media.image.decode import open_upright
+    from PIL import Image
 
     parts = [int(float(v)) for v in clip_box.split(",")]
     if len(parts) != 4:
         raise ValueError(f"clip_box must have 4 values, got {len(parts)}")
     box: tuple[int, int, int, int] = (parts[0], parts[1], parts[2], parts[3])
-    # Upright decode, matching the clipper the box was recorded by.
-    with open_upright(file_path) as img:
+    with Image.open(file_path) as img:
         cropped = img.crop(box)
         buf = _io.BytesIO()
         cropped.save(buf, format=img.format or "PNG")

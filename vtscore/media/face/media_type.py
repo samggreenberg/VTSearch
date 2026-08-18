@@ -127,16 +127,18 @@ class FaceMediaType(MediaType):
         # Faces are not imported from files in the normal flow, but implement
         # this defensively (image-like) so a face crop loaded from disk still
         # gets its dimensions + thumbnail populated.
-        from vtscore.media.image.decode import upright_size  # noqa: PLC0415
+        import io  # noqa: PLC0415
+
+        from PIL import Image  # noqa: PLC0415
+
         from vtscore.media.image.thumbnail import make_image_thumbnail  # noqa: PLC0415
 
         if media_bytes is None:
             with open(file_path, "rb") as f:
                 media_bytes = f.read()
         try:
-            # Upright, matching the thumbnail below: face crops carry no EXIF of
-            # their own, but a crop loaded straight off disk might.
-            width, height = upright_size(media_bytes)
+            with Image.open(io.BytesIO(media_bytes)) as img:
+                width, height = img.width, img.height
         except Exception:
             width, height = None, None
         thumb = make_image_thumbnail(media_bytes)

@@ -83,20 +83,18 @@ def make_image_thumbnail(
     Returns ``None`` when the bytes can't be decoded as an image (e.g. SVG or
     a corrupt file), letting the caller fall back to the original bytes.
     """
-    from PIL import Image  # noqa: PLC0415
+    from PIL import Image, ImageOps  # noqa: PLC0415
 
     from vtscore.media.image.decode import decode_bounded  # noqa: PLC0415
 
     try:
         # Bounded decode: the result is at most ``max_dim`` px on its longest
         # side, so a gigapixel source has nothing to gain from being decoded at
-        # full resolution first.  It also comes back already rotated to its EXIF
-        # display orientation, so the crop below — like the media's stored
-        # ``width``/``height`` — addresses upright pixels.  Both the crop and the
-        # edge-trim work in *fractional* coordinates, so they are unaffected by
-        # the downsample.
+        # full resolution first.  Both the crop and the edge-trim below work in
+        # *fractional* coordinates, so they are unaffected by the downsample.
         decoded, _scale = decode_bounded(media_bytes)
-        with decoded as img:
+        with decoded as src:
+            img = ImageOps.exif_transpose(src) or src
             if crop is not None:
                 img = _crop_to_region(img, crop)
             else:

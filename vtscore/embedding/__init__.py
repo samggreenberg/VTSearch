@@ -35,6 +35,7 @@ from vtscore.embedding.matrix import (
     get_embedding_matrix_for_snap,
     get_region_matrix_for_snap,
     invalidate_embedding_matrix,
+    scoreable_snapshot,
 )
 
 __all__ = [
@@ -58,6 +59,7 @@ __all__ = [
     "invalidate_embedding_matrix",
     "get_embedding_matrix_for_snap",
     "get_region_matrix_for_snap",
+    "scoreable_snapshot",
     "derive_binding",
     "validate_binding",
 ]
