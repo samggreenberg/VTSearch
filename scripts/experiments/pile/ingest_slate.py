@@ -29,6 +29,8 @@ import argparse
 import csv
 import glob
 import json
+import urllib.parse
+import urllib.request
 from collections import defaultdict
 from pathlib import Path
 
@@ -80,6 +82,31 @@ def class_of(path: Path, elements: list[dict], folders: dict[str, str], explicit
     )
 
 
+def read_api(base: str, detector: str) -> list[dict]:
+    """One detector's saved votes, in the same shape as a file export.
+
+    ``GET /api/detectors/<name>/labels-detail`` already returns the two things a
+    verdict needs -- the file name (which is the VG image id) and the
+    ``region_box`` drawn on a Good vote -- so pulling straight from the running
+    app skips the export dialog entirely. The reviewer votes; nothing else is
+    asked of them.
+    """
+    url = f"{base.rstrip('/')}/api/detectors/{urllib.parse.quote(detector)}/labels-detail"
+    with urllib.request.urlopen(url, timeout=60) as r:  # noqa: S310 - caller-supplied http(s) base
+        data = json.load(r)
+    out = []
+    for label in ("good", "bad"):
+        for el in data.get(label) or []:
+            out.append(
+                {
+                    "filename": el.get("filename") or el.get("origin_name"),
+                    "label": label,
+                    "region_box": el.get("region_box"),
+                }
+            )
+    return out
+
+
 def read_export(path: Path) -> list[dict]:
     """The labelled elements of one export, whichever shape it was written in."""
     data = json.loads(path.read_text())
@@ -92,7 +119,13 @@ def read_export(path: Path) -> list[dict]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--export", required=True, help="exported JSON (glob allowed)")
+    ap.add_argument("--export", default="", help="exported JSON (glob allowed)")
+    ap.add_argument(
+        "--api",
+        default="",
+        help="pull votes straight from a running VTSearch instead of a file export, "
+        "e.g. --api http://rack7n03:11850 (one detector per class, named after it)",
+    )
     ap.add_argument("--slates", default=str(pc.PILE / "slates"), help="slate dir from make_audit_slate.py")
     ap.add_argument("--out", default="", help="write the verdict rows here")
     ap.add_argument("--class", dest="klass", default="", help="the class this export reviews (else inferred)")
@@ -103,11 +136,24 @@ def main() -> int:
         raise SystemExit(f"no manifests under {args.slates}; run make_audit_slate.py first")
     log(f"{len(manifests)} slate entries over {len({c for _, c in manifests})} classes")
 
+    if not args.export and not args.api:
+        raise SystemExit("pass --export <file/glob> or --api <base-url>")
+
+    # (label of the source, its elements, the class it reviews)
+    sources: list[tuple[str, list[dict], str]] = []
+    if args.api:
+        for c in sorted(folders):
+            if args.klass and c != args.klass:
+                continue
+            els = read_api(args.api, c)
+            sources.append((f"api:{c}", els, c))
+    for path in sorted(glob.glob(args.export)) if args.export else []:
+        els = read_export(Path(path))
+        sources.append((Path(path).name, els, class_of(Path(path), els, folders, args.klass)))
+
     verdicts: list[dict] = []
     unmatched = 0
-    for path in sorted(glob.glob(args.export)):
-        elements = read_export(Path(path))
-        c = class_of(Path(path), elements, folders, args.klass)
+    for source, elements, c in sources:
         for el in elements:
             name = Path(el.get("filename") or el.get("origin_name") or "").stem
             if not name.isdigit():
@@ -128,10 +174,10 @@ def main() -> int:
                     "exhaustive": row["exhaustive"],
                     "box": el.get("region_box"),
                     "text_score": float(row["text_score"]),
-                    "export": Path(path).name,
+                    "export": source,
                 }
             )
-        log(f"  {Path(path).name}: {len(elements)} labelled elements, class {c!r}")
+        log(f"  {source}: {len(elements)} labelled elements, class {c!r}")
     if unmatched:
         log(f"  WARNING {unmatched} exported elements matched no slate entry")
 
