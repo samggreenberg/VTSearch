@@ -4,6 +4,7 @@
 #
 #   bash launch_pile.sh              # prefetch + submit all three dataset jobs
 #   bash launch_pile.sh coco_val     # just one dataset's job
+#   VTS_GPU_NODE=rack7n03 bash launch_pile.sh visual_genome_m   # pin the device
 #
 # Weights are prefetched in a separate CPU step because parallel GPU jobs would
 # otherwise race to populate the same shared HF cache (see prefetch_models.py).
@@ -54,8 +55,29 @@ read -r -a DATASETS <<< "${DATASETS[@]}"
 # embedded on the slowest GPU on the cluster while L40S/A100 nodes idled --
 # 2.3x slower for siglip2_l (issue #3144). VTS_GPU still overrides.
 PICK_GPU="$SELF_DIR/../../slurm/pick_gpu.py"
+
+# Rebuilding one existing cell is a different job from building a new pile, and
+# it has a constraint the picker cannot express: #3143 measured that a
+# `gres/gpu:v100` job can land on either of two devices whose siglip2_l vectors
+# differ by 1.5e-04 (#3160). Reproducing a cell therefore means pinning the
+# *node* it was built on -- which is in that cell's provenance sidecar:
+#
+#   python build_pile.py --provenance      # read the node out
+#   VTS_GPU_NODE=rack7n03 bash launch_pile.sh visual_genome_m
+#
+# The type is derived from the node rather than asked for separately: a
+# --nodelist that disagrees with --gres pends forever with no explanation.
+NODELIST=()
 GPU_TYPE=""
-if [[ -f "$PICK_GPU" ]] && command -v python3 >/dev/null 2>&1; then
+if [[ -n "${VTS_GPU_NODE:-}" ]]; then
+  NODELIST=(--nodelist="$VTS_GPU_NODE")
+  GPU_TYPE="$(sinfo -h -N -n "$VTS_GPU_NODE" -o "%G" | head -1 | sed -E 's/.*gpu:([A-Za-z0-9_.-]+):.*/\1/')"
+  if [[ -z "$GPU_TYPE" ]]; then
+    echo "VTS_GPU_NODE=$VTS_GPU_NODE: no GPU gres visible on that node -- refusing to guess a type" >&2
+    exit 1
+  fi
+  echo "pinned to node $VTS_GPU_NODE (gpu:$GPU_TYPE); the auto-pick is skipped"
+elif [[ -f "$PICK_GPU" ]] && command -v python3 >/dev/null 2>&1; then
   GPU_TYPE="$(python3 "$PICK_GPU" --need "${#DATASETS[@]}" --explain || true)"
 fi
 # A missing picker (or python) must not sink the launch; l40s is the safe pin
@@ -67,6 +89,7 @@ for ds in "${DATASETS[@]}"; do
     --job-name="pile-$ds" \
     --partition=gpu \
     --gres="gpu:${GPU_TYPE}:1" \
+    "${NODELIST[@]}" \
     --cpus-per-task="$CPUS" \
     --mem="$MEM" \
     --time="$TIME" \
@@ -78,7 +101,7 @@ for ds in "${DATASETS[@]}"; do
     echo "FAILED to submit $ds (empty job id)" >&2
     exit 1
   fi
-  echo "submitted $ds -> job $jid  (gpu:$GPU_TYPE, log: $LOGS/pile-$ds-$jid.out)"
+  echo "submitted $ds -> job $jid  (gpu:$GPU_TYPE${VTS_GPU_NODE:+ on $VTS_GPU_NODE}, log: $LOGS/pile-$ds-$jid.out)"
 done
 
 echo

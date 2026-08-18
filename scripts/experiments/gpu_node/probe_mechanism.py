@@ -46,12 +46,22 @@ def log(msg: str) -> None:
 
 
 def _stamp(tensor) -> dict:
+    """Hash for "did it change at all", projection for "by how much".
+
+    The hash alone cannot answer the question this probe exists for -- a step
+    versus a ramp -- and keeping whole hidden states would be 700 MB. Summing
+    over every axis but the last leaves a per-channel vector: small enough to
+    write down, big enough that a relative L2 difference between two nodes is a
+    real magnitude rather than a yes/no.
+    """
     t = tensor.detach().float().cpu().contiguous()
+    proj = t.double().reshape(-1, t.shape[-1]).sum(0)
     return {
         "sha256": hashlib.sha256(t.numpy().tobytes()).hexdigest()[:16],
         "sum": float(t.double().sum()),
         "absmax": float(t.abs().max()),
         "shape": list(t.shape),
+        "proj": [round(v, 10) for v in proj.tolist()],
     }
 
 

@@ -17,6 +17,8 @@ Usage::
     python build_pile.py --embedders siglip2,siglip2_l
     python build_pile.py --verify                    # load every cell, check geometry
     python build_pile.py --manifest                  # (re)write MANIFEST.{json,md}
+    python build_pile.py --provenance                # which device built each cell
+    python build_pile.py --backfill-provenance       # fingerprint the pre-#3160 cells
 
 ``--verify`` is the guard the region-voting studies needed: it asserts that
 every cell whose ``(dataset, embedder)`` pair claims region capability actually
@@ -531,6 +533,123 @@ def _embed_batch_size(embedder: str):
         os.environ.pop("VTSEARCH_EMBED_BATCH_SIZE", None)
 
 
+# --------------------------------------------------------------------------
+# Provenance: which machine produced this cell (#3160)
+# --------------------------------------------------------------------------
+
+
+def _device_record() -> dict:
+    """Everything about the machine that a later reader needs to compare cells.
+
+    ``gres/gpu:v100`` is a *type*, and #3143 measured that a type is not a
+    device: two nodes both answering to it produced ``siglip2_l`` vectors 1.5e-04
+    apart, while three other devices agreed to ~1e-12. Nothing in ``scontrol`` or
+    ``--gres`` distinguishes the parts, so the only way a rebuild can be told
+    apart from the cell it replaces is if the build **writes down** what it ran
+    on. That is what this is; it does not make the arithmetic reproducible, it
+    makes the difference visible.
+    """
+    import torch  # noqa: PLC0415
+
+    from vtscore.config import EMBED_PRECISION, embed_precision  # noqa: PLC0415
+
+    rec: dict = {
+        "hostname": os.uname().nodename,
+        "slurm_job": os.environ.get("SLURM_JOB_ID"),
+        "slurm_gres": os.environ.get("SLURM_JOB_GRES") or os.environ.get("SBATCH_GRES"),
+        "precision_requested": EMBED_PRECISION,
+        "precision_resolved": embed_precision(),
+        "torch": torch.__version__,
+        "cuda_runtime": getattr(torch.version, "cuda", None),
+        "commit": _git_commit(),
+    }
+    if not torch.cuda.is_available():
+        rec["gpu_name"] = None
+        rec["note"] = "no CUDA device; embedded on CPU"
+        return rec
+    props = torch.cuda.get_device_properties(0)
+    major, minor = torch.cuda.get_device_capability(0)
+    rec.update(
+        {
+            "gpu_name": torch.cuda.get_device_name(0),
+            "gpu_capability": f"sm_{major}{minor}",
+            # SM count is the field the leading hypothesis for #3160 runs on:
+            # different SM counts mean different GEMM tiling and a different
+            # accumulation order at the same shape.
+            "multi_processor_count": props.multi_processor_count,
+            "total_memory_gb": round(props.total_memory / 1e9, 1),
+            "cudnn_version": torch.backends.cudnn.version(),
+            "cudnn_allow_tf32": bool(torch.backends.cudnn.allow_tf32),
+            "matmul_allow_tf32": bool(torch.backends.cuda.matmul.allow_tf32),
+            "cudnn_deterministic": bool(torch.backends.cudnn.deterministic),
+            "cudnn_benchmark": bool(torch.backends.cudnn.benchmark),
+        }
+    )
+    return rec
+
+
+def _git_commit() -> str | None:
+    """The commit of the checkout that is about to embed, or None outside git."""
+    import subprocess  # noqa: PLC0415, S404 -- fixed argv, no shell
+
+    repo = Path(os.environ.get("VTS_REPO") or Path(__file__).resolve().parents[3])
+    try:
+        out = subprocess.run(  # noqa: S603
+            ["git", "-C", str(repo), "rev-parse", "HEAD"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out.stdout.strip() or None
+
+
+def cell_fingerprint(dataset: str, embedder: str) -> dict:
+    """A hash of the cell's vectors, in a fixed media-id order.
+
+    The point of the hash is that it survives the cell it describes: a rebuild
+    can be compared against it without keeping the old 900 MB pickle, which is
+    exactly the check a purge-and-rebuild needs and cannot otherwise make.
+    """
+    import hashlib  # noqa: PLC0415
+
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+
+    medias = _cells_io().load_medias(pc.cell_path(dataset, embedder))
+    ids = sorted(medias)
+    vecs = [media_embedding(medias[i]) for i in ids]
+    arr = np.stack([np.asarray(v, dtype=np.float32) for v in vecs if v is not None])
+    digest = hashlib.sha256(arr.tobytes()).hexdigest()
+    return {
+        "n_vectors": int(arr.shape[0]),
+        "dim": int(arr.shape[1]) if arr.ndim > 1 else None,
+        "vectors_sha256": digest,
+        "id_range": [int(ids[0]), int(ids[-1])] if ids else None,
+    }
+
+
+def write_provenance(dataset: str, embedder: str, summary: dict) -> Path:
+    """Write the per-cell provenance sidecar."""
+    record = {
+        "dataset": dataset,
+        "embedder": embedder,
+        "cell": pc.cell_path(dataset, embedder).name,
+        "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        "device": _device_record(),
+        "cell_summary": {k: v for k, v in summary.items() if k != "status"},
+        "fingerprint": cell_fingerprint(dataset, embedder),
+    }
+    path = pc.provenance_path(dataset, embedder)
+    path.write_text(json.dumps(record, indent=2) + "\n")
+    dev = record["device"]
+    log(f"  provenance: {dev.get('gpu_name')} on {dev.get('hostname')} -> {path.name}")
+    return path
+
+
 def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
     """Build one cell, returning a summary record."""
     out = pc.cell_path(dataset, embedder)
@@ -572,7 +691,7 @@ def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
         f"  wrote {out.name}: {nbytes / 1e6:.0f} MB, {len(medias)} medias, "
         f"patch grids {n_patch}/{len(medias)}, embed {embed_s:.0f}s, total {total_s:.0f}s"
     )
-    return {
+    summary = {
         "dataset": dataset,
         "embedder": embedder,
         "status": "built",
@@ -580,7 +699,10 @@ def build_cell(dataset: str, embedder: str, force: bool = False) -> dict:
         "n_patch_grids": n_patch,
         "megabytes": round(nbytes / 1e6, 1),
         "embed_seconds": round(embed_s, 1),
+        "wall_seconds": round(total_s, 1),
     }
+    write_provenance(dataset, embedder, summary)
+    return summary
 
 
 # --------------------------------------------------------------------------
@@ -722,6 +844,85 @@ def report_bands() -> int:
     return 0
 
 
+def provenance_report(backfill: bool = False) -> int:
+    """Show which device built each cell -- and, with ``--backfill-provenance``,
+    stamp what is still knowable for the cells built before this existed.
+
+    A backfilled sidecar deliberately records ``gpu_name: null``: the node a 2026
+    job ran on is not recoverable from the pickle, and writing a guess would be
+    worse than writing nothing. What it *can* record is the fingerprint, and that
+    is the half that matters for a rebuild -- it turns "did the rebuild reproduce
+    the cell?" from an unanswerable question into a hash comparison.
+    """
+    rows, missing, devices = [], [], defaultdict(list)
+    for ds, emb in pc.cells():
+        cell = pc.cell_path(ds, emb)
+        if not cell.exists():
+            continue
+        path = pc.provenance_path(ds, emb)
+        if not path.exists():
+            if backfill:
+                stat = cell.stat()
+                record = {
+                    "dataset": ds,
+                    "embedder": emb,
+                    "cell": cell.name,
+                    "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(stat.st_mtime)),
+                    "backfilled": True,
+                    "device": {
+                        "gpu_name": None,
+                        "note": "unknown: cell predates per-cell provenance (#3160)",
+                    },
+                    "cell_summary": {"megabytes": round(stat.st_size / 1e6, 1)},
+                    "fingerprint": cell_fingerprint(ds, emb),
+                }
+                path.write_text(json.dumps(record, indent=2) + "\n")
+                log(f"backfilled {path.name} ({record['fingerprint']['vectors_sha256'][:12]})")
+            else:
+                missing.append(f"{ds} x {emb}")
+                continue
+        rec = json.loads(path.read_text())
+        dev = rec.get("device", {})
+        rows.append(
+            (
+                ds,
+                emb,
+                dev.get("gpu_name") or "unknown",
+                dev.get("hostname") or "-",
+                (dev.get("commit") or "-")[:9],
+                rec.get("fingerprint", {}).get("vectors_sha256", "")[:12],
+            )
+        )
+        devices[dev.get("gpu_name") or "unknown"].append(f"{ds}x{emb}")
+
+    log(f"{'dataset':<18} {'embedder':<14} {'device':<26} {'node':<10} {'commit':<10} vectors")
+    for row in sorted(rows):
+        log("{:<18} {:<14} {:<26} {:<10} {:<10} {}".format(*row))
+    if missing:
+        log(f"\n{len(missing)} cell(s) with NO provenance (run --backfill-provenance): {', '.join(missing)}")
+    if len(devices) > 1:
+        log(f"\nthis pile MIXES {len(devices)} devices -- cells built on different devices are not")
+        log("bit-comparable, and on siglip2_l the measured spread between V100 parts is 1.5e-04 (#3160):")
+        for name, cells in sorted(devices.items()):
+            log(f"  {name:<26} {len(cells)} cell(s)")
+    return 0
+
+
+def _manifest_provenance(dataset: str, embedder: str) -> dict:
+    """The provenance fields the manifest carries per cell, or nulls if unknown."""
+    path = pc.provenance_path(dataset, embedder)
+    if not path.exists():
+        return {"gpu_name": None, "built_by": None, "commit": None, "vectors_sha256": None}
+    rec = json.loads(path.read_text())
+    dev = rec.get("device", {})
+    return {
+        "gpu_name": dev.get("gpu_name"),
+        "built_by": dev.get("hostname"),
+        "commit": dev.get("commit"),
+        "vectors_sha256": rec.get("fingerprint", {}).get("vectors_sha256"),
+    }
+
+
 def write_manifest() -> None:
     """Write MANIFEST.json + MANIFEST.md describing the pile and how to rebuild it."""
     io = _cells_io()
@@ -743,6 +944,9 @@ def write_manifest() -> None:
                 "n_medias": n,
                 "n_patch_grids": sum(1 for m in medias.values() if m.get("patch_grid") is not None),
                 "region_capable": pc.region_capable(ds, emb),
+                # Which machine built it (#3160). None for cells that predate the
+                # sidecar; a null here is a fact about the pile, not a gap to hide.
+                **_manifest_provenance(ds, emb),
             }
         )
 
@@ -829,6 +1033,12 @@ def main() -> int:
     ap.add_argument("--verify", action="store_true", help="load every cell and check geometry")
     ap.add_argument("--bands", action="store_true", help="report voted-box scale bands for boxed datasets")
     ap.add_argument("--manifest", action="store_true", help="(re)write the manifest and exit")
+    ap.add_argument("--provenance", action="store_true", help="show which device built each cell")
+    ap.add_argument(
+        "--backfill-provenance",
+        action="store_true",
+        help="stamp a sidecar (fingerprint only, device unknown) on cells built before #3160",
+    )
     args = ap.parse_args()
 
     pc.EMBEDDINGS.mkdir(parents=True, exist_ok=True)
@@ -844,6 +1054,8 @@ def main() -> int:
     if args.manifest:
         write_manifest()
         return 0
+    if args.provenance or args.backfill_provenance:
+        return provenance_report(backfill=args.backfill_provenance)
 
     datasets = args.datasets.split(",") if args.datasets else list(pc.DATASETS)
     embedders = args.embedders.split(",") if args.embedders else list(pc.EMBEDDERS)
