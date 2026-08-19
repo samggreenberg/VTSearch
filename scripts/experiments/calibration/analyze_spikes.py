@@ -73,6 +73,17 @@ if not ARMS:
     raise SystemExit("SPIKE_ARMS is set but empty - refusing to analyze zero arms")
 CONTROL_ARM = os.environ.get("SPIKE_CONTROL_ARM") or ARMS[0]
 PRODUCTION_ARM = os.environ.get("SPIKE_PRODUCTION_ARM") or ARMS[-1]
+if os.environ.get("SPIKE_ARMS") and not (
+    os.environ.get("SPIKE_CONTROL_ARM") and os.environ.get("SPIKE_PRODUCTION_ARM")
+):
+    # Position meant role only while ARMS was a literal.  A caller that supplies
+    # its own arm order gets whatever happens to sit first and last, and the
+    # report then labels a counterfactual arm "production" without failing.
+    print(
+        f"WARNING: SPIKE_ARMS is set but the arm ROLES are not. "
+        f"Defaulting control={CONTROL_ARM!r} (first) and production={PRODUCTION_ARM!r} (last). "
+        f"Set SPIKE_CONTROL_ARM / SPIKE_PRODUCTION_ARM if that is not what you mean."
+    )
 
 # --- Pre-registered spike rules -------------------------------------------
 #: Steps before this are the cold start - every arm in #2847's figure humps
