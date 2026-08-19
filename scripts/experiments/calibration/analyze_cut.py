@@ -463,14 +463,61 @@ def oracle_distance(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
 # ------------------------------------------------------------------
 
 
+#: Every cut the chain differences, in order.  A row missing any one of these
+#: cannot contribute to *any* term without skewing the rest (see
+#: :func:`_complete_chain_rows`).
+DECOMPOSITION_CUTS: tuple[str, ...] = tuple(
+    dict.fromkeys([c for _n, a, b in DECOMPOSITION for c in (a, b)])
+)
+
+
+def _complete_chain_rows(frame: pd.DataFrame, chain: "list[str] | tuple[str, ...]") -> "pd.Series":
+    """Mask of rows where every link in ``chain`` is present.
+
+    The decomposition only telescopes when each term is averaged over the *same*
+    steps.  ``DataFrame.mean()`` skips NaN per column, so a row missing one link
+    silently shrinks that link's sample while leaving ``total`` at full size -
+    the terms then sum to something other than the total, by an amount nobody
+    can see.  Oracle variants are exactly the links that go missing: they do not
+    fall back, so a step where the oracle cut is not finite emits no row at all
+    (``vtscore.eval.voting_iterations._safe_gmm_variant_rows``).  Dropping those
+    rows wholesale is what keeps the arithmetic honest; the callers report how
+    many were dropped rather than swallowing it.
+    """
+    present = [c for c in chain if c in frame.columns]
+    if len(present) != len(chain):
+        return pd.Series(False, index=frame.index)
+    return frame[present].notna().all(axis=1)
+
+
+def _with_incomplete_count(agg: pd.DataFrame, rows: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
+    """Attach ``n_incomplete`` (rows dropped for a missing chain link) to ``agg``.
+
+    Outer-merged, so a group whose rows were *all* incomplete still appears -
+    with empty terms and its true drop count - instead of vanishing from the
+    table as though it had never been measured.
+    """
+    dropped = rows[~rows["_complete"]].groupby(keys).size().rename("n_incomplete").reset_index()
+    out = agg.merge(dropped, on=keys, how="outer")
+    for col in ("n", "n_incomplete"):
+        if col in out.columns:
+            out[col] = out[col].fillna(0).astype(int)
+    return out
+
+
 def decomposition_table(diag: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
     """The four-term chain in threshold units, per (arm, geometry, window).
 
-    ``residual`` is the telescoping check: the four terms must sum to
-    ``tau_cross - tau_test_oracle`` exactly, so a non-zero residual means a NaN
-    dropped a link rather than a real disagreement.
+    Aggregated over **complete** rows only - those carrying every cut in the
+    chain - so that all four terms and ``total`` average the same steps and the
+    sum telescopes exactly.  ``n`` counts the rows that made it; ``n_incomplete``
+    counts the rows dropped for a missing link, which is the number that used to
+    disappear silently.  ``residual`` is then the arithmetic check it was always
+    described as: it must be 0, and a non-zero value means the terms genuinely
+    disagree rather than that a NaN ate a link.
     """
     d = diag.copy()
+    d["_complete"] = _complete_chain_rows(d, DECOMPOSITION_CUTS)
     for name, a, b in DECOMPOSITION:
         d[f"term_{name}"] = d[a] - d[b]
     d["total"] = d["tau_cross"] - d["tau_test_oracle"]
@@ -486,7 +533,8 @@ def decomposition_table(diag: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
             "residual": ("residual", "mean"),
             "n": ("total", "size"),
         }
-        g = w.groupby(["arm", "geometry"]).agg(**agg).reset_index()
+        g = w[w["_complete"]].groupby(["arm", "geometry"]).agg(**agg).reset_index()
+        g = _with_incomplete_count(g, w, ["arm", "geometry"])
         g.insert(0, "window", wname)
         out.append(g)
     tbl = pd.concat(out, ignore_index=True) if out else pd.DataFrame()
@@ -502,6 +550,13 @@ def cost_decomposition(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
     moves it a little across the elbow is not.  Each link is the difference of
     ``raw_cut_cost`` between consecutive rules on the same step, with the last
     link measured against the test-set oracle cost.
+
+    Like :func:`decomposition_table`, aggregated over complete rows only, with
+    ``n_incomplete`` counting the dropped ones and ``cost_residual`` pinning the
+    telescoping.  The oracle links are the ones that go missing here - a step
+    where ``pooled_supervised`` or ``pooled_sim_oracle`` emitted no row pivots to
+    NaN - and they feed three of the four terms, so averaging around them shrank
+    exactly the terms this study reads.
     """
     v = df[df["gmm_variant"].isin(COST_CHAIN)]
     keys = ["arm", "category", "seed", "t", "n_votes"]
@@ -520,19 +575,24 @@ def cost_decomposition(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
         common.log(f"cost decomposition skipped - no rows for {missing}")
         return pd.DataFrame()
     wide = wide.join(oracle.to_frame("oracle_cost"), how="inner").reset_index()
+    wide["_complete"] = _complete_chain_rows(wide, [*COST_CHAIN, "oracle_cost"])
 
     wide["cost_prior_loss"] = wide["pooled_cross"] - wide["pooled_priorfree"]
     wide["cost_identification"] = wide["pooled_priorfree"] - wide["pooled_supervised"]
     wide["cost_misspecification"] = wide["pooled_supervised"] - wide["pooled_sim_oracle"]
     wide["cost_transfer"] = wide["pooled_sim_oracle"] - wide["oracle_cost"]
     wide["cost_total"] = wide["pooled_cross"] - wide["oracle_cost"]
+    terms = ["cost_prior_loss", "cost_identification", "cost_misspecification", "cost_transfer"]
+    wide["cost_residual"] = wide["cost_total"] - sum(wide[c] for c in terms)
 
-    cols = ["cost_prior_loss", "cost_identification", "cost_misspecification", "cost_transfer", "cost_total"]
+    cols = [*terms, "cost_total", "cost_residual"]
     out = []
     for wname, (lo, hi) in WINDOWS.items():
         w = wide[(wide["n_votes"] >= lo) & (wide["n_votes"] <= hi)]
-        g = w.groupby("arm")[cols].mean().reset_index()
-        g["n"] = w.groupby("arm")[cols[0]].size().to_numpy()
+        complete = w[w["_complete"]]
+        g = complete.groupby("arm")[cols].mean().reset_index()
+        g["n"] = complete.groupby("arm")[cols[0]].size().to_numpy()
+        g = _with_incomplete_count(g, w, ["arm"])
         g.insert(0, "window", wname)
         out.append(g)
     tbl = pd.concat(out, ignore_index=True) if out else pd.DataFrame()
@@ -999,6 +1059,12 @@ def decisions(
             if terms:
                 out["dominant_error_term"] = max(terms, key=lambda k: terms[k])
                 out["error_terms_cost"] = terms
+                # The terms are only comparable to each other, and to `total`, if
+                # every one of them averaged the same steps.  Both numbers say so
+                # explicitly rather than leaving a reader to re-add the column.
+                row = c.iloc[0]
+                out["error_terms_residual"] = float(row.get("cost_residual", float("nan")))
+                out["error_terms_n_incomplete"] = int(row.get("n_incomplete", 0))
     # The leading hypothesis is confirmed only if the prior/loss term dominates.
     out["leading_hypothesis_confirmed"] = out["dominant_error_term"] == "prior_loss"
     # One key per tail model, named after it.  The old single `tail_alpha_stable`
