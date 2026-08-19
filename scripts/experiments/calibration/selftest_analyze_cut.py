@@ -549,7 +549,8 @@ def main() -> int:
             ok &= _check(f"cost term {term}", abs(got - planted_cost) < 1e-9, f"{got:.5f} vs {planted_cost}")
         ok &= _check(
             "summary reports the decomposition's own integrity",
-            abs(float(dec["error_terms_residual"])) < 1e-9 and int(dec["error_terms_n_incomplete"]) == n_incomplete_expected,
+            abs(float(dec["error_terms_residual"])) < 1e-9
+            and int(dec["error_terms_n_incomplete"]) == n_incomplete_expected,
             f"residual={dec.get('error_terms_residual')} n_incomplete={dec.get('error_terms_n_incomplete')}",
         )
         for term, planted in PLANTED_TERMS.items():

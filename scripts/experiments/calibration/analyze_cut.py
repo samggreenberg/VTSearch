@@ -466,9 +466,7 @@ def oracle_distance(df: pd.DataFrame, agg_dir: Path) -> pd.DataFrame:
 #: Every cut the chain differences, in order.  A row missing any one of these
 #: cannot contribute to *any* term without skewing the rest (see
 #: :func:`_complete_chain_rows`).
-DECOMPOSITION_CUTS: tuple[str, ...] = tuple(
-    dict.fromkeys([c for _n, a, b in DECOMPOSITION for c in (a, b)])
-)
+DECOMPOSITION_CUTS: tuple[str, ...] = tuple(dict.fromkeys([c for _n, a, b in DECOMPOSITION for c in (a, b)]))
 
 
 def _complete_chain_rows(frame: pd.DataFrame, chain: "list[str] | tuple[str, ...]") -> "pd.Series":
