@@ -220,6 +220,18 @@ Production arm, ramp 6–20, excess-cost units, against #2836's run:
 | finite-sim-set transfer | +0.0406 | +0.0407 |
 | total (`cross` → test oracle) | +0.0623 | +0.0623 |
 
+> **Both columns carry the same uncorrected-arithmetic defect** described in
+> [`REPORT.md`](REPORT.md): the terms sum to +0.0597 in this run and +0.0598 in
+> #2836's, against a stated +0.0623 for both. The analyzer averaged each term over whichever steps
+> had that link, and the oracle links go missing on steps where the oracle
+> variants emit no row, so the three oracle-dependent terms cover fewer steps
+> than `total`. Fixed in `analyze_cut.py`; corrected numbers need the analyzer
+> re-run over this run's cell CSVs. **The replication claim below is unaffected**
+> — it compares each term against its #2836 counterpart, and both runs were
+> aggregated the same way, so the agreement is between like and like. The +0.041
+> `transfer` finding is likewise unaffected in substance (65 % of the stated
+> total, 68 % of the summed terms).
+
 Four independent terms to within 0.0007 on a re-run whose trajectories differ
 (the production threshold changed, so the steps are not the same steps). This is
 the run's own evidence that the harness and the decomposition are sound, which is
