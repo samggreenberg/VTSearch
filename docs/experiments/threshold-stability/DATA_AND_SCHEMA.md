@@ -13,7 +13,7 @@ into per case, and mined for the *next* problem.
 | Per-class raw rows | `/exp/sgreenberg/threshold-stability/vg_bool/<embedder>/<head>/c<ID>/results.jsonl` | one file per (embedder, head, class); 900 rows each = 15 seeds × 60 steps |
 | Consolidated dataset | `/exp/sgreenberg/threshold-stability/vg_bool_all.jsonl.gz` | all rows in one gz, written by the `vgfin` finalize job on completion |
 | Manifest (coverage) | `/exp/sgreenberg/threshold-stability/vg_bool_manifest.txt` | row counts per (embedder, head) |
-| **Durable local archive** | `/home/samiam/experiments/threshold-stability-2790/data/` | timestamped `.tgz` snapshots pulled off `/exp` (which is a volatile 50G quota, chronically ~98% full — do **not** treat `/exp` as durable) |
+| **Durable local archive** | `~/experiments/threshold-stability-2790/data/` (off-cluster) | timestamped `.tgz` snapshots pulled off `/exp` (which is a volatile 50G quota, chronically ~98% full — do **not** treat `/exp` as durable) |
 
 Each row is **self-describing** (carries `embedder`, `head`, `class`, `seed`, `t`),
 so the consolidated file needs no join to the directory tree.

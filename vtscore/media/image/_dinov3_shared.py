@@ -112,7 +112,17 @@ class _Dinov3Base(MediaEmbedder):
 
     @property
     def embedding_dim(self) -> int:
-        return 768
+        """Width of the CLS vector, read off the loaded checkpoint.
+
+        Not a constant: ``set_model_id`` lets the SOD sweep's ``--dinov3-model`` axis
+        swap in another DINOv3 ViT, and the sizes differ (S 384, B 768, L 1024, H+ 1280,
+        7B 4096).  Falls back to the ViT-B width before a model is loaded, which is what
+        ``DINOV3_MODEL_ID`` points at and what callers like
+        :func:`vtscore.embedding.binding` ask for on an unloaded embedder.
+        """
+        if self._model is None:
+            return 768
+        return int(getattr(self._model.config, "hidden_size", 768))
 
     @property
     def supports_text(self) -> bool:
