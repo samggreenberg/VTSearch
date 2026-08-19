@@ -1,4 +1,4 @@
-# A chain job freezes its analyze step at the moment the CHAIN fires, not when the arrays end
+# 2026-08-19 — a chain job freezes its analyze wrap when the CHAIN fires (#2808)
 
 **Study:** #2808 linear-head convergence. **Cost:** near-miss — caught by
 inspection minutes after launch; would have produced a report naming the wrong

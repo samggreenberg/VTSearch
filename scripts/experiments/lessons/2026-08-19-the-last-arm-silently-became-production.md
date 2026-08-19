@@ -1,4 +1,4 @@
-# The last arm in the list silently became "production" in the report
+# 2026-08-19 — the last arm in the list silently became "production" (#2808)
 
 **Study:** #2808 linear-head convergence. **Cost:** near-miss, caught before the
 run finished. Would have printed every "production" figure against the

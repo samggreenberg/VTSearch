@@ -1,4 +1,4 @@
-# A figure script's own loader read 34× the rows the analyzer sees
+# 2026-08-19 — a figure script's private loader read 34x the analyzer's rows (#2808)
 
 **Study:** #2808 linear-head convergence. **Cost:** caught by a row count printed
 during the first figure run; the figures were regenerated before anything was
