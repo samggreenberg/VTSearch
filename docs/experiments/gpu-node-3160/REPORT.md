@@ -33,7 +33,7 @@ of 27 blocks**. The divergence enters on the host, in image preprocessing: the
 | How much of the fleet? | **9 of 20** GPU nodes are AVX2-only — including **9 of 13** `gpu:v100` nodes. A `gpu:v100` pile rebuild lands on the other side of the split about two times in three. |
 | Is #3144's premise wrong? | **No — it was right about the GPU.** With the input pinned, cross-part GPU disagreement is ~1e-15 in 1−cos. The auto-pick is not the defect. |
 | Is there a fix? | **Yes, and it is cheap.** Pinning `ATEN_CPU_CAPABILITY=avx2` in the pile build makes two hosts' vectors agree to 8.9e-16 (from 1.3e-04) and makes the resize **26% faster** on an AVX-512 host (2.18 ± 0.02 s → 1.62 ± 0.02 s per 256 images). |
-| Does the drift reach a decision? | See §5 — the paired benchmark. |
+| Does the drift reach a decision? | **No.** 4060 paired cells over two independent grids: five of seven metrics resolved below the 0.005 margin, none distinguishable from zero. A reproducibility defect, not a correctness one. |
 
 **Recommendation.** Pin the dispatch in pile builds (shipped here), record the
 host and the resolved capability per cell (shipped here), and treat
@@ -304,34 +304,64 @@ directions while the mean sits near zero. That spread is trajectory
 decorrelation, not effect size, and it is why this test bounds a *systematic*
 shift and cannot be made tight cheaply.
 
-## 5.1 Replication
+## 5.1 Replication: the 2.6-SE line was multiplicity
 
-**Pending** — arrays `515932`/`515956`, analysis chained as `515978`, which writes
-`/expscratch/$USER/gpu-node-3160/BENCH_REP_TABLES.txt`. A fresh grid: `siglip2_l`
-only, 256 seeds, ~2048 treated cells per arm — 2× the treated *n* of §5 and
-**independent of it**, not pooled with it.
+An independent grid — `siglip2_l` only, 256 seeds, **2033 paired cells** (2048
+files per arm, 15 header-only at identical indices in both, paired-safe), 296,166
+paired steps, zero zero-byte cells, all 4096 array tasks COMPLETED. Twice §5's
+treated *n*, and not pooled with it.
 
-The reading is fixed here, before the number exists, because the one result at
-stake is a 2.6-SE line among seven metrics and that is exactly the situation in
-which a rule chosen afterwards is worthless:
+`rule_inefficiency`, the one line §5 flagged:
 
-- **`rule_inefficiency` reproduces** (same sign, ≥2 SE, comparable magnitude to
-  −0.0057) → it is real, and a ~1.5e-04 preprocessing perturbation *does* reach a
-  shipped decision metric. That would make the `vg_box_small` ISA split in §6 a
-  live contaminant of #3129/#3156's band comparison, and a rebuild of that band
-  under the pin becomes the recommendation rather than an option.
-- **It shrinks toward zero** (|diff| well under 0.003, or the sign flips) → it was
-  a multiplicity artifact of testing seven metrics, exactly as #3143's `n_good`
-  was at n=95, and §5's summary stands unqualified: no shipped decision metric
-  moves detectably.
-- **It stays ~2 SE without shrinking** → unresolved, and the honest report is
-  that it is unresolved. Do not pool the two grids to manufacture significance;
-  they are separate studies by construction (different seed counts, different
-  embedder set), and pooling them would be the same error as reading §5's
-  half-placebo pooled row as if it described the treated arm.
+| | cells | paired diff ± SE | distance from 0 |
+|---|---:|---|---:|
+| §5 | 1007 | −0.0057 ± 0.0022 | 2.6 SE |
+| **§5.1 (replication)** | **2010** | **−0.0015 ± 0.0015** | **1.0 SE** |
 
-Whichever holds, §5's other six metrics are unaffected: they are centred within
-0.003 with 2·SE ≈ 0.005 and the replication cannot move that.
+Same sign, **a quarter the magnitude, now resolvably below the margin**. Under
+the rule fixed above, that is the "shrinks toward zero" branch: it was a
+multiplicity artifact of testing seven metrics — the identical shape #3143 met
+with `n_good` (−0.87 ± 0.38 at n=95 → −0.0034 ± 0.11 at n=1013) and closed on
+the bigger measurement. Nothing was pooled to get here.
+
+The whole treated arm, at 2× the cells:
+
+| metric | ref | arm | paired diff ± SE | verdict |
+|---|---:|---:|---|---|
+| cost | 0.37 | 0.38 | +0.00059 ± 0.0018 | **below margin** |
+| regret | 0.10 | 0.10 | +0.000078 ± 0.0015 | **below margin** |
+| average_precision | 0.47 | 0.47 | +0.0010 ± 0.0016 | **below margin** |
+| fnr | 0.14 | 0.14 | +0.0019 ± 0.0018 | cannot resolve |
+| fpr | 0.24 | 0.23 | −0.0013 ± 0.0024 | cannot resolve |
+| rule_inefficiency | −0.0094 | −0.011 | −0.0015 ± 0.0015 | **below margin** |
+| calibration_shift | 0.11 | 0.11 | +0.0015 ± 0.0015 | **below margin** |
+| n_good (count) | 8.8 | 8.9 | +0.08 ± 0.081 | within noise |
+
+**Five of seven metrics are now resolved below 0.005 on the treated embedder
+alone** — not on a pooled row diluted by a placebo, which is what §5 could
+offer. `fnr` and `fpr` remain unresolved and would need ~1052 and ~1809 cells at
+their spread; they have 2033, so the intervals graze the margin because the point
+estimates are not exactly zero, not because the run is underpowered.
+
+Three of the seven signs **flipped** between §5 and §5.1 (cost, regret,
+average_precision). That is what noise looks like, and it is the same reading
+#3143's 6-seed grid earned when its per-embedder signs opposed and then agreed at
+16× the cells.
+
+![Replication: paired cost](figures/rep_paired_cost.png)
+
+![Replication: paired average precision](figures/rep_paired_average_precision.png)
+
+The mechanism is unchanged and is the point: `cost` is bit-identical on **3.6%**
+of steps and `average_precision` on **0.0%**, while the threshold is chosen the
+same way on **99.8%**. The decision *rule* never changes; the *trajectory*
+always does.
+
+**Verdict for the issue.** A 1.5e-04 preprocessing-induced vector drift does not
+reach a shipped decision metric at a resolution of 0.005. It is a
+**reproducibility defect, not a correctness one** — which is what #3160's item 3
+asked, and it is now answered on 4060 paired cells across two independent grids
+rather than assumed.
 
 ---
 
@@ -355,8 +385,14 @@ job name, and an ambiguous dataset is left blank rather than guessed):
 `siglip` and `dinov3_patch` cells of all three bands are unaffected (224px), so
 the region-voting arm of those studies is clean.
 
-Whether this matters for a band comparison is the §5 question restated, on a
-different corpus. It is filed rather than acted on here.
+Whether this matters for a band comparison is the §5 question restated on a
+different corpus, and §5.1 answers the general form of it: a drift of this size
+does not reach a decision metric at 0.005 resolution. So the recommendation is
+**record it, do not rebuild** — the band comparison is not invalidated, but
+`vg_box_small`'s `siglip2_l` cell is the one cell in the pile whose provenance
+differs from its siblings', and any future study contrasting those three bands
+should say so. A rebuild under the pin is cheap (~25 min) if anyone wants the
+confound gone rather than documented.
 
 ---
 
