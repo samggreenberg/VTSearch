@@ -51,23 +51,33 @@ DPI = 130
 
 
 def load(results: Path) -> pd.DataFrame:
-    """Concatenate every arm's base rows.  Mirrors analyze_spikes.load_arm:
-    tagged counterfactual rows are dropped, only each arm's own base row kept."""
+    """Concatenate every arm's base rows, via the ANALYZER's own loader.
+
+    Deliberately not a second implementation.  The cells carry counterfactual
+    variant rows alongside each arm's base row, and a private "drop the tagged
+    rows" filter here loaded 1.41M rows where the analyzer sees 42k - which
+    would have made every figure disagree with the table beside it while looking
+    entirely plausible.  Importing ``load_arm`` makes that class of drift
+    impossible rather than merely unlikely.
+    """
+    import analyze_spikes as A  # noqa: PLC0415 - needs the study env set up first
+
     frames = []
     for arm in ARMS:
-        for f in sorted((results / arm / "cells").glob("*.csv")):
-            try:
-                d = pd.read_csv(f)
-            except Exception:  # noqa: BLE001 - a bad cell is reported, not fatal
-                print(f"  UNREADABLE (skipped): {f}")
-                continue
-            if d.empty:
-                continue
-            for tag in ("repool", "schedule", "fold_count", "variant_tag"):
-                if tag in d.columns:
-                    d = d[d[tag].isna() | (d[tag].astype(str).str.strip() == "")]
-            d["arm"] = arm
-            frames.append(d)
+        d, prov = A.load_arm(results / arm)
+        if d.empty:
+            print(f"  {arm}: NO ROWS")
+            continue
+        d["arm"] = arm
+        # Report what was dropped; an analysis that silently excludes cells is
+        # how a disk incident becomes a wrong verdict.
+        print(
+            f"  {arm}: {len(d)} base rows from {prov.get('n_files', '?')} cells"
+            f" | unreadable={len(prov.get('unreadable', []))}"
+            f" zero_byte={len(prov.get('zero_byte', []))}"
+            f" no_positive={len(prov.get('no_positive_found', []))}"
+        )
+        frames.append(d)
     df = pd.concat(frames, ignore_index=True)
     if "embedder" not in df.columns:
         df["embedder"] = "unknown"
