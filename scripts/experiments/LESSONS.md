@@ -72,6 +72,7 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-08-20 | [the rebuild fixed one axis and silently moved another](lessons/2026-08-20-the-rebuild-reproduced-the-pin-and-moved-the-card.md) | #3160 |
 | 2026-08-18 | [a string-replace edit that matched nothing, an hour later](lessons/2026-08-18-a-string-replace-that-matched-nothing.md) | #3160 |
 | 2026-08-18 | [an env var read once at init measured nothing](lessons/2026-08-18-an-env-var-read-once-measured-nothing.md) | #3160 |
 | 2026-08-18 | [the source said "slow path", the installed library said otherwise](lessons/2026-08-18-the-source-said-slow-the-library-said-fast.md) | #3146 |
