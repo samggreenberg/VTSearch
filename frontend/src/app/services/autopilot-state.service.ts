@@ -40,17 +40,35 @@ export class AutopilotStateService {
   readonly state$ = this.stateSubject.asObservable();
 
   /**
-   * Whether the terminal-phase hand-off (the "Done!" toast and its auto-return
-   * countdown) has already fired for the current autopilot run.
+   * Whether the terminal-phase hand-off (the "trained" modal) has already been
+   * shown for the current autopilot run.
    *
    * This lives on the service rather than on the panel component on purpose:
-   * the panel is destroyed and rebuilt every time the user leaves and re-enters
-   * the Train window, so a component-scoped flag re-arms the countdown on each
-   * return and keeps yanking a user who has come back precisely because they
-   * wanted to stay. The hand-off is offered once per run; declining it (or
-   * simply coming back) is final.
+   * the panel is destroyed and rebuilt every time the user switches the
+   * left-panel tab, so a component-scoped flag would re-open the modal on each
+   * return.
    */
   private completionAnnounced = false;
+
+  /**
+   * Whether the detector already carried labels when this autopilot run began.
+   *
+   * The completion hand-off is for the moment a user *finishes training a
+   * detector*, which happens exactly once per detector. Every later run —
+   * continuing after autopilot already finished, or picking up a detector
+   * trained on another dataset — starts from a detector that is already
+   * trained, and announcing "Done!" there is the nag reported in #3201: the
+   * user re-enters the Train window on purpose and is immediately told to
+   * leave it again.
+   *
+   * ``completionAnnounced`` cannot carry that on its own, because it is
+   * per-run and every re-entry to the Train window is a new run. The labelset
+   * is what remembers across runs, so the run's first look at it decides.
+   */
+  private startedTrained = false;
+
+  /** Whether {@link noteInitialLabelset} has taken its one reading this run. */
+  private initialLabelsetKnown = false;
 
   get state(): AutopilotState {
     return this.stateSubject.value;
@@ -60,9 +78,40 @@ export class AutopilotStateService {
     return this.stateSubject.value.phase !== 'idle';
   }
 
-  /** See {@link completionAnnounced}. */
-  get completionAlreadyAnnounced(): boolean {
-    return this.completionAnnounced;
+  /**
+   * Record whether the detector held any labels at the start of this run.
+   *
+   * Takes effect on the first call after {@link activate} and ignores every
+   * later one: once the user starts voting the labelset is no longer evidence
+   * of anything, so only the first reading — taken as soon as ``/api/votes``
+   * has landed, before the user can have voted — is meaningful.
+   */
+  noteInitialLabelset(hasLabels: boolean): void {
+    if (this.initialLabelsetKnown) return;
+    this.initialLabelsetKnown = true;
+    this.startedTrained = hasLabels;
+  }
+
+  /**
+   * Discard the reading, so the next {@link noteInitialLabelset} takes a fresh
+   * one. Called while the labelset is un-loaded — the dataset/detector pair
+   * changed under a running autopilot — because the reading described the
+   * *previous* detector and says nothing about the one now in front of the user.
+   */
+  forgetInitialLabelset(): void {
+    this.initialLabelsetKnown = false;
+    this.startedTrained = false;
+  }
+
+  /**
+   * Whether reaching a terminal phase right now should be announced to the
+   * user: this run has to have started from an untrained detector (see
+   * {@link startedTrained}), the labelset must have been read at least once so
+   * we are not guessing from not-yet-loaded zeroes, and the hand-off must not
+   * already have been offered.
+   */
+  get shouldAnnounceCompletion(): boolean {
+    return this.initialLabelsetKnown && !this.startedTrained && !this.completionAnnounced;
   }
 
   /** Record that the completion hand-off has been offered for this run. */
@@ -73,6 +122,8 @@ export class AutopilotStateService {
   activate(retrainMode = false): void {
     if (this.running) return;
     this.completionAnnounced = false;
+    this.startedTrained = false;
+    this.initialLabelsetKnown = false;
     this.stateSubject.next({
       ...this.stateSubject.value,
       phase: 'good',
@@ -167,6 +218,8 @@ export class AutopilotStateService {
 
   clear(): void {
     this.completionAnnounced = false;
+    this.startedTrained = false;
+    this.initialLabelsetKnown = false;
     this.stateSubject.next({ ...INITIAL_STATE });
   }
 }

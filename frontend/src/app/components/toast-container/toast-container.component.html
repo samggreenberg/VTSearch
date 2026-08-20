@@ -19,7 +19,6 @@
       [class.toast--success]="t.level === 'success'"
       [class.toast--warning]="t.level === 'warning'"
       [class.toast--info]="t.level === 'info'"
-      [class.toast--countdown]="!!t.countdown"
       role="alert"
     >
       <div class="toast__main">
@@ -57,19 +56,6 @@
           <div class="toast__title">{{ t.message }}</div>
           @if (t.detail) {
             <div class="toast__detail">{{ t.detail }}</div>
-          }
-          @if (t.countdown; as cd) {
-            <!-- aria-live="off" so the per-second tick isn't re-announced by a
-                 screen reader; the toast's role="alert" already read the line once. -->
-            <div class="toast__countdown" aria-live="off">
-              {{ cd.label }} <span class="toast__countdown-seconds">{{ cd.remaining }}</span>&hellip;
-            </div>
-            <!-- Draining bar: the countdown's second-by-second text is easy to
-                 miss when the user's attention is elsewhere on the page, so the
-                 same information is also carried by a moving shape. -->
-            <div class="toast__countdown-track" aria-hidden="true">
-              <div class="toast__countdown-bar" [style.width.%]="(cd.remaining / cd.total) * 100"></div>
-            </div>
           }
         </div>
         <div class="toast__actions">

@@ -17,6 +17,18 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **Autopilot's "you're done" hand-off is a dialog you answer, and it appears
+  once.** Reaching the end of training used to raise a toast that counted down
+  and then returned you to the Dashboard unless you cancelled it — and because
+  the countdown re-armed on every entry to the Train window, anyone who thought
+  their detector needed more work had to dismiss the same redirect each time
+  they came back. It is now a **Detector Trained** dialog with two plain
+  buttons, **Continue Training** and **Head to Dashboard**, and nothing happens
+  until you pick one. It is also raised only for the autopilot run that
+  actually trained the detector: continuing afterwards, or picking up a
+  detector already trained on another dataset, no longer announces anything.
+  (#3201)
+
 - **The detector head is now a linear SVM.** Every trained detector — new
   detectors, saved ones re-derived from their labels, and the per-step models
   behind the labeling-progress indicators — is fitted to the class-balanced

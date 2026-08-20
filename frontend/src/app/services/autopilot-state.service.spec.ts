@@ -28,6 +28,51 @@ describe('AutopilotStateService', () => {
     expect(service.running).toBe(false);
   });
 
+  describe('completion eligibility', () => {
+    it('withholds the hand-off until the labelset has been read', () => {
+      service.activate();
+      expect(service.shouldAnnounceCompletion).toBe(false);
+
+      service.noteInitialLabelset(false);
+      expect(service.shouldAnnounceCompletion).toBe(true);
+    });
+
+    it('withholds it for a detector that was already trained at run start', () => {
+      service.activate();
+      service.noteInitialLabelset(true);
+      expect(service.shouldAnnounceCompletion).toBe(false);
+    });
+
+    it('ignores every reading after the first, so the user\'s own votes cannot flip it', () => {
+      service.activate();
+      service.noteInitialLabelset(false);
+      // The user labels; the labelset is no longer evidence of anything.
+      service.noteInitialLabelset(true);
+      expect(service.shouldAnnounceCompletion).toBe(true);
+    });
+
+    it('offers the hand-off once per run', () => {
+      service.activate();
+      service.noteInitialLabelset(false);
+      service.markCompletionAnnounced();
+      expect(service.shouldAnnounceCompletion).toBe(false);
+    });
+
+    it('re-arms on a new run, but only for a detector that is still untrained', () => {
+      service.activate();
+      service.noteInitialLabelset(false);
+      service.markCompletionAnnounced();
+
+      service.deactivate();
+      service.activate();
+      expect(service.shouldAnnounceCompletion).toBe(false);
+      // Whatever the run just trained is in the labelset now, so the next run
+      // reads as already-trained and stays quiet.
+      service.noteInitialLabelset(true);
+      expect(service.shouldAnnounceCompletion).toBe(false);
+    });
+  });
+
   it('activate should move to good phase', () => {
     service.activate();
     expect(service.state.phase).toBe('good');
