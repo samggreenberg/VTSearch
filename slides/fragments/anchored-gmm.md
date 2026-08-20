@@ -1,4 +1,4 @@
-![bg right:54% fit](figs/calib-anchored-em.png)
+![bg right:56% fit](figs/calib-anchored-em.png)
 
 ### Iteration 4 — the idea
 

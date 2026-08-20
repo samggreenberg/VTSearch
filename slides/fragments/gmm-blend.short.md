@@ -1,4 +1,4 @@
-![bg right:54% fit](figs/calib-blend-schedule.png)
+![bg right:56% fit](figs/calib-blend-schedule.png)
 
 ### Iterations 2–3
 

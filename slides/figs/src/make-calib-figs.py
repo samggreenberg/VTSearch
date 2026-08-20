@@ -28,6 +28,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from slide_figure import save  # noqa: E402
+
 from vtscore.training.blend_schedules import BlendContext, get_schedule
 from vtscore.training.thresholds import fit_anchored_score_gmm, fit_score_gmm
 
@@ -78,7 +81,7 @@ def blend_schedule_fig() -> None:
             for k in n
         ]
         ax.plot(n, w, color=color, linestyle=style, linewidth=2.4)
-        ax.annotate(label, xy=xy, ha=ha, va=va, fontsize=13.5, color=color)
+        ax.annotate(label, xy=xy, ha=ha, va=va, fontsize=15, color=color)
     ax.set_xlim(0, 122)
     ax.set_ylim(-0.02, 1.08)
     ax.set_yticks([0, 0.5, 1.0], ["pure\nGMM", "0.5", "pure\nx-cal"])
@@ -88,8 +91,7 @@ def blend_schedule_fig() -> None:
     ax.grid(axis="y", color=RULE, linewidth=0.8)
     ax.set_axisbelow(True)
     fig.tight_layout()
-    fig.savefig(OUT / "calib-blend-schedule.png")
-    plt.close(fig)
+    save(fig, OUT, "calib-blend-schedule.png")
 
 
 def gmm_cut_fig() -> None:
@@ -115,14 +117,14 @@ def gmm_cut_fig() -> None:
         textcoords="offset points",
         ha="center",
         color=RUST,
-        fontsize=13.5,
+        fontsize=15,
     )
     ax.annotate(
         "high (Good)\nmode",
-        xy=(0.86, fit.w_hi * gaussian(fit.mu_hi, fit.mu_hi, fit.var_hi) * 0.9),
-        ha="left",
+        xy=(0.99, fit.w_hi * gaussian(fit.mu_hi, fit.mu_hi, fit.var_hi) * 0.9),
+        ha="right",
         color=GREEN,
-        fontsize=13.5,
+        fontsize=15,
     )
     ax.annotate(
         "cut: the midpoint\nbetween the modes",
@@ -131,7 +133,7 @@ def gmm_cut_fig() -> None:
         textcoords="offset points",
         ha="left",
         color=BLUE,
-        fontsize=13.5,
+        fontsize=15,
     )
     ax.set_xlim(0, 1)
     ax.set_xlabel("detector score — every item in the haystack, no labels")
@@ -139,8 +141,7 @@ def gmm_cut_fig() -> None:
     ax.spines["left"].set_visible(False)
     ax.set_title("A threshold with no labels at all", loc="left", pad=14)
     fig.tight_layout()
-    fig.savefig(OUT / "calib-gmm-cut.png")
-    plt.close(fig)
+    save(fig, OUT, "calib-gmm-cut.png")
 
 
 def anchored_fig() -> None:
@@ -192,7 +193,7 @@ def anchored_fig() -> None:
         textcoords="offset points",
         ha="right",
         color=SOFT,
-        fontsize=13.5,
+        fontsize=15,
     )
     ax.annotate(
         "anchored cut",
@@ -201,7 +202,7 @@ def anchored_fig() -> None:
         textcoords="offset points",
         ha="left",
         color=BLUE,
-        fontsize=13.5,
+        fontsize=15,
     )
     ax.annotate(
         "votes, clamped one-hot at mass κ",
@@ -209,7 +210,7 @@ def anchored_fig() -> None:
         ha="center",
         va="top",
         color=INK,
-        fontsize=13.5,
+        fontsize=15,
         annotation_clip=False,
     )
     ax.set_xlim(0, 1)
@@ -219,8 +220,7 @@ def anchored_fig() -> None:
     ax.spines["left"].set_visible(False)
     ax.set_title("Votes re-identify the components", loc="left", pad=14)
     fig.tight_layout()
-    fig.savefig(OUT / "calib-anchored-em.png")
-    plt.close(fig)
+    save(fig, OUT, "calib-anchored-em.png")
 
 
 def decomposition_fig() -> None:
@@ -243,7 +243,7 @@ def decomposition_fig() -> None:
             xytext=(6, 0),
             textcoords="offset points",
             va="center",
-            fontsize=13.5,
+            fontsize=15,
             color=BLUE if emphasized else SOFT,
             fontweight="bold" if emphasized else "normal",
         )
@@ -260,12 +260,11 @@ def decomposition_fig() -> None:
         xycoords="axes fraction",
         xytext=(0, 8),
         textcoords="offset points",
-        fontsize=13,
+        fontsize=15,
         color=SOFT,
     )
     fig.tight_layout()
-    fig.savefig(OUT / "calib-error-decomposition.png")
-    plt.close(fig)
+    save(fig, OUT, "calib-error-decomposition.png")
 
 
 if __name__ == "__main__":

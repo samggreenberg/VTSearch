@@ -3,10 +3,10 @@
 
 theme: vtsearch
 paginate: false
-footer: VTSearch
 
 slides:
   title-scale26
+  outline-lightning
   problem
   ui-region-voting
   region-voting.short

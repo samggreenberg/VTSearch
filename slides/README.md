@@ -17,6 +17,11 @@ _out/       rendered decks (gitignored)
 `build.py --check` runs as a `./run-tests.sh` gate, so a deck that names a
 missing fragment or figure fails the suite rather than rotting quietly.
 
+**Read [`STYLE.md`](STYLE.md) before writing or editing a deck.** It holds the
+house rules that apply to every talk — no running footer, real subscripts,
+colour reserved for meaning, the 20px type floor, and the opening outline
+slide. This file is the mechanics; that one is the choices.
+
 ## Build
 
 Needs node and python3. Nothing to install — `npx` fetches Marp on first run
@@ -49,6 +54,10 @@ If Marp can't find a browser (it drives one to rasterise), point it at one:
 Copy `slides/fragments/_template.md`. Keep it short — if a slide needs more
 than ~25 words it wants to be two slides or a figure.
 
+Every deck opens with its own outline fragment (`fragments/outline-<deck>.md`,
+`<!-- _class: outline -->`) right after the title slide; see
+[`STYLE.md`](STYLE.md).
+
 Layout is a background-image directive, which is why placement survives in
 version control as a diffable line rather than a repacked binary:
 
@@ -65,8 +74,11 @@ Figure paths are written relative to `slides/`, not to the fragment — `build.p
 repoints them when it assembles into `_build/`.
 
 `bg right:56%` puts the figure in the right 56% of the slide; `left:` mirrors
-it; plain `![bg fit]` goes full-bleed. Classes `lead`, `statement`, `full`, and
-`caveat` are defined in the theme and set per-slide with `<!-- _class: full -->`.
+it; plain `![bg fit]` goes full-bleed. **56% is the standard and every sidebar
+figure uses it** — the generators size figures to that slot's 717x720 box and
+check their type against it, so a one-off `54%` quietly changes what the check
+was measuring. Classes `lead`, `statement`, `outline`, `full`, and `caveat` are
+defined in the theme and set per-slide with `<!-- _class: full -->`.
 
 Any HTML comment that isn't a Marp directive becomes a **presenter note** —
 visible in `--preview` and exported into PPTX/HTML notes, not on the slide.
@@ -99,7 +111,16 @@ rewrites the whole archive.
 
 A figure generated from code keeps that code beside it in `figs/src/`, so the
 plot can be regenerated when the underlying numbers move —
-`slides/figs/src/make-calib-figs.py` is the worked example. Generators may
+`slides/figs/src/make-calib-figs.py` is the worked example. Save through
+`slide_figure.save()` rather than `fig.savefig`: it enforces the type floor
+(see [`STYLE.md`](STYLE.md)) and refuses to write a figure whose labels would
+be unreadable in its slot.
+
+**Never drop a report figure straight onto a slide.** It was sized for a page,
+and in a slide slot its labels land around 8px. `slides/figs/src/make-bench-figs.py`
+is the worked example of the alternative: it reads the plotted series back out
+of the committed report SVGs (`slides/figs/src/report_svg.py`) and redraws them
+at slide scale, so the slide and the report cannot disagree about a number. Generators may
 import `vtscore` directly (they run from a checkout that has it), which is what
 lets a mechanism figure plot the *shipped* estimator rather than a redrawing of
 it. matplotlib is already a project dependency, so a normal checkout install

@@ -3,6 +3,28 @@
 /*
  * Figure-forward deck theme. Type is deliberately large and sparse: if a slide
  * needs more than ~25 words, it wants to be two slides or a figure.
+ *
+ * TWO RULES THIS FILE ENFORCES
+ *
+ * 1. Emphasis is weight, size and darkness — never hue. Bold text is *darker
+ *    and heavier*, not blue; kickers, list markers and code are neutral grey.
+ *    A word that turns a colour is making a claim the audience has to decode,
+ *    and "this bit is important" is not a claim worth a colour.
+ *
+ * 2. Hue is reserved for identity, and every hue matches the figure palette in
+ *    slides/figs/src/make-calib-figs.py, so a colour means the same thing on a
+ *    slide as it does in the chart beside it:
+ *
+ *      --hue-cut   blue   the threshold, and the shipped decision it makes
+ *      --hue-neg   rust   the negative side: the Bad component, the losing arm
+ *      --hue-pos   green  the positive side: the Good component, a measured win
+ *
+ *    Use them through the .cut / .neg / .pos span classes, and only when the
+ *    word names something the adjacent figure also draws in that colour. If
+ *    there is no figure, there is no reason to colour a word.
+ *
+ * MINIMUM TYPE SIZE: nothing on a slide is smaller than 20px at 1280x720 —
+ * that is table headers and page numbers. Body copy is 28px.
  */
 
 @import "default";
@@ -10,10 +32,14 @@
 :root {
   --ink: #14181f;
   --ink-soft: #5b6472;
-  --accent: #0b5fa5;
-  --accent-soft: #e7f0f8;
   --rule: #d8dee6;
+  --wash: #eef1f5;
   --paper: #ffffff;
+
+  /* Identity hues — see rule 2 above. Kept in sync with make-calib-figs.py. */
+  --hue-cut: #0b5fa5;
+  --hue-neg: #b45309;
+  --hue-pos: #0d8a5f;
 
   font-family: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
 }
@@ -22,7 +48,7 @@ section {
   background: var(--paper);
   color: var(--ink);
   padding: 60px 70px;
-  font-size: 26px;
+  font-size: 28px;
   line-height: 1.45;
   /* Sparse slides read better as a centred block than pinned to the top. */
   justify-content: center;
@@ -44,60 +70,82 @@ h2 {
   margin: 0 0 0.6em;
 }
 
-/* Kicker: a short label above the headline, e.g. "Finding 3". */
+/* Kicker: a short label above the headline, e.g. "Finding 3". Grey and small
+   because it is scaffolding — the headline under it is the thing to read. */
 h3 {
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.09em;
-  color: var(--accent);
+  color: var(--ink-soft);
   margin: 0 0 0.35em;
 }
 
-strong { color: var(--accent); font-weight: 600; }
-em { color: var(--ink-soft); font-style: italic; }
+/* Emphasis: darker and heavier, never tinted. */
+strong { color: var(--ink); font-weight: 700; }
+em { color: inherit; font-style: italic; }
 
 ul, ol { margin: 0; padding-left: 1.1em; }
 li { margin-bottom: 0.45em; }
-li::marker { color: var(--accent); }
+li::marker { color: var(--ink-soft); }
+
+/* Real subscripts and superscripts, in the deck's own typeface: `w_f` written
+   out as ASCII reads as a typo at 34px. Author them as <sub>/<sup>. */
+sub, sup {
+  font-size: 0.62em;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+sub { bottom: -0.24em; }
+sup { top: -0.45em; }
 
 code {
   font-family: "SF Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
   font-size: 0.85em;
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--wash);
+  color: var(--ink);
   padding: 0.08em 0.32em;
   border-radius: 4px;
 }
 
-pre { font-size: 0.72em; line-height: 1.4; }
-pre code { background: #f5f7fa; color: var(--ink); display: block; padding: 0.8em 1em; }
+pre { font-size: 0.8em; line-height: 1.4; }
+pre code { background: var(--wash); color: var(--ink); display: block; padding: 0.8em 1em; }
 
 img { display: block; }
 
 blockquote {
-  border-left: 4px solid var(--accent);
+  border-left: 4px solid var(--rule);
   margin: 0;
   padding-left: 0.9em;
   color: var(--ink-soft);
-  font-size: 0.92em;
+  font-size: 0.95em;
 }
 
-table { font-size: 0.78em; border-collapse: collapse; }
+table { font-size: 0.85em; border-collapse: collapse; }
 th {
   text-align: left;
   border-bottom: 2px solid var(--rule);
   color: var(--ink-soft);
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  font-size: 0.82em;
+  font-size: 0.84em;
   letter-spacing: 0.05em;
 }
 td { border-bottom: 1px solid var(--rule); padding: 0.35em 0.9em 0.35em 0; }
 
+/* --- Identity hues --------------------------------------------------- */
+
+/* Only for a word that names a series the adjacent figure draws in the same
+   colour. Never for "this is the important bit" — that is what bold is for. */
+.cut { color: var(--hue-cut); }
+.neg { color: var(--hue-neg); }
+.pos { color: var(--hue-pos); }
+.cut, .neg, .pos { font-weight: 600; }
+
 /* --- Slide classes -------------------------------------------------- */
 
-/* Title / section-break slide: centred, accent rule under the headline. */
+/* Title / section-break slide: centred, rule under the headline. */
 section.lead {
   justify-content: center;
   padding: 60px 90px;
@@ -108,7 +156,7 @@ section.lead h1::after {
   display: block;
   width: 90px;
   height: 4px;
-  background: var(--accent);
+  background: var(--ink);
   margin-top: 0.5em;
 }
 section.lead h2 {
@@ -116,6 +164,10 @@ section.lead h2 {
   font-weight: 400;
   color: var(--ink-soft);
   margin-top: 0.6em;
+}
+section.lead h3 {
+  color: var(--ink-soft);
+  margin-top: 0.9em;
 }
 
 /* Statement slide: one big claim, nothing else. */
@@ -125,6 +177,29 @@ section.statement {
   padding: 60px 120px;
 }
 section.statement h1 { font-size: 54px; line-height: 1.2; }
+
+/* Outline slide: the "where this is going" list. Numbered, quiet numerals, one
+   line per section so the audience can hold the whole shape at once. */
+section.outline ol { padding-left: 0; list-style: none; counter-reset: outline; }
+section.outline ol li {
+  counter-increment: outline;
+  margin-bottom: 0.5em;
+  padding-left: 1.9em;
+  position: relative;
+}
+section.outline ol li::before {
+  content: counter(outline);
+  position: absolute;
+  left: 0;
+  width: 1.25em;
+  text-align: right;
+  color: var(--ink-soft);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+/* The section we are about to enter, or the one being revisited. */
+section.outline ol li.here { font-weight: 700; }
+section.outline ol li em { color: var(--ink-soft); font-style: normal; }
 
 /* Full-bleed figure: kill the padding so a background image owns the slide. */
 section.full { padding: 0; }
@@ -142,26 +217,16 @@ section.full h2 {
 section.caveat { background: #f7f8fa; }
 section.caveat h2 { color: var(--ink-soft); }
 
-/* --- Footer / pagination -------------------------------------------- */
+/* --- Pagination ------------------------------------------------------ */
 
-footer {
-  color: var(--ink-soft);
-  font-size: 15px;
-  left: 70px;
-  bottom: 26px;
-}
-
+/* No running footer: the audience knows which talk they are in. Only the page
+   number, and only where it is useful. */
 section::after {
   color: var(--ink-soft);
-  font-size: 15px;
+  font-size: 20px;
   right: 70px;
   bottom: 26px;
 }
 
 section.lead::after,
 section.statement::after { content: ""; }
-
-/* Title and section-break slides carry their own identity; the running footer
-   is redundant there. */
-section.lead footer,
-section.statement footer { display: none; }
