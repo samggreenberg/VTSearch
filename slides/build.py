@@ -7,9 +7,19 @@ otherwise fail late (missing fragment, missing figure, a stray `---` inside a
 fragment that would silently split one slide into two).
 
     ./build.py scale26-review        # -> _build/scale26-review.md
+    ./build.py --speaker scale26-review  # -> _build/scale26-review.speaker.md
     ./build.py --all
     ./build.py --check               # preflight only, write nothing
     ./build.py --list                # decks, slide counts, unused fragments
+
+The --speaker variant renders presenter notes *visibly*, PowerPoint
+notes-page style: each speaker page shows a miniature of the real rendered
+slide beside the notes for it. Notes are the HTML comments that are not Marp
+directives — the same comments Marp exports as PPTX/HTML presenter notes, so
+they are authored once. The speaker build references per-slide PNGs of the
+audience deck under _build/imgs/, which render.sh produces first; run
+`./render.sh <deck> pdf --speaker` rather than calling this mode directly.
+The audience build is untouched.
 """
 
 from __future__ import annotations
@@ -29,6 +39,15 @@ BUILD = ROOT / "_build"
 IMAGE_RE = re.compile(r"!\[[^\]]*\]\(\s*([^)\s]+)")
 # A line that is exactly a Marp slide separator.
 RULE_RE = re.compile(r"^-{3,}\s*$")
+# An HTML comment, possibly spanning lines.
+COMMENT_RE = re.compile(r"<!--(.*?)-->", re.DOTALL)
+# A line that sets a Marp/Marpit directive (`_class: lead`, `paginate: false`,
+# ...). A comment whose every non-blank line matches is a directive comment;
+# any other comment is a presenter note (mirrors Marp's own reading).
+DIRECTIVE_LINE_RE = re.compile(
+    r"^\s*_?(?:marp|theme|style|class|paginate|header|footer|color|transition"
+    r"|headingDivider|math|lang|size|background[A-Za-z]*)\s*:"
+)
 
 # Front-matter keys we default when a manifest doesn't set them.
 DEFAULT_FRONTMATTER = {"marp": "true", "theme": "vtsearch", "paginate": "true"}
@@ -97,6 +116,53 @@ def rewrite_images(text: str) -> str:
     return IMAGE_RE.sub(repoint, text)
 
 
+def is_directive_comment(body: str) -> bool:
+    lines = [line for line in body.splitlines() if line.strip()]
+    return bool(lines) and all(DIRECTIVE_LINE_RE.match(line) for line in lines)
+
+
+def fragment_notes(text: str) -> list[str]:
+    """Extract a fragment's presenter notes (non-directive HTML comments).
+
+    Note text is markdown; the continuation-line indentation of the comment
+    style is stripped so it can't be misread as a code block.
+    """
+    notes: list[str] = []
+    for match in COMMENT_RE.finditer(text):
+        body = match.group(1)
+        if is_directive_comment(body):
+            continue
+        # Reflow: Marp renders single newlines as hard breaks, so joining the
+        # comment's wrapped lines with "\n" would keep its ragged wrapping.
+        # Collapse each blank-line-separated block to one line instead.
+        paragraphs = [
+            " ".join(line.strip() for line in block.split("\n") if line.strip()) for block in re.split(r"\n\s*\n", body)
+        ]
+        cleaned = "\n\n".join(p for p in paragraphs if p)
+        if cleaned:
+            notes.append(cleaned)
+    return notes
+
+
+def speaker_page(deck: str, index: int, text: str) -> str:
+    """Build one speaker page: the rendered slide beside its notes.
+
+    The miniature is the per-slide PNG of the audience deck (rendered by
+    render.sh into _build/imgs/ before this runs), so the speaker sees exactly
+    what the audience sees, pixel for pixel — page number included. The path
+    is written repo-`slides/`-relative like every fragment figure, and
+    rewrite_images repoints it for _build/.
+    """
+    image = f"_build/imgs/{deck}.{index:03d}.png"
+    notes = fragment_notes(text) or ["*(no presenter notes on this slide)*"]
+    return (
+        "<!-- _class: speaker -->\n<!-- _paginate: false -->\n\n"
+        '<div class="speaker-page">\n<div class="speaker-slide">\n\n'
+        f"![Slide {index}]({image})\n\n"
+        '</div>\n<div class="speaker-notes">\n\n' + "\n\n".join(notes) + "\n\n</div>\n</div>"
+    )
+
+
 def check_fragment(name: str, text: str, problems: list[str]) -> None:
     for lineno, line in enumerate(text.splitlines(), 1):
         if RULE_RE.match(line):
@@ -113,8 +179,8 @@ def check_fragment(name: str, text: str, problems: list[str]) -> None:
             problems.append(f"fragments/{name}.md:{line}: figure not found: {target}")
 
 
-def assemble(deck: str, write: bool) -> list[str]:
-    """Preflight one deck; write _build/<deck>.md unless write=False.
+def assemble(deck: str, write: bool, speaker: bool = False) -> list[str]:
+    """Preflight one deck; write _build/<deck>[.speaker].md unless write=False.
 
     Returns the list of problems found (empty means the deck is clean).
     """
@@ -126,14 +192,20 @@ def assemble(deck: str, write: bool) -> list[str]:
     problems: list[str] = []
     bodies: list[str] = []
 
-    for name in names:
+    for index, name in enumerate(names, 1):
         fragment = SLIDES / f"{name}.md"
         if not fragment.exists():
             problems.append(f"{deck}.deck: missing fragment: fragments/{name}.md")
             continue
         text = fragment.read_text().strip("\n")
         check_fragment(name, text, problems)
-        bodies.append(text)
+        if speaker and write and not (BUILD / "imgs" / f"{deck}.{index:03d}.png").exists():
+            problems.append(
+                f"{deck}.deck: missing slide image _build/imgs/{deck}.{index:03d}.png — "
+                f"the speaker build needs the audience deck rendered to per-slide PNGs "
+                f"first; use `./render.sh {deck} pdf --speaker`, which does both"
+            )
+        bodies.append(speaker_page(deck, index, text) if speaker else text)
 
     if problems or not write:
         return problems
@@ -143,7 +215,7 @@ def assemble(deck: str, write: bool) -> list[str]:
     header = "\n".join(f"{k}: {yaml_scalar(v)}" for k, v in merged.items())
 
     BUILD.mkdir(exist_ok=True)
-    out = BUILD / f"{deck}.md"
+    out = BUILD / (f"{deck}.speaker.md" if speaker else f"{deck}.md")
     body = rewrite_images("\n\n---\n\n".join(bodies))
     out.write_text(f"---\n{header}\n---\n\n{body}\n")
 
@@ -188,6 +260,11 @@ def cmd_list() -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     parser.add_argument("deck", nargs="?", help="deck name (without .deck)")
+    parser.add_argument(
+        "--speaker",
+        action="store_true",
+        help="render presenter notes visibly; writes _build/<deck>.speaker.md",
+    )
     parser.add_argument("--all", action="store_true", help="build every deck")
     parser.add_argument("--check", action="store_true", help="preflight only")
     parser.add_argument("--list", action="store_true", help="show decks and orphans")
@@ -204,7 +281,7 @@ def main() -> int:
     problems: list[str] = []
     for deck in targets:
         try:
-            problems += assemble(deck, write=not args.check)
+            problems += assemble(deck, write=not args.check, speaker=args.speaker)
         except DeckError as exc:
             problems.append(str(exc))
 

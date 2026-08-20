@@ -30,6 +30,7 @@ Needs node and python3. Nothing to install — `npx` fetches Marp on first run
 ```bash
 ./render.sh scale26-review          # -> _out/scale26-review.pdf
 ./render.sh sponsor-brief html      # or html / pptx
+./render.sh calibration-brief pdf --speaker  # -> _out/calibration-brief.speaker.pdf
 ./build.py --check                  # preflight all manifests, build nothing
 ./build.py --list                   # decks, slide counts, unused fragments
 ```
@@ -82,6 +83,16 @@ defined in the theme and set per-slide with `<!-- _class: full -->`.
 
 Any HTML comment that isn't a Marp directive becomes a **presenter note** —
 visible in `--preview` and exported into PPTX/HTML notes, not on the slide.
+Write them as real speaking notes: wordier than the slide, covering what to
+say, not just provenance.
+
+PDF has no native speaker view, so there are two renderers for the same deck.
+The plain build ignores the notes; the **speaker build**
+(`./render.sh <deck> pdf --speaker`) produces `_out/<deck>.speaker.pdf` beside
+the audience `_out/<deck>.pdf`, PowerPoint notes-page style: each page shows a
+miniature of the real rendered slide (pixel-identical — it *is* a PNG of the
+audience deck, rendered in a first pass) with that slide's notes beside it.
+Same fragments, same manifest — the notes are authored once, as comments.
 
 **Never put a bare `---` in a fragment**: Marp reads it as a slide break and
 would silently split one slide into two. `build.py` errors on it. Use `***`
