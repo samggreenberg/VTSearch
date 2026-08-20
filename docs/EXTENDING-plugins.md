@@ -1174,6 +1174,13 @@ declared fields rendered as a dynamic form. Nothing ships in-tree, so a
 vanilla install shows no extra tabs; the family exists for third-party
 packages.
 
+A run's results appear **on the importer's own tab**, under its form: the
+media tab's example stack is mirrored there, so a batch lands in view where
+the user asked for it rather than switching them to the media tab
+(issue #3192). It is one list, not a copy — the seed tab's Remove buttons
+edit the same stack the media tab shows, and only the media tab carries the
+"+ Add" browse affordance, since a seed tab adds through its own form.
+
 ### Seeds are queries, not labels
 
 Every item a seed importer returns is stored on the detector as
