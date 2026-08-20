@@ -12,6 +12,9 @@ they come back out:
   steps per cell would inflate every p-value's confidence);
 * the decomposition telescopes and names the term that was actually planted as
   dominant;
+* a step whose oracle links are missing is **dropped from every term**, not
+  averaged around: the terms and ``total`` must cover the same steps or the chain
+  stops summing to the total, silently, in exactly the terms this study reads;
 * a rule whose *blended* cost wins while its *raw cut* does not is reported as
   such, since that is the trap the plan pre-registers;
 * the ship test is decided against the run's **own base row**, not against the
@@ -74,6 +77,20 @@ PROD_EDGE = -0.10
 FALLBACK_VARIANT = "pooled_gumbel_priorfree"
 FALLBACK_REASON = "modes_swapped"
 FALLBACK_STEPS = [t for t in range(2, 31) if t >= 21]
+#: Steps where the oracle links are **missing**, planted inside the ramp window.
+#: The field condition: oracle variants do not fall back, so a step whose oracle
+#: cut is not finite emits no row at all and the analyzer's pivot fills NaN.
+INCOMPLETE_STEPS = {8, 9}
+#: The links that go absent on those steps - both oracle variants, which between
+#: them feed three of the four terms.
+INCOMPLETE_LINKS = ("pooled_supervised", "pooled_sim_oracle")
+#: How far the *surviving* links are displaced on those steps.  Applied to both
+#: ends of the ``prior_loss`` link so that term is unchanged and only ``total``
+#: moves - which is exactly the imbalance a per-column ``mean()`` cannot see, and
+#: what makes averaging around the hole (rather than dropping the step) show up
+#: as a decomposition that no longer telescopes.
+INCOMPLETE_DISPLACEMENT = 0.05
+
 #: A rule present in the cells that the analyzer's ``SHIPPABLE`` allowlist does
 #: not know about.  Planted deliberately: the allowlist gates the ship decision,
 #: so an unlisted rule is omitted from the verdict while still showing up in the
@@ -160,7 +177,10 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                     # it - which on the anchored cells it no longer does.
                     anchored = seed in ANCHORED_SEEDS
                     threshold = 0.55
+                    incomplete = t in INCOMPLETE_STEPS
                     for variant in ["", *variants]:
+                        if incomplete and variant in INCOMPLETE_LINKS:
+                            continue
                         is_base = variant == ""
                         effect = RAMP_EFFECT if (variant == WINNER and in_ramp) else 0.0
                         if in_ramp and variant in _TAIL_EFFECT_BY_VARIANT:
@@ -171,6 +191,8 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                         # for the decoy, which wins only after blending.
                         decoy = variant == "pooled_gumbel_cross" and in_ramp
                         raw_cost = _CHAIN_RAW_COST.get(variant, base_cost) + (0.02 if decoy else 0.0)
+                        if incomplete and variant in ("pooled_cross", "pooled_priorfree"):
+                            raw_cost += INCOMPLETE_DISPLACEMENT
                         fell = variant == FALLBACK_VARIANT and t in FALLBACK_STEPS
                         row = dict(ident)
                         row.update(
@@ -268,9 +290,9 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                             tau_gumbel_any_cross=tau_cross,
                             tau_gumbel_any_priorfree=tau_priorfree,
                             tau_gumbel_any_rate=tau_priorfree,
-                            tau_supervised=tau_supervised,
-                            tau_sim_oracle=tau_sim_oracle,
-                            tau_test_oracle=tau_test_oracle,
+                            tau_supervised=np.nan if incomplete else tau_supervised,
+                            tau_sim_oracle=np.nan if incomplete else tau_sim_oracle,
+                            tau_test_oracle=tau_test_oracle - (INCOMPLETE_DISPLACEMENT if incomplete else 0.0),
                             oracle_lo_sf_gauss=0.02,
                             oracle_lo_sf_evt=0.02,
                         )
@@ -490,8 +512,47 @@ def main() -> int:
             len(decoy) == 1 and decoy.iloc[0]["mean_d_raw_cut_cost"] > 0 > decoy.iloc[0]["mean_d_cost"],
         )
 
+        # Steps with a missing chain link must be dropped whole, from the terms
+        # *and* from `total`.  Averaging around them leaves every term looking
+        # sane on its own while the chain no longer sums to the total - which is
+        # unfindable from the table unless the residual and the drop count are
+        # both reported.  `INCOMPLETE_DISPLACEMENT` is planted so that a
+        # per-column mean would miss the total by a visible amount.
+        n_incomplete_expected = len(CATEGORIES) * len(SEEDS) * len(INCOMPLETE_STEPS)
+        n_ramp_steps = len([t for t in range(2, 31) if 6 <= t <= 20])
+        n_complete_expected = len(CATEGORIES) * len(SEEDS) * (n_ramp_steps - len(INCOMPLETE_STEPS))
+
         pooled = decomp[(decomp["window"] == "ramp_6_20") & (decomp["geometry"] == "pooled")]
         ok &= _check("decomposition telescopes", bool((pooled["residual"].abs() < 1e-9).all()))
+        ok &= _check(
+            "incomplete steps dropped from the threshold-unit chain",
+            bool((pooled["n"] == n_complete_expected).all())
+            and bool((pooled["n_incomplete"] == n_incomplete_expected).all()),
+            f"n={list(pooled['n'])} n_incomplete={list(pooled['n_incomplete'])}",
+        )
+
+        costs = pd.read_csv(root / "agg" / "cut_cost_decomposition.csv")
+        cost_ramp = costs[costs["window"] == "ramp_6_20"]
+        ok &= _check(
+            "cost decomposition telescopes",
+            bool((cost_ramp["cost_residual"].abs() < 1e-9).all()),
+            f"max |residual| = {cost_ramp['cost_residual'].abs().max():.6f}",
+        )
+        ok &= _check(
+            "incomplete steps dropped from the cost chain",
+            bool((cost_ramp["n"] == n_complete_expected).all())
+            and bool((cost_ramp["n_incomplete"] == n_incomplete_expected).all()),
+            f"n={list(cost_ramp['n'])} n_incomplete={list(cost_ramp['n_incomplete'])}",
+        )
+        for term, planted_cost in PLANTED_COST_TERMS.items():
+            got = float(cost_ramp[f"cost_{term}"].iloc[0])
+            ok &= _check(f"cost term {term}", abs(got - planted_cost) < 1e-9, f"{got:.5f} vs {planted_cost}")
+        ok &= _check(
+            "summary reports the decomposition's own integrity",
+            abs(float(dec["error_terms_residual"])) < 1e-9
+            and int(dec["error_terms_n_incomplete"]) == n_incomplete_expected,
+            f"residual={dec.get('error_terms_residual')} n_incomplete={dec.get('error_terms_n_incomplete')}",
+        )
         for term, planted in PLANTED_TERMS.items():
             got = float(pooled[f"term_{term}"].iloc[0])
             # prior_loss carries the shared jitter, which averages out over cells.

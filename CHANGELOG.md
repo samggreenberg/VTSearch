@@ -17,6 +17,60 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **CLI autodetect no longer reports every media as a hit, and no longer
+  disagrees with the GUI's Find.** A run against a dataset and detector that
+  the GUI cut at ~0.475 came back with a threshold of `-0.375` and a positive
+  hit for every image. Two separate defects were behind it. First, a media the
+  detector head cannot score (a corrupt vector, a destabilised fit) is recorded
+  at the `-1.0` sentinel — deliberately outside the sigmoid range so it can
+  never clear a threshold — and those sentinels were being fed to the threshold
+  estimators as if they were scores. A spike a full unit below the range pulls
+  the fitted cut under zero, at which point every real score clears it: 2%
+  unscorable media moved a threshold from `+0.58` to `-0.50` and a 30-of-600
+  shortlist to 588 of 600. Every estimator now fits on the scorable population
+  only — fold haystacks, held-out anchors, the pooled conformal orderings, and
+  the blend's GMM — and the run warns, naming the count, when media had to be
+  excluded. Second, CLI scoring forwarded each media's image-level vector while
+  the threshold it compared against (and the GUI) max-pool the media's patch
+  rows; on a patch dataset that is a different distribution, enough to turn a
+  GUI Find's dozens of hits into zero CLI hits. Both now build their rows
+  through the same builder. (#3180)
+
+- **One image that fails to embed no longer aborts a CLI run.** Every CLI
+  scoring path fed the raw media chunk straight to the embedding-matrix
+  builders, which raise on a media with no vector (`ValueError`, from
+  `vtscore/embedding/matrix.py`) or one whose vector is the wrong width
+  (`MismatchedVectorError`, from `vtscore/embedding/precomputed.py`). Those
+  raises are correct for the dataset's own matrix — the load pipeline has
+  already dropped vector-less media by then — but not for a snapshot handed to
+  the scorer, so a single corrupt or undecodable file took the whole run down
+  with it. The scoring paths now filter first and score what is left, matching
+  the drop-and-log policy the load pipeline and converter routing already used,
+  and each skip is announced on the CLI event stream (`medias_skipped`) so a
+  short hit count is never silent. This also fixes
+  `--autodetect --importer …`, which failed on *every* run: the safe-threshold
+  population pass scored the chunk before anything had been embedded, so it hit
+  the same raise on the first media. (#3179)
+
+- **A detector's labelset no longer stores the same media twice.** After one
+  pass over a 300-image dataset a detector reported `num_training: 356` — 300
+  distinct images, 56 of them held as a duplicate pair. The two halves of the
+  labelset round-trip disagreed on what "the same media" means: loading a
+  detector turned an entry into a vote when it matched a dataset item by
+  origin **or** content hash, while saving decided an entry belonged to the
+  active dataset by comparing origins alone. Anything that matched only on its
+  hash — an exemplar carrying the `example_media` sentinel, a label imported
+  from a plain md5 list, a label saved under another dataset's importer — was
+  restored as a vote, re-emitted as a fresh element, and kept beside its
+  original. Both writers now use the same origin-or-hash resolution, so a
+  re-vote updates the existing element instead of appending, and a labelset
+  that already carries duplicates collapses on the next write. Two related
+  leaks went with it: the Find "add corrections to detector" fold left the
+  stale entry in place beside its correction (one media, two contradicting
+  labels), and a drawn Good region was erased whenever a detector reload
+  resynced the labelset, because the restored vote came back image-level.
+  Duplicated entries were also double-weighted at training time. (#3174)
+
 - **A finished dataset import no longer looks like a wedged one.** An import
   that had already succeeded — pickle written, dataset registered — kept the
   progress channel parked on its last message ("Loading SigLIP processor…")
@@ -47,6 +101,27 @@ not list every commit. Use `git log` for the full history.
   failures are written to the server log. (#3139)
 
 ### Changed
+
+- **Image preprocessing now names its backend instead of inheriting one.**
+  Every image embedder builds its processor by asking `transformers` for the
+  `torchvision` backend outright (`VTSEARCH_IMAGE_PROCESSOR_BACKEND`, new
+  default `torchvision`; set `auto` for the previous behaviour). Nothing in the
+  code used to say which implementation resized and normalised an image, and
+  the answer changed *inside* the version range we pin: `transformers` 5
+  removed the `Fast` suffix, so the bare `SiglipImageProcessor` means the PIL
+  implementation below 5 and the torchvision one at 5+, while
+  `requirements/image-embedders.txt` asks only for `>=4.49`. The two are not
+  interchangeable — they disagree on 53–59% of pixel elements and by a median
+  `1 − cos` of ~1.5e-04 on `siglip2_l`, 50× the perturbation half precision
+  causes — so two hosts resolving different wheels produced different vectors
+  from identical code and weights, with nothing recording which. **On a
+  `transformers` 5 host this changes nothing** (the pre-embedded pile is
+  torchvision-built, reproduced to 7.6e-13). **On a 4.x host it changes the
+  vectors**, which is the point: that host was quietly disagreeing with the
+  pile and now agrees with it. Because a backend request is a request and not a
+  guarantee — DINOv3 ships no PIL implementation, and `transformers` warns and
+  falls back rather than raising — each embedder now reads back the class it
+  actually loaded and logs a warning naming itself when it differs. (#3173)
 
 - **Bad pre-computed vectors are now rejected at import, with an error that says
   what is wrong.** Importing an `.npz` manifest of pre-computed embeddings used
@@ -91,6 +166,27 @@ not list every commit. Use `git log` for the full history.
   names.
 
 ### Added
+
+- **Three long-form audio demos: Apollo 11, BirdVox Full Night, and the Nixon
+  White House Tapes.** Every audio demo so far was a corpus of short labelled
+  clips (ESC-50, GTZAN, UrbanSound8K) or, in TUT's case, 32 four-minute street
+  soundscapes. These three are hours-long *unlabelled* recordings where the
+  interesting content is discrete events scattered through the runtime — the
+  Quindar beeps, master alarms and MOCR applause in 174 hours of NASA mission
+  loops; the sub-second bird flight calls in six ten-hour night recordings from
+  BirdVox-full-night; the telephone rings, laughter and room noise under 12
+  tapes' worth of Nixon's secret taping system. Each loads as one
+  undifferentiated bucket, so you clip it yourself, vote on a handful of hits,
+  and let the detector rank the rest. All three sources are freely
+  redistributable (CC PD Mark, Creative Commons, and US federal public domain
+  respectively).
+
+  Unlike the older demos, **each size variant downloads only its own slice** of
+  the source rather than the whole thing — at 5-10 GB apiece that difference
+  matters, so (S) costs a twelfth (Apollo, Nixon) or a sixth (BirdVox) of the
+  figure shown in [`docs/demos.md`](docs/demos.md). BirdVox's ten-hour FLAC
+  units are segmented into 10-minute chunks as they download, since a ten-hour
+  file cannot be handed to the clipper as a single item.
 
 - **Seed importers: a new plugin family for unlabeled seed media.** An
   external package can now contribute its own tab to the New Detector modal's

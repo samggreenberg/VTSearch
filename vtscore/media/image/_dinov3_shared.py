@@ -22,7 +22,12 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
-from vtscore.config import DINOV3_MODEL_ID
+from vtscore.config import (
+    DINOV3_MODEL_ID,
+    image_processor_call_kwargs,
+    image_processor_load_kwargs,
+    verify_image_processor_backend,
+)
 from vtscore.media.embedder import (
     IMPORT_MODULE_ESTIMATES,
     MediaEmbedder,
@@ -126,8 +131,13 @@ class _Dinov3Base(MediaEmbedder):
         self._on_progress("loading", "Loading DINOv3 image processor…", 0, 0)
         with intercept_tqdm_progress(self._on_progress):
             self._processor = load_pretrained_local_first(
-                AutoImageProcessor.from_pretrained, DINOV3_MODEL_ID, cache_dir=cache_dir, token=hf_token()
+                AutoImageProcessor.from_pretrained,
+                DINOV3_MODEL_ID,
+                cache_dir=cache_dir,
+                token=hf_token(),
+                **image_processor_load_kwargs(),
             )
+        verify_image_processor_backend(self._processor, embedder="DINOv3")
 
     def _embed_media_impl(self, media: dict) -> Optional[np.ndarray]:
         if self._model is None:
@@ -153,7 +163,7 @@ class _Dinov3Base(MediaEmbedder):
             import torch  # noqa: PLC0415
 
             image = image.convert("RGB")
-            inputs = self._processor(images=image, return_tensors="pt")
+            inputs = self._processor(images=image, return_tensors="pt", **image_processor_call_kwargs())
             inputs = to_model_inputs(inputs, self._model)
             with torch.no_grad(), embed_autocast():
                 outputs = self._model(**inputs)
@@ -172,7 +182,7 @@ class _Dinov3Base(MediaEmbedder):
         import torch  # noqa: PLC0415
 
         rgb = [im.convert("RGB") for im in images]
-        inputs = self._processor(images=rgb, return_tensors="pt")
+        inputs = self._processor(images=rgb, return_tensors="pt", **image_processor_call_kwargs())
         inputs = to_model_inputs(inputs, self._model)
         with torch.no_grad(), embed_autocast():
             outputs = self._model(**inputs)
@@ -198,7 +208,7 @@ class _Dinov3Base(MediaEmbedder):
         import torch  # noqa: PLC0415
 
         rgb = [im.convert("RGB") for im in images]
-        inputs = self._processor(images=rgb, return_tensors="pt")
+        inputs = self._processor(images=rgb, return_tensors="pt", **image_processor_call_kwargs())
         inputs = to_model_inputs(inputs, self._model)
         with torch.no_grad(), embed_autocast():
             outputs = self._model(**inputs, output_attentions=True)
@@ -233,7 +243,7 @@ class _Dinov3Base(MediaEmbedder):
         try:
             import torch  # noqa: PLC0415
 
-            inputs = self._processor(images=image, return_tensors="pt")
+            inputs = self._processor(images=image, return_tensors="pt", **image_processor_call_kwargs())
             inputs = to_model_inputs(inputs, self._model)
             with torch.no_grad(), embed_autocast():
                 outputs = self._model(**inputs, output_attentions=True)

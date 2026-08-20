@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
+from vtscore.config import image_processor_call_kwargs
 from vtscore.media.embedder import (
     MediaEmbedder,
     embed_autocast,
@@ -92,7 +93,7 @@ class _CrossModalHFEmbedder(MediaEmbedder):
             import torch  # noqa: PLC0415
 
             image = image.convert("RGB")
-            inputs = self._processor(images=image, return_tensors="pt")
+            inputs = self._processor(images=image, return_tensors="pt", **image_processor_call_kwargs())
             inputs = to_model_inputs(inputs, self._model)
             with torch.no_grad(), embed_autocast():
                 outputs = self._model.get_image_features(**inputs)
@@ -111,7 +112,7 @@ class _CrossModalHFEmbedder(MediaEmbedder):
         import torch  # noqa: PLC0415
 
         rgb = [im.convert("RGB") for im in images]
-        inputs = self._processor(images=rgb, return_tensors="pt")
+        inputs = self._processor(images=rgb, return_tensors="pt", **image_processor_call_kwargs())
         inputs = to_model_inputs(inputs, self._model)
         with torch.no_grad(), embed_autocast():
             outputs = self._model.get_image_features(**inputs)

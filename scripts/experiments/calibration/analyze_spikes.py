@@ -51,15 +51,39 @@ try:  # scipy is in the grid venv, but the analyzer must not die without it
 except Exception:  # noqa: BLE001
     _wilcoxon = None
 
-ARMS: tuple[str, ...] = ("A_mlp_xcal", "B_mlp_fused", "C_lin_xcal", "D_lin_fused")
+#: The 2x2 above is the default.  ``SPIKE_ARMS`` re-points this analyzer at a
+#: different arm set that answers the same question with the same pre-registered
+#: spike rules - #2808 reuses it for the head/epoch contrast.  The FIRST arm is
+#: always the positive control and the LAST is the arm treated as production,
+#: so a caller that reorders them changes which arm the no-verdict guard reads.
+ARMS: tuple[str, ...] = tuple(
+    a for a in os.environ.get("SPIKE_ARMS", "A_mlp_xcal B_mlp_fused C_lin_xcal D_lin_fused").replace(",", " ").split()
+)
 ARM_LABEL: dict[str, str] = {
     "A_mlp_xcal": "mlp + conformal (#2847-era)",
     "B_mlp_fused": "mlp + fold-anchored",
     "C_lin_xcal": "linear + conformal",
     "D_lin_fused": "linear + fold-anchored (production)",
+    # #2808: head x training-budget, all on the fold-anchored (production) cut.
+    "C_mlp": "mlp, 200 epochs (reference)",
+    "A_shipped": "linear, 200 epochs / patience 10 (production, early-stopped)",
+    "B_converged": "linear, 2000 epochs / no early-stop (converged)",
 }
-CONTROL_ARM = "A_mlp_xcal"
-PRODUCTION_ARM = "D_lin_fused"
+if not ARMS:
+    raise SystemExit("SPIKE_ARMS is set but empty - refusing to analyze zero arms")
+CONTROL_ARM = os.environ.get("SPIKE_CONTROL_ARM") or ARMS[0]
+PRODUCTION_ARM = os.environ.get("SPIKE_PRODUCTION_ARM") or ARMS[-1]
+if os.environ.get("SPIKE_ARMS") and not (
+    os.environ.get("SPIKE_CONTROL_ARM") and os.environ.get("SPIKE_PRODUCTION_ARM")
+):
+    # Position meant role only while ARMS was a literal.  A caller that supplies
+    # its own arm order gets whatever happens to sit first and last, and the
+    # report then labels a counterfactual arm "production" without failing.
+    print(
+        f"WARNING: SPIKE_ARMS is set but the arm ROLES are not. "
+        f"Defaulting control={CONTROL_ARM!r} (first) and production={PRODUCTION_ARM!r} (last). "
+        f"Set SPIKE_CONTROL_ARM / SPIKE_PRODUCTION_ARM if that is not what you mean."
+    )
 
 # --- Pre-registered spike rules -------------------------------------------
 #: Steps before this are the cold start - every arm in #2847's figure humps
@@ -448,7 +472,7 @@ def build_summary(df: pd.DataFrame, traj: pd.DataFrame, prov: dict) -> dict:
         if t.empty:
             continue
         per_arm[a] = {
-            "label": ARM_LABEL[a],
+            "label": ARM_LABEL.get(a, a),
             "n_trajectories": int(len(t)),
             "n_steps": int(t["n_steps"].sum()),
             "deep_spike_trajectory_rate": float(t["has_deep"].mean()),
@@ -518,7 +542,7 @@ def write_report(summary: dict, spikes: pd.DataFrame, figs: list[str], outdir: P
 
     if not summary["control_reproduces_phenomenon"]:
         A(
-            "> **NO VERDICT.** The control arm `A_mlp_xcal` - the #2847-era "
+            f"> **NO VERDICT.** The control arm `{CONTROL_ARM}` - the #2847-era "
             "configuration - produced no deep spike in this harness, so this run "
             "cannot distinguish a fix from a harness that never showed the "
             "phenomenon. Everything below is descriptive only.\n"

@@ -9,6 +9,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import math
 import tempfile
 from pathlib import Path
 
@@ -406,10 +407,18 @@ class TestCliScoringNegativeHits:
         with pytest.raises(ValueError):
             _score_medias_with_detectors(medias, detector_mlps)
 
-    def test_none_embedding_surfaces_loud_error(self, client):
-        """Regression for audit M11 (root cause): a media with
-        ``embedding=None`` must raise rather than silently producing
-        NaN-scored hits via ``matrix[i] = None`` (numpy 2.x).
+    def test_none_embedding_media_is_skipped_never_nan_scored(self, client):
+        """Regression for audit M11 (root cause) and issue #3179.
+
+        A media with no vector must never reach the hit list with a NaN score
+        (``matrix[i] = None`` stores ``nan`` on numpy 2.x, which then poisons
+        every threshold compare and sort it touches).  M11 enforced that by
+        raising from the matrix builder, which the builders still do; #3179
+        changed what the *CLI scorer* does with that refusal - one unembeddable
+        image must cost that one item, not the whole run - so the media is
+        dropped from the snapshot and simply does not appear in the results.
+        Both readings of the invariant hold: the victim is absent, and every
+        other media still scores.
         """
         from vtscore.cli import _score_medias_with_detectors
         from vtscore.detectors.training import train_and_threshold
@@ -439,8 +448,11 @@ class TestCliScoringNegativeHits:
         broken[victim_cid]["embeddings"] = {}
 
         detector_mlps = {"test": {"mlp": mlp, "threshold": threshold}}
-        with pytest.raises(ValueError, match=r"has no embedding"):
-            _score_medias_with_detectors(broken, detector_mlps)
+        det_broken = _score_medias_with_detectors(broken, detector_mlps)["test"]
+        scored = {h["id"] for h in det_broken["hits"]} | {h["id"] for h in det_broken["negative_hits"]}
+        assert victim_cid not in scored
+        assert scored == set(broken) - {victim_cid}
+        assert all(math.isfinite(h["score"]) for h in det_broken["hits"] + det_broken["negative_hits"])
 
         # Untouched global state stays scorable; the broken dict was a
         # local snapshot, ``medias`` is intact.

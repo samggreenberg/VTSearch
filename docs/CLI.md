@@ -144,6 +144,13 @@ skipped entirely (with a note). When a converter fans one media out into several
 media by **max**: the video is a positive hit when *any* of its frames clears the
 threshold, and it surfaces as a single hit on the video, not one per frame.
 
+**The CLI scores a media exactly as the GUI does.** Both go through one row
+builder (`scoring_rows_for_snap`), so on a patch dataset a media's score is the
+max over its score rows — image-level vector plus every raw patch — not the
+image-level vector alone. That is also the geometry the detector's threshold was
+calibrated on, so a CLI run and a GUI Find agree on which media clear it (issue
+#3180).
+
 **Matching the detector's clipper granularity.** A detector trained on a
 specific clipper (its `input_spec.clipper` — e.g. 2-second audio tiles, or an
 image grid) is **re-clipped at scoring time** when the loaded dataset wasn't
@@ -312,6 +319,18 @@ python app.py --autodetect --dataset data.pkl --settings settings.json \
 A `notification` never ends the run, at any level — including
 `"level": "error"`, which reports something the code continued past. The
 fatal-error record is the separate `error` event.
+
+A media the scorer cannot embed — a corrupt image, an unresolvable thin path, a
+pre-computed vector of the wrong width — is **skipped**, not fatal: one bad file
+must not take a long run down with it. Each skip is reported as a
+`medias_skipped` event carrying the count and the first of the affected ids, so
+a hit count that is short of the file count is never silent:
+
+```bash
+python app.py --autodetect --importer server_folder --path /data/images \
+    --media-type image --settings settings.json --progress-format json \
+  | jq -r 'select(.event == "medias_skipped") | .text'
+```
 
 An exporter can format its results into a URL for a browser to open rather than
 delivering them anywhere (the built-in `open_url` exporter does exactly this).

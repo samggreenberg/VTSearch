@@ -67,34 +67,58 @@ def _get_loaded_detector_state() -> tuple[dict[str, Any], Path, dict[str, Any], 
 def _merge_labelsets_across_datasets(
     existing_ls: LabelSet,
     current_ls: LabelSet,
-    current_dataset_keys: set,
+    current_dataset_medias: dict[int, dict[str, Any]],
 ) -> LabelSet:
     """Merge a fresh per-dataset labelset into a cross-dataset existing one.
 
-    Existing entries owned by the active dataset (key in ``current_dataset_keys``)
-    are dropped - they get replaced by ``current_ls``. Other entries are kept
-    verbatim. Duplicate keys across the resulting list are collapsed
-    (first occurrence wins).
+    Existing entries that resolve to a media in *current_dataset_medias* are
+    dropped - they get replaced by ``current_ls``, which is the authoritative
+    record of what the user has voted there.  Entries that resolve to nothing
+    were accumulated under other datasets and are kept verbatim.
+
+    Ownership is decided by the *same* resolution
+    (:func:`~vtscore.state.media_lookup.resolve_media_ids`, origin **or** md5)
+    that :func:`~vtscore.detectors.label_restoration.restore_labels_from_detector`
+    uses to turn labelset elements back into votes.  That symmetry is the whole
+    point: an element that becomes a vote on load is an element ``current_ls``
+    re-emits, so keeping the original beside it stores the same media twice.
+    Comparing :func:`~vtscore.datasets.labelset.element_key` instead - which
+    prefers origin and so misses an entry that shares only a content hash - is
+    what made a 300-image pass report ``num_training: 356`` (issue #3174).
+
+    Duplicate identities across the resulting list are collapsed (first
+    occurrence wins), so a labelset that already carried duplicates heals on
+    the next write.
+
+    *current_dataset_medias* must be the same medias snapshot *current_ls* was
+    composed from, so the two halves of the merge can't straddle a concurrent
+    dataset switch.
     """
-    from vtscore.datasets.labelset import element_key
+    from vtscore.datasets.labelset import element_identity_keys
+    from vtscore.state import build_media_lookup, resolve_media_ids
+
+    origin_lookup, md5_lookup, name_lookup = build_media_lookup(current_dataset_medias)
 
     new_elements = []
     seen_keys: set = set()
+
+    def _take(el) -> bool:
+        """Record *el*'s identities, returning False if one was already seen."""
+        keys = element_identity_keys(el)
+        if any(k in seen_keys for k in keys):
+            return False
+        seen_keys.update(keys)
+        return True
+
     for el in existing_ls.elements:
-        key = element_key(el)
-        if key in current_dataset_keys:
+        if resolve_media_ids(el.to_dict(), origin_lookup, md5_lookup, name_lookup):
             continue
-        if key is not None:
-            if key in seen_keys:
-                continue
-            seen_keys.add(key)
+        if not _take(el):
+            continue
         new_elements.append(el)
     for el in current_ls.elements:
-        key = element_key(el)
-        if key is not None:
-            if key in seen_keys:
-                continue
-            seen_keys.add(key)
+        if not _take(el):
+            continue
         new_elements.append(el)
     return LabelSet(new_elements)
 
@@ -141,7 +165,6 @@ def _sync_labels_to_loaded_detector_locked() -> None:
         return
     entry, path, data, det_ctx = state
 
-    from vtscore.datasets.labelset import media_element_key
     from vtscore.detectors.dataset_sync import validated_vote_snapshot
     from vtscore.detectors.registry import update_detector
     from vtscore.detectors.store import _write_detector
@@ -165,18 +188,10 @@ def _sync_labels_to_loaded_detector_locked() -> None:
     )
     existing_ls = LabelSet.from_dict(data.get("labelset") or {})
 
-    # Origin keys for *every* media in the active dataset (voted or not).
-    # Existing labelset entries that match one of these keys are considered
-    # "owned" by the active dataset and will be reconciled against the
-    # current votes; entries that don't match are cross-dataset entries
-    # and are preserved verbatim.
-    current_dataset_keys = set()
-    for media in snap.values():
-        key = media_element_key(media)
-        if key is not None:
-            current_dataset_keys.add(key)
-
-    merged = _merge_labelsets_across_datasets(existing_ls, current_ls, current_dataset_keys)
+    # Existing labelset entries that resolve into the active dataset are
+    # "owned" by it and get reconciled against the current votes; entries that
+    # resolve to nothing are cross-dataset and are preserved verbatim.
+    merged = _merge_labelsets_across_datasets(existing_ls, current_ls, snap)
     data["labelset"] = merged.to_dict()
     _write_detector(path, data)
 

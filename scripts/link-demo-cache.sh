@@ -38,11 +38,12 @@ DATADIR="$(cd "$DATADIR" && pwd)"
 # derived images/ + video/ media dirs. Kept in sync with the source by
 # tests_lib/downloads/test_demo_cache_script.py.
 DEMO_DIRS=(
-  aclImdb bbc-fulltext caltech-101 caltech-256 cifar-10-batches-py clotho
-  dbpedia_csv enrico ESC-50-master EuroSAT_RGB food-101 gtzan hmdb51
-  openlogo oxford_flowers places365 reuters21578 rico_screen2words roxford5k
-  rvl_cdip speech_commands_v2 tut_sound_events_2017 UCF-101 UCF101_subset
-  ucsf_documents UrbanSound8K vggface2 visual_genome
+  aclImdb apollo11_audio bbc-fulltext birdvox_full_night caltech-101 caltech-256
+  cifar-10-batches-py clotho dbpedia_csv enrico ESC-50-master EuroSAT_RGB
+  food-101 gtzan hmdb51 nixon_tapes openlogo oxford_flowers places365
+  reuters21578 rico_screen2words roxford5k rvl_cdip speech_commands_v2
+  tut_sound_events_2017 UCF-101 UCF101_subset ucsf_documents UrbanSound8K
+  vggface2 visual_genome
 )
 
 for name in "${DEMO_DIRS[@]}"; do

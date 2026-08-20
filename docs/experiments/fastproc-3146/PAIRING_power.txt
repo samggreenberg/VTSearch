@@ -1,0 +1,7 @@
+checked 2 arms: tv_cpu, tv_cuda
+  tv_cpu         visual_genome_m    siglip       4193 medias, dim 768, 8 categories
+  tv_cpu         visual_genome_m    siglip2_l    4193 medias, dim 1152, 8 categories
+  tv_cuda        visual_genome_m    siglip       4193 medias, dim 768, 8 categories
+  tv_cuda        visual_genome_m    siglip2_l    4193 medias, dim 1152, 8 categories
+
+pairing verified: identical categories, order, populations and exemplar candidates

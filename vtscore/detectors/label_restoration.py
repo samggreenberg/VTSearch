@@ -48,7 +48,7 @@ def _resolve_unmatched(unresolved: list, md5_lookup: dict[str, list[int]]) -> in
             cids = md5_lookup.get(resolved_md5, [])
             if cids:
                 for cid in cids:
-                    apply_label(cid, elem.label, silent=True)
+                    apply_label(cid, elem.label, silent=True, region_box=elem.region_box)
                 restored += 1
             else:
                 _log.debug(
@@ -73,6 +73,11 @@ def restore_labels_from_detector(det_data: dict) -> int:
     trends and span/diversity coverage start fresh from the user's session
     votes.  The good/bad counts still reflect restored labels, so autopilot's
     initial Find Goods / Find Bads gates can skip ahead.
+
+    A Good element's ``region_box`` rides along into ``vote_region_boxes``.
+    Dropping it here used to erase the drawn region the moment the next vote
+    resynced the labelset back to disk - the restored vote was image-level, so
+    the element it re-emitted was too.
 
     Returns the number of labels successfully restored.
     """
@@ -106,7 +111,7 @@ def restore_labels_from_detector(det_data: dict) -> int:
         cids = resolve_media_ids(elem.to_dict(), origin_lookup, md5_lookup, name_lookup)
         if cids:
             for cid in cids:
-                apply_label(cid, elem.label, silent=True)
+                apply_label(cid, elem.label, silent=True, region_box=elem.region_box)
             restored += 1
         else:
             unresolved.append(elem)

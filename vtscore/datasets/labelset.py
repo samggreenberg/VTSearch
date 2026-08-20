@@ -394,6 +394,34 @@ def element_key(el: LabeledElement) -> Any:
     return None
 
 
+def element_identity_keys(el: LabeledElement) -> list[Any]:
+    """Return every hashable key under which *el* denotes the same media.
+
+    :func:`element_key` picks the *preferred* identity (origin when present,
+    else md5), which is what a stable element id is derived from.  But two
+    elements can denote the same media while disagreeing on that preference:
+    an exemplar carrying the ``example_media`` sentinel origin and a vote on
+    the same file inside a folder-imported dataset share only their content
+    hash.  Matching on the preferred key alone lets those two accumulate as a
+    duplicate pair (issue #3174).
+
+    This returns the union - the preferred key plus the ``("md5", ...)`` key
+    when the element has a hash - mirroring
+    :func:`~vtscore.state.media_lookup.resolve_media_ids`, which also matches
+    a label entry to media by origin **or** md5.  Elements with neither an
+    origin nor an md5 have no identity at all and yield an empty list.
+    """
+    keys: list[Any] = []
+    key = element_key(el)
+    if key is not None:
+        keys.append(key)
+    if el.md5:
+        md5_key = ("md5", el.md5)
+        if md5_key not in keys:
+            keys.append(md5_key)
+    return keys
+
+
 def media_element_key(media: dict[str, Any]) -> Any:
     """Return the element-identity key for a media dict (origin-keyed when possible).
 

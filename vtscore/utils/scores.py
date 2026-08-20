@@ -99,3 +99,36 @@ def finite_or(value: float, default: float = NON_FINITE_SCORE_SENTINEL) -> float
     write site cannot leak ``NaN``/``Infinity`` into a JSON response.
     """
     return value if math.isfinite(value) else default
+
+
+def scored_mask(scores: "np.ndarray | list[float]") -> np.ndarray:
+    """Boolean mask of the entries of *scores* that are real sigmoid outputs.
+
+    ``True`` where a score lies in the ``[0, 1]`` sigmoid range and is finite;
+    ``False`` for :data:`NON_FINITE_SCORE_SENTINEL` and for anything else out
+    of range.  The sentinel means "this item could not be scored", which is a
+    *different* statement from "this item scored low" - so any estimator
+    fitted on a score distribution has to drop it rather than treat ``-1.0``
+    as an observation.  Returned as a mask (rather than a filtered array) so
+    callers holding parallel arrays - a score list and its labels - can drop
+    the same positions from both.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    arr = np.asarray(scores, dtype=np.float64)
+    return np.isfinite(arr) & (arr >= 0.0) & (arr <= 1.0)
+
+
+def scored_only(scores: "np.ndarray | list[float]") -> np.ndarray:
+    """*scores* with every unscorable entry dropped; see :func:`scored_mask`.
+
+    The population a threshold estimator may be fitted on.  Feeding the
+    sentinel into a fit is not a rounding error but a sign flip: ``-1.0`` sits
+    a full unit below the sigmoid range, so a handful of unscorable media pull
+    a fitted cut *below zero*, at which point every real score clears it and
+    the detector reports the whole dataset as a hit (issue #3180).
+    """
+    import numpy as np  # noqa: PLC0415
+
+    arr = np.asarray(scores, dtype=np.float64)
+    return arr[scored_mask(arr)]

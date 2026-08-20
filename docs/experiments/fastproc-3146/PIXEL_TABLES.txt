@@ -1,0 +1,40 @@
+device: cuda NVIDIA L40S
+node: rack4n01
+384 corpus images, sizes (332, 500)..(1280, 960), batch 32, reps 3
+
+=== siglip (google/siglip-base-patch16-224) ===
+  auto/cpu           SiglipImageProcessor            2.19 ms/img  shape=(384, 3, 224, 224) range=[-1.00,1.00]
+  torchvision/cpu    SiglipImageProcessor            2.09 ms/img  shape=(384, 3, 224, 224) range=[-1.00,1.00]
+  pil/cpu            SiglipImageProcessorPil         6.29 ms/img  shape=(384, 3, 224, 224) range=[-1.00,1.00]
+  torchvision/cuda   SiglipImageProcessor            0.56 ms/img  shape=(384, 3, 224, 224) range=[-1.00,1.00]
+
+=== siglip2_l (google/siglip2-so400m-patch14-384) ===
+  auto/cpu           SiglipImageProcessor            2.31 ms/img  shape=(384, 3, 384, 384) range=[-1.00,1.00]
+  torchvision/cpu    SiglipImageProcessor            2.12 ms/img  shape=(384, 3, 384, 384) range=[-1.00,1.00]
+  pil/cpu            SiglipImageProcessorPil         6.83 ms/img  shape=(384, 3, 384, 384) range=[-1.00,1.00]
+  torchvision/cuda   SiglipImageProcessor            0.56 ms/img  shape=(384, 3, 384, 384) range=[-1.00,1.00]
+
+=== cost: the processor call alone ===
+embedder     arm                  class                            ms/img  vs tv/cpu
+siglip       auto/cpu             SiglipImageProcessor               2.19      0.96x
+siglip       torchvision/cpu      SiglipImageProcessor               2.09      1.00x
+siglip       pil/cpu              SiglipImageProcessorPil            6.29      0.33x
+siglip       torchvision/cuda     SiglipImageProcessor               0.56      3.76x
+siglip2_l    auto/cpu             SiglipImageProcessor               2.31      0.92x
+siglip2_l    torchvision/cpu      SiglipImageProcessor               2.12      1.00x
+siglip2_l    pil/cpu              SiglipImageProcessorPil            6.83      0.31x
+siglip2_l    torchvision/cuda     SiglipImageProcessor               0.56      3.81x
+
+=== perturbation vs the shipped path (torchvision/cpu) ===
+Per-image |delta pixel|.  'max' is the worst pixel in the worst image; 'max median'
+is the worst pixel in the median image — the honest headline, since a resize
+difference concentrates at edges and a corpus max reports one picture.
+embedder     arm                         max   max median       mean  max/range
+siglip       auto/cpu                      0            0          0          0
+siglip       pil/cpu                 7.8e-03      7.8e-03    1.8e-05    3.9e-03
+siglip       torchvision/cuda          0.078        0.024    9.1e-04      0.039
+siglip2_l    auto/cpu                      0            0          0          0
+siglip2_l    pil/cpu                 7.8e-03      7.8e-03    1.1e-03    3.9e-03
+siglip2_l    torchvision/cuda        7.8e-03      7.8e-03    2.3e-06    3.9e-03
+
+wrote /expscratch/sgreenberg/fastproc-3146/results/pixel_drift.csv and pixel_drift_examples.json

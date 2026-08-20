@@ -18,6 +18,7 @@ from typing import Any, NamedTuple
 import numpy as np
 
 from vtscore.training.blend_schedules import BlendContext, BlendSchedule, get_schedule
+from vtscore.utils.scores import scored_mask, scored_only
 
 # Sentinel threshold meaning "predict nothing as Good". Sigmoid scores are
 # in [0, 1], so any value > 1.0 makes every ``score >= threshold`` check
@@ -485,6 +486,31 @@ def gmm_fit_array(scores: "list[float] | np.ndarray") -> np.ndarray:
         rng = np.random.default_rng(42)
         arr = rng.choice(arr, size=_GMM_MAX_SAMPLES, replace=False)
     return arr
+
+
+def scored_ordering(
+    ordering: tuple[list[float], list[float]],
+) -> tuple[list[float], list[float]]:
+    """A fold's ``(scores, labels)`` ordering with the unscored items dropped.
+
+    A held-out item whose fold model produced a non-finite logit is recorded at
+    :data:`~vtscore.utils.scores.NON_FINITE_SCORE_SENTINEL` (``-1.0``) - the
+    orderings are cached and swept, so they cannot hold ``NaN``.  As a
+    *calibration anchor* that sentinel is worse than useless: the rules here
+    read the anchors as positions on the sigmoid scale, and a labelled item
+    sitting a unit below the scale drags both the conformal quantile and the
+    anchored mixture down with it.  The item carries no information about where
+    the cut belongs, so it is dropped - together with its label, which is why
+    this filters the pair rather than the score list alone.
+    """
+    scores, labels = ordering
+    keep = scored_mask(scores)
+    if bool(keep.all()):
+        return scores, labels
+    return (
+        [s for s, ok in zip(scores, keep.tolist(), strict=True) if ok],
+        [lb for lb, ok in zip(labels, keep.tolist(), strict=True) if ok],
+    )
 
 
 def snap_cut_to_sample(cut: float, sorted_scores: np.ndarray) -> float:
@@ -1112,15 +1138,25 @@ def fit_fold_anchored_cut(
     every fold failed (or there were none), leaving the terminal fallback to
     the caller - :func:`fold_anchored_gmm_threshold` cuts the final model's own
     distribution instead, never 0.5.
+
+    Every score that reaches a fit - haystack and anchor alike - is first put
+    through :func:`~vtscore.utils.scores.scored_only`, so an item the head
+    could not score (:data:`~vtscore.utils.scores.NON_FINITE_SCORE_SENTINEL`,
+    ``-1.0``) is *absent* rather than treated as an observation a full unit
+    below the sigmoid range.  Without that, a couple of unreadable media drag
+    the fitted cut - and, through the quantile realised on the final haystack,
+    the shipped threshold - below zero, where every real score clears it
+    (issue #3180).
     """
-    final_arr = gmm_fit_array(final_scores)
+    final_arr = gmm_fit_array(scored_only(final_scores))
     if final_arr.size == 0:
         return None
     fits: list[GmmFit1D] = []
     haystacks: list[np.ndarray] = []
     n_anchored = 0
-    for hay, (a_scores, a_labels) in zip(fold_haystack_scores, fold_anchor_orderings, strict=True):
-        arr = gmm_fit_array(hay)
+    for hay, ordering in zip(fold_haystack_scores, fold_anchor_orderings, strict=True):
+        a_scores, a_labels = scored_ordering(ordering)
+        arr = gmm_fit_array(scored_only(hay))
         fit, provenance = fit_anchored_score_gmm(arr, a_scores, a_labels, anchor_weight=anchor_weight)
         if fit is None:
             fit = fit_score_gmm(arr)
@@ -1982,12 +2018,19 @@ def threshold_from_fold_orderings(
 
     Callers must pass a non-empty ``fold_orderings`` (the empty case is
     handled via the ``fallback`` from :func:`compute_fold_orderings`);
-    an empty list returns :data:`NO_GOOD_THRESHOLD` defensively.
+    an empty list returns :data:`NO_GOOD_THRESHOLD` defensively.  Held-out
+    items the fold model could not score are dropped from the pool by
+    :func:`scored_ordering`; if that leaves nothing to take a quantile over,
+    the answer is again :data:`NO_GOOD_THRESHOLD` - no calibration evidence
+    means admit nothing, never admit everything.
     """
     if not fold_orderings:
         return NO_GOOD_THRESHOLD
-    pooled_scores = [s for scores, _ in fold_orderings for s in scores]
-    pooled_labels = [lb for _, labels in fold_orderings for lb in labels]
+    scored = [scored_ordering(ordering) for ordering in fold_orderings]
+    pooled_scores = [s for scores, _ in scored for s in scores]
+    pooled_labels = [lb for _, labels in scored for lb in labels]
+    if not pooled_scores:
+        return NO_GOOD_THRESHOLD
     return conformal_threshold(pooled_scores, pooled_labels, inclusion_value)
 
 
@@ -2130,8 +2173,19 @@ def calculate_safe_threshold(
         to the other; if both are, returns ``0.5``.  The result is guaranteed
         finite so it can be safely stored on ``DetectorContext.threshold``
         without breaking ``score >= threshold`` comparisons.
+
+    Media the head could not score are dropped from *all_scores* before the
+    GMM sees them (:func:`~vtscore.utils.scores.scored_only`); they are
+    recorded a unit below the sigmoid range and would otherwise pull a fitted
+    component - and the blend with it - under zero (issue #3180).  When that
+    leaves *no* population at all, there is nothing for the GMM to stand in
+    for and the x-cal cut ships alone rather than being blended against
+    :func:`fit_gmm_threshold`'s "too few scores" 0.5.
     """
-    cut, fit = fit_gmm_threshold(all_scores)
+    population = scored_only(all_scores)
+    if population.size == 0:
+        return xcal_threshold if math.isfinite(xcal_threshold) else 0.5
+    cut, fit = fit_gmm_threshold(population.tolist())
     return blend_gmm_threshold(xcal_threshold, cut, ctx, schedule=schedule, fit=fit)
 
 
