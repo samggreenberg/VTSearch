@@ -60,6 +60,11 @@ ALLOWED_PATHS: dict[str, str] = {
     # hooks, so it is absent until the frontend has been built once -- and this
     # gate runs before that build, so a cold container would otherwise fail here.
     "frontend/src/app/generated/": "generated build stamp (frontend prebuild/pretest hook); gitignored",
+    # Marp build products. Both are gitignored, so they exist only on a machine
+    # that has rendered a deck since checkout -- which made this gate pass on
+    # the author's box and fail on a fresh clone.
+    "slides/_build/": "assembled deck markdown (slides/build.py); gitignored",
+    "slides/_out/": "rendered decks (slides/render.sh); gitignored",
     # Another repository's tree. Backticked because it reads as a path, but it
     # is the evaluation-framework repo's, and nothing here will ever create it.
     "scripts/sod/": "lives in the evaluation-framework repo, not this one (#2847)",
