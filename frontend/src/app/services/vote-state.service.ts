@@ -70,6 +70,7 @@ export class VoteStateService implements OnDestroy {
   private readonly _learnedScores = signal<Record<string, number>>({});
   private readonly _labelsetGoodCount = signal(0);
   private readonly _labelsetBadCount = signal(0);
+  private readonly _votesLoaded = signal(false);
   private readonly _goodRegionBoxes = signal<Record<string, number[]>>({});
   private readonly destroy$ = new Subject<void>();
   private readonly stopPolling$ = new Subject<void>();
@@ -214,6 +215,21 @@ export class VoteStateService implements OnDestroy {
   /** Bad-label counterpart of {@link labelsetGoodCount}. */
   get labelsetBadCount(): number {
     return this._labelsetBadCount();
+  }
+
+  /**
+   * True once a ``/api/votes`` read has landed for the current
+   * dataset/detector pair, i.e. the vote sets and labelset counts describe the
+   * server rather than the zeroed post-{@link clear} defaults.
+   *
+   * Callers that need to tell "this detector has no labels" from "the labels
+   * have not arrived yet" must gate on this: the two states are otherwise
+   * identical (both report 0/0), and reading the second as the first is how
+   * Autopilot used to mistake a fully-trained detector for a fresh one on
+   * every re-entry to the Train window.
+   */
+  get votesLoaded(): boolean {
+    return this._votesLoaded();
   }
 
   get goodRegionBoxes(): Record<string, number[]> {
@@ -507,6 +523,7 @@ export class VoteStateService implements OnDestroy {
     this._learnedScores.set({});
     this._labelsetGoodCount.set(0);
     this._labelsetBadCount.set(0);
+    this._votesLoaded.set(false);
     this._goodRegionBoxes.set({});
     this.pendingOptimistic.clear();
     this.pendingVerified.clear();
@@ -687,5 +704,6 @@ export class VoteStateService implements OnDestroy {
     this._learnedScores.set(votes.learned_scores);
     this._labelsetGoodCount.set(votes.labelset_good_count ?? good.size);
     this._labelsetBadCount.set(votes.labelset_bad_count ?? bad.size);
+    this._votesLoaded.set(true);
   }
 }

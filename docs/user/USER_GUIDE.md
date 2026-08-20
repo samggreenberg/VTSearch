@@ -331,9 +331,13 @@ The phase panel labels them, in order:
    mix. This catches edge cases the previous phase missed. The phase
    ends when this coverage hits your goal (default: 40).
 
-When all four phases are done, Autopilot shows **Done!**. You can
-keep labeling if you want - the detector continues to improve - or
-move on to exporting results.
+When all four phases are done, Autopilot shows **Done!** and a
+**Detector Trained** dialog offers you the choice: **Continue
+Training** stays put so you can keep labeling (the detector continues
+to improve), and **Head to Dashboard** takes you out to export it or
+run it over another dataset. Nothing happens on its own, and the
+dialog only appears for the run that trained the detector - coming
+back later to refine it further will not raise it again.
 
 ### The collapsed bar
 

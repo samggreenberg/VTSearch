@@ -1,0 +1,23 @@
+<vt-modal [open]="true" [title]="heading()" [showCloseButton]="false" (closed)="stay.emit()">
+  <div class="autopilot-complete">
+    @if (detail()) {
+      <p class="ac-detail">{{ detail() }}</p>
+    }
+    @if (nextSteps()) {
+      <p class="ac-detail">{{ nextSteps() }}</p>
+    }
+  </div>
+
+  <div modal-footer>
+    <button
+      class="btn btn--secondary"
+      (click)="stay.emit()"
+      title="Stay in the Train window"
+    >{{ stayLabel() }}</button>
+    <button
+      class="btn btn--primary"
+      (click)="goToDashboard.emit()"
+      title="Leave the Train window and go to the Dashboard"
+    >Head to Dashboard</button>
+  </div>
+</vt-modal>
