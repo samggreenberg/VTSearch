@@ -407,6 +407,83 @@ describe('ExportModalComponent', () => {
     });
   });
 
+  // Issue #3199: a plugin field whose default is templated on the active
+  // detector used to render its raw `{detector_name}` placeholder, because the
+  // substitution only ever happened server-side, at run time.
+  describe('templated field defaults', () => {
+    /** An exporter with a non-`filepath` field templated on the detector. */
+    const namedExporter = {
+      name: 'labelset_api',
+      display_name: 'Labelset API',
+      fields: [
+        {
+          key: 'label_set_name',
+          field_type: 'text',
+          default: '{detector_name}',
+          template_vars: ['detector_name'],
+        },
+        {
+          key: 'undeclared',
+          field_type: 'text',
+          default: '{detector_name}',
+        },
+      ],
+    };
+
+    /** Land a detector registry naming `d1`, as the app-level refresh would. */
+    function flushRegistry(): void {
+      TestBed.inject(DatasetStateService).refresh();
+      httpMock.expectOne('/api/datasets/registry').flush({ datasets: [] });
+      httpMock
+        .expectOne('/api/detectors/registry')
+        .flush({ detectors: [{ id: 'd1', name: 'Birdsong' }] });
+    }
+
+    it('resolves a declared detector_name into the form value', async () => {
+      fixture.componentRef.setInput('detectorName', 'Sirens');
+      await flushInit();
+      component.selectExporterTab(namedExporter as never);
+      expect(component.formValues['label_set_name']).toBe('Sirens');
+    });
+
+    it('leaves a placeholder the field never declared', async () => {
+      fixture.componentRef.setInput('detectorName', 'Sirens');
+      await flushInit();
+      component.selectExporterTab(namedExporter as never);
+      // `portable_detector` withholds the declaration on purpose so it can
+      // substitute per-detector itself; the preview must respect that.
+      expect(component.formValues['undeclared']).toBe('{detector_name}');
+    });
+
+    it('leaves the placeholder for the server when no detector is known', async () => {
+      await flushInit();
+      component.selectExporterTab(namedExporter as never);
+      expect(component.formValues['label_set_name']).toBe('{detector_name}');
+    });
+
+    it('backfills the name when the detector registry resolves late', async () => {
+      await flushInit();
+      TestBed.inject(ActiveContextService).setActivePair('ds1', 'd1');
+      component.selectExporterTab(namedExporter as never);
+      expect(component.formValues['label_set_name']).toBe('{detector_name}');
+
+      flushRegistry();
+      TestBed.tick();
+      expect(component.formValues['label_set_name']).toBe('Birdsong');
+    });
+
+    it('leaves a user-edited value alone when the name arrives late', async () => {
+      await flushInit();
+      TestBed.inject(ActiveContextService).setActivePair('ds1', 'd1');
+      component.selectExporterTab(namedExporter as never);
+      component.formValues['label_set_name'] = 'mine';
+
+      flushRegistry();
+      TestBed.tick();
+      expect(component.formValues['label_set_name']).toBe('mine');
+    });
+  });
+
   it('emits closed on close', async () => {
     await flushInit();
     vi.spyOn(component.closed, 'emit');

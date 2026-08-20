@@ -9,6 +9,7 @@ import {
   ClipboardCopyComponent,
 } from '../../clipboard-copy/clipboard-copy.component';
 import { ExportersApiService } from '../../../services/exporters-api.service';
+import { PluginTemplateVarsService } from '../../../services/plugin-template-vars.service';
 import {
   AutoDetectHit,
   AutoDetectResultsData,
@@ -28,6 +29,7 @@ import { openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
 })
 export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
   private exportersApi = inject(ExportersApiService);
+  private templateVars = inject(PluginTemplateVarsService);
 
   readonly data = input<AutoDetectResultsData>({ results: {} });
   readonly closed = output<void>();
@@ -154,7 +156,10 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
     this.exportFieldValues = {};
     for (const field of fields) {
       if (field.default) {
-        this.exportFieldValues[field.key] = field.default;
+        // Resolve the field's declared `template_vars` so a default like
+        // `"{detector_name}"` shows the real name instead of the placeholder
+        // (issue #3199); the server substitutes again, idempotently, on run.
+        this.exportFieldValues[field.key] = this.templateVars.resolveDefault(field);
       }
     }
   }

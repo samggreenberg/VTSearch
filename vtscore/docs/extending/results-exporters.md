@@ -143,6 +143,14 @@ user's `{YYYYMMDD}` ends up literally in the filename. Declaring a name
 outside the supported set raises `ValueError` on the first request, so
 typos fail loudly.
 
+**Declaring is also what makes the GUI show the value.** Run-now plugin
+forms resolve a field's *declared* variables client-side while building
+the form, so a field carrying `default="{detector_name}"` opens showing
+the detector's real name instead of the raw placeholder - visible and
+editable before the user hits Export. Resolving the active detector
+inside your `export()` body instead gets you an empty box in the UI and
+a value that appears out of nowhere on submit.
+
 ## Server-path and URL validation
 
 **A declared field is already validated.** Because a field typed

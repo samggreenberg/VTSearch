@@ -536,6 +536,16 @@ without the stack one keypress closed them all and lost the outer form.
   outer view to return to and correctly has no back button. The full rule,
   including the canonical markup and the persistent-tab exception, is in
   [`CLAUDE.md`](../CLAUDE.md) under "Nested-modal back buttons".
+- **Plugin-field forms preview their template variables.** A modal that builds
+  a form from a plugin's `fields` (Export, Auto-Detect results) seeds each
+  value through `PluginTemplateVarsService`, which resolves the *declared*
+  `template_vars` — `{detector_name}`, `{username}`, the date parts — so the
+  user sees and can edit the value the server would substitute rather than a
+  raw placeholder (issue #3199). Only declared names are touched, and anything
+  unresolvable stays templated for the server. Never do this in a form whose
+  values are **persisted** (Auto-Find's saved exporter fields, a labelset-sync
+  source): those templates are meant to re-resolve on every later run. See
+  `utils/plugin-template-vars.ts`.
 
 ### Lazy loading and the bundle budget
 
