@@ -219,6 +219,8 @@ def _band_categories(band: str) -> list[str]:
 
 def _load_vg_band(band: str, medias: dict[int, dict], embedder_name: str) -> None:
     """Populate *medias* with full-VG images carrying this band's categories."""
+    import random  # noqa: PLC0415
+
     from PIL import Image  # noqa: PLC0415
 
     vg_root = pc.DEMO_CACHE / "visual_genome"
