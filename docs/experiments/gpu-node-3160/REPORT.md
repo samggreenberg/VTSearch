@@ -387,12 +387,55 @@ the region-voting arm of those studies is clean.
 
 Whether this matters for a band comparison is the §5 question restated on a
 different corpus, and §5.1 answers the general form of it: a drift of this size
-does not reach a decision metric at 0.005 resolution. So the recommendation is
-**record it, do not rebuild** — the band comparison is not invalidated, but
-`vg_box_small`'s `siglip2_l` cell is the one cell in the pile whose provenance
-differs from its siblings', and any future study contrasting those three bands
-should say so. A rebuild under the pin is cheap (~25 min) if anyone wants the
-confound gone rather than documented.
+does not reach a decision metric at 0.005 resolution. The comparison was
+therefore never invalidated — but the confound was cheap to remove, so it was
+removed rather than documented.
+
+## 6.1 The rebuild, and the reproducibility proof it produced
+
+**The band that needed rebuilding is not the one the confound was found in.**
+`vg_box_small` was built on an AVX2-only host and the shipped pin *is* `avx2`;
+it is `vg_box_medium` and `vg_box_large`, built under AVX-512, that sat off the
+go-forward standard. Both were rebuilt under the pin, on the same V100 part, from
+the **archived** `vg_box_scale.json` — and `vg_box_small` was rebuilt alongside
+them purely as a control that should come back unchanged.
+
+| band | media ids | median 1−cos vs the live cell | outcome |
+|---|---|---:|---|
+| `small` (control) | identical | **0** — 100% of rows bit-identical | bytes untouched; sidecar upgraded |
+| `medium` | identical | 1.67e-04 | swapped in |
+| `large` | identical | 1.65e-04 | swapped in |
+
+The control line is the result worth keeping. #3160's complaint was that *"a
+rebuild is not numerically reproducible"*. With the dispatch pinned and the card
+held fixed, a rebuild **eight days later**, in a different session under
+transformers 5.12.1, reproduces the 2026-08-12 cell **exactly** — which is both
+the end-to-end validation of the pin and proof that nothing else drifted in the
+interval.
+
+Two near-misses, both caught by things that were only in the run to be boring:
+
+- **The first rebuild used the wrong card.** Requesting `gpu:l40s` for speed
+  returned the control at 5.07e-07 instead of 0 — the L40S-vs-V100 difference
+  §2 independently measured at 5.3e-07. Swapping those cells in would have left
+  the three bands inconsistent *by a difference this study introduced*. The pin
+  fixes the host axis; it does not fix the device axis, and a rebuild meant to
+  reproduce a cell has to hold both.
+- **Regenerating the scan would have redefined the dataset.** The archived
+  `vg_box_scale.json` predates #3156's schema, so the build failed with
+  `KeyError: 'categories'`. Re-running `scan_vg_boxes.py` is the obvious fix and
+  the wrong one: #3156 changed inflation filtering from per-class to per-image,
+  which changes *which categories qualify*. Feeding the archived scan to today's
+  selector reproduces all 40 categories per band, and the rebuilt cells carry
+  identical media ids — so this recomputed vectors rather than choosing
+  different images.
+
+The superseded cells and their original sidecars are kept at
+`/expscratch/$USER/gpu-node-3160/pre-3160-backup/`. Old fingerprints:
+`a1d274acf47a` (medium), `b1bf5d6dc8b0` (large); new: `72fb4a56a778` and
+`08d69ae7aef3`. Anyone re-running #3129/#3156 against the pile now reads
+different `siglip2_l` vectors for those two bands than the published runs did —
+detectable precisely because the fingerprints were recorded first.
 
 ---
 
