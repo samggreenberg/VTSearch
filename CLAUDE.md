@@ -225,7 +225,7 @@ VTSearch is a desktop web app. **Do not design, implement, or test for mobile or
 
 ## Render and attach slide decks (when you change `slides/`)
 
-**Any session that changes the slide codebase must end by rendering the affected decks and attaching the PDFs in the conversation** (via `SendUserFile`), so the user can see the result in-browser without checking out the branch and running the build themselves. "Changes the slide codebase" means any edit under `slides/` — fragments, `.deck` manifests, the theme, figures, or the build/render tooling.
+**Any session that changes the slide codebase must end by rendering the affected decks and attaching the PDFs in the conversation** (via `SendUserFile`), so the user can see the result in-browser without checking out the branch and running the build themselves. "Changes the slide codebase" means any edit under `slides/` that can change what a rendered deck looks like — fragments, `.deck` manifests, the theme, figures, or the build/render tooling. Prose that renders nothing (`README.md`, `STYLE.md`) is the one exception: there is no output to show, so attaching a deck identical to the last one is noise rather than evidence.
 
 - **Which decks:** every deck whose output the change affects. A fragment edit affects the decks whose manifests name it (grep `slides/decks/*.deck`); a theme, `build.py`, or `render.sh` change affects all decks. When in doubt, render more rather than fewer.
 - **How:** `cd slides && ./render.sh <deck> pdf` for each affected deck. The cloud container has a browser; if Marp can't find it, use `CHROME_PATH=/opt/pw-browsers/chromium`. When presenter notes or the speaker pipeline changed, also render `./render.sh <deck> pdf --speaker` and attach that variant too.
