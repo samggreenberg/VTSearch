@@ -106,6 +106,12 @@
                 errorFallback="Failed to fetch seeds"
                 (imported)="onSeedsImported($any($event))"
               ></vt-plugin-import-form>
+              @if (seedNotice()) {
+                <p class="info-text">{{ seedNotice() }}</p>
+              }
+              @if (hasMediaExample) {
+                <ng-container [ngTemplateOutlet]="exampleStack" [ngTemplateOutletContext]="{ showAdd: false }"></ng-container>
+              }
             </div>
           } @else if (exampleTab() === 'text') {
             <div class="example-panel">
@@ -131,36 +137,7 @@
           } @else {
             <div class="example-panel">
               @if (hasMediaExample) {
-                <div class="example-stack">
-                  @for (example of mediaExamples(); track example.value; let i = $index) {
-                    <div class="example-row">
-                      @if (exampleThumbnailUrl(example); as thumbUrl) {
-                        @if (example.mediaType === 'audio') {
-                          <!-- Audio waveform alpha mask (issue #2369): surface box
-                               with the wave masked in the accent so it recolours
-                               with the theme. -->
-                          <span class="example-thumbnail" role="img" [attr.aria-label]="example.display">
-                            <span
-                              class="example-thumbnail-wave waveform-mask"
-                              [style.-webkit-mask-image]="'url(' + thumbUrl + ')'"
-                              [style.mask-image]="'url(' + thumbUrl + ')'"></span>
-                          </span>
-                        } @else {
-                          <img class="example-thumbnail" [src]="thumbUrl" [alt]="example.display" (error)="onExampleThumbError(i)" />
-                        }
-                      } @else {
-                        <svg class="example-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3zm2 7.5 2.5-3 1.75 2L10.5 6.5 13 11H4v-.5zM5.5 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg>
-                      }
-                      <span class="example-label" [title]="example.display">{{ example.display }}</span>
-                      @if (example.seed) {
-                        <span class="example-seed-badge"
-                          title="An unlabeled seed: it steers the first sort but is not counted as a Good vote.">Seed</span>
-                      }
-                      <button type="button" class="btn btn--secondary btn--sm" (click)="removeMediaExample(i)" title="Remove this example">Remove</button>
-                    </div>
-                  }
-                  <button type="button" class="btn btn--secondary btn--sm add-example-btn" (click)="openMediaPicker()" title="Add another example. The detector starts from what the examples have in common.">+ Add</button>
-                </div>
+                <ng-container [ngTemplateOutlet]="exampleStack" [ngTemplateOutletContext]="{ showAdd: true }"></ng-container>
               } @else {
                 <button type="button" class="btn btn--secondary btn--sm media-btn" (click)="openMediaPicker()" title="Browse demos, server folders, or upload a file to pick an example">{{ browseMediaLabel }}</button>
                 <vt-drop-zone
@@ -168,9 +145,6 @@
                   sublabel="or click to upload from this computer"
                   (filesSelected)="onLocalFileDropped($event)"
                 ></vt-drop-zone>
-              }
-              @if (seedNotice()) {
-                <p class="info-text">{{ seedNotice() }}</p>
               }
             </div>
           }
@@ -548,3 +522,42 @@
     (cancelled)="onCropCancelled()">
   </vt-media-crop-modal>
 }
+
+<!-- The picked-example stack, shared by the media tab and every seed-importer
+     tab (issue #3192): one list, rendered wherever the user is adding to it, so
+     an import lands in view instead of throwing the user onto another tab.
+     ``showAdd`` gates the browse button — a seed tab adds through its own form. -->
+<ng-template #exampleStack let-showAdd="showAdd">
+  <div class="example-stack">
+    @for (example of mediaExamples(); track example.value; let i = $index) {
+      <div class="example-row">
+        @if (exampleThumbnailUrl(example); as thumbUrl) {
+          @if (example.mediaType === 'audio') {
+            <!-- Audio waveform alpha mask (issue #2369): surface box
+                 with the wave masked in the accent so it recolours
+                 with the theme. -->
+            <span class="example-thumbnail" role="img" [attr.aria-label]="example.display">
+              <span
+                class="example-thumbnail-wave waveform-mask"
+                [style.-webkit-mask-image]="'url(' + thumbUrl + ')'"
+                [style.mask-image]="'url(' + thumbUrl + ')'"></span>
+            </span>
+          } @else {
+            <img class="example-thumbnail" [src]="thumbUrl" [alt]="example.display" (error)="onExampleThumbError(i)" />
+          }
+        } @else {
+          <svg class="example-icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M2 3a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V3zm2 7.5 2.5-3 1.75 2L10.5 6.5 13 11H4v-.5zM5.5 7a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/></svg>
+        }
+        <span class="example-label" [title]="example.display">{{ example.display }}</span>
+        @if (example.seed) {
+          <span class="example-seed-badge"
+            title="An unlabeled seed: it steers the first sort but is not counted as a Good vote.">Seed</span>
+        }
+        <button type="button" class="btn btn--secondary btn--sm" (click)="removeMediaExample(i)" title="Remove this example">Remove</button>
+      </div>
+    }
+    @if (showAdd) {
+      <button type="button" class="btn btn--secondary btn--sm add-example-btn" (click)="openMediaPicker()" title="Add another example. The detector starts from what the examples have in common.">+ Add</button>
+    }
+  </div>
+</ng-template>

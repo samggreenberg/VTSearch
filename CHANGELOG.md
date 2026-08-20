@@ -102,6 +102,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **A seed importer's results now appear on its own tab.** Running a seed
+  importer in the New Detector modal used to switch the user to the media
+  tab, where the batch had been appended — an odd jump mid-import, and one
+  that hid the form they were still working in. The example stack is now
+  mirrored under each seed importer's form, so seeds land in view where they
+  were added. It stays one list: the mirrored rows carry the same Seed badges
+  and Remove buttons, and edits from either tab hit the same stack. Picking an
+  exemplar by hand still lands on the media tab, which is where the picker
+  lives. (#3192)
+
 - **Image preprocessing now names its backend instead of inheriting one.**
   Every image embedder builds its processor by asking `transformers` for the
   `torchvision` backend outright (`VTSEARCH_IMAGE_PROCESSOR_BACKEND`, new
