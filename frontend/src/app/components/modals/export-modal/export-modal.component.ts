@@ -24,6 +24,7 @@ import { ActiveDetectorService } from '../../../services/active-detector.service
 import { DatasetsRegistryApiService } from '../../../services/datasets-registry-api.service';
 import { ExportersApiService } from '../../../services/exporters-api.service';
 import { LabelSessionService } from '../../../services/label-session.service';
+import { PluginTemplateVarsService } from '../../../services/plugin-template-vars.service';
 import { SortingApiService } from '../../../services/sorting-api.service';
 import type { LabelFilter } from '../../../services/sorting-api.service';
 import { ToastService } from '../../../services/toast.service';
@@ -69,6 +70,7 @@ export class ExportModalComponent implements OnInit {
   private readonly datasetsRegistryApi = inject(DatasetsRegistryApiService);
   private readonly exportersApi = inject(ExportersApiService);
   private readonly labelSession = inject(LabelSessionService);
+  private readonly templateVars = inject(PluginTemplateVarsService);
   private readonly sortingApi = inject(SortingApiService);
   private readonly activeDetector = inject(ActiveDetectorService);
   private readonly toast = inject(ToastService);
@@ -199,8 +201,12 @@ export class ExportModalComponent implements OnInit {
       const exporter = this.selectedExporter ?? this.activeTabExporter;
       if (!exporter) return;
       if (!detectorName && !datasetName) return;
-      if (this.formValues['filepath'] !== this.lastAutoFilename) return;
-      this.applyDefaultFilename(exporter);
+      if (this.formValues['filepath'] === this.lastAutoFilename) {
+        this.applyDefaultFilename(exporter);
+      }
+      // Same late-arrival story for any *other* field whose default is
+      // templated on the detector name (issue #3199).
+      this.reapplyTemplateDefaults(exporter);
     });
   }
 
@@ -456,7 +462,18 @@ export class ExportModalComponent implements OnInit {
    *  option when a select field has no default (so the form is never sitting
    *  on a blank pulldown that the user has to actively populate). */
   private defaultFor(field: ImporterField): string {
-    if (field.default) return field.default;
+    if (field.default) {
+      // A default that uses the field's declared `template_vars` is resolved
+      // for display, so `"{detector_name}"` opens as the detector's actual
+      // name rather than the raw placeholder (issue #3199). The server
+      // substitutes again on submit - idempotently, since the placeholder is
+      // already gone - and anything this client can't resolve (no detector
+      // loaded yet) stays templated for the server to fill in, exactly as
+      // before.
+      return this.templateVars.resolveDefault(field, {
+        detectorName: this.effectiveDetectorName(),
+      });
+    }
     if (
       field.field_type === 'select' &&
       !field.dynamic_options &&
@@ -472,6 +489,43 @@ export class ExportModalComponent implements OnInit {
    *  against the live field value to tell "still ours" from "user-edited"
    *  before the constructor effect regenerates it. */
   private lastAutoFilename = '';
+
+  /** Per-field values this component last auto-filled from a templated
+   *  default, for the same "still ours" test as `lastAutoFilename` — the
+   *  detector name can land after the form was built, and re-resolving must
+   *  never overwrite something the user typed. */
+  private lastAutoValues: Record<string, string> = {};
+
+  /** Seed `formValues` from *exporter*'s field defaults, recording what was
+   *  auto-filled so a late-resolving template var can refresh it. */
+  private initFormValues(exporter: ExporterEntry): void {
+    this.formValues = {};
+    this.lastAutoValues = {};
+    for (const f of this.exporterFieldsOf(exporter)) {
+      const value = this.defaultFor(f);
+      this.formValues[f.key] = value;
+      this.lastAutoValues[f.key] = value;
+    }
+  }
+
+  /** Re-resolve templated defaults once a variable they need arrives.
+   *
+   *  `detector_name` is the case that bites: the detector registry can settle
+   *  after the modal opened, which used to leave a `{detector_name}` default
+   *  showing its placeholder forever. Only fields still holding exactly what
+   *  we auto-filled are rewritten, so a user edit is never clobbered.
+   *  `filepath` is skipped — `applyDefaultFilename` owns that one and builds a
+   *  richer name (filter + detector + dataset) than the plugin's template. */
+  private reapplyTemplateDefaults(exporter: ExporterEntry): void {
+    for (const f of this.exporterFieldsOf(exporter)) {
+      if (f.key === 'filepath') continue;
+      if (!f.default || !f.template_vars?.length) continue;
+      if (this.formValues[f.key] !== this.lastAutoValues[f.key]) continue;
+      const value = this.defaultFor(f);
+      this.formValues[f.key] = value;
+      this.lastAutoValues[f.key] = value;
+    }
+  }
 
   /** Apply the dynamic default filename to the filepath form field if present. */
   private applyDefaultFilename(exporter: ExporterEntry): void {
@@ -495,10 +549,7 @@ export class ExportModalComponent implements OnInit {
       return;
     }
     this.selectedExporter = exporter;
-    this.formValues = {};
-    for (const f of fields) {
-      this.formValues[f.key] = this.defaultFor(f);
-    }
+    this.initFormValues(exporter);
     this.applyDefaultFilename(exporter);
     this.actionError.set('');
     this.status.set('');
@@ -508,10 +559,7 @@ export class ExportModalComponent implements OnInit {
   selectExporterTab(exporter: ExporterEntry): void {
     this.activeTab = exporter.name;
     this.selectedExporter = exporter;
-    this.formValues = {};
-    for (const f of this.exporterFieldsOf(exporter)) {
-      this.formValues[f.key] = this.defaultFor(f);
-    }
+    this.initFormValues(exporter);
     this.applyDefaultFilename(exporter);
     this.actionError.set('');
     this.status.set('');

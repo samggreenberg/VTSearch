@@ -234,6 +234,36 @@ placeholder into a filename. Every substituted value is run through
 `sanitize_template_value()`, so a detector named `../../etc/passwd`
 cannot escape the directory implied by an admin-configured template.
 
+**Declaring the variable is also what makes the GUI show the value.**
+Run-now plugin forms (the Export modal, the Auto-Detect results export)
+resolve a field's *declared* `template_vars` client-side when they build
+the form, so a field carrying `default="{detector_name}"` opens showing
+the detector's actual name instead of the raw placeholder — the user can
+see and edit the value before running. Undeclared placeholders are left
+alone (the `portable_detector` exporter withholds `detector_name` on
+purpose so it can substitute per-detector itself), and anything the
+browser can't resolve yet stays templated for the server to fill in. The
+server-side pass remains authoritative; the frontend copy is a preview.
+
+The corollary is the one anti-pattern to avoid: **don't resolve the
+active detector inside your `export()` / `run()` body.**
+
+```python
+# Wrong: the value only exists at run time, so the form shows an empty box.
+def export(self, results, field_values):
+    name = field_values["name"] or get_active_detector_context().name
+
+# Right: the framework fills it in, and the GUI can show it up front.
+PluginField(key="name", default="{detector_name}", template_vars=("detector_name",))
+```
+
+Persisted plugin configs — Auto-Find's saved exporter fields, a
+detector's labelset-sync source — deliberately keep the placeholder
+verbatim rather than a resolved value, because those templates are
+re-resolved on *every* later run: that is what gives a daily Auto-Find a
+fresh `results_{YYYY}.{MM}.{DD}.csv` and each detector its own
+`labels/{detector_name}.json`.
+
 ### Notifying the user (toasts)
 
 Sometimes a plugin hits a problem that is worth *mentioning* but not worth
