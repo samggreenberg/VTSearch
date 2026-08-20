@@ -281,17 +281,20 @@ def region_voting_fig(name: str, *, rows: int, size: tuple[float, float], column
         )
         for _source, key, _label, dash in BOX_SERIES
     ]
-    fig.legend(
-        handles,
-        [label for _source, _key, label, _dash in BOX_SERIES],
-        loc="upper center",
-        ncol=2,
-        frameon=False,
-        bbox_to_anchor=(0.5, 1.03),
-        handlelength=2.0,
-    )
-    fig.tight_layout(rect=(0.03, 0, 1, 0.88 if rows == 2 else 0.86))
-    save(fig, OUT, name, column)
+    labels = [label for _source, _key, label, _dash in BOX_SERIES]
+    if rows == 2:
+        fig.legend(
+            handles, labels, loc="upper center", ncol=2, frameon=False, bbox_to_anchor=(0.5, 1.03), handlelength=2.0
+        )
+        fig.tight_layout(rect=(0.03, 0, 1, 0.88))
+        save(fig, OUT, name, column)
+        return
+
+    # Full-bleed: the slide overlays its own headline across the top of the
+    # image, so the top ~15% is left empty for it and the legend sits under it.
+    fig.legend(handles, labels, loc="upper center", ncol=2, frameon=False, bbox_to_anchor=(0.5, 0.87), handlelength=2.0)
+    fig.subplots_adjust(left=0.075, right=0.985, top=0.68, bottom=0.14, wspace=0.16)
+    save(fig, OUT, name, column, tight=False)
 
 
 def regret_fig() -> None:

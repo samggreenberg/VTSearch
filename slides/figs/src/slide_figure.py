@@ -65,8 +65,15 @@ def enforce_type_floor(fig: plt.Figure, column: float = SIDEBAR) -> None:
         )
 
 
-def save(fig: plt.Figure, out: Path, name: str, column: float = SIDEBAR) -> None:
+def save(fig: plt.Figure, out: Path, name: str, column: float = SIDEBAR, *, tight: bool = True) -> None:
+    """Write `fig`, refusing it if any label would miss the type floor.
+
+    `tight=False` keeps the figure's declared bounds instead of cropping to the
+    ink. That matters for a full-bleed slide, where the slide's own headline is
+    overlaid on the top of the image: the reserved whitespace it needs is empty
+    by definition, and a tight bbox would helpfully remove it.
+    """
     enforce_type_floor(fig, column)
-    fig.savefig(out / name, bbox_inches="tight", pad_inches=0.14)
+    fig.savefig(out / name, **({"bbox_inches": "tight", "pad_inches": 0.14} if tight else {}))
     plt.close(fig)
     print(f"wrote figs/{name}")
