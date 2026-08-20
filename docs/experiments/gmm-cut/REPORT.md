@@ -187,6 +187,20 @@ Decomposing today's gap on the production arm, in **excess-cost** units
 | **finite-sim-set transfer** | **+0.0406** | **65 %** |
 | total (`cross` → test oracle) | +0.0623 | |
 
+> **This table does not telescope, and the numbers above are the uncorrected
+> ones.** The four terms sum to +0.0598 against the stated +0.0623. The analyzer
+> averaged each column independently, so steps where an oracle variant emitted no
+> row (they do not fall back) were dropped from the three oracle-dependent terms
+> — identification, misspecification, transfer — while still counting toward
+> `total`. Those three are therefore means over a smaller, non-random subset of
+> steps than the total and the prior/loss term. The shares are computed against
+> the total, which is why they sum to 108 %. Fixed in `analyze_cut.py`, which now
+> aggregates over complete rows only and reports `n_incomplete` and a residual;
+> **corrected numbers need a re-run of the analyzer over this study's existing
+> cell CSVs** — a re-analysis, not a re-sweep. The headline is not at risk: the
+> transfer share is 65 % against the stated total and 68 % against the sum of the
+> terms.
+
 The prior term is real and worth fixing — that is the shipped change — but
 **about two thirds of the remaining gap is sim→test transfer, which no cut rule
 can address.** Cut-rule work has roughly 0.026 of headroom, not 0.062. That is
