@@ -106,8 +106,18 @@ def read_api(base: str, detector: str) -> list[dict]:
     asked of them.
     """
     url = f"{base.rstrip('/')}/api/detectors/{urllib.parse.quote(detector)}/labels-detail"
-    with urllib.request.urlopen(url, timeout=60) as r:  # noqa: S310 - caller-supplied http(s) base
-        data = json.load(r)
+    try:
+        with urllib.request.urlopen(url, timeout=60) as r:  # noqa: S310 - caller-supplied http(s) base
+            data = json.load(r)
+    except urllib.error.HTTPError as exc:
+        if exc.code != 404:
+            raise
+        # A slate whose detector has been retired: reviewing it moved elsewhere
+        # (a Claude triage pass, say) and its verdicts live in a snapshot. That
+        # is a normal state, not a failure -- but it is reported, because a
+        # silently empty detector and a finished one look identical downstream.
+        log(f"  {detector}: no such detector (retired); contributing no verdicts")
+        return []
     out = []
     for label in ("good", "bad"):
         for el in data.get(label) or []:
