@@ -37,7 +37,7 @@ from vtscore.embedding.media_vectors import media_embedding
 from vtscore.media import audio  # noqa: F401 - registers the audio MediaType + embedders
 from vtscore.state import DetectorContext, register_detector_context
 from vtscore.training import calculate_cross_calibration_threshold, train_model
-from vtscore.training.mlp import LINEAR_HEAD
+from vtscore.training.mlp import LINEAR_SVM_HEAD
 
 from tests_lib.helpers import make_wav_file
 
@@ -277,24 +277,24 @@ class TestTrainFromLabels:
         X = torch.from_numpy(np.stack(X_list).astype(np.float32))
         y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
 
-        model = train_model(X, y, input_dim=X.shape[1], hidden_dim=LINEAR_HEAD)
+        model = train_model(X, y, input_dim=X.shape[1], hidden_dim=LINEAR_SVM_HEAD)
         threshold = calculate_cross_calibration_threshold(
             X_list,
             y_list,
             input_dim=X.shape[1],
             inclusion_value=0,
-            hidden_dim=LINEAR_HEAD,
+            hidden_dim=LINEAR_SVM_HEAD,
         )
         assert isinstance(threshold, float)
 
-        # The linear head is a single Linear(D, 1) - one weight matrix, one bias.
+        # The linear SVM head is a single Linear(D, 1) - one weight matrix, one bias.
         assert len(list(model.parameters())) == 2
 
     def test_scoring_a_fresh_folder(self, loaded_medias, tmp_path):
         X_list, y_list = _build_xy(loaded_medias)
         X = torch.from_numpy(np.stack(X_list).astype(np.float32))
         y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
-        model = train_model(X, y, input_dim=X.shape[1], hidden_dim=LINEAR_HEAD)
+        model = train_model(X, y, input_dim=X.shape[1], hidden_dim=LINEAR_SVM_HEAD)
 
         target_folder = tmp_path / "new-audio"
         target_folder.mkdir()
@@ -497,7 +497,7 @@ class TestCalibrationFoldsSnippet:
             X_list[0].shape[0],
             calibrate_count=2,
             calibration_fraction=0.5,
-            hidden_dim=LINEAR_HEAD,
+            hidden_dim=LINEAR_SVM_HEAD,
         )
         assert folds._fields == ("orderings", "fallback", "models")
         assert isinstance(threshold_from_folds(folds, inclusion_value=0), float)

@@ -8,7 +8,7 @@ package docs read smoothly.
 3. [Origin](#3-origin) - provenance: how to find a media item again.
 4. [LabelSet / LabeledElement](#4-labelset--labeledelement) - voted labels with provenance.
 5. [Embedder](#5-embedder) - the model that turns a file into an embedding.
-6. [Detector](#6-detector) - the linear head + threshold that scores embeddings.
+6. [Detector](#6-detector) - the linear SVM head + threshold that scores embeddings.
 7. [Context](#7-context) - per-dataset / per-detector mutable state holder.
 8. [Plugin](#8-plugin) - auto-discovered, swappable component of any family.
 
@@ -262,31 +262,36 @@ and [extending/embedders.md](extending/embedders.md) to write your own.
 
 ## 6. Detector
 
-A **detector** in `vtscore` is a **linear (logistic) classifier head** plus a
+A **detector** in `vtscore` is a **linear SVM classifier head** plus a
 calibrated decision threshold, both derived from a `LabelSet`.
 
 Architecture (`vtscore/training/mlp.py`):
 
 ```
 input  (D,)
-  → Linear(D, 1)        # hidden_dim=LINEAR_HEAD (0): no hidden layer
-  → (no activation; train with BCEWithLogitsLoss)
+  → Linear(D, 1)        # hidden_dim=LINEAR_SVM_HEAD (-1): no hidden layer
+  → (no activation; the output is the SVM's decision function)
 ```
 
-`build_model(input_dim, hidden_dim=N)` with `N > 0` still builds the older MLP
-(`Linear(D, H) → ReLU → Dropout(p) → Linear(H, 1)`, width from
-`_auto_hidden_dim`), but that path survives only for the eval harness's sweep
-arm and unit tests - production always passes `LINEAR_HEAD`. See
-[`docs/ML.md`](../../docs/ML.md#why-linear-and-where-the-mlp-survives) for why
-the head is linear.
+Two other heads share the same entry point but not the same fit: `LINEAR_HEAD`
+(`0`) builds the identical `Linear(D, 1)` and fits it with balanced
+BCE-with-logits, making it logistic regression, and any `hidden_dim > 0` builds
+the older MLP (`Linear(D, H) → ReLU → Dropout(p) → Linear(H, 1)`, width from
+`_auto_hidden_dim`). Both survive only for the eval harness's head-sweep arms
+and unit tests - production always passes `LINEAR_SVM_HEAD`. See
+[`docs/ML.md`](../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why)
+for why the head is a linear SVM.
 
 Training (`vtscore.training.train_model`):
 
-- Class-weighted BCE-with-logits with inverse-frequency balancing and
-  label-smoothed targets (`MLP_LABEL_SMOOTHING`).  Inclusion does *not*
-  enter training - it is applied later as a pure threshold knob.
-- Local `torch.Generator` seeded with the caller-supplied seed
-  (default 42) for deterministic weight init.
+- The production head is fitted by liblinear (`LinearSVC`, squared hinge + L2,
+  `class_weight="balanced"`), deterministic given the caller-supplied seed
+  (default 42). Inclusion does *not* enter training - it is applied later as a
+  pure threshold knob.
+- The BCE heads instead run a class-weighted BCE-with-logits loop with
+  inverse-frequency balancing and label-smoothed targets
+  (`MLP_LABEL_SMOOTHING`), using a local `torch.Generator` seeded with the
+  caller-supplied seed for deterministic weight init.
 - `torch.random.fork_rng()` around `nn.Dropout` so concurrent training
   calls don't race on the global RNG (the linear head has no dropout, so
   this only bites the MLP arm).

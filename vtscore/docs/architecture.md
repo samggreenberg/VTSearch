@@ -27,7 +27,7 @@ or *Context* are unfamiliar - this doc assumes them.
 1. **Turn media into embeddings.** Audio, images, text, video, documents go
    in via a `MediaEmbedder`; fixed-dimensional `(D,)` numpy vectors come
    out.
-2. **Train a linear (logistic) head on user-labelled embeddings.** Voted-good
+2. **Train a linear SVM head on user-labelled embeddings.** Voted-good
    and voted-bad media become `(X, y)`; a `Linear(D, 1)` head plus a calibrated
    threshold comes out. See [`docs/ML.md`](../../docs/ML.md) for why the head is
    linear and where the older MLP path survives.

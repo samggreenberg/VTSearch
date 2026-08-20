@@ -15,6 +15,24 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Changed
+
+- **The detector head is now a linear SVM.** Every trained detector — new
+  detectors, saved ones re-derived from their labels, and the per-step models
+  behind the labeling-progress indicators — is fitted to the class-balanced
+  maximum-margin boundary between your Good and Bad votes (scikit-learn's
+  `LinearSVC`) instead of by logistic regression. It is the same shape of model
+  as before, a single linear boundary over the embedding space, so nothing
+  about detector files, exports, or the ONNX bundle changes: only where the
+  boundary lands. Measurements in a separate environment put the SVM's ranking
+  clearly ahead of the logistic head's, and while *why* is still under
+  investigation, the best-measured head is the one that ships. Detector scores
+  will move — a detector retrained after this change can put items in a
+  different order and cut at a different threshold than the same votes did
+  before. The regularisation strength is tunable via `VTSEARCH_SVM_HEAD_C`
+  (default `1.0`), and `VTSEARCH_TRAIN_EPOCHS` / `VTSEARCH_TRAIN_PATIENCE` no
+  longer affect a detector fit. See [`docs/ML.md`](docs/ML.md).
+
 ### Fixed
 
 - **CLI autodetect no longer reports every media as a hit, and no longer

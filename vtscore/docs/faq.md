@@ -244,17 +244,17 @@ fetching at runtime.
 
 The detector works from about 4 labels (2 good, 2 bad) and improves through
 about 50. Above 100 the gains are mostly noise. The production head is linear
-(a single `Linear(D, 1)`, i.e. logistic regression), which is what makes it
-usable that low: with 3-5 positives an MLP is under-determined and its scores
-wobble from retrain to retrain. See
-[docs/ML.md](../../docs/ML.md#why-linear-and-where-the-mlp-survives).
+(a single `Linear(D, 1)` fitted as a maximum-margin SVM), which is what makes
+it usable that low: with 3-5 positives an MLP is under-determined and its
+scores wobble from retrain to retrain. See
+[docs/ML.md](../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why).
 
 ### Is training deterministic?
 
 Yes, given a fixed seed. `train_model` takes a `seed: int = 42` keyword
-argument and isolates its RNG via `torch.random.fork_rng()`. Different
-seeds produce slightly different models (mostly within noise); the same
-seed always produces bit-identical weights.
+argument; the production SVM head passes it to liblinear (which touches no
+global RNG), and the BCE heads additionally isolate theirs via
+`torch.random.fork_rng()`. The same seed always produces bit-identical weights.
 
 ### What does `inclusion_value` do?
 

@@ -33,7 +33,18 @@ from .test_max_patch_style import _planted_dataset
 # read them, never mutate them.  See sweep_cache.py.
 pytestmark = pytest.mark.xdist_group("cut-inclusion-sweep")
 
-_KS = [-4, -2, 0, 2, 4]
+#: The knob positions the frame sweeps.  Deliberately near the ends of the
+#: ``[-10, 10]`` range rather than clustered around zero: ``rate`` - and
+#: therefore the ``mid_tilt`` shift composed from it - is *invariant* to the
+#: cost weights while its root stays inside the inter-mean interval, and only
+#: starts moving once the root is pushed out (see ``gmm_cut_from_fit``).  How
+#: far out that takes depends on how well separated the fitted components are,
+#: which depends on the head: a narrow grid that happened to show movement
+#: under the logistic head showed none under the shipped linear SVM, whose
+#: fits keep the root interior further along the knob.  A frame whose subject
+#: is "does this rule read inclusion at all" has to sweep where the answer can
+#: be yes.
+_KS = [-8, -4, 0, 4, 8]
 _RULES = ["mid", "mid_tilt", "rate", "cross_tilt", "q_tilt"]
 
 

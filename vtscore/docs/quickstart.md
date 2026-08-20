@@ -165,7 +165,7 @@ import numpy as np
 import torch
 
 from vtscore.training import train_model, calculate_cross_calibration_threshold
-from vtscore.training.mlp import LINEAR_HEAD
+from vtscore.training.mlp import LINEAR_SVM_HEAD
 
 # Map filenames to labels.
 labels = {
@@ -189,20 +189,20 @@ for m in medias.values():
 X = torch.from_numpy(np.stack(X_list).astype(np.float32))
 y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
 
-# LINEAR_HEAD is the production head: a single Linear(D, 1), i.e. logistic
-# regression. Omitting hidden_dim auto-sizes an MLP instead - see docs/ML.md.
-model = train_model(X, y, input_dim=X.shape[1], hidden_dim=LINEAR_HEAD)
+# LINEAR_SVM_HEAD is the production head: a single Linear(D, 1) fitted to the
+# maximum-margin boundary. Omitting hidden_dim auto-sizes an MLP - see docs/ML.md.
+model = train_model(X, y, input_dim=X.shape[1], hidden_dim=LINEAR_SVM_HEAD)
 threshold = calculate_cross_calibration_threshold(
     X_list, y_list, input_dim=X.shape[1], inclusion_value=0,
-    hidden_dim=LINEAR_HEAD,
+    hidden_dim=LINEAR_SVM_HEAD,
 )
 print(f"Trained detector; calibrated threshold = {threshold:.3f}")
 # Trained detector; calibrated threshold = 0.412
 ```
 
 `train_model` is deterministic given the default seed (42). Six labels is
-enough for the linear head to converge - it has `D + 1` parameters and no
-hidden layer, which is exactly why it is the production head when positives
+enough for the linear head to fit - it has `D + 1` parameters and no hidden
+layer, which is exactly why a linear head is the production head when positives
 are sparse.
 
 For a more idiomatic detector lifecycle (with persistence), see

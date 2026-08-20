@@ -157,12 +157,13 @@ when one is in scope). Tests rely on this: they override
 | `DEFAULT_DECODE_WORKER_CAP` | `8`  | `VTSEARCH_DECODE_WORKERS`     | Ceiling on the image-decode prefetch pool (see `resolve_decode_workers()`). The pool itself is sized from the allocation, not this constant. |
 | `DEVICE`                 | `"auto"`| `VTSEARCH_DEVICE`             | Preferred compute device. `"auto"` resolves at call time; explicit `"cuda"`, `"cuda:0"`, `"cpu"`, `"mps"` are honoured, but a CUDA device the installed torch wheel can't actually run on falls back to `"cpu"`. |
 | `MAX_UPLOAD_MB`          | `2048`  | `VTSEARCH_MAX_UPLOAD_MB`      | HTTP body cap in megabytes (default 2 GiB). Oversized requests get HTTP 413. Set to `0` for unlimited (Flask's out-of-the-box behaviour). |
-| `TRAIN_EPOCHS`           | `200`   | `VTSEARCH_TRAIN_EPOCHS`       | Upper bound on head training epochs. `vtscore.training.mlp.train_model` may early-stop sooner.                   |
-| `TRAIN_PATIENCE`         | `10`    | `VTSEARCH_TRAIN_PATIENCE`     | Epochs the training loss must fail to improve before early-stop fires. `0` disables early-stop.                  |
+| `TRAIN_EPOCHS`           | `200`   | `VTSEARCH_TRAIN_EPOCHS`       | Upper bound on BCE-head training epochs. `vtscore.training.mlp.train_model` may early-stop sooner. The production SVM head is one liblinear solve and ignores this.  |
+| `TRAIN_PATIENCE`         | `10`    | `VTSEARCH_TRAIN_PATIENCE`     | Epochs the training loss must fail to improve before early-stop fires. `0` disables early-stop. BCE heads only.   |
 | `DEFAULT_CALIBRATE_COUNT`| `2`     | `VTSEARCH_CALIBRATE_COUNT`    | First-run default for `CoreConfig.calibrate_count`. Min 1.                                                       |
-| `MLP_HIDDEN_MIN`         | `8`     | -                             | Auto-sizing floor for MLP hidden width. Legacy MLP head only - the production linear head has none.              |
+| `MLP_HIDDEN_MIN`         | `8`     | -                             | Auto-sizing floor for MLP hidden width. Legacy MLP head only - the production linear SVM head has none.              |
 | `MLP_HIDDEN_MAX`         | `32`    | -                             | Auto-sizing ceiling for MLP hidden width. Legacy MLP head only.                                                  |
-| `MLP_DROPOUT`            | `0.5`   | -                             | Dropout rate for trained MLPs. Ignored by the production linear head.                                            |
+| `MLP_DROPOUT`            | `0.5`   | -                             | Dropout rate for trained MLPs. Ignored by the production linear SVM head.                                            |
+| `SVM_HEAD_C`             | `1.0`   | `VTSEARCH_SVM_HEAD_C`         | Inverse regularisation strength of the production linear SVM head (`fit_linear_svm_head`). Lower regularises harder on few votes. |
 
 ### `allocated_cpus()` / `resolve_decode_workers()`
 

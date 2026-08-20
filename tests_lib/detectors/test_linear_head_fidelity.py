@@ -1,28 +1,38 @@
-"""The production detector head is a logistic regression, structurally and numerically.
+"""The two linear heads are what they claim to be, structurally and numerically.
 
-``build_model(input_dim, hidden_dim=LINEAR_HEAD)`` is a single ``Linear(d, 1)``
-emitting a logit; pushed through :func:`vtscore.training.mlp.train_model`'s
-balanced BCE-with-logits loop it *is* ``LogisticRegression(class_weight=
-"balanced")``.  These tests pin both halves of that claim:
+Both are ``build_model(input_dim, hidden_dim=<sentinel>)`` - a single
+``Linear(d, 1)`` emitting a logit - and they differ only in the objective that
+fits them:
 
-* **fidelity** - on seeded synthetic 2-class data the shipped head must rank a
-  held-out set in near-lockstep with scikit-learn's ``LogisticRegression``.  If
-  a future change to the training loop (an added nonlinearity, a different loss,
-  a dropped class weighting) quietly stops it from being logistic regression,
-  the rank agreement drops and this test fails.
-* **structure / round-trip** - one Linear layer, ``0.weight`` / ``0.bias`` as the
-  only state-dict keys, and a clean trip through ``build_model_from_weights``
-  and the portable ONNX exporter (whose 1-layer branch only the linear head
-  exercises).
+* :data:`~vtscore.training.mlp.LINEAR_SVM_HEAD` is the **production** head.
+  Fitted through :func:`vtscore.training.svm.fit_linear_svm_head` it *is*
+  ``LinearSVC(class_weight="balanced")``, and these tests pin it to the very
+  ``svm_linear`` arm the eval harness scores - score for score, not merely in
+  rank - so the shipped detector and the measured arm can't drift apart.
+* :data:`~vtscore.training.mlp.LINEAR_HEAD` is the logistic head the SVM
+  replaced, still reachable as a named eval arm.  Pushed through
+  :func:`vtscore.training.mlp.train_model`'s balanced BCE-with-logits loop it
+  *is* ``LogisticRegression(class_weight="balanced")``; on seeded synthetic
+  2-class data it must rank a held-out set in near-lockstep with scikit-learn's.
+  If a future change to the training loop (an added nonlinearity, a different
+  loss, a dropped class weighting) quietly stops it from being logistic
+  regression, the rank agreement drops and that test fails.
 
-The fidelity tests raise ``TRAIN_EPOCHS`` and disable early-stop: the claim
-under test is about the *objective* the loop optimises, so the loop has to be
-run to convergence.  Production's 200-epoch budget (and this suite's 30) stop
+**Structure / round-trip** is shared by both: one Linear layer, ``0.weight`` /
+``0.bias`` as the only state-dict keys, and a clean trip through
+``build_model_from_weights`` and the portable ONNX exporter (whose 1-layer
+branch only a linear head exercises).
+
+The *logistic* fidelity tests raise ``TRAIN_EPOCHS`` and disable early-stop: the
+claim under test is about the *objective* the loop optimises, so the loop has to
+be run to convergence.  Production's 200-epoch budget (and this suite's 30) stop
 well short of the optimum - an early-stopped linear model, still linear, but not
 the ``LogisticRegression`` fixed point.  The synthetic features are deliberately
 raw Gaussians rather than the unit-norm vectors a real embedder emits, because
 un-normalised features make the problem well-conditioned enough for Adam to
-actually reach that fixed point in a unit test's time budget.
+actually reach that fixed point in a unit test's time budget.  The SVM head
+needs none of that: liblinear solves its objective outright, so its fidelity
+test is an exact comparison at production settings.
 """
 
 from __future__ import annotations
@@ -38,7 +48,13 @@ from vtscore.detectors.portable_bundle import (
     mlp_weights_to_onnx,
 )
 from vtscore.detectors.training import serialize_weights
-from vtscore.training.mlp import LINEAR_HEAD, build_model, build_model_from_weights, train_model
+from vtscore.training.mlp import (
+    LINEAR_HEAD,
+    LINEAR_SVM_HEAD,
+    build_model,
+    build_model_from_weights,
+    train_model,
+)
 
 DIM = 16
 
@@ -67,14 +83,19 @@ def _two_class_data(n_per_class: int, seed: int) -> tuple[np.ndarray, np.ndarray
     return X, y
 
 
-def _head_scores(X_train: np.ndarray, y_train: np.ndarray, X_score: np.ndarray) -> np.ndarray:
-    """Sigmoid scores of the shipped linear head, trained the production way."""
+def _head_scores(
+    X_train: np.ndarray,
+    y_train: np.ndarray,
+    X_score: np.ndarray,
+    hidden_dim: int = LINEAR_HEAD,
+) -> np.ndarray:
+    """Sigmoid scores of the linear head *hidden_dim* names, fitted the production way."""
     model = train_model(
         torch.from_numpy(X_train),
         torch.from_numpy(y_train).unsqueeze(1),
         DIM,
         seed=0,
-        hidden_dim=LINEAR_HEAD,
+        hidden_dim=hidden_dim,
     )
     with torch.no_grad():
         device = next(model.parameters()).device
@@ -124,11 +145,93 @@ class TestLogisticFidelity:
         assert rho >= 0.95, f"linear head ranks disagree under class imbalance (Spearman {rho:.4f})"
 
 
-class TestProductionPathTrainsTheLinearHead:
-    """``train_and_threshold`` (the Find path) hands back a one-layer head.
+def _weight_of(model) -> torch.Tensor:
+    """The single ``Linear`` layer's weight tensor of a linear head."""
+    layer = model[0]
+    assert isinstance(layer, torch.nn.Linear)
+    return layer.weight
 
-    Guards the #2790 swap end-to-end: a revert to ``_auto_hidden_dim`` here
-    reinstates the MLP, and this fails rather than letting it back in silently.
+
+class TestSVMFidelity:
+    """The production head *is* the eval harness's ``svm_linear`` arm.
+
+    Not "ranks like": the same numbers.  ``fit_linear_svm_head`` delegates to
+    the very ``train_svm(kernel="linear")`` call the harness scores, and
+    production's ``sigmoid(model(x))`` reproduces that fit's
+    ``decision_sigmoid`` ``predict_proba``.  If the two ever diverge, an
+    experiment that says "svm_linear wins" stops being a statement about the
+    shipped detector - which is the whole reason the head was switched.
+    """
+
+    def _svm_linear_arm_scores(self, X_train, y_train, X_score) -> np.ndarray:
+        """Exactly what ``TRAINERS["svm_linear"]`` computes for these labels."""
+        from vtscore.eval.trainers import resolve_trainer  # noqa: PLC0415
+
+        predict = resolve_trainer("svm_linear")(X_train, y_train, 0)
+        return np.asarray(predict(X_score), dtype=np.float64)
+
+    def test_scores_match_the_svm_linear_eval_arm(self):
+        X, y = _two_class_data(n_per_class=60, seed=12345)
+        X_score, _ = _two_class_data(n_per_class=100, seed=999)
+
+        head = _head_scores(X, y, X_score, hidden_dim=LINEAR_SVM_HEAD)
+        arm = self._svm_linear_arm_scores(X, y, X_score)
+        assert np.allclose(head, arm, atol=1e-5), f"max deviation {np.abs(head - arm).max():.3e}"
+
+    def test_scores_match_when_positives_are_sparse(self):
+        """12 positives against 60 negatives - the sparse-positive regime."""
+        X, y = _two_class_data(n_per_class=60, seed=12345)
+        keep = np.concatenate([np.arange(12), np.arange(60, 120)])
+        X, y = X[keep], y[keep]
+        X_score, _ = _two_class_data(n_per_class=100, seed=999)
+
+        head = _head_scores(X, y, X_score, hidden_dim=LINEAR_SVM_HEAD)
+        arm = self._svm_linear_arm_scores(X, y, X_score)
+        assert np.allclose(head, arm, atol=1e-5), f"max deviation {np.abs(head - arm).max():.3e}"
+
+    def test_the_head_is_a_maximum_margin_fit_not_a_logistic_one(self):
+        """The two heads must actually be different fits, or the switch is a no-op."""
+        X, y = _two_class_data(n_per_class=60, seed=12345)
+        X_score, _ = _two_class_data(n_per_class=100, seed=999)
+
+        svm = _head_scores(X, y, X_score, hidden_dim=LINEAR_SVM_HEAD)
+        logistic = _head_scores(X, y, X_score, hidden_dim=LINEAR_HEAD)
+        assert not np.allclose(svm, logistic, atol=1e-3)
+
+    def test_per_row_weights_replace_the_class_balance(self):
+        """Region flooding's per-bag weights must reach liblinear.
+
+        Weighting every negative down must move the boundary; if the weights
+        were dropped the two fits would be identical and a Bad image's ~197
+        region rows would each count as an independent negative.
+        """
+        X, y = _two_class_data(n_per_class=40, seed=7)
+        X_t = torch.from_numpy(X)
+        y_t = torch.from_numpy(y).unsqueeze(1)
+        weights = torch.where(y_t.reshape(-1) == 1.0, 1.0, 0.05)
+
+        plain = train_model(X_t, y_t, DIM, seed=0, hidden_dim=LINEAR_SVM_HEAD)
+        weighted = train_model(X_t, y_t, DIM, seed=0, hidden_dim=LINEAR_SVM_HEAD, sample_weights=weights)
+        assert not torch.allclose(_weight_of(plain), _weight_of(weighted), atol=1e-4)
+
+    def test_mismatched_weight_length_is_rejected(self):
+        X, y = _two_class_data(n_per_class=8, seed=1)
+        with pytest.raises(ValueError, match="does not match training-set size"):
+            train_model(
+                torch.from_numpy(X),
+                torch.from_numpy(y).unsqueeze(1),
+                DIM,
+                hidden_dim=LINEAR_SVM_HEAD,
+                sample_weights=torch.ones(3),
+            )
+
+
+class TestProductionPathTrainsTheSVMHead:
+    """``train_and_threshold`` (the Find path) hands back a one-layer SVM head.
+
+    Guards the shipped head end-to-end: a revert to ``_auto_hidden_dim`` here
+    reinstates the MLP, and a revert to ``LINEAR_HEAD`` reinstates the logistic
+    fit - both fail here rather than sliding back in silently.
     The vote/labelset path (``_train_and_score_xy``) and the load-time
     re-derivation (``train_detector_from_origins``) are pinned the same way from
     the app tier, where their snapshot fixtures live.
@@ -222,13 +325,13 @@ class TestProductionPathTrainsTheLinearHead:
         monkeypatch.setattr(training_pkg, "train_model", spy)
         return seen
 
-    def test_uncached_calibration_folds_use_the_linear_head(self, monkeypatch):
-        """The ``det_ctx is None`` branch calibrates on the linear head too (#2824).
+    def test_uncached_calibration_folds_use_the_svm_head(self, monkeypatch):
+        """The ``det_ctx is None`` branch calibrates on the production head too (#2824).
 
         Before the fix this branch omitted ``hidden_dim`` from
         ``calculate_cross_calibration_threshold``, so the fold models auto-sized
         to the MLP while the final model was linear - the threshold was measured
-        on an architecture the detector never ships.
+        on a head the detector never ships.
         """
         from vtscore.detectors.training import train_and_threshold  # noqa: PLC0415
 
@@ -238,10 +341,10 @@ class TestProductionPathTrainsTheLinearHead:
 
         # At least the calibration folds plus the final fit.
         assert len(seen) >= 2
-        assert all(h == LINEAR_HEAD for h in seen), f"non-linear train_model calls: {seen}"
+        assert all(h == LINEAR_SVM_HEAD for h in seen), f"non-SVM train_model calls: {seen}"
 
-    def test_region_bag_uncached_path_uses_the_linear_head(self, monkeypatch):
-        """A flooded region label set calibrates + trains linear end-to-end (#2824)."""
+    def test_region_bag_uncached_path_uses_the_svm_head(self, monkeypatch):
+        """A flooded region label set calibrates + trains on the SVM head end-to-end (#2824)."""
         from vtscore.detectors.training import train_and_threshold  # noqa: PLC0415
 
         seen = self._spy_hidden_dims(monkeypatch)
@@ -249,11 +352,11 @@ class TestProductionPathTrainsTheLinearHead:
         model, _threshold = train_and_threshold(X_list, y_list, groups=groups)
 
         assert len(seen) >= 2
-        assert all(h == LINEAR_HEAD for h in seen), f"non-linear train_model calls: {seen}"
+        assert all(h == LINEAR_SVM_HEAD for h in seen), f"non-SVM train_model calls: {seen}"
         assert [type(layer) for layer in model] == [torch.nn.Linear]
 
-    def test_region_bag_cached_path_uses_the_linear_head(self, monkeypatch):
-        """The det_ctx (cached grouped-calibration) path is linear end-to-end too."""
+    def test_region_bag_cached_path_uses_the_svm_head(self, monkeypatch):
+        """The det_ctx (cached grouped-calibration) path uses the SVM head too."""
         from types import SimpleNamespace  # noqa: PLC0415
 
         from vtscore.detectors.training import train_and_threshold  # noqa: PLC0415
@@ -264,7 +367,7 @@ class TestProductionPathTrainsTheLinearHead:
         model, _threshold = train_and_threshold(X_list, y_list, det_ctx=det_ctx, groups=groups)
 
         assert len(seen) >= 2
-        assert all(h == LINEAR_HEAD for h in seen), f"non-linear train_model calls: {seen}"
+        assert all(h == LINEAR_SVM_HEAD for h in seen), f"non-SVM train_model calls: {seen}"
         assert [type(layer) for layer in model] == [torch.nn.Linear]
         # The fold orderings were cached for a later no-retrain Inclusion slide.
         assert det_ctx.calibration_cache is not None

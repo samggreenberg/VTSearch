@@ -1,7 +1,7 @@
 # `vtscore.detectors` - Detector lifecycle, training, and labelset materialisation
 
 A **detector** in vtscore is the trained classifier you search with: a
-linear (logistic) head plus a calibrated threshold plus a `LabelSet`. This package
+linear SVM head plus a calibrated threshold plus a `LabelSet`. This package
 owns the resolve → embed → train pipeline that turns origin trails into
 a trained model, the on-disk JSON store that persists the labelset
 (never weights), the registry that tracks every detector the user has
