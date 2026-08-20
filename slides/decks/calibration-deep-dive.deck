@@ -7,10 +7,10 @@
 
 theme: vtsearch
 paginate: true
-footer: VTSearch · calibration · HLTCOE
 
 slides:
   title-calibration
+  outline-calibration
   calib-problem
   xcal
   xcal-results

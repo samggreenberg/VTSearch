@@ -1,4 +1,4 @@
-![bg right:55% fit](figs/ui-autopilot.png)
+![bg right:56% fit](figs/ui-autopilot.png)
 
 ### Active learning
 

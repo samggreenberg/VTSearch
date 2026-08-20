@@ -8,8 +8,13 @@
     ![bg left:56% fit](figs/cost-traces.png)    figure left, text right
     ![bg fit](figs/cost-traces.png)             full bleed (with _class: full)
 
-  Slide classes: lead (title), statement (one big claim), full (edge-to-edge
-  figure), caveat (quiet grey). Set with <!-- _class: statement -- >.
+  Slide classes: lead (title), statement (one big claim), outline (the deck's
+  opening "where this goes" list), full (edge-to-edge figure), caveat (quiet
+  grey). Set with <!-- _class: statement -- >.
+
+  House rules live in slides/STYLE.md — read it before writing a slide. The two
+  that bite most often: emphasis is **bold**, never a colour; and subscripts
+  are written *w*<sub>f</sub>, not w_f.
 
   A `---` line here would split this fragment into two slides; build.py errors
   on it. Use `***` if you want a horizontal rule.

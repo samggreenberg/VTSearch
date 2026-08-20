@@ -4,10 +4,10 @@
 
 theme: vtsearch
 paginate: true
-footer: VTSearch · Programme review
 
 slides:
   title-sponsor
+  outline-sponsor
   problem
   ui-tour
   ui-region-voting

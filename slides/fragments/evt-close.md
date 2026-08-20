@@ -1,4 +1,4 @@
-![bg right:52% fit](figs/calib-error-decomposition.png)
+![bg right:56% fit](figs/calib-error-decomposition.png)
 
 ### Epilogue — why it closed
 

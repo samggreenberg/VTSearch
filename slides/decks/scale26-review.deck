@@ -3,10 +3,10 @@
 
 theme: vtsearch
 paginate: true
-footer: VTSearch · SCALE 2026 · HLTCOE
 
 slides:
   title-scale26
+  outline-scale26
   problem
   ui-tour
   autopilot

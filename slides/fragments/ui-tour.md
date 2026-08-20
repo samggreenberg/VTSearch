@@ -1,4 +1,4 @@
-![bg right:58% fit](figs/ui-three-panel.png)
+![bg right:56% fit](figs/ui-three-panel.png)
 
 ### The loop
 
