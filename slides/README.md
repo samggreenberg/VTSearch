@@ -17,6 +17,16 @@ _out/       rendered decks (gitignored)
 `build.py --check` runs as a `./run-tests.sh` gate, so a deck that names a
 missing fragment or figure fails the suite rather than rotting quietly.
 
+**Test a deck change with `./run-tests.sh slides`** — about four seconds, versus
+three and a half minutes for the full suite. It is not a shortcut you are
+trading safety for: it runs every gate that can observe a deck (ruff over
+`build.py`, codespell over slide prose, `check-docs.py` over the fragments, and
+the manifest preflight) and skips only checks that provably cannot see one —
+nothing imports `build.py`, pyright does not read it, and no test in either tree
+opens a deck. For a change confined to `slides/` it is the whole gate, and it
+refuses to run once the branch touches anything else, so it cannot quietly
+become one.
+
 **Read [`STYLE.md`](STYLE.md) before writing or editing a deck.** It holds the
 house rules that apply to every talk — no running footer, real subscripts,
 colour reserved for meaning, the 20px type floor, and the opening outline
