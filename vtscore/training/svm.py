@@ -523,6 +523,7 @@ def fit_linear_svm_head(
             single-class or there are fewer than 2 samples.
     """
     import torch  # noqa: PLC0415
+    import torch.nn as nn  # noqa: PLC0415
 
     from vtscore.embedding.loader import ensure_torch_configured, get_torch_device  # noqa: PLC0415
     from vtscore.training.mlp import LINEAR_SVM_HEAD, build_model  # noqa: PLC0415
@@ -557,8 +558,9 @@ def fit_linear_svm_head(
 
     ensure_torch_configured()
     model = build_model(input_dim, hidden_dim=LINEAR_SVM_HEAD)
+    layer: nn.Linear = model[0]  # type: ignore[assignment]  # LINEAR_SVM_HEAD builds exactly this
     with torch.no_grad():
-        model[0].weight.copy_(torch.from_numpy(coef))
-        model[0].bias.copy_(torch.from_numpy(intercept))
+        layer.weight.copy_(torch.from_numpy(coef))
+        layer.bias.copy_(torch.from_numpy(intercept))
     model.eval()
     return model.to(get_torch_device())

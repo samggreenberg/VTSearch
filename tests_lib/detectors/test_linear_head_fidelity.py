@@ -145,6 +145,13 @@ class TestLogisticFidelity:
         assert rho >= 0.95, f"linear head ranks disagree under class imbalance (Spearman {rho:.4f})"
 
 
+def _weight_of(model) -> torch.Tensor:
+    """The single ``Linear`` layer's weight tensor of a linear head."""
+    layer = model[0]
+    assert isinstance(layer, torch.nn.Linear)
+    return layer.weight
+
+
 class TestSVMFidelity:
     """The production head *is* the eval harness's ``svm_linear`` arm.
 
@@ -205,7 +212,7 @@ class TestSVMFidelity:
 
         plain = train_model(X_t, y_t, DIM, seed=0, hidden_dim=LINEAR_SVM_HEAD)
         weighted = train_model(X_t, y_t, DIM, seed=0, hidden_dim=LINEAR_SVM_HEAD, sample_weights=weights)
-        assert not torch.allclose(plain[0].weight, weighted[0].weight, atol=1e-4)
+        assert not torch.allclose(_weight_of(plain), _weight_of(weighted), atol=1e-4)
 
     def test_mismatched_weight_length_is_rejected(self):
         X, y = _two_class_data(n_per_class=8, seed=1)
