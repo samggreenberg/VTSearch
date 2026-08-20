@@ -329,6 +329,16 @@ if ! python scripts/check-vtscore-docs.py ; then
     exit 1
 fi
 
+# Slide decks: every deck manifest names fragments that exist and figures that
+# resolve. Marp only *warns* on a missing figure and still exits 0, so a rotted
+# deck is otherwise silent until someone rebuilds it the morning of a talk.
+# Pure stdlib, reads slides/ only, ~0.05s. See slides/README.md.
+echo "Checking slide decks..."
+if ! python slides/build.py --check ; then
+    _blocked "slide deck preflight failed"
+    exit 1
+fi
+
 # Eval/app sync: the eval framework reproduces a handful of app surfaces it
 # cannot call (the TypeScript autopilot phase machine, the app's default
 # resolution). This gate notices when one of those app surfaces changes, so the
