@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
 import json
 import os
 import sys
@@ -218,8 +219,6 @@ def _band_categories(band: str) -> list[str]:
 
 def _load_vg_band(band: str, medias: dict[int, dict], embedder_name: str) -> None:
     """Populate *medias* with full-VG images carrying this band's categories."""
-    import random  # noqa: PLC0415
-
     from PIL import Image  # noqa: PLC0415
 
     vg_root = pc.DEMO_CACHE / "visual_genome"
@@ -404,8 +403,6 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
     them.** VG's own annotation is not exhaustive and measurably fails this
     construction -- see the note in the body and ``coco_anchor.py``.
     """
-    import random  # noqa: PLC0415
-
     from PIL import Image  # noqa: PLC0415
 
     import coco_anchor as ca  # noqa: PLC0415
@@ -540,7 +537,16 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
                     boxes_for[(iid, pc.scale_cell(name, band))] = bs
                     break
 
-    rng = random.Random(0x5CA1E)  # deterministic sample, stable across rebuilds
+    # Selection must be stable under a changing candidate list, not merely
+    # deterministic. `rng.sample` is deterministic given the same list, but any
+    # edit to the pool -- a label fix, an image excluded as a re-framed copy --
+    # reshuffles the entire draw, and a rebuild then silently retires images a
+    # human already reviewed (49 of 360 in one such rebuild). Ranking each
+    # candidate by a hash of (cell, image_id) instead means adding or removing
+    # one image changes only that image's membership.
+    def _rank(cell: str, iid: int) -> str:
+        return hashlib.sha1(f"{cell}:{iid}".encode()).hexdigest()  # noqa: S324 - not security
+
     chosen: dict[str, list[int]] = {}
     for c in pc.SCALE_CLASSES:
         for band in bands:
@@ -551,13 +557,13 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
                 # prevalence between bands is the defect this construction
                 # exists to remove.
                 log(f"  UNDER-SUPPLIED {cell}: {len(pool)} positives (wanted {pc.SCALE_N_POS})")
-            chosen[cell] = rng.sample(pool, min(pc.SCALE_N_POS, len(pool)))
+            chosen[cell] = sorted(pool, key=lambda i: _rank(cell, i))[: pc.SCALE_N_POS]
 
     clean.sort()
     # Draw spares beyond the designated pool. A human verdict can retire a
     # contaminated negative later, and re-designating from spares costs a
     # relabel rather than a re-embed of every cell.
-    drawn = rng.sample(clean, min(pc.SCALE_N_NEG + pc.SCALE_N_NEG_SPARE, len(clean)))
+    drawn = sorted(clean, key=lambda i: _rank("__negatives__", i))[: pc.SCALE_N_NEG + pc.SCALE_N_NEG_SPARE]
     negatives, spares = drawn[: pc.SCALE_N_NEG], drawn[pc.SCALE_N_NEG :]
     neg_set = set(negatives)
     log(
