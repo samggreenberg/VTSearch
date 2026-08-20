@@ -1,0 +1,16 @@
+# Calibration line brief — mixed audience, ~10 min
+# One slide per iteration; numbers only where they carry the story.
+
+theme: vtsearch
+paginate: true
+footer: VTSearch · calibration
+
+slides:
+  title-calibration
+  calib-problem
+  xcal.short
+  gmm-blend.short
+  anchored.short
+  evt.short
+  calib-roadmap
+  thanks

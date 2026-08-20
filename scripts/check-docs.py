@@ -89,6 +89,17 @@ ALLOWED_PATHS: dict[str, str] = {
 # said nothing. A report may only cite analysis code that is in the tree.
 PATH_SKIP_PREFIXES = ("docs/plans/",)
 
+# Documents whose relative links resolve against a directory other than their
+# own. Slide fragments are assembled into `slides/_build/<deck>.md` by
+# `slides/build.py`, which repoints every image path as it goes, so a fragment
+# writes `figs/x.png` relative to `slides/` rather than to its own directory.
+# Resolving those against `slides/fragments/` would be wrong rather than
+# lenient, so the LINK check follows the convention instead of skipping it —
+# these links stay fully policed, just against the base Marp will see.
+LINK_BASE_OVERRIDES: dict[str, str] = {
+    "slides/fragments/": "slides",
+}
+
 # Exempt from the PLAN check: this checker and its test are the one place in the
 # tree that must name plan paths which deliberately do not resolve — an example
 # in a comment, a synthetic fixture — because naming them is how the check is
@@ -319,6 +330,18 @@ def allowed_path(token: str) -> bool:
     return any(prefix.endswith("/") and token.startswith(prefix) for prefix in ALLOWED_PATHS)
 
 
+def link_base(rel: str, doc: Path) -> Path:
+    """The directory a document's relative links resolve against.
+
+    Normally the document's own directory; see :data:`LINK_BASE_OVERRIDES` for
+    the trees that deliberately author links against a different base.
+    """
+    for prefix, base in LINK_BASE_OVERRIDES.items():
+        if rel.startswith(prefix):
+            return ROOT / base
+    return doc.parent
+
+
 def resolve_repo_path(token: str, doc: Path, files: frozenset[str], dirs: frozenset[str]) -> bool:
     """True if `token` names something that exists, read from the repo root or
     from the citing document's own directory."""
@@ -373,7 +396,7 @@ def check_markdown(
         if path_part.startswith("/"):
             failures.append(Failure("LINK", doc, lineno, f"'{target}' is an absolute link; use a relative path"))
             continue
-        resolved = (doc.parent / unquote(path_part)).resolve()
+        resolved = (link_base(rel, doc) / unquote(path_part)).resolve()
         if not resolved.exists():
             failures.append(Failure("LINK", doc, lineno, f"'{path_part}' does not exist"))
             continue

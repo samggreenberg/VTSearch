@@ -1,0 +1,167 @@
+/* @theme vtsearch */
+
+/*
+ * Figure-forward deck theme. Type is deliberately large and sparse: if a slide
+ * needs more than ~25 words, it wants to be two slides or a figure.
+ */
+
+@import "default";
+
+:root {
+  --ink: #14181f;
+  --ink-soft: #5b6472;
+  --accent: #0b5fa5;
+  --accent-soft: #e7f0f8;
+  --rule: #d8dee6;
+  --paper: #ffffff;
+
+  font-family: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
+}
+
+section {
+  background: var(--paper);
+  color: var(--ink);
+  padding: 60px 70px;
+  font-size: 26px;
+  line-height: 1.45;
+  /* Sparse slides read better as a centred block than pinned to the top. */
+  justify-content: center;
+}
+
+h1 {
+  font-size: 46px;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  margin: 0 0 0.5em;
+}
+
+h2 {
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0 0 0.6em;
+}
+
+/* Kicker: a short label above the headline, e.g. "Finding 3". */
+h3 {
+  font-size: 20px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.09em;
+  color: var(--accent);
+  margin: 0 0 0.35em;
+}
+
+strong { color: var(--accent); font-weight: 600; }
+em { color: var(--ink-soft); font-style: italic; }
+
+ul, ol { margin: 0; padding-left: 1.1em; }
+li { margin-bottom: 0.45em; }
+li::marker { color: var(--accent); }
+
+code {
+  font-family: "SF Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 0.08em 0.32em;
+  border-radius: 4px;
+}
+
+pre { font-size: 0.72em; line-height: 1.4; }
+pre code { background: #f5f7fa; color: var(--ink); display: block; padding: 0.8em 1em; }
+
+img { display: block; }
+
+blockquote {
+  border-left: 4px solid var(--accent);
+  margin: 0;
+  padding-left: 0.9em;
+  color: var(--ink-soft);
+  font-size: 0.92em;
+}
+
+table { font-size: 0.78em; border-collapse: collapse; }
+th {
+  text-align: left;
+  border-bottom: 2px solid var(--rule);
+  color: var(--ink-soft);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.82em;
+  letter-spacing: 0.05em;
+}
+td { border-bottom: 1px solid var(--rule); padding: 0.35em 0.9em 0.35em 0; }
+
+/* --- Slide classes -------------------------------------------------- */
+
+/* Title / section-break slide: centred, accent rule under the headline. */
+section.lead {
+  justify-content: center;
+  padding: 60px 90px;
+}
+section.lead h1 { font-size: 60px; line-height: 1.12; }
+section.lead h1::after {
+  content: "";
+  display: block;
+  width: 90px;
+  height: 4px;
+  background: var(--accent);
+  margin-top: 0.5em;
+}
+section.lead h2 {
+  font-size: 28px;
+  font-weight: 400;
+  color: var(--ink-soft);
+  margin-top: 0.6em;
+}
+
+/* Statement slide: one big claim, nothing else. */
+section.statement {
+  justify-content: center;
+  text-align: center;
+  padding: 60px 120px;
+}
+section.statement h1 { font-size: 54px; line-height: 1.2; }
+
+/* Full-bleed figure: kill the padding so a background image owns the slide. */
+section.full { padding: 0; }
+section.full h2 {
+  position: absolute;
+  top: 42px;
+  left: 60px;
+  right: 60px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 0.25em 0.5em;
+  border-radius: 6px;
+}
+
+/* Quiet slide for caveats and limitations. */
+section.caveat { background: #f7f8fa; }
+section.caveat h2 { color: var(--ink-soft); }
+
+/* --- Footer / pagination -------------------------------------------- */
+
+footer {
+  color: var(--ink-soft);
+  font-size: 15px;
+  left: 70px;
+  bottom: 26px;
+}
+
+section::after {
+  color: var(--ink-soft);
+  font-size: 15px;
+  right: 70px;
+  bottom: 26px;
+}
+
+section.lead::after,
+section.statement::after { content: ""; }
+
+/* Title and section-break slides carry their own identity; the running footer
+   is redundant there. */
+section.lead footer,
+section.statement footer { display: none; }
