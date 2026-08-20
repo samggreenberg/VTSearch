@@ -1,53 +1,65 @@
 # Machine Learning Details
 
-VTSearch learns a binary classifier from user votes ("good" vs "bad") using a **linear (logistic) head** — a single `Linear(input_dim, 1)` trained with balanced binary cross-entropy, i.e. logistic regression. The model operates on embeddings produced by pretrained feature extractors (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text) and outputs a score in [0, 1] for each item in the dataset.
+VTSearch learns a binary classifier from user votes ("good" vs "bad") using a **linear SVM head** — a single `Linear(input_dim, 1)` fitted to the maximum-margin boundary between the two vote classes (hinge loss + L2, class-balanced). The model operates on embeddings produced by pretrained feature extractors (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text) and outputs a score in [0, 1] for each item in the dataset.
 
 Alongside the head, each dataset carries a **[Coverage Atlas](#coverage-atlas)** — a hierarchical partition of the embedding space that guides the autopilot's diversity sampling and provides calibrated typicality scores for domain-shift detection.
 
 ## Architecture
 
-The head is defined in `vtscore/training/mlp.py` via `build_model()`. Production always builds the linear head, selected by the `hidden_dim=LINEAR_HEAD` (`0`) sentinel:
+The head's *architecture* is defined in `vtscore/training/mlp.py` via `build_model()`, and its *fit* in `vtscore/training/svm.py` via `fit_linear_svm_head()`. Production always builds the linear head, selected by the `hidden_dim=LINEAR_SVM_HEAD` (`-1`) sentinel:
 
 ```
 Linear(input_dim, 1)
 ```
 
 - **Input dimension**: Dynamic, depends on the embedding model for the current media type (see [Embedding Models](#embedding-models) below).
-- **No hidden layer**: hence no ReLU and no dropout — a bare linear map has nothing to regularize with dropout, matching plain logistic regression.
-- **Output**: A single logit. `torch.sigmoid` is applied at inference time to produce a probability in [0, 1].
+- **No hidden layer**: hence no ReLU and no dropout — a bare linear map has nothing to regularize with dropout.
+- **Output**: A single number — the SVM's decision function, `w·x + b`. `torch.sigmoid` is applied at inference time to squash it into [0, 1].
 
-The model outputs raw logits (not probabilities) during training. This allows the use of `BCEWithLogitsLoss`, which fuses the sigmoid and binary cross-entropy computation using the log-sum-exp trick for better numerical stability. At inference time, `torch.sigmoid()` is applied explicitly to convert logits to probabilities.
+The head is fitted by liblinear (scikit-learn's `LinearSVC`, `C=1.0`, `class_weight="balanced"`) rather than by a gradient loop, and its hyperplane is then copied into the `Linear(input_dim, 1)` module. Keeping the result a torch module is what lets the rest of the pipeline — calibration folds, max-pooled region scoring, weight serialization, the ONNX exporter, threshold fusion — stay exactly as it was.
 
-### Why linear, and where the MLP survives
+**The sigmoid is not a calibrated probability**, and never was under the logistic head either: the decision point is the separately calibrated threshold below, not 0.5. The sigmoid is a monotone squash that keeps every downstream consumer (sorting, the score column, the quantile rules) working in [0, 1].
 
-The head used to be a small MLP (`Linear(input_dim, hidden_dim) -> ReLU -> Dropout(p) -> Linear(hidden_dim, 1)`, width auto-sized by `_auto_hidden_dim(n_train)`). With only ~3–5 labeled positives that MLP is under-determined: each retrain wobbles the scores, and the calibrated cut lurches over the unlabeled positives — the threshold-stability spikes tracked in issue #2790. A linear boundary has no such freedom, and measurements on COCO/SigLIP2 and VG/SigLIP1+2 put the deep-spike rate roughly 55–73% lower at equal or better FNR and cost.
+### The three heads: which one is shipped, and why
 
-`build_model(input_dim, hidden_dim=N)` with `N > 0` still builds the MLP, and `_auto_hidden_dim` still sizes it. That path exists only for the eval harness's MLP sweep arm (see [`docs/EVAL.md`](EVAL.md)) and unit tests; it is not reachable from the app. The Stage-2 structural-verification classifier (`vtscore/training/structural_similarity.py`) is a separate feature and keeps its own MLP.
+| Sentinel | Architecture | Fitted by | Status |
+|---|---|---|---|
+| `LINEAR_SVM_HEAD` (`-1`) | `Linear(D, 1)` | liblinear, hinge + L2, class-balanced | **shipped** |
+| `LINEAR_HEAD` (`0`) | `Linear(D, 1)` | balanced BCE gradient loop = logistic regression | eval arm, tests |
+| `hidden_dim > 0` | `Linear(D, H) -> ReLU -> Dropout -> Linear(H, 1)` | balanced BCE gradient loop | eval arm, tests |
+
+The head used to be a small MLP with its width auto-sized by `_auto_hidden_dim(n_train)`. With only ~3–5 labeled positives that MLP is under-determined: each retrain wobbles the scores, and the calibrated cut lurches over the unlabeled positives — the threshold-stability spikes tracked in issue #2790. A linear boundary has no such freedom, and measurements on COCO/SigLIP2 and VG/SigLIP1+2 put the deep-spike rate roughly 55–73% lower at equal or better FNR and cost. That finding moved the head to `LINEAR_HEAD`.
+
+The move from there to the SVM keeps that same linear boundary and changes only the objective that places it. A maximum-margin fit is decided by the votes nearest the boundary and is indifferent to how far the easy ones sit beyond it, whereas logistic regression keeps paying attention to every example — which is why the two place a visibly different line on the same handful of votes. Measurements in a separate environment put the SVM's ranking clearly ahead of the logistic head's; **why** it wins (better-behaved scores near the cut? more tolerance of a mis-vote?) is still open, and is the subject of follow-up sweeps. Until those land, the shipped head is the one that measures best.
+
+Both retired heads remain reachable **by name** as eval arms (`head="linear"`, `head="mlp"`; see [`docs/EVAL.md`](EVAL.md)) and in unit tests; neither is reachable from the app. The Stage-2 structural-verification classifier (`vtscore/training/structural_similarity.py`) is a separate feature and keeps its own MLP.
 
 ## Training Configuration
 
 | Setting | Value | Notes |
 |---------|-------|-------|
-| **Loss function** | `BCEWithLogitsLoss` | Per-sample (unreduced), with manual class weighting |
-| **Optimizer** | Adam | `lr=0.001`, `weight_decay=1e-4` |
-| **Epochs (cap)** | 200 | Configurable via `TRAIN_EPOCHS` in `config.py` or the `VTSEARCH_TRAIN_EPOCHS` env var |
-| **Early-stop patience** | 10 | Training halts when the loss fails to improve for this many consecutive epochs (configurable via `TRAIN_PATIENCE` / `VTSEARCH_TRAIN_PATIENCE`; set 0 to disable) |
-| **Head** | `Linear(input_dim, 1)` | The `LINEAR_HEAD` sentinel (`hidden_dim=0`); no hidden layer, no dropout |
-| **Batching** | Full-batch | All labeled data in every forward pass |
-| **Reproducibility** | Local `torch.Generator` | Per-model seed (default 42) for thread-safe deterministic init |
-| **Gradient scoping** | `torch.enable_grad()` | Explicitly enabled during training loop |
+| **Loss function** | Squared hinge + L2 | scikit-learn `LinearSVC`, solved by liblinear |
+| **Regularization** | `C = 1.0` | `SVM_HEAD_C` in `config.py`, or the `VTSEARCH_SVM_HEAD_C` env var |
+| **Solver iteration cap** | 5000 | liblinear's `max_iter`; the fit is milliseconds at any real vote count |
+| **Head** | `Linear(input_dim, 1)` | The `LINEAR_SVM_HEAD` sentinel (`hidden_dim=-1`); no hidden layer, no dropout |
+| **Batching** | Full-batch | All labeled data in one solve |
+| **Reproducibility** | `random_state=seed` | liblinear is deterministic given the seed (default 42); the fit runs on CPU |
+
+`TRAIN_EPOCHS`, `TRAIN_PATIENCE`, `MLP_DROPOUT` and `MLP_LABEL_SMOOTHING` no longer touch a production fit — they configure the BCE gradient loop, which now only the eval arms and the structural-verification classifier run.
 
 ### Class Weighting
 
-Training balances classes by **inverse-frequency weighting** by default (`mlp.py`). The one exception is region flooding on patch datasets, where the caller supplies explicit per-bag `sample_weights` instead (see [Region-aware training](#region-aware-training-on-patch-datasets) below). Either way, inclusion does **not** enter training — the trained model, and therefore every item's score, is independent of inclusion. Inclusion is applied later as a pure threshold knob in `conformal_threshold` (see [Threshold Calibration](#threshold-calibration) below).
+Training balances classes by **inverse-frequency weighting** by default (`class_weight="balanced"`, liblinear's equivalent of the gradient loop's per-sample weights). The one exception is region flooding on patch datasets, where the caller supplies explicit per-bag `sample_weights` instead — those replace the class balance rather than stacking on it (see [Region-aware training](#region-aware-training-on-patch-datasets) below). Either way, inclusion does **not** enter training — the trained model, and therefore every item's score, is independent of inclusion. Inclusion is applied later as a pure threshold knob in `conformal_threshold` (see [Threshold Calibration](#threshold-calibration) below).
 
-- **Weights**: `weight_true = num_false / num_true`, `weight_false = 1.0`
+- **Weights**: `weight_true = num_false / num_true`, `weight_false = 1.0` (the same ratio `class_weight="balanced"` derives)
 
 Keeping the model inclusion-independent is what lets the calibration cache reuse fold scores across cutoff slides: when the user changes inclusion, the labels are unchanged, the fold models are unchanged, and only the cheap quantile rule re-runs.
 
-### Label Smoothing
+### Label Smoothing (BCE arms only)
 
-Targets are label-smoothed with ε = 0.05 (`MLP_LABEL_SMOOTHING` in `vtscore/config.py`): Good examples train toward 0.95, Bad toward 0.05, with class weights still derived from the hard labels. This is **not** a knob-mover — it exists as tie insurance for the conformal threshold rule below, which takes quantiles of the calibration scores and therefore needs distinct score values. Smoothing bounds the optimal logit (≈ ±2.9 at ε = 0.05), so a strongly-fit model cannot saturate every score to exact 0.0/1.0 sigmoids, where all quantiles would collapse to the same cut.
+The BCE gradient loop label-smooths its targets with ε = 0.05 (`MLP_LABEL_SMOOTHING` in `vtscore/config.py`): Good examples train toward 0.95, Bad toward 0.05, with class weights still derived from the hard labels. This is **not** a knob-mover — it exists as tie insurance for the conformal threshold rule below, which takes quantiles of the calibration scores and therefore needs distinct score values. Smoothing bounds the optimal logit (≈ ±2.9 at ε = 0.05), so a strongly-fit model cannot saturate every score to exact 0.0/1.0 sigmoids, where all quantiles would collapse to the same cut.
+
+The SVM head needs no such insurance and does not use it: the margin objective has no incentive to run the decision function off to infinity, so its scores stay in a narrow band around the boundary and quantiles over them are naturally distinct.
 
 ### Threshold Calibration
 
@@ -98,7 +110,7 @@ Two things about the shape are worth keeping. **It is an offset, not an absolute
 
 Everything else still reads the reporting cut: the green/red line, the above-threshold count, Find verdicts and the Find boundary walk, exports, and the labeling-progress indicators. Only the two Autopilot picks moved, and only the learned sort's response carries an `acq_threshold` for them.
 
-**Why fold models share the final model's architecture:** a different architecture produces a different score distribution, so a threshold found on fold models would not transfer faithfully to the final model. The training code threads one `hidden_dim` through both the final fit and every fold fit, so the two can't drift apart. With the linear head that value is a constant (`LINEAR_HEAD`), which makes the property automatic — the head has no capacity to size. It mattered more under the old MLP, whose width was auto-sized from the training-set size: left alone, each fold would have trained on fewer examples and got a narrower hidden layer than the final model.
+**Why fold models share the final model's head:** a different head produces a different score distribution, so a threshold found on fold models would not transfer faithfully to the final model. The training code threads one `hidden_dim` sentinel through both the final fit and every fold fit, so the two can't drift apart. With a linear head that value is a constant (`LINEAR_SVM_HEAD`), which makes the property automatic — the head has no capacity to size. It mattered more under the old MLP, whose width was auto-sized from the training-set size: left alone, each fold would have trained on fewer examples and got a narrower hidden layer than the final model.
 
 The **Calibration Fraction** setting (0–1, default 0.5) controls how much data is reserved for threshold calibration vs. model training in each split. For example, a value of 0.2 means 80% Train / 20% Calibrate. If the fraction is so extreme that a valid Train/Calibrate split cannot be formed (fewer than 2 training examples or fewer than 1 calibration example), the system returns a maximum threshold so that nothing is predicted as Good.
 
@@ -127,7 +139,7 @@ For semantic (text/example) sorts, a **GMM-based threshold** is used instead: a 
 | dtype | `training.py` | `torch.float32` |
 | Device | default | CPU (GPU supported, see tests) |
 
-Threading is restricted to 1 to minimize memory overhead; the real cost is the embedding models, not the head.
+Threading is restricted to 1 to minimize memory overhead; the real cost is the embedding models, not the head. (The head's own fit is liblinear on the CPU and is milliseconds either way.)
 
 ## Embedding Models
 

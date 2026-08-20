@@ -10,6 +10,24 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ## [Unreleased]
 
+### Changed
+
+- **`LINEAR_SVM_HEAD` is the production detector head**, replacing
+  `LINEAR_HEAD`. Both sentinels build the same `Linear(D, 1)`; the new one is
+  fitted by `vtscore.training.svm.fit_linear_svm_head` (squared hinge + L2 via
+  liblinear, `class_weight="balanced"`) rather than by `train_model`'s balanced
+  BCE loop. The fit delegates to `train_svm(kernel="linear")` — the very call
+  the eval harness scores as its `svm_linear` arm — so the shipped head and the
+  measured arm cannot drift apart, and `vtscore.eval.voting_iterations`'
+  `PRODUCTION_HEAD` moves to `"linear_svm"` with it. `head="linear"` and
+  `head="mlp"` remain as named eval arms. Callers that passed `LINEAR_HEAD` to
+  match production must now pass `LINEAR_SVM_HEAD`; scores from a detector
+  trained on the same labels will differ.
+- **`train_svm` accepts `sample_weight`** (`decision_sigmoid` calibration
+  only), mirroring `train_model`'s contract: per-row weights replace the
+  `class_weight` balance rather than stacking on it. This is how region
+  flooding weights a Bad image's many region rows down to one image's worth.
+
 ### Added
 
 - **`vtscore.concurrency.notifications`** - `notify()`, `Notification` and

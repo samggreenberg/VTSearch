@@ -110,7 +110,7 @@ For production deployment, offline/air-gapped operation, Docker hardening, envir
 
 ## Machine learning
 
-VTSearch trains a **linear (logistic) head** — a single `Linear(input_dim, 1)` fitted with balanced binary cross-entropy — on user votes to learn a binary classifier over pretrained embeddings. See [docs/ML.md](docs/ML.md) for full details on the model architecture (including why the head is linear and where the older MLP path survives), training configuration, PyTorch settings, embedding models, and the Coverage Atlas that drives diversity sampling and domain-shift detection.
+VTSearch trains a **linear SVM head** — a single `Linear(input_dim, 1)` fitted to the class-balanced maximum-margin boundary — on user votes to learn a binary classifier over pretrained embeddings. See [docs/ML.md](docs/ML.md) for full details on the model architecture (including why the head is a linear SVM and where the older logistic and MLP paths survive), training configuration, PyTorch settings, embedding models, and the Coverage Atlas that drives diversity sampling and domain-shift detection.
 
 ## Evaluation
 

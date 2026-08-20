@@ -1,14 +1,19 @@
-"""SVM trainer prototype for the learned-sort comparison study.
+"""SVM trainers: the **production detector head** plus the kernel sweep arms.
 
-This module is intentionally standalone - it does NOT wire into
-``DetectorContext`` or the ``train_and_score`` production path.  Its job
-is to expose a trainer with the same input/output contract as the MLP
-(features in, calibrated [0, 1] probabilities out) so the label-curve
-sweep in :mod:`vtscore.eval.label_curve` can compare them head-to-head.
+:func:`train_svm` is the general trainer used by the eval sweeps
+(:mod:`vtscore.eval.label_curve`, :mod:`vtscore.eval.voting_iterations`) to
+compare kernels and hyperparameters head-to-head against the MLP.
 
-If the sweep shows the SVM is competitive, the next step is to add a
-trainer-selection field on detectors and route through this module from
-``train_and_score``.  Until then, treat everything here as experimental.
+:func:`fit_linear_svm_head` is the one production cares about.  It fits the
+**linear** SVM through the very same :func:`train_svm` call the eval harness
+scores as ``svm_linear``, then lifts the resulting hyperplane into a torch
+``Linear(D, 1)`` so the rest of the detector pipeline - calibration folds,
+max-pooled region scoring, weight serialisation, threshold fusion - keeps
+working on an ``nn.Sequential`` exactly as it did under the logistic head.
+The two heads have the *same architecture*; they differ only in the objective
+that fits it (hinge + L2 versus balanced BCE).  Reached through
+:func:`vtscore.training.mlp.train_model` via the
+:data:`~vtscore.training.mlp.LINEAR_SVM_HEAD` sentinel.
 """
 
 from __future__ import annotations
@@ -192,6 +197,33 @@ def _effective_calibration(
     return "isotonic"
 
 
+def _class_weight_for(
+    inclusion_value: int,
+    n_pos: int,
+    n_neg: int,
+    *,
+    weighted: bool,
+) -> str | dict[int, float] | None:
+    """Translate *inclusion_value* into an sklearn ``class_weight``.
+
+    Mirrors the MLP path: the ``"balanced"`` baseline divides by class
+    frequency, then an exponential multiplier tilts it in the requested
+    direction.  When the caller supplies explicit per-row weights (*weighted*)
+    the result is ``None`` - again mirroring the MLP path, where per-row
+    weights replace the frequency balance entirely.  Stacking a class balance
+    on top of per-bag weights would count the balance twice.
+    """
+    if weighted:
+        return None
+    if inclusion_value == 0:
+        return "balanced"
+    if inclusion_value > 0:
+        base_pos = n_neg / max(n_pos, 1)
+        return {0: 1.0, 1: float(base_pos * (2.0**inclusion_value))}
+    base_neg = n_pos / max(n_neg, 1)
+    return {0: float(base_neg * (2.0 ** (-inclusion_value))), 1: 1.0}
+
+
 def train_svm(
     X: np.ndarray,
     y: np.ndarray,
@@ -206,6 +238,7 @@ def train_svm(
     seed: int = 42,
     standardize: bool = False,
     backend: SVMBackend = "auto",
+    sample_weight: np.ndarray | None = None,
 ) -> SVMClassifier:
     """Fit an SVM classifier and return a score-emitting wrapper.
 
@@ -258,7 +291,16 @@ def train_svm(
             fall-back behaviour when the data can't support CV
             calibration.
         inclusion_value: ``[-10, 10]`` bias toward including (positive) or
-            excluding (negative) - translated to ``class_weight``.
+            excluding (negative) - translated to ``class_weight``.  Ignored
+            when *sample_weight* is supplied (the caller owns class balance).
+        sample_weight: Optional per-row fit weights of shape ``(N,)``.  When
+            given they replace the ``class_weight`` balance entirely, exactly
+            as they do in :func:`vtscore.training.mlp.train_model` - this is
+            how the region-flooding path expresses **per-bag** balancing, so a
+            Bad image's many correlated region negatives count as one image.
+            Only the ``decision_sigmoid`` path accepts them; CV calibration
+            would have to re-weight each fold, so it rejects them instead of
+            silently dropping the balance.
         seed: Random seed for the SVM solver and the calibrator's CV splits.
         standardize: When ``True``, fit a ``StandardScaler`` first.  Every
             embedding is L2-normalised once at ingest (see
@@ -297,17 +339,12 @@ def train_svm(
         scaler = StandardScaler().fit(X)
         X_fit = np.asarray(scaler.transform(X), dtype=np.float32)
 
-    # Translate inclusion into a class weight.  Mirrors the MLP path:
-    # the "balanced" baseline divides by class frequency, then we apply
-    # an exponential multiplier in the requested direction.
-    if inclusion_value == 0:
-        class_weight: str | dict[int, float] = "balanced"
-    elif inclusion_value > 0:
-        base_pos = n_neg / max(n_pos, 1)
-        class_weight = {0: 1.0, 1: float(base_pos * (2.0**inclusion_value))}
-    else:
-        base_neg = n_pos / max(n_neg, 1)
-        class_weight = {0: float(base_neg * (2.0 ** (-inclusion_value))), 1: 1.0}
+    if sample_weight is not None:
+        sample_weight = np.asarray(sample_weight, dtype=np.float64).ravel()
+        if sample_weight.shape[0] != y.shape[0]:
+            raise ValueError(f"sample_weight has {sample_weight.shape[0]} rows but y has {y.shape[0]}")
+
+    class_weight = _class_weight_for(inclusion_value, n_pos, n_neg, weighted=sample_weight is not None)
 
     gamma_eff = _resolve_gamma(gamma, gamma_mult, X_fit)
     mode = _effective_calibration(calibration, n_pos, n_neg)
@@ -322,12 +359,26 @@ def train_svm(
         # and flips the process-global kill switch, mirroring
         # :mod:`vtscore.gpu_backends`.
         base, used_backend = _fit_decision_sigmoid(
-            kernel, C, seed, class_weight, X_fit, y, gamma=gamma_eff, degree=degree, backend=backend
+            kernel,
+            C,
+            seed,
+            class_weight,
+            X_fit,
+            y,
+            gamma=gamma_eff,
+            degree=degree,
+            backend=backend,
+            sample_weight=sample_weight,
         )
         calibrator = None
     else:
         # CV calibration (Platt/isotonic) is sklearn-only — cuML has no
         # CalibratedClassifierCV — so this path always runs on the CPU.
+        if sample_weight is not None:
+            raise ValueError(
+                f"sample_weight is only supported with calibration='decision_sigmoid' (got {mode!r}); "
+                "CV calibration would re-fit on unweighted folds and silently drop the balance"
+            )
         from sklearn.calibration import CalibratedClassifierCV  # noqa: PLC0415
         from sklearn.model_selection import StratifiedKFold  # noqa: PLC0415
 
@@ -374,6 +425,7 @@ def _fit_decision_sigmoid(
     gamma: str | float,
     degree: int,
     backend: SVMBackend,
+    sample_weight: np.ndarray | None = None,
 ) -> tuple[Any, str]:
     """Fit the base SVM for ``decision_sigmoid`` scoring, preferring cuML on a GPU.
 
@@ -381,10 +433,16 @@ def _fit_decision_sigmoid(
     ``"cuml"`` or ``"sklearn-cpu"``.  A cuML failure (import, construction, or
     the lazy fit-time kernel compile) degrades to sklearn and disables cuML for
     the rest of the process.
+
+    *sample_weight*, when given, is forwarded to ``fit``.  cuML's SVMs do not
+    take per-row weights, so a weighted fit stays on sklearn rather than
+    silently dropping the weights on the GPU path.
     """
     global _cuml_svm_failed
 
-    want_cuml = backend in ("auto", "cuml") and not _cuml_svm_failed
+    want_cuml = backend in ("auto", "cuml") and not _cuml_svm_failed and sample_weight is None
+    if sample_weight is not None and backend == "cuml":
+        raise ValueError("backend='cuml' cannot honour sample_weight; cuML's SVMs take no per-row weights")
     if want_cuml and backend == "auto":
         from vtscore.gpu_backends import cuml_enabled  # noqa: PLC0415
 
@@ -411,5 +469,96 @@ def _fit_decision_sigmoid(
                 raise
 
     base = _make_base_estimator(kernel, C, seed, class_weight, gamma=gamma, degree=degree)
-    base.fit(X_fit, y)
+    base.fit(X_fit, y, sample_weight=sample_weight)
     return base, "sklearn-cpu"
+
+
+def fit_linear_svm_head(
+    X: np.ndarray,
+    y: np.ndarray,
+    input_dim: int,
+    *,
+    seed: int = 42,
+    sample_weight: np.ndarray | None = None,
+) -> Any:
+    """Fit the **production detector head**: a linear SVM, returned as ``Linear(D, 1)``.
+
+    This is the head every production fit trains (see
+    :data:`vtscore.training.mlp.LINEAR_SVM_HEAD`).  It is the *same*
+    architecture as the older logistic head - one ``Linear(input_dim, 1)``, no
+    hidden layer - so weight serialisation, ``build_model_from_weights``,
+    max-pooled region scoring, and the calibration folds are all untouched.
+    What changes is the objective that fits it: hinge loss with L2
+    regularisation (a maximum-margin boundary decided by the examples nearest
+    it) instead of balanced binary cross-entropy.
+
+    The fit is delegated to :func:`train_svm` with ``kernel="linear"`` rather
+    than re-implemented, so the shipped head *is* the ``svm_linear`` arm the
+    eval harness scores - there is no second definition to drift.
+
+    Scores stay comparable to the logistic head's because both end in
+    ``sigmoid(w·x + b)``: production applies the sigmoid downstream
+    (:func:`vtscore.utils.scores.sigmoid_to_finite_scores`), which reproduces
+    :meth:`SVMClassifier.predict_proba`'s ``decision_sigmoid`` mode value for
+    value.  Neither head's output is a calibrated probability - the decision
+    point is the separately calibrated threshold, not 0.5.
+
+    Args:
+        X: ``(N, input_dim)`` float array of training embeddings.
+        y: ``(N,)`` array of 0/1 labels (1 = good, 0 = bad).
+        input_dim: Embedding dimensionality; must match ``X.shape[1]``.
+        seed: Seed for the solver (liblinear is deterministic given it).
+        sample_weight: Optional per-row fit weights.  ``None`` balances the
+            classes by inverse frequency (``class_weight="balanced"``, the
+            analogue of the MLP path's default); supplying weights hands class
+            balance to the caller, which is how region flooding weights a Bad
+            image's many region rows down to one image's worth.
+
+    Returns:
+        An ``nn.Sequential(Linear(input_dim, 1))`` in eval mode on the active
+        torch device, whose forward pass **is** the SVM's decision function.
+
+    Raises:
+        ValueError: propagated from :func:`train_svm` when the labels are
+            single-class or there are fewer than 2 samples.
+    """
+    import torch  # noqa: PLC0415
+
+    from vtscore.embedding.loader import ensure_torch_configured, get_torch_device  # noqa: PLC0415
+    from vtscore.training.mlp import LINEAR_SVM_HEAD, build_model  # noqa: PLC0415
+
+    from vtscore import config  # noqa: PLC0415
+
+    clf = train_svm(
+        X,
+        y,
+        kernel="linear",
+        C=config.SVM_HEAD_C,
+        calibration="decision_sigmoid",
+        inclusion_value=0,
+        seed=seed,
+        standardize=False,
+        # sklearn only: the fit is milliseconds at any vote count a user
+        # reaches, liblinear is deterministic given the seed, and cuML's
+        # LinearSVC takes neither a seed nor per-row weights - so a GPU fit
+        # would buy nothing and cost reproducibility.
+        backend="sklearn",
+        sample_weight=sample_weight,
+    )
+
+    # Lift the hyperplane into the torch head.  ``coef_`` is ``(1, D)`` and
+    # ``intercept_`` is ``(1,)`` for a binary LinearSVC, which is exactly the
+    # shape of ``Linear(D, 1)``'s weight and bias, so ``model(x)`` returns the
+    # decision function unchanged.
+    coef = np.asarray(clf.base.coef_, dtype=np.float32).reshape(1, -1)
+    intercept = np.asarray(clf.base.intercept_, dtype=np.float32).reshape(1)
+    if coef.shape[1] != input_dim:
+        raise ValueError(f"SVM fit produced {coef.shape[1]} coefficients but input_dim is {input_dim}")
+
+    ensure_torch_configured()
+    model = build_model(input_dim, hidden_dim=LINEAR_SVM_HEAD)
+    with torch.no_grad():
+        model[0].weight.copy_(torch.from_numpy(coef))
+        model[0].bias.copy_(torch.from_numpy(intercept))
+    model.eval()
+    return model.to(get_torch_device())

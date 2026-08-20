@@ -642,6 +642,14 @@ MLP_DROPOUT = 0.5
 # where all quantiles degenerate to the same cut.
 MLP_LABEL_SMOOTHING = 0.05
 
+# Inverse regularisation strength of the production **linear SVM head**
+# (``LINEAR_SVM_HEAD`` in ``vtscore.training.mlp``, fitted by
+# ``vtscore.training.svm.fit_linear_svm_head``).  1.0 is sklearn's own default
+# and the value the eval harness's ``svm_linear`` arm was measured at, so the
+# shipped head and the measured arm are the same fit.  Lower it to regularise
+# harder on very few votes; raise it to trust the labels more.
+SVM_HEAD_C = float(os.environ.get("VTSEARCH_SVM_HEAD_C", "1.0"))
+
 # --- Browse projection (UMAP Stage 1) ---------------------------------------
 # Default UMAP knobs for the VTSBrowse 2-D projection.  Overridable per
 # deployment via the ``projection_n_neighbors`` / ``projection_min_dist``

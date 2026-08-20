@@ -33,7 +33,7 @@ dataset by how well it matches. Detectors come from two places;
 either trained in the UI from good/bad votes in a labeling pass, or
 imported/loaded from disk and applied as-is. The architecture combines:
 
-- **Detectors (learned search)**: a linear (logistic) head trained on
+- **Detectors (learned search)**: a linear SVM head trained on
   user votes to predict good/bad labels. This is the primary search mechanism.
   Detectors are persisted as **labelsets** (origin info + labels; never
   weights; weights are an in-memory artifact, re-derived on demand from
@@ -571,7 +571,7 @@ modules on the right.
 **Dependencies:** `torch`, `sklearn`, `numpy`
 
 **What you get:** `train_model()` trains a classifier on embeddings +
-binary labels — the linear (logistic) head production uses
+binary labels — the linear SVM head production uses
 (`hidden_dim=LINEAR_HEAD`), or the MLP for a positive `hidden_dim`.  `conformal_threshold()` maps an
 `inclusion` value to a decision threshold via a split-conformal
 quantile rule over held-out calibration scores.  A separate

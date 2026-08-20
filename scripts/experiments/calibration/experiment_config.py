@@ -194,13 +194,14 @@ CUT_INCLUSION_QTILT_STEPS = [float(s) for s in os.environ.get("CALIB_CUT_INCL_QT
 #: grid's *maximum* sets the price, not its length.  Size it from a real cell.
 FOLD_COUNTS = [int(k) for k in os.environ.get("CALIB_FOLD_COUNTS", "").split(",") if k.strip()]
 
-#: Which torch head each step trains (``vtscore.eval.voting_iterations.HEADS``).
+#: Which head each step trains (``vtscore.eval.voting_iterations.HEADS``).
 #: Unset (the default) hands ``head=None`` to the harness, which resolves it to
-#: the head the live detector actually trains — ``linear`` since #2790/#2809.
-#: That is the only setting a study's headline numbers can be read off, because
-#: questions like #2799's ("should safe_thresholds be forced on for every
-#: VTSearch user?") are answerable only on the shipped head.  Set
-#: ``CALIB_HEAD=mlp`` to reproduce the historical auto-sized-MLP arm (#2781).
+#: the head the live detector actually trains — ``linear_svm``.  That is the
+#: only setting a study's headline numbers can be read off, because questions
+#: like #2799's ("should safe_thresholds be forced on for every VTSearch
+#: user?") are answerable only on the shipped head.  Set ``CALIB_HEAD=linear``
+#: for the logistic head the SVM replaced (#2790/#2809), or ``CALIB_HEAD=mlp``
+#: for the historical auto-sized-MLP arm (#2781).
 HEAD = os.environ.get("CALIB_HEAD") or None
 
 #: Which safe-threshold mix-in schedule the run *lives* under (issue #2841).

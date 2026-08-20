@@ -283,7 +283,7 @@ by `sim_fraction`, then iterates:
    Hard → New) and apply it; mirror it onto the coverage atlas that
    drives the New phase.
 2. When both polarities have at least one vote, train the head
-   (`train_model`; the default arm passes `LINEAR_HEAD`, matching the app)
+   (`train_model`; the default arm passes `LINEAR_SVM_HEAD`, matching the app)
    and pick a threshold
    (`calculate_cross_calibration_threshold`, with optional
    `calculate_safe_threshold` blend).

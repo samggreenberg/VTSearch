@@ -33,7 +33,7 @@ import numpy as np
 
 from vtscore.concurrency.async_jobs import check_job_cancelled
 from vtscore.embedding.media_vectors import media_embedding
-from vtscore.training.mlp import LINEAR_HEAD, train_model
+from vtscore.training.mlp import LINEAR_SVM_HEAD, train_model
 from vtscore.training.thresholds import conformal_threshold
 
 if TYPE_CHECKING:
@@ -528,8 +528,8 @@ def _train_step(
     X = torch.tensor(np.array(X_list), dtype=torch.float32)
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
 
-    # Linear (logistic) head, matching the production detector this previews.
-    model = train_model(X, y, X.shape[1], hidden_dim=LINEAR_HEAD)
+    # Linear SVM head, matching the production detector this previews.
+    model = train_model(X, y, X.shape[1], hidden_dim=LINEAR_SVM_HEAD)
 
     with torch.no_grad():
         X_dev = X.to(next(model.parameters()).device)
