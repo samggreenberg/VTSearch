@@ -35,7 +35,13 @@ from vtscore.eval.region_curve import RV_HEAD_STRATEGIES, evaluate_realistic_cur
 from vtscore.eval.region_sources import build_region_source
 
 EMBEDDER_ALIASES = {"dinov2": "dinov2_patch", "dinov3": "dinov3_patch"}
-TEXT_EMBEDDERS = {"siglip", "siglip2", "clip"}
+# Image embedders with a text encoder, so a text query can seed the cold-start ranking.
+# Must list every text-capable name in the registry, INCLUDING the ``_l`` (large)
+# variants: a name missing here silently falls back to example-seeding (cosine to ONE
+# randomly drawn training positive per seed), which makes cold-start rows differ across
+# seeds and makes --query a no-op with no warning. Cross-check against
+# ``[e.name for e in all_embedders() if e.media_type_id == "image" and e.supports_text]``.
+TEXT_EMBEDDERS = {"siglip", "siglip_l", "siglip2", "siglip2_l", "clip"}
 
 # Short aliases for the gated DINOv3 ViT checkpoints (all patch-size 16, so the
 # grid density is identical across sizes — a larger model buys richer per-patch

@@ -30,6 +30,9 @@ Matthew Usage:
 # Cats SigLIP
 python scripts/sod/sweep_train_test.py --image-dir data/cats --cache-dir docs/experiments/sod-sweep/cache  --name cats --out-dir docs/experiments/sod-sweep/cats --reference-csv data/cats/reference/reference.csv --embedders siglip --iterations 3 --max-labels 150 --viz --viz-band all --labeling-trace --show-oracle --query "cat"
 
+# Cats SigLIP2
+python scripts/sod/sweep_train_test.py --image-dir data/cats --cache-dir docs/experiments/sod-sweep/cache  --name cats --out-dir docs/experiments/sod-sweep/cats-siglip2large --reference-csv data/cats/reference/reference.csv --embedders siglip2_l --iterations 3 --max-labels 150 --viz --viz-band all --labeling-trace --show-oracle --query "cat"
+
 # Cats HAC
 python scripts/sod/sweep_train_test.py --image-dir data/cats --name cats --embedders dinov3 -- --iterations 3 --max-labels 150 --resolution 448 --out-dir docs/experiments/sod-sweep/cats --viz --viz-band all --labeling-trace
 """

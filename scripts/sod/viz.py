@@ -1031,7 +1031,9 @@ def render_labeling_trace(
 
     * ``…_pred.png`` — GT green + the detector's surfacing box/score red (+ good-vote snapped
       region blue). For a **good** vote it also appends, on the right, the snapped node's own
-      patches (a colour cell-crop) — the exact sub-image that becomes the next MLP's training positive.
+      patches (a colour cell-crop) — the exact sub-image that becomes the next MLP's training
+      positive. **Not on ``proposal="whole"``**: there the only region is the full frame, so the
+      crop would duplicate the overlay; those steps emit the single image alone.
     * ``…_hac.png``  — the reference-style HAC composite (see :func:`_render_hac_composite`):
       the region tree drawn twice — masked-cell pixel thumbnails on the left, the same tree
       over the inferno attention overlay on the right — with each node's MLP score and the
@@ -1094,7 +1096,10 @@ def render_labeling_trace(
         #    For a GOOD vote, append the snapped node's own patches (colour cell-crop) on the right,
         #    so you see exactly the sub-image that becomes the training positive.
         pred_img = _draw(img, gt, pred, e.get("surface_score"), snap=snap_box)
-        if snapped is not None and viz is not None:
+        # The right-hand cell-crop is the snapped node's own patches. On ``whole`` the only
+        # region IS the full frame, so that crop is just a second copy of the same picture -
+        # skip it and emit the single overlay.
+        if snapped is not None and viz is not None and proposal != "whole":
             mask = cell_masks[snapped] if cell_masks is not None else None
             node = _cell_thumb(
                 np.asarray(img.convert("RGB"), dtype=np.uint8), mask, boxes[snapped], (img.height, img.height)
