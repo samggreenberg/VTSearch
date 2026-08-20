@@ -467,6 +467,7 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
     # dimensions of the image its coordinates were measured on.
     box_dims: dict[int, tuple[int, int]] = dict(dims)
     n_anchored = 0
+    n_reframed = 0
     for iid in labels:
         cid = coco_of.get(iid)
         ref = truth.get(cid) if cid is not None else None
@@ -474,6 +475,17 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
             continue
         wh = ca.COCO_DIMS.get(cid)
         if wh is None:
+            continue
+        # A normalised box only transfers between two copies of an image if they
+        # frame the same thing. 49 of the 51,497 overlaps disagree on aspect
+        # ratio -- some are transposed (VG 500x375 against COCO 375x500), i.e. a
+        # rotated or re-cropped copy -- and there COCO's box does not describe
+        # VG's pixels at all. Those keep VG's own labels and stay unanchored
+        # rather than importing a box that points at the wrong part of a
+        # different framing.
+        vw, vh = dims[iid]
+        if abs((vw / vh) - (wh[0] / wh[1])) / (wh[0] / wh[1]) > pc.MAX_ASPECT_DRIFT:
+            n_reframed += 1
             continue
         box_dims[iid] = wh
         # COCO's annotation REPLACES VG's for this image rather than merging
@@ -493,7 +505,10 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
             labels[iid].pop(name, None)
         exhaustive.add(iid)  # a human looked at this pair
 
-    log(f"  labels: {len(labels)} VG images, {n_anchored} repaired from COCO, {len(exhaustive)} with a verified pair")
+    log(
+        f"  labels: {len(labels)} VG images, {n_anchored} repaired from COCO, "
+        f"{len(exhaustive)} with a verified pair, {n_reframed} skipped as re-framed copies"
+    )
 
     # --- candidates ---------------------------------------------------------
     supply: dict[str, dict[str, list[int]]] = {c: {b: [] for b in bands} for c in pc.SCALE_CLASSES}

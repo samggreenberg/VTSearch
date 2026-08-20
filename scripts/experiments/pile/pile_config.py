@@ -279,6 +279,14 @@ SCALE_N_NEG = int(os.environ.get("VTS_SCALE_N_NEG", "3900"))
 SCALE_N_NEG_SPARE = int(os.environ.get("VTS_SCALE_N_NEG_SPARE", "300"))
 
 
+#: How far a VG copy's aspect ratio may drift from the COCO original before its
+#: boxes are considered untransferable. Normalised coordinates survive a rescale
+#: but not a re-crop or a rotation, and 49 of the 51,497 overlaps are one of
+#: those -- small enough to ignore by accident, which is why it is a constant
+#: with a check rather than an assumption.
+MAX_ASPECT_DRIFT = float(os.environ.get("VTS_MAX_ASPECT_DRIFT", "0.01"))
+
+
 def scale_cell(category: str, band: str) -> str:
     """The band-suffixed category name a harness cell is keyed on.
 
