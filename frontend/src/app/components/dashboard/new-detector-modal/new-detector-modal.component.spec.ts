@@ -430,6 +430,10 @@ describe('NewDetectorModalComponent', () => {
   });
 
   it('appends an imported batch to the stack as unlabeled seeds', () => {
+    component.seedImporters.set([
+      { name: 'holder', display_name: 'Holder', description: 'Near misses' } as never,
+    ]);
+    component.setExampleTab('holder');
     component.mediaType.set('');
 
     component.onSeedsImported({
@@ -445,9 +449,60 @@ describe('NewDetectorModalComponent', () => {
     expect(component.mediaExamples().every((e) => e.seed)).toBe(true);
     // Media type is inferred from the original filename's extension.
     expect(component.mediaExamples()[0].mediaType).toBe('audio');
-    // The stack is where the user prunes what arrived, so land them on it.
-    expect(component.exampleTab()).toBe('media');
+    // The stack is mirrored under the importer's own form, so the batch shows
+    // up where it was added rather than yanking the user to the media tab.
+    expect(component.exampleTab()).toBe('holder');
     expect(component.seedNotice()).toBe('Added 2 seeds.');
+  });
+
+  it('mirrors the example stack inside the seed importer tab (issue #3192)', () => {
+    component.seedImporters.set([
+      { name: 'holder', display_name: 'Holder', description: 'Near misses' } as never,
+    ]);
+    component.setExampleTab('holder');
+    fixture.detectChanges();
+
+    // Nothing imported yet: the form stands alone, no stack.
+    const panel = () => fixture.nativeElement.querySelector('.example-panel');
+    expect(panel().querySelector('.example-stack')).toBeNull();
+
+    component.onSeedsImported({
+      count: 2,
+      truncated: false,
+      items: [
+        { filename: 'aaa.wav', original_name: 'near-miss-1.wav', origin: null },
+        { filename: 'bbb.wav', original_name: 'near-miss-2.wav', origin: null },
+      ],
+    });
+    fixture.detectChanges();
+
+    // Same rows the media tab renders, still on the seed importer's tab —
+    // including the Seed badges and per-row Remove buttons.
+    const rows = panel().querySelectorAll('.example-stack .example-row');
+    expect(rows.length).toBe(2);
+    expect(panel().querySelectorAll('.example-seed-badge').length).toBe(2);
+    expect(panel().querySelector('vt-plugin-import-form')).toBeTruthy();
+    // The seed tab adds through its own form, so it omits the browse button.
+    expect(panel().querySelector('.add-example-btn')).toBeNull();
+
+    // Removing from the mirrored stack edits the one shared list.
+    component.removeMediaExample(0);
+    fixture.detectChanges();
+    expect(component.mediaExamples().map((e) => e.value)).toEqual(['bbb.wav']);
+    expect(panel().querySelectorAll('.example-stack .example-row').length).toBe(1);
+  });
+
+  it('still lands a hand-picked example on the media tab', () => {
+    component.seedImporters.set([
+      { name: 'holder', display_name: 'Holder', description: 'Near misses' } as never,
+    ]);
+    component.setExampleTab('holder');
+
+    // A pick made through the media picker belongs to the media tab, which is
+    // where the picker lives — only seeds stay put.
+    component.onDatasourceImported({ filename: 'bbb.wav', original_name: 'bark.wav' });
+
+    expect(component.exampleTab()).toBe('media');
   });
 
   it('says so when a batch comes back empty or truncated', () => {
