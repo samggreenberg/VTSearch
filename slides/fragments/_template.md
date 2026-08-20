@@ -19,7 +19,10 @@
   A `---` line here would split this fragment into two slides; build.py errors
   on it. Use `***` if you want a horizontal rule.
 
-  Any HTML comment that is not a Marp directive becomes a presenter note.
+  Any HTML comment that is not a Marp directive becomes a presenter note —
+  hidden in the audience build, rendered beside a miniature of the slide by
+  the speaker build (./render.sh <deck> pdf --speaker). Write notes as real
+  speaking notes: wordier than the slide, covering what to say.
 -->
 
 ### Kicker
