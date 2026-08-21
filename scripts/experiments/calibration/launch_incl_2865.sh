@@ -119,10 +119,19 @@ export CALIB_N_SEEDS=4
 # it rather than trusting this paragraph.
 export CALIB_PARTITION=cpu
 export CALIB_GRES=none
-export CALIB_MEM=12G
+# Measured, not guessed: `size` timed one cell of each of the four arms at
+# 75 min / 83 min (the two dinov3 region arms, MaxRSS 5.3G) and 8-9 min (the two
+# siglip binary arms).  8G covers the peak; 4 h covers the slowest cell twice
+# over.  Concurrency is capped by the `cpu_limit` QOS, which is cpu=240 with 2
+# charged per task (=120) and mem=1100000M (=134 at 8G) - so 120 is the cpu cap,
+# and asking for more only parks the excess behind your own array.
+export CALIB_MEM=8G
 export CALIB_CPUS=1
-export CALIB_TIME=6:00:00
-export CALIB_CONC=130
+export CALIB_TIME=4:00:00
+export CALIB_CONC=120
+# ~28 k cut-inclusion rows per cell x 336 cells = ~9.4 M rows for one analyzer.
+export CALIB_ANALYZE_MEM=48G
+export CALIB_ANALYZE_TIME=2:00:00
 
 # Read the pre-embedded pile in place: no re-embed, no GPU, no model download.
 export VTS_PILE="${VTS_PILE:-/expscratch/$USER/vts-cache}"
