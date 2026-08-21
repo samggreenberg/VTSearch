@@ -239,3 +239,30 @@ leaving the current Find session frozen and marking it stale.
 
 Errors: **400** (no Find run yet), **404** (no active detector), **409**
 (detector vote state not aligned with the active dataset).
+
+### End the Find session
+
+```
+POST /api/find/end-session
+```
+
+**Requires** `X-Dataset-Id` **and** `X-Detector-Id`.
+
+Discards the active detector's live Find session — the whole-dataset
+presumptions `find-label` wrote into its vote dicts, the frozen scores, and the
+verified set — and re-derives its votes from its on-disk labelset.
+
+Find and training share one set of per-detector vote dicts, so this is what
+separates the two: the Train window calls it on entry, before it reads
+[`GET /api/votes`](medias.md). Without it a user who ran Find and went back to
+training saw every item in the collection already voted (Autopilot lands in a
+terminal phase on arrival), and the find-mode write-back guard kept each new
+training vote out of the labelset.
+
+Find-session state is in-memory only and is already dropped on a dataset
+switch; nothing durable is lost. Corrections folded in via
+`/api/find/corrections-to-detector` live in the labelset and survive.
+
+Idempotent — with no session to end it is a no-op reporting `ended: false`.
+
+→ `{"ok": true, "ended": true}`
