@@ -138,9 +138,11 @@ Synthetic Media generator's media type and dataset size:
 
 ### Advanced import options
 
-Importers expose a collapsible **Advanced** section (hidden when there is
-nothing in it to choose). The most important control there is the embedder
-picker, which is actually a three-role picker:
+Every importer exposes a collapsible **Advanced** section. It starts
+collapsed and *nothing* inside it renders until you open it - not even a
+control whose value differs from the default; hover the **Advanced** toggle
+and its tooltip names any non-default choice in effect. The most important
+control there is the embedder picker, which is actually a three-role picker:
 
 - **Embedder** - the main model that powers search and matching for the
   dataset. VTSearch picks a sensible default for each media type.
@@ -155,6 +157,10 @@ form:
 - **Include media** - which source media types feed the dataset. The
   dataset's own type is included directly; other types are pulled in and
   converted (images out of videos, pages out of documents).
+- **Convert to** - on the **Demo** importer, whose dataset is fixed:
+  which type to convert the demo's media into on load (scanned documents
+  into page images, say). The equivalent choice on the other importers is
+  *Include media* above.
 - **Clipper** - a pre-processing pass applied before each item is
   analyzed, e.g. cutting long audio into shorter segments.
 - **Cleanup** - optional passes that strip content-free regions from each
