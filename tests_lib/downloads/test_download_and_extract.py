@@ -993,17 +993,19 @@ class _FakeResponse:
 
     Yields the given *chunks* from ``iter_content``; if *fail_after_chunks* is
     set, raises ``ChunkedEncodingError`` once that many chunks have been yielded
-    (simulating a mid-stream connection drop / ``IncompleteRead``).
+    (simulating a mid-stream connection drop / ``IncompleteRead``).  *text* is
+    the whole-body view the small-payload fetches read instead of streaming.
     """
 
     is_redirect = False
     is_permanent_redirect = False
 
-    def __init__(self, chunks, status_code=200, headers=None, fail_after_chunks=None):
+    def __init__(self, chunks, status_code=200, headers=None, fail_after_chunks=None, text=""):
         self._chunks = list(chunks)
         self.status_code = status_code
         self.headers = headers or {}
         self._fail_after_chunks = fail_after_chunks
+        self.text = text
         self.closed = False
 
     def raise_for_status(self):
@@ -1244,8 +1246,7 @@ class TestFetchTextWithRetry:
 
         from vtscore.datasets.downloader import core as dl_core
 
-        response = _FakeResponse([], status_code=200)
-        response.text = '{"files": []}'
+        response = _FakeResponse([], status_code=200, text='{"files": []}')
         monkeypatch.setattr(requests.Session, "get", lambda self, url, *a, **k: response)
 
         assert dl_core.fetch_text_with_retry("https://archive.org/metadata/x") == '{"files": []}'
@@ -1256,8 +1257,7 @@ class TestFetchTextWithRetry:
 
         from vtscore.datasets.downloader import core as dl_core
 
-        response = _FakeResponse([], status_code=200)
-        response.text = "ok"
+        response = _FakeResponse([], status_code=200, text="ok")
         calls = []
 
         def fake_get(self, url, *args, **kwargs):
