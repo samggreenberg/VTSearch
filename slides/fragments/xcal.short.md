@@ -1,4 +1,4 @@
-![bg right:56% fit](figs/calib-xcal-flow.png)
+![bg right:70% fit](figs/calib-xcal-flow.png)
 
 ### Iteration 1
 
