@@ -68,6 +68,115 @@ def gaussian(x: np.ndarray, mu: float, var: float) -> np.ndarray:
     return np.exp(-0.5 * (x - mu) ** 2 / var) / np.sqrt(2 * np.pi * var)
 
 
+def xcal_flow_fig() -> None:
+    """Schematic of cross-calibration (issue #3207), drawn to match the code.
+
+    Deliberate divergences from the hand mockup the issue attached, because the
+    mockup drew a different algorithm than `calculate_cross_calibration_threshold`:
+    the rounds are independent stratified *re-draws* of the whole labelset (not
+    a partition into halves), and there are no per-fold thresholds to average —
+    the held-out scores are pooled and one conformal quantile is cut
+    (`threshold_from_fold_orderings`). Green = Good, red = Bad, everything else
+    ink-on-white per the issue.
+    """
+    from matplotlib.patches import FancyArrowPatch, Rectangle  # noqa: PLC0415
+
+    fig, ax = plt.subplots(figsize=(7.2, 7.0))
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.set_axis_off()
+
+    # One square per labelled vote; True = Good (green), False = Bad (rust).
+    votes = [True, False, False, True, False, True, False, False, True, False]
+    sq, gap = 0.34, 0.075
+
+    def vote_row(x0: float, y0: float, labels: list[bool]) -> float:
+        for i, good in enumerate(labels):
+            ax.add_patch(
+                Rectangle(
+                    (x0 + i * (sq + gap), y0),
+                    sq,
+                    sq,
+                    facecolor=GREEN if good else RUST,
+                    edgecolor=INK,
+                    linewidth=1.0,
+                    zorder=3,
+                )
+            )
+        return x0 + len(labels) * (sq + gap) - gap
+
+    def arrow(xy_from: tuple[float, float], xy_to: tuple[float, float], rad: float = 0.0) -> None:
+        ax.add_patch(
+            FancyArrowPatch(
+                xy_from,
+                xy_to,
+                arrowstyle="-|>",
+                mutation_scale=14,
+                color=INK,
+                linewidth=1.6,
+                connectionstyle=f"arc3,rad={rad}",
+                zorder=2,
+            )
+        )
+
+    def model_box(cx: float, cy: float, label: str) -> None:
+        w, h = 0.85, 0.62
+        ax.add_patch(
+            Rectangle((cx - w / 2, cy - h / 2), w, h, facecolor="white", edgecolor=INK, linewidth=1.6, zorder=3)
+        )
+        ax.text(cx, cy, label, ha="center", va="center", fontsize=16, color=INK, zorder=4)
+
+    # ── the model you keep: train M0 on every vote ────────────────────────────
+    ax.text(0.5, 9.6, "D₀ — the labelled votes", ha="left", va="bottom", fontsize=15, color=INK)
+    xa_end = vote_row(0.5, 9.0, votes)
+    arrow((xa_end + 0.15, 9.17), (5.55, 9.17))
+    ax.text(4.95, 8.85, "train on all of D₀", ha="center", va="top", fontsize=15, color=INK)
+    model_box(6.05, 9.17, "M₀")
+    ax.text(6.6, 9.17, "the model you keep", ha="left", va="center", fontsize=15, color=SOFT)
+
+    # ── K independent stratified re-splits ────────────────────────────────────
+    ax.text(0.5, 8.1, "K independent stratified re-splits  (shipped: K = 2)", fontsize=15.5, color=INK, fontweight="bold")
+    ax.text(0.5, 7.73, "re-drawn each round, not a partition —", fontsize=15, color=SOFT)
+    ax.text(0.5, 7.38, "a vote can be held out twice, or never", fontsize=15, color=SOFT)
+
+    # Round 1 holds out votes {0, 2, 4, 6, 8}; round 2 re-draws {0, 2, 3, 7, 9}.
+    # Both splits are stratified: 2 Good + 3 Bad on each side, every round.
+    holdouts = [[0, 2, 4, 6, 8], [0, 2, 3, 7, 9]]
+    for row, (y0, held) in enumerate(zip((6.6, 5.3), holdouts)):
+        train = [votes[i] for i in range(len(votes)) if i not in held]
+        cal = [votes[i] for i in held]
+        yc = y0 + sq / 2
+        xt_end = vote_row(0.5, y0, train)
+        arrow((xt_end + 0.15, yc), (3.35, yc))
+        ax.text((xt_end + 3.4) / 2, y0 - 0.14, "train", ha="center", va="top", fontsize=15, color=INK)
+        model_box(3.8, yc, f"M{chr(0x2081 + row)}")
+        arrow((4.25, yc), (5.1, yc))
+        ax.text(4.68, y0 - 0.14, "score", ha="center", va="top", fontsize=15, color=INK)
+        xc_end = vote_row(5.25, y0, cal)
+        ax.text(xc_end + 0.2, yc, "held out — never\nseen in training", ha="left", va="center", fontsize=15, color=INK)
+        # Held-out scores drop into the pooled line below; the x positions sit
+        # in the gaps between round 2's squares so the arrows cross nothing.
+        arrow((6.04 + 0.42 * row, y0 - 0.08), (6.04 + 0.42 * row, 3.55))
+
+    # ── pool the held-out scores; cut one quantile ────────────────────────────
+    ax.text(0.5, 4.45, "pool the held-out scores", fontsize=15.5, color=INK, fontweight="bold")
+    ax.text(0.5, 4.1, "no per-round θ to average", fontsize=15, color=SOFT)
+    line_y = 3.0
+    ax.plot([0.9, 9.1], [line_y, line_y], color=INK, linewidth=1.8, zorder=2)
+    for x in (1.5, 2.2, 2.9, 3.5, 4.05, 4.5):
+        ax.text(x, line_y - 0.14, "✗", ha="center", va="top", fontsize=16, color=RUST, fontweight="bold")
+    for x in (5.4, 6.3, 7.2, 8.1):
+        ax.text(x, line_y + 0.1, "✓", ha="center", va="bottom", fontsize=16, color=GREEN, fontweight="bold")
+    cut_x = 4.95
+    ax.plot([cut_x, cut_x], [line_y - 0.55, line_y + 0.62], color=INK, linewidth=2.6, zorder=4)
+    ax.text(cut_x, 2.2, "θ₀ — one conformal quantile of the pool", ha="center", va="top", fontsize=15.5, color=INK)
+    ax.text(cut_x, 1.83, "the Inclusion knob slides the quantile; training never sees it", ha="center", va="top", fontsize=15, color=SOFT)
+
+    ax.text(5.0, 0.9, "return (M₀, θ₀)", ha="center", va="center", fontsize=18, color=INK, fontweight="bold")
+
+    save(fig, OUT, "calib-xcal-flow.png")
+
+
 def blend_schedule_fig() -> None:
     n = np.arange(0, 121)
     fig, ax = plt.subplots(figsize=(7.0, 5.0))
@@ -268,6 +377,7 @@ def decomposition_fig() -> None:
 
 
 if __name__ == "__main__":
+    xcal_flow_fig()
     blend_schedule_fig()
     gmm_cut_fig()
     anchored_fig()
