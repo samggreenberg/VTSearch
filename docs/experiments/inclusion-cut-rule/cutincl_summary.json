@@ -1,0 +1,96 @@
+{
+  "incumbent": "fold_anchored_w0.3_mid_tilt_qmean",
+  "n_boot": 2000,
+  "harm_tolerance": 0.01,
+  "incumbent_knob_yield": 0.9496099946642252,
+  "arms": [
+    {
+      "arm": "fold_anchored_w0.3_cross_tilt_qmean",
+      "d_regret_pooled": 0.0075183784,
+      "n_harmed_cells": 12,
+      "knob_yield": 0.9485534169,
+      "beats_incumbent_knob": false,
+      "no_regret_harm": false,
+      "ships": false
+    },
+    {
+      "arm": "fold_anchored_w0.3_mid_qmean",
+      "d_regret_pooled": 0.0562813984,
+      "n_harmed_cells": 37,
+      "knob_yield": 0.0769230769,
+      "beats_incumbent_knob": false,
+      "no_regret_harm": false,
+      "ships": false
+    },
+    {
+      "arm": "fold_anchored_w0.3_q_tilt_qmean_s0.005",
+      "d_regret_pooled": 0.0442888202,
+      "n_harmed_cells": 36,
+      "knob_yield": 0.9556987394,
+      "beats_incumbent_knob": true,
+      "no_regret_harm": false,
+      "ships": false
+    },
+    {
+      "arm": "fold_anchored_w0.3_q_tilt_qmean_s0.01",
+      "d_regret_pooled": 0.0359679397,
+      "n_harmed_cells": 36,
+      "knob_yield": 0.9500855962,
+      "beats_incumbent_knob": true,
+      "no_regret_harm": false,
+      "ships": false
+    },
+    {
+      "arm": "fold_anchored_w0.3_q_tilt_qmean_s0.02",
+      "d_regret_pooled": 0.0254217247,
+      "n_harmed_cells": 28,
+      "knob_yield": 0.9073650837,
+      "beats_incumbent_knob": false,
+      "no_regret_harm": false,
+      "ships": false
+    },
+    {
+      "arm": "fold_anchored_w0.3_q_tilt_qmean_s0.04",
+      "d_regret_pooled": 0.017543009,
+      "n_harmed_cells": 19,
+      "knob_yield": 0.8221455619,
+      "beats_incumbent_knob": false,
+      "no_regret_harm": false,
+      "ships": false
+    },
+    {
+      "arm": "fold_anchored_w0.3_q_tilt_qmean_s0.08",
+      "d_regret_pooled": 0.0172851443,
+      "n_harmed_cells": 13,
+      "knob_yield": 0.7229065346,
+      "beats_incumbent_knob": false,
+      "no_regret_harm": false,
+      "ships": false
+    },
+    {
+      "arm": "fold_anchored_w0.3_rate_qmean",
+      "d_regret_pooled": 0.0012738592,
+      "n_harmed_cells": 1,
+      "knob_yield": 0.9630824054,
+      "beats_incumbent_knob": true,
+      "no_regret_harm": false,
+      "ships": false
+    }
+  ],
+  "decidable": true,
+  "recommended": null,
+  "reason": "no challenger both beat the incumbent's knob yield and stayed within 0.01 regret at every k",
+  "cells": {
+    "n_files": 336,
+    "unreadable": [],
+    "empty": [
+      "task_0097__cutincl.csv",
+      "task_0120__cutincl.csv",
+      "task_0228__cutincl.csv",
+      "task_0241__cutincl.csv",
+      "task_0304__cutincl.csv",
+      "task_0317__cutincl.csv"
+    ],
+    "n_expected": 336
+  }
+}

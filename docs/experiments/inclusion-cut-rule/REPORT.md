@@ -132,8 +132,13 @@ Paired against the incumbent at each stop, per environment; **negative favours
 the challenger**, ± is a bootstrap SE over cells (the resampling unit is a cell,
 not a step: consecutive steps of one trajectory share a model).
 
-Four environments × seven of the thirteen stops (the full grid, all thirteen
-stops and all nine arms, is in `agg/cutincl_regret_vs_incumbent.csv`):
+Four environments × seven of the thirteen stops. The full grid — all thirteen
+stops, all nine arms, with `d_regret_cost` beside each rate-scale figure — is
+committed here as
+[`cutincl_regret_vs_incumbent.csv`](cutincl_regret_vs_incumbent.csv), beside
+[`cutincl_liveness.csv`](cutincl_liveness.csv),
+[`cutincl_env_flatness.csv`](cutincl_env_flatness.csv) and the analyzer's
+[`cutincl_summary.json`](cutincl_summary.json):
 
 **`visual_genome_m × dinov3_patch × max_patch` — region voting, 92 cells**
 
