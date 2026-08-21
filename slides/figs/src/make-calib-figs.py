@@ -897,6 +897,17 @@ BLEND_LINE_HALF = 1.45
 #: The conclusion row's type.
 CONCLUSION_PT = 17.0
 
+#: How much of the figure's bottom-right corner to leave empty, in drawing
+#: units. A `bg` figure is laid *under* the slide, and the theme puts the page
+#: number at `right: 70px; bottom: 26px` — inside the figure's own bottom-right
+#: corner once it is fitted into a 70% slot. The two parent figures are clear
+#: of it by luck (their conclusion lines are centred over the middle of the
+#: canvas); this one ends with a line that would otherwise run right through
+#: it, so the clearance is measured rather than eyeballed: fitted, this figure
+#: renders at ~60px per drawing unit, and the badge's ink starts ~73px in from
+#: the right edge and ~50px up from the bottom.
+PAGE_NUMBER_CLEAR = 1.35
+
 
 def blend_flow_fig() -> None:
     """Schematic of the blend — iteration 3 of the line (issue #3218).
@@ -931,7 +942,7 @@ def blend_flow_fig() -> None:
     weighted average and stops there: the weight's shape over the vote count —
     the hand-tuned ramp, and iteration 3½'s finding that the shipped curves
     never hand over completely — is the next slide's business, and a ramp drawn
-    here would spend this slide's ink pre-empting it.
+    here would spend this slide's ink getting ahead of it.
     """
     fit, scores = _haystack_scores()
     final = _blend_flow_stage(BLEND_FLOW_STAGES, fit, scores)
@@ -1106,12 +1117,18 @@ def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Fi
             fontsize=CONCLUSION_PT,
             color=INK,
         )
-        # The fold branch's answer is carried in by an arrow aimed at the two
-        # texts' own ink, so the gaps hold whatever width a mathtext run turns
-        # out to have once rendered.
+        # Everything below is measured off the two texts' own ink, because the
+        # rendered width of a mathtext run is not something to guess at: the
+        # equation is pulled left if it would reach into the page number's
+        # corner, and the arrow between the two is then fitted to what is left.
         fig.canvas.draw()
         to_units = ax.transData.inverted()
         eq_box = equation.get_window_extent().transformed(to_units)
+        overhang = eq_box.x1 - (BLEND_CANVAS[0] - 0.2 - PAGE_NUMBER_CLEAR)
+        if overhang > 0:
+            equation.set_x(eq_x - overhang)
+            fig.canvas.draw()
+            eq_box = equation.get_window_extent().transformed(to_units)
         xcal_box = theta_x_text.get_window_extent().transformed(to_units)
         arrow((xcal_box.x1 + OBJECT_GAP, conclusion_y), (eq_box.x0 - OBJECT_GAP, conclusion_y))
 
