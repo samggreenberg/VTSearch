@@ -135,7 +135,9 @@ def xcal_flow_fig() -> None:
     ax.text(6.6, 9.17, "the model you keep", ha="left", va="center", fontsize=15, color=SOFT)
 
     # ── K independent stratified re-splits ────────────────────────────────────
-    ax.text(0.5, 8.1, "K independent stratified re-splits  (shipped: K = 2)", fontsize=15.5, color=INK, fontweight="bold")
+    ax.text(
+        0.5, 8.1, "K independent stratified re-splits  (shipped: K = 2)", fontsize=15.5, color=INK, fontweight="bold"
+    )
     ax.text(0.5, 7.73, "re-drawn each round, not a partition —", fontsize=15, color=SOFT)
     ax.text(0.5, 7.38, "a vote can be held out twice, or never", fontsize=15, color=SOFT)
 
@@ -170,7 +172,15 @@ def xcal_flow_fig() -> None:
     cut_x = 4.95
     ax.plot([cut_x, cut_x], [line_y - 0.55, line_y + 0.62], color=INK, linewidth=2.6, zorder=4)
     ax.text(cut_x, 2.2, "θ₀ — one conformal quantile of the pool", ha="center", va="top", fontsize=15.5, color=INK)
-    ax.text(cut_x, 1.83, "the Inclusion knob slides the quantile; training never sees it", ha="center", va="top", fontsize=15, color=SOFT)
+    ax.text(
+        cut_x,
+        1.83,
+        "the Inclusion knob slides the quantile; training never sees it",
+        ha="center",
+        va="top",
+        fontsize=15,
+        color=SOFT,
+    )
 
     ax.text(5.0, 0.9, "return (M₀, θ₀)", ha="center", va="center", fontsize=18, color=INK, fontweight="bold")
 
