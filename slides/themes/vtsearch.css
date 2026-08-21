@@ -213,6 +213,15 @@ section.full h2 {
   border-radius: 6px;
 }
 
+/* Build groups (progressive reveal): build.py injects this class on every
+   page of the group, the final page included. Anchoring the column to the
+   top instead of centring it means a reveal adds ink below what is already
+   on screen — nothing re-centres between the pages of one slide.
+   (align-content, not justify-content: marp-core v4's default theme keeps
+   section as a block container and centres with `place-content`, which
+   block layout reads from the align-content half.) */
+section.build { align-content: start; }
+
 /* Quiet slide for caveats and limitations. */
 section.caveat { background: #f7f8fa; }
 section.caveat h2 { color: var(--ink-soft); }

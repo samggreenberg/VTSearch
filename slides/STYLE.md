@@ -116,6 +116,41 @@ the caption to match.
 
 <!-- item-sep -->
 
+## A label is closer to its object than objects are to each other
+
+A schematic — boxes, arrows, a thing labelled `D`<sub>1</sub> — is read by
+proximity before it is read at all. The eye binds each label to whatever is
+nearest, so the *only* thing that says which box `D`<sub>1</sub> names is that
+it sits closer to that box than to anything else. Get that backwards, as
+`calib-xcal-flow` did (issue #3217), and the reader has to work out from the
+content what the layout should have told them for free.
+
+So two gaps, and they are not close together:
+
+| gap | what it separates | value |
+|---|---|---|
+| **label gap** | a label and the thing it labels | `slide_figure.LABEL_GAP_PT` |
+| **object gap** | two distinct objects — a box and the arrow leaving it, an arrowhead and what it points at, two stacked lines of a conclusion | `slide_figure.OBJECT_GAP_PT` |
+
+They are in **printed points**, not a figure's drawing units, so the standard
+survives being dropped into any figure: divide by the points-per-unit that
+figure is drawn at and use the result for every gap in it. The ratio is the
+part that matters, and it wants to be roughly 3:1 — eyeballing the two
+separately is what produces 1:1, which is exactly the failure above.
+
+Two consequences worth spelling out, because they are the ones that get
+fudged:
+
+- **Measure the object gap from where the arrow's own line leaves the box**,
+  not from the box's nearest flat edge. Otherwise a diagonal arrow is short of
+  the box by a different amount than a vertical one, and one constant stops
+  holding. `make-calib-figs._box_edge` is the helper.
+- **An arrow that points at a group stops an object gap from the group's
+  topmost ink** — which is usually the group's own label, not the line or the
+  box you were thinking of.
+
+<!-- item-sep -->
+
 ## Every deck opens with an outline
 
 After the title slide, before the first argument: one slide naming the sections
@@ -131,3 +166,25 @@ in the evidence, not in the reveal.
 An outline lives in its own fragment (`fragments/outline-<deck>.md`) so a deck
 that re-tailors the argument gets its own, rather than inheriting a list that
 no longer describes it.
+
+<!-- item-sep -->
+
+## Builds: design the final slide, then chop
+
+A mechanism slide that the room should watch assemble is a **build** — a
+series of pages sharing one page number (see `slides/README.md` for the
+markers). Two rules keep a build honest:
+
+- **The final page is the slide.** Design it complete, as if there were no
+  build; every earlier page is that slide with later steps *removed*, never a
+  different layout. Nothing may move, resize, or restyle between pages — a
+  reveal adds ink, and that is all it does. (For generated figures,
+  `slide_figure.tight_box` pins every stage to the final stage's crop for
+  exactly this reason.)
+- **Chop at the mechanism's own joints.** One reveal per step the speaker
+  narrates, not per bullet and not per sentence. A build that advances on
+  every line is a slow way to read a list; a build that reveals "and now the
+  models swap halves" is a mechanism teaching itself.
+
+The speaker build always shows the one complete page — a speaker glancing at
+notes needs the whole picture, not whichever stage the audience is on.

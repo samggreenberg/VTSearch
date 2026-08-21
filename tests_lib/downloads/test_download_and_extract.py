@@ -993,17 +993,19 @@ class _FakeResponse:
 
     Yields the given *chunks* from ``iter_content``; if *fail_after_chunks* is
     set, raises ``ChunkedEncodingError`` once that many chunks have been yielded
-    (simulating a mid-stream connection drop / ``IncompleteRead``).
+    (simulating a mid-stream connection drop / ``IncompleteRead``).  *text* is
+    the whole-body view the small-payload fetches read instead of streaming.
     """
 
     is_redirect = False
     is_permanent_redirect = False
 
-    def __init__(self, chunks, status_code=200, headers=None, fail_after_chunks=None):
+    def __init__(self, chunks, status_code=200, headers=None, fail_after_chunks=None, text=""):
         self._chunks = list(chunks)
         self.status_code = status_code
         self.headers = headers or {}
         self._fail_after_chunks = fail_after_chunks
+        self.text = text
         self.closed = False
 
     def raise_for_status(self):
@@ -1110,5 +1112,187 @@ class TestDownloadResume:
         self._install(monkeypatch, dropping)
 
         dest = tmp_path / "archive.tar"
-        with pytest.raises(requests.exceptions.ChunkedEncodingError):
+        with pytest.raises(dl_core.RemoteUnreachableError) as excinfo:
             dl_core.download_file_with_progress("https://example.com/archive.tar", dest, on_progress=lambda *a: None)
+
+        # The user-facing message is a sentence naming the host, not a nested
+        # urllib3 MaxRetryError dump (issue #3216).
+        message = str(excinfo.value)
+        assert "example.com" in message
+        assert "https://example.com/archive.tar" not in message
+        assert excinfo.value.attempts == dl_core._MAX_DOWNLOAD_ATTEMPTS
+        # The original exception stays reachable for the server-side traceback.
+        assert isinstance(excinfo.value.__cause__, requests.exceptions.ChunkedEncodingError)
+
+
+class TestConnectFailureHandling:
+    """Connection-level failures retry with an escalating connect budget and
+    end in one actionable sentence rather than a urllib3 dump (issue #3216)."""
+
+    @staticmethod
+    def _install_failing_get(monkeypatch, exc_factory, succeed_after=None):
+        """Patch ``requests.Session.get`` to raise *exc_factory()* on every call
+        (or until *succeed_after* calls have been made, then hand back a tiny
+        200 response).  Records each call's timeout and neutralizes the backoff
+        sleep.  Returns the list of recorded timeouts."""
+        import requests
+
+        from vtscore.datasets.downloader import core as dl_core
+
+        timeouts = []
+
+        def fake_get(self, url, *args, timeout=None, **kwargs):
+            timeouts.append(timeout)
+            if succeed_after is not None and len(timeouts) > succeed_after:
+                return _FakeResponse([b"payload"], status_code=200, headers={"content-length": "7"})
+            raise exc_factory()
+
+        monkeypatch.setattr(requests.Session, "get", fake_get)
+        monkeypatch.setattr(dl_core.time, "sleep", lambda *a, **k: None)
+        return timeouts
+
+    def test_connect_budget_escalates_across_attempts(self, tmp_path, monkeypatch):
+        """A host slow to *accept* must not be written off on the same 10 s
+        budget six times over."""
+        import requests
+
+        from vtscore.datasets.downloader import core as dl_core
+
+        timeouts = self._install_failing_get(monkeypatch, lambda: requests.exceptions.ConnectTimeout("connect timeout"))
+
+        with pytest.raises(dl_core.RemoteUnreachableError):
+            dl_core.download_file_with_progress(
+                "https://archive.org/download/x/y.mp3", tmp_path / "y.mp3", on_progress=lambda *a: None
+            )
+
+        connect_budgets = [t[0] for t in timeouts]
+        assert connect_budgets == [10.0, 15.0, 20.0, 30.0, 30.0, 30.0]
+        assert {t[1] for t in timeouts} == {dl_core._READ_TIMEOUT_S}
+
+    def test_connect_timeout_message_names_the_host(self, tmp_path, monkeypatch):
+        import requests
+
+        from vtscore.datasets.downloader import core as dl_core
+
+        self._install_failing_get(monkeypatch, lambda: requests.exceptions.ConnectTimeout("connect timeout"))
+
+        with pytest.raises(dl_core.RemoteUnreachableError) as excinfo:
+            dl_core.download_file_with_progress(
+                "https://archive.org/download/Apollo11Audio/11-03301.mp3",
+                tmp_path / "11-03301.mp3",
+                on_progress=lambda *a: None,
+            )
+
+        message = str(excinfo.value)
+        assert message.startswith("Couldn't reach archive.org:")
+        assert "timed out" in message
+        assert "retry" in message
+        assert excinfo.value.url == "https://archive.org/download/Apollo11Audio/11-03301.mp3"
+
+    def test_retry_message_says_retrying_before_any_bytes_land(self, tmp_path, monkeypatch):
+        """ "Resuming ... at 0 bytes" read as a stalled transfer when in fact
+        nothing had ever connected."""
+        import requests
+
+        from vtscore.datasets.downloader import core as dl_core
+
+        self._install_failing_get(
+            monkeypatch, lambda: requests.exceptions.ConnectTimeout("connect timeout"), succeed_after=2
+        )
+
+        reported = []
+        dl_core.download_file_with_progress(
+            "https://archive.org/download/x/y.mp3", tmp_path / "y.mp3", on_progress=lambda *a: reported.append(a)
+        )
+
+        retry_messages = [a[1] for a in reported if "Connection interrupted" in a[1]]
+        assert retry_messages, "the retries were never reported"
+        assert all("retrying y.mp3" in m for m in retry_messages)
+        assert not any("resuming" in m or "0 bytes" in m for m in retry_messages)
+
+    def test_retry_message_says_resuming_once_bytes_are_on_disk(self, tmp_path, monkeypatch):
+        from vtscore.datasets.downloader import core as dl_core
+
+        payload = b"z" * 512
+        chunks = [payload[:256], payload[256:]]
+        first = _FakeResponse(chunks, status_code=200, headers={"content-length": "512"}, fail_after_chunks=1)
+        second = _FakeResponse(
+            chunks[1:],
+            status_code=206,
+            headers={"content-length": "256", "Content-Range": "bytes 256-511/512"},
+        )
+        TestDownloadResume._install(monkeypatch, [first, second])
+
+        reported = []
+        dl_core.download_file_with_progress(
+            "https://example.com/archive.tar", tmp_path / "archive.tar", on_progress=lambda *a: reported.append(a)
+        )
+
+        retry_messages = [a[1] for a in reported if "Connection interrupted" in a[1]]
+        assert retry_messages == [
+            f"Connection interrupted at 256 bytes - resuming archive.tar (attempt 2/{dl_core._MAX_DOWNLOAD_ATTEMPTS})..."
+        ]
+
+
+class TestFetchTextWithRetry:
+    """Manifest/index fetches share the transfer's retry budget and error shape.
+
+    A one-shot GET for a few KB of JSON used to be strictly more fragile than
+    the multi-GB download it precedes.
+    """
+
+    def test_returns_the_body_on_success(self, monkeypatch):
+        import requests
+
+        from vtscore.datasets.downloader import core as dl_core
+
+        response = _FakeResponse([], status_code=200, text='{"files": []}')
+        monkeypatch.setattr(requests.Session, "get", lambda self, url, *a, **k: response)
+
+        assert dl_core.fetch_text_with_retry("https://archive.org/metadata/x") == '{"files": []}'
+        assert response.closed
+
+    def test_retries_a_transient_connect_failure(self, monkeypatch):
+        import requests
+
+        from vtscore.datasets.downloader import core as dl_core
+
+        response = _FakeResponse([], status_code=200, text="ok")
+        calls = []
+
+        def fake_get(self, url, *args, **kwargs):
+            calls.append(url)
+            if len(calls) < 3:
+                raise requests.exceptions.ConnectTimeout("connect timeout")
+            return response
+
+        monkeypatch.setattr(requests.Session, "get", fake_get)
+        monkeypatch.setattr(dl_core.time, "sleep", lambda *a, **k: None)
+
+        reported = []
+        result = dl_core.fetch_text_with_retry(
+            "https://archive.org/metadata/x", "the track list", lambda *a: reported.append(a)
+        )
+
+        assert result == "ok"
+        assert len(calls) == 3
+        # The retry notice names the fetch, not a filename it doesn't have.
+        assert [a[1] for a in reported] == [
+            f"Connection interrupted - retrying the track list (attempt {n}/{dl_core._MAX_DOWNLOAD_ATTEMPTS})..."
+            for n in (2, 3)
+        ]
+
+    def test_exhausted_attempts_raise_the_named_host_error(self, monkeypatch):
+        import requests
+
+        from vtscore.datasets.downloader import core as dl_core
+
+        def fake_get(self, url, *args, **kwargs):
+            raise requests.exceptions.ConnectTimeout("connect timeout")
+
+        monkeypatch.setattr(requests.Session, "get", fake_get)
+        monkeypatch.setattr(dl_core.time, "sleep", lambda *a, **k: None)
+
+        with pytest.raises(dl_core.RemoteUnreachableError) as excinfo:
+            dl_core.fetch_text_with_retry("https://archive.org/metadata/x", on_progress=lambda *a: None)
+        assert "archive.org" in str(excinfo.value)

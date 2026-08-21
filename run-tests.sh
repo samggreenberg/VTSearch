@@ -294,10 +294,33 @@ fi
 # stopping at the first failure costs nothing.
 # ---------------------------------------------------------------------------
 
+# Stale-tree ("phantom base") check.
+#
+# Runs before every other gate, because a clobbered tree passes all of them by
+# construction: when a branch reverts the PRs that merged just before it, the
+# feature and its tests go together, so there is nothing left to fail. Five
+# PRs have done exactly that (#2741, #2793, #2821, #3184 and the three
+# restored in #3206); one reached `main`. Linting the wrong tree cleanly is
+# not information, so this asks *whether it is the right tree* first.
+#
+# Compares against the working tree rather than HEAD: the damage exists
+# before it is committed, which is often when tests run. Pure git, ~200ms.
+#
+# Two signals, because deletions are only the visible half: whole paths that
+# vanished, and runs of consecutive commits the branch keeps nothing of (a
+# clobber whose reverted hunks sit inside files that survive deletes nothing
+# at all). See scripts/check-phantom-base.py for both and their measured
+# false-positive rates.
+echo "Checking for a stale tree..."
+if ! python scripts/check-phantom-base.py ; then
+    _blocked "branch reverts work it never touched (stale tree)"
+    exit 1
+fi
+
 # Ruff lint + format check.
-# Runs first because it's fast (~0.5s) and catches mistakes the pytest /
-# frontend stages can't see, e.g. F401 unused-import on TYPE_CHECKING
-# imports whose only "use" is inside a string-form forward reference.
+# Fast (~0.5s), and catches mistakes the pytest / frontend stages can't see,
+# e.g. F401 unused-import on TYPE_CHECKING imports whose only "use" is inside
+# a string-form forward reference.
 echo "Running ruff check..."
 if ! ruff check . ; then
     _blocked "ruff check failed"

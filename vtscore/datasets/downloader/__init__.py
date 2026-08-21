@@ -123,11 +123,13 @@ from vtscore.datasets.downloader.core import (
     VISUAL_GENOME_OBJECTS_DOWNLOAD_SIZE_MB,
     VISUAL_GENOME_OBJECTS_URL,
     ProgressCallback,
+    RemoteUnreachableError,
     _default_progress,
     _download_and_extract,
     _move_tree_contents,
     _validate_archive,
     download_file_with_progress,
+    fetch_text_with_retry,
 )
 
 # Audio downloaders
@@ -299,7 +301,9 @@ __all__ = [
     "VISUAL_GENOME_IMAGES_URL",
     "VISUAL_GENOME_OBJECTS_DOWNLOAD_SIZE_MB",
     "VISUAL_GENOME_OBJECTS_URL",
+    "RemoteUnreachableError",
     "download_file_with_progress",
+    "fetch_text_with_retry",
     # Audio
     "apollo11_audio_manifest",
     "birdvox_full_night_manifest",

@@ -43,6 +43,7 @@ Find endpoints (``vtsearch/routes/detectors/find.py``):
 * ``POST /api/find`` -> :class:`FindRequestSchema` ->
                       :class:`FindResponseSchema`
 * ``POST /api/find/cancel`` -> :class:`FindCancelResponseSchema`
+* ``POST /api/find/end-session`` -> :class:`FindEndSessionResponseSchema`
 
 Label endpoints (``vtsearch/routes/detectors/labels.py``):
 
@@ -847,6 +848,19 @@ class FindCancelResponseSchema(Schema):
     """
 
     ok = fields.Boolean(required=True)
+
+
+class FindEndSessionResponseSchema(Schema):
+    """Response for ``POST /api/find/end-session``.
+
+    ``ended`` is ``True`` when a live Find session was discarded and the
+    detector's votes re-derived from its labelset, ``False`` when there was
+    no session to end (the common case: the Train window says so on every
+    entry, whether or not Find ever ran).
+    """
+
+    ok = fields.Boolean(required=True)
+    ended = fields.Boolean(required=True)
 
 
 # ---------------------------------------------------------------------------

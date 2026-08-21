@@ -47,6 +47,20 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A demo download that can't reach its host now says so in a sentence, and
+  tries harder before giving up.** Loading the Apollo 11 Mission Audio demo
+  while archive.org was refusing connections failed with a hundred-line
+  `MaxRetryError` traceback pasted into the Dataset-load-failed box, after
+  six identical 10-second connection attempts — and the progress bar said
+  "resuming" a file that had never downloaded a single byte. The failure now
+  reads *"Couldn't reach archive.org: the connection timed out before the
+  server answered, on all 6 attempts. The site may be down or blocked by your
+  network/proxy…"*, the connect budget escalates across retries (10 s → 30 s)
+  so a host that is merely slow to accept isn't written off six times over,
+  the retry notice says "retrying" until there are bytes to resume, and the
+  track-list fetch that precedes the download gets the same retry budget
+  instead of dying on a single unlucky handshake. (#3216)
+
 - **CLI autodetect no longer reports every media as a hit, and no longer
   disagrees with the GUI's Find.** A run against a dataset and detector that
   the GUI cut at ~0.475 came back with a threshold of `-0.375` and a positive
@@ -81,6 +95,23 @@ not list every commit. Use `git log` for the full history.
   `--autodetect --importer …`, which failed on *every* run: the safe-threshold
   population pass scored the chunk before anything had been embedded, so it hit
   the same raise on the first media. (#3179)
+- **Rotated photos are no longer processed sideways.** A JPEG carrying an EXIF
+  orientation tag — the ordinary output of a phone camera, which stores the
+  sensor frame plus "rotate me" rather than rotating pixels — reached the
+  embedder, OCR, face detection and every crop path 90/180/270 degrees from the
+  way the browser (and every other photo viewer) displays it. Nothing errored;
+  the picture was simply the wrong way up in a space nobody looks at directly,
+  so a sideways photo embedded as a sideways photo and landed in the wrong part
+  of the vector space. Orientation is now applied once, in the image decode
+  layer, so every consumer sees the same upright pixels; a media's stored
+  `width`/`height` are the displayed dimensions to match, and cropping, lazy
+  clip resolution and cross-dataset origin resolution decode upright so a box
+  drawn on screen cuts the region the user drew. The `image_exif_orient`
+  cleaner still exists for anyone who wants the rotation baked into the *stored
+  bytes* (for tools outside VTSearch that ignore EXIF), but it is now off by
+  default: it costs a lossy re-encode and no longer changes anything VTSearch
+  itself sees. Images already imported keep the dimensions and embeddings they
+  were ingested with; re-import a rotated corpus to pick up the fix. (#3172)
 
 - **A detector's labelset no longer stores the same media twice.** After one
   pass over a 300-image dataset a detector reported `num_training: 356` — 300
