@@ -20,12 +20,13 @@ because both scored every arm at inclusion 0:
 - **The tilt itself is free.** `mid_tilt` and `rate` differ by a *constant offset
   in fold-quantile space* — that is exact, not empirical — so this sweep is a
   re-measurement of the **inclusion-0 choice** at thirteen different cost
-  weightings. `rate` never differs from the incumbent by more than 0.012 at any
-  stop in any environment, and by more than 0.002 at only five of the 52; its one
-  material loss (**+0.015±0.002**, `coco_val × dinov3_patch` at k=0)
-  is precisely the inclusion-0 contrast the anchor-mass run already decided in
-  `mid`'s favour — reproduced here on a different detector head and a different
-  environment.
+  weightings. Above inclusion 0, `rate`'s gap to the incumbent never exceeds
+  0.005 at any stop in any environment; its two largest gaps anywhere are a
+  **+0.015±0.002** at k=0 on `coco_val × dinov3_patch` and a −0.021±0.005 at
+  k=−1 on `coco_val × siglip`. The first is the only *material* loss on the
+  table, and it is precisely the inclusion-0 contrast the anchor-mass run
+  already decided in `mid`'s favour — reproduced here on a different detector
+  head and a different environment.
 - **Candidate 3 is dead and candidate 2-as-written is a lead, not a rule.**
   `q_tilt` is worse than the incumbent at every step size in every environment,
   and buys knob only by giving up accuracy. `cross_tilt` is genuinely *better*
@@ -382,26 +383,31 @@ constraint** — which is the reason #2868's repair worked at all.
 - **The plan's `#2865` item closes**, along with the two items it absorbed:
   *deeper-than-inclusion-0 evidence for the cut rule* (this sweep) and
   *inclusion resolution on cleanly separated haystacks* (§7).
-- **`test_inclusion_slide_recut` can now assert a number rather than a
-  direction.** It asserts the admitted set moves; the measured incumbent yield is
-  0.88–0.99 per environment, so "the slider produces more than one answer" is a
-  floor the shipped rule clears by a wide margin.
+- **`test_inclusion_slide_recut`'s assertion is now backed by a number.** It
+  asserts that a slide moves the admitted *set*, not just the threshold — the
+  right invariant, and one `mid` would have failed. What it could not say is by
+  how much: the measured incumbent yield is 0.88–0.99 per environment, so the
+  shipped rule clears that floor by an enormous margin rather than scraping it.
 - **`FOLD_ANCHOR_QTILT_STEP`'s docstring stops being a placeholder** and starts
   being a measurement: the parameter was swept, and no value of it makes the rule
   competitive.
 
 ### Follow-ups this run raises
 
-- **`cross_tilt`'s below-zero win.** It beats the incumbent at k ∈ [−4, −1] in
+Both are filed as open items in
+[`docs/plans/population-anchored-calibration.md`](../../plans/population-anchored-calibration.md),
+in the space the closed `#2865` item vacated:
+
+- **A sign-dependent tilt.** `cross_tilt` beats the incumbent at k ∈ [−4, −1] in
   three of four environments, by up to 0.034 — larger than anything else on the
-  table — while losing above zero. A rule that reads the mixture weights *only
-  when the knob asks for fewer false alarms* is not obviously wrong, but it is a
-  new rule and needs its own pre-registration, not a footnote here.
-- **`rate` at k ∈ [−3, −1] on binary COCO** (−0.021±0.005 at k=−1) is the one
-  place a shipped-rule change would help, and it is one environment out of four.
-- **The k=0 loss on `coco_val × dinov3_patch` is worth understanding, not just
-  recording.** `rate` is worse than `mid` there by 0.015 — five times its
-  inclusion-0 gap in the other three environments. #2864's mechanism for
+  table — while losing above zero. A rule that reads the acquisition-biased
+  mixture weights *only when the knob asks for fewer false alarms* is not
+  obviously wrong, but it is a new rule: it needs its own pre-registration, and a
+  hinge at k=0 has to be shown not to break the nesting contract. (`rate` shows
+  the same sign, smaller: −0.021±0.005 at k=−1 on binary COCO.)
+- **Explain the k=0 loss on `coco_val × dinov3_patch`.** `rate` is worse than
+  `mid` there by 0.015 — five times its inclusion-0 gap in the other three
+  environments, and the single reason `rate` did not ship. #2864's mechanism for
   `mid`-beats-`rate` is the components' **variance asymmetry**; if that is right,
   this environment should show the widest asymmetry, and that is checkable from
   the `__cutdiag` frame this run already wrote.
