@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { IconComponent } from '../../../icon/icon.component';
 import { DropZoneComponent } from '../../../drop-zone/drop-zone.component';
 import { ImporterInfo, ImporterPickerTab, MediaTypeInfo } from '../../../../models/api.models';
@@ -54,7 +53,7 @@ import { ManagedColumns } from '../../../../utils/managed-columns';
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-source-picker',
   standalone: true,
-  imports: [CommonModule, FormsModule, IconComponent, DropZoneComponent],
+  imports: [CommonModule, IconComponent, DropZoneComponent],
   templateUrl: './source-picker.component.html',
   styleUrl: './source-picker.component.scss',
 })
@@ -138,22 +137,6 @@ export class SourcePickerComponent {
    *  selected row when the parent treats row clicks as a selection (not
    *  an immediate submit).  Empty string disables the highlight. */
   readonly selectedDemoName = input('');
-
-  // === Server folder source view ===
-
-  readonly sfPathInputValue = input('');
-  readonly sfPathInputValueChange = output<string>();
-  /** Fired when the user finalises the typed path (Enter or blur). */
-  readonly sfPathApplied = output<void>();
-
-  readonly sfPathLabel = input('Folder to import');
-  readonly sfPathPlaceholder = input('/absolute/server/path/to/folder');
-  readonly sfPathFieldId = input('sf-path-input');
-  /** Whether to fire ``sfPathApplied`` on the path input's ``blur``
-   *  event in addition to Enter.  The Add Dataset modal wants
-   *  blur-to-detect; the New Detector modal explicitly drives loading
-   *  through a Load button and disables blur to avoid double-firing. */
-  readonly sfApplyOnBlur = input(true);
 
   // === Local folder/files source view ===
 

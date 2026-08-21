@@ -135,20 +135,6 @@
   <div class="server-folder-browser">
     <ng-content select="[sfBefore]"></ng-content>
 
-    <div class="sf-browse-section">
-      <label class="form-label" [for]="sfPathFieldId()">{{ sfPathLabel() }}</label>
-      <input
-        [id]="sfPathFieldId()"
-        type="text"
-        class="form-input"
-        [placeholder]="sfPathPlaceholder()"
-        [ngModel]="sfPathInputValue()"
-        (ngModelChange)="sfPathInputValueChange.emit($event)"
-        (keydown.enter)="sfPathApplied.emit(); $event.preventDefault()"
-        (blur)="sfApplyOnBlur() && sfPathApplied.emit()"
-      />
-    </div>
-
     <ng-content select="[sfAfter]"></ng-content>
   </div>
 }

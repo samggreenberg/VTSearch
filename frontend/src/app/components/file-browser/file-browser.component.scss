@@ -1,32 +1,8 @@
+// `.browse-row` (input + Browse button) and `.browse-panel` (the revealed
+// folder-browser chrome) are shared classes in `_components.scss`; this
+// file owns only the field's own vertical rhythm.
 .file-browser-field {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
-}
-
-.file-browser-input-row {
-  display: flex;
-  gap: var(--space-sm);
-}
-
-.file-browser-input {
-  flex: 1;
-  min-width: 0;
-}
-
-.file-browser-browse-btn {
-  white-space: nowrap;
-  padding: var(--space-xs) var(--space-lg);
-  font-size: var(--font-md);
-}
-
-// Outer chrome around the embedded folder-browser panel. The list,
-// breadcrumb, and rows themselves are styled by vt-folder-browser.
-.file-browser-panel {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--bg-subtle);
-  padding: var(--space-sm) var(--space-md);
-  display: flex;
-  flex-direction: column;
 }

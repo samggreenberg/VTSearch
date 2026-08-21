@@ -177,7 +177,7 @@ class EmailLabelsetExporter(LabelsetExporter):
     fields = [
         PluginField(
             key="from",
-            label="Sender Email",
+            label="Sender email",
             field_type="email",
             description="The email address the results will be sent from.",
             hint=("Must be on a domain you control - most MX hosts reject mail from non-existent domains."),
@@ -185,7 +185,7 @@ class EmailLabelsetExporter(LabelsetExporter):
         ),
         PluginField(
             key="to",
-            label="Recipient Email",
+            label="Recipient email",
             field_type="email",
             description="The email address to send the results to.",
             placeholder="recipient@example.com",

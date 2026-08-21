@@ -203,7 +203,7 @@ class ReCallerDatasetImporter(DatasetImporter):
     fields = [
         PluginField(
             key="media_type",
-            label="Output Media Type",
+            label="Output media type",
             field_type="select",
             options=all_folder_names(),
             default="audio",

@@ -232,7 +232,7 @@ disk, and no member data is read at import time - the importer only walks
 each referenced shard's tar headers to confirm the member exists and record
 its size.
 
-Set the *Dataset MediaType* to the kind of media the referenced members
+Set the *Dataset media type* to the kind of media the referenced members
 hold (e.g. `video` or `audio`). Because the manifest supplies the
 embeddings, the import needs no GPU and skips the embed stage entirely.
 
