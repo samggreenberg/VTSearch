@@ -13,6 +13,7 @@ The decomposition figure re-plots published numbers from
 `docs/experiments/gmm-cut/REPORT-2881.md` (the #2879 re-measure).
 """
 
+import functools
 import sys
 from pathlib import Path
 
@@ -27,9 +28,10 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.patches import FancyArrow, FancyArrowPatch, Rectangle
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from slide_figure import save  # noqa: E402
+from slide_figure import save, tight_box  # noqa: E402
 
 from vtscore.training.blend_schedules import BlendContext, get_schedule
 from vtscore.training.thresholds import fit_anchored_score_gmm, fit_score_gmm
@@ -68,8 +70,14 @@ def gaussian(x: np.ndarray, mu: float, var: float) -> np.ndarray:
     return np.exp(-0.5 * (x - mu) ** 2 / var) / np.sqrt(2 * np.pi * var)
 
 
+#: How many build stages the cross-calibration schematic reveals in
+#: (issue #3208): D₀ → M₀; the split; the fold models; M₁ scores D₂; θ₁;
+#: M₂ scores D₁ and θ₂; the average. Stage 7 is the committed final figure.
+XCAL_FLOW_STAGES = 7
+
+
 def xcal_flow_fig() -> None:
-    """Schematic of the original cross-calibration idea (issue #3207).
+    """Schematic of the original cross-calibration idea (issues #3207/#3208).
 
     Follows the issue's hand mockup: this is the *iteration-1* slide, so it
     draws the simple initial version — partition the labelled data in half,
@@ -77,6 +85,133 @@ def xcal_flow_fig() -> None:
     per half, and average the two cuts. The refinements the shipped code adds
     on top (pooled folds, the conformal quantile, re-drawn splits) are later
     iterations of the deck's story and deliberately absent here.
+
+    Besides the final figure, this writes the build stages the deck's
+    `<!-- build: ... -->` markers reveal through: stage k draws the first k
+    steps of the mechanism onto the same fixed canvas, and every stage is
+    cropped to the *final* stage's box, so across the build slides the
+    drawing assembles in place rather than recentring itself.
+    """
+    final = _xcal_flow_stage(XCAL_FLOW_STAGES)
+    box = tight_box(final)
+    for stage in range(1, XCAL_FLOW_STAGES):
+        save(_xcal_flow_stage(stage), OUT, f"calib-xcal-flow.build{stage}.png", box=box)
+    save(final, OUT, "calib-xcal-flow.png", box=box)
+
+
+def _data_block(ax: plt.Axes, x0: float, y0: float, w: float, h: float, split: bool = False) -> None:
+    """A block of labelled media: an amorphous green (Good) region over a red (Bad) one."""
+    good_h = 0.42 * h
+    ax.add_patch(
+        Rectangle(
+            (x0, y0 + h - good_h),
+            w,
+            good_h,
+            facecolor="white",
+            edgecolor=GREEN,
+            hatch="//////",
+            linewidth=0,
+            zorder=2,
+        )
+    )
+    ax.add_patch(
+        Rectangle((x0, y0), w, h - good_h, facecolor="white", edgecolor=RUST, hatch="\\\\\\", linewidth=0, zorder=2)
+    )
+    ax.add_patch(Rectangle((x0, y0), w, h, facecolor="none", edgecolor=INK, linewidth=1.6, zorder=3))
+    ax.plot([x0, x0 + w], [y0 + h - good_h] * 2, color=INK, linewidth=1.0, zorder=3)
+    if split:
+        ax.plot([x0 + w / 2] * 2, [y0, y0 + h], color=INK, linewidth=1.6, zorder=3)
+
+
+def _arrow(ax: plt.Axes, xy_from: tuple[float, float], xy_to: tuple[float, float]) -> None:
+    ax.add_patch(
+        FancyArrowPatch(xy_from, xy_to, arrowstyle="-|>", mutation_scale=14, color=INK, linewidth=1.6, zorder=2)
+    )
+
+
+def _labeled_arrow(
+    ax: plt.Axes, xy_from: tuple[float, float], xy_to: tuple[float, float], label: str, z: float = 2.0
+) -> None:
+    """An outlined block arrow with an open core, *label* written along the shaft.
+
+    The label sits at the centre of the shaft, both length-wise and
+    width-wise, rotated to the arrow's own angle. 14.5pt is the smallest
+    size the 20px type floor admits in the 56% slot — small enough to sit
+    fully inside the 0.5-unit shaft with clear margins. Where two of these
+    arrows cross, the higher-*z* one's open core simply covers the other's
+    label near the crossing; that is deliberate (issue #3207 review).
+    """
+    (x0, y0), (x1, y1) = xy_from, xy_to
+    dx, dy = x1 - x0, y1 - y0
+    length = float(np.hypot(dx, dy))
+    head_len = 0.32
+    ax.add_patch(
+        FancyArrow(
+            x0,
+            y0,
+            dx,
+            dy,
+            width=0.5,
+            head_width=0.66,
+            head_length=head_len,
+            length_includes_head=True,
+            facecolor="white",
+            edgecolor=INK,
+            linewidth=1.4,
+            zorder=z,
+        )
+    )
+    frac = 0.5 * (length - head_len) / length
+    angle = float(np.degrees(np.arctan2(dy, dx)))
+    if angle < -90 or angle > 90:  # keep the label reading left-to-right
+        angle += 180
+    ax.text(
+        x0 + dx * frac,
+        y0 + dy * frac,
+        label,
+        rotation=angle,
+        ha="center",
+        va="center",
+        fontsize=14.5,
+        color=INK,
+        zorder=z + 0.05,
+    )
+
+
+def _model_box(ax: plt.Axes, cx: float, cy: float, label: str) -> None:
+    w, h = 0.85, 0.62
+    ax.add_patch(Rectangle((cx - w / 2, cy - h / 2), w, h, facecolor="white", edgecolor=INK, linewidth=1.6, zorder=3))
+    # center_baseline + a hair of lift: optically centers the cap-height "M"
+    # in the box despite the subscript digit hanging below the baseline.
+    ax.text(cx, cy + 0.025, label, ha="center", va="center_baseline", fontsize=16, color=INK, zorder=4)
+
+
+def _score_line(
+    ax: plt.Axes,
+    cx: float,
+    label: str,
+    bad: list[float],
+    good: list[float],
+    theta_x: float,
+    theta: str,
+    cut: bool = True,
+) -> None:
+    """Held-out scores on a number line: Bad low, Good high, a cut between."""
+    y = 3.65
+    ax.plot([cx - 1.7, cx + 1.7], [y, y], color=INK, linewidth=1.8, zorder=2)
+    ax.text(cx, 4.15, label, ha="center", va="bottom", fontsize=16, color=INK)
+    for x in bad:
+        ax.text(cx + x, y - 0.12, "✗", ha="center", va="top", fontsize=16, color=RUST, fontweight="bold")
+    for x in good:
+        ax.text(cx + x, y + 0.08, "✓", ha="center", va="bottom", fontsize=16, color=GREEN, fontweight="bold")
+    if not cut:
+        return
+    ax.plot([cx + theta_x] * 2, [y - 0.32, y], color=INK, linewidth=2.2, zorder=3)
+    ax.text(cx + theta_x, y - 0.44, theta, ha="center", va="top", fontsize=16, color=INK)
+
+
+def _xcal_flow_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the schematic.
 
     Layout rules carried over from the mockup on purpose: the split is drawn,
     not written — D₀ is one block with a centre divider whose halves are
@@ -88,143 +223,71 @@ def xcal_flow_fig() -> None:
     Green = Good media, red = Bad media (amorphous regions); everything else
     ink on white.
     """
-    from matplotlib.patches import FancyArrow, FancyArrowPatch, Rectangle  # noqa: PLC0415
-
     fig, ax = plt.subplots(figsize=(7.2, 7.0))
     ax.set_xlim(0, 10)
     ax.set_ylim(0, 10)
     ax.set_axis_off()
 
-    def data_block(x0: float, y0: float, w: float, h: float, split: bool = False) -> None:
-        """A block of labelled media: an amorphous green (Good) region over a red (Bad) one."""
-        good_h = 0.42 * h
-        ax.add_patch(
-            Rectangle(
-                (x0, y0 + h - good_h),
-                w,
-                good_h,
-                facecolor="white",
-                edgecolor=GREEN,
-                hatch="//////",
-                linewidth=0,
-                zorder=2,
-            )
-        )
-        ax.add_patch(
-            Rectangle((x0, y0), w, h - good_h, facecolor="white", edgecolor=RUST, hatch="\\\\\\", linewidth=0, zorder=2)
-        )
-        ax.add_patch(Rectangle((x0, y0), w, h, facecolor="none", edgecolor=INK, linewidth=1.6, zorder=3))
-        ax.plot([x0, x0 + w], [y0 + h - good_h] * 2, color=INK, linewidth=1.0, zorder=3)
-        if split:
-            ax.plot([x0 + w / 2] * 2, [y0, y0 + h], color=INK, linewidth=1.6, zorder=3)
+    data_block = functools.partial(_data_block, ax)
+    arrow = functools.partial(_arrow, ax)
+    labeled_arrow = functools.partial(_labeled_arrow, ax)
+    model_box = functools.partial(_model_box, ax)
+    score_line = functools.partial(_score_line, ax)
 
-    def arrow(xy_from: tuple[float, float], xy_to: tuple[float, float]) -> None:
-        ax.add_patch(
-            FancyArrowPatch(xy_from, xy_to, arrowstyle="-|>", mutation_scale=14, color=INK, linewidth=1.6, zorder=2)
-        )
-
-    def labeled_arrow(xy_from: tuple[float, float], xy_to: tuple[float, float], label: str, z: float = 2.0) -> None:
-        """An outlined block arrow with an open core, *label* written along the shaft.
-
-        The label sits at the centre of the shaft, both length-wise and
-        width-wise, rotated to the arrow's own angle. 14.5pt is the smallest
-        size the 20px type floor admits in the 56% slot — small enough to sit
-        fully inside the 0.5-unit shaft with clear margins. Where two of these
-        arrows cross, the higher-*z* one's open core simply covers the other's
-        label near the crossing; that is deliberate (issue #3207 review).
-        """
-        (x0, y0), (x1, y1) = xy_from, xy_to
-        dx, dy = x1 - x0, y1 - y0
-        length = float(np.hypot(dx, dy))
-        head_len = 0.32
-        ax.add_patch(
-            FancyArrow(
-                x0,
-                y0,
-                dx,
-                dy,
-                width=0.5,
-                head_width=0.66,
-                head_length=head_len,
-                length_includes_head=True,
-                facecolor="white",
-                edgecolor=INK,
-                linewidth=1.4,
-                zorder=z,
-            )
-        )
-        frac = 0.5 * (length - head_len) / length
-        angle = float(np.degrees(np.arctan2(dy, dx)))
-        if angle < -90 or angle > 90:  # keep the label reading left-to-right
-            angle += 180
-        ax.text(
-            x0 + dx * frac,
-            y0 + dy * frac,
-            label,
-            rotation=angle,
-            ha="center",
-            va="center",
-            fontsize=14.5,
-            color=INK,
-            zorder=z + 0.05,
-        )
-
-    def model_box(cx: float, cy: float, label: str) -> None:
-        w, h = 0.85, 0.62
-        ax.add_patch(
-            Rectangle((cx - w / 2, cy - h / 2), w, h, facecolor="white", edgecolor=INK, linewidth=1.6, zorder=3)
-        )
-        # center_baseline + a hair of lift: optically centers the cap-height "M"
-        # in the box despite the subscript digit hanging below the baseline.
-        ax.text(cx, cy + 0.025, label, ha="center", va="center_baseline", fontsize=16, color=INK, zorder=4)
-
-    def score_line(cx: float, label: str, bad: list[float], good: list[float], theta_x: float, theta: str) -> None:
-        """Held-out scores on a number line: Bad low, Good high, a cut between."""
-        y = 3.65
-        ax.plot([cx - 1.7, cx + 1.7], [y, y], color=INK, linewidth=1.8, zorder=2)
-        ax.text(cx, 4.15, label, ha="center", va="bottom", fontsize=16, color=INK)
-        for x in bad:
-            ax.text(cx + x, y - 0.12, "✗", ha="center", va="top", fontsize=16, color=RUST, fontweight="bold")
-        for x in good:
-            ax.text(cx + x, y + 0.08, "✓", ha="center", va="bottom", fontsize=16, color=GREEN, fontweight="bold")
-        ax.plot([cx + theta_x] * 2, [y - 0.32, y], color=INK, linewidth=2.2, zorder=3)
-        ax.text(cx + theta_x, y - 0.44, theta, ha="center", va="top", fontsize=16, color=INK)
-
-    # ── D0, already drawn split in half, and the model trained on all of it ───
+    # ── stage 1: D0 and the model trained on all of it ────────────────────────
     ax.text(5.0, 9.8, "D₀", ha="center", va="bottom", fontsize=16, color=INK)
-    data_block(3.2, 8.7, 3.6, 1.0, split=True)
+    data_block(3.2, 8.7, 3.6, 1.0, split=stage >= 2)
     ax.text(3.05, 9.45, "Good", ha="right", va="center", fontsize=15, color=GREEN)
     ax.text(3.05, 8.95, "Bad", ha="right", va="center", fontsize=15, color=RUST)
-    ax.text(4.1, 8.55, "D₁", ha="center", va="top", fontsize=16, color=INK)
-    ax.text(5.9, 8.55, "D₂", ha="center", va="top", fontsize=16, color=INK)
     labeled_arrow((6.9, 9.2), (8.32, 9.2), "train")
     model_box(8.8, 9.2, "M₀")
 
-    # ── train a model per half; score the other half ──────────────────────────
+    # ── stage 2: split D0 in half — D1 and D2 ─────────────────────────────────
+    if stage >= 2:
+        ax.text(4.1, 8.55, "D₁", ha="center", va="top", fontsize=16, color=INK)
+        ax.text(5.9, 8.55, "D₂", ha="center", va="top", fontsize=16, color=INK)
+
+    # ── stage 3: train a model per half ───────────────────────────────────────
     # The train arrows are vertical; the only diagonals are the scoring paths
     # D₂ → M₁ → M₁(D₂) and D₁ → M₂ → M₂(D₁), whose crossing draws the X that
     # names cross-calibration.
-    model_box(4.1, 6.3, "M₁")
-    model_box(5.9, 6.3, "M₂")
-    labeled_arrow((4.1, 8.1), (4.1, 6.68), "train")
-    labeled_arrow((5.9, 8.1), (5.9, 6.68), "train")
+    if stage >= 3:
+        model_box(4.1, 6.3, "M₁")
+        model_box(5.9, 6.3, "M₂")
+        labeled_arrow((4.1, 8.1), (4.1, 6.68), "train")
+        labeled_arrow((5.9, 8.1), (5.9, 6.68), "train")
+
+    # ── stage 4: M1 scores the half it never saw ──────────────────────────────
     # Each scoring path is one geometric line (slope Δx/Δy = 0.789) that runs
     # from under the opposite half, through the M box, down to the score line —
     # the entry and exit arrows are collinear, so the eye reads one straight
-    # stroke and the two strokes cross in a symmetric X.
-    labeled_arrow((5.52, 8.1), (4.42, 6.71), "score", z=2.1)
-    labeled_arrow((4.48, 8.1), (5.58, 6.71), "score", z=2.2)
-    arrow((3.82, 5.94), (2.88, 4.75))
-    arrow((6.18, 5.94), (7.12, 4.75))
+    # stroke and, once both are drawn, the two strokes cross in a symmetric X.
+    if stage >= 4:
+        labeled_arrow((5.52, 8.1), (4.42, 6.71), "score", z=2.1)
+        arrow((3.82, 5.94), (2.88, 4.75))
+        # ── stage 5: cut M1's held-out scores at θ1 ───────────────────────────
+        score_line(
+            2.3,
+            "M₁(D₂)",
+            bad=[-1.4, -0.95, -0.5, -0.05],
+            good=[0.5, 0.95, 1.4],
+            theta_x=0.22,
+            theta="θ₁",
+            cut=stage >= 5,
+        )
 
-    # ── per-half held-out scores; cut each, average ───────────────────────────
-    score_line(2.3, "M₁(D₂)", bad=[-1.4, -0.95, -0.5, -0.05], good=[0.5, 0.95, 1.4], theta_x=0.22, theta="θ₁")
-    score_line(7.7, "M₂(D₁)", bad=[-1.4, -1.0, -0.6, 0.3], good=[0.0, 0.7, 1.15], theta_x=-0.3, theta="θ₂")
+    # ── stage 6: the same for M2 — score D1, cut at θ2 ────────────────────────
+    if stage >= 6:
+        labeled_arrow((4.48, 8.1), (5.58, 6.71), "score", z=2.2)
+        arrow((6.18, 5.94), (7.12, 4.75))
+        score_line(7.7, "M₂(D₁)", bad=[-1.4, -1.0, -0.6, 0.3], good=[0.0, 0.7, 1.15], theta_x=-0.3, theta="θ₂")
 
-    ax.text(5.0, 2.5, "θ₀ = avg(θ₁, θ₂)", ha="center", va="center", fontsize=16.5, color=INK)
-    ax.text(5.0, 1.6, "return (M₀, θ₀)", ha="center", va="center", fontsize=18, color=INK, fontweight="bold")
+    # ── stage 7: average the cuts ─────────────────────────────────────────────
+    if stage >= 7:
+        ax.text(5.0, 2.5, "θ₀ = avg(θ₁, θ₂)", ha="center", va="center", fontsize=16.5, color=INK)
+        ax.text(5.0, 1.6, "return (M₀, θ₀)", ha="center", va="center", fontsize=18, color=INK, fontweight="bold")
 
-    save(fig, OUT, "calib-xcal-flow.png")
+    return fig
 
 
 def blend_schedule_fig() -> None:
