@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, HostListener, inject, input, OnInit, output, signal } from '@angular/core';
 
+import { NgTemplateOutlet } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 import { ModalComponent } from '../../modal/modal.component';
 import { IconComponent } from '../../icon/icon.component';
@@ -86,7 +88,7 @@ interface MediaExampleItem {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-new-detector-modal',
   standalone: true,
-  imports: [FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent],
+  imports: [NgTemplateOutlet, FormsModule, ModalComponent, IconComponent, MediaCropModalComponent, DropZoneComponent, SourcePickerComponent, PluginImportFormComponent, FieldHintIconComponent, ProgressBarComponent],
   templateUrl: './new-detector-modal.component.html',
   styleUrl: './new-detector-modal.component.scss',
 })
@@ -364,11 +366,16 @@ export class NewDetectorModalComponent implements OnInit {
   }
 
   /** Append a picked media example to the stack. Clears any pending text
-   *  (text and media examples are mutually exclusive), switches to the
-   *  media tab, and auto-fills the name from the first example.
+   *  (text and media examples are mutually exclusive) and auto-fills the name
+   *  from the first example.
    *
    *  ``seed`` marks an unlabeled seed contributed by a seed importer, which
-   *  rides in the same stack but is submitted with ``labeled: false``. */
+   *  rides in the same stack but is submitted with ``labeled: false``.
+   *
+   *  A hand-picked example lands the user on the media tab, where the picker
+   *  they just used lives. A seed does not (issue #3192): the seed-importer
+   *  tab renders the same stack, so the batch appears where it was added
+   *  instead of throwing the user onto the media tab mid-import. */
   private addMediaExample(
     value: string,
     display: string,
@@ -381,7 +388,7 @@ export class NewDetectorModalComponent implements OnInit {
       { value, display, mediaType, thumbFailed: false, origin: origin ?? null, seed },
     ]);
     this.pendingText.set('');
-    this.exampleTab.set('media');
+    if (!seed) this.exampleTab.set('media');
     this.autoFillNameFromExample();
   }
 
@@ -620,9 +627,10 @@ export class NewDetectorModalComponent implements OnInit {
    *  instead of looking like it silently did nothing. */
   readonly seedNotice = signal('');
 
-  /** A seed importer returned a batch: append every saved item to the media
-   *  stack as an unlabeled seed and land the user on the stack so they can
-   *  see (and prune) what arrived. */
+  /** A seed importer returned a batch: append every saved item to the shared
+   *  example stack as an unlabeled seed. The stack is mirrored under the seed
+   *  importer's own form, so the batch appears in place — the user stays on
+   *  this tab and can see (and prune) what arrived. */
   onSeedsImported(result: SeedImportResult): void {
     const items = result?.items ?? [];
     for (const item of items) {

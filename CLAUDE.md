@@ -1,6 +1,6 @@
 # VTSearch
 
-Trainable media search tool. Searches collections of audio, images, text, video, and documents using a **detector**: a small trained ranker that scores each item by how well it matches. Two ways to search: **train a new detector** (vote good/bad on a handful of items; a linear (logistic) head learns to rank the rest) or **use an existing detector** (saved or imported). Trained detectors are reusable across compatible datasets. Text queries (LAION-CLAP, SigLIP, X-CLIP, E5 embeddings) seed either flow or work as a quick stand-alone search. Flask + Angular + PyTorch.
+Trainable media search tool. Searches collections of audio, images, text, video, and documents using a **detector**: a small trained ranker that scores each item by how well it matches. Two ways to search: **train a new detector** (vote good/bad on a handful of items; a linear SVM head learns to rank the rest) or **use an existing detector** (saved or imported). Trained detectors are reusable across compatible datasets. Text queries (LAION-CLAP, SigLIP, X-CLIP, E5 embeddings) seed either flow or work as a quick stand-alone search. Flask + Angular + PyTorch.
 
 Architecture, state model, plugin systems, auth, and the directory map all live in **`docs/ARCHITECTURE.md`**. This file holds the testing rules and the policy/gotchas that must be in context every turn.
 
@@ -223,6 +223,15 @@ Breaking backwards compatibility is acceptable; do not add shims, feature flags,
 
 VTSearch is a desktop web app. **Do not design, implement, or test for mobile or narrow viewports.** No responsive breakpoints, no touch-targeted controls, no mobile-only layouts, no concerns about portrait orientation. If a design discussion raises "what about mobile?", the answer is "we don't care." When evaluating a layout, assume a standard desktop viewport and skip mobile considerations entirely.
 
+## Render and attach slide decks (when you change `slides/`)
+
+**Any session that changes the slide codebase must end by rendering the affected decks and attaching the PDFs in the conversation** (via `SendUserFile`), so the user can see the result in-browser without checking out the branch and running the build themselves. "Changes the slide codebase" means any edit under `slides/` that can change what a rendered deck looks like — fragments, `.deck` manifests, the theme, figures, or the build/render tooling. Prose that renders nothing (`README.md`, `STYLE.md`) is the one exception: there is no output to show, so attaching a deck identical to the last one is noise rather than evidence.
+
+- **Which decks:** every deck whose output the change affects. A fragment edit affects the decks whose manifests name it (grep `slides/decks/*.deck`); a theme, `build.py`, or `render.sh` change affects all decks. When in doubt, render more rather than fewer.
+- **How:** `cd slides && ./render.sh <deck> pdf` for each affected deck. The cloud container has a browser; if Marp can't find it, use `CHROME_PATH=/opt/pw-browsers/chromium`. When presenter notes or the speaker pipeline changed, also render `./render.sh <deck> pdf --speaker` and attach that variant too.
+- **When:** at the end of the session, from the final state of the branch (after the last commit that touches `slides/`), so what the user sees is what the PR ships. Attach with a one-line caption naming the deck(s).
+- Rendered PDFs stay in gitignored `slides/_out/` — attach them, never commit them.
+
 ## Screenshot reshoots (when you change the GUI)
 
 User-facing docs embed screenshots captured by a Playwright harness that **needs a real browser**. The cloud container *does* have one (see "Environment Notes" below), so the default when you change a framed GUI surface is to **reshoot in the same session**: run `scripts/screenshots/refresh.sh`, review `git diff docs/user/assets/`, and commit the regenerated PNGs. **Do not let that drift go silently unrecorded.**
@@ -302,6 +311,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 
 - **Run tests (CPU, fast)**: `./run-tests.sh` (runs every gate listed under "What `run-tests.sh` gates" below, then pytest)
 - **Run tests by group**: `./run-tests.sh core`, `./run-tests.sh sorting`, `./run-tests.sh api` (see Test Groups below; every invocation runs the cheap serial gates — linters, doc checks, snapshot drift — first, but a group run **skips the heavy whole-repo gates** (pyright, pip-audit, and the frontend gates unless the group is `core`/`frontend`) to keep the inner loop fast; it says so in its output. `VTSEARCH_FULL_GATES=1` forces them. A **full** `./run-tests.sh` runs everything and is mandatory before pushing. `core` and `frontend` additionally run the frontend build + `npm audit`, and `frontend` alone also runs the Vitest unit suite)
+- **Run tests for a slides-only change**: `./run-tests.sh slides` (~4s; the four gates a deck can trip. This is the *complete* gate for a change confined to `slides/` — see the Test Groups table — and it refuses to run if the branch touches anything else)
 - **Run tests with coverage**: `VTSEARCH_COVERAGE=1 ./run-tests.sh` (opt-in; adds ~10-20% overhead)
 - **Run multiple groups**: `./run-tests.sh core sorting api`
 - **Run tests with extra args**: `./run-tests.sh core -- -x --tb=long` (args after `--` go to pytest)
@@ -316,6 +326,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json> --exporter server_json_file --filepath results.json`
 - **CLI autodetect + importer**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings <settings.json>`
 - **Check eval/app sync**: `python scripts/check-eval-app-sync.py` (also a `./run-tests.sh` gate; re-pin with `--update` after reconciling the harness)
+- **Check for a stale tree**: `python scripts/check-phantom-base.py` (also the first `./run-tests.sh` gate; fails when the branch deletes files it never created, or carries none of what `dev` gained across two or more consecutive commits. Override a deliberate deletion with `VTSEARCH_ALLOW_DELETIONS=1`, a deliberate revert with `VTSEARCH_ALLOW_REVERTS=1`)
 - **Check documentation**: `python scripts/check-docs.py` (also a `./run-tests.sh` gate; validates relative links, `#anchors`, backticked repo paths, absolute-path leaks, `docs/plans/*.md` citations anywhere in the tree, and code fences. Pure invariants — nothing to re-pin. Fix the doc, or add an allowlist entry with a reason if the path is runtime-generated or a deliberately fictional example)
 - **Regenerate doc inventories**: `python scripts/gen-docs-inventories.py` (fills the `<!-- BEGIN GENERATED: ... -->` regions in the docs from the live registries — embedders, plugin families, demo datasets; `--check` is a `./run-tests.sh` gate, so registry changes require rerunning this and committing the result)
 - **Install deps**: `bash scripts/install.sh` (auto-detects CPU vs GPU; pass `cpu`/`gpu` to force, or a `cuXYZ` tag to override the GPU wheel, e.g. `bash scripts/install.sh cu121`)
@@ -339,6 +350,7 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 
 | Gate | Command it runs | Notes |
 |------|-----------------|-------|
+| Stale tree | `scripts/check-phantom-base.py` | **Runs first.** Refuses a branch whose tree matches an *ancestor* of `origin/dev` rather than `origin/dev` — the signature of a stale checkout committed onto a fresh HEAD, which has silently reverted five merged PRs. Two signals: paths deleted that the branch never created, and a run of two or more consecutive `dev` commits the branch keeps *nothing* of (which is what catches a clobber that deletes no file at all, because the reverted hunks sit inside files that survive). Compares against the working tree, so it fires before the clobber is committed. A deliberate deletion (a shipped plan file) passes with `VTSEARCH_ALLOW_DELETIONS=1`; a deliberate revert of consecutive merges with `VTSEARCH_ALLOW_REVERTS=1`. |
 | Lint | `ruff check .` | |
 | Format | `ruff format --check .` | Fix with `ruff format .`. |
 | Spelling | `codespell --toml pyproject.toml` | |
@@ -349,6 +361,7 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 | Dockerfiles | `scripts/check-dockerfiles.py` | |
 | User-docs screenshot wiring | `scripts/screenshots/wiring-check.py` | Browser-free; the pixel-diff (`check.sh`) stays a manual chore. Also what makes the reshoot queue un-rottable. |
 | vtscore package docs | `scripts/check-vtscore-docs.py` | |
+| Slide decks | `slides/build.py --check` | Preflights every deck manifest: fragments exist, figures resolve. Marp only warns on a missing figure and exits 0, so a rotted deck is otherwise silent. |
 | Eval/app sync | `scripts/check-eval-app-sync.py` | Re-pin with `--update` **after** reconciling the harness. |
 
 **Stage 2 — frontend production build, serial (full run and the `core` / `frontend` groups):** `cd frontend && npm run build:prod`. Any `▲ [WARNING]` line is a hard failure. Runs *before* pytest because some tests serve the built bundle out of `static/`. Skipped with a notice if `frontend/node_modules` is absent.
@@ -363,7 +376,7 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 | Frontend unit tests | `cd frontend && npm run test:ci` | Full run or `frontend` **only** — deliberately off the fast `core` path | Headless Vitest. |
 | Python tests | `pytest tests/ tests_lib/ -n auto --dist loadgroup` | Every run except a `frontend`-only group | |
 
-**Group runs skip the whole-repo stage-3 gates** (pyright, pip-audit, and the frontend gates unless the group asks for them) so the edit/test loop stays in the seconds — the skip is announced in the output, and `VTSEARCH_FULL_GATES=1` forces the complete chain on a group run. Stage 1 runs on every invocation. This is a deliberate trade: the fast inner loop may miss a type error or CVE, which is why **a full `./run-tests.sh` remains mandatory before pushing.**
+**Group runs skip the whole-repo stage-3 gates** (pyright, pip-audit, and the frontend gates unless the group asks for them) so the edit/test loop stays in the seconds — the skip is announced in the output, and `VTSEARCH_FULL_GATES=1` forces the complete chain on a group run. Stage 1 runs on every invocation. This is a deliberate trade: the fast inner loop may miss a type error or CVE, which is why **a full `./run-tests.sh` remains mandatory before pushing** — with exactly one exception, `./run-tests.sh slides`, whose narrower scope is a proof rather than a gamble (see the Test Groups table) and which blocks itself the moment the diff stops being slides-only.
 
 ## Test Groups
 
@@ -383,6 +396,7 @@ Tests are grouped by folder under `tests/` and `tests_lib/`. Each folder is a py
 | `converters` | Media converters (document, video, image) |
 | `projection` | VTSBrowse UMAP projection + hex-tile pyramid (library tier) |
 | `frontend` | Frontend-only gate: Angular `build:prod` + `npm audit` + the headless Vitest unit suite. No Python tests; `./run-tests.sh frontend` skips pytest. Also runs as part of the full `./run-tests.sh`. |
+| `slides` | Slide-deck gate: `ruff`, `codespell`, `check-docs.py`, `slides/build.py --check`. No Python tests, no whole-repo gates. **The one group that also gates a push**, because a change confined to `slides/` cannot reach the rest of the repo: nothing imports `slides/build.py`, `pyrightconfig.json` excludes it, and no test in either tree reads a deck. Self-policing — the group refuses to run when the branch changes anything outside `slides/`, so the exemption can't be taken by mistake. Also runs as part of the full `./run-tests.sh`. |
 | `gpu` | CUDA-only tests (excluded by default) |
 
 **Recommended workflow**: Run `./run-tests.sh <group>` for the area you changed, then `./run-tests.sh` for the full suite.
@@ -541,6 +555,7 @@ def slow_load():
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — production/offline deployment, env vars, data directory, troubleshooting.
 - [`docs/EXTENDING.md`](docs/EXTENDING.md) + [`docs/EXTENDING-plugins.md`](docs/EXTENDING-plugins.md) + [`docs/EXTENDING-media.md`](docs/EXTENDING-media.md) + [`docs/EXTENDING-processors.md`](docs/EXTENDING-processors.md) — how to add plugins.
 - [`vtscore/docs/README.md`](vtscore/docs/README.md) — the library tier's own doc set (quickstart, concepts, per-package reference, tutorials, FAQ).
+- [`slides/STYLE.md`](slides/STYLE.md) — house rules for every slide deck (no running footer, real subscripts, colour reserved for meaning, the 20px type floor, the opening outline); [`slides/README.md`](slides/README.md) is the build mechanics.
 - [`docs/plans/`](docs/plans/) — future-work design docs (open/proposed; shipped work is pruned out, not archived); check here before adding a "Phase N" feature.
 - [`docs/RELEASE.md`](docs/RELEASE.md) — the `dev` → `main` release runbook (the procedure the Dev2Main Routine follows: vulture audit, release summary, punch-card refresh, release PR, issue close-out, plan-pointer prune).
 - [`docs/branch-protection.md`](docs/branch-protection.md) — who can land on `main` vs `dev`, and what the Free-plan private repo can and cannot enforce.

@@ -1,8 +1,8 @@
 <div class="file-browser-field">
-  <div class="file-browser-input-row">
+  <div class="browse-row">
     <input
       type="text"
-      class="form-input file-browser-input"
+      class="form-input"
       [(ngModel)]="inputValue"
       (ngModelChange)="onInputChange()"
       [placeholder]="placeholder()"
@@ -10,14 +10,14 @@
     />
     <button
       type="button"
-      class="btn btn--secondary file-browser-browse-btn"
+      class="btn btn--secondary"
       (click)="browserOpen ? closeBrowser() : openBrowser()"
       title="Browse server files"
     >Browse</button>
   </div>
 
   @if (browserOpen) {
-    <div class="file-browser-panel">
+    <div class="browse-panel">
       <vt-folder-browser
         [browse]="browseFn"
         [showFiles]="true"

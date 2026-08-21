@@ -2,7 +2,17 @@
 
 **[→ Read the report: `REPORT.md`](REPORT.md)**
 
-Verdict: **keep the MLP.** The SVMs are more label-efficient in the first ~50
+> **Superseded as a product decision.** This study compared the SVMs against
+> the small **auto-sized MLP** that was the detector head at the time. The head
+> has moved twice since: to a linear (logistic) head, and then to a **linear
+> SVM**, which is what ships today. The comparison below is therefore a
+> historical record, not the live recommendation — its "keep the MLP" verdict
+> was about a head the app no longer trains, and it never measured the
+> logistic head the SVM was actually swapped for. `REPORT.md` is regenerated
+> deterministically from the CSVs, so it still states the verdict it measured;
+> read it that way. See [`docs/ML.md`](../../ML.md#the-three-heads-which-one-is-shipped-and-why).
+
+Verdict at the time: **keep the MLP.** The SVMs are more label-efficient in the first ~50
 votes but the MLP overtakes them decisively by 200 votes, especially on
 rare-event false-negatives — so no SVM variant met the pre-registered switch
 criterion. See `REPORT.md` for the full write-up, curves, and take-aways.

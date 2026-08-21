@@ -306,7 +306,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.layoutRef().nativeElement.style.setProperty('--right-width', `${this.rightWidth()}px`);
     this.pendingSnapOnLoad = true;
     this.mediaState.loadMedias();
-    this.voteState.loadVotes();
+    this.loadTrainingVotes();
     this.loadSettings();
     this.startStatusPolling();
     this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.pairScope$)).subscribe({
@@ -393,7 +393,7 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     this.voteState.clear();
     this.pendingSnapOnLoad = true;
     this.mediaState.loadMedias();
-    this.voteState.loadVotes();
+    this.loadTrainingVotes();
     this.datasetsRegistryApi.getStatus().pipe(takeUntil(this.pairScope$)).subscribe({
       next: (status) => { this.datasetName.set(status.display_name || ''); },
     });
@@ -403,6 +403,30 @@ export class LabelViewComponent implements OnInit, AfterViewInit, OnDestroy {
     // Arm the rehydrate effect: it fires `onLearnedSort` once the reloaded
     // votes land (counts go 0 → available) if the user is still in learned mode.
     this.pendingRehydrateLearned = this.sortState.sortMode === 'learned';
+  }
+
+  /**
+   * Load the votes this window trains from, ending any live Find session first.
+   *
+   * Find fills the *same* per-detector vote dicts as training does, but with
+   * the detector's own call for every item in the dataset — a presumption, not
+   * a human decision. Read as votes they make the whole collection look
+   * labeled, which lands Autopilot in a terminal phase the moment the user
+   * arrives, and the server-side find-mode guard keeps every vote cast here out
+   * of the labelset (#3212). Entering the Train window is the statement that
+   * this is training, so it says so before it reads the votes.
+   *
+   * The load runs either way: a failed hand-off is no reason to leave the
+   * window with no votes at all.
+   */
+  private loadTrainingVotes(): void {
+    this.detectorsFindApi
+      .endFindSession()
+      .pipe(takeUntil(this.pairScope$))
+      .subscribe({
+        next: () => this.voteState.loadVotes(),
+        error: () => this.voteState.loadVotes(),
+      });
   }
 
   ngOnDestroy(): void {

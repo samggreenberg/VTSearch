@@ -239,6 +239,11 @@ extend_exclude = [
     "model_cache",
 ]
 
+# Sibling modules that slides/figs/src/*.py import off their own directory
+# (they are scripts run by path, not an installed package, so deptry reads the
+# imports as third-party). Everything else under slides/ is still checked.
+known_first_party = ["report_svg", "slide_figure"]
+
 # Module name → distribution name. Deptry needs these when the importable
 # module differs from the PyPI package.
 [tool.deptry.package_module_name_map]
@@ -378,6 +383,7 @@ markers = [
     "converters: document and media converters",
     "projection: VTSBrowse UMAP projection and hex-tile pyramid",
     "frontend: frontend-only gate (Angular build + npm audit + Vitest unit suite); has no Python tests, runs via ./run-tests.sh frontend",
+    "slides: slide-deck gate (ruff, codespell, check-docs, deck preflight); has no Python tests, runs via ./run-tests.sh slides",
 ]
 # --timeout: per-test wall-clock cap, so one hung test fails with a traceback
 #   naming it instead of stalling the whole run. 300s is ~10x the slowest
@@ -411,7 +417,10 @@ exclude_lines = [
 # docs/reports/*.html are generated experiment reports with embedded
 # base64 image data URIs, the same class of binary-ish content *.svg is
 # already skipped for.
-skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/reports/*.html,*vtscore/projection/assets*"
+# slides/_build and slides/_out are gitignored deck-build artifacts; the
+# rendered PDFs there decode as mojibake that codespell "corrects", which
+# used to fail any test run that happened after `slides/render.sh`.
+skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/reports/*.html,*vtscore/projection/assets*,*slides/_build*,*slides/_out*"
 # Domain terms (clap/siglip/xclip = embedder names; wrest/caller/recaller =
 # extension scaffold names), legitimate code identifiers (numer/denom in
 # slope formulas, medias as the global state proxy, goup as a TS method,

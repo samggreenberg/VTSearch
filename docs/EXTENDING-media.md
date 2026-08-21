@@ -199,6 +199,18 @@ changes to `vtscore/media/__init__.py` are needed.
 | `load_media_data(file_path, media_bytes=None)`| `(Path, bytes \| None) -> dict` | Must include `"duration"` key. The optional `media_bytes` lets callers (e.g. the folder loader) pass already-read bytes to avoid a second disk read. |
 | `media_response(media)`     | `(dict) -> MediaResponse`      | HTTP response for a media item           |
 
+> **Pixel-media types: report *displayed* dimensions.** A media's stored
+> `width`/`height` are the coordinate space every box in the system is expressed
+> against — clip boxes, extractor and localizer output, the region a user drags
+> on the canvas. For images that space is the picture *as displayed*, i.e. after
+> EXIF orientation: a phone photo shot sideways stores a landscape bitmap plus a
+> "rotate me" tag, and browsers honour the tag, so the user is looking at a
+> portrait image. `vtscore.media.image.decode` applies the tag on every decode
+> (`decode_bounded`, `decode_bounded_rgb`, `open_upright`) and exposes
+> `upright_size()` for the header-only read `load_media_data` wants. Reach for
+> `open_image()` only when you genuinely want the untransposed original — it is
+> the lazy, metadata-only escape hatch, not the default.
+
 **Optional overridable properties (with defaults):**
 
 | Property             | Returns     | Default            | Purpose                                   |
@@ -795,7 +807,7 @@ otherwise hide it. Do not add a cleaner affordance outside that block.
 
 | Cleaner | Name | Media Type | Default | Description |
 |---------|------|------------|---------|-------------|
-| `ImageExifOrientCleaner` | `image_exif_orient` | `image` | **on** | Bake a photo's EXIF display orientation into its pixels so the embedder sees it upright |
+| `ImageExifOrientCleaner` | `image_exif_orient` | `image` | off | Bake a photo's EXIF display orientation into its stored bytes (VTSearch already *reads* every image upright; this is for tools that ignore EXIF) |
 | `ImageEdgeTrimCleaner` | `image_edge_trim` | `image` | off | Crop near-solid white/black margins (letterbox, pillarbox, whitespace around a logo) |
 | `AudioSilenceTrimCleaner` | `audio_silence_trim` | `audio` | off | Drop the silence at the head and tail of a clip, keeping internal pauses |
 | `TextMarkupStripCleaner` | `text_markup_strip` | `text` | off | Remove HTML tags and Markdown syntax, keeping the text inside |
@@ -1310,4 +1322,3 @@ completes before per-item work begins. If your source's `resolve_path()`
 populates `FetchedItem.embedding`, the embed step is skipped automatically.
 
 ---
-

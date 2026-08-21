@@ -135,10 +135,17 @@ class TestCleanersApiEndpoint:
         assert all(c["media_type"] == "video" for c in cleaners)
         assert all(c["default_enabled"] is False for c in cleaners)
 
-    def test_exif_cleaner_defaults_on(self, client):
+    def test_every_shipped_cleaner_is_opt_in(self, client):
+        """No gate rewrites a user's payload unless they asked for it.
+
+        ``image_exif_orient`` was the one exception until orientation moved into
+        the decode layer; now that every image is *read* upright, baking the
+        rotation into the stored bytes is a preference, not a correction.
+        """
         resp = client.get("/api/cleaners?media_type=image")
-        exif = next(c for c in resp.get_json()["cleaners"] if c["name"] == "image_exif_orient")
-        assert exif["default_enabled"] is True
+        cleaners = resp.get_json()["cleaners"]
+        assert all(c["default_enabled"] is False for c in cleaners)
+        exif = next(c for c in cleaners if c["name"] == "image_exif_orient")
         assert exif["description"]
 
     def test_cleaners_are_absent_from_the_clipper_listing(self, client):

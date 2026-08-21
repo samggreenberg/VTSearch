@@ -1,0 +1,20 @@
+# SCALE'26 mid-year review — technical audience, ~25 min
+# Full findings with the evidence base and the caveats.
+
+theme: vtsearch
+paginate: true
+
+slides:
+  title-scale26
+  outline-scale26
+  problem
+  ui-tour
+  autopilot
+  ui-region-voting
+  benchmark
+  region-voting
+  positives
+  regret
+  caveats
+  roadmap
+  thanks

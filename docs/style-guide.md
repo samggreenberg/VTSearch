@@ -251,11 +251,13 @@ A borderless icon button inside a card row or action cluster is **not** a `.btn`
 ```
 
 - `.form-group` is the label+control wrapper: a flex column with `gap: var(--space-xs)`. It owns the spacing *inside* one field; the surrounding form (`.importer-form`, §2.5) owns the spacing between fields. `.form-group--section` adds `margin-top: var(--space-xl)` above a grouped block inside an importer form (the Embedder/Clipper "Advanced" block).
+- **Every stacked field belongs to a form container, including projected ones.** A run of `.form-group`s that are a *component's own* root children get no rhythm from the `.importer-form` two components up - `gap` only reaches direct children, so the fields land flush against each other while the projected component as a whole sits `--space-lg` from its neighbours. That mismatch ("large gap above the block, no gap inside it") is what the Add Dataset pickers shipped for a while. Either wrap the component's fields in their own `.importer-form`, or give its `:host` the same `flex-direction: column; gap: var(--space-lg)` - never rely on an ancestor's `gap` crossing a component boundary.
 - `.form-input` and `.form-select` share padding, border, focus state. They sit on `--bg-subtle` so they read as "input wells."
 - `.form-select--compact` is the toolbar-sized select: sized to its content rather than full width, tighter padding, `--font-xs`, on `--bg-surface`. Use it in dense bars (label sort, browse selection panel), not in forms.
 - `.form-label` is `--font-md`, `--weight-medium`, `--text-primary` - sized to match `.form-input` so the header is never visually smaller than the value the user types/picks underneath it. Custom `<button>`-based dropdown triggers that play the role of `.form-select` (e.g. icon-bearing media-type pickers) must set `font-size: var(--font-md)` explicitly: `<button>` doesn't inherit page font by default, and component-scoped overrides (`font: inherit`, etc.) silently win over the global `.form-select` because Angular view encapsulation raises their specificity. If the trigger text ever renders larger than the label above it, that rule is the regression.
 - `.form-hint` (used for plugin-field `hint` strings) is muted `--font-mono` at `--font-sm`, and preserves newlines (`white-space: pre-wrap`) so a multi-line schema hint keeps its shape.
 - `.required` marks required fields with `--color-bad`.
+- **`.browse-row` + `.browse-panel`** are the canonical "type a path, or pick one" field. `.browse-row` lays a `.form-input` and its `Browse` `.btn` on one line (the input flexes, the button hugs its label) so the pair reads as a single control rather than two stacked fields; `.browse-panel` frames the `<vt-folder-browser>` that the button reveals below it as a recessed sub-surface. Both `<vt-file-browser>` (pick a file) and the Add Dataset server-folder field (pick a folder) use them - a new "browse the server" field should too, rather than stacking a bare button under an input.
 
 Focus state is provided globally by `:focus-visible { outline: 2px solid var(--accent); }`. Inputs additionally swap their border to `--accent` on focus. **Do not override focus styling per component.**
 
@@ -561,7 +563,7 @@ Two buckets, one rule each:
   buttons with a text label, radio-pill labels). These name a surface or an
   action, so they read as a title.
 - **sentence case** - everything the user *reads or fills in*: **form field
-  labels** (`.form-label`, `.col-label`), **placeholders**, **hints**
+  labels** (`.form-label`), **placeholders**, **hints**
   (`.form-hint`, `.info-text`), **empty-state messages** (`.empty-state`),
   **tooltips** (`title="…"`), **aria-labels**, and any inline description or
   status sentence. Capitalize only the first word and proper nouns.

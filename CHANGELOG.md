@@ -15,7 +15,66 @@ not list every commit. Use `git log` for the full history.
 
 ## Unreleased
 
+### Changed
+
+- **The Add Dataset dialog has one consistent vertical rhythm, and Advanced
+  really is hidden.** The Folder, Manifest and Demo forms all laid their fields
+  out differently: a field's own controls could sit further apart than two
+  unrelated fields, the "Folder to import" path and its **Browse** button were
+  separated as if they were different questions while the checkboxes below ran
+  together with no gap at all, and the folder browser opened as loose rows with
+  no frame. Every field in every importer now shares the same spacing, the path
+  input and **Browse** sit on one line (matching the Manifest importer's file
+  field), and the browser opens in a framed panel under it. Separately, the
+  **Advanced** section now shows *nothing* until you open it: **Embedder** and
+  the Demo importer's **Convert to** used to appear on the collapsed form
+  whenever their value differed from the default — which, on a demo dataset
+  that picks its own embedder, was most of the time. Any non-default choice is
+  still disclosed, in the **Advanced** toggle's tooltip. (#3215)
+
+- **Autopilot's "you're done" hand-off is a dialog you answer, and it appears
+  once.** Reaching the end of training used to raise a toast that counted down
+  and then returned you to the Dashboard unless you cancelled it — and because
+  the countdown re-armed on every entry to the Train window, anyone who thought
+  their detector needed more work had to dismiss the same redirect each time
+  they came back. It is now a **Detector Trained** dialog with two plain
+  buttons, **Continue Training** and **Head to Dashboard**, and nothing happens
+  until you pick one. It is also raised only for the autopilot run that
+  actually trained the detector: continuing afterwards, or picking up a
+  detector already trained on another dataset, no longer announces anything.
+  (#3201)
+
+- **The detector head is now a linear SVM.** Every trained detector — new
+  detectors, saved ones re-derived from their labels, and the per-step models
+  behind the labeling-progress indicators — is fitted to the class-balanced
+  maximum-margin boundary between your Good and Bad votes (scikit-learn's
+  `LinearSVC`) instead of by logistic regression. It is the same shape of model
+  as before, a single linear boundary over the embedding space, so nothing
+  about detector files, exports, or the ONNX bundle changes: only where the
+  boundary lands. Measurements in a separate environment put the SVM's ranking
+  clearly ahead of the logistic head's, and while *why* is still under
+  investigation, the best-measured head is the one that ships. Detector scores
+  will move — a detector retrained after this change can put items in a
+  different order and cut at a different threshold than the same votes did
+  before. The regularisation strength is tunable via `VTSEARCH_SVM_HEAD_C`
+  (default `1.0`), and `VTSEARCH_TRAIN_EPOCHS` / `VTSEARCH_TRAIN_PATIENCE` no
+  longer affect a detector fit. See [`docs/ML.md`](docs/ML.md).
+
 ### Fixed
+
+- **A demo download that can't reach its host now says so in a sentence, and
+  tries harder before giving up.** Loading the Apollo 11 Mission Audio demo
+  while archive.org was refusing connections failed with a hundred-line
+  `MaxRetryError` traceback pasted into the Dataset-load-failed box, after
+  six identical 10-second connection attempts — and the progress bar said
+  "resuming" a file that had never downloaded a single byte. The failure now
+  reads *"Couldn't reach archive.org: the connection timed out before the
+  server answered, on all 6 attempts. The site may be down or blocked by your
+  network/proxy…"*, the connect budget escalates across retries (10 s → 30 s)
+  so a host that is merely slow to accept isn't written off six times over,
+  the retry notice says "retrying" until there are bytes to resume, and the
+  track-list fetch that precedes the download gets the same retry budget
+  instead of dying on a single unlucky handshake. (#3216)
 
 - **CLI autodetect no longer reports every media as a hit, and no longer
   disagrees with the GUI's Find.** A run against a dataset and detector that
@@ -51,6 +110,23 @@ not list every commit. Use `git log` for the full history.
   `--autodetect --importer …`, which failed on *every* run: the safe-threshold
   population pass scored the chunk before anything had been embedded, so it hit
   the same raise on the first media. (#3179)
+- **Rotated photos are no longer processed sideways.** A JPEG carrying an EXIF
+  orientation tag — the ordinary output of a phone camera, which stores the
+  sensor frame plus "rotate me" rather than rotating pixels — reached the
+  embedder, OCR, face detection and every crop path 90/180/270 degrees from the
+  way the browser (and every other photo viewer) displays it. Nothing errored;
+  the picture was simply the wrong way up in a space nobody looks at directly,
+  so a sideways photo embedded as a sideways photo and landed in the wrong part
+  of the vector space. Orientation is now applied once, in the image decode
+  layer, so every consumer sees the same upright pixels; a media's stored
+  `width`/`height` are the displayed dimensions to match, and cropping, lazy
+  clip resolution and cross-dataset origin resolution decode upright so a box
+  drawn on screen cuts the region the user drew. The `image_exif_orient`
+  cleaner still exists for anyone who wants the rotation baked into the *stored
+  bytes* (for tools outside VTSearch that ignore EXIF), but it is now off by
+  default: it costs a lossy re-encode and no longer changes anything VTSearch
+  itself sees. Images already imported keep the dimensions and embeddings they
+  were ingested with; re-import a rotated corpus to pick up the fix. (#3172)
 
 - **A detector's labelset no longer stores the same media twice.** After one
   pass over a 300-image dataset a detector reported `num_training: 356` — 300
@@ -101,6 +177,16 @@ not list every commit. Use `git log` for the full history.
   failures are written to the server log. (#3139)
 
 ### Changed
+
+- **A seed importer's results now appear on its own tab.** Running a seed
+  importer in the New Detector modal used to switch the user to the media
+  tab, where the batch had been appended — an odd jump mid-import, and one
+  that hid the form they were still working in. The example stack is now
+  mirrored under each seed importer's form, so seeds land in view where they
+  were added. It stays one list: the mirrored rows carry the same Seed badges
+  and Remove buttons, and edits from either tab hit the same stack. Picking an
+  exemplar by hand still lands on the media tab, which is where the picker
+  lives. (#3192)
 
 - **Image preprocessing now names its backend instead of inheriting one.**
   Every image embedder builds its processor by asking `transformers` for the

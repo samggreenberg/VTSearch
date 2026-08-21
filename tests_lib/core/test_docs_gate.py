@@ -124,6 +124,24 @@ class TestLinkCheck:
     def test_reference_definition_is_checked(self):
         assert checks("text\n\n[ml]: nope-not-here.md\n") == ["LINK"]
 
+    def test_slide_fragment_links_resolve_against_the_deck_root(self):
+        """Fragments author figure paths relative to `slides/`, not to themselves.
+
+        `slides/build.py` repoints them when it assembles a deck, so resolving
+        them against `slides/fragments/` would flag every working slide.
+        """
+        fragment = REPO_ROOT / "slides" / "fragments" / "__synthetic__.md"
+        assert run("![bg fit](figs/cost-traces.png)", fragment) == []
+
+    def test_slide_fragment_links_are_still_checked(self):
+        """The override changes the base directory, it does not disable the check."""
+        fragment = REPO_ROOT / "slides" / "fragments" / "__synthetic__.md"
+        assert checks("![bg fit](figs/no-such-figure.png)", fragment) == ["LINK"]
+
+    def test_link_base_override_does_not_leak_to_other_docs(self):
+        """A doc outside the override prefix still resolves against its own dir."""
+        assert checks("![bg fit](figs/cost-traces.png)") == ["LINK"]
+
 
 class TestAnchorCheck:
     def test_dead_in_page_anchor_fires(self):
@@ -273,3 +291,8 @@ class TestAllowlistsStayHonest:
     def test_plan_self_reference_entries_point_at_real_files(self):
         for rel in gate.PLAN_SELF_REFERENCE:
             assert (REPO_ROOT / rel).exists(), f"{rel} is exempt from the PLAN check but no longer exists"
+
+    def test_link_base_overrides_point_at_real_directories(self):
+        for prefix, base in gate.LINK_BASE_OVERRIDES.items():
+            assert (REPO_ROOT / prefix).is_dir(), f"{prefix} has a link-base override but no longer exists"
+            assert (REPO_ROOT / base).is_dir(), f"{prefix} resolves links against {base}, which no longer exists"

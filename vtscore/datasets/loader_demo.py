@@ -17,6 +17,7 @@ from typing import Any, Optional
 
 import numpy as np
 
+from vtscore.embedding.stack import embedding_stack
 from vtscore.datasets.config import DEMO_DATASETS
 from vtscore.datasets.loader import (
     ProgressCallback,
@@ -425,6 +426,9 @@ def _write_demo_cache(
     meta = {
         "format_version": 1,
         "embedder": resolved_name,
+        # See vtscore/embedding/stack.py: the embedder name does not pin the
+        # arithmetic, so record what actually produced the vectors (#3160).
+        "embedding_stack": embedding_stack(embedder),
         # Store the *effective* clipper (normalised default -> "") plus its
         # params so a later load can tell whether the cache still matches the
         # requested split.

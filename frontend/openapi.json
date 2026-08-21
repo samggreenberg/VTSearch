@@ -3585,6 +3585,22 @@
         ],
         "type": "object"
       },
+      "FindEndSessionResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "ended": {
+            "type": "boolean"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ended",
+          "ok"
+        ],
+        "type": "object"
+      },
       "FindEvidenceCoverageResponse": {
         "additionalProperties": false,
         "properties": {
@@ -13814,6 +13830,31 @@
         "summary": "Fold the Find corrections into the active detector's labelset for *future*\nscoring, leaving the current Find session frozen.",
         "tags": [
           "detector_scoring"
+        ]
+      }
+    },
+    "/api/find/end-session": {
+      "post": {
+        "description": "``/api/find-label`` leaves the detector's in-memory votes holding its own\ncall for *every* item in the dataset, flagged ``find_mode`` so they are kept\nout of the labelset.  Those presumptions are not training labels, and the\nTrain window reads the same vote dicts - so it must say \"I am training now\"\nbefore it reads them, or it shows the whole collection as voted and\nAutopilot lands in a terminal phase on arrival (issue #3212).\n\nIdempotent: with no session to end this is a no-op that reports\n``ended = false``.",
+        "operationId": "end_find_session_route",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindEndSessionResponse"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "default": {
+            "$ref": "#/components/responses/DEFAULT_ERROR"
+          }
+        },
+        "summary": "Discard the active detector's live Find session, if it has one.",
+        "tags": [
+          "detector_find"
         ]
       }
     },

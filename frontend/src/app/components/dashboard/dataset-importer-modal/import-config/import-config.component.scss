@@ -8,9 +8,11 @@
 
 // Detection hint shown below the output-media-type dropdown after the
 // modal samples the picked folder / files.  Subtle chip so it informs
-// without distracting from the form.
+// without distracting from the form.  Margin-free: the enclosing
+// `.form-group` owns the gap to the dropdown above it (style-guide
+// anti-pattern 14).
 .detection-hint {
-  margin: var(--space-sm) 0 0;
+  margin: 0;
   font-size: var(--font-sm);
   line-height: 1.35;
   color: var(--text-muted);
@@ -40,7 +42,7 @@
   // shorthand here would silently win over `.form-select`'s
   // `font-size: var(--font-md)` and render the trigger at the page-root
   // 1rem instead, making "Audio" visibly larger than the
-  // "Dataset MediaType" label above it (style-guide §2.3).
+  // "Dataset media type" label above it (style-guide §2.3).
   font-family: inherit;
   font-size: var(--font-md);
 }

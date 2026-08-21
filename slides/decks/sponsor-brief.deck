@@ -1,0 +1,19 @@
+# Programme review — capability-forward, ~10 min.
+# Leads with what it does; one finding, not three. Method detail is cut, but
+# the caveats stay: a sponsor deck that hides limitations ages badly.
+
+theme: vtsearch
+paginate: true
+
+slides:
+  title-sponsor
+  outline-sponsor
+  problem
+  ui-tour
+  ui-region-voting
+  region-voting
+  # positives          <- too inside-baseball for this room
+  # regret             <- ditto
+  caveats
+  roadmap
+  thanks

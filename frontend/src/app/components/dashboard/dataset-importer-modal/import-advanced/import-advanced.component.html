@@ -1,153 +1,190 @@
-@if (showAdvancedToggle) {
-  <button
-    type="button"
-    class="advanced-toggle"
-    (click)="toggleAdvanced()"
-    [attr.aria-expanded]="advancedOpen"
-    [title]="advancedToggleTitle"
-  >
-    Advanced {{ advancedOpen ? '▴' : '▾' }}
-  </button>
-}
-
-@if (advancedOpen && hasSourceSpecsColumn) {
-  <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media</label>
-  <vt-source-specs-picker
-    [availableConverters]="availableConverters()"
-    [nativeType]="nativeType()"
-    [typeLabels]="typeLabels()"
-    [specs]="sourceSpecs()"
-    [clippers]="clippers()"
-    [selectedClipperName]="selectedClipper()"
-    [selectedClipperParams]="selectedClipperParams()"
-    (specsChange)="onSourceSpecsChange($event)"
-    (clipperChooserRequested)="onClipperClick()"
-  ></vt-source-specs-picker>
-}
-
-@if (embedders().length > 1 && showEmbedderPicker) {
-  <label class="form-label" for="import-advanced-embedder" title="The embedder used to analyze each item so it can be searched">Embedder</label>
-  <select
-    id="import-advanced-embedder"
-    class="form-select"
-    [ngModel]="selectedEmbedder()"
-    (ngModelChange)="onEmbedderChange($event)"
-  >
-    @if (recommendedEmbedders.length > 0) {
-      <optgroup label="Recommended">
-        @for (embedder of recommendedEmbedders; track embedder.name) {
-          <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-        }
-      </optgroup>
-    }
-    @if (advancedEmbedderOptions.length > 0) {
-      <optgroup label="Advanced ▾">
-        @for (embedder of advancedEmbedderOptions; track embedder.name) {
-          <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-        }
-      </optgroup>
-    }
-  </select>
-  @if (licenseNotice; as notice) {
-    <div class="license-warning" role="note">⚠ {{ notice }}</div>
-  }
-}
-
-@if (advancedOpen && patchEmbedderOptions.length > 0) {
-  <label class="form-label" for="import-advanced-patch-embedder" title="Optionally add a region-aware embedder that lets you vote on parts of an image and search by region. Leave as None to skip.">Region embedder (optional)</label>
-  <select
-    id="import-advanced-patch-embedder"
-    class="form-select"
-    [ngModel]="selectedPatchEmbedder()"
-    (ngModelChange)="onPatchEmbedderChange($event)"
-  >
-    <option [value]="''">None</option>
-    @for (embedder of patchEmbedderOptions; track embedder.name) {
-      <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-    }
-  </select>
-  @if (patchLicenseNotice; as notice) {
-    <div class="license-warning" role="note">⚠ {{ notice }}</div>
-  }
-}
-
-@if (advancedOpen && structuralEmbedderOptions.length > 0) {
-  <label class="form-label" for="import-advanced-structural-embedder" title="Optionally add a pattern-matching embedder that finds a specific object or logo. Leave as None to skip.">Instance embedder (optional)</label>
-  <select
-    id="import-advanced-structural-embedder"
-    class="form-select"
-    [ngModel]="selectedStructuralEmbedder()"
-    (ngModelChange)="onStructuralEmbedderChange($event)"
-  >
-    <option [value]="''">None</option>
-    @for (embedder of structuralEmbedderOptions; track embedder.name) {
-      <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
-    }
-  </select>
-  @if (structuralLicenseNotice; as notice) {
-    <div class="license-warning" role="note">⚠ {{ notice }}</div>
-  }
-}
-
-@if (showStandaloneClipperButton) {
-  <label class="form-label" title="Pre-processing clipper applied before each item is analyzed (e.g. clips audio into shorter segments)">Clipper</label>
-  <button
-    class="btn btn--secondary clipper-btn"
-    (click)="onClipperClick()"
-    title="Choose how to pre-process media before it's analyzed (e.g. clip into shorter segments)"
-  >
-    Details: {{ clipperDisplayName }}
-  </button>
-}
-
-@if (showCleanupSection) {
-  <label class="form-label" title="Optional cleanup passes applied to every item just before it's analyzed, so the analysis isn't spent on content-free regions. Each one is independent — tick any combination.">Cleanup</label>
-  @for (cleaner of cleaners(); track cleaner.name) {
-    <label class="form-label cleanup-row" [title]="cleaner.description || ''">
-      <input
-        type="checkbox"
-        [checked]="isCleanerEnabled(cleaner.name)"
-        (change)="onCleanerToggle(cleaner, $any($event.target).checked)"
-      />
-      {{ cleanerLabel(cleaner) }}
-    </label>
-    @if (isCleanerEnabled(cleaner.name)) {
-      @for (param of cleanerParameters(cleaner); track param.key) {
-        <label class="form-label cleanup-param" [title]="param.description || ''">
-          {{ param.label }}
-          <input
-            class="form-input"
-            [type]="param.type === 'number' ? 'number' : 'text'"
-            [attr.min]="param.min"
-            [attr.max]="param.max"
-            [attr.step]="param.step"
-            [ngModel]="cleanerParamValue(cleaner, param)"
-            [name]="'cleanup-' + cleaner.name + '-' + param.key"
-            (ngModelChange)="onCleanerParamChange(cleaner, param, $event)"
-          />
-        </label>
-      }
-    }
-  }
-}
+<button
+  type="button"
+  class="advanced-toggle"
+  (click)="toggleAdvanced()"
+  [attr.aria-expanded]="advancedOpen"
+  [title]="advancedToggleTitle"
+>
+  Advanced {{ advancedOpen ? '▴' : '▾' }}
+</button>
 
 @if (advancedOpen) {
-  <label class="form-label" for="import-advanced-projection" title="Build the Browse map — and its region signposts, where supported — now, while importing. Costs extra time up front but makes Browse open instantly, already lettered. When off, the map and signs are built the first time you open Browse.">
-    <input
-      id="import-advanced-projection"
-      type="checkbox"
-      [ngModel]="buildProjection()"
-      (ngModelChange)="onBuildProjectionChange($event)"
-    />
-    Build Browse map now
-  </label>
-  <label class="form-label" for="import-advanced-near-dupes" title="Merge near-duplicate images and text (visually/textually near-identical copies — resizes, recompressions, trivial edits) in addition to exact duplicates. Keeps the largest copy of each group; exporting one member exports the whole group.">
-    <input
-      id="import-advanced-near-dupes"
-      type="checkbox"
-      [ngModel]="mergeNearDuplicates()"
-      (ngModelChange)="onMergeNearDuplicatesChange($event)"
-    />
-    Merge near-duplicates
-  </label>
+  @if (hasSourceSpecsColumn) {
+    <div class="form-group">
+      <label class="form-label" title="Pick which source media types feed the dataset. The native type is included directly; other types are pulled in and converted.">Include media</label>
+      <vt-source-specs-picker
+        [availableConverters]="availableConverters()"
+        [nativeType]="nativeType()"
+        [typeLabels]="typeLabels()"
+        [specs]="sourceSpecs()"
+        [clippers]="clippers()"
+        [selectedClipperName]="selectedClipper()"
+        [selectedClipperParams]="selectedClipperParams()"
+        (specsChange)="onSourceSpecsChange($event)"
+        (clipperChooserRequested)="onClipperClick()"
+      ></vt-source-specs-picker>
+    </div>
+  }
+
+  @if (showConvertTargetPicker) {
+    <div class="form-group">
+      <label
+        class="form-label"
+        for="import-advanced-convert-target"
+        [title]="convertOptional()
+          ? 'Optionally convert this media into another type on load (e.g. crop faces out of images).'
+          : 'This media type isn\'t embeddable on its own; pick what to convert it into on load.'"
+      >Convert to</label>
+      <select
+        id="import-advanced-convert-target"
+        class="form-select"
+        [ngModel]="selectedConvertTarget()"
+        (ngModelChange)="onConvertTargetChange($event)"
+      >
+        @if (convertOptional()) {
+          <option value="">{{ typeLabel(nativeType()) }} (no conversion)</option>
+        }
+        @for (target of convertTargets(); track target) {
+          <option [value]="target">{{ typeLabel(target) }}</option>
+        }
+      </select>
+    </div>
+  }
+
+  @if (showEmbedderPicker) {
+    <div class="form-group">
+      <label class="form-label" for="import-advanced-embedder" title="The embedder used to analyze each item so it can be searched">Embedder</label>
+      <select
+        id="import-advanced-embedder"
+        class="form-select"
+        [ngModel]="selectedEmbedder()"
+        (ngModelChange)="onEmbedderChange($event)"
+      >
+        @if (recommendedEmbedders.length > 0) {
+          <optgroup label="Recommended">
+            @for (embedder of recommendedEmbedders; track embedder.name) {
+              <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+            }
+          </optgroup>
+        }
+        @if (advancedEmbedderOptions.length > 0) {
+          <optgroup label="Advanced ▾">
+            @for (embedder of advancedEmbedderOptions; track embedder.name) {
+              <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+            }
+          </optgroup>
+        }
+      </select>
+      @if (licenseNotice; as notice) {
+        <div class="license-warning" role="note">⚠ {{ notice }}</div>
+      }
+    </div>
+  }
+
+  @if (patchEmbedderOptions.length > 0) {
+    <div class="form-group">
+      <label class="form-label" for="import-advanced-patch-embedder" title="Optionally add a region-aware embedder that lets you vote on parts of an image and search by region. Leave as None to skip.">Region embedder (optional)</label>
+      <select
+        id="import-advanced-patch-embedder"
+        class="form-select"
+        [ngModel]="selectedPatchEmbedder()"
+        (ngModelChange)="onPatchEmbedderChange($event)"
+      >
+        <option [value]="''">None</option>
+        @for (embedder of patchEmbedderOptions; track embedder.name) {
+          <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+        }
+      </select>
+      @if (patchLicenseNotice; as notice) {
+        <div class="license-warning" role="note">⚠ {{ notice }}</div>
+      }
+    </div>
+  }
+
+  @if (structuralEmbedderOptions.length > 0) {
+    <div class="form-group">
+      <label class="form-label" for="import-advanced-structural-embedder" title="Optionally add a pattern-matching embedder that finds a specific object or logo. Leave as None to skip.">Instance embedder (optional)</label>
+      <select
+        id="import-advanced-structural-embedder"
+        class="form-select"
+        [ngModel]="selectedStructuralEmbedder()"
+        (ngModelChange)="onStructuralEmbedderChange($event)"
+      >
+        <option [value]="''">None</option>
+        @for (embedder of structuralEmbedderOptions; track embedder.name) {
+          <option [value]="embedder.name">{{ embedderLabel(embedder) }}</option>
+        }
+      </select>
+      @if (structuralLicenseNotice; as notice) {
+        <div class="license-warning" role="note">⚠ {{ notice }}</div>
+      }
+    </div>
+  }
+
+  @if (showStandaloneClipperButton) {
+    <div class="form-group">
+      <label class="form-label" title="Pre-processing clipper applied before each item is analyzed (e.g. clips audio into shorter segments)">Clipper</label>
+      <button
+        class="btn btn--secondary clipper-btn"
+        (click)="onClipperClick()"
+        title="Choose how to pre-process media before it's analyzed (e.g. clip into shorter segments)"
+      >
+        Details: {{ clipperDisplayName }}
+      </button>
+    </div>
+  }
+
+  @if (showCleanupSection) {
+    <div class="form-group">
+      <label class="form-label" title="Optional cleanup passes applied to every item just before it's analyzed, so the analysis isn't spent on content-free regions. Each one is independent — tick any combination.">Cleanup</label>
+      @for (cleaner of cleaners(); track cleaner.name) {
+        <label class="form-label cleanup-row" [title]="cleaner.description || ''">
+          <input
+            type="checkbox"
+            [checked]="isCleanerEnabled(cleaner.name)"
+            (change)="onCleanerToggle(cleaner, $any($event.target).checked)"
+          />
+          {{ cleanerLabel(cleaner) }}
+        </label>
+        @if (isCleanerEnabled(cleaner.name)) {
+          @for (param of cleanerParameters(cleaner); track param.key) {
+            <label class="form-label cleanup-param" [title]="param.description || ''">
+              {{ param.label }}
+              <input
+                class="form-input"
+                [type]="param.type === 'number' ? 'number' : 'text'"
+                [attr.min]="param.min"
+                [attr.max]="param.max"
+                [attr.step]="param.step"
+                [ngModel]="cleanerParamValue(cleaner, param)"
+                [name]="'cleanup-' + cleaner.name + '-' + param.key"
+                (ngModelChange)="onCleanerParamChange(cleaner, param, $event)"
+              />
+            </label>
+          }
+        }
+      }
+    </div>
+  }
+
+  <div class="form-group">
+    <label class="form-label" for="import-advanced-projection" title="Build the Browse map — and its region signposts, where supported — now, while importing. Costs extra time up front but makes Browse open instantly, already lettered. When off, the map and signs are built the first time you open Browse.">
+      <input
+        id="import-advanced-projection"
+        type="checkbox"
+        [ngModel]="buildProjection()"
+        (ngModelChange)="onBuildProjectionChange($event)"
+      />
+      Build Browse map now
+    </label>
+    <label class="form-label" for="import-advanced-near-dupes" title="Merge near-duplicate images and text (visually/textually near-identical copies — resizes, recompressions, trivial edits) in addition to exact duplicates. Keeps the largest copy of each group; exporting one member exports the whole group.">
+      <input
+        id="import-advanced-near-dupes"
+        type="checkbox"
+        [ngModel]="mergeNearDuplicates()"
+        (ngModelChange)="onMergeNearDuplicatesChange($event)"
+      />
+      Merge near-duplicates
+    </label>
+  </div>
 }

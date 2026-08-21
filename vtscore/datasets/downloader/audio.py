@@ -250,15 +250,15 @@ def download_tut_sound_events_2017(on_progress: Optional[ProgressCallback] = Non
 # ---------------------------------------------------------------------------
 
 
-def _fetch_text(url: str) -> str:
-    """GET *url* through the SSRF-guarded session and return its body as text."""
-    session = _core.guarded_session()
-    response = _core.open_validated_stream(session, url)
-    try:
-        response.raise_for_status()
-        return response.text
-    finally:
-        response.close()
+def _fetch_text(url: str, label: str = "") -> str:
+    """GET *url* through the SSRF-guarded session and return its body as text.
+
+    Routed through :func:`~vtscore.datasets.downloader.core.fetch_text_with_retry`
+    so a manifest/index fetch gets the same retry budget as the transfer it
+    precedes: these are the Internet Archive and NARA, and a single unlucky
+    handshake here used to sink the whole load before a byte was downloaded.
+    """
+    return _core.fetch_text_with_retry(url, label)
 
 
 def _download_files_into(
@@ -299,7 +299,7 @@ def apollo11_audio_manifest() -> list[tuple[str, int]]:
     import json  # noqa: PLC0415
 
     url = f"{_core.ARCHIVE_ORG_METADATA_URL}/{_core.APOLLO11_AUDIO_ITEM}"
-    payload = json.loads(_fetch_text(url))
+    payload = json.loads(_fetch_text(url, "the Apollo 11 track list"))
     tracks = [
         (f["name"], int(f.get("size") or 0))
         for f in payload.get("files", [])
@@ -447,7 +447,7 @@ def nixon_tape_conversation_urls(tape: str) -> list[str]:
     """
     import re  # noqa: PLC0415
 
-    html = _fetch_text(f"{_core.NIXON_TAPES_PAGE_URL}/{tape}")
+    html = _fetch_text(f"{_core.NIXON_TAPES_PAGE_URL}/{tape}", f"the tape {tape} index")
     return sorted(set(re.findall(_core.NIXON_TAPE_MP3_PATTERN, html)))
 
 

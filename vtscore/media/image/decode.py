@@ -37,6 +37,23 @@ reasons in pixel coordinates:
 which the media registry imports eagerly while auto-discovering media types,
 so the ceiling is lifted process-wide before any image work begins —
 including in code that calls ``PIL.Image.open`` directly.
+
+**EXIF orientation is applied here, once, for everybody.**  Phone and camera
+JPEGs are stored in sensor order with an EXIF ``Orientation`` tag telling the
+viewer how to rotate them; browsers honour it, so the picture the user sees is
+the *upright* one.  Every decode in this module therefore returns upright
+pixels (:func:`decode_bounded`, :func:`decode_bounded_rgb`,
+:func:`open_upright`), and :func:`upright_size` reports the matching
+dimensions from the header alone.  That makes "the original image's space" mean
+one thing everywhere: what the user sees.  Embeddings, thumbnails, OCR boxes,
+face boxes, crop boxes and the media's stored ``width``/``height`` all agree,
+and a call site that divides a bounded-decode coordinate by ``scale`` lands in
+the same space the stored dimensions describe.
+
+:func:`open_image` is the deliberate exception — it stays lazy and untransposed
+because it exists for header-only reads, where forcing a decode to rotate
+pixels nobody asked for would defeat the point.  Ask it for metadata, not for
+pixels.
 """
 
 from __future__ import annotations
@@ -53,6 +70,14 @@ if TYPE_CHECKING:
 
 #: Anything :func:`PIL.Image.open` accepts, plus a raw in-memory blob.
 ImageSource = Union[str, Path, bytes, bytearray, memoryview, IO[bytes]]
+
+#: EXIF tag holding the display orientation.  ``1`` (and a missing tag) mean
+#: "already upright"; ``5``-``8`` additionally swap the two axes.
+EXIF_ORIENTATION_TAG = 274
+
+#: Orientations that transpose the image, i.e. whose upright form has the
+#: source's width and height exchanged.
+_AXIS_SWAPPING_ORIENTATIONS = frozenset({5, 6, 7, 8})
 
 _limits_configured = False
 
@@ -101,17 +126,110 @@ def open_image(source: ImageSource) -> "Image.Image":
     return Image.open(_as_openable(source))
 
 
+def exif_orientation(img: "Image.Image") -> int:
+    """Return *img*'s EXIF display orientation, or ``1`` when it has none.
+
+    Reads the header only — safe to call on a lazy :func:`open_image` result
+    without forcing a decode.  A payload whose EXIF block is missing or
+    unparseable reports ``1`` rather than raising: an unreadable tag and an
+    absent one both mean "no rotation is known to be needed".
+    """
+    try:
+        exif = img.getexif()
+    except Exception:
+        return 1
+    if not exif:
+        return 1
+    value = exif.get(EXIF_ORIENTATION_TAG)
+    return value if isinstance(value, int) and 1 <= value <= 8 else 1
+
+
+def apply_exif_orientation(img: "Image.Image") -> "Image.Image":
+    """Return *img* rotated to its EXIF display orientation.
+
+    Returns *img* **itself** when there is nothing to do (no tag, or a tag that
+    already says upright) — the overwhelmingly common case, and the reason this
+    exists instead of a bare ``ImageOps.exif_transpose`` call, which copies the
+    full bitmap unconditionally.  When a rotation *is* applied the result is a
+    new image with the orientation tag stripped, so re-applying is a no-op; the
+    source's ``format`` is carried across so a caller re-encoding a crop keeps
+    the original container instead of silently falling back to PNG.
+
+    Callers that own *img* should close it when a different object comes back.
+    """
+    if exif_orientation(img) == 1:
+        return img
+
+    from PIL import ImageOps  # noqa: PLC0415
+
+    upright = ImageOps.exif_transpose(img)
+    if upright is None or upright is img:
+        return img
+    upright.format = img.format
+    return upright
+
+
+def _upright(img: "Image.Image") -> "Image.Image":
+    """:func:`apply_exif_orientation`, closing *img* when it is superseded."""
+    upright = apply_exif_orientation(img)
+    if upright is not img:
+        img.close()
+    return upright
+
+
+def exif_upright_size(img: "Image.Image") -> tuple[int, int]:
+    """Return *img*'s ``(width, height)`` **as displayed**, from the header.
+
+    Costs one EXIF parse and no decode: a 90°/270° orientation just exchanges
+    the two numbers.  This is what a media item's stored ``width``/``height``
+    must be, so that boxes expressed against them address the same pixels the
+    user is looking at.
+    """
+    width, height = img.size
+    if exif_orientation(img) in _AXIS_SWAPPING_ORIENTATIONS:
+        return height, width
+    return width, height
+
+
+def upright_size(source: ImageSource) -> tuple[int, int]:
+    """:func:`exif_upright_size` for a source that is not open yet."""
+    with open_image(source) as img:
+        return exif_upright_size(img)
+
+
+def open_upright(source: ImageSource) -> "Image.Image":
+    """Open *source* at native resolution, rotated to its display orientation.
+
+    The full-resolution counterpart to :func:`decode_bounded`, for the paths
+    that reason in pixel coordinates against a media's stored
+    ``width``/``height`` — cropping, clipping, origin resolution.  Unlike
+    :func:`open_image` the result is *not* lazy when a rotation is needed
+    (rotating requires the pixels), which is exactly the trade those call sites
+    want: they are about to decode anyway, and a crop box that disagreed with
+    the stored dimensions by 90° would cut out the wrong region.
+    """
+    return _upright(open_image(source))
+
+
 def decode_bounded(
     source: ImageSource,
     max_pixels: int | None = None,
 ) -> tuple["Image.Image", float]:
-    """Open *source*, downsampled to at most *max_pixels* total pixels.
+    """Open *source* upright, downsampled to at most *max_pixels* total pixels.
 
     Returns ``(img, scale)`` where ``scale`` is the ratio of the returned
-    image's width to the original's — ``1.0`` when the source already fit
-    inside the budget, and ``< 1.0`` when it was reduced.  Call sites that
-    report pixel coordinates (bounding boxes) divide by ``scale`` to map
-    them back into the original image's coordinate space.
+    image's longest-side length to the original's — ``1.0`` when the source
+    already fit inside the budget, and ``< 1.0`` when it was reduced.  Call
+    sites that report pixel coordinates (bounding boxes) divide by ``scale``
+    to map them back into the original image's coordinate space.
+
+    EXIF display orientation is applied (see the module docstring), so "the
+    original image's space" means the *upright* image — the same space the
+    media's stored ``width``/``height`` describe and the same one the user
+    sees in the browser.  The downsample happens first and the rotation
+    second, so a rotated gigapixel photo is still never materialised at full
+    resolution, and ``scale`` is unaffected either way: a transpose exchanges
+    the axes without changing the linear reduction ratio.
 
     Aspect ratio is preserved.  Small images are never upscaled.  For JPEGs
     the reduction goes through Pillow's DCT-scaled ``draft`` path, so a huge
@@ -132,8 +250,10 @@ def decode_bounded(
         # 1/8 size) and only then resamples, so the full-resolution bitmap
         # never has to fit in memory for the formats that support it.
         img.thumbnail(target, Image.Resampling.LANCZOS, reducing_gap=2.0)
+    # Measured before the transpose, while both sides are still in source
+    # axis order; the rotation below preserves the ratio but may swap w/h.
     scale = (img.width / orig_w) if orig_w > 0 else 1.0
-    return img, scale
+    return _upright(img), scale
 
 
 def decode_bounded_rgb(

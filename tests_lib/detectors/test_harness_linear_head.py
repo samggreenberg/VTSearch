@@ -1,22 +1,22 @@
 """The harness's **default** head is the production head (#2799, #2916).
 
 The calibration/voting harness historically trained a small auto-sized MLP,
-while the live detector has trained a linear (logistic) head since #2790/#2809.
+then the linear (logistic) head; the live detector now trains a **linear SVM**.
 Measuring a shipped default like ``safe_thresholds`` on the wrong head measures
 the wrong product, so an unspecified ``head`` resolves to
-:data:`~vtscore.eval.voting_iterations.PRODUCTION_HEAD` and ``head="mlp"`` is
-the explicitly-named legacy arm.
+:data:`~vtscore.eval.voting_iterations.PRODUCTION_HEAD` and ``head="linear"`` /
+``head="mlp"`` are the explicitly-named legacy arms.
 
 These tests pin the three things that make a default run faithful:
 
 * the resolved default really is the head the *app* trains — pinned against
   ``train_and_threshold`` itself, so flipping the shipped head fails the suite
   instead of silently leaving the harness behind;
-* the width reaches **both** the final model and the calibration folds (the
-  folds must share the final model's architecture — production threads one
-  width through ``_train_and_score_xy`` for exactly this reason);
-* the final per-step model really is a single ``Linear(d, 1)``, i.e. logistic
-  regression, on the whole-image path *and* the region/style path.
+* the head reaches **both** the final model and the calibration folds (the
+  folds must share the final model's fit — production threads one sentinel
+  through ``_train_and_score_xy`` for exactly this reason);
+* the final per-step model really is a single ``Linear(d, 1)`` on the
+  whole-image path *and* the region/style path.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ import torch.nn as nn
 
 import vtscore.eval.voting_iterations as vi
 from vtscore.eval.patch_styles import resolve_style
-from vtscore.training.mlp import LINEAR_HEAD, _auto_hidden_dim
+from vtscore.training.mlp import LINEAR_HEAD, LINEAR_SVM_HEAD, _auto_hidden_dim
 
 from .test_max_patch_style import DIM, _planted_dataset
 
@@ -38,7 +38,8 @@ def _votes(medias, n=6):
     return dict(list(goods.items())[:n]), dict(list(bads.items())[:n])
 
 
-def test_resolve_hidden_dim_maps_heads_to_widths():
+def test_resolve_hidden_dim_maps_heads_to_sentinels():
+    assert vi._resolve_hidden_dim("linear_svm", 40) == LINEAR_SVM_HEAD
     assert vi._resolve_hidden_dim("linear", 40) == LINEAR_HEAD == 0
     assert vi._resolve_hidden_dim("mlp", 40) == _auto_hidden_dim(40)
     with pytest.raises(ValueError, match="unknown head"):
@@ -84,15 +85,16 @@ def test_unknown_head_is_rejected_early():
 
 def test_head_does_not_apply_to_the_svm_trainer():
     medias, _ = _planted_dataset(n_per_cat=6, seed=0)
-    with pytest.raises(ValueError, match="only applies to the torch trainer"):
+    with pytest.raises(ValueError, match="only applies to the production trainer"):
         vi.simulate_voting_iterations(
             medias, target_category="cat0", seed=0, trainer="svm_linear", head="linear", max_steps=1
         )
 
 
+@pytest.mark.parametrize("head,sentinel", [("linear_svm", LINEAR_SVM_HEAD), ("linear", LINEAR_HEAD)])
 @pytest.mark.parametrize("style", [None, "max_patch"])
-def test_linear_head_reaches_the_final_model_and_the_calibration_folds(style, monkeypatch):
-    """``head="linear"`` must set ``hidden_dim=0`` on the fit *and* the folds."""
+def test_linear_head_reaches_the_final_model_and_the_calibration_folds(style, head, sentinel, monkeypatch):
+    """A linear head must reach the fit *and* the folds under the same sentinel."""
     medias, _ = _planted_dataset(n_per_cat=10, seed=0)
     good_votes, bad_votes = _votes(medias)
 
@@ -126,15 +128,15 @@ def test_linear_head_reaches_the_final_model_and_the_calibration_folds(style, mo
         inclusion=0,
         calibrate_count=2,
         calibration_fraction=0.5,
-        head="linear",
+        head=head,
         style_obj=style_obj,
     )
 
     assert seen["train"], "the final model was never trained"
-    assert set(seen["train"]) == {LINEAR_HEAD}
+    assert set(seen["train"]) == {sentinel}
     assert seen["calib"], "the calibration folds were never fitted"
-    assert set(seen["calib"]) == {LINEAR_HEAD}
-    # A single Linear(d, 1) with no hidden layer == logistic regression.
+    assert set(seen["calib"]) == {sentinel}
+    # A single Linear(d, 1) with no hidden layer.
     assert step.torch_model is not None
     layers = [m for m in step.torch_model if isinstance(m, nn.Linear)]
     assert len(layers) == 1
@@ -214,13 +216,13 @@ def test_rows_record_the_head_and_linear_runs_end_to_end():
         safe_thresholds=True,
         max_steps=12,
         style="max_patch",
-        head="linear",
+        head="linear_svm",
         emit_calibration_metrics=True,
     )
     assert rows, "no rows produced"
-    assert {r["head"] for r in rows} == {"linear"}
+    assert {r["head"] for r in rows} == {"linear_svm"}
     assert "head" in vi._IDENT_COLUMNS
-    assert vi.PRODUCTION_HEAD == "linear"
+    assert vi.PRODUCTION_HEAD == "linear_svm"
     # The #2799 variant rows still ride along under safe_thresholds.
     assert {r["gmm_variant"] for r in rows} >= {"", "xcal_only", "pooled_cross"}
     for r in rows:

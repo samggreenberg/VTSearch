@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 # #2865 cut-rule x inclusion sweep: which rule should answer the Inclusion knob?
 #
+#   bash launch_incl_2865.sh prepare   # stage 0 (cpu, reads the pile in place)
+#   bash launch_incl_2865.sh size      # time ONE cell of the slowest arm
+#   bash launch_incl_2865.sh arms      # the array + the analysis step
+#
 # The #2861 anchor-mass run moved production to `kappa=0.3, mid`, and `mid` is
 # the midpoint of two component means - it never looks at the cost weights the
 # Inclusion knob arrives as.  Shipping it verbatim made the knob a NO-OP for
@@ -21,38 +25,53 @@
 # serves the whole (rule x combine x k) grid - the same no-refit re-cut the app
 # does when the user drags the slider.  The marginal cost over a plain #2861-shaped
 # run is arithmetic plus one oracle sweep per k.
-#
-# Prepare is REUSED from the #2861 run (no GPU stage).  Point CALIB_EXP at that
-# run's directory, or symlink its `results/prepare_info.json` + `results/crops/`
-# into a fresh one.
 set -uo pipefail
+trap 'echo "ABORTED: $0 line $LINENO exited $? -- NOTHING WAS SUBMITTED" >&2' ERR
+
+MODE="${1:-arms}"
 
 export VTS_REPO=/exp/sgreenberg/projects/vts-incl-2865
 WT="$VTS_REPO"
 HERE="$WT/scripts/experiments/calibration"
 
-export CALIB_EXP="/exp/$USER/cut-incl-2865"
+# /exp is a 50G quota shared with every other study; the cut-inclusion side
+# frame is ~120 rows per step per cell, so the cells dir runs to a few GB.
+export CALIB_EXP="/expscratch/$USER/cut-incl-2865"
 export CALIB_RESULTS="$CALIB_EXP/results"
 
 # --- science knobs ---
 export CALIB_SAFE_THRESHOLDS=1
 export CALIB_ANCHORED=1
 export CALIB_ANALYZE=analyze_cutincl.py
-export CALIB_HEAD=linear
+
+# CALIB_HEAD is deliberately UNSET: `head=None` resolves to
+# `voting_iterations.PRODUCTION_HEAD`, the linear SVM a live detector trains
+# since PR #3198.  The #2861/#2864 runs this one follows pinned `CALIB_HEAD=linear`
+# because the logistic head was production *then*; carrying that pin forward
+# would measure the cut rule on a head no user has.  See the report's fidelity
+# section - the arms here are paired within a step, so the head choice moves
+# every arm together and the *contrast* is the same object either way.
 
 # --- environments ---
 # The issue asks for "at least the two region-voting environments where fusion
-# actually pays".  Only the `dinov3_patch` arms actually region-vote (a boxed
-# dataset paired with a single-vector embedder silently degrades to binary; see
-# experiment_config.REGION_VOTING_BY_DATASET), and `visual_genome_m` is the only
-# prepared dataset with a stored patch grid - so the two region-voting cells are
-# its two patch STYLES, not two datasets.  COCO rides along as the binary-voting
-# control: the knob is a user-facing control on every detector, so a rule that
-# restores it on region voting while wrecking binary is not shippable.
+# actually pays".  Region voting needs BOTH halves - ground-truth boxes (the
+# dataset) and a patch grid (the embedder) - so the two are
+# `visual_genome_m x dinov3_patch` and `coco_val x dinov3_patch`; the pile
+# gained the second one after this launcher was first drafted, which is why it
+# no longer reaches for two patch STYLES of one dataset instead.
+# Each dataset also rides its `siglip` binary arm: the knob is a user-facing
+# control on every detector, so a rule that restores it on region voting while
+# wrecking binary voting is not shippable.  `siglip` (not `siglip2_l`) because
+# it is the shipped default embedder.
+# Order matters: the array enumerates dataset -> embedder -> category -> seed,
+# so the long dinov3 arms are listed first and start in the first wave.
 export CALIB_DATASETS=visual_genome_m,coco_val
-export CALIB_VG_EMBEDDERS=dinov3_patch
-export CALIB_COCO_EMBEDDERS=siglip2
-export CALIB_PATCH_STYLES=max_patch,max_patch_pca_hac
+export CALIB_VG_EMBEDDERS=dinov3_patch,siglip
+export CALIB_COCO_EMBEDDERS=dinov3_patch,siglip
+# `max_patch` only: it *is* the production patch pipeline.  The HAC hybrids are
+# experiment-only arms and #2886 removed the tree from ingest, so scoring them
+# here would double the run to price geometry no user gets.
+export CALIB_PATCH_STYLES=max_patch
 export CALIB_REPOOL_VARIANTS=
 
 # --- the sweep this run exists for ---
@@ -96,32 +115,93 @@ export CALIB_N_SEEDS=4
 # whose cells were single-threaded with a 5.4G peak RSS.  This run adds ~13 k
 # values of arithmetic per step over that one and no new scoring passes, so the
 # per-cell cost is essentially unchanged; the array is much smaller (one
-# embedder per dataset), so a 3 h limit has ample headroom.
+# embedder per dataset), so the limit has ample headroom.  `size` re-measures
+# it rather than trusting this paragraph.
 export CALIB_PARTITION=cpu
 export CALIB_GRES=none
+# Measured, not guessed: `size` timed one cell of each of the four arms at
+# 75 min / 83 min (the two dinov3 region arms, MaxRSS 5.3G) and 8-9 min (the two
+# siglip binary arms).  8G covers the peak; 4 h covers the slowest cell twice
+# over.  Concurrency is capped by the `cpu_limit` QOS, which is cpu=240 with 2
+# charged per task (=120) and mem=1100000M (=134 at 8G) - so 120 is the cpu cap,
+# and asking for more only parks the excess behind your own array.
 export CALIB_MEM=8G
 export CALIB_CPUS=1
-export CALIB_TIME=3:00:00
-export CALIB_CONC=130
+export CALIB_TIME=4:00:00
+export CALIB_CONC=120
+# ~28 k cut-inclusion rows per cell x 336 cells = ~9.4 M rows for one analyzer.
+export CALIB_ANALYZE_MEM=48G
+export CALIB_ANALYZE_TIME=2:00:00
 
-export VTSEARCH_DATA_DIR="$CALIB_EXP/datadir"
-export VTSEARCH_MODELS_DIR="/exp/$USER/max-patch/models"
-export HF_HOME="/exp/$USER/.cache/huggingface"
+# Read the pre-embedded pile in place: no re-embed, no GPU, no model download.
+export VTS_PILE="${VTS_PILE:-/expscratch/$USER/vts-cache}"
+export VTSEARCH_DATA_DIR="$VTS_PILE/datadir"
+export VTSEARCH_MODELS_DIR="$VTS_PILE/models"
+export HF_HOME="$VTS_PILE/models"
 
 LOGS="$CALIB_EXP/logs"
 mkdir -p "$LOGS" "$CALIB_RESULTS/cells" "$CALIB_RESULTS/crops"
 
-if [[ ! -f "$CALIB_RESULTS/prepare_info.json" ]]; then
-  echo "ERROR: no prepare_info.json at $CALIB_RESULTS" >&2
-  echo "       Reuse the #2861 run's prepare stage - symlink its results/prepare_info.json" >&2
-  echo "       and results/crops/ in, or point CALIB_EXP at that run directly." >&2
-  exit 1
-fi
+ENVX="export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
 
-if [[ -x "$WT/scripts/experiments/preflight.sh" ]]; then
-  bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb 6 || {
-    echo "preflight FAILED" >&2; [[ "${PREFLIGHT_SKIP:-0}" == "1" ]] || exit 1
-  }
-fi
+require_jobid() {
+  local id="$1" what="$2"
+  if ! [[ "$id" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: $what was REFUSED by sbatch (no job id came back)." >&2
+    exit 1
+  fi
+}
 
-exec bash "$HERE/launch_cells.sh"
+case "$MODE" in
+  prepare)
+    # Stage 0 on the CPU partition: every pair is already in the pile, so this
+    # loads each pickle, re-derives the selected categories and writes the
+    # startup-exemplar vectors.  No model is constructed.
+    P=$(sbatch --parsable --job-name=incl-prep --mem=24G --cpus-per-task=2 \
+      --time=1:30:00 --partition=cpu --export=ALL \
+      --output="$LOGS/prepare-%j.out" \
+      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py")
+    require_jobid "$P" "prepare"
+    echo "prepare job: $P  ->  $LOGS/prepare-$P.out"
+    ;;
+
+  size)
+    # Time ONE cell of the slowest arm before committing to the whole array.
+    # Cell 0 is the first (dataset, embedder) pair listed, which is the long one.
+    IDX="${2:-0}"
+    S=$(sbatch --parsable --job-name=incl-size --mem="$CALIB_MEM" --cpus-per-task="$CALIB_CPUS" \
+      --time="$CALIB_TIME" --partition=cpu --export=ALL \
+      --output="$LOGS/size-%j.out" \
+      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $CALIB_EXP/sizing")
+    require_jobid "$S" "size"
+    echo "size job: $S (cell $IDX)  ->  $LOGS/size-$S.out"
+    ;;
+
+  arms)
+    if [[ ! -f "$CALIB_RESULTS/prepare_info.json" ]]; then
+      echo "ERROR: no prepare_info.json at $CALIB_RESULTS - run '$0 prepare' first." >&2
+      exit 1
+    fi
+    # Both region arms get their premise asserted, not assumed: `region_voting`
+    # is a REQUEST, and a boxed dataset on a single-vector embedder silently runs
+    # binary (#2877).  Preflight takes one arm at a time, so it runs twice.
+    if [[ -x "$WT/scripts/experiments/preflight.sh" ]]; then
+      for arm in visual_genome_m:dinov3_patch coco_val:dinov3_patch; do
+        # No `--diverges`: this run pins nothing off-production.  The cut rule
+        # is the axis it sweeps, and the shipped rule is one of the arms, so
+        # even that is not a divergence - it is a comparison.
+        bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb 20 \
+          --require-region-voting "$arm" \
+          --job-name cal-cells --mem "$CALIB_MEM" --conc "$CALIB_CONC" || {
+          echo "preflight FAILED ($arm)" >&2; [[ "${PREFLIGHT_SKIP:-0}" == "1" ]] || exit 1
+        }
+      done
+    fi
+    exec bash "$HERE/launch_cells.sh"
+    ;;
+
+  *)
+    echo "usage: $0 {prepare|size [cell]|arms}" >&2
+    exit 2
+    ;;
+esac

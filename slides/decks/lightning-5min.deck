@@ -1,0 +1,14 @@
+# Lightning talk, 5 min — figures only, no bullets to read out.
+# Uses the .short variant of the region-voting slide.
+
+theme: vtsearch
+paginate: false
+
+slides:
+  title-scale26
+  outline-lightning
+  problem
+  ui-region-voting
+  region-voting.short
+  positives
+  thanks

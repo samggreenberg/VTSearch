@@ -364,7 +364,7 @@ def train_and_threshold(
         train_model,
     )
     from vtscore.training.blend_schedules import BlendContext
-    from vtscore.training.mlp import LINEAR_HEAD
+    from vtscore.training.mlp import LINEAR_SVM_HEAD
 
     X = torch.from_numpy(stack_vectors(X_list, label="training vector"))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
@@ -376,13 +376,15 @@ def train_and_threshold(
     _n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
     cal_score_rows = _calibration_score_rows(groups, cal_groups, score_rows)
 
-    # The production detector head is linear (logistic regression): stable under
-    # sparse positives where a small MLP's per-retrain score wobble drove the
-    # threshold-stability #2790 spikes.  The same head sizes the final model and
-    # the calibration fold models on *both* branches below (cached and uncached),
-    # so the calibrated threshold is always measured on the architecture the
-    # final model actually has.
-    hidden_dim = LINEAR_HEAD
+    # The production detector head is the **linear SVM**: one Linear(d, 1) fitted
+    # to the maximum-margin boundary (hinge + L2) rather than to balanced BCE.
+    # Like the logistic head it replaced it has no capacity to wobble under
+    # sparse positives (the threshold-stability #2790 finding); unlike it, it
+    # ranks measurably better.  The same head fits the final model and the
+    # calibration fold models on *both* branches below (cached and uncached), so
+    # the calibrated threshold is always measured on the head the final model
+    # actually has.
+    hidden_dim = LINEAR_SVM_HEAD
 
     inclusion = get_inclusion()
     blend_ctx = BlendContext.from_labels(y_list, cal_groups)
@@ -988,7 +990,7 @@ def _train_and_score_xy(
     ``(X_list, y_list)``, so the guard → threshold → train → score → format
     tail lives here once.
 
-    The head is the linear (logistic) one at every label count, so region
+    The head is the linear SVM at every label count, so region
     flooding can't inflate its capacity; the threshold's label count is still
     sized from the **vote** count (distinct *groups*) rather than the row count,
     so flooding - which turns one Bad vote into many leaf rows - doesn't shift
@@ -1004,7 +1006,7 @@ def _train_and_score_xy(
     """
     import torch  # noqa: PLC0415
 
-    from vtscore.training.mlp import LINEAR_HEAD, train_model  # noqa: PLC0415
+    from vtscore.training.mlp import LINEAR_SVM_HEAD, train_model  # noqa: PLC0415
     from vtscore.training.blend_schedules import BlendContext  # noqa: PLC0415
     from vtscore.training.thresholds import (  # noqa: PLC0415
         calibration_folds_cached,
@@ -1030,8 +1032,8 @@ def _train_and_score_xy(
     _n_votes, cal_groups, sample_weights = _flood_context(X_list, y_list, groups)
     cal_score_rows = _calibration_score_rows(groups, cal_groups, score_rows)
     blend_ctx = BlendContext.from_labels(y_list, cal_groups)
-    # Linear (logistic) production head - see train_and_threshold for why.
-    hidden_dim = LINEAR_HEAD
+    # Linear SVM production head - see train_and_threshold for why.
+    hidden_dim = LINEAR_SVM_HEAD
 
     # K-fold calibration runs at every label count: the fold-anchored estimator
     # anchors on the fold models' held-out scores, so their models are an input
@@ -1235,7 +1237,7 @@ def train_detector_from_origins(
     import torch  # noqa: PLC0415
 
     from vtscore.detectors.resolver import embed_file, resolve_file_context
-    from vtscore.training.mlp import LINEAR_HEAD, train_model
+    from vtscore.training.mlp import LINEAR_SVM_HEAD, train_model
     from vtscore.training.thresholds import calculate_cross_calibration_threshold
 
     X_list: list = []
@@ -1290,9 +1292,9 @@ def train_detector_from_origins(
         inclusion,
         calibrate_count=calibrate_count,
         calibration_fraction=calibration_fraction,
-        hidden_dim=LINEAR_HEAD,
+        hidden_dim=LINEAR_SVM_HEAD,
     )
-    model = train_model(X, y, input_dim, hidden_dim=LINEAR_HEAD)
+    model = train_model(X, y, input_dim, hidden_dim=LINEAR_SVM_HEAD)
 
     state_dict = model.state_dict()
     weights = {k: v.cpu().tolist() for k, v in state_dict.items()}

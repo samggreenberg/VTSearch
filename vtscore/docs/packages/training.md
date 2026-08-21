@@ -50,8 +50,8 @@ matrices and binary labels. The `hidden_dim` argument selects the head:
 
 ### Architecture
 
-**Linear (logistic) head - the production head.** Selected by the
-`hidden_dim=LINEAR_HEAD` (`0`) sentinel in `vtscore/training/mlp.py`:
+**Linear SVM head - the production head.** Selected by the
+`hidden_dim=LINEAR_SVM_HEAD` (`-1`) sentinel in `vtscore/training/mlp.py`:
 
 ```python
 nn.Sequential(
@@ -59,14 +59,26 @@ nn.Sequential(
 )
 ```
 
-Trained through `train_model`'s balanced BCE-with-logits loop this *is*
-logistic regression. `dropout` is ignored (a bare linear map has nothing to
-regularise with dropout). Every production fit passes `LINEAR_HEAD`:
-`vtscore/detectors/training.py` does it for both the final model and the
-calibration fold models (so the threshold is always calibrated on the
-architecture the final model has), `labeling_progress.py` does it for the
-per-step stopping-condition models, and `labelset_training.py` inherits it by
-going through `train_and_threshold`.
+`train_model` routes this sentinel to `fit_linear_svm_head` in
+`vtscore/training/svm.py` instead of running the BCE epoch loop. That function
+delegates to `train_svm(kernel="linear")` - the very call the eval harness
+scores as its `svm_linear` arm, so the shipped head and the measured arm cannot
+drift apart - and copies the resulting hyperplane into the `Linear(input_dim, 1)`
+module, whose forward pass is then the SVM's decision function. `dropout` is
+ignored (a bare linear map has nothing to regularise with dropout). Every
+production fit passes `LINEAR_SVM_HEAD`: `vtscore/detectors/training.py` does it
+for both the final model and the calibration fold models (so the threshold is
+always calibrated on the head the final model has), `labeling_progress.py` does
+it for the per-step stopping-condition models, and `labelset_training.py`
+inherits it by going through `train_and_threshold`.
+
+**Linear (logistic) head - eval harness and tests only.** The `LINEAR_HEAD`
+(`0`) sentinel builds the *same* `Linear(input_dim, 1)` but fits it through
+`train_model`'s balanced BCE-with-logits loop, which makes it logistic
+regression. This was the production head between the threshold-stability work
+(#2790) and the switch to the SVM; it survives as a named eval arm
+(`head="linear"`, see [eval.md](eval.md)) and in unit tests, and is not
+reachable from the app.
 
 **MLP head - eval harness and tests only.** Any `hidden_dim > 0`:
 
@@ -83,10 +95,11 @@ This was the production head until the threshold-stability work (#2790): with
 only ~3-5 labelled positives the MLP is under-determined, each retrain wobbles
 the scores, and the calibrated cut lurches. It survives for the eval harness's
 head-sweep arm (see [eval.md](eval.md)) and unit tests, and is not reachable
-from the app. See [`docs/ML.md`](../../../docs/ML.md#why-linear-and-where-the-mlp-survives)
-for the measurements.
+from the app. See
+[`docs/ML.md`](../../../docs/ML.md#the-three-heads-which-one-is-shipped-and-why)
+for the measurements behind both moves.
 
-Both are built by
+All three are built by
 `build_model(input_dim, hidden_dim=64, dropout=0.0, generator=None)` at
 `vtscore/training/mlp.py`. Pass a seeded `torch.Generator` to
 deterministically re-initialise the `Linear` weights (Kaiming uniform
@@ -96,11 +109,11 @@ fan-in bound).
 > Note the mismatch between the two defaults: `build_model`'s own
 > `hidden_dim=64` builds an MLP, and `train_model`'s `hidden_dim=None`
 > auto-sizes one. Neither default is the production head - callers that want
-> it must pass `LINEAR_HEAD` explicitly.
+> it must pass `LINEAR_SVM_HEAD` explicitly.
 
 ### Auto-sizing the MLP hidden layer
 
-Only the MLP head uses this; the linear head has no hidden layer.
+Only the MLP head uses this; neither linear head has a hidden layer.
 `_auto_hidden_dim(n_train)` in `vtscore/training/mlp.py` chooses the
 hidden width from the number of training examples:
 
@@ -113,9 +126,9 @@ With the default `MLP_HIDDEN_MIN=8` and `MLP_HIDDEN_MAX=32` (from
 handful of labels exist - n_train=10 picks 8 (floored), n_train=60 picks 20,
 n_train=120 picks 32 (capped). The function is private but stable; the eval
 harness's `_resolve_hidden_dim` (`vtscore/eval/voting_iterations.py`) calls it
-for the `"mlp"` arm. The detector code no longer does - it passes `LINEAR_HEAD`
-for both the final model and the cross-calibration fold models, so fold
-thresholds stay directly comparable to the full-data model.
+for the `"mlp"` arm. The detector code no longer does - it passes
+`LINEAR_SVM_HEAD` for both the final model and the cross-calibration fold
+models, so fold thresholds stay directly comparable to the full-data model.
 
 ### Training
 
@@ -125,27 +138,48 @@ in `vtscore/training/mlp.py` is the workhorse:
 ```python
 import numpy as np, torch
 from vtscore.training import train_model
-from vtscore.training.mlp import LINEAR_HEAD
+from vtscore.training.mlp import LINEAR_SVM_HEAD
 
 X = torch.from_numpy(np.random.RandomState(0).standard_normal((60, 512)).astype(np.float32))
 y = torch.tensor([1.0] * 30 + [0.0] * 30).unsqueeze(1)
 
-# hidden_dim=LINEAR_HEAD is what production passes; omitting it auto-sizes an MLP.
-model = train_model(X, y, input_dim=512, hidden_dim=LINEAR_HEAD)
+# hidden_dim=LINEAR_SVM_HEAD is what production passes; omitting it auto-sizes an MLP.
+model = train_model(X, y, input_dim=512, hidden_dim=LINEAR_SVM_HEAD)
 with torch.no_grad():
     scores = torch.sigmoid(model(X)).squeeze(1).cpu().numpy()
 ```
 
-Key behaviour:
+Behaviour shared by every head:
 
-- **Loss:** weighted `BCEWithLogitsLoss(reduction="none")`. Per-sample
-  weights are precomputed from `y_train` so the loss balances class
-  frequencies (`weight_true = num_false / num_true`, `weight_false = 1.0`).
-  Pass `sample_weights` to replace them entirely - that is how the
-  region-flooding path expresses per-bag balancing.
 - **Inclusion does not enter training.** It is a pure threshold knob applied
   later in `vtscore.training.thresholds.conformal_threshold`, so the trained
   model - and therefore every item's score - is independent of inclusion.
+- **Class balance:** by default the fit balances class frequencies
+  (`weight_true = num_false / num_true`, `weight_false = 1.0`, which is what
+  `class_weight="balanced"` derives on the SVM path). Pass `sample_weights` to
+  replace that balance entirely - that is how the region-flooding path
+  expresses per-bag balancing.
+- **Device:** the returned module lands on
+  `vtscore.embedding.loader.get_torch_device()` via `ensure_torch_configured()`.
+
+#### The SVM head (`LINEAR_SVM_HEAD`, production)
+
+- **Objective:** squared hinge + L2, solved by liblinear via scikit-learn's
+  `LinearSVC(C=config.SVM_HEAD_C, class_weight="balanced", dual="auto",
+  max_iter=5000, random_state=seed)`. One blocking solve, not an epoch loop -
+  so `TRAIN_EPOCHS`, `TRAIN_PATIENCE`, `MLP_DROPOUT` and `MLP_LABEL_SMOOTHING`
+  do not apply, and a cancelled background job is checked once up front rather
+  than per epoch.
+- **Backend:** always sklearn on the CPU. The fit is milliseconds at any real
+  vote count, and cuML's `LinearSVC` takes neither a seed nor per-row weights,
+  so a GPU fit would buy nothing and cost reproducibility.
+- **Determinism:** liblinear is deterministic given `random_state`, so the same
+  `(X, y, seed)` always yields the same hyperplane - no RNG forking needed.
+
+#### The BCE heads (`LINEAR_HEAD` and the MLP, eval arms)
+
+- **Loss:** weighted `BCEWithLogitsLoss(reduction="none")`, with the per-sample
+  weights described above.
 - **Label smoothing:** targets are smoothed by `MLP_LABEL_SMOOTHING` after the
   class weights are derived from the hard labels, so a strongly-fit model
   can't saturate every score to an exact 0.0/1.0 sigmoid and collapse the
@@ -158,12 +192,11 @@ Key behaviour:
 - **Mixed precision:** enabled automatically on CUDA via `torch.amp` /
   `GradScaler`; CPU and MPS use FP32 so deterministic training is
   bit-for-bit reproducible.
-- **Device:** picked up from `vtscore.embedding.loader.get_torch_device()`
-  via `ensure_torch_configured()`.
 
 ### Thread safety and reproducibility
 
-`train_model` deliberately avoids touching PyTorch's global RNG:
+On the BCE heads, `train_model` deliberately avoids touching PyTorch's global
+RNG:
 
 ```python
 g = torch.Generator()
@@ -178,11 +211,12 @@ with torch.random.fork_rng(), torch.enable_grad():
 ```
 
 The local `torch.Generator` seeds weight initialisation; `fork_rng`
-isolates the dropout RNG inside the training loop (the linear head has no
+isolates the dropout RNG inside the training loop (neither linear head has
 dropout, so that half matters only for the MLP arm). Two concurrent
 `train_model` calls in different threads do not interfere with each
 other's seed, and either call produces the same model given the same
-`(X, y, seed)`. This matters because cross-calibration trains *k* fold
+`(X, y, seed)`. The SVM head gets the same guarantee for free - liblinear
+touches no global RNG at all. This matters because cross-calibration trains *k* fold
 models in sequence and the eval harness can run multiple seeds in
 parallel.
 
@@ -191,8 +225,10 @@ parallel.
 `build_model_from_weights(weights)` in `vtscore/training/mlp.py`
 reconstructs a model from a dict of lists (the output of
 `tensor.tolist()` per state-dict entry). It infers the head from the keys
-present: `0.*` alone means the linear head, while a `3.weight` means an MLP
-whose hidden width is the length of `0.bias`. It also silently remaps the
+present: `0.*` alone means a linear head, while a `3.weight` means an MLP
+whose hidden width is the length of `0.bias`. The two linear heads are
+indistinguishable here by design - they have the same architecture, and which
+objective produced the numbers is irrelevant once the numbers are in hand. It also silently remaps the
 legacy 3-layer MLP format (`0.*`, `2.*`) to the current keys, so old detector
 files don't have to be migrated.
 
@@ -274,7 +310,7 @@ For each of `calibrate_count` rounds:
 1. Randomly split `(X_list, y_list)` into Train (`1 - calibration_fraction`)
    and Calibrate (`calibration_fraction`).
 2. Train a head on Train via `train_model` (the caller passes `hidden_dim`;
-   the detector pipeline passes `LINEAR_HEAD`).
+   the detector pipeline passes `LINEAR_SVM_HEAD`).
 3. Score the held-out Calibrate portion.
 
 Pools every round's held-out (score, label) pairs and applies
@@ -286,7 +322,7 @@ than 2 training examples or 1 calibration example.
 
 ```python
 from vtscore.training import calculate_cross_calibration_threshold
-from vtscore.training.mlp import LINEAR_HEAD
+from vtscore.training.mlp import LINEAR_SVM_HEAD
 
 t = calculate_cross_calibration_threshold(
     X_list=[v for v in feature_vectors],
@@ -295,16 +331,16 @@ t = calculate_cross_calibration_threshold(
     inclusion_value=0,
     calibrate_count=2,
     calibration_fraction=0.5,
-    hidden_dim=LINEAR_HEAD,   # match the full-data model's architecture
+    hidden_dim=LINEAR_SVM_HEAD,   # match the full-data model's head
 )
 ```
 
 The fold models honour `hidden_dim` when provided - important for the
 detector pipeline, which wants fold thresholds calibrated against a
-model with the same capacity as the final full-data model, and therefore
-passes `LINEAR_HEAD` on both sides. A positive `hidden_dim` here calibrates
-against MLP fold models, which is what the eval harness's sweep arm wants
-and nothing else does.
+model fitted the same way as the final full-data model, and therefore
+passes `LINEAR_SVM_HEAD` on both sides. `LINEAR_HEAD` or a positive
+`hidden_dim` here calibrates against logistic or MLP fold models, which is
+what the eval harness's head-sweep arms want and nothing else does.
 
 ### `calibration_folds_cached(...)` + `threshold_from_folds(...)`
 
@@ -317,7 +353,7 @@ from vtscore.training import calibration_folds_cached, threshold_from_folds
 folds = calibration_folds_cached(          # expensive: fits `calibrate_count` fold models
     X_list, y_list, input_dim,
     calibrate_count=2, calibration_fraction=0.5,
-    hidden_dim=LINEAR_HEAD, det_ctx=det_ctx,
+    hidden_dim=LINEAR_SVM_HEAD, det_ctx=det_ctx,
 )
 threshold = threshold_from_folds(folds, inclusion_value=0)   # cheap: a quantile rule
 ```

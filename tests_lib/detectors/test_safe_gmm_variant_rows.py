@@ -24,6 +24,7 @@ from vtscore.eval.voting_iterations import (
     _CUT_DIAGNOSTIC_COLUMNS,
     _ORACLE_VARIANTS,
     _SAFE_GMM_VARIANTS,
+    _safe_gmm_variant_rows,
     simulate_voting_iterations,
 )
 from vtscore.training.thresholds import (
@@ -243,6 +244,23 @@ class TestCutDiagnosticFrame:
                 continue  # the row reports the midpoint it fell back to
             assert r["gmm_cut"] == pooled[r["t"]][f"tau_{rule}"]
 
+    def test_every_swept_row_reports_one_of_this_familys_two_outcomes(self):
+        """Only two kinds are reachable here: the rule's own cut, or the midpoint.
+
+        This family never *continues* past the inter-mean interval and never
+        reports production's degenerate branch, so a row carrying either of
+        those kinds would mean the two families' vocabularies had been crossed.
+        """
+        rows = _run_safe("max_patch")
+        for r in rows:
+            if r["gmm_variant"] in ("xcal_only", *_ORACLE_VARIANTS) or not r["gmm_variant"].startswith(
+                ("pooled_", "image_")
+            ):
+                continue
+            kind = r["cut_fallback_kind"]
+            assert kind in (CUT_KIND_INTERIOR, CUT_KIND_MIDPOINT), (r["gmm_variant"], kind)
+            assert r["cut_fallback"] == int(bool(kind))
+
     def test_a_fallen_back_row_names_the_midpoint_it_substituted(self):
         """The divergence from production is kept, but it is no longer invisible.
 
@@ -254,28 +272,41 @@ class TestCutDiagnosticFrame:
         has to say which of the two it is, or an analysis that reads a
         ``*_rate`` arm as "what the app would have done" is silently wrong on
         them (issue #2900).
+
+        The substitution is provoked here rather than waited for.  It used to be
+        read off whatever the ``max_patch`` sweep happened to produce, which
+        made the assertion hostage to the fixture: the planted dataset's fits
+        stopped declining the moment the shipped head changed, and the branch
+        went silently unexercised while the test still passed its other rows.
+        A near-tied sim distribution declines the EVT guards by construction on
+        any head, so the path is exercised on purpose.
         """
-        diag: list[dict] = []
-        rows = _run_safe("max_patch", diag_sink=diag)
-        pooled = {d["t"]: d for d in diag if d["geometry"] == "pooled"}
+        scores = [0.5] * 40 + [0.5001] * 40
+        labels = np.array([1.0] * 40 + [0.0] * 40)
+        rows, diag = _safe_gmm_variant_rows(
+            details={"xcal_threshold": 0.5, "n_votes": 20, "n_good": 10, "n_bad": 10},
+            base_scores=np.array(scores),
+            base_labels=labels,
+            sim_scores_by_geometry={"pooled": scores, "image": scores},
+            sim_labels_by_geometry={"pooled": labels, "image": labels},
+            inclusion=0,
+            n_pool_rows=float(len(scores)),
+        )
+        tau_mid = {d["geometry"]: d["tau_mid"] for d in diag}["pooled"]
+
         seen_fallback = 0
         for r in rows:
-            if r["gmm_variant"] in ("xcal_only", *_ORACLE_VARIANTS) or not r["gmm_variant"].startswith(
-                ("pooled_", "image_")
-            ):
+            if r["gmm_variant"] in ("xcal_only", *_ORACLE_VARIANTS) or not r["gmm_variant"].startswith("pooled_"):
                 continue
             kind = r["cut_fallback_kind"]
-            # This family has exactly two outcomes: the rule's own cut, or the
-            # midpoint.  It never continues, and it never reports production's
-            # degenerate branch.
             assert kind in (CUT_KIND_INTERIOR, CUT_KIND_MIDPOINT), (r["gmm_variant"], kind)
             assert r["cut_fallback"] == int(bool(kind))
-            if kind == CUT_KIND_MIDPOINT and r["gmm_variant"].startswith("pooled_"):
+            if kind == CUT_KIND_MIDPOINT:
                 seen_fallback += 1
                 # The substituted value really is that fit's midpoint, not the
                 # rule's own extrapolation.
-                assert r["gmm_cut"] == pooled[r["t"]]["tau_mid"]
-        assert seen_fallback, "no rule fell back; the substitution path went unexercised"
+                assert r["gmm_cut"] == tau_mid
+        assert seen_fallback, "the crafted tie should have declined at least one EVT guard"
 
     def test_prevalence_is_a_fraction(self):
         diag: list[dict] = []

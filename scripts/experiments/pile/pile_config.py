@@ -327,6 +327,16 @@ def cell_path(dataset: str, embedder: str) -> Path:
     return EMBEDDINGS / pickle_name(dataset, embedder)
 
 
+def provenance_path(dataset: str, embedder: str) -> Path:
+    """Sidecar recording *which machine* produced this cell (#3160).
+
+    Beside the pickle rather than inside it: a cell built before this existed
+    stays loadable, and the sidecar can be read (or backfilled) without paying
+    to unpickle a 900 MB file.
+    """
+    return EMBEDDINGS / f"{dataset}__{embedder}.provenance.json"
+
+
 def is_patch_embedder(embedder: str) -> bool:
     return bool(EMBEDDERS.get(embedder, {}).get("patch"))
 

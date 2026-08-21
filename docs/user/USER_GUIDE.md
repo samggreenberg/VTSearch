@@ -138,9 +138,11 @@ Synthetic Media generator's media type and dataset size:
 
 ### Advanced import options
 
-Importers expose a collapsible **Advanced** section (hidden when there is
-nothing in it to choose). The most important control there is the embedder
-picker, which is actually a three-role picker:
+Every importer exposes a collapsible **Advanced** section. It starts
+collapsed and *nothing* inside it renders until you open it - not even a
+control whose value differs from the default; hover the **Advanced** toggle
+and its tooltip names any non-default choice in effect. The most important
+control there is the embedder picker, which is actually a three-role picker:
 
 - **Embedder** - the main model that powers search and matching for the
   dataset. VTSearch picks a sensible default for each media type.
@@ -155,6 +157,10 @@ form:
 - **Include media** - which source media types feed the dataset. The
   dataset's own type is included directly; other types are pulled in and
   converted (images out of videos, pages out of documents).
+- **Convert to** - on the **Demo** importer, whose dataset is fixed:
+  which type to convert the demo's media into on load (scanned documents
+  into page images, say). The equivalent choice on the other importers is
+  *Include media* above.
 - **Clipper** - a pre-processing pass applied before each item is
   analyzed, e.g. cutting long audio into shorter segments.
 - **Cleanup** - optional passes that strip content-free regions from each
@@ -232,7 +238,7 @@ disk, and no member data is read at import time - the importer only walks
 each referenced shard's tar headers to confirm the member exists and record
 its size.
 
-Set the *Dataset MediaType* to the kind of media the referenced members
+Set the *Dataset media type* to the kind of media the referenced members
 hold (e.g. `video` or `audio`). Because the manifest supplies the
 embeddings, the import needs no GPU and skips the embed stage entirely.
 
@@ -331,9 +337,13 @@ The phase panel labels them, in order:
    mix. This catches edge cases the previous phase missed. The phase
    ends when this coverage hits your goal (default: 40).
 
-When all four phases are done, Autopilot shows **Done!**. You can
-keep labeling if you want - the detector continues to improve - or
-move on to exporting results.
+When all four phases are done, Autopilot shows **Done!** and a
+**Detector Trained** dialog offers you the choice: **Continue
+Training** stays put so you can keep labeling (the detector continues
+to improve), and **Head to Dashboard** takes you out to export it or
+run it over another dataset. Nothing happens on its own, and the
+dialog only appears for the run that trained the detector - coming
+back later to refine it further will not raise it again.
 
 ### The collapsed bar
 

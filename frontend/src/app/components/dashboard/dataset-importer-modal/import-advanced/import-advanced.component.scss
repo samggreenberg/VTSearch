@@ -1,9 +1,11 @@
-// Styles previously inlined in the parent component for the
-// "Advanced ▾" block; kept identical so the migration is a pure
-// extraction with no visual diff.
-
+// Layout for the "Advanced ▾" block.  The host is the block's own flex
+// column so its fields carry the same `--space-lg` rhythm as
+// `.importer-form` above it; each label+control pair inside is a
+// `.form-group` (tight `--space-xs`) exactly like a top-level field.
 :host {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
 }
 
 .advanced-toggle {
@@ -19,7 +21,10 @@
   &:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 }
 
+// Sized to its own label rather than stretched across the modal by the
+// enclosing `.form-group`'s column layout.
 .clipper-btn {
+  align-self: flex-start;
   text-align: left;
   white-space: nowrap;
 }
@@ -29,18 +34,20 @@
 // questions. A checked cleaner's parameter rows indent under it.
 .cleanup-row {
   margin: 0;
-  font-weight: normal;
+  font-weight: var(--weight-regular);
 }
 
 .cleanup-param {
   margin: 0 0 0 var(--space-lg);
-  font-weight: normal;
+  font-weight: var(--weight-regular);
   font-size: var(--font-sm);
   color: var(--text-muted);
 }
 
+// Margin-free: the enclosing `.form-group` owns the gap to the select
+// above it (style-guide anti-pattern 14).
 .license-warning {
-  margin-top: var(--space-sm);
+  margin: 0;
   padding: var(--space-sm) var(--space-md);
   border-radius: var(--radius-md);
   background: var(--warning-bg);

@@ -15,6 +15,7 @@ import uuid
 import zipfile
 from pathlib import Path
 from typing import Callable, Literal, Optional
+from urllib.parse import urlparse
 
 import requests
 
@@ -45,6 +46,15 @@ _RETRYABLE_EXCEPTIONS = (
     requests.exceptions.ConnectionError,
     requests.exceptions.Timeout,
 )
+# ``(connect, read)`` timeout per attempt.  The connect budget *escalates*: the
+# first attempt fails fast so a genuinely dead host does not stall a load for
+# minutes before saying so, but a host that is merely slow to **accept** - the
+# Internet Archive under load routinely takes 20-30 s to complete a handshake -
+# gets progressively more room instead of being written off six times on the
+# same 10 s budget.  Attempts past the last step reuse it.
+_CONNECT_TIMEOUT_STEPS_S = (10.0, 15.0, 20.0, 30.0)
+_READ_TIMEOUT_S = 60.0
+
 
 # Demo dataset directory paths (derived from DATA_DIR)
 IMAGE_DIR = DATA_DIR / "images"
@@ -335,14 +345,31 @@ def _request_headers(url: str, headers: Optional[dict]) -> dict:
     return merged
 
 
-def _open_validated_stream(session: requests.Session, url: str, headers: Optional[dict] = None) -> requests.Response:
+def _timeout_for_attempt(attempt: int) -> tuple[float, float]:
+    """Return the ``(connect, read)`` timeout for 1-based retry *attempt*.
+
+    Walks :data:`_CONNECT_TIMEOUT_STEPS_S` and holds at its last entry, so a
+    host that needs longer than the fail-fast first budget to accept a socket
+    gets it on a later attempt rather than timing out identically every time.
+    """
+    step = _CONNECT_TIMEOUT_STEPS_S[min(attempt, len(_CONNECT_TIMEOUT_STEPS_S)) - 1]
+    return (step, _READ_TIMEOUT_S)
+
+
+def _open_validated_stream(
+    session: requests.Session,
+    url: str,
+    headers: Optional[dict] = None,
+    timeout: Optional[tuple[float, float]] = None,
+) -> requests.Response:
     """GET *url* as a stream with every redirect hop re-checked for SSRF.
 
     A thin binding of :func:`~vtscore.security.url_validation.open_validated_stream`
     to the downloader's needs: caller *headers* merged with a HuggingFace bearer
     token recomputed per hop, so the token follows a redirect only to another
     Hub host and never to a presigned CDN / Xet target.  Callers validate *url*
-    itself up front; this covers the hops after it.
+    itself up front; this covers the hops after it.  *timeout* defaults to the
+    first (fail-fast) entry of the escalating retry ladder.
 
     Returns the final, non-redirect response; the caller owns closing it.
     """
@@ -350,6 +377,7 @@ def _open_validated_stream(session: requests.Session, url: str, headers: Optiona
         session,
         url,
         headers_for_url=lambda hop: _request_headers(hop, headers),
+        timeout=timeout if timeout is not None else _timeout_for_attempt(1),
     )
 
 
@@ -374,18 +402,71 @@ def _total_size_from_headers(response: requests.Response, downloaded: int, expec
 
 
 def _backoff_and_notify(
-    on_progress: ProgressCallback, dest_path: Path, attempt: int, downloaded: int, total_size: int
+    on_progress: ProgressCallback, label: str, attempt: int, downloaded: int, total_size: int
 ) -> None:
-    """Report a recoverable interruption and sleep for an exponential backoff."""
+    """Report a recoverable interruption and sleep for an exponential backoff.
+
+    *label* names what is being fetched (a filename, or a short description for
+    a metadata fetch).  The wording follows the byte count: with nothing on disk
+    yet there is nothing to resume, and saying "resuming" at 0 bytes is exactly
+    the message that made a failed-to-even-connect load read as a stalled
+    transfer (see issue #3216).
+    """
     backoff = min(_RETRY_BACKOFF_BASE_S * (2 ** (attempt - 1)), _RETRY_BACKOFF_MAX_S)
+    where = f" at {downloaded:,} bytes" if downloaded else ""
+    verb = "resuming" if downloaded else "retrying"
     on_progress(
         "downloading",
-        f"Connection interrupted at {downloaded:,} bytes - resuming {dest_path.name} "
-        f"(attempt {attempt + 1}/{_MAX_DOWNLOAD_ATTEMPTS})...",
+        f"Connection interrupted{where} - {verb} {label} (attempt {attempt + 1}/{_MAX_DOWNLOAD_ATTEMPTS})...",
         downloaded,
         total_size,
     )
     time.sleep(backoff)
+
+
+class RemoteUnreachableError(RuntimeError):
+    """A fetch gave up because the remote host could not be reached.
+
+    Raised in place of the raw requests/urllib3 exception once every retry has
+    been spent on *connection-level* failures, so the dataset-load error the
+    user sees is one actionable sentence naming the host rather than a nested
+    ``MaxRetryError`` dump ending in a memory address.  Carries the originating
+    *url* and the number of *attempts* for logging; the underlying exception
+    stays reachable as ``__cause__`` (and is still printed to the server log by
+    the load pipeline's ``traceback.print_exc``).
+    """
+
+    def __init__(self, message: str, *, url: str = "", attempts: int = 0) -> None:
+        super().__init__(message)
+        self.url = url
+        self.attempts = attempts
+
+
+def _unreachable_error(url: str, exc: BaseException, attempts: int) -> RemoteUnreachableError:
+    """Build a short, user-facing :class:`RemoteUnreachableError` for *url*.
+
+    Names the *host* rather than the full URL (a 200-character archive.org
+    download path tells the user nothing they can act on) and says which way
+    the connection failed, because "timed out before connecting" and "dropped
+    mid-transfer" point at different things to check.
+    """
+    host = urlparse(url).hostname or url
+    if isinstance(exc, requests.exceptions.ConnectTimeout):
+        what = "the connection timed out before the server answered"
+    elif isinstance(exc, requests.exceptions.ReadTimeout):
+        what = "the server stopped sending data"
+    elif isinstance(exc, requests.exceptions.ChunkedEncodingError):
+        what = "the connection kept dropping mid-transfer"
+    else:
+        what = "the connection failed"
+    return RemoteUnreachableError(
+        f"Couldn't reach {host}: {what}, on all {attempts} attempts. "
+        f"The site may be down or blocked by your network/proxy - open it in a "
+        f"browser to check, then retry. Anything already downloaded is kept, so "
+        f"a retry picks up where this left off.",
+        url=url,
+        attempts=attempts,
+    )
 
 
 def _gated_error(url: str, status: int) -> GatedResourceError:
@@ -446,8 +527,9 @@ def download_file_with_progress(  # noqa: C901
 
     Raises:
         requests.HTTPError: If the server returns a non-retryable error status.
-        requests.exceptions.ChunkedEncodingError / ConnectionError / Timeout: If
-            the connection keeps failing after the final retry attempt.
+        RemoteUnreachableError: If the connection keeps failing after the final
+            retry attempt.  The underlying requests exception is its
+            ``__cause__``.
     """
     if on_progress is None:
         on_progress = _default_progress()
@@ -470,11 +552,11 @@ def download_file_with_progress(  # noqa: C901
 
         response = None
         try:
-            response = _open_validated_stream(session, url, headers)
+            response = _open_validated_stream(session, url, headers, _timeout_for_attempt(attempt))
 
             # Transient server-side error: back off and retry (resuming if we can).
             if response.status_code in _RETRYABLE_STATUS and not last_attempt:
-                _backoff_and_notify(on_progress, dest_path, attempt, downloaded, total_size)
+                _backoff_and_notify(on_progress, dest_path.name, attempt, downloaded, total_size)
                 continue
             # Auth-required: this is gated content we can't fetch with the
             # credentials we have.  Surface a short, actionable message instead
@@ -509,13 +591,63 @@ def download_file_with_progress(  # noqa: C901
                         on_progress("downloading", f"Downloading {dest_path.name}...", downloaded, total_size)
             on_progress("downloading", f"Downloading {dest_path.name}...", downloaded, total_size)
             return  # stream consumed cleanly
-        except _RETRYABLE_EXCEPTIONS:
+        except _RETRYABLE_EXCEPTIONS as exc:
             if last_attempt:
-                raise
-            _backoff_and_notify(on_progress, dest_path, attempt, downloaded, total_size)
+                raise _unreachable_error(url, exc, _MAX_DOWNLOAD_ATTEMPTS) from exc
+            _backoff_and_notify(on_progress, dest_path.name, attempt, downloaded, total_size)
         finally:
             if response is not None:
                 response.close()
+
+
+def fetch_text_with_retry(url: str, label: str = "", on_progress: Optional[ProgressCallback] = None) -> str:
+    """GET *url* through the SSRF-guarded session and return its body as text.
+
+    The small-payload counterpart to :func:`download_file_with_progress`, for
+    the manifest / index fetches that decide *what* to download: same retry
+    budget, same escalating connect timeout, same
+    :class:`RemoteUnreachableError` once the attempts are spent.  Without it a
+    one-shot GET for a few KB of JSON is strictly more fragile than the
+    multi-GB transfer it precedes, and fails with a raw urllib3 dump instead of
+    a sentence.
+
+    Args:
+        url: An already-validated HTTP(S) URL.
+        label: Short human-readable name for the fetch, used in the retry
+            progress message.  Defaults to the URL's last path segment.
+        on_progress: Optional progress callback.  Falls back to the
+            application-wide ``update_progress`` when ``None``.
+
+    Raises:
+        requests.HTTPError: If the server returns a non-retryable error status.
+        RemoteUnreachableError: If the connection keeps failing after the final
+            retry attempt.
+    """
+    if on_progress is None:
+        on_progress = _default_progress()
+    label = label or urlparse(url).path.rsplit("/", 1)[-1] or url
+
+    session = guarded_session()
+    for attempt in range(1, _MAX_DOWNLOAD_ATTEMPTS + 1):
+        last_attempt = attempt == _MAX_DOWNLOAD_ATTEMPTS
+        response = None
+        try:
+            response = _open_validated_stream(session, url, timeout=_timeout_for_attempt(attempt))
+            if response.status_code in _RETRYABLE_STATUS and not last_attempt:
+                _backoff_and_notify(on_progress, label, attempt, 0, 0)
+                continue
+            if response.status_code in _AUTH_REQUIRED_STATUS:
+                raise _gated_error(url, response.status_code)
+            response.raise_for_status()
+            return response.text
+        except _RETRYABLE_EXCEPTIONS as exc:
+            if last_attempt:
+                raise _unreachable_error(url, exc, _MAX_DOWNLOAD_ATTEMPTS) from exc
+            _backoff_and_notify(on_progress, label, attempt, 0, 0)
+        finally:
+            if response is not None:
+                response.close()
+    raise AssertionError("unreachable: the loop above always returns or raises")  # pragma: no cover
 
 
 def fetch_remote_signature(url: str) -> Optional[str]:

@@ -71,6 +71,10 @@ export class LeftPanelComponent implements OnInit {
   /** Active detector's saved labelset counts (across all datasets). */
   readonly labelsetGoodCount = input(0);
   readonly labelsetBadCount = input(0);
+  /** True once ``/api/votes`` has answered, so the labelset counts above are
+   *  facts rather than not-yet-loaded zeroes. Forwarded to the autopilot
+   *  panel, which gates its completion hand-off on the distinction. */
+  readonly votesLoaded = input(false);
   readonly sortMode = input<SortMode>('text');
   readonly selectMode = input<SelectMode>('top');
   readonly inclusion = input<number>(0);

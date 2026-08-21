@@ -7,10 +7,13 @@
 #   ./run-tests.sh sorting      # sorting group + the cheap gates
 #   ./run-tests.sh core sorting # core + sorting groups
 #   ./run-tests.sh vtscore-clean  # run tests_lib/ with Flask import blocked
+#   ./run-tests.sh slides       # slide-deck gates only (~8s, no Python tests)
 #
 # Available groups: core, api, sorting, datasets, io, detectors,
 #                   downloads, integration, cli, converters, projection,
-#                   frontend (build + audit + Vitest, no Python tests), gpu
+#                   frontend (build + audit + Vitest, no Python tests),
+#                   slides (the four gates a deck can trip, no Python
+#                   tests — see the note below), gpu
 #
 # Each group is a folder under tests/ AND tests_lib/. Marker assignment is
 # automatic: any file at tests[_lib]/<group>/test_*.py gets marked <group>
@@ -57,6 +60,16 @@
 # a five-second group. The skip is announced on every group run, because the
 # full run is what actually gates a push. Set VTSEARCH_FULL_GATES=1 to force
 # the complete chain on a group run.
+#
+# `slides` goes further and is the one group that also gates a push, because a
+# change confined to slides/ cannot reach anything else in the repo: nothing
+# imports slides/build.py (it is a standalone script), pyrightconfig.json does
+# not include it, and no test in either tree touches a deck. So the group runs
+# only the four gates that can actually observe a deck — ruff (build.py),
+# codespell (slide prose), check-docs.py (fragments are tracked markdown), and
+# build.py --check — and skips pytest and every whole-repo gate. ~8s against
+# ~3.5min. The exemption is self-policing: the group refuses to run when the
+# branch touches anything outside slides/, so it cannot be taken by mistake.
 # ---------------------------------------------------------------------------
 
 set -euo pipefail
@@ -217,6 +230,16 @@ if [[ ${#TEST_GROUPS[@]} -eq 1 && "${TEST_GROUPS[0]}" == "frontend" ]]; then
     _run_pytest=false
 fi
 
+# `slides` is the same shape: no Python tests, so pytest is skipped rather than
+# asked for an empty `-m slides` selection. Unlike every other group this one
+# is also a legitimate pre-push gate; see the staging note at the top and the
+# guard immediately below, which is what makes that safe.
+_is_slides_run=false
+if [[ ${#TEST_GROUPS[@]} -eq 1 && "${TEST_GROUPS[0]}" == "slides" ]]; then
+    _is_slides_run=true
+    _run_pytest=false
+fi
+
 _blocked() {
     echo ""
     echo "============================================================"
@@ -224,15 +247,80 @@ _blocked() {
     echo "============================================================"
 }
 
+# Guard on the `slides` fast path.
+#
+# The group's whole justification is that a change confined to slides/ cannot
+# affect anything the skipped gates check. That premise is about the *diff*,
+# not about intent, so it is worth verifying rather than trusting: the failure
+# mode this prevents is someone believing their change is slides-only, taking
+# the 8s path, and pushing an unchecked edit to real code.
+#
+# "Confined to slides/" means everything this branch changes relative to dev —
+# committed, staged, unstaged, and untracked alike. Untracked files count
+# because a stray new .py would be linted by a full run and is exactly the kind
+# of thing that should not ride along unchecked.
+#
+# Strict on purpose: a docs/ or CLAUDE.md edit alongside the deck also fails
+# this, because the doc-inventory gate can see markdown that this group skips.
+# Run the full suite for a mixed change; it is the honest cost of one.
+if $_is_slides_run; then
+    _slides_base=$(git merge-base HEAD origin/dev 2>/dev/null || true)
+    if [[ -z "$_slides_base" ]]; then
+        echo "Note: no origin/dev to diff against; skipping the slides-only guard."
+    else
+        _outside=$(
+            {
+                git diff --name-only "$_slides_base" HEAD
+                git diff --name-only HEAD
+                git ls-files --others --exclude-standard
+            } | sort -u | grep -v '^slides/' || true
+        )
+        if [[ -n "$_outside" ]]; then
+            _blocked "'slides' is a slides-only gate, but this branch changes other files"
+            echo ""
+            echo "The group skips pytest and every whole-repo gate, which is only"
+            echo "sound when nothing outside slides/ has changed. Outside slides/:"
+            echo ""
+            echo "$_outside" | sed 's/^/  /'
+            echo ""
+            echo "Run the full suite instead:  ./run-tests.sh"
+            exit 1
+        fi
+    fi
+fi
+
 # ---------------------------------------------------------------------------
 # Stage 1: cheap gates. Serial and fail-fast — the whole set is ~8s, so
 # stopping at the first failure costs nothing.
 # ---------------------------------------------------------------------------
 
+# Stale-tree ("phantom base") check.
+#
+# Runs before every other gate, because a clobbered tree passes all of them by
+# construction: when a branch reverts the PRs that merged just before it, the
+# feature and its tests go together, so there is nothing left to fail. Five
+# PRs have done exactly that (#2741, #2793, #2821, #3184 and the three
+# restored in #3206); one reached `main`. Linting the wrong tree cleanly is
+# not information, so this asks *whether it is the right tree* first.
+#
+# Compares against the working tree rather than HEAD: the damage exists
+# before it is committed, which is often when tests run. Pure git, ~200ms.
+#
+# Two signals, because deletions are only the visible half: whole paths that
+# vanished, and runs of consecutive commits the branch keeps nothing of (a
+# clobber whose reverted hunks sit inside files that survive deletes nothing
+# at all). See scripts/check-phantom-base.py for both and their measured
+# false-positive rates.
+echo "Checking for a stale tree..."
+if ! python scripts/check-phantom-base.py ; then
+    _blocked "branch reverts work it never touched (stale tree)"
+    exit 1
+fi
+
 # Ruff lint + format check.
-# Runs first because it's fast (~0.5s) and catches mistakes the pytest /
-# frontend stages can't see, e.g. F401 unused-import on TYPE_CHECKING
-# imports whose only "use" is inside a string-form forward reference.
+# Fast (~0.5s), and catches mistakes the pytest / frontend stages can't see,
+# e.g. F401 unused-import on TYPE_CHECKING imports whose only "use" is inside
+# a string-form forward reference.
 echo "Running ruff check..."
 if ! ruff check . ; then
     _blocked "ruff check failed"
@@ -260,72 +348,89 @@ if ! python scripts/check-docs.py ; then
     exit 1
 fi
 
-echo "Running deptry..."
-if ! python -m deptry . ; then
-    _blocked "deptry found dependency issues"
-    exit 1
-fi
+# Skipped on a `slides` run: none of these can see a deck. deptry reads
+# imports, the OpenAPI and doc-inventory snapshots are generated from the
+# app's registries, and the rest scan Dockerfiles / user-docs screenshots /
+# vtscore. The guard above has already established that nothing outside
+# slides/ changed, so there is nothing here for them to find.
+if ! $_is_slides_run; then
+    echo "Running deptry..."
+    if ! python -m deptry . ; then
+        _blocked "deptry found dependency issues"
+        exit 1
+    fi
 
-# OpenAPI snapshot drift check: regenerate the flask-smorest spec from
-# the live app and diff against the checked-in snapshot at
-# frontend/openapi.json. The frontend's generated TS client is built
-# from this snapshot, so a stale file means the generated client lags
-# the real API. Cheap (~2s) and runs every invocation.
-echo "Checking OpenAPI snapshot drift..."
-_openapi_regen=$(mktemp)
-_openapi_dump_log=$(mktemp)
-if ! python scripts/dump_openapi.py > "$_openapi_regen" 2> "$_openapi_dump_log"; then
-    _blocked "OpenAPI spec dump failed"
-    cat "$_openapi_dump_log"
+    # OpenAPI snapshot drift check: regenerate the flask-smorest spec from
+    # the live app and diff against the checked-in snapshot at
+    # frontend/openapi.json. The frontend's generated TS client is built
+    # from this snapshot, so a stale file means the generated client lags
+    # the real API. Cheap (~2s) and runs every invocation.
+    echo "Checking OpenAPI snapshot drift..."
+    _openapi_regen=$(mktemp)
+    _openapi_dump_log=$(mktemp)
+    if ! python scripts/dump_openapi.py > "$_openapi_regen" 2> "$_openapi_dump_log"; then
+        _blocked "OpenAPI spec dump failed"
+        cat "$_openapi_dump_log"
+        rm -f "$_openapi_regen" "$_openapi_dump_log"
+        exit 1
+    fi
+    if ! diff -u frontend/openapi.json "$_openapi_regen" > /dev/null; then
+        _blocked "OpenAPI snapshot is stale"
+        echo "Run 'npm run regenerate-openapi-snapshot' (or"
+        echo "'python scripts/dump_openapi.py > frontend/openapi.json') and"
+        echo "commit the result."
+        diff -u frontend/openapi.json "$_openapi_regen" | head -80
+        rm -f "$_openapi_regen" "$_openapi_dump_log"
+        exit 1
+    fi
     rm -f "$_openapi_regen" "$_openapi_dump_log"
-    exit 1
-fi
-if ! diff -u frontend/openapi.json "$_openapi_regen" > /dev/null; then
-    _blocked "OpenAPI snapshot is stale"
-    echo "Run 'npm run regenerate-openapi-snapshot' (or"
-    echo "'python scripts/dump_openapi.py > frontend/openapi.json') and"
-    echo "commit the result."
-    diff -u frontend/openapi.json "$_openapi_regen" | head -80
-    rm -f "$_openapi_regen" "$_openapi_dump_log"
-    exit 1
-fi
-rm -f "$_openapi_regen" "$_openapi_dump_log"
 
-# Generated doc-inventory drift check: regenerate the registry-backed
-# tables embedded in the docs (embedders, plugin families, demo datasets,
-# ...) and fail if any committed region is stale. Same shape as the
-# OpenAPI snapshot gate above; see scripts/gen-docs-inventories.py.
-echo "Checking generated doc inventories..."
-if ! python scripts/gen-docs-inventories.py --check ; then
-    _blocked "generated doc inventories are stale"
-    echo "Run 'python scripts/gen-docs-inventories.py' and commit the"
-    echo "result."
-    exit 1
+    # Generated doc-inventory drift check: regenerate the registry-backed
+    # tables embedded in the docs (embedders, plugin families, demo datasets,
+    # ...) and fail if any committed region is stale. Same shape as the
+    # OpenAPI snapshot gate above; see scripts/gen-docs-inventories.py.
+    echo "Checking generated doc inventories..."
+    if ! python scripts/gen-docs-inventories.py --check ; then
+        _blocked "generated doc inventories are stale"
+        echo "Run 'python scripts/gen-docs-inventories.py' and commit the"
+        echo "result."
+        exit 1
+    fi
+
+    echo "Checking Dockerfiles..."
+    if ! python scripts/check-dockerfiles.py ; then
+        _blocked "Dockerfile check failed"
+        exit 1
+    fi
+
+    # User-docs screenshot wiring: every manifest shot id has both theme PNGs on
+    # disk, and every screenshot the user docs embed maps to a manifest id. Cheap,
+    # browser-free (see docs/plans/user-docs-screenshots.md); the pixel-diff
+    # (check.sh) needs chromium and stays a manual chore.
+    echo "Checking user-docs screenshot wiring..."
+    if ! python scripts/screenshots/wiring-check.py ; then
+        _blocked "user-docs screenshot wiring check failed"
+        exit 1
+    fi
+
+    # vtscore package docs: every top-level module / sub-package of vtscore/ is
+    # covered by a packages/ doc, and no doc cites a file.py:NNN line anchor (they
+    # rot on the next edit; cite module-and-symbol instead). Regex sweep, imports
+    # nothing, ~0.1s. See scripts/check-vtscore-docs.py for the policy.
+    echo "Checking vtscore package docs..."
+    if ! python scripts/check-vtscore-docs.py ; then
+        _blocked "vtscore package docs check failed"
+        exit 1
+    fi
 fi
 
-echo "Checking Dockerfiles..."
-if ! python scripts/check-dockerfiles.py ; then
-    _blocked "Dockerfile check failed"
-    exit 1
-fi
-
-# User-docs screenshot wiring: every manifest shot id has both theme PNGs on
-# disk, and every screenshot the user docs embed maps to a manifest id. Cheap,
-# browser-free (see docs/plans/user-docs-screenshots.md); the pixel-diff
-# (check.sh) needs chromium and stays a manual chore.
-echo "Checking user-docs screenshot wiring..."
-if ! python scripts/screenshots/wiring-check.py ; then
-    _blocked "user-docs screenshot wiring check failed"
-    exit 1
-fi
-
-# vtscore package docs: every top-level module / sub-package of vtscore/ is
-# covered by a packages/ doc, and no doc cites a file.py:NNN line anchor (they
-# rot on the next edit; cite module-and-symbol instead). Regex sweep, imports
-# nothing, ~0.1s. See scripts/check-vtscore-docs.py for the policy.
-echo "Checking vtscore package docs..."
-if ! python scripts/check-vtscore-docs.py ; then
-    _blocked "vtscore package docs check failed"
+# Slide decks: every deck manifest names fragments that exist and figures that
+# resolve. Marp only *warns* on a missing figure and still exits 0, so a rotted
+# deck is otherwise silent until someone rebuilds it the morning of a talk.
+# Pure stdlib, reads slides/ only, ~0.05s. See slides/README.md.
+echo "Checking slide decks..."
+if ! python slides/build.py --check ; then
+    _blocked "slide deck preflight failed"
     exit 1
 fi
 
@@ -334,10 +439,12 @@ fi
 # resolution). This gate notices when one of those app surfaces changes, so the
 # eval default arm can't quietly stop being the shipped algorithm. Parses
 # source, imports nothing, ~0.3s.
-echo "Checking eval/app sync..."
-if ! python scripts/check-eval-app-sync.py ; then
-    _blocked "eval framework is out of sync with the app"
-    exit 1
+if ! $_is_slides_run; then
+    echo "Checking eval/app sync..."
+    if ! python scripts/check-eval-app-sync.py ; then
+        _blocked "eval framework is out of sync with the app"
+        exit 1
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -468,7 +575,13 @@ fi
 if [[ ${#_lane_names[@]} -gt 0 ]]; then
     echo "Running in parallel with the tests: ${_lane_names[*]}"
 fi
-if ! $_run_whole_repo_gates; then
+if $_is_slides_run; then
+    # Deliberately not the "a full run is the gate before pushing" notice below:
+    # for a change confined to slides/ this *is* the gate. Say what was skipped
+    # and why it is sound, so the claim stays auditable rather than folkloric.
+    echo "Slides-only run: pytest and every whole-repo gate skipped — nothing"
+    echo "outside slides/ changed, and no test or type-check reads a deck."
+elif ! $_run_whole_repo_gates; then
     echo "Group run: skipping pyright and pip-audit. A full './run-tests.sh' is"
     echo "the gate before pushing (or set VTSEARCH_FULL_GATES=1 to force them)."
 fi
@@ -578,6 +691,8 @@ if [[ ${#_failed_lanes[@]} -gt 0 || $_pytest_status -ne 0 ]]; then
 fi
 if $_run_pytest; then
     echo "RUN PASSED (all gates green; pytest summary above)"
+elif $_is_slides_run; then
+    echo "RUN PASSED (slides-only; this is the full gate for a slides-only change)"
 else
     echo "RUN PASSED (frontend-only; no Python tests in the 'frontend' group)"
 fi

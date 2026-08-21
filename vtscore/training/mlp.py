@@ -24,14 +24,35 @@ if TYPE_CHECKING:
 
 
 #: ``hidden_dim`` sentinel selecting the **linear (logistic-regression) head** -
-#: a single ``Linear(input_dim, 1)`` with no hidden layer.  This is the
-#: **production detector head**: trained through :func:`train_model`'s balanced
-#: BCE-with-logits loop it *is* logistic regression, and its linear decision
+#: a single ``Linear(input_dim, 1)`` with no hidden layer, fitted by
+#: :func:`train_model`'s balanced BCE-with-logits loop.  Its linear decision
 #: boundary avoids the retrain-to-retrain score wobble a small MLP shows when
-#: positives are sparse (the threshold-stability #2790 finding).  Positive
-#: ``hidden_dim`` values build the MLP instead; that path survives only for the
-#: eval harness / experiments and unit tests, and is not reachable from the app.
+#: positives are sparse (the threshold-stability #2790 finding).  This was the
+#: production head until the linear SVM replaced it; it now survives as a named
+#: eval arm and in unit tests.  Positive ``hidden_dim`` values build the MLP
+#: instead - the older arm still, likewise, not reachable from the app.
 LINEAR_HEAD = 0
+
+#: ``hidden_dim`` sentinel selecting the **linear SVM head** - the
+#: **production detector head**.  Architecturally identical to
+#: :data:`LINEAR_HEAD` (one ``Linear(input_dim, 1)``, so weight serialisation,
+#: :func:`build_model_from_weights`, and every scoring path are shared); what
+#: differs is the objective that fits it.  :func:`train_model` routes this
+#: sentinel to :func:`vtscore.training.svm.fit_linear_svm_head`, which fits a
+#: maximum-margin hyperplane (hinge loss + L2) through the very
+#: :func:`~vtscore.training.svm.train_svm` call the eval harness scores as
+#: ``svm_linear``, rather than running the BCE epoch loop below.
+#:
+#: The sentinel is negative because it is *not* a width: both linear heads have
+#: no hidden layer, and only their loss tells them apart.  Threading it through
+#: the existing ``hidden_dim`` plumbing keeps one "which head" knob reaching the
+#: final fit and the calibration folds together, which is the property
+#: production depends on (fold models must share the final model's fit, or the
+#: calibrated threshold does not transfer).
+LINEAR_SVM_HEAD = -1
+
+#: Every ``hidden_dim`` that builds a single ``Linear(D, 1)`` rather than an MLP.
+LINEAR_HEADS = (LINEAR_HEAD, LINEAR_SVM_HEAD)
 
 
 def _auto_hidden_dim(n_train: int) -> int:
@@ -42,8 +63,8 @@ def _auto_hidden_dim(n_train: int) -> int:
     arrive.  The width is floored at ``MLP_HIDDEN_MIN`` (8): below ~8
     neurons the detector underfits and destabilizes on harder tasks.
 
-    Only the MLP head uses this; the production linear head (:data:`LINEAR_HEAD`)
-    has no hidden layer.
+    Only the MLP head uses this; the production linear SVM head
+    (:data:`LINEAR_SVM_HEAD`) has no hidden layer.
     """
     return max(MLP_HIDDEN_MIN, min(MLP_HIDDEN_MAX, n_train // 3))
 
@@ -72,14 +93,16 @@ def build_model(
     Returns:
         An ``nn.Sequential`` model.  With ``hidden_dim > 0`` (the MLP) the layers
         are ``Linear(input_dim, hidden_dim) -> ReLU -> Dropout -> Linear(hidden_dim, 1)``.
-        With ``hidden_dim == 0`` (:data:`LINEAR_HEAD`, the production head) it is a
-        single ``Linear(input_dim, 1)`` - a linear/logistic head with no hidden
-        layer; ``dropout`` is ignored there (a bare linear map has nothing to
-        regularise with dropout, matching plain logistic regression).
+        With a linear-head sentinel (:data:`LINEAR_SVM_HEAD`, the production
+        head, or :data:`LINEAR_HEAD`) it is a single ``Linear(input_dim, 1)``
+        with no hidden layer; ``dropout`` is ignored there (a bare linear map
+        has nothing to regularise with dropout).  The two linear sentinels build
+        the *same* architecture - they differ only in how :func:`train_model`
+        fits it.
     """
     import torch.nn as nn  # noqa: PLC0415
 
-    if hidden_dim == LINEAR_HEAD:
+    if hidden_dim in LINEAR_HEADS:
         model = nn.Sequential(nn.Linear(input_dim, 1))
     else:
         model = nn.Sequential(
@@ -125,8 +148,11 @@ def build_model_from_weights(weights: dict[str, list]) -> nn.Sequential:
         # MLP: the second Linear's bias length is the hidden width.
         hidden_dim = len(weights["0.bias"])
     else:
-        # Linear head (:data:`LINEAR_HEAD`): a single ``Linear(input_dim, 1)``,
-        # so the only keys are ``0.weight`` / ``0.bias``.
+        # A linear head: a single ``Linear(input_dim, 1)``, so the only keys are
+        # ``0.weight`` / ``0.bias``.  Which of the two linear sentinels fitted
+        # those weights is not recoverable from - and irrelevant to - a
+        # reconstruction: the objective only shapes the numbers, and they are
+        # already in hand.  Either sentinel builds the same architecture.
         hidden_dim = LINEAR_HEAD
 
     model = build_model(input_dim, hidden_dim=hidden_dim, dropout=0.0)
@@ -134,6 +160,54 @@ def build_model_from_weights(weights: dict[str, list]) -> nn.Sequential:
     model.load_state_dict(state_dict)
     model.eval()
     return model
+
+
+def _amp_context(use_amp: bool, nullcontext):
+    """Return the ``(GradScaler, autocast context)`` pair for a training loop.
+
+    Prefers the modern ``torch.amp.GradScaler("cuda", ...)`` API and falls back
+    to the legacy ``torch.cuda.amp.GradScaler`` on torch <2.3.  Both are inert
+    when *use_amp* is false (CPU/MPS), where the FP32 path keeps training
+    bit-for-bit reproducible.
+    """
+    import torch  # noqa: PLC0415
+
+    grad_scaler_cls = getattr(torch.amp, "GradScaler", None)
+    if grad_scaler_cls is not None:
+        scaler = grad_scaler_cls("cuda", enabled=use_amp)
+    else:
+        scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
+    return scaler, (torch.autocast(device_type="cuda") if use_amp else nullcontext())
+
+
+def _train_svm_head(
+    X_train: torch.Tensor,
+    y_train: torch.Tensor,
+    input_dim: int,
+    seed: int,
+    sample_weights: torch.Tensor | None,
+) -> nn.Sequential:
+    """Fit the :data:`LINEAR_SVM_HEAD` branch of :func:`train_model`.
+
+    Hands the tensors to :func:`vtscore.training.svm.fit_linear_svm_head` as
+    numpy (liblinear is a CPU solver) and returns its ``Linear(input_dim, 1)``.
+    """
+    # liblinear is one blocking call rather than an epoch loop, so honour a
+    # cancelled background job once up front instead of at every epoch
+    # boundary; the fit itself is milliseconds at any real vote count.
+    check_job_cancelled()
+    from vtscore.training.svm import fit_linear_svm_head  # noqa: PLC0415
+
+    weights_np = None if sample_weights is None else sample_weights.reshape(-1).detach().cpu().numpy()
+    if weights_np is not None and weights_np.shape[0] != len(y_train):
+        raise ValueError(f"sample_weights length {weights_np.shape[0]} does not match training-set size {len(y_train)}")
+    return fit_linear_svm_head(
+        X_train.detach().cpu().numpy(),
+        y_train.reshape(-1).detach().cpu().numpy(),
+        input_dim,
+        seed=seed,
+        sample_weight=weights_np,
+    )
 
 
 def train_model(
@@ -144,7 +218,15 @@ def train_model(
     hidden_dim: int | None = None,
     sample_weights: torch.Tensor | None = None,
 ) -> nn.Sequential:
-    """Train a small MLP classifier and return the trained model.
+    """Train the detector head named by *hidden_dim* and return it.
+
+    ``hidden_dim`` picks the head.  :data:`LINEAR_SVM_HEAD` - what every
+    production fit passes - short-circuits everything below and delegates to
+    :func:`vtscore.training.svm.fit_linear_svm_head`, which fits a
+    maximum-margin hyperplane with liblinear instead of running the BCE epoch
+    loop; it returns the same ``Linear(input_dim, 1)`` module, so callers see no
+    difference beyond the weights.  Everything from here down describes the
+    **torch** heads, :data:`LINEAR_HEAD` and the MLP.
 
     The hidden-layer width is chosen automatically based on the number of
     training examples (see :func:`_auto_hidden_dim`) unless explicitly
@@ -180,9 +262,11 @@ def train_model(
             (1.0 for good, 0.0 for bad).
         input_dim: Dimensionality of the input embeddings.
         seed: Seed for the local RNG used for weight initialisation (default 42).
-        hidden_dim: Number of neurons in the hidden layer.  When ``None``
-            (default) the width is chosen automatically via
-            :func:`_auto_hidden_dim` based on the training-set size.
+        hidden_dim: Which head to fit.  :data:`LINEAR_SVM_HEAD` (production)
+            and :data:`LINEAR_HEAD` are the two ``Linear(input_dim, 1)``
+            heads - hinge-fitted and BCE-fitted respectively; a positive value
+            is an MLP hidden width.  ``None`` (default) auto-sizes an MLP via
+            :func:`_auto_hidden_dim`.
         sample_weights: Optional per-row loss weights of shape ``(N,)`` or
             ``(N, 1)``.  When ``None`` (default) inverse-class-frequency
             weights are computed internally.  When provided they replace the
@@ -190,7 +274,8 @@ def train_model(
 
     Returns:
         A trained ``nn.Sequential`` model in eval mode.
-        The model outputs raw logits - apply ``torch.sigmoid`` at inference.
+        The model outputs raw logits (the SVM head's decision function) - apply
+        ``torch.sigmoid`` at inference.
 
     Raises:
         ValueError: If ``y_train`` does not contain at least one positive
@@ -211,6 +296,9 @@ def train_model(
             "train_model requires at least one positive (y=1) and one negative "
             f"(y=0) example; got {num_true} positives and {num_false} negatives"
         )
+
+    if hidden_dim == LINEAR_SVM_HEAD:
+        return _train_svm_head(X_train, y_train, input_dim, seed, sample_weights)
 
     ensure_torch_configured()
     device = get_torch_device()
@@ -276,14 +364,7 @@ def train_model(
     # per-epoch cadence and the CPU path stays bit-for-bit as before (the seeded
     # early-stop test exercises exactly this path).
     loss_check_interval = 5 if device.type == "cuda" else 1
-    # Prefer the modern ``torch.amp.GradScaler("cuda", ...)`` API; fall back
-    # to the legacy ``torch.cuda.amp.GradScaler`` on torch <2.3.
-    grad_scaler_cls = getattr(torch.amp, "GradScaler", None)
-    if grad_scaler_cls is not None:
-        scaler = grad_scaler_cls("cuda", enabled=use_amp)
-    else:
-        scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
-    autocast_ctx = torch.autocast(device_type="cuda") if use_amp else nullcontext()
+    scaler, autocast_ctx = _amp_context(use_amp, nullcontext)
     with torch.random.fork_rng(), torch.enable_grad():
         torch.manual_seed(seed)
         for epoch in range(epochs):

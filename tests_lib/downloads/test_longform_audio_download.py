@@ -78,6 +78,24 @@ class TestApollo11Manifest:
         with patch.object(audio_module, "_fetch_text", return_value=json.dumps(payload)):
             assert audio_module.apollo11_audio_manifest() == [("x.mp3", 0)]
 
+    def test_the_fetch_shares_the_download_retry_budget(self, monkeypatch):
+        """A one-shot GET for the track list would be strictly more fragile
+        than the multi-GB transfer it precedes (issue #3216)."""
+        from vtscore.datasets.downloader import audio as audio_module
+        from vtscore.datasets.downloader import core as dl_core
+
+        seen = {}
+
+        def fake_fetch(url, label="", on_progress=None):
+            seen["url"], seen["label"] = url, label
+            return json.dumps(_APOLLO_METADATA)
+
+        monkeypatch.setattr(dl_core, "fetch_text_with_retry", fake_fetch)
+        audio_module.apollo11_audio_manifest()
+
+        assert seen["url"].startswith(dl_core.ARCHIVE_ORG_METADATA_URL)
+        assert seen["label"], "the retry notice needs a name for this fetch"
+
 
 class TestDownloadApollo11Audio:
     def test_downloads_only_the_given_tracks(self, tmp_path):

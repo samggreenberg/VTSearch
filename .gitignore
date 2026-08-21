@@ -57,3 +57,9 @@ model_cache/*
 
 # Spike / experiment scratch (codebook fits, ROxford caches, logs)
 scratch/
+
+# Slide-deck build output. Assembled markdown and rendered decks are both
+# rebuildable from slides/decks/ + slides/fragments/ + slides/figs/, so neither
+# belongs in history.
+slides/_build/
+slides/_out/

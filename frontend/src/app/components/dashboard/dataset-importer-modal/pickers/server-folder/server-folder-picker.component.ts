@@ -41,11 +41,12 @@ import {
  *  found in the sample.
  *
  *  Sits behind the shared ``<vt-source-picker>`` chrome (rendered by
- *  the parent modal) which owns the typed-path input widget itself;
- *  this component owns everything below/around it (media-type select,
- *  inline folder browser, checkboxes, dataset name, Advanced block) via
- *  the ``sfBefore`` / ``sfAfter`` projection slots, plus the submit
- *  logic. */
+ *  the parent modal), projected into its ``sfAfter`` slot.  This
+ *  component owns the whole form: the "Folder to import" field (typed
+ *  path + Browse button + inline folder browser), the checkboxes, the
+ *  dataset name, the Advanced block, and the submit logic.  The
+ *  media-type select above it is projected into ``sfBefore`` by the
+ *  parent. */
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'vt-server-folder-picker',
@@ -75,10 +76,8 @@ export class ServerFolderPickerComponent {
 
   readonly selectedImporter = signal<ImporterInfo | null>(null);
 
-  /** Current value of the editable absolute-path input.  Two-way bound
-   *  (via the parent) to ``<vt-source-picker>``'s ``sfPathInputValue``
-   *  input/output, so this must be a signal: the widget that renders it
-   *  lives in a sibling component. */
+  /** Current value of the editable absolute-path input rendered by this
+   *  component's own "Folder to import" field. */
   readonly pathInputValue = signal('');
   /** Committed absolute server path (trailing slash trimmed); read by
    *  the parent's footer submit button, hence also a signal. */
@@ -214,13 +213,10 @@ export class ServerFolderPickerComponent {
     this.applyPathInput();
   }
 
-  /** Invoked via a listener bound on the sibling `<vt-source-picker>` in
-   *  the parent's template (typing in the shared typed-path input), so
-   *  this component isn't on the ancestor-marked dirty path that
-   *  produces; every exit writes at least one signal (``pathInputValue``
-   *  / ``folderPath`` / ``browseError`` / ``detection``) which notifies
-   *  the scheduler on its own, but ``datasetName`` is a plain field -
-   *  ``markForCheck()`` covers it too. */
+  /** Typing in the "Folder to import" input.  Every exit writes at least
+   *  one signal (``pathInputValue`` / ``folderPath`` / ``browseError`` /
+   *  ``detection``) which notifies the scheduler on its own, but
+   *  ``datasetName`` is a plain field - ``markForCheck()`` covers it too. */
   onPathInput(value: string): void {
     this.pathInputValue.set(value);
     const raw = (value || '').trim();

@@ -1,0 +1,5 @@
+env,best_arm,best_knob_yield,dead_step_rate,admitted_span,quantile_span
+coco_val/siglip/whole_image,fold_anchored_w0.3_rate_qmean,0.8903688577962297,0.11876707072075122,0.77210104,0.7741151
+coco_val/dinov3_patch/max_patch,fold_anchored_w0.3_q_tilt_qmean_s0.005,0.9868603186828054,0.014234654760294051,0.097473495,0.099999994
+visual_genome_m/siglip/whole_image,fold_anchored_w0.3_rate_qmean,0.9997614788312463,0.00025839793281653745,0.9483774,0.94651717
+visual_genome_m/dinov3_patch/max_patch,fold_anchored_w0.3_rate_qmean,0.9997657640775789,0.0002537555826228177,0.8418366,0.8396743
