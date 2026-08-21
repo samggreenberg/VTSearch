@@ -264,13 +264,19 @@ def fig_qtilt_step(reg: pd.DataFrame, live: pd.DataFrame, out: Path) -> str:
         axes[0].plot(s.index, s.values, marker="o", ms=4, lw=1.6, label=_short(env).replace("\n", " "))
         y = ql[ql["env"] == env].set_index("step")["knob_yield"].sort_index()
         axes[1].plot(y.index, y.values, marker="o", ms=4, lw=1.6)
+    steps = sorted(q["step"].unique())
+    for ax in axes:
+        # Label the five swept steps and nothing else: matplotlib's default log
+        # minor ticks collide into an unreadable smear at this spacing.
+        ax.set_xscale("log")
+        ax.set_xticks(steps)
+        ax.set_xticklabels([f"{s:g}" for s in steps])
+        ax.set_xticks([], minor=True)
     axes[0].axhline(0, color="k", lw=1)
-    axes[0].set_xscale("log")
     axes[0].set_xlabel("q_tilt step (fold quantile per inclusion step)")
     axes[0].set_ylabel("regret − incumbent (rate scale), pooled over k")
     axes[0].grid(alpha=0.25)
     axes[0].legend(fontsize=7)
-    axes[1].set_xscale("log")
     axes[1].axhline(1.0, color="0.4", ls="--", lw=1)
     axes[1].set_xlabel("q_tilt step")
     axes[1].set_ylabel("knob yield (distinct admitted sets / stops)")
