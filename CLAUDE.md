@@ -326,6 +326,7 @@ A flow can legitimately carry both: a nested view shows `← Back` at the top to
 - **CLI autodetect + exporter**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --dataset <file.pkl> --settings <settings.json> --exporter server_json_file --filepath results.json`
 - **CLI autodetect + importer**: `bash .claude/hooks/ensure-test-deps.sh && python app.py --autodetect --importer server_folder --path /data/sounds --media-type audio --settings <settings.json>`
 - **Check eval/app sync**: `python scripts/check-eval-app-sync.py` (also a `./run-tests.sh` gate; re-pin with `--update` after reconciling the harness)
+- **Check for a stale tree**: `python scripts/check-phantom-base.py` (also the first `./run-tests.sh` gate; fails when the branch deletes files it never created. Override a deliberate deletion with `VTSEARCH_ALLOW_DELETIONS=1`)
 - **Check documentation**: `python scripts/check-docs.py` (also a `./run-tests.sh` gate; validates relative links, `#anchors`, backticked repo paths, absolute-path leaks, `docs/plans/*.md` citations anywhere in the tree, and code fences. Pure invariants — nothing to re-pin. Fix the doc, or add an allowlist entry with a reason if the path is runtime-generated or a deliberately fictional example)
 - **Regenerate doc inventories**: `python scripts/gen-docs-inventories.py` (fills the `<!-- BEGIN GENERATED: ... -->` regions in the docs from the live registries — embedders, plugin families, demo datasets; `--check` is a `./run-tests.sh` gate, so registry changes require rerunning this and committing the result)
 - **Install deps**: `bash scripts/install.sh` (auto-detects CPU vs GPU; pass `cpu`/`gpu` to force, or a `cuXYZ` tag to override the GPU wheel, e.g. `bash scripts/install.sh cu121`)
@@ -349,6 +350,7 @@ Wrapping everything: a wall-clock cap (`VTSEARCH_TEST_TIMEOUT`, default **1800s 
 
 | Gate | Command it runs | Notes |
 |------|-----------------|-------|
+| Stale tree | `scripts/check-phantom-base.py` | **Runs first.** Refuses a branch whose tree matches an *ancestor* of `origin/dev` rather than `origin/dev` — the signature of a stale checkout committed onto a fresh HEAD, which has silently reverted five merged PRs. Compares against the working tree, so it fires before the clobber is committed. A deliberate deletion (a shipped plan file) passes with `VTSEARCH_ALLOW_DELETIONS=1`. |
 | Lint | `ruff check .` | |
 | Format | `ruff format --check .` | Fix with `ruff format .`. |
 | Spelling | `codespell --toml pyproject.toml` | |
