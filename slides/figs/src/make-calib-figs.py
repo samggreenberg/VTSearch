@@ -134,9 +134,9 @@ def xcal_flow_fig() -> None:
 
     def score_line(cx: float, label: str, bad: list[float], good: list[float], theta_x: float, theta: str) -> None:
         """Held-out scores on a number line: Bad low, Good high, a cut between."""
-        y = 3.55
+        y = 3.65
         ax.plot([cx - 1.7, cx + 1.7], [y, y], color=INK, linewidth=1.8, zorder=2)
-        ax.text(cx, 4.05, label, ha="center", va="bottom", fontsize=16, color=INK)
+        ax.text(cx, 4.15, label, ha="center", va="bottom", fontsize=16, color=INK)
         for x in bad:
             ax.text(cx + x, y - 0.12, "✗", ha="center", va="top", fontsize=16, color=RUST, fontweight="bold")
         for x in good:
@@ -165,17 +165,21 @@ def xcal_flow_fig() -> None:
     ax.text(3.85, 7.4, "train", ha="right", va="center", fontsize=15, color=INK)
     arrow((5.9, 8.1), (5.9, 6.68))
     ax.text(6.15, 7.4, "train", ha="left", va="center", fontsize=15, color=INK)
-    arrow((5.62, 8.1), (4.38, 6.68))
-    arrow((4.38, 8.1), (5.62, 6.68))
-    arrow((3.8, 5.95), (2.55, 4.75))
-    arrow((6.2, 5.95), (7.45, 4.75))
+    # Each scoring path is one geometric line (slope Δx/Δy = 0.83) that runs
+    # from under the opposite half, through the M box, down to the score line —
+    # the entry and exit arrows are collinear, so the eye reads one straight
+    # stroke and the two strokes cross in a symmetric X.
+    arrow((5.62, 8.1), (4.43, 6.66))
+    arrow((4.38, 8.1), (5.57, 6.66))
+    arrow((3.83, 5.94), (2.84, 4.75))
+    arrow((6.17, 5.94), (7.16, 4.75))
 
     # ── per-half held-out scores; cut each, average ───────────────────────────
-    score_line(2.0, "M₁(D₂)", bad=[-1.4, -0.95, -0.5, -0.05], good=[0.5, 0.95, 1.4], theta_x=0.22, theta="θ₁")
-    score_line(8.0, "M₂(D₁)", bad=[-1.4, -1.0, -0.6, 0.3], good=[0.0, 0.7, 1.15], theta_x=-0.3, theta="θ₂")
+    score_line(2.3, "M₁(D₂)", bad=[-1.4, -0.95, -0.5, -0.05], good=[0.5, 0.95, 1.4], theta_x=0.22, theta="θ₁")
+    score_line(7.7, "M₂(D₁)", bad=[-1.4, -1.0, -0.6, 0.3], good=[0.0, 0.7, 1.15], theta_x=-0.3, theta="θ₂")
 
-    ax.text(5.0, 2.4, "θ₀ = avg(θ₁, θ₂)", ha="center", va="center", fontsize=16.5, color=INK)
-    ax.text(5.0, 1.5, "return (M₀, θ₀)", ha="center", va="center", fontsize=18, color=INK, fontweight="bold")
+    ax.text(5.0, 2.5, "θ₀ = avg(θ₁, θ₂)", ha="center", va="center", fontsize=16.5, color=INK)
+    ax.text(5.0, 1.6, "return (M₀, θ₀)", ha="center", va="center", fontsize=18, color=INK, fontweight="bold")
 
     save(fig, OUT, "calib-xcal-flow.png")
 
