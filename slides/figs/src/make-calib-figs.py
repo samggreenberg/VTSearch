@@ -112,6 +112,27 @@ ARROW_W, ARROW_HEAD_W, ARROW_HEAD_L = 0.5, 0.66, 0.32
 CAP_16 = 0.36
 SCORE_LABEL_LIFT = 0.08 + 0.29 + LABEL_GAP
 
+#: The half-width the held-out score marks below are quoted at, and the marks
+#: themselves: where each fold's Bad and Good votes land on its own score line,
+#: and where that fold's cut goes. Quoted once and rescaled by `_line_marks`,
+#: because two figures draw the same two lines at two different lengths — the
+#: cross-calibration schematic can spend 2.6 units on a line, while the blend
+#: schematic has to fit a whole second branch beside them. One ordering is
+#: imperfect on purpose: a Bad lands above θ₂.
+SCORE_MARK_HALF = 2.6
+SCORE_MARKS_1 = {"bad": (-2.25, -1.53, -0.81, -0.09), "good": (0.81, 1.53, 2.25), "theta": 0.36}
+SCORE_MARKS_2 = {"bad": (-2.25, -1.62, -0.98, 0.48), "good": (0.0, 1.1, 1.82), "theta": -0.48}
+
+
+def _line_marks(marks: dict, half: float) -> dict:
+    """`marks` rescaled from `SCORE_MARK_HALF` to a line of half-width *half*."""
+    k = half / SCORE_MARK_HALF
+    return {
+        "bad": [x * k for x in marks["bad"]],
+        "good": [x * k for x in marks["good"]],
+        "theta_x": marks["theta"] * k,
+    }
+
 
 def _sub(expr: str) -> str:
     """A subscripted label, set in the figure's own sans face.
@@ -228,7 +249,12 @@ def _arrow(ax: plt.Axes, xy_from: tuple[float, float], xy_to: tuple[float, float
 
 
 def _labeled_arrow(
-    ax: plt.Axes, xy_from: tuple[float, float], xy_to: tuple[float, float], label: str, z: float = 2.0
+    ax: plt.Axes,
+    xy_from: tuple[float, float],
+    xy_to: tuple[float, float],
+    label: str,
+    z: float = 2.0,
+    fontsize: float = 15,
 ) -> None:
     """An outlined block arrow with an open core, *label* written along the shaft.
 
@@ -267,7 +293,7 @@ def _labeled_arrow(
         rotation=angle,
         ha="center",
         va="center",
-        fontsize=15,
+        fontsize=fontsize,
         color=INK,
         zorder=z + 0.05,
     )
@@ -418,9 +444,7 @@ def _xcal_flow_stage(stage: int) -> plt.Figure:
         score_line(
             cx1,
             label="M_1(D_2)",
-            bad=[-2.25, -1.53, -0.81, -0.09],
-            good=[0.81, 1.53, 2.25],
-            theta_x=0.36,
+            **_line_marks(SCORE_MARKS_1, line_half),
             theta=r"\theta_1",
             cut=stage >= 5,
         )
@@ -434,9 +458,7 @@ def _xcal_flow_stage(stage: int) -> plt.Figure:
         score_line(
             cx2,
             label="M_2(D_1)",
-            bad=[-2.25, -1.62, -0.98, 0.48],
-            good=[0.0, 1.1, 1.82],
-            theta_x=-0.48,
+            **_line_marks(SCORE_MARKS_2, line_half),
             theta=r"\theta_2",
         )
 
@@ -853,6 +875,314 @@ def _gmm_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figu
     return fig
 
 
+#: How many build stages the blend schematic reveals in: the spine the two
+#: rival estimators share; the mixture branch; its label-free cut θ_G; the fold
+#: models and their crossed scoring paths; the held-out cuts averaged into θ_X;
+#: and the weighted average that settles between the two.
+BLEND_FLOW_STAGES = 6
+
+#: Wider than the two figures it assembles (13.2 each) because it holds both of
+#: them — and, uniquely in the progression, a little taller than
+#: `FLOW_CANVAS_H`. The rule the other two obey is that a shared canvas height
+#: keeps the *rendered* label size equal across the progression, and that rule
+#: assumes the figure is height-limited in its slot. This one is not: its ink
+#: is wide enough that the 896px width of a `bg right:70%` slot binds first, so
+#: the extra height is very nearly free. Measured, cropped, in that slot: the
+#: two parents render a 15pt label at 24.7px and this figure at 24.0px, a
+#: difference of half a pixel per point that no room can see. Growing it much
+#: past this does start costing real size — at which point the fix is to cut
+#: content, not canvas.
+BLEND_CANVAS = (13.6, 11.4)
+
+#: D₋₁ and D₀ are drawn slightly shorter here than the 1.05 they get in the two
+#: parent figures. This one carries both of their mechanisms *and* a conclusion
+#: row, so ~0.3 units had to come from somewhere; taking it from two block
+#: heights is invisible, while taking it from an arrow would leave the arrow
+#: too short to write "train" along.
+BLEND_BLOCK_H = 0.9
+
+#: The blend schematic's score lines, shorter than the cross-calibration
+#: figure's 2.6 because the mixture panel shares their row.
+BLEND_LINE_HALF = 1.55
+
+#: The conclusion row's type, and the size of the little ramp glyph that
+#: labels the `w` in it.
+CONCLUSION_PT = 17.0
+RAMP_W, RAMP_H = 1.1, 0.4
+
+#: Flow-arrow labels are set a point smaller here than the 15pt the two parent
+#: figures use. A block arrow has to be longer than the word written along it,
+#: so every arrow in the figure is a *vertical* cost, and this figure stacks
+#: more of them than either parent: at 15pt the arrows that fit the words push
+#: the conclusion row off the bottom of the canvas. One point buys ~0.4 units
+#: of height and renders at 24px, comfortably over the 20px floor, at a size
+#: difference nobody sitting in the room can see.
+BLEND_ARROW_PT = 14.0
+
+
+def blend_flow_fig() -> None:
+    """Schematic of the blend — iteration 3 of the line (issue #3218).
+
+    The third figure of the calibration progression, and the first that is an
+    *assembly* rather than a new mechanism: its left half is `calib-xcal-flow`
+    and its right half is `calib-gmm-flow`, sharing the spine both of those
+    figures already drew — the haystack D₋₁, the votes D₀ taken out of it, and
+    the model M₀ trained on those votes.
+
+    From that shared spine the two estimators go their separate ways and are
+    drawn going them: the cross-calibration flow **down** (split the votes,
+    train a fold model per half, score the half it never saw, cut, average)
+    ending at θ_X, and the mixture flow **right and down** (M₀ scores the whole
+    haystack, fit two components, cut at their midpoint) ending at θ_G. Neither
+    is the answer; the answer is the weighted average of the two, which is what
+    shipped as safe thresholds (#2798/#2799).
+
+    Three geometric choices carry the argument:
+
+    * **The three evidence displays share one baseline.** M₁'s held-out score
+      line, M₂'s, and the haystack histogram all sit on the same rule, so the
+      three cuts θ₁, θ₂ and θ_G are ticked at the same height and read as
+      three answers to one question rather than as two unrelated pictures.
+    * **The rivals are the same size.** The mixture panel gets the width the
+      two score lines get, because the slide's claim is that neither estimator
+      dominates — one is starved, the other is biased.
+    * **The conclusion is the confluence.** θ_X arrives from the left and θ_G
+      from above, into the one line that names both.
+
+    The w annotation under it is the iteration's whole hand-tuned dial, and it
+    is drawn as the ramp it is. It says what iteration 3 shipped — a straight
+    ramp on the vote count from pure GMM at 6 votes to pure x-cal at 20 — and
+    not what iteration 3½ replaced it with, which is the next slide's news.
+    """
+    fit, scores = _haystack_scores()
+    final = _blend_flow_stage(BLEND_FLOW_STAGES, fit, scores)
+    box = tight_box(final)
+    for stage in range(1, BLEND_FLOW_STAGES):
+        save(
+            _blend_flow_stage(stage, fit, scores),
+            OUT,
+            f"calib-blend-flow.build{stage}.png",
+            column=SIDEBAR_WIDE,
+            box=box,
+        )
+    save(final, OUT, "calib-blend-flow.png", column=SIDEBAR_WIDE, box=box)
+
+
+def _text_width(ax: plt.Axes, text: str, fontsize: float) -> float:
+    """How wide *text* comes out, in the axes' own drawing units."""
+    probe = ax.text(0, 0, text, fontsize=fontsize)
+    ax.figure.canvas.draw()
+    width = probe.get_window_extent().transformed(ax.transData.inverted()).width
+    probe.remove()
+    return width
+
+
+def _w_ramp(ax: plt.Axes, x0: float, y0: float, w: float, h: float) -> None:
+    """The mix-in weight, drawn as the ramp on vote count that it is.
+
+    A sparkline rather than a plot: it is a label of the `w` in the line above
+    it, and the numbers it would otherwise spend axis ticks on are in the
+    caption beside it. Iteration 3's shipped rule, `clip((n − 6) / 14, 0, 1)`,
+    is a flat, a rise and a flat, which is exactly three segments of ink.
+    """
+    knee = 0.28
+    ax.plot(
+        [x0, x0 + knee * w, x0 + (1 - knee) * w, x0 + w],
+        [y0, y0, y0 + h, y0 + h],
+        color=INK,
+        linewidth=2.0,
+        solid_joinstyle="round",
+        zorder=3,
+    )
+
+
+def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in BLEND_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, BLEND_CANVAS[0])
+    ax.set_ylim(0, BLEND_CANVAS[1])
+    ax.set_axis_off()
+
+    # ── layout ────────────────────────────────────────────────────────────────
+    # Top-down for the spine, then the two branches, then the conclusion row.
+    bx, block_w, block_h = 4.4, 4.0, BLEND_BLOCK_H
+    block_x0 = bx - block_w / 2
+    hay_x0, hay_top, hay_h = block_x0, BLEND_CANVAS[1], block_h
+    hay_w = BLEND_CANVAS[0] - 0.2 - hay_x0
+    hay_y0 = hay_top - hay_h
+    vote_len = 1.05
+    block_top = hay_y0 - OBJECT_GAP - vote_len - OBJECT_GAP
+    block_y0 = block_top - block_h
+    row_y = block_y0 + block_h / 2
+
+    train_len = 1.4
+    train_x = bx + block_w / 2 + OBJECT_GAP
+    m0x = train_x + train_len + OBJECT_GAP + MODEL_W / 2
+
+    # ── the cross-calibration branch, straight down ───────────────────────────
+    fold_train_len, score_len, slope = 1.1, 1.2, 0.75
+    m1x, m2x = bx - block_w / 4, bx + block_w / 4
+    train_tail_y = block_y0 - OBJECT_GAP
+    my = train_tail_y - fold_train_len - OBJECT_GAP - MODEL_H / 2
+
+    down_left = (m1x - slope, my - 1.0)
+    exit1 = _box_edge(m1x, my, down_left, OBJECT_GAP)
+    ux, uy = np.array([slope, 1.0]) / float(np.hypot(slope, 1.0))
+    tip1 = (exit1[0] - score_len * ux, exit1[1] - score_len * uy)
+    line_y, line_half = tip1[1] - (OBJECT_GAP + CAP_16 + SCORE_LABEL_LIFT), BLEND_LINE_HALF
+    cx1 = tip1[0] - 0.4 * line_half
+    cx2 = 2 * bx - cx1
+
+    # ── the mixture branch, right and down ────────────────────────────────────
+    # Its baseline is the score lines' baseline: the two fold lines and the
+    # haystack histogram are three readings of the same quantity, so they are
+    # drawn on one rule and their three cuts are ticked at one height.
+    panel_x0 = cx2 + line_half + OBJECT_GAP
+    panel_w = BLEND_CANVAS[0] - 0.2 - panel_x0
+    panel_h = 2.05
+    y_base = line_y
+    # The score arrow leaves M₀ on a diagonal rather than dropping straight, as
+    # the mixture figure's does. There it could fall vertically because nothing
+    # else wanted that column; here the panel has to sit right of the score
+    # lines, so a vertical drop would land on the panel's far-left tail. The
+    # diagonal points where the drop pointed there — into the sparse ground
+    # between the two humps — and matches the fold branch's own scoring paths.
+    tip0 = (panel_x0 + 0.4 * panel_w, y_base + panel_h + OBJECT_GAP + CAP_16 + LABEL_GAP)
+
+    # Where the mixture puts its cut: midway between the two component means,
+    # which is `calculate_gmm_threshold`'s rule and the previous figure's θ_G.
+    theta_g_x = panel_x0 + 0.5 * (fit.mu_lo + fit.mu_hi) * panel_w
+
+    # ── the conclusion ────────────────────────────────────────────────────────
+    # One row, holding both branches' answers: what the folds settled on, then
+    # what the two rivals settle on together. The mixture's answer needs no
+    # arrow into it — the equation is written directly under the histogram it
+    # comes off — so only the fold branch, which ends away to the left, is
+    # carried across with one.
+    theta_bottom = line_y - 0.32 - LABEL_GAP - CAP_16
+    conclusion_y = theta_bottom - OBJECT_GAP - CONCLUSION_PT / 72 * 1.0
+    eq_x = 10.75
+    ramp_y = conclusion_y - CONCLUSION_PT / 72 - LABEL_GAP - CAP_16 / 2
+
+    data_block = functools.partial(_data_block, ax)
+    arrow = functools.partial(_arrow, ax)
+    labeled_arrow = functools.partial(_labeled_arrow, ax, fontsize=BLEND_ARROW_PT)
+    model_box = functools.partial(_model_box, ax)
+    score_line = functools.partial(_score_line, ax, y=line_y, half=line_half)
+
+    # ── stage 1: the spine both estimators are built on ───────────────────────
+    # Carried over wholesale from the mixture figure: the unlabeled haystack,
+    # the sliver of it that got voted, and the model trained on those votes.
+    _haystack_block(ax, hay_x0, hay_y0, hay_w, hay_h)
+    _disc_label(ax, hay_x0 + hay_w / 2, hay_y0 + hay_h / 2, "D_{-1}")
+    ax.text(hay_x0 - LABEL_GAP, hay_y0 + hay_h / 2, "Unlabeled", ha="right", va="center", fontsize=15, color=SOFT)
+    labeled_arrow((bx, hay_y0 - OBJECT_GAP), (bx, hay_y0 - OBJECT_GAP - vote_len), "vote")
+    data_block(block_x0, block_y0, block_w, block_h, split=stage >= 4)
+    good_h = 0.42 * block_h
+    ax.text(block_x0 - LABEL_GAP, block_top - good_h / 2, "Good", ha="right", va="center", fontsize=15, color=GREEN)
+    ax.text(
+        block_x0 - LABEL_GAP,
+        block_y0 + (block_h - good_h) / 2,
+        "Bad",
+        ha="right",
+        va="center",
+        fontsize=15,
+        color=RUST,
+    )
+    # D₀ is named from *above*, not on a disc inside itself as the mixture
+    # figure names it: the inside of this block is about to be divided into D₁
+    # and D₂, which is where those discs go. Left-aligned rather than centred
+    # because the centre of the space above the block is where the vote arrow
+    # lands.
+    ax.text(block_x0, block_top + LABEL_GAP, _sub("D_0"), ha="left", va="bottom", fontsize=16, color=INK)
+    labeled_arrow((train_x, row_y), (train_x + train_len, row_y), "train")
+    model_box(m0x, row_y, "M_0")
+
+    # ── stage 2: M0 scores the whole haystack ─────────────────────────────────
+    if stage >= 2:
+        arrow((m0x, hay_y0 - OBJECT_GAP), _box_edge(m0x, row_y, (m0x, hay_y0), OBJECT_GAP))
+        labeled_arrow(_box_edge(m0x, row_y, tip0, OBJECT_GAP), tip0, "score", z=2.1)
+        ax.text(
+            panel_x0,
+            y_base + panel_h + LABEL_GAP,
+            _sub("M_0(D_{-1})"),
+            ha="left",
+            va="bottom",
+            fontsize=16,
+            color=INK,
+        )
+        _score_histogram(ax, panel_x0, y_base, panel_w, panel_h, fit, scores, colored=True)
+
+    # ── stage 3: cut it where the two fitted components meet ──────────────────
+    if stage >= 3:
+        ax.plot([theta_g_x] * 2, [y_base - 0.32, y_base + panel_h], color=INK, linewidth=2.2, zorder=6)
+        ax.text(theta_g_x, y_base - 0.32 - LABEL_GAP, _sub(r"\theta_G"), ha="center", va="top", fontsize=16, color=INK)
+
+    # ── stage 4: split the votes and train a fold model on each half ──────────
+    if stage >= 4:
+        for mx, name in ((m1x, "M_1"), (m2x, "M_2")):
+            model_box(mx, my, name)
+            labeled_arrow((mx, train_tail_y), (mx, train_tail_y - fold_train_len), "train")
+        for mx, sign in ((m1x, 1.0), (m2x, -1.0)):
+            entry_tail = (mx + sign * slope * (train_tail_y - my), train_tail_y)
+            arrow(entry_tail, _box_edge(mx, my, entry_tail, OBJECT_GAP))
+        labeled_arrow(exit1, tip1, "score", z=2.1)
+        exit2 = (2 * bx - exit1[0], exit1[1])
+        labeled_arrow(exit2, (2 * bx - tip1[0], tip1[1]), "score", z=2.1)
+        score_line(cx1, label="M_1(D_2)", **_line_marks(SCORE_MARKS_1, line_half), theta=r"\theta_1", cut=stage >= 5)
+        score_line(cx2, label="M_2(D_1)", **_line_marks(SCORE_MARKS_2, line_half), theta=r"\theta_2", cut=stage >= 5)
+
+    # ── stage 5: cut each fold's held-out scores, and average the two ─────────
+    if stage >= 5:
+        theta_x_text = ax.text(
+            bx,
+            conclusion_y,
+            _sub(r"\theta_X = avg(\theta_1,\, \theta_2)"),
+            ha="center",
+            va="center",
+            fontsize=16.5,
+            color=INK,
+        )
+
+    # ── stage 6: settle between the rivals ────────────────────────────────────
+    if stage >= 6:
+        equation = ax.text(
+            eq_x,
+            conclusion_y,
+            _sub(r"\theta_0 = w\cdot\theta_X + (1-w)\cdot\theta_G"),
+            ha="center",
+            va="center",
+            fontsize=CONCLUSION_PT,
+            color=INK,
+        )
+        # The fold branch's answer is carried in by an arrow aimed at the
+        # equation's own ink, so the gap holds whatever width a mathtext run
+        # turns out to have once rendered.
+        fig.canvas.draw()
+        to_units = ax.transData.inverted()
+        eq_box = equation.get_window_extent().transformed(to_units)
+        xcal_box = theta_x_text.get_window_extent().transformed(to_units)
+        arrow((xcal_box.x1 + OBJECT_GAP, conclusion_y), (eq_box.x0 - OBJECT_GAP, conclusion_y))
+        # The dial, drawn as the ramp it is and labelled with its endpoints:
+        # one group, centred under the equation whose w it explains.
+        caption = "w: 0 at ≤6 votes, 1 at ≥20"
+        caption_w = _text_width(ax, caption, BLEND_ARROW_PT)
+        group_x0 = eq_box.x0 + (eq_box.width - (RAMP_W + 2 * LABEL_GAP + caption_w)) / 2
+        _w_ramp(ax, group_x0, ramp_y - RAMP_H / 2, RAMP_W, RAMP_H)
+        ax.text(
+            group_x0 + RAMP_W + 2 * LABEL_GAP,
+            ramp_y,
+            caption,
+            ha="left",
+            va="center",
+            fontsize=BLEND_ARROW_PT,
+            color=SOFT,
+        )
+
+    return fig
+
+
 def blend_schedule_fig() -> None:
     n = np.arange(0, 121)
     fig, ax = plt.subplots(figsize=(7.0, 5.0))
@@ -1005,6 +1335,7 @@ def decomposition_fig() -> None:
 if __name__ == "__main__":
     xcal_flow_fig()
     gmm_flow_fig()
+    blend_flow_fig()
     blend_schedule_fig()
     anchored_fig()
     decomposition_fig()
