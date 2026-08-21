@@ -53,7 +53,6 @@ ALLOWED_PATHS: dict[str, str] = {
     # Runtime-generated: written by a running app, absent from a clean checkout.
     "data/": "runtime data directory (gitignored); settings, detectors, datasets, uploads",
     "static/": "Angular build output (gitignored)",
-    "slides/_out/": "rendered slide decks (slides/render.sh); gitignored",
     "vtsearch/_version.txt": "baked into Docker images only; gitignored",
     "frontend/node_modules/": "npm install output",
     "frontend/src/app/api/": "generated API client (npm run generate-api-client)",

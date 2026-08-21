@@ -72,10 +72,13 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-08-20 | [the rebuild fixed one axis and silently moved another](lessons/2026-08-20-the-rebuild-reproduced-the-pin-and-moved-the-card.md) | #3160 |
 | 2026-08-19 | [a chain job freezes its analyze wrap when the CHAIN fires](lessons/2026-08-19-a-chain-job-freezes-its-analyze-wrap.md) | #2808 |
 | 2026-08-19 | [a figure script's private loader read 34x the analyzer's rows](lessons/2026-08-19-a-private-loader-in-a-figure-script.md) | #2808 |
 | 2026-08-19 | [FETCH_HEAD passed to a script that fetches tested a stranger's commit](lessons/2026-08-19-fetch-head-passed-to-a-script-that-fetches.md) | #2808 |
 | 2026-08-19 | [the last arm in the list silently became "production"](lessons/2026-08-19-the-last-arm-silently-became-production.md) | #2808 |
+| 2026-08-18 | [a string-replace edit that matched nothing, an hour later](lessons/2026-08-18-a-string-replace-that-matched-nothing.md) | #3160 |
+| 2026-08-18 | [an env var read once at init measured nothing](lessons/2026-08-18-an-env-var-read-once-measured-nothing.md) | #3160 |
 | 2026-08-18 | [the source said "slow path", the installed library said otherwise](lessons/2026-08-18-the-source-said-slow-the-library-said-fast.md) | #3146 |
 | 2026-08-17 | [a hardcoded GPU type is a pin that never reports its own cost](lessons/2026-08-17-a-hardcoded-gpu-type-is-a-pin-that.md) | #3144 |
 | 2026-08-17 | [a launcher that exits 1 with no output submitted nothing](lessons/2026-08-17-a-launcher-that-exits-1-with-no-output.md) | #3143 |

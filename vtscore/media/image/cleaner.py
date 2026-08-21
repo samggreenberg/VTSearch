@@ -24,18 +24,19 @@ class ImageExifOrientCleaner(MediaCleaner):
     """Bake a photo's EXIF display orientation into its pixels.
 
     Phone and camera JPEGs are stored in sensor order with an EXIF
-    ``Orientation`` tag telling the viewer how to rotate them.  Browsers and
-    :func:`~vtscore.media.image.thumbnail.make_image_thumbnail` honour that tag,
-    but the **embed path does not**: it hands the stored bytes straight to the
-    embedder, so a portrait phone photo is embedded sideways while its thumbnail
-    shows upright.  Every rotated photo therefore lands in the wrong part of the
-    vector space, which no amount of training fixes.
+    ``Orientation`` tag telling the viewer how to rotate them.  This gate
+    rewrites the payload as the upright image with the tag cleared, so the
+    *stored bytes* are upright too.
 
-    This gate rewrites the payload as the upright image with the tag cleared, so
-    the bytes the embedder sees match the bytes the user sees.  Because it
-    corrects an outright representation bug rather than making a judgment call
-    about what counts as wasted content, it is the one cleaner that defaults
-    **on**.
+    It is **off by default**, and does not affect what VTSearch sees.  Every
+    decode in :mod:`vtscore.media.image.decode` applies the orientation tag
+    already, so the embedder, thumbnailer, OCR, face detection and the crop
+    paths all work on upright pixels whether or not this cleaner ran.  What it
+    buys is bytes that are upright *outside* VTSearch — for a consumer of an
+    exported dataset that reads the payload without honouring EXIF.  What it
+    costs is a re-encode of every rotated photo (lossy, for JPEG), which is why
+    the default is off: paying it to fix a bug that no longer exists would be a
+    poor trade.
     """
 
     @property
@@ -53,13 +54,13 @@ class ImageExifOrientCleaner(MediaCleaner):
     @property
     def description(self) -> str:
         return (
-            "Rotate photos to their EXIF display orientation so the embedder sees them "
-            "upright, the way thumbnails already show them."
+            "Rewrite photos upright in their stored bytes. VTSearch already reads them "
+            "upright either way; this only matters for tools that ignore EXIF."
         )
 
     @property
     def default_enabled(self) -> bool:
-        return True
+        return False
 
     def clean(self, media: dict[str, Any]) -> dict[str, Any]:
         """Return *media* with the rotation baked in, or unchanged.
@@ -104,9 +105,10 @@ class ImageExifOrientCleaner(MediaCleaner):
 
 
 #: Formats whose Pillow encoder accepts an ``exif=`` keyword.  A cropped copy
-#: keeps the source's EXIF block for these so a photo that still carries an
-#: unbaked orientation tag (i.e. ``image_exif_orient`` is switched off) is not
-#: silently un-rotated by the crop.
+#: keeps the source's EXIF block for these so the camera/GPS metadata survives
+#: the trim.  The block is taken from the *upright* image, where Pillow has
+#: already dropped the orientation tag, so a rotated photo is not re-rotated on
+#: top of pixels that are already upright.
 _EXIF_WRITABLE_FORMATS = frozenset({"JPEG", "PNG", "TIFF", "WEBP", "MPO"})
 
 
@@ -233,10 +235,13 @@ class ImageEdgeTrimCleaner(MediaCleaner):
         if not isinstance(media_bytes, (bytes, bytearray)) or not media_bytes:
             return media
 
-        from PIL import Image  # noqa: PLC0415
+        from vtscore.media.image.decode import open_upright  # noqa: PLC0415
 
         try:
-            with Image.open(io.BytesIO(media_bytes)) as src:
+            # Upright decode: the trimmed copy's dimensions become the media's
+            # stored ``width``/``height``, which are the displayed ones, and the
+            # grid thumbnail runs the same detector over the same upright pixels.
+            with open_upright(io.BytesIO(media_bytes)) as src:
                 box = solid_edge_box(
                     src,
                     edge_tol=self._edge_tol,
