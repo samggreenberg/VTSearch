@@ -64,7 +64,16 @@ def _arm(rule: str) -> str:
 
 
 def _regret(rule: str, k: int) -> float:
-    """Planted regret curve per rule.  The incumbent is the zero line."""
+    """Planted regret curve per rule, on the **rate scale**.
+
+    The fixture writes ``cut_regret`` in the harness's own cost units, i.e. this
+    value times ``2**abs(k)`` (see :func:`_cost_scale`), because
+    ``inclusion_cost_weights`` doubles one of the two cost weights per step of
+    the knob.  Every assertion below is on the analyzer's rate-scale column, so
+    the scaling is itself a planted answer: an analyzer that pooled or gated on
+    raw cost units would see the ``k=+-4`` rows at sixteen times their weight
+    and both the ``rate`` trap and the ``q_tilt`` tie would come out wrong.
+    """
     if rule == "mid_tilt":
         return 0.10
     if rule == "q_tilt":
@@ -79,6 +88,11 @@ def _regret(rule: str, k: int) -> float:
         # tolerance.  An analyzer that ranked on pooled regret would ship this.
         return 0.10 - 0.04 if k <= 0 else 0.10 + 0.03
     raise AssertionError(rule)
+
+
+def _cost_scale(k: int) -> float:
+    """The larger of the two inclusion cost weights at *k*: ``2**abs(k)``."""
+    return 2.0 ** abs(k)
 
 
 def _admitted(rule: str, k: int, granularity: int) -> int:
@@ -122,6 +136,9 @@ def _fabricate(results: Path, rng: np.random.Generator) -> None:
                             # Small per-arm jitter so nothing is exactly
                             # degenerate, but far below the planted effects.
                             regret = _regret(rule, k) + shared[k] + float(rng.normal(0, 0.002))
+                            # ...written out in the units the harness actually
+                            # scores in, which is the rate scale times 2**|k|.
+                            scale = _cost_scale(k)
                             rows.append(
                                 {
                                     "seed": seed,
@@ -150,12 +167,12 @@ def _fabricate(results: Path, rng: np.random.Generator) -> None:
                                     # empty-band signal the report reads.
                                     "fold_quantile": 0.5 - 0.03 * k,
                                     "cut_threshold": 0.6 - 0.01 * k,
-                                    "cut_cost": 0.2 + regret,
+                                    "cut_cost": (0.2 + regret) * scale,
                                     "cut_fpr": 0.05,
                                     "cut_fnr": 0.12,
                                     "k_oracle_threshold": 0.55,
-                                    "k_oracle_cost": 0.2,
-                                    "cut_regret": regret,
+                                    "k_oracle_cost": 0.2 * scale,
+                                    "cut_regret": regret * scale,
                                     "admitted_frac": n_adm / N_TEST,
                                     "n_admitted": n_adm,
                                     "n_test": N_TEST,
@@ -221,6 +238,13 @@ def main() -> int:  # noqa: C901 - a linear list of planted-answer assertions
         harmed = reg[(reg["arm"] == _arm("rate")) & (reg["ci_lo"] > analyze_cutincl.HARM_TOLERANCE)]
         assert not harmed.empty, "the planted +0.03 harm at k>0 was not detected as material"
         assert set(harmed["inclusion_k"]) == {k for k in KS if k > 0}, harmed.to_dict("records")
+
+        # ...and the reported difference IS the rate-scale one: the same rows in
+        # raw cost units are 2**|k| times bigger, which is the whole reason the
+        # analyzer rescales before pooling or gating.
+        r4 = reg[(reg["arm"] == _arm("rate")) & (reg["inclusion_k"] == 4)]
+        ratio = (r4["d_regret_cost"] / r4["d_regret"]).abs()
+        assert ((ratio - 16.0).abs() < 0.5).all(), r4.to_dict("records")
 
         # --- (b) knob liveness ---------------------------------------------
         live = pd.read_csv(results / "agg" / "cutincl_liveness.csv").set_index(["arm", "env"])

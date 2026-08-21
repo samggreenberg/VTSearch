@@ -934,8 +934,19 @@ FOLD_ANCHOR_WEIGHT = 0.3
 #: At inclusion 0 the shift is identically zero, so the threshold is
 #: bit-for-bit the measured ``κ=0.3, mid`` arm; away from 0 it inherits
 #: ``rate``'s monotone tilt without inheriting ``rate``'s weight-biased
-#: *location*.  The tilt itself is still unmeasured - issue #2865's inclusion
-#: sweep is what prices it.
+#: *location*.
+#:
+#: **The tilt is measured** (issue #2865, 336 cells over four environments and
+#: thirteen stops of the knob, on the shipped head; see
+#: ``docs/experiments/inclusion-cut-rule/REPORT.md``).  It held: no candidate
+#: both delivered more of the knob and stayed within the pre-registered 0.01
+#: regret tolerance at every stop.  Two numbers worth keeping here - the ``mid``
+#: cut this replaced admitted **one** set for the whole slider in every one of
+#: 65,671 measured cell-steps and cost up to +0.18 regret away from inclusion 0;
+#: and because ``mid_tilt`` differs from ``rate`` by the *constant*
+#: ``q_mid - q_rate(0)`` in fold-quantile space, that sweep re-priced the
+#: inclusion-0 choice under thirteen cost weightings and ``mid``'s location
+#: survived all of them.
 FOLD_ANCHOR_CUT_RULE = "mid_tilt"
 
 #: Production fold-combine rule: mean of the per-fold quantiles.  With the
@@ -952,11 +963,14 @@ FOLD_ANCHOR_COMBINE = "qmean"
 #: the simplest rule that cannot be inclusion-blind - and its price is this free
 #: parameter, which has no principled value and must be *fitted*.
 #:
-#: **This default is a placeholder, not a measurement.**  0.02 means "one
-#: inclusion step moves the cut by two percentage points of the haystack", which
-#: is the right order of magnitude for the shipped ``mid_tilt`` rule's own
-#: realised tilt but is otherwise arbitrary.  #2865's sweep varies it; nothing
-#: should ship at this value on the strength of it being written down here.
+#: **The step size has now been swept, and the rule lost at every value of it**
+#: (issue #2865: {0.005, 0.01, 0.02, 0.04, 0.08} x four environments; see
+#: ``docs/experiments/inclusion-cut-rule/REPORT.md``).  Small steps keep the
+#: knob and cannot move far enough at large ``|k|``; large steps run the
+#: quantile past 1.0 and admit nothing at the ends.  There is no value at which
+#: ``q_tilt`` is not worse than the shipped ``mid_tilt``, so 0.02 remains what
+#: it always was - an arbitrary constant on an arm that exists to be beaten -
+#: and nothing should ship at it.
 FOLD_ANCHOR_QTILT_STEP = 0.02
 
 

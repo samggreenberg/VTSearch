@@ -72,6 +72,8 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-08-21 | [a launcher pinned a head that stopped being production](lessons/2026-08-21-a-launcher-pinned-a-head-that-stopped.md) | #2865 |
+| 2026-08-21 | [a pooled number over an axis that rescales the metric is that axis's endpoints](lessons/2026-08-21-a-pooled-number-over-an-axis-that-rescales.md) | #2865 |
 | 2026-08-20 | [the rebuild fixed one axis and silently moved another](lessons/2026-08-20-the-rebuild-reproduced-the-pin-and-moved-the-card.md) | #3160 |
 | 2026-08-19 | [a chain job freezes its analyze wrap when the CHAIN fires](lessons/2026-08-19-a-chain-job-freezes-its-analyze-wrap.md) | #2808 |
 | 2026-08-19 | [a figure script's private loader read 34x the analyzer's rows](lessons/2026-08-19-a-private-loader-in-a-figure-script.md) | #2808 |

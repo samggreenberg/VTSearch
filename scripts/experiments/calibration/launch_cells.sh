@@ -41,8 +41,14 @@ echo "cells array: $B"
 # Which analyzer runs after the cells: the #2781 study's analyze.py (default)
 # or the #2799 safe-threshold study's analyze_safe.py (set by launch_safe.sh).
 ANALYZE="${CALIB_ANALYZE:-analyze.py}"
-A=$(sbatch --parsable --dependency=afterany:$B --job-name=cal-analyze --mem=16G \
-  --cpus-per-task=4 --time=0:40:00 --partition=cpu \
+# Size the analysis step from the frame it will read, not from a default: a
+# study that emits a per-(step, arm, k) side frame hands its analyzer tens of
+# millions of rows, and the 16G/40min default is where such a run dies - after
+# the cells have already been paid for.
+AMEM="${CALIB_ANALYZE_MEM:-16G}"
+ATIME="${CALIB_ANALYZE_TIME:-0:40:00}"
+A=$(sbatch --parsable --dependency=afterany:$B --job-name=cal-analyze --mem="$AMEM" \
+  --cpus-per-task=4 --time="$ATIME" --partition=cpu \
   --export=ALL --output="$LOGS/analyze-%j.out" \
   --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python $ANALYZE")
 echo "analyze: $A"
