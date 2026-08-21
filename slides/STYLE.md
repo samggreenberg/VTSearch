@@ -131,3 +131,25 @@ in the evidence, not in the reveal.
 An outline lives in its own fragment (`fragments/outline-<deck>.md`) so a deck
 that re-tailors the argument gets its own, rather than inheriting a list that
 no longer describes it.
+
+<!-- item-sep -->
+
+## Builds: design the final slide, then chop
+
+A mechanism slide that the room should watch assemble is a **build** — a
+series of pages sharing one page number (see `slides/README.md` for the
+markers). Two rules keep a build honest:
+
+- **The final page is the slide.** Design it complete, as if there were no
+  build; every earlier page is that slide with later steps *removed*, never a
+  different layout. Nothing may move, resize, or restyle between pages — a
+  reveal adds ink, and that is all it does. (For generated figures,
+  `slide_figure.tight_box` pins every stage to the final stage's crop for
+  exactly this reason.)
+- **Chop at the mechanism's own joints.** One reveal per step the speaker
+  narrates, not per bullet and not per sentence. A build that advances on
+  every line is a slow way to read a list; a build that reveals "and now the
+  models swap halves" is a mechanism teaching itself.
+
+The speaker build always shows the one complete page — a speaker glancing at
+notes needs the whole picture, not whichever stage the audience is on.

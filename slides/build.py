@@ -4,7 +4,14 @@
 A manifest names slides in order; this script concatenates them with `---`
 separators, prepends Marp front matter, and preflights everything that would
 otherwise fail late (missing fragment, missing figure, a stray `---` inside a
-fragment that would silently split one slide into two).
+fragment that would silently split one slide into two, a build marker naming a
+missing stage figure).
+
+A fragment may carry `<!-- build -->` / `<!-- build: figs/x.png -->` markers:
+progressive-reveal chop points. The audience build expands each marker into an
+earlier stage of the slide (the content above the marker, the figure swapped
+when the marker names one), all sharing one page number; the speaker build
+keeps one page per fragment — the final stage. See slides/README.md.
 
     ./build.py scale26-review        # -> _build/scale26-review.md
     ./build.py --speaker scale26-review  # -> _build/scale26-review.speaker.md
@@ -37,6 +44,18 @@ BUILD = ROOT / "_build"
 
 # ![alt](path)  — captures the path, ignoring any "title" suffix.
 IMAGE_RE = re.compile(r"!\[[^\]]*\]\(\s*([^)\s]+)")
+# A build marker, alone on its line: `<!-- build -->` repeats the slide in the
+# audience deck with only the content above the marker; `<!-- build: figs/x.png -->`
+# additionally swaps the slide's (first) figure for that stage's figure. The
+# speaker build ignores markers and keeps one page per fragment.
+BUILD_RE = re.compile(r"^\s*<!--\s*build(?:\s*:\s*(\S+))?\s*-->\s*$")
+# The same marker as a comment body, so notes extraction can skip it.
+BUILD_BODY_RE = re.compile(r"\s*build(?:\s*:\s*\S+)?\s*")
+# Injected on every slide of a build group after the first, so the whole
+# progression shares one page number (Marpit's `paginate: hold`).
+HOLD = "<!-- _paginate: hold -->"
+# A fragment's own per-slide class directive, merged into the injected one.
+CLASS_RE = re.compile(r"<!--\s*_class:\s*(.+?)\s*-->")
 # A line that is exactly a Marp slide separator.
 RULE_RE = re.compile(r"^-{3,}\s*$")
 # An HTML comment, possibly spanning lines.
@@ -130,7 +149,7 @@ def fragment_notes(text: str) -> list[str]:
     notes: list[str] = []
     for match in COMMENT_RE.finditer(text):
         body = match.group(1)
-        if is_directive_comment(body):
+        if is_directive_comment(body) or BUILD_BODY_RE.fullmatch(body):
             continue
         # Reflow: Marp renders single newlines as hard breaks, so joining the
         # comment's wrapped lines with "\n" would keep its ragged wrapping.
@@ -142,6 +161,60 @@ def fragment_notes(text: str) -> list[str]:
         if cleaned:
             notes.append(cleaned)
     return notes
+
+
+def strip_notes(text: str) -> str:
+    """Remove presenter-note comments, keeping directive comments."""
+
+    def drop(match: re.Match[str]) -> str:
+        return match.group(0) if is_directive_comment(match.group(1)) else ""
+
+    return COMMENT_RE.sub(drop, text)
+
+
+def swap_figure(body: str, figure: str) -> str:
+    """Repoint the first image in *body* at *figure* (a slides/-relative path)."""
+    match = IMAGE_RE.search(body)
+    if not match:
+        return body  # check_fragment already reported the missing image
+    return body[: match.start()] + match.group(0).replace(match.group(1), figure) + body[match.end() :]
+
+
+def expand_builds(text: str) -> list[str]:
+    """Expand a fragment's build markers into its audience slide sequence.
+
+    The fragment is authored as the *final* slide; each `<!-- build -->` marker
+    chops an earlier reveal out of it: a slide holding only the content above
+    the marker, with the figure swapped when the marker names one, and with
+    presenter notes stripped (they belong to the final slide alone). The final
+    slide — the full fragment, markers removed — comes last. Every slide after
+    the first holds the page number, so the whole progression reads as one
+    slide to the audience, and every slide (the final one included) gets the
+    theme's top-anchoring `build` class, so a reveal adds ink below what is
+    already on screen instead of re-centring the column between pages. A
+    fragment with no markers returns itself.
+    """
+    lines = text.splitlines()
+    markers = [(i, m.group(1)) for i, m in ((i, BUILD_RE.match(line)) for i, line in enumerate(lines)) if m]
+    if not markers:
+        return [text]
+
+    # Appended last so it wins over any `_class` the fragment sets itself,
+    # which is why it must also carry those classes forward.
+    fragment_class = CLASS_RE.search(text)
+    build_class = f"<!-- _class: {fragment_class.group(1)} build -->" if fragment_class else "<!-- _class: build -->"
+
+    slides: list[str] = []
+    for count, (cut, figure) in enumerate(markers):
+        kept = [line for line in lines[:cut] if not BUILD_RE.match(line)]
+        body = strip_notes("\n".join(kept)).strip("\n")
+        if figure:
+            body = swap_figure(body, figure)
+        prefix = f"{HOLD}\n\n" if count else ""
+        slides.append(f"{prefix}{body}\n\n{build_class}")
+    final = "\n".join(line for line in lines if not BUILD_RE.match(line)).strip("\n")
+    slides.append(f"{HOLD}\n\n{final}\n\n{build_class}")
+    return slides
 
 
 def speaker_page(deck: str, index: int, text: str) -> str:
@@ -163,6 +236,30 @@ def speaker_page(deck: str, index: int, text: str) -> str:
     )
 
 
+def check_build_markers(name: str, text: str, problems: list[str]) -> None:
+    """Preflight a fragment's build markers: syntax, stage figures, swappability."""
+    saw_image = False
+    for lineno, line in enumerate(text.splitlines(), 1):
+        saw_image = saw_image or bool(IMAGE_RE.search(line))
+        marker = BUILD_RE.match(line)
+        if marker is None:
+            if line.strip().startswith("<!-- build"):
+                problems.append(
+                    f"fragments/{name}.md:{lineno}: malformed build marker — expected "
+                    f"`<!-- build -->` or `<!-- build: figs/x.png -->` alone on its line"
+                )
+            continue
+        figure = marker.group(1)
+        if figure is None:
+            continue
+        if not (ROOT / figure).exists():
+            problems.append(f"fragments/{name}.md:{lineno}: build figure not found: {figure}")
+        if not saw_image:
+            problems.append(
+                f"fragments/{name}.md:{lineno}: build marker names a figure, but no image appears above it to swap"
+            )
+
+
 def check_fragment(name: str, text: str, problems: list[str]) -> None:
     for lineno, line in enumerate(text.splitlines(), 1):
         if RULE_RE.match(line):
@@ -170,6 +267,7 @@ def check_fragment(name: str, text: str, problems: list[str]) -> None:
                 f"fragments/{name}.md:{lineno}: bare `---` splits this fragment into two "
                 f"slides; use `***` for a horizontal rule"
             )
+    check_build_markers(name, text, problems)
     for match in IMAGE_RE.finditer(text):
         target = match.group(1)
         if target.startswith(("http://", "https://", "data:")):
@@ -191,21 +289,29 @@ def assemble(deck: str, write: bool, speaker: bool = False) -> list[str]:
     front, names = parse_manifest(manifest)
     problems: list[str] = []
     bodies: list[str] = []
+    page = 0  # audience-deck page count, builds included
 
-    for index, name in enumerate(names, 1):
+    for name in names:
         fragment = SLIDES / f"{name}.md"
         if not fragment.exists():
             problems.append(f"{deck}.deck: missing fragment: fragments/{name}.md")
             continue
         text = fragment.read_text().strip("\n")
         check_fragment(name, text, problems)
-        if speaker and write and not (BUILD / "imgs" / f"{deck}.{index:03d}.png").exists():
+        stages = expand_builds(text)
+        page += len(stages)
+        if not speaker:
+            bodies.extend(stages)
+            continue
+        # One speaker page per fragment; the miniature is the *final* stage of
+        # the audience build, which is the page the fragment's notes narrate.
+        if write and not (BUILD / "imgs" / f"{deck}.{page:03d}.png").exists():
             problems.append(
-                f"{deck}.deck: missing slide image _build/imgs/{deck}.{index:03d}.png — "
+                f"{deck}.deck: missing slide image _build/imgs/{deck}.{page:03d}.png — "
                 f"the speaker build needs the audience deck rendered to per-slide PNGs "
                 f"first; use `./render.sh {deck} pdf --speaker`, which does both"
             )
-        bodies.append(speaker_page(deck, index, text) if speaker else text)
+        bodies.append(speaker_page(deck, page, text))
 
     if problems or not write:
         return problems
@@ -221,18 +327,25 @@ def assemble(deck: str, write: bool, speaker: bool = False) -> list[str]:
 
     # Verify against the emitted file, not the sources: the paths that matter
     # are the ones Marp will resolve, from _build/.
-    for match in IMAGE_RE.finditer(body):
-        target = match.group(1)
-        if target.startswith(("http://", "https://", "data:")):
-            continue
-        if not (BUILD / target).exists():
-            problems.append(f"{deck}.deck: unresolvable from _build/: {target}")
+    problems += [f"{deck}.deck: unresolvable from _build/: {target}" for target in unresolvable_images(body)]
     if problems:
         out.unlink()
         return problems
 
     print(f"built {out.relative_to(ROOT)}  ({len(bodies)} slides)")
     return []
+
+
+def unresolvable_images(body: str) -> list[str]:
+    """Local image paths in an assembled deck body that don't resolve from _build/."""
+    missing: list[str] = []
+    for match in IMAGE_RE.finditer(body):
+        target = match.group(1)
+        if target.startswith(("http://", "https://", "data:")):
+            continue
+        if not (BUILD / target).exists():
+            missing.append(target)
+    return missing
 
 
 def all_decks() -> list[str]:
@@ -248,7 +361,12 @@ def cmd_list() -> None:
             print(f"  {deck:<24} !! {exc}")
             continue
         used.update(names)
-        print(f"  {deck:<24} {len(names):>2} slides")
+        pages = 0
+        for name in names:
+            fragment = SLIDES / f"{name}.md"
+            pages += len(expand_builds(fragment.read_text().strip("\n"))) if fragment.exists() else 1
+        builds = f"  ({pages} pages with builds)" if pages != len(names) else ""
+        print(f"  {deck:<24} {len(names):>2} slides{builds}")
 
     orphans = sorted(p.stem for p in SLIDES.glob("*.md") if p.stem not in used)
     if orphans:

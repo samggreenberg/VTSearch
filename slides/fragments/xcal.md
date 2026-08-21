@@ -4,11 +4,30 @@
 
 ## Cross-calibration
 
+<!-- build: figs/calib-xcal-flow.build1.png -->
+
 - Split the votes in half; train a model on each half
+
+<!-- build: figs/calib-xcal-flow.build2.png -->
+
+<!-- build: figs/calib-xcal-flow.build3.png -->
+
 - Each model scores the half it **never saw** — honest scores
+
+<!-- build: figs/calib-xcal-flow.build4.png -->
+
 - Cut each half; **average** the two cuts
 
-<!-- This is the pre-history of the line, the textbook answer everything else
+<!-- build: figs/calib-xcal-flow.build5.png -->
+
+<!-- build: figs/calib-xcal-flow.build6.png -->
+
+<!-- In the audience deck this slide is a seven-page build (one page number):
+     the figure assembles top to bottom, one mechanism step per advance, and
+     this page — the complete picture — is where it lands. Keep advancing
+     through the reveals as you narrate the steps below.
+
+     This is the pre-history of the line, the textbook answer everything else
      is measured against. Walk the mechanism off the figure, top to bottom:
      the model you keep, M0, trains on every vote — but its scores on its own
      training votes are optimistically shifted, so you cannot cut on them

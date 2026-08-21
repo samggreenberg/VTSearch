@@ -65,15 +65,44 @@ def enforce_type_floor(fig: plt.Figure, column: float = SIDEBAR) -> None:
         )
 
 
-def save(fig: plt.Figure, out: Path, name: str, column: float = SIDEBAR, *, tight: bool = True) -> None:
+def tight_box(fig: plt.Figure) -> matplotlib.transforms.Bbox:
+    """The crop box (in inches) that `save`'s default tight crop would use.
+
+    A figure drawn in stages for a slide build must save every stage with the
+    *final* stage's box, not its own: cropping each stage to its own ink would
+    reframe the drawing between build slides, and the mechanism would jump
+    around the slot instead of assembling in place.
+    """
+    fig.canvas.draw()
+    return fig.get_tightbbox(fig.canvas.get_renderer()).padded(0.14)
+
+
+def save(
+    fig: plt.Figure,
+    out: Path,
+    name: str,
+    column: float = SIDEBAR,
+    *,
+    tight: bool = True,
+    box: matplotlib.transforms.Bbox | None = None,
+) -> None:
     """Write `fig`, refusing it if any label would miss the type floor.
 
     `tight=False` keeps the figure's declared bounds instead of cropping to the
     ink. That matters for a full-bleed slide, where the slide's own headline is
     overlaid on the top of the image: the reserved whitespace it needs is empty
     by definition, and a tight bbox would helpfully remove it.
+
+    `box` crops to an explicit box (inches) instead — pass `tight_box(final)`
+    when saving the stages of a build figure, so every stage shares the final
+    stage's framing.
     """
     enforce_type_floor(fig, column)
-    fig.savefig(out / name, **({"bbox_inches": "tight", "pad_inches": 0.14} if tight else {}))
+    if box is not None:
+        fig.savefig(out / name, bbox_inches=box)
+    elif tight:
+        fig.savefig(out / name, bbox_inches="tight", pad_inches=0.14)
+    else:
+        fig.savefig(out / name)
     plt.close(fig)
     print(f"wrote figs/{name}")
