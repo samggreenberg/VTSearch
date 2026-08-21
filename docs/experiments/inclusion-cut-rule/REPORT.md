@@ -28,8 +28,9 @@ because both scored every arm at inclusion 0:
   already decided in `mid`'s favour — reproduced here on a different detector
   head and a different environment.
 - **Candidate 3 is dead and candidate 2-as-written is a lead, not a rule.**
-  `q_tilt` is worse than the incumbent at every step size in every environment,
-  and buys knob only by giving up accuracy. `cross_tilt` is genuinely *better*
+  `q_tilt` is worse than the incumbent — averaged across the knob — at every one
+  of the five step sizes in every environment, and buys knob only by giving up
+  accuracy. `cross_tilt` is genuinely *better*
   below inclusion 0 (down to **−0.034±0.005**) and genuinely worse above it (up
   to **+0.073±0.012**) — an asymmetry worth a follow-up, not a rule to ship.
 
@@ -334,7 +335,9 @@ fits it rather than assuming the shipped placeholder.
 *Left: what each step buys or spends against the incumbent, pooled over k.
 Right: how much of the slider it delivers. Every curve on the left is above
 zero, in every environment, at every step — there is no value of the free
-parameter at which candidate 3 is not worse than the rule already shipped — and
+parameter at which candidate 3 is not, on balance across the knob, worse than the
+rule already shipped (it does win at scattered individual stops; see the per-k
+tables) — and
 the knob it delivers falls monotonically as the step grows. Small steps keep the
 knob and lose on regret because they cannot move far enough at large |k|; large
 steps lose the knob to saturation.*
