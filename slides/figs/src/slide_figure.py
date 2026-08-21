@@ -18,6 +18,10 @@ So every generator here works to two rules:
 
 Both rules are about the *rendered* size, which is why neither can be checked
 by looking at the PNG on its own.
+
+A third rule applies to schematics rather than plots, and is about *spacing*
+rather than size: `LABEL_GAP_PT` and `OBJECT_GAP_PT` below. See
+`slides/STYLE.md` for what they mean and why the ratio between them matters.
 """
 
 from __future__ import annotations
@@ -31,12 +35,26 @@ import matplotlib.pyplot as plt
 SLIDE_PX = 1280
 #: `![bg right:56% fit]`, the standard sidebar slot in slides/fragments/.
 SIDEBAR = 0.56
+#: `![bg right:70% fit]`, for a slide the figure is meant to carry.
+SIDEBAR_WIDE = 0.70
 #: `![bg fit]` on a `_class: full` slide.
 FULL_BLEED = 1.0
 #: Body copy on a slide is 28px and the page number — the smallest thing the
 #: theme draws — is 20px. Nothing inside a figure has more right to be small
 #: than the page number.
 TYPE_FLOOR_PX = 20.0
+
+#: Spacing standard for schematic figures, in printed points. A label must sit
+#: *closer* to the thing it names than that thing sits to its neighbours, or
+#: the eye binds it to whichever object happens to be nearest. `LABEL_GAP_PT`
+#: is the gap from a label to what it labels; `OBJECT_GAP_PT` is the gap
+#: between two distinct objects — a box and the arrow leaving it, an arrowhead
+#: and what it points at. Only the ratio really matters, and it wants to be
+#: large: at 1:1 (which is what "eyeball it" produces) the pairing is a
+#: coin-flip. Convert to a figure's own drawing units by dividing by the
+#: points-per-unit that figure is drawn at.
+LABEL_GAP_PT = 6.0
+OBJECT_GAP_PT = 16.0
 
 INK = "#14181f"
 SOFT = "#5b6472"
