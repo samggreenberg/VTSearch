@@ -47,6 +47,20 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A demo download that can't reach its host now says so in a sentence, and
+  tries harder before giving up.** Loading the Apollo 11 Mission Audio demo
+  while archive.org was refusing connections failed with a hundred-line
+  `MaxRetryError` traceback pasted into the Dataset-load-failed box, after
+  six identical 10-second connection attempts — and the progress bar said
+  "resuming" a file that had never downloaded a single byte. The failure now
+  reads *"Couldn't reach archive.org: the connection timed out before the
+  server answered, on all 6 attempts. The site may be down or blocked by your
+  network/proxy…"*, the connect budget escalates across retries (10 s → 30 s)
+  so a host that is merely slow to accept isn't written off six times over,
+  the retry notice says "retrying" until there are bytes to resume, and the
+  track-list fetch that precedes the download gets the same retry budget
+  instead of dying on a single unlucky handshake. (#3216)
+
 - **CLI autodetect no longer reports every media as a hit, and no longer
   disagrees with the GUI's Find.** A run against a dataset and detector that
   the GUI cut at ~0.475 came back with a threshold of `-0.375` and a positive
