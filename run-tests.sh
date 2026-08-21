@@ -303,12 +303,17 @@ fi
 # restored in #3206); one reached `main`. Linting the wrong tree cleanly is
 # not information, so this asks *whether it is the right tree* first.
 #
-# Compares against the working tree rather than HEAD: the deletions exist
-# before they are committed, which is often when tests run. Pure git, ~40ms.
-# See scripts/check-phantom-base.py for the signal and its false-positive rate.
+# Compares against the working tree rather than HEAD: the damage exists
+# before it is committed, which is often when tests run. Pure git, ~200ms.
+#
+# Two signals, because deletions are only the visible half: whole paths that
+# vanished, and runs of consecutive commits the branch keeps nothing of (a
+# clobber whose reverted hunks sit inside files that survive deletes nothing
+# at all). See scripts/check-phantom-base.py for both and their measured
+# false-positive rates.
 echo "Checking for a stale tree..."
 if ! python scripts/check-phantom-base.py ; then
-    _blocked "branch deletes files it never created (stale tree)"
+    _blocked "branch reverts work it never touched (stale tree)"
     exit 1
 fi
 
