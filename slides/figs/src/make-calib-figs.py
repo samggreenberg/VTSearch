@@ -69,15 +69,16 @@ def gaussian(x: np.ndarray, mu: float, var: float) -> np.ndarray:
 
 
 def xcal_flow_fig() -> None:
-    """Schematic of cross-calibration (issue #3207), drawn to match the code.
+    """Schematic of the original cross-calibration idea (issue #3207).
 
-    Deliberate divergences from the hand mockup the issue attached, because the
-    mockup drew a different algorithm than `calculate_cross_calibration_threshold`:
-    the rounds are independent stratified *re-draws* of the whole labelset (not
-    a partition into halves), and there are no per-fold thresholds to average —
-    the held-out scores are pooled and one conformal quantile is cut
-    (`threshold_from_fold_orderings`). Green = Good, red = Bad, everything else
-    ink-on-white per the issue.
+    Follows the issue's hand mockup: this is the *iteration-1* slide, so it
+    draws the simple initial version — partition the labelled data in half,
+    train a model per half, score the half each model never saw, find a cut
+    per half, and average the two cuts. The refinements the shipped code adds
+    on top (pooled folds, the conformal quantile, re-drawn splits) are later
+    iterations of the deck's story and deliberately absent here. Green = Good
+    media, red = Bad media (amorphous regions, as in the mockup); everything
+    else ink on white.
     """
     from matplotlib.patches import FancyArrowPatch, Rectangle  # noqa: PLC0415
 
@@ -86,36 +87,22 @@ def xcal_flow_fig() -> None:
     ax.set_ylim(0, 10)
     ax.set_axis_off()
 
-    # One square per labelled vote; True = Good (green), False = Bad (rust).
-    votes = [True, False, False, True, False, True, False, False, True, False]
-    sq, gap = 0.34, 0.075
+    def data_block(x0: float, y0: float, w: float, h: float) -> None:
+        """A block of labelled media: an amorphous green (Good) region over a red (Bad) one."""
+        good_h = 0.42 * h
+        ax.add_patch(
+            Rectangle((x0, y0 + h - good_h), w, good_h, facecolor="white", edgecolor=GREEN, hatch="//////", linewidth=0, zorder=2)
+        )
+        ax.add_patch(
+            Rectangle((x0, y0), w, h - good_h, facecolor="white", edgecolor=RUST, hatch="\\\\\\", linewidth=0, zorder=2)
+        )
+        ax.add_patch(Rectangle((x0, y0), w, h, facecolor="none", edgecolor=INK, linewidth=1.6, zorder=3))
+        ax.plot([x0, x0 + w], [y0 + h - good_h] * 2, color=INK, linewidth=1.0, zorder=3)
 
-    def vote_row(x0: float, y0: float, labels: list[bool]) -> float:
-        for i, good in enumerate(labels):
-            ax.add_patch(
-                Rectangle(
-                    (x0 + i * (sq + gap), y0),
-                    sq,
-                    sq,
-                    facecolor=GREEN if good else RUST,
-                    edgecolor=INK,
-                    linewidth=1.0,
-                    zorder=3,
-                )
-            )
-        return x0 + len(labels) * (sq + gap) - gap
-
-    def arrow(xy_from: tuple[float, float], xy_to: tuple[float, float], rad: float = 0.0) -> None:
+    def arrow(xy_from: tuple[float, float], xy_to: tuple[float, float]) -> None:
         ax.add_patch(
             FancyArrowPatch(
-                xy_from,
-                xy_to,
-                arrowstyle="-|>",
-                mutation_scale=14,
-                color=INK,
-                linewidth=1.6,
-                connectionstyle=f"arc3,rad={rad}",
-                zorder=2,
+                xy_from, xy_to, arrowstyle="-|>", mutation_scale=14, color=INK, linewidth=1.6, zorder=2
             )
         )
 
@@ -126,63 +113,49 @@ def xcal_flow_fig() -> None:
         )
         ax.text(cx, cy, label, ha="center", va="center", fontsize=16, color=INK, zorder=4)
 
-    # ── the model you keep: train M0 on every vote ────────────────────────────
-    ax.text(0.5, 9.6, "D₀ — the labelled votes", ha="left", va="bottom", fontsize=15, color=INK)
-    xa_end = vote_row(0.5, 9.0, votes)
-    arrow((xa_end + 0.15, 9.17), (5.55, 9.17))
-    ax.text(4.95, 8.85, "train on all of D₀", ha="center", va="top", fontsize=15, color=INK)
-    model_box(6.05, 9.17, "M₀")
-    ax.text(6.6, 9.17, "the model you keep", ha="left", va="center", fontsize=15, color=SOFT)
+    def score_line(cx: float, theta_label: str) -> None:
+        """Held-out scores on a number line: Bad low, Good high, a cut between."""
+        y = 3.55
+        ax.plot([cx - 1.7, cx + 1.7], [y, y], color=INK, linewidth=1.8, zorder=2)
+        for x in (-1.4, -0.95, -0.5, -0.1):
+            ax.text(cx + x, y - 0.12, "✗", ha="center", va="top", fontsize=16, color=RUST, fontweight="bold")
+        for x in (0.45, 0.95, 1.4):
+            ax.text(cx + x, y + 0.08, "✓", ha="center", va="bottom", fontsize=16, color=GREEN, fontweight="bold")
+        ax.plot([cx + 0.18] * 2, [y - 0.32, y], color=INK, linewidth=2.2, zorder=3)
+        ax.text(cx + 0.18, y - 0.44, theta_label, ha="center", va="top", fontsize=16, color=INK)
 
-    # ── K independent stratified re-splits ────────────────────────────────────
-    ax.text(
-        0.5, 8.1, "K independent stratified re-splits  (shipped: K = 2)", fontsize=15.5, color=INK, fontweight="bold"
-    )
-    ax.text(0.5, 7.73, "re-drawn each round, not a partition —", fontsize=15, color=SOFT)
-    ax.text(0.5, 7.38, "a vote can be held out twice, or never", fontsize=15, color=SOFT)
+    # ── D0 and the model you keep ─────────────────────────────────────────────
+    ax.text(5.0, 9.78, "D₀", ha="center", va="bottom", fontsize=16, color=INK)
+    data_block(3.6, 8.6, 2.8, 1.1)
+    ax.text(3.45, 9.42, "Good", ha="right", va="center", fontsize=15, color=GREEN)
+    ax.text(3.45, 8.88, "Bad", ha="right", va="center", fontsize=15, color=RUST)
+    arrow((6.55, 9.15), (7.5, 9.15))
+    ax.text(6.95, 8.78, "train", ha="center", va="top", fontsize=15, color=INK)
+    model_box(7.95, 9.15, "M₀")
+    ax.text(8.5, 9.15, "the model\nyou keep", ha="left", va="center", fontsize=15, color=SOFT)
 
-    # Round 1 holds out votes {0, 2, 4, 6, 8}; round 2 re-draws {0, 2, 3, 7, 9}.
-    # Both splits are stratified: 2 Good + 3 Bad on each side, every round.
-    holdouts = [[0, 2, 4, 6, 8], [0, 2, 3, 7, 9]]
-    for row, (y0, held) in enumerate(zip((6.6, 5.3), holdouts)):
-        train = [votes[i] for i in range(len(votes)) if i not in held]
-        cal = [votes[i] for i in held]
-        yc = y0 + sq / 2
-        xt_end = vote_row(0.5, y0, train)
-        arrow((xt_end + 0.15, yc), (3.35, yc))
-        ax.text((xt_end + 3.4) / 2, y0 - 0.14, "train", ha="center", va="top", fontsize=15, color=INK)
-        model_box(3.8, yc, f"M{chr(0x2081 + row)}")
-        arrow((4.25, yc), (5.1, yc))
-        ax.text(4.68, y0 - 0.14, "score", ha="center", va="top", fontsize=15, color=INK)
-        xc_end = vote_row(5.25, y0, cal)
-        ax.text(xc_end + 0.2, yc, "held out — never\nseen in training", ha="left", va="center", fontsize=15, color=INK)
-        # Held-out scores drop into the pooled line below; the x positions sit
-        # in the gaps between round 2's squares so the arrows cross nothing.
-        arrow((6.04 + 0.42 * row, y0 - 0.08), (6.04 + 0.42 * row, 3.55))
+    # ── split in half ─────────────────────────────────────────────────────────
+    arrow((4.4, 8.5), (2.85, 7.8))
+    arrow((5.6, 8.5), (7.15, 7.8))
+    ax.text(5.0, 8.12, "split in half", ha="center", va="center", fontsize=15, color=INK)
+    for cx, name, label_x, label_ha in ((2.6, "D₁", 1.4, "right"), (7.4, "D₂", 8.6, "left")):
+        data_block(cx - 1.0, 6.7, 2.0, 1.0)
+        ax.text(label_x, 7.2, name, ha=label_ha, va="center", fontsize=16, color=INK)
+        arrow((cx, 6.6), (cx, 6.05))
+        ax.text(cx - 0.2, 6.32, "train", ha="right", va="center", fontsize=15, color=INK)
+        model_box(cx, 5.7, "M₁" if cx < 5 else "M₂")
 
-    # ── pool the held-out scores; cut one quantile ────────────────────────────
-    ax.text(0.5, 4.45, "pool the held-out scores", fontsize=15.5, color=INK, fontweight="bold")
-    ax.text(0.5, 4.1, "no per-round θ to average", fontsize=15, color=SOFT)
-    line_y = 3.0
-    ax.plot([0.9, 9.1], [line_y, line_y], color=INK, linewidth=1.8, zorder=2)
-    for x in (1.5, 2.2, 2.9, 3.5, 4.05, 4.5):
-        ax.text(x, line_y - 0.14, "✗", ha="center", va="top", fontsize=16, color=RUST, fontweight="bold")
-    for x in (5.4, 6.3, 7.2, 8.1):
-        ax.text(x, line_y + 0.1, "✓", ha="center", va="bottom", fontsize=16, color=GREEN, fontweight="bold")
-    cut_x = 4.95
-    ax.plot([cut_x, cut_x], [line_y - 0.55, line_y + 0.62], color=INK, linewidth=2.6, zorder=4)
-    ax.text(cut_x, 2.2, "θ₀ — one conformal quantile of the pool", ha="center", va="top", fontsize=15.5, color=INK)
-    ax.text(
-        cut_x,
-        1.83,
-        "the Inclusion knob slides the quantile; training never sees it",
-        ha="center",
-        va="top",
-        fontsize=15,
-        color=SOFT,
-    )
+    # ── cross-scoring: each model scores the half it never saw ────────────────
+    arrow((2.9, 5.35), (7.05, 4.55))
+    arrow((7.1, 5.35), (2.95, 4.55))
+    ax.text(2.6, 4.05, "M₂ scores D₁", ha="center", va="bottom", fontsize=15, color=INK)
+    ax.text(7.4, 4.05, "M₁ scores D₂", ha="center", va="bottom", fontsize=15, color=INK)
+    score_line(2.6, "θ₁")
+    score_line(7.4, "θ₂")
 
-    ax.text(5.0, 0.9, "return (M₀, θ₀)", ha="center", va="center", fontsize=18, color=INK, fontweight="bold")
+    # ── average the two cuts ──────────────────────────────────────────────────
+    ax.text(5.0, 2.25, "θ₀ = avg(θ₁, θ₂)", ha="center", va="center", fontsize=16.5, color=INK)
+    ax.text(5.0, 1.4, "return (M₀, θ₀)", ha="center", va="center", fontsize=18, color=INK, fontweight="bold")
 
     save(fig, OUT, "calib-xcal-flow.png")
 
