@@ -111,7 +111,10 @@ class TestFiresOnAClobber:
         assert "my_feature.txt" not in out
 
     def test_names_the_ancestor_the_content_actually_came_from(self, repo: Path):
-        first = _git(repo, "rev-list", "--max-parents=0", "HEAD")
+        root = _git(repo, "rev-list", "--max-parents=0", "HEAD")
+        # Ask git for the abbreviation it would print; %h is 7 chars in a
+        # repo this small and longer in a real one.
+        first = _git(repo, "rev-parse", "--short", root)
         _stale_checkout(repo, ["landed_a.txt", "landed_b.txt"])
         _commit(repo, "my feature")
 
@@ -119,7 +122,7 @@ class TestFiresOnAClobber:
 
         assert code == 1
         # A restore has to start from the real base, so the gate must say which.
-        assert first[:8] in out
+        assert first in out
         assert "2 commits earlier" in out
 
     def test_sees_a_clobber_that_is_not_committed_yet(self, repo: Path):
