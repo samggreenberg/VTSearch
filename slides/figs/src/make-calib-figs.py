@@ -91,7 +91,16 @@ def xcal_flow_fig() -> None:
         """A block of labelled media: an amorphous green (Good) region over a red (Bad) one."""
         good_h = 0.42 * h
         ax.add_patch(
-            Rectangle((x0, y0 + h - good_h), w, good_h, facecolor="white", edgecolor=GREEN, hatch="//////", linewidth=0, zorder=2)
+            Rectangle(
+                (x0, y0 + h - good_h),
+                w,
+                good_h,
+                facecolor="white",
+                edgecolor=GREEN,
+                hatch="//////",
+                linewidth=0,
+                zorder=2,
+            )
         )
         ax.add_patch(
             Rectangle((x0, y0), w, h - good_h, facecolor="white", edgecolor=RUST, hatch="\\\\\\", linewidth=0, zorder=2)
@@ -101,9 +110,7 @@ def xcal_flow_fig() -> None:
 
     def arrow(xy_from: tuple[float, float], xy_to: tuple[float, float]) -> None:
         ax.add_patch(
-            FancyArrowPatch(
-                xy_from, xy_to, arrowstyle="-|>", mutation_scale=14, color=INK, linewidth=1.6, zorder=2
-            )
+            FancyArrowPatch(xy_from, xy_to, arrowstyle="-|>", mutation_scale=14, color=INK, linewidth=1.6, zorder=2)
         )
 
     def model_box(cx: float, cy: float, label: str) -> None:
