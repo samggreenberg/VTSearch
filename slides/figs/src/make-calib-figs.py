@@ -197,8 +197,8 @@ def xcal_flow_fig() -> None:
     ax.text(3.05, 8.95, "Bad", ha="right", va="center", fontsize=15, color=RUST)
     ax.text(4.1, 8.55, "D₁", ha="center", va="top", fontsize=16, color=INK)
     ax.text(5.9, 8.55, "D₂", ha="center", va="top", fontsize=16, color=INK)
-    labeled_arrow((6.9, 9.2), (8.1, 9.2), "train")
-    model_box(8.55, 9.2, "M₀")
+    labeled_arrow((6.9, 9.2), (8.32, 9.2), "train")
+    model_box(8.8, 9.2, "M₀")
 
     # ── train a model per half; score the other half ──────────────────────────
     # The train arrows are vertical; the only diagonals are the scoring paths
