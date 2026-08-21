@@ -6,17 +6,11 @@
 
 <!-- build: figs/calib-xcal-flow.build1.png -->
 
-- Split the votes in half; train a model on each half
-
 <!-- build: figs/calib-xcal-flow.build2.png -->
 
 <!-- build: figs/calib-xcal-flow.build3.png -->
 
-- Each model scores the half it **never saw** — honest scores
-
 <!-- build: figs/calib-xcal-flow.build4.png -->
-
-- Cut each half; **average** the two cuts
 
 <!-- build: figs/calib-xcal-flow.build5.png -->
 
@@ -24,8 +18,9 @@
 
 <!-- In the audience deck this slide is a seven-page build (one page number):
      the figure assembles top to bottom, one mechanism step per advance, and
-     this page — the complete picture — is where it lands. Keep advancing
-     through the reveals as you narrate the steps below.
+     this page — the complete picture — is where it lands. There are no
+     bullets by design; the figure is the slide, and everything below is what
+     you say over it. Keep advancing through the reveals as you narrate.
 
      This is the pre-history of the line, the textbook answer everything else
      is measured against. Walk the mechanism off the figure, top to bottom:
