@@ -12,6 +12,19 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`RemoteUnreachableError` now also covers a retryable HTTP status that
+  outlives the retry budget.** `download_file_with_progress` and
+  `fetch_text_with_retry` used to end a run of 500/502/503/504/429 responses by
+  calling `raise_for_status()`, so the caller got a raw `requests.HTTPError`
+  naming whichever CDN node the redirect landed on. Both now raise
+  `RemoteUnreachableError` with a sentence naming the host and the status.
+  Non-retryable statuses (404 and friends) still raise `HTTPError` unchanged,
+  and gated 401/403 still raise `GatedResourceError`.
+- **A multi-file demo download tolerates individual files the host refuses.**
+  The per-file sets (Apollo 11, the Nixon tapes) set a failed file aside, retry
+  it once after the rest of the set, then skip it with a `notify()` warning,
+  failing the download only when more than a quarter of the set is missing.
+
 - **`LINEAR_SVM_HEAD` is the production detector head**, replacing
   `LINEAR_HEAD`. Both sentinels build the same `Linear(D, 1)`; the new one is
   fitted by `vtscore.training.svm.fit_linear_svm_head` (squared hinge + L2 via
