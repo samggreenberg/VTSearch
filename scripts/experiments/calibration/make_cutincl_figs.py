@@ -319,6 +319,68 @@ def fig_knob_yield(live: pd.DataFrame, n_ks: int, out: Path) -> str:
     return p.name
 
 
+def write_examples(df: pd.DataFrame, incumbent: str, out: Path) -> str:
+    """The literal rows behind the rates: one real slider drag, per environment.
+
+    Every aggregate here is a count of admitted sets, and a reader has to be
+    able to check one.  So for each environment this prints one actual cell at
+    one actual step - the threshold each rule chose at each stop of the knob and
+    how many of the test pool it admitted - with the *most* and *least* live
+    cell of that environment named, since the mean of a bimodal liveness
+    distribution describes no cell at all.
+
+    The cell shown is the one whose incumbent knob yield is the environment's
+    median, so it is representative rather than flattering.
+    """
+    lines = ["# What one slider drag actually did (#2865)", ""]
+    deep = df[df["n_votes"] >= 100]
+    for env in _envs(deep):
+        sub = deep[deep["env"] == env]
+        inc = sub[sub["arm"] == incumbent]
+        # Knob yield per (cell, step) for the incumbent, then the median cell.
+        yield_by_cell = (
+            inc.groupby(["cell", "t"], observed=True)["n_admitted"].nunique().groupby("cell", observed=True).mean()
+        )
+        yield_by_cell = yield_by_cell[yield_by_cell.notna()].sort_values()
+        if yield_by_cell.empty:
+            continue
+        cell = str(yield_by_cell.index[len(yield_by_cell) // 2])
+        worst, best = str(yield_by_cell.index[0]), str(yield_by_cell.index[-1])
+        cs = sub[sub["cell"] == cell]
+        t = int(cs["t"].max())
+        cs = cs[cs["t"] == t]
+        n_test = int(cs["n_test"].iloc[0])
+        lines += [
+            f"## `{env}`",
+            "",
+            f"Cell `{cell}` at step t={t} ({int(cs['n_votes'].iloc[0])} votes, test pool {n_test} items).",
+            "Chosen as the environment's **median** cell by the incumbent's knob yield;",
+            f"the least live cell here is `{worst}` ({yield_by_cell.iloc[0]:.1f} distinct sets)",
+            f"and the most live is `{best}` ({yield_by_cell.iloc[-1]:.1f}).",
+            "",
+            "Each row is one stop of the Inclusion slider; each cell is `threshold -> items admitted`.",
+            "",
+        ]
+        arms = [a for a in sorted(cs["arm"].unique(), key=lambda a: (RULE_ORDER.index(_rule_of(str(a))), str(a)))]
+        header = (
+            "| k | " + " | ".join(str(a).replace("fold_anchored_w0.3_", "").replace("_qmean", "") for a in arms) + " |"
+        )
+        lines += [header, "|" + "---|" * (len(arms) + 1)]
+        for k in sorted(cs["inclusion_k"].unique()):
+            row = [f"| {int(k):+d} "]
+            for a in arms:
+                r = cs[(cs["arm"] == a) & (cs["inclusion_k"] == k)]
+                if r.empty:
+                    row.append("| — ")
+                    continue
+                row.append(f"| {float(r['cut_threshold'].iloc[0]):.3g} → {int(r['n_admitted'].iloc[0])} ")
+            lines.append("".join(row) + "|")
+        lines.append("")
+    p = out / "examples_slider.md"
+    p.write_text("\n".join(lines))
+    return p.name
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Figures for the #2865 cut-rule x inclusion sweep.")
     ap.add_argument("--results", default=None, help="Run's results dir (default: the study env's).")
@@ -352,6 +414,7 @@ def main() -> int:
         fig_per_run(df, 3, [A.incumbent_arm(), "fold_anchored_w0.3_mid_qmean", "fold_anchored_w0.3_rate_qmean"], out),
         fig_qtilt_step(reg, live, out),
         fig_knob_yield(live, n_ks, out),
+        write_examples(df, A.incumbent_arm(), out),
     ]
     for name in made:
         if name:
