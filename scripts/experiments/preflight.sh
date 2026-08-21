@@ -25,6 +25,7 @@ REUSE_PREPARE=""
 JOB_NAME=""
 MEM_PER_TASK=""
 CONC=""
+DIVERGES="${PREFLIGHT_DIVERGES:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -34,6 +35,7 @@ while [[ $# -gt 0 ]]; do
     --require-region-voting) REGION_ARM="$2"; shift 2 ;;
     --reuse-prepare) REUSE_PREPARE="$2"; shift 2 ;;
     --job-name) JOB_NAME="$2"; shift 2 ;;
+    --diverges) DIVERGES="$2"; shift 2 ;;
     --mem) MEM_PER_TASK="$2"; shift 2 ;;
     --conc) CONC="$2"; shift 2 ;;
     --warn-only) WARN_ONLY=1; shift ;;
@@ -45,6 +47,7 @@ done
   echo "                    [--require-region-voting DATASET:EMBEDDER]" >&2
   echo "                    [--reuse-prepare RESULTS_DIR]" >&2
   echo "                    [--job-name NAME] [--mem 64G] [--conc N]" >&2
+  echo "                    [--diverges knob1,knob2]   # knobs this study MEANS to pin off-production" >&2
   exit 2
 }
 
@@ -414,6 +417,106 @@ if [[ -n "$REUSE_PREPARE" ]]; then
       echo "        -> the source study was probably archived; repoint them at the archive's real files"
     else
       say_ok "reused prepare at $REUSE_PREPARE resolves (prepare_info.json + crops)"
+    fi
+  fi
+fi
+
+# --- 12. The knobs this run pins, against what the app actually ships ---------
+# The eval framework only measures something if its *unswept* knobs are the
+# app's.  They drift the other way round from how it feels: the app moves, and a
+# launcher written weeks earlier keeps pinning what used to be production.
+# `launch_incl_2865.sh` pinned `CALIB_HEAD=linear` - correct on 2026-08-12, and
+# by the time it ran PR #3198 had made the linear SVM the shipped head, so the
+# pin would have measured a cut rule on a detector nobody has.  Nothing would
+# have broken: the numbers would have been clean, plausible, and about the wrong
+# thing.
+#
+# So every knob with a *named* shipped constant is compared against it, and a
+# divergence must be **declared** to pass: `--diverges head,anchor_weight`.  That
+# is the whole design - a study is always allowed to pin the axis it sweeps, and
+# is never allowed to pin one silently.
+if [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
+  DIVERGENCE=$(CALIB_EXP="$EXP" python - "$REPO" <<'PYDIV' 2>&1
+import os
+import pathlib
+import sys
+
+repo = sys.argv[1]
+sys.path.insert(0, str(pathlib.Path(repo) / "scripts" / "experiments" / "calibration"))
+import common  # noqa: E402
+
+common.setup_env()
+from vtscore.eval.voting_iterations import PRODUCTION_HEAD, PRODUCTION_PATCH_STYLE  # noqa: E402
+from vtscore.training import thresholds as T  # noqa: E402
+
+
+def env(name):
+    v = os.environ.get(name)
+    return v.strip() if v and v.strip() else None
+
+
+rows = []
+
+
+def pinned(knob, var, shipped):
+    """A scalar knob: unset means the harness resolves it to the shipped value."""
+    v = env(var)
+    if v is not None and v != str(shipped):
+        rows.append((knob, v, str(shipped)))
+
+
+def must_contain(knob, var, shipped, default):
+    """A set-valued knob: the shipped value has to be IN it, or the run has no
+    arm to compare its challengers against."""
+    v = env(var) or default
+    if str(shipped) not in [p.strip() for p in v.split(",")]:
+        rows.append((knob, v, "a set containing " + str(shipped)))
+
+
+pinned("head", "CALIB_HEAD", PRODUCTION_HEAD)
+pinned("acq_offset", "CALIB_ACQ_INCLUSION_OFFSET", T.ACQUISITION_INCLUSION_OFFSET)
+pinned("calibrate_count", "CALIB_CALIBRATE_COUNT", 2)
+
+# The app has no safe-thresholds switch any more (#2799): fusion is always on.
+v = env("CALIB_SAFE_THRESHOLDS")
+if v is not None and v != "1":
+    rows.append(("safe_thresholds", v, "1 (the app has no switch)"))
+
+# An explicit schedule overrides the app's per-mode default (#2841).
+v = env("CALIB_BLEND_SCHEDULE")
+if v is not None:
+    rows.append(("blend_schedule", v, "<unset> = the app's per-mode default"))
+
+must_contain("cut_rule", "CALIB_ANCHORED_RULES", T.FOLD_ANCHOR_CUT_RULE, "mid,rate")
+must_contain("fold_combine", "CALIB_ANCHORED_FOLD_COMBINES", T.FOLD_ANCHOR_COMBINE, "qmean,qmedian")
+must_contain("anchor_weight", "CALIB_ANCHORED_WEIGHTS", "%g" % T.FOLD_ANCHOR_WEIGHT, "1,3,10,30,100")
+must_contain("patch_style", "CALIB_PATCH_STYLES", PRODUCTION_PATCH_STYLE, "max_patch,max_patch_pca_hac")
+
+if not rows:
+    print("MATCHES")
+else:
+    for knob, got, want in rows:
+        print("DIVERGES\t%s\t%s\t%s" % (knob, got, want))
+PYDIV
+)
+  if [[ "$DIVERGENCE" == "MATCHES" ]]; then
+    say_ok "every pinned knob matches the shipped value"
+  elif [[ "$DIVERGENCE" != DIVERGES* ]]; then
+    say_fail "could not compare this run's knobs against production: $DIVERGENCE"
+  else
+    unacked=0
+    while IFS=$'\t' read -r _ knob got want; do
+      [[ -z "$knob" ]] && continue
+      if [[ ",${DIVERGES}," == *",${knob},"* ]]; then
+        say_ok "declared divergence on '$knob' ($got, shipped is $want)"
+      else
+        say_fail "UNDECLARED divergence from production: $knob = $got, shipped is $want"
+        unacked=$((unacked + 1))
+      fi
+    done <<< "$DIVERGENCE"
+    if [[ "$unacked" -gt 0 ]]; then
+      echo "        -> if that is the axis this study sweeps, pass --diverges <knob>[,<knob>]"
+      echo "        -> if it is not, the run would measure a detector nobody ships"
     fi
   fi
 fi

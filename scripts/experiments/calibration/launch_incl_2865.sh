@@ -187,6 +187,9 @@ case "$MODE" in
     # binary (#2877).  Preflight takes one arm at a time, so it runs twice.
     if [[ -x "$WT/scripts/experiments/preflight.sh" ]]; then
       for arm in visual_genome_m:dinov3_patch coco_val:dinov3_patch; do
+        # No `--diverges`: this run pins nothing off-production.  The cut rule
+        # is the axis it sweeps, and the shipped rule is one of the arms, so
+        # even that is not a divergence - it is a comparison.
         bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb 20 \
           --require-region-voting "$arm" \
           --job-name cal-cells --mem "$CALIB_MEM" --conc "$CALIB_CONC" || {

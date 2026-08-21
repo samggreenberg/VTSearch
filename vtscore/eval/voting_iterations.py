@@ -118,6 +118,17 @@ HEADS: tuple[str, ...] = ("mlp", "linear", "linear_svm")
 PRODUCTION_HEAD: str = "linear_svm"
 
 
+#: The detection geometry a live detector uses on a patch dataset - the style an
+#: unspecified ``style=`` resolves to below.  Named rather than inlined so that
+#: "is this run measuring the shipped geometry?" is a question something can
+#: *ask*: `scripts/experiments/preflight.sh` compares a study's configured
+#: styles against it, the way it compares a study's head against
+#: :data:`PRODUCTION_HEAD`.  The HAC hybrids in
+#: :mod:`vtscore.eval.patch_styles` are experiment-only arms; #2886 removed the
+#: region tree from ingest.
+PRODUCTION_PATCH_STYLE: str = "max_patch"
+
+
 def _resolve_hidden_dim(head: str, n_votes: int) -> int:
     """``hidden_dim`` sentinel for *head* at *n_votes* votes.
 
@@ -2730,7 +2741,7 @@ def simulate_voting_iterations(  # noqa: C901
     # historical ``_mlp_train_and_calibrate`` path runs byte-for-byte.  Non-MLP
     # trainers are untouched too - they have no head for a style to drive.
     if style is None and region_aware and trainer == "mlp":
-        style = "max_patch"
+        style = PRODUCTION_PATCH_STYLE
 
     style_obj: Any = None
     if style is not None:
