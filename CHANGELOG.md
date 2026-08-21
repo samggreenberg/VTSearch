@@ -62,6 +62,22 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **One file a host won't serve no longer sinks a whole multi-file demo
+  download.** The Apollo 11 Mission Audio demo pulls its tracks as separate
+  files from the Internet Archive, which serves each one from a data node that
+  can answer HTTP 500 for minutes at a time while its siblings stay healthy.
+  A single such track spent its six retries, then failed the entire dataset
+  load with a raw `500 Server Error` naming a `dn721903.ca.archive.org` URL the
+  user had never asked for. A file the host refuses is now set aside, retried
+  once after the rest of the set (by which point a wobbling node has usually
+  recovered), and otherwise skipped with a note in the progress line — the
+  download only fails when more than a quarter of the set is missing, and a
+  skipped track is fetched the next time the dataset loads. When a server does
+  keep returning 500/502/503/504/429 until the retries run out, that now reads
+  as *"archive.org kept returning an internal server error (HTTP 500) on all 6
+  attempts. That is a problem on the server's side, not yours…"* rather than a
+  raw `HTTPError` ending in a CDN node URL. (#3227)
+
 - **A demo download that can't reach its host now says so in a sentence, and
   tries harder before giving up.** Loading the Apollo 11 Mission Audio demo
   while archive.org was refusing connections failed with a hundred-line

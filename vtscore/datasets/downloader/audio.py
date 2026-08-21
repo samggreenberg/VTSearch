@@ -320,9 +320,9 @@ def _download_files_into(
     """Download ``(url, filename, size)`` *items* into *dest_dir*, skipping cached ones.
 
     Files the remote refuses to serve are set aside and retried once after the
-    rest of the set, then skipped; the download only fails if more than
-    :data:`_MAX_FAILED_FRACTION` of the set ends up missing.  See that constant
-    for why one bad file must not sink the whole download.
+    rest of the set, then skipped with a warning notification; the download only
+    fails if more than :data:`_MAX_FAILED_FRACTION` of the set ends up missing.
+    See that constant for why one bad file must not sink the whole download.
 
     Raises:
         RemoteUnreachableError: If too much of the set could not be fetched.
@@ -360,11 +360,18 @@ def _download_files_into(
             f"which is too much of the dataset to load without. {last_exc}",
             url=still_failed[0][1][0],
         ) from last_exc
-    on_progress(
-        "downloading",
-        f"{dataset_name}: skipped {len(still_failed)} of {total} files the server wouldn't serve",
-        total,
-        total,
+    # A toast, not a progress line: the progress channel holds one current
+    # snapshot and the next load stage overwrites it within the second, so a
+    # skip reported there is a skip the user never sees.
+    from vtscore.concurrency.notifications import notify  # noqa: PLC0415
+
+    names = [item[1] for _i, item in still_failed]
+    listed = ", ".join(names[:5]) + (f" and {len(names) - 5} more" if len(names) > 5 else "")
+    notify(
+        f"{dataset_name}: {len(still_failed)} of {total} files couldn't be downloaded",
+        level="warning",
+        detail=f"The server wouldn't serve {listed}. The rest of the set downloaded and the dataset loaded normally.",
+        source="Dataset download",
     )
 
 

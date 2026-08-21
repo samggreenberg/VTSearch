@@ -322,15 +322,39 @@ class TestPerFileFailureTolerance:
         with pytest.raises(GatedResourceError):
             self._run(tmp_path, [(f"t{i:02d}.mp3", 10) for i in range(8)], _download)
 
-    def test_the_skip_is_reported_not_silent(self, tmp_path):
+    def test_the_skip_toasts_rather_than_passing_silently(self, tmp_path):
+        """A progress line would be overwritten by the next load stage within
+        the second, so the skip has to be a notification to be seen at all."""
+        from vtscore.concurrency import notifications
+
         tracks = [(f"t{i:02d}.mp3", 10) for i in range(8)]
         download, _ = self._downloader({"t02.mp3": 99})
-        reported: list = []
+        seen: list = []
 
-        self._run(tmp_path, tracks, download, on_progress=lambda *a: reported.append(a))
+        notifications.notifications.subscribe(seen.append)
+        try:
+            self._run(tmp_path, tracks, download)
+        finally:
+            notifications.notifications.unsubscribe(seen.append)
 
-        messages = [a[1] for a in reported]
-        assert any("skipped 1 of 8 files" in m for m in messages)
+        assert len(seen) == 1
+        assert seen[0].level == "warning"
+        assert seen[0].message == "Apollo 11 audio: 1 of 8 files couldn't be downloaded"
+        assert "t02.mp3" in (seen[0].detail or "")
+
+    def test_a_clean_download_toasts_nothing(self, tmp_path):
+        from vtscore.concurrency import notifications
+
+        download, _ = self._downloader({})
+        seen: list = []
+
+        notifications.notifications.subscribe(seen.append)
+        try:
+            self._run(tmp_path, [(f"t{i:02d}.mp3", 10) for i in range(4)], download)
+        finally:
+            notifications.notifications.unsubscribe(seen.append)
+
+        assert seen == []
 
 
 # ---------------------------------------------------------------------------
