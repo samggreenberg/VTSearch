@@ -306,8 +306,11 @@ def fig_knob_yield(live: pd.DataFrame, n_ks: int, out: Path) -> str:
         [a.replace("fold_anchored_w0.3_", "").replace("_qmean", "") for a in arms], rotation=30, ha="right", fontsize=8
     )
     ax.set_ylabel("distinct admitted sets across the knob")
+    ax.set_ylim(0, n_ks * 1.12)
     ax.grid(alpha=0.25, axis="y")
-    ax.legend(fontsize=7)
+    # Below the axes, not inside it: every bar here is near the top of the
+    # range, so an in-axes legend covers the arms it is labelling.
+    ax.legend(fontsize=7, loc="upper center", bbox_to_anchor=(0.5, -0.28), ncol=2, frameon=False)
     fig.suptitle(
         f"How many different answers dragging the slider produces, out of {n_ks} stops, averaged over steps and cells.",
         fontsize=10,
