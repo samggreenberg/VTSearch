@@ -14,10 +14,13 @@
      training votes are optimistically shifted, so you cannot cut on them
      directly. So split the votes in half, train a model on each half, and
      have each model score the half it never trained on — honest scores, at
-     the price of training extra models on half the data. On each half the
-     Bad scores pile up low and the Good scores pile up high, so cut in the
-     gap; average the two cuts and hand θ0 to M0. Green is Good media, red is
-     Bad, matching the checks and crosses on the score lines.
+     the price of training extra models on half the data. The two scoring
+     paths cross on the slide — that X is the "cross" in cross-calibration.
+     On each half the Bad scores mostly pile up low and the Good scores high,
+     but not perfectly (note the Bad that lands above θ2), so each cut is a
+     trade-off, not a free gap; average the two cuts and hand θ0 to M0. Green
+     is Good media, red is Bad, matching the checks and crosses on the score
+     lines.
 
      This slide teaches the original, simplest form of the idea; the shipped
      code has since refined it (the halves are pooled into one score set

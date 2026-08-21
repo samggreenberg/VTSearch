@@ -76,9 +76,14 @@ def xcal_flow_fig() -> None:
     train a model per half, score the half each model never saw, find a cut
     per half, and average the two cuts. The refinements the shipped code adds
     on top (pooled folds, the conformal quantile, re-drawn splits) are later
-    iterations of the deck's story and deliberately absent here. Green = Good
-    media, red = Bad media (amorphous regions, as in the mockup); everything
-    else ink on white.
+    iterations of the deck's story and deliberately absent here.
+
+    Two touches carried over from the mockup on purpose: the D₂ → M₁ → M₁(D₂)
+    path is one straight diagonal (and mirrors D₁ → M₂ → M₂(D₁)), so the two
+    scoring paths draw the X of "cross"-calibration; and one held-out ordering
+    is imperfect — a Bad lands above θ₂ — because a fold model's ranking of
+    votes it never saw is not trivially clean. Green = Good media, red = Bad
+    media (amorphous regions); everything else ink on white.
     """
     from matplotlib.patches import FancyArrowPatch, Rectangle  # noqa: PLC0415
 
@@ -103,7 +108,9 @@ def xcal_flow_fig() -> None:
             )
         )
         ax.add_patch(
-            Rectangle((x0, y0), w, h - good_h, facecolor="white", edgecolor=RUST, hatch="\\\\\\", linewidth=0, zorder=2)
+            Rectangle(
+                (x0, y0), w, h - good_h, facecolor="white", edgecolor=RUST, hatch="\\\\\\", linewidth=0, zorder=2
+            )
         )
         ax.add_patch(Rectangle((x0, y0), w, h, facecolor="none", edgecolor=INK, linewidth=1.6, zorder=3))
         ax.plot([x0, x0 + w], [y0 + h - good_h] * 2, color=INK, linewidth=1.0, zorder=3)
@@ -120,49 +127,57 @@ def xcal_flow_fig() -> None:
         )
         ax.text(cx, cy, label, ha="center", va="center", fontsize=16, color=INK, zorder=4)
 
-    def score_line(cx: float, theta_label: str) -> None:
+    def score_line(cx: float, label: str, bad: list[float], good: list[float], theta_x: float, theta: str) -> None:
         """Held-out scores on a number line: Bad low, Good high, a cut between."""
         y = 3.55
         ax.plot([cx - 1.7, cx + 1.7], [y, y], color=INK, linewidth=1.8, zorder=2)
-        for x in (-1.4, -0.95, -0.5, -0.1):
+        ax.text(cx, 4.05, label, ha="center", va="bottom", fontsize=16, color=INK)
+        for x in bad:
             ax.text(cx + x, y - 0.12, "✗", ha="center", va="top", fontsize=16, color=RUST, fontweight="bold")
-        for x in (0.45, 0.95, 1.4):
+        for x in good:
             ax.text(cx + x, y + 0.08, "✓", ha="center", va="bottom", fontsize=16, color=GREEN, fontweight="bold")
-        ax.plot([cx + 0.18] * 2, [y - 0.32, y], color=INK, linewidth=2.2, zorder=3)
-        ax.text(cx + 0.18, y - 0.44, theta_label, ha="center", va="top", fontsize=16, color=INK)
+        ax.plot([cx + theta_x] * 2, [y - 0.32, y], color=INK, linewidth=2.2, zorder=3)
+        ax.text(cx + theta_x, y - 0.44, theta, ha="center", va="top", fontsize=16, color=INK)
 
     # ── D0 and the model you keep ─────────────────────────────────────────────
-    ax.text(5.0, 9.78, "D₀", ha="center", va="bottom", fontsize=16, color=INK)
-    data_block(3.6, 8.6, 2.8, 1.1)
-    ax.text(3.45, 9.42, "Good", ha="right", va="center", fontsize=15, color=GREEN)
-    ax.text(3.45, 8.88, "Bad", ha="right", va="center", fontsize=15, color=RUST)
-    arrow((6.55, 9.15), (7.5, 9.15))
-    ax.text(6.95, 8.78, "train", ha="center", va="top", fontsize=15, color=INK)
-    model_box(7.95, 9.15, "M₀")
-    ax.text(8.5, 9.15, "the model\nyou keep", ha="left", va="center", fontsize=15, color=SOFT)
+    ax.text(5.0, 9.8, "D₀", ha="center", va="bottom", fontsize=16, color=INK)
+    data_block(3.6, 8.75, 2.8, 1.0)
+    ax.text(3.45, 9.5, "Good", ha="right", va="center", fontsize=15, color=GREEN)
+    ax.text(3.45, 9.0, "Bad", ha="right", va="center", fontsize=15, color=RUST)
+    arrow((6.55, 9.25), (7.5, 9.25))
+    ax.text(6.95, 8.92, "train", ha="center", va="top", fontsize=15, color=INK)
+    model_box(7.95, 9.25, "M₀")
+    ax.text(8.5, 9.25, "the model\nyou keep", ha="left", va="center", fontsize=15, color=SOFT)
 
     # ── split in half ─────────────────────────────────────────────────────────
-    arrow((4.4, 8.5), (2.85, 7.8))
-    arrow((5.6, 8.5), (7.15, 7.8))
-    ax.text(5.0, 8.12, "split in half", ha="center", va="center", fontsize=15, color=INK)
-    for cx, name, label_x, label_ha in ((2.6, "D₁", 1.4, "right"), (7.4, "D₂", 8.6, "left")):
-        data_block(cx - 1.0, 6.7, 2.0, 1.0)
-        ax.text(label_x, 7.2, name, ha=label_ha, va="center", fontsize=16, color=INK)
-        arrow((cx, 6.6), (cx, 6.05))
-        ax.text(cx - 0.2, 6.32, "train", ha="right", va="center", fontsize=15, color=INK)
-        model_box(cx, 5.7, "M₁" if cx < 5 else "M₂")
+    arrow((4.5, 8.65), (3.5, 8.15))
+    arrow((5.5, 8.65), (6.5, 8.15))
+    ax.text(5.0, 8.44, "split in half", ha="center", va="center", fontsize=15, color=INK)
+    data_block(2.3, 7.0, 2.0, 1.0)
+    ax.text(2.15, 7.5, "D₁", ha="right", va="center", fontsize=16, color=INK)
+    data_block(5.7, 7.0, 2.0, 1.0)
+    ax.text(7.85, 7.5, "D₂", ha="left", va="center", fontsize=16, color=INK)
 
-    # ── cross-scoring: each model scores the half it never saw ────────────────
-    arrow((2.9, 5.35), (7.05, 4.55))
-    arrow((7.1, 5.35), (2.95, 4.55))
-    ax.text(2.6, 4.05, "M₂ scores D₁", ha="center", va="bottom", fontsize=15, color=INK)
-    ax.text(7.4, 4.05, "M₁ scores D₂", ha="center", va="bottom", fontsize=15, color=INK)
-    score_line(2.6, "θ₁")
-    score_line(7.4, "θ₂")
+    # ── train a model per half; score the other half ──────────────────────────
+    # D₂ → M₁ → M₁(D₂) is one straight diagonal, mirrored by D₁ → M₂ → M₂(D₁):
+    # the two scoring paths draw the X that names cross-calibration.
+    model_box(4.02, 5.55, "M₁")
+    model_box(5.98, 5.55, "M₂")
+    arrow((3.3, 6.95), (3.85, 5.92))
+    ax.text(2.95, 6.42, "train", ha="right", va="center", fontsize=15, color=INK)
+    arrow((6.7, 6.95), (6.15, 5.92))
+    ax.text(7.05, 6.42, "train", ha="left", va="center", fontsize=15, color=INK)
+    arrow((6.2, 6.95), (4.5, 5.9))
+    arrow((3.8, 6.95), (5.5, 5.9))
+    arrow((3.55, 5.22), (2.15, 4.35))
+    arrow((6.45, 5.22), (7.85, 4.35))
 
-    # ── average the two cuts ──────────────────────────────────────────────────
-    ax.text(5.0, 2.25, "θ₀ = avg(θ₁, θ₂)", ha="center", va="center", fontsize=16.5, color=INK)
-    ax.text(5.0, 1.4, "return (M₀, θ₀)", ha="center", va="center", fontsize=18, color=INK, fontweight="bold")
+    # ── per-half held-out scores; cut each, average ───────────────────────────
+    score_line(2.0, "M₁(D₂)", bad=[-1.4, -0.95, -0.5, -0.05], good=[0.5, 0.95, 1.4], theta_x=0.22, theta="θ₁")
+    score_line(8.0, "M₂(D₁)", bad=[-1.4, -1.0, -0.6, 0.3], good=[0.0, 0.7, 1.15], theta_x=-0.3, theta="θ₂")
+
+    ax.text(5.0, 2.4, "θ₀ = avg(θ₁, θ₂)", ha="center", va="center", fontsize=16.5, color=INK)
+    ax.text(5.0, 1.5, "return (M₀, θ₀)", ha="center", va="center", fontsize=18, color=INK, fontweight="bold")
 
     save(fig, OUT, "calib-xcal-flow.png")
 
