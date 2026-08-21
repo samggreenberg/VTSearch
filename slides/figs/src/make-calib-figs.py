@@ -88,7 +88,7 @@ def xcal_flow_fig() -> None:
     Green = Good media, red = Bad media (amorphous regions); everything else
     ink on white.
     """
-    from matplotlib.patches import FancyArrowPatch, Rectangle  # noqa: PLC0415
+    from matplotlib.patches import FancyArrow, FancyArrowPatch, Rectangle  # noqa: PLC0415
 
     fig, ax = plt.subplots(figsize=(7.2, 7.0))
     ax.set_xlim(0, 10)
@@ -123,6 +123,52 @@ def xcal_flow_fig() -> None:
             FancyArrowPatch(xy_from, xy_to, arrowstyle="-|>", mutation_scale=14, color=INK, linewidth=1.6, zorder=2)
         )
 
+    def labeled_arrow(xy_from: tuple[float, float], xy_to: tuple[float, float], label: str, z: float = 2.0) -> None:
+        """An outlined block arrow with an open core, *label* written along the shaft.
+
+        The label sits at the centre of the shaft, both length-wise and
+        width-wise, rotated to the arrow's own angle. 14.5pt is the smallest
+        size the 20px type floor admits in the 56% slot — small enough to sit
+        fully inside the 0.5-unit shaft with clear margins. Where two of these
+        arrows cross, the higher-*z* one's open core simply covers the other's
+        label near the crossing; that is deliberate (issue #3207 review).
+        """
+        (x0, y0), (x1, y1) = xy_from, xy_to
+        dx, dy = x1 - x0, y1 - y0
+        length = float(np.hypot(dx, dy))
+        head_len = 0.32
+        ax.add_patch(
+            FancyArrow(
+                x0,
+                y0,
+                dx,
+                dy,
+                width=0.5,
+                head_width=0.66,
+                head_length=head_len,
+                length_includes_head=True,
+                facecolor="white",
+                edgecolor=INK,
+                linewidth=1.4,
+                zorder=z,
+            )
+        )
+        frac = 0.5 * (length - head_len) / length
+        angle = float(np.degrees(np.arctan2(dy, dx)))
+        if angle < -90 or angle > 90:  # keep the label reading left-to-right
+            angle += 180
+        ax.text(
+            x0 + dx * frac,
+            y0 + dy * frac,
+            label,
+            rotation=angle,
+            ha="center",
+            va="center",
+            fontsize=14.5,
+            color=INK,
+            zorder=z + 0.05,
+        )
+
     def model_box(cx: float, cy: float, label: str) -> None:
         w, h = 0.85, 0.62
         ax.add_patch(
@@ -151,9 +197,8 @@ def xcal_flow_fig() -> None:
     ax.text(3.05, 8.95, "Bad", ha="right", va="center", fontsize=15, color=RUST)
     ax.text(4.1, 8.55, "D₁", ha="center", va="top", fontsize=16, color=INK)
     ax.text(5.9, 8.55, "D₂", ha="center", va="top", fontsize=16, color=INK)
-    arrow((6.95, 9.2), (7.85, 9.2))
-    ax.text(7.4, 9.32, "train", ha="center", va="bottom", fontsize=15, color=INK)
-    model_box(8.3, 9.2, "M₀")
+    labeled_arrow((6.9, 9.2), (8.1, 9.2), "train")
+    model_box(8.55, 9.2, "M₀")
 
     # ── train a model per half; score the other half ──────────────────────────
     # The train arrows are vertical; the only diagonals are the scoring paths
@@ -161,18 +206,16 @@ def xcal_flow_fig() -> None:
     # names cross-calibration.
     model_box(4.1, 6.3, "M₁")
     model_box(5.9, 6.3, "M₂")
-    arrow((4.1, 8.1), (4.1, 6.68))
-    ax.text(3.85, 7.4, "train", ha="right", va="center", fontsize=15, color=INK)
-    arrow((5.9, 8.1), (5.9, 6.68))
-    ax.text(6.15, 7.4, "train", ha="left", va="center", fontsize=15, color=INK)
-    # Each scoring path is one geometric line (slope Δx/Δy = 0.83) that runs
+    labeled_arrow((4.1, 8.1), (4.1, 6.68), "train")
+    labeled_arrow((5.9, 8.1), (5.9, 6.68), "train")
+    # Each scoring path is one geometric line (slope Δx/Δy = 0.789) that runs
     # from under the opposite half, through the M box, down to the score line —
     # the entry and exit arrows are collinear, so the eye reads one straight
     # stroke and the two strokes cross in a symmetric X.
-    arrow((5.62, 8.1), (4.43, 6.66))
-    arrow((4.38, 8.1), (5.57, 6.66))
-    arrow((3.83, 5.94), (2.84, 4.75))
-    arrow((6.17, 5.94), (7.16, 4.75))
+    labeled_arrow((5.52, 8.1), (4.42, 6.71), "score", z=2.1)
+    labeled_arrow((4.48, 8.1), (5.58, 6.71), "score", z=2.2)
+    arrow((3.82, 5.94), (2.88, 4.75))
+    arrow((6.18, 5.94), (7.12, 4.75))
 
     # ── per-half held-out scores; cut each, average ───────────────────────────
     score_line(2.3, "M₁(D₂)", bad=[-1.4, -0.95, -0.5, -0.05], good=[0.5, 0.95, 1.4], theta_x=0.22, theta="θ₁")
