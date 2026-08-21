@@ -16,6 +16,19 @@ paired bootstrap over **cells**, not over steps: consecutive steps of one
 trajectory share a model and are nowhere near independent, so a step-level
 interval would be badly over-confident.
 
+Regret is reported on the **rate scale**, ``cut_regret / 2**abs(k)``, because
+the cost the harness scores is ``fpr_weight*FPR + fnr_weight*FNR`` and
+:func:`~vtscore.training.thresholds.inclusion_cost_weights` *doubles* one of
+those weights per step of the knob.  Raw ``cut_regret`` at ``k=10`` is therefore
+denominated in units 1024x the ones at ``k=0``: pooling it across the knob is
+dominated entirely by the two end stops, and a fixed tolerance in cost units
+means "a thousandth of an error rate" at one end of the slider and "a whole
+error rate" at the other.  Dividing by the larger of the two weights - which is
+``2**abs(k)``, and exactly 1 at inclusion 0 - restores a common unit (a weighted
+mean of FPR and FNR, bounded like a rate) **without changing any number at
+inclusion 0**, where every prior calibration study measured.  The raw
+cost-unit difference rides along as ``d_regret_cost`` for anyone who wants it.
+
 **(b) How much of the knob's nominal range survives as distinct admitted sets.**
 A rule that moves the threshold without moving the admitted set has not fixed
 anything.  Because the cut is carried to the final model as a *quantile*, a cut
@@ -187,6 +200,11 @@ def load_cutincl(cells_dir: Path) -> pd.DataFrame:
     df["env"] = env.astype("category")
     df["cell"] = (env + "/" + df["category"].astype(str) + "/s" + df["seed"].astype(str)).astype("category")
     df["n_votes"] = (df["n_good"] + df["n_bad"]).astype("int32")
+    # The knob's own cost scale: `inclusion_cost_weights` doubles one weight per
+    # step, so a cost at k=10 is denominated in units 1024x a cost at k=0.  See
+    # the module docstring - without this every pooled number is the k=+-10 pair.
+    df["k_scale"] = np.exp2(np.abs(df["inclusion_k"].to_numpy(dtype=np.float32)))
+    df["regret_rate"] = (df["cut_regret"] / df["k_scale"]).astype("float32")
     common.log(
         f"loaded {len(df):,} cut-inclusion rows from {len(files)} cells, {df['arm'].nunique()} arms "
         f"({df.memory_usage(deep=True).sum() / 1e9:.1f} GB in memory)"
@@ -215,21 +233,28 @@ def regret_vs_incumbent(df: pd.DataFrame, incumbent: str, agg: Path) -> pd.DataF
     exchangeable.
     """
     keys = ["env", "cell", "category", "seed", "t", "inclusion_k"]
-    base = df[df["arm"] == incumbent].set_index(keys)["cut_regret"]
+    cols = ["regret_rate", "cut_regret"]
+    base = df[df["arm"] == incumbent].set_index(keys)[cols]
     if base.empty:
         common.log(f"WARNING: incumbent arm {incumbent!r} absent; no paired contrasts")
         return pd.DataFrame()
+    base = base.rename(columns={"regret_rate": "inc_rate", "cut_regret": "inc_cost"})
 
     rng = np.random.default_rng(12345)
     rows = []
     for arm, a in df.groupby("arm", observed=True):
         if arm == incumbent:
             continue
-        joined = a.set_index(keys)["cut_regret"].to_frame("arm_regret").join(base.rename("inc_regret"), how="inner")
+        joined = (
+            a.set_index(keys)[cols]
+            .rename(columns={"regret_rate": "arm_rate", "cut_regret": "arm_cost"})
+            .join(base, how="inner")
+        )
         if joined.empty:
             continue
         joined = joined.reset_index()
-        joined["d"] = joined["arm_regret"] - joined["inc_regret"]
+        joined["d"] = joined["arm_rate"] - joined["inc_rate"]
+        joined["d_cost"] = joined["arm_cost"] - joined["inc_cost"]
         for (env, k), g in joined.groupby(["env", "inclusion_k"], observed=True):
             per_cell = g.groupby("cell", observed=True)["d"].mean()
             mean, lo, hi = _paired_bootstrap(per_cell, rng)
@@ -244,6 +269,10 @@ def regret_vs_incumbent(df: pd.DataFrame, incumbent: str, agg: Path) -> pd.DataF
                     "ci_lo": lo,
                     "ci_hi": hi,
                     "win_rate": float((g["d"] < 0).mean()),
+                    # The same difference in raw cost units, for orientation:
+                    # it is what the harness scored, and it is 2**abs(k) times
+                    # the column the decision is taken on.
+                    "d_regret_cost": float(g.groupby("cell", observed=True)["d_cost"].mean().mean()),
                 }
             )
     out = pd.DataFrame(rows)
@@ -357,6 +386,10 @@ def flatness_by_env(per_env: pd.DataFrame, agg: Path) -> pd.DataFrame:
 def verdicts(regret: pd.DataFrame, liveness: pd.DataFrame, incumbent: str) -> dict:
     """The decision, mechanically stated.  The tables still get read.
 
+    Regret enters here on the **rate scale** (`d_regret`, i.e. cost divided by
+    `2**abs(k)`), so one tolerance means the same thing at every stop of the
+    knob; see the module docstring.
+
     A challenger has to clear **both** bars: not lose materially on regret
     anywhere across the knob (a rule that is only better at one end is a rule
     that is worse at the other), and deliver strictly more of the knob than the
@@ -414,8 +447,9 @@ def write_report(results: Path, regret: pd.DataFrame, liveness: pd.DataFrame, fl
         f"Incumbent (the shipped rule): `{v['incumbent']}`.",
         f"Swept k: {cfg.CUT_INCLUSION_KS}.  Anchor weights: {cfg.ANCHORED_WEIGHTS}.  Rules: {cfg.ANCHORED_RULES}.",
         "",
-        "Every row is scored at its own `k` against the oracle at that `k`, so",
-        "regret is comparable along the knob as well as across arms.",
+        "Every row is scored at its own `k` against the oracle at that `k`, and",
+        "reported divided by `2**abs(k)`, so regret is comparable along the knob",
+        "as well as across arms.",
         "",
         "## Verdict (mechanical; read the tables before believing it)",
         "",
@@ -426,6 +460,10 @@ def write_report(results: Path, regret: pd.DataFrame, liveness: pd.DataFrame, fl
         "## (a) Paired regret vs the incumbent, per k",
         "",
         "Negative favours the challenger.  CI is a paired bootstrap over cells.",
+        "`d_regret` is on the **rate scale** - raw cost divided by `2**abs(k)`, the",
+        "larger of the two inclusion cost weights - so one tolerance means the same",
+        "thing at every stop of the knob and inclusion 0 is unchanged.  The raw",
+        "cost-unit difference the harness scored is `d_regret_cost`.",
         f"An arm counts as harmed at a `(env, k)` only when `ci_lo > {HARM_TOLERANCE}`",
         "- see `HARM_TOLERANCE` for why a bare significance test cannot decide this.",
         "",
