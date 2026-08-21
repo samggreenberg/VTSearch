@@ -102,16 +102,95 @@ def incumbent_arm() -> str:
     return f"fold_anchored_w{FOLD_ANCHOR_WEIGHT:g}_{FOLD_ANCHOR_CUT_RULE}_{FOLD_ANCHOR_COMBINE}"
 
 
+#: Columns this analysis (and `make_cutincl_figs.py`) reads.  The frame is one
+#: row per (step, arm, k) and a full run is ~10 M rows, so the loader takes only
+#: these and hands the string columns to pandas as categories: the default
+#: `read_csv` over the whole 34-column frame costs ~5x the memory for columns
+#: nothing here groups on, which is how a 16G analysis step dies at the end of a
+#: three-hour run rather than at its start.
+_USECOLS: tuple[str, ...] = (
+    "seed",
+    "dataset",
+    "embedder",
+    "category",
+    "head",
+    "style",
+    "t",
+    "n_good",
+    "n_bad",
+    "arm",
+    "cut_rule",
+    "anchor_weight",
+    "combine",
+    "qtilt_step",
+    "inclusion_k",
+    "fold_quantile",
+    "cut_threshold",
+    "cut_cost",
+    "cut_fpr",
+    "cut_fnr",
+    "k_oracle_cost",
+    "cut_regret",
+    "admitted_frac",
+    "n_admitted",
+    "n_test",
+)
+
+_DTYPES: dict[str, str] = {
+    "dataset": "category",
+    "embedder": "category",
+    "category": "category",
+    "head": "category",
+    "style": "category",
+    "arm": "category",
+    "cut_rule": "category",
+    "combine": "category",
+    "seed": "int16",
+    "t": "int32",
+    "n_good": "int32",
+    "n_bad": "int32",
+    "inclusion_k": "int16",
+    "n_admitted": "int32",
+    "n_test": "int32",
+    "anchor_weight": "float32",
+    "qtilt_step": "float32",
+    "fold_quantile": "float32",
+    "cut_threshold": "float32",
+    "cut_cost": "float32",
+    "cut_fpr": "float32",
+    "cut_fnr": "float32",
+    "k_oracle_cost": "float32",
+    "cut_regret": "float32",
+    "admitted_frac": "float32",
+}
+
+
 def load_cutincl(cells_dir: Path) -> pd.DataFrame:
     files = side_frame_files(cells_dir, "__cutincl")
-    frames = [f for f in (pd.read_csv(p) for p in files) if not f.empty]
+
+    def _read(path: Path) -> pd.DataFrame:
+        # A cell written by an older/other run may lack a column; fall back to
+        # a plain read rather than dropping the cell silently.
+        try:
+            return pd.read_csv(path, usecols=list(_USECOLS), dtype=_DTYPES)
+        except ValueError:
+            return pd.read_csv(path)
+
+    frames = [f for f in (_read(p) for p in files) if not f.empty]
     if not frames:
         return pd.DataFrame()
     df = pd.concat(frames, ignore_index=True)
-    df["env"] = df["dataset"] + "/" + df["embedder"] + "/" + df["style"]
-    df["cell"] = df["env"] + "/" + df["category"] + "/s" + df["seed"].astype(str)
-    df["n_votes"] = df["n_good"] + df["n_bad"]
-    common.log(f"loaded {len(df):,} cut-inclusion rows from {len(files)} cells, {df['arm'].nunique()} arms")
+    for col in ("dataset", "embedder", "style", "category", "arm", "cut_rule"):
+        if col in df.columns and not isinstance(df[col].dtype, pd.CategoricalDtype):
+            df[col] = df[col].astype("category")
+    env = df["dataset"].astype(str) + "/" + df["embedder"].astype(str) + "/" + df["style"].astype(str)
+    df["env"] = env.astype("category")
+    df["cell"] = (env + "/" + df["category"].astype(str) + "/s" + df["seed"].astype(str)).astype("category")
+    df["n_votes"] = (df["n_good"] + df["n_bad"]).astype("int32")
+    common.log(
+        f"loaded {len(df):,} cut-inclusion rows from {len(files)} cells, {df['arm'].nunique()} arms "
+        f"({df.memory_usage(deep=True).sum() / 1e9:.1f} GB in memory)"
+    )
     return df
 
 
@@ -195,26 +274,36 @@ def knob_liveness(df: pd.DataFrame, agg: Path) -> pd.DataFrame:
       ``quantile_span`` with a small ``admitted_span`` is the empty-band failure:
       the rule is moving the cut, the haystack has nothing there.
     """
-    rows = []
-    for (arm, env, t, cell), g in df.groupby(["arm", "env", "t", "cell"], observed=True):
-        g = g.sort_values("inclusion_k")
-        adm = g["n_admitted"].to_numpy()
-        rows.append(
-            {
-                "arm": arm,
-                "env": env,
-                "cell": cell,
-                "t": t,
-                "n_votes": int(g["n_votes"].iloc[0]),
-                "n_ks": int(len(g)),
-                "distinct_admitted": int(len(set(adm.tolist()))),
-                "dead_steps": int(np.count_nonzero(np.diff(adm) == 0)),
-                "adjacent_pairs": int(max(0, len(adm) - 1)),
-                "admitted_span": float(g["admitted_frac"].max() - g["admitted_frac"].min()),
-                "quantile_span": float(g["fold_quantile"].max() - g["fold_quantile"].min()),
-            }
+    # Vectorised: a full run is ~10 M rows and ~700 k (arm, env, cell, step)
+    # groups, so a Python loop over `groupby` here ran ~40 min - longer than the
+    # analysis step's own time limit.  Same quantities, one sort and one agg.
+    cols = ["arm", "env", "cell", "t", "inclusion_k", "n_admitted", "admitted_frac", "fold_quantile", "n_votes"]
+    g = df[cols].sort_values(["arm", "env", "cell", "t", "inclusion_k"], kind="stable")
+    key = ["arm", "env", "cell", "t"]
+    grp = g.groupby(key, observed=True, sort=False)
+    # A "dead step" is an adjacent pair of k that admitted the same set.  The
+    # diff is taken over the sorted frame, so the first row of each group has to
+    # be masked out - otherwise a group whose first admitted count happens to
+    # equal the previous group's last one counts a pair that does not exist.
+    g = g.assign(_dead=(g["n_admitted"].diff().eq(0) & (grp.cumcount() > 0)).astype("int32"))
+    per_step = (
+        g.groupby(key, observed=True, sort=False)
+        .agg(
+            n_votes=("n_votes", "first"),
+            n_ks=("inclusion_k", "size"),
+            distinct_admitted=("n_admitted", "nunique"),
+            dead_steps=("_dead", "sum"),
+            adm_hi=("admitted_frac", "max"),
+            adm_lo=("admitted_frac", "min"),
+            q_hi=("fold_quantile", "max"),
+            q_lo=("fold_quantile", "min"),
         )
-    per_step = pd.DataFrame(rows)
+        .reset_index()
+    )
+    per_step["adjacent_pairs"] = (per_step["n_ks"] - 1).clip(lower=0)
+    per_step["admitted_span"] = per_step["adm_hi"] - per_step["adm_lo"]
+    per_step["quantile_span"] = per_step["q_hi"] - per_step["q_lo"]
+    per_step = per_step.drop(columns=["adm_hi", "adm_lo", "q_hi", "q_lo"])
     if per_step.empty:
         return per_step
     per_step["knob_yield"] = per_step["distinct_admitted"] / per_step["n_ks"]
