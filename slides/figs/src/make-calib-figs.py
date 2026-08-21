@@ -78,12 +78,15 @@ def xcal_flow_fig() -> None:
     on top (pooled folds, the conformal quantile, re-drawn splits) are later
     iterations of the deck's story and deliberately absent here.
 
-    Two touches carried over from the mockup on purpose: the D₂ → M₁ → M₁(D₂)
-    path is one straight diagonal (and mirrors D₁ → M₂ → M₂(D₁)), so the two
-    scoring paths draw the X of "cross"-calibration; and one held-out ordering
-    is imperfect — a Bad lands above θ₂ — because a fold model's ranking of
-    votes it never saw is not trivially clean. Green = Good media, red = Bad
-    media (amorphous regions); everything else ink on white.
+    Layout rules carried over from the mockup on purpose: the split is drawn,
+    not written — D₀ is one block with a centre divider whose halves are
+    labelled D₁ and D₂; the train arrows D₁ → M₁ and D₂ → M₂ are vertical, so
+    the only diagonals are the two scoring paths D₂ → M₁ → M₁(D₂) and
+    D₁ → M₂ → M₂(D₁), which cross into the X that names cross-calibration;
+    and one held-out ordering is imperfect — a Bad lands above θ₂ — because a
+    fold model's ranking of votes it never saw is not trivially clean.
+    Green = Good media, red = Bad media (amorphous regions); everything else
+    ink on white.
     """
     from matplotlib.patches import FancyArrowPatch, Rectangle  # noqa: PLC0415
 
@@ -92,7 +95,7 @@ def xcal_flow_fig() -> None:
     ax.set_ylim(0, 10)
     ax.set_axis_off()
 
-    def data_block(x0: float, y0: float, w: float, h: float) -> None:
+    def data_block(x0: float, y0: float, w: float, h: float, split: bool = False) -> None:
         """A block of labelled media: an amorphous green (Good) region over a red (Bad) one."""
         good_h = 0.42 * h
         ax.add_patch(
@@ -112,6 +115,8 @@ def xcal_flow_fig() -> None:
         )
         ax.add_patch(Rectangle((x0, y0), w, h, facecolor="none", edgecolor=INK, linewidth=1.6, zorder=3))
         ax.plot([x0, x0 + w], [y0 + h - good_h] * 2, color=INK, linewidth=1.0, zorder=3)
+        if split:
+            ax.plot([x0 + w / 2] * 2, [y0, y0 + h], color=INK, linewidth=1.6, zorder=3)
 
     def arrow(xy_from: tuple[float, float], xy_to: tuple[float, float]) -> None:
         ax.add_patch(
@@ -123,7 +128,9 @@ def xcal_flow_fig() -> None:
         ax.add_patch(
             Rectangle((cx - w / 2, cy - h / 2), w, h, facecolor="white", edgecolor=INK, linewidth=1.6, zorder=3)
         )
-        ax.text(cx, cy, label, ha="center", va="center", fontsize=16, color=INK, zorder=4)
+        # center_baseline + a hair of lift: optically centers the cap-height "M"
+        # in the box despite the subscript digit hanging below the baseline.
+        ax.text(cx, cy + 0.025, label, ha="center", va="center_baseline", fontsize=16, color=INK, zorder=4)
 
     def score_line(cx: float, label: str, bad: list[float], good: list[float], theta_x: float, theta: str) -> None:
         """Held-out scores on a number line: Bad low, Good high, a cut between."""
@@ -137,38 +144,31 @@ def xcal_flow_fig() -> None:
         ax.plot([cx + theta_x] * 2, [y - 0.32, y], color=INK, linewidth=2.2, zorder=3)
         ax.text(cx + theta_x, y - 0.44, theta, ha="center", va="top", fontsize=16, color=INK)
 
-    # ── D0 and the model you keep ─────────────────────────────────────────────
+    # ── D0, already drawn split in half, and the model trained on all of it ───
     ax.text(5.0, 9.8, "D₀", ha="center", va="bottom", fontsize=16, color=INK)
-    data_block(3.6, 8.75, 2.8, 1.0)
-    ax.text(3.45, 9.5, "Good", ha="right", va="center", fontsize=15, color=GREEN)
-    ax.text(3.45, 9.0, "Bad", ha="right", va="center", fontsize=15, color=RUST)
-    arrow((6.55, 9.25), (7.5, 9.25))
-    ax.text(6.95, 8.92, "train", ha="center", va="top", fontsize=15, color=INK)
-    model_box(7.95, 9.25, "M₀")
-    ax.text(8.5, 9.25, "the model\nyou keep", ha="left", va="center", fontsize=15, color=SOFT)
-
-    # ── split in half ─────────────────────────────────────────────────────────
-    arrow((4.5, 8.65), (3.5, 8.15))
-    arrow((5.5, 8.65), (6.5, 8.15))
-    ax.text(5.0, 8.44, "split in half", ha="center", va="center", fontsize=15, color=INK)
-    data_block(2.3, 7.0, 2.0, 1.0)
-    ax.text(2.15, 7.5, "D₁", ha="right", va="center", fontsize=16, color=INK)
-    data_block(5.7, 7.0, 2.0, 1.0)
-    ax.text(7.85, 7.5, "D₂", ha="left", va="center", fontsize=16, color=INK)
+    data_block(3.2, 8.7, 3.6, 1.0, split=True)
+    ax.text(3.05, 9.45, "Good", ha="right", va="center", fontsize=15, color=GREEN)
+    ax.text(3.05, 8.95, "Bad", ha="right", va="center", fontsize=15, color=RUST)
+    ax.text(4.1, 8.55, "D₁", ha="center", va="top", fontsize=16, color=INK)
+    ax.text(5.9, 8.55, "D₂", ha="center", va="top", fontsize=16, color=INK)
+    arrow((6.95, 9.2), (7.85, 9.2))
+    ax.text(7.4, 9.32, "train", ha="center", va="bottom", fontsize=15, color=INK)
+    model_box(8.3, 9.2, "M₀")
 
     # ── train a model per half; score the other half ──────────────────────────
-    # D₂ → M₁ → M₁(D₂) is one straight diagonal, mirrored by D₁ → M₂ → M₂(D₁):
-    # the two scoring paths draw the X that names cross-calibration.
-    model_box(4.02, 5.55, "M₁")
-    model_box(5.98, 5.55, "M₂")
-    arrow((3.3, 6.95), (3.85, 5.92))
-    ax.text(2.95, 6.42, "train", ha="right", va="center", fontsize=15, color=INK)
-    arrow((6.7, 6.95), (6.15, 5.92))
-    ax.text(7.05, 6.42, "train", ha="left", va="center", fontsize=15, color=INK)
-    arrow((6.2, 6.95), (4.5, 5.9))
-    arrow((3.8, 6.95), (5.5, 5.9))
-    arrow((3.55, 5.22), (2.15, 4.35))
-    arrow((6.45, 5.22), (7.85, 4.35))
+    # The train arrows are vertical; the only diagonals are the scoring paths
+    # D₂ → M₁ → M₁(D₂) and D₁ → M₂ → M₂(D₁), whose crossing draws the X that
+    # names cross-calibration.
+    model_box(4.1, 6.3, "M₁")
+    model_box(5.9, 6.3, "M₂")
+    arrow((4.1, 8.1), (4.1, 6.68))
+    ax.text(3.85, 7.4, "train", ha="right", va="center", fontsize=15, color=INK)
+    arrow((5.9, 8.1), (5.9, 6.68))
+    ax.text(6.15, 7.4, "train", ha="left", va="center", fontsize=15, color=INK)
+    arrow((5.62, 8.1), (4.38, 6.68))
+    arrow((4.38, 8.1), (5.62, 6.68))
+    arrow((3.8, 5.95), (2.55, 4.75))
+    arrow((6.2, 5.95), (7.45, 4.75))
 
     # ── per-half held-out scores; cut each, average ───────────────────────────
     score_line(2.0, "M₁(D₂)", bad=[-1.4, -0.95, -0.5, -0.05], good=[0.5, 0.95, 1.4], theta_x=0.22, theta="θ₁")
