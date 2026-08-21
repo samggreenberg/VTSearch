@@ -28,7 +28,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import Ellipse, FancyArrow, FancyArrowPatch, Rectangle
+from matplotlib.patches import Ellipse, FancyArrow, FancyArrowPatch, Polygon, Rectangle
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from slide_figure import LABEL_GAP_PT, OBJECT_GAP_PT, SIDEBAR, SIDEBAR_WIDE, save, tight_box  # noqa: E402
@@ -548,6 +548,76 @@ def _haystack_block(ax: plt.Axes, x0: float, y0: float, w: float, h: float) -> N
     ax.add_patch(Rectangle((x0, y0), w, h, facecolor=NEUTRAL_FILL, edgecolor=INK, linewidth=1.6, zorder=2))
 
 
+def _staircase(x0: float, y_base: float, w: float, sy: float, edges, density, first: int, last: int) -> "Polygon":
+    """The histogram's own outline over bins ``first..last``, as a closed shape.
+
+    Drawing the bars as one polygon rather than N rectangles is what lets the
+    same silhouette be re-filled between build stages — black while it is just
+    "the shape of the data", then split in two and hatched once the fit claims
+    which half is which — without the outline moving by a pixel.
+    """
+    pts = [(x0 + edges[first] * w, y_base)]
+    for i in range(first, last + 1):
+        top = y_base + density[i] * sy
+        pts.append((x0 + edges[i] * w, top))
+        pts.append((x0 + edges[i + 1] * w, top))
+    pts.append((x0 + edges[last + 1] * w, y_base))
+    return Polygon(pts, closed=True)
+
+
+#: Height below which a fitted component's tail stops being drawn, as a
+#: fraction of the panel height. See `_score_histogram`.
+TAIL_FLOOR = 0.012
+
+#: Nominal height of one "?" in the hatch, in drawing units, and the lattice
+#: pitch as a multiple of it.
+QUERY_GLYPH = 0.19
+QUERY_PITCH = 1.32
+
+
+def _question_hatch(ax: plt.Axes, region: "Polygon", color: str, z: float) -> None:
+    """Fill *region* with a lattice of small question marks in *color*.
+
+    The figure's one texture that is also an argument: the mixture has read no
+    labels, so "this hump is the Bad one" is a guess, and the fill says so at
+    a glance rather than in the speaker notes. It is drawn on the same footing
+    as `_data_block`'s hatching — a property of the region, not a label of it.
+
+    Deliberately a scatter of mathtext *markers* rather than `ax.text` glyphs.
+    A marker is a path, so it is texture the way a hatch is texture; text would
+    be read by `slide_figure.enforce_type_floor` as the smallest label in the
+    figure and would fail the 20px floor — correctly, for a label, which this
+    is not. Rows are staggered so the lattice reads as a fill rather than as a
+    grid of columns.
+    """
+    # Bounds come off the polygon's own vertices, which are in drawing units.
+    # `Patch.get_extents()` would report *display* pixels once the patch has
+    # been added to an Axes, and a lattice laid out on those numbers lands
+    # thousands of units off-canvas, where the clip silently eats all of it.
+    xy = region.get_xy()
+    bx0, by0 = xy[:, 0].min(), xy[:, 1].min()
+    bx1, by1 = xy[:, 0].max(), xy[:, 1].max()
+    pitch = QUERY_GLYPH * QUERY_PITCH
+    rows = np.arange(by0 + 0.35 * pitch, by1, pitch)
+    xs, ys = [], []
+    for k, y in enumerate(rows):
+        for x in np.arange(bx0 + (0.5 * pitch if k % 2 else 0.0), bx1, pitch):
+            xs.append(x)
+            ys.append(y)
+    if not xs:
+        return
+    dots = ax.scatter(
+        xs,
+        ys,
+        marker="$?$",
+        s=(QUERY_GLYPH * FLOW_UNIT_PT) ** 2,
+        color=color,
+        linewidths=0,
+        zorder=z,
+    )
+    dots.set_clip_path(region)
+
+
 def _score_histogram(
     ax: plt.Axes,
     x0: float,
@@ -567,50 +637,66 @@ def _score_histogram(
     is scaled so the tallest bar is exactly `h`. The fitted component curves
     ride the same scaling, so curve and bars are directly comparable.
 
-    `colored` splits stage 3 from stage 4 of the build: before it the bars are
-    bare and the figure has asserted only "here is the shape"; after it the two
-    fitted components are drawn over them in the same rust and green the rest
-    of the deck uses for Bad and Good. That reveal *is* the claim the estimator
-    makes — and, per the speaker notes, the one it cannot support, since
-    nothing here has read a label.
+    `colored` splits stage 3 from stage 4 of the build, and the split is the
+    argument of the whole slide. Stage 3 is the histogram in flat black: the
+    shape of the data, which is all anyone actually has. Stage 4 keeps that
+    silhouette exactly and re-fills it — split at the components' crossing,
+    each half hatched with question marks in rust or green and traced by its
+    fitted Gaussian. Everything that arrives in stage 4 is inference, and
+    none of it has read a label.
     """
     density, edges = np.histogram(scores, bins=GMM_FLOW_BINS, range=(0.0, 1.0), density=True)
-    centers = 0.5 * (edges[:-1] + edges[1:])
-    bin_w = edges[1] - edges[0]
     sy = h / float(density.max())
 
-    for c, d in zip(centers, density):
-        ax.add_patch(
-            Rectangle(
-                (x0 + (c - bin_w / 2) * w, y_base),
-                bin_w * w,
-                d * sy,
-                facecolor=NEUTRAL_FILL,
-                edgecolor="none",
-                zorder=2,
-            )
-        )
+    if not colored:
+        black = _staircase(x0, y_base, w, sy, edges, density, 0, len(density) - 1)
+        black.set(facecolor=INK, edgecolor="none", zorder=2)
+        ax.add_patch(black)
+        ax.plot([x0, x0 + w], [y_base] * 2, color=INK, linewidth=1.8, zorder=5)
+        return
 
-    if colored:
-        xs = np.linspace(0.0, 1.0, 400)
-        for mu, var, weight, color, name in (
-            (fit.mu_lo, fit.var_lo, fit.w_lo, RUST, r"\mu_{lo}"),
-            (fit.mu_hi, fit.var_hi, fit.w_hi, GREEN, r"\mu_{hi}"),
-        ):
-            ax.plot(x0 + xs * w, y_base + weight * gaussian(xs, mu, var) * sy, color=color, linewidth=2.4, zorder=3)
-            peak = weight * gaussian(np.array([mu]), mu, var)[0] * sy
-            ax.plot(
-                [x0 + mu * w] * 2,
-                [y_base, y_base + peak],
-                color=color,
-                linewidth=1.6,
-                linestyle=(0, (2, 2)),
-                zorder=4,
-            )
-            # The means are named because the closing line's formula is written
-            # in terms of them; they sit under the line they drop to, a label
-            # gap below it, and clear of the cut's own deeper tick.
-            ax.text(x0 + mu * w, y_base - LABEL_GAP, _sub(name), ha="center", va="top", fontsize=15, color=INK)
+    # Where the fit stops calling a score Bad and starts calling it Good. The
+    # two humps are split here, so between them the fill changes colour exactly
+    # once and at the place the mixture itself puts the boundary.
+    xs = np.linspace(0.0, 1.0, 600)
+    lo_d = fit.w_lo * gaussian(xs, fit.mu_lo, fit.var_lo)
+    hi_d = fit.w_hi * gaussian(xs, fit.mu_hi, fit.var_hi)
+    crossing = int(np.argmax(hi_d > lo_d)) if (hi_d > lo_d).any() else len(xs)
+
+    for lo_i, hi_i, mu, var, weight, color, name in (
+        (0, crossing, fit.mu_lo, fit.var_lo, fit.w_lo, RUST, r"\mu_{lo}"),
+        (crossing, len(xs), fit.mu_hi, fit.var_hi, fit.w_hi, GREEN, r"\mu_{hi}"),
+    ):
+        curve = y_base + weight * gaussian(xs, mu, var) * sy
+        seg_x, seg_y = xs[lo_i:hi_i], curve[lo_i:hi_i]
+        if seg_x.size:
+            # The hatch is clipped to the area under this component's own
+            # curve, not to the histogram's silhouette. The silhouette is the
+            # taller of the two wherever the data outruns the fit, so clipping
+            # to it let question marks stand above the very line that is
+            # supposed to bound them.
+            pts = [(x0 + seg_x[0] * w, y_base)]
+            pts += [(x0 + xx * w, yy) for xx, yy in zip(seg_x, seg_y)]
+            pts.append((x0 + seg_x[-1] * w, y_base))
+            hump = Polygon(pts, closed=True)
+            hump.set(facecolor="white", edgecolor="none", zorder=2)
+            ax.add_patch(hump)
+            _question_hatch(ax, hump, color, z=2.5)
+        # Each Gaussian is drawn only where it is visibly off the baseline.
+        # Plotted over the full axis, a component's far tail lies flat along
+        # the bottom of the *other* hump, and a green line running under the
+        # rust distribution reads as a stray mark rather than as the tail of
+        # something that is genuinely still there.
+        visible = np.flatnonzero(curve > y_base + TAIL_FLOOR * h)
+        if visible.size:
+            lo_v, hi_v = visible[0], visible[-1] + 1
+            ax.plot(x0 + xs[lo_v:hi_v] * w, curve[lo_v:hi_v], color=color, linewidth=2.4, zorder=3)
+        # Black, not the component's colour: against a rust or green hatch a
+        # matching dashed line stops reading as a separate mark, and this one
+        # has a job of its own — θ_G is ticked midway between the two.
+        peak = y_base + weight * gaussian(np.array([mu]), mu, var)[0] * sy
+        ax.plot([x0 + mu * w] * 2, [y_base, peak], color=INK, linewidth=1.6, linestyle=(0, (2, 2)), zorder=4)
+        ax.text(x0 + mu * w, y_base - LABEL_GAP, _sub(name), ha="center", va="top", fontsize=15, color=INK)
 
     ax.plot([x0, x0 + w], [y_base] * 2, color=INK, linewidth=1.8, zorder=5)
 
@@ -645,7 +731,7 @@ def _gmm_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figu
     # Both blocks are named on discs *inside* themselves and share a left edge,
     # so the only difference the eye has to read between them is width — and
     # neither spends vertical budget on a label hung above it.
-    hay_x0, hay_top = bx - block_w / 2, 10.75
+    hay_x0, hay_top = bx - block_w / 2, 10.9
     hay_w, hay_h = 10.1, block_h
     hay_y0 = hay_top - hay_h
     vote_len = 1.45
@@ -662,34 +748,34 @@ def _gmm_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figu
     # cannot show; the midpoint *is* shown here — θ_G is ticked exactly between
     # two named means — so spelling it out again would cost the histogram a
     # third of its height to restate what the reader can already see.
-    return_y = 0.40
+    return_y = 0.32
     theta_label_top = return_y + 0.23 + OBJECT_GAP + CAP_16
     y_base = theta_label_top + LABEL_GAP + 0.32
 
-    panel_x0, panel_w, panel_h = hay_x0, 7.6, 2.3
-    # The score arrow's angle is the figure's one real trade-off. Two arrows
-    # leaving the same small box are always nearer each other than either is to
-    # the box, and the shallower this one runs the more of its own shaft width
-    # it turns towards the train arrow's head — so too shallow breaks the object
-    # gap between them. But a steep arrow is a *short* arrow for a given drop,
-    # and it has to be long enough to hold the word "score", which forces the
-    # drop to grow and takes the height straight out of the histogram — leaving
-    # a void where the flow crosses back over the figure. This angle is the
-    # shallowest that still clears the head, which is also the one that spends
-    # the least height and sweeps the void.
-    tip = (m0x - 1.6, y_base + panel_h + OBJECT_GAP + CAP_16 + LABEL_GAP)
+    # D₋₁ → M₀ → M₀(D₋₁) is one straight vertical drop, not a dogleg: the
+    # haystack falls into the model and the scores fall out of it on the same
+    # line, which is the whole path the slide is about. The price is paid in
+    # the panel's *position* rather than in the drawing — the histogram slides
+    # right to sit under that line, so the arrow lands between θ_G and μ_hi
+    # instead of over the middle of the distribution. Pointing at a group's
+    # centre is worth less than the path reading as one stroke, and a vertical
+    # arrow is also the cheapest possible use of the drop it costs: every unit
+    # of height becomes arrow length, none of it spent going sideways.
+    panel_x0, panel_w, panel_h = 3.8, 8.0, 1.9
+    tip = (m0x, y_base + panel_h + OBJECT_GAP + CAP_16 + LABEL_GAP)
 
     labeled_arrow = functools.partial(_labeled_arrow, ax)
 
     # ── stage 1: the unlabeled haystack ───────────────────────────────────────
-    # "unlabeled" sits where D₀'s Good/Bad sit, because it answers the same
-    # question about the same slot: what the classes in this block are.
+    # "Unlabeled" sits where D₀'s Good/Bad sit, capitalised to match them,
+    # because it answers the same question about the same slot: what the
+    # classes in this block are.
     _haystack_block(ax, hay_x0, hay_y0, hay_w, hay_h)
-    _disc_label(ax, bx, hay_y0 + hay_h / 2, "D_{-1}")
+    _disc_label(ax, hay_x0 + hay_w / 2, hay_y0 + hay_h / 2, "D_{-1}")
     ax.text(
         hay_x0 - LABEL_GAP,
         hay_y0 + hay_h / 2,
-        "unlabeled",
+        "Unlabeled",
         ha="right",
         va="center",
         fontsize=15,
