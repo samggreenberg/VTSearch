@@ -206,7 +206,7 @@
 
 // `.back-btn` from `_components.scss` already sets `align-self: flex-start`.
 
-// Picker chrome (.importer-picker, .demo-picker, .sf-browse-section,
+// Picker chrome (.importer-picker, .demo-picker,
 // .local-folder-uploader) lives inside <vt-source-picker>.  The
 // `.server-folder-browser` rule below still applies because the
 // demoFileBrowsing widget (rendered in this parent's template) wraps
