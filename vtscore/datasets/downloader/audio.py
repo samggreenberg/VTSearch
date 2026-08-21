@@ -5,6 +5,8 @@ import shutil
 from pathlib import Path
 from typing import Optional
 
+import requests
+
 from vtscore.datasets.downloader import core as _core
 from vtscore.datasets.downloader.core import ProgressCallback
 
@@ -261,6 +263,54 @@ def _fetch_text(url: str, label: str = "") -> str:
     return _core.fetch_text_with_retry(url, label)
 
 
+# A per-file demo set is dozens to hundreds of separate transfers from one
+# third-party host, so the odds that *some* file fails are far higher than for
+# the single-archive demos.  The Internet Archive in particular serves each file
+# from a data node that can answer HTTP 500 for minutes on end while its
+# siblings stay healthy, which is what sank a whole Apollo 11 load over one
+# track of thirty (issue #3227).  Losing a handful of hours-long recordings out
+# of a hundred costs the user nothing they would notice - losing the load does -
+# so a failed file is set aside, retried once at the end of the set (by which
+# point a transient node error has usually cleared), and only fails the load if
+# too many of them pile up.  A skipped file is simply absent from *dest_dir*, so
+# the next load of the same dataset fetches it rather than treating it as done.
+_MAX_FAILED_FRACTION = 0.25
+
+# Per-file failures worth setting aside rather than sinking the set: the remote
+# gave up (connection or a retryable status exhausted its budget), or answered
+# with a hard status such as 404 for this one file.  Everything else - a
+# cancelled load, a gated dataset, a full disk - is about the *run*, not the
+# file, and must still stop it.
+_TOLERATED_FILE_FAILURES = (_core.RemoteUnreachableError, requests.HTTPError)
+
+
+def _download_one_file_into(
+    dest_dir: Path,
+    item: tuple[str, str, int],
+    dataset_name: str,
+    on_progress: ProgressCallback,
+    index: int,
+    total: int,
+) -> None:
+    """Fetch one ``(url, filename, size)`` *item*, or report it already cached.
+
+    The file lands on a ``.part`` sibling first and is renamed into place only
+    once the transfer completes, so the presence of the final name is an honest
+    "this file is whole" marker and an interrupted run resumes per file rather
+    than restarting the set.  ``download_file_with_progress`` itself resumes a
+    partial ``.part`` via an HTTP ``Range`` request.
+    """
+    url, filename, size = item
+    final = dest_dir / filename
+    if final.exists():
+        on_progress("downloading", f"{dataset_name}: {filename} (cached)", index + 1, total)
+        return
+    partial = dest_dir / f"{filename}.part"
+    _core.download_file_with_progress(url, partial, expected_size=size, on_progress=on_progress)
+    partial.replace(final)
+    on_progress("downloading", f"{dataset_name}: downloaded {filename}", index + 1, total)
+
+
 def _download_files_into(
     dest_dir: Path,
     items: list[tuple[str, str, int]],
@@ -269,23 +319,53 @@ def _download_files_into(
 ) -> None:
     """Download ``(url, filename, size)`` *items* into *dest_dir*, skipping cached ones.
 
-    Each file lands on a ``.part`` sibling first and is renamed into place only
-    once the transfer completes, so the presence of the final name is an honest
-    "this file is whole" marker and an interrupted run resumes per file rather
-    than restarting the set.  ``download_file_with_progress`` itself resumes a
-    partial ``.part`` via an HTTP ``Range`` request.
+    Files the remote refuses to serve are set aside and retried once after the
+    rest of the set, then skipped; the download only fails if more than
+    :data:`_MAX_FAILED_FRACTION` of the set ends up missing.  See that constant
+    for why one bad file must not sink the whole download.
+
+    Raises:
+        RemoteUnreachableError: If too much of the set could not be fetched.
+            The last per-file failure is its ``__cause__``.
     """
     dest_dir.mkdir(parents=True, exist_ok=True)
     total = len(items)
-    for i, (url, filename, size) in enumerate(items):
-        final = dest_dir / filename
-        if final.exists():
-            on_progress("downloading", f"{dataset_name}: {filename} (cached)", i + 1, total)
-            continue
-        partial = dest_dir / f"{filename}.part"
-        _core.download_file_with_progress(url, partial, expected_size=size, on_progress=on_progress)
-        partial.replace(final)
-        on_progress("downloading", f"{dataset_name}: downloaded {filename}", i + 1, total)
+    failed: list[tuple[int, tuple[str, str, int]]] = []
+    last_exc: BaseException | None = None
+
+    for i, item in enumerate(items):
+        try:
+            _download_one_file_into(dest_dir, item, dataset_name, on_progress, i, total)
+        except _TOLERATED_FILE_FAILURES as exc:
+            last_exc = exc
+            failed.append((i, item))
+            on_progress("downloading", f"{dataset_name}: {item[1]} unavailable - will retry at the end", i + 1, total)
+
+    # Second pass: downloading the rest of the set has bought each failure
+    # minutes of backoff, which is usually all a wobbling data node needed.
+    still_failed: list[tuple[int, tuple[str, str, int]]] = []
+    for i, item in failed:
+        on_progress("downloading", f"{dataset_name}: retrying {item[1]}...", i + 1, total)
+        try:
+            _download_one_file_into(dest_dir, item, dataset_name, on_progress, i, total)
+        except _TOLERATED_FILE_FAILURES as exc:
+            last_exc = exc
+            still_failed.append((i, item))
+
+    if not still_failed:
+        return
+    if len(still_failed) > total * _MAX_FAILED_FRACTION:
+        raise _core.RemoteUnreachableError(
+            f"{dataset_name}: {len(still_failed)} of {total} files could not be downloaded, "
+            f"which is too much of the dataset to load without. {last_exc}",
+            url=still_failed[0][1][0],
+        ) from last_exc
+    on_progress(
+        "downloading",
+        f"{dataset_name}: skipped {len(still_failed)} of {total} files the server wouldn't serve",
+        total,
+        total,
+    )
 
 
 def apollo11_audio_manifest() -> list[tuple[str, int]]:
