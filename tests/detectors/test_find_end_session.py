@@ -19,9 +19,7 @@ from vtsearch.state import snapshot_medias
 
 def _detector_with_votes(client):
     """A loaded detector holding three good + four bad training votes."""
-    detector_id = setup_trainable_model_in_registry(
-        "end-session", good_ids=[], bad_ids=[], snap=snapshot_medias()
-    )
+    detector_id = setup_trainable_model_in_registry("end-session", good_ids=[], bad_ids=[], snap=snapshot_medias())
     load_detector_and_wait(client, detector_id)
     for media_id in (1, 2, 3):
         assert client.post(f"/api/medias/{media_id}/vote", json={"target": "good"}).status_code == 200
