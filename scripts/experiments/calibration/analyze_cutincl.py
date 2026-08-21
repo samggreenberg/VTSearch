@@ -178,8 +178,33 @@ _DTYPES: dict[str, str] = {
 }
 
 
-def load_cutincl(cells_dir: Path) -> pd.DataFrame:
+def expected_cells(results: Path) -> int:
+    """How many cells this grid *should* have produced, from the run's own config.
+
+    An analysis that silently excludes cells is how a disk incident becomes a
+    wrong verdict, so the count that matters is not "how many files did I find"
+    but "how many did the grid define".
+    """
+    info_path = results / "prepare_info.json"
+    if not info_path.exists():
+        return 0
+    info = json.loads(info_path.read_text())
+    cats = {
+        ds: {emb: entry.get("selected_categories", []) for emb, entry in per_emb.items()}
+        for ds, per_emb in info.get("datasets", {}).items()
+    }
+    try:
+        return len(cfg.array_cells(cats))
+    except Exception:  # noqa: BLE001 - a config mismatch must not lose the analysis
+        return 0
+
+
+def load_cutincl(cells_dir: Path, provenance: dict | None = None) -> pd.DataFrame:
     files = side_frame_files(cells_dir, "__cutincl")
+    prov = provenance if provenance is not None else {}
+    prov["n_files"] = len(files)
+    prov["unreadable"] = []
+    prov["empty"] = []
 
     def _read(path: Path) -> pd.DataFrame:
         # A cell written by an older/other run may lack a column; fall back to
@@ -189,7 +214,21 @@ def load_cutincl(cells_dir: Path) -> pd.DataFrame:
         except ValueError:
             return pd.read_csv(path)
 
-    frames = [f for f in (_read(p) for p in files) if not f.empty]
+    frames = []
+    for path in files:
+        try:
+            f = _read(path)
+        except Exception as exc:  # noqa: BLE001 - one bad cell must not lose the rest
+            prov["unreadable"].append(f"{path.name}: {exc}")
+            continue
+        if f.empty:
+            prov["empty"].append(path.name)
+            continue
+        frames.append(f)
+    if prov["unreadable"] or prov["empty"]:
+        common.log(f"DROPPED {len(prov['unreadable'])} unreadable and {len(prov['empty'])} empty cell frames")
+        for line in [*prov["unreadable"], *prov["empty"]]:
+            common.log(f"  {line}")
     if not frames:
         return pd.DataFrame()
     df = pd.concat(frames, ignore_index=True)
@@ -447,6 +486,13 @@ def write_report(results: Path, regret: pd.DataFrame, liveness: pd.DataFrame, fl
         f"Incumbent (the shipped rule): `{v['incumbent']}`.",
         f"Swept k: {cfg.CUT_INCLUSION_KS}.  Anchor weights: {cfg.ANCHORED_WEIGHTS}.  Rules: {cfg.ANCHORED_RULES}.",
         "",
+        (
+            f"Cells: {v.get('cells', {}).get('n_files', '?')} read of "
+            f"{v.get('cells', {}).get('n_expected', '?')} defined by the grid; "
+            f"{len(v.get('cells', {}).get('unreadable', []))} unreadable, "
+            f"{len(v.get('cells', {}).get('empty', []))} empty."
+        ),
+        "",
         "Every row is scored at its own `k` against the oracle at that `k`, and",
         "reported divided by `2**abs(k)`, so regret is comparable along the knob",
         "as well as across arms.",
@@ -492,7 +538,14 @@ def main() -> int:
     results = common.RESULTS
     agg = results / "agg"
     agg.mkdir(parents=True, exist_ok=True)
-    df = load_cutincl(results / "cells")
+    prov: dict = {}
+    df = load_cutincl(results / "cells", prov)
+    prov["n_expected"] = expected_cells(results)
+    if prov["n_expected"]:
+        missing = prov["n_expected"] - prov["n_files"]
+        common.log(
+            f"cells: {prov['n_files']} of {prov['n_expected']} expected ({missing} never wrote a cut-inclusion frame)"
+        )
     if df.empty:
         common.log("no cut-inclusion rows found; was CALIB_CUT_INCL_KS set on the run?")
         return 1
@@ -507,6 +560,7 @@ def main() -> int:
     liveness = knob_liveness(deep, agg)
     flat = flatness_by_env(liveness, agg)
     v = verdicts(regret, liveness, incumbent)
+    v["cells"] = prov
 
     (results / "cutincl_summary.json").write_text(json.dumps(v, indent=2))
     write_report(results, regret, liveness, flat, v)
