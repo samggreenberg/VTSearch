@@ -232,6 +232,47 @@ def ensure_votes_match_active_dataset() -> None:
         resync_coverage_atlas_to_detector(ds_ctx, det_ctx)
 
 
+def end_find_session() -> bool:
+    """Discard the active detector's live Find session and re-derive its votes.
+
+    ``/api/find-label`` replaces the detector's in-memory votes with its own
+    per-item calls over the *whole* dataset and stamps ``find_mode`` so nothing
+    writes those presumptions back to the labelset.  That is right for the Find
+    window and wrong everywhere else: the Train window reads the same vote
+    dicts, so a user who ran Find and then went back to training saw every item
+    in the collection already "voted" - Autopilot jumped straight to a terminal
+    phase, and every genuine training vote cast there was silently kept out of
+    the labelset by the find-mode write-back guard (issue #3212).
+
+    Clears the session (votes, the frozen scores, the verified set) and lets
+    :func:`ensure_votes_match_active_dataset` restore the detector's real
+    training labels from the on-disk labelset.  Find-session state is in-memory
+    only by design and is already dropped on a dataset switch, so ending it here
+    loses nothing durable: the ranking and the verifications belong to the Find
+    window the user just left, and re-entering Find re-scores from scratch.
+
+    Returns ``True`` when a session was ended, ``False`` when there was none.
+    """
+    from vtscore.state.core import _state_lock, get_active_detector_context
+    from vtscore.state.votes import clear_votes
+
+    det_ctx = get_active_detector_context()
+    if not det_ctx.find_mode:
+        return False
+
+    # Drops the presumptions along with every Find-session field (find_mode
+    # included), the coverage atlas evidence, and the labeling-progress cache.
+    clear_votes()
+    with _state_lock:
+        # Force the rehydrate's freshness pre-check to miss.  Nothing about the
+        # (dataset, detector-file) pair changed while Find ran, so the check
+        # would otherwise early-return and leave the votes we just cleared
+        # empty instead of restoring the labelset's.
+        det_ctx.cached_labelset_mtime = 0.0
+    ensure_votes_match_active_dataset()
+    return True
+
+
 def _repoint_labelset_cache(det_ctx, path) -> None:
     """Re-point *det_ctx*'s cached labelset at the on-disk file, votes untouched.
 

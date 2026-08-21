@@ -21,13 +21,19 @@ from vtscore.concurrency.progress import CancelledError, find_progress, update_f
 from vtscore.detectors.training import train_and_threshold
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.utils.scores import sigmoid_to_finite_scores
-from vtsearch.routes._shared import find_idle, find_idle_on_crash, require_detector_header
+from vtsearch.routes._shared import (
+    find_idle,
+    find_idle_on_crash,
+    require_dataset_header,
+    require_detector_header,
+)
 from vtsearch.schemas.detectors import (
     FindBoundaryNextQuerySchema,
     FindBoundaryNextResponseSchema,
     FindCancelResponseSchema,
     FindCheckLabelsRequestSchema,
     FindCheckLabelsResponseSchema,
+    FindEndSessionResponseSchema,
     FindQueueIdsQuerySchema,
     FindQueueIdsResponseSchema,
     FindRequestSchema,
@@ -719,6 +725,28 @@ def cancel_find():
     """
     find_progress.cancel()
     return {"ok": True}
+
+
+@detector_find_bp.route("/api/find/end-session", methods=["POST"])
+@detector_find_bp.response(200, FindEndSessionResponseSchema)
+@require_dataset_header
+@require_detector_header
+def end_find_session_route():
+    """Discard the active detector's live Find session, if it has one.
+
+    ``/api/find-label`` leaves the detector's in-memory votes holding its own
+    call for *every* item in the dataset, flagged ``find_mode`` so they are kept
+    out of the labelset.  Those presumptions are not training labels, and the
+    Train window reads the same vote dicts - so it must say "I am training now"
+    before it reads them, or it shows the whole collection as voted and
+    Autopilot lands in a terminal phase on arrival (issue #3212).
+
+    Idempotent: with no session to end this is a no-op that reports
+    ``ended = false``.
+    """
+    from vtscore.detectors.dataset_sync import end_find_session  # noqa: PLC0415
+
+    return {"ok": True, "ended": end_find_session()}
 
 
 @detector_find_bp.route("/api/find/queue-ids", methods=["GET"])

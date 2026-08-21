@@ -67,6 +67,11 @@ describe('LabelViewComponent (zoneless dataset-name canary)', () => {
       httpMock.match('/api/medias/ids').forEach((req) =>
         req.flush([{ id: 1, media_type: 'audio' }]),
       );
+      // The Train window ends any live Find session before it reads the votes
+      // (#3212), so the GET below is only issued once this POST answers.
+      httpMock.match('/api/find/end-session').forEach((req) =>
+        req.flush({ ok: true, ended: false }),
+      );
       httpMock.match('/api/votes').forEach((req) =>
         req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
       );
@@ -148,6 +153,13 @@ describe('LabelViewComponent', () => {
         { id: 2, media_type: 'audio' },
       ]),
     );
+    // /api/find/end-session (the Train window's hand-off out of a Find
+    // session, #3212); loadVotes is chained onto its response, so the GET
+    // below only exists after this POST is answered and the tick lands it.
+    httpMock.match('/api/find/end-session').forEach(req =>
+      req.flush({ ok: true, ended: false }),
+    );
+    TestBed.tick();
     // /api/votes (label-view loadVotes)
     httpMock.match('/api/votes').forEach(req =>
       req.flush({ good: [], bad: [], click_times: {}, learned_scores: {} }),
@@ -222,6 +234,24 @@ describe('LabelViewComponent', () => {
     flushInitialRequests();
     expect(component.voteState.goodVotes.size).toBe(0);
     expect(component.voteState.badVotes.size).toBe(0);
+  });
+
+  it('ends a live Find session before it reads the votes (#3212)', () => {
+    // Find's bulk presumptions live in the same per-detector vote dicts the
+    // Train window trains from, so reading /api/votes first would show the whole
+    // collection as voted (and land Autopilot in a terminal phase on arrival).
+    const loadVotes = vi.spyOn(TestBed.inject(VoteStateService), 'loadVotes');
+    TestBed.tick();
+    TestBed.tick();
+    expect(loadVotes).not.toHaveBeenCalled();
+
+    const handoff = httpMock.expectOne('/api/find/end-session');
+    expect(handoff.request.method).toBe('POST');
+    handoff.flush({ ok: true, ended: true });
+    TestBed.tick();
+
+    // Only now, against the votes the hand-off restored from the labelset.
+    expect(loadVotes).toHaveBeenCalledTimes(1);
   });
 
   it('snaps both panels tight once medias first render', async () => {

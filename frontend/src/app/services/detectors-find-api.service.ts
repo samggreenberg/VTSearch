@@ -5,6 +5,7 @@ import { map } from 'rxjs/operators';
 
 import { ApiConfiguration } from '../generated/api-client/api-configuration';
 import type { FindCancelResponse } from '../generated/api-client/models/find-cancel-response';
+import type { FindEndSessionResponse } from '../generated/api-client/models/find-end-session-response';
 import type { FindCheckLabelsRequest } from '../generated/api-client/models/find-check-labels-request';
 import type { FindCheckLabelsResponse } from '../generated/api-client/models/find-check-labels-response';
 import type { FindLabelRequest } from '../generated/api-client/models/find-label-request';
@@ -15,6 +16,7 @@ import type { FindStatsResponse } from '../generated/api-client/models/find-stat
 import type { FindEvidenceCoverageResponse } from '../generated/api-client/models/find-evidence-coverage-response';
 import type { FindCorrectionsToDetectorResponse } from '../generated/api-client/models/find-corrections-to-detector-response';
 import { cancelFind } from '../generated/api-client/fn/detector-find/cancel-find';
+import { endFindSessionRoute } from '../generated/api-client/fn/detector-find/end-find-session-route';
 import { findCheckLabels } from '../generated/api-client/fn/detector-find/find-check-labels';
 import { findLabel } from '../generated/api-client/fn/detector-scoring/find-label';
 import { findStats } from '../generated/api-client/fn/detector-scoring/find-stats';
@@ -48,6 +50,15 @@ export class DetectorsFindApiService {
   /** Cancel any in-flight find / find-label / auto-detect scoring. */
   cancelFind(): Observable<FindCancelResponse> {
     return cancelFind(this.http, this.config.rootUrl).pipe(map((r) => r.body));
+  }
+
+  /** Discard the active detector's live Find session (if any), restoring its
+   *  votes from its labelset. Find's bulk presumptions live in the same vote
+   *  dicts the Train window trains from, so Train calls this on entry before it
+   *  reads them — otherwise the whole collection reads as voted and Autopilot
+   *  lands in a terminal phase on arrival (#3212). A no-op when Find never ran. */
+  endFindSession(): Observable<FindEndSessionResponse> {
+    return endFindSessionRoute(this.http, this.config.rootUrl).pipe(map((r) => r.body));
   }
 
   /** Detector-evaluation stats over the adopted Find label set (2x2 confusion
