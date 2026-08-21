@@ -28,13 +28,13 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.patches import Ellipse, FancyArrow, FancyArrowPatch, Rectangle
+from matplotlib.patches import Ellipse, FancyArrow, FancyArrowPatch, Polygon, Rectangle
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from slide_figure import LABEL_GAP_PT, OBJECT_GAP_PT, SIDEBAR_WIDE, save, tight_box  # noqa: E402
+from slide_figure import LABEL_GAP_PT, OBJECT_GAP_PT, SIDEBAR, SIDEBAR_WIDE, save, tight_box  # noqa: E402
 
 from vtscore.training.blend_schedules import BlendContext, get_schedule
-from vtscore.training.thresholds import fit_anchored_score_gmm, fit_score_gmm
+from vtscore.training.thresholds import GmmFit1D, fit_anchored_score_gmm, fit_score_gmm
 
 OUT = Path(__file__).resolve().parent.parent
 
@@ -79,17 +79,27 @@ def gaussian(x: np.ndarray, mu: float, var: float) -> np.ndarray:
 #: M₂ scores D₁ and θ₂; the average. Stage 7 is the committed final figure.
 XCAL_FLOW_STAGES = 7
 
-#: The schematic's canvas in drawing units, and the points one unit is drawn
-#: at. The axes fill the figure (no subplot margins), so the figure size is
-#: just the canvas rescaled — which is what keeps every geometry constant
-#: below in a fixed relationship to the font sizes, whatever the figure's
-#: inches happen to be.
-XCAL_CANVAS = (13.2, 11.0)
-XCAL_UNIT_PT = 38.0
+#: The points one drawing unit of a *schematic* figure is drawn at. The axes
+#: fill the figure (no subplot margins), so the figure size is just the canvas
+#: rescaled — which is what keeps every geometry constant below in a fixed
+#: relationship to the font sizes, whatever the figure's inches happen to be.
+#:
+#: Every schematic in the calibration progression shares this scale and this
+#: canvas *height*: the deep-dive deck fits each one into the same
+#: `bg right:70%` slot, so a figure that is height-limited at the same number
+#: of units is scaled by the same factor as its neighbours, and a 16pt label
+#: renders at the same size on every slide of the progression. Widths may
+#: differ; heights may not. (A figure re-used at a *narrower* slot elsewhere —
+#: `xcal.short` — still has to clear the type floor there; see
+#: `xcal_flow_fig`.)
+FLOW_UNIT_PT = 38.0
+FLOW_CANVAS_H = 11.0
 
-#: `slide_figure`'s spacing standard, in this figure's drawing units.
-LABEL_GAP = LABEL_GAP_PT / XCAL_UNIT_PT
-OBJECT_GAP = OBJECT_GAP_PT / XCAL_UNIT_PT
+XCAL_CANVAS = (13.2, FLOW_CANVAS_H)
+
+#: `slide_figure`'s spacing standard, in a schematic's drawing units.
+LABEL_GAP = LABEL_GAP_PT / FLOW_UNIT_PT
+OBJECT_GAP = OBJECT_GAP_PT / FLOW_UNIT_PT
 
 #: The fold-model boxes. `_box_edge` has to agree with what `_model_box` draws.
 MODEL_W, MODEL_H = 0.85, 0.62
@@ -133,6 +143,11 @@ def xcal_flow_fig() -> None:
     cropped to the *final* stage's box, so across the build slides the
     drawing assembles in place rather than recentring itself.
     """
+    # Type-floor-checked against `SIDEBAR`, not `SIDEBAR_WIDE`, because this one
+    # figure appears at two widths: the deep-dive slide gives it 70% and drops
+    # its bullets, while `xcal.short` keeps the bullets that carry the brief
+    # deck's argument and so can only spare 56%. A figure used at two slot
+    # widths has to clear the floor at the narrower of them.
     final = _xcal_flow_stage(XCAL_FLOW_STAGES)
     box = tight_box(final)
     for stage in range(1, XCAL_FLOW_STAGES):
@@ -140,10 +155,10 @@ def xcal_flow_fig() -> None:
             _xcal_flow_stage(stage),
             OUT,
             f"calib-xcal-flow.build{stage}.png",
-            column=SIDEBAR_WIDE,
+            column=SIDEBAR,
             box=box,
         )
-    save(final, OUT, "calib-xcal-flow.png", column=SIDEBAR_WIDE, box=box)
+    save(final, OUT, "calib-xcal-flow.png", column=SIDEBAR, box=box)
 
 
 def _data_block(ax: plt.Axes, x0: float, y0: float, w: float, h: float, split: bool = False) -> None:
@@ -174,8 +189,20 @@ def _data_block(ax: plt.Axes, x0: float, y0: float, w: float, h: float, split: b
     # Hung below the block instead, each label sat further from the half it
     # named than from the train arrow leaving that half.
     for cx, name in ((x0 + w / 4, "D_1"), (x0 + 3 * w / 4, "D_2")):
-        ax.add_patch(Ellipse((cx, y0 + h / 2), 0.95, 0.62, facecolor="white", edgecolor="none", zorder=4))
-        ax.text(cx, y0 + h / 2, _sub(name), ha="center", va="center", fontsize=16, color=INK, zorder=5)
+        _disc_label(ax, cx, y0 + h / 2, name)
+
+
+def _disc_label(ax: plt.Axes, cx: float, cy: float, name: str) -> None:
+    """Name a data block from *inside* it, on a white disc.
+
+    The disc clears the Good/Bad divider and the hatching under it, so the
+    name reads cleanly without being hung outside the block — where it would
+    sit as close to whatever arrow arrives next as to the thing it names
+    (issue #3217). Used for the halves D₁/D₂, and for any whole block that has
+    an arrow coming into the space above it.
+    """
+    ax.add_patch(Ellipse((cx, cy), 0.95, 0.62, facecolor="white", edgecolor="none", zorder=4))
+    ax.text(cx, cy, _sub(name), ha="center", va="center", fontsize=16, color=INK, zorder=5)
 
 
 def _box_edge(cx: float, cy: float, toward: tuple[float, float], gap: float) -> tuple[float, float]:
@@ -313,7 +340,7 @@ def _xcal_flow_stage(stage: int) -> plt.Figure:
     both be read. The X is then drawn as two plain strokes crossing, which is
     what an X wants to be anyway.
     """
-    fig, ax = plt.subplots(figsize=tuple(c * XCAL_UNIT_PT / 72 for c in XCAL_CANVAS))
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in XCAL_CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
     ax.set_xlim(0, XCAL_CANVAS[0])
     ax.set_ylim(0, XCAL_CANVAS[1])
@@ -439,6 +466,393 @@ def _xcal_flow_stage(stage: int) -> plt.Figure:
     return fig
 
 
+#: How many build stages the label-free mixture schematic reveals in: the
+#: unlabeled haystack; the votes drawn out of it and the model they train; the
+#: haystack scored into a histogram; the two modes *claimed* as Bad and Good;
+#: the cut between them.
+GMM_FLOW_STAGES = 5
+
+#: Same height as `XCAL_CANVAS`, deliberately — see `FLOW_CANVAS_H`.
+GMM_CANVAS = (13.2, FLOW_CANVAS_H)
+
+#: Bins in the schematic's score histogram. Enough to show two modes and the
+#: dip between them; few enough that one bar is still a visible object at the
+#: rendered size.
+GMM_FLOW_BINS = 44
+
+
+def gmm_flow_fig() -> None:
+    """Schematic of the label-free mixture cut — iteration 2 of the line.
+
+    The second figure of the calibration progression (issue #3218), and drawn
+    to be recognisably the *first* one with a new source of data bolted on:
+    `D₀ —train→ M₀` is carried over from `calib-xcal-flow` unchanged, and above
+    it sits `D₋₁`, the unlabeled haystack the votes were drawn out of. The
+    mechanism is then the other direction round the loop — `M₀` scores all of
+    `D₋₁`, and a cut is read off the shape of the resulting score histogram
+    without any label being consulted.
+
+    The haystack block is the same height as the votes' block and carries no
+    Good/Bad hatching, which is the one thing the figure says by shape alone:
+    these are the same kind of media, there are far more of them, and their
+    classes are unknown — not absent.
+
+    What the figure deliberately leaves to the speaker is that naming the low
+    mode Bad and the high mode Good is this estimator's *assumption*. It reads
+    the shape of the distribution and nothing else, so the identification is
+    exactly the part it cannot support, and #2836 measured it wrong: a fitted
+    high-component weight of 0.35 against a true prevalence of 0.09 — "confi-
+    dently scored", not "true match". That is the ceiling iteration 4 lifts by
+    letting votes pin the components down.
+    """
+    fit, scores = _haystack_scores()
+    final = _gmm_flow_stage(GMM_FLOW_STAGES, fit, scores)
+    box = tight_box(final)
+    for stage in range(1, GMM_FLOW_STAGES):
+        save(
+            _gmm_flow_stage(stage, fit, scores),
+            OUT,
+            f"calib-gmm-flow.build{stage}.png",
+            column=SIDEBAR_WIDE,
+            box=box,
+        )
+    save(final, OUT, "calib-gmm-flow.png", column=SIDEBAR_WIDE, box=box)
+
+
+def _haystack_scores() -> tuple[GmmFit1D, np.ndarray]:
+    """A synthetic haystack and the **real** `fit_score_gmm` fit of it.
+
+    Schematic input, real estimator — the house rule for the mixture figures.
+    The positive rate is chosen so both modes are visible at slide size —
+    density-normalised, a realistic 2-5% positive haystack draws its high mode
+    at a fortieth of the low one's height and the picture stops being bimodal
+    to look at. Real haystacks are sparser than this, which only sharpens the
+    identification problem the slide is there to raise.
+    """
+    rng = np.random.default_rng(42)
+    neg = rng.normal(0.26, 0.082, 4800)
+    pos = rng.normal(0.74, 0.078, 1200)
+    scores = np.clip(np.concatenate([neg, pos]), 0.0, 1.0)
+    fit = fit_score_gmm(scores)
+    assert fit is not None
+    return fit, scores
+
+
+def _haystack_block(ax: plt.Axes, x0: float, y0: float, w: float, h: float) -> None:
+    """A block of **unlabeled** media: the same outline as `_data_block`, flat.
+
+    The absence of the Good/Bad hatching is the whole content of this shape.
+    Beside a hatched `_data_block` it reads as "same kind of thing, classes
+    unknown", which is exactly what the haystack is.
+    """
+    ax.add_patch(Rectangle((x0, y0), w, h, facecolor=NEUTRAL_FILL, edgecolor=INK, linewidth=1.6, zorder=2))
+
+
+def _staircase(x0: float, y_base: float, w: float, sy: float, edges, density, first: int, last: int) -> "Polygon":
+    """The histogram's own outline over bins ``first..last``, as a closed shape.
+
+    Drawing the bars as one polygon rather than N rectangles is what lets the
+    same silhouette be re-filled between build stages — black while it is just
+    "the shape of the data", then split in two and hatched once the fit claims
+    which half is which — without the outline moving by a pixel.
+    """
+    pts = [(x0 + edges[first] * w, y_base)]
+    for i in range(first, last + 1):
+        top = y_base + density[i] * sy
+        pts.append((x0 + edges[i] * w, top))
+        pts.append((x0 + edges[i + 1] * w, top))
+    pts.append((x0 + edges[last + 1] * w, y_base))
+    return Polygon(pts, closed=True)
+
+
+#: Height below which a fitted component's tail stops being drawn, as a
+#: fraction of the panel height. See `_score_histogram`.
+TAIL_FLOOR = 0.012
+
+#: Nominal height of one "?" in the hatch, in drawing units, and the lattice
+#: pitch as a multiple of it.
+QUERY_GLYPH = 0.19
+QUERY_PITCH = 1.32
+
+
+def _question_hatch(ax: plt.Axes, region: "Polygon", color: str, z: float) -> None:
+    """Fill *region* with a lattice of small question marks in *color*.
+
+    The figure's one texture that is also an argument: the mixture has read no
+    labels, so "this hump is the Bad one" is a guess, and the fill says so at
+    a glance rather than in the speaker notes. It is drawn on the same footing
+    as `_data_block`'s hatching — a property of the region, not a label of it.
+
+    Deliberately a scatter of mathtext *markers* rather than `ax.text` glyphs.
+    A marker is a path, so it is texture the way a hatch is texture; text would
+    be read by `slide_figure.enforce_type_floor` as the smallest label in the
+    figure and would fail the 20px floor — correctly, for a label, which this
+    is not. Rows are staggered so the lattice reads as a fill rather than as a
+    grid of columns.
+    """
+    # Bounds come off the polygon's own vertices, which are in drawing units.
+    # `Patch.get_extents()` would report *display* pixels once the patch has
+    # been added to an Axes, and a lattice laid out on those numbers lands
+    # thousands of units off-canvas, where the clip silently eats all of it.
+    xy = region.get_xy()
+    bx0, by0 = xy[:, 0].min(), xy[:, 1].min()
+    bx1, by1 = xy[:, 0].max(), xy[:, 1].max()
+    pitch = QUERY_GLYPH * QUERY_PITCH
+    rows = np.arange(by0 + 0.35 * pitch, by1, pitch)
+    xs, ys = [], []
+    for k, y in enumerate(rows):
+        for x in np.arange(bx0 + (0.5 * pitch if k % 2 else 0.0), bx1, pitch):
+            xs.append(x)
+            ys.append(y)
+    if not xs:
+        return
+    dots = ax.scatter(
+        xs,
+        ys,
+        marker="$?$",
+        s=(QUERY_GLYPH * FLOW_UNIT_PT) ** 2,
+        color=color,
+        linewidths=0,
+        zorder=z,
+    )
+    dots.set_clip_path(region)
+
+
+def _score_histogram(
+    ax: plt.Axes,
+    x0: float,
+    y_base: float,
+    w: float,
+    h: float,
+    fit: "GmmFit1D",
+    scores: np.ndarray,
+    *,
+    colored: bool,
+) -> None:
+    """The haystack's score histogram, drawn in the schematic's drawing units.
+
+    A `bg`-slot schematic cannot host a real Axes without inheriting its own
+    scales and margins, so the distribution is rasterised by hand into the
+    rectangle `(x0, y_base, w, h)`: score 0-1 maps across `w`, and the density
+    is scaled so the tallest bar is exactly `h`. The fitted component curves
+    ride the same scaling, so curve and bars are directly comparable.
+
+    `colored` splits stage 3 from stage 4 of the build, and the split is the
+    argument of the whole slide. Stage 3 is the histogram in flat black: the
+    shape of the data, which is all anyone actually has. Stage 4 keeps that
+    silhouette exactly and re-fills it — split at the components' crossing,
+    each half hatched with question marks in rust or green and traced by its
+    fitted Gaussian. Everything that arrives in stage 4 is inference, and
+    none of it has read a label.
+    """
+    density, edges = np.histogram(scores, bins=GMM_FLOW_BINS, range=(0.0, 1.0), density=True)
+    sy = h / float(density.max())
+
+    if not colored:
+        black = _staircase(x0, y_base, w, sy, edges, density, 0, len(density) - 1)
+        black.set(facecolor=INK, edgecolor="none", zorder=2)
+        ax.add_patch(black)
+        ax.plot([x0, x0 + w], [y_base] * 2, color=INK, linewidth=1.8, zorder=5)
+        return
+
+    # Where the fit stops calling a score Bad and starts calling it Good. The
+    # two humps are split here, so between them the fill changes colour exactly
+    # once and at the place the mixture itself puts the boundary.
+    xs = np.linspace(0.0, 1.0, 600)
+    lo_d = fit.w_lo * gaussian(xs, fit.mu_lo, fit.var_lo)
+    hi_d = fit.w_hi * gaussian(xs, fit.mu_hi, fit.var_hi)
+    crossing = int(np.argmax(hi_d > lo_d)) if (hi_d > lo_d).any() else len(xs)
+
+    for lo_i, hi_i, mu, var, weight, color, name in (
+        (0, crossing, fit.mu_lo, fit.var_lo, fit.w_lo, RUST, r"\mu_{lo}"),
+        (crossing, len(xs), fit.mu_hi, fit.var_hi, fit.w_hi, GREEN, r"\mu_{hi}"),
+    ):
+        curve = y_base + weight * gaussian(xs, mu, var) * sy
+        seg_x, seg_y = xs[lo_i:hi_i], curve[lo_i:hi_i]
+        if seg_x.size:
+            # The hatch is clipped to the area under this component's own
+            # curve, not to the histogram's silhouette. The silhouette is the
+            # taller of the two wherever the data outruns the fit, so clipping
+            # to it let question marks stand above the very line that is
+            # supposed to bound them.
+            pts = [(x0 + seg_x[0] * w, y_base)]
+            pts += [(x0 + xx * w, yy) for xx, yy in zip(seg_x, seg_y)]
+            pts.append((x0 + seg_x[-1] * w, y_base))
+            hump = Polygon(pts, closed=True)
+            hump.set(facecolor="white", edgecolor="none", zorder=2)
+            ax.add_patch(hump)
+            _question_hatch(ax, hump, color, z=2.5)
+        # Each Gaussian is drawn only where it is visibly off the baseline.
+        # Plotted over the full axis, a component's far tail lies flat along
+        # the bottom of the *other* hump, and a green line running under the
+        # rust distribution reads as a stray mark rather than as the tail of
+        # something that is genuinely still there.
+        visible = np.flatnonzero(curve > y_base + TAIL_FLOOR * h)
+        if visible.size:
+            lo_v, hi_v = visible[0], visible[-1] + 1
+            ax.plot(x0 + xs[lo_v:hi_v] * w, curve[lo_v:hi_v], color=color, linewidth=2.4, zorder=3)
+        # Black, not the component's colour: against a rust or green hatch a
+        # matching dashed line stops reading as a separate mark, and this one
+        # has a job of its own — θ_G is ticked midway between the two.
+        peak = y_base + weight * gaussian(np.array([mu]), mu, var)[0] * sy
+        ax.plot([x0 + mu * w] * 2, [y_base, peak], color=INK, linewidth=1.6, linestyle=(0, (2, 2)), zorder=4)
+        ax.text(x0 + mu * w, y_base - LABEL_GAP, _sub(name), ha="center", va="top", fontsize=15, color=INK)
+
+    ax.plot([x0, x0 + w], [y_base] * 2, color=INK, linewidth=1.8, zorder=5)
+
+
+def _gmm_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the schematic.
+
+    The loop runs anticlockwise — haystack down to votes, votes right into the
+    model, model back down across the figure into the histogram — so the two
+    things the mixture cut trades off sit on opposite sides of it: the sliver
+    of labelled data on the upper left, the whole scored haystack along the
+    bottom. `D₋₁ → M₀` is a plain stroke and `M₀ → M₀(D₋₁)` is the labelled
+    block arrow, matching `_xcal_flow_stage`'s rule that a scoring path enters
+    a model bare and leaves it labelled.
+    """
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in GMM_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, GMM_CANVAS[0])
+    ax.set_ylim(0, GMM_CANVAS[1])
+    ax.set_axis_off()
+
+    # ── layout ────────────────────────────────────────────────────────────────
+    # Derived top-down from the haystack, then bottom-up from the closing line,
+    # so the histogram takes whatever vertical room is actually left over.
+    # `block_h` matches `_xcal_flow_stage`'s block, so D₀ is literally the same
+    # object across the two figures — and so the disc naming it clears the
+    # hatching by the same margin there as here.
+    bx, block_w, block_h = 4.2, 4.0, 1.05
+    # The haystack is the same *height* as the votes' block and much wider:
+    # the two are the same kind of thing — media — so the shape that differs
+    # between them should be how many there are, not how tall the box is.
+    # Both blocks are named on discs *inside* themselves and share a left edge,
+    # so the only difference the eye has to read between them is width — and
+    # neither spends vertical budget on a label hung above it.
+    hay_x0, hay_top = bx - block_w / 2, 10.9
+    hay_w, hay_h = 10.1, block_h
+    hay_y0 = hay_top - hay_h
+    vote_len = 1.45
+    block_top = hay_y0 - OBJECT_GAP - vote_len - OBJECT_GAP
+    block_y0 = block_top - block_h
+    row_y = block_y0 + block_h / 2
+
+    train_len = 1.75
+    train_x = bx + block_w / 2 + OBJECT_GAP
+    m0x = train_x + train_len + OBJECT_GAP + MODEL_W / 2
+
+    # One closing line, not two. `_xcal_flow_stage` can afford `θ₀ = avg(θ₁, θ₂)`
+    # above its `return` because averaging two cuts is arithmetic the picture
+    # cannot show; the midpoint *is* shown here — θ_G is ticked exactly between
+    # two named means — so spelling it out again would cost the histogram a
+    # third of its height to restate what the reader can already see.
+    return_y = 0.32
+    theta_label_top = return_y + 0.23 + OBJECT_GAP + CAP_16
+    y_base = theta_label_top + LABEL_GAP + 0.32
+
+    # D₋₁ → M₀ → M₀(D₋₁) is one straight vertical drop, not a dogleg: the
+    # haystack falls into the model and the scores fall out of it on the same
+    # line, which is the whole path the slide is about. The price is paid in
+    # the panel's *position* rather than in the drawing — the histogram slides
+    # right to sit under that line, so the arrow lands between θ_G and μ_hi
+    # instead of over the middle of the distribution. Pointing at a group's
+    # centre is worth less than the path reading as one stroke, and a vertical
+    # arrow is also the cheapest possible use of the drop it costs: every unit
+    # of height becomes arrow length, none of it spent going sideways.
+    panel_x0, panel_w, panel_h = 3.8, 8.0, 1.9
+    tip = (m0x, y_base + panel_h + OBJECT_GAP + CAP_16 + LABEL_GAP)
+
+    labeled_arrow = functools.partial(_labeled_arrow, ax)
+
+    # ── stage 1: the unlabeled haystack ───────────────────────────────────────
+    # "Unlabeled" sits where D₀'s Good/Bad sit, capitalised to match them,
+    # because it answers the same question about the same slot: what the
+    # classes in this block are.
+    _haystack_block(ax, hay_x0, hay_y0, hay_w, hay_h)
+    _disc_label(ax, hay_x0 + hay_w / 2, hay_y0 + hay_h / 2, "D_{-1}")
+    ax.text(
+        hay_x0 - LABEL_GAP,
+        hay_y0 + hay_h / 2,
+        "Unlabeled",
+        ha="right",
+        va="center",
+        fontsize=15,
+        color=SOFT,
+    )
+
+    # ── stage 2: vote a sliver of it into D0, and train M0 on that ────────────
+    # Lifted from `_xcal_flow_stage`'s stage 1, with the votes' provenance
+    # added above it: this is the same D₀ and the same M₀ the last figure kept.
+    if stage >= 2:
+        labeled_arrow((bx, hay_y0 - OBJECT_GAP), (bx, hay_y0 - OBJECT_GAP - vote_len), "vote")
+        _data_block(ax, bx - block_w / 2, block_y0, block_w, block_h)
+        good_h = 0.42 * block_h
+        ax.text(
+            bx - block_w / 2 - LABEL_GAP,
+            block_top - good_h / 2,
+            "Good",
+            ha="right",
+            va="center",
+            fontsize=15,
+            color=GREEN,
+        )
+        ax.text(
+            bx - block_w / 2 - LABEL_GAP,
+            block_y0 + (block_h - good_h) / 2,
+            "Bad",
+            ha="right",
+            va="center",
+            fontsize=15,
+            color=RUST,
+        )
+        _disc_label(ax, bx, row_y, "D_0")
+        labeled_arrow((train_x, row_y), (train_x + train_len, row_y), "train")
+        _model_box(ax, m0x, row_y, "M_0")
+
+    # ── stage 3: M0 scores the whole haystack ─────────────────────────────────
+    # The haystack drops into M₀ as a bare stroke and leaves it as the labelled
+    # "score" arrow, so the eye reads one path with the model on it.
+    if stage >= 3:
+        _arrow(ax, (m0x, hay_y0 - OBJECT_GAP), _box_edge(m0x, row_y, (m0x, hay_y0), OBJECT_GAP))
+        labeled_arrow(_box_edge(m0x, row_y, tip, OBJECT_GAP), tip, "score", z=2.1)
+        # Left-aligned, unlike the centred labels on `_score_line`: the cut is
+        # carried up through the histogram and lands within a hair of the panel's
+        # own midpoint, so a centred label would sit on top of it.
+        ax.text(
+            panel_x0,
+            y_base + panel_h + LABEL_GAP,
+            _sub("M_0(D_{-1})"),
+            ha="left",
+            va="bottom",
+            fontsize=16,
+            color=INK,
+        )
+        _score_histogram(ax, panel_x0, y_base, panel_w, panel_h, fit, scores, colored=stage >= 4)
+
+    # ── stage 5: cut at the midpoint between the two claimed modes ────────────
+    if stage >= 5:
+        mid = 0.5 * (fit.mu_lo + fit.mu_hi)
+        theta_x = panel_x0 + mid * panel_w
+        # Carried up through the histogram, not just ticked below it: the cut's
+        # whole claim is that it divides this distribution into the two classes,
+        # and a tick under the baseline leaves that to be taken on trust.
+        ax.plot([theta_x] * 2, [y_base - 0.32, y_base + panel_h], color=INK, linewidth=2.2, zorder=6)
+        ax.text(theta_x, y_base - 0.32 - LABEL_GAP, _sub(r"\theta_G"), ha="center", va="top", fontsize=16, color=INK)
+        ax.text(
+            panel_x0 + panel_w / 2,
+            return_y,
+            "return " + _sub(r"(M_0,\, \theta_G)"),
+            ha="center",
+            va="center",
+            fontsize=18,
+            color=INK,
+        )
+
+    return fig
+
+
 def blend_schedule_fig() -> None:
     n = np.arange(0, 121)
     fig, ax = plt.subplots(figsize=(7.0, 5.0))
@@ -463,56 +877,6 @@ def blend_schedule_fig() -> None:
     ax.set_axisbelow(True)
     fig.tight_layout()
     save(fig, OUT, "calib-blend-schedule.png")
-
-
-def gmm_cut_fig() -> None:
-    rng = np.random.default_rng(42)
-    neg = rng.normal(0.22, 0.09, 5700)
-    pos = rng.normal(0.72, 0.09, 300)
-    scores = np.clip(np.concatenate([neg, pos]), 0.0, 1.0)
-    fit = fit_score_gmm(scores)
-    assert fit is not None
-    mid = 0.5 * (fit.mu_lo + fit.mu_hi)
-
-    x = np.linspace(0, 1, 400)
-    fig, ax = plt.subplots(figsize=(7.0, 5.0))
-    ax.hist(scores, bins=48, density=True, color=NEUTRAL_FILL, zorder=1)
-    ax.plot(x, fit.w_lo * gaussian(x, fit.mu_lo, fit.var_lo), color=RUST, linewidth=2.4, zorder=3)
-    ax.plot(x, fit.w_hi * gaussian(x, fit.mu_hi, fit.var_hi), color=GREEN, linewidth=2.4, zorder=3)
-    ax.axvline(mid, color=BLUE, linewidth=2.4, zorder=4)
-    ymax = ax.get_ylim()[1]
-    ax.annotate(
-        "low (Bad) mode",
-        xy=(fit.mu_lo, fit.w_lo * gaussian(fit.mu_lo, fit.mu_lo, fit.var_lo)),
-        xytext=(0, 8),
-        textcoords="offset points",
-        ha="center",
-        color=RUST,
-        fontsize=15,
-    )
-    ax.annotate(
-        "high (Good)\nmode",
-        xy=(0.99, fit.w_hi * gaussian(fit.mu_hi, fit.mu_hi, fit.var_hi) * 0.9),
-        ha="right",
-        color=GREEN,
-        fontsize=15,
-    )
-    ax.annotate(
-        "cut: the midpoint\nbetween the modes",
-        xy=(mid, ymax * 0.82),
-        xytext=(10, 0),
-        textcoords="offset points",
-        ha="left",
-        color=BLUE,
-        fontsize=15,
-    )
-    ax.set_xlim(0, 1)
-    ax.set_xlabel("detector score — every item in the haystack, no labels")
-    ax.set_yticks([])
-    ax.spines["left"].set_visible(False)
-    ax.set_title("A threshold with no labels at all", loc="left", pad=14)
-    fig.tight_layout()
-    save(fig, OUT, "calib-gmm-cut.png")
 
 
 def anchored_fig() -> None:
@@ -640,8 +1004,8 @@ def decomposition_fig() -> None:
 
 if __name__ == "__main__":
     xcal_flow_fig()
+    gmm_flow_fig()
     blend_schedule_fig()
-    gmm_cut_fig()
     anchored_fig()
     decomposition_fig()
     print("wrote figures to", OUT)
