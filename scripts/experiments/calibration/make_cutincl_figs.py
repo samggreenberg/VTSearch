@@ -28,6 +28,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import re
 from pathlib import Path
 
 import matplotlib
@@ -62,10 +63,25 @@ RULE_ORDER = ("mid", "mid_tilt", "rate", "cross_tilt", "q_tilt")
 QDASH = {0.005: (1, 2), 0.01: (2, 2), 0.02: (), 0.04: (5, 2), 0.08: (7, 2, 1, 2)}
 
 
+#: `fold_anchored_w<kappa>_<rule>_<combine>[_s<step>]`.  Both the weight and the
+#: rule can contain characters that a naive `split("_")` mis-counts (`w0.3`,
+#: `mid_tilt`, `q_tilt`), so the prefix is stripped by pattern, not by position.
+_ARM_RE = re.compile(r"^fold_anchored_w[^_]+_(?P<rule>.+?)_(?:qmean|qmedian)(?:_s(?P<step>[0-9.]+))?$")
+
+
 def _rule_of(arm: str) -> str:
     """`fold_anchored_w0.3_<rule>_qmean[_s<step>]` -> `<rule>`."""
-    body = arm.split("_qmean")[0]
-    return body.split("_", 2)[2]
+    m = _ARM_RE.match(arm)
+    if not m:
+        raise ValueError(f"unrecognised arm name: {arm!r}")
+    return m.group("rule")
+
+
+def _step_of(arm: str) -> float | None:
+    """The `q_tilt` step size an arm carries, or ``None``."""
+    m = _ARM_RE.match(arm)
+    step = m.group("step") if m else None
+    return float(step) if step else None
 
 
 def _style(rule: str, step: float | None) -> dict:
@@ -103,7 +119,7 @@ def fig_regret_vs_k(reg: pd.DataFrame, tol: float, out: Path) -> str:
         for arm, g in sub.groupby("arm"):
             g = g.sort_values("inclusion_k")
             rule = _rule_of(str(arm))
-            step = float(str(arm).split("_s")[-1]) if "_s" in str(arm) else None
+            step = _step_of(str(arm))
             st = _style(rule, step)
             ax.plot(g["inclusion_k"], g["d_regret"], **st)
             ax.fill_between(g["inclusion_k"], g["ci_lo"], g["ci_hi"], color=st["color"], alpha=0.10, lw=0)
@@ -137,7 +153,7 @@ def fig_knob_liveness(df: pd.DataFrame, out: Path) -> str:
     for col, env in enumerate(envs):
         sub = df[df["env"] == env]
         for (arm, rule), g in sub.groupby(["arm", "cut_rule"], observed=True):
-            step = float(str(arm).split("_s")[-1]) if "_s" in str(arm) else None
+            step = _step_of(str(arm))
             st = _style(str(rule), step)
             a = g.groupby("inclusion_k")["admitted_frac"].mean()
             q = g.groupby("inclusion_k")["fold_quantile"].mean()
@@ -174,7 +190,7 @@ def fig_regret_vs_votes(df: pd.DataFrame, ks: tuple[int, ...], out: Path) -> str
             ax = axes[row, col]
             sub = df[(df["env"] == env) & (df["inclusion_k"] == k)]
             for (arm, rule), g in sub.groupby(["arm", "cut_rule"], observed=True):
-                step = float(str(arm).split("_s")[-1]) if "_s" in str(arm) else None
+                step = _step_of(str(arm))
                 if str(rule) == "q_tilt" and step is not None and round(step, 4) != 0.02:
                     continue  # one q_tilt line here; its step axis is fig5
                 st = _style(str(rule), None)
@@ -238,9 +254,9 @@ def fig_qtilt_step(reg: pd.DataFrame, live: pd.DataFrame, out: Path) -> str:
     q = reg[reg["arm"].str.contains("_q_tilt_")].copy()
     if q.empty:
         return ""
-    q["step"] = q["arm"].str.split("_s").str[-1].astype(float)
+    q["step"] = q["arm"].map(_step_of)
     ql = live[live["arm"].str.contains("_q_tilt_")].copy()
-    ql["step"] = ql["arm"].str.split("_s").str[-1].astype(float)
+    ql["step"] = ql["arm"].map(_step_of)
     envs = sorted(q["env"].unique(), key=lambda e: (0 if "dinov3" in e else 1, e))
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.2))
     for env in envs:
