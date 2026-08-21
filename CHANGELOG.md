@@ -17,6 +17,21 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Add Dataset dialog has one consistent vertical rhythm, and Advanced
+  really is hidden.** The Folder, Manifest and Demo forms all laid their fields
+  out differently: a field's own controls could sit further apart than two
+  unrelated fields, the "Folder to import" path and its **Browse** button were
+  separated as if they were different questions while the checkboxes below ran
+  together with no gap at all, and the folder browser opened as loose rows with
+  no frame. Every field in every importer now shares the same spacing, the path
+  input and **Browse** sit on one line (matching the Manifest importer's file
+  field), and the browser opens in a framed panel under it. Separately, the
+  **Advanced** section now shows *nothing* until you open it: **Embedder** and
+  the Demo importer's **Convert to** used to appear on the collapsed form
+  whenever their value differed from the default — which, on a demo dataset
+  that picks its own embedder, was most of the time. Any non-default choice is
+  still disclosed, in the **Advanced** toggle's tooltip. (#3215)
+
 - **Autopilot's "you're done" hand-off is a dialog you answer, and it appears
   once.** Reaching the end of training used to raise a toast that counted down
   and then returned you to the Dashboard unless you cancelled it — and because

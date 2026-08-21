@@ -1,6 +1,6 @@
 """Sample a folder of files and guess which media type dominates.
 
-Used by the import modal to pre-fill the "Dataset MediaType" dropdown and
+Used by the import modal to pre-fill the "Dataset media type" dropdown and
 auto-populate :class:`~vtscore.datasets.importers.base.SourceSpec` rows
 based on what's actually in the folder, instead of making the user pick
 blindly.

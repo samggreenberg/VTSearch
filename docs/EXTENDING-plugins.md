@@ -1014,7 +1014,7 @@ loops `effective_source_specs()` and calls you once per spec.
 class DXImporter(DatasetImporter):
     name = "dx"
     fields = [
-        PluginField(key="media_type", label="Output Media Type", field_type="select", ...),
+        PluginField(key="media_type", label="Output media type", field_type="select", ...),
         PluginField(key="dataset_id", ..., required=True),
     ]
 

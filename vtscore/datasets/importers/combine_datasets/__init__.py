@@ -189,7 +189,7 @@ class CombineDatasetsImporter(ImporterBase):
     fields = [
         PluginField(
             key="datasets",
-            label="Dataset Files",
+            label="Dataset files",
             field_type="text",
             description="The existing datasets to merge into one new dataset.",
             hint="Comma-separated paths to .pkl files exported from VTSearch.",

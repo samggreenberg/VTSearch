@@ -117,86 +117,106 @@ describe('ImportAdvancedComponent', () => {
     });
   });
 
-  describe('showAdvancedToggle', () => {
-    it('is true whenever the source-specs block is offered', async () => {
-      await setInputs({ showSourceSpecs: true, embedders, selectedEmbedder: 'custom' });
-      expect(component.showAdvancedToggle).toBe(true);
+  describe('nothing renders while Advanced is collapsed', () => {
+    const everything = {
+      showSourceSpecs: true,
+      availableConverters: converters,
+      embedders,
+      clippers,
+      cleaners,
+      selectedEmbedder: 'custom',
+      selectedClipper: 'sliding',
+      convertTargets: ['image', 'text'],
+    };
+
+    /** Click the real toggle so the OnPush component is marked dirty the way
+     *  a user's click marks it (assigning `advancedOpen` directly would not
+     *  schedule a re-render). */
+    async function openAdvanced(): Promise<void> {
+      fixture.nativeElement.querySelector('.advanced-toggle').click();
+      await settleZoneless(fixture);
+    }
+
+    /** Visible label text only - the toggle's tooltip also names the
+     *  overridden pickers, and that disclosure is the point of it. */
+    function labels(): string[] {
+      return [...fixture.nativeElement.querySelectorAll('.form-label')].map((el) =>
+        (el as HTMLElement).textContent!.trim(),
+      );
+    }
+
+    it('renders only the toggle, whatever has been overridden', async () => {
+      await setInputs(everything);
+      expect(fixture.nativeElement.querySelector('.advanced-toggle')).toBeTruthy();
+      expect(labels()).toEqual([]);
+      expect(fixture.nativeElement.querySelectorAll('select').length).toBe(0);
+      expect(fixture.nativeElement.querySelectorAll('input').length).toBe(0);
     });
 
-    it('is true when neither embedder nor clipper has been overridden', async () => {
-      await setInputs({ showSourceSpecs: false, embedders, clippers, selectedEmbedder: 'clap', selectedClipper: 'clip_default' });
-      expect(component.showAdvancedToggle).toBe(true);
+    it('renders every picker once Advanced is opened', async () => {
+      await setInputs(everything);
+      await openAdvanced();
+      const text: string = fixture.nativeElement.textContent;
+      expect(text).toContain('Include media');
+      expect(text).toContain('Convert to');
+      expect(text).toContain('Embedder');
+      expect(text).toContain('Cleanup');
+      expect(text).toContain('Merge near-duplicates');
+    });
+  });
+
+  describe('showConvertTargetPicker', () => {
+    it('is false when no conversion targets are offered', async () => {
+      await setInputs({ convertTargets: [], convertOptional: true });
+      expect(component.showConvertTargetPicker).toBe(false);
     });
 
-    it('is false when an override keeps a picker visible anyway', async () => {
-      await setInputs({ showSourceSpecs: false, embedders, clippers, selectedEmbedder: 'custom', selectedClipper: 'clip_default' });
-      expect(component.showAdvancedToggle).toBe(false);
+    it('is true for a single optional target ("no conversion" is the other choice)', async () => {
+      await setInputs({ convertTargets: ['text'], convertOptional: true });
+      expect(component.showConvertTargetPicker).toBe(true);
     });
 
-    it('is true whenever cleaners exist, even with a picker overridden', async () => {
-      // Cleanup lives strictly behind the toggle, so hiding the toggle would
-      // strand the gates with no way back to them.
-      await setInputs({ showSourceSpecs: false, embedders, clippers, selectedEmbedder: 'custom', selectedClipper: 'clip_default', cleaners });
-      expect(component.showAdvancedToggle).toBe(true);
+    it('is false for a single forced target (a question with one answer)', async () => {
+      await setInputs({ convertTargets: ['image'], convertOptional: false });
+      expect(component.showConvertTargetPicker).toBe(false);
+    });
+
+    it('is true for two forced targets', async () => {
+      await setInputs({ convertTargets: ['image', 'text'], convertOptional: false });
+      expect(component.showConvertTargetPicker).toBe(true);
     });
   });
 
   describe('showEmbedderPicker', () => {
     it('is hidden when a Solo embedder is locked', async () => {
       await setInputs({ embedders, lockedEmbedder: 'clap' });
-      component.advancedOpen = true;
       expect(component.showEmbedderPicker).toBe(false);
     });
 
-    it('is visible when Advanced is open', async () => {
+    it('is hidden when there is only one embedder to choose from', async () => {
+      await setInputs({ embedders: [embedders[0]], selectedEmbedder: 'clap' });
+      expect(component.showEmbedderPicker).toBe(false);
+    });
+
+    it('is offered when more than one embedder is available', async () => {
       await setInputs({ embedders, selectedEmbedder: 'clap' });
-      component.advancedOpen = true;
       expect(component.showEmbedderPicker).toBe(true);
-    });
-
-    it('is visible when a non-default embedder is chosen even while collapsed', async () => {
-      await setInputs({ embedders, selectedEmbedder: 'custom' });
-      component.advancedOpen = false;
-      expect(component.showEmbedderPicker).toBe(true);
-    });
-  });
-
-  describe('showClipperPicker', () => {
-    it('is visible when Advanced is open', async () => {
-      await setInputs({ clippers, selectedClipper: 'clip_default' });
-      component.advancedOpen = true;
-      expect(component.showClipperPicker).toBe(true);
-    });
-
-    it('is visible when a non-default clipper is chosen while collapsed', async () => {
-      await setInputs({ clippers, selectedClipper: 'sliding' });
-      component.advancedOpen = false;
-      expect(component.showClipperPicker).toBe(true);
     });
   });
 
   describe('showStandaloneClipperButton', () => {
     it('is false when there is at most one clipper', async () => {
       await setInputs({ clippers: [clippers[0]], selectedClipper: 'clip_default' });
-      component.advancedOpen = true;
-      expect(component.showStandaloneClipperButton).toBe(false);
-    });
-
-    it('is false when the clipper picker is hidden', async () => {
-      await setInputs({ clippers, selectedClipper: 'clip_default' });
-      component.advancedOpen = false;
       expect(component.showStandaloneClipperButton).toBe(false);
     });
 
     it('is false when the source-specs column already hosts the native Details button', async () => {
       await setInputs({ clippers, selectedClipper: 'clip_default', showSourceSpecs: true, availableConverters: converters });
-      component.advancedOpen = true;
       expect(component.showStandaloneClipperButton).toBe(false);
     });
 
-    it('is true when the picker is visible and no source-specs column is present', async () => {
+    it('is true when no source-specs column is present', async () => {
       await setInputs({ clippers, selectedClipper: 'clip_default', showSourceSpecs: false });
-      component.advancedOpen = true;
       expect(component.showStandaloneClipperButton).toBe(true);
     });
 
@@ -205,7 +225,6 @@ describe('ImportAdvancedComponent', () => {
       // Include-media column collapses to a trivial native-only row and is
       // hidden; the clipper chooser must stay reachable via the standalone button.
       await setInputs({ clippers, selectedClipper: 'clip_default', showSourceSpecs: true, availableConverters: [] });
-      component.advancedOpen = true;
       expect(component.showStandaloneClipperButton).toBe(true);
     });
   });
@@ -363,22 +382,21 @@ describe('ImportAdvancedComponent', () => {
       expect(component.showCleanupSection).toBe(false);
     });
 
-    it('showCleanupSection follows the Advanced toggle at the registry default', async () => {
+    it('showCleanupSection is offered whenever the media type registers gates', async () => {
       await setInputs({ cleaners, selectedCleaners: defaultSelection });
       expect(component.isDefaultCleanupSelected).toBe(true);
-      expect(component.showCleanupSection).toBe(false);
-      component.advancedOpen = true;
       expect(component.showCleanupSection).toBe(true);
     });
 
-    it('a non-default selection stays hidden with Advanced collapsed', async () => {
-      // Unlike the embedder/clipper pickers, cleanup does NOT escape the
-      // toggle when overridden: it is too technical to show unprompted.
+    it('a non-default selection renders nothing with Advanced collapsed', async () => {
+      // Like every other block here, cleanup does NOT escape the toggle when
+      // overridden: it is too technical to show unprompted.
       await setInputs({ cleaners, selectedCleaners: [] });
       expect(component.isDefaultCleanupSelected).toBe(false);
-      expect(component.showCleanupSection).toBe(false);
-      component.advancedOpen = true;
-      expect(component.showCleanupSection).toBe(true);
+      expect(fixture.nativeElement.querySelectorAll('.cleanup-row').length).toBe(0);
+      fixture.nativeElement.querySelector('.advanced-toggle').click();
+      await settleZoneless(fixture);
+      expect(fixture.nativeElement.querySelectorAll('.cleanup-row').length).toBe(cleaners.length);
     });
 
     it('renders no cleanup markup at all while Advanced is collapsed', async () => {

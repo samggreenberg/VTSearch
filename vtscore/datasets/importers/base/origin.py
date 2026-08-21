@@ -60,7 +60,7 @@ def _serialise_origin_value(value: Any, serializer: Any) -> str:
 def _dataset_name_field() -> PluginField:
     return PluginField(
         key=DATASET_NAME_FIELD_KEY,
-        label="Dataset Name",
+        label="Dataset name",
         field_type="text",
         description="Leave blank to use a default name",
         required=False,

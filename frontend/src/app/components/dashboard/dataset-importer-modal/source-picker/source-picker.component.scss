@@ -21,8 +21,7 @@
 .importer-picker,
 .demo-picker,
 .server-folder-browser,
-.local-folder-uploader,
-.sf-browse-section {
+.local-folder-uploader {
   display: flex;
   flex-direction: column;
 }
@@ -40,7 +39,6 @@
 }
 
 .server-folder-browser { gap: var(--space-lg); }
-.sf-browse-section { gap: var(--space-sm); }
 
 // Stacked form sections inside the local-files / local-folder uploader
 // (lfInfo description, lfBefore media-type picker, drop zone, lfAfter
@@ -58,7 +56,3 @@
 .server-folder-browser {
   padding-left: var(--space-2xl);
 }
-
-// Extra vertical breathing room above grouped sections inside the
-// uploader (used to wrap `<ng-content>`-projected blocks too).
-.form-group--section { margin-top: var(--space-xl); }

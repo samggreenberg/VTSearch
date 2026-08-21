@@ -39,7 +39,7 @@ class WebhookLabelsetExporter(LabelsetExporter):
         ),
         PluginField(
             key="auth_header",
-            label="Authorization Header",
+            label="Authorization header",
             field_type="password",
             description="Optional Bearer token or API key sent as the Authorization header.",
             required=False,

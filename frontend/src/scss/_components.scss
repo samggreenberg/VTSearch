@@ -448,7 +448,7 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 
 // Field header label.  Made visually distinct from `.info-text` (instruction
 // body copy) by using the primary text color and a heavier weight, so a
-// label like "Dataset Name" reads as a header above its input rather than
+// label like "Dataset name" reads as a header above its input rather than
 // blending into surrounding paragraph text.  Sized to match `.form-input`
 // (`var(--font-md)`) so the header is never visually smaller than the value
 // the user types/picks underneath it.
@@ -696,6 +696,39 @@ h4 { font-size: var(--font-lg); font-weight: var(--weight-medium); }
 // local-folder / demo), each of which renders its own
 // `<vt-import-advanced>` wrapped in a `.form-group.form-group--section`.
 .form-group--section { margin-top: var(--space-xl); }
+
+// A text field paired with a "Browse" button that opens an inline
+// server-side browser below it: the input and the button share one row so
+// they read as a single control, and the revealed panel gets the recessed
+// chrome below.  Used by `<vt-file-browser>` (pick a file) and the Add
+// Dataset server-folder field (pick a folder).
+.browse-row {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.browse-row .form-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.browse-row .btn {
+  white-space: nowrap;
+}
+
+// Outer chrome around an inline `<vt-folder-browser>` panel.  The list,
+// breadcrumb, and rows themselves are styled by that component; this only
+// frames it so the browser reads as a recessed sub-surface of the field
+// that opened it rather than as loose rows in the form.
+.browse-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-subtle);
+  padding: var(--space-sm) var(--space-md);
+}
 
 // Inline format-hint chip rendered below an importer form field when the
 // PluginField declares a `hint` (separate from `description`, which feeds

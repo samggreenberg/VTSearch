@@ -16,7 +16,7 @@
     <form class="new-detector-form" (ngSubmit)="submit()">
       @if (tab === 'blank' && !effectiveSoloMediaType) {
         <div class="form-group">
-          <label class="col-label" title="The type of media this detector will process">Media type</label>
+          <label class="form-label" title="The type of media this detector will process">Media type</label>
           <div class="media-type-row">
             <div class="custom-select"
               [class.open]="mediaTypeDropdownOpen"
@@ -68,7 +68,7 @@
 
       @if (tab === 'blank') {
         <div class="form-group example-group">
-          <label class="col-label">Example <span class="required">*</span></label>
+          <label class="form-label">Example <span class="required">*</span></label>
           <div class="tab-bar example-tab-bar" role="tablist">
             <button type="button" class="tab" role="tab"
               [class.active]="exampleTab() === 'text'"
@@ -160,7 +160,7 @@
       @if (tab === 'trained') {
         @if (trainedView === 'picker') {
           <div class="form-group">
-            <label class="col-label">Import labels from <span class="required">*</span></label>
+            <label class="form-label">Import labels from <span class="required">*</span></label>
             <p class="info-text">Choose where to import labels from. The resulting detector's training data will be the imported labels.</p>
             @if (labelImportersLoading()) {
               <p class="empty-state">Loading importers…</p>
@@ -191,7 +191,7 @@
             @if (selectedLabelImporterFields.length > 0) {
               @for (field of selectedLabelImporterFields; track field.key) {
                 <div class="form-group">
-                  <label class="col-label" [for]="'nmm-' + field.key"
+                  <label class="form-label" [for]="'nmm-' + field.key"
                     [title]="field.description || field.label || field.key">
                     {{ field.label || field.key }}
                     @if (field.required) {
@@ -326,7 +326,7 @@
       }
 
       <div class="form-group">
-        <label class="col-label" for="detector-name" title="A short name to identify this detector">Detector name</label>
+        <label class="form-label" for="detector-name" title="A short name to identify this detector">Detector name</label>
         <input
           id="detector-name"
           class="form-input"
@@ -352,7 +352,7 @@
 
           @if (advancedOpen()) {
             @if (showEmbedderTypePicker) {
-              <label class="col-label" for="detector-embedder-type"
+              <label class="form-label" for="detector-embedder-type"
                 title="The kind of embedder this detector works with. An embedder is the tool that analyzes your items so they can be searched. The detector stays compatible with any dataset that uses this kind of embedder. Pick the kind you expect to use — you can create a detector before adding any dataset.">
                 Detector Embedder Type
               </label>

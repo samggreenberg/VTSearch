@@ -14,16 +14,17 @@ import {
 import { SourceSpecsPickerComponent } from '../source-specs-picker/source-specs-picker.component';
 
 /** "Advanced ▾" block of the Add Dataset modal: Include media (source
- *  specs), Embedder, Clipper.  Pulled out of the parent component
- *  because the same block was inlined three times (server-folder,
- *  local-folder/files, generic form), with `sf*` / `lf*` / `form*`
- *  prefixed parallel state and a slew of context-dispatching helpers.
+ *  specs), Convert to, Embedder, Clipper, Cleanup, and the two ingest
+ *  toggles.  Pulled out of the parent component because the same block
+ *  was inlined three times (server-folder, local-folder/files, generic
+ *  form), with `sf*` / `lf*` / `form*` prefixed parallel state and a
+ *  slew of context-dispatching helpers.
  *
- *  The block lives behind an "Advanced ▾" toggle but the embedder and
- *  clipper pickers can stay visible even when the toggle is collapsed
- *  if the user has chosen a non-default value; otherwise their
- *  override would be hidden until they opened Advanced again.  The
- *  Include media picker is gated strictly by the toggle.
+ *  **Everything in the block is gated strictly by the toggle.**  Nothing
+ *  here is on screen for a user who has not opened Advanced - not even a
+ *  picker the user has moved off its default, which earlier versions kept
+ *  visible so the override stayed discoverable.  What the current
+ *  selection is instead surfaces in :prop:`advancedToggleTitle`.
  *
  *  The clipper chooser modal lives one level up (each of the four
  *  Add Dataset picker views - generic form / server-folder /
@@ -67,6 +68,19 @@ export class ImportAdvancedComponent {
    *  at all.  True for every importer that participates in the dataset
    *  modal's form / server-folder / local-folder/files flows. */
   readonly showSourceSpecs = input(false);
+
+  /** Media types the current native type can be converted into on load.
+   *  Feeds the "Convert to" picker; empty hides it.  Used by the demo
+   *  flow, whose fixed dataset offers a single conversion choice rather
+   *  than the source-specs matrix the folder/form flows get. */
+  readonly convertTargets = input<string[]>([]);
+  /** Whether conversion is optional (the native type is embeddable on its
+   *  own, so "no conversion" is an offered choice) or forced (it is not,
+   *  so one of :prop:`convertTargets` must be picked). */
+  readonly convertOptional = input(false);
+  /** Two-way bound conversion target; ``''`` means "no conversion". */
+  readonly selectedConvertTarget = input('');
+  readonly selectedConvertTargetChange = output<string>();
 
   /** Two-way bound source-spec list. */
   readonly sourceSpecs = input<SourceSpec[]>([]);
@@ -188,54 +202,50 @@ export class ImportAdvancedComponent {
     });
   }
 
-  /** Tooltip for the Advanced toggle.  Gains a trailing cleanup line only
-   *  once the user has moved the gates off the registry default, so the
-   *  override stays discoverable while Advanced is collapsed without
-   *  putting any of it on screen for the default user. */
+  /** Tooltip for the Advanced toggle.  Since nothing in the block shows
+   *  while it is collapsed, the tooltip is the only place a non-default
+   *  selection is disclosed: it gains one trailing line per knob the user
+   *  (or the flow) has moved off its default. */
   get advancedToggleTitle(): string {
     const base = 'Show advanced options: included media types, embedder, pre-processing clipper, and cleanup gates';
-    if (this.cleaners().length === 0 || this.isDefaultCleanupSelected) return base;
-    const enabled = this.cleaners()
-      .filter((c) => this.isCleanerEnabled(c.name))
-      .map((c) => this.cleanerLabel(c));
-    return `${base}\nCleanup: ${enabled.length > 0 ? enabled.join(', ') : 'none'}`;
+    const lines: string[] = [];
+    if (this.showEmbedderPicker && !this.isDefaultEmbedderSelected) {
+      const embedder = this.embedders().find((e) => e.name === this.selectedEmbedder());
+      lines.push(`Embedder: ${embedder ? this.embedderLabel(embedder) : this.selectedEmbedder()}`);
+    }
+    if (this.clippers().length > 1 && !this.isDefaultClipperSelected) {
+      lines.push(`Clipper: ${this.clipperDisplayName}`);
+    }
+    if (this.cleaners().length > 0 && !this.isDefaultCleanupSelected) {
+      const enabled = this.cleaners()
+        .filter((c) => this.isCleanerEnabled(c.name))
+        .map((c) => this.cleanerLabel(c));
+      lines.push(`Cleanup: ${enabled.length > 0 ? enabled.join(', ') : 'none'}`);
+    }
+    return lines.length > 0 ? `${base}\n${lines.join('\n')}` : base;
   }
 
-  /** The Advanced toggle is shown either when a block that lives
-   *  *strictly* behind it is available - Include media, or the Cleanup
-   *  gates - in which case the toggle must stay reachable or that block
-   *  becomes unreachable; or when no picker in the block has been
-   *  overridden (otherwise those pickers stay visible anyway and the
-   *  toggle would be redundant). */
-  get showAdvancedToggle(): boolean {
-    if (this.showSourceSpecs()) return true;
-    if (this.cleaners().length > 0) return true;
-    return this.isDefaultEmbedderSelected && this.isDefaultClipperSelected;
+  /** Whether the "Convert to" picker has a real choice to offer.  When
+   *  conversion is forced, a lone target is applied silently rather than
+   *  posed as a question with one answer. */
+  get showConvertTargetPicker(): boolean {
+    const targets = this.convertTargets();
+    return this.convertOptional() ? targets.length > 0 : targets.length > 1;
   }
 
-  /** Embedder picker is visible when Advanced is open OR when the user
-   *  has picked a non-default embedder, and never when a Solo
-   *  mediaEmbedder is locked for the current mediaType (then the user
-   *  has explicitly opted out of seeing the picker for this type). */
+  /** Embedder picker is offered whenever there is more than one embedder
+   *  to choose between, except when a Solo mediaEmbedder is locked for the
+   *  current mediaType (then the user has explicitly opted out of seeing
+   *  the picker for this type).  Like everything else in the block it only
+   *  renders while Advanced is open. */
   get showEmbedderPicker(): boolean {
     if (this.lockedEmbedder()) return false;
-    return this.advancedOpen || !this.isDefaultEmbedderSelected;
+    return this.embedders().length > 1;
   }
 
-  /** Clipper picker is visible when Advanced is open OR when the user
-   *  has picked a non-default clipper. */
-  get showClipperPicker(): boolean {
-    return this.advancedOpen || !this.isDefaultClipperSelected;
-  }
-
-  /** Cleanup block is visible only while Advanced is open.  Unlike the
-   *  embedder and clipper pickers, a non-default selection does *not* keep
-   *  it on screen with Advanced collapsed: cleanup is the most technical
-   *  knob in the modal and the default user should never meet it, so it
-   *  stays behind the toggle even for a user who has changed it.  What the
-   *  selection is instead surfaces in :prop:`advancedToggleTitle`. */
+  /** Cleanup block is offered whenever the media type registers gates. */
   get showCleanupSection(): boolean {
-    return this.cleaners().length > 0 && this.advancedOpen;
+    return this.cleaners().length > 0;
   }
 
   /** Human label for a cleaner's checkbox row. */
@@ -292,20 +302,14 @@ export class ImportAdvancedComponent {
     );
   }
 
-  /** Whether to render the standalone clipper "Details" button below
-   *  the Advanced block.  When the source-specs column is visible
-   *  (Advanced open AND :prop:`hasSourceSpecsColumn`), the native row in
-   *  the column hosts its own Details button, so the standalone one
-   *  would be redundant.  In every other case where the user should be
-   *  able to reach the clipper chooser (Advanced collapsed but a
-   *  non-default clipper is in effect, or importers with no
-   *  source-specs column at all (demo form)), we
-   *  fall back to this standalone button so the override stays visible
-   *  and the chooser stays reachable. */
+  /** Whether to render the standalone clipper "Details" button.  When the
+   *  source-specs column is present, the native row in that column hosts
+   *  its own Details button, so the standalone one would be redundant;
+   *  importers with no source-specs column at all (demo flow) get this
+   *  fallback so the chooser stays reachable. */
   get showStandaloneClipperButton(): boolean {
     if (this.clippers().length <= 1) return false;
-    if (!this.showClipperPicker) return false;
-    return !(this.advancedOpen && this.hasSourceSpecsColumn);
+    return !this.hasSourceSpecsColumn;
   }
 
   /** Embedders flagged ``is_default`` for the active media type; shown
@@ -365,6 +369,16 @@ export class ImportAdvancedComponent {
     if (!clipper) return 'None';
     if (clipper.name.endsWith('_default')) return 'None';
     return clipper.display_name || clipper.name;
+  }
+
+  /** Human label for a media type id, falling back to the raw id. */
+  typeLabel(typeId: string): string {
+    return this.typeLabels()[typeId] || typeId;
+  }
+
+  /** Fired by the "Convert to" select on user pick. */
+  onConvertTargetChange(target: string): void {
+    this.selectedConvertTargetChange.emit(target);
   }
 
   /** Fired by the source-specs picker when its specs list changes. */

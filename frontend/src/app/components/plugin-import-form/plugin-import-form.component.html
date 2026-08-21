@@ -5,7 +5,7 @@
 
   @for (field of importerFields; track field.key) {
     <div class="form-group">
-      <label class="col-label" [for]="'pif-' + field.key"
+      <label class="form-label" [for]="'pif-' + field.key"
         [title]="field.description || field.label || field.key">
         {{ field.label || field.key }}
         @if (field.required) {
