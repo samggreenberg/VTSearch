@@ -563,7 +563,7 @@ Two buckets, one rule each:
   buttons with a text label, radio-pill labels). These name a surface or an
   action, so they read as a title.
 - **sentence case** - everything the user *reads or fills in*: **form field
-  labels** (`.form-label`, `.col-label`), **placeholders**, **hints**
+  labels** (`.form-label`), **placeholders**, **hints**
   (`.form-hint`, `.info-text`), **empty-state messages** (`.empty-state`),
   **tooltips** (`title="…"`), **aria-labels**, and any inline description or
   status sentence. Capitalize only the first word and proper nouns.

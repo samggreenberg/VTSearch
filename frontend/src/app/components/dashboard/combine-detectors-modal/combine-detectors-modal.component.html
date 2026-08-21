@@ -1,7 +1,7 @@
 <vt-modal [open]="true" title="Combine Trainable Detectors" [showCloseButton]="false" (closed)="close()">
   <form class="combine-form" (ngSubmit)="submit()">
     <div class="form-group">
-      <label class="col-label" title="Trainable detectors being combined">Sources</label>
+      <label class="form-label" title="Trainable detectors being combined">Sources</label>
       <ul class="source-list">
         @for (row of rows; track row.name) {
           <li class="source-row">
@@ -19,7 +19,7 @@
     </div>
 
     <div class="form-group">
-      <label class="col-label" for="combine-new-name" title="The name of the new combined detector">New name <span class="required">*</span></label>
+      <label class="form-label" for="combine-new-name" title="The name of the new combined detector">New name <span class="required">*</span></label>
       <input
         id="combine-new-name"
         class="form-input"
