@@ -391,6 +391,18 @@ constraint** — which is the reason #2868's repair worked at all.
 - **`FOLD_ANCHOR_QTILT_STEP`'s docstring stops being a placeholder** and starts
   being a measurement: the parameter was swept, and no value of it makes the rule
   competitive.
+- **`preflight.sh` gained the check this run needed and did not have.** The
+  launcher was drafted on 2026-08-12 pinning `CALIB_HEAD=linear` — production
+  then, a legacy arm by the morning it ran — and the same pin would have
+  produced a clean, plausible table about a detector nobody has. Check 12 now
+  compares every knob with a named shipped constant against it and fails on any
+  divergence the study has not *declared* (`--diverges head,anchor_weight`). To
+  give the patch geometry something to be compared with, `voting_iterations`
+  names its default as `PRODUCTION_PATCH_STYLE` rather than inlining it. Written
+  up in
+  [`lessons/2026-08-21-a-launcher-pinned-a-head-that-stopped.md`](../../../scripts/experiments/lessons/2026-08-21-a-launcher-pinned-a-head-that-stopped.md);
+  the units bug the sizing run caught is in
+  [`lessons/2026-08-21-a-pooled-number-over-an-axis-that-rescales.md`](../../../scripts/experiments/lessons/2026-08-21-a-pooled-number-over-an-axis-that-rescales.md).
 
 ### Follow-ups this run raises
 
