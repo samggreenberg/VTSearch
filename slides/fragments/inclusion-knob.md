@@ -27,8 +27,8 @@
 
      Now the failure, in five advances.
 
-     The panel is one you have seen twice: a fold model's scored corpus in flat
-     black, with its held-out votes standing on the baseline. Nothing is fitted
+     The panel is one you have seen twice: a fold model's scored corpus in bare
+     bars, with its held-out votes standing on the baseline. Nothing is fitted
      — the rule about to be drawn reads the seven marks and nothing else.
 
      Advance two: the only cuts the original rule could return. It searched for

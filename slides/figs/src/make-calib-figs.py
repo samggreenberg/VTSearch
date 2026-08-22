@@ -591,9 +591,11 @@ def _staircase(x0: float, y_base: float, w: float, sy: float, edges, density, fi
     """The histogram's own outline over bins ``first..last``, as a closed shape.
 
     Drawing the bars as one polygon rather than N rectangles is what lets the
-    same silhouette be re-filled between build stages — black while it is just
+    same silhouette be re-drawn between build stages — bare while it is just
     "the shape of the data", then split in two and hatched once the fit claims
-    which half is which — without the outline moving by a pixel.
+    which half is which — without the outline moving by a pixel. It is also
+    what keeps the unfitted form's bar separators single-stroked; see
+    `_score_histogram`.
     """
     pts = [(x0 + edges[first] * w, y_base)]
     for i in range(first, last + 1):
@@ -607,6 +609,13 @@ def _staircase(x0: float, y_base: float, w: float, sy: float, edges, density, fi
 #: Height below which a fitted component's tail stops being drawn, as a
 #: fraction of the panel height. See `_score_histogram`.
 TAIL_FLOOR = 0.012
+
+#: Stroke width of an unfitted histogram's bars. The narrowest panel in the
+#: progression is `calib-quantile-flow`'s, where `GMM_FLOW_BINS` bars share
+#: 4.85 drawing units — about 4pt each, or six slide pixels — so the two edges
+#: of a bar and the white between them are all within a pixel or two of each
+#: other. Any heavier and the bars close up into the solid block they replaced.
+BAR_EDGE_LW = 0.9
 
 #: Nominal height of one "?" in the hatch, in drawing units, and the lattice
 #: pitch as a multiple of it.
@@ -680,8 +689,8 @@ def _score_histogram(
     `fill` names what the silhouette is filled with, and across the
     progression the three fills *are* the argument:
 
-    * `"plain"` — flat black: the shape of the data, which is all anyone
-      actually has before a fit is claimed.
+    * `"plain"` — hollow bars in outline: the shape of the data, which is all
+      anyone actually has before a fit is claimed.
     * `"query"` — the same silhouette re-filled, split at the components'
       crossing and hatched with question marks in rust or green. The mixture
       has read no labels, so "this hump is the Bad one" is a guess and the
@@ -702,9 +711,20 @@ def _score_histogram(
     sy = h / float(density.max())
 
     if fill == "plain":
-        black = _staircase(x0, y_base, w, sy, edges, density, 0, len(density) - 1)
-        black.set(facecolor=INK, edgecolor="none", zorder=2)
-        ax.add_patch(black)
+        # Bars in outline rather than a solid black mass. The silhouette is the
+        # same polygon the fitted forms re-draw, so nothing moves between build
+        # stages; what makes it read as *bars* is one separator per internal bin
+        # boundary. Each separator stops at the shorter of the two bars it
+        # divides, because the staircase's own riser already carries the rest of
+        # that boundary — drawn full height they would double-stroke every riser
+        # in the figure and the outline would thicken wherever the data steps.
+        bars = _staircase(x0, y_base, w, sy, edges, density, 0, len(density) - 1)
+        bars.set(facecolor="white", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
+        ax.add_patch(bars)
+        for i in range(1, len(density)):
+            top = y_base + float(min(density[i - 1], density[i])) * sy
+            if top > y_base:
+                ax.plot([x0 + edges[i] * w] * 2, [y_base, top], color=INK, linewidth=BAR_EDGE_LW, zorder=2)
         ax.plot([x0, x0 + w], [y_base] * 2, color=INK, linewidth=1.8, zorder=5)
         return
 
@@ -1689,9 +1709,9 @@ def xquant_flow_fig() -> None:
     `calib-blend-flow`'s mixture branch returning — D₀ –train→ M₀, then a
     straight drop into a panel on the shared baseline — but doing a different
     job. In the blend, M₀ scored the haystack so a mixture could be fitted on
-    it; here nothing is fitted on it, which is why the panel is drawn in flat
-    black. M₀'s distribution is not evidence in this figure. It is the *scale
-    the answer has to be spoken in*.
+    it; here nothing is fitted on it, which is why the panel is drawn as bare
+    bars with no curve over them. M₀'s distribution is not evidence in this
+    figure. It is the *scale the answer has to be spoken in*.
 
     The argument runs in three moves, and the drawing is arranged so each is a
     comparison the audience makes rather than a claim they are told:
@@ -2050,7 +2070,7 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
             )
 
     # ── stage 4: M₀ scores the haystack — a scale, not evidence ───────────────
-    # Flat black, and no fitted curves over it: nothing is estimated on this
+    # Bare bars, and no fitted curves over them: nothing is estimated on this
     # distribution. It is here because the threshold has to be a number M₀ can
     # apply, and M₀'s numbers are its own.
     if stage >= 4:
@@ -2185,9 +2205,9 @@ def _incl_corpus() -> np.ndarray:
     Same generator, same seed, same first draw, so the histogram in Part 2 is
     the *same shape* as the left panel of `calib-quantile-flow` rather than a
     lookalike. Nothing is fitted on it here: the two cut rules Part 2 compares
-    read the seven votes and nothing else, and the corpus is drawn flat black
-    for the reason `calib-quantile-flow` draws M₀ flat black — it is not
-    evidence, it is what the cut is applied to.
+    read the seven votes and nothing else, and the corpus is drawn as bare bars
+    for the reason `calib-quantile-flow` draws M₀ that way — it is not evidence,
+    it is what the cut is applied to.
     """
     rng = np.random.default_rng(11)
     neg, pos = INCL_POPULATION
@@ -2251,8 +2271,9 @@ def _normalised_cost(scores: np.ndarray, labels: np.ndarray, inclusion: int, gri
 def _incl_panel(ax: plt.Axes, corpus: np.ndarray, *, y_base: float, top: float, votes: bool = True) -> None:
     """`calib-quantile-flow`'s left panel, unfitted: the corpus, and the votes on it.
 
-    The humps are flat black because nothing is estimated on them — the cut
-    rules Part 2 compares read the seven marks on the baseline and nothing else.
+    The bars carry no fill and no fitted curve because nothing is estimated on
+    them — the cut rules Part 2 compares read the seven marks on the baseline
+    and nothing else.
     Both names are kept for the reason the quantile figure keeps both: a panel
     holding two quantities has to name both, and which model scored which half
     of the votes is the fact the whole progression turns on.

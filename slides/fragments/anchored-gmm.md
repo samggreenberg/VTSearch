@@ -32,8 +32,9 @@
 
      Advance three is where the two lines meet. Each fold model scores the
      whole corpus, and that is what the panel underneath it is: the same
-     histogram iteration 2 fitted, one per fold, in flat black. Say that black
-     out loud — it is the shape of the data and it is all anyone has. Iteration
+     histogram iteration 2 fitted, one per fold, drawn as bare bars with nothing
+     over them. Say that out loud — it is the shape of the data and it is all
+     anyone has. Iteration
      2 had to look at exactly this and *assume* the high mound was the Good
      one. That assumption is the ceiling this slide lifts, and it was measured
      wrong: the fit put a third of the corpus in the high component when the

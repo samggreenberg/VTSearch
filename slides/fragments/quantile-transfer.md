@@ -37,8 +37,8 @@
 
      Advance four is where the slide turns, and it is worth slowing down for,
      because the thing it adds looks redundant and is not. M₀ scores the corpus
-     too, and its distribution appears on the right — in flat black, with no
-     fitted curves over it. Say that out loud: nothing is estimated here. This
+     too, and its distribution appears on the right — bare bars, with no fitted
+     curves over them. Say that out loud: nothing is estimated here. This
      panel is not a third piece of evidence. It is the scale the answer has to
      be spoken in, because M₀ is the model that will actually apply the
      threshold, and a model's scores are its own.
