@@ -30,6 +30,9 @@
      the threshold from the model — it is zero when the line is perfectly
      placed, however good or bad the ranking underneath happens to be.
 
+     The figure is drawn at equal weights, which is why its axis reads simply
+     FPR + FNR; the Inclusion setting is what tilts them apart.
+
      Point at the figure: each thin trace is one run's cost as votes
      accumulate, the heavy line is the median. Two things to note — it falls,
      which is the system working, and the spread is enormous, which is why

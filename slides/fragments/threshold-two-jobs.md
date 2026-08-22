@@ -1,8 +1,8 @@
 <!-- _class: statement -->
 
-# A detector *ranks*. The threshold *decides* — twice.
+# A detector *ranks*. A threshold *decides*.
 
-## What you keep at the end, and what you are asked about next.
+## Twice: what you keep, and what you are asked about next.
 
 <!-- The one-sentence version of the slide before it; land it and move on.
      The whole deck lives in the gap between ranking and deciding.
