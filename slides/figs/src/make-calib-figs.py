@@ -32,13 +32,19 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import patheffects
 from matplotlib.patches import Ellipse, FancyArrow, FancyArrowPatch, Polygon, Rectangle
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from slide_figure import LABEL_GAP_PT, OBJECT_GAP_PT, SIDEBAR, SIDEBAR_WIDE, save, tight_box  # noqa: E402
 
 from vtscore.training.blend_schedules import BlendContext, get_schedule
-from vtscore.training.thresholds import GmmFit1D, fit_anchored_score_gmm, fit_score_gmm
+from vtscore.training.thresholds import (
+    FOLD_ANCHOR_WEIGHT,
+    GmmFit1D,
+    fit_anchored_score_gmm,
+    fit_score_gmm,
+)
 
 OUT = Path(__file__).resolve().parent.parent
 
@@ -655,7 +661,8 @@ def _score_histogram(
     fit: "GmmFit1D",
     scores: np.ndarray,
     *,
-    colored: bool,
+    fill: str,
+    mu_labels: bool = True,
 ) -> None:
     """The haystack's score histogram, drawn in the schematic's drawing units.
 
@@ -665,18 +672,31 @@ def _score_histogram(
     is scaled so the tallest bar is exactly `h`. The fitted component curves
     ride the same scaling, so curve and bars are directly comparable.
 
-    `colored` splits stage 3 from stage 4 of the build, and the split is the
-    argument of the whole slide. Stage 3 is the histogram in flat black: the
-    shape of the data, which is all anyone actually has. Stage 4 keeps that
-    silhouette exactly and re-fills it — split at the components' crossing,
-    each half hatched with question marks in rust or green and traced by its
-    fitted Gaussian. Everything that arrives in stage 4 is inference, and
-    none of it has read a label.
+    `fill` names what the silhouette is filled with, and across the
+    progression the three fills *are* the argument:
+
+    * `"plain"` — flat black: the shape of the data, which is all anyone
+      actually has before a fit is claimed.
+    * `"query"` — the same silhouette re-filled, split at the components'
+      crossing and hatched with question marks in rust or green. The mixture
+      has read no labels, so "this hump is the Bad one" is a guess and the
+      texture says so (the label-free figure, `calib-gmm-flow`).
+    * `"class"` — the same two humps hatched the way `_data_block` hatches
+      Good and Bad media. Votes inside the humps have pinned the components
+      to actual classes, so the fill is the block's own texture rather than a
+      question mark (the fold-anchored figure, `calib-fold-anchored-flow`).
+
+    `mu_labels` writes the component means under the baseline. Off where two
+    panels share a row and the μ names would crowd the cuts ticked beside
+    them; the dashed stems stay either way, because the cut is drawn midway
+    between them and needs them visible to read as a midpoint.
     """
+    if fill not in ("plain", "query", "class"):
+        raise ValueError(f"unknown histogram fill {fill!r}; expected 'plain', 'query' or 'class'")
     density, edges = np.histogram(scores, bins=GMM_FLOW_BINS, range=(0.0, 1.0), density=True)
     sy = h / float(density.max())
 
-    if not colored:
+    if fill == "plain":
         black = _staircase(x0, y_base, w, sy, edges, density, 0, len(density) - 1)
         black.set(facecolor=INK, edgecolor="none", zorder=2)
         ax.add_patch(black)
@@ -691,9 +711,9 @@ def _score_histogram(
     hi_d = fit.w_hi * gaussian(xs, fit.mu_hi, fit.var_hi)
     crossing = int(np.argmax(hi_d > lo_d)) if (hi_d > lo_d).any() else len(xs)
 
-    for lo_i, hi_i, mu, var, weight, color, name in (
-        (0, crossing, fit.mu_lo, fit.var_lo, fit.w_lo, RUST, r"\mu_{lo}"),
-        (crossing, len(xs), fit.mu_hi, fit.var_hi, fit.w_hi, GREEN, r"\mu_{hi}"),
+    for lo_i, hi_i, mu, var, weight, color, hatch, name in (
+        (0, crossing, fit.mu_lo, fit.var_lo, fit.w_lo, RUST, "\\\\\\", r"\mu_{lo}"),
+        (crossing, len(xs), fit.mu_hi, fit.var_hi, fit.w_hi, GREEN, "//////", r"\mu_{hi}"),
     ):
         curve = y_base + weight * gaussian(xs, mu, var) * sy
         seg_x, seg_y = xs[lo_i:hi_i], curve[lo_i:hi_i]
@@ -707,9 +727,15 @@ def _score_histogram(
             pts += [(x0 + xx * w, yy) for xx, yy in zip(seg_x, seg_y)]
             pts.append((x0 + seg_x[-1] * w, y_base))
             hump = Polygon(pts, closed=True)
-            hump.set(facecolor="white", edgecolor="none", zorder=2)
-            ax.add_patch(hump)
-            _question_hatch(ax, hump, color, z=2.5)
+            if fill == "query":
+                hump.set(facecolor="white", edgecolor="none", zorder=2)
+                ax.add_patch(hump)
+                _question_hatch(ax, hump, color, z=2.5)
+            else:
+                # `_data_block`'s own hatches, so a hump reads as the same
+                # stuff as the half of D₀ that named it.
+                hump.set(facecolor="white", edgecolor=color, hatch=hatch, linewidth=0, zorder=2)
+                ax.add_patch(hump)
         # Each Gaussian is drawn only where it is visibly off the baseline.
         # Plotted over the full axis, a component's far tail lies flat along
         # the bottom of the *other* hump, and a green line running under the
@@ -724,7 +750,8 @@ def _score_histogram(
         # has a job of its own — θ_G is ticked midway between the two.
         peak = y_base + weight * gaussian(np.array([mu]), mu, var)[0] * sy
         ax.plot([x0 + mu * w] * 2, [y_base, peak], color=INK, linewidth=1.6, linestyle=(0, (2, 2)), zorder=4)
-        ax.text(x0 + mu * w, y_base - LABEL_GAP, _sub(name), ha="center", va="top", fontsize=15, color=INK)
+        if mu_labels:
+            ax.text(x0 + mu * w, y_base - LABEL_GAP, _sub(name), ha="center", va="top", fontsize=15, color=INK)
 
     ax.plot([x0, x0 + w], [y_base] * 2, color=INK, linewidth=1.8, zorder=5)
 
@@ -857,16 +884,21 @@ def _gmm_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figu
             fontsize=16,
             color=INK,
         )
-        _score_histogram(ax, panel_x0, y_base, panel_w, panel_h, fit, scores, colored=stage >= 4)
+        _score_histogram(ax, panel_x0, y_base, panel_w, panel_h, fit, scores, fill="query" if stage >= 4 else "plain")
 
     # ── stage 5: cut at the midpoint between the two claimed modes ────────────
     if stage >= 5:
         mid = 0.5 * (fit.mu_lo + fit.mu_hi)
         theta_x = panel_x0 + mid * panel_w
-        # Carried up through the histogram, not just ticked below it: the cut's
-        # whole claim is that it divides this distribution into the two classes,
-        # and a tick under the baseline leaves that to be taken on trust.
-        ax.plot([theta_x] * 2, [y_base - 0.32, y_base + panel_h], color=INK, linewidth=2.2, zorder=6)
+        # A notch under the baseline, exactly as `_score_line` ticks a cut.
+        # Carrying the cut up through the histogram would say more about this
+        # one — its whole claim is that it divides the distribution — but the
+        # next two figures put this very panel beside score lines whose cuts
+        # are notched, and a cut that changes its mark between figures reads
+        # as a different kind of thing rather than as the same θ. One mark,
+        # one meaning; the two named means either side of it are what make it
+        # a midpoint, and they are drawn.
+        ax.plot([theta_x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
         ax.text(theta_x, y_base - 0.32 - LABEL_GAP, _sub(r"\theta_G"), ha="center", va="top", fontsize=16, color=INK)
         ax.text(
             panel_x0 + panel_w / 2,
@@ -941,8 +973,9 @@ def blend_flow_fig() -> None:
 
     * **The three evidence displays share one baseline.** M₁'s held-out score
       line, M₂'s, and the haystack histogram all sit on the same rule, so the
-      three cuts θ₁, θ₂ and θ_G are ticked at the same height and read as
-      three answers to one question rather than as two unrelated pictures.
+      three cuts θ₁, θ₂ and θ_G are ticked at the same height, with the same
+      mark, and read as three answers to one question rather than as two
+      unrelated pictures.
     * **The rivals are the same size.** The mixture panel gets the width the
       two score lines get, because the slide's claim is that neither estimator
       dominates — one is starved, the other is biased.
@@ -1082,11 +1115,15 @@ def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Fi
             fontsize=16,
             color=INK,
         )
-        _score_histogram(ax, panel_x0, y_base, panel_w, panel_h, fit, scores, colored=True)
+        _score_histogram(ax, panel_x0, y_base, panel_w, panel_h, fit, scores, fill="query")
 
     # ── stage 3: cut it where the two fitted components meet ──────────────────
     if stage >= 3:
-        ax.plot([theta_g_x] * 2, [y_base - 0.32, y_base + panel_h], color=INK, linewidth=2.2, zorder=6)
+        # A notch under the baseline, exactly as `_score_line` ticks a cut: the
+        # cuts in this progression are one mark with one meaning, so they are
+        # drawn one way whether the evidence above the line is a row of votes
+        # or a fitted mixture.
+        ax.plot([theta_g_x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
         ax.text(theta_g_x, y_base - 0.32 - LABEL_GAP, _sub(r"\theta_G"), ha="center", va="top", fontsize=16, color=INK)
 
     # ── stage 4: split the votes and train a fold model on each half ──────────
@@ -1142,6 +1179,405 @@ def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Fi
             eq_box = equation.get_window_extent().transformed(to_units)
         xcal_box = theta_x_text.get_window_extent().transformed(to_units)
         arrow((xcal_box.x1 + OBJECT_GAP, conclusion_y), (eq_box.x0 - OBJECT_GAP, conclusion_y))
+
+    return fig
+
+
+#: How many build stages the fold-anchored schematic reveals in: the spine
+#: carried over from the blend; the split and the two fold models; each fold
+#: model scoring the whole haystack into a shape; the held-out votes arriving
+#: to name the two components; the per-fold cuts; the average.
+XSEMI_FLOW_STAGES = 6
+
+#: Taller than any of its parents, and the one figure in the progression that
+#: could not be talked down to `FLOW_CANVAS_H`. The blend fits in 11.4 because
+#: its mixture panel sits *beside* the fold branch, sharing that branch's
+#: vertical budget; here both evidence displays are mixture panels and both
+#: hang *below* the fold models, so the panel's height is spent on top of the
+#: whole spine rather than alongside it. Measured rather than eyeballed, on
+#: the same rule the blend's exception was measured by: fitted into a
+#: `bg right:70%` slot a 15pt label renders at 22.6px here, against the
+#: blend's 23.8px and the theme's 20px floor. The alternatives were cutting
+#: the panels to a size where the votes inside the humps stop being legible,
+#: or dropping a beat the figure exists to make.
+XSEMI_CANVAS = (13.6, 12.75)
+
+#: The fold panels' height. Shorter than the blend's 2.0 because there are two
+#: of them stacked under the flow rather than one beside it, and no shorter,
+#: because the Good hump has to stay tall enough to hold a vote *inside* it —
+#: at a fifth of the haystack it draws at about a quarter of the Bad hump's
+#: height, which is the real floor on this number.
+XSEMI_PANEL_H = 1.75
+
+#: Each fold model's haystack scores, as `((mu, sigma), (mu, sigma))` for the
+#: Bad and Good populations. Fold 1 is the mixture figure's own haystack,
+#: unchanged, so the audience recognises the picture; fold 2 is drawn from a
+#: model that scores the same media differently — its Bads sit higher and its
+#: Goods sit higher still. That the two folds disagree is the point of
+#: averaging their cuts at all, and the quantile figure that follows is where
+#: the disagreement stops being survivable by an average of raw scores.
+XSEMI_POPULATIONS = (
+    ((0.26, 0.082), (0.74, 0.078)),
+    ((0.36, 0.095), (0.80, 0.075)),
+)
+
+#: Each fold's *held-out* votes, as scores on that fold's own scale — the
+#: cross-calibration figure's ✗s and ✓s, moved onto a score axis. The counts
+#: and the imperfection are carried over from `SCORE_MARKS_2`: fold 2 ranks a
+#: Bad above its own cut, because a fold model's ranking of votes it never
+#: saw is not trivially clean, and an anchored fit has to survive that. No
+#: Good sits at its fold's μ_hi, because a ✓ drawn above the baseline lands on
+#: the dashed stem that marks the mean and neither mark survives the overlap.
+XSEMI_ANCHORS = (
+    {"bad": (0.12, 0.20, 0.28, 0.36), "good": (0.63, 0.71, 0.85)},
+    {"bad": (0.22, 0.30, 0.38, 0.70), "good": (0.61, 0.74, 0.91)},
+)
+
+
+def xsemi_flow_fig() -> None:
+    """Schematic of the fold-anchored mixture — iteration 4 of the line (#3218).
+
+    The fourth figure of the calibration progression, and the one where the
+    two rivals of `calib-blend-flow` stop being rivals: instead of averaging a
+    label-free cut against a label-only cut, each *fold* model fits the whole
+    haystack **and** its own held-out votes at once, so one estimator reads
+    both sources of evidence. This is the shipped threshold path
+    (`fold_anchored_gmm_threshold`), drawn at its shipped settings: anchors at
+    mass κ = `FOLD_ANCHOR_WEIGHT`, the cut at the midpoint of the two fitted
+    means, one fit per fold.
+
+    What survives from the previous figures, deliberately: the haystack D₋₁
+    and the votes D₀ taken out of it; D₀ —train→ M₀; the split into D₁/D₂ and
+    the crossed scoring paths that name cross-calibration. What is gone is the
+    horizontal rival branch — M₀ no longer scores the haystack here, because
+    the mixture it used to fit has moved inside the folds. What is new is the
+    pair of bare strokes running down the outside: *each fold model* scores
+    the whole haystack, which is the fit's population.
+
+    Three things the geometry is doing:
+
+    * **The evidence displays upgrade in place.** Where the cross-calibration
+      figure put a score line with ✗s and ✓s on it, this one puts the same
+      marks inside a mixture panel. The votes have not changed and neither has
+      their arrangement; what has changed is that a whole scored haystack is
+      now drawn behind them.
+    * **The humps take the block's own hatching.** The label-free figure
+      filled them with question marks because the low/high = Bad/Good reading
+      was an assumption. Here the votes are *in* the humps, so the fill is the
+      same Good/Bad texture D₀ is drawn with — the identification is shown
+      being earned rather than assumed.
+    * **The two cuts are ticked on one baseline**, as the blend's three were,
+      and they visibly disagree. Averaging them is the closing line, and it is
+      a *strawman*: the quantile figure that follows shows what a cardinal
+      average of two models' raw scores actually does. That is also why this
+      figure does not close on a `return`, as its parents do — it ends on the
+      thing the next figure corrects.
+
+    One honesty note for the speaker, recorded here because the figure cannot
+    say it: production never shipped this cardinal average. Quantile transfer
+    was in the fold-anchored design from the start; the average is drawn plain
+    here because the mistake teaches the fix, not because it is history.
+    """
+    folds = _xsemi_folds()
+    final = _xsemi_flow_stage(XSEMI_FLOW_STAGES, folds)
+    box = tight_box(final)
+    for stage in range(1, XSEMI_FLOW_STAGES):
+        save(
+            _xsemi_flow_stage(stage, folds),
+            OUT,
+            f"calib-fold-anchored-flow.build{stage}.png",
+            column=SIDEBAR_WIDE,
+            box=box,
+        )
+    save(final, OUT, "calib-fold-anchored-flow.png", column=SIDEBAR_WIDE, box=box)
+
+
+def _xsemi_folds() -> list[tuple[GmmFit1D, np.ndarray, dict]]:
+    """Per fold: the **real** anchored fit, its haystack sample, and its votes.
+
+    Schematic input, real estimator — the house rule, and here it runs the
+    shipped entry point (`fit_anchored_score_gmm` at `FOLD_ANCHOR_WEIGHT`) on
+    each fold's own population and each fold's own held-out anchors, which is
+    exactly what `fit_fold_anchored_cut` does per fold. At κ = 0.3 a handful
+    of votes barely moves a fit this well separated, and that is the honest
+    picture: what the anchors buy here is *identity*, not displacement. The
+    figure that shows anchors moving a fit is `calib-anchored-em`.
+    """
+    rng = np.random.default_rng(4)
+    folds = []
+    for (neg, pos), anchors in zip(XSEMI_POPULATIONS, XSEMI_ANCHORS, strict=True):
+        scores = np.clip(np.concatenate([rng.normal(neg[0], neg[1], 4800), rng.normal(pos[0], pos[1], 1200)]), 0.0, 1.0)
+        a_scores = np.array(anchors["bad"] + anchors["good"], dtype=float)
+        a_labels = np.concatenate([np.zeros(len(anchors["bad"])), np.ones(len(anchors["good"]))])
+        fit, provenance = fit_anchored_score_gmm(scores, a_scores, a_labels, anchor_weight=FOLD_ANCHOR_WEIGHT)
+        assert fit is not None and provenance == "anchored"
+        folds.append((fit, scores, anchors))
+    return folds
+
+
+def _hump_marks(ax: plt.Axes, x0: float, y_base: float, w: float, anchors: dict) -> None:
+    """This fold's held-out votes, drawn on the panel's baseline.
+
+    The panel's baseline *is* the cross-calibration figure's score line: the
+    same ✗s below it and ✓s above it, at the same offsets and the same weight,
+    because this is the identical evidence and the reader has already learnt
+    to read it that way. All that has changed is that the fold model's whole
+    scored haystack is now drawn standing on the same line, so the votes and
+    the population they anchor are read against one axis.
+
+    The one thing the panel adds is that a vote's position now means a score
+    rather than a rank, which is what lets a vote the fold model ranked wrongly
+    land visibly to the far side of its own fold's cut.
+
+    The glyphs are knocked out of whatever they land on with a white outline.
+    On the cross-calibration figure they sat on white paper; here a ✓ sits
+    just above the baseline where the Good hump's green hatch starts, and
+    green on green is not a mark. The halo is the smallest change that keeps
+    the glyph itself identical.
+    """
+    halo = [patheffects.withStroke(linewidth=4.0, foreground="white")]
+    for key, color, glyph, dy, va in (("bad", RUST, "✗", -0.12, "top"), ("good", GREEN, "✓", 0.08, "bottom")):
+        for score in anchors[key]:
+            ax.text(
+                x0 + score * w,
+                y_base + dy,
+                glyph,
+                ha="center",
+                va=va,
+                fontsize=16,
+                color=color,
+                fontweight="bold",
+                zorder=6,
+                path_effects=halo,
+            )
+
+
+def _mark_legend(ax: plt.Axes, x_outer: float, y: float, name: str, *, mirrored: bool) -> None:
+    """Name whose scores the ✗s and ✓s in a panel are, with the glyphs themselves.
+
+    The panel's own label says what the *humps* are — `Mᵢ(D₋₁)`, the whole
+    scored haystack. The marks in them are the other half of the fit and are a
+    different quantity, so they are named too, in the same two glyphs the
+    cross-calibration figure put on a score line.
+
+    Set as a second line above the panel's own label, at the panel's outer
+    top corner: the two labels name the two things in the panel, so they read
+    as one group, and the corner is the only place in this figure where a
+    two-line group fits. Inside the panel it would sit on a hump — the two
+    panels are mirror images in every quadrant *except* their humps, which
+    both lean left — and hung at the inner corners the two legends meet in
+    the middle of the figure and read as one four-glyph cluster belonging to
+    neither panel.
+    """
+    step, gap = 0.30, 0.30
+    d = -1.0 if mirrored else 1.0
+    pair = (("✓", GREEN), ("✗", RUST)) if mirrored else (("✗", RUST), ("✓", GREEN))
+    for k, (glyph, color) in enumerate(pair):
+        ax.text(
+            x_outer + d * (0.15 + step * k),
+            y,
+            glyph,
+            ha="center",
+            va="baseline",
+            fontsize=16,
+            color=color,
+            fontweight="bold",
+        )
+    ax.text(
+        x_outer + d * (0.15 + step + gap),
+        y,
+        _sub(name),
+        ha="right" if mirrored else "left",
+        va="baseline",
+        fontsize=15,
+        color=INK,
+    )
+
+
+def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in XSEMI_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, XSEMI_CANVAS[0])
+    ax.set_ylim(0, XSEMI_CANVAS[1])
+    ax.set_axis_off()
+
+    # ── layout ────────────────────────────────────────────────────────────────
+    # Top-down for the spine and the fold branch, exactly as the blend figure
+    # derives them, then the panels from where the fold branch's score arrows
+    # land, then the conclusion under both.
+    canvas_w, canvas_h = XSEMI_CANVAS
+    bx, block_w, block_h = canvas_w / 2, 4.0, 1.05
+    block_x0 = bx - block_w / 2
+    # Centred on the spine rather than run out to the canvas edge: the disc
+    # naming the haystack sits at the block's own centre, so centring the
+    # block is what puts that name directly above the vote arrow drawn out of
+    # it. Wide enough to stay 2.4× the votes' block — "far more of them" is
+    # the one thing this shape says — and no wider, since past the point the
+    # ratio is legible the extra length only pulls D₋₁'s name off the spine.
+    hay_w, hay_h = 2.4 * block_w, block_h
+    hay_x0 = bx - hay_w / 2
+    hay_y0 = canvas_h - hay_h
+    vote_len = 1.15
+    block_top = hay_y0 - OBJECT_GAP - vote_len - OBJECT_GAP
+    block_y0 = block_top - block_h
+    row_y = block_y0 + block_h / 2
+
+    fold_train_len, score_len, slope = 1.15, 1.3, 0.75
+    m1x, m2x = bx - block_w / 4, bx + block_w / 4
+    train_tail_y = block_y0 - OBJECT_GAP
+    my = train_tail_y - fold_train_len - OBJECT_GAP - MODEL_H / 2
+
+    down_left = (m1x - slope, my - 1.0)
+    exit1 = _box_edge(m1x, my, down_left, OBJECT_GAP)
+    ux, uy = np.array([slope, 1.0]) / float(np.hypot(slope, 1.0))
+    tip1 = (exit1[0] - score_len * ux, exit1[1] - score_len * uy)
+
+    # The two panels are a mirror pair about the figure's centre line, and
+    # their width is whatever makes the left one's arrow land where the blend
+    # figure's did — 0.62 of the way across, past the cut and short of μ_hi,
+    # off the tall bars. Solving that for the width is what keeps the pair
+    # centred *and* the arrows honest.
+    panel_h = XSEMI_PANEL_H
+    panel_gap = 2 * OBJECT_GAP
+    panel_w = (bx - panel_gap / 2 - tip1[0]) / 0.38
+    panel_top = tip1[1] - (OBJECT_GAP + CAP_16 + LABEL_GAP)
+    y_base = panel_top - panel_h
+    panel_x = (bx - panel_gap / 2 - panel_w, bx + panel_gap / 2)
+
+    # M₀ still gets trained on all of D₀ — it is what the threshold is *for* —
+    # but nothing flows into it from the haystack any more: the mixture that
+    # used to be fitted on M₀'s scores has moved inside the folds. That
+    # collapse is the whole of what iteration 4 removes.
+    train_x = block_x0 + block_w + OBJECT_GAP
+    train_len = 1.5
+    m0x = train_x + train_len + OBJECT_GAP + MODEL_W / 2
+
+    theta_bottom = y_base - 0.32 - LABEL_GAP - CAP_16
+    conclusion_y = theta_bottom - OBJECT_GAP - CONCLUSION_PT / 72
+
+    data_block = functools.partial(_data_block, ax)
+    arrow = functools.partial(_arrow, ax)
+    labeled_arrow = functools.partial(_labeled_arrow, ax)
+    model_box = functools.partial(_model_box, ax)
+
+    # ── stage 1: the spine, carried over from the blend ───────────────────────
+    _haystack_block(ax, hay_x0, hay_y0, hay_w, hay_h)
+    _disc_label(ax, hay_x0 + hay_w / 2, hay_y0 + hay_h / 2, "D_{-1}")
+    ax.text(hay_x0 - LABEL_GAP, hay_y0 + hay_h / 2, "Unlabeled", ha="right", va="center", fontsize=15, color=SOFT)
+    labeled_arrow((bx, hay_y0 - OBJECT_GAP), (bx, hay_y0 - OBJECT_GAP - vote_len), "vote")
+    data_block(block_x0, block_y0, block_w, block_h, split=stage >= 2)
+    good_h = 0.42 * block_h
+    ax.text(block_x0 - LABEL_GAP, block_top - good_h / 2, "Good", ha="right", va="center", fontsize=15, color=GREEN)
+    ax.text(
+        block_x0 - LABEL_GAP,
+        block_y0 + (block_h - good_h) / 2,
+        "Bad",
+        ha="right",
+        va="center",
+        fontsize=15,
+        color=RUST,
+    )
+    ax.text(block_x0, block_top + LABEL_GAP, _sub("D_0"), ha="left", va="bottom", fontsize=16, color=INK)
+    labeled_arrow((train_x, row_y), (train_x + train_len, row_y), "train")
+    model_box(m0x, row_y, "M_0")
+
+    # ── stage 2: split the votes, train a fold model on each half ─────────────
+    if stage >= 2:
+        for mx, name in ((m1x, "M_1"), (m2x, "M_2")):
+            model_box(mx, my, name)
+            labeled_arrow((mx, train_tail_y), (mx, train_tail_y - fold_train_len), "train")
+
+    # ── stage 3: each fold model scores the whole haystack ────────────────────
+    # Where the haystack enters the fold models is left to the panel's own
+    # label. Drawn, that path has to come down the outside of the figure and
+    # in along the models' row — the space directly above each fold model is
+    # spoken for by the half of D₀ that trains it — and two L-shaped strokes
+    # that size buy a fact the audience already has from three figures of the
+    # same haystack: `Mᵢ(D₋₁)` over a histogram says where it came from.
+    for i, (fit, scores, _anchors) in enumerate(folds):
+        if stage < 3:
+            break
+        sign = -1.0 if i == 0 else 1.0
+        exit_i = (2 * bx - exit1[0], exit1[1]) if i else exit1
+        tip_i = (2 * bx - tip1[0], tip1[1]) if i else tip1
+        labeled_arrow(exit_i, tip_i, "score", z=2.1)
+        ax.text(
+            panel_x[i] + (panel_w if sign > 0 else 0.0),
+            panel_top + LABEL_GAP,
+            _sub(f"M_{i + 1}(D_{{-1}})"),
+            ha="right" if sign > 0 else "left",
+            va="bottom",
+            fontsize=16,
+            color=INK,
+        )
+        _score_histogram(
+            ax,
+            panel_x[i],
+            y_base,
+            panel_w,
+            panel_h,
+            fit,
+            scores,
+            fill="class" if stage >= 4 else "plain",
+            mu_labels=False,
+        )
+
+    # ── stage 4: the held-out votes arrive and name the two components ────────
+    if stage >= 4:
+        for i, (mx, sign) in enumerate(((m1x, 1.0), (m2x, -1.0))):
+            entry_tail = (mx + sign * slope * (train_tail_y - my), train_tail_y)
+            arrow(entry_tail, _box_edge(mx, my, entry_tail, OBJECT_GAP))
+            _hump_marks(ax, panel_x[i], y_base, panel_w, folds[i][2])
+            # Held out, and named: the votes in fold i's panel are the ones
+            # its own model never trained on — the crossed strokes above are
+            # where they came from.
+            _mark_legend(
+                ax,
+                panel_x[i] + (0.0 if i == 0 else panel_w),
+                panel_top + LABEL_GAP + CAP_16 + LABEL_GAP,
+                f"M_{i + 1}(D_{2 - i})",
+                mirrored=i == 1,
+            )
+        # How much weight the votes carry — κ, and the share γ = κn/(κn+N)
+        # they end up holding — is deliberately *not* annotated here. It is
+        # the number that replaces the blend's hand-tuned ramp, which makes it
+        # a claim to argue on a slide of its own rather than a quantity the
+        # drawing needs: what this figure has to show is that the votes are in
+        # the fit at all.
+
+    # ── stage 5: cut each fold at the midpoint of its two fitted means ────────
+    if stage >= 5:
+        for i, (fit, _scores, _anchors) in enumerate(folds):
+            theta_x = panel_x[i] + 0.5 * (fit.mu_lo + fit.mu_hi) * panel_w
+            ax.plot([theta_x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
+            ax.text(
+                theta_x,
+                y_base - 0.32 - LABEL_GAP,
+                _sub(rf"\theta_{i + 1}"),
+                ha="center",
+                va="top",
+                fontsize=16,
+                color=INK,
+            )
+
+    # ── stage 6: average the two cuts ─────────────────────────────────────────
+    # One line, and no `return (M₀, θ₀)` after it. Its parents close on a
+    # return because they are each a whole algorithm; this one is a beat in the
+    # middle of an argument, and the quantile figure that follows takes this
+    # very average apart. Ending on the thing about to be corrected is the
+    # point, and an arrow onward to a return would spend the slide's last
+    # words settling something the next slide unsettles.
+    if stage >= 6:
+        ax.text(
+            bx,
+            conclusion_y,
+            _sub(r"\theta_0 = avg(\theta_1,\, \theta_2)"),
+            ha="center",
+            va="center",
+            fontsize=CONCLUSION_PT,
+            color=INK,
+        )
 
     return fig
 
@@ -1523,6 +1959,7 @@ if __name__ == "__main__":
     xcal_flow_fig()
     gmm_flow_fig()
     blend_flow_fig()
+    xsemi_flow_fig()
     blend_schedule_fig()
     anchored_fig()
     decomposition_fig()
