@@ -1,10 +1,14 @@
 #!/usr/bin/env python
-"""Mechanism figures for the calibration decks.
+"""Mechanism figures for the calibration deck.
 
 Uses matplotlib and vtscore, both already project dependencies, so a normal
 checkout install is enough. Run from the repo root:
 
     python slides/figs/src/make-calib-figs.py
+
+The loop schematic is hand-drawn: it is the deck's introduction to the
+application, so it carries plain-English labels rather than the notation the
+later schematics share.
 
 The two mixture figures run the *real* vtscore estimators (`fit_score_gmm`,
 `fit_anchored_score_gmm`) on labelled synthetic data — schematic inputs, real
@@ -73,6 +77,13 @@ plt.rcParams.update(
 def gaussian(x: np.ndarray, mu: float, var: float) -> np.ndarray:
     return np.exp(-0.5 * (x - mu) ** 2 / var) / np.sqrt(2 * np.pi * var)
 
+
+#: How many build stages the loop schematic reveals in: the corpus; the
+#: detector; the scores; the cut; what the cut keeps; what the cut asks about
+#: next; the retrain that closes the loop. Stage 7 is the committed final
+#: figure. The fork at stages 5-6 is the point of the slide — one cut, two
+#: jobs — so those two steps are deliberately separate reveals.
+LOOP_STAGES = 7
 
 #: How many build stages the cross-calibration schematic reveals in
 #: (issue #3208): D₀ → M₀; the split; the fold models; M₁ scores D₂; θ₁;
@@ -1284,7 +1295,231 @@ def decomposition_fig() -> None:
     save(fig, OUT, "calib-error-decomposition.png")
 
 
+#: The loop schematic's canvas. Wider than the calibration schematics because
+#: the cut forks left and right on the same row; the height matches theirs so a
+#: 16pt label renders at the same size on every schematic in the deck.
+LOOP_CANVAS = (13.6, FLOW_CANVAS_H)
+
+#: How far the whole-corpus score line's own label sits above it. The
+#: calibration schematics clear a check mark (`SCORE_LABEL_LIFT`); this line
+#: carries plain grey ticks instead, because the corpus is unlabeled and
+#: nothing on it is known to be Good or Bad.
+LOOP_TICK_H = 0.16
+LOOP_LABEL_LIFT = LOOP_TICK_H + LABEL_GAP
+
+
+def vts_loop_fig() -> None:
+    """The application loop the whole deck sits inside.
+
+    Deliberately not in the notation the calibration schematics share: this is
+    the slide that introduces the tool, so the corpus, the detector and the
+    votes are named in words. What it *does* share is the vocabulary of shapes
+    — a grey bar for unlabeled media, a green-over-rust hatched block for
+    votes, an outlined box for a model, a number line with a cut on it — so
+    that the later schematics are already half-read when they arrive.
+
+    The one argument the figure makes is the fork under the cut: the same
+    threshold decides what the search returns *and* which item the user is
+    asked about next, which is why it is worth a talk. The build reveals those
+    two arrows as separate steps.
+    """
+    final = _vts_loop_stage(LOOP_STAGES)
+    box = tight_box(final)
+    for stage in range(1, LOOP_STAGES):
+        save(_vts_loop_stage(stage), OUT, f"vts-loop.build{stage}.png", column=SIDEBAR_WIDE, box=box)
+    save(final, OUT, "vts-loop.png", column=SIDEBAR_WIDE, box=box)
+
+
+def _vts_loop_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the loop."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LOOP_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, LOOP_CANVAS[0])
+    ax.set_ylim(0, LOOP_CANVAS[1])
+    ax.set_axis_off()
+
+    arrow = functools.partial(_arrow, ax)
+    labeled_arrow = functools.partial(_labeled_arrow, ax)
+
+    # ── layout ────────────────────────────────────────────────────────────────
+    # One spine down the middle (corpus, detector, scores, cut), then a fork.
+    bx = 7.4
+    pool_x0, pool_w, pool_y0, pool_h = 2.6, 9.6, 9.95, 0.85
+    det_cy, det_w, det_h = 8.2, 2.9, 0.78
+    score_len = 1.5
+
+    score_tail = det_cy - det_h / 2 - OBJECT_GAP
+    score_tip = score_tail - score_len
+    # The arrow points at the score-line *group*, so it stops an object gap
+    # above the group's topmost ink — which is the line's label, not the line.
+    line_y = score_tip - (OBJECT_GAP + CAP_16 + LOOP_LABEL_LIFT)
+    line_half = 3.5
+    theta_x = bx + 0.1 * line_half
+
+    # Both forks leave from directly under the cut's own label.
+    fork = (theta_x, line_y - 0.32 - LABEL_GAP - CAP_16 - OBJECT_GAP)
+
+    votes_x0, votes_w, votes_y0, votes_h = 2.6, 3.2, 0.85, 0.95
+    votes_cx = votes_x0 + votes_w / 2
+    keep_cx, keep_cy, keep_w, keep_h = 11.5, 1.6, 3.2, 0.8
+
+    # ── stage 1: the corpus — everything the user has, none of it labelled ────
+    ax.add_patch(
+        Rectangle(
+            (pool_x0, pool_y0),
+            pool_w,
+            pool_h,
+            facecolor=NEUTRAL_FILL,
+            edgecolor=INK,
+            linewidth=1.6,
+            zorder=2,
+        )
+    )
+    ax.text(
+        pool_x0 + pool_w / 2,
+        pool_y0 + pool_h / 2,
+        "everything you have, unlabeled",
+        ha="center",
+        va="center",
+        fontsize=16,
+        color=INK,
+        zorder=3,
+    )
+
+    # ── stage 2: the detector — a small head trained on the votes so far ──────
+    if stage >= 2:
+        arrow((bx, pool_y0 - OBJECT_GAP), (bx, det_cy + det_h / 2 + OBJECT_GAP))
+        ax.add_patch(
+            Rectangle(
+                (bx - det_w / 2, det_cy - det_h / 2),
+                det_w,
+                det_h,
+                facecolor="white",
+                edgecolor=INK,
+                linewidth=1.6,
+                zorder=3,
+            )
+        )
+        ax.text(bx, det_cy, "detector", ha="center", va="center", fontsize=16, color=INK, zorder=4)
+
+    # ── stage 3: it scores the whole corpus ──────────────────────────────────
+    # Grey ticks, not checks and crosses: the corpus is unlabeled, so the shape
+    # of the scores is all anyone has. The two mounds are what iteration 2 goes
+    # on to fit.
+    if stage >= 3:
+        labeled_arrow((bx, score_tail), (bx, score_tip), "score")
+        ax.plot([bx - line_half, bx + line_half], [line_y] * 2, color=INK, linewidth=1.8, zorder=2)
+        ax.text(
+            bx,
+            line_y + LOOP_LABEL_LIFT,
+            "the whole corpus, scored",
+            ha="center",
+            va="bottom",
+            fontsize=16,
+            color=INK,
+        )
+        rng = np.random.default_rng(0)
+        draws = np.concatenate([rng.normal(-0.55, 0.22, 46), rng.normal(0.60, 0.17, 9)])
+        for u in np.clip(draws, -0.97, 0.97):
+            x = bx + u * line_half
+            ax.plot([x, x], [line_y, line_y + LOOP_TICK_H], color=SOFT, linewidth=1.3, zorder=3)
+
+    # ── stage 4: the cut ─────────────────────────────────────────────────────
+    if stage >= 4:
+        ax.plot([theta_x] * 2, [line_y - 0.32, line_y], color=BLUE, linewidth=2.6, zorder=4)
+        ax.text(
+            theta_x,
+            line_y - 0.32 - LABEL_GAP,
+            _sub(r"\theta"),
+            ha="center",
+            va="top",
+            fontsize=16,
+            color=BLUE,
+        )
+
+    # ── stage 5: job one — what the search gives back ────────────────────────
+    if stage >= 5:
+        labeled_arrow(fork, (keep_cx - keep_w / 2 + 0.7, keep_cy + keep_h / 2 + OBJECT_GAP), "keep")
+        ax.add_patch(
+            Rectangle(
+                (keep_cx - keep_w / 2, keep_cy - keep_h / 2),
+                keep_w,
+                keep_h,
+                facecolor="white",
+                edgecolor=INK,
+                linewidth=1.6,
+                zorder=3,
+            )
+        )
+        ax.text(keep_cx, keep_cy, "what you keep", ha="center", va="center", fontsize=16, color=INK, zorder=4)
+
+    # ── stage 6: job two — which item you are asked about next ───────────────
+    if stage >= 6:
+        labeled_arrow(fork, (votes_cx, votes_y0 + votes_h + LABEL_GAP + CAP_16 + OBJECT_GAP), "ask next")
+        _data_block(ax, votes_x0, votes_y0, votes_w, votes_h)
+        ax.text(
+            votes_cx,
+            votes_y0 + votes_h + LABEL_GAP,
+            "your votes",
+            ha="center",
+            va="bottom",
+            fontsize=16,
+            color=INK,
+        )
+        good_h = 0.42 * votes_h
+        ax.text(
+            votes_x0 + votes_w + LABEL_GAP,
+            votes_y0 + votes_h - good_h / 2,
+            "Good",
+            ha="left",
+            va="center",
+            fontsize=15,
+            color=GREEN,
+        )
+        ax.text(
+            votes_x0 + votes_w + LABEL_GAP,
+            votes_y0 + (votes_h - good_h) / 2,
+            "Bad",
+            ha="left",
+            va="center",
+            fontsize=15,
+            color=RUST,
+        )
+
+    # ── stage 7: the vote retrains the detector, and it all goes round again ─
+    # Routed as a rail down the left margin: a straight diagonal would cut
+    # through the score line, and the point of the last step is that the loop
+    # closes, which a clean rectangular return says more plainly.
+    if stage >= 7:
+        rail_x = 0.75
+        rail_y = votes_y0 + votes_h / 2
+        head_from = bx - det_w / 2 - OBJECT_GAP - 0.55
+        ax.plot(
+            [votes_x0 - OBJECT_GAP, rail_x, rail_x, head_from],
+            [rail_y, rail_y, det_cy, det_cy],
+            color=INK,
+            linewidth=1.6,
+            solid_capstyle="round",
+            solid_joinstyle="round",
+            zorder=2,
+        )
+        arrow((head_from, det_cy), (bx - det_w / 2 - OBJECT_GAP, det_cy))
+        ax.text(
+            rail_x - LABEL_GAP,
+            (rail_y + det_cy) / 2,
+            "retrain",
+            rotation=90,
+            ha="center",
+            va="bottom",
+            fontsize=15,
+            color=INK,
+        )
+
+    return fig
+
+
 if __name__ == "__main__":
+    vts_loop_fig()
     xcal_flow_fig()
     gmm_flow_fig()
     blend_flow_fig()

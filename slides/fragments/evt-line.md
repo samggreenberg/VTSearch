@@ -2,25 +2,32 @@
 
 ## Could a smarter rule beat the midpoint?
 
-- Prior-free crossing: derived, shipped, **−0.0044** — FPR *and* FNR both fall
-- Gumbel/EVT family: a max over regions is an extreme-value statistic — fit one
+- Prior-free crossing: derived, shipped, **−0.0044** — FPR *and* FNR both fell
+- A max over regions is an **extreme-value** statistic — so fit that tail instead
 - Pre-registered, swept twice, repaired once…
 
-<!-- Change of pace for the epilogue: the iterations so far changed what data
-     the threshold sees; this line asked whether, holding the mixture fit
-     fixed, a smarter *cut rule* than the naive midpoint could win. It opened
-     with a genuine success (docs/experiments/gmm-cut/REPORT.md, #2836): the
-     prior-free crossing — the Bayes crossing with the mixture weights
-     correctly divided out, weights the midpoint was silently smuggling in —
-     shipped at −0.0044 cost with FPR and FNR both falling, capturing about
-     60% of the headroom that a label-reading oracle showed was available. A
-     small win, but a clean one, and it proved the axis had something on it.
+<!-- Change of pace for the epilogue. Every iteration so far changed what data
+     the threshold gets to see. This line asked a different question: holding
+     the mixture fit fixed, could a smarter *cut rule* than the naive midpoint
+     win?
 
-     Then the ambitious idea: on region voting a media score is a max over
-     region scores, and the max of many draws is an extreme-value statistic —
-     so the high tail should be Gumbel-shaped, and fitting the tail family the
-     data actually implies should beat any Gaussian rule. Stress that this
-     premise is principled and testable, and that the sweep was pre-registered
-     before any result came back — because the next slide is what the
-     measurement said, and pre-registration is what makes that answer mean
-     something. Leave the ellipsis hanging as the transition. -->
+     It opened with a genuine success. The midpoint between two component
+     means is the right cut only when the two components are equally likely;
+     doing the Bayes-optimal crossing properly, with the fitted mixture
+     weights divided back out rather than silently smuggled in, is a
+     three-line change. It shipped at −0.0044 in cost with both error rates
+     falling, and it captured about sixty percent of the headroom that a
+     label-reading oracle said was available on this axis. Small, but clean,
+     and it proved the axis had something on it.
+
+     Then the ambitious idea, and this is the one to set up carefully. Under
+     region voting an item's score is the maximum over its regions — that was
+     the second slide of the talk. The maximum of many draws is not
+     Gaussian-shaped; it is an extreme-value statistic, and the classical
+     answer for its tail is the Gumbel family. So fitting the tail family the
+     data actually implies ought to beat any rule that assumes a Gaussian.
+
+     Stress two things: the premise is principled and testable, and the sweep
+     was pre-registered before any result came back. The next slide is what
+     the measurement said, and pre-registration is what makes that answer mean
+     something. Leave the ellipsis hanging. -->

@@ -38,9 +38,9 @@ Needs node and python3. Nothing to install — `npx` fetches Marp on first run
 (~1 min, once). Run from this directory:
 
 ```bash
-./render.sh scale26-review          # -> _out/scale26-review.pdf
-./render.sh sponsor-brief html      # or html / pptx
-./render.sh calibration-brief pdf --speaker  # -> _out/calibration-brief.speaker.pdf
+./render.sh hold-the-line           # -> _out/hold-the-line.pdf
+./render.sh hold-the-line html      # or html / pptx
+./render.sh hold-the-line pdf --speaker  # -> _out/hold-the-line.speaker.pdf
 ./build.py --check                  # preflight all manifests, build nothing
 ./build.py --list                   # decks, slide counts, unused fragments
 ```
@@ -52,8 +52,8 @@ here. The Makefile is for the grid or wherever make exists.
 For live preview while writing:
 
 ```bash
-./build.py sponsor-brief
-npx @marp-team/marp-cli@4 _build/sponsor-brief.md \
+./build.py hold-the-line
+npx @marp-team/marp-cli@4 _build/hold-the-line.md \
     --theme-set themes/ --allow-local-files -w --preview
 ```
 
@@ -156,9 +156,10 @@ exists, like any other figure reference.
 ## Variants
 
 For a slide that needs an audience-specific cut, add a suffix rather than
-branching the deck: `region-voting.md` and `region-voting.short.md` are both
-fragments, and each manifest picks the one it wants. Comment a line out of a
-manifest with `#` to park a slide without losing it.
+branching the deck: `foo.md` and `foo.short.md` are both fragments, and each
+manifest picks the one it wants — which is how one library serves a 25-minute
+talk and a 5-minute one without either deck owning a slide. Comment a line out
+of a manifest with `#` to park a slide without losing it.
 
 ## Figures
 

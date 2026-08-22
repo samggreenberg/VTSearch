@@ -2,27 +2,33 @@
 
 ## The single biggest win in the line
 
-- A/B on the production arm: cost **−0.074**, regret −0.070 (p ≈ 1e−23)
+- A/B on the production arm: cost **−0.074**, regret **−0.070** (p ≈ 1e−23)
 - FNR −0.071 with FPR flat — not bought with permissiveness
 - Keeps paying *after* handoff: a better cut surfaces better items to vote on
 
-<!-- The A/B (docs/experiments/safe-thresholds/REPORT.md, #2799) is the
-     cleanest result in the deck; spend time on why it is clean, not just how
-     big. Three reasons. First, it is not bought with permissiveness: the
-     recurring failure mode in earlier threshold work was a "fix" that games
-     the weighted cost by cutting lower and wrecking precision — here FNR
-     drops 0.071 while FPR is flat, meaning the cut lands closer to the
-     model's own oracle, which is what "better calibrated" is supposed to
-     mean. Second, ranking is untouched (average precision moves +0.001,
-     n.s.): the blend changes where the line is drawn, not how the pool is
-     ordered.
+<!-- This is the cleanest result in the deck; spend time on why it is clean,
+     not just on how big it is. Three reasons.
 
-     Third — the subtle one, worth slowing down for — it keeps paying after
-     its authority ends. Past 20 votes the blend IS pure cross-calibration,
-     yet the ON arm stays ahead. The only path for that gain is selection
-     feedback: the threshold drives Autopilot's Hard pick, so a better cut
-     surfaces better items to vote on, and the whole trajectory improves. A
-     within-step counterfactual cannot see this at all, which is exactly why
-     the study was run as an A/B over whole trajectories. Turned on for
-     everyone; it also eliminated the cold-start "admit nothing" cuts on the
-     control arm. -->
+     First, it is not bought with permissiveness. The recurring failure mode
+     in threshold work is a "fix" that games the weighted cost by cutting
+     lower and wrecking precision. Here the false-negative rate drops by 0.071
+     while the false-positive rate does not move, which means the cut landed
+     closer to the model's own best line rather than sliding down it. That is
+     what "better calibrated" is supposed to mean, and it is worth showing the
+     room that the two rates were checked separately.
+
+     Second, the ranking is untouched — average precision moves by 0.001, not
+     significant. The blend changes where the line is drawn, not how the pool
+     is ordered. Same detector, better decision.
+
+     Third, and this is the subtle one, so slow down: it keeps paying after
+     its authority ends. Past twenty votes the blend IS pure
+     cross-calibration — the mixture's weight has gone to zero — and yet the
+     arm with the blend switched on stays ahead for the rest of the run. The
+     only path for that gain is the second job from the loop slide: the
+     threshold decides which items get shown, so a better cut early surfaces
+     better items to vote on, which improves every retrain after it. A
+     within-step comparison cannot see this at all, which is exactly why the
+     study was run as an A/B over whole trajectories rather than as a cheaper
+     per-step counterfactual. Turned on for everyone; it also eliminated the
+     cold-start "admit nothing" cuts on the control arm. -->
