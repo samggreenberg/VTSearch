@@ -1259,7 +1259,9 @@ def xsemi_flow_fig() -> None:
     * **The two cuts are ticked on one baseline**, as the blend's three were,
       and they visibly disagree. Averaging them is the closing line, and it is
       a *strawman*: the quantile figure that follows shows what a cardinal
-      average of two models' raw scores actually does.
+      average of two models' raw scores actually does. That is also why this
+      figure does not close on a `return`, as its parents do — it ends on the
+      thing the next figure corrects.
 
     One honesty note for the speaker, recorded here because the figure cannot
     say it: production never shipped this cardinal average. Quantile transfer
@@ -1521,19 +1523,12 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
                 f"M_{i + 1}(D_{2 - i})",
                 mirrored=i == 1,
             )
-        # The weight the votes carry, in the space the collapsed rival branch
-        # left behind: what the blend hand-tuned as a ramp on the vote count is
-        # here a consequence of one number, and κ is that number.
-        ax.text(
-            (block_x0 + block_w + canvas_w - 0.2) / 2,
-            my + (block_y0 - my) / 2,
-            "anchor mass " + _sub(r"\kappa = 0.3") + "\n" + _sub(r"\gamma = \kappa n\, /\, (\kappa n + N)"),
-            ha="center",
-            va="center",
-            fontsize=15,
-            color=SOFT,
-            linespacing=1.6,
-        )
+        # How much weight the votes carry — κ, and the share γ = κn/(κn+N)
+        # they end up holding — is deliberately *not* annotated here. It is
+        # the number that replaces the blend's hand-tuned ramp, which makes it
+        # a claim to argue on a slide of its own rather than a quantity the
+        # drawing needs: what this figure has to show is that the votes are in
+        # the fit at all.
 
     # ── stage 5: cut each fold at the midpoint of its two fitted means ────────
     if stage >= 5:
@@ -1551,9 +1546,15 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
             )
 
     # ── stage 6: average the two cuts ─────────────────────────────────────────
+    # One line, and no `return (M₀, θ₀)` after it. Its parents close on a
+    # return because they are each a whole algorithm; this one is a beat in the
+    # middle of an argument, and the quantile figure that follows takes this
+    # very average apart. Ending on the thing about to be corrected is the
+    # point, and an arrow onward to a return would spend the slide's last
+    # words settling something the next slide unsettles.
     if stage >= 6:
-        avg = ax.text(
-            bx - 2.9,
+        ax.text(
+            bx,
             conclusion_y,
             _sub(r"\theta_0 = avg(\theta_1,\, \theta_2)"),
             ha="center",
@@ -1561,20 +1562,6 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
             fontsize=CONCLUSION_PT,
             color=INK,
         )
-        ret = ax.text(
-            bx + 2.9,
-            conclusion_y,
-            "return " + _sub(r"(M_0,\, \theta_0)"),
-            ha="center",
-            va="center",
-            fontsize=18,
-            color=INK,
-        )
-        fig.canvas.draw()
-        to_units = ax.transData.inverted()
-        a_box = avg.get_window_extent().transformed(to_units)
-        r_box = ret.get_window_extent().transformed(to_units)
-        arrow((a_box.x1 + OBJECT_GAP, conclusion_y), (r_box.x0 - OBJECT_GAP, conclusion_y))
 
     return fig
 
