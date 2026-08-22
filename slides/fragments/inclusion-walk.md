@@ -48,11 +48,16 @@
      that midpoint toward the positives' seventy-fifth percentile at minus ten —
      "just the surest matches" — and every stop of the walk is its own quantile,
      so every stop is its own cut. That is the whole repair. Measured against
-     the retired rule: zero flat sweeps rather than up to forty-four percent,
-     about ten distinct admitted sizes across eleven positions rather than two
-     to four, zero monotonicity violations rather than up to twelve percent, and
-     no cost at the default — the balanced error at inclusion zero is within
-     0.015 of what it replaced.
+     the retired rule: no flat sweeps at all on the real embeddings or on either
+     of the overlapping synthetic arms, at any vote count, against up to
+     forty-four percent for production; about ten distinct admitted sizes across
+     eleven positions rather than two to four; zero monotonicity violations
+     rather than up to twelve percent; and no cost at the default — the balanced
+     error at inclusion zero is within 0.015 of what it replaced. The one place
+     it still went flat is the arm where flatness is correct: the fully
+     separable synthetic case under label smoothing, where the pool genuinely
+     offers nothing between "all the positives" and "all the positives plus
+     margin".
 
      Advance five is the other half of the rule and an honest note. Above
      inclusion zero the cut never exceeds an alpha-quantile of the calibration

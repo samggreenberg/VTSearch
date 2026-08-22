@@ -2993,7 +2993,15 @@ def _tilt_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     return fig
 
 
-ACQ_CANVAS_H = 12.5
+#: Taller than the rest of the section, and the extra is spent at the bottom
+#: rather than on content. This is the only Part 2 figure whose last line runs
+#: along the foot of the canvas, and the theme prints the page number over a
+#: `bg` figure's bottom-right corner (see `PAGE_NUMBER_CLEAR`): fitted into a
+#: 70% slot this renders at ~52px per drawing unit, and the badge's ink reaches
+#: about 0.56 units up from the canvas's bottom edge, so the closing line has to
+#: sit clear of that. 13.26 units is the ceiling — past it the figure stops
+#: being width-limited in the slot and the type starts shrinking.
+ACQ_CANVAS_H = 13.0
 
 #: The acquisition figure's panel and the ranking bar under it.
 ACQ_PANEL_X0, ACQ_PANEL_W, ACQ_PANEL_H = 4.9, 10.3, 2.0
@@ -3009,7 +3017,7 @@ ACQ_ZOOM_H = 0.62
 
 #: How far the zoomed ranking hangs below the full one, leaving room for the
 #: callout lines that tie the two together and for the pick's own name.
-ACQ_ZOOM_DROP = 1.4
+ACQ_ZOOM_DROP = 1.2
 
 #: Which cells of the zoom carry votes rather than unlabeled media, as
 #: `(index, is_good)`. Two of twenty-one: near the cut almost everything is
@@ -3096,7 +3104,7 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     row_y = block_y0 + block_h / 2
 
     m0x = x0 + 0.30 * w
-    score_len = 1.6
+    score_len = 1.2
     panel_top = row_y - MODEL_H / 2 - OBJECT_GAP - score_len - OBJECT_GAP - CAP_16 - LABEL_GAP
     y_base = panel_top - ACQ_PANEL_H
 
@@ -3244,13 +3252,13 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
             fontsize=15,
             color=INK,
         )
-        # Centred on the *canvas*, not on the panel: this line is wider than
-        # the panel and the crop is taken from the ink, so hanging it off centre
-        # would widen the saved figure and shrink every label in the slot.
+        # Centred on the *canvas*, not on the panel, and kept short: a line
+        # hung off centre or run out to the panel's right edge widens the saved
+        # figure past its canvas, and every label in the slot shrinks with it.
         ax.text(
             INCL_CANVAS_W / 2,
             conclusion_y,
-            "the threshold picks what you are asked; the answers retrain it",
+            "the cut chooses the next question",
             ha="center",
             va="center",
             fontsize=17,

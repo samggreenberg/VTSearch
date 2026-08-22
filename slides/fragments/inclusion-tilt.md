@@ -31,7 +31,9 @@
      sixty-five thousand six hundred and seventy-one measured cell-steps, in
      every one of four environments — and away from inclusion zero it costs up to
      eighteen hundredths of regret. Not coarse. Inert. On one real median cell
-     the slider admitted three hundred and eighty-two items at every single stop.
+     the slider admitted three hundred and eighty-two items at every single
+     stop, where the shipped rule runs thirty-eight to two thousand four hundred
+     and forty-two.
 
      Advance three: something in the fit *does* read the weights. The
      rate-optimal crossing between the two fitted components moves as the price
@@ -62,9 +64,11 @@
      pre-registered regret tolerance at every stop. The incumbent delivers
      ninety-five percent of the knob. One candidate died outright: shifting the
      quantile by a fixed amount per step decouples the knob from the mixture
-     entirely, which sounds like the safest possible design, and it lost at all
-     five step sizes in all four environments — its free parameter has no good
-     value. And because the shipped rule differs from the rate rule by a
+     entirely, which sounds like the safest possible design, and averaged across
+     the knob it lost at all five step sizes in all four environments — small
+     steps keep the slider and cannot move far enough at the ends, large steps
+     run the quantile past one and admit nothing. Its free parameter has no
+     good value. And because the shipped rule differs from the rate rule by a
      constant in quantile space, that sweep doubled as a re-pricing of the
      inclusion-zero choice under thirteen cost weightings; the midpoint survived
      all of them. -->
