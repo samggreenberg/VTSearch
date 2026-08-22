@@ -4,27 +4,38 @@
 
 ## Stop averaging cuts. Fuse the evidence.
 
-- Semi-supervised EM: each vote clamped one-hot at mass **κ**
-- One fit sees haystack *and* labels; one cut falls out
-- The blend's hand-tuned ramp becomes **derived**: γ = κn / (κn + N)
+- One fit reads the corpus *and* the votes — each vote pinned at mass **κ**
+- The labels' job: **identify** the components, not estimate them
+- The hand-tuned ramp becomes **derived**: γ = κ*n* / (κ*n* + *N*)
 
-<!-- The blend averages two finished answers; iteration 4 fuses the evidence
-     before answering. Mechanically it is semi-supervised EM on the same
-     two-component mixture: the unlabeled haystack contributes soft
-     responsibilities as usual, while each voted item is clamped one-hot to
-     its component — a Good vote belongs to the high component with certainty
-     — and carries weight κ instead of 1. One fit sees both data sources; one
-     cut falls out (fit_anchored_score_gmm, #2852).
+<!-- The blend averages two finished answers. Iteration 4 fuses the evidence
+     before answering, which is the difference between asking two people and
+     getting one opinion out of everything they both saw.
 
-     The conceptual line to deliver: the labels' job is to *identify* the
-     components, not to estimate them. The haystack has all the shape
-     information; what it cannot know is which mound is "Good". A handful of
-     clamped votes pins that down. And the blend's hand-tuned ramp is now
-     derived instead of designed: the labels' effective share of the fit is
-     γ = κn/(κn + N), which grows automatically with the vote count n — at
-     κ = 0.3, γ is around 2.5%.
+     Mechanically it is the same two-component mixture as iteration 2, fitted
+     the same way, with one addition: the unlabeled corpus contributes softly,
+     as before, while each voted item is pinned to the component its vote
+     names — a Good vote belongs to the high component with certainty — and
+     carries a weight κ instead of 1. One fit sees both data sources; one cut
+     falls out of it. The figure shows what that buys: the unanchored fit,
+     dashed, puts its cut inside the negative bulk, because with no labels
+     nothing tells it which mound is which. A handful of pinned votes moves
+     the line to where it belongs.
 
-     One refinement to mention (#2853): production fits per calibration fold
-     on held-out anchors and transfers cuts as quantile ranks, so no raw score
-     ever crosses model scales. Figure: real vtscore fits on synthetic
-     scores. -->
+     The conceptual line to deliver, and it is the one worth remembering: the
+     labels' job is to identify the components, not to estimate them. The
+     corpus has all the shape information — fifty thousand scores describe two
+     mounds perfectly well. What it cannot know is which mound is "Good". Five
+     votes settle that. This is why the estimator does not starve the way
+     iteration 1 does: identification is a much cheaper question than
+     estimation.
+
+     And the previous iteration's hand-tuned ramp is now derived rather than
+     designed. The labels' effective share of the fit is their total mass over
+     the total mass — κ times the vote count, over that plus the corpus size —
+     which grows with the vote count on its own, with nobody choosing
+     endpoints. At the shipped setting it is around two and a half percent.
+
+     One refinement to mention if asked: in production the fit is done per
+     calibration fold on held-out anchors, and cuts transfer as quantile
+     ranks, so no raw score ever crosses between model scales. -->

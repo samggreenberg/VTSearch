@@ -1,10 +1,10 @@
 # Build slide decks from decks/*.deck manifests.
 #
 #   make                      every deck -> _out/*.pdf
-#   make scale26-review       one deck   -> _out/scale26-review.pdf
+#   make hold-the-line        one deck   -> _out/hold-the-line.pdf
 #   make speaker              every deck -> _out/*.speaker.pdf (notes visible)
 #   make html FMT=html        every deck -> _out/*.html
-#   make watch DECK=sponsor-brief   live preview in a browser
+#   make watch DECK=hold-the-line   live preview in a browser
 #   make check                preflight every manifest, build nothing
 #   make list                 decks, slide counts, unused fragments
 
@@ -24,7 +24,7 @@ all: $(addprefix _out/,$(addsuffix .$(FMT),$(DECKS)))
 speaker:
 	@for d in $(DECKS); do ./render.sh $$d $(FMT) --speaker || exit 1; done
 
-# Bare deck name builds that one deck, e.g. `make sponsor-brief`.
+# Bare deck name builds that one deck, e.g. `make hold-the-line`.
 $(DECKS): %: _out/%.$(FMT)
 
 _build/%.md: decks/%.deck $(wildcard fragments/*.md) build.py

@@ -1,0 +1,34 @@
+# (thresh)Hold The Line — advances in VTSearch calibration.
+# Mildly technical audience with no prior exposure to VTSearch: the first
+# third builds the loop the threshold lives inside, so that the second job of
+# the threshold — choosing the next question — lands before the iterations do.
+# Then four iterations, each as [the idea, then the measurement], and the
+# cut-rule line told as the epilogue that proves the anchored fit won.
+
+theme: vtsearch
+paginate: true
+
+slides:
+  title-hold-the-line
+  outline-hold-the-line
+  problem
+  ui-tour
+  voting-modes
+  vts-loop
+  threshold-two-jobs
+  how-we-measure
+  positives
+  xcal
+  xcal-results
+  gmm-idea
+  gmm-fragility
+  blend
+  blend-results
+  blend-schedule
+  anchored-gmm
+  anchored-results
+  anchored-kappa
+  evt-line
+  evt-close
+  calib-roadmap
+  thanks
