@@ -34,7 +34,7 @@ Commit the triage changes on the current branch **before** opening the PR — no
 Run `git fetch origin --prune`, then summarize
 `git log origin/main..origin/dev --no-merges --reverse`.
 
-**Format:** categorized bullets under these headings (collapse any with zero items): **Features**, **Bug fixes**, **Performance**, **Refactors / internals**, **Dev tooling & docs**.
+**Format:** categorized bullets under these headings (collapse any with zero items): **Features**, **Bug fixes**, **Performance**, **Refactors / internals**, **Documentation**, **Dev tooling**.
 
 **Constraints:**
 
