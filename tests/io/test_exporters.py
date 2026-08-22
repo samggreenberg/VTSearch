@@ -621,7 +621,14 @@ class TestEmailResultsExporter:
 
         _, _, raw_msg = mock_server.sendmail.call_args.args
         msg = email.message_from_string(raw_msg)
-        return [part.get_payload(decode=True).decode("utf-8") for part in msg.walk() if not part.is_multipart()]
+        bodies = []
+        for part in msg.walk():
+            if part.is_multipart():
+                continue
+            payload = part.get_payload(decode=True)
+            assert isinstance(payload, bytes)
+            bodies.append(payload.decode("utf-8"))
+        return bodies
 
     def test_custom_subject_is_used(self):
         from vtscore.exporters import get_exporter
