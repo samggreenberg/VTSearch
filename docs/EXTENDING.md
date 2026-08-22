@@ -176,8 +176,8 @@ See [EXTENDING-plugins.md § Adding a Data Importer](EXTENDING-plugins.md#adding
 See [EXTENDING-plugins.md § Adding a Results Exporter](EXTENDING-plugins.md#adding-a-results-exporter).
 
 - [ ] Create `vtscore/exporters/<name>/__init__.py`
-- [ ] Subclass `LabelsetExporter`, set `name`, `display_name`, `description`, `fields`
-- [ ] Implement `export(self, results, field_values)`: return a dict with a `"message"` key
+- [ ] Subclass `ResultsExporter`, set `name`, `display_name`, `description`, `fields`
+- [ ] Implement a payload method per kind you support — `export_find_results(self, results, field_values)` for a scored run, `export_labelset(self, labelset, field_values)` for a detector's labels: return a dict with a `"message"` key
 - [ ] To send the user to a web page instead of (or as well as) delivering the labelset, return an `"open_url"` and set `opens_url = True` if you always return one — see [Opening a browser tab](EXTENDING-plugins.md#opening-a-browser-tab-open_url)
 - [ ] Expose `EXPORTER = YourExporter()` at module level
 - [ ] If the plugin needs extra packages, add them to `[project.dependencies]` in `pyproject.toml` and re-run your editable install

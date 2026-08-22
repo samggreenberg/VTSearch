@@ -12,6 +12,26 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Results exporters declare which payload kinds they handle, instead of
+  sniffing the dict shape.** `LabelsetExporter` is now `ResultsExporter`
+  (the old name stays as a permanent module-level alias), and it exposes
+  `export_find_results()` and `export_labelset()` alongside the existing
+  `export_cli_detectors()`. `supported_payloads` is derived from which of
+  those a subclass overrides, so each picker offers an exporter only for the
+  kinds it can actually read and the export route answers 400 - rather than
+  letting an exporter be handed a shape it doesn't understand and deliver an
+  empty export while reporting success. `email_smtp` gained a labelset mode
+  it never had.
+
+  **Existing exporters keep working with no changes.** The default
+  `export_find_results()` / `export_labelset()` both delegate to `export()`,
+  so a plugin written against the single-method contract still runs and still
+  does its own `if "labels" in results` check; it is credited with both
+  payload kinds and logs one line at import pointing at the named methods.
+  Migrating is a mechanical split of that `if` into two methods, and buys
+  accurate picker filtering. See
+  [`vtscore/docs/extending/results-exporters.md`](docs/extending/results-exporters.md).
+
 - **`RemoteUnreachableError` now also covers a retryable HTTP status that
   outlives the retry budget.** `download_file_with_progress` and
   `fetch_text_with_retry` used to end a run of 500/502/503/504/429 responses by

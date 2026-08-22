@@ -1,29 +1,37 @@
-"""Base classes for Labelset Exporters.
+"""Base classes for Results Exporters.
 
-To add a new exporter, subclass :class:`LabelsetExporter`, define its class
-attributes and :meth:`~LabelsetExporter.export`, then expose a module-level
-``EXPORTER`` instance from a package under this directory.  The registry will
-discover it automatically.
+An exporter is a *destination* - a file, an SMTP server, a webhook, a browser
+tab.  What gets sent there is a separate axis, with three payload kinds
+(:data:`PAYLOAD_KINDS`): a scored run, a detector's labelset, or the trained
+classifiers.  To add a new exporter, subclass :class:`ResultsExporter`, define
+its class attributes and a method per payload kind you support, then expose a
+module-level ``EXPORTER`` instance from a package under this directory.  The
+registry will discover it automatically.
 
-Each exporter also supports CLI usage via :meth:`~LabelsetExporter.add_cli_arguments`
-and :meth:`~LabelsetExporter.export_cli`.  The base class provides default
+:attr:`~ResultsExporter.supported_payloads` is derived from which methods you
+overrode, so each picker offers you only for the kinds you can actually read.
+An exporter written against the older single-:meth:`~ResultsExporter.export`
+contract keeps working unchanged; see that class's docstring.
+
+Each exporter also supports CLI usage via :meth:`~ResultsExporter.add_cli_arguments`
+and :meth:`~ResultsExporter.export_cli`.  The base class provides default
 implementations that derive CLI arguments from the :attr:`fields` list, so most
-exporters work on the command line without any extra code.  Exporters whose
-:meth:`export` expects non-string values should override :meth:`export_cli` to
-handle the CLI-appropriate types.
+exporters work on the command line without any extra code.  Exporters that
+expect non-string values should override :meth:`export_cli` to handle the
+CLI-appropriate types.
 
 For the CLI ``--stream-results`` path (scoring a media source larger than RAM),
 an exporter can write hits incrementally instead of buffering the whole result
-set: set :attr:`~LabelsetExporter.supports_streaming` to ``True`` and implement
-:meth:`~LabelsetExporter.export_cli_streaming`.  See that method's docstring and
+set: set :attr:`~ResultsExporter.supports_streaming` to ``True`` and implement
+:meth:`~ResultsExporter.export_cli_streaming`.  See that method's docstring and
 ``docs/plans/cli-stream-massive-images.md`` for details.
 
 Example – a minimal SFTP exporter skeleton::
 
     # vtsearch/exporters/sftp/__init__.py
-    from vtscore.exporters.base import LabelsetExporter, PluginField
+    from vtscore.exporters.base import PluginField, ResultsExporter
 
-    class SftpLabelsetExporter(LabelsetExporter):
+    class SftpResultsExporter(ResultsExporter):
         name         = "sftp"
         display_name = "SFTP Upload"
         description  = "Upload results JSON to a remote SFTP server."
@@ -36,12 +44,18 @@ Example – a minimal SFTP exporter skeleton::
                           default="/results/autodetect.json"),
         ]
 
-        def export(self, results: dict, field_values: dict) -> dict:
+        def _upload(self, payload: dict, field_values: dict) -> dict:
             import paramiko
             ...  # connect, write JSON, disconnect
             return {"message": f"Uploaded to {field_values['host']}:{field_values['path']}"}
 
-    EXPORTER = SftpLabelsetExporter()
+        def export_find_results(self, results: dict, field_values: dict) -> dict:
+            return self._upload(results, field_values)
+
+        def export_labelset(self, labelset: dict, field_values: dict) -> dict:
+            return self._upload(labelset, field_values)
+
+    EXPORTER = SftpResultsExporter()
 
 If the exporter needs extra packages, add them to
 ``[project.dependencies]`` in the repo's ``pyproject.toml``. They are
