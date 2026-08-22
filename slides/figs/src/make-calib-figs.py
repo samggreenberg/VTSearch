@@ -43,9 +43,12 @@ from vtscore.training.thresholds import (
     FOLD_ANCHOR_WEIGHT,
     FoldAnchoredCut,
     GmmFit1D,
+    acquisition_inclusion,
+    conformal_threshold,
     fit_anchored_score_gmm,
     fit_score_gmm,
     gmm_cut_from_fit,
+    inclusion_cost_weights,
 )
 
 OUT = Path(__file__).resolve().parent.parent
@@ -2116,6 +2119,1147 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
     return fig
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Part 2 — the Inclusion progression (issue #3218).
+#
+# The calibration progression above asks "where does the line go?"; this one
+# asks the second question the room always has — "what if I wanted more, or
+# fewer, false positives?" — and answers it by walking the *same* machinery a
+# second time. Every figure here is a piece of `calib-quantile-flow` with the
+# knob turned on it: Figs F and G are its left panel (one fold model's corpus
+# and the votes standing on that corpus's baseline), Fig H is the whole of it,
+# and Fig I is its right panel.
+#
+# **These figures share Fig E's canvas *width* rather than Part 1's canvas
+# height.** Part 1's schematics are height-limited in a `bg right:70%` slot, so
+# pinning `FLOW_CANVAS_H` is what keeps a 15pt label the same size on every
+# slide of it. These four are much wider than they are tall — a score axis with
+# things hung under it — so they are *width*-limited in the same slot, and it is
+# the width that has to be pinned instead. At `XQUANT_CANVAS[0]` a 15pt label
+# renders at 21.2px, which is `calib-quantile-flow`'s own number: the type does
+# not change size when the talk crosses from Part 1 into Part 2. Heights may
+# differ, and must stay under `INCL_CANVAS_W * 720 / 896` (13.37) or the figure
+# becomes height-limited and the pin stops holding.
+INCL_CANVAS_W = XQUANT_CANVAS[0]
+
+#: The panel every Part 2 figure hangs its argument on, in drawing units.
+INCL_PANEL_X0, INCL_PANEL_W, INCL_PANEL_H = 1.4, 13.85, 2.2
+
+#: The three stops each figure reads its gauges at. The retired rule returns one
+#: answer at every stop, so the knob's two ends and its middle are the fairest
+#: three to draw it at; the conformal rule's motion is all below inclusion 0 on
+#: cleanly separated votes (its false-negative cap is an upper bound and goes
+#: unspent when the negatives force no sacrifice), so the walk is read at the
+#: three stops where it has something to show. The pile of stops at ``k >= 0``
+#: is drawn rather than hidden — see `_walk_flow_stage`.
+KNOB_STOPS = (10, 0, -10)
+WALK_STOPS = (0, -5, -10)
+
+#: The knob's own range, from `vtscore.training.thresholds.INCLUSION_MIN/MAX`.
+#: Drawn as a tick per stop, so a rule that returns one cut for the whole
+#: slider draws twenty-one ticks in one place.
+INCL_KNOB = tuple(range(-10, 11))
+
+#: Fold 1's held-out votes and the corpus it scored, from `calib-quantile-flow`
+#: — the same seven ✗s and ✓s the progression has carried since
+#: `calib-xcal-flow`, standing on the same distribution. Part 2 opens on a
+#: picture the audience has already been walked through twice.
+INCL_VOTES = XQUANT_ANCHORS[0]
+INCL_POPULATION = XQUANT_POPULATIONS[0]
+
+#: How many build stages each of the four reveal in.
+KNOB_FLOW_STAGES = 5
+WALK_FLOW_STAGES = 6
+TILT_FLOW_STAGES = 6
+ACQ_FLOW_STAGES = 5
+
+#: The gauge row's geometry: three bars across the panel's width.
+INCL_GAUGE_GAP = 0.8
+INCL_GAUGE_W = (INCL_PANEL_W - 2 * INCL_GAUGE_GAP) / 3
+INCL_GAUGE_H = XQUANT_GAUGE_H
+
+
+def _incl_corpus() -> np.ndarray:
+    """Fold 1's scored corpus, redrawn exactly as `_xquant_populations` draws it.
+
+    Same generator, same seed, same first draw, so the histogram in Part 2 is
+    the *same shape* as the left panel of `calib-quantile-flow` rather than a
+    lookalike. Nothing is fitted on it here: the two cut rules Part 2 compares
+    read the seven votes and nothing else, and the corpus is drawn flat black
+    for the reason `calib-quantile-flow` draws M₀ flat black — it is not
+    evidence, it is what the cut is applied to.
+    """
+    rng = np.random.default_rng(11)
+    neg, pos = INCL_POPULATION
+    return np.clip(np.concatenate([rng.normal(*neg, 4800), rng.normal(*pos, 1200)]), 0.0, 1.0)
+
+
+def _incl_votes() -> tuple[np.ndarray, np.ndarray]:
+    """The seven held-out votes as `(scores, labels)`, in the estimators' order."""
+    scores = np.array(INCL_VOTES["bad"] + INCL_VOTES["good"], dtype=float)
+    labels = np.concatenate([np.zeros(len(INCL_VOTES["bad"])), np.ones(len(INCL_VOTES["good"]))])
+    return scores, labels
+
+
+def _argmin_cut(scores: np.ndarray, labels: np.ndarray, inclusion: int) -> float:
+    """The **retired** min-cost threshold search, reconstructed for the figure.
+
+    This is the one place in the deck's generators that cannot delegate to
+    `vtscore`, because the code it draws no longer exists: `find_optimal_threshold`
+    was deleted when the conformal rule shipped (#2693), which is the whole
+    point of the slide. It is reconstructed from the rule as
+    `docs/experiments/inclusion-knob/REPORT.md` states it — the minimum of
+    ``fpr_weight·FPR + fnr_weight·FNR`` over the observed held-out cut points,
+    with the weights from the shipped :func:`inclusion_cost_weights` so the
+    *knob* half of the picture is still the live definition.
+
+    The tie-break is the failure the figure is about and is therefore not
+    incidental: on cleanly ranked votes every cut in the band between the two
+    classes has cost zero under every weighting, so the search returns whichever
+    of them it happens to see first and returns *that same one* at all twenty-one
+    stops of the knob.
+    """
+    fpr_weight, fnr_weight = inclusion_cost_weights(inclusion)
+    n_neg, n_pos = float((labels == 0).sum()), float((labels == 1).sum())
+    best, best_cost = float(scores.max()), np.inf
+    for cut in np.sort(scores):
+        predicted = scores > cut - 1e-9
+        fpr = float(((labels == 0) & predicted).sum()) / n_neg
+        fnr = float(((labels == 1) & ~predicted).sum()) / n_pos
+        cost = fpr_weight * fpr + fnr_weight * fnr
+        if cost < best_cost - 1e-12:
+            best, best_cost = float(cut), cost
+    return best
+
+
+def _normalised_cost(scores: np.ndarray, labels: np.ndarray, inclusion: int, grid: np.ndarray) -> np.ndarray:
+    """``(w_f·FPR + w_n·FNR) / (w_f + w_n)`` over a grid of cut positions.
+
+    Divided by the weights' sum only so the two ends of the knob — which price
+    the two errors a thousand to one in opposite directions — can be drawn on
+    one vertical scale. It is a rescaling by a positive constant, so it moves
+    neither the curve's shape nor its argmin, which are the two things the
+    figure reads off it.
+    """
+    fpr_weight, fnr_weight = inclusion_cost_weights(inclusion)
+    neg, pos = scores[labels == 0], scores[labels == 1]
+    fpr = np.array([float((neg > t).mean()) for t in grid])
+    fnr = np.array([float((pos <= t).mean()) for t in grid])
+    return (fpr_weight * fpr + fnr_weight * fnr) / (fpr_weight + fnr_weight)
+
+
+def _incl_panel(ax: plt.Axes, corpus: np.ndarray, *, y_base: float, top: float, votes: bool = True) -> None:
+    """`calib-quantile-flow`'s left panel, unfitted: the corpus, and the votes on it.
+
+    The humps are flat black because nothing is estimated on them — the cut
+    rules Part 2 compares read the seven marks on the baseline and nothing else.
+    Both names are kept for the reason the quantile figure keeps both: a panel
+    holding two quantities has to name both, and which model scored which half
+    of the votes is the fact the whole progression turns on.
+    """
+    x0, w = INCL_PANEL_X0, INCL_PANEL_W
+    _score_histogram(ax, x0, y_base, w, INCL_PANEL_H, None, corpus, fill="plain", mu_labels=False)
+    ax.text(x0, top + LABEL_GAP, _sub("M_1(D_{-1})"), ha="left", va="bottom", fontsize=16, color=INK)
+    if votes:
+        ax.text(
+            x0,
+            top + LABEL_GAP + CAP_16 + LABEL_GAP,
+            _sub("M_1(D_2)"),
+            ha="left",
+            va="baseline",
+            fontsize=15,
+            color=INK,
+        )
+        _hump_marks(ax, x0, y_base, w, INCL_VOTES)
+
+
+def _incl_gauges(
+    ax: plt.Axes,
+    corpus: np.ndarray,
+    stops: "tuple[int, ...]",
+    cuts: "list[float]",
+    *,
+    y0: float,
+    stop_label_y: float,
+) -> None:
+    """One gauge per stop: what the knob admits, at three settings of it.
+
+    The same bar `calib-quantile-flow` reads a quantile off, doing the job it
+    was built for one figure earlier — the corpus sorted by score and split at
+    the cut. Three of them in a row is the comparison the section exists to
+    make: under the retired rule they are the same picture three times.
+    """
+    for i, (inclusion, cut) in enumerate(zip(stops, cuts, strict=True)):
+        x0 = INCL_PANEL_X0 + i * (INCL_GAUGE_W + INCL_GAUGE_GAP)
+        q = float((corpus <= cut).mean())
+        ax.text(
+            x0 + INCL_GAUGE_W / 2,
+            stop_label_y,
+            _sub(rf"k = {inclusion:+d}" if inclusion else "k = 0"),
+            ha="center",
+            va="bottom",
+            fontsize=16,
+            color=INK,
+        )
+        _quantile_gauge(
+            ax,
+            x0,
+            y0,
+            INCL_GAUGE_W,
+            INCL_GAUGE_H,
+            q,
+            _sub(rf"admits\ {1 - q:.0%}".replace("%", r"\%")),
+        )
+
+
+def _incl_figure(canvas_h: float) -> tuple[plt.Figure, plt.Axes]:
+    """A Part 2 canvas: Fig E's width, this figure's own height."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in (INCL_CANVAS_W, canvas_h)))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, INCL_CANVAS_W)
+    ax.set_ylim(0, canvas_h)
+    ax.set_axis_off()
+    return fig, ax
+
+
+#: The knob pair's shared canvas height. `calib-knob-flow` and `calib-walk-flow`
+#: are a matched pair — the same panel, the same votes, the same gauge row, with
+#: one row swapped between them — so every row lands on the same drawing unit in
+#: both and the deck's flip from one to the other moves only the thing that
+#: changed. `_incl_rows` is where that is enforced; the height is set so the
+#: lower of the two figures' conclusion lines ends just inside the canvas.
+INCL_CANVAS_H = 11.2
+
+
+def _incl_rows() -> dict:
+    """Every shared y in the knob pair, so the two figures overlay exactly.
+
+    `calib-walk-flow` has no cut notch hanging under its panel and
+    `calib-knob-flow` has no two-line anchor names under its middle row; both
+    reserve the other's space anyway. Spending a few empty drawing units is what
+    buys the property the pair exists for — flipping between the two slides
+    moves the middle row and nothing else.
+    """
+    panel_top = INCL_CANVAS_H - (LABEL_GAP + CAP_16 + LABEL_GAP + CAP_16)
+    y_base = panel_top - INCL_PANEL_H
+    # Reserved on both: a cut notch under the panel and its name (knob only).
+    theta_bottom = y_base - 0.32 - LABEL_GAP - CAP_16
+    mid_label_y = theta_bottom - OBJECT_GAP - CAP_16
+    mid_top = mid_label_y - LABEL_GAP
+    mid_h = 1.9
+    mid_base = mid_top - mid_h
+    # Reserved on both: two rows of anchor names under the middle row (walk only).
+    mid_bottom = mid_base - 0.32 - LABEL_GAP - CAP_16 - LABEL_GAP - CAP_16
+    stop_label_y = mid_bottom - OBJECT_GAP - CAP_16
+    gauge_top = stop_label_y - LABEL_GAP
+    gauge_y0 = gauge_top - INCL_GAUGE_H
+    conclusion_y = gauge_y0 - LABEL_GAP - CAP_16 - OBJECT_GAP - 0.23
+    return {
+        "panel_top": panel_top,
+        "y_base": y_base,
+        "theta_bottom": theta_bottom,
+        "mid_label_y": mid_label_y,
+        "mid_top": mid_top,
+        "mid_h": mid_h,
+        "mid_base": mid_base,
+        "mid_bottom": mid_bottom,
+        "stop_label_y": stop_label_y,
+        "gauge_top": gauge_top,
+        "gauge_y0": gauge_y0,
+        "conclusion_y": conclusion_y,
+    }
+
+
+def knob_flow_fig() -> None:
+    """Schematic of the knob that did not turn — Part 2's opening figure (#3218).
+
+    The Inclusion slider is defined as a trade between the two error *rates*,
+    ``cost = w_f·FPR + w_n·FNR``, each ``+1`` step doubling the price of a miss
+    and each ``-1`` the price of a false alarm
+    (:func:`vtscore.training.thresholds.inclusion_cost_weights`, which this
+    figure calls rather than restates). The rule that first answered it took the
+    minimum of that cost over the observed held-out cut points — and had exactly
+    as many distinct optima as the calibration set had ranking errors.
+
+    The drawing is that sentence. Seven cleanly ranked votes leave an empty band
+    between the classes; both ends of the knob price the two errors a thousand
+    to one in opposite directions, and *both cost curves are zero across the
+    whole band*, so every cut in it ties at every setting. Twenty-one stops, one
+    answer, three identical gauges (#2693,
+    ``docs/experiments/inclusion-knob/REPORT.md``: 100% flat sweeps on the
+    separable arm, and ~1.8 distinct admitted sizes across eleven stops on real
+    embeddings).
+    """
+    corpus = _incl_corpus()
+    scores, labels = _incl_votes()
+    final = _knob_flow_stage(KNOB_FLOW_STAGES, corpus, scores, labels)
+    box = tight_box(final)
+    for stage in range(1, KNOB_FLOW_STAGES):
+        save(
+            _knob_flow_stage(stage, corpus, scores, labels),
+            OUT,
+            f"calib-knob-flow.build{stage}.png",
+            column=SIDEBAR_WIDE,
+            box=box,
+        )
+    save(final, OUT, "calib-knob-flow.png", column=SIDEBAR_WIDE, box=box)
+
+
+def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
+    fig, ax = _incl_figure(INCL_CANVAS_H)
+    x0, w = INCL_PANEL_X0, INCL_PANEL_W
+
+    # The cost panel's own labels sit above it, so the object gap below the cut's
+    # name is measured to *them* rather than to the curves they name; `_incl_rows`
+    # holds that arithmetic, because the walk figure has to land on it too.
+    rows = _incl_rows()
+    panel_top, y_base = rows["panel_top"], rows["y_base"]
+    cost_label_y, cost_h, cost_base = rows["mid_label_y"], rows["mid_h"], rows["mid_base"]
+    stop_label_y, gauge_y0, conclusion_y = rows["stop_label_y"], rows["gauge_y0"], rows["conclusion_y"]
+
+    # ── stage 1: the corpus, and the seven held-out votes standing on it ──────
+    _incl_panel(ax, corpus, y_base=y_base, top=panel_top)
+
+    # ── stage 2: the only cuts the search can return ──────────────────────────
+    # A tick per observed vote score. Shorter than the progression's own cut
+    # notch and in soft grey: these are candidates, not a decision.
+    if stage >= 2:
+        for score in scores:
+            ax.plot([x0 + score * w] * 2, [y_base - 0.18, y_base], color=SOFT, linewidth=1.6, zorder=5)
+
+    # ── stage 3: what a cut costs, at the two ends of the knob ────────────────
+    # Drawn together because the whole content is that they agree. At k = +10 a
+    # miss is priced 1024:1 and the curve is essentially the false-negative
+    # rate; at k = -10 it is essentially the false-positive rate. Between the
+    # top ✗ and the bottom ✓ neither error is possible, so both curves sit on
+    # zero — and every cut in that band is optimal at every setting of a knob
+    # whose two ends are three orders of magnitude apart.
+    band_lo, band_hi = float(scores[labels == 0].max()), float(scores[labels == 1].min())
+    band_mid = (band_lo + band_hi) / 2
+    if stage >= 3:
+        ax.add_patch(
+            Rectangle(
+                (x0 + band_lo * w, cost_base),
+                (band_hi - band_lo) * w,
+                cost_h,
+                facecolor=NEUTRAL_FILL,
+                edgecolor="none",
+                zorder=1,
+            )
+        )
+        # The band is a fact about the *votes*, so it is tied back to them: two
+        # soft rules running from the panel's baseline down the figure, standing
+        # in the gap between the top ✗ and the bottom ✓. Without them the shaded
+        # rectangle reads as a feature of the cost curves rather than as the
+        # place on the score axis where the calibration data runs out.
+        for edge in (band_lo, band_hi):
+            ax.plot(
+                [x0 + edge * w] * 2,
+                [cost_base, y_base],
+                color=RULE,
+                linewidth=1.4,
+                zorder=0,
+            )
+        grid = np.linspace(0.0, 1.0, 800)
+        for inclusion, style, name_at in ((10, "solid", 0.965), (-10, (0, (4, 3)), 0.035)):
+            curve = _normalised_cost(scores, labels, inclusion, grid)
+            ax.plot(
+                x0 + grid * w,
+                cost_base + curve * cost_h,
+                color=INK,
+                linewidth=2.2,
+                linestyle=style,
+                zorder=3,
+            )
+            ax.text(
+                x0 + name_at * w,
+                cost_label_y,
+                _sub(rf"k = {inclusion:+d}"),
+                ha="right" if inclusion > 0 else "left",
+                va="bottom",
+                fontsize=15,
+                color=INK,
+            )
+        ax.plot([x0, x0 + w], [cost_base] * 2, color=INK, linewidth=1.8, zorder=4)
+        # The row's name is the definition of the knob, which is the one thing
+        # every rule in this section shares — and putting it here rather than in
+        # the slide's own copy means the pair of figures carries it, so the walk
+        # figure's identical row is read against the same sentence.
+        ax.text(
+            x0 + band_mid * w,
+            cost_label_y,
+            _sub(r"cost = w_f\cdot FPR + w_n\cdot FNR"),
+            ha="center",
+            va="bottom",
+            fontsize=16,
+            color=INK,
+        )
+        ax.text(
+            x0 + band_mid * w,
+            cost_base + LABEL_GAP,
+            "zero, either way",
+            ha="center",
+            va="bottom",
+            fontsize=15,
+            color=SOFT,
+        )
+
+    # ── stage 4: turn the knob, twenty-one times, and watch ───────────────────
+    # The two lines under the cost row are the mechanism, and they stand in the
+    # rows `_incl_rows` reserves for the walk figure's anchor names — so the pair
+    # keeps its overlay and neither figure carries an empty band.
+    if stage >= 4:
+        ax.text(
+            x0 + band_mid * w,
+            cost_base - 0.32 - LABEL_GAP,
+            "no ✗ ranks above a ✓",
+            ha="center",
+            va="top",
+            fontsize=16,
+            color=INK,
+        )
+        ax.text(
+            x0 + band_mid * w,
+            cost_base - 0.32 - LABEL_GAP - CAP_16 - LABEL_GAP,
+            "so the search has one optimum, at every price",
+            ha="center",
+            va="top",
+            fontsize=15,
+            color=SOFT,
+        )
+        cuts = [_argmin_cut(scores, labels, k) for k in INCL_KNOB]
+        for cut in cuts:
+            ax.plot([x0 + cut * w] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
+        theta = cuts[0]
+        ax.text(
+            x0 + theta * w + 0.10,
+            y_base - 0.32 - LABEL_GAP,
+            _sub(r"\theta\ at\ all\ 21\ stops"),
+            ha="left",
+            va="top",
+            fontsize=16,
+            color=INK,
+        )
+
+    # ── stage 5: three settings of the knob, three identical answers ──────────
+    if stage >= 5:
+        cuts = [_argmin_cut(scores, labels, k) for k in KNOB_STOPS]
+        _incl_gauges(ax, corpus, KNOB_STOPS, cuts, y0=gauge_y0, stop_label_y=stop_label_y)
+        ax.text(
+            x0 + w / 2,
+            conclusion_y,
+            "one answer, whichever way you turn it",
+            ha="center",
+            va="center",
+            fontsize=17,
+            color=INK,
+        )
+
+    return fig
+
+
+#: The false-positive guard's and the walk's endpoints, as
+#: `vtscore.training.thresholds.conformal_threshold` defines them. Quoted here
+#: only so the figure can *label* them; every cut it draws comes from calling
+#: that function, not from re-deriving it.
+WALK_GUARD_Q = 1.0 - 0.25  # the 1 - BASE*2^k quantile of the negatives, at k = 0
+WALK_TOP_Q = 0.75  # CONFORMAL_QPOS_MAX: the positives' quantile the k = -10 end walks to
+
+
+def walk_flow_fig() -> None:
+    """Schematic of the conformal quantile walk — Part 2's repair (#2693, #3218).
+
+    Same panel as `calib-knob-flow`, same seven votes, same corpus: only the
+    middle row changes, from what the retired rule *computed* to what the
+    shipped one computes. That is the comparison the pair exists to make.
+
+    The rule is :func:`vtscore.training.thresholds.conformal_threshold`, which
+    this figure calls at each of the knob's twenty-one stops rather than
+    restating, and it is drawn in the order it composes:
+
+    * the **false-positive guard**, the negatives' 1 − 0.25·2^k quantile — a
+      *quantile* of the ✗s and deliberately not their maximum, for the same
+      reason the midpoint below is not the lowest ✓;
+    * the **band** between that guard and the lowest ✓, which the calibration
+      set cannot resolve, and the **gap midpoint** in it that inclusion 0 cuts
+      at — the max-margin choice among cuts the data calls equal, where the
+      retired rule took the band's top edge and got an extreme order statistic
+      over a handful of votes;
+    * the **walk** up from that midpoint to the positives' 75th percentile at
+      k = −10 — "just the surest matches" — which is where the knob's
+      resolution comes from: a quantile moves whenever the scores have any
+      spread, and eleven stops of the slider land in eleven distinct places;
+    * the **false-negative cap**, the positives' α(k) = 0.25·2^−k quantile,
+      halving per step. It is a ceiling, not a target: on votes this cleanly
+      ranked it sits above the walk and never binds, which is why the stops at
+      k ≥ 0 pile on the midpoint. The figure draws that pile rather than hiding
+      it — the cap is what gives the positive half of the knob its meaning once
+      the classes overlap, and this vote set has no overlap to spend it on.
+    """
+    corpus = _incl_corpus()
+    scores, labels = _incl_votes()
+    final = _walk_flow_stage(WALK_FLOW_STAGES, corpus, scores, labels)
+    box = tight_box(final)
+    for stage in range(1, WALK_FLOW_STAGES):
+        save(
+            _walk_flow_stage(stage, corpus, scores, labels),
+            OUT,
+            f"calib-walk-flow.build{stage}.png",
+            column=SIDEBAR_WIDE,
+            box=box,
+        )
+    save(final, OUT, "calib-walk-flow.png", column=SIDEBAR_WIDE, box=box)
+
+
+def _walk_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
+    fig, ax = _incl_figure(INCL_CANVAS_H)
+    x0, w = INCL_PANEL_X0, INCL_PANEL_W
+
+    # The middle row is `calib-knob-flow`'s cost panel — same height, same place,
+    # same label row above it — holding the new rule instead of the old one's
+    # arithmetic. That the two figures differ in exactly one row is the whole of
+    # what the pair has to say, so both take their rows from `_incl_rows`.
+    rows = _incl_rows()
+    panel_top, y_base = rows["panel_top"], rows["y_base"]
+    rule_label_y, rule_h, rule_base = rows["mid_label_y"], rows["mid_h"], rows["mid_base"]
+    stop_label_y, gauge_y0, conclusion_y = rows["stop_label_y"], rows["gauge_y0"], rows["conclusion_y"]
+
+    neg, pos = scores[labels == 0], scores[labels == 1]
+    guard = float(np.quantile(neg, WALK_GUARD_Q))
+    lowest_good = float(pos.min())
+    top_quarter = float(np.quantile(pos, WALK_TOP_Q))
+    band_mid = (guard + lowest_good) / 2
+    stops = {k: conformal_threshold(scores.tolist(), labels.tolist(), k) for k in INCL_KNOB}
+
+    def guide(score: float) -> None:
+        """Tie a mark on the rule row back to the votes on the panel above it."""
+        ax.plot([x0 + score * w] * 2, [rule_base, y_base], color=RULE, linewidth=1.4, zorder=0)
+
+    def mark(score: float, name: str, sub: str) -> None:
+        """One anchor of the rule: a full-height tick, named in two lines below."""
+        # Stops short of the row's top so the walk's own arrow and label have a
+        # clear band to run in; the shaded rectangle carries the full height.
+        ax.plot([x0 + score * w] * 2, [rule_base - 0.32, rule_base + rule_h * 0.3], color=INK, linewidth=2.2, zorder=5)
+        ax.text(x0 + score * w, rule_base - 0.32 - LABEL_GAP, name, ha="center", va="top", fontsize=16, color=INK)
+        ax.text(
+            x0 + score * w,
+            rule_base - 0.32 - LABEL_GAP - CAP_16 - LABEL_GAP,
+            sub,
+            ha="center",
+            va="top",
+            fontsize=15,
+            color=SOFT,
+        )
+
+    # ── stage 1: the same panel the retired rule was drawn on ─────────────────
+    _incl_panel(ax, corpus, y_base=y_base, top=panel_top)
+    ax.plot([x0, x0 + w], [rule_base] * 2, color=INK, linewidth=1.8, zorder=4)
+    ax.text(
+        x0 + band_mid * w, rule_label_y, "where the rule may cut", ha="center", va="bottom", fontsize=15, color=SOFT
+    )
+
+    # ── stage 2: the false-positive guard — a quantile of the ✗s, not their max ─
+    if stage >= 2:
+        guide(guard)
+        mark(guard, "guard", "¾ of the ✗s")
+
+    # ── stage 3: the band the votes cannot resolve, and its midpoint ──────────
+    # Every cut between the guard and the lowest ✓ has the same empirical error
+    # on this calibration set — which is what the previous figure's flat cost
+    # floor was. The retired rule took the band's top edge; this one sits in the
+    # middle of it, because that top edge is a single held-out vote and moves
+    # violently when the next one arrives.
+    #
+    # The mark is named `k ≥ 0`, not `k = 0`, and that is exact rather than
+    # cautious: above inclusion 0 the rule returns ``min(cap, θ(0))``, and the
+    # gap midpoint is below every calibration positive, so on cleanly ranked
+    # votes the cap can never bind and *every* non-negative stop lands here.
+    if stage >= 3:
+        guide(lowest_good)
+        ax.add_patch(
+            Rectangle(
+                (x0 + guard * w, rule_base),
+                (lowest_good - guard) * w,
+                rule_h,
+                facecolor=NEUTRAL_FILL,
+                edgecolor="none",
+                zorder=1,
+            )
+        )
+        ax.text(
+            x0 + band_mid * w,
+            rule_base + rule_h * 0.3 + LABEL_GAP,
+            "the votes cannot tell these apart",
+            ha="center",
+            va="bottom",
+            fontsize=15,
+            color=SOFT,
+        )
+        mark(stops[0], _sub(r"k \geq 0"), "midpoint")
+
+    # ── stage 4: walk up the positives as false alarms get dearer ─────────────
+    # Every stop of the knob below 0 is its own quantile, so every stop is its
+    # own cut — the whole of the repair.
+    if stage >= 4:
+        guide(top_quarter)
+        for k in INCL_KNOB:
+            ax.plot([x0 + stops[k] * w] * 2, [rule_base - 0.32, rule_base], color=INK, linewidth=2.2, zorder=5)
+        mark(stops[-10], _sub("k = -10"), "top ¼ of the ✓s")
+        arrow_y = rule_base + rule_h * 0.685
+        _arrow(
+            ax,
+            (x0 + stops[0] * w + OBJECT_GAP, arrow_y),
+            (x0 + stops[-10] * w - OBJECT_GAP, arrow_y),
+        )
+        ax.text(
+            x0 + (stops[0] + stops[-10]) / 2 * w,
+            arrow_y + LABEL_GAP,
+            "one stop, one quantile, one cut",
+            ha="center",
+            va="bottom",
+            fontsize=15,
+            color=INK,
+        )
+
+    # ── stage 5: the other half of the knob, and why it is quiet here ─────────
+    # The rule's false-negative cap is a quantile of the ✓s — never above the
+    # α(k) = 0.25·2^-k of them, halving per step — so it is drawn where it
+    # lives: a bracket over the positives in the panel, not a tick on the axis
+    # below. It is a ceiling, not a target, and on votes this cleanly ranked it
+    # never binds: the gap midpoint is under every ✓, so nothing above
+    # inclusion 0 has anything to give back, which is exactly the pile of ticks
+    # `k ≥ 0` names. Under overlap it is what the positive half of the slider
+    # spends, and a tick per stop would have to be redrawn for every one of
+    # them inside a fifth of a score unit.
+    if stage >= 5:
+        brace_y = y_base + INCL_PANEL_H * 0.72
+        lo, hi = x0 + float(pos.min()) * w, x0 + float(pos.max()) * w
+        ax.plot(
+            [lo, lo, hi, hi], [brace_y - 0.12, brace_y, brace_y, brace_y - 0.12], color=SOFT, linewidth=1.6, zorder=6
+        )
+        ax.text(
+            (lo + hi) / 2,
+            brace_y + LABEL_GAP,
+            _sub(r"cap:\ \alpha(k)\ of\ these,\ halving\ per\ step"),
+            ha="center",
+            va="bottom",
+            fontsize=15,
+            color=SOFT,
+        )
+
+    # ── stage 6: three settings of the knob, three different answers ──────────
+    if stage >= 6:
+        cuts = [stops[k] for k in WALK_STOPS]
+        _incl_gauges(ax, corpus, WALK_STOPS, cuts, y0=gauge_y0, stop_label_y=stop_label_y)
+        ax.text(
+            x0 + w / 2,
+            conclusion_y,
+            "and the sets nest: cut at 1, verify up to 4",
+            ha="center",
+            va="center",
+            fontsize=17,
+            color=INK,
+        )
+
+    return fig
+
+
+#: The tilt figure stacks its two panels instead of setting them side by side,
+#: which is what lets both be `INCL_PANEL_W` wide — the same panel the knob pair
+#: draws, in the same place, so all three figures of the section share one
+#: geometry. It also buys the comb its legibility: eleven cuts spanning a fifth
+#: of the axis are 13px apart across a full-width panel and 8px apart across a
+#: half-width one. The height that costs is height the figure wanted anyway; at
+#: 12.1 units it very nearly fills a `bg right:70%` slot, where the side-by-side
+#: version sat in a thin band across the middle of it.
+TILT_CANVAS_H = 12.1
+TILT_PANEL_H = 2.6
+
+#: Which stops of the knob the comb on M₀'s panel draws. Every other one: at
+#: twenty-one the strokes touch and the comb reads as a bar, and the claim the
+#: figure makes is "a cut per stop", which a comb of eleven makes and a solid
+#: block does not.
+TILT_COMB = tuple(range(-10, 11, 2))
+
+#: Which stops the *rate* rule's crossing is drawn at on the fold panel. Zero is
+#: deliberately absent, and not for room: on populations this close in variance
+#: the rate crossing at equal cost weights sits within a thousandth of the
+#: midpoint, so a stem drawn there would land on the midpoint notch and invite
+#: exactly the reading `mid_tilt` exists to refuse — that the shipped rule is
+#: `rate`. What the figure needs from `rate` is its *displacement*, which is the
+#: only thing `mid_tilt` takes from it.
+TILT_RATE_STOPS = (-10, -5, 5, 10)
+
+#: The grey caret that marks the one cut the inclusion-blind midpoint returns.
+TILT_CARET_H = 0.26
+
+
+def tilt_flow_fig() -> None:
+    """Schematic of the tilt that gave the knob back — Part 2's repair, on the
+    super-figure (#2865, #3218).
+
+    Part 1 ended by replacing the blend with one fused fit, and that fit reads
+    no cost weights: `mid` is the midpoint of two fitted component means, and
+    the Inclusion knob arrives as a pair of cost weights it never looks at. So
+    the knob went silent again — measured, not argued: one admitted set for the
+    whole slider in **65,671 of 65,671** cell-steps across four environments, at
+    up to **+0.18±0.02** regret away from inclusion 0
+    (``docs/experiments/inclusion-cut-rule/REPORT.md``).
+
+    The shipped rule (:data:`~vtscore.training.thresholds.FOLD_ANCHOR_CUT_RULE`,
+    ``"mid_tilt"``) keeps the measured winner exactly where it was measured and
+    borrows only the motion:
+    ``q(k) = q_mid + (q_rate(k) - q_rate(0))`` in fold-quantile space. At
+    inclusion 0 the bracket is *identically* zero — both terms are the same
+    computation on the same fits — so the threshold is bit-for-bit the arm the
+    anchor-mass run scored; everywhere else it inherits the rate-optimal
+    crossing's tilt without inheriting its location.
+
+    The drawing is that sentence, stacked: the rate crossing fans across the
+    fold panel, the midpoint does not move, the formula carries the fan and not
+    the location down to the model that applies it, and M₀'s panel grows a comb
+    where it had one notch. Every number on it comes from a live
+    :class:`~vtscore.training.thresholds.FoldAnchoredCut` over
+    `calib-quantile-flow`'s own three populations, so the figure cannot drift
+    from the estimator it claims to draw.
+    """
+    folds, final = _xquant_populations()
+    last = _tilt_flow_stage(TILT_FLOW_STAGES, folds, final)
+    box = tight_box(last)
+    for stage in range(1, TILT_FLOW_STAGES):
+        save(
+            _tilt_flow_stage(stage, folds, final),
+            OUT,
+            f"calib-tilt-flow.build{stage}.png",
+            column=SIDEBAR_WIDE,
+            box=box,
+        )
+    save(last, OUT, "calib-tilt-flow.png", column=SIDEBAR_WIDE, box=box)
+
+
+def _tilt_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
+    fig, ax = _incl_figure(TILT_CANVAS_H)
+    x0, w = INCL_PANEL_X0, INCL_PANEL_W
+
+    fit, scores, anchors = folds[0]
+    cut = _xquant_cut(folds, final)
+    theta_mid = gmm_cut_from_fit(fit, "mid", 1.0, 1.0)[0]
+    theta = {k: cut.threshold_at(k) for k in TILT_COMB}
+
+    # ── layout ────────────────────────────────────────────────────────────────
+    # Two panels on one axis, stacked, with the rule that carries the cut from
+    # the upper to the lower one written in the gap between them.
+    fold_top = TILT_CANVAS_H - (LABEL_GAP + CAP_16 + LABEL_GAP + CAP_16)
+    fold_base = fold_top - TILT_PANEL_H
+    mid_label_bottom = fold_base - 0.32 - LABEL_GAP - CAP_16
+
+    formula_y = mid_label_bottom - OBJECT_GAP - 0.24
+    caret_top = formula_y - 0.24 - OBJECT_GAP - CAP_16 - LABEL_GAP
+    final_top = caret_top - TILT_CARET_H - OBJECT_GAP
+    final_base = final_top - TILT_PANEL_H
+    comb_label_y = final_base - 0.32 - LABEL_GAP
+    caption_y = comb_label_y - CAP_16 - LABEL_GAP
+    free_y = caption_y - CAP_16 - OBJECT_GAP - 0.24
+
+    x_mid = x0 + float(theta[0]) * w
+
+    # ── stage 1: the super-figure's conclusion, stacked into two rows ─────────
+    _score_histogram(ax, x0, fold_base, w, TILT_PANEL_H, fit, scores, fill="class", mu_labels=False)
+    _hump_marks(ax, x0, fold_base, w, anchors)
+    ax.text(x0, fold_top + LABEL_GAP, _sub("M_1(D_{-1})"), ha="left", va="bottom", fontsize=16, color=INK)
+    ax.text(
+        x0,
+        fold_top + LABEL_GAP + CAP_16 + LABEL_GAP,
+        _sub("M_1(D_2)"),
+        ha="left",
+        va="baseline",
+        fontsize=15,
+        color=INK,
+    )
+    _theta_notch(ax, x0 + theta_mid * w, fold_base, "mid")
+
+    _score_histogram(ax, x0, final_base, w, TILT_PANEL_H, None, final, fill="plain", mu_labels=False)
+    ax.text(x0 + w, final_top + LABEL_GAP, _sub("M_0(D_{-1})"), ha="right", va="bottom", fontsize=16, color=INK)
+    # Anchored on the panels' shared left edge and spanning the whole gap, so
+    # it reads as one axis handing its cut down to the next rather than as a
+    # mark floating between two drawings.
+    _arrow(ax, (x0, fold_base - OBJECT_GAP), (x0, final_top + OBJECT_GAP))
+    ax.plot([x_mid] * 2, [final_base - 0.32, final_base], color=INK, linewidth=2.2, zorder=6)
+    ax.text(x_mid, comb_label_y, _sub(r"\theta_0"), ha="center", va="top", fontsize=16, color=INK)
+
+    # ── stage 2: the knob arrives, and the midpoint does not hear it ──────────
+    # A caret over M₀'s distribution, pointing at the one cut the fused fit
+    # returns however far the slider is dragged. It stays on the final frame:
+    # the comb the last stage draws is centred on it, because inclusion 0 is
+    # where the two rules agree by construction.
+    if stage >= 2:
+        ax.add_patch(
+            Polygon(
+                [
+                    (x_mid - TILT_CARET_H * 0.6, caret_top),
+                    (x_mid + TILT_CARET_H * 0.6, caret_top),
+                    (x_mid, caret_top - TILT_CARET_H),
+                ],
+                closed=True,
+                facecolor=SOFT,
+                edgecolor="none",
+                zorder=6,
+            )
+        )
+        ax.text(
+            x_mid,
+            caret_top + LABEL_GAP,
+            "mid: this one cut, at every stop of the knob",
+            ha="center",
+            va="bottom",
+            fontsize=15,
+            color=SOFT,
+        )
+
+    # ── stage 3: the rate-optimal crossing does read the weights ─────────────
+    if stage >= 3:
+        for k in TILT_RATE_STOPS:
+            rate = gmm_cut_from_fit(fit, "rate", *inclusion_cost_weights(k))[0]
+            ax.plot(
+                [x0 + rate * w] * 2,
+                [fold_base, fold_top],
+                color=SOFT,
+                linewidth=2.0,
+                linestyle=(0, (4, 3)),
+                zorder=6,
+            )
+        ax.text(x0 + w, fold_top + LABEL_GAP, _sub("rate(k)"), ha="right", va="bottom", fontsize=15, color=SOFT)
+
+    # ── stage 4: keep the location that was measured, borrow only the motion ──
+    if stage >= 4:
+        ax.text(
+            x0 + w / 2,
+            formula_y,
+            _sub(r"q(k) = q_{mid} + \left(q_{rate}(k) - q_{rate}(0)\right)"),
+            ha="center",
+            va="center",
+            fontsize=17,
+            color=INK,
+        )
+
+    # ── stage 5: realized on M₀ — one notch becomes a comb ───────────────────
+    if stage >= 5:
+        for k in TILT_COMB:
+            ax.plot(
+                [x0 + float(theta[k]) * w] * 2,
+                [final_base - 0.32, final_base],
+                color=INK,
+                linewidth=2.2,
+                zorder=6,
+            )
+        # The comb spans a fifth of M₀'s axis, which is narrower than its two end
+        # labels together; so the names are hung *outward* from its ends rather
+        # than centred on them, and θ₀ keeps the middle.
+        for k, ha, dx in ((10, "right", -LABEL_GAP), (-10, "left", LABEL_GAP)):
+            ax.text(
+                x0 + float(theta[k]) * w + dx,
+                comb_label_y,
+                _sub(rf"k = {k:+d}"),
+                ha=ha,
+                va="top",
+                fontsize=16,
+                color=INK,
+            )
+        ax.text(
+            x_mid,
+            caption_y,
+            "a stop, a quantile, a cut — as before",
+            ha="center",
+            va="top",
+            fontsize=15,
+            color=SOFT,
+        )
+
+    # ── stage 6: and it costs nothing, because the fits do not move ───────────
+    if stage >= 6:
+        ax.text(
+            INCL_CANVAS_W / 2,
+            free_y,
+            "the fits are inclusion-independent: re-cutting is arithmetic, not a retrain",
+            ha="center",
+            va="center",
+            fontsize=17,
+            color=INK,
+        )
+
+    return fig
+
+
+ACQ_CANVAS_H = 12.5
+
+#: The acquisition figure's panel and the ranking bar under it.
+ACQ_PANEL_X0, ACQ_PANEL_W, ACQ_PANEL_H = 4.9, 10.3, 2.0
+ACQ_GAUGE_H = 0.34
+
+#: The zoom strip: how many items of the ranking it shows, and how tall a cell
+#: is. Twenty-one is chosen from the drawing's own numbers rather than for
+#: looks — one step of the knob moves this estimator's cut about eight items of
+#: six thousand, so a window of twenty-one is the smallest that holds both cuts
+#: *and* the gap between them at their true separation.
+ACQ_ZOOM_CELLS = 21
+ACQ_ZOOM_H = 0.62
+
+#: How far the zoomed ranking hangs below the full one, leaving room for the
+#: callout lines that tie the two together and for the pick's own name.
+ACQ_ZOOM_DROP = 1.4
+
+#: Which cells of the zoom carry votes rather than unlabeled media, as
+#: `(index, is_good)`. Two of twenty-one: near the cut almost everything is
+#: unlabeled, which is the whole reason there is something to ask about.
+ACQ_ZOOM_VOTES = ((3, False), (17, True))
+
+
+def acq_flow_fig() -> None:
+    """Schematic of the second cut, and the loop it closes — Part 2's last
+    figure (#2876, #3218).
+
+    The same fitted estimator yields **two** thresholds, because the two jobs
+    named at the top of the talk read a threshold differently. Reporting reads
+    it as a decision boundary: everything above it comes back. Autopilot's
+    ``hard`` pick reads it as a **rank position** — it ranks the corpus
+    descending, finds the first position at or below the cut, and takes the
+    unlabeled item nearest that position *by index*
+    (:func:`vtscore.eval.al_strategies._hard_pick_by_index`, mirroring the app's
+    ``autoSelectNext``). So the acquisition cut is taken
+    :data:`~vtscore.training.thresholds.ACQUISITION_INCLUSION_OFFSET` steps
+    below the reporting one — a *negative* offset, which prices false alarms
+    higher, **raises** the cut, moves it up the ranking, and returns more
+    positives to vote on.
+
+    The direction is the opposite of the intuition from the cost weights, so the
+    figure draws it at its true size rather than at a legible one: on this
+    corpus one step of the knob is about eight items in six thousand, which is
+    why the ranking is zoomed rather than merely notched twice. The gap is small
+    and it compounds — every pick it changes changes a vote, and every vote
+    retrains the model, which is the arrow that closes the loop back to D₀.
+
+    Measured record, and it is not a clean one:
+    ``coco_val × siglip2`` found an interior optimum at −3 (positives per 100
+    votes 4 → 18, average precision 0.696 → 0.817), ``visual_genome_m × siglip``
+    rejected −3 against a +0.01 tolerance, and only −1 passed in both. The
+    region-voting leg is void pending a re-run (#2943), and a supply-dependent
+    offset is the open frontier (#2910). See
+    ``docs/experiments/acquisition-inclusion/REPORT.md``.
+    """
+    folds, final = _xquant_populations()
+    last = _acq_flow_stage(ACQ_FLOW_STAGES, folds, final)
+    box = tight_box(last)
+    for stage in range(1, ACQ_FLOW_STAGES):
+        save(
+            _acq_flow_stage(stage, folds, final),
+            OUT,
+            f"calib-acq-flow.build{stage}.png",
+            column=SIDEBAR_WIDE,
+            box=box,
+        )
+    save(last, OUT, "calib-acq-flow.png", column=SIDEBAR_WIDE, box=box)
+
+
+def _acq_cell(ax: plt.Axes, x0: float, y0: float, w: float, h: float, kind: str, lw: float = 1.2) -> None:
+    """One item of the zoomed ranking: unlabeled, or a vote already cast."""
+    if kind == "unlabeled":
+        ax.add_patch(Rectangle((x0, y0), w, h, facecolor=NEUTRAL_FILL, edgecolor=INK, linewidth=lw, zorder=3))
+        return
+    color, hatch = (GREEN, "//////") if kind == "good" else (RUST, "\\\\\\")
+    ax.add_patch(Rectangle((x0, y0), w, h, facecolor="white", edgecolor=color, hatch=hatch, linewidth=0, zorder=3))
+    ax.add_patch(Rectangle((x0, y0), w, h, facecolor="none", edgecolor=INK, linewidth=lw, zorder=4))
+
+
+def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
+    fig, ax = _incl_figure(ACQ_CANVAS_H)
+    x0, w = ACQ_PANEL_X0, ACQ_PANEL_W
+
+    cut = _xquant_cut(folds, final)
+    k_acq = acquisition_inclusion(0)
+    q_report, q_acq = cut.quantile_at(0), cut.quantile_at(k_acq)
+    theta_report = cut.threshold_at(0)
+
+    # ── layout ────────────────────────────────────────────────────────────────
+    # Two rows of evidence — the distribution the cut is a *number* in, and the
+    # ranking it is a *position* in — with the loop's return routed down the left
+    # margin past both. The row names go in that margin too: the zoom's callout
+    # lines need the space under the ranking bar, and a name hung there would be
+    # the thing they ran through.
+    block_w, block_h = 3.0, 1.05
+    block_x0 = 1.0
+    block_top = ACQ_CANVAS_H - LABEL_GAP - CAP_16
+    block_y0 = block_top - block_h
+    row_y = block_y0 + block_h / 2
+
+    m0x = x0 + 0.30 * w
+    score_len = 1.6
+    panel_top = row_y - MODEL_H / 2 - OBJECT_GAP - score_len - OBJECT_GAP - CAP_16 - LABEL_GAP
+    y_base = panel_top - ACQ_PANEL_H
+
+    theta_bottom = y_base - 0.32 - LABEL_GAP - CAP_16
+    gauge_top = theta_bottom - OBJECT_GAP - GAUGE_STUB
+    gauge_y0 = gauge_top - ACQ_GAUGE_H
+
+    zoom_top = gauge_y0 - ACQ_ZOOM_DROP
+    zoom_y0 = zoom_top - ACQ_ZOOM_H
+    cell_w = w / ACQ_ZOOM_CELLS
+    # The window is centred on the reporting cut and holds the acquisition cut at
+    # its true distance: one step of the knob is about eight items in six
+    # thousand here, and drawing that gap wider than it is would be the one lie
+    # the figure could tell that actually matters.
+    gap_cells = (q_acq - q_report) * final.size
+    report_cell = (ACQ_ZOOM_CELLS - gap_cells) / 2
+    zoom_report_x = x0 + report_cell * cell_w
+    zoom_acq_x = zoom_report_x + gap_cells * cell_w
+    # The app ranks descending and takes the first position at or below the cut,
+    # so the pick is the item the cut falls *into*, not the one above it.
+    pick_index = int(np.floor(report_cell + gap_cells))
+
+    cut_label_bottom = zoom_y0 - 0.32 - LABEL_GAP - CAP_16
+    rail_x = 0.45
+    ask_y = cut_label_bottom - OBJECT_GAP - CAP_16 - LABEL_GAP
+    conclusion_y = ask_y - OBJECT_GAP - 0.24
+
+    def row_name(y: float, text: str, size: float = 15.0) -> None:
+        ax.text(x0 - LABEL_GAP, y, text, ha="right", va="center", fontsize=size, color=SOFT)
+
+    # ── stage 1: where the calibration talk left off ──────────────────────────
+    ax.text(block_x0, block_top + LABEL_GAP, _sub("D_0"), ha="left", va="bottom", fontsize=16, color=INK)
+    _data_block(ax, block_x0, block_y0, block_w, block_h)
+    train_x = block_x0 + block_w + OBJECT_GAP
+    _labeled_arrow(ax, (train_x, row_y), (m0x - MODEL_W / 2 - OBJECT_GAP, row_y), "train")
+    _model_box(ax, m0x, row_y, "M_0")
+    _labeled_arrow(
+        ax,
+        (m0x, row_y - MODEL_H / 2 - OBJECT_GAP),
+        (m0x, panel_top + OBJECT_GAP + CAP_16 + LABEL_GAP),
+        "score",
+        z=2.1,
+    )
+    ax.text(x0 + w, panel_top + LABEL_GAP, _sub("M_0(D_{-1})"), ha="right", va="bottom", fontsize=16, color=INK)
+    _score_histogram(ax, x0, y_base, w, ACQ_PANEL_H, None, final, fill="plain", mu_labels=False)
+    _theta_notch(ax, x0 + theta_report * w, y_base, _sub(r"\theta_{report}"))
+    _quantile_gauge(ax, x0, gauge_y0, w, ACQ_GAUGE_H, q_report, "")
+    row_name(gauge_y0 + ACQ_GAUGE_H / 2, "the corpus, ranked")
+
+    # ── stage 2: job one — the cut read as a decision boundary ───────────────
+    if stage >= 2:
+        brace_x0, brace_x1 = x0 + q_report * w, x0 + w
+        brace_y = gauge_top + GAUGE_STUB + OBJECT_GAP
+        ax.plot(
+            [brace_x0, brace_x0, brace_x1, brace_x1],
+            [brace_y - 0.12, brace_y, brace_y, brace_y - 0.12],
+            color=INK,
+            linewidth=1.6,
+            zorder=5,
+        )
+        ax.text(
+            (brace_x0 + brace_x1) / 2,
+            brace_y + LABEL_GAP,
+            "what you keep",
+            ha="center",
+            va="bottom",
+            fontsize=15,
+            color=INK,
+        )
+
+    # ── stage 3: job two reads the same number as a rank, so zoom in ─────────
+    if stage >= 3:
+        for i in range(ACQ_ZOOM_CELLS):
+            kind = "unlabeled"
+            for idx, good in ACQ_ZOOM_VOTES:
+                if idx == i:
+                    kind = "good" if good else "bad"
+            _acq_cell(ax, x0 + i * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, kind)
+        for target in (x0, x0 + w):
+            ax.plot(
+                [x0 + q_report * w, target],
+                [gauge_y0, zoom_top],
+                color=RULE,
+                linewidth=1.4,
+                zorder=0,
+            )
+        row_name(zoom_y0 + ACQ_ZOOM_H / 2, "zoomed at the cut")
+        ax.plot([zoom_report_x] * 2, [zoom_y0 - 0.32, zoom_top], color=INK, linewidth=2.2, zorder=6)
+        ax.text(
+            zoom_report_x - LABEL_GAP,
+            zoom_y0 - 0.32 - LABEL_GAP,
+            _sub(r"\theta_{report}"),
+            ha="right",
+            va="top",
+            fontsize=16,
+            color=INK,
+        )
+
+    # ── stage 4: the second cut, one step of the knob further up the ranking ──
+    if stage >= 4:
+        ax.plot([zoom_acq_x] * 2, [zoom_y0 - 0.32, zoom_top], color=INK, linewidth=2.2, zorder=6)
+        ax.text(
+            zoom_acq_x + LABEL_GAP,
+            zoom_y0 - 0.32 - LABEL_GAP,
+            _sub(rf"\theta_{{acq}}\ \ (k = {k_acq})"),
+            ha="left",
+            va="top",
+            fontsize=16,
+            color=INK,
+        )
+        _acq_cell(ax, x0 + pick_index * cell_w, zoom_y0, cell_w, ACQ_ZOOM_H, "unlabeled", lw=3.2)
+        ax.text(
+            x0 + (pick_index + 0.5) * cell_w,
+            zoom_top + LABEL_GAP,
+            "ask about this one",
+            ha="center",
+            va="bottom",
+            fontsize=15,
+            color=INK,
+        )
+
+    # ── stage 5: the vote goes back to D₀, and the loop closes ───────────────
+    # Routed down the left margin, as the loop schematic routes its own return:
+    # a straight diagonal would cross both rows of evidence, and what the last
+    # step has to say is that the threshold chooses what gets voted on, which a
+    # clean rectangular return says more plainly than a shortcut.
+    if stage >= 5:
+        pick_cx = x0 + (pick_index + 0.5) * cell_w
+        ax.plot(
+            [pick_cx, pick_cx, rail_x, rail_x],
+            [cut_label_bottom - OBJECT_GAP, ask_y, ask_y, row_y],
+            color=INK,
+            linewidth=1.6,
+            solid_capstyle="round",
+            solid_joinstyle="round",
+            zorder=2,
+        )
+        _arrow(ax, (rail_x, row_y), (block_x0 - OBJECT_GAP, row_y))
+        ax.text(
+            (rail_x + pick_cx) / 2,
+            ask_y + LABEL_GAP,
+            "vote, and train again",
+            ha="center",
+            va="bottom",
+            fontsize=15,
+            color=INK,
+        )
+        # Centred on the *canvas*, not on the panel: this line is wider than
+        # the panel and the crop is taken from the ink, so hanging it off centre
+        # would widen the saved figure and shrink every label in the slot.
+        ax.text(
+            INCL_CANVAS_W / 2,
+            conclusion_y,
+            "the threshold picks what you are asked; the answers retrain it",
+            ha="center",
+            va="center",
+            fontsize=17,
+            color=INK,
+        )
+
+    return fig
+
+
 def blend_schedule_fig() -> None:
     n = np.arange(0, 121)
     fig, ax = plt.subplots(figsize=(7.0, 5.0))
@@ -2495,6 +3639,10 @@ if __name__ == "__main__":
     blend_flow_fig()
     xsemi_flow_fig()
     xquant_flow_fig()
+    knob_flow_fig()
+    walk_flow_fig()
+    tilt_flow_fig()
+    acq_flow_fig()
     blend_schedule_fig()
     anchored_fig()
     decomposition_fig()

@@ -4,8 +4,12 @@
 # the threshold — choosing the next question — lands before the iterations do.
 # Then four iterations, each as [the idea, then the measurement] — the fourth
 # carrying an extra slide between the two, because its idea is not finished
-# until scores stop being averaged as numbers — and the cut-rule line told as
-# the epilogue that proves the anchored fit won.
+# until scores stop being averaged as numbers. Then the same machinery walked a
+# second time along the Inclusion axis — the knob that did nothing, the quantile
+# rule that repaired it, the tilt that gave it back once the fused fit had taken
+# it away again, and the second cut that closes the loop onto the promise made
+# on slide seven — and the cut-rule line told as the epilogue that proves the
+# anchored fit won.
 
 theme: vtsearch
 paginate: true
@@ -31,6 +35,10 @@ slides:
   quantile-transfer
   anchored-results
   anchored-kappa
+  inclusion-knob
+  inclusion-walk
+  inclusion-tilt
+  inclusion-acq
   evt-line
   evt-close
   calib-roadmap
