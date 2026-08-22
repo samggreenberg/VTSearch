@@ -1618,6 +1618,10 @@ XQUANT_GAUGE_W = 0.58
 
 #: What the two fold gauges are **labelled** with, and filled to.
 #:
+#: Printed as percentages, which is the point of them being percentages: a
+#: share and a score are different kinds of quantity, and every other number on
+#: this figure is a score. `81%` cannot be mistaken for a cut at 0.81.
+#:
 #: These two are the figure's one invented pair of numbers, and they are here
 #: because the true ones teach badly. A midpoint cut on a well-separated mixture
 #: at this prevalence always lands at very nearly the same quantile — that is
@@ -1837,13 +1841,19 @@ def _xquant_fold_panel(
     advances on, and re-walking a picture the audience was already walked through
     would spend them on nothing.
 
-    The one thing the fold-anchored figure carries and this one drops is
-    `_mark_legend`, the two glyphs naming whose scores a panel's ✗s and ✓s are.
-    There it was the first time those marks appeared inside a mixture panel
-    rather than on a score line, so they were worth naming; by here they have
-    been the same evidence for two figures running, and a legend for a mark the
-    audience already reads is a line of type competing with the three this
-    figure needs.
+    Both of the panel's names are kept — `Mᵢ(D₋₁)` for the humps and `Mᵢ(D_j)`
+    for the votes standing in them — because a panel holding two quantities has
+    to name both, and this is the figure where a reader most needs to know that
+    the votes came from the *other* half. What goes is `_mark_legend`'s pair of
+    glyphs beside that second name. There they were the first ✗ and ✓ to appear
+    inside a mixture panel rather than on a score line, so a key was worth its
+    space; two figures on, they are simply the evidence, and a floating key for
+    a mark the audience already reads is ink competing with the three moves this
+    figure exists to make.
+
+    Both names hang at the panel's own outer corner, which `_mark_legend` could
+    not do — it had glyphs to fit in first, so its name sat inboard of them. Two
+    labels on one edge read as one group naming one panel.
     """
     fit, scores, anchors = fold
     outer = x0 + (w if i else 0.0)
@@ -1855,6 +1865,15 @@ def _xquant_fold_panel(
         ha="right" if i else "left",
         va="bottom",
         fontsize=16,
+        color=INK,
+    )
+    ax.text(
+        outer,
+        top + LABEL_GAP + CAP_16 + LABEL_GAP,
+        _sub(f"M_{i + 1}(D_{2 - i})"),
+        ha="right" if i else "left",
+        va="baseline",
+        fontsize=15,
         color=INK,
     )
     _score_histogram(ax, x0, y_base, w, h, fit, scores, fill="class", mu_labels=False)
@@ -1876,9 +1895,9 @@ def _xquant_gauges(ax: plt.Axes, xs: tuple[float, ...], y0: float, w: float, q_b
         xs,
         (*shown, q_bar),
         (
-            _sub(rf"q_1 = {shown[0]:.2f}"),
-            _sub(rf"q_2 = {shown[1]:.2f}"),
-            _sub(rf"q = avg(q_1,\, q_2) = {q_bar:.2f}"),
+            _sub(rf"q_1 = {shown[0]:.0%}".replace("%", r"\%")),
+            _sub(rf"q_2 = {shown[1]:.0%}".replace("%", r"\%")),
+            _sub(rf"q = avg(q_1,\, q_2) = {q_bar:.0%}".replace("%", r"\%")),
         ),
         strict=True,
     ):
@@ -1947,13 +1966,14 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
     final_x = fold_x[1] + panel_w + panel_gap
 
     # M₀'s branch, returning from the blend figure: train out to the right, then
-    # one straight drop onto the middle of the distribution it produces. The
-    # blend aims its own drop off the tall bars (0.62 across) because a mixture is
-    # about to be fitted under it and the fit is what the eye has to reach;
-    # nothing is fitted here, so the drop can land on the histogram's centre —
-    # which is also what pulls M₀ in from the right edge and takes nearly two
-    # units off the train arrow reaching it.
-    m0x = final_x + 0.5 * panel_w
+    # one straight drop onto the distribution it produces. The blend aims its own
+    # drop off the tall bars (0.62 across) because a mixture is about to be
+    # fitted under it and the fit is what the eye has to reach; nothing is fitted
+    # here, so the drop can land on the shape itself — at its **centre of mass**,
+    # which is the honest middle of a histogram this left-weighted and is nearly
+    # a third of the panel left of its geometric centre. That also takes some
+    # three units off the train arrow reaching M₀.
+    m0x = final_x + float(np.mean(final)) * panel_w
     train_x = block_x0 + block_w + OBJECT_GAP
     train_len = m0x - MODEL_W / 2 - OBJECT_GAP - train_x
     # The head clears the panel's own name by an object gap instead of abutting
@@ -2030,7 +2050,18 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
     if stage >= 4:
         arrow((m0x, hay_y0 - OBJECT_GAP), _box_edge(m0x, row_y, (m0x, hay_y0), OBJECT_GAP))
         labeled_arrow(_box_edge(m0x, row_y, tip0, OBJECT_GAP), tip0, "score", z=2.1)
-        ax.text(final_x, panel_top + LABEL_GAP, _sub("M_0(D_{-1})"), ha="left", va="bottom", fontsize=16, color=INK)
+        # At the panel's outer corner, as the fold panels' names are: the drop now
+        # comes down over the left third of this panel, which is where a
+        # left-aligned name would be standing.
+        ax.text(
+            final_x + panel_w,
+            panel_top + LABEL_GAP,
+            _sub("M_0(D_{-1})"),
+            ha="right",
+            va="bottom",
+            fontsize=16,
+            color=INK,
+        )
         _score_histogram(ax, final_x, y_base, panel_w, panel_h, None, final, fill="plain", mu_labels=False)
 
     # ── stage 5: the strawman — average the two numbers, and look ─────────────

@@ -52,9 +52,10 @@
      takes.
 
      Advance six is the fix, and it is one sentence: stop reading the cut as a
-     number and read it as a *share*. Each fold's cut admits some fraction of
-     the corpus — that is the bar under each panel — and the two folds, which
-     disagreed about the number, agree about the fraction. That is not luck. A
+     number and read it as a *share* — which is why those three are the only
+     numbers on the slide carrying a percent sign. Each fold's cut admits some
+     fraction of the corpus; that is the bar under each panel, and the two folds
+     that disagreed about the number agree about the fraction. That is not luck. A
      quantile survives any monotone re-scoring of the same corpus, and two
      models scoring the same haystack are close enough to that for the share to
      carry across where the number cannot. Average the shares.
@@ -67,7 +68,7 @@
      the cardinal-averaging stage — quantile transfer was in the fold-anchored
      design from the start, and the strawman is drawn because it makes the fix
      obvious, not because it is history. And the two fold shares are drawn as
-     0.79 and 0.81 to make the averaging legible; measured, they agree to within
+     79% and 81% to make the averaging legible; measured, they agree to within
      a fifth of a percent, which is a stronger version of the same point rather
      than a weaker one.
 
