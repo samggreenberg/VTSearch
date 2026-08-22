@@ -106,8 +106,7 @@ def run_export(body: dict):
         abort(
             400,
             message=(
-                f"Exporter '{exporter_name}' does not export a {payload_kind} payload "
-                f"(it supports: {supported})."
+                f"Exporter '{exporter_name}' does not export a {payload_kind} payload (it supports: {supported})."
             ),
         )
 

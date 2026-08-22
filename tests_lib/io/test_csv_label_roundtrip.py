@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import csv
 
-from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 from vtscore.labels.importers.server_csv_file import _parse_csv_bytes
 
 # Names that begin with each formula prefix the exporter escapes.  Tab and
@@ -24,7 +24,7 @@ _TRICKY_NAMES = ["-take2.wav", "@handle_post.txt", "=mc2.wav", "+1_more.wav"]
 
 def _export_then_import(labels, tmp_path, columns=None):
     filepath = tmp_path / "labels.csv"
-    ServerCsvLabelsetExporter().export(
+    ServerCsvResultsExporter().export_labelset(
         {"labels": labels, "selected_columns": columns or ["label", "md5", "origin_name", "filename", "category"]},
         {"filepath": str(filepath)},
     )
@@ -57,7 +57,7 @@ class TestCsvLabelRoundTrip:
     def test_written_csv_still_escapes_for_spreadsheets(self, tmp_path):
         """De-sanitizing on read must not weaken the on-disk escaping."""
         filepath = tmp_path / "labels.csv"
-        ServerCsvLabelsetExporter().export(
+        ServerCsvResultsExporter().export_labelset(
             {
                 "labels": [{"label": "good", "md5": "abc123", "filename": "-take2.wav"}],
                 "selected_columns": ["label", "md5", "filename"],

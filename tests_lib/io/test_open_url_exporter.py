@@ -16,7 +16,7 @@ import pytest
 from vtscore import cli_progress
 from vtscore.cli import _run_exporter
 from vtscore.exporters import get_exporter
-from vtscore.exporters.open_url import MAX_URL_LENGTH, OpenUrlLabelsetExporter
+from vtscore.exporters.open_url import MAX_URL_LENGTH, OpenUrlResultsExporter
 
 LABELSET = {
     "labels": [
@@ -58,8 +58,8 @@ def _stub_gui_cli_export(outcome: dict):
 
 
 @pytest.fixture
-def exporter() -> OpenUrlLabelsetExporter:
-    return OpenUrlLabelsetExporter()
+def exporter() -> OpenUrlResultsExporter:
+    return OpenUrlResultsExporter()
 
 
 class TestOpenUrlRegistration:
@@ -78,34 +78,34 @@ class TestOpenUrlRegistration:
 
 class TestUrlFormatting:
     def test_substitutes_ids_from_labelset(self, exporter):
-        out = exporter.export(LABELSET, {"url_template": "https://example.com/r?ids={ids}"})
+        out = exporter.export_labelset(LABELSET, {"url_template": "https://example.com/r?ids={ids}"})
         assert _ids_param(out["open_url"]) == "aaa1,bbb2,ccc3"
 
     def test_substitutes_ids_from_autodetect_results(self, exporter):
-        out = exporter.export(AUTODETECT_RESULTS, {"url_template": "https://example.com/r?ids={ids}"})
+        out = exporter.export_find_results(AUTODETECT_RESULTS, {"url_template": "https://example.com/r?ids={ids}"})
         assert _ids_param(out["open_url"]) == "aaa1,bbb2"
 
     def test_substitutes_count(self, exporter):
-        out = exporter.export(LABELSET, {"url_template": "https://example.com/r?n={count}"})
+        out = exporter.export_labelset(LABELSET, {"url_template": "https://example.com/r?n={count}"})
         assert _ids_param(out["open_url"], "n") == "3"
 
     def test_id_field_selects_the_identifier(self, exporter):
-        out = exporter.export(
+        out = exporter.export_labelset(
             LABELSET,
             {"url_template": "https://example.com/r?ids={ids}", "id_field": "filename"},
         )
         assert _ids_param(out["open_url"]) == "one.wav,two.wav,three.wav"
 
     def test_falls_back_to_custom_metadata(self, exporter):
-        results = {"labels": [{"md5": "aaa1", "custom_metadata": {"asset_id": "XY-7"}}]}
-        out = exporter.export(
-            results,
+        labelset = {"labels": [{"md5": "aaa1", "custom_metadata": {"asset_id": "XY-7"}}]}
+        out = exporter.export_labelset(
+            labelset,
             {"url_template": "https://example.com/r?ids={ids}", "id_field": "asset_id"},
         )
         assert _ids_param(out["open_url"]) == "XY-7"
 
     def test_separator_is_url_encoded_not_literal(self, exporter):
-        out = exporter.export(
+        out = exporter.export_labelset(
             LABELSET,
             {"url_template": "https://example.com/r?ids={ids}", "separator": "/"},
         )
@@ -114,33 +114,33 @@ class TestUrlFormatting:
         assert _ids_param(out["open_url"]) == "aaa1/bbb2/ccc3"
 
     def test_items_without_the_identifier_are_skipped(self, exporter):
-        results = {"labels": [{"md5": "aaa1"}, {"filename": "no-md5.wav"}]}
-        out = exporter.export(results, {"url_template": "https://example.com/r?ids={ids}"})
+        labelset = {"labels": [{"md5": "aaa1"}, {"filename": "no-md5.wav"}]}
+        out = exporter.export_labelset(labelset, {"url_template": "https://example.com/r?ids={ids}"})
         assert _ids_param(out["open_url"]) == "aaa1"
 
     def test_template_without_placeholders_opens_the_site(self, exporter):
-        out = exporter.export(LABELSET, {"url_template": "https://example.com/review"})
+        out = exporter.export_labelset(LABELSET, {"url_template": "https://example.com/review"})
         assert out["open_url"] == "https://example.com/review"
 
     def test_empty_labelset_yields_an_empty_id_list(self, exporter):
-        out = exporter.export({"labels": []}, {"url_template": "https://example.com/r?ids={ids}"})
+        out = exporter.export_labelset({"labels": []}, {"url_template": "https://example.com/r?ids={ids}"})
         assert out["open_url"] == "https://example.com/r?ids="
         assert out["total_count"] == 0
 
     def test_spaces_from_template_substitution_are_encoded(self, exporter):
         # ``{detector_name}`` is substituted by the framework *before* export()
         # sees the value, and a detector name may contain spaces.
-        out = exporter.export(LABELSET, {"url_template": "https://example.com/r?d=Bird Calls"})
+        out = exporter.export_labelset(LABELSET, {"url_template": "https://example.com/r?d=Bird Calls"})
         assert out["open_url"] == "https://example.com/r?d=Bird%20Calls"
 
     def test_rejects_control_characters(self, exporter):
         with pytest.raises(ValueError, match="control characters"):
-            exporter.export(LABELSET, {"url_template": "https://example.com/r?d=a\nb"})
+            exporter.export_labelset(LABELSET, {"url_template": "https://example.com/r?d=a\nb"})
 
 
 class TestTruncation:
     def test_truncates_to_max_items(self, exporter):
-        out = exporter.export(
+        out = exporter.export_labelset(
             LABELSET,
             {"url_template": "https://example.com/r?ids={ids}", "max_items": "2"},
         )
@@ -149,14 +149,14 @@ class TestTruncation:
         assert out["total_count"] == 3
 
     def test_truncation_is_reported_in_the_message(self, exporter):
-        out = exporter.export(
+        out = exporter.export_labelset(
             LABELSET,
             {"url_template": "https://example.com/r?ids={ids}", "max_items": "2"},
         )
         assert "first 2 of 3" in out["message"]
 
     def test_untruncated_message_omits_the_first_n_phrasing(self, exporter):
-        out = exporter.export(LABELSET, {"url_template": "https://example.com/r?ids={ids}"})
+        out = exporter.export_labelset(LABELSET, {"url_template": "https://example.com/r?ids={ids}"})
         assert "first" not in out["message"]
         assert out["included_count"] == out["total_count"] == 3
 
@@ -178,30 +178,30 @@ class TestRejection:
     )
     def test_rejects_non_http_schemes(self, exporter, template):
         with pytest.raises(ValueError, match="http or https"):
-            exporter.export(LABELSET, {"url_template": template})
+            exporter.export_labelset(LABELSET, {"url_template": template})
 
     def test_rejects_relative_url(self, exporter):
         with pytest.raises(ValueError, match="http or https"):
-            exporter.export(LABELSET, {"url_template": "/review?ids={ids}"})
+            exporter.export_labelset(LABELSET, {"url_template": "/review?ids={ids}"})
 
     def test_rejects_empty_template(self, exporter):
         with pytest.raises(ValueError, match="required"):
-            exporter.export(LABELSET, {"url_template": "   "})
+            exporter.export_labelset(LABELSET, {"url_template": "   "})
 
     def test_rejects_url_over_the_length_limit(self, exporter):
-        results = {"labels": [{"md5": "x" * 100} for _ in range(100)]}
+        labelset = {"labels": [{"md5": "x" * 100} for _ in range(100)]}
         with pytest.raises(ValueError, match="over the"):
-            exporter.export(results, {"url_template": "https://example.com/r?ids={ids}"})
+            exporter.export_labelset(labelset, {"url_template": "https://example.com/r?ids={ids}"})
 
     def test_length_error_names_the_knob_to_turn(self, exporter):
-        results = {"labels": [{"md5": "x" * 100} for _ in range(100)]}
+        labelset = {"labels": [{"md5": "x" * 100} for _ in range(100)]}
         with pytest.raises(ValueError, match="Max items"):
-            exporter.export(results, {"url_template": "https://example.com/r?ids={ids}"})
+            exporter.export_labelset(labelset, {"url_template": "https://example.com/r?ids={ids}"})
 
     def test_lowering_max_items_brings_it_under_the_limit(self, exporter):
-        results = {"labels": [{"md5": "x" * 100} for _ in range(100)]}
-        out = exporter.export(
-            results,
+        labelset = {"labels": [{"md5": "x" * 100} for _ in range(100)]}
+        out = exporter.export_labelset(
+            labelset,
             {"url_template": "https://example.com/r?ids={ids}", "max_items": "10"},
         )
         assert len(out["open_url"]) <= MAX_URL_LENGTH
@@ -215,18 +215,18 @@ class TestCliExport:
     """
 
     def test_returns_the_url(self, exporter):
-        out = exporter.export_cli(LABELSET, {"url_template": "https://example.com/r?ids={ids}"})
-        assert _ids_param(out["open_url"]) == "aaa1,bbb2,ccc3"
+        out = exporter.export_cli(AUTODETECT_RESULTS, {"url_template": "https://example.com/r?ids={ids}"})
+        assert _ids_param(out["open_url"]) == "aaa1,bbb2"
 
     def test_reports_truncation_in_the_message(self, exporter):
         out = exporter.export_cli(
-            LABELSET,
+            AUTODETECT_RESULTS,
             {"url_template": "https://example.com/r?ids={ids}", "max_items": "1"},
         )
-        assert "first 1 of 3" in out["message"]
+        assert "first 1 of 2" in out["message"]
 
     def test_writes_nothing_to_stdout(self, exporter, capsys):
-        exporter.export_cli(LABELSET, {"url_template": "https://example.com/r?ids={ids}"})
+        exporter.export_cli(AUTODETECT_RESULTS, {"url_template": "https://example.com/r?ids={ids}"})
         assert capsys.readouterr().out == ""
 
 
@@ -242,30 +242,30 @@ class TestCliSurfacesOpenUrl:
     TEMPLATE = {"url_template": "https://example.com/r?ids={ids}"}
 
     def test_prints_the_url_under_the_message(self, capsys):
-        _run_exporter("open_url", dict(self.TEMPLATE), LABELSET)
+        _run_exporter("open_url", dict(self.TEMPLATE), AUTODETECT_RESULTS)
         out = capsys.readouterr().out
-        assert "Formatted a URL covering 3 item(s)." in out
-        assert "https://example.com/r?ids=aaa1%2Cbbb2%2Cccc3" in out
+        assert "Formatted a URL covering 2 item(s)." in out
+        assert "https://example.com/r?ids=aaa1%2Cbbb2" in out
 
     def test_carries_the_url_on_the_json_event(self, capsys):
         cli_progress.set_format("json")
-        _run_exporter("open_url", dict(self.TEMPLATE), LABELSET)
+        _run_exporter("open_url", dict(self.TEMPLATE), AUTODETECT_RESULTS)
         lines = [ln for ln in capsys.readouterr().out.splitlines() if ln.strip()]
         assert len(lines) == 1, "the URL must not be printed as prose alongside the NDJSON event"
         event = json.loads(lines[0])
         assert event["event"] == "export_complete"
-        assert _ids_param(event["open_url"]) == "aaa1,bbb2,ccc3"
+        assert _ids_param(event["open_url"]) == "aaa1,bbb2"
 
     def test_exporters_without_a_url_are_unchanged(self, capsys):
         with _stub_gui_cli_export({"message": "Wrote it."}):
-            _run_exporter("gui", {}, LABELSET)
+            _run_exporter("gui", {}, AUTODETECT_RESULTS)
         assert capsys.readouterr().out == "Wrote it.\n"
 
     def test_unusable_url_is_dropped_rather_than_shown(self, capsys):
         """A plugin must not be able to put a ``javascript:`` URL in front of
         the user — but the export itself already ran, so it isn't failed."""
         with _stub_gui_cli_export({"message": "Wrote it.", "open_url": "javascript:alert(1)"}):
-            _run_exporter("gui", {}, LABELSET)
+            _run_exporter("gui", {}, AUTODETECT_RESULTS)
         out = capsys.readouterr().out
         assert "javascript:" not in out
         assert "Wrote it." in out
