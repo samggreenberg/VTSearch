@@ -32,6 +32,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib import patheffects
 from matplotlib.patches import Ellipse, FancyArrow, FancyArrowPatch, Polygon, Rectangle
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -1214,22 +1215,13 @@ XSEMI_POPULATIONS = (
 #: cross-calibration figure's ✗s and ✓s, moved onto a score axis. The counts
 #: and the imperfection are carried over from `SCORE_MARKS_2`: fold 2 ranks a
 #: Bad above its own cut, because a fold model's ranking of votes it never
-#: saw is not trivially clean, and an anchored fit has to survive that.
+#: saw is not trivially clean, and an anchored fit has to survive that. No
+#: Good sits at its fold's μ_hi, because a ✓ drawn above the baseline lands on
+#: the dashed stem that marks the mean and neither mark survives the overlap.
 XSEMI_ANCHORS = (
-    {"bad": (0.12, 0.20, 0.28, 0.36), "good": (0.64, 0.74, 0.84)},
-    {"bad": (0.22, 0.30, 0.38, 0.70), "good": (0.60, 0.79, 0.90)},
+    {"bad": (0.12, 0.20, 0.28, 0.36), "good": (0.63, 0.71, 0.85)},
+    {"bad": (0.22, 0.30, 0.38, 0.70), "good": (0.61, 0.74, 0.91)},
 )
-
-#: Where a vote's glyph sits inside its hump: this fraction of the mixture's
-#: own height at that score, floored so a vote out in a tail still clears the
-#: baseline and capped so one near a peak stays under the curve.
-MARK_HEIGHT_FRAC = 0.45
-MARK_HEIGHT_FLOOR = 0.20
-
-#: The white disc each vote's glyph is set on, as (width, height) in drawing
-#: units. Same device as `_disc_label`: a mark has to be read against the
-#: hatch of the hump it is sitting in, and a rust ✗ on a rust hatch is not.
-MARK_DISC = (0.28, 0.32)
 
 
 def xsemi_flow_fig() -> None:
@@ -1311,42 +1303,40 @@ def _xsemi_folds() -> list[tuple[GmmFit1D, np.ndarray, dict]]:
     return folds
 
 
-def _hump_marks(
-    ax: plt.Axes,
-    x0: float,
-    y_base: float,
-    w: float,
-    h: float,
-    fit: "GmmFit1D",
-    scores: np.ndarray,
-    anchors: dict,
-) -> None:
-    """This fold's held-out votes, drawn *inside* the humps at their scores.
+def _hump_marks(ax: plt.Axes, x0: float, y_base: float, w: float, anchors: dict) -> None:
+    """This fold's held-out votes, drawn on the panel's baseline.
 
-    The same ✗/✓ glyphs the cross-calibration figure puts on a score line, at
-    the same weight — this is the identical evidence, re-plotted against the
-    haystack the fit is over. Each glyph rides the mixture's own height at its
-    score, so the marks follow the shape they are pinning instead of sitting
-    in a row beneath it, and a vote the fold model ranked wrongly is drawn
-    where it actually landed: inside the *other* component's hump.
+    The panel's baseline *is* the cross-calibration figure's score line: the
+    same ✗s below it and ✓s above it, at the same offsets and the same weight,
+    because this is the identical evidence and the reader has already learnt
+    to read it that way. All that has changed is that the fold model's whole
+    scored haystack is now drawn standing on the same line, so the votes and
+    the population they anchor are read against one axis.
+
+    The one thing the panel adds is that a vote's position now means a score
+    rather than a rank, which is what lets a vote the fold model ranked wrongly
+    land visibly to the far side of its own fold's cut.
+
+    The glyphs are knocked out of whatever they land on with a white outline.
+    On the cross-calibration figure they sat on white paper; here a ✓ sits
+    just above the baseline where the Good hump's green hatch starts, and
+    green on green is not a mark. The halo is the smallest change that keeps
+    the glyph itself identical.
     """
-    density, _edges = np.histogram(scores, bins=GMM_FLOW_BINS, range=(0.0, 1.0), density=True)
-    sy = h / float(density.max())
-    for key, color, glyph in (("bad", RUST, "✗"), ("good", GREEN, "✓")):
-        for s in anchors[key]:
-            mix = max(
-                fit.w_lo * gaussian(np.array([s]), fit.mu_lo, fit.var_lo)[0],
-                fit.w_hi * gaussian(np.array([s]), fit.mu_hi, fit.var_hi)[0],
-            )
-            # Under the curve where the curve has room, and never below the
-            # baseline where it does not: a vote out in a tail rides at the
-            # floor with its disc poking through the outline, which is the
-            # honest picture of a vote the fold model scored out there.
-            top = mix * sy - MARK_DISC[1] / 2
-            y = y_base + max(min(MARK_HEIGHT_FRAC * mix * sy, top), MARK_HEIGHT_FLOOR)
-            ax.add_patch(Ellipse((x0 + s * w, y), *MARK_DISC, facecolor="white", edgecolor="none", zorder=5.5))
+    halo = [patheffects.withStroke(linewidth=4.0, foreground="white")]
+    for key, color, glyph, dy, va in (("bad", RUST, "✗", -0.12, "top"), ("good", GREEN, "✓", 0.08, "bottom")):
+        for score in anchors[key]:
             ax.text(
-                x0 + s * w, y, glyph, ha="center", va="center", fontsize=16, color=color, fontweight="bold", zorder=6
+                x0 + score * w,
+                y_base + dy,
+                glyph,
+                ha="center",
+                va=va,
+                fontsize=16,
+                color=color,
+                fontweight="bold",
+                zorder=6,
+                path_effects=halo,
             )
 
 
@@ -1445,15 +1435,6 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
     train_len = 1.5
     m0x = train_x + train_len + OBJECT_GAP + MODEL_W / 2
 
-    # The haystack reaches each fold model down the *outside* of the figure and
-    # in along the models' own row. A straight drop is what the previous two
-    # figures used, and it is not available here: the space directly above each
-    # fold model is spoken for by the half of D₀ that trains it. Running the
-    # two paths around the outside also says the thing the fit depends on —
-    # both fold models score the *same* whole haystack — with the same stroke
-    # weight as every other scoring path, and without crossing anything.
-    bus_x = (hay_x0 + 0.6, hay_x0 + hay_w - 0.3)
-
     theta_bottom = y_base - 0.32 - LABEL_GAP - CAP_16
     conclusion_y = theta_bottom - OBJECT_GAP - CONCLUSION_PT / 72
 
@@ -1490,17 +1471,16 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
             labeled_arrow((mx, train_tail_y), (mx, train_tail_y - fold_train_len), "train")
 
     # ── stage 3: each fold model scores the whole haystack ────────────────────
-    # Bare stroke in, labelled block arrow out — the progression's rule for a
-    # scoring path — and the panel it lands on is the shape of those scores and
-    # nothing else yet.
+    # Where the haystack enters the fold models is left to the panel's own
+    # label. Drawn, that path has to come down the outside of the figure and
+    # in along the models' row — the space directly above each fold model is
+    # spoken for by the half of D₀ that trains it — and two L-shaped strokes
+    # that size buy a fact the audience already has from three figures of the
+    # same haystack: `Mᵢ(D₋₁)` over a histogram says where it came from.
     for i, (fit, scores, _anchors) in enumerate(folds):
         if stage < 3:
             break
         sign = -1.0 if i == 0 else 1.0
-        bx_i = bus_x[i]
-        ax.plot([bx_i] * 2, [hay_y0 - OBJECT_GAP, my], color=INK, linewidth=1.6, zorder=2)
-        mx = m1x if i == 0 else m2x
-        arrow((bx_i, my), _box_edge(mx, my, (bx_i, my), OBJECT_GAP))
         exit_i = (2 * bx - exit1[0], exit1[1]) if i else exit1
         tip_i = (2 * bx - tip1[0], tip1[1]) if i else tip1
         labeled_arrow(exit_i, tip_i, "score", z=2.1)
@@ -1530,8 +1510,7 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
         for i, (mx, sign) in enumerate(((m1x, 1.0), (m2x, -1.0))):
             entry_tail = (mx + sign * slope * (train_tail_y - my), train_tail_y)
             arrow(entry_tail, _box_edge(mx, my, entry_tail, OBJECT_GAP))
-            fit, scores, anchors = folds[i]
-            _hump_marks(ax, panel_x[i], y_base, panel_w, panel_h, fit, scores, anchors)
+            _hump_marks(ax, panel_x[i], y_base, panel_w, folds[i][2])
             # Held out, and named: the votes in fold i's panel are the ones
             # its own model never trained on — the crossed strokes above are
             # where they came from.
@@ -1546,7 +1525,7 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
         # left behind: what the blend hand-tuned as a ramp on the vote count is
         # here a consequence of one number, and κ is that number.
         ax.text(
-            (block_x0 + block_w + bus_x[1]) / 2,
+            (block_x0 + block_w + canvas_w - 0.2) / 2,
             my + (block_y0 - my) / 2,
             "anchor mass " + _sub(r"\kappa = 0.3") + "\n" + _sub(r"\gamma = \kappa n\, /\, (\kappa n + N)"),
             ha="center",
