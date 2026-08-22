@@ -73,4 +73,5 @@
      models score the same corpus on scales that need not agree, so a cut
      crosses between them as a quantile rank rather than as a number, and the
      mean rank is realised on the final model's own distribution. Drawn plain
-     because the plain version is what makes the fix obvious. -->
+     because the plain version is what makes the fix obvious — and the fix is
+     the next slide, so do not spend more than a sentence on it here. -->
