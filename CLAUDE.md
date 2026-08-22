@@ -217,7 +217,23 @@ Never ask the user whether to subscribe to PR activity, and never call `subscrib
 
 ## Backwards Compatibility
 
-Breaking backwards compatibility is acceptable; do not add shims, feature flags, legacy re-exports, or other compatibility layers to preserve old behavior. Just make the clean change. When a change does break backwards compatibility, mention it to the user so they're aware.
+**Which surface breaks decides how much care it's owed.** The two cases pull in opposite directions, so name the surface before deciding.
+
+### Saved data and internal surfaces: break freely
+
+Persisted artifacts (settings files, detector JSON, dataset pickles, cached sidecars, exported files) and anything internal to the app (routes talking to our own SPA, module layout, function signatures inside `vtsearch`) may be broken without ceremony. VTSearch does not produce long-lived exports that have to survive version to version, and both halves of the app ship together. Do **not** add migration shims, feature flags, legacy re-exports, or compatibility layers to preserve old behavior here. Just make the clean change, and mention the break to the user so they're aware.
+
+### Extension-facing surfaces: don't break casually
+
+A third-party developer may have written code against our plugin ABCs (`LabelsetExporter`, `DatasetImporter`, `MediaConverter`, and their siblings), the registry sentinels (`EXPORTER`, `IMPORTER`, …), the `vtscore.*` entry-point groups, or the public `vtscore` library API. Breaking those forces someone outside this repo to refactor working code, on our schedule. That is a real cost, and it is paid by someone who never agreed to it.
+
+This is not an absolute bar — a genuinely better contract can be worth it — but it must be a deliberate decision, not a side effect:
+
+- **Prefer additive.** A new method alongside the old one, with the base class delegating so an existing plugin keeps working, is usually available and usually cheap. Reach for it first.
+- **Keep the cheap escape hatches.** A module-level alias for a renamed class, or a default implementation that delegates to the old method, costs a line or two and preserves every out-of-tree caller. Unlike a data migration, these do not rot.
+- **When a hard break is right, make it loud, not silent.** A plugin that no longer satisfies the contract should be rejected with a message naming what's missing — never half-work.
+- **Say so where extension authors will see it:** an `[Unreleased]` entry in `vtscore/CHANGELOG.md`, plus the relevant guide under `docs/EXTENDING-plugins.md` / `vtscore/docs/extending/`.
+- **Raise it with the user before committing to it.** An extension-facing break is a decision to make on purpose, out loud.
 
 ## Frontend Scope: Desktop Only
 

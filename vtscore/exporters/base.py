@@ -52,11 +52,37 @@ verifies that every imported package is declared there.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Iterator
 
 from vtscore.plugins import PluginBase, PluginField
 
-__all__ = ["LabelsetExporter", "PluginField", "resolve_stream_batch_size"]
+logger = logging.getLogger(__name__)
+
+__all__ = [
+    "PAYLOAD_KINDS",
+    "LabelsetExporter",
+    "PluginField",
+    "ResultsExporter",
+    "UnsupportedPayloadError",
+    "resolve_stream_batch_size",
+]
+
+#: Every payload kind an exporter can be handed, in the order they are
+#: documented.  ``find_results`` is a scored run (hit lists); ``labelset`` is a
+#: detector's labels (origins and vote provenance); ``detector_bundles`` is the
+#: trained classifiers themselves.  See :class:`ResultsExporter`.
+PAYLOAD_KINDS: tuple[str, ...] = ("find_results", "labelset", "detector_bundles")
+
+
+class UnsupportedPayloadError(ValueError):
+    """Raised when an exporter is handed a payload kind it does not implement.
+
+    A :class:`ValueError` subclass so ``POST /api/exporters/export`` turns it
+    into a 400 through the handler's existing ``except ValueError`` arm rather
+    than a 500: asking a labelset-only exporter for a find-results export is a
+    bad request, not a server fault.
+    """
 
 
 def resolve_stream_batch_size(value: Any, default: int = 500) -> int:
@@ -80,23 +106,94 @@ def resolve_stream_batch_size(value: Any, default: int = 500) -> int:
     return n if n > 0 else default
 
 
-class LabelsetExporter(PluginBase):
+class ResultsExporter(PluginBase):
     """Abstract base class for results exporters.
 
-    Subclass this, set the class-level attributes, implement :meth:`export`,
-    and expose a module-level ``EXPORTER = YourExporter()`` – the registry
-    picks it up automatically.
+    Subclass this, set the class-level attributes, implement the payload
+    method(s) you support, and expose a module-level
+    ``EXPORTER = YourExporter()`` – the registry picks it up automatically.
 
-    The :meth:`export` method receives the full results dict returned by
-    ``/api/auto-detect`` and a flat mapping of field values supplied by the
-    user via the UI.  It should return a dict with at minimum a ``"message"``
-    key describing what happened (shown to the user as confirmation).
+    Payload kinds
+    -------------
+    An exporter is a *destination* (a file, an SMTP server, a webhook, a
+    browser tab).  What gets sent there is a separate axis, and there are three
+    kinds:
 
-    Exporters that can write results incrementally (for the CLI
+    ``find_results``
+        A scored run: hit lists per detector, with scores and thresholds.
+        Implement :meth:`export_find_results`.  Produced by
+        ``POST /api/auto-detect``, the Auto-Find auto-export, and CLI
+        ``--autodetect``.
+
+    ``labelset``
+        A detector's labels: origins, vote provenance, and the metadata that
+        makes the export re-importable.  Implement :meth:`export_labelset`.
+        Produced by the Export modal.
+
+    ``detector_bundles``
+        The trained classifiers themselves, for a portable scoring bundle.
+        Implement :meth:`export_cli_detectors` (CLI/pipeline path only).
+
+    Most destinations can carry more than one kind, and many carry two: a CSV
+    file is a fine home for either a scored run or a labelset.  Implement each
+    kind you actually understand and leave the rest alone – :attr:`supported_payloads`
+    is derived from which methods you overrode, the pickers only offer you for
+    the kinds you claim, and the route rejects anything else with a 400 rather
+    than letting you deliver an empty export.
+
+    Legacy single-method exporters
+    ------------------------------
+    Before the payload kinds were named, an exporter implemented one
+    :meth:`export` method and told the two dict shapes apart itself (typically
+    ``if "labels" in results``).  That still works: the default
+    :meth:`export_find_results` and :meth:`export_labelset` delegate to
+    :meth:`export`, so an existing out-of-tree plugin needs no changes.  Such an
+    exporter is credited with **both** kinds (there is no way to know which it
+    handles), which is exactly the pre-existing behaviour, and it gets a
+    :class:`DeprecationWarning` pointing at the named methods.
+
+    Streaming
+    ---------
+    Exporters that can write a scored run incrementally (for the CLI
     ``--stream-results`` path on a media source larger than RAM) override
     :attr:`supports_streaming` to return ``True`` and implement
-    :meth:`export_cli_streaming`.
+    :meth:`export_cli_streaming`.  Streaming is a ``find_results`` mode only;
+    there is no labelset equivalent.
     """
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        # A subclass that overrode only the pre-payload-kinds ``export()`` gets
+        # delegated to and keeps working, but it is credited with every
+        # non-detector payload kind because nothing can tell which it actually
+        # handles - so a picker may hand it one it silently no-ops on.  Say so
+        # once, at import time, rather than leaving the author to discover it
+        # from an empty export.
+        #
+        # Deliberately a log line and not ``warnings.warn(DeprecationWarning)``.
+        # Class bodies are executed inside the registry's import ``try``, so a
+        # caller running under ``-W error`` would turn this advisory into an
+        # ImportError and tombstone the very plugin the delegation exists to
+        # keep working - escalating a compatibility notice into the break it
+        # was written to avoid.  A log line cannot do that, and reaches the
+        # author where they are already looking (the server log at startup),
+        # unlike a DeprecationWarning that Python hides by default anyway.
+        overrides_legacy = cls.export is not ResultsExporter.export
+        overrides_named = (
+            cls.export_find_results is not ResultsExporter.export_find_results
+            or cls.export_labelset is not ResultsExporter.export_labelset
+        )
+        # A detector-bundle exporter legitimately overrides ``export()`` only to
+        # explain why hits are the wrong input; it is not a legacy exporter.
+        exports_bundles = cls.export_cli_detectors is not ResultsExporter.export_cli_detectors
+        if overrides_legacy and not overrides_named and not exports_bundles:
+            logger.warning(
+                "%s implements the legacy ResultsExporter.export(); it still works, but it is offered "
+                "every payload kind because nothing can tell which shapes it handles. Override "
+                "export_find_results() and/or export_labelset() instead - see "
+                "vtscore/docs/extending/results-exporters.md.",
+                cls.__name__,
+            )
 
     #: Emoji or icon string shown next to the display name in the UI.
     icon: str = "📤"
@@ -113,12 +210,171 @@ class LabelsetExporter(PluginBase):
     #: front.  See :meth:`export` for the response contract.
     opens_url: bool = False
 
-    def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
-        """Perform the export and return a status dict.
+    @property
+    def supported_payloads(self) -> frozenset[str]:
+        """Which of :data:`PAYLOAD_KINDS` this exporter actually implements.
+
+        Derived from which methods the subclass overrode, never declared.  A
+        declared flag is a second place to forget something, and forgetting is
+        precisely how an exporter ends up in a picker for a payload it cannot
+        read; a derived set cannot drift from the implementation.
+
+        The rules, in order:
+
+        - :attr:`needs_trained_detectors` means "this exporter consumes the
+          trained classifiers, not their output", so it reports
+          ``{"detector_bundles"}`` alone.
+        - Otherwise, overriding :meth:`export_find_results` or
+          :meth:`export_labelset` claims that kind, and overriding the legacy
+          :meth:`export` claims **both** (nothing can tell which dict shapes it
+          handles - see the class docstring).
+        - Overriding :meth:`export_cli_detectors` adds ``detector_bundles``.
+
+        A subclass of a concrete exporter inherits its parent's overrides, and
+        therefore its parent's payload kinds, which is the intended answer.
+        """
+        cls = type(self)
+        if self.needs_trained_detectors:
+            return frozenset({"detector_bundles"})
+
+        kinds: set[str] = set()
+        legacy = cls.export is not ResultsExporter.export
+        if legacy or cls.export_find_results is not ResultsExporter.export_find_results:
+            kinds.add("find_results")
+        if legacy or cls.export_labelset is not ResultsExporter.export_labelset:
+            kinds.add("labelset")
+        if cls.export_cli_detectors is not ResultsExporter.export_cli_detectors:
+            kinds.add("detector_bundles")
+        return frozenset(kinds)
+
+    def export_find_results(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """Export a scored run - the hit lists a detector produced.
 
         Args:
-            results: The full auto-detect results dict from ``/api/auto-detect``.
-                     Shape::
+            results: The auto-detect results dict.  Shape::
+
+                         {
+                           "media_type": "audio",
+                           "detectors_run": 2,
+                           "results": {
+                             "<detector_name>": {
+                               "detector_name": "...",
+                               "threshold": 0.5,
+                               "total_hits": 15,      # positives only
+                               "hits": [{...}, ...],
+                               "negative_hits": [{...}, ...],
+                             }
+                           },
+                           "missing_detectors": [...],
+                         }
+
+                     Each hit comes from
+                     :func:`vtscore.utils.hits.build_media_hit`: ``id``,
+                     ``filename``, ``category``, ``score``, plus ``origin`` /
+                     ``origin_name`` / ``md5`` and any clip bounds the media
+                     carries.
+
+                     **``negative_hits`` is conventionally ignored.** Every
+                     built-in exporter writes positives only, because "the
+                     items the detector found" is what an export is for.  The
+                     key is nonetheless always present (the CLI fills it only
+                     under ``--keep-negatives``), so an exporter that wants the
+                     below-threshold items can read it.  ``missing_detectors``
+                     is likewise informational.
+
+            field_values: Mapping of :attr:`PluginField.key` -> value supplied
+                by the user.
+
+        Returns:
+            A status dict; see :meth:`export` for the ``"message"`` /
+            ``"open_url"`` / ``"display_results"`` contract, which is shared by
+            all three payload methods.
+
+        Raises:
+            UnsupportedPayloadError: If this exporter does not handle a scored
+                run (the default, unless the legacy :meth:`export` is
+                overridden).
+        """
+        return self._delegate_to_legacy_export("find_results", results, field_values)
+
+    def export_labelset(self, labelset: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """Export a detector's labelset - what it was taught, not what it found.
+
+        Args:
+            labelset: A serialised
+                :class:`~vtscore.datasets.labelset.LabelSet`.  Shape::
+
+                         {
+                           "labels": [{...}, ...],
+                           "selected_columns": ["label", "md5", ...],
+                         }
+
+                     Each entry is a
+                     :class:`~vtscore.datasets.labelset.LabeledElement` dict:
+                     ``md5`` and ``label`` always, plus ``origin`` /
+                     ``origin_name`` / ``filename`` / ``category`` /
+                     ``metadata`` / ``region_box`` where present.  The
+                     ``origin`` is what makes the export re-importable, so
+                     preserve it rather than flattening it to a string.
+
+                     ``selected_columns`` is the user's column choice from the
+                     Export modal.  Honour it for tabular output; a delivery
+                     exporter that sends the whole entry may ignore it.  It is
+                     absent on non-UI call paths.
+
+            field_values: Mapping of :attr:`PluginField.key` -> value supplied
+                by the user.
+
+        Returns:
+            A status dict; see :meth:`export`.
+
+        Raises:
+            UnsupportedPayloadError: If this exporter does not handle a
+                labelset (the default, unless the legacy :meth:`export` is
+                overridden).
+        """
+        return self._delegate_to_legacy_export("labelset", labelset, field_values)
+
+    def _delegate_to_legacy_export(
+        self,
+        kind: str,
+        payload: dict[str, Any],
+        field_values: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Hand *payload* to a legacy :meth:`export`, or refuse it clearly.
+
+        The compatibility hinge: an exporter written before the payload kinds
+        were named implements :meth:`export` and sniffs the dict shape itself,
+        so the named methods route to it unchanged.  One that implements
+        neither gets an :class:`UnsupportedPayloadError` naming the kind, which
+        the route turns into a 400.
+        """
+        if type(self).export is ResultsExporter.export:
+            raise UnsupportedPayloadError(
+                f"{type(self).__name__} does not export a {kind} payload "
+                f"(supported: {', '.join(sorted(self.supported_payloads)) or 'none'})"
+            )
+        return self.export(payload, field_values)
+
+    def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """Legacy single-method export; prefer the payload-specific methods.
+
+        Kept working, and not going anywhere, so an out-of-tree exporter written
+        against it needs no changes: :meth:`export_find_results` and
+        :meth:`export_labelset` both delegate here when the subclass hasn't
+        overridden them.  New exporters should implement those instead - an
+        exporter that only implements this one is credited with both payload
+        kinds, so a picker can hand it a shape it doesn't read.
+
+        This method's own contract is unchanged: *results* is whichever payload
+        the caller had, and an implementation tells them apart with
+        ``if "labels" in results``.
+
+        The return contract below is shared by all three payload methods.
+
+        Args:
+            results: The full auto-detect results dict from ``/api/auto-detect``
+                     (or a serialised LabelSet - see above).  Shape::
 
                          {
                            "media_type": "audio",
@@ -175,32 +431,46 @@ class LabelsetExporter(PluginBase):
         raise NotImplementedError(f"{type(self).__name__}.export() is not implemented")
 
     # ------------------------------------------------------------------
+    # Payload-specific export methods
+    # ------------------------------------------------------------------
+
+    # ------------------------------------------------------------------
     # Serialisation
     # ------------------------------------------------------------------
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialise exporter metadata, adding the exporter-only flags.
+        """Serialise exporter metadata, adding the exporter-only fields.
 
         :attr:`opens_url` rides along so ``GET /api/exporters`` tells the
         frontend which exporters end in a new browser tab.  It is declared
         here rather than on :class:`~vtscore.plugins.PluginBase` because no
         other plugin kind has anywhere to open a URL.
+
+        :attr:`supported_payloads` rides along for the same reason: it is what
+        lets each picker offer only the exporters that can read the payload it
+        is about to send, instead of listing the whole registry and finding out
+        afterwards.  Serialised sorted, so the API response is stable.
         """
-        return {**super().to_dict(), "opens_url": self.opens_url}
+        return {
+            **super().to_dict(),
+            "opens_url": self.opens_url,
+            "supported_payloads": sorted(self.supported_payloads),
+        }
 
     # ------------------------------------------------------------------
     # CLI support
     # ------------------------------------------------------------------
 
     def export_cli(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
-        """Export results from CLI-provided *field_values*.
+        """Export a scored run from CLI-provided *field_values*.
 
-        The default implementation simply delegates to :meth:`export`, which
-        works for exporters whose ``export()`` only expects plain string values.
+        The CLI autodetect/pipeline path only ever produces find results, so the
+        default delegates to :meth:`export_find_results` (which in turn reaches
+        a legacy :meth:`export`, if that is all the exporter implements).
         Exporters that need different behaviour on the command line (e.g. the
         GUI exporter, which has no browser) should override this method.
         """
-        return self.export(results, field_values)
+        return self.export_find_results(results, field_values)
 
     # ------------------------------------------------------------------
     # Trained-detector CLI support (portable-detector export)
@@ -307,3 +577,12 @@ class LabelsetExporter(PluginBase):
             NotImplementedError: If the exporter does not support streaming.
         """
         raise NotImplementedError(f"{type(self).__name__} does not support streaming export")
+
+
+#: Backwards-compatible alias for the pre-payload-kinds class name.
+#:
+#: ``LabelsetExporter`` described one of the three payloads the class has
+#: always accepted, which is why every guide had to apologise for it.  The
+#: alias is permanent: it costs a line and keeps every out-of-tree ``from
+#: vtscore.exporters.base import LabelsetExporter`` and subclass working.
+LabelsetExporter = ResultsExporter

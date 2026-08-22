@@ -9,16 +9,21 @@ GET  /api/exporters
     List all registered exporters with their metadata and field definitions.
 
 POST /api/exporters/export
-    Run a specific exporter on auto-detect results supplied in the request
-    body. ``field_values`` is permissive at the schema layer because its
-    inner keys depend on the named exporter; the handler validates it
-    against the selected plugin's :attr:`fields`. Schema-level failures
-    (missing ``exporter_name``) surface as 422; handler-level rejects
-    (unknown exporter, missing plugin field, invalid filepath, plugin
-    error) keep their original HTTP codes (404 / 400 / 500) with the
-    standard ``message`` envelope. An ``open_url`` in the exporter's
-    outcome is re-validated against the browser-URL scheme allowlist
-    before it reaches the frontend; a URL that fails is a 500.
+    Run a specific exporter on the payload supplied in the request body.
+    ``payload_kind`` says whether that payload is a scored run
+    (``find_results``) or a detector's labels (``labelset``); omitting it
+    falls back to inferring from the dict shape, for API clients written
+    before the kinds were named. ``field_values`` is permissive at the
+    schema layer because its inner keys depend on the named exporter; the
+    handler validates it against the selected plugin's :attr:`fields`.
+    Schema-level failures (missing ``exporter_name``, unknown
+    ``payload_kind``) surface as 422; handler-level rejects (unknown
+    exporter, an exporter that doesn't implement the requested kind,
+    missing plugin field, invalid filepath, plugin error) keep their
+    original HTTP codes (404 / 400 / 500) with the standard ``message``
+    envelope. An ``open_url`` in the exporter's outcome is re-validated
+    against the browser-URL scheme allowlist before it reaches the
+    frontend; a URL that fails is a 500.
 """
 
 from __future__ import annotations
@@ -28,6 +33,7 @@ import logging
 from flask_smorest import Blueprint, abort
 
 from vtscore.exporters import get_exporter, list_exporters
+from vtscore.exporters.base import ResultsExporter
 from vtscore.security.url_validation import validate_browser_url
 from vtsearch.routes._shared import validate_exporter_field_values
 from vtsearch.schemas.labels import (
@@ -43,6 +49,26 @@ exporters_bp = Blueprint(
     __name__,
     description="List and run labelset exporters.",
 )
+
+
+def _infer_payload_kind(payload: dict) -> str:
+    """Guess the payload kind for a client that didn't send one.
+
+    The pre-payload-kinds fallback, and the same test every exporter used to
+    run for itself: a serialised LabelSet has a top-level ``labels`` key and a
+    scored run doesn't. Kept only so an API client written against the old body
+    keeps working; the frontend always sends ``payload_kind`` explicitly, which
+    is what lets the capability check below reject a bad pairing instead of
+    guessing at one.
+    """
+    return "labelset" if "labels" in payload else "find_results"
+
+
+def _run(exporter: ResultsExporter, payload_kind: str, payload: dict, field_values: dict) -> dict:
+    """Dispatch to the exporter method for *payload_kind*."""
+    if payload_kind == "labelset":
+        return exporter.export_labelset(payload, field_values)
+    return exporter.export_find_results(payload, field_values)
 
 
 @exporters_bp.route("/api/exporters", methods=["GET"])
@@ -73,13 +99,24 @@ def run_export(body: dict):
 
     field_values = validate_exporter_field_values(exporter, dict(body.get("field_values") or {}))
     results: dict = dict(body.get("results") or {})
+    payload_kind = body.get("payload_kind") or _infer_payload_kind(results)
+
+    if payload_kind not in exporter.supported_payloads:
+        supported = ", ".join(sorted(exporter.supported_payloads)) or "nothing"
+        abort(
+            400,
+            message=(
+                f"Exporter '{exporter_name}' does not export a {payload_kind} payload "
+                f"(it supports: {supported})."
+            ),
+        )
 
     try:
-        outcome = dict(exporter.export(results, field_values) or {})
+        outcome = dict(_run(exporter, payload_kind, results, field_values) or {})
     except ValueError as exc:
         abort(400, message=str(exc))
     except Exception as exc:
-        logger.exception("%s.export() failed: %s", type(exporter).__name__, exc)
+        logger.exception("%s export of a %s payload failed: %s", type(exporter).__name__, payload_kind, exc)
         abort(500, message=str(exc))
 
     if outcome.get("open_url") is not None:

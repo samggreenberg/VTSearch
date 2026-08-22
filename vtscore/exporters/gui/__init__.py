@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Iterator
 
-from vtscore.exporters.base import LabelsetExporter
+from vtscore.exporters.base import ResultsExporter
 
 
 def _format_origin(hit: dict[str, Any]) -> str:
@@ -24,7 +24,7 @@ def _format_origin(hit: dict[str, Any]) -> str:
         return str(origin)
 
 
-class DisplayLabelsetExporter(LabelsetExporter):
+class DisplayResultsExporter(ResultsExporter):
     """Display auto-detect results in the browser (GUI) or print to console (CLI).
 
     This is the default exporter: in GUI mode it performs no server-side work
@@ -40,16 +40,28 @@ class DisplayLabelsetExporter(LabelsetExporter):
     hidden_from_picker = True
     fields = []  # no questions to ask
 
-    def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
-        # If results come from /api/labels/export (LabelSet format), convert
-        # to the display format expected by displayAutodetectResults().
-        if "labels" in results and "results" not in results:
-            results = self._labelset_to_display(results)
-
+    def export_find_results(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """Hand the scored run straight back for the results modal to render."""
         total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
         return {
             "message": (f"Showing {total_hits} hit(s) across {results.get('detectors_run', 0)} detector(s)."),
             "display_results": results,
+        }
+
+    def export_labelset(self, labelset: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """Render a labelset in the results modal, which speaks hit lists.
+
+        The modal only knows the find-results shape, so the labelset is dressed
+        as one.  The adaptation is display-only and stays local to this
+        exporter: the fabricated ``media_type`` / ``detectors_run`` read fine in
+        a modal header and would read as nonsense in an email subject or a CSV
+        column, which is why there is no framework-level converter.
+        """
+        display = self._labelset_to_display(labelset)
+        total_hits = sum(r.get("total_hits", 0) for r in display.get("results", {}).values())
+        return {
+            "message": f"Showing {total_hits} label(s).",
+            "display_results": display,
         }
 
     @staticmethod
@@ -131,4 +143,4 @@ class DisplayLabelsetExporter(LabelsetExporter):
         }
 
 
-EXPORTER = DisplayLabelsetExporter()
+EXPORTER = DisplayResultsExporter()

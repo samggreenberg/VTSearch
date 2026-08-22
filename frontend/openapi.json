@@ -3355,6 +3355,12 @@
           "opens_url": {
             "type": "boolean"
           },
+          "supported_payloads": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "ui_mode": {
             "type": "string"
           }
@@ -3367,6 +3373,7 @@
           "icon",
           "name",
           "opens_url",
+          "supported_payloads",
           "ui_mode"
         ],
         "type": "object"
@@ -5458,6 +5465,18 @@
           "field_values": {
             "additionalProperties": {},
             "type": "object"
+          },
+          "payload_kind": {
+            "default": null,
+            "description": "Which payload ``results`` carries. Omit and the handler infers it from the dict shape, which is what pre-payload-kind API clients get; send it explicitly and the handler rejects an exporter that does not implement that kind instead of letting it deliver an empty export.",
+            "enum": [
+              "find_results",
+              "labelset",
+              "detector_bundles",
+              null
+            ],
+            "nullable": true,
+            "type": "string"
           },
           "results": {
             "additionalProperties": {},

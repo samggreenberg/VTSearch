@@ -27,7 +27,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from vtscore.exporters.base import LabelsetExporter, PluginField
+from vtscore.exporters.base import PluginField, ResultsExporter
 from vtscore.io import atomic_write_bytes
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 _DEFAULT_BUNDLE_PATH = "data/{detector_name}-detector.zip"
 
 
-class PortableDetectorLabelsetExporter(LabelsetExporter):
+class PortableDetectorResultsExporter(ResultsExporter):
     """Write each trained detector as a standalone, portable scoring bundle.
 
     CLI-only: it needs the trained MLP, which only the ``--autodetect`` /
@@ -227,4 +227,4 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-EXPORTER = PortableDetectorLabelsetExporter()
+EXPORTER = PortableDetectorResultsExporter()

@@ -96,7 +96,14 @@ export class ExportModalComponent implements OnInit {
   });
 
   readonly exporters = computed<ExporterEntry[]>(() =>
-    (this.exportersResource.value() ?? []).filter((e) => !e.hidden_from_picker),
+    // Two filters, and they answer different questions. `hidden_from_picker`
+    // is the plugin author saying "not in a generic list"; `supported_payloads`
+    // is the framework saying "this one cannot read a labelset". Offering an
+    // exporter that can't is how a labelset email used to go out empty and
+    // still report success (#3219).
+    (this.exportersResource.value() ?? []).filter(
+      (e) => !e.hidden_from_picker && (e.supported_payloads ?? []).includes('labelset'),
+    ),
   );
 
   /** Labels fetched from the server. */
@@ -644,6 +651,7 @@ export class ExportModalComponent implements OnInit {
         exporter_name: exporter.name,
         field_values: fieldValues,
         results: labelsData,
+        payload_kind: 'labelset',
       })
       .subscribe({
         next: (response) => {

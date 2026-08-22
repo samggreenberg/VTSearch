@@ -56,9 +56,13 @@ export class AutoDetectResultsModalComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.exportersApi.getExporters().pipe(takeUntil(this.destroy$)).subscribe({
       next: (list) => {
-        // Drop exporters the plugin author flagged hidden_from_picker so they
-        // never surface in this destination picker (matches the export modal).
-        const visible = list.filter((exp) => !exp.hidden_from_picker);
+        // Drop exporters the plugin author flagged hidden_from_picker, and
+        // those that can't read a scored run - this picker's destination is
+        // always find results (matches the export modal, which filters on
+        // `labelset` instead).
+        const visible = list.filter(
+          (exp) => !exp.hidden_from_picker && (exp.supported_payloads ?? []).includes('find_results'),
+        );
         this.exporters.set(visible);
         if (visible.length > 0) {
           this.selectedExporter.set(visible[0].name);
