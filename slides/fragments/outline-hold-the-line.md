@@ -7,8 +7,9 @@
 1. **What VTSearch is** *— you vote on a handful; a detector ranks the rest*
 2. **The threshold decides twice** *— what you keep, and what you are asked next*
 3. **Four iterations on the line** *— each one shipped or died on a measurement*
-4. **An epilogue that closed a line** *— pre-registered, measured twice, negative*
-5. **What is still open**
+4. **The other axis** *— what if you wanted more false positives, or fewer?*
+5. **An epilogue that closed a line** *— pre-registered, measured twice, negative*
+6. **What is still open**
 
 <!-- Walk the list slowly; the whole talk should be legible from this slide.
 
@@ -24,7 +25,13 @@
      then the obvious fix of averaging them, then the principled fix of fusing
      them into one fit.
 
-     Say now that section 4 is a negative result and that it is here on
+     Section 4 is the same machinery walked a second time, and say so when you
+     get to this line: everything in section 3 asks where the line goes, and
+     section 4 asks what happens when the user wants it somewhere else. It is
+     four slides and it is where the second job of the threshold — the one
+     named in section 2 — comes back and closes the loop.
+
+     Say now that section 5 is a negative result and that it is here on
      purpose: once the fused fit shipped, even a rule that reads the true
      labels could not beat it, which is the strongest evidence that section 3
      finished the job rather than leaving it half done. -->
