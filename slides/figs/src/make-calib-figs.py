@@ -1881,23 +1881,26 @@ def _xquant_fold_panel(
     _theta_notch(ax, x0 + theta * w, y_base, _sub(rf"\theta_{i + 1} = {theta:.2f}"))
 
 
-def _xquant_gauges(ax: plt.Axes, xs: tuple[float, ...], y0: float, w: float, q_bar: float, clear_x: float) -> None:
+def _xquant_gauges(ax: plt.Axes, xs: tuple[float, ...], y0: float, w: float, q_0: float, clear_x: float) -> None:
     """The three gauges of the combine step, in one row under the three panels.
 
     Drawn together because they are one comparison, not three readings: what the
     row has to show is two folds agreeing on a fraction they disagree about the
     score of, and a third bar carrying that agreed fraction over to the model the
-    threshold will be applied by.
+    threshold will be applied by. The third is `q₀` and not a bare `q` for the
+    same reason the threshold read off it is `θ₀`: both belong to M₀, and a
+    subscript that names its model is what says the share has *moved* rather
+    than merely been averaged.
     """
     shown = XQUANT_SHOWN_QUANTILES
     texts = []
     for x, q, label in zip(
         xs,
-        (*shown, q_bar),
+        (*shown, q_0),
         (
             _sub(rf"q_1 = {shown[0]:.0%}".replace("%", r"\%")),
             _sub(rf"q_2 = {shown[1]:.0%}".replace("%", r"\%")),
-            _sub(rf"q = avg(q_1,\, q_2) = {q_bar:.0%}".replace("%", r"\%")),
+            _sub(rf"q_0 = avg(q_1,\, q_2) = {q_0:.0%}".replace("%", r"\%")),
         ),
         strict=True,
     ):
@@ -1998,7 +2001,7 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
     labeled_arrow = functools.partial(_labeled_arrow, ax)
     model_box = functools.partial(_model_box, ax)
 
-    thetas, q_bar, theta_0 = _xquant_numbers(folds, final)
+    thetas, q_0, theta_0 = _xquant_numbers(folds, final)
     theta_cardinal = float(np.mean(thetas))
 
     # ── stage 1: the spine, unchanged since the mixture figure ────────────────
@@ -2102,13 +2105,13 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
 
     # ── stage 6: re-read each cut as a share of the corpus, and average ───────
     if stage >= 6:
-        _xquant_gauges(ax, (*fold_x, final_x), gauge_y0, gauge_w, q_bar, clear_x)
+        _xquant_gauges(ax, (*fold_x, final_x), gauge_y0, gauge_w, q_0, clear_x)
 
     # ── stage 7: realize the mean share on M₀'s own distribution ─────────────
     if stage >= 7:
         theta_x = final_x + theta_0 * panel_w
         _theta_notch(ax, theta_x, y_base, _sub(rf"\theta_0 = {theta_0:.2f}"), ha="right")
-        arrow((final_x + q_bar * gauge_w, gauge_top + GAUGE_STUB + OBJECT_GAP / 2), (theta_x, y_base - 0.32))
+        arrow((final_x + q_0 * gauge_w, gauge_top + GAUGE_STUB + OBJECT_GAP / 2), (theta_x, y_base - 0.32))
 
     return fig
 
