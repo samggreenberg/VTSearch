@@ -85,7 +85,13 @@ export class AutoFindSettingsComponent implements OnInit, OnDestroy {
       .pipe(takeUntil(this.destroy$))
       .subscribe({
         next: (list) => {
-          this.exporters.set((list || []).filter((exp) => !exp.hidden_from_picker));
+          // Auto-Find runs its export on a scored run, so only exporters that
+        // implement that payload belong in this picker.
+        this.exporters.set(
+          (list || []).filter(
+            (exp) => !exp.hidden_from_picker && (exp.supported_payloads ?? []).includes('find_results'),
+          ),
+        );
           this.loadingExporters.set(false);
         },
         error: () => {

@@ -1,8 +1,8 @@
-"""Labelset-exporter registry with auto-discovery.
+"""Results-exporter registry with auto-discovery.
 
 Any package placed directly under this directory is automatically registered
 if it exposes a module-level ``EXPORTER`` attribute that is a
-:class:`~vtscore.exporters.base.LabelsetExporter` instance.
+:class:`~vtscore.exporters.base.ResultsExporter` instance.
 
 Usage::
 

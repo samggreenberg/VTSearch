@@ -68,6 +68,20 @@ class TestAutofindExportOpenUrl:
         assert status["success"] is True
         assert status["open_url"] == "https://example.com/r?ids=abc"
 
+    def test_an_exporter_that_cannot_read_a_scored_run_is_reported(self, isolated_settings):
+        """A saved Auto-Find choice can outlive what the exporter accepts.
+
+        Reported through the status block rather than raised: the scored
+        results are valuable on their own, so a misconfigured export must not
+        sink the request - and must not be handed a shape it cannot read.
+        """
+        settings.set_autofind_exporter("holder")
+        status = _run_autofind_export(dict(_SAMPLE_RESULTS))
+        assert status is not None
+        assert status["success"] is False
+        assert "cannot export find results" in status["error"]
+        assert "labelset" in status["error"]
+
     def test_unusable_url_is_dropped_not_forwarded(self, isolated_settings):
         """The same scheme allowlist the export route applies — a plugin must
         not be able to push a ``javascript:`` URL at the browser from here."""
@@ -79,7 +93,7 @@ class TestAutofindExportOpenUrl:
         settings.set_autofind_exporter("gui")
         with patch.object(
             type(get_exporter("gui")),
-            "export",
+            "export_find_results",
             return_value={"message": "Shown.", "open_url": "javascript:alert(1)"},
         ):
             status = _run_autofind_export(dict(_SAMPLE_RESULTS))

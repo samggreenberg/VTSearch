@@ -1014,12 +1014,24 @@ def _run_autofind_export(response: dict) -> dict | None:
     if exporter is None:
         return {"exporter": exporter_name, "success": False, "error": f"Unknown exporter '{exporter_name}'"}
 
+    if "find_results" not in exporter.supported_payloads:
+        # A saved Auto-Find choice can outlive the exporter's capabilities (a
+        # plugin narrowed, or a labelset-only exporter picked before the
+        # pickers filtered). Report it rather than handing it a shape it can't
+        # read and mailing an empty summary.
+        supported = ", ".join(sorted(exporter.supported_payloads)) or "nothing"
+        return {
+            "exporter": exporter_name,
+            "success": False,
+            "error": f"Exporter '{exporter_name}' cannot export find results (it supports: {supported})",
+        }
+
     field_values = dict(get_autofind_exporter_field_values().get(exporter_name, {}))
     try:
         from vtscore.plugins.normalize import normalize_field_values  # noqa: PLC0415
 
         normalize_field_values(exporter, field_values)
-        outcome = exporter.export(response, field_values) or {}
+        outcome = exporter.export_find_results(response, field_values) or {}
     except Exception as exc:  # noqa: BLE001 - surfaced to the caller, never raised
         logger.exception("Auto-Find export via %s failed", exporter_name)
         return {"exporter": exporter_name, "success": False, "error": str(exc)}

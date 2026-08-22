@@ -13,11 +13,11 @@ from __future__ import annotations
 
 from typing import Any, Iterator
 
-from vtscore.exporters.base import PluginField, LabelsetExporter, resolve_stream_batch_size
+from vtscore.exporters.base import PluginField, ResultsExporter, resolve_stream_batch_size
 from vtscore.security.url_validation import guarded_session
 
 
-class WebhookLabelsetExporter(LabelsetExporter):
+class WebhookResultsExporter(ResultsExporter):
     """POST the results JSON to a user-specified URL.
 
     Enables integration with automation platforms (Zapier, n8n, Make,
@@ -66,25 +66,36 @@ class WebhookLabelsetExporter(LabelsetExporter):
             headers["Authorization"] = auth_header
         return headers
 
-    def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+    def _post(self, payload: dict[str, Any], field_values: dict[str, Any], detail: str) -> dict[str, Any]:
+        """POST *payload* as JSON and report the outcome with *detail*.
+
+        Both payload kinds go out verbatim - the receiver gets the same dict
+        the exporter was handed, so a labelset arrives with its origins intact
+        and a scored run with its hit lists.
+        """
         url = field_values["url"]
         headers = self._headers(field_values)
 
         with guarded_session() as session:
-            resp = session.post(url, json=results, headers=headers, timeout=30, allow_redirects=False)
+            resp = session.post(url, json=payload, headers=headers, timeout=30, allow_redirects=False)
             resp.raise_for_status()
 
-        if "labels" in results:
-            total_items = len(results.get("labels", []))
-            detail = f"Posted {total_items} label(s)"
-        else:
-            total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
-            detail = f"Posted {total_hits} hit(s) across {results.get('detectors_run', 0)} detector(s)"
         return {
             "message": (f"{detail} to {url} (HTTP {resp.status_code})."),
             "status_code": resp.status_code,
             "url": url,
         }
+
+    def export_find_results(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """POST the scored run as a single JSON body."""
+        total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
+        detail = f"Posted {total_hits} hit(s) across {results.get('detectors_run', 0)} detector(s)"
+        return self._post(results, field_values, detail)
+
+    def export_labelset(self, labelset: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """POST the labelset as a single JSON body."""
+        detail = f"Posted {len(labelset.get('labels', []))} label(s)"
+        return self._post(labelset, field_values, detail)
 
     @property
     def supports_streaming(self) -> bool:
@@ -151,4 +162,4 @@ class WebhookLabelsetExporter(LabelsetExporter):
         }
 
 
-EXPORTER = WebhookLabelsetExporter()
+EXPORTER = WebhookResultsExporter()

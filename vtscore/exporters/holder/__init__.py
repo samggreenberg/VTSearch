@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from vtscore.exporters.base import PluginField, LabelsetExporter
+from vtscore.exporters.base import PluginField, ResultsExporter
 
 
 # ---------------------------------------------------------------------------
@@ -117,7 +117,7 @@ def _extract_entry_metadata(entry: dict[str, Any]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-class HolderLabelsetExporter(LabelsetExporter):
+class HolderResultsExporter(ResultsExporter):
     """Export labels to a new Holder package (Good / Bad folders)."""
 
     name = "holder"
@@ -131,10 +131,16 @@ class HolderLabelsetExporter(LabelsetExporter):
         # PluginField(key="holder_url", label="Holder API URL", field_type="text"),
     ]
 
-    def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
-        labels = results.get("labels")
+    def export_labelset(self, labelset: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """File each labelled element into the package's Good / Bad folder.
+
+        Labelset-only by design: Holder files items by the label a human gave
+        them, which a scored run does not carry.  Declaring only this method is
+        what keeps the exporter out of the find-results pickers.
+        """
+        labels = labelset.get("labels")
         if not isinstance(labels, list):
-            raise ValueError("Expected labels-format results with a 'labels' key.")
+            raise ValueError("Expected a labelset with a 'labels' key.")
 
         # Create package and folders
         holder_id = _holder_create_package()
@@ -174,4 +180,4 @@ class HolderLabelsetExporter(LabelsetExporter):
         }
 
 
-EXPORTER = HolderLabelsetExporter()
+EXPORTER = HolderResultsExporter()

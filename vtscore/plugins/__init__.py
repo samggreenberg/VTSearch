@@ -253,12 +253,15 @@ class PluginField:
 
 #: Class-name suffixes stripped before snake-casing for the default
 #: :attr:`PluginBase.name`.  Order matters; longer / more-specific
-#: suffixes come first so ``HolderLabelsetExporter`` strips
-#: ``LabelsetExporter`` rather than just ``Exporter``.
+#: suffixes come first so ``HolderResultsExporter`` strips
+#: ``ResultsExporter`` rather than just ``Exporter``.  ``LabelsetExporter``
+#: stays listed beside it: it is the results-exporter base class's permanent
+#: alias, so an out-of-tree ``FooLabelsetExporter`` must keep deriving ``foo``.
 _PLUGIN_NAME_SUFFIXES: tuple[str, ...] = (
     "DataSourceImporter",
     "DatasetImporter",
     "LabelsetExporter",
+    "ResultsExporter",
     "LabelImporter",
     "LabelsetSource",
     "SeedImporter",
@@ -288,6 +291,7 @@ _PLUGIN_FAMILY_BASE_NAMES: frozenset[str] = frozenset(
         "DataSourceImporter",
         "DatasetImporter",
         "LabelsetExporter",
+        "ResultsExporter",
         "LabelImporter",
         "LabelsetSource",
         "SeedImporter",
@@ -430,7 +434,7 @@ class PluginBase:
     :meth:`__init_subclass__`:
 
     - :attr:`name`: class name with the trailing family suffix
-      (``DatasetImporter`` / ``LabelsetExporter`` / ``MediaConverter`` /
+      (``DatasetImporter`` / ``ResultsExporter`` / ``MediaConverter`` /
       etc.) stripped and the remainder snake-cased.  E.g.
       ``MyShinyExporter`` → ``"my_shiny"``.
     - :attr:`display_name`: title-cased :attr:`name`.

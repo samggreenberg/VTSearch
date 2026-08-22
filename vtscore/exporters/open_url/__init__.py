@@ -25,7 +25,7 @@ from __future__ import annotations
 from typing import Any
 from urllib.parse import quote
 
-from vtscore.exporters.base import LabelsetExporter, PluginField
+from vtscore.exporters.base import PluginField, ResultsExporter
 from vtscore.security.url_validation import validate_browser_url
 
 #: Practical ceiling on a URL the browser will actually follow.  The HTTP spec
@@ -59,7 +59,7 @@ def _encode_unsafe_chars(url: str) -> str:
     return quote(url, safe=_URL_SAFE_CHARS)
 
 
-class OpenUrlLabelsetExporter(LabelsetExporter):
+class OpenUrlResultsExporter(ResultsExporter):
     """Format the labelset into a URL and hand it to the browser to open.
 
     Fills ``{ids}`` (and ``{count}``) in a user-supplied URL template with the
@@ -126,20 +126,18 @@ class OpenUrlLabelsetExporter(LabelsetExporter):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _extract_items(results: dict[str, Any]) -> list[dict[str, Any]]:
-        """Return the exported items from either payload shape.
-
-        The Export modal posts a LabelSet (``{"labels": [...]}``); the
-        auto-detect path posts the per-detector results dict.  Both reduce to a
-        flat list of item dicts here.
-        """
-        if "labels" in results:
-            return [e for e in results.get("labels") or [] if isinstance(e, dict)]
+    def _items_from_find_results(results: dict[str, Any]) -> list[dict[str, Any]]:
+        """Flatten a scored run's per-detector hit lists into one item list."""
         items: list[dict[str, Any]] = []
         for det_result in (results.get("results") or {}).values():
             if isinstance(det_result, dict):
                 items.extend(h for h in det_result.get("hits") or [] if isinstance(h, dict))
         return items
+
+    @staticmethod
+    def _items_from_labelset(labelset: dict[str, Any]) -> list[dict[str, Any]]:
+        """Return a labelset's entries as the item list."""
+        return [e for e in labelset.get("labels") or [] if isinstance(e, dict)]
 
     @staticmethod
     def _identifier(item: dict[str, Any], id_field: str) -> str:
@@ -160,8 +158,12 @@ class OpenUrlLabelsetExporter(LabelsetExporter):
             return DEFAULT_MAX_ITEMS
         return n if n > 0 else DEFAULT_MAX_ITEMS
 
-    def _build_url(self, results: dict[str, Any], field_values: dict[str, Any]) -> tuple[str, int, int]:
-        """Return ``(url, included_count, total_count)`` for *results*.
+    def _build_url(self, items: list[dict[str, Any]], field_values: dict[str, Any]) -> tuple[str, int, int]:
+        """Return ``(url, included_count, total_count)`` for *items*.
+
+        Both payload kinds reduce to a flat list of item dicts before they get
+        here, so the URL is built the same way whether the identifiers came
+        from a scored run's hits or a labelset's entries.
 
         Raises:
             ValueError: If the template is empty, the formatted URL fails
@@ -177,7 +179,6 @@ class OpenUrlLabelsetExporter(LabelsetExporter):
         separator = "," if separator is None or separator == "" else str(separator)
         max_items = self._resolve_max_items(field_values.get("max_items"))
 
-        items = self._extract_items(results)
         identifiers = [i for i in (self._identifier(item, id_field) for item in items) if i]
         total = len(identifiers)
         included = identifiers[:max_items]
@@ -199,18 +200,24 @@ class OpenUrlLabelsetExporter(LabelsetExporter):
     # Export
     # ------------------------------------------------------------------
 
-    def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
-        url, included, total = self._build_url(results, field_values)
-        if included < total:
-            detail = f"first {included} of {total} item(s)"
-        else:
-            detail = f"{included} item(s)"
+    def _opened(self, items: list[dict[str, Any]], field_values: dict[str, Any]) -> dict[str, Any]:
+        """Build the URL for *items* and describe it as a tab about to open."""
+        url, included, total = self._build_url(items, field_values)
+        detail = f"first {included} of {total} item(s)" if included < total else f"{included} item(s)"
         return {
             "message": f"Opening {detail} in a new tab.",
             "open_url": url,
             "included_count": included,
             "total_count": total,
         }
+
+    def export_find_results(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """Format the run's hits into the target site's URL."""
+        return self._opened(self._items_from_find_results(results), field_values)
+
+    def export_labelset(self, labelset: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """Format the labelset's entries into the target site's URL."""
+        return self._opened(self._items_from_labelset(labelset), field_values)
 
     def export_cli(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
         """Return the formatted URL — there is no browser here to open it.
@@ -220,7 +227,7 @@ class OpenUrlLabelsetExporter(LabelsetExporter):
         would both duplicate that line and put prose in the middle of the
         NDJSON stream under ``--progress-format json``.
         """
-        url, included, total = self._build_url(results, field_values)
+        url, included, total = self._build_url(self._items_from_find_results(results), field_values)
         detail = f"first {included} of {total} item(s)" if included < total else f"{included} item(s)"
         return {
             "message": f"Formatted a URL covering {detail}.",
@@ -230,4 +237,4 @@ class OpenUrlLabelsetExporter(LabelsetExporter):
         }
 
 
-EXPORTER = OpenUrlLabelsetExporter()
+EXPORTER = OpenUrlResultsExporter()

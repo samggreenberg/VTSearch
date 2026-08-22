@@ -668,10 +668,10 @@ class TestWebhookExporterSSRF:
         # Phase B: ``validate_url`` runs at the framework boundary, not
         # inside ``exp.export()``.  Verify the framework's normalize
         # pass fires on the exporter's declared ``url`` field.
-        from vtscore.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookResultsExporter
         from vtscore.plugins.normalize import normalize_field_values
 
-        exp = WebhookLabelsetExporter()
+        exp = WebhookResultsExporter()
         with mock.patch(
             "vtscore.security.url_validation.socket.getaddrinfo",
             return_value=[(2, 1, 0, "", ("192.168.1.1", 0))],
@@ -680,17 +680,17 @@ class TestWebhookExporterSSRF:
                 normalize_field_values(exp, {"url": "http://192.168.1.1:9090/hook"})
 
     def test_export_rejects_non_http_scheme(self):
-        from vtscore.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookResultsExporter
         from vtscore.plugins.normalize import normalize_field_values
 
-        exp = WebhookLabelsetExporter()
+        exp = WebhookResultsExporter()
         with pytest.raises(ValueError, match="http or https"):
             normalize_field_values(exp, {"url": "ftp://evil.example/hook"})
 
     def test_export_allows_public_url(self):
-        from vtscore.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookResultsExporter
 
-        exp = WebhookLabelsetExporter()
+        exp = WebhookResultsExporter()
         mock_resp = mock.MagicMock()
         mock_resp.status_code = 200
         mock_resp.raise_for_status.return_value = None
@@ -700,7 +700,7 @@ class TestWebhookExporterSSRF:
             return_value=[(2, 1, 0, "", ("93.184.216.34", 0))],
         ):
             with mock.patch("requests.Session.post", return_value=mock_resp):
-                result = exp.export(
+                result = exp.export_find_results(
                     {"detectors_run": 0, "results": {}},
                     {"url": "https://example.com/hook"},
                 )

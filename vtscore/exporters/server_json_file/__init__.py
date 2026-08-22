@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from vtscore.config import DATA_DIR
-from vtscore.exporters.base import PluginField, LabelsetExporter
+from vtscore.exporters.base import PluginField, ResultsExporter
 from vtscore.io import atomic_write_json
 
 _DEFAULT_JSON_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.json"
@@ -30,7 +30,7 @@ _DEFAULT_JSON_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.json"
 from vtscore.io import atomic_write_text as _atomic_write_text  # noqa: E402, F401
 
 
-class ServerJsonLabelsetExporter(LabelsetExporter):
+class ServerJsonResultsExporter(ResultsExporter):
     """Save auto-detect results as a JSON file on the server filesystem.
 
     The user supplies the destination path (absolute or relative to the
@@ -59,14 +59,9 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
         ),
     ]
 
-    def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+    def export_find_results(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """Write the scored run verbatim as JSON."""
         filepath = Path(field_values["filepath"])
-
-        # Labels format (from the export modal UI) - filter to selected columns
-        if "labels" in results:
-            return self._export_labels(results, filepath)
-
-        # Autodetect results format (from CLI / fill-from-sort)
         atomic_write_json(filepath, results)
 
         total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
@@ -137,10 +132,15 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
             "filepath": str(filepath.resolve()),
         }
 
-    def _export_labels(self, results: dict[str, Any], filepath: Path) -> dict[str, Any]:
-        """Export labels, filtering to selected columns when provided."""
-        labels = results.get("labels", [])
-        selected_columns: list[str] | None = results.get("selected_columns")
+    def export_labelset(self, labelset: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """Write the labelset as JSON, filtering to the selected columns.
+
+        Entries keep their ``origin`` as a real nested dict rather than a
+        display string, which is what makes the file re-importable.
+        """
+        filepath = Path(field_values["filepath"])
+        labels = labelset.get("labels", [])
+        selected_columns: list[str] | None = labelset.get("selected_columns")
 
         if selected_columns is not None:
             filtered_labels = []
@@ -164,4 +164,4 @@ class ServerJsonLabelsetExporter(LabelsetExporter):
         }
 
 
-EXPORTER = ServerJsonLabelsetExporter()
+EXPORTER = ServerJsonResultsExporter()

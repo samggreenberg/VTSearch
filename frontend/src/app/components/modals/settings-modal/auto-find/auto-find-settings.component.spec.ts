@@ -30,6 +30,7 @@ describe('AutoFindSettingsComponent', () => {
       description: 'Write results to a JSON file',
       icon: 'download',
       hidden_from_picker: false,
+      supported_payloads: ['find_results', 'labelset'],
       ui_mode: 'form',
       fields: [
         { key: 'filepath', field_type: 'text', label: 'File path', default: '/out.json' },
@@ -42,6 +43,7 @@ describe('AutoFindSettingsComponent', () => {
       description: 'Email the results',
       icon: 'mail',
       hidden_from_picker: false,
+      supported_payloads: ['find_results', 'labelset'],
       ui_mode: 'form',
       fields: [] as ImporterField[],
     },
@@ -51,6 +53,7 @@ describe('AutoFindSettingsComponent', () => {
       description: 'hidden',
       icon: '',
       hidden_from_picker: true,
+      supported_payloads: ['find_results'],
       ui_mode: 'form',
       fields: [] as ImporterField[],
     },

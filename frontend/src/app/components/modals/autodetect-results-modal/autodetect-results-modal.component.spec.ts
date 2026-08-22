@@ -48,8 +48,13 @@ describe('AutoDetectResultsModalComponent', () => {
   async function flushInit(): Promise<void> {
     await settleZoneless(fixture);
     httpMock.expectOne('/api/exporters').flush([
-      { name: 'json', label: 'JSON', fields: [] },
-      { name: 'csv', label: 'CSV', fields: [{ key: 'path', field_type: 'text', label: 'Path' }] },
+      { name: 'json', label: 'JSON', fields: [], supported_payloads: ['find_results'] },
+      {
+        name: 'csv',
+        label: 'CSV',
+        fields: [{ key: 'path', field_type: 'text', label: 'Path' }],
+        supported_payloads: ['find_results', 'labelset'],
+      },
     ]);
     await settleZoneless(fixture);
   }

@@ -16,6 +16,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+SAMPLE_LABELSET = {
+    "labels": [
+        {"md5": "aaa1", "label": "good", "filename": "one.wav", "origin_name": "one.wav"},
+        {"md5": "bbb2", "label": "good", "filename": "two.wav", "origin_name": "two.wav"},
+        {"md5": "ccc3", "label": "bad", "filename": "three.wav", "origin_name": "three.wav"},
+    ],
+    "selected_columns": ["label", "md5", "filename"],
+}
+
 SAMPLE_RESULTS = {
     "media_type": "audio",
     "detectors_run": 2,
@@ -134,6 +143,34 @@ class TestLabelsetExporterBase:
         with pytest.raises(NotImplementedError):
             exp.export({}, {})
 
+    def test_labelset_exporter_is_an_alias_of_results_exporter(self):
+        """The pre-payload-kinds name must keep resolving, permanently.
+
+        An out-of-tree exporter subclasses this name; renaming it without an
+        alias would break every one of them for a cosmetic gain.
+        """
+        from vtscore.exporters.base import LabelsetExporter, ResultsExporter
+
+        assert LabelsetExporter is ResultsExporter
+
+    def test_bare_base_supports_no_payload_kind(self):
+        from vtscore.exporters.base import ResultsExporter
+
+        assert ResultsExporter().supported_payloads == frozenset()
+
+    @pytest.mark.parametrize("method,kind", [("export_find_results", "find_results"), ("export_labelset", "labelset")])
+    def test_named_methods_refuse_an_unimplemented_kind(self, method, kind):
+        """The refusal is a ValueError, so the route answers 400 and not 500.
+
+        Asking a labelset-only exporter for a scored run is a bad request, not
+        a server fault.
+        """
+        from vtscore.exporters.base import ResultsExporter, UnsupportedPayloadError
+
+        assert issubclass(UnsupportedPayloadError, ValueError)
+        with pytest.raises(UnsupportedPayloadError, match=kind):
+            getattr(ResultsExporter(), method)({}, {})
+
     def test_to_dict_contains_standard_keys(self):
         from vtscore.exporters.base import PluginField, LabelsetExporter
 
@@ -217,7 +254,7 @@ class TestExporterRegistry:
 # ---------------------------------------------------------------------------
 
 
-class TestDisplayLabelsetExporter:
+class TestDisplayResultsExporter:
     def test_has_no_fields(self):
         from vtscore.exporters import get_exporter
 
@@ -228,7 +265,7 @@ class TestDisplayLabelsetExporter:
         from vtscore.exporters import get_exporter
 
         exp = get_exporter("gui")
-        result = exp.export(SAMPLE_RESULTS, {})
+        result = exp.export_find_results(SAMPLE_RESULTS, {})
         assert "message" in result
         assert "display_results" in result
         assert result["display_results"] is SAMPLE_RESULTS
@@ -237,7 +274,7 @@ class TestDisplayLabelsetExporter:
         from vtscore.exporters import get_exporter
 
         exp = get_exporter("gui")
-        result = exp.export(SAMPLE_RESULTS, {})
+        result = exp.export_find_results(SAMPLE_RESULTS, {})
         # 3 + 1 = 4 total hits
         assert "4" in result["message"]
         assert "2" in result["message"]  # 2 detectors
@@ -246,7 +283,7 @@ class TestDisplayLabelsetExporter:
         from vtscore.exporters import get_exporter
 
         exp = get_exporter("gui")
-        result = exp.export(EMPTY_RESULTS, {})
+        result = exp.export_find_results(EMPTY_RESULTS, {})
         assert "message" in result
         assert result["display_results"] is EMPTY_RESULTS
 
@@ -315,7 +352,7 @@ class TestDisplayLabelsetExporter:
             ]
         }
         exp = get_exporter("gui")
-        result = exp.export(labelset_data, {})
+        result = exp.export_labelset(labelset_data, {})
         assert "display_results" in result
         dr = result["display_results"]
         # Should have the autodetect-results structure
@@ -418,7 +455,7 @@ class TestGuiOriginFormatting:
 # ---------------------------------------------------------------------------
 
 
-class TestServerJsonLabelsetExporter:
+class TestServerJsonResultsExporter:
     def test_has_filepath_field(self):
         from vtscore.exporters import get_exporter
 
@@ -432,7 +469,7 @@ class TestServerJsonLabelsetExporter:
         exp = get_exporter("server_json_file")
         with tempfile.TemporaryDirectory() as tmpdir:
             fpath = Path(tmpdir) / "results.json"
-            result = exp.export(SAMPLE_RESULTS, {"filepath": str(fpath)})
+            result = exp.export_find_results(SAMPLE_RESULTS, {"filepath": str(fpath)})
             assert "message" in result
             assert fpath.exists()
             written = json.loads(fpath.read_text())
@@ -445,7 +482,7 @@ class TestServerJsonLabelsetExporter:
         exp = get_exporter("server_json_file")
         with tempfile.TemporaryDirectory() as tmpdir:
             fpath = Path(tmpdir) / "sub" / "dir" / "results.json"
-            exp.export(SAMPLE_RESULTS, {"filepath": str(fpath)})
+            exp.export_find_results(SAMPLE_RESULTS, {"filepath": str(fpath)})
             assert fpath.exists()
 
     def test_export_message_contains_hit_count(self):
@@ -454,7 +491,7 @@ class TestServerJsonLabelsetExporter:
         exp = get_exporter("server_json_file")
         with tempfile.TemporaryDirectory() as tmpdir:
             fpath = Path(tmpdir) / "out.json"
-            result = exp.export(SAMPLE_RESULTS, {"filepath": str(fpath)})
+            result = exp.export_find_results(SAMPLE_RESULTS, {"filepath": str(fpath)})
             assert "4" in result["message"]  # 3 + 1 hits
 
     def test_to_dict_has_all_keys(self):
@@ -471,7 +508,7 @@ class TestServerJsonLabelsetExporter:
 # ---------------------------------------------------------------------------
 
 
-class TestEmailLabelsetExporter:
+class TestEmailResultsExporter:
     def test_has_required_fields(self):
         from vtscore.exporters import get_exporter
 
@@ -499,14 +536,14 @@ class TestEmailLabelsetExporter:
 
         exp = get_exporter("email_smtp")
         with pytest.raises(ValueError, match="Recipient"):
-            exp.export(SAMPLE_RESULTS, {"from": "me@example.com", "to": ""})
+            exp.export_find_results(SAMPLE_RESULTS, {"from": "me@example.com", "to": ""})
 
     def test_export_raises_on_missing_from(self):
         from vtscore.exporters import get_exporter
 
         exp = get_exporter("email_smtp")
         with pytest.raises(ValueError, match="Sender"):
-            exp.export(SAMPLE_RESULTS, {"from": "", "to": "you@example.com"})
+            exp.export_find_results(SAMPLE_RESULTS, {"from": "", "to": "you@example.com"})
 
     @pytest.mark.parametrize(
         "bad_addr",
@@ -519,7 +556,7 @@ class TestEmailLabelsetExporter:
 
         exp = get_exporter("email_smtp")
         with pytest.raises(ValueError, match="Recipient"):
-            exp.export(SAMPLE_RESULTS, {"from": "me@example.com", "to": bad_addr})
+            exp.export_find_results(SAMPLE_RESULTS, {"from": "me@example.com", "to": bad_addr})
 
     @pytest.mark.parametrize("bad_addr", ["@example.com", "me@", "me@localhost", "no domain@"])
     def test_export_rejects_malformed_sender(self, bad_addr):
@@ -527,7 +564,7 @@ class TestEmailLabelsetExporter:
 
         exp = get_exporter("email_smtp")
         with pytest.raises(ValueError, match="Sender"):
-            exp.export(SAMPLE_RESULTS, {"from": bad_addr, "to": "you@example.com"})
+            exp.export_find_results(SAMPLE_RESULTS, {"from": bad_addr, "to": "you@example.com"})
 
     def test_is_valid_email_accepts_normal_addresses(self):
         from vtscore.exporters.email_smtp import _is_valid_email
@@ -552,7 +589,7 @@ class TestEmailLabelsetExporter:
             patch("vtscore.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
             patch("vtscore.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls),
         ):
-            result = exp.export(
+            result = exp.export_find_results(
                 SAMPLE_RESULTS,
                 {"from": "me@my-domain.example", "to": "you@example.com"},
             )
@@ -578,6 +615,21 @@ class TestEmailLabelsetExporter:
 
         return email.message_from_string(raw_msg)["Subject"]
 
+    def _sent_bodies(self, mock_server) -> list[str]:
+        """Return the decoded text of every MIME part of the sent message."""
+        import email
+
+        _, _, raw_msg = mock_server.sendmail.call_args.args
+        msg = email.message_from_string(raw_msg)
+        bodies = []
+        for part in msg.walk():
+            if part.is_multipart():
+                continue
+            payload = part.get_payload(decode=True)
+            assert isinstance(payload, bytes)
+            bodies.append(payload.decode("utf-8"))
+        return bodies
+
     def test_custom_subject_is_used(self):
         from vtscore.exporters import get_exporter
 
@@ -588,7 +640,7 @@ class TestEmailLabelsetExporter:
             patch("vtscore.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
             patch("vtscore.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls),
         ):
-            exp.export(
+            exp.export_find_results(
                 SAMPLE_RESULTS,
                 {"from": "me@my-domain.example", "to": "you@example.com", "subject": "Nightly run 2026-07-14"},
             )
@@ -605,7 +657,7 @@ class TestEmailLabelsetExporter:
             patch("vtscore.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
             patch("vtscore.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls),
         ):
-            exp.export(
+            exp.export_find_results(
                 SAMPLE_RESULTS,
                 {"from": "me@my-domain.example", "to": "you@example.com", "subject": ""},
             )
@@ -631,6 +683,237 @@ class TestEmailLabelsetExporter:
         assert "dog_bark" in html
         assert "cat_meow" in html
         assert "bark1.wav" in html
+
+    # -- labelset mode (issue #3219) --------------------------------------
+    #
+    # Before this existed the exporter understood only the scored-run shape,
+    # while both pickers offered it for either. A labelset export therefore
+    # mailed an empty body under a "0 hit(s) on unknown dataset" subject and
+    # still reported success. Nothing tested it, which is why it survived.
+
+    def test_labelset_email_carries_the_labels(self):
+        from vtscore.exporters import get_exporter
+
+        exp = get_exporter("email_smtp")
+        mock_server, mock_smtp_cls = self._mock_smtp()
+
+        with (
+            patch("vtscore.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
+            patch("vtscore.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls),
+        ):
+            result = exp.export_labelset(
+                SAMPLE_LABELSET,
+                {"from": "me@my-domain.example", "to": "you@example.com"},
+            )
+
+        # The MIME parts are base64-encoded, so decode rather than substring-
+        # matching the raw envelope.
+        bodies = self._sent_bodies(mock_server)
+        assert any("one.wav" in b for b in bodies)
+        assert any("three.wav" in b for b in bodies)
+        assert "3 label(s)" in result["message"]
+
+    def test_labelset_subject_counts_labels_not_hits(self):
+        from vtscore.exporters import get_exporter
+
+        exp = get_exporter("email_smtp")
+        mock_server, mock_smtp_cls = self._mock_smtp()
+
+        with (
+            patch("vtscore.exporters.email_smtp._resolve_mx", return_value="mx.example.com"),
+            patch("vtscore.exporters.email_smtp.smtplib.SMTP", mock_smtp_cls),
+        ):
+            exp.export_labelset(
+                SAMPLE_LABELSET,
+                {"from": "me@my-domain.example", "to": "you@example.com", "subject": ""},
+            )
+
+        subject = self._sent_subject(mock_server)
+        assert "3 label(s)" in subject
+        assert "2 good, 1 bad" in subject
+        # The regression itself: the find-results subject, on a labelset.
+        assert "0 hit(s)" not in subject
+
+    def test_labelset_builders_render_label_origin_and_name(self):
+        from vtscore.exporters.email_smtp import _build_labelset_html, _build_labelset_plain
+
+        text = _build_labelset_plain(SAMPLE_LABELSET)
+        html = _build_labelset_html(SAMPLE_LABELSET)
+        for body in (text, html):
+            assert "one.wav" in body
+            assert "good" in body
+            assert "bad" in body
+        assert "<html>" in html
+
+    def test_labelset_builders_tolerate_a_malformed_origin(self):
+        """A bad origin must not sink an otherwise deliverable email."""
+        from vtscore.exporters.email_smtp import _build_labelset_plain
+
+        text = _build_labelset_plain({"labels": [{"md5": "z", "label": "good", "origin": {"nope": 1}}]})
+        assert "good" in text
+
+
+# ---------------------------------------------------------------------------
+# Payload kinds (issue #3219)
+# ---------------------------------------------------------------------------
+
+
+class TestSupportedPayloads:
+    """``supported_payloads`` is derived from the overrides, never declared."""
+
+    def test_in_tree_exporters_declare_what_they_can_read(self):
+        from vtscore.exporters import list_exporters
+
+        actual = {e.name: sorted(e.supported_payloads) for e in list_exporters()}
+        assert actual == {
+            "email_smtp": ["find_results", "labelset"],
+            "gui": ["find_results", "labelset"],
+            "holder": ["labelset"],
+            "open_url": ["find_results", "labelset"],
+            "portable_detector": ["detector_bundles"],
+            "server_csv_file": ["find_results", "labelset"],
+            "server_json_file": ["find_results", "labelset"],
+            "webhook": ["find_results", "labelset"],
+        }
+
+    def test_a_legacy_export_only_exporter_still_works_and_claims_both(self):
+        """The compatibility hinge: an out-of-tree plugin needs no changes.
+
+        It implements ``export()`` and sniffs the dict shape itself, so both
+        named methods route to it, and it is credited with both kinds because
+        nothing can tell which it actually handles.
+        """
+        from vtscore.exporters.base import ResultsExporter
+
+        class Legacy(ResultsExporter):
+            name = "legacy_probe"
+            fields = []
+
+            def export(self, results, field_values):
+                return {"message": "labels" if "labels" in results else "find"}
+
+        exp = Legacy()
+        assert sorted(exp.supported_payloads) == ["find_results", "labelset"]
+        assert exp.export_labelset({"labels": []}, {})["message"] == "labels"
+        assert exp.export_find_results({"results": {}}, {})["message"] == "find"
+
+    def test_overriding_one_named_method_claims_only_that_kind(self):
+        from vtscore.exporters.base import ResultsExporter
+
+        class LabelsOnly(ResultsExporter):
+            name = "labels_only_probe"
+            fields = []
+
+            def export_labelset(self, labelset, field_values):
+                return {"message": "ok"}
+
+        assert sorted(LabelsOnly().supported_payloads) == ["labelset"]
+
+    def test_a_subclass_inherits_its_parents_kinds(self):
+        from vtscore.exporters import get_exporter
+
+        class Narrowed(type(get_exporter("holder"))):
+            name = "holder_subclass_probe"
+
+        assert sorted(Narrowed().supported_payloads) == ["labelset"]
+
+    def test_get_exporters_reports_the_kinds(self, client):
+        res = client.get("/api/exporters")
+        assert res.status_code == 200
+        by_name = {e["name"]: e for e in res.get_json()}
+        assert by_name["server_csv_file"]["supported_payloads"] == ["find_results", "labelset"]
+
+
+class TestPayloadKindRouting:
+    """The route dispatches on the declared kind rather than sniffing."""
+
+    def test_labelset_kind_reaches_export_labelset(self, client, tmp_path):
+        from vtscore.exporters import get_exporter
+
+        exporter = get_exporter("server_json_file")
+        with patch.object(type(exporter), "export_labelset", return_value={"message": "ok"}) as spy:
+            res = client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": "server_json_file",
+                    "field_values": {"filepath": str(tmp_path / "x.json")},
+                    "results": {"labels": []},
+                    "payload_kind": "labelset",
+                },
+            )
+        assert res.status_code == 200
+        spy.assert_called_once()
+
+    def test_find_results_kind_reaches_export_find_results(self, client, tmp_path):
+        from vtscore.exporters import get_exporter
+
+        exporter = get_exporter("server_json_file")
+        with patch.object(type(exporter), "export_find_results", return_value={"message": "ok"}) as spy:
+            res = client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": "server_json_file",
+                    "field_values": {"filepath": str(tmp_path / "x.json")},
+                    "results": SAMPLE_RESULTS,
+                    "payload_kind": "find_results",
+                },
+            )
+        assert res.status_code == 200
+        spy.assert_called_once()
+
+    def test_an_unsupported_pairing_is_a_400_not_a_silent_empty_export(self, client):
+        """The bug this contract exists to make impossible.
+
+        Holder reads labels only. Asked for a scored run it must be refused
+        outright, rather than handed a shape it cannot read and left to deliver
+        nothing while reporting success.
+        """
+        res = client.post(
+            "/api/exporters/export",
+            json={
+                "exporter_name": "holder",
+                "field_values": {},
+                "results": SAMPLE_RESULTS,
+                "payload_kind": "find_results",
+            },
+        )
+        assert res.status_code == 400
+        message = res.get_json()["message"]
+        assert "find_results" in message
+        assert "labelset" in message
+
+    def test_an_unknown_kind_is_rejected_by_the_schema(self, client):
+        res = client.post(
+            "/api/exporters/export",
+            json={
+                "exporter_name": "server_json_file",
+                "field_values": {},
+                "results": {},
+                "payload_kind": "nonsense",
+            },
+        )
+        assert res.status_code == 422
+
+    @pytest.mark.parametrize(
+        "payload,method",
+        [({"labels": []}, "export_labelset"), ({"results": {}}, "export_find_results")],
+    )
+    def test_an_omitted_kind_falls_back_to_the_shape(self, client, tmp_path, payload, method):
+        """Pre-payload-kind API clients keep working."""
+        from vtscore.exporters import get_exporter
+
+        exporter = get_exporter("server_json_file")
+        with patch.object(type(exporter), method, return_value={"message": "ok"}) as spy:
+            res = client.post(
+                "/api/exporters/export",
+                json={
+                    "exporter_name": "server_json_file",
+                    "field_values": {"filepath": str(tmp_path / "x.json")},
+                    "results": payload,
+                },
+            )
+        assert res.status_code == 200
+        spy.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -894,7 +1177,7 @@ class TestExportEndpoint:
 
         with caplog.at_level(logging.ERROR, logger="vtsearch.routes.labels.exporters"):
             with patch(
-                "vtscore.exporters.server_json_file.ServerJsonLabelsetExporter.export",
+                "vtscore.exporters.server_json_file.ServerJsonResultsExporter.export_find_results",
                 side_effect=OSError("No space left on device"),
             ):
                 res = client.post(
@@ -918,7 +1201,7 @@ class TestExportEndpoint:
 
         with caplog.at_level(logging.ERROR, logger="vtsearch.routes.labels.exporters"):
             with patch(
-                "vtscore.exporters.server_json_file.ServerJsonLabelsetExporter.export",
+                "vtscore.exporters.server_json_file.ServerJsonResultsExporter.export_find_results",
                 side_effect=PermissionError("Permission denied"),
             ):
                 res = client.post(
@@ -1000,7 +1283,7 @@ class TestOpenUrlResponseKey:
         exporter = get_exporter("gui")
         with patch.object(
             type(exporter),
-            "export",
+            "export_find_results",
             return_value={"message": "done", "open_url": "javascript:alert(1)"},
         ):
             res = client.post(
@@ -1017,7 +1300,7 @@ class TestOpenUrlResponseKey:
         exporter = get_exporter("gui")
         with patch.object(
             type(exporter),
-            "export",
+            "export_find_results",
             return_value={"message": "done", "open_url": "http://localhost:9000/viewer"},
         ):
             res = client.post(

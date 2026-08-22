@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from vtscore.config import DATA_DIR
-from vtscore.exporters.base import PluginField, LabelsetExporter
+from vtscore.exporters.base import PluginField, ResultsExporter
 from vtscore.io import atomic_write_text, sanitize_csv_cell as _sanitize_csv_cell
 
 _DEFAULT_CSV_PATH = f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.csv"
@@ -39,7 +39,7 @@ def _atomic_write_csv(path: Path, write_rows) -> None:
     atomic_write_text(path, buf.getvalue())
 
 
-class ServerCsvLabelsetExporter(LabelsetExporter):
+class ServerCsvResultsExporter(ResultsExporter):
     """Save auto-detect results as a CSV file on the server filesystem.
 
     Produces one row per hit across all detectors, with columns for the
@@ -72,16 +72,17 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
     #: ``origin`` is always appended as the last column (not listed here).
     _LABEL_BASE_COLUMNS = ["label", "md5", "origin_name", "filename", "category"]
 
-    def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+    def export_find_results(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """Write one CSV row per hit, across all detectors."""
         filepath = Path(field_values["filepath"])
         filepath.parent.mkdir(parents=True, exist_ok=True)
-
-        # Labels format (from the export modal UI)
-        if "labels" in results:
-            return self._export_labels(results, filepath)
-
-        # Autodetect results format (from CLI / fill-from-sort)
         return self._export_autodetect(results, filepath)
+
+    def export_labelset(self, labelset: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """Write one CSV row per label, in the user's chosen column order."""
+        filepath = Path(field_values["filepath"])
+        filepath.parent.mkdir(parents=True, exist_ok=True)
+        return self._export_labels(labelset, filepath)
 
     #: Fixed column order for streamed autodetect exports.  Streaming cannot
     #: pre-scan all hits to detect which optional clip columns are present, so
@@ -287,4 +288,4 @@ class ServerCsvLabelsetExporter(LabelsetExporter):
         }
 
 
-EXPORTER = ServerCsvLabelsetExporter()
+EXPORTER = ServerCsvResultsExporter()

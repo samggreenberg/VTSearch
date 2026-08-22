@@ -246,11 +246,11 @@ browser can't resolve yet stays templated for the server to fill in. The
 server-side pass remains authoritative; the frontend copy is a preview.
 
 The corollary is the one anti-pattern to avoid: **don't resolve the
-active detector inside your `export()` / `run()` body.**
+active detector inside your export / `run()` body.**
 
 ```python
 # Wrong: the value only exists at run time, so the form shows an empty box.
-def export(self, results, field_values):
+def export_find_results(self, results, field_values):
     name = field_values["name"] or get_active_detector_context().name
 
 # Right: the framework fills it in, and the GUI can show it up front.
@@ -347,7 +347,7 @@ Most plugin families use sub-packages, which pair well with per-plugin
 | Data Importers       | `vtscore.datasets.importers`      | `IMPORTER`             | `DatasetImporter`     | `vtscore.importers`             |
 | Datasource Importers | `vtscore.datasource_importers`    | `DATASOURCE_IMPORTER`  | `DataSourceImporter`  | `vtscore.datasource_importers`  |
 | Seed Importers       | `vtscore.seed_importers`          | `SEED_IMPORTER`        | `SeedImporter`        | `vtscore.seed_importers`        |
-| Results Exporters    | `vtscore.exporters`               | `EXPORTER`             | `LabelsetExporter`    | `vtscore.exporters`             |
+| Results Exporters    | `vtscore.exporters`               | `EXPORTER`             | `ResultsExporter`     | `vtscore.exporters`             |
 | Label Importers      | `vtscore.labels.importers`        | `LABEL_IMPORTER`       | `LabelImporter`       | `vtscore.label_importers`       |
 | Settings Importers   | `vtsearch.settings_io.importers`   | `SETTINGS_IMPORTER`    | `SettingsImporter`    | `vtsearch.settings_importers`   |
 | Settings Exporters   | `vtsearch.settings_io.exporters`   | `SETTINGS_EXPORTER`    | `SettingsExporter`    | `vtsearch.settings_exporters`   |
@@ -1397,14 +1397,31 @@ Results exporters deliver autodetect results **or labels** to a destination
 (file, webhook, email, Holder, etc.).  Auto-discovered; no changes to
 routes needed.
 
-Exporters receive **two possible result formats** and should detect which:
+An exporter is a **destination**; *what* gets sent there is a separate axis,
+with three **payload kinds**. Implement a method per kind you support:
 
-- **Auto-detect results**: `{"media_type": "audio", "results": {...}}`
-- **Labels**: `{"labels": [...], "selected_columns": [...]}` (from the
-  label export flow with `enrich=true`)
+| Kind | Method | Payload | Produced by |
+|------|--------|---------|-------------|
+| `find_results` | `export_find_results()` | `{"media_type", "detectors_run", "results": {det: {hits, negative_hits, threshold, total_hits}}}` | `POST /api/auto-detect`, Auto-Find auto-export, CLI `--autodetect` |
+| `labelset` | `export_labelset()` | `{"labels": [LabeledElement], "selected_columns": [...]}` | the Export modal |
+| `detector_bundles` | `export_cli_detectors()` | the trained classifiers | CLI `--pipeline` / `--autodetect` |
 
-Check `if "labels" in results` to distinguish them.  The built-in
-CSV/JSON/webhook exporters handle both formats.
+Most destinations carry more than one: a CSV file is a fine home for either a
+scored run or a labelset, and the built-in CSV/JSON/webhook/email exporters
+implement both. Implement only the kinds you actually understand — the pickers
+offer you for the kinds you claim, and the route answers 400 for anything else
+rather than letting you deliver an empty export.
+
+`supported_payloads` is **derived** from which methods you overrode; there is
+nothing to declare, and therefore nothing to forget.
+
+**Legacy single-method exporters still work.** Before the kinds were named, an
+exporter implemented one `export()` and told the shapes apart itself with
+`if "labels" in results`. The default `export_find_results()` /
+`export_labelset()` delegate to `export()`, so an existing out-of-tree plugin
+needs no changes; it is credited with both kinds (nothing can tell which it
+handles) and logs a line at import pointing at the named methods. New exporters
+should implement those instead.
 
 ### File structure
 
@@ -1415,15 +1432,16 @@ vtscore/exporters/<your_exporter>/
 
 ### What to implement
 
-Subclass `LabelsetExporter` from `vtscore.exporters.base`.
+Subclass `ResultsExporter` from `vtscore.exporters.base`. (`LabelsetExporter`
+remains a permanent alias for the same class, so existing imports keep working.)
 
 ```python
 # vtscore/exporters/sftp/__init__.py
 
-from vtscore.exporters.base import LabelsetExporter, PluginField
+from vtscore.exporters.base import PluginField, ResultsExporter
 
 
-class SftpLabelsetExporter(LabelsetExporter):
+class SftpResultsExporter(ResultsExporter):
     name = "sftp"
     display_name = "SFTP Upload"
     description = "Upload results JSON to a remote SFTP server."
@@ -1438,28 +1456,8 @@ class SftpLabelsetExporter(LabelsetExporter):
         ),
     ]
 
-    def export(self, results: dict, field_values: dict) -> dict:
-        """Export results to an SFTP server.
-
-        Args:
-            results: The full auto-detect results dict.  Shape:
-                {
-                    "media_type": "audio",
-                    "detectors_run": 2,
-                    "results": {
-                        "detector_name": {
-                            "detector_name": "...",
-                            "threshold": 0.5,
-                            "total_hits": 15,
-                            "hits": [{...}, ...]
-                        }
-                    }
-                }
-            field_values: Mapping of PluginField.key to user-supplied value.
-
-        Returns:
-            A dict with a "message" key (shown as confirmation to the user).
-        """
+    def _upload(self, payload: dict, field_values: dict) -> dict:
+        """Write *payload* as JSON to the remote path."""
         import json
         import paramiko
 
@@ -1472,29 +1470,44 @@ class SftpLabelsetExporter(LabelsetExporter):
                     password=field_values["password"])
         sftp = ssh.open_sftp()
         with sftp.open(path, "w") as f:
-            f.write(json.dumps(results, indent=2))
+            f.write(json.dumps(payload, indent=2))
         sftp.close()
         ssh.close()
 
         return {"message": f"Uploaded to {host}:{path}"}
 
+    def export_find_results(self, results: dict, field_values: dict) -> dict:
+        """Upload a scored run (hit lists, scores, thresholds)."""
+        return self._upload(results, field_values)
 
-EXPORTER = SftpLabelsetExporter()
+    def export_labelset(self, labelset: dict, field_values: dict) -> dict:
+        """Upload a detector's labels (origins, vote provenance)."""
+        return self._upload(labelset, field_values)
+
+
+EXPORTER = SftpResultsExporter()
 ```
 
-### LabelsetExporter class reference
+Implementing only one of the two is fine and common — a Holder-style exporter
+that files items by the label a human gave them declares `export_labelset()`
+alone, and is then absent from the find-results pickers by construction.
 
-**Required to implement:**
+### ResultsExporter class reference
+
+**Required to implement:** at least one payload method.
 
 | Member | Signature | Description |
 |--------|-----------|-------------|
-| `export()` | `(results: dict, field_values: dict) -> dict` | Perform the export; return dict with `"message"` key |
+| `export_find_results()` | `(results: dict, field_values: dict) -> dict` | Export a scored run; return dict with `"message"` key |
+| `export_labelset()` | `(labelset: dict, field_values: dict) -> dict` | Export a detector's labels; same return contract |
 
 **Optional overrides:**
 
 | Member | Signature | Description |
 |--------|-----------|-------------|
-| `export_cli()` | `(results: dict, field_values: dict) -> dict` | CLI variant; default delegates to `export()` |
+| `export()` | `(results: dict, field_values: dict) -> dict` | Legacy single-method form. Both named methods delegate here when unoverridden, which is what keeps pre-existing plugins working; prefer the named methods in new code |
+| `export_cli_detectors()` | `(detectors: list[dict], field_values: dict) -> dict` | Export the trained classifiers instead of their output (CLI/pipeline only) |
+| `export_cli()` | `(results: dict, field_values: dict) -> dict` | CLI variant; default delegates to `export_find_results()` |
 | `supports_streaming` | `property -> bool` | Whether this exporter can write results incrementally. Default `False`. |
 | `export_cli_streaming()` | `(header: dict, records: Iterator[tuple[str, dict]], field_values: dict) -> dict` | Write hits incrementally as scored chunks stream in. Required when `supports_streaming` is `True`. |
 
@@ -1557,15 +1570,15 @@ return it. A delivery exporter whose remote hands back a permalink returns the
 same key.
 
 ```python
-class ReviewSiteExporter(LabelsetExporter):
+class ReviewSiteExporter(ResultsExporter):
     name = "review_site"
     display_name = "Review Site"
     description = "Open the labelset in Review Site."
     opens_url = True
     fields = []          # required, even when empty — there is no default
 
-    def export(self, results: dict, field_values: dict) -> dict:
-        ids = ",".join(e["md5"] for e in results.get("labels", []))
+    def export_labelset(self, labelset: dict, field_values: dict) -> dict:
+        ids = ",".join(e["md5"] for e in labelset.get("labels", []))
         url = validate_browser_url(f"https://review.example.com/?ids={quote(ids, safe='')}")
         return {"message": "Opening the labelset in Review Site.", "open_url": url}
 ```
