@@ -890,10 +890,15 @@ def _gmm_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figu
     if stage >= 5:
         mid = 0.5 * (fit.mu_lo + fit.mu_hi)
         theta_x = panel_x0 + mid * panel_w
-        # Carried up through the histogram, not just ticked below it: the cut's
-        # whole claim is that it divides this distribution into the two classes,
-        # and a tick under the baseline leaves that to be taken on trust.
-        ax.plot([theta_x] * 2, [y_base - 0.32, y_base + panel_h], color=INK, linewidth=2.2, zorder=6)
+        # A notch under the baseline, exactly as `_score_line` ticks a cut.
+        # Carrying the cut up through the histogram would say more about this
+        # one — its whole claim is that it divides the distribution — but the
+        # next two figures put this very panel beside score lines whose cuts
+        # are notched, and a cut that changes its mark between figures reads
+        # as a different kind of thing rather than as the same θ. One mark,
+        # one meaning; the two named means either side of it are what make it
+        # a midpoint, and they are drawn.
+        ax.plot([theta_x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
         ax.text(theta_x, y_base - 0.32 - LABEL_GAP, _sub(r"\theta_G"), ha="center", va="top", fontsize=16, color=INK)
         ax.text(
             panel_x0 + panel_w / 2,
@@ -968,8 +973,9 @@ def blend_flow_fig() -> None:
 
     * **The three evidence displays share one baseline.** M₁'s held-out score
       line, M₂'s, and the haystack histogram all sit on the same rule, so the
-      three cuts θ₁, θ₂ and θ_G are ticked at the same height and read as
-      three answers to one question rather than as two unrelated pictures.
+      three cuts θ₁, θ₂ and θ_G are ticked at the same height, with the same
+      mark, and read as three answers to one question rather than as two
+      unrelated pictures.
     * **The rivals are the same size.** The mixture panel gets the width the
       two score lines get, because the slide's claim is that neither estimator
       dominates — one is starved, the other is biased.
@@ -1113,7 +1119,11 @@ def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Fi
 
     # ── stage 3: cut it where the two fitted components meet ──────────────────
     if stage >= 3:
-        ax.plot([theta_g_x] * 2, [y_base - 0.32, y_base + panel_h], color=INK, linewidth=2.2, zorder=6)
+        # A notch under the baseline, exactly as `_score_line` ticks a cut: the
+        # cuts in this progression are one mark with one meaning, so they are
+        # drawn one way whether the evidence above the line is a row of votes
+        # or a fitted mixture.
+        ax.plot([theta_g_x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
         ax.text(theta_g_x, y_base - 0.32 - LABEL_GAP, _sub(r"\theta_G"), ha="center", va="top", fontsize=16, color=INK)
 
     # ── stage 4: split the votes and train a fold model on each half ──────────
@@ -1399,8 +1409,14 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
     canvas_w, canvas_h = XSEMI_CANVAS
     bx, block_w, block_h = canvas_w / 2, 4.0, 1.05
     block_x0 = bx - block_w / 2
-    hay_x0, hay_h = 1.6, block_h
-    hay_w = canvas_w - 0.2 - hay_x0
+    # Centred on the spine rather than run out to the canvas edge: the disc
+    # naming the haystack sits at the block's own centre, so centring the
+    # block is what puts that name directly above the vote arrow drawn out of
+    # it. Wide enough to stay 2.4× the votes' block — "far more of them" is
+    # the one thing this shape says — and no wider, since past the point the
+    # ratio is legible the extra length only pulls D₋₁'s name off the spine.
+    hay_w, hay_h = 2.4 * block_w, block_h
+    hay_x0 = bx - hay_w / 2
     hay_y0 = canvas_h - hay_h
     vote_len = 1.15
     block_top = hay_y0 - OBJECT_GAP - vote_len - OBJECT_GAP
@@ -1534,7 +1550,7 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
     if stage >= 5:
         for i, (fit, _scores, _anchors) in enumerate(folds):
             theta_x = panel_x[i] + 0.5 * (fit.mu_lo + fit.mu_hi) * panel_w
-            ax.plot([theta_x] * 2, [y_base - 0.32, y_base + panel_h], color=INK, linewidth=2.2, zorder=6)
+            ax.plot([theta_x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
             ax.text(
                 theta_x,
                 y_base - 0.32 - LABEL_GAP,
