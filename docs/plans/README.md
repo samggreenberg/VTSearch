@@ -58,6 +58,10 @@ to go stale. Keep the grouping in sync when you add or delete a plan — one lin
 - [`cli-stream-massive-images.md`](cli-stream-massive-images.md)
 - [`cli-detector-converter.md`](cli-detector-converter.md)
 
+## Plugins and I/O
+
+- [`exporter-payload-contract.md`](exporter-payload-contract.md)
+
 ## Cross-cutting audits
 
 - [`codebase-audit-2026-08.md`](codebase-audit-2026-08.md)
