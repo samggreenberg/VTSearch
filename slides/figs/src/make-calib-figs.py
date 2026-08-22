@@ -41,9 +41,11 @@ from slide_figure import LABEL_GAP_PT, OBJECT_GAP_PT, SIDEBAR, SIDEBAR_WIDE, sav
 from vtscore.training.blend_schedules import BlendContext, get_schedule
 from vtscore.training.thresholds import (
     FOLD_ANCHOR_WEIGHT,
+    FoldAnchoredCut,
     GmmFit1D,
     fit_anchored_score_gmm,
     fit_score_gmm,
+    gmm_cut_from_fit,
 )
 
 OUT = Path(__file__).resolve().parent.parent
@@ -658,7 +660,7 @@ def _score_histogram(
     y_base: float,
     w: float,
     h: float,
-    fit: "GmmFit1D",
+    fit: "GmmFit1D | None",
     scores: np.ndarray,
     *,
     fill: str,
@@ -1128,10 +1130,9 @@ def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Fi
 
     # ── stage 4: split the votes and train a fold model on each half ──────────
     if stage >= 4:
-        for mx, name in ((m1x, "M_1"), (m2x, "M_2")):
+        for mx, name, sign in ((m1x, "M_1", 1.0), (m2x, "M_2", -1.0)):
             model_box(mx, my, name)
             labeled_arrow((mx, train_tail_y), (mx, train_tail_y - fold_train_len), "train")
-        for mx, sign in ((m1x, 1.0), (m2x, -1.0)):
             entry_tail = (mx + sign * slope * (train_tail_y - my), train_tail_y)
             arrow(entry_tail, _box_edge(mx, my, entry_tail, OBJECT_GAP))
         labeled_arrow(exit1, tip1, "score", z=2.1)
@@ -1582,6 +1583,457 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
     return fig
 
 
+#: How many build stages the quantile schematic reveals in: the spine; the
+#: split and the two fold models; both fold panels fitted, voted and cut (one
+#: advance, because every stroke of it is `calib-fold-anchored-flow`
+#: recapitulated); M₀ scoring the haystack into a third, unfitted shape; the
+#: cardinal average dropped onto that shape, where it lands in the Good mound;
+#: the two cuts re-read as quantiles and averaged there; the mean quantile
+#: realized on M₀'s own distribution, and the return.
+XQUANT_FLOW_STAGES = 7
+
+#: Wider than any of its parents and, at 13.4, marginally taller than the
+#: fold-anchored figure it extends. The width is what carries the argument:
+#: three panels of the **same** width on one baseline, so "0.58" is at the same
+#: place along every axis and the eye can compare where a raw score lands in
+#: three different models' distributions. Fitted into a `bg right:70%` slot a
+#: 15pt label renders at 21.2px here, against the fold-anchored figure's 22.6px
+#: and the theme's 20px floor; the figure is height-limited in that slot, so
+#: the extra width is free and only the 0.65 units of extra height are spent.
+XQUANT_CANVAS = (16.65, 13.0)
+
+#: The three panels' shared height, and the gauge row's bar height. The panels
+#: are `XSEMI_PANEL_H` unchanged — the fold half of this figure is the previous
+#: figure's fold half, drawn at the same size so it is recognised rather than
+#: re-read.
+XQUANT_PANEL_H = XSEMI_PANEL_H
+XQUANT_GAUGE_H = 0.30
+
+#: The gauge's width as a fraction of its panel's. Narrower than the panel, and
+#: left-aligned under it, for two reasons: a gauge is a *rank* axis and must not
+#: invite being read as the score axis it sits under, and the figure's
+#: bottom-right corner is where the theme prints the page number (see
+#: `PAGE_NUMBER_CLEAR`), which a full-width bar ran straight through.
+XQUANT_GAUGE_W = 0.64
+
+#: How far the gauge's cut stands proud of the bar, and where the realizing
+#: stroke starts from.
+GAUGE_STUB = 0.16
+
+#: The two fold models' haystack scores and M₀'s, as `((mu, sigma), (mu,
+#: sigma))` for the Bad and Good populations. This is the figure's premise, so
+#: the three are deliberately **on three different scales**: fold 1 spreads
+#: (σ ≈ 0.10), fold 2 is right-shifted and tight, and M₀ — trained on all of
+#: D₀ rather than half of it — separates the same media in a lower, narrower
+#: band. Nothing about the media changed; three models scored them.
+#:
+#: The numbers are chosen so the strawman bites at the one place it can be
+#: seen: fold 1 cuts at ≈0.50 and fold 2 at ≈0.66, so the *cardinal* average
+#: of the two lands at ≈0.58 — which is M₀'s Good mean. Averaging raw scores
+#: does not merely lose a little accuracy here; it puts the threshold through
+#: the middle of the mound it is supposed to keep.
+XQUANT_POPULATIONS = (
+    ((0.24, 0.105), (0.76, 0.100)),
+    ((0.46, 0.070), (0.86, 0.065)),
+)
+XQUANT_FINAL_POPULATION = ((0.20, 0.070), (0.58, 0.070))
+
+#: Each fold's *held-out* votes, on that fold's own scale — the same seven
+#: marks the progression has carried since the cross-calibration figure, moved
+#: onto each model's axis. Fold 2 keeps the imperfect ordering: a Bad at 0.72
+#: sits above its own fold's cut. No Good sits at its fold's μ_hi, where the
+#: dashed mean stem would eat the glyph.
+XQUANT_ANCHORS = (
+    {"bad": (0.10, 0.19, 0.27, 0.36), "good": (0.64, 0.72, 0.88)},
+    {"bad": (0.34, 0.41, 0.48, 0.72), "good": (0.75, 0.82, 0.94)},
+)
+
+
+def xquant_flow_fig() -> None:
+    """Schematic of quantile transfer — iteration 5, the super-figure (#3218).
+
+    The fifth and last figure of the calibration progression, and the one that
+    **is** the shipped algorithm: fold-anchored fits at κ = `FOLD_ANCHOR_WEIGHT`,
+    the cut at the midpoint of each fold's two fitted means, the per-fold cuts
+    combined as a mean *quantile* rather than a mean score, and that mean
+    quantile realized on the final model's own distribution.
+
+    It is an assembly, and the geometry says so. Its left two thirds are
+    `calib-fold-anchored-flow` at the same size, stroke for stroke: the
+    haystack, the votes drawn out of it, the split, the crossed fold models,
+    and a fitted, voted, cut mixture panel under each. Its right third is
+    `calib-blend-flow`'s mixture branch returning — D₀ –train→ M₀, then a
+    straight drop into a panel on the shared baseline — but doing a different
+    job. In the blend, M₀ scored the haystack so a mixture could be fitted on
+    it; here nothing is fitted on it, which is why the panel is drawn in flat
+    black. M₀'s distribution is not evidence in this figure. It is the *scale
+    the answer has to be spoken in*.
+
+    The argument runs in three moves, and the drawing is arranged so each is a
+    comparison the audience makes rather than a claim they are told:
+
+    * **The strawman is a location, not an assertion.** The three panels are
+      the same width and each maps score 0–1 across it, so the average of two
+      raw cuts can simply be dropped onto the third panel and looked at. It
+      lands on M₀'s Good mound. Nothing has to say the cardinal average is
+      wrong; it is drawn being wrong, and it stays on the final frame beside
+      the answer that replaces it.
+    * **The quantile is drawn as what it is** — the share of the corpus the cut
+      calls Bad. Each panel's gauge is that share, hatched in `_data_block`'s
+      own Bad and Good textures, so the reader can see the two folds agreeing
+      on the fraction while disagreeing on the number. That is the whole of why
+      a quantile survives the crossing between two models and a score does not.
+    * **Realization is a stroke.** The mean quantile is a position on M₀'s
+      gauge; θ₀ is where that position lands on M₀'s distribution, and the arrow
+      between them is the last operation the algorithm performs.
+
+    One honesty note, recorded here because it is the figure's only fiction:
+    production never went through a cardinal-averaging stage. Quantile transfer
+    was in the fold-anchored design from the start. The strawman is drawn
+    because it teaches the fix, not because it happened.
+    """
+    folds, final = _xquant_populations()
+    final_stage = _xquant_flow_stage(XQUANT_FLOW_STAGES, folds, final)
+    box = tight_box(final_stage)
+    for stage in range(1, XQUANT_FLOW_STAGES):
+        save(
+            _xquant_flow_stage(stage, folds, final),
+            OUT,
+            f"calib-quantile-flow.build{stage}.png",
+            column=SIDEBAR_WIDE,
+            box=box,
+        )
+    save(final_stage, OUT, "calib-quantile-flow.png", column=SIDEBAR_WIDE, box=box)
+
+
+def _xquant_populations() -> tuple[list[tuple[GmmFit1D, np.ndarray, dict]], np.ndarray]:
+    """The two fold fits (real estimator) and M₀'s unfitted haystack scores.
+
+    Schematic input, real estimator, as everywhere else in the progression:
+    each fold runs the shipped `fit_anchored_score_gmm` at `FOLD_ANCHOR_WEIGHT`
+    on its own population and its own held-out anchors. M₀'s scores are *not*
+    fitted — the figure's point is that no mixture is estimated on them.
+    """
+    rng = np.random.default_rng(11)
+
+    def sample(neg: tuple[float, float], pos: tuple[float, float]) -> np.ndarray:
+        return np.clip(np.concatenate([rng.normal(*neg, 4800), rng.normal(*pos, 1200)]), 0.0, 1.0)
+
+    folds = []
+    for (neg, pos), anchors in zip(XQUANT_POPULATIONS, XQUANT_ANCHORS, strict=True):
+        scores = sample(neg, pos)
+        a_scores = np.array(anchors["bad"] + anchors["good"], dtype=float)
+        a_labels = np.concatenate([np.zeros(len(anchors["bad"])), np.ones(len(anchors["good"]))])
+        fit, provenance = fit_anchored_score_gmm(scores, a_scores, a_labels, anchor_weight=FOLD_ANCHOR_WEIGHT)
+        assert fit is not None and provenance == "anchored"
+        folds.append((fit, scores, anchors))
+    return folds, sample(*XQUANT_FINAL_POPULATION)
+
+
+def _xquant_cut(folds: list, final: np.ndarray) -> "FoldAnchoredCut":
+    """The **real** shipped estimator over this figure's three populations."""
+    return FoldAnchoredCut(
+        fits=tuple(f for f, _s, _a in folds),
+        fold_haystacks=tuple(np.sort(s) for _f, s, _a in folds),
+        final_haystack=np.sort(final),
+        n_anchored=len(folds),
+    )
+
+
+def _quantile_gauge(ax: plt.Axes, x0: float, y0: float, w: float, h: float, q: float, label: str) -> None:
+    """The corpus, sorted by score and cut at quantile *q*.
+
+    A quantile is a *share of the population*, and the figure has to show that
+    rather than assert it — the whole argument is that the share is what two
+    models agree on when their scores do not. So the gauge is the population
+    itself: the same Bad and Good hatching `_data_block` draws labelled media
+    with, split left-to-right at the fraction the cut admits, and notched at
+    that split with the identical mark every cut in the progression carries.
+
+    Drawn under its panel and the width of it, so the fraction can be read
+    against the distribution it was measured on; but it is a rank axis, not a
+    score axis, and the two do not agree — which is exactly why the fold
+    panels' notches sit at different places along their axes while their
+    gauges' notches sit at the same place along theirs.
+    """
+    ax.add_patch(
+        Rectangle((x0, y0), q * w, h, facecolor="white", edgecolor=RUST, hatch="\\\\\\", linewidth=0, zorder=2)
+    )
+    ax.add_patch(
+        Rectangle(
+            (x0 + q * w, y0), (1 - q) * w, h, facecolor="white", edgecolor=GREEN, hatch="////", linewidth=0, zorder=2
+        )
+    )
+    ax.add_patch(Rectangle((x0, y0), w, h, facecolor="none", edgecolor=INK, linewidth=1.6, zorder=3))
+    # The cut runs the full depth of the bar and stands `GAUGE_STUB` proud of
+    # its top: on a panel the notch hangs below the baseline because the
+    # distribution is above it, and here the population is below, so the same
+    # mark is drawn on the same side of the thing it cuts.
+    ax.plot([x0 + q * w] * 2, [y0, y0 + h + GAUGE_STUB], color=INK, linewidth=2.2, zorder=4)
+    ax.text(x0 + w / 2, y0 - LABEL_GAP, label, ha="center", va="top", fontsize=15, color=INK)
+
+
+def _theta_notch(ax: plt.Axes, x: float, y_base: float, label: str, ha: str = "center") -> None:
+    """The progression's one cut mark: a notch under the baseline, then a name."""
+    ax.plot([x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
+    dx = 0.0 if ha == "center" else (-0.10 if ha == "right" else 0.10)
+    ax.text(x + dx, y_base - 0.32 - LABEL_GAP, label, ha=ha, va="top", fontsize=16, color=INK)
+
+
+def _xquant_numbers(folds: list, final: np.ndarray) -> tuple[list[float], list[float], float, float]:
+    """Every number the figure prints, from the **shipped** estimator.
+
+    Per fold: the midpoint cut of its own fitted means, and that cut\'s empirical
+    quantile in its own haystack — `FoldAnchoredCut._combined_fold_quantile`\'s
+    two lines, spelled out here because the figure has to label the halves it
+    combines. The mean quantile and the threshold it realizes then come from the
+    real `FoldAnchoredCut` at inclusion 0, so the figure cannot drift from the
+    algorithm it claims to draw.
+    """
+    cut = _xquant_cut(folds, final)
+    thetas = [gmm_cut_from_fit(fit, "mid", 1.0, 1.0)[0] for fit, _s, _a in folds]
+    quantiles = [
+        float(np.searchsorted(src, th, side="left")) / float(src.size)
+        for th, src in zip(thetas, cut.fold_haystacks, strict=True)
+    ]
+    return thetas, quantiles, cut.quantile_at(0), cut.threshold_at(0)
+
+
+def _xquant_fold_panel(
+    ax: plt.Axes,
+    i: int,
+    fold: tuple,
+    theta: float,
+    *,
+    x0: float,
+    y_base: float,
+    w: float,
+    h: float,
+    top: float,
+    score_from: tuple[float, float],
+    score_to: tuple[float, float],
+) -> None:
+    """One fold's whole evidence display: `calib-fold-anchored-flow`\'s panel.
+
+    Every stroke here is the previous figure — the score arrow into the panel,
+    the fitted and hatched mixture, the held-out votes on the baseline, the two
+    labels stacked at the panel\'s outer corner, and the midpoint cut — so it is
+    drawn from one call and revealed in one advance. The quantile figure has its
+    own three moves to spend advances on, and re-walking a picture the audience
+    was already walked through would spend them on nothing.
+    """
+    fit, scores, anchors = fold
+    outer = x0 + (w if i else 0.0)
+    _labeled_arrow(ax, score_from, score_to, "score", z=2.1)
+    ax.text(
+        outer,
+        top + LABEL_GAP,
+        _sub(f"M_{i + 1}(D_{{-1}})"),
+        ha="right" if i else "left",
+        va="bottom",
+        fontsize=16,
+        color=INK,
+    )
+    _mark_legend(ax, outer, top + LABEL_GAP + CAP_16 + LABEL_GAP, f"M_{i + 1}(D_{2 - i})", mirrored=i == 1)
+    _score_histogram(ax, x0, y_base, w, h, fit, scores, fill="class", mu_labels=False)
+    _hump_marks(ax, x0, y_base, w, anchors)
+    _theta_notch(ax, x0 + theta * w, y_base, _sub(rf"\theta_{i + 1} = {theta:.2f}"))
+
+
+def _xquant_gauges(
+    ax: plt.Axes, xs: tuple[float, ...], y0: float, w: float, quantiles: list[float], q_bar: float
+) -> None:
+    """The three gauges of the combine step, in one row under the three panels.
+
+    Drawn together because they are one comparison, not three readings: what the
+    row has to show is two folds agreeing on a fraction they disagree about the
+    score of, and a third bar carrying that agreed fraction over to the model the
+    threshold will be applied by.
+    """
+    for x, q, label in zip(
+        xs,
+        (*quantiles, q_bar),
+        (_sub(rf"q_1 = {quantiles[0]:.2f}"), _sub(rf"q_2 = {quantiles[1]:.2f}"), _sub(r"q = avg(q_1,\, q_2)")),
+        strict=True,
+    ):
+        _quantile_gauge(ax, x, y0, w, XQUANT_GAUGE_H, q, label)
+
+
+def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in XQUANT_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, XQUANT_CANVAS[0])
+    ax.set_ylim(0, XQUANT_CANVAS[1])
+    ax.set_axis_off()
+
+    canvas_w, canvas_h = XQUANT_CANVAS
+    panel_h, panel_gap = XQUANT_PANEL_H, 2 * OBJECT_GAP
+
+    # ── layout ────────────────────────────────────────────────────────────────
+    # The fold half is `_xsemi_flow_stage`'s arithmetic verbatim, so the two
+    # figures' shared strokes land on the same drawing units and the reader
+    # recognises the picture instead of re-reading it. Only the spine's x moves:
+    # here the fold pair is pushed right by nothing and M₀'s branch takes the
+    # width to its right, so `bx` is fixed by the left panel's own margin.
+    block_w, block_h = 4.0, 1.05
+    fold_train_len, score_len, slope = 1.15, 1.3, 0.75
+    # Solve the panel width from where the fold branch's score arrow has to
+    # land — 0.62 across the panel, past the cut and short of μ_hi — exactly as
+    # the fold-anchored figure solves it, which is what keeps the two figures'
+    # panels the same size.
+    ux, uy = np.array([slope, 1.0]) / float(np.hypot(slope, 1.0))
+    t_edge = min(MODEL_W / 2 / abs(ux), MODEL_H / 2 / abs(uy)) + OBJECT_GAP
+    dx_to_tip = block_w / 4 + t_edge * ux + score_len * ux  # bx − tip1.x
+    panel_w = (dx_to_tip - panel_gap / 2) / 0.38
+    bx = 0.2 + panel_w + panel_gap / 2
+
+    block_x0 = bx - block_w / 2
+    hay_x0 = block_x0
+    hay_w = canvas_w - 0.2 - hay_x0
+    hay_h = block_h
+    hay_y0 = canvas_h - hay_h
+    vote_len = 1.15
+    block_top = hay_y0 - OBJECT_GAP - vote_len - OBJECT_GAP
+    block_y0 = block_top - block_h
+    row_y = block_y0 + block_h / 2
+
+    m1x, m2x = bx - block_w / 4, bx + block_w / 4
+    train_tail_y = block_y0 - OBJECT_GAP
+    my = train_tail_y - fold_train_len - OBJECT_GAP - MODEL_H / 2
+
+    down_left = (m1x - slope, my - 1.0)
+    exit1 = _box_edge(m1x, my, down_left, OBJECT_GAP)
+    tip1 = (exit1[0] - score_len * ux, exit1[1] - score_len * uy)
+
+    panel_top = tip1[1] - (OBJECT_GAP + CAP_16 + LABEL_GAP)
+    y_base = panel_top - panel_h
+    fold_x = (bx - panel_gap / 2 - panel_w, bx + panel_gap / 2)
+    final_x = fold_x[1] + panel_w + panel_gap
+
+    # M₀'s branch, returning from the blend figure: train out to the right, then
+    # one straight drop onto the shared baseline. It lands further across its
+    # panel than the blend's drop does (0.85, not 0.62) because 0.62 of *this*
+    # panel is exactly where the cardinal average lands, and the strawman's
+    # dashed stem and struck label are already standing there. Past the Good
+    # mound is the only part of this panel with nothing in it.
+    m0x = final_x + 0.85 * panel_w
+    train_x = block_x0 + block_w + OBJECT_GAP
+    train_len = m0x - MODEL_W / 2 - OBJECT_GAP - train_x
+    tip0 = (m0x, panel_top + OBJECT_GAP + CAP_16 + LABEL_GAP)
+
+    theta_bottom = y_base - 0.32 - LABEL_GAP - CAP_16
+    gauge_top = theta_bottom - OBJECT_GAP - GAUGE_STUB
+    gauge_y0 = gauge_top - XQUANT_GAUGE_H
+    gauge_w = XQUANT_GAUGE_W * panel_w
+
+    data_block = functools.partial(_data_block, ax)
+    arrow = functools.partial(_arrow, ax)
+    labeled_arrow = functools.partial(_labeled_arrow, ax)
+    model_box = functools.partial(_model_box, ax)
+
+    thetas, quantiles, q_bar, theta_0 = _xquant_numbers(folds, final)
+    theta_cardinal = float(np.mean(thetas))
+
+    # ── stage 1: the spine, unchanged since the mixture figure ────────────────
+    _haystack_block(ax, hay_x0, hay_y0, hay_w, hay_h)
+    _disc_label(ax, hay_x0 + hay_w / 2, hay_y0 + hay_h / 2, "D_{-1}")
+    ax.text(hay_x0 - LABEL_GAP, hay_y0 + hay_h / 2, "Unlabeled", ha="right", va="center", fontsize=15, color=SOFT)
+    labeled_arrow((bx, hay_y0 - OBJECT_GAP), (bx, hay_y0 - OBJECT_GAP - vote_len), "vote")
+    data_block(block_x0, block_y0, block_w, block_h, split=stage >= 2)
+    good_h = 0.42 * block_h
+    ax.text(block_x0 - LABEL_GAP, block_top - good_h / 2, "Good", ha="right", va="center", fontsize=15, color=GREEN)
+    ax.text(
+        block_x0 - LABEL_GAP, block_y0 + (block_h - good_h) / 2, "Bad", ha="right", va="center", fontsize=15, color=RUST
+    )
+    ax.text(block_x0, block_top + LABEL_GAP, _sub("D_0"), ha="left", va="bottom", fontsize=16, color=INK)
+    labeled_arrow((train_x, row_y), (train_x + train_len, row_y), "train")
+    model_box(m0x, row_y, "M_0")
+
+    # ── stage 2: split the votes, train a fold model on each half ─────────────
+    if stage >= 2:
+        for mx, name, sign in ((m1x, "M_1", 1.0), (m2x, "M_2", -1.0)):
+            model_box(mx, my, name)
+            labeled_arrow((mx, train_tail_y), (mx, train_tail_y - fold_train_len), "train")
+            entry_tail = (mx + sign * slope * (train_tail_y - my), train_tail_y)
+            arrow(entry_tail, _box_edge(mx, my, entry_tail, OBJECT_GAP))
+
+    # ── stage 3: the fold-anchored figure, recapitulated in one advance ───────
+    # Fitted, voted and cut together: every stroke here is the previous figure
+    # and the audience has already been walked through it a step at a time.
+    if stage >= 3:
+        for i, (fit, scores, anchors) in enumerate(folds):
+            _xquant_fold_panel(
+                ax,
+                i,
+                (fit, scores, anchors),
+                thetas[i],
+                x0=fold_x[i],
+                y_base=y_base,
+                w=panel_w,
+                h=panel_h,
+                top=panel_top,
+                score_from=(2 * bx - exit1[0], exit1[1]) if i else exit1,
+                score_to=(2 * bx - tip1[0], tip1[1]) if i else tip1,
+            )
+
+    # ── stage 4: M₀ scores the haystack — a scale, not evidence ───────────────
+    # Flat black, and no fitted curves over it: nothing is estimated on this
+    # distribution. It is here because the threshold has to be a number M₀ can
+    # apply, and M₀'s numbers are its own.
+    if stage >= 4:
+        arrow((m0x, hay_y0 - OBJECT_GAP), _box_edge(m0x, row_y, (m0x, hay_y0), OBJECT_GAP))
+        labeled_arrow(_box_edge(m0x, row_y, tip0, OBJECT_GAP), tip0, "score", z=2.1)
+        ax.text(final_x, panel_top + LABEL_GAP, _sub("M_0(D_{-1})"), ha="left", va="bottom", fontsize=16, color=INK)
+        _score_histogram(ax, final_x, y_base, panel_w, panel_h, None, final, fill="plain", mu_labels=False)
+
+    # ── stage 5: the strawman — average the two numbers, and look ─────────────
+    if stage >= 5:
+        cx = final_x + theta_cardinal * panel_w
+        ax.plot(
+            [cx, cx],
+            [y_base, panel_top + LABEL_GAP + CAP_16],
+            color=SOFT,
+            linewidth=2.0,
+            linestyle=(0, (4, 3)),
+            zorder=6,
+        )
+        strike = ax.text(
+            final_x + 0.37 * panel_w,
+            panel_top + LABEL_GAP + CAP_16 + LABEL_GAP,
+            _sub(rf"avg(\theta_1,\, \theta_2) = {theta_cardinal:.2f}"),
+            ha="center",
+            va="baseline",
+            fontsize=15,
+            color=SOFT,
+        )
+        # Struck through, and measured rather than guessed: the rendered width
+        # of a mathtext run is not a number to estimate, and a rule that
+        # overhangs its own text reads as a different mark entirely.
+        fig.canvas.draw()
+        sb = strike.get_window_extent().transformed(ax.transData.inverted())
+        ax.plot(
+            [sb.x0 - 0.06, sb.x1 + 0.06],
+            [(sb.y0 + sb.y1) / 2 + 0.02] * 2,
+            color=RUST,
+            linewidth=1.5,
+            zorder=7,
+            solid_capstyle="round",
+        )
+
+    # ── stage 6: re-read each cut as a share of the corpus, and average ───────
+    if stage >= 6:
+        _xquant_gauges(ax, (*fold_x, final_x), gauge_y0, gauge_w, quantiles, q_bar)
+
+    # ── stage 7: realize the mean share on M₀'s own distribution ─────────────
+    if stage >= 7:
+        theta_x = final_x + theta_0 * panel_w
+        _theta_notch(ax, theta_x, y_base, _sub(rf"\theta_0 = {theta_0:.2f}"), ha="right")
+        arrow((final_x + q_bar * gauge_w, gauge_top + GAUGE_STUB + OBJECT_GAP / 2), (theta_x, y_base - 0.32))
+
+    return fig
+
+
 def blend_schedule_fig() -> None:
     n = np.arange(0, 121)
     fig, ax = plt.subplots(figsize=(7.0, 5.0))
@@ -1960,6 +2412,7 @@ if __name__ == "__main__":
     gmm_flow_fig()
     blend_flow_fig()
     xsemi_flow_fig()
+    xquant_flow_fig()
     blend_schedule_fig()
     anchored_fig()
     decomposition_fig()
