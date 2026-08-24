@@ -1,6 +1,6 @@
-![bg right:70% fit](figs/calib-blend-flow.png)
+<!-- _class: full -->
 
-### Iteration 3 — the idea
+![bg fit](figs/calib-blend-flow.png)
 
 ## Average the rivals
 

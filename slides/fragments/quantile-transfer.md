@@ -1,8 +1,11 @@
-![bg right:70% fit](figs/calib-quantile-flow.png)
+<!-- _class: full -->
 
-### Iteration 4 — the fix
+![bg fit](figs/calib-quantile-flow.png)
 
-## Cuts don't transfer. Ranks do.
+<!-- Untitled by design: this figure's own axis starts in the
+     top-left corner, where a headline would go, so the slide carries none.
+     The line to say as it comes up is “Cuts don't transfer. Ranks do.”.
+     -->
 
 <!-- build: figs/calib-quantile-flow.build1.png -->
 

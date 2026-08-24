@@ -1,14 +1,14 @@
-![bg right:56% fit](figs/ui-three-panel.webp)
+<!-- _class: full -->
 
-### What it is
+![bg fit](figs/ui-three-panel.webp)
 
 ## Search, judge, repeat
 
-- Seed with **text** or an **example item**
-- Judge what comes back: **Good** or **Bad**
-- The ranking updates in seconds — then it asks again
+<!-- The three beats that used to be on the slide, now yours to say: seed with
+     text or an example item; judge what comes back, Good or Bad; the ranking
+     updates in seconds, and then it asks again.
 
-<!-- Walk the three panels left to right, slowly; this is the audience's
+     Walk the three panels left to right, slowly; this is the audience's
      first sight of the tool.
 
      Say what is on the screen first, because it is a real session and it

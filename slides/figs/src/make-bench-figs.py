@@ -131,7 +131,10 @@ EMBEDDERS = ["siglip", "siglip2_l", "dinov3_patch"]
 def positives_fig() -> None:
     """Positives accumulated against votes, one panel per dataset."""
     panels = {p.title: p for p in report_panels("fig_positives")}
-    fig, axes = plt.subplots(3, 2, figsize=(7.2, 7.0), sharex=True, sharey=True)
+    # 2 rows x 3 cols on a 16:9 canvas. The old 3x2 was correct for the nearly
+    # square `bg right:56%` sidebar; a full-bleed slot is wide, and a tall grid
+    # in a wide box is the same decision as drawing everything at half size.
+    fig, axes = plt.subplots(2, 3, figsize=(11.6, 6.4), sharex=True, sharey=True)
 
     for ax, dataset in zip(axes.ravel(), DATASETS):
         panel = panels[dataset]
@@ -154,17 +157,19 @@ def positives_fig() -> None:
 
     handles = [plt.Line2D([], [], color=COLOR[e], linewidth=2.4) for e in EMBEDDERS]
     handles.append(plt.Line2D([], [], color=CEILING, linestyle=(0, (1.5, 2)), linewidth=1.8))
+    # The legend shares the reserved top band with the slide's headline, which
+    # occupies the left third of it — so it goes right, not centre.
     fig.legend(
         handles,
         [*EMBEDDERS, "every vote a positive"],
-        loc="upper center",
+        loc="upper right",
         ncol=2,
         frameon=False,
-        bbox_to_anchor=(0.5, 1.04),
+        bbox_to_anchor=(0.995, 0.93),
         handlelength=1.8,
     )
-    fig.tight_layout(rect=(0.02, 0, 1, 0.93))
-    save(fig, OUT, "positive-starvation.png")
+    fig.subplots_adjust(left=0.085, right=0.985, top=0.675, bottom=0.145, wspace=0.13, hspace=0.30)
+    save(fig, OUT, "positive-starvation.png", column=FULL_BLEED, tight=False)
 
 
 def _split_traces(panel: report_svg.Panel) -> tuple[list, list, list]:
@@ -202,18 +207,21 @@ def _cost_panel(ax: plt.Axes, panel: report_svg.Panel, embedder: str) -> None:
 def cost_traces_fig() -> None:
     """Every individual run, laid out dataset (columns) by embedder (rows)."""
     panels = {p.title: p for p in report_panels("fig_cost_traces")}
+    # Datasets become rows and embedders columns, which is the transpose of the
+    # sidebar layout: a full-bleed slot is wide, so the grid that fills it is
+    # the short one. 2 rows x 3 cols on a 16:9 canvas.
     layout = [("visual_genome_m", e) for e in EMBEDDERS], [("vg_box_small", e) for e in EMBEDDERS]
-    fig, axes = plt.subplots(3, 2, figsize=(7.2, 7.0), sharex=True, sharey=True)
+    fig, axes = plt.subplots(2, 3, figsize=(11.6, 6.4), sharex=True, sharey=True)
 
-    for column, cells in enumerate(layout):
-        for row, (dataset, embedder) in enumerate(cells):
+    for row, cells in enumerate(layout):
+        for column, (dataset, embedder) in enumerate(cells):
             ax = axes[row][column]
             title = next(t for t in panels if t.startswith(f"{dataset} x {embedder} "))
             _cost_panel(ax, panels[title], embedder)
             if row == 0:
-                ax.set_title(dataset, pad=8)
+                ax.set_title(embedder, pad=8)
             if column == 0:
-                ax.set_ylabel(embedder, labelpad=8)
+                ax.set_ylabel(dataset, labelpad=8)
 
     fig.supxlabel("votes cast", fontsize=15)
 
@@ -226,15 +234,15 @@ def cost_traces_fig() -> None:
     fig.legend(
         handles,
         ["median run", "mean", "one run", "first scored step"],
-        loc="upper center",
+        loc="upper right",
         ncol=2,
         frameon=False,
-        bbox_to_anchor=(0.5, 1.04),
+        bbox_to_anchor=(0.995, 0.93),
         handlelength=1.8,
     )
     fig.supylabel("cost = FPR + FNR", fontsize=15, x=0.005)
-    fig.tight_layout(rect=(0.02, 0, 1, 0.93))
-    save(fig, OUT, "cost-traces.png")
+    fig.subplots_adjust(left=0.135, right=0.985, top=0.675, bottom=0.145, wspace=0.13, hspace=0.30)
+    save(fig, OUT, "cost-traces.png", column=FULL_BLEED, tight=False)
 
 
 BOX_SERIES = [

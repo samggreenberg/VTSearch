@@ -1,6 +1,6 @@
-![bg right:70% fit](figs/calib-gmm-flow.png)
+<!-- _class: full -->
 
-### Iteration 2 — the idea
+![bg fit](figs/calib-gmm-flow.png)
 
 ## A cut with no labels at all
 

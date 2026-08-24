@@ -1,14 +1,15 @@
-![bg right:56% fit](figs/positive-starvation.png)
+<!-- _class: full -->
 
-### Why this is hard
+![bg fit](figs/positive-starvation.png)
 
 ## Positives are the binding constraint
 
-- After **150 votes**: a median of only **4–11** positives
-- One trace sat at **3 positives for 120 votes**
-- **3.7%** of runs never found a single one
+<!-- The three numbers are yours to say now, and they are the ones to land:
+     after 150 votes, a median of only four to eleven positives; one trace sat
+     at three positives for a hundred and twenty votes; and 3.7% of runs never
+     found a single one.
 
-<!-- This is the headline empirical fact of the whole line; give it room, and
+     This is the headline empirical fact of the whole line; give it room, and
      make sure the room understands what is being counted.
 
      Votes are cheap — a click each, and the system keeps asking. Positives

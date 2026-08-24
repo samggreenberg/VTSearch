@@ -1,6 +1,6 @@
-![bg right:70% fit](figs/calib-xcal-flow.png)
+<!-- _class: full -->
 
-### Iteration 1 — the idea
+![bg fit](figs/calib-xcal-flow.png)
 
 ## Cross-calibration
 

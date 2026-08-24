@@ -1,6 +1,6 @@
-![bg right:70% fit](figs/calib-fold-anchored-flow.png)
+<!-- _class: full -->
 
-### Iteration 4 — the idea
+![bg fit](figs/calib-fold-anchored-flow.png)
 
 ## Stop averaging cuts. Fuse the evidence.
 
