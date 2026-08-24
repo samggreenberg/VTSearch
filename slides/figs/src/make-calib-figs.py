@@ -40,8 +40,6 @@ from slide_figure import (  # noqa: E402
     FULL_BLEED,
     LABEL_GAP_PT,
     OBJECT_GAP_PT,
-    SIDEBAR,
-    SIDEBAR_WIDE,
     save,
     tight_box,
 )
@@ -125,7 +123,11 @@ XCAL_FLOW_STAGES = 7
 FLOW_UNIT_PT = 38.0
 FLOW_CANVAS_H = 11.0
 
-XCAL_CANVAS = (13.2, FLOW_CANVAS_H)
+#: 16:9 for a full-bleed slot. The height is `FLOW_CANVAS_H`, shared with the
+#: rest of the progression; the extra width all goes into `line_half`, which
+#: spreads the two fold score lines apart — they are the widest row, and the
+#: one the audience is asked to compare across.
+XCAL_CANVAS = (19.8, FLOW_CANVAS_H)
 
 #: `slide_figure`'s spacing standard, in a schematic's drawing units.
 LABEL_GAP = LABEL_GAP_PT / FLOW_UNIT_PT
@@ -206,10 +208,11 @@ def xcal_flow_fig() -> None:
             _xcal_flow_stage(stage),
             OUT,
             f"calib-xcal-flow.build{stage}.png",
-            column=SIDEBAR,
+            column=FULL_BLEED,
+            notch=False,
             box=box,
         )
-    save(final, OUT, "calib-xcal-flow.png", column=SIDEBAR, box=box)
+    save(final, OUT, "calib-xcal-flow.png", column=FULL_BLEED, box=box)
 
 
 def _data_block(ax: plt.Axes, x0: float, y0: float, w: float, h: float, split: bool = False) -> None:
@@ -400,7 +403,7 @@ def _xcal_flow_stage(stage: int) -> plt.Figure:
     # ── layout ────────────────────────────────────────────────────────────────
     # Everything is derived from the block downwards, so the two spacing
     # constants really are the only spacings in the figure.
-    bx, block_w, block_h, block_top = 6.5, 4.8, 1.05, 10.35
+    bx, block_w, block_h, block_top = 9.9, 4.8, 1.05, 10.35
     block_y0, block_x0 = block_top - block_h, bx - block_w / 2
     m1x, m2x = bx - block_w / 4, bx + block_w / 4  # the halves, and the models under them
 
@@ -414,7 +417,7 @@ def _xcal_flow_stage(stage: int) -> plt.Figure:
     tip1 = (exit1[0] - score_len * ux, exit1[1] - score_len * uy)
     # The arrow points at the score-line *group*, so it stops an object gap
     # above the group's topmost ink — which is its label, not the line.
-    line_y, line_half = tip1[1] - (OBJECT_GAP + CAP_16 + SCORE_LABEL_LIFT), 2.6
+    line_y, line_half = tip1[1] - (OBJECT_GAP + CAP_16 + SCORE_LABEL_LIFT), 4.6
     cx1 = tip1[0] - 0.4 * line_half
     cx2 = 2 * bx - cx1
 
@@ -520,7 +523,7 @@ def _xcal_flow_stage(stage: int) -> plt.Figure:
 GMM_FLOW_STAGES = 5
 
 #: Same height as `XCAL_CANVAS`, deliberately — see `FLOW_CANVAS_H`.
-GMM_CANVAS = (13.2, FLOW_CANVAS_H)
+GMM_CANVAS = (19.8, FLOW_CANVAS_H)
 
 #: Bins in the schematic's score histogram. Enough to show two modes and the
 #: dip between them; few enough that one bar is still a visible object at the
@@ -560,10 +563,11 @@ def gmm_flow_fig() -> None:
             _gmm_flow_stage(stage, fit, scores),
             OUT,
             f"calib-gmm-flow.build{stage}.png",
-            column=SIDEBAR_WIDE,
+            column=FULL_BLEED,
             box=box,
+            notch=False,
         )
-    save(final, OUT, "calib-gmm-flow.png", column=SIDEBAR_WIDE, box=box)
+    save(final, OUT, "calib-gmm-flow.png", column=FULL_BLEED, box=box)
 
 
 def _haystack_scores() -> tuple[GmmFit1D, np.ndarray]:
@@ -812,7 +816,7 @@ def _gmm_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figu
     # `block_h` matches `_xcal_flow_stage`'s block, so D₀ is literally the same
     # object across the two figures — and so the disc naming it clears the
     # hatching by the same margin there as here.
-    bx, block_w, block_h = 4.2, 4.0, 1.05
+    bx, block_w, block_h = 10.2, 4.0, 1.05
     # The haystack is the same *height* as the votes' block and much wider:
     # the two are the same kind of thing — media — so the shape that differs
     # between them should be how many there are, not how tall the box is.
@@ -820,7 +824,7 @@ def _gmm_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figu
     # so the only difference the eye has to read between them is width — and
     # neither spends vertical budget on a label hung above it.
     hay_x0, hay_top = bx - block_w / 2, 10.9
-    hay_w, hay_h = 10.1, block_h
+    hay_w, hay_h = 9.4, block_h
     hay_y0 = hay_top - hay_h
     vote_len = 1.45
     block_top = hay_y0 - OBJECT_GAP - vote_len - OBJECT_GAP
@@ -849,7 +853,7 @@ def _gmm_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figu
     # centre is worth less than the path reading as one stroke, and a vertical
     # arrow is also the cheapest possible use of the drop it costs: every unit
     # of height becomes arrow length, none of it spent going sideways.
-    panel_x0, panel_w, panel_h = 3.8, 8.0, 1.9
+    panel_x0, panel_w, panel_h = 1.0, 18.6, 1.9
     tip = (m0x, y_base + panel_h + OBJECT_GAP + CAP_16 + LABEL_GAP)
 
     labeled_arrow = functools.partial(_labeled_arrow, ax)
@@ -964,11 +968,11 @@ BLEND_FLOW_STAGES = 6
 #: along it. Spending 4% of size to avoid shrinking the type and cramping
 #: every arrow is the better half of that trade; spending much more would not
 #: be, and the fix past this point is to cut content rather than add canvas.
-BLEND_CANVAS = (13.6, 11.4)
+BLEND_CANVAS = (20.3, 11.4)
 
 #: The blend schematic's score lines, shorter than the cross-calibration
 #: figure's 2.6 because the mixture panel shares their row.
-BLEND_LINE_HALF = 1.45
+BLEND_LINE_HALF = 2.4
 
 #: The conclusion row's type.
 CONCLUSION_PT = 17.0
@@ -1029,10 +1033,11 @@ def blend_flow_fig() -> None:
             _blend_flow_stage(stage, fit, scores),
             OUT,
             f"calib-blend-flow.build{stage}.png",
-            column=SIDEBAR_WIDE,
+            column=FULL_BLEED,
             box=box,
+            notch=False,
         )
-    save(final, OUT, "calib-blend-flow.png", column=SIDEBAR_WIDE, box=box)
+    save(final, OUT, "calib-blend-flow.png", column=FULL_BLEED, box=box)
 
 
 def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figure:
@@ -1046,7 +1051,7 @@ def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Fi
     # ── layout ────────────────────────────────────────────────────────────────
     # Top-down for the spine, then the fold branch (which fixes how much width
     # is left), then the mixture branch into what remains, then the conclusion.
-    bx, block_w, block_h = 4.4, 4.0, 1.05
+    bx, block_w, block_h = 10.4, 4.0, 1.05
     block_x0 = bx - block_w / 2
     hay_x0, hay_top, hay_h = block_x0, BLEND_CANVAS[1], block_h
     hay_w = BLEND_CANVAS[0] - 0.2 - hay_x0
@@ -1232,7 +1237,7 @@ XSEMI_FLOW_STAGES = 6
 #: blend's 23.8px and the theme's 20px floor. The alternatives were cutting
 #: the panels to a size where the votes inside the humps stop being legible,
 #: or dropping a beat the figure exists to make.
-XSEMI_CANVAS = (13.6, 12.75)
+XSEMI_CANVAS = (24.2, 12.75)
 
 #: The fold panels' height. Shorter than the blend's 2.0 because there are two
 #: of them stacked under the flow rather than one beside it, and no shorter,
@@ -1318,10 +1323,11 @@ def xsemi_flow_fig() -> None:
             _xsemi_flow_stage(stage, folds),
             OUT,
             f"calib-fold-anchored-flow.build{stage}.png",
-            column=SIDEBAR_WIDE,
+            column=FULL_BLEED,
             box=box,
+            notch=False,
         )
-    save(final, OUT, "calib-fold-anchored-flow.png", column=SIDEBAR_WIDE, box=box)
+    save(final, OUT, "calib-fold-anchored-flow.png", column=FULL_BLEED, box=box)
 
 
 def _xsemi_folds() -> list[tuple[GmmFit1D, np.ndarray, dict]]:
@@ -1439,7 +1445,9 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
     # derives them, then the panels from where the fold branch's score arrows
     # land, then the conclusion under both.
     canvas_w, canvas_h = XSEMI_CANVAS
-    bx, block_w, block_h = canvas_w / 2, 4.0, 1.05
+    # Nudged right of centre so the haystack — the one row that reaches the top
+    # of the drawing — starts clear of the slide's title notch.
+    bx, block_w, block_h = canvas_w / 2 + 3.0, 4.0, 1.05
     block_x0 = bx - block_w / 2
     # Centred on the spine rather than run out to the canvas edge: the disc
     # naming the haystack sits at the block's own centre, so centring the
@@ -1752,10 +1760,11 @@ def xquant_flow_fig() -> None:
             _xquant_flow_stage(stage, folds, final),
             OUT,
             f"calib-quantile-flow.build{stage}.png",
-            column=SIDEBAR_WIDE,
+            column=FULL_BLEED,
             box=box,
+            notch=False,
         )
-    save(final_stage, OUT, "calib-quantile-flow.png", column=SIDEBAR_WIDE, box=box)
+    save(final_stage, OUT, "calib-quantile-flow.png", column=FULL_BLEED, box=box, notch=False)
 
 
 def _xquant_populations() -> tuple[list[tuple[GmmFit1D, np.ndarray, dict]], np.ndarray]:
@@ -2168,10 +2177,17 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
 # not change size when the talk crosses from Part 1 into Part 2. Heights may
 # differ, and must stay under `INCL_CANVAS_W * 720 / 896` (13.37) or the figure
 # becomes height-limited and the pin stops holding.
-INCL_CANVAS_W = XQUANT_CANVAS[0]
+#: Widened for a full-bleed slot: these four used to inherit
+#: `XQUANT_CANVAS[0]`, which was pinned against a 896px-wide `bg right:70%`
+#: box. A full-bleed slot is 1280px, so the old width left 400px of dead white
+#: down the sides. At this width a 15pt label renders at 21.5px against the
+#: 20px floor — within a rounding error of what it was — and the extra drawing
+#: units all go into the panel, which is a score axis and had annotations
+#: crowding on it.
+INCL_CANVAS_W = 23.45
 
 #: The panel every Part 2 figure hangs its argument on, in drawing units.
-INCL_PANEL_X0, INCL_PANEL_W, INCL_PANEL_H = 1.4, 13.85, 2.2
+INCL_PANEL_X0, INCL_PANEL_W, INCL_PANEL_H = 1.97, 19.5, 2.2
 
 #: The three stops each figure reads its gauges at. The retired rule returns one
 #: answer at every stop, so the knob's two ends and its middle are the fairest
@@ -2428,10 +2444,11 @@ def knob_flow_fig() -> None:
             _knob_flow_stage(stage, corpus, scores, labels),
             OUT,
             f"calib-knob-flow.build{stage}.png",
-            column=SIDEBAR_WIDE,
+            column=FULL_BLEED,
             box=box,
+            notch=False,
         )
-    save(final, OUT, "calib-knob-flow.png", column=SIDEBAR_WIDE, box=box)
+    save(final, OUT, "calib-knob-flow.png", column=FULL_BLEED, box=box, notch=False)
 
 
 def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
@@ -2635,10 +2652,11 @@ def walk_flow_fig() -> None:
             _walk_flow_stage(stage, corpus, scores, labels),
             OUT,
             f"calib-walk-flow.build{stage}.png",
-            column=SIDEBAR_WIDE,
+            column=FULL_BLEED,
             box=box,
+            notch=False,
         )
-    save(final, OUT, "calib-walk-flow.png", column=SIDEBAR_WIDE, box=box)
+    save(final, OUT, "calib-walk-flow.png", column=FULL_BLEED, box=box, notch=False)
 
 
 def _walk_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
@@ -2862,10 +2880,11 @@ def tilt_flow_fig() -> None:
             _tilt_flow_stage(stage, folds, final),
             OUT,
             f"calib-tilt-flow.build{stage}.png",
-            column=SIDEBAR_WIDE,
+            column=FULL_BLEED,
             box=box,
+            notch=False,
         )
-    save(last, OUT, "calib-tilt-flow.png", column=SIDEBAR_WIDE, box=box)
+    save(last, OUT, "calib-tilt-flow.png", column=FULL_BLEED, box=box, notch=False)
 
 
 def _tilt_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
@@ -3094,10 +3113,11 @@ def acq_flow_fig() -> None:
             _acq_flow_stage(stage, folds, final),
             OUT,
             f"calib-acq-flow.build{stage}.png",
-            column=SIDEBAR_WIDE,
+            column=FULL_BLEED,
             box=box,
+            notch=False,
         )
-    save(last, OUT, "calib-acq-flow.png", column=SIDEBAR_WIDE, box=box)
+    save(last, OUT, "calib-acq-flow.png", column=FULL_BLEED, box=box, notch=False)
 
 
 def _acq_cell(ax: plt.Axes, x0: float, y0: float, w: float, h: float, kind: str, lw: float = 1.2) -> None:
@@ -3299,7 +3319,7 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
 
 def blend_schedule_fig() -> None:
     n = np.arange(0, 121)
-    fig, ax = plt.subplots(figsize=(7.0, 5.0))
+    fig, ax = plt.subplots(figsize=(11.5, 6.5))
     for name, color, style, label, xy, ha, va in (
         ("prod", SOFT, (0, (4, 3)), "historical ramp:\npure x-cal by 20 votes", (40, 0.96), "left", "top"),
         ("cap50", BLUE, (0, (1, 1.6)), "cap50 — binary voting", (23, 0.42), "left", "top"),
@@ -3324,7 +3344,7 @@ def blend_schedule_fig() -> None:
     # Full-bleed: no in-figure title (the slide's headline is the title, and it
     # is drawn over this band), and the plot is pushed below TITLE_NOTCH_PX
     # rather than tight-cropped, so the reserved corner survives the write.
-    fig.subplots_adjust(left=0.20, right=0.97, top=0.69, bottom=0.13)
+    fig.subplots_adjust(left=0.115, right=0.98, top=0.55, bottom=0.135)
     save(fig, OUT, "calib-blend-schedule.png", column=FULL_BLEED, tight=False)
 
 
@@ -3416,7 +3436,7 @@ def decomposition_fig() -> None:
         ("Gaussian\nmisspecification", 0.0129),
         ("sim → test\ntransfer", 0.0389),
     ]
-    fig, ax = plt.subplots(figsize=(7.0, 4.6))
+    fig, ax = plt.subplots(figsize=(11.5, 6.5))
     ys = np.arange(len(terms))
     for y, (name, v) in zip(ys, terms):
         emphasized = name.startswith("sim")
@@ -3449,7 +3469,7 @@ def decomposition_fig() -> None:
         fontsize=15,
         color=SOFT,
     )
-    fig.subplots_adjust(left=0.28, right=0.97, top=0.645, bottom=0.05)
+    fig.subplots_adjust(left=0.175, right=0.98, top=0.55, bottom=0.06)
     save(fig, OUT, "calib-error-decomposition.png", column=FULL_BLEED, tight=False)
 
 

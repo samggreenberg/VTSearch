@@ -224,10 +224,10 @@ section.full {
    and set tight, because a title that wraps into a squarer block keeps the
    notch out of the figure's way. */
 section.full h2 {
-  max-width: 420px;
+  max-width: 300px;
   margin: 0;
-  font-size: 42px;
-  line-height: 1.15;
+  font-size: 40px;
+  line-height: 1.12;
   /* A white halo, not a white plate. On a generated figure — white paper with
      its ink kept out of the notch — it is invisible by construction, so those
      slides pay nothing for it. On a screenshot, which is a photograph and

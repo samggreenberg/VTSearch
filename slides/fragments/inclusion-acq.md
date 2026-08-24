@@ -2,7 +2,10 @@
 
 ![bg fit](figs/calib-acq-flow.png)
 
-## One estimator, two thresholds
+<!-- Untitled by design: this figure's own axis starts in the
+     top-left corner, where a headline would go, so the slide carries none.
+     The line to say as it comes up is “One estimator, two thresholds”.
+     -->
 
 <!-- build: figs/calib-acq-flow.build1.png -->
 

@@ -2,7 +2,10 @@
 
 ![bg fit](figs/calib-tilt-flow.png)
 
-## Keep the midpoint. Borrow the tilt.
+<!-- Untitled by design: this figure's own axis starts in the
+     top-left corner, where a headline would go, so the slide carries none.
+     The line to say as it comes up is “Keep the midpoint. Borrow the tilt.”.
+     -->
 
 <!-- build: figs/calib-tilt-flow.build1.png -->
 

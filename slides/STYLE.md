@@ -99,10 +99,10 @@ in the report and it is unreadable from the third row.
 
 Two consequences for any figure headed for a slide:
 
-- **Size it to the slot, not to the page.** The standard sidebar
-  (`![bg right:56% fit]`) is a 717×720 box — very nearly *square*. A 2:1 report
-  figure fills half of it and wastes the rest, which is the same decision as
-  drawing everything at half size. Six panels go 3 rows × 2 cols, not 2 × 3.
+- **Size it to the slot, not to the page.** The slot is the full 1280×720
+  slide (see *Size a figure to a 16:9 slot* above). A 1:1 figure fills 56% of
+  it and wastes the rest, which is the same decision as drawing everything at
+  three-quarter size. Six panels go 2 rows × 3 cols, not 3 × 2.
 - **Then subtract.** One shared legend, not one per panel. No suptitle — the
   slide's own headline is the title. No footnote — that is a presenter note.
 
@@ -113,6 +113,91 @@ every generated figure; a hand-checked floor is a floor that drifts.
 Screenshots are exempt from the check and not from the rule: if the UI text in
 a screenshot is unreadable at slot size, crop it or zoom the app, do not shrink
 the caption to match.
+
+<!-- item-sep -->
+
+## A figure owns the whole slide; the title lives in a notch
+
+A figure that shares its slide with a column of bullets is not paying for that
+column in the way it looks like it is. Measure before you rearrange: every
+sidebar figure in this repo was already **height-bound** in its slot — sized to
+the slot, so it touched 720px top to bottom and left its slack out the sides.
+The text column sat beside empty *figure margin*, not on top of the drawing.
+Deleting the bullets bought those figures exactly nothing.
+
+Two consequences, and the second is the one that surprises people:
+
+- **Height is the scarce resource, not width.** A title band across the top of
+  the slide spends the only dimension that binds. Measured over this deck's
+  fifteen figures, a 1280×605 band made eleven of them **0.84×** the size they
+  already were.
+- **Full-bleed is never worse**, and up to **1.57×** better on a wide figure.
+  So the standard is `<!-- _class: full -->` with `![bg fit]`, and the title
+  goes in a **notch** cut out of the drawing's top-left corner.
+
+`slide_figure.TITLE_NOTCH_PX` is that rectangle — 300×250 at a 60×42 inset —
+and `section.full` in `themes/vtsearch.css` is the same rectangle in CSS. Keep
+the two in step. `save()` refuses to write a full-bleed figure that draws
+inside it, so the reserve cannot rot.
+
+**The notch does not move, and that is the whole point of it.** A headline that
+shifts corner to corner to dodge each figure stops being a headline and becomes
+another thing to hunt for. So a figure that genuinely cannot spare its top-left
+corner **carries no title at all** — it does not put one somewhere else. That
+is the standard working, not failing.
+
+Three rules follow.
+
+**No kicker on a full-bleed slide.** The figure already says which mechanism
+this is; `### Iteration 1 — the idea` over the top of it is a second thing to
+read before the first. Say it instead — it belongs in the presenter notes.
+
+**The headline is meant to wrap.** 40px in a 300px column, three or four lines
+deep. That is not a compromise to fit the notch, it is what makes the notch
+narrow enough to be clearable — see below — and it buys a bigger headline than
+the deck's own 34px `h2`.
+
+**Which figures can clear it is geometry, not taste.** A schematic drawn
+symmetrically about a spine puts its first row — the block, plus any labels
+hanging off its left edge — at a fixed fraction of its own width, near 0.29,
+*whatever* its aspect: widening the drawing moves the block and the notch
+together. So a notch wider than that is unclearable at any aspect a slide can
+show, which is why 300px and not 420px. What still cannot clear it is a figure
+whose **top row spans the drawing** — a score axis or a scatter that starts in
+the top-left by construction. Those slides carry no title, and their headline
+becomes the first line of the notes.
+
+<!-- item-sep -->
+
+## Size a figure to a 16:9 slot, not to a square one
+
+The old rule here read "the standard sidebar is a 717×720 box — very nearly
+*square*, so six panels go 3 rows × 2 cols, not 2 × 3." That was right for the
+sidebar and is exactly wrong now: a full-bleed slot is **1280×720**, and a tall
+grid in a wide box is the same decision as drawing everything at half size.
+Six panels go **2 rows × 3 cols**.
+
+The arithmetic behind the type floor is unchanged — a figure `W` inches wide is
+drawn at `W × 72` points and displayed in a `P`-pixel slot, so it renders at
+`P / (W × 72)` pixels per point — but the binding axis has moved. A drawing
+narrower than 16:9 is **height**-bound, and adding width to it buys nothing at
+all: the empty side margins grow and the type stays exactly the size it was.
+The only thing that makes a height-bound figure bigger is making it **shorter**
+— moving rows sideways, not stretching them.
+
+So when a schematic goes full-bleed, look for the height:
+
+- **Long diagonals are where it hides.** The loop schematic's fork was two long
+  diagonal arrows costing three units of drop; on a wide canvas the same two
+  outputs sit low and far apart and the fork is nearly horizontal.
+- **A wide panel wants the width.** The Part 2 figures hang everything on one
+  score axis. Widening that axis spends the new width on the thing the audience
+  is actually asked to read, and costs no height.
+- **Some figures cannot be reshaped by a constant.** Where a layout is *solved*
+  from geometric constraints rather than set — `calib-quantile-flow`'s three
+  equal panels, `vote-boundary`'s equal-aspect scatter — widening the canvas
+  only adds empty space. Those need a real redesign, and until they get one
+  they letterbox. Say so rather than stretching them.
 
 <!-- item-sep -->
 

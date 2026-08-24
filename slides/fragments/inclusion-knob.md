@@ -2,7 +2,10 @@
 
 ![bg fit](figs/calib-knob-flow.png)
 
-## The knob that did nothing
+<!-- Untitled by design: this figure's own axis starts in the
+     top-left corner, where a headline would go, so the slide carries none.
+     The line to say as it comes up is “The knob that did nothing”.
+     -->
 
 <!-- build: figs/calib-knob-flow.build1.png -->
 

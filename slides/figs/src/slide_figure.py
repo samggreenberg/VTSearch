@@ -8,10 +8,13 @@ tick labels at **8 pixels** — beside 28px body copy on the same slide.
 
 So every generator here works to two rules:
 
-* **Size to the slot.** A `bg right:56%` box on a 1280x720 slide is 717x720 —
-  very nearly square. A 2:1 figure fills half of it and wastes the rest, which
-  is the same as choosing to draw everything at half size. Give a six-panel
-  figure 3 rows x 2 cols, not 2 x 3.
+* **Size to the slot.** The slot is the whole 1280x720 slide: these decks are
+  full-bleed (`_class: full` + `![bg fit]`), because a sidebar figure was
+  already height-bound and the text column beside it cost the drawing nothing.
+  A 1:1 figure fills 56% of a 16:9 box and wastes the rest, which is the same
+  as choosing to draw everything at three-quarter size. Give a six-panel figure
+  2 rows x 3 cols, not 3 x 2 — and note that widening a *height-bound* drawing
+  buys no type at all; only making it shorter does.
 * **Hold the type floor.** Nothing renders below `TYPE_FLOOR_PX`. `save()`
   checks it and raises, so a later edit that adds panels or shrinks a label
   fails the build instead of quietly producing another unreadable figure.
@@ -69,18 +72,24 @@ OBJECT_GAP_PT = 16.0
 #: The title notch, in slide pixels from the top-left of a 1280x720 slide:
 #: `(x, y, width, height)`. A `_class: full` slide draws its kicker and
 #: headline here and nowhere else, so a full-bleed figure must keep its ink
-#: out of it. Sized to hold three lines of the 42px headline `section.full`
-#: sets, plus the theme's 60x42 inset — and nothing else, because a full-bleed
-#: slide carries no kicker. Wrapping the headline into a squarer block is the
-#: point rather than a cost: a 420px notch takes a third of the slide's width
-#: instead of half, which is the difference between a figure that has to be
-#: redrawn around it and one that merely has to lean right.
+#: out of it. Narrow and tall on purpose, and nothing but the headline: a
+#: full-bleed slide carries no kicker, and the headline is *meant* to wrap into
+#: a tall block rather than run across the top.
 #:
-#: This is a *standard*, and the point of it is that it does not move. See
-#: `section.full` in `slides/themes/vtsearch.css`, which is the same rectangle
-#: expressed in CSS, and `notch_box()` below, which is it in figure
-#: coordinates so a generator can lay out around it.
-TITLE_NOTCH_PX = (60.0, 42.0, 420.0, 160.0)
+#: The width is what the geometry turns on. A schematic drawn symmetrically
+#: about a spine puts its first row — the block, plus whatever labels hang off
+#: its left edge — at a fixed fraction of its own width, near 0.29. A notch
+#: wider than that is unclearable at any aspect a slide can show: widening the
+#: drawing moves the block and the notch together. At 300px the reserve ends at
+#: 0.28 of a 16:9 drawing's width and the symmetric flows clear it, which is
+#: the difference between those slides having a headline and not.
+#:
+#: What still cannot clear it is a figure whose *top row spans the drawing* —
+#: the Part 2 panel figures, whose score axis starts at the top-left corner by
+#: construction. Those slides carry no title. That is the standard working, not
+#: failing: the alternative is a headline that moves, and a headline that moves
+#: is worse than none.
+TITLE_NOTCH_PX = (60.0, 42.0, 300.0, 250.0)
 
 INK = "#14181f"
 SOFT = "#5b6472"
