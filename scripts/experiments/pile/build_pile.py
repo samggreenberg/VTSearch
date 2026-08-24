@@ -584,11 +584,21 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
                 # exists to remove.
                 log(f"  UNDER-SUPPLIED {cell}: {len(pool)} positives (wanted {pc.SCALE_N_POS})")
             eligible = set(pool)
-            kept = [i for i in roster.get("cells", {}).get(cell, []) if i in eligible]
-            if len(kept) < pc.SCALE_N_POS:
-                spare = sorted(eligible - set(kept), key=lambda i: _rank(cell, i))
-                kept += spare[: pc.SCALE_N_POS - len(kept)]
-            chosen[cell] = kept[: pc.SCALE_N_POS]
+            pinned = [i for i in roster.get("cells", {}).get(cell, []) if i in eligible]
+            # A correction can move an image to another band -- that is the
+            # point of re-drawing a box. If the destination cell is already full
+            # of images nobody has looked at, the reviewed one lands nowhere and
+            # the review quietly stops covering it (99 of 360 boxed positives,
+            # first time round). Reviewed images therefore outrank unreviewed
+            # ones for a seat, wherever their box now puts them.
+            reviewed = {i for i in eligible if (i, c) in corrections}
+            order = (
+                [i for i in pinned if i in reviewed]
+                + sorted(reviewed - set(pinned), key=lambda i: _rank(cell, i))
+                + [i for i in pinned if i not in reviewed]
+                + sorted(eligible - reviewed - set(pinned), key=lambda i: _rank(cell, i))
+            )
+            chosen[cell] = order[: pc.SCALE_N_POS]
 
     clean.sort()
     # Draw spares beyond the designated pool. A human verdict can retire a
