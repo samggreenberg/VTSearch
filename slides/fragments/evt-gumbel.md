@@ -22,9 +22,11 @@
      threshold is actually being applied to. Every score in this distribution
      is a maximum of a dozen draws. -->
 
-<!-- **c** — And a maximum is not a mean. It leans right, and the classical
-     answer for the tail of a maximum is not the Gaussian — it is the
-     extreme-value family, of which the Gumbel is the workhorse. Fit the family
+<!-- **c** — And a maximum is not a mean. It leans right, and the shape it
+     leans toward is not the Gaussian. The one-line version, if the room needs
+     it: the Gumbel is to a maximum what the Gaussian is to an average — the
+     shape you converge on when you take enough draws. That is the whole
+     extreme-value family, and the Gumbel is its workhorse. Fit the family
      the data actually implies and you should beat any rule that assumes a
      Gaussian. Note that even here the Gumbel is not a perfect fit: a dozen
      draws is not "many", which is the first hint of how this ends. The premise

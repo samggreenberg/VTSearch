@@ -333,7 +333,9 @@ markers). Two rules keep a build honest:
 letters (`**c** — the same cut, loosened and tightened`) rather than against
 "page 3 of the build": the letter is what the audience deck actually prints,
 what a question from the room will use, and what the speaker build's contact
-sheet labels each frame with.
+sheet labels each frame with. `build.py --check` requires every page of a
+group to be named by some note — one note may cover two, but no frame may go
+unmentioned.
 
 The speaker build shows the one complete page large — a speaker glancing at
 notes needs the whole picture, not whichever stage the audience is on — with

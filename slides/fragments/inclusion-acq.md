@@ -37,10 +37,10 @@
      step is about eight items in six thousand, and the figure draws that gap
      at its true size rather than a legible one. -->
 
-<!-- Then the loop closes: that vote goes back into the labelled set, the model
-     retrains, and the threshold that chose the question is re-derived from the
-     answer. This is why the number compounds — a better threshold does not
-     only fix the final set, it changes which items get shown. -->
+<!-- **e** — And the loop closes: that vote goes back into the labelled set, the
+     model retrains, and the threshold that chose the question is re-derived
+     from the answer. This is why the number compounds — a better threshold
+     does not only fix the final set, it changes which items get shown. -->
 
 <!-- The measured record, straight, because it is not a clean one. On COCO with
      SigLIP2 the interior optimum was minus three: positives found per hundred

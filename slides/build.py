@@ -384,6 +384,42 @@ def check_build_markers(name: str, text: str, problems: list[str]) -> None:
             )
 
 
+# A page letter as a presenter note refers to it: `**c** — the same cut, ...`.
+NOTE_LETTER_RE = re.compile(r"\*\*([a-z])\*\*")
+
+
+def check_note_letters(name: str, text: str, problems: list[str]) -> None:
+    """Preflight that a build's notes name every page of the group.
+
+    The audience deck prints a letter on every page of a build (5a, 5b, 5c) and
+    the speaker build labels every frame of its contact sheet with the same
+    letter, so a presenter reads the notes *against* those letters — which only
+    works if there is a note for each. A frame nobody wrote a line for is the
+    failure this catches, and it is the kind that is invisible until you are
+    standing in front of a room (#3246).
+
+    A single note may name several letters (`**a**, **b** — recapitulation`);
+    what is checked is coverage, not one note per page.
+    """
+    pages = len([line for line in text.splitlines() if BUILD_RE.match(line)]) + 1
+    if pages < 2:
+        return
+    named = {m.group(1) for comment in COMMENT_RE.finditer(text) for m in NOTE_LETTER_RE.finditer(comment.group(1))}
+    missing = [stage_letter(i) for i in range(pages) if stage_letter(i) not in named]
+    if missing:
+        problems.append(
+            f"fragments/{name}.md: this build is {pages} pages, but its presenter notes "
+            f"never mention page {', '.join(missing)} — write a note per reveal, named by "
+            f"the letter the deck prints on it (`**{missing[0]}** — ...`)"
+        )
+    stray = sorted(letter for letter in named if letter not in {stage_letter(i) for i in range(pages)})
+    if stray:
+        problems.append(
+            f"fragments/{name}.md: presenter notes name page {', '.join(stray)}, but this "
+            f"build is only {pages} pages (a-{stage_letter(pages - 1)})"
+        )
+
+
 def check_fragment(name: str, text: str, problems: list[str]) -> None:
     for lineno, line in enumerate(text.splitlines(), 1):
         if RULE_RE.match(line):
@@ -392,6 +428,7 @@ def check_fragment(name: str, text: str, problems: list[str]) -> None:
                 f"slides; use `***` for a horizontal rule"
             )
     check_build_markers(name, text, problems)
+    check_note_letters(name, text, problems)
     for match in IMAGE_RE.finditer(text):
         target = match.group(1)
         if target.startswith(("http://", "https://", "data:")):

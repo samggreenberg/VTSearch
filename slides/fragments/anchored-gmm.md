@@ -55,7 +55,11 @@
      around two and a half percent at the shipped setting. That ratio is the
      previous slide's hand-tuned ramp arriving *derived*. -->
 
-<!-- **e** — Land on the last line and undercut it in the same breath.
+<!-- **e** — Each fold cuts at the midpoint of its own two fitted means. Same
+     rule iteration 2 used, on a fit that has now been told which mound is
+     which. -->
+
+<!-- **f** — And the last line, which you should undercut in the same breath.
      Averaging θ₁ and θ₂ is drawn plainly here and production does not do it:
      two fold models score the same corpus on scales that need not agree. The
      fix is the next slide, so spend one sentence on it. -->

@@ -14,10 +14,10 @@
 
 <!-- build: figs/calib-walk-flow.build5.png -->
 
-<!-- Name what the room is looking at first: this is the previous slide with one
-     row swapped. Same panel, same seven votes, same three gauges — only the
-     middle row changed, from what the retired rule computed to what the
-     shipped one computes. If they look identical, that is the point. -->
+<!-- **a** — Name what the room is looking at first: this is the previous slide
+     with one row swapped. Same panel, same seven votes, same three gauges —
+     only the middle row changed, from what the retired rule computed to what
+     the shipped one computes. If they look identical, that is the point. -->
 
 <!-- The fix is a change of kind, not of tuning: stop searching over cut points
      and start reading **quantiles** of the calibration score distributions.
@@ -61,6 +61,9 @@
      alpha halving per step — which gives the positive half a portable,
      user-facing meaning: *the fraction of true matches I am willing to miss*.
      It is a cap, not a target. -->
+
+<!-- **f** — And what the user sees, against the three identical answers the
+     retired rule gave: three settings of the slider, three different sets. -->
 
 <!-- Land on monotonicity, because it is what makes the control usable rather
      than merely live: every component is monotone in the knob, so their

@@ -18,10 +18,7 @@
 <!-- **Schedule the anchor mass.** The fused fit weights each vote by κ, and the
      best κ is not a constant: it falls as votes accumulate, from around 3 early
      to around 0.1 deep. Any fixed value is a compromise across regimes, and
-     κ ∝ 1/*n* is a one-line arm. (Worth admitting here if you like: the shipped
-     value was chosen from a grid whose *edge* won, which should have been read
-     as "the optimum is off the edge". A wider run found it interior a day
-     later.) -->
+     κ ∝ 1/*n* is a one-line arm. -->
 
 <!-- **Binary voting is stranded**, on record: fusion ties the capped blend on
      both binary environments, but the blend's off-switch is gone, so binary

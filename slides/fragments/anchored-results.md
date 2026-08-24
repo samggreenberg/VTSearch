@@ -20,9 +20,9 @@
      blend, and one dataset shows a small loss. The win does not transfer
      everywhere, and saying so is part of why the result is credible. -->
 
-<!-- One process note worth volunteering: run A swept κ over 1, 3, 10, 30, 100 and
-     κ = 1 won — the smallest value on the grid, which should have been read as
-     "the optimum is off the edge". Run B, two decades wider, found it interior at
-     κ = 0.3 and winning in all six environments, about a day after the narrower
-     recommendation had merged. A winner on the edge of its own grid is a prompt
-     to extend the grid. -->
+<!-- If someone asks where κ = 0.3 comes from: a first sweep over 1 to 100 picked
+     the smallest value it measured, and a wider one found the real optimum an
+     order of magnitude below that, winning in all six environments. It is a
+     measured setting, not a tuned one — and the fact that κ* keeps falling as
+     votes accumulate is why the roadmap wants a schedule rather than a
+     constant. -->
