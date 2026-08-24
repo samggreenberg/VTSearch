@@ -247,6 +247,21 @@ def transfer_bracket(df: pd.DataFrame, diag: pd.DataFrame, agg_dir: Path) -> pd.
             rows.append(entry)
     tbl = pd.DataFrame(rows)
     tbl.to_csv(agg_dir / "transfer_bracket.csv", index=False)
+
+    # The axis the user actually spends.  A window mean cannot show whether the
+    # gap closes as votes accumulate, and "what do I get after 20 clicks" is the
+    # question the ramp window exists to answer.
+    by_votes = (
+        j.groupby(["arm", "n_votes"])[["transfer_naive", "transfer_honest", "optimism"]]
+        .agg(["mean", "sem", "size"])
+        .reset_index()
+    )
+    by_votes.columns = ["_".join(c).rstrip("_") for c in by_votes.columns]
+    by_votes.to_csv(agg_dir / "transfer_by_votes.csv", index=False)
+
+    # One row per cell per step: the mean hides that some runs never leave the
+    # floor, and on these trajectories the spread is usually the real finding.
+    j[[*STEP, "n_votes", "transfer_naive", "transfer_honest"]].to_csv(agg_dir / "transfer_by_cell.csv", index=False)
     return tbl
 
 
@@ -639,7 +654,13 @@ def decisions(
 # ------------------------------------------------------------------
 
 
-def make_figures(curve: pd.DataFrame, bracket: pd.DataFrame, scaling: pd.DataFrame, fig_dir: Path) -> list[str]:
+def make_figures(
+    curve: pd.DataFrame,
+    bracket: pd.DataFrame,
+    scaling: pd.DataFrame,
+    fig_dir: Path,
+    agg_dir: Path | None = None,
+) -> list[str]:
     """The three figures the argument cannot be made without.
 
     Every one is drawn from the same CSVs as the tables above, so a reader can
@@ -739,6 +760,70 @@ def make_figures(curve: pd.DataFrame, bracket: pd.DataFrame, scaling: pd.DataFra
             fig.savefig(p, dpi=130)
             plt.close(fig)
             made.append(p.name)
+
+    if agg_dir is None:
+        return made
+
+    # 4. The axis the user spends, both references, with a band.
+    votes_csv = agg_dir / "transfer_by_votes.csv"
+    if votes_csv.exists():
+        bv = pd.read_csv(votes_csv)
+        if not bv.empty:
+            fig, ax = plt.subplots(figsize=(8.0, 4.2))
+            for arm, sub in bv.groupby("arm"):
+                sub = sub.sort_values("n_votes")
+                for col, style, lbl in (
+                    ("transfer_naive", "-", "naive reference (what the chain reports)"),
+                    ("transfer_honest", "--", "cross-fitted reference"),
+                ):
+                    m, e = sub[f"{col}_mean"], sub[f"{col}_sem"]
+                    (line,) = ax.plot(sub["n_votes"], m, style, label=f"{arm.split('/', 1)[1]} - {lbl}")
+                    ax.fill_between(sub["n_votes"], m - e, m + e, alpha=0.18, color=line.get_color())
+            ax.axvspan(6, 20, color="grey", alpha=0.10)
+            ax.axhline(0.0, color="k", lw=0.8)
+            ax.set_xlabel("votes (the axis a user spends)")
+            ax.set_ylabel("transfer")
+            ax.legend(fontsize=7)
+            ax.grid(alpha=0.3)
+            ax.set_title(
+                "`transfer` over the vote budget, under both references\n(shaded band = the 6-20 ramp window)",
+                fontsize=10,
+            )
+            fig.tight_layout()
+            q = fig_dir / "transfer_by_votes.png"
+            fig.savefig(q, dpi=130)
+            plt.close(fig)
+            made.append(q.name)
+
+    # 5. One line per run: the spread, which the means above cannot show.
+    cell_csv = agg_dir / "transfer_by_cell.csv"
+    if cell_csv.exists():
+        bc = pd.read_csv(cell_csv)
+        arms = sorted(bc["arm"].unique())
+        if arms:
+            fig, axes = plt.subplots(1, len(arms), figsize=(6 * len(arms), 4.2), squeeze=False, sharey=True)
+            for ax, arm in zip(axes[0], arms, strict=True):
+                sub = bc[bc["arm"] == arm]
+                for _key, g in sub.groupby(["category", "seed"]):
+                    ax.plot(g["n_votes"], g["transfer_honest"], color="#3b6ea5", alpha=0.06, lw=0.8)
+                mean = sub.groupby("n_votes")["transfer_honest"].mean()
+                ax.plot(mean.index, mean.to_numpy(), color="#c9553f", lw=2.0, label="mean")
+                ax.axhline(0.0, color="k", lw=0.8)
+                ax.set_xlabel("votes")
+                ax.set_title(arm, fontsize=9)
+                ax.legend(fontsize=8)
+                ax.grid(alpha=0.3)
+            axes[0][0].set_ylabel("transfer vs the cross-fitted reference")
+            fig.suptitle(
+                "One line per run. A mean over cells cannot show how far individual\n"
+                "trajectories sit from it, and here the spread is the finding.",
+                fontsize=10,
+            )
+            fig.tight_layout()
+            q = fig_dir / "transfer_by_cell.png"
+            fig.savefig(q, dpi=130)
+            plt.close(fig)
+            made.append(q.name)
     return made
 
 
@@ -806,7 +891,7 @@ def main() -> int:
     if sanity.get("ok") is False:
         common.log(f"WARNING: reference sanity FAILED (max_abs_diff={sanity['max_abs_diff']}) - the join is suspect")
 
-    figs = make_figures(curve, bracket, scaling, fig_dir)
+    figs = make_figures(curve, bracket, scaling, fig_dir, agg_dir)
     summary = {
         "n_variant_rows": int((df["gmm_variant"] != "").sum()),
         "n_diag_rows": int(len(diag)),
