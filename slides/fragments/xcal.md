@@ -2,8 +2,6 @@
 
 ![bg fit](figs/calib-xcal-flow.png)
 
-### Iteration 1 — the idea
-
 ## Cross-calibration
 
 <!-- build: figs/calib-xcal-flow.build1.png -->

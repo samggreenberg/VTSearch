@@ -1,6 +1,6 @@
-![bg right:70% fit](figs/vote-boundary.png)
+<!-- _class: full -->
 
-### What a vote does
+![bg fit](figs/vote-boundary.png)
 
 ## Every answer moves the boundary
 

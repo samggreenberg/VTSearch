@@ -1,14 +1,16 @@
-![bg right:56% fit](figs/cost-traces.png)
+<!-- _class: full -->
 
-### The yardstick
+![bg fit](figs/cost-traces.png)
 
 ## Simulated voters, thousands of runs
 
-- Replay the real loop on **labeled** corpora — labels score it, never feed it
-- Every step: **cost = *w*<sub>f</sub>·FPR + *w*<sub>n</sub>·FNR**
-- **Regret** = that cost, minus the best cut available in hindsight
+<!-- The three definitions are no longer on the slide, so say them, and say
+     them slowly — they are the units of every number that follows. We replay
+     the real loop on labeled corpora, where the labels score the run and never
+     feed it. At every step, cost = *w*<sub>f</sub>·FPR + *w*<sub>n</sub>·FNR.
+     And regret is that cost minus the best cut available in hindsight.
 
-<!-- Spend a minute here; every number in the rest of the deck is in these
+     Spend a minute here; every number in the rest of the deck is in these
      units, and a room that does not have them will hear "minus 0.074" as
      noise.
 

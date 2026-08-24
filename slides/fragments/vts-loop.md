@@ -1,6 +1,6 @@
-![bg right:70% fit](figs/vts-loop.png)
+<!-- _class: full -->
 
-### The loop
+![bg fit](figs/vts-loop.png)
 
 ## One line, two jobs
 

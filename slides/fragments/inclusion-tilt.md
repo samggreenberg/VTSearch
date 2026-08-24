@@ -1,6 +1,6 @@
-![bg right:70% fit](figs/calib-tilt-flow.png)
+<!-- _class: full -->
 
-### The other axis — on the fused fit
+![bg fit](figs/calib-tilt-flow.png)
 
 ## Keep the midpoint. Borrow the tilt.
 

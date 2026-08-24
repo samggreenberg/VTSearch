@@ -1,6 +1,6 @@
-![bg right:70% fit](figs/calib-quantile-flow.png)
+<!-- _class: full -->
 
-### Iteration 4 — the fix
+![bg fit](figs/calib-quantile-flow.png)
 
 ## Cuts don't transfer. Ranks do.
 

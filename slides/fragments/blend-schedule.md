@@ -2,8 +2,6 @@
 
 ![bg fit](figs/calib-blend-schedule.png)
 
-### Iteration 3½ — measured again
-
 ## Never hand over completely
 
 <!-- Say the three numbers; they are no longer on the slide. Nine schedules

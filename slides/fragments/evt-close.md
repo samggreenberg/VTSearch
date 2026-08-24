@@ -2,8 +2,6 @@
 
 ![bg fit](figs/calib-error-decomposition.png)
 
-### Epilogue — why it closed
-
 ## The anchored fit ate the cut axis
 
 <!-- Say the three numbers; they are no longer on the slide. The tail rule at

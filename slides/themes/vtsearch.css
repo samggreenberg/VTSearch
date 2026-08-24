@@ -218,9 +218,28 @@ section.full {
   padding: 42px 60px;
   align-content: start;
 }
-section.full h2,
-section.full h3 { max-width: 600px; }
-section.full h2 { margin: 0; }
+/* No kicker on a full-bleed slide: the figure says which mechanism this is,
+   and "Iteration 1 — the idea" over the top of it is a second thing to read
+   before the first. The headline alone, larger than the deck's body headline
+   and set tight, because a title that wraps into a squarer block keeps the
+   notch out of the figure's way. */
+section.full h2 {
+  max-width: 420px;
+  margin: 0;
+  font-size: 42px;
+  line-height: 1.15;
+  /* A white halo, not a white plate. On a generated figure — white paper with
+     its ink kept out of the notch — it is invisible by construction, so those
+     slides pay nothing for it. On a screenshot, which is a photograph and
+     cannot leave a corner blank, it is what separates the headline from the
+     app's own chrome. One rule for both, so the title looks the same
+     everywhere instead of growing a plate on the slides that need one. */
+  text-shadow:
+    0 0 6px #fff,
+    0 0 14px #fff,
+    0 0 28px #fff,
+    0 0 28px #fff;
+}
 
 /* Build groups (progressive reveal): build.py injects this class on every
    page of the group, the final page included. Anchoring the column to the

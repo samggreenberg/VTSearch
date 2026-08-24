@@ -69,16 +69,18 @@ OBJECT_GAP_PT = 16.0
 #: The title notch, in slide pixels from the top-left of a 1280x720 slide:
 #: `(x, y, width, height)`. A `_class: full` slide draws its kicker and
 #: headline here and nowhere else, so a full-bleed figure must keep its ink
-#: out of it. Sized to hold a 22px kicker over two lines of 34px headline —
-#: which is every headline in the deck — plus the theme's 60x42 inset.
-#: Two lines of headline at 600px is ~68 characters, so no full-bleed slide in
-#: the library has to be re-worded to fit.
+#: out of it. Sized to hold three lines of the 42px headline `section.full`
+#: sets, plus the theme's 60x42 inset — and nothing else, because a full-bleed
+#: slide carries no kicker. Wrapping the headline into a squarer block is the
+#: point rather than a cost: a 420px notch takes a third of the slide's width
+#: instead of half, which is the difference between a figure that has to be
+#: redrawn around it and one that merely has to lean right.
 #:
 #: This is a *standard*, and the point of it is that it does not move. See
 #: `section.full` in `slides/themes/vtsearch.css`, which is the same rectangle
 #: expressed in CSS, and `notch_box()` below, which is it in figure
 #: coordinates so a generator can lay out around it.
-TITLE_NOTCH_PX = (60.0, 42.0, 600.0, 170.0)
+TITLE_NOTCH_PX = (60.0, 42.0, 420.0, 160.0)
 
 INK = "#14181f"
 SOFT = "#5b6472"

@@ -1,6 +1,6 @@
-![bg right:70% fit](figs/calib-walk-flow.png)
+<!-- _class: full -->
 
-### The other axis — the repair
+![bg fit](figs/calib-walk-flow.png)
 
 ## Cut where the votes can't tell
 

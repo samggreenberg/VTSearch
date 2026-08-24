@@ -1,6 +1,6 @@
-![bg right:70% fit](figs/calib-knob-flow.png)
+<!-- _class: full -->
 
-### The other axis
+![bg fit](figs/calib-knob-flow.png)
 
 ## The knob that did nothing
 
