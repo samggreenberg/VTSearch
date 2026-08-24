@@ -95,13 +95,6 @@ def gaussian(x: np.ndarray, mu: float, var: float) -> np.ndarray:
     return np.exp(-0.5 * (x - mu) ** 2 / var) / np.sqrt(2 * np.pi * var)
 
 
-#: How many build stages the loop schematic reveals in: the corpus; the
-#: detector; the scores; the cut; what the cut keeps; what the cut asks about
-#: next; the retrain that closes the loop. Stage 7 is the committed final
-#: figure. The fork at stages 5-6 is the point of the slide — one cut, two
-#: jobs — so those two steps are deliberately separate reveals.
-LOOP_STAGES = 7
-
 #: How many build stages the cross-calibration schematic reveals in
 #: (issue #3208): D₀ → M₀; the split; the fold models; M₁ scores D₂; θ₁;
 #: M₂ scores D₁ and θ₂; the average. Stage 7 is the committed final figure.
@@ -341,6 +334,22 @@ def _model_box(ax: plt.Axes, cx: float, cy: float, label: str) -> None:
     ax.text(cx, cy, _sub(label), ha="center", va="center", fontsize=16, color=INK, zorder=4)
 
 
+#: Half-height of the serif at each end of a range line, in drawing units. A
+#: bare stroke with marks on it is ambiguous about where it stops — the eye
+#: reads the marks as the extent and the line as decoration. Feet at both ends
+#: say the line is a *range*: this is the interval the checks and crosses fell
+#: in. Every range in the deck carries them, which is the point (#3246): two
+#: adjacent score lines with no ends read as one long axis.
+RANGE_FOOT = 0.13
+
+
+def _range_line(ax: plt.Axes, x_left: float, x_right: float, y: float, z: int = 2) -> None:
+    """A range: a horizontal rule with a serif foot at each end."""
+    ax.plot([x_left, x_right], [y, y], color=INK, linewidth=1.8, zorder=z)
+    for x in (x_left, x_right):
+        ax.plot([x, x], [y - RANGE_FOOT, y + RANGE_FOOT], color=INK, linewidth=1.8, zorder=z)
+
+
 def _score_line(
     ax: plt.Axes,
     cx: float,
@@ -359,7 +368,7 @@ def _score_line(
     the ticks and marks touch the line, and the two texts clear the tallest
     mark on their side by `LABEL_GAP`.
     """
-    ax.plot([cx - half, cx + half], [y, y], color=INK, linewidth=1.8, zorder=2)
+    _range_line(ax, cx - half, cx + half, y)
     ax.text(cx, y + SCORE_LABEL_LIFT, _sub(label), ha="center", va="bottom", fontsize=16, color=INK)
     for x in bad:
         ax.text(cx + x, y - 0.12, "✗", ha="center", va="top", fontsize=16, color=RUST, fontweight="bold")
@@ -416,9 +425,13 @@ def _xcal_flow_stage(stage: int) -> plt.Figure:
     tip1 = (exit1[0] - score_len * ux, exit1[1] - score_len * uy)
     # The arrow points at the score-line *group*, so it stops an object gap
     # above the group's topmost ink — which is its label, not the line.
-    line_y, line_half = tip1[1] - (OBJECT_GAP + CAP_16 + SCORE_LABEL_LIFT), 4.6
-    cx1 = tip1[0] - 0.4 * line_half
+    line_y, line_half = tip1[1] - (OBJECT_GAP + CAP_16 + SCORE_LABEL_LIFT), 4.4
+    cx1 = tip1[0] - 0.5 * line_half
     cx2 = 2 * bx - cx1
+    # Two ranges that meet nose to tail read as one long axis with a kink in
+    # it. The serif feet `_range_line` draws say where each one ends, and this
+    # says it a second way, in the currency the eye reads first (#3246).
+    assert cx2 - cx1 - 2 * line_half >= 2 * OBJECT_GAP, "the two fold score lines are touching"
 
     data_block = functools.partial(_data_block, ax)
     arrow = functools.partial(_arrow, ax)
@@ -505,7 +518,7 @@ def _xcal_flow_stage(stage: int) -> plt.Figure:
         ax.text(
             bx,
             avg_y - 0.21 - OBJECT_GAP - 0.23,
-            "return " + _sub(r"(M_0,\, \theta_0)"),
+            "return " + _sub(r"M_0,\, \theta_0"),
             ha="center",
             va="center",
             fontsize=18,
@@ -616,9 +629,13 @@ def _staircase(x0: float, y_base: float, w: float, sy: float, edges, density, fi
     return Polygon(pts, closed=True)
 
 
-#: Height below which a fitted component's tail stops being drawn, as a
-#: fraction of the panel height. See `_score_histogram`.
-TAIL_FLOOR = 0.012
+#: Height below which a fitted component's tail stops being drawn, in drawing
+#: units. Half the baseline's own stroke, so a tail that stops is already
+#: inside the black rule and merges with it — set as a fraction of the panel
+#: height instead, a tail on a tall panel stopped a visible step *above* the
+#: baseline and the curve appeared to drop off at both ends and in the valley
+#: (#3246). See `_score_histogram`.
+TAIL_FLOOR = 0.9 / FLOW_UNIT_PT
 
 #: Stroke width of an unfitted histogram's bars. The narrowest panel in the
 #: progression is `calib-quantile-flow`'s, where `GMM_FLOW_BINS` bars share
@@ -735,7 +752,7 @@ def _score_histogram(
             top = y_base + float(min(density[i - 1], density[i])) * sy
             if top > y_base:
                 ax.plot([x0 + edges[i] * w] * 2, [y_base, top], color=INK, linewidth=BAR_EDGE_LW, zorder=2)
-        ax.plot([x0, x0 + w], [y_base] * 2, color=INK, linewidth=1.8, zorder=5)
+        _range_line(ax, x0, x0 + w, y_base, z=5)
         return
 
     # Where the fit stops calling a score Bad and starts calling it Good. The
@@ -776,7 +793,7 @@ def _score_histogram(
         # the bottom of the *other* hump, and a green line running under the
         # rust distribution reads as a stray mark rather than as the tail of
         # something that is genuinely still there.
-        visible = np.flatnonzero(curve > y_base + TAIL_FLOOR * h)
+        visible = np.flatnonzero(curve > y_base + TAIL_FLOOR)
         if visible.size:
             lo_v, hi_v = visible[0], visible[-1] + 1
             ax.plot(x0 + xs[lo_v:hi_v] * w, curve[lo_v:hi_v], color=color, linewidth=2.4, zorder=3)
@@ -788,7 +805,7 @@ def _score_histogram(
         if mu_labels:
             ax.text(x0 + mu * w, y_base - LABEL_GAP, _sub(name), ha="center", va="top", fontsize=15, color=INK)
 
-    ax.plot([x0, x0 + w], [y_base] * 2, color=INK, linewidth=1.8, zorder=5)
+    _range_line(ax, x0, x0 + w, y_base, z=5)
 
 
 def _gmm_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figure:
@@ -824,7 +841,7 @@ def _gmm_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figu
     hay_x0, hay_top = bx - block_w / 2, 10.9
     hay_w, hay_h = 9.4, block_h
     hay_y0 = hay_top - hay_h
-    vote_len = 1.45
+    vote_len = 1.75
     block_top = hay_y0 - OBJECT_GAP - vote_len - OBJECT_GAP
     block_y0 = block_top - block_h
     row_y = block_y0 + block_h / 2
@@ -851,7 +868,7 @@ def _gmm_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figu
     # centre is worth less than the path reading as one stroke, and a vertical
     # arrow is also the cheapest possible use of the drop it costs: every unit
     # of height becomes arrow length, none of it spent going sideways.
-    panel_x0, panel_w, panel_h = 1.0, 18.6, 1.9
+    panel_x0, panel_w, panel_h = 1.0, 18.6, 2.15
     tip = (m0x, y_base + panel_h + OBJECT_GAP + CAP_16 + LABEL_GAP)
 
     labeled_arrow = functools.partial(_labeled_arrow, ax)
@@ -938,7 +955,7 @@ def _gmm_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figu
         ax.text(
             panel_x0 + panel_w / 2,
             return_y,
-            "return " + _sub(r"(M_0,\, \theta_G)"),
+            "return " + _sub(r"M_0,\, \theta_G"),
             ha="center",
             va="center",
             fontsize=18,
@@ -970,7 +987,7 @@ BLEND_CANVAS = (20.3, 11.4)
 
 #: The blend schematic's score lines, shorter than the cross-calibration
 #: figure's 2.6 because the mixture panel shares their row.
-BLEND_LINE_HALF = 2.4
+BLEND_LINE_HALF = 1.95
 
 #: The conclusion row's type.
 CONCLUSION_PT = 17.0
@@ -1048,7 +1065,12 @@ def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Fi
     # ── layout ────────────────────────────────────────────────────────────────
     # Top-down for the spine, then the fold branch (which fixes how much width
     # is left), then the mixture branch into what remains, then the conclusion.
-    bx, block_w, block_h = 10.4, 4.0, 1.05
+    # The whole cross-calibration branch hangs off `bx`, so moving it is how
+    # the two rivals are pushed apart: everything from the vote arrow down to
+    # θ_X follows it left, the mixture panel stays anchored to the right edge,
+    # and the space that used to be dead white under the title becomes the gap
+    # between the two estimators being averaged (#3246).
+    bx, block_w, block_h = 9.9, 4.0, 1.05
     block_x0 = bx - block_w / 2
     hay_x0, hay_top, hay_h = block_x0, BLEND_CANVAS[1], block_h
     hay_w = BLEND_CANVAS[0] - 0.2 - hay_x0
@@ -1076,9 +1098,12 @@ def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Fi
     # Its baseline is the score lines' baseline: the two fold lines and the
     # haystack histogram are three readings of the same quantity, so they are
     # drawn on one rule and their three cuts are ticked at one height.
-    panel_x0 = cx2 + line_half + OBJECT_GAP
-    panel_w = BLEND_CANVAS[0] - 0.2 - panel_x0
-    panel_h = 2.0
+    # Anchored to the right edge at a fixed width rather than taking whatever
+    # the score lines leave: the point of moving the fold branch left is to buy
+    # a *gap*, and a panel that grows into the space has spent it again.
+    panel_w, panel_h = 3.6, 2.0
+    panel_x0 = BLEND_CANVAS[0] - 0.2 - panel_w
+    assert panel_x0 > cx2 + line_half + OBJECT_GAP, "the mixture panel overlaps the second fold's score line"
     y_base = line_y
     # Where the mixture puts its cut: midway between the two component means,
     # which is `calculate_gmm_threshold`'s rule and the previous figure's θ_G.
@@ -1114,7 +1139,9 @@ def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Fi
     # the sliver of it that got voted, and the model trained on those votes.
     _haystack_block(ax, hay_x0, hay_y0, hay_w, hay_h)
     _disc_label(ax, hay_x0 + hay_w / 2, hay_y0 + hay_h / 2, "D_{-1}")
-    ax.text(hay_x0 - LABEL_GAP, hay_y0 + hay_h / 2, "Unlabeled", ha="right", va="center", fontsize=15, color=SOFT)
+    ax.text(
+        hay_x0 + hay_w + LABEL_GAP, hay_y0 + hay_h / 2, "Unlabeled", ha="left", va="center", fontsize=15, color=SOFT
+    )
     labeled_arrow((bx, hay_y0 - OBJECT_GAP), (bx, hay_y0 - OBJECT_GAP - vote_len), "vote")
     data_block(block_x0, block_y0, block_w, block_h, split=stage >= 4)
     good_h = 0.42 * block_h
@@ -1442,8 +1469,11 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
     # land, then the conclusion under both.
     canvas_w, canvas_h = XSEMI_CANVAS
     # Nudged right of centre so the haystack — the one row that reaches the top
-    # of the drawing — starts clear of the slide's title notch.
-    bx, block_w, block_h = canvas_w / 2 + 3.0, 4.0, 1.05
+    # of the drawing — starts clear of the slide's title notch, and no further:
+    # every unit past that is dead white on the left and a crowd on the right
+    # (#3246). What used to make the nudge so large was the "Unlabeled" label
+    # hanging off the haystack's *left* edge, which is now on its right.
+    bx, block_w, block_h = canvas_w / 2 - 0.2, 4.0, 1.05
     block_x0 = bx - block_w / 2
     # Centred on the spine rather than run out to the canvas edge: the disc
     # naming the haystack sits at the block's own centre, so centring the
@@ -1475,7 +1505,10 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
     # off the tall bars. Solving that for the width is what keeps the pair
     # centred *and* the arrows honest.
     panel_h = XSEMI_PANEL_H
-    panel_gap = 2 * OBJECT_GAP
+    # Wider than an object gap: two distributions butted up against each other
+    # read as one panel with a seam, and the whole claim of the stage is that
+    # they are two independent readings of the same corpus (#3246).
+    panel_gap = 1.3
     panel_w = (bx - panel_gap / 2 - tip1[0]) / 0.38
     panel_top = tip1[1] - (OBJECT_GAP + CAP_16 + LABEL_GAP)
     y_base = panel_top - panel_h
@@ -1500,7 +1533,12 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
     # ── stage 1: the spine, carried over from the blend ───────────────────────
     _haystack_block(ax, hay_x0, hay_y0, hay_w, hay_h)
     _disc_label(ax, hay_x0 + hay_w / 2, hay_y0 + hay_h / 2, "D_{-1}")
-    ax.text(hay_x0 - LABEL_GAP, hay_y0 + hay_h / 2, "Unlabeled", ha="right", va="center", fontsize=15, color=SOFT)
+    # On the haystack's right, not its left: the left is where the slide's
+    # headline goes, and a label there is what pinned this whole figure two
+    # units right of where it wanted to be.
+    ax.text(
+        hay_x0 + hay_w + LABEL_GAP, hay_y0 + hay_h / 2, "Unlabeled", ha="left", va="center", fontsize=15, color=SOFT
+    )
     labeled_arrow((bx, hay_y0 - OBJECT_GAP), (bx, hay_y0 - OBJECT_GAP - vote_len), "vote")
     data_block(block_x0, block_y0, block_w, block_h, split=stage >= 2)
     good_h = 0.42 * block_h
@@ -1650,7 +1688,18 @@ XQUANT_CANVAS = (20.45, 13.0)
 #: efficiency — a wider canvas is centred, so each unit of gutter carries the
 #: drawing only half a unit further from the slide's left edge — which is why
 #: 3.8 units of gutter buys the 1.9 the labels needed.
-XQUANT_GUTTER = 4.0
+XQUANT_GUTTER = 2.95
+
+#: Room reserved at the haystack's right end for its "Unlabeled" label, in
+#: drawing units — the rendered width of the word plus a label gap, rounded up.
+XQUANT_HAY_LABEL = 2.4
+
+#: The least far across M₀'s panel its score drop may land, as a fraction of
+#: the panel width. The honest landing point is the distribution's centre of
+#: mass, but on a corpus this left-weighted that is far enough left to leave
+#: the train arrow reaching it stubby; floored here, the arrow is a stroke
+#: rather than a hyphen and the drop still lands off the tall bars.
+XQUANT_M0_DROP = 0.46
 
 #: The three panels' shared height, and the gauge row's bar height. The panels
 #: are `XSEMI_PANEL_H` unchanged — the fold half of this figure is the previous
@@ -1823,11 +1872,13 @@ def _quantile_gauge(
     with, split left-to-right at the fraction the cut admits, and notched at
     that split with the identical mark every cut in the progression carries.
 
-    Drawn under its panel and the width of it, so the fraction can be read
-    against the distribution it was measured on; but it is a rank axis, not a
-    score axis, and the two do not agree — which is exactly why the fold
-    panels' notches sit at different places along their axes while their
-    gauges' notches sit at the same place along theirs.
+    Drawn under its panel, and *registered to that panel's own cut*: the gauge
+    is slid until the notch in it stands directly below the θ notch it is a
+    re-reading of. Left-aligned with the panel instead, as it was, the two
+    marks that say the same thing sat a centimetre apart and the reader had to
+    take on trust which gauge belonged to which cut (#3246). What the row still
+    shows is the thing worth showing — three notches at three different places
+    along three score axes, at nearly the same place along three rank axes.
     """
     ax.add_patch(
         Rectangle((x0, y0), q * w, h, facecolor="white", edgecolor=RUST, hatch="\\\\\\", linewidth=0, zorder=2)
@@ -1931,6 +1982,11 @@ def _xquant_fold_panel(
     _theta_notch(ax, x0 + theta * w, y_base, _sub(rf"\theta_{i + 1} = {theta:.2f}"))
 
 
+def _gauge_left(cut_x: float, q: float, w: float) -> float:
+    """Where a gauge starts if its notch is to land under the cut at `cut_x`."""
+    return cut_x - q * w
+
+
 def _xquant_gauges(ax: plt.Axes, xs: tuple[float, ...], y0: float, w: float, q_0: float, clear_x: float) -> None:
     """The three gauges of the combine step, in one row under the three panels.
 
@@ -1997,7 +2053,11 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
 
     block_x0 = bx - block_w / 2
     hay_x0 = block_x0
-    hay_w = canvas_w - 0.2 - hay_x0
+    # Stops short of the right edge, so "Unlabeled" can hang off the haystack's
+    # *right* — see the fold-anchored figure. On its left it is the widest thing
+    # in the slide's title reserve, and it is what used to hold this whole
+    # drawing two units right of where it wanted to sit (#3246).
+    hay_w = canvas_w - 0.2 - hay_x0 - XQUANT_HAY_LABEL
     hay_h = block_h
     hay_y0 = canvas_h - hay_h
     vote_len = 1.15
@@ -2026,7 +2086,7 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
     # which is the honest middle of a histogram this left-weighted and is nearly
     # a third of the panel left of its geometric centre. That also takes some
     # three units off the train arrow reaching M₀.
-    m0x = final_x + float(np.mean(final)) * panel_w
+    m0x = final_x + max(float(np.mean(final)), XQUANT_M0_DROP) * panel_w
     train_x = block_x0 + block_w + OBJECT_GAP
     train_len = m0x - MODEL_W / 2 - OBJECT_GAP - train_x
     # The head clears the panel's own name by an object gap instead of abutting
@@ -2057,7 +2117,12 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
     # ── stage 1: the spine, unchanged since the mixture figure ────────────────
     _haystack_block(ax, hay_x0, hay_y0, hay_w, hay_h)
     _disc_label(ax, hay_x0 + hay_w / 2, hay_y0 + hay_h / 2, "D_{-1}")
-    ax.text(hay_x0 - LABEL_GAP, hay_y0 + hay_h / 2, "Unlabeled", ha="right", va="center", fontsize=15, color=SOFT)
+    # On the haystack's right, not its left: the left is where the slide's
+    # headline goes, and a label there is what pinned this whole figure two
+    # units right of where it wanted to be.
+    ax.text(
+        hay_x0 + hay_w + LABEL_GAP, hay_y0 + hay_h / 2, "Unlabeled", ha="left", va="center", fontsize=15, color=SOFT
+    )
     labeled_arrow((bx, hay_y0 - OBJECT_GAP), (bx, hay_y0 - OBJECT_GAP - vote_len), "vote")
     data_block(block_x0, block_y0, block_w, block_h, split=stage >= 2)
     good_h = 0.42 * block_h
@@ -2155,13 +2220,27 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
 
     # ── stage 6: re-read each cut as a share of the corpus, and average ───────
     if stage >= 6:
-        _xquant_gauges(ax, (*fold_x, final_x), gauge_y0, gauge_w, q_0, clear_x)
+        cuts = (
+            fold_x[0] + thetas[0] * panel_w,
+            fold_x[1] + thetas[1] * panel_w,
+            final_x + theta_0 * panel_w,
+        )
+        gauge_x = tuple(
+            _gauge_left(cut, q, gauge_w) for cut, q in zip(cuts, (*XQUANT_SHOWN_QUANTILES, q_0), strict=True)
+        )
+        _xquant_gauges(ax, gauge_x, gauge_y0, gauge_w, q_0, clear_x)
 
     # ── stage 7: realize the mean share on M₀'s own distribution ─────────────
     if stage >= 7:
         theta_x = final_x + theta_0 * panel_w
-        _theta_notch(ax, theta_x, y_base, _sub(rf"\theta_0 = {theta_0:.2f}"), ha="right")
-        arrow((final_x + q_0 * gauge_w, gauge_top + GAUGE_STUB + OBJECT_GAP / 2), (theta_x, y_base - 0.32))
+        # No value on the label. Nobody in the room can do the quantile arithmetic
+        # that produced it, so a number here arrives from nowhere and invites the
+        # one question the slide cannot answer; the *place* is the whole point,
+        # and the gauge under it says where the place came from (#3246).
+        _theta_notch(ax, theta_x, y_base, _sub(r"\theta_0"), ha="right")
+        # Straight up, because the gauge is now registered to this very cut:
+        # the notch it leaves and the notch it lands on share an x.
+        arrow((theta_x, gauge_top + GAUGE_STUB + OBJECT_GAP / 2), (theta_x, y_base - 0.32))
 
     return fig
 
@@ -2545,7 +2624,7 @@ def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels:
                 fontsize=15,
                 color=INK,
             )
-        ax.plot([x0, x0 + w], [cost_base] * 2, color=INK, linewidth=1.8, zorder=4)
+        _range_line(ax, x0, x0 + w, cost_base, z=4)
         # The row's name is the definition of the knob, which is the one thing
         # every rule in this section shares — and putting it here rather than in
         # the slide's own copy means the pair of figures carries it, so the walk
@@ -2719,7 +2798,7 @@ def _walk_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels:
 
     # ── stage 1: the same panel the retired rule was drawn on ─────────────────
     _incl_panel(ax, corpus, y_base=y_base, top=panel_top)
-    ax.plot([x0, x0 + w], [rule_base] * 2, color=INK, linewidth=1.8, zorder=4)
+    _range_line(ax, x0, x0 + w, rule_base, z=4)
     ax.text(
         x0 + band_mid * w, rule_label_y, "where the rule may cut", ha="center", va="bottom", fontsize=15, color=SOFT
     )
@@ -3359,13 +3438,19 @@ def blend_schedule_fig() -> None:
     # Short enough not to overflow the (shortened) axes above the title notch;
     # the tick labels already read "pure GMM" to "pure x-cal", so the axis name
     # only has to name the quantity, not re-explain the ends.
-    ax.set_ylabel("weight on the x-cal cut")
+    # Anchored to the bottom of the axis, out of the title reserve's own band:
+    # the reserve is only the *top* left corner, so a label that lives low on
+    # the left costs the drawing nothing.
+    ax.set_ylabel("weight on the x-cal cut", loc="bottom")
     ax.grid(axis="y", color=RULE, linewidth=0.8)
     ax.set_axisbelow(True)
-    # Full-bleed: no in-figure title (the slide's headline is the title, and it
-    # is drawn over this band), and the plot is pushed below TITLE_NOTCH_PX
-    # rather than tight-cropped, so the reserved corner survives the write.
-    fig.subplots_adjust(left=0.115, right=0.98, top=0.55, bottom=0.135)
+    # Full-bleed: no in-figure title (the slide's headline is the title, drawn
+    # over the top-left corner), and the axes are *indented* past the reserve
+    # rather than pushed under it. Pushing the plot down to `top=0.55` cleared
+    # the corner by spending half the slide, which `slides/STYLE.md` names as
+    # the wrong repair for exactly this shape: the blocker is horizontal, so
+    # the fix is horizontal (#3246).
+    fig.subplots_adjust(left=0.335, right=0.98, top=0.93, bottom=0.135)
     save(fig, OUT, "calib-blend-schedule.png", column=FULL_BLEED, tight=False)
 
 
@@ -3494,249 +3579,552 @@ def decomposition_fig() -> None:
     save(fig, OUT, "calib-error-decomposition.png", column=FULL_BLEED, tight=False)
 
 
-#: The loop schematic's canvas. Wider than the calibration schematics because
-#: the cut forks left and right on the same row; the height matches theirs so a
-#: 16pt label renders at the same size on every schematic in the deck.
-#: 16:9, because the loop owns a full-bleed slide. The old canvas was 1.24:1
-#: — right for the nearly square `bg right:70%` sidebar, and 200px of dead
-#: white down each side of a slide that has no sidebar left to fill.
-LOOP_CANVAS = (17.4, 9.8)
+# ═══════════════════════════════════════════════════════════════════════════
+# Part 3 — the three teaching figures (issue #3246).
+#
+# Each of these sets up an idea the deck used to knock down before it had been
+# stood up. The knob figures show a control failing and then being repaired,
+# and never said what the control is *for*; the epilogue asserted that the
+# midpoint is not the weighted midpoint and that a max is an extreme-value
+# statistic, in one bullet each. A room cannot judge a repair to a thing it has
+# not been shown.
+# ═══════════════════════════════════════════════════════════════════════════
 
-#: How far the whole-corpus score line's own label sits above it. The
-#: calibration schematics clear a check mark (`SCORE_LABEL_LIFT`); this line
-#: carries plain grey ticks instead, because the corpus is unlabeled and
-#: nothing on it is known to be Good or Bad.
-LOOP_TICK_H = 0.16
-LOOP_LABEL_LIFT = LOOP_TICK_H + LABEL_GAP
+#: The teaching figures' canvas — the full-bleed slot, at the schematics' own
+#: unit scale so a 16pt label renders the same size here as everywhere else.
+TEACH_CANVAS = (19.8, 11.0)
+
+#: How many build stages the cost-knob figure reveals in: the ranking; the cost
+#: rule and the balanced cut; the strict cut; the permissive cut; the slider
+#: that names them.
+COST_STAGES = 5
+
+#: How many stages the Bayes-crossing figure reveals in: the fitted mixture;
+#: the midpoint of the means; the weighted densities and where they actually
+#: cross; the arithmetic that moves one to the other.
+CROSSING_STAGES = 4
+
+#: How many stages the region-maximum figure reveals in: one item's regions and
+#: the max over them; the corpus of maxima; the two tail families fitted to it.
+REGION_MAX_STAGES = 3
+
+#: The cost weightings the knob figure draws, as (price of a false alarm, price
+#: of a miss, label). Symmetric about the middle one on purpose: the slide's
+#: claim is that reasonable people disagree in *both* directions, and a
+#: one-sided pair reads as a default and a special case.
+COST_ARMS = (
+    (4.0, 1.0, "4 : 1"),
+    (1.0, 1.0, "1 : 1"),
+    (1.0, 4.0, "1 : 4"),
+)
+
+#: Dash patterns for those three arms, in the same order. One hue for all
+#: three, because all three are the same object — a cut — and the deck reserves
+#: hue for identity rather than for enumeration (`slides/STYLE.md`).
+COST_DASHES = ((0, (5, 3)), (0, ()), (0, (1.5, 2.5)))
+
+#: Which build stage each arm arrives on, in `COST_ARMS` order. The balanced
+#: one comes first because it is the cut the room already has in mind; the
+#: other two are what the slide is arguing also exist.
+COST_REVEAL = (3, 2, 4)
 
 
-def vts_loop_fig() -> None:
-    """The application loop the whole deck sits inside.
+def _ranked_votes() -> tuple[np.ndarray, np.ndarray]:
+    """A deliberately imperfect ranking: scores for a Bad pile and a Good pile.
 
-    Deliberately not in the notation the calibration schematics share: this is
-    the slide that introduces the tool, so the corpus, the detector and the
-    votes are named in words. What it *does* share is the vocabulary of shapes
-    — a grey bar for unlabeled media, a green-over-rust hatched block for
-    votes, an outlined box for a model, a number line with a cut on it — so
-    that the later schematics are already half-read when they arrive.
-
-    The one argument the figure makes is the fork under the cut: the same
-    threshold decides what the search returns *and* which item the user is
-    asked about next, which is why it is worth a talk. The build reveals those
-    two arrows as separate steps.
+    Overlapping on purpose, and by more than a shipped detector usually manages:
+    a perfectly separated ranking has one obvious cut and the slide's whole
+    point is that it has several. Fixed seed, because a redraw that changes
+    which cut wins changes what the slide says.
     """
-    final = _vts_loop_stage(LOOP_STAGES)
+    rng = np.random.default_rng(20)
+    bad = np.clip(rng.normal(0.36, 0.19, 15), 0.04, 0.96)
+    good = np.clip(rng.normal(0.66, 0.17, 8), 0.04, 0.96)
+    return np.sort(bad), np.sort(good)
+
+
+def _cost_curve(bad: np.ndarray, good: np.ndarray, w_fp: float, w_fn: float, cuts: np.ndarray) -> np.ndarray:
+    """Weighted error rate at every cut in *cuts* — the same quantity the app minimises."""
+    fpr = np.array([(bad >= t).mean() for t in cuts])
+    fnr = np.array([(good < t).mean() for t in cuts])
+    return (w_fp * fpr + w_fn * fnr) / (w_fp + w_fn)
+
+
+def cost_knob_fig() -> None:
+    """What the Inclusion knob is *for*, before the deck shows it failing.
+
+    One imperfect ranking, three defensible cuts, and the thing that chooses
+    between them: how much the person at the keyboard hates a false alarm
+    against how much they hate a miss.
+    """
+    final = _cost_knob_stage(COST_STAGES)
     box = tight_box(final)
-    for stage in range(1, LOOP_STAGES):
-        save(_vts_loop_stage(stage), OUT, f"vts-loop.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "vts-loop.png", column=FULL_BLEED, box=box)
+    for stage in range(1, COST_STAGES):
+        save(_cost_knob_stage(stage), OUT, f"calib-cost-knob.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-cost-knob.png", column=FULL_BLEED, box=box)
 
 
-def _vts_loop_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of the loop."""
-    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in LOOP_CANVAS))
+def _cost_knob_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the cost figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in TEACH_CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
-    ax.set_xlim(0, LOOP_CANVAS[0])
-    ax.set_ylim(0, LOOP_CANVAS[1])
+    ax.set_xlim(0, TEACH_CANVAS[0])
+    ax.set_ylim(0, TEACH_CANVAS[1])
     ax.set_axis_off()
 
-    arrow = functools.partial(_arrow, ax)
-    labeled_arrow = functools.partial(_labeled_arrow, ax)
+    bad, good = _ranked_votes()
 
     # ── layout ────────────────────────────────────────────────────────────────
-    # One spine down the middle (corpus, detector, scores, cut), then a fork.
-    # The spine sits right of centre: the slide's title notch owns the top-left
-    # corner (`slide_figure.TITLE_NOTCH_PX`), so the corpus bar — the one row
-    # that reaches the top of the drawing — starts clear of it. Everything
-    # below the notch may use the full width, and the retrain rail does.
-    bx = 11.45
-    pool_x0, pool_w, pool_y0, pool_h = 6.7, 9.5, 8.5, 0.85
-    # The detector drops 0.35 below where the spine would otherwise put it, and
-    # the score arrow gives back most of that, so the rows below shift by 0.15
-    # rather than by the whole drop. What the drop buys is the retrain rail:
-    # the rail runs into the detector's left edge at `det_cy`, and at 6.90 that
-    # run crossed the title notch's bottom edge. The rail is the only thing in
-    # this figure that reaches left under the headline, so 0.35 units is the
-    # whole price of the slide having one (#3242). The split is what it is
-    # because the arrow has to stay longer than the word rotated inside it.
-    det_cy, det_w, det_h = 6.55, 2.9, 0.78
-    score_len = 1.40
+    # The ranking sits at the top of the drawing and the cost panel under it, on
+    # the same x scale, so a minimum in the panel is directly under the cut it
+    # names. Indented from the left: the top row spans the drawing, which is the
+    # one shape the title notch cannot be panned out of (`slides/STYLE.md`).
+    x0, w = 5.9, TEACH_CANVAS[0] - 5.9 - 3.4
+    rank_y = TEACH_CANVAS[1] - 1.9
+    panel_top = rank_y - 1.85
+    panel_h = 5.0
+    panel_base = panel_top - panel_h
 
-    score_tail = det_cy - det_h / 2 - OBJECT_GAP
-    score_tip = score_tail - score_len
-    # The arrow points at the score-line *group*, so it stops an object gap
-    # above the group's topmost ink — which is the line's label, not the line.
-    line_y = score_tip - (OBJECT_GAP + CAP_16 + LOOP_LABEL_LIFT)
-    line_half = 4.2
-    theta_x = bx + 0.1 * line_half
+    cuts = np.linspace(0.02, 0.98, 400)
+    curves = [_cost_curve(bad, good, w_fp, w_fn, cuts) for w_fp, w_fn, _ in COST_ARMS]
+    ceiling = max(float(c.max()) for c in curves)
+    sy = panel_h / ceiling
 
-    # Both forks leave from directly under the cut's own label.
-    fork = (theta_x, line_y - 0.32 - LABEL_GAP - CAP_16 - OBJECT_GAP)
+    # ── stage 1: one imperfect ranking ────────────────────────────────────────
+    _range_line(ax, x0, x0 + w, rank_y, z=3)
+    for score in bad:
+        ax.text(x0 + score * w, rank_y - 0.14, "✗", ha="center", va="top", fontsize=16, color=RUST, fontweight="bold")
+    for score in good:
+        ax.text(
+            x0 + score * w, rank_y + 0.10, "✓", ha="center", va="bottom", fontsize=16, color=GREEN, fontweight="bold"
+        )
+    ax.text(x0, rank_y + SCORE_LABEL_LIFT, "one ranking, imperfect", ha="left", va="bottom", fontsize=16, color=INK)
+    ax.text(x0 + w, rank_y + SCORE_LABEL_LIFT, "score", ha="right", va="bottom", fontsize=15, color=SOFT)
 
-    # Both outputs sit low and wide apart, so the fork's arrows are nearly
-    # horizontal. That is where the height came from: on the old tall canvas
-    # the same fork was two long diagonals costing three units of drop.
-    votes_x0, votes_w, votes_y0, votes_h = 5.4, 3.4, 0.2, 0.9
-    votes_cx = votes_x0 + votes_w / 2
-    keep_cx, keep_cy, keep_w, keep_h = 14.6, 1.15, 3.4, 0.8
-
-    # ── stage 1: the corpus — everything the user has, none of it labelled ────
-    ax.add_patch(
-        Rectangle(
-            (pool_x0, pool_y0),
-            pool_w,
-            pool_h,
-            facecolor=NEUTRAL_FILL,
-            edgecolor=INK,
-            linewidth=1.6,
+    # ── stages 2-4: one cost rule, three prices, three cuts ───────────────────
+    # The rule names the panel rather than sitting in a row of its own: the
+    # three dotted drops from a minimum up to the cut it chooses have to cross
+    # that row, and a formula with three dotted lines through it is a formula
+    # nobody reads. Haloed for the same reason, and the same way the theme
+    # halos a full-bleed headline: white behind the letters, not a white plate
+    # over the drawing.
+    if stage >= 2:
+        ax.text(
+            x0,
+            panel_top + LABEL_GAP,
+            "cost = " + _sub(r"w_f") + "·FPR + " + _sub(r"w_n") + "·FNR",
+            ha="left",
+            va="bottom",
+            fontsize=18,
+            color=INK,
+            zorder=6,
+            path_effects=[patheffects.withStroke(linewidth=7, foreground="white")],
+        )
+    for arm, ((w_fp, w_fn, name), curve, dash) in enumerate(zip(COST_ARMS, curves, COST_DASHES, strict=True)):
+        # Balanced first, then strict, then permissive: the middle arm is the
+        # one the room already has in mind, and the other two are what the
+        # slide is arguing also exist.
+        if stage < COST_REVEAL[arm]:
+            continue
+        ys = panel_base + curve * sy
+        ax.plot(x0 + cuts * w, ys, color=BLUE, linewidth=2.4, linestyle=dash, zorder=3)
+        best = int(np.argmin(curve))
+        cut_x = x0 + cuts[best] * w
+        ax.plot([cut_x], [panel_base + curve[best] * sy], marker="o", markersize=7, color=BLUE, zorder=5)
+        ax.plot(
+            [cut_x, cut_x],
+            [panel_base + curve[best] * sy, rank_y],
+            color=BLUE,
+            linewidth=1.4,
+            linestyle=(0, (2, 3)),
             zorder=2,
         )
+        ax.plot([cut_x] * 2, [rank_y - 0.32, rank_y], color=BLUE, linewidth=2.4, zorder=4)
+        # The arm is named at the right-hand end of its own curve, not under
+        # its minimum: the three minima are close together — that they differ
+        # at all is the slide's point — so three labels stacked there is three
+        # labels on top of each other.
+        ax.text(
+            x0 + w + LABEL_GAP,
+            ys[-1],
+            _sub(rf"w_f : w_n = {name}"),
+            ha="left",
+            va="center",
+            fontsize=15,
+            color=INK,
+        )
+
+    # ── stage 5: the control that sets the ratio ──────────────────────────────
+    if stage >= COST_STAGES:
+        _incl_slider(ax, x0, panel_base - 1.5, w)
+    return fig
+
+
+#: The slider's stops, and the two ends it is labelled by.
+INCL_STOPS = 13
+INCL_SLIDER_H = 0.34
+
+
+def _incl_slider(ax: plt.Axes, x0: float, y: float, w: float) -> None:
+    """The Inclusion control, drawn as the thing the room will actually see.
+
+    A rail with thirteen stops and the two ends named in the units the previous
+    row just established — each step up doubles the price of a miss, each step
+    down doubles the price of a false alarm. That is the whole definition, and
+    every rule in the section it opens shares it.
+    """
+    _range_line(ax, x0, x0 + w, y, z=3)
+    for i in range(INCL_STOPS):
+        x = x0 + w * i / (INCL_STOPS - 1)
+        ax.plot([x, x], [y, y + INCL_SLIDER_H], color=SOFT, linewidth=1.4, zorder=3)
+    ax.add_patch(
+        Rectangle(
+            (x0 + w / 2 - 0.12, y - 0.06),
+            0.24,
+            INCL_SLIDER_H + 0.12,
+            facecolor=BLUE,
+            edgecolor="none",
+            zorder=4,
+        )
     )
+    ax.text(x0, y - LABEL_GAP, "−10  no false alarms", ha="left", va="top", fontsize=15, color=INK)
+    ax.text(x0 + w / 2, y + INCL_SLIDER_H + LABEL_GAP, "Inclusion", ha="center", va="bottom", fontsize=16, color=INK)
+    ax.text(x0 + w, y - LABEL_GAP, "miss nothing  +10", ha="right", va="top", fontsize=15, color=INK)
+
+
+#: The mixture the crossing figure argues over: (weight, mean, variance) for
+#: the Bad component and the Good one. The weights are the measured ones from
+#: the anchored slide — a fitted high-component weight far under a half is what
+#: makes the midpoint and the crossing different places, and a figure drawn at
+#: equal weights would show them on top of each other and prove nothing.
+CROSSING_LO = (0.91, 0.30, 0.0130)
+CROSSING_HI = (0.09, 0.70, 0.0130)
+
+#: How tall the small component is drawn relative to its own true height. The
+#: two weighted densities differ by a factor of ten, so the Good one drawn to
+#: scale is a smear along the baseline and the crossing it makes is invisible.
+#: The *shapes* are therefore drawn unweighted and the weights are carried by
+#: the second pair of curves, which is the whole distinction the slide makes.
+CROSSING_SHAPE_H = 0.86
+
+
+def crossing_fig() -> None:
+    """Why the midpoint of two means is not the cut, unless the two are equally likely.
+
+    The deck asserted this in one bullet and then reported that fixing it was
+    worth −0.0044. A room that has not seen *where* the two answers differ has
+    no way to judge either number (#3246).
+    """
+    final = _crossing_stage(CROSSING_STAGES)
+    box = tight_box(final)
+    for stage in range(1, CROSSING_STAGES):
+        save(_crossing_stage(stage), OUT, f"calib-crossing.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-crossing.png", column=FULL_BLEED, box=box)
+
+
+def _crossing_point() -> float:
+    """Where the two weighted components actually cross, in score units.
+
+    Closed form, because the two variances are equal: the log-odds are linear
+    in the score, so the crossing is the midpoint of the means displaced by the
+    prior's own log-ratio. That displacement is the slide.
+    """
+    (w_lo, mu_lo, var), (w_hi, mu_hi, _) = CROSSING_LO, CROSSING_HI
+    return 0.5 * (mu_lo + mu_hi) + var / (mu_hi - mu_lo) * float(np.log(w_lo / w_hi))
+
+
+def _crossing_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the crossing figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in TEACH_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, TEACH_CANVAS[0])
+    ax.set_ylim(0, TEACH_CANVAS[1])
+    ax.set_axis_off()
+
+    (w_lo, mu_lo, var_lo), (w_hi, mu_hi, var_hi) = CROSSING_LO, CROSSING_HI
+    x0, w = 5.9, TEACH_CANVAS[0] - 5.9 - 0.7
+    shape_base = TEACH_CANVAS[1] - 1.0 - 3.1
+    shape_h = 3.1
+    weighted_base = 2.35
+    weighted_h = 3.1
+    arithmetic_y = 0.55
+
+    xs = np.linspace(0.0, 1.0, 700)
+    lo, hi = gaussian(xs, mu_lo, var_lo), gaussian(xs, mu_hi, var_hi)
+    mid = 0.5 * (mu_lo + mu_hi)
+    crossing = _crossing_point()
+
+    # ── stage 1: the fit, as the mixture slide left it — two shapes and two means
+    peak = float(max(lo.max(), hi.max()))
+    for curve, colour, name, hatch in ((lo, RUST, r"\mu_{lo}", "\\\\\\"), (hi, GREEN, r"\mu_{hi}", "//////")):
+        ys = shape_base + curve / peak * shape_h * CROSSING_SHAPE_H
+        mu = mu_lo if colour == RUST else mu_hi
+        keep = np.flatnonzero(ys > shape_base + TAIL_FLOOR)
+        ax.plot(x0 + xs[keep] * w, ys[keep], color=colour, linewidth=2.4, zorder=3)
+        pts = [(x0 + xs[keep[0]] * w, shape_base)]
+        pts += [(x0 + xx * w, yy) for xx, yy in zip(xs[keep], ys[keep])]
+        pts.append((x0 + xs[keep[-1]] * w, shape_base))
+        ax.add_patch(Polygon(pts, closed=True, facecolor="white", edgecolor=colour, hatch=hatch, linewidth=0, zorder=2))
+        top = shape_base + float(curve.max()) / peak * shape_h * CROSSING_SHAPE_H
+        ax.plot([x0 + mu * w] * 2, [shape_base, top], color=INK, linewidth=1.6, linestyle=(0, (2, 2)), zorder=4)
+        ax.text(x0 + mu * w, shape_base - LABEL_GAP, _sub(name), ha="center", va="top", fontsize=16, color=INK)
+    _range_line(ax, x0, x0 + w, shape_base, z=5)
     ax.text(
-        pool_x0 + pool_w / 2,
-        pool_y0 + pool_h / 2,
-        "everything you have, unlabeled",
-        ha="center",
+        x0,
+        shape_base + shape_h + LABEL_GAP,
+        "two components, same shape",
+        ha="left",
+        va="bottom",
+        fontsize=16,
+        color=INK,
+    )
+
+    # ── stage 2: the shipped rule — halfway between the means ─────────────────
+    if stage >= 2:
+        _theta_notch(ax, x0 + mid * w, shape_base, _sub(r"\theta_{mid}"))
+
+    # ── stage 3: the same two components, priced by how likely each is ────────
+    if stage >= 3:
+        weighted = [(w_lo * lo, RUST, "\\\\\\"), (w_hi * hi, GREEN, "//////")]
+        top = float(max(c.max() for c, _c, _h in weighted))
+        for curve, colour, hatch in weighted:
+            ys = weighted_base + curve / top * weighted_h
+            keep = np.flatnonzero(ys > weighted_base + TAIL_FLOOR)
+            ax.plot(x0 + xs[keep] * w, ys[keep], color=colour, linewidth=2.4, zorder=3)
+            pts = [(x0 + xs[keep[0]] * w, weighted_base)]
+            pts += [(x0 + xx * w, yy) for xx, yy in zip(xs[keep], ys[keep])]
+            pts.append((x0 + xs[keep[-1]] * w, weighted_base))
+            ax.add_patch(
+                Polygon(pts, closed=True, facecolor="white", edgecolor=colour, hatch=hatch, linewidth=0, zorder=2)
+            )
+        _range_line(ax, x0, x0 + w, weighted_base, z=5)
+        ax.text(
+            x0,
+            weighted_base + weighted_h + LABEL_GAP,
+            _sub(r"\pi_{lo} = 0.91") + "  of the corpus is Bad, so its curve is ten times the other's",
+            ha="left",
+            va="bottom",
+            fontsize=16,
+            color=INK,
+        )
+        _theta_notch(ax, x0 + crossing * w, weighted_base, _sub(r"\theta^*"))
+        # The midpoint, carried down onto the weighted picture so the gap
+        # between the two answers is a gap the room can measure by eye rather
+        # than a claim about two numbers on two different rows.
+        ax.plot(
+            [x0 + mid * w] * 2,
+            [weighted_base, weighted_base + weighted_h * 0.62],
+            color=SOFT,
+            linewidth=2.0,
+            linestyle=(0, (4, 3)),
+            zorder=4,
+        )
+        ax.annotate(
+            "",
+            xy=(x0 + crossing * w, weighted_base + weighted_h * 0.5),
+            xytext=(x0 + mid * w, weighted_base + weighted_h * 0.5),
+            arrowprops={"arrowstyle": "-|>", "color": INK, "linewidth": 1.8, "shrinkA": 0, "shrinkB": 0},
+        )
+
+    # ── stage 4: the arithmetic that moves one to the other ───────────────────
+    if stage >= CROSSING_STAGES:
+        ax.text(
+            x0 + w / 2,
+            arithmetic_y,
+            _sub(r"\theta^* = \theta_{mid} + \frac{\sigma^2}{\mu_{hi} - \mu_{lo}}\,")
+            + "ln "
+            + _sub(r"\frac{\pi_{lo}}{\pi_{hi}}"),
+            ha="center",
+            va="center",
+            fontsize=19,
+            color=INK,
+        )
+    return fig
+
+
+#: The region grid the max figure opens on: rows, columns, and which cell wins.
+REGION_GRID = (3, 4)
+
+#: The score range the maxima panel is drawn over. Cropped to the sample rather
+#: than run 0-1: the whole claim of the stage is a *shape* — that a maximum
+#: leans right — and a distribution drawn across four times its own width is a
+#: spike with no shape at all.
+REGION_RANGE = (0.33, 0.82)
+REGION_BINS = 42
+
+#: Per-region scores for that one item, row-major. Hand-set rather than drawn,
+#: because the point is which cell is the maximum and by how much, and a random
+#: draw that makes two cells tie makes the slide argue with itself.
+REGION_SCORES = (
+    (0.11, 0.19, 0.44, 0.23),
+    (0.16, 0.62, 0.81, 0.35),
+    (0.09, 0.28, 0.41, 0.14),
+)
+
+
+def region_max_fig() -> None:
+    """Region voting, the maximum it implies, and the tail family that follows.
+
+    Three things the deck used to assume the room remembered: what a region
+    vote is, why an item's score becomes a maximum, and why a maximum is not
+    Gaussian-shaped (#3246).
+    """
+    final = _region_max_stage(REGION_MAX_STAGES)
+    box = tight_box(final)
+    for stage in range(1, REGION_MAX_STAGES):
+        save(_region_max_stage(stage), OUT, f"calib-region-max.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-region-max.png", column=FULL_BLEED, box=box)
+
+
+def _maxima(rng_seed: int = 5) -> np.ndarray:
+    """Each item's score under region voting: the maximum over its own regions.
+
+    Drawn rather than asserted, so the histogram in the last stage really is a
+    distribution of maxima and its right skew really is the thing the slide
+    says it is.
+    """
+    rng = np.random.default_rng(rng_seed)
+    regions = rng.normal(0.32, 0.12, size=(6000, REGION_GRID[0] * REGION_GRID[1]))
+    return regions.max(axis=1)
+
+
+def _gumbel_fit(sample: np.ndarray) -> tuple[float, float]:
+    """Method-of-moments Gumbel parameters: the classical fit, in one line each."""
+    scale = float(sample.std(ddof=1)) * np.sqrt(6.0) / np.pi
+    return float(sample.mean()) - 0.5772156649 * scale, scale
+
+
+def _region_max_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the region-max figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in TEACH_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, TEACH_CANVAS[0])
+    ax.set_ylim(0, TEACH_CANVAS[1])
+    ax.set_axis_off()
+
+    rows, cols = REGION_GRID
+    cell = 1.08
+    grid_x0 = 6.2
+    grid_top = TEACH_CANVAS[1] - 0.65
+    grid_y0 = grid_top - rows * cell
+    best = max(((r, c) for r in range(rows) for c in range(cols)), key=lambda rc: REGION_SCORES[rc[0]][rc[1]])
+
+    # ── stage 1: one item, its regions, and the maximum over them ─────────────
+    for r in range(rows):
+        for c in range(cols):
+            score = REGION_SCORES[r][c]
+            won = (r, c) == best
+            ax.add_patch(
+                Rectangle(
+                    (grid_x0 + c * cell, grid_top - (r + 1) * cell),
+                    cell,
+                    cell,
+                    facecolor=NEUTRAL_FILL if not won else "white",
+                    edgecolor=INK if won else RULE,
+                    linewidth=2.6 if won else 1.2,
+                    zorder=3 if won else 2,
+                )
+            )
+            ax.text(
+                grid_x0 + (c + 0.5) * cell,
+                grid_top - (r + 0.5) * cell,
+                f"{score:.2f}",
+                ha="center",
+                va="center",
+                fontsize=15,
+                color=INK if won else SOFT,
+                fontweight="bold" if won else "normal",
+                zorder=4,
+            )
+    ax.text(
+        grid_x0 + cols * cell + OBJECT_GAP,
+        grid_y0 + rows * cell / 2,
+        "one item, scored\nregion by region",
+        ha="left",
         va="center",
         fontsize=16,
         color=INK,
-        zorder=3,
+    )
+    ax.text(
+        grid_x0,
+        grid_y0 - LABEL_GAP,
+        "score(item) = max over its regions = " + f"{REGION_SCORES[best[0]][best[1]]:.2f}",
+        ha="left",
+        va="top",
+        fontsize=17,
+        color=INK,
     )
 
-    # ── stage 2: the detector — a small head trained on the votes so far ──────
+    # ── stage 2: every item is a maximum, so the corpus is a pile of maxima ───
+    panel_x0, panel_w = 5.9, TEACH_CANVAS[0] - 5.9 - 0.7
+    panel_h = 3.75
+    y_base = 1.5
+    sample = _maxima()
     if stage >= 2:
-        arrow((bx, pool_y0 - OBJECT_GAP), (bx, det_cy + det_h / 2 + OBJECT_GAP))
-        ax.add_patch(
-            Rectangle(
-                (bx - det_w / 2, det_cy - det_h / 2),
-                det_w,
-                det_h,
-                facecolor="white",
-                edgecolor=INK,
-                linewidth=1.6,
-                zorder=3,
-            )
-        )
-        ax.text(bx, det_cy, "detector", ha="center", va="center", fontsize=16, color=INK, zorder=4)
-
-    # ── stage 3: it scores the whole corpus ──────────────────────────────────
-    # Grey ticks, not checks and crosses: the corpus is unlabeled, so the shape
-    # of the scores is all anyone has. The two mounds are what iteration 2 goes
-    # on to fit.
-    if stage >= 3:
-        labeled_arrow((bx, score_tail), (bx, score_tip), "score")
-        ax.plot([bx - line_half, bx + line_half], [line_y] * 2, color=INK, linewidth=1.8, zorder=2)
+        lo, hi = REGION_RANGE
+        density, edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
+        sy = panel_h / float(density.max())
+        bars = _staircase(panel_x0, y_base, panel_w / (hi - lo), sy, (edges - lo), density, 0, len(density) - 1)
+        bars.set(facecolor="white", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
+        ax.add_patch(bars)
+        _range_line(ax, panel_x0, panel_x0 + panel_w, y_base, z=5)
         ax.text(
-            bx,
-            line_y + LOOP_LABEL_LIFT,
-            "the whole corpus, scored",
-            ha="center",
+            panel_x0,
+            y_base + panel_h + LABEL_GAP,
+            "every item's score, over the whole corpus",
+            ha="left",
             va="bottom",
             fontsize=16,
             color=INK,
         )
-        rng = np.random.default_rng(0)
-        draws = np.concatenate([rng.normal(-0.55, 0.22, 46), rng.normal(0.60, 0.17, 9)])
-        for u in np.clip(draws, -0.97, 0.97):
-            x = bx + u * line_half
-            ax.plot([x, x], [line_y, line_y + LOOP_TICK_H], color=SOFT, linewidth=1.3, zorder=3)
 
-    # ── stage 4: the cut ─────────────────────────────────────────────────────
-    if stage >= 4:
-        ax.plot([theta_x] * 2, [line_y - 0.32, line_y], color=BLUE, linewidth=2.6, zorder=4)
+    # ── stage 3: the two tail families, fitted to the same maxima ─────────────
+    if stage >= REGION_MAX_STAGES:
+        lo, hi = REGION_RANGE
+        density, _edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
+        sy = panel_h / float(density.max())
+        xs = np.linspace(lo, hi, 500)
+        normal = gaussian(xs, float(sample.mean()), float(sample.var()))
+        loc, scale = _gumbel_fit(sample)
+        z = (xs - loc) / scale
+        gumbel = np.exp(-(z + np.exp(-z))) / scale
+        for curve, colour, dash, name in (
+            (normal, SOFT, (0, (5, 3)), "a Gaussian, fitted"),
+            (gumbel, BLUE, (0, ()), "a Gumbel, fitted"),
+        ):
+            ax.plot(
+                panel_x0 + (xs - lo) / (hi - lo) * panel_w,
+                y_base + curve * sy,
+                color=colour,
+                linewidth=2.6,
+                linestyle=dash,
+                zorder=4,
+            )
+            ax.text(
+                panel_x0 + panel_w,
+                y_base + panel_h - (0.0 if colour == BLUE else CAP_16 + LABEL_GAP) - CAP_16,
+                name,
+                ha="right",
+                va="bottom",
+                fontsize=15,
+                color=colour,
+            )
         ax.text(
-            theta_x,
-            line_y - 0.32 - LABEL_GAP,
-            _sub(r"\theta"),
-            ha="center",
+            panel_x0 + panel_w,
+            y_base - 0.32 - LABEL_GAP,
+            "a maximum is not a mean: it leans right, and the tail is where the cut goes",
+            ha="right",
             va="top",
             fontsize=16,
-            color=BLUE,
-        )
-
-    # ── stage 5: job one — what the search gives back ────────────────────────
-    if stage >= 5:
-        labeled_arrow(fork, (keep_cx - keep_w / 2 + 0.7, keep_cy + keep_h / 2 + OBJECT_GAP), "keep")
-        ax.add_patch(
-            Rectangle(
-                (keep_cx - keep_w / 2, keep_cy - keep_h / 2),
-                keep_w,
-                keep_h,
-                facecolor="white",
-                edgecolor=INK,
-                linewidth=1.6,
-                zorder=3,
-            )
-        )
-        ax.text(keep_cx, keep_cy, "what you keep", ha="center", va="center", fontsize=16, color=INK, zorder=4)
-
-    # ── stage 6: job two — which item you are asked about next ───────────────
-    if stage >= 6:
-        labeled_arrow(fork, (votes_cx, votes_y0 + votes_h + LABEL_GAP + CAP_16 + OBJECT_GAP), "ask next")
-        _data_block(ax, votes_x0, votes_y0, votes_w, votes_h)
-        ax.text(
-            votes_cx,
-            votes_y0 + votes_h + LABEL_GAP,
-            "your votes",
-            ha="center",
-            va="bottom",
-            fontsize=16,
             color=INK,
         )
-        good_h = 0.42 * votes_h
-        ax.text(
-            votes_x0 + votes_w + LABEL_GAP,
-            votes_y0 + votes_h - good_h / 2,
-            "Good",
-            ha="left",
-            va="center",
-            fontsize=15,
-            color=GREEN,
-        )
-        ax.text(
-            votes_x0 + votes_w + LABEL_GAP,
-            votes_y0 + (votes_h - good_h) / 2,
-            "Bad",
-            ha="left",
-            va="center",
-            fontsize=15,
-            color=RUST,
-        )
-
-    # ── stage 7: the vote retrains the detector, and it all goes round again ─
-    # Routed as a rail down the left margin: a straight diagonal would cut
-    # through the score line, and the point of the last step is that the loop
-    # closes, which a clean rectangular return says more plainly.
-    if stage >= 7:
-        rail_x = 0.9
-        rail_y = votes_y0 + votes_h / 2
-        head_from = bx - det_w / 2 - OBJECT_GAP - 0.55
-        ax.plot(
-            [votes_x0 - OBJECT_GAP, rail_x, rail_x, head_from],
-            [rail_y, rail_y, det_cy, det_cy],
-            color=INK,
-            linewidth=1.6,
-            solid_capstyle="round",
-            solid_joinstyle="round",
-            zorder=2,
-        )
-        arrow((head_from, det_cy), (bx - det_w / 2 - OBJECT_GAP, det_cy))
-        ax.text(
-            rail_x - LABEL_GAP,
-            (rail_y + det_cy) / 2,
-            "retrain",
-            rotation=90,
-            ha="center",
-            va="bottom",
-            fontsize=15,
-            color=INK,
-        )
-
     return fig
 
 
 if __name__ == "__main__":
-    vts_loop_fig()
+    cost_knob_fig()
+    crossing_fig()
+    region_max_fig()
     xcal_flow_fig()
     gmm_flow_fig()
     blend_flow_fig()

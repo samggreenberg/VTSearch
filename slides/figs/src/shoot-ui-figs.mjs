@@ -63,13 +63,18 @@ const HERO = ['cougar_face/image_0012.jpg', 'cougar_face/image_0022.jpg', 'couga
 
 // The region shot wants the opposite of a portrait: a photo where the cat is a
 // *part* of the frame, so that a box drawn round it is visibly a claim about
-// where the evidence is rather than a box round the whole picture.
-const HERO_REGION = ['wild_cat/image_0002.jpg', 'wild_cat/image_0004.jpg', 'Leopards/image_0005.jpg'];
+// where the evidence is rather than a box round the whole picture. Caltech-101
+// is an object-centric set and most of it is portraits, which is why this is
+// one named frame with a hand-measured box rather than a preference list: three
+// cheetahs in a wide grass field, and the box goes round the standing one.
+// The fractions are of the displayed image, measured off the source (#3246).
+const HERO_REGION = 'Leopards/image_0005.jpg';
+const REGION_BOX = { x0: 0.40, y0: 0.25, x1: 0.62, y1: 0.84 };
 
 const log = (...a) => console.log('[slide-shots]', ...a);
 
 /**
- * Screenshot, then re-encode as WebP.
+ * Screenshot, pad it out to 16:9, then re-encode as WebP.
  *
  * These two figures are photographs behind UI chrome, which is the one thing
  * PNG is bad at: the same frames weigh 2.7 MB as PNG and 0.4 MB as WebP at a
@@ -83,13 +88,25 @@ const log = (...a) => console.log('[slide-shots]', ...a);
  */
 async function shoot(page, name) {
   const png = await page.screenshot({ type: 'png' });
+  // Padded on the left to exactly 16:9 before the encode. These go on
+  // `_class: full` slides, which reserve their top-left corner for the
+  // headline; a 1.25:1 frame letterboxes into that slot with white bands too
+  // narrow to hold it, so the title landed across the app's own chrome. The
+  // padding is the `slides/STYLE.md` "pan the frame" repair, and it is free
+  // here for the same reason it is free there: the frame was height-bound, so
+  // the widened canvas is drawn at the same scale and the app comes out the
+  // same size on the slide — it just sits to the right of a real title
+  // column instead of under a floating headline (#3246).
   execFileSync(
     'python',
     [
       '-c',
       'import sys;from io import BytesIO;from PIL import Image;'
-        + 'Image.open(BytesIO(sys.stdin.buffer.read())).convert("RGB")'
-        + '.save(sys.argv[1],"WEBP",quality=92,method=6)',
+        + 'shot=Image.open(BytesIO(sys.stdin.buffer.read())).convert("RGB");'
+        + 'w=max(shot.width,round(shot.height*16/9));'
+        + 'canvas=Image.new("RGB",(w,shot.height),"white");'
+        + 'canvas.paste(shot,(w-shot.width,0));'
+        + 'canvas.save(sys.argv[1],"WEBP",quality=92,method=6)',
       join(FIGS, `${name}.webp`),
     ],
     { cwd: REPO, input: png, stdio: ['pipe', 'inherit', 'inherit'] }
@@ -175,6 +192,14 @@ async function ensureDataset(name, plan, embedder) {
   const existing = named(await datasets(), name);
   if (existing) {
     log(`dataset ${name} exists (${existing.num_items} items)`);
+    // Registered is not loaded. A fresh import leaves the dataset in memory, so
+    // the first run never needed this; a re-run against a restarted app finds
+    // it on disk and unloaded, and every call after this one 409s with
+    // `dataset_not_loaded`. Idempotent means idempotent across restarts too.
+    if (!existing.loaded) {
+      await api(`/api/datasets/registry/${existing.id}/load`, { method: 'POST' });
+      await waitFor(`dataset ${name} to load`, async () => named(await datasets(), name)?.loaded);
+    }
     return existing;
   }
   const path = buildCorpus(name, plan);
@@ -263,83 +288,29 @@ async function ensureVotes(dataset, detector) {
   for (const id of ids.filter((i) => !good.includes(i) && !bad.includes(i))) await vote(id, 'none');
   await sleep(3000);
   log(`voted ${good.length} good / ${bad.length} bad`);
+  // Remembered so the centre viewer can be given an item nobody has answered
+  // yet. A frame showing an already-voted item has its Good button filled in,
+  // and the whole point of that panel is that the tool is *asking* (#3246).
+  const voted = new Set();
+  for (const m of meta) if (good.includes(m.id) || bad.includes(m.id)) voted.add(m.filename);
+  return voted;
 }
 
 // ── capture ──────────────────────────────────────────────────────────────────
 
-/** Kill transitions and carets so the frame is stable. */
-const STILL_CSS =
-  '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}';
-
 /**
- * Draw the callouts as a DOM overlay before the shot.
+ * Kill transitions and carets so the frame is stable, and hide the toast stack.
  *
- * Deliberately the same red-box-and-label vocabulary as the docs harness
- * (`scripts/screenshots/capture.ts`): the two sets of screenshots are of the
- * same application and a reader who has seen one should not have to learn a
- * second annotation language for the other.
+ * The toasts are an artefact of the harness rather than of the product: this
+ * drives a dev checkout, where `static/` is a build artefact that goes stale
+ * the moment anything is committed, so `BuildSkewService` puts a large
+ * non-dismissing "this page is running an out-of-date build" banner across the
+ * top of every frame. It is doing its job — see the note in `CLAUDE.md` — and
+ * it has nothing to do with the application a slide is showing.
  */
-async function annotate(page, annotations) {
-  await page.evaluate((anns) => {
-    const layer = document.createElement('div');
-    Object.assign(layer.style, {
-      position: 'fixed',
-      inset: '0',
-      zIndex: '2147483647',
-      pointerEvents: 'none',
-    });
-    layer.id = '__shot_annotations';
-    document.body.appendChild(layer);
-    const accent = '#e8453c';
-    for (const a of anns) {
-      const el = [...document.querySelectorAll(a.target)].find(
-        (e) => e.getBoundingClientRect().width > 0
-      );
-      if (!el) continue;
-      const r = el.getBoundingClientRect();
-      const pad = 4;
-      const box = document.createElement('div');
-      Object.assign(box.style, {
-        position: 'absolute',
-        left: `${r.x - pad}px`,
-        top: `${r.y - pad}px`,
-        width: `${r.width + pad * 2}px`,
-        height: `${r.height + pad * 2}px`,
-        border: `3px solid ${accent}`,
-        borderRadius: '8px',
-        boxSizing: 'border-box',
-      });
-      layer.appendChild(box);
-      if (!a.label) continue;
-      const label = document.createElement('div');
-      label.textContent = a.label;
-      // Below the box by preference — the space under a control is usually
-      // chrome, while the space above it is usually the thing the shot is of.
-      // Then above, and then inside, which is the only option left when the
-      // box is the full height of the window (framing a whole panel, say) and
-      // is what silently dropped those labels off-screen before.
-      const below = r.y + r.height + 60 < window.innerHeight;
-      const above = r.y > 60;
-      const top = below ? r.y + r.height + pad + 8 : above ? r.y - pad - 56 : r.y + pad + 8;
-      Object.assign(label.style, {
-        position: 'absolute',
-        left: `${r.x + r.width / 2}px`,
-        top: `${top}px`,
-        transform: 'translateX(-50%)',
-        background: accent,
-        color: '#fff',
-        // Sized for the slot, not the screenshot. The narrower of the two
-        // slots scales a 1180px window by 0.61, so 34px is what clears
-        // STYLE.md's 20px floor there; it lands larger on the full-bleed one.
-        font: '600 34px/1.2 system-ui, sans-serif',
-        padding: '7px 14px',
-        borderRadius: '6px',
-        whiteSpace: 'nowrap',
-      });
-      layer.appendChild(label);
-    }
-  }, annotations);
-}
+const STILL_CSS =
+  '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}'
+  + 'vt-toast-container,.toast-stack{display:none!important}';
 
 async function enterLabelView(page, datasetName, detectorName) {
   await page.goto(`${APP}/#/dashboard`, { waitUntil: 'domcontentloaded' });
@@ -373,13 +344,48 @@ async function enterLabelView(page, datasetName, detectorName) {
 }
 
 async function leftTab(page, name) {
+  // The tab strip is hidden while autopilot is collapsed, and panel state
+  // persists across runs — so expand first, or the second shot of a run waits
+  // for a tab that is not on the page.
+  if ((await page.locator('.left-tab').count()) === 0) {
+    await page.locator('.collapse-toggle').first().click();
+    await page.waitForTimeout(1200);
+  }
   await page.locator('.left-tab', { hasText: name }).first().click();
   await page.waitForTimeout(800);
 }
 
-/** Put an item in the centre viewer — the frame both shots are really about. */
-async function serveItem(page, prefer = []) {
-  const shown = await page.locator('.thumbnail-wrap img').evaluateAll((es) => es.map((e) => e.alt));
+/**
+ * Hand the session to autopilot and fold its panel away to a rail.
+ *
+ * This is what the deck should be showing (#3246). Manual mode spends four
+ * rows of the left panel on sort mode, selection strategy and inclusion before
+ * the corpus grid even starts — every one of them a control the audience is
+ * being asked to ignore. Autopilot replaces the lot with a five-step phase
+ * list, and collapsing that leaves a rail a centimetre wide: what is left on
+ * screen is the item and the votes, which is the whole interaction.
+ *
+ * Switching tabs starts autopilot (`left-panel.setTab`), which re-sorts — but
+ * it keeps whatever item is already selected, so the caller can pick the frame
+ * in Manual first and still end up here.
+ */
+async function collapseIntoAutopilot(page) {
+  await leftTab(page, 'Autopilot');
+  await page.waitForTimeout(9000);
+  await page.locator('.collapse-toggle').first().click();
+  await page.waitForTimeout(2500);
+}
+
+/**
+ * Put an unanswered item in the centre viewer — the frame both shots are about.
+ *
+ * `voted` is excluded rather than merely deprioritised: an item that already
+ * carries a vote renders its Good or Bad button filled, which reads as an
+ * answer the tool has given itself instead of a question it is asking.
+ */
+async function serveItem(page, prefer = [], voted = new Set()) {
+  const all = await page.locator('.thumbnail-wrap img').evaluateAll((es) => es.map((e) => e.alt));
+  const shown = all.filter((n) => !voted.has(n));
   const target =
     prefer.find((name) => shown.includes(name)) ?? shown.find((n) => n.startsWith('cougar_face/'));
   const thumb = target
@@ -390,31 +396,47 @@ async function serveItem(page, prefer = []) {
   await page.waitForTimeout(1500);
 }
 
-async function shootThreePanel(page) {
+async function shootThreePanel(page, voted) {
   await enterLabelView(page, 'photos', 'cats');
+  // Manual only long enough to choose the frame: the corpus grid lives in that
+  // tab, and it is the only way to put a named item in the centre viewer.
   await leftTab(page, 'Manual');
-  await serveItem(page, HERO);
-  // One callout, not three. The three panels are legible as three panels
-  // without help, and an unlabelled red box round each says nothing that the
-  // layout does not; a label on each says it in type too small to read from
-  // the slot. What the slide is actually for is the pair of buttons.
-  await annotate(page, [{ target: '.vote-buttons, .btn-good', label: 'One item. Good or Bad.' }]);
+  await serveItem(page, HERO, voted);
+  await collapseIntoAutopilot(page);
+  // No callout. The slide is the audience's first sight of the product, and a
+  // red box with red type across the middle of it is the presenter shouting
+  // over the thing they are asking the room to look at. The buttons are the
+  // biggest control on the screen and the speaker can point at them (#3246).
   await shoot(page, 'ui-three-panel');
 }
 
-async function shootRegionVoting(page) {
+async function shootRegionVoting(page, voted) {
   await enterLabelView(page, 'photo-regions', 'cats-regions');
   await leftTab(page, 'Manual');
-  await serveItem(page, HERO_REGION);
+  await serveItem(page, [HERO_REGION], voted);
+  await collapseIntoAutopilot(page);
+  // The drawing tools live in the centre panel, so the box can be drawn after
+  // the left panel has been folded away.
   await page.locator('.ivc-btn-toggle, button[title*="Marquee" i]').first().click();
   await page.waitForTimeout(700);
-  const img = page.locator('img.image-element, .image-wrap').first();
-  const box = await img.boundingBox();
+  // The rendered *picture*, not the <img> element and not its wrapper. The
+  // viewer sizes the element to the whole centre panel and uses
+  // `object-fit: contain`, so the element's bounding box is much taller than
+  // the photo inside it: fractions of the element put the drag outside the
+  // picture, the app clamps the box back to the image edges, and a
+  // hand-measured box comes out spanning the full height (#3246).
+  const box = await page.locator('img.image-element').first().evaluate((img) => {
+    const r = img.getBoundingClientRect();
+    const scale = Math.min(r.width / img.naturalWidth, r.height / img.naturalHeight);
+    const w = img.naturalWidth * scale;
+    const h = img.naturalHeight * scale;
+    return { x: r.x + (r.width - w) / 2, y: r.y + (r.height - h) / 2, width: w, height: h };
+  });
   if (!box) throw new Error('no image in the centre viewer to draw on');
-  const x0 = box.x + box.width * 0.26;
-  const y0 = box.y + box.height * 0.18;
-  const x1 = box.x + box.width * 0.74;
-  const y1 = box.y + box.height * 0.72;
+  const x0 = box.x + box.width * REGION_BOX.x0;
+  const y0 = box.y + box.height * REGION_BOX.y0;
+  const x1 = box.x + box.width * REGION_BOX.x1;
+  const y1 = box.y + box.height * REGION_BOX.y1;
   await page.mouse.move(x0, y0);
   await page.mouse.down();
   await page.mouse.move((x0 + x1) / 2, (y0 + y1) / 2, { steps: 8 });
@@ -422,7 +444,9 @@ async function shootRegionVoting(page) {
   await page.mouse.up();
   await page.waitForSelector('.region-box', { timeout: 15000 });
   await page.waitForTimeout(700);
-  await annotate(page, [{ target: '.region-box', label: 'Vote good on this region' }]);
+  // The drawn box is already the loudest thing on the screen and it is the
+  // right colour for it. A second red box with a red caption inside it hides
+  // the one the audience is meant to read (#3246).
   await shoot(page, 'ui-region-voting');
 }
 
@@ -454,7 +478,8 @@ async function ensureApp() {
 await ensureApp();
 const photos = await ensureDataset('photos', { ...CATS, ...NOT_CATS }, 'siglip');
 const detector = await ensureDetector('cats', photos);
-await ensureVotes(photos, detector);
+const photosVoted = await ensureVotes(photos, detector);
+let regionsVoted = new Set();
 if (wanted('region-voting')) {
   // A second detector, not the same one: a detector binds an embedder *type*
   // at creation, and a patch dataset offers `patch_semantic` where the SigLIP
@@ -466,7 +491,7 @@ if (wanted('region-voting')) {
     { ...REGION_CATS, ...REGION_NOT_CATS },
     'dinov2_patch'
   );
-  await ensureVotes(regions, await ensureDetector('cats-regions', regions));
+  regionsVoted = await ensureVotes(regions, await ensureDetector('cats-regions', regions));
 }
 
 const browser = await launchChromium();
@@ -480,8 +505,8 @@ try {
       document.head.appendChild(s);
     });
   }, STILL_CSS);
-  if (wanted('three-panel')) await shootThreePanel(page);
-  if (wanted('region-voting')) await shootRegionVoting(page);
+  if (wanted('three-panel')) await shootThreePanel(page, photosVoted);
+  if (wanted('region-voting')) await shootRegionVoting(page, regionsVoted);
 } finally {
   await browser.close();
   if (appProcess) appProcess.kill();

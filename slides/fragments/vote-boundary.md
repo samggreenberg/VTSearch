@@ -4,9 +4,6 @@
 
 ## Rock the Vote
 
-<!-- The line to say as the figure comes up is “Every answer moves the boundary” — the
-     headline names the slide, this names the move. -->
-
 <!-- build: figs/vote-boundary.build1.png -->
 
 <!-- build: figs/vote-boundary.build2.png -->
@@ -17,44 +14,43 @@
 
 <!-- build: figs/vote-boundary.build5.png -->
 
-<!-- A six-page build sharing one page number, and there are deliberately no
-     bullets: the figure is the slide and the words are yours. Advance as you
-     narrate. Say up front that this is a drawing, not a plot of anything —
-     the real detector is a linear SVM in a few hundred dimensions, where the
-     boundary is a flat plane; squeeze that down to a page and it curves. Every
-     curve you are about to see is nonetheless a real fit to the votes on
-     screen, and every item it picks out is really the one the app would pick.
+<!-- build: figs/vote-boundary.build6.png -->
 
-     Page 1. One circle per item — a photo, a clip, a document. Nothing is
-     labelled and nothing is known. This is the pile from two slides ago,
-     drawn.
+<!-- The figure is the slide; the words are yours. Say first that this is a
+     drawing, not a plot: the real detector is a linear SVM in a few hundred
+     dimensions, where the boundary is a flat plane. Squeeze that onto a page
+     and it curves. Every curve here is still a real fit to the votes on
+     screen. -->
 
-     Page 2. Some votes: five Good, five Bad. That is a couple of minutes of
-     someone's time, and it is already enough to fit a detector — the curve is
-     everything the model currently calls a match. Note what it enclosed:
-     mostly circles, not checks. The model is guessing about all of those, and
-     the whole game is which guess to check next.
+<!-- **a** — One circle per item: a photo, a clip, a document. Nothing is
+     labelled and nothing is known. This is the pile, drawn. -->
 
-     Page 3. Here are two of them, and they are the ones you would *not* ask
-     about. Sitting well inside, surrounded by Goods, nothing near them to
-     suggest otherwise — the model would bet on these and it would be right.
-     Ask the user about one and you have spent a vote confirming what you
-     already believed. This is the trap in "just show them the top of the
-     ranking": the top of the ranking is precisely where the model is already
-     sure.
+<!-- **b** — Five Good, five Bad: a couple of minutes of clicking, and already
+     enough to fit a detector. The curve is everything the model now calls a
+     match. Note what it enclosed — mostly circles, not checks. -->
 
-     Page 4. So it asks about this one instead — the item on the line, where
-     the model genuinely cannot call it. It is the least comfortable item to be
-     shown and the most valuable one to answer.
+<!-- **c** — The threshold's first job. Same detector, cut looser and cut
+     tighter; both dashed curves still keep every check in and every cross out,
+     so nothing the user has said can choose between them. But look inside the
+     strip: those items come back under one cut and not the other. That is the
+     line deciding what you keep. -->
 
-     Page 5. The user says Good. Retrain, and the boundary is somewhere else:
-     dashed is where it used to be. Worth saying out loud that the other branch
-     is just as real — a Bad there would have pulled the curve *in* on that
-     side, tightening around the votes instead of reaching past them. One
-     answer, one item, and the model's opinion about a dozen items it has never
-     been shown has changed.
+<!-- **d** — Two items no threshold argues about: one deep inside, one far
+     outside. The model would bet on either and be right, so a vote spent on
+     either buys nothing. This is the trap in "just show them the top of the
+     ranking" — the top is exactly where the model is already sure. -->
 
-     Page 6. And that is the loop closing. The boundary moved, so a *different*
-     item is now the one sitting on it, and that is the next thing the user
-     sees. Land here: the model does not just answer the question, it chooses
-     the next one — which is the point the following slides are built on. -->
+<!-- **e** — So it asks about this one instead: in the strip, where the model
+     genuinely cannot call it. The least comfortable item to be shown and the
+     most valuable one to answer. That is the threshold's second job — the same
+     line that decides what comes back decides what you are asked next. -->
+
+<!-- **f** — The user says Good. Retrain, and the boundary is somewhere else;
+     dashed is where it was. Say that the other branch is just as real: a Bad
+     there would have pulled the curve *in* on that side. One answer, and the
+     model's opinion about a dozen items it has never seen has changed. -->
+
+<!-- **g** — And the loop closes. The boundary moved, so a *different* item is
+     now the one on it, and that is the next thing the user sees. Land here:
+     get the line wrong and you do not just return the wrong set — you spend
+     the user's next twenty votes on the wrong questions. -->

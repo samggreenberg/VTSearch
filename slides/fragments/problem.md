@@ -1,22 +1,20 @@
-<!-- _class: statement -->
+### The Problem
 
-# You Have a Million Images and a Concept in Your Head.
+## A Concept in Your Head, a Million Items on Disk
 
-## No Labels. No Detector. No Time to Build Either.
+- Easy to say, impossible to query: *"trucks parked on grass"*
+- No labelled set exists — the concept was invented five minutes ago
+- Building one costs days. The answer is worth about **twenty minutes**
 
 <!-- Beat here. This is the whole motivation and it should land before any
-     mechanism appears.
+     mechanism appears. -->
 
-     Spell out the situation for a room that has not seen the tool. Someone
-     has a corpus — a drive of imagery, a video archive, a folder of
-     documents — and a concept they can describe to a colleague in one
-     sentence but cannot express as a query: "trucks parked on grass",
-     "this kind of rash", "the thing that made that noise". There is no
-     labelled training set for it and there never will be, because the
-     concept was invented five minutes ago for this one question.
+<!-- Spell the situation out for a room that has not seen the tool. Someone has
+     a corpus — a drive of imagery, a video archive, a folder of documents —
+     and a concept they can describe to a colleague in one sentence but cannot
+     express as a query: "this kind of rash", "the thing that made that noise". -->
 
-     The classical answer is: go label a few thousand examples and train
-     something. That answer is useless here, and not because it is
-     technically wrong — because the whole task is worth about twenty minutes
-     of the person's attention. Everything in this talk follows from taking
-     that budget seriously. -->
+<!-- The classical answer is to go and label a few thousand examples and train
+     something. It is useless here, and not because it is technically wrong:
+     the whole task is worth about twenty minutes of the person's attention.
+     Everything in this talk follows from taking that budget seriously. -->
