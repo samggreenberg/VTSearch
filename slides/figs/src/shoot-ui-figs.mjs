@@ -74,7 +74,7 @@ const REGION_BOX = { x0: 0.40, y0: 0.25, x1: 0.62, y1: 0.84 };
 const log = (...a) => console.log('[slide-shots]', ...a);
 
 /**
- * Screenshot, then re-encode as WebP.
+ * Screenshot, pad it out to 16:9, then re-encode as WebP.
  *
  * These two figures are photographs behind UI chrome, which is the one thing
  * PNG is bad at: the same frames weigh 2.7 MB as PNG and 0.4 MB as WebP at a
@@ -88,13 +88,25 @@ const log = (...a) => console.log('[slide-shots]', ...a);
  */
 async function shoot(page, name) {
   const png = await page.screenshot({ type: 'png' });
+  // Padded on the left to exactly 16:9 before the encode. These go on
+  // `_class: full` slides, which reserve their top-left corner for the
+  // headline; a 1.25:1 frame letterboxes into that slot with white bands too
+  // narrow to hold it, so the title landed across the app's own chrome. The
+  // padding is the `slides/STYLE.md` "pan the frame" repair, and it is free
+  // here for the same reason it is free there: the frame was height-bound, so
+  // the widened canvas is drawn at the same scale and the app comes out the
+  // same size on the slide — it just sits to the right of a real title
+  // column instead of under a floating headline (#3246).
   execFileSync(
     'python',
     [
       '-c',
       'import sys;from io import BytesIO;from PIL import Image;'
-        + 'Image.open(BytesIO(sys.stdin.buffer.read())).convert("RGB")'
-        + '.save(sys.argv[1],"WEBP",quality=92,method=6)',
+        + 'shot=Image.open(BytesIO(sys.stdin.buffer.read())).convert("RGB");'
+        + 'w=max(shot.width,round(shot.height*16/9));'
+        + 'canvas=Image.new("RGB",(w,shot.height),"white");'
+        + 'canvas.paste(shot,(w-shot.width,0));'
+        + 'canvas.save(sys.argv[1],"WEBP",quality=92,method=6)',
       join(FIGS, `${name}.webp`),
     ],
     { cwd: REPO, input: png, stdio: ['pipe', 'inherit', 'inherit'] }
@@ -286,9 +298,19 @@ async function ensureVotes(dataset, detector) {
 
 // ── capture ──────────────────────────────────────────────────────────────────
 
-/** Kill transitions and carets so the frame is stable. */
+/**
+ * Kill transitions and carets so the frame is stable, and hide the toast stack.
+ *
+ * The toasts are an artefact of the harness rather than of the product: this
+ * drives a dev checkout, where `static/` is a build artefact that goes stale
+ * the moment anything is committed, so `BuildSkewService` puts a large
+ * non-dismissing "this page is running an out-of-date build" banner across the
+ * top of every frame. It is doing its job — see the note in `CLAUDE.md` — and
+ * it has nothing to do with the application a slide is showing.
+ */
 const STILL_CSS =
-  '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}';
+  '*,*::before,*::after{transition:none!important;animation:none!important;caret-color:transparent!important}'
+  + 'vt-toast-container,.toast-stack{display:none!important}';
 
 async function enterLabelView(page, datasetName, detectorName) {
   await page.goto(`${APP}/#/dashboard`, { waitUntil: 'domcontentloaded' });

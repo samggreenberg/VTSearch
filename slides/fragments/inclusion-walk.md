@@ -4,6 +4,16 @@
 
 ## Walk the Line
 
+<!-- build: figs/calib-walk-flow.build1.png -->
+
+<!-- build: figs/calib-walk-flow.build2.png -->
+
+<!-- build: figs/calib-walk-flow.build3.png -->
+
+<!-- build: figs/calib-walk-flow.build4.png -->
+
+<!-- build: figs/calib-walk-flow.build5.png -->
+
 <!-- Name what the room is looking at first: this is the previous slide with one
      row swapped. Same panel, same seven votes, same three gauges — only the
      middle row changed, from what the retired rule computed to what the

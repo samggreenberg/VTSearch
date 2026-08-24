@@ -4,6 +4,18 @@
 
 ## The Rank<br>& File
 
+<!-- build: figs/calib-quantile-flow.build1.png -->
+
+<!-- build: figs/calib-quantile-flow.build2.png -->
+
+<!-- build: figs/calib-quantile-flow.build3.png -->
+
+<!-- build: figs/calib-quantile-flow.build4.png -->
+
+<!-- build: figs/calib-quantile-flow.build5.png -->
+
+<!-- build: figs/calib-quantile-flow.build6.png -->
+
 <!-- The build that finishes the algorithm. This page — the complete picture —
      is what actually ships today, end to end. If someone photographs one slide
      of this talk, it should be this one. The line to say as it comes up:

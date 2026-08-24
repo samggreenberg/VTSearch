@@ -4,7 +4,17 @@
 
 ## Cost Cutting
 
-<!-- The knob is defined; now watch it not work. The panel is one you have seen
+<!-- build: figs/calib-knob-flow.build1.png -->
+
+<!-- build: figs/calib-knob-flow.build2.png -->
+
+<!-- build: figs/calib-knob-flow.build3.png -->
+
+<!-- build: figs/calib-knob-flow.build4.png -->
+
+<!-- The knob is defined; now watch it not work.
+
+     **a** — The panel is one you have seen
      twice: a fold model's scored corpus in bare bars, with its held-out votes
      standing on the baseline. Nothing is fitted — the rule about to be drawn
      reads the seven marks and nothing else. -->

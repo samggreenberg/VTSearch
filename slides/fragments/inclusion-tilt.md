@@ -4,6 +4,16 @@
 
 ## On Tilt
 
+<!-- build: figs/calib-tilt-flow.build1.png -->
+
+<!-- build: figs/calib-tilt-flow.build2.png -->
+
+<!-- build: figs/calib-tilt-flow.build3.png -->
+
+<!-- build: figs/calib-tilt-flow.build4.png -->
+
+<!-- build: figs/calib-tilt-flow.build5.png -->
+
 <!-- The slide where the two halves of the talk collide, so set that up before
      the figure moves. Iteration 4 replaced the blend with one fused fit, and
      the fused fit cuts at the midpoint of two fitted component means. A

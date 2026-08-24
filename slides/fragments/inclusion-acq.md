@@ -4,6 +4,14 @@
 
 ## Compound Interest
 
+<!-- build: figs/calib-acq-flow.build1.png -->
+
+<!-- build: figs/calib-acq-flow.build2.png -->
+
+<!-- build: figs/calib-acq-flow.build3.png -->
+
+<!-- build: figs/calib-acq-flow.build4.png -->
+
 <!-- The last figure of the talk, and it closes the loop back to Rock the Vote.
      Remind the room of the promise made there: the threshold decides twice —
      what you keep, and what you are asked about next. Everything since has
