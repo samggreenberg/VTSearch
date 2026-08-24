@@ -2,7 +2,7 @@
 
 ## A vote is the whole item — or a box drawn on it
 
-![bg fit](figs/ui-region-voting.png)
+![bg fit](figs/ui-region-voting.webp)
 
 <!-- Show, don't explain. Point at the box, say "that is the whole
      interaction", move on — but make the distinction stick, because the

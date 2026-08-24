@@ -173,6 +173,11 @@ rewrites the whole archive.
   enormous line anyway.
 - **SVG for diagrams** with a few dozen shapes: smaller, and genuinely
   diffable.
+- **WebP for screenshots.** A screenshot is a photograph behind UI chrome,
+  which is the one thing PNG is bad at: the two UI figures weigh 2.7 MB as PNG
+  and 0.4 MB as WebP at a quality no projector resolves the difference at — and
+  they are re-shot on every GUI change, so the cost is paid again and again.
+  Marp rasterises through Chromium, which reads WebP natively.
 - Iterate in the working tree and `--amend` while a figure is still ugly, so
   only the final render becomes permanent history.
 
@@ -182,6 +187,25 @@ plot can be regenerated when the underlying numbers move —
 `slide_figure.save()` rather than `fig.savefig`: it enforces the type floor
 (see [`STYLE.md`](STYLE.md)) and refuses to write a figure whose labels would
 be unreadable in its slot.
+
+**Screenshots of the app are generated too.** `figs/ui-three-panel.webp` and
+`figs/ui-region-voting.webp` come from `figs/src/shoot-ui-figs.mjs`, which builds
+a corpus of real photographs out of the Caltech-101 download, trains a detector
+on cats by voting, and drives headless chromium:
+
+```bash
+cd scripts/screenshots && npm install     # once — playwright lives here
+node ../../slides/figs/src/shoot-ui-figs.mjs
+```
+
+Every step is idempotent, so a re-run after a GUI change is just the captures.
+It deliberately does **not** reuse the docs shots in
+`docs/user/screenshots.manifest.ts`: those are taken against the synthetic
+`syn-imgs` fixture because the user guide walks the reader through that dataset,
+and a slide is the audience's first sight of the tool, where flat coloured
+shapes make the product look like a toy. **A GUI change that moves the docs
+screenshots moves these too** — reshoot both, or the deck keeps showing an app
+that no longer exists.
 
 **Never drop a report figure straight onto a slide.** It was sized for a page,
 and in a slide slot its labels land around 8px. `slides/figs/src/make-bench-figs.py`
