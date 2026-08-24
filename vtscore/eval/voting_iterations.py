@@ -316,9 +316,31 @@ _CUT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
     "tau_tail_a220",
     "tau_tail_a300",
     "tau_tail_a400",
+    "tau_bagfit_mid",
+    "tau_bagfit_priorfree",
     "tau_supervised",
     "tau_sim_oracle",
+    "tau_sim_oracle_f050",
+    "tau_sim_oracle_f100",
+    "tau_sim_oracle_f250",
+    "tau_sim_oracle_f500",
+    "tau_sim_oracle_bag",
+    "tau_sim_oracle_smooth",
     "tau_test_oracle",
+    # #2883: the reference point, honestly.  `tau_test_oracle` above is the
+    # argmin of the empirical cost on the test sample itself, so it is a sample
+    # minimum and the gap measured against it is biased high.  The cross-fitted
+    # pair chooses the cut and pays for it on disjoint folds; the two costs
+    # bracket the population optimum the chain actually wants.
+    "tau_test_oracle_honest",
+    "cost_test_oracle_naive",
+    "cost_test_oracle_honest",
+    # Sample sizes the last link's variance should scale with, recorded so the
+    # scaling claim is read off the run rather than off the dataset's nominal
+    # size (thinning, the prevalence arm and per-category positives all move it).
+    "sim_n_pos",
+    "test_n",
+    "test_n_pos",
     # Where the true optimum sits in each fitted Bad component's upper tail.
     "oracle_lo_sf_gauss",
     "oracle_lo_sf_evt",
@@ -875,11 +897,40 @@ _SAFE_GMM_VARIANTS: tuple[tuple[str, str, str], ...] = (
     ("pooled_tail_a400", "pooled", "tail_a400"),
     ("pooled_supervised", "pooled", "supervised"),
     ("pooled_sim_oracle", "pooled", "sim_oracle"),
+    # #2883: the last link's shape.  Four subsample levels give the learning
+    # curve in sim-set size (the test set and the trajectory are identical
+    # across them - only the number of labelled sim scores moves), and two
+    # variance-reduced estimators of the same target test whether the empirical
+    # minimiser is the bound `family_headroom_exhausted` treats it as.
+    ("pooled_sim_oracle_f050", "pooled", "sim_oracle_f050"),
+    ("pooled_sim_oracle_f100", "pooled", "sim_oracle_f100"),
+    ("pooled_sim_oracle_f250", "pooled", "sim_oracle_f250"),
+    ("pooled_sim_oracle_f500", "pooled", "sim_oracle_f500"),
+    ("pooled_sim_oracle_bag", "pooled", "sim_oracle_bag"),
+    ("pooled_sim_oracle_smooth", "pooled", "sim_oracle_smooth"),
+    # The label-free counterpart: bag the mixture fit rather than the labelled
+    # cost curve.  Exploratory, not ship-gated - see PREREG.
+    ("pooled_bagfit_mid", "pooled", "bagfit_mid"),
+    ("pooled_bagfit_priorfree", "pooled", "bagfit_priorfree"),
 )
 
 #: Variants that read the sim set's true labels.  Reported for the decomposition,
 #: never eligible to ship - a rule cannot see these labels in the app.
-_ORACLE_VARIANTS: frozenset[str] = frozenset({"pooled_supervised", "pooled_sim_oracle"})
+_ORACLE_VARIANTS: frozenset[str] = frozenset(
+    {
+        "pooled_supervised",
+        "pooled_sim_oracle",
+        # #2883's readings of the same sim set - label-reading for the same
+        # reason and, like the two above, emitting NaN rather than falling back
+        # to a midpoint under another rule's name.
+        "pooled_sim_oracle_f050",
+        "pooled_sim_oracle_f100",
+        "pooled_sim_oracle_f250",
+        "pooled_sim_oracle_f500",
+        "pooled_sim_oracle_bag",
+        "pooled_sim_oracle_smooth",
+    }
+)
 
 
 def _safe_gmm_variant_rows(
@@ -940,8 +991,9 @@ def _safe_gmm_variant_rows(
     """
     import numpy as np  # noqa: PLC0415
 
-    from vtscore.eval.calibration_metrics import inclusion_weights, operating_cost  # noqa: PLC0415
+    from vtscore.eval.calibration_metrics import inclusion_weights, operating_cost, oracle_cut  # noqa: PLC0415
     from vtscore.eval.cut_rules import CUT_KIND_MIDPOINT, decomposition_cuts  # noqa: PLC0415
+    from vtscore.eval.transfer_rules import honest_test_oracle  # noqa: PLC0415
     from vtscore.training.thresholds import blend_gmm_threshold, safe_blend_weight  # noqa: PLC0415
 
     xcal = float(details["xcal_threshold"])
@@ -970,7 +1022,14 @@ def _safe_gmm_variant_rows(
         cuts, params, reasons = decomposition_cuts(scores, labels, wf, wn)
         cuts_by_geometry[geometry] = cuts
         reasons_by_geometry[geometry] = reasons
-        diag = {"geometry": geometry, "sim_prevalence": _r(float(np.mean(labels))) if len(labels) else nan}
+        diag = {
+            "geometry": geometry,
+            "sim_prevalence": _r(float(np.mean(labels))) if len(labels) else nan,
+            # The count, not just the rate: a threshold estimated from labelled
+            # scores is limited by the *rarer* class, so #2883's scaling claim is
+            # about positives and prevalence alone cannot express it.
+            "sim_n_pos": _r(float(np.sum(labels == 1.0))) if len(labels) else nan,
+        }
         # ``evt_fit_fail`` is a reason string; everything else in params is numeric.
         diag.update({k: v if isinstance(v, str) else _r(float(v)) for k, v in params.items()})
         diag.update({f"tau_{name}": _r(float(value)) for name, value in cuts.items()})
@@ -1035,8 +1094,27 @@ def _safe_gmm_variant_rows(
     # The last link in the chain: the best cut on the held-out test set.  Read off
     # any emitted row (all share the same base_scores/base_labels oracle).
     if rows and diag_rows:
+        # #2883: that cut is the argmin of the empirical cost on the test sample
+        # *itself*, so its cost is a sample minimum - biased low, which biases
+        # `transfer` high by however much the reference overfits.  Record the
+        # cross-fitted version beside it (cut and cost on disjoint folds) so the
+        # last link can be reported as a bracket instead of a point.
+        honest_cost, honest_tau = honest_test_oracle(base_scores, base_labels, wf, wn)
+        # From `oracle_cut` itself, NOT by re-scoring at `rows[0]["oracle_threshold"]`:
+        # that column is rounded on the way out, and re-evaluating a cost at a
+        # rounded threshold moves items across the boundary.  With ~55 test
+        # positives one FNR step is 1/55 = 0.018 - half the size of the term this
+        # study is measuring - so the rounding is not a rounding error here.
+        _naive_tau, naive_cost, _nfpr, _nfnr = oracle_cut(base_scores, base_labels, wf, wn)
+        n_test = float(np.asarray(base_labels).size)
+        n_test_pos = float(np.sum(np.asarray(base_labels) == 1.0))
         for diag in diag_rows:
             diag["tau_test_oracle"] = rows[0]["oracle_threshold"]
+            diag["tau_test_oracle_honest"] = _r(honest_tau)
+            diag["cost_test_oracle_naive"] = _r(naive_cost)
+            diag["cost_test_oracle_honest"] = _r(honest_cost)
+            diag["test_n"] = _r(n_test)
+            diag["test_n_pos"] = _r(n_test_pos)
     return rows, diag_rows
 
 

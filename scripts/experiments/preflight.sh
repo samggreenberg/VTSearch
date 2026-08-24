@@ -487,9 +487,18 @@ v = env("CALIB_BLEND_SCHEDULE")
 if v is not None:
     rows.append(("blend_schedule", v, "<unset> = the app's per-mode default"))
 
-must_contain("cut_rule", "CALIB_ANCHORED_RULES", T.FOLD_ANCHOR_CUT_RULE, "mid,rate")
-must_contain("fold_combine", "CALIB_ANCHORED_FOLD_COMBINES", T.FOLD_ANCHOR_COMBINE, "qmean,qmedian")
-must_contain("anchor_weight", "CALIB_ANCHORED_WEIGHTS", "%g" % T.FOLD_ANCHOR_WEIGHT, "1,3,10,30,100")
+# The anchored/fold-anchored grid (#2852) is emitted only under CALIB_ANCHORED=1
+# and is off by default.  Checking its knobs unconditionally makes every study
+# that does not use the family declare a divergence it does not have - and a
+# declared-but-fictional divergence is worse than no check, because the next
+# reader cannot tell the real ones from the noise.  Check them when the family is
+# actually on; say plainly that they were skipped when it is not.
+if os.environ.get("CALIB_ANCHORED") == "1":
+    must_contain("cut_rule", "CALIB_ANCHORED_RULES", T.FOLD_ANCHOR_CUT_RULE, "mid,rate")
+    must_contain("fold_combine", "CALIB_ANCHORED_FOLD_COMBINES", T.FOLD_ANCHOR_COMBINE, "qmean,qmedian")
+    must_contain("anchor_weight", "CALIB_ANCHORED_WEIGHTS", "%g" % T.FOLD_ANCHOR_WEIGHT, "1,3,10,30,100")
+else:
+    print("SKIPPED\tanchored grid (CALIB_ANCHORED is not 1, so no anchored row is emitted)")
 must_contain("patch_style", "CALIB_PATCH_STYLES", PRODUCTION_PATCH_STYLE, "max_patch,max_patch_pca_hac")
 
 if not rows:
@@ -499,25 +508,40 @@ else:
         print("DIVERGES\t%s\t%s\t%s" % (knob, got, want))
 PYDIV
 )
-  if [[ "$DIVERGENCE" == "MATCHES" ]]; then
-    say_ok "every pinned knob matches the shipped value"
-  elif [[ "$DIVERGENCE" != DIVERGES* ]]; then
+  # Tag-dispatched rather than prefix-matched on the whole blob: the probe emits
+  # SKIPPED lines for knob families this run does not enable, and those have to
+  # be *reported* (a skipped check is not a passed one) without being mistaken
+  # for a divergence or for a broken probe.
+  unacked=0
+  understood=0
+  while IFS=$'\t' read -r tag knob got want; do
+    [[ -z "$tag" ]] && continue
+    case "$tag" in
+      MATCHES)
+        say_ok "every pinned knob matches the shipped value"
+        understood=1 ;;
+      SKIPPED)
+        say_ok "knob check skipped: $knob"
+        understood=1 ;;
+      DIVERGES)
+        understood=1
+        if [[ ",${DIVERGES}," == *",${knob},"* ]]; then
+          say_ok "declared divergence on '$knob' ($got, shipped is $want)"
+        else
+          say_fail "UNDECLARED divergence from production: $knob = $got, shipped is $want"
+          unacked=$((unacked + 1))
+        fi ;;
+      *)
+        say_fail "could not compare this run's knobs against production: $tag $knob $got $want"
+        understood=1 ;;
+    esac
+  done <<< "$DIVERGENCE"
+  if [[ "$understood" -eq 0 ]]; then
     say_fail "could not compare this run's knobs against production: $DIVERGENCE"
-  else
-    unacked=0
-    while IFS=$'\t' read -r _ knob got want; do
-      [[ -z "$knob" ]] && continue
-      if [[ ",${DIVERGES}," == *",${knob},"* ]]; then
-        say_ok "declared divergence on '$knob' ($got, shipped is $want)"
-      else
-        say_fail "UNDECLARED divergence from production: $knob = $got, shipped is $want"
-        unacked=$((unacked + 1))
-      fi
-    done <<< "$DIVERGENCE"
-    if [[ "$unacked" -gt 0 ]]; then
-      echo "        -> if that is the axis this study sweeps, pass --diverges <knob>[,<knob>]"
-      echo "        -> if it is not, the run would measure a detector nobody ships"
-    fi
+  fi
+  if [[ "$unacked" -gt 0 ]]; then
+    echo "        -> if that is the axis this study sweeps, pass --diverges <knob>[,<knob>]"
+    echo "        -> if it is not, the run would measure a detector nobody ships"
   fi
 fi
 
