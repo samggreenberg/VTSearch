@@ -844,6 +844,22 @@ def verify() -> int:
     for ds, emb, state, n, patch, dim in rows:
         log(f"{ds:18s} {emb:14s} {state:16s} {n:>7s} {patch:>12s} {dim:>6s}")
 
+    # Coverage is not implied by anything above: a cell can be structurally
+    # perfect and no longer contain the images a human reviewed. Reported here
+    # so a rebuild cannot be declared healthy without it being looked at.
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import check_review_coverage  # noqa: PLC0415
+
+        if pc.cell_path("vg_scale", "siglip").exists():
+            log("")
+            log("review coverage:")
+            sys.argv = ["check_review_coverage"]
+            if check_review_coverage.main() != 0:
+                problems.append("vg_scale: the rebuild retired images that had been reviewed")
+    except Exception as exc:  # noqa: BLE001 - an absent review is not a build failure
+        log(f"  (review-coverage check skipped: {exc})")
+
     if problems:
         log("")
         for p in problems:
