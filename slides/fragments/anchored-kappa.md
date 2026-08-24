@@ -1,8 +1,8 @@
 <!-- _class: caveat -->
 
-### Iteration 4 — a caution we keep
+### Iteration 4 — A Caution We Keep
 
-## Run A shipped from the edge of its own grid
+## Run A Shipped from the Edge of Its Own Grid
 
 - κ = 1 won run A — the **smallest κ it measured**
 - Run B, two decades wider: the optimum is interior, **κ = 0.3**, 6/6

@@ -1,15 +1,15 @@
 <!-- _class: outline -->
 
-### Where this goes
+### Where This Goes
 
-## One line, and five attempts to move it
+## One Line, and Five Attempts to Move It
 
-1. **What VTSearch is** *— you vote on a handful; a detector ranks the rest*
-2. **The threshold decides twice** *— what you keep, and what you are asked next*
-3. **Four iterations on the line** *— each one shipped or died on a measurement*
-4. **The other axis** *— what if you wanted more false positives, or fewer?*
-5. **An epilogue that closed a line** *— pre-registered, measured twice, negative*
-6. **What is still open**
+1. **What VTSearch Is** *— you vote on a handful; a detector ranks the rest*
+2. **The Threshold Decides Twice** *— what you keep, and what you are asked next*
+3. **Four Iterations on the Line** *— each one shipped or died on a measurement*
+4. **The Other Axis** *— what if you wanted more false positives, or fewer?*
+5. **An Epilogue That Closed a Line** *— pre-registered, measured twice, negative*
+6. **What Is Still Open**
 
 <!-- Walk the list slowly; the whole talk should be legible from this slide.
 

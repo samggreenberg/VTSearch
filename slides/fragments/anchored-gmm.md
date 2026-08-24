@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-fold-anchored-flow.png)
 
-## Stop averaging cuts. Fuse the evidence.
+## Above Average
 
 <!-- build: figs/calib-fold-anchored-flow.build1.png -->
 

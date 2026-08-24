@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-gmm-flow.png)
 
-## A cut with no labels at all
+## A Mixed Blessing
 
 <!-- build: figs/calib-gmm-flow.build1.png -->
 

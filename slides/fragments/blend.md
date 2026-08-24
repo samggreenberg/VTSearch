@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-blend-flow.png)
 
-## Average the rivals
+## Just an Average Guy
 
 <!-- build: figs/calib-blend-flow.build1.png -->
 

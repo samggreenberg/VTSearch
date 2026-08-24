@@ -1,6 +1,6 @@
-### Iteration 3 — measured
+### Iteration 3 — Measured
 
-## The single biggest win in the line
+## The Single Biggest Win in the Line
 
 - A/B on the production arm: cost **−0.074**, regret **−0.070** (p ≈ 1e−23)
 - FNR −0.071 with FPR flat — not bought with permissiveness

@@ -1,6 +1,6 @@
-### Iteration 4 — measured
+### Iteration 4 — Measured
 
-## The production threshold today
+## The Production Threshold Today
 
 - Deep regime: **−0.044** paired regret against pure cross-calibration
 - Beats the shipped blend on region voting: **−0.026 to −0.032**

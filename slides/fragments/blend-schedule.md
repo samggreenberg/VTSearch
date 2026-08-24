@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-blend-schedule.png)
 
-## Never hand over completely
+## Never Hand Over Completely
 
 <!-- Say the three numbers; they are no longer on the slide. Nine schedules
      swept, and the 20-vote handoff was too fast. The winners cap x-cal at half

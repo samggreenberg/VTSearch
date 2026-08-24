@@ -2,7 +2,7 @@
 
 ![bg fit](figs/cost-traces.png)
 
-## Simulated voters, thousands of runs
+## Simulated Voters, Thousands of Runs
 
 <!-- The three definitions are no longer on the slide, so say them, and say
      them slowly — they are the units of every number that follows. We replay

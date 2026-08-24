@@ -1,8 +1,8 @@
 <!-- _class: statement -->
 
-# You have a million images and a concept in your head.
+# You Have a Million Images and a Concept in Your Head.
 
-## No labels. No detector. No time to build either.
+## No Labels. No Detector. No Time to Build Either.
 
 <!-- Beat here. This is the whole motivation and it should land before any
      mechanism appears.

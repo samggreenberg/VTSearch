@@ -1,6 +1,6 @@
 <!-- _class: full -->
 
-## A vote is the whole item — or a box drawn on it
+## Region of Interest
 
 ![bg fit](figs/ui-region-voting.webp)
 

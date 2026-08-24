@@ -1,6 +1,6 @@
-### Iteration 2 — measured
+### Iteration 2 — Measured
 
-## Nearly oracle-close early — and the least robust choice
+## Nearly Oracle-Close Early — And the Least Robust Choice
 
 - Closest of any schedule to the oracle cut (gap **0.023** vs production 0.036)
 - But it never learns: pure mixture hits **+0.24** cost when false positives cost 4×

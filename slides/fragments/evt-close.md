@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-error-decomposition.png)
 
-## The anchored fit ate the cut axis
+## The Anchored Fit Ate the Cut Axis
 
 <!-- Say the three numbers; they are no longer on the slide. The tail rule at
      its own best tuning is +0.0069, worse at p = 0.001. The label-reading

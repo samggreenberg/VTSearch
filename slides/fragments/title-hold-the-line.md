@@ -3,7 +3,7 @@
 
 # (thresh)Hold The Line
 
-## Advances in VTSearch calibration
+## Advances in VTSearch Calibration
 ### Sam Greenberg
 
 <!-- Open by saying what the room is in for, because half the talk is a tool
