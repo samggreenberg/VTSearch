@@ -209,7 +209,6 @@ def xcal_flow_fig() -> None:
             OUT,
             f"calib-xcal-flow.build{stage}.png",
             column=FULL_BLEED,
-            notch=False,
             box=box,
         )
     save(final, OUT, "calib-xcal-flow.png", column=FULL_BLEED, box=box)
@@ -565,7 +564,6 @@ def gmm_flow_fig() -> None:
             f"calib-gmm-flow.build{stage}.png",
             column=FULL_BLEED,
             box=box,
-            notch=False,
         )
     save(final, OUT, "calib-gmm-flow.png", column=FULL_BLEED, box=box)
 
@@ -1035,7 +1033,6 @@ def blend_flow_fig() -> None:
             f"calib-blend-flow.build{stage}.png",
             column=FULL_BLEED,
             box=box,
-            notch=False,
         )
     save(final, OUT, "calib-blend-flow.png", column=FULL_BLEED, box=box)
 
@@ -1325,7 +1322,6 @@ def xsemi_flow_fig() -> None:
             f"calib-fold-anchored-flow.build{stage}.png",
             column=FULL_BLEED,
             box=box,
-            notch=False,
         )
     save(final, OUT, "calib-fold-anchored-flow.png", column=FULL_BLEED, box=box)
 
@@ -1639,7 +1635,22 @@ XQUANT_FLOW_STAGES = 7
 #: 15pt label renders at 21.2px here, against the fold-anchored figure's 22.6px
 #: and the theme's 20px floor; the figure is height-limited in that slot, so
 #: the extra width is free and only the 0.65 units of extra height are spent.
-XQUANT_CANVAS = (16.65, 13.0)
+XQUANT_CANVAS = (20.45, 13.0)
+
+#: The left gutter that buys this figure its headline (#3242). Everything in
+#: the notch's vertical band — the "Unlabeled" / Good / Bad names hanging off
+#: the blocks' left edges — used to sit in the reserve, and the schematic
+#: cannot simply move right because it has to stay centred over the fold panels
+#: below it. So the *canvas* grows to its left instead and the whole drawing
+#: rides right with it.
+#:
+#: The drawing pays nothing for this. The figure is height-limited in a
+#: full-bleed slot, so its scale is set by `XQUANT_CANVAS[1]` alone: widening
+#: the canvas moves the drawing without shrinking it. It does so at half
+#: efficiency — a wider canvas is centred, so each unit of gutter carries the
+#: drawing only half a unit further from the slide's left edge — which is why
+#: 3.8 units of gutter buys the 1.9 the labels needed.
+XQUANT_GUTTER = 4.0
 
 #: The three panels' shared height, and the gauge row's bar height. The panels
 #: are `XSEMI_PANEL_H` unchanged — the fold half of this figure is the previous
@@ -1762,9 +1773,8 @@ def xquant_flow_fig() -> None:
             f"calib-quantile-flow.build{stage}.png",
             column=FULL_BLEED,
             box=box,
-            notch=False,
         )
-    save(final_stage, OUT, "calib-quantile-flow.png", column=FULL_BLEED, box=box, notch=False)
+    save(final_stage, OUT, "calib-quantile-flow.png", column=FULL_BLEED, box=box)
 
 
 def _xquant_populations() -> tuple[list[tuple[GmmFit1D, np.ndarray, dict]], np.ndarray]:
@@ -1983,7 +1993,7 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
     t_edge = min(MODEL_W / 2 / abs(ux), MODEL_H / 2 / abs(uy)) + OBJECT_GAP
     dx_to_tip = block_w / 4 + t_edge * ux + score_len * ux  # bx − tip1.x
     panel_w = (dx_to_tip - panel_gap / 2) / 0.38
-    bx = 0.2 + panel_w + panel_gap / 2
+    bx = XQUANT_GUTTER + panel_w + panel_gap / 2
 
     block_x0 = bx - block_w / 2
     hay_x0 = block_x0
@@ -2187,7 +2197,16 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
 INCL_CANVAS_W = 23.45
 
 #: The panel every Part 2 figure hangs its argument on, in drawing units.
-INCL_PANEL_X0, INCL_PANEL_W, INCL_PANEL_H = 1.97, 19.5, 2.2
+#:
+#: `X0` clears the title notch and is the reason these four slides have
+#: headlines at all (#3242). Their blocker was never the notch's *height* — a
+#: score axis spans the drawing, so shortening the reserve moves nothing out of
+#: it — but its left edge: the panel has to begin right of `TITLE_NOTCH_PX`.
+#: One canvas unit is 53.4 slide px with the canvas origin at slide x=14.2, so
+#: the notch's right edge falls at 6.48 and 6.70 clears it by 12px. The width
+#: spends the right margin to buy most of that back: the panel gives up 16% of
+#: its old span rather than the 24% the indent alone would have cost.
+INCL_PANEL_X0, INCL_PANEL_W, INCL_PANEL_H = 6.70, 16.40, 2.2
 
 #: The three stops each figure reads its gauges at. The retired rule returns one
 #: answer at every stop, so the knob's two ends and its middle are the fairest
@@ -2446,9 +2465,8 @@ def knob_flow_fig() -> None:
             f"calib-knob-flow.build{stage}.png",
             column=FULL_BLEED,
             box=box,
-            notch=False,
         )
-    save(final, OUT, "calib-knob-flow.png", column=FULL_BLEED, box=box, notch=False)
+    save(final, OUT, "calib-knob-flow.png", column=FULL_BLEED, box=box)
 
 
 def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
@@ -2654,9 +2672,8 @@ def walk_flow_fig() -> None:
             f"calib-walk-flow.build{stage}.png",
             column=FULL_BLEED,
             box=box,
-            notch=False,
         )
-    save(final, OUT, "calib-walk-flow.png", column=FULL_BLEED, box=box, notch=False)
+    save(final, OUT, "calib-walk-flow.png", column=FULL_BLEED, box=box)
 
 
 def _walk_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
@@ -2882,9 +2899,8 @@ def tilt_flow_fig() -> None:
             f"calib-tilt-flow.build{stage}.png",
             column=FULL_BLEED,
             box=box,
-            notch=False,
         )
-    save(last, OUT, "calib-tilt-flow.png", column=FULL_BLEED, box=box, notch=False)
+    save(last, OUT, "calib-tilt-flow.png", column=FULL_BLEED, box=box)
 
 
 def _tilt_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
@@ -3052,7 +3068,13 @@ def _tilt_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
 ACQ_CANVAS_H = 13.0
 
 #: The acquisition figure's panel and the ranking bar under it.
-ACQ_PANEL_X0, ACQ_PANEL_W, ACQ_PANEL_H = 4.9, 10.3, 2.0
+#: Shifted right with the rest of Part 2 to clear the title notch (#3242).
+#: This figure's blocker was not its score axis but the loop: `D_0` sits in the
+#: top-left corner and the return arrow enters it horizontally, so the whole
+#: drawing — rail, block and panel — moves right together rather than the panel
+#: alone. It had the room: the old layout left the right third of the canvas
+#: empty, which is exactly what the shift spends.
+ACQ_PANEL_X0, ACQ_PANEL_W, ACQ_PANEL_H = 11.05, 10.3, 2.0
 ACQ_GAUGE_H = 0.34
 
 #: The zoom strip: how many items of the ranking it shows, and how tall a cell
@@ -3115,9 +3137,8 @@ def acq_flow_fig() -> None:
             f"calib-acq-flow.build{stage}.png",
             column=FULL_BLEED,
             box=box,
-            notch=False,
         )
-    save(last, OUT, "calib-acq-flow.png", column=FULL_BLEED, box=box, notch=False)
+    save(last, OUT, "calib-acq-flow.png", column=FULL_BLEED, box=box)
 
 
 def _acq_cell(ax: plt.Axes, x0: float, y0: float, w: float, h: float, kind: str, lw: float = 1.2) -> None:
@@ -3147,7 +3168,7 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     # lines need the space under the ranking bar, and a name hung there would be
     # the thing they ran through.
     block_w, block_h = 3.0, 1.05
-    block_x0 = 1.0
+    block_x0 = 7.15
     block_top = ACQ_CANVAS_H - LABEL_GAP - CAP_16
     block_y0 = block_top - block_h
     row_y = block_y0 + block_h / 2
@@ -3177,7 +3198,7 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     pick_index = int(np.floor(report_cell + gap_cells))
 
     cut_label_bottom = zoom_y0 - 0.32 - LABEL_GAP - CAP_16
-    rail_x = 0.45
+    rail_x = 6.60
     ask_y = cut_label_bottom - OBJECT_GAP - CAP_16 - LABEL_GAP
     conclusion_y = ask_y - OBJECT_GAP - 0.24
 
@@ -3507,7 +3528,7 @@ def vts_loop_fig() -> None:
     final = _vts_loop_stage(LOOP_STAGES)
     box = tight_box(final)
     for stage in range(1, LOOP_STAGES):
-        save(_vts_loop_stage(stage), OUT, f"vts-loop.build{stage}.png", column=FULL_BLEED, box=box, notch=False)
+        save(_vts_loop_stage(stage), OUT, f"vts-loop.build{stage}.png", column=FULL_BLEED, box=box)
     save(final, OUT, "vts-loop.png", column=FULL_BLEED, box=box)
 
 
@@ -3530,8 +3551,16 @@ def _vts_loop_stage(stage: int) -> plt.Figure:
     # below the notch may use the full width, and the retrain rail does.
     bx = 11.45
     pool_x0, pool_w, pool_y0, pool_h = 6.7, 9.5, 8.5, 0.85
-    det_cy, det_w, det_h = 6.9, 2.9, 0.78
-    score_len = 1.55
+    # The detector drops 0.35 below where the spine would otherwise put it, and
+    # the score arrow gives back most of that, so the rows below shift by 0.15
+    # rather than by the whole drop. What the drop buys is the retrain rail:
+    # the rail runs into the detector's left edge at `det_cy`, and at 6.90 that
+    # run crossed the title notch's bottom edge. The rail is the only thing in
+    # this figure that reaches left under the headline, so 0.35 units is the
+    # whole price of the slide having one (#3242). The split is what it is
+    # because the arrow has to stay longer than the word rotated inside it.
+    det_cy, det_w, det_h = 6.55, 2.9, 0.78
+    score_len = 1.40
 
     score_tail = det_cy - det_h / 2 - OBJECT_GAP
     score_tip = score_tail - score_len

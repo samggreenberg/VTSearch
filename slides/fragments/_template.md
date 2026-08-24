@@ -27,7 +27,7 @@
 
 ### Kicker
 
-## Headline claim
+## Headline Claim
 
 - Supporting point
 - Supporting point

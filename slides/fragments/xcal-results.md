@@ -1,6 +1,6 @@
-### Iteration 1 — measured
+### Iteration 1 — Measured
 
-## Right in the limit, wild at the start
+## Right in the Limit, Wild at the Start
 
 - One bug fix took clean-vote regret from **0.010–0.016** to **~0.000**
 - But the cut is a **low quantile over tens of positives**, redrawn every vote

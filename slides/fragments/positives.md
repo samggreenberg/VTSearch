@@ -2,7 +2,7 @@
 
 ![bg fit](figs/positive-starvation.png)
 
-## Positives are the binding constraint
+## Positives Are the Binding Constraint
 
 <!-- The three numbers are yours to say now, and they are the ones to land:
      after 150 votes, a median of only four to eleven positives; one trace sat

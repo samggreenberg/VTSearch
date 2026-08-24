@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-xcal-flow.png)
 
-## Cross-calibration
+## Cross Examination
 
 <!-- build: figs/calib-xcal-flow.build1.png -->
 

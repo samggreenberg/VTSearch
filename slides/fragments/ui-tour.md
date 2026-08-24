@@ -2,7 +2,7 @@
 
 ![bg fit](figs/ui-three-panel.webp)
 
-## Search, judge, repeat
+## Judging by Appearances
 
 <!-- The three beats that used to be on the slide, now yours to say: seed with
      text or an example item; judge what comes back, Good or Bad; the ranking

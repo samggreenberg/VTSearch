@@ -2,7 +2,7 @@
 
 ![bg fit](figs/vts-loop.png)
 
-## One line, two jobs
+## In the Loop
 
 <!-- build: figs/vts-loop.build1.png -->
 

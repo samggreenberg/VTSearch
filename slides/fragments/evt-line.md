@@ -1,6 +1,6 @@
-### Epilogue — the cut-rule line
+### Epilogue — The Cut-Rule Line
 
-## Could a smarter rule beat the midpoint?
+## Could a Smarter Rule Beat the Midpoint?
 
 - Prior-free crossing: derived, shipped, **−0.0044** — FPR *and* FNR both fell
 - A max over regions is an **extreme-value** statistic — so fit that tail instead

@@ -84,12 +84,24 @@ OBJECT_GAP_PT = 16.0
 #: 0.28 of a 16:9 drawing's width and the symmetric flows clear it, which is
 #: the difference between those slides having a headline and not.
 #:
+#: The height is measured, not chosen. It used to be 250px, sized against the
+#: sentence-length headlines the deck carried before #3242 retitled the figure
+#: slides to short recognizable phrases. Every `_class: full` headline in the
+#: deck now renders at or under 191.2px in this column ("Simulated Voters,
+#: Thousands of Runs", the longest, at four lines), so 250 was 59px of reserve
+#: nothing ever used — and every one of those pixels was taken out of a figure.
+#: Re-measure before changing it, and re-measure if a full-bleed headline grows
+#: past two lines: `slides/STYLE.md` records the recipe (render the deck to
+#: HTML and read every `section.full h2` box in a browser). This number is a
+#: measurement of the deck, so it is only true of the deck it was measured on.
+#:
 #: What still cannot clear it is a figure whose *top row spans the drawing* —
-#: the Part 2 panel figures, whose score axis starts at the top-left corner by
-#: construction. Those slides carry no title. That is the standard working, not
-#: failing: the alternative is a headline that moves, and a headline that moves
-#: is worse than none.
-TITLE_NOTCH_PX = (60.0, 42.0, 300.0, 250.0)
+#: a score axis or a scatter that starts in the top-left corner by
+#: construction. Shrinking the height does not help those: the blocker is
+#: horizontal, so the drawing has to start right of the notch instead. The
+#: Part 2 panel figures do exactly that. What the height buys is the figures
+#: whose ink merely grazed the reserve's lower half.
+TITLE_NOTCH_PX = (60.0, 42.0, 300.0, 200.0)
 
 INK = "#14181f"
 SOFT = "#5b6472"

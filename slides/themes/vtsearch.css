@@ -210,7 +210,9 @@ section.outline ol li em { color: var(--ink-soft); font-style: normal; }
    spare its top-left corner therefore carries NO title — it does not put one
    somewhere else. The same rectangle lives in Python as
    `slide_figure.TITLE_NOTCH_PX`, where `save()` refuses to write a full-bleed
-   figure that draws inside it; keep the two in sync.
+   figure that draws inside it; keep the two in sync. Its height is a
+   measurement of this deck's longest full-bleed headline rather than a round
+   number — see the Python constant for how to re-take it.
 
    The background image is a Marpit layer behind the section, so the padding
    here insets only the title — the figure still bleeds to all four edges. */

@@ -1,6 +1,6 @@
 ### Next
 
-## Attack the fit, not the cut
+## Attack the Fit, Not the Cut
 
 - **Characterize transfer** — what does the calibration set fail to say about the pool?
 - **Schedule the anchor mass** — the best κ falls with votes; κ ∝ 1/*n* is a one-line arm

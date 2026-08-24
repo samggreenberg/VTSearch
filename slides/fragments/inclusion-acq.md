@@ -2,10 +2,10 @@
 
 ![bg fit](figs/calib-acq-flow.png)
 
-<!-- Untitled by design: this figure's own axis starts in the
-     top-left corner, where a headline would go, so the slide carries none.
-     The line to say as it comes up is “One estimator, two thresholds”.
-     -->
+## Compound Interest
+
+<!-- The line to say as the figure comes up is “One estimator, two thresholds” — the
+     headline names the slide, this names the move. -->
 
 <!-- build: figs/calib-acq-flow.build1.png -->
 

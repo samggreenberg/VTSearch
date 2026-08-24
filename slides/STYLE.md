@@ -135,10 +135,25 @@ Two consequences, and the second is the one that surprises people:
   So the standard is `<!-- _class: full -->` with `![bg fit]`, and the title
   goes in a **notch** cut out of the drawing's top-left corner.
 
-`slide_figure.TITLE_NOTCH_PX` is that rectangle — 300×250 at a 60×42 inset —
+`slide_figure.TITLE_NOTCH_PX` is that rectangle — 300×200 at a 60×42 inset —
 and `section.full` in `themes/vtsearch.css` is the same rectangle in CSS. Keep
 the two in step. `save()` refuses to write a full-bleed figure that draws
 inside it, so the reserve cannot rot.
+
+**The height is a measurement, not a round number.** It is the deck's longest
+full-bleed headline plus a little: every `section.full h2` renders at or under
+191.2px in a 300px column, so the reserve is 200. It used to be 250, sized
+against the sentence-length headlines the figure slides carried before #3242
+retitled them to short phrases, and the 59px nobody used were 59px taken out of
+every full-bleed figure. Re-measure before you change it, and re-measure if a
+headline grows past two lines — render the deck to HTML and read the boxes:
+
+```bash
+./build.py hold-the-line
+npx @marp-team/marp-cli@4 _build/hold-the-line.md --theme-set themes/ \
+    --allow-local-files --html -o _out/hold-the-line.html
+# then, in a browser: for every `section.full h2`, its height / (slide width / 1280)
+```
 
 **The notch does not move, and that is the whole point of it.** A headline that
 shifts corner to corner to dodge each figure stops being a headline and becomes
@@ -162,10 +177,32 @@ symmetrically about a spine puts its first row — the block, plus any labels
 hanging off its left edge — at a fixed fraction of its own width, near 0.29,
 *whatever* its aspect: widening the drawing moves the block and the notch
 together. So a notch wider than that is unclearable at any aspect a slide can
-show, which is why 300px and not 420px. What still cannot clear it is a figure
-whose **top row spans the drawing** — a score axis or a scatter that starts in
-the top-left by construction. Those slides carry no title, and their headline
-becomes the first line of the notes.
+show, which is why 300px and not 420px.
+
+The hard case is a figure whose **top row spans the drawing** — a score axis or
+a scatter that starts in the top-left by construction. This used to be where a
+slide gave up its title. It is not, and #3242 is the proof: every full-bleed
+figure in the deck now clears the reserve, and `save()` enforces it on all of
+them rather than taking a `notch=False`. The blocker in that case is
+*horizontal*, so shortening the reserve moves nothing out of it — which is why
+the repair is one of these three, in rising order of cost:
+
+- **Pan the frame.** A height-limited figure keeps its scale when its canvas
+  grows to the left, so the drawing rides right without shrinking. It buys half
+  a unit of clearance per unit of gutter, because the wider canvas re-centres.
+  `calib-quantile-flow` and `vote-boundary` are repaired this way and pay
+  nothing at all.
+- **Move the one thing that reaches left.** Often the ink in the reserve is a
+  single object, not the drawing: `vts-loop`'s retrain rail, `calib-acq-flow`'s
+  `D_0` block. Drop it, shift it, or give its row back the space elsewhere.
+- **Indent the axis.** When the top row genuinely spans the drawing —
+  `calib-knob-flow`, `-walk-`, `-tilt-` — the panel starts right of the notch
+  and spends the right margin to buy most of the width back. Those three give
+  up 16% of their span, which is what a headline costs there.
+
+A figure that resists all three still carries no title, and its headline
+becomes the first line of the notes. That is the standard working, not
+failing — but check the three first, because none of them was tried before.
 
 <!-- item-sep -->
 
