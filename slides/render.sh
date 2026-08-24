@@ -26,7 +26,10 @@ mkdir -p _out
 run_marp() {
     local log
     log=$(mktemp)
-    "${MARP[@]}" "$@" --theme-set themes/ --allow-local-files 2>&1 | tee "$log"
+    # --no-stdin: without it Marp waits for EOF on stdin before converting, so
+    # a render started from anything that does not close stdin (a script, a CI
+    # step, an agent shell) hangs forever with no output rather than failing.
+    "${MARP[@]}" "$@" --theme-set themes/ --allow-local-files --no-stdin 2>&1 | tee "$log"
     if grep -q "local files are missing" "$log"; then
         rm -f "$log"
         echo "ERROR: Marp could not resolve some figures." >&2
