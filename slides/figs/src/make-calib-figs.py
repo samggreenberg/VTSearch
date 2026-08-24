@@ -3434,13 +3434,19 @@ def blend_schedule_fig() -> None:
     # Short enough not to overflow the (shortened) axes above the title notch;
     # the tick labels already read "pure GMM" to "pure x-cal", so the axis name
     # only has to name the quantity, not re-explain the ends.
-    ax.set_ylabel("weight on the x-cal cut")
+    # Anchored to the bottom of the axis, out of the title reserve's own band:
+    # the reserve is only the *top* left corner, so a label that lives low on
+    # the left costs the drawing nothing.
+    ax.set_ylabel("weight on the x-cal cut", loc="bottom")
     ax.grid(axis="y", color=RULE, linewidth=0.8)
     ax.set_axisbelow(True)
-    # Full-bleed: no in-figure title (the slide's headline is the title, and it
-    # is drawn over this band), and the plot is pushed below TITLE_NOTCH_PX
-    # rather than tight-cropped, so the reserved corner survives the write.
-    fig.subplots_adjust(left=0.115, right=0.98, top=0.55, bottom=0.135)
+    # Full-bleed: no in-figure title (the slide's headline is the title, drawn
+    # over the top-left corner), and the axes are *indented* past the reserve
+    # rather than pushed under it. Pushing the plot down to `top=0.55` cleared
+    # the corner by spending half the slide, which `slides/STYLE.md` names as
+    # the wrong repair for exactly this shape: the blocker is horizontal, so
+    # the fix is horizontal (#3246).
+    fig.subplots_adjust(left=0.335, right=0.98, top=0.93, bottom=0.135)
     save(fig, OUT, "calib-blend-schedule.png", column=FULL_BLEED, tight=False)
 
 

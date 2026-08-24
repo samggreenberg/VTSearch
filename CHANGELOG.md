@@ -17,6 +17,23 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The calibration deck is a talk about ideas again, and every reveal has a
+  name.** `slides/decks/hold-the-line.deck` was rebuilt end to end: the
+  measurement slides are parked after the Questions slide as backup, so the
+  main line is what we found rather than how we ran the study; the two slides
+  that argued the threshold's double duty in the abstract are gone, and the
+  point is now made on the field of items where it can be seen — one detector
+  curve, then the same curve cut looser and tighter, then the item the loose
+  and tight cuts disagree about, which is also the item the user gets asked. A
+  new slide sets up what the Inclusion knob is *for* before the section that
+  shows it failing, and the epilogue's two compressed bullets became two
+  slides: why the midpoint of two means is not the Bayes-optimal cut, and why
+  a region-voted score is an extreme-value statistic. Every page of a build now
+  carries a letter after the shared page number (5a, 5b, 5c), the speaker view
+  shows the whole build as a lettered contact sheet under the slide, and
+  presenter notes that would have been clipped spill onto a continuation page
+  instead.
+
 - **The Add Dataset dialog has one consistent vertical rhythm, and Advanced
   really is hidden.** The Folder, Manifest and Demo forms all laid their fields
   out differently: a field's own controls could sit further apart than two

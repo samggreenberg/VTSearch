@@ -277,8 +277,8 @@ def expand_builds(text: str) -> list[str]:
 #: of underestimating is one extra continuation page, and the cost of
 #: overestimating is a sentence the presenter cannot read, which is the bug
 #: this exists to make impossible (#3246).
-NOTES_CHARS_PER_LINE = 66
-NOTES_LINES = 22
+NOTES_CHARS_PER_LINE = 67
+NOTES_LINES = 23
 #: A paragraph's bottom margin, in lines.
 NOTES_PARAGRAPH_GAP = 0.4
 

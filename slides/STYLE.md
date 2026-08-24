@@ -193,8 +193,11 @@ the repair is one of these three, in rising order of cost:
   `calib-quantile-flow` and `vote-boundary` are repaired this way and pay
   nothing at all.
 - **Move the one thing that reaches left.** Often the ink in the reserve is a
-  single object, not the drawing: `vts-loop`'s retrain rail, `calib-acq-flow`'s
-  `D_0` block. Drop it, shift it, or give its row back the space elsewhere.
+  single object, not the drawing: `calib-acq-flow`'s `D_0` block, or the
+  "Unlabeled" label that used to hang off the left edge of `D`<sub>−1</sub> in
+  three figures and held all three two units right of where they wanted to sit.
+  Drop it, shift it to the other side, or give its row back the space
+  elsewhere.
 - **Indent the axis.** When the top row genuinely spans the drawing —
   `calib-knob-flow`, `-walk-`, `-tilt-` — the panel starts right of the notch
   and spends the right margin to buy most of the width back. Those three give
@@ -273,21 +276,38 @@ fudged:
 
 <!-- item-sep -->
 
-## Every deck opens with an outline
+## Every deck opens with an outline, and comes back to it
 
 After the title slide, before the first argument: one slide naming the sections
 in the order they arrive. Not a table of contents of slide titles — the three
 or five things the talk is *for*.
 
-Give it `<!-- _class: outline -->`, write it as a numbered list of
-`**Name** *— one qualifying clause*`, and make each name match the headline of
-the section it points at. If the audience can predict every headline in the
-deck from this slide, it is doing its job: the interest in a research talk is
-in the evidence, not in the reveal.
+Give it `<!-- _class: outline -->` and write it as a numbered list of **bare
+names**. No qualifying clause, no gloss, nothing the presenter is going to say
+anyway: the room reads this slide at a glance or not at all, and a line they
+have to study is a line that has stopped being an outline. Make each name match
+the section it points at closely enough that the audience can place a slide
+without being told.
+
+**Then show it again before every section**, with that section's line marked.
+Use the same fragment, and let the manifest do the marking:
+
+```
+outline-hold-the-line +at3
+```
+
+The theme takes the marked line to full weight and quiets the rest, which is
+the deck's one rule for emphasis — weight and darkness, never hue — used to say
+*you are here*. It costs one slide per section and buys two things: the listener
+is anchored in the argument, and a topic change gets an unmistakable signal to
+wake up for. It is also why the opening outline carries `+at1` rather than
+appearing unmarked and then again marked; showing the same list twice in a row
+is a stutter, not an anchor.
 
 An outline lives in its own fragment (`fragments/outline-<deck>.md`) so a deck
 that re-tailors the argument gets its own, rather than inheriting a list that
-no longer describes it.
+no longer describes it — and one fragment used *N* ways cannot drift the way *N*
+copies would.
 
 <!-- item-sep -->
 
@@ -308,5 +328,16 @@ markers). Two rules keep a build honest:
   every line is a slow way to read a list; a build that reveals "and now the
   models swap halves" is a mechanism teaching itself.
 
-The speaker build always shows the one complete page — a speaker glancing at
-notes needs the whole picture, not whichever stage the audience is on.
+**Every page of a build carries a letter** after the shared page number — 5a,
+5b, 5c — so a reveal can be named. Write the presenter notes against those
+letters (`**c** — the same cut, loosened and tightened`) rather than against
+"page 3 of the build": the letter is what the audience deck actually prints,
+what a question from the room will use, and what the speaker build's contact
+sheet labels each frame with.
+
+The speaker build shows the one complete page large — a speaker glancing at
+notes needs the whole picture, not whichever stage the audience is on — with
+the whole group beneath it as a lettered contact sheet. That sheet is why a
+note never has to *describe* the build: "this slide is a seven-page build" is
+a sentence spent saying what a picture already says, in the one column that
+has no room to spare.
