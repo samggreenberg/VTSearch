@@ -199,7 +199,33 @@ section.outline ol li::before {
 }
 /* The section we are about to enter, or the one being revisited. */
 section.outline ol li.here { font-weight: 700; }
+/* Weight is set here, not with `**bold**` in the fragment: the whole point of
+   the marked variants below is that one line is heavier and darker than the
+   rest, and a `<strong>` in the markdown would pin every line to the same
+   weight whichever one is marked. */
+section.outline ol li { font-weight: 600; }
 section.outline ol li em { color: var(--ink-soft); font-style: normal; }
+
+/* The same outline, shown again before each section with that section marked:
+   `outline-<deck> +at3` in the manifest. The marked line goes bold and the
+   rest go quiet, which is the deck's one rule for emphasis — weight and
+   darkness, never hue — used to say "you are here" without adding a mark the
+   audience has to decode. The opening outline carries no `atN` and so is all
+   one weight, because at that point every section is still ahead. */
+section.outline[class*="at"] ol li { color: var(--ink-soft); }
+section.outline[class*="at"] ol li::before { color: var(--rule); }
+section.outline.at1 ol li:nth-of-type(1),
+section.outline.at2 ol li:nth-of-type(2),
+section.outline.at3 ol li:nth-of-type(3),
+section.outline.at4 ol li:nth-of-type(4),
+section.outline.at5 ol li:nth-of-type(5),
+section.outline.at6 ol li:nth-of-type(6) { color: var(--ink); font-weight: 700; }
+section.outline.at1 ol li:nth-of-type(1)::before,
+section.outline.at2 ol li:nth-of-type(2)::before,
+section.outline.at3 ol li:nth-of-type(3)::before,
+section.outline.at4 ol li:nth-of-type(4)::before,
+section.outline.at5 ol li:nth-of-type(5)::before,
+section.outline.at6 ol li:nth-of-type(6)::before { color: var(--ink-soft); }
 
 /* Full-bleed figure: the figure owns the whole 1280x720 slide, and the title
    sits in a notch cut out of its top-left corner.
@@ -276,11 +302,54 @@ section.speaker .speaker-page {
 section.speaker .speaker-slide {
   flex: 0 0 44%;
 }
+section.speaker .speaker-slide > p { margin: 0; }
 section.speaker .speaker-slide img {
   width: 100%;
   border: 1px solid var(--rule);
   border-radius: 4px;
   box-shadow: 0 2px 10px rgba(20, 24, 31, 0.10);
+}
+
+/* The build group's reveals, as a lettered contact sheet under the miniature.
+   It fills the quarter-page the single miniature used to leave empty, and it
+   replaces the sentence of prose ("in the audience deck this slide is a
+   seven-page build...") that used to spend the notes column saying what a
+   picture says better. Three across, because at four the frames stop being
+   readable as drawings; the strip wraps to as many rows as the group needs. */
+section.speaker .speaker-frames {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+section.speaker .speaker-frames figure {
+  margin: 0;
+  flex: 0 0 calc((100% - 20px) / 3);
+  position: relative;
+}
+section.speaker .speaker-frames img {
+  width: 100%;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  box-shadow: none;
+}
+/* The letter, in the corner of the frame it names — same pairing the audience
+   deck makes at the bottom-right of every page of the group. */
+section.speaker .speaker-frames figcaption {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  min-width: 26px;
+  padding: 1px 5px 2px;
+  background: var(--wash);
+  border-top: 1px solid var(--rule);
+  border-right: 1px solid var(--rule);
+  border-radius: 0 4px 0 3px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.1;
+  text-align: center;
 }
 section.speaker .speaker-notes {
   flex: 1;
@@ -303,3 +372,22 @@ section::after {
 
 section.lead::after,
 section.statement::after { content: ""; }
+
+/* A build group shares one page number, so "the slide with the mixture plot"
+   still names one slide — but the room and the presenter still need to say
+   *which* reveal. Every page of a group carries a letter after the number:
+   5a, 5b, 5c. It is drawn a step lighter than the number, because the number
+   is the address and the letter is the sub-address; and it sits in a
+   fixed-width box to the right of the number rather than inside it, so a
+   one-character suffix cannot shift the number it follows. build.py emits it,
+   and only on the pages of a build group. */
+section .pageno-letter {
+  position: absolute;
+  right: 56px;
+  bottom: 26px;
+  width: 14px;
+  text-align: left;
+  font-size: 20px;
+  color: #a9b2be;
+}
+section.speaker .pageno-letter { display: none; }

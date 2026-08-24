@@ -32,6 +32,7 @@ The audience build is untouched.
 from __future__ import annotations
 
 import argparse
+import math
 import os
 import re
 import sys
@@ -44,6 +45,9 @@ BUILD = ROOT / "_build"
 
 # ![alt](path)  — captures the path, ignoring any "title" suffix.
 IMAGE_RE = re.compile(r"!\[[^\]]*\]\(\s*([^)\s]+)")
+# src="path" — the speaker build's frame strip writes raw <img> tags, because a
+# markdown image cannot sit inside a <figure> without a blank line either side.
+SRC_RE = re.compile(r'src="([^"]+)"')
 # A build marker, alone on its line: `<!-- build -->` repeats the slide in the
 # audience deck with only the content above the marker; `<!-- build: figs/x.png -->`
 # additionally swaps the slide's (first) figure for that stage's figure. The
@@ -54,6 +58,11 @@ BUILD_BODY_RE = re.compile(r"\s*build(?:\s*:\s*\S+)?\s*")
 # Injected on every slide of a build group after the first, so the whole
 # progression shares one page number (Marpit's `paginate: hold`).
 HOLD = "<!-- _paginate: hold -->"
+# Emitted on every page of a build group, and nowhere else: the letter that
+# distinguishes 5a from 5b. Absolutely positioned by the theme just right of
+# Marp's own page number, and drawn fainter than it, so the pair reads as one
+# label with the letter subordinate to the number.
+LETTER_DIV = '<div class="pageno-letter">{}</div>'
 # A fragment's own per-slide class directive, merged into the injected one.
 CLASS_RE = re.compile(r"<!--\s*_class:\s*(.+?)\s*-->")
 # A line that is exactly a Marp slide separator.
@@ -76,15 +85,22 @@ class DeckError(Exception):
     pass
 
 
-def parse_manifest(path: Path) -> tuple[dict[str, str], list[str]]:
-    """Return (front-matter dict, ordered slide names).
+def parse_manifest(path: Path) -> tuple[dict[str, str], list[tuple[str, list[str]]]]:
+    """Return (front-matter dict, ordered `(slide name, extra classes)` pairs).
 
     Format: `key: value` lines, then a `slides:` line, then one slide name per
     line. `#` starts a comment anywhere, so a slide can be parked by commenting
     it out rather than deleting it.
+
+    A slide line may carry trailing `+class` tokens — `outline-foo +at2` — which
+    are merged into that *use* of the fragment. It exists for the one thing a
+    fragment cannot say about itself: a deck that shows its outline again
+    before each section wants the same five lines six times over, with a
+    different one marked each time. Six near-identical fragments would be six
+    copies to keep in step; one fragment used six ways cannot drift.
     """
     front: dict[str, str] = {}
-    slides: list[str] = []
+    slides: list[tuple[str, list[str]]] = []
     in_slides = False
 
     for lineno, raw in enumerate(path.read_text().splitlines(), 1):
@@ -95,7 +111,11 @@ def parse_manifest(path: Path) -> tuple[dict[str, str], list[str]]:
             in_slides = True
             continue
         if in_slides:
-            slides.append(line)
+            name, *tokens = line.split()
+            bad = [t for t in tokens if not t.startswith("+")]
+            if bad:
+                raise DeckError(f"{path.name}:{lineno}: expected `+class` after the fragment name, got {bad[0]!r}")
+            slides.append((name, [t[1:] for t in tokens]))
         elif ":" in line:
             key, value = line.split(":", 1)
             front[key.strip()] = value.strip()
@@ -107,6 +127,19 @@ def parse_manifest(path: Path) -> tuple[dict[str, str], list[str]]:
     if not slides:
         raise DeckError(f"{path.name}: `slides:` section is empty")
     return front, slides
+
+
+def with_extra_classes(text: str, extras: list[str]) -> str:
+    """Append a `_class` directive merging *extras* into whatever the fragment sets.
+
+    Marpit takes the last `_class` on a slide, so the new directive has to
+    restate the fragment's own classes rather than only adding to them.
+    """
+    if not extras:
+        return text
+    own = CLASS_RE.findall(text)
+    merged = " ".join(dict.fromkeys((own[-1].split() if own else []) + extras))
+    return f"{text}\n\n<!-- _class: {merged} -->"
 
 
 def yaml_scalar(value: str) -> str:
@@ -132,7 +165,25 @@ def rewrite_images(text: str) -> str:
         relative = os.path.relpath(ROOT / target, BUILD)
         return match.group(0).replace(target, relative)
 
-    return IMAGE_RE.sub(repoint, text)
+    return SRC_RE.sub(repoint, IMAGE_RE.sub(repoint, text))
+
+
+def stage_letter(index: int) -> str:
+    """The suffix a build's *index*-th page carries after the slide number.
+
+    Pages of one build group share a page number (`_paginate: hold`), which is
+    what makes "the slide with the mixture plot" name one slide — but it also
+    leaves the room and the presenter with no way to say *which* reveal. So
+    every page of a group carries a letter after the number: 5a, 5b, 5c. A
+    fragment with no build markers is one page and carries no letter.
+    """
+    letters = ""
+    while True:
+        index, remainder = divmod(index, 26)
+        letters = chr(ord("a") + remainder) + letters
+        if index == 0:
+            return letters
+        index -= 1
 
 
 def is_directive_comment(body: str) -> bool:
@@ -141,10 +192,15 @@ def is_directive_comment(body: str) -> bool:
 
 
 def fragment_notes(text: str) -> list[str]:
-    """Extract a fragment's presenter notes (non-directive HTML comments).
+    """A fragment's presenter notes, one entry per paragraph.
 
-    Note text is markdown; the continuation-line indentation of the comment
-    style is stripped so it can't be misread as a code block.
+    Notes are the non-directive HTML comments; note text is markdown, and the
+    continuation-line indentation of the comment style is stripped so it can't
+    be misread as a code block. The return value is flat — a paragraph, not a
+    comment, is the unit — because that is the granularity the speaker build
+    has to page at: one comment holding a slide's whole narration is longer
+    than any page can show, so a splitter working comment by comment would
+    have nothing to split.
     """
     notes: list[str] = []
     for match in COMMENT_RE.finditer(text):
@@ -154,12 +210,10 @@ def fragment_notes(text: str) -> list[str]:
         # Reflow: Marp renders single newlines as hard breaks, so joining the
         # comment's wrapped lines with "\n" would keep its ragged wrapping.
         # Collapse each blank-line-separated block to one line instead.
-        paragraphs = [
-            " ".join(line.strip() for line in block.split("\n") if line.strip()) for block in re.split(r"\n\s*\n", body)
-        ]
-        cleaned = "\n\n".join(p for p in paragraphs if p)
-        if cleaned:
-            notes.append(cleaned)
+        for block in re.split(r"\n\s*\n", body):
+            paragraph = " ".join(line.strip() for line in block.split("\n") if line.strip())
+            if paragraph:
+                notes.append(paragraph)
     return notes
 
 
@@ -211,29 +265,99 @@ def expand_builds(text: str) -> list[str]:
         if figure:
             body = swap_figure(body, figure)
         prefix = f"{HOLD}\n\n" if count else ""
-        slides.append(f"{prefix}{body}\n\n{build_class}")
+        slides.append(f"{prefix}{body}\n\n{build_class}\n\n{LETTER_DIV.format(stage_letter(count))}")
     final = "\n".join(line for line in lines if not BUILD_RE.match(line)).strip("\n")
-    slides.append(f"{HOLD}\n\n{final}\n\n{build_class}")
+    slides.append(f"{HOLD}\n\n{final}\n\n{build_class}\n\n{LETTER_DIV.format(stage_letter(len(markers)))}")
     return slides
 
 
-def speaker_page(deck: str, index: int, text: str) -> str:
-    """Build one speaker page: the rendered slide beside its notes.
+#: What one speaker page's notes column holds, measured against the theme:
+#: notes are 20px on a 1.38 line height in a 636px column, which is about 62
+#: characters a line and 21 lines a page. Deliberately conservative — the cost
+#: of underestimating is one extra continuation page, and the cost of
+#: overestimating is a sentence the presenter cannot read, which is the bug
+#: this exists to make impossible (#3246).
+NOTES_CHARS_PER_LINE = 66
+NOTES_LINES = 22
+#: A paragraph's bottom margin, in lines.
+NOTES_PARAGRAPH_GAP = 0.4
+
+
+def _notes_pages(notes: list[str]) -> list[list[str]]:
+    """Split *notes* into as many speaker pages as it takes for all of it to fit.
+
+    A speaker page that clips its own notes mid-sentence is worse than useless
+    — the presenter cannot tell that anything is missing. The type floor rules
+    out shrinking to fit, so the overflow goes onto a continuation page
+    instead. A single paragraph longer than a whole page still overflows; the
+    estimator reports that by giving it its own page, which is the loudest
+    thing a build step can do without failing a deck for being wordy.
+    """
+    pages: list[list[str]] = []
+    current: list[str] = []
+    used = 0.0
+    for note in notes:
+        cost = max(1, math.ceil(len(note) / NOTES_CHARS_PER_LINE)) + NOTES_PARAGRAPH_GAP
+        if current and used + cost > NOTES_LINES:
+            pages.append(current)
+            current, used = [], 0.0
+        current.append(note)
+        used += cost
+    pages.append(current or ["*(no presenter notes on this slide)*"])
+    return pages
+
+
+def _frame_strip(deck: str, pages: list[int]) -> str:
+    """The build group's reveals, as a lettered contact sheet.
+
+    A speaker page used to spend a sentence of its notes saying "in the
+    audience deck this slide is a seven-page build" — prose standing in for a
+    picture, in a column that had none to spare, beside a quarter of the page
+    that was empty. The frames themselves say it better and for free: the
+    presenter sees what each advance puts on screen, and every one carries the
+    letter the notes refer to it by.
+
+    Empty for a fragment that is one page — there is nothing to contact-sheet.
+    """
+    if len(pages) < 2:
+        return ""
+    cells = "\n".join(
+        f'<figure><img src="_build/imgs/{deck}.{page:03d}.png"><figcaption>{stage_letter(i)}</figcaption></figure>'
+        for i, page in enumerate(pages)
+    )
+    return f'<div class="speaker-frames">\n{cells}\n</div>\n'
+
+
+def speaker_page(deck: str, pages: list[int], text: str) -> list[str]:
+    """Build the speaker pages for one fragment: the slide beside its notes.
 
     The miniature is the per-slide PNG of the audience deck (rendered by
     render.sh into _build/imgs/ before this runs), so the speaker sees exactly
-    what the audience sees, pixel for pixel — page number included. The path
-    is written repo-`slides/`-relative like every fragment figure, and
-    rewrite_images repoints it for _build/.
+    what the audience sees, pixel for pixel — page number included. When the
+    fragment is a build, the frames of the whole group follow it as a lettered
+    contact sheet, filling the space the single miniature left empty. The paths
+    are written repo-`slides/`-relative like every fragment figure, and
+    rewrite_images repoints them for _build/.
+
+    Returns one page per chunk of notes: usually one, more when the notes are
+    too long to fit at the type floor.
     """
-    image = f"_build/imgs/{deck}.{index:03d}.png"
-    notes = fragment_notes(text) or ["*(no presenter notes on this slide)*"]
-    return (
-        "<!-- _class: speaker -->\n<!-- _paginate: false -->\n\n"
-        '<div class="speaker-page">\n<div class="speaker-slide">\n\n'
-        f"![Slide {index}]({image})\n\n"
-        '</div>\n<div class="speaker-notes">\n\n' + "\n\n".join(notes) + "\n\n</div>\n</div>"
-    )
+    last = pages[-1]
+    image = f"_build/imgs/{deck}.{last:03d}.png"
+    chunks = _notes_pages(fragment_notes(text))
+    strip = _frame_strip(deck, pages)
+    out: list[str] = []
+    for number, chunk in enumerate(chunks):
+        # The contact sheet goes on the first page only: a continuation page is
+        # more notes about the same slide, not a second slide.
+        left = f"![Slide {last}]({image})\n\n" + (strip if number == 0 else "")
+        out.append(
+            "<!-- _class: speaker -->\n<!-- _paginate: false -->\n\n"
+            '<div class="speaker-page">\n<div class="speaker-slide">\n\n'
+            f"{left}"
+            '</div>\n<div class="speaker-notes">\n\n' + "\n\n".join(chunk) + "\n\n</div>\n</div>"
+        )
+    return out
 
 
 def check_build_markers(name: str, text: str, problems: list[str]) -> None:
@@ -291,27 +415,31 @@ def assemble(deck: str, write: bool, speaker: bool = False) -> list[str]:
     bodies: list[str] = []
     page = 0  # audience-deck page count, builds included
 
-    for name in names:
+    for name, extras in names:
         fragment = SLIDES / f"{name}.md"
         if not fragment.exists():
             problems.append(f"{deck}.deck: missing fragment: fragments/{name}.md")
             continue
         text = fragment.read_text().strip("\n")
         check_fragment(name, text, problems)
-        stages = expand_builds(text)
+        stages = [with_extra_classes(stage, extras) for stage in expand_builds(text)]
+        pages = list(range(page + 1, page + 1 + len(stages)))
         page += len(stages)
         if not speaker:
             bodies.extend(stages)
             continue
-        # One speaker page per fragment; the miniature is the *final* stage of
-        # the audience build, which is the page the fragment's notes narrate.
-        if write and not (BUILD / "imgs" / f"{deck}.{page:03d}.png").exists():
-            problems.append(
-                f"{deck}.deck: missing slide image _build/imgs/{deck}.{page:03d}.png — "
-                f"the speaker build needs the audience deck rendered to per-slide PNGs "
-                f"first; use `./render.sh {deck} pdf --speaker`, which does both"
-            )
-        bodies.append(speaker_page(deck, page, text))
+        # One speaker page per fragment (more when its notes overflow); the
+        # miniature is the *final* stage of the audience build, which is the
+        # page the fragment's notes narrate, and the lettered contact sheet
+        # beneath it is every page of the group.
+        for number in pages if write else []:
+            if not (BUILD / "imgs" / f"{deck}.{number:03d}.png").exists():
+                problems.append(
+                    f"{deck}.deck: missing slide image _build/imgs/{deck}.{number:03d}.png — "
+                    f"the speaker build needs the audience deck rendered to per-slide PNGs "
+                    f"first; use `./render.sh {deck} pdf --speaker`, which does both"
+                )
+        bodies.extend(speaker_page(deck, pages, text))
 
     if problems or not write:
         return problems
@@ -339,12 +467,13 @@ def assemble(deck: str, write: bool, speaker: bool = False) -> list[str]:
 def unresolvable_images(body: str) -> list[str]:
     """Local image paths in an assembled deck body that don't resolve from _build/."""
     missing: list[str] = []
-    for match in IMAGE_RE.finditer(body):
-        target = match.group(1)
-        if target.startswith(("http://", "https://", "data:")):
-            continue
-        if not (BUILD / target).exists():
-            missing.append(target)
+    for pattern in (IMAGE_RE, SRC_RE):
+        for match in pattern.finditer(body):
+            target = match.group(1)
+            if target.startswith(("http://", "https://", "data:")):
+                continue
+            if not (BUILD / target).exists():
+                missing.append(target)
     return missing
 
 
@@ -360,9 +489,9 @@ def cmd_list() -> None:
         except DeckError as exc:
             print(f"  {deck:<24} !! {exc}")
             continue
-        used.update(names)
+        used.update(name for name, _ in names)
         pages = 0
-        for name in names:
+        for name, _ in names:
             fragment = SLIDES / f"{name}.md"
             pages += len(expand_builds(fragment.read_text().strip("\n"))) if fragment.exists() else 1
         builds = f"  ({pages} pages with builds)" if pages != len(names) else ""

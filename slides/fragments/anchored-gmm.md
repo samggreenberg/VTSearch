@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-fold-anchored-flow.png)
 
-## Above Average
+## Above<br>Average
 
 <!-- build: figs/calib-fold-anchored-flow.build1.png -->
 

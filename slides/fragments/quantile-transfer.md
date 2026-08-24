@@ -2,7 +2,7 @@
 
 ![bg fit](figs/calib-quantile-flow.png)
 
-## The Rank and File
+## The Rank<br>& File
 
 <!-- The line to say as the figure comes up is “Cuts don't transfer. Ranks do.” — the
      headline names the slide, this names the move. -->
