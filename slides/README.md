@@ -183,6 +183,25 @@ plot can be regenerated when the underlying numbers move —
 (see [`STYLE.md`](STYLE.md)) and refuses to write a figure whose labels would
 be unreadable in its slot.
 
+**Screenshots of the app are generated too.** `figs/ui-three-panel.png` and
+`figs/ui-region-voting.png` come from `figs/src/shoot-ui-figs.mjs`, which builds
+a corpus of real photographs out of the Caltech-101 download, trains a detector
+on cats by voting, and drives headless chromium:
+
+```bash
+cd scripts/screenshots && npm install     # once — playwright lives here
+node ../../slides/figs/src/shoot-ui-figs.mjs
+```
+
+Every step is idempotent, so a re-run after a GUI change is just the captures.
+It deliberately does **not** reuse the docs shots in
+`docs/user/screenshots.manifest.ts`: those are taken against the synthetic
+`syn-imgs` fixture because the user guide walks the reader through that dataset,
+and a slide is the audience's first sight of the tool, where flat coloured
+shapes make the product look like a toy. **A GUI change that moves the docs
+screenshots moves these too** — reshoot both, or the deck keeps showing an app
+that no longer exists.
+
 **Never drop a report figure straight onto a slide.** It was sized for a page,
 and in a slide slot its labels land around 8px. `slides/figs/src/make-bench-figs.py`
 is the worked example of the alternative: it reads the plotted series back out
