@@ -235,6 +235,16 @@ def transfer_bracket(df: pd.DataFrame, diag: pd.DataFrame, agg_dir: Path) -> pd.
             # them if they are in the table beside it.
             entry["ref_naive"] = float(np.nanmean(per_cell["cost_test_oracle_naive"].to_numpy()))
             entry["ref_honest"] = float(np.nanmean(per_cell["cost_test_oracle_honest"].to_numpy()))
+            # Step-weighted as well as cell-weighted, and the step count with it.
+            # `analyze_cut.cost_decomposition`'s `cost_transfer` is the same
+            # quantity computed two ways over: it averages *steps* rather than
+            # cells, and it keeps only steps with a complete four-link oracle
+            # chain, where this table needs the sim oracle alone.  Both
+            # differences are legitimate and they do not cancel, so the two
+            # numbers disagree by a small amount that a reader would otherwise
+            # have to explain away.  Printing both is cheaper than the paragraph.
+            entry["n_steps"] = int(len(sub))
+            entry["transfer_naive_step_weighted"] = float(np.nanmean(sub["transfer_naive"].to_numpy()))
             for col in ("transfer_naive", "transfer_honest", "optimism"):
                 mean, sem, p, n = _mean_sem(per_cell[col].to_numpy())
                 entry[col] = mean
