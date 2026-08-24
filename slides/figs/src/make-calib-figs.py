@@ -425,9 +425,13 @@ def _xcal_flow_stage(stage: int) -> plt.Figure:
     tip1 = (exit1[0] - score_len * ux, exit1[1] - score_len * uy)
     # The arrow points at the score-line *group*, so it stops an object gap
     # above the group's topmost ink — which is its label, not the line.
-    line_y, line_half = tip1[1] - (OBJECT_GAP + CAP_16 + SCORE_LABEL_LIFT), 4.6
-    cx1 = tip1[0] - 0.4 * line_half
+    line_y, line_half = tip1[1] - (OBJECT_GAP + CAP_16 + SCORE_LABEL_LIFT), 4.4
+    cx1 = tip1[0] - 0.5 * line_half
     cx2 = 2 * bx - cx1
+    # Two ranges that meet nose to tail read as one long axis with a kink in
+    # it. The serif feet `_range_line` draws say where each one ends, and this
+    # says it a second way, in the currency the eye reads first (#3246).
+    assert cx2 - cx1 - 2 * line_half >= 2 * OBJECT_GAP, "the two fold score lines are touching"
 
     data_block = functools.partial(_data_block, ax)
     arrow = functools.partial(_arrow, ax)
