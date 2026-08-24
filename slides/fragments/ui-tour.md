@@ -4,22 +4,27 @@
 
 ## Judging by Appearances
 
-<!-- The audience's first sight of the tool. Say what is on the screen, because
-     it is a real session: a few hundred photographs, someone about ten votes
-     into looking for the cats in them, nothing labelled when they started. -->
+<!-- The audience's first sight of the tool, and it is a real session: a few
+     hundred photographs, someone about ten votes into looking for the cats in
+     them, nothing labelled when they started. -->
 
-<!-- Walk the three panels left to right, slowly. Left: the corpus, ordered by
-     how well it currently matches — nothing here is labelled, it is just
-     everything the user has. Middle: one item, large, with two buttons under
-     it. That is the entire interaction the user performs. Right: the votes cast
-     so far, kept as two piles. -->
+<!-- Two things on the screen, and that is the whole interaction. In the middle,
+     one item, large, with two buttons under it — Good or Bad. On the right,
+     the votes cast so far, kept as two piles. Nothing else is being asked of
+     the user. -->
+
+<!-- The user is not scrolling a result list choosing what to judge. **The system
+     is choosing what to put in front of them** — that is the sliver on the far
+     left, autopilot working through its phases, and it is where the next slide
+     goes. -->
 
 <!-- The loop starts from a seed, because a model with no votes has nothing to
      rank by: type a phrase, or point at one example item. From then on it is
      vote, retrain, re-rank. A retrain is a fraction of a second, because the
-     thing being trained is a small linear head on frozen embeddings — the heavy
-     model never moves. -->
+     thing being trained is a small linear head on frozen embeddings — the
+     heavy model never moves. -->
 
-<!-- One thing worth pointing at, because it is where the next slide goes: the
-     user is not scrolling a result list choosing what to judge. The system is
-     choosing what to put in front of them. -->
+<!-- If someone asks where the rest of the corpus is: there is a manual mode with
+     the whole pile in a grid, sort controls and a threshold slider. It is not
+     on this slide because none of it is the point, and the slider is a
+     character in the second half of the talk. -->

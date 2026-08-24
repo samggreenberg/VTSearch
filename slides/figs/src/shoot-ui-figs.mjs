@@ -344,8 +344,36 @@ async function enterLabelView(page, datasetName, detectorName) {
 }
 
 async function leftTab(page, name) {
+  // The tab strip is hidden while autopilot is collapsed, and panel state
+  // persists across runs — so expand first, or the second shot of a run waits
+  // for a tab that is not on the page.
+  if ((await page.locator('.left-tab').count()) === 0) {
+    await page.locator('.collapse-toggle').first().click();
+    await page.waitForTimeout(1200);
+  }
   await page.locator('.left-tab', { hasText: name }).first().click();
   await page.waitForTimeout(800);
+}
+
+/**
+ * Hand the session to autopilot and fold its panel away to a rail.
+ *
+ * This is what the deck should be showing (#3246). Manual mode spends four
+ * rows of the left panel on sort mode, selection strategy and inclusion before
+ * the corpus grid even starts — every one of them a control the audience is
+ * being asked to ignore. Autopilot replaces the lot with a five-step phase
+ * list, and collapsing that leaves a rail a centimetre wide: what is left on
+ * screen is the item and the votes, which is the whole interaction.
+ *
+ * Switching tabs starts autopilot (`left-panel.setTab`), which re-sorts — but
+ * it keeps whatever item is already selected, so the caller can pick the frame
+ * in Manual first and still end up here.
+ */
+async function collapseIntoAutopilot(page) {
+  await leftTab(page, 'Autopilot');
+  await page.waitForTimeout(9000);
+  await page.locator('.collapse-toggle').first().click();
+  await page.waitForTimeout(2500);
 }
 
 /**
@@ -370,8 +398,11 @@ async function serveItem(page, prefer = [], voted = new Set()) {
 
 async function shootThreePanel(page, voted) {
   await enterLabelView(page, 'photos', 'cats');
+  // Manual only long enough to choose the frame: the corpus grid lives in that
+  // tab, and it is the only way to put a named item in the centre viewer.
   await leftTab(page, 'Manual');
   await serveItem(page, HERO, voted);
+  await collapseIntoAutopilot(page);
   // No callout. The slide is the audience's first sight of the product, and a
   // red box with red type across the middle of it is the presenter shouting
   // over the thing they are asking the room to look at. The buttons are the
@@ -383,15 +414,9 @@ async function shootRegionVoting(page, voted) {
   await enterLabelView(page, 'photo-regions', 'cats-regions');
   await leftTab(page, 'Manual');
   await serveItem(page, [HERO_REGION], voted);
-  // Sort by the trained detector rather than by text. On a patch dataset the
-  // text radio prints "this dataset's embedder does not support text queries"
-  // under the sort bar, which is two lines of apology in the panel the slide is
-  // asking the room to glance at (#3246).
-  const learned = page.locator('label:has(input[type=radio]):has-text("Learned")').first();
-  if (await learned.count()) {
-    await learned.click().catch(() => {});
-    await page.waitForTimeout(2500);
-  }
+  await collapseIntoAutopilot(page);
+  // The drawing tools live in the centre panel, so the box can be drawn after
+  // the left panel has been folded away.
   await page.locator('.ivc-btn-toggle, button[title*="Marquee" i]').first().click();
   await page.waitForTimeout(700);
   // The rendered *picture*, not the <img> element and not its wrapper. The
