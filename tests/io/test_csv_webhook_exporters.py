@@ -88,9 +88,9 @@ class TestCsvExporterCLI:
     """CLI argument parsing for the CSV exporter."""
 
     def test_adds_filepath_arg(self):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
@@ -99,9 +99,9 @@ class TestCsvExporterCLI:
 
     def test_filepath_default(self):
         from vtscore.config import DATA_DIR
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
@@ -111,15 +111,15 @@ class TestCsvExporterCLI:
         assert args.filepath == f"{DATA_DIR}/autodetect_results_{{YYYYMMDD-HHMMSS}}.csv"
 
     def test_validate_passes(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
         exp.validate_cli_field_values({"filepath": str(tmp_path / "out.csv")})
 
     def test_validate_missing_filepath(self):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
         with pytest.raises(ValueError, match="Missing required argument: --filepath"):
             exp.validate_cli_field_values({})
 
@@ -133,38 +133,38 @@ class TestCsvExporterExport:
     """Tests for the CSV export() method."""
 
     def test_creates_csv_file(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
         results = _make_sample_results()
         filepath = tmp_path / "output.csv"
 
-        result = exp.export(results, {"filepath": str(filepath)})
+        result = exp.export_find_results(results, {"filepath": str(filepath)})
         assert filepath.exists()
         assert "message" in result
         assert "Saved" in result["message"]
 
     def test_csv_has_correct_header(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
         results = _make_sample_results()
         filepath = tmp_path / "output.csv"
 
-        exp.export(results, {"filepath": str(filepath)})
+        exp.export_find_results(results, {"filepath": str(filepath)})
         with open(filepath, newline="", encoding="utf-8") as f:
             reader = csv.reader(f)
             header = next(reader)
         assert header == ["detector", "threshold", "filename", "category", "score", "origin", "origin_name"]
 
     def test_csv_has_correct_row_count(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
         results = _make_sample_results()
         filepath = tmp_path / "output.csv"
 
-        exp.export(results, {"filepath": str(filepath)})
+        exp.export_find_results(results, {"filepath": str(filepath)})
         with open(filepath, newline="", encoding="utf-8") as f:
             reader = csv.reader(f)
             rows = list(reader)
@@ -172,13 +172,13 @@ class TestCsvExporterExport:
         assert len(rows) == 4
 
     def test_csv_row_values(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
         results = _make_sample_results()
         filepath = tmp_path / "output.csv"
 
-        exp.export(results, {"filepath": str(filepath)})
+        exp.export_find_results(results, {"filepath": str(filepath)})
         with open(filepath, newline="", encoding="utf-8") as f:
             reader = csv.reader(f)
             next(reader)  # skip header
@@ -189,30 +189,30 @@ class TestCsvExporterExport:
         assert first_row[4] == "0.95"
 
     def test_csv_empty_results(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
         results = {"media_type": "audio", "detectors_run": 0, "results": {}}
         filepath = tmp_path / "empty.csv"
 
-        result = exp.export(results, {"filepath": str(filepath)})
+        result = exp.export_find_results(results, {"filepath": str(filepath)})
         assert filepath.exists()
         assert "0 hit(s)" in result["message"]
 
     def test_csv_creates_parent_dirs(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
         results = _make_sample_results()
         filepath = tmp_path / "sub" / "dir" / "output.csv"
 
-        exp.export(results, {"filepath": str(filepath)})
+        exp.export_find_results(results, {"filepath": str(filepath)})
         assert filepath.exists()
 
     def test_csv_multiple_detectors(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
         results = {
             "media_type": "audio",
             "detectors_run": 2,
@@ -236,7 +236,7 @@ class TestCsvExporterExport:
         }
         filepath = tmp_path / "multi.csv"
 
-        result = exp.export(results, {"filepath": str(filepath)})
+        result = exp.export_find_results(results, {"filepath": str(filepath)})
         with open(filepath, newline="", encoding="utf-8") as f:
             reader = csv.reader(f)
             rows = list(reader)
@@ -283,16 +283,16 @@ class TestCsvExporterLabelsFormat:
     """Tests for CSV export of labels with selected columns."""
 
     def test_labels_format_uses_selected_columns(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
-        results = {
+        exp = ServerCsvResultsExporter()
+        labelset = {
             "labels": SAMPLE_LABELS,
             "selected_columns": ["label", "filename", "category"],
         }
         filepath = tmp_path / "labels.csv"
 
-        exp.export(results, {"filepath": str(filepath)})
+        exp.export_labelset(labelset, {"filepath": str(filepath)})
         with open(filepath, newline="", encoding="utf-8") as f:
             reader = csv.reader(f)
             header = next(reader)
@@ -300,31 +300,31 @@ class TestCsvExporterLabelsFormat:
         assert header == ["label", "filename", "category", "origin"]
 
     def test_labels_format_correct_row_count(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
-        results = {
+        exp = ServerCsvResultsExporter()
+        labelset = {
             "labels": SAMPLE_LABELS,
             "selected_columns": ["label", "filename"],
         }
         filepath = tmp_path / "labels.csv"
 
-        exp.export(results, {"filepath": str(filepath)})
+        exp.export_labelset(labelset, {"filepath": str(filepath)})
         with open(filepath, newline="", encoding="utf-8") as f:
             rows = list(csv.reader(f))
         assert len(rows) == 4  # 1 header + 3 labels
 
     def test_labels_format_row_values(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
-        results = {
+        exp = ServerCsvResultsExporter()
+        labelset = {
             "labels": SAMPLE_LABELS,
             "selected_columns": ["label", "filename", "category"],
         }
         filepath = tmp_path / "labels.csv"
 
-        exp.export(results, {"filepath": str(filepath)})
+        exp.export_labelset(labelset, {"filepath": str(filepath)})
         with open(filepath, newline="", encoding="utf-8") as f:
             reader = csv.reader(f)
             next(reader)  # skip header
@@ -333,16 +333,16 @@ class TestCsvExporterLabelsFormat:
         assert first_row == ["good", "clip1.wav", "birds", ""]
 
     def test_labels_format_includes_metadata_columns(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
-        results = {
+        exp = ServerCsvResultsExporter()
+        labelset = {
             "labels": SAMPLE_LABELS,
             "selected_columns": ["filename", "source", "quality"],
         }
         filepath = tmp_path / "labels.csv"
 
-        exp.export(results, {"filepath": str(filepath)})
+        exp.export_labelset(labelset, {"filepath": str(filepath)})
         with open(filepath, newline="", encoding="utf-8") as f:
             reader = csv.reader(f)
             header = next(reader)
@@ -352,16 +352,16 @@ class TestCsvExporterLabelsFormat:
 
     def test_labels_format_missing_metadata_gives_empty(self, tmp_path):
         """When a metadata column is missing from an entry, output empty string."""
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
-        results = {
+        exp = ServerCsvResultsExporter()
+        labelset = {
             "labels": SAMPLE_LABELS,
             "selected_columns": ["filename", "quality"],
         }
         filepath = tmp_path / "labels.csv"
 
-        exp.export(results, {"filepath": str(filepath)})
+        exp.export_labelset(labelset, {"filepath": str(filepath)})
         with open(filepath, newline="", encoding="utf-8") as f:
             rows = list(csv.reader(f))
         # Third entry (clip3.wav) has no "quality" in metadata; origin also empty
@@ -369,25 +369,25 @@ class TestCsvExporterLabelsFormat:
 
     def test_labels_format_changed_columns_reflected(self, tmp_path):
         """Changing selected_columns between exports produces different output."""
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
 
         # First export with all base columns
-        results1 = {
+        labelset1 = {
             "labels": SAMPLE_LABELS,
             "selected_columns": ["label", "md5", "origin_name", "filename", "category"],
         }
         filepath1 = tmp_path / "export1.csv"
-        exp.export(results1, {"filepath": str(filepath1)})
+        exp.export_labelset(labelset1, {"filepath": str(filepath1)})
 
         # Second export with only a metadata column
-        results2 = {
+        labelset2 = {
             "labels": SAMPLE_LABELS,
             "selected_columns": ["source"],
         }
         filepath2 = tmp_path / "export2.csv"
-        exp.export(results2, {"filepath": str(filepath2)})
+        exp.export_labelset(labelset2, {"filepath": str(filepath2)})
 
         with open(filepath1, newline="", encoding="utf-8") as f:
             header1 = next(csv.reader(f))
@@ -400,38 +400,38 @@ class TestCsvExporterLabelsFormat:
 
     def test_labels_format_no_selected_columns_uses_defaults(self, tmp_path):
         """When selected_columns is absent, fall back to base columns."""
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
-        results = {"labels": SAMPLE_LABELS}
+        exp = ServerCsvResultsExporter()
+        labelset = {"labels": SAMPLE_LABELS}
         filepath = tmp_path / "labels.csv"
 
-        exp.export(results, {"filepath": str(filepath)})
+        exp.export_labelset(labelset, {"filepath": str(filepath)})
         with open(filepath, newline="", encoding="utf-8") as f:
             header = next(csv.reader(f))
         assert header == ["label", "md5", "origin_name", "filename", "category", "origin"]
 
     def test_labels_format_message(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
-        results = {
+        exp = ServerCsvResultsExporter()
+        labelset = {
             "labels": SAMPLE_LABELS,
             "selected_columns": ["label", "filename"],
         }
         filepath = tmp_path / "labels.csv"
 
-        result = exp.export(results, {"filepath": str(filepath)})
+        result = exp.export_labelset(labelset, {"filepath": str(filepath)})
         assert "3 label(s)" in result["message"]
 
     def test_labels_format_empty_labels(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
-        results = {"labels": [], "selected_columns": ["label", "filename"]}
+        exp = ServerCsvResultsExporter()
+        labelset = {"labels": [], "selected_columns": ["label", "filename"]}
         filepath = tmp_path / "empty.csv"
 
-        result = exp.export(results, {"filepath": str(filepath)})
+        result = exp.export_labelset(labelset, {"filepath": str(filepath)})
         assert "0 label(s)" in result["message"]
         with open(filepath, newline="", encoding="utf-8") as f:
             rows = list(csv.reader(f))
@@ -439,9 +439,9 @@ class TestCsvExporterLabelsFormat:
 
     def test_labels_format_origin_dict_serialised_as_json(self, tmp_path):
         """Origin dicts are JSON-serialised in CSV so they survive round-trip."""
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
         origin = {"importer": "demo", "params": {"name": "flowers102"}}
         labels = [
             {
@@ -453,10 +453,10 @@ class TestCsvExporterLabelsFormat:
                 "origin": origin,
             }
         ]
-        results = {"labels": labels}
+        labelset = {"labels": labels}
         filepath = tmp_path / "with_origin.csv"
 
-        exp.export(results, {"filepath": str(filepath)})
+        exp.export_labelset(labelset, {"filepath": str(filepath)})
 
         # Read back and verify origin column is valid JSON
         from vtscore.labels.importers.server_csv_file import _parse_csv_bytes
@@ -475,59 +475,59 @@ class TestJsonExporterLabelsFormat:
     """Tests for JSON export of labels with selected columns."""
 
     def test_labels_format_filters_to_selected_columns(self, tmp_path):
-        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonResultsExporter
 
-        exp = ServerJsonLabelsetExporter()
-        results = {
+        exp = ServerJsonResultsExporter()
+        labelset = {
             "labels": SAMPLE_LABELS,
             "selected_columns": ["label", "filename"],
         }
         filepath = tmp_path / "labels.json"
 
-        exp.export(results, {"filepath": str(filepath)})
+        exp.export_labelset(labelset, {"filepath": str(filepath)})
         written = json.loads(filepath.read_text())
         assert written["selected_columns"] == ["label", "filename"]
         for entry in written["labels"]:
             assert set(entry.keys()) == {"label", "filename"}
 
     def test_labels_format_includes_metadata(self, tmp_path):
-        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonResultsExporter
 
-        exp = ServerJsonLabelsetExporter()
-        results = {
+        exp = ServerJsonResultsExporter()
+        labelset = {
             "labels": SAMPLE_LABELS,
             "selected_columns": ["filename", "source"],
         }
         filepath = tmp_path / "labels.json"
 
-        exp.export(results, {"filepath": str(filepath)})
+        exp.export_labelset(labelset, {"filepath": str(filepath)})
         written = json.loads(filepath.read_text())
         assert written["labels"][0] == {"filename": "clip1.wav", "source": "field"}
 
     def test_labels_format_no_selected_columns_keeps_all(self, tmp_path):
-        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonResultsExporter
 
-        exp = ServerJsonLabelsetExporter()
-        results = {"labels": SAMPLE_LABELS}
+        exp = ServerJsonResultsExporter()
+        labelset = {"labels": SAMPLE_LABELS}
         filepath = tmp_path / "labels.json"
 
-        exp.export(results, {"filepath": str(filepath)})
+        exp.export_labelset(labelset, {"filepath": str(filepath)})
         written = json.loads(filepath.read_text())
         assert written["labels"] == SAMPLE_LABELS
 
     def test_labels_format_changed_columns(self, tmp_path):
         """Changing selected_columns between exports produces different JSON."""
-        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonResultsExporter
 
-        exp = ServerJsonLabelsetExporter()
+        exp = ServerJsonResultsExporter()
 
-        results1 = {"labels": SAMPLE_LABELS, "selected_columns": ["label", "md5"]}
+        labelset1 = {"labels": SAMPLE_LABELS, "selected_columns": ["label", "md5"]}
         filepath1 = tmp_path / "export1.json"
-        exp.export(results1, {"filepath": str(filepath1)})
+        exp.export_labelset(labelset1, {"filepath": str(filepath1)})
 
-        results2 = {"labels": SAMPLE_LABELS, "selected_columns": ["source"]}
+        labelset2 = {"labels": SAMPLE_LABELS, "selected_columns": ["source"]}
         filepath2 = tmp_path / "export2.json"
-        exp.export(results2, {"filepath": str(filepath2)})
+        exp.export_labelset(labelset2, {"filepath": str(filepath2)})
 
         written1 = json.loads(filepath1.read_text())
         written2 = json.loads(filepath2.read_text())
@@ -536,13 +536,13 @@ class TestJsonExporterLabelsFormat:
         assert set(written2["labels"][0].keys()) == {"source"}
 
     def test_labels_format_message(self, tmp_path):
-        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonResultsExporter
 
-        exp = ServerJsonLabelsetExporter()
-        results = {"labels": SAMPLE_LABELS, "selected_columns": ["label"]}
+        exp = ServerJsonResultsExporter()
+        labelset = {"labels": SAMPLE_LABELS, "selected_columns": ["label"]}
         filepath = tmp_path / "labels.json"
 
-        result = exp.export(results, {"filepath": str(filepath)})
+        result = exp.export_labelset(labelset, {"filepath": str(filepath)})
         assert "3 label(s)" in result["message"]
 
 
@@ -633,9 +633,9 @@ class TestWebhookExporterCLI:
     """CLI argument parsing for the Webhook exporter."""
 
     def test_adds_url_arg(self):
-        from vtscore.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookResultsExporter
 
-        exp = WebhookLabelsetExporter()
+        exp = WebhookResultsExporter()
         parser = argparse.ArgumentParser()
         exp.add_cli_arguments(parser)
 
@@ -643,23 +643,23 @@ class TestWebhookExporterCLI:
         assert args.url == "https://example.com/hook"
 
     def test_validate_passes_with_url(self):
-        from vtscore.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookResultsExporter
 
-        exp = WebhookLabelsetExporter()
+        exp = WebhookResultsExporter()
         # auth_header is optional, so only url is needed
         exp.validate_cli_field_values({"url": "https://example.com/hook"})
 
     def test_validate_missing_url(self):
-        from vtscore.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookResultsExporter
 
-        exp = WebhookLabelsetExporter()
+        exp = WebhookResultsExporter()
         with pytest.raises(ValueError, match="Missing required argument: --url"):
             exp.validate_cli_field_values({})
 
     def test_validate_passes_without_auth_header(self):
-        from vtscore.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookResultsExporter
 
-        exp = WebhookLabelsetExporter()
+        exp = WebhookResultsExporter()
         # Should not raise
         exp.validate_cli_field_values({"url": "https://example.com/hook"})
 
@@ -680,9 +680,9 @@ class TestWebhookExporterExport:
     """
 
     def test_posts_json_to_url(self):
-        from vtscore.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookResultsExporter
 
-        exp = WebhookLabelsetExporter()
+        exp = WebhookResultsExporter()
         results = _make_sample_results()
 
         mock_resp = mock.MagicMock()
@@ -692,7 +692,7 @@ class TestWebhookExporterExport:
         with (
             mock.patch("requests.Session.post", return_value=mock_resp) as mock_post,
         ):
-            result = exp.export(results, {"url": "https://example.com/hook"})
+            result = exp.export_find_results(results, {"url": "https://example.com/hook"})
 
         mock_post.assert_called_once()
         call_kwargs = mock_post.call_args
@@ -701,9 +701,9 @@ class TestWebhookExporterExport:
         assert "200" in result["message"]
 
     def test_sends_auth_header_when_provided(self):
-        from vtscore.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookResultsExporter
 
-        exp = WebhookLabelsetExporter()
+        exp = WebhookResultsExporter()
         results = _make_sample_results()
 
         mock_resp = mock.MagicMock()
@@ -713,15 +713,15 @@ class TestWebhookExporterExport:
         with (
             mock.patch("requests.Session.post", return_value=mock_resp) as mock_post,
         ):
-            exp.export(results, {"url": "https://example.com/hook", "auth_header": "Bearer my-token"})
+            exp.export_find_results(results, {"url": "https://example.com/hook", "auth_header": "Bearer my-token"})
 
         call_kwargs = mock_post.call_args
         assert call_kwargs.kwargs["headers"]["Authorization"] == "Bearer my-token"
 
     def test_no_auth_header_when_empty(self):
-        from vtscore.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookResultsExporter
 
-        exp = WebhookLabelsetExporter()
+        exp = WebhookResultsExporter()
         results = _make_sample_results()
 
         mock_resp = mock.MagicMock()
@@ -731,15 +731,15 @@ class TestWebhookExporterExport:
         with (
             mock.patch("requests.Session.post", return_value=mock_resp) as mock_post,
         ):
-            exp.export(results, {"url": "https://example.com/hook", "auth_header": ""})
+            exp.export_find_results(results, {"url": "https://example.com/hook", "auth_header": ""})
 
         call_kwargs = mock_post.call_args
         assert "Authorization" not in call_kwargs.kwargs["headers"]
 
     def test_http_error_propagates(self):
-        from vtscore.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookResultsExporter
 
-        exp = WebhookLabelsetExporter()
+        exp = WebhookResultsExporter()
         results = _make_sample_results()
 
         mock_resp = mock.MagicMock()
@@ -747,12 +747,12 @@ class TestWebhookExporterExport:
 
         with mock.patch("requests.Session.post", return_value=mock_resp):
             with pytest.raises(Exception, match="500 Server Error"):
-                exp.export(results, {"url": "https://example.com/hook"})
+                exp.export_find_results(results, {"url": "https://example.com/hook"})
 
     def test_message_contains_hit_count(self):
-        from vtscore.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookResultsExporter
 
-        exp = WebhookLabelsetExporter()
+        exp = WebhookResultsExporter()
         results = _make_sample_results()
 
         mock_resp = mock.MagicMock()
@@ -760,15 +760,15 @@ class TestWebhookExporterExport:
         mock_resp.raise_for_status.return_value = None
 
         with mock.patch("requests.Session.post", return_value=mock_resp):
-            result = exp.export(results, {"url": "https://example.com/hook"})
+            result = exp.export_find_results(results, {"url": "https://example.com/hook"})
 
         assert "3 hit(s)" in result["message"]
         assert "1 detector(s)" in result["message"]
 
     def test_result_includes_status_code_and_url(self):
-        from vtscore.exporters.webhook import WebhookLabelsetExporter
+        from vtscore.exporters.webhook import WebhookResultsExporter
 
-        exp = WebhookLabelsetExporter()
+        exp = WebhookResultsExporter()
         results = _make_sample_results()
 
         mock_resp = mock.MagicMock()
@@ -776,7 +776,7 @@ class TestWebhookExporterExport:
         mock_resp.raise_for_status.return_value = None
 
         with mock.patch("requests.Session.post", return_value=mock_resp):
-            result = exp.export(results, {"url": "https://example.com/hook"})
+            result = exp.export_find_results(results, {"url": "https://example.com/hook"})
 
         assert result["status_code"] == 201
         assert result["url"] == "https://example.com/hook"
@@ -832,10 +832,10 @@ class TestFilepathTemplateExpansion:
 
     def test_consecutive_csv_exports_do_not_overwrite(self, tmp_path):
         """Two exports a second apart should land in distinct files."""
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
         from vtscore.plugins.normalize import normalize_field_values
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
         results = _make_sample_results()
         template = str(tmp_path / "out_{YYYYMMDD-HHMMSS}.csv")
 
@@ -844,9 +844,9 @@ class TestFilepathTemplateExpansion:
             from datetime import timezone
 
             mock_dt.now.return_value = real_dt(2026, 5, 16, 14, 30, 22, tzinfo=timezone.utc)
-            r1 = exp.export(results, normalize_field_values(exp, {"filepath": template}))
+            r1 = exp.export_find_results(results, normalize_field_values(exp, {"filepath": template}))
             mock_dt.now.return_value = real_dt(2026, 5, 16, 14, 30, 23, tzinfo=timezone.utc)
-            r2 = exp.export(results, normalize_field_values(exp, {"filepath": template}))
+            r2 = exp.export_find_results(results, normalize_field_values(exp, {"filepath": template}))
 
         # Both files exist with distinct, timestamp-stamped names.
         assert r1["filepath"] != r2["filepath"]
@@ -858,15 +858,17 @@ class TestFilepathTemplateExpansion:
         from datetime import datetime as real_dt
         from datetime import timezone
 
-        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonResultsExporter
         from vtscore.plugins.normalize import normalize_field_values
 
-        exp = ServerJsonLabelsetExporter()
+        exp = ServerJsonResultsExporter()
         template = str(tmp_path / "j_{YYYYMMDD-HHMMSS}.json")
 
         with mock.patch("vtscore.plugins.normalize.datetime") as mock_dt:
             mock_dt.now.return_value = real_dt(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
-            result = exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
+            result = exp.export_find_results(
+                _make_sample_results(), normalize_field_values(exp, {"filepath": template})
+            )
 
         expected = tmp_path / "j_20260102-030405.json"
         assert expected.exists()
@@ -878,15 +880,17 @@ class TestFilepathTemplateExpansion:
         from datetime import datetime as real_dt
         from datetime import timezone
 
-        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonResultsExporter
         from vtscore.plugins.normalize import normalize_field_values
 
-        exp = ServerJsonLabelsetExporter()
+        exp = ServerJsonResultsExporter()
         template = str(tmp_path / "d_{YYYYMMDD}" / "{YYYY}.{MM}.{DD}.json")
 
         with mock.patch("vtscore.plugins.normalize.datetime") as mock_dt:
             mock_dt.now.return_value = real_dt(2026, 4, 1, 23, 59, 59, tzinfo=timezone.utc)
-            result = exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
+            result = exp.export_find_results(
+                _make_sample_results(), normalize_field_values(exp, {"filepath": template})
+            )
 
         expected = tmp_path / "d_20260401" / "2026.04.01.json"
         assert expected.exists()
@@ -895,45 +899,45 @@ class TestFilepathTemplateExpansion:
     def test_username_template_expands(self, tmp_path):
         """The {username} template substitutes get_current_user(), sanitised."""
         from vtsearch.auth import thread_user
-        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonResultsExporter
         from vtscore.plugins.normalize import normalize_field_values
 
-        exp = ServerJsonLabelsetExporter()
+        exp = ServerJsonResultsExporter()
         template = str(tmp_path / "{username}.json")
 
         with thread_user("alice"):
-            exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
+            exp.export_find_results(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
 
         assert (tmp_path / "alice.json").exists()
 
     def test_username_template_sanitises_path_separators(self, tmp_path):
         """A malicious username with ``/`` cannot escape the parent directory."""
         from vtsearch.auth import thread_user
-        from vtscore.exporters.server_json_file import ServerJsonLabelsetExporter
+        from vtscore.exporters.server_json_file import ServerJsonResultsExporter
         from vtscore.plugins.normalize import normalize_field_values
 
-        exp = ServerJsonLabelsetExporter()
+        exp = ServerJsonResultsExporter()
         template = str(tmp_path / "{username}.json")
 
         with thread_user("../evil"):
-            exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
+            exp.export_find_results(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
 
         # ``/`` and ``..`` are replaced with ``_``, so the result stays inside tmp_path.
         assert (tmp_path / ".._evil.json").exists()
 
     def test_detector_name_template_expands(self, tmp_path):
         """The {detector_name} template pulls from the active detector context."""
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
         from vtscore.plugins.normalize import normalize_field_values
         from vtscore.state.core import DetectorContext, set_thread_detector_context
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
         template = str(tmp_path / "{detector_name}.csv")
 
         ctx = DetectorContext("det-id-1", name="dog_bark")
         set_thread_detector_context(ctx)
         try:
-            exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
+            exp.export_find_results(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
         finally:
             set_thread_detector_context(None)
 
@@ -941,13 +945,13 @@ class TestFilepathTemplateExpansion:
 
     def test_detector_name_template_with_no_active_context_uses_placeholder(self, tmp_path):
         """An empty detector context (fallback) sanitises to ``_``."""
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
         from vtscore.plugins.normalize import normalize_field_values
 
-        exp = ServerCsvLabelsetExporter()
+        exp = ServerCsvResultsExporter()
         template = str(tmp_path / "{detector_name}.csv")
 
-        exp.export(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
+        exp.export_find_results(_make_sample_results(), normalize_field_values(exp, {"filepath": template}))
 
         # sanitize_template_value("") -> "_"
         assert (tmp_path / "_.csv").exists()

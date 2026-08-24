@@ -1,4 +1,4 @@
-# Writing a `LabelsetExporter`
+# Writing a `ResultsExporter`
 
 A results exporter sends autodetect output or a label export to a
 destination - a file on the server, a webhook, an email, a queue, an
@@ -6,16 +6,14 @@ S3 object, anything reachable from the Python process. The library
 auto-discovers exporters under `vtscore.exporters` (sentinel
 `EXPORTER`) and walks the `vtscore.exporters` entry-point group so a
 third-party distribution can `pip install` one in. Subclass
-[`LabelsetExporter`](../../exporters/base.py)
+[`ResultsExporter`](../../exporters/base.py)
 ([`vtscore/exporters/base.py`](../../exporters/base.py)), declare
-your `fields`, and implement `export(results, field_values) -> dict`.
+your `fields`, and implement a method per payload kind you support.
 
-The base class is named `LabelsetExporter` for historical reasons; in
-practice it handles both autodetect-results payloads and label
-exports. The `export()` method should detect which is which (label
-payloads carry a top-level `"labels"` key - see
-[`vtscore/exporters/server_json_file/__init__.py`](../../exporters/server_json_file/__init__.py)
-for the pattern).
+The class was called `LabelsetExporter` for historical reasons, which
+described one of the three payloads it has always accepted. It is now
+`ResultsExporter`; `LabelsetExporter` remains a permanent module-level
+alias, so existing imports and subclasses keep working untouched.
 
 **App-side counterpart:** [`docs/EXTENDING-plugins.md § Adding a
 Results Exporter`](../../../docs/EXTENDING-plugins.md#adding-a-results-exporter)
@@ -25,7 +23,7 @@ and third-party packaging.
 ## Contents
 
 - [The contract](#the-contract)
-- [Two payload shapes](#two-payload-shapes)
+- [Payload kinds](#payload-kinds)
 - [Template-variable interpolation](#template-variable-interpolation)
 - [Server-path and URL validation](#server-path-and-url-validation)
 - [Opening a URL in the browser](#opening-a-url-in-the-browser)
@@ -35,7 +33,7 @@ and third-party packaging.
 
 ## The contract
 
-`LabelsetExporter` is a `PluginBase` subclass. Required overrides:
+`ResultsExporter` is a `PluginBase` subclass. Required overrides:
 
 | Member | Type | Purpose |
 |--------|------|---------|
@@ -43,7 +41,7 @@ and third-party packaging.
 | `display_name: str` | class attr | Human-readable label |
 | `description: str` | class attr | One-sentence subtitle |
 | `fields: list[PluginField]` | class attr | User-configurable inputs |
-| `export(results, field_values)` | method | Perform the export; return a dict with at least `"message"` |
+| a payload method | method | At least one of `export_find_results()` / `export_labelset()` / `export_cli_detectors()`; return a dict with at least `"message"` |
 
 Optional overrides:
 
@@ -51,7 +49,8 @@ Optional overrides:
 |--------|---------|---------|
 | `icon: str` | `"📤"` | Emoji rendered in the UI |
 | `opens_url: bool` | `False` | Set `True` when `export()` always returns an `"open_url"` - see [Opening a URL in the browser](#opening-a-url-in-the-browser) |
-| `export_cli(results, field_values)` | delegates to `export()` | Override only when CLI-supplied values need different handling (rare) |
+| `export(results, field_values)` | raises | Legacy single-method form. The named methods delegate here when unoverridden, which keeps pre-existing plugins working; prefer the named methods in new code |
+| `export_cli(results, field_values)` | delegates to `export_find_results()` | Override only when CLI-supplied values need different handling (rare) |
 
 Expose `EXPORTER = YourExporter()` at module level so the registry
 picks it up. The sentinel must be an already-instantiated object, not
@@ -63,9 +62,22 @@ the API response. Two of those keys mean something to the frontend:
 `"display_results"` (rendered in the Auto-Detect Results modal) and
 `"open_url"` (opened in a new browser tab - see below).
 
-## Two payload shapes
+## Payload kinds
 
-Exporters receive one of two dict shapes and should detect which:
+An exporter is a *destination*; what gets sent there is a separate
+axis. There are three payload kinds, each with its own method:
+
+| Kind | Method | What it is |
+|------|--------|------------|
+| `find_results` | `export_find_results()` | a scored run - hit lists, scores, thresholds |
+| `labelset` | `export_labelset()` | a detector's labels - origins and vote provenance |
+| `detector_bundles` | `export_cli_detectors()` | the trained classifiers themselves |
+
+`supported_payloads` is **derived** from which of these you overrode
+(never declared, so there is nothing to forget), and it is what each
+picker filters on: an exporter is only offered for the kinds it claims,
+and the route answers 400 for anything else rather than letting it
+deliver an empty export.
 
 **Autodetect results** (from `/api/auto-detect` or CLI autodetect):
 
@@ -97,19 +109,43 @@ Exporters receive one of two dict shapes and should detect which:
 }
 ```
 
-The standard idiom:
+Note that a scored run carries `negative_hits` alongside `hits`, and
+every built-in exporter ignores it: an export is conventionally the
+items the detector *found*. The key is there if you want the
+below-threshold items.
+
+The standard idiom is one method per kind, sharing whatever delivery
+code they have in common:
 
 ```python
-def export(self, results: dict, field_values: dict) -> dict:
-    if "labels" in results:
-        return self._export_labels(results, field_values)
-    return self._export_autodetect(results, field_values)
+def _deliver(self, payload: dict, field_values: dict) -> dict:
+    ...  # the connection / write / POST, identical either way
+
+def export_find_results(self, results: dict, field_values: dict) -> dict:
+    return self._deliver(results, field_values)
+
+def export_labelset(self, labelset: dict, field_values: dict) -> dict:
+    return self._deliver(labelset, field_values)
 ```
 
 The built-in [`server_json_file`](../../exporters/server_json_file/__init__.py),
 [`server_csv_file`](../../exporters/server_csv_file/), and
 [`webhook`](../../exporters/webhook/__init__.py) exporters all follow
-this pattern.
+this pattern. Implement only one when only one makes sense -
+[`holder`](../../exporters/holder/__init__.py) files items by the label
+a human gave them, so it declares `export_labelset()` alone.
+
+### Legacy single-method exporters
+
+Before the kinds were named, an exporter implemented one `export()` and
+told the two dict shapes apart itself with `if "labels" in results`.
+That still works and is not going away: the default
+`export_find_results()` and `export_labelset()` both delegate to
+`export()`, so an out-of-tree plugin written against the old contract
+needs no changes. Such an exporter is credited with *both* kinds - there
+is no way to know which it handles - and logs a line at import time
+pointing here. Migrating is a mechanical split of the `if` into two
+methods, and buys accurate picker filtering.
 
 ## Template-variable interpolation
 
@@ -161,7 +197,7 @@ normalization](README.md#framework-side-normalization) — the correct
 exporter body just uses the value:
 
 ```python
-def export(self, results: dict, field_values: dict) -> dict:
+def export_find_results(self, results: dict, field_values: dict) -> dict:
     path = Path(field_values["filepath"])   # already stripped, substituted, confined
     requests.post(field_values["url"], json=results, timeout=30, allow_redirects=False)
 ```
@@ -204,15 +240,15 @@ from urllib.parse import quote
 from vtscore.security.url_validation import validate_browser_url
 
 
-class ReviewSiteExporter(LabelsetExporter):
+class ReviewSiteExporter(ResultsExporter):
     name = "review_site"
     display_name = "Review Site"
     description = "Open the labelset in the review site."
     opens_url = True          # lets the button read "Open Labelset in Review Site"
     fields = []
 
-    def export(self, results: dict, field_values: dict) -> dict:
-        ids = ",".join(e["md5"] for e in results.get("labels", []))
+    def export_labelset(self, labelset: dict, field_values: dict) -> dict:
+        ids = ",".join(e["md5"] for e in labelset.get("labels", []))
         url = validate_browser_url(f"https://review.example.com/?ids={quote(ids, safe='')}")
         return {"message": "Opening the labelset in Review Site.", "open_url": url}
 ```
@@ -274,7 +310,7 @@ dependencies = ["vtsearch"]
 my_exporter = "my_pkg.exporter:EXPORTER"
 ```
 
-The value must resolve to an already-instantiated `LabelsetExporter`.
+The value must resolve to an already-instantiated `ResultsExporter`.
 After `pip install`, the exporter appears in `list_exporters()`, the
 `/api/exporters` endpoint, the CLI's `--exporter` flag, and `python
 app.py --list-plugins`.
@@ -295,10 +331,10 @@ from typing import Any
 
 import requests
 
-from vtscore.exporters.base import PluginField, LabelsetExporter
+from vtscore.exporters.base import PluginField, ResultsExporter
 
 
-class SignedWebhookExporter(LabelsetExporter):
+class SignedWebhookExporter(ResultsExporter):
     """POST labels to a webhook with an HMAC-SHA256 signature header."""
 
     name = "signed_webhook"
@@ -322,17 +358,17 @@ class SignedWebhookExporter(LabelsetExporter):
         ),
     ]
 
-    def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
-        # Only handle label exports; refuse autodetect-results payloads.
-        if "labels" not in results:
-            raise ValueError("signed_webhook exporter only handles label exports.")
-
+    # Declaring only this method is what makes the exporter labelset-only:
+    # `supported_payloads` is derived from the overrides, so it never appears
+    # in a find-results picker and the route refuses a scored run with a 400.
+    # No hand-written shape check needed.
+    def export_labelset(self, labelset: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
         # Both fields are declared and required, so by this point they are
         # stripped, non-empty, and (for the "url" field type) SSRF-checked.
         url = field_values["url"]
         secret = field_values["hmac_secret"].encode("utf-8")
 
-        body = json.dumps(results, sort_keys=True).encode("utf-8")
+        body = json.dumps(labelset, sort_keys=True).encode("utf-8")
         signature = hmac.new(secret, body, hashlib.sha256).hexdigest()
 
         resp = requests.post(
@@ -347,7 +383,7 @@ class SignedWebhookExporter(LabelsetExporter):
         )
         resp.raise_for_status()
 
-        n = len(results["labels"])
+        n = len(labelset["labels"])
         return {
             "message": f"Posted {n} label(s) to {url} (HTTP {resp.status_code}).",
             "status_code": resp.status_code,

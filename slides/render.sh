@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build one deck without make:  ./render.sh scale26-review [pdf|html|pptx] [--speaker]
+# Build one deck without make:  ./render.sh hold-the-line [pdf|html|pptx] [--speaker]
 # --speaker builds the speaker view -> _out/<deck>.speaker.<fmt>: each page is
 # a miniature of the real rendered slide beside its presenter notes. It renders
 # the audience deck to per-slide PNGs first, so it is a two-pass build.

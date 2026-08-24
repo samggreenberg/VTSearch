@@ -951,9 +951,9 @@ class TestCsvExportClipColumns:
     """CSV autodetect export should include clip columns when present."""
 
     def test_csv_includes_clip_start_end(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exporter = ServerCsvLabelsetExporter()
+        exporter = ServerCsvResultsExporter()
         results = {
             "detectors_run": 1,
             "results": {
@@ -982,7 +982,7 @@ class TestCsvExportClipColumns:
             },
         }
         filepath = tmp_path / "results.csv"
-        exporter.export(results, {"filepath": str(filepath)})
+        exporter.export_find_results(results, {"filepath": str(filepath)})
 
         import csv
 
@@ -995,9 +995,9 @@ class TestCsvExportClipColumns:
         assert rows[1]["clip_end"] == "4.0"
 
     def test_csv_includes_clip_box(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exporter = ServerCsvLabelsetExporter()
+        exporter = ServerCsvResultsExporter()
         results = {
             "detectors_run": 1,
             "results": {
@@ -1017,7 +1017,7 @@ class TestCsvExportClipColumns:
             },
         }
         filepath = tmp_path / "results.csv"
-        exporter.export(results, {"filepath": str(filepath)})
+        exporter.export_find_results(results, {"filepath": str(filepath)})
 
         import csv
 
@@ -1028,9 +1028,9 @@ class TestCsvExportClipColumns:
         assert rows[0]["clip_box"] == "0,0,100,100"
 
     def test_csv_omits_clip_columns_without_clips(self, tmp_path):
-        from vtscore.exporters.server_csv_file import ServerCsvLabelsetExporter
+        from vtscore.exporters.server_csv_file import ServerCsvResultsExporter
 
-        exporter = ServerCsvLabelsetExporter()
+        exporter = ServerCsvResultsExporter()
         results = {
             "detectors_run": 1,
             "results": {
@@ -1044,7 +1044,7 @@ class TestCsvExportClipColumns:
             },
         }
         filepath = tmp_path / "results.csv"
-        exporter.export(results, {"filepath": str(filepath)})
+        exporter.export_find_results(results, {"filepath": str(filepath)})
 
         import csv
 

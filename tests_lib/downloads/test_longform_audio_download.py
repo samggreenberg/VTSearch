@@ -207,6 +207,156 @@ class TestLoadDemoSourceApollo11:
         assert [c["filename"] for c in clips.values()] == ["mission_audio/present.mp3"]
 
 
+class TestPerFileFailureTolerance:
+    """One file the host won't serve must not sink a hundred-file download.
+
+    The Internet Archive serves each file of an item from a data node that can
+    answer HTTP 500 for minutes while its siblings stay healthy; that took out a
+    whole Apollo 11 load over a single track (issue #3227).
+    """
+
+    @staticmethod
+    def _downloader(failing: dict[str, int], payload=b"ID3"):
+        """Return a ``download_file_with_progress`` stand-in that fails for each
+        name in *failing* the given number of times, then succeeds.
+
+        Returns ``(fn, attempts)`` where *attempts* records every requested
+        filename in order.
+        """
+        from vtscore.datasets.downloader import core as dl_core
+
+        attempts: list[str] = []
+        remaining = dict(failing)
+
+        def _download(url, dest, expected_size=0, on_progress=None):
+            name = url.rsplit("/", 1)[-1]
+            attempts.append(name)
+            if remaining.get(name, 0) > 0:
+                remaining[name] -= 1
+                raise dl_core.RemoteUnreachableError("archive.org kept returning …", url=url)
+            Path(dest).write_bytes(payload)
+
+        return _download, attempts
+
+    def _run(self, tmp_path, tracks, downloader, on_progress=None):
+        from vtscore.datasets import downloader as dl_module
+
+        with (
+            patch.object(dl_module.core, "DATA_DIR", tmp_path),
+            patch.object(dl_module.core, "download_file_with_progress", downloader),
+        ):
+            return dl_module.download_apollo11_audio(tracks, on_progress=on_progress or (lambda *a: None))
+
+    def test_a_dead_track_is_retried_at_the_end_and_then_skipped(self, tmp_path):
+        tracks = [(f"t{i:02d}.mp3", 10) for i in range(8)]
+        download, attempts = self._downloader({"t02.mp3": 99})
+
+        result = self._run(tmp_path, tracks, download)
+
+        # The other seven tracks are on disk; the load is not lost.
+        assert sorted(p.name for p in result.glob("*.mp3")) == [f"t{i:02d}.mp3" for i in range(8) if i != 2]
+        # The failure was retried once, after the rest of the set had run.
+        assert attempts.count("t02.mp3") == 2
+        assert attempts[-1] == "t02.mp3"
+
+    def test_the_end_of_set_retry_recovers_a_transient_failure(self, tmp_path):
+        """A node that wobbles for one file gets the whole rest of the download
+        as backoff before we write the track off."""
+        tracks = [(f"t{i:02d}.mp3", 10) for i in range(4)]
+        download, attempts = self._downloader({"t01.mp3": 1})
+
+        result = self._run(tmp_path, tracks, download)
+
+        assert sorted(p.name for p in result.glob("*.mp3")) == [f"t{i:02d}.mp3" for i in range(4)]
+        assert attempts.count("t01.mp3") == 2
+
+    def test_a_hard_http_status_on_one_file_is_tolerated_too(self, tmp_path):
+        """A single 404 (a track dropped from the item) is still just one file."""
+        import requests
+
+        def _download(url, dest, expected_size=0, on_progress=None):
+            if url.endswith("t03.mp3"):
+                raise requests.HTTPError("404 Client Error")
+            Path(dest).write_bytes(b"ID3")
+
+        tracks = [(f"t{i:02d}.mp3", 10) for i in range(8)]
+        result = self._run(tmp_path, tracks, _download)
+
+        assert len(list(result.glob("*.mp3"))) == 7
+
+    def test_too_many_failures_still_fail_the_load(self, tmp_path):
+        """Tolerating one bad file must not quietly hand back a gutted dataset."""
+        from vtscore.datasets.downloader import core as dl_core
+
+        tracks = [(f"t{i:02d}.mp3", 10) for i in range(8)]
+        download, _ = self._downloader({f"t{i:02d}.mp3": 99 for i in range(3)})
+
+        with pytest.raises(dl_core.RemoteUnreachableError) as excinfo:
+            self._run(tmp_path, tracks, download)
+        assert "3 of 8 files could not be downloaded" in str(excinfo.value)
+
+    def test_a_single_file_set_that_fails_is_a_failed_load(self, tmp_path):
+        from vtscore.datasets.downloader import core as dl_core
+
+        download, _ = self._downloader({"only.mp3": 99})
+        with pytest.raises(dl_core.RemoteUnreachableError):
+            self._run(tmp_path, [("only.mp3", 10)], download)
+
+    def test_cancellation_is_never_swallowed(self, tmp_path):
+        """A cancelled load is about the run, not the file: it must stop the
+        download rather than be counted as one more skippable track."""
+        from vtscore.concurrency.progress import CancelledError
+
+        def _download(url, dest, expected_size=0, on_progress=None):
+            raise CancelledError("Operation cancelled by user")
+
+        with pytest.raises(CancelledError):
+            self._run(tmp_path, [(f"t{i:02d}.mp3", 10) for i in range(8)], _download)
+
+    def test_a_gated_dataset_is_never_swallowed(self, tmp_path):
+        from vtscore.security.hf_auth import GatedResourceError
+
+        def _download(url, dest, expected_size=0, on_progress=None):
+            raise GatedResourceError("Sign in with HuggingFace", url=url, status=403)
+
+        with pytest.raises(GatedResourceError):
+            self._run(tmp_path, [(f"t{i:02d}.mp3", 10) for i in range(8)], _download)
+
+    def test_the_skip_toasts_rather_than_passing_silently(self, tmp_path):
+        """A progress line would be overwritten by the next load stage within
+        the second, so the skip has to be a notification to be seen at all."""
+        from vtscore.concurrency import notifications
+
+        tracks = [(f"t{i:02d}.mp3", 10) for i in range(8)]
+        download, _ = self._downloader({"t02.mp3": 99})
+        seen: list = []
+
+        notifications.notifications.subscribe(seen.append)
+        try:
+            self._run(tmp_path, tracks, download)
+        finally:
+            notifications.notifications.unsubscribe(seen.append)
+
+        assert len(seen) == 1
+        assert seen[0].level == "warning"
+        assert seen[0].message == "Apollo 11 audio: 1 of 8 files couldn't be downloaded"
+        assert "t02.mp3" in (seen[0].detail or "")
+
+    def test_a_clean_download_toasts_nothing(self, tmp_path):
+        from vtscore.concurrency import notifications
+
+        download, _ = self._downloader({})
+        seen: list = []
+
+        notifications.notifications.subscribe(seen.append)
+        try:
+            self._run(tmp_path, [(f"t{i:02d}.mp3", 10) for i in range(4)], download)
+        finally:
+            notifications.notifications.unsubscribe(seen.append)
+
+        assert seen == []
+
+
 # ---------------------------------------------------------------------------
 # BirdVox-full-night
 # ---------------------------------------------------------------------------

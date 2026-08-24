@@ -12,6 +12,39 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Results exporters declare which payload kinds they handle, instead of
+  sniffing the dict shape.** `LabelsetExporter` is now `ResultsExporter`
+  (the old name stays as a permanent module-level alias), and it exposes
+  `export_find_results()` and `export_labelset()` alongside the existing
+  `export_cli_detectors()`. `supported_payloads` is derived from which of
+  those a subclass overrides, so each picker offers an exporter only for the
+  kinds it can actually read and the export route answers 400 - rather than
+  letting an exporter be handed a shape it doesn't understand and deliver an
+  empty export while reporting success. `email_smtp` gained a labelset mode
+  it never had.
+
+  **Existing exporters keep working with no changes.** The default
+  `export_find_results()` / `export_labelset()` both delegate to `export()`,
+  so a plugin written against the single-method contract still runs and still
+  does its own `if "labels" in results` check; it is credited with both
+  payload kinds and logs one line at import pointing at the named methods.
+  Migrating is a mechanical split of that `if` into two methods, and buys
+  accurate picker filtering. See
+  [`vtscore/docs/extending/results-exporters.md`](docs/extending/results-exporters.md).
+
+- **`RemoteUnreachableError` now also covers a retryable HTTP status that
+  outlives the retry budget.** `download_file_with_progress` and
+  `fetch_text_with_retry` used to end a run of 500/502/503/504/429 responses by
+  calling `raise_for_status()`, so the caller got a raw `requests.HTTPError`
+  naming whichever CDN node the redirect landed on. Both now raise
+  `RemoteUnreachableError` with a sentence naming the host and the status.
+  Non-retryable statuses (404 and friends) still raise `HTTPError` unchanged,
+  and gated 401/403 still raise `GatedResourceError`.
+- **A multi-file demo download tolerates individual files the host refuses.**
+  The per-file sets (Apollo 11, the Nixon tapes) set a failed file aside, retry
+  it once after the rest of the set, then skip it with a `notify()` warning,
+  failing the download only when more than a quarter of the set is missing.
+
 - **`LINEAR_SVM_HEAD` is the production detector head**, replacing
   `LINEAR_HEAD`. Both sentinels build the same `Linear(D, 1)`; the new one is
   fitted by `vtscore.training.svm.fit_linear_svm_head` (squared hinge + L2 via

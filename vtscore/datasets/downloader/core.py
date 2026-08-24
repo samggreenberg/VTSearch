@@ -39,6 +39,16 @@ _RETRY_BACKOFF_BASE_S = 1.0
 _RETRY_BACKOFF_MAX_S = 30.0
 # Transient HTTP statuses worth retrying (rate-limit + gateway/CDN hiccups).
 _RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
+# How each retryable status reads in the message we show once the budget for it
+# is spent.  Phrased as what the *server* did, because the point of the sentence
+# is to tell the user the failure is not on their end.
+_STATUS_EXPLANATIONS = {
+    429: "a rate-limit refusal",
+    500: "an internal server error",
+    502: "a bad-gateway error",
+    503: "a service-unavailable error",
+    504: "a gateway timeout",
+}
 # Connection-level failures (dropped/incomplete read, reset, read timeout) that
 # a resume can recover from.  An IncompleteRead surfaces as ChunkedEncodingError.
 _RETRYABLE_EXCEPTIONS = (
@@ -425,15 +435,18 @@ def _backoff_and_notify(
 
 
 class RemoteUnreachableError(RuntimeError):
-    """A fetch gave up because the remote host could not be reached.
+    """A fetch gave up because the remote kept failing.
 
     Raised in place of the raw requests/urllib3 exception once every retry has
-    been spent on *connection-level* failures, so the dataset-load error the
-    user sees is one actionable sentence naming the host rather than a nested
-    ``MaxRetryError`` dump ending in a memory address.  Carries the originating
-    *url* and the number of *attempts* for logging; the underlying exception
-    stays reachable as ``__cause__`` (and is still printed to the server log by
-    the load pipeline's ``traceback.print_exc``).
+    been spent - either on *connection-level* failures (nothing ever answered)
+    or on a *retryable status* the server kept returning (500/502/503/504/429).
+    Both end the same way for the user, so both surface as one actionable
+    sentence naming the host rather than a nested ``MaxRetryError`` dump ending
+    in a memory address, or a raw ``HTTPError`` ending in a 200-character CDN
+    node URL.  Carries the originating *url* and the number of *attempts* for
+    logging; the underlying exception stays reachable as ``__cause__`` (and is
+    still printed to the server log by the load pipeline's
+    ``traceback.print_exc``).
     """
 
     def __init__(self, message: str, *, url: str = "", attempts: int = 0) -> None:
@@ -464,6 +477,28 @@ def _unreachable_error(url: str, exc: BaseException, attempts: int) -> RemoteUnr
         f"The site may be down or blocked by your network/proxy - open it in a "
         f"browser to check, then retry. Anything already downloaded is kept, so "
         f"a retry picks up where this left off.",
+        url=url,
+        attempts=attempts,
+    )
+
+
+def _status_error(url: str, status: int, attempts: int) -> RemoteUnreachableError:
+    """Build a short, user-facing error for a retryable status that outlived the
+    retry budget.
+
+    The counterpart of :func:`_unreachable_error` for the case where the server
+    *did* answer, over and over, with a status we were willing to wait out
+    (issue #3227: the Internet Archive served HTTP 500 for one Apollo track on
+    every attempt).  ``raise_for_status`` would otherwise surface that as a raw
+    ``HTTPError`` naming the redirect's data-node URL - which tells the user
+    neither which site failed nor that the failure is the server's, not theirs.
+    """
+    host = urlparse(url).hostname or url
+    return RemoteUnreachableError(
+        f"{host} kept returning {_STATUS_EXPLANATIONS.get(status, 'an error')} "
+        f"(HTTP {status}) on all {attempts} attempts. That is a problem on the "
+        f"server's side, not yours - wait a few minutes and retry. Anything "
+        f"already downloaded is kept, so a retry picks up where this left off.",
         url=url,
         attempts=attempts,
     )
@@ -527,9 +562,10 @@ def download_file_with_progress(  # noqa: C901
 
     Raises:
         requests.HTTPError: If the server returns a non-retryable error status.
-        RemoteUnreachableError: If the connection keeps failing after the final
-            retry attempt.  The underlying requests exception is its
-            ``__cause__``.
+        RemoteUnreachableError: If the connection keeps failing, or the server
+            keeps returning a retryable status, after the final retry attempt.
+            A connection failure leaves the underlying requests exception as
+            its ``__cause__``.
     """
     if on_progress is None:
         on_progress = _default_progress()
@@ -554,10 +590,14 @@ def download_file_with_progress(  # noqa: C901
         try:
             response = _open_validated_stream(session, url, headers, _timeout_for_attempt(attempt))
 
-            # Transient server-side error: back off and retry (resuming if we can).
-            if response.status_code in _RETRYABLE_STATUS and not last_attempt:
-                _backoff_and_notify(on_progress, dest_path.name, attempt, downloaded, total_size)
-                continue
+            # Transient server-side error: back off and retry (resuming if we
+            # can), and once the budget is spent say so in a sentence rather
+            # than letting raise_for_status dump the CDN node URL.
+            if response.status_code in _RETRYABLE_STATUS:
+                if not last_attempt:
+                    _backoff_and_notify(on_progress, dest_path.name, attempt, downloaded, total_size)
+                    continue
+                raise _status_error(url, response.status_code, _MAX_DOWNLOAD_ATTEMPTS)
             # Auth-required: this is gated content we can't fetch with the
             # credentials we have.  Surface a short, actionable message instead
             # of a raw HTTPError, and don't retry (it can't succeed unchanged).
@@ -620,8 +660,8 @@ def fetch_text_with_retry(url: str, label: str = "", on_progress: Optional[Progr
 
     Raises:
         requests.HTTPError: If the server returns a non-retryable error status.
-        RemoteUnreachableError: If the connection keeps failing after the final
-            retry attempt.
+        RemoteUnreachableError: If the connection keeps failing, or the server
+            keeps returning a retryable status, after the final retry attempt.
     """
     if on_progress is None:
         on_progress = _default_progress()
@@ -633,9 +673,11 @@ def fetch_text_with_retry(url: str, label: str = "", on_progress: Optional[Progr
         response = None
         try:
             response = _open_validated_stream(session, url, timeout=_timeout_for_attempt(attempt))
-            if response.status_code in _RETRYABLE_STATUS and not last_attempt:
-                _backoff_and_notify(on_progress, label, attempt, 0, 0)
-                continue
+            if response.status_code in _RETRYABLE_STATUS:
+                if not last_attempt:
+                    _backoff_and_notify(on_progress, label, attempt, 0, 0)
+                    continue
+                raise _status_error(url, response.status_code, _MAX_DOWNLOAD_ATTEMPTS)
             if response.status_code in _AUTH_REQUIRED_STATUS:
                 raise _gated_error(url, response.status_code)
             response.raise_for_status()

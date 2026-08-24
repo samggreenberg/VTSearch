@@ -15,8 +15,27 @@ describe('ExportModalComponent', () => {
   let httpMock: HttpTestingController;
 
   const mockExporters = [
-    { name: 'server_json_file', display_name: 'Server JSON', fields: [] },
-    { name: 'hidden', display_name: 'Hidden', hidden_from_picker: true, fields: [] },
+    {
+      name: 'server_json_file',
+      display_name: 'Server JSON',
+      fields: [],
+      supported_payloads: ['find_results', 'labelset'],
+    },
+    {
+      name: 'hidden',
+      display_name: 'Hidden',
+      hidden_from_picker: true,
+      fields: [],
+      supported_payloads: ['labelset'],
+    },
+    // Visible in the picker, but can only read a scored run — this modal
+    // sends a labelset, so it must be filtered out (issue #3219).
+    {
+      name: 'find_only',
+      display_name: 'Find Only',
+      fields: [],
+      supported_payloads: ['find_results'],
+    },
   ];
   const mockLabels = {
     labels: [
@@ -24,7 +43,14 @@ describe('ExportModalComponent', () => {
       { md5: 'b', label: 'bad', filename: 'b.wav' },
       { md5: 'c', label: 'good', filename: 'c.wav', is_correction: true },
     ],
-    available_columns: ['label', 'md5', 'filename', 'category', 'extra', 'name'],
+    available_columns: [
+      'label',
+      'md5',
+      'filename',
+      'category',
+      'extra',
+      'name',
+    ],
   };
 
   beforeEach(async () => {
@@ -46,7 +72,9 @@ describe('ExportModalComponent', () => {
   // `rxResource`, whose loaders run in a root effect rather than during
   // `detectChanges()`; tick to issue the GETs (the labels read also waits for
   // `ngOnInit` to set the input-derived filter), then settle before asserting.
-  async function flushInit(exporters: unknown[] = mockExporters): Promise<void> {
+  async function flushInit(
+    exporters: unknown[] = mockExporters,
+  ): Promise<void> {
     // Zoneless + rxResource: TestBed.tick() runs ngOnInit and the resource
     // loader effects to issue the GETs. whenStable() can't be used — a loading
     // rxResource holds the app unstable — so the rxResource specs drive CD with
@@ -56,7 +84,9 @@ describe('ExportModalComponent', () => {
     // released by `ngOnInit`'s signal flip a microtask later, so settle first
     // to let all three become pending before flushing.
     await settleResource();
-    httpMock.expectOne('/api/dataset/status').flush({ display_name: 'My Dataset' });
+    httpMock
+      .expectOne('/api/dataset/status')
+      .flush({ display_name: 'My Dataset' });
     httpMock.expectOne('/api/exporters').flush(exporters);
     httpMock.expectOne((r) => r.url === '/api/labels/export').flush(mockLabels);
     await settleResource();
@@ -71,6 +101,23 @@ describe('ExportModalComponent', () => {
     await flushInit();
     expect(component.exporters().length).toBe(1);
     expect(component.exporters()[0].name).toBe('server_json_file');
+  });
+
+  // This modal sends a labelset. Offering an exporter that only reads a scored
+  // run is how a labelset email used to go out empty and still report success
+  // (issue #3219), so the picker filters on the capability, not just on
+  // `hidden_from_picker`.
+  it('drops exporters that cannot read a labelset', async () => {
+    await flushInit();
+    expect(component.exporters().map((e) => e.name)).not.toContain('find_only');
+  });
+
+  it('tells the API which payload kind it is sending', async () => {
+    await flushInit();
+    component.startExporter(mockExporters[0] as never);
+    const req = httpMock.expectOne('/api/exporters/export');
+    expect(req.request.body.payload_kind).toBe('labelset');
+    req.flush({ success: true });
   });
 
   it('builds columns from available_columns once labels resolve', async () => {
@@ -122,7 +169,11 @@ describe('ExportModalComponent', () => {
     // real dict and serializes it as JSON.
     component.startExporter(mockExporters[0] as never);
     const req = httpMock.expectOne('/api/exporters/export');
-    expect(req.request.body.results.selected_columns).toEqual(['md5', 'origin', 'origin_name']);
+    expect(req.request.body.results.selected_columns).toEqual([
+      'md5',
+      'origin',
+      'origin_name',
+    ]);
     req.flush({ message: 'ok' });
   });
 
@@ -158,7 +209,9 @@ describe('ExportModalComponent', () => {
     component.startExporter(mockExporters[0] as never);
     httpMock.expectOne('/api/exporters/export').flush({ success: true });
     expect(successSpy).toHaveBeenCalledTimes(1);
-    expect(successSpy.mock.calls[0][0].message).toBe('Exported 2 labels to Server JSON');
+    expect(successSpy.mock.calls[0][0].message).toBe(
+      'Exported 2 labels to Server JSON',
+    );
   });
 
   // An exporter can return an `open_url` for the browser to open in a new tab,
@@ -170,16 +223,24 @@ describe('ExportModalComponent', () => {
       display_name: 'Open in Website',
       opens_url: true,
       fields: [],
+      supported_payloads: ['find_results', 'labelset'],
     };
 
     /** A stand-in for the `Window` handle `window.open` hands back. */
     function fakeWindow() {
-      return { closed: false, opener: {}, location: { href: '' }, close: vi.fn() };
+      return {
+        closed: false,
+        opener: {},
+        location: { href: '' },
+        close: vi.fn(),
+      };
     }
 
     /** Stub `window.open`, returning *handle* as the opened window. */
     function stubWindowOpen(handle: unknown) {
-      return vi.spyOn(window, 'open').mockReturnValue(handle as unknown as Window);
+      return vi
+        .spyOn(window, 'open')
+        .mockReturnValue(handle as unknown as Window);
     }
 
     // `window` outlives the TestBed, so a spy left installed on it carries its
@@ -233,7 +294,10 @@ describe('ExportModalComponent', () => {
       const win = fakeWindow();
       openSpy.mockReturnValue(win as unknown as Window);
       toast.action!.onClick();
-      expect(openSpy).toHaveBeenLastCalledWith('https://example.com/r', '_blank');
+      expect(openSpy).toHaveBeenLastCalledWith(
+        'https://example.com/r',
+        '_blank',
+      );
     });
 
     it('reports an opened tab rather than an export in the toast message', async () => {
@@ -268,20 +332,24 @@ describe('ExportModalComponent', () => {
       expect(successSpy.mock.calls[0][0].action?.label).toBe('Open');
     });
 
-    it.each(['javascript:alert(1)', 'data:text/html,x', 'file:///etc/passwd', '/relative'])(
-      'refuses to open a %s URL even if the server sent one',
-      async (url) => {
-        await flushInit();
-        const win = fakeWindow();
-        stubWindowOpen(win);
-        component.startExporter(openUrlExporter as never);
-        httpMock.expectOne('/api/exporters/export').flush({ success: true, open_url: url });
-        // The tab was claimed on click, but nothing unsafe is navigated to and
-        // the blank tab doesn't outlive the export.
-        expect(win.location.href).toBe('');
-        expect(win.close).toHaveBeenCalled();
-      },
-    );
+    it.each([
+      'javascript:alert(1)',
+      'data:text/html,x',
+      'file:///etc/passwd',
+      '/relative',
+    ])('refuses to open a %s URL even if the server sent one', async (url) => {
+      await flushInit();
+      const win = fakeWindow();
+      stubWindowOpen(win);
+      component.startExporter(openUrlExporter as never);
+      httpMock
+        .expectOne('/api/exporters/export')
+        .flush({ success: true, open_url: url });
+      // The tab was claimed on click, but nothing unsafe is navigated to and
+      // the blank tab doesn't outlive the export.
+      expect(win.location.href).toBe('');
+      expect(win.close).toHaveBeenCalled();
+    });
 
     it('closes the claimed tab when the export fails outright', async () => {
       await flushInit();
@@ -290,7 +358,10 @@ describe('ExportModalComponent', () => {
       component.startExporter(openUrlExporter as never);
       httpMock
         .expectOne('/api/exporters/export')
-        .flush({ message: 'boom' }, { status: 500, statusText: 'Server Error' });
+        .flush(
+          { message: 'boom' },
+          { status: 500, statusText: 'Server Error' },
+        );
       expect(win.close).toHaveBeenCalled();
     });
 
@@ -306,7 +377,9 @@ describe('ExportModalComponent', () => {
     it('labels the action button with the destination site', async () => {
       await flushInit([openUrlExporter]);
       component.selectExporterTab(openUrlExporter as never);
-      expect(component.activeTabAction).toBe('Open Labelset in Open in Website');
+      expect(component.activeTabAction).toBe(
+        'Open Labelset in Open in Website',
+      );
     });
   });
 
@@ -361,7 +434,9 @@ describe('ExportModalComponent', () => {
     const fileExporter = {
       name: 'server_json_file',
       display_name: 'Server JSON',
-      fields: [{ key: 'filepath', field_type: 'text', default: 'data/labels.json' }],
+      fields: [
+        { key: 'filepath', field_type: 'text', default: 'data/labels.json' },
+      ],
     };
 
     /** Land a detector registry naming `d1`, as the app-level refresh would. */
@@ -377,7 +452,9 @@ describe('ExportModalComponent', () => {
       fixture.componentRef.setInput('detectorName', 'Sirens');
       await flushInit();
       component.selectExporterTab(fileExporter as never);
-      expect(component.formValues['filepath']).toBe('data/Good-Sirens-My Dataset.json');
+      expect(component.formValues['filepath']).toBe(
+        'data/Good-Sirens-My Dataset.json',
+      );
     });
 
     // The lifecycle gap behind issue #2819: the filename is built once, at
@@ -387,12 +464,16 @@ describe('ExportModalComponent', () => {
       await flushInit();
       TestBed.inject(ActiveContextService).setActivePair('ds1', 'd1');
       component.selectExporterTab(fileExporter as never);
-      expect(component.formValues['filepath']).toBe('data/Good-My Dataset.json');
+      expect(component.formValues['filepath']).toBe(
+        'data/Good-My Dataset.json',
+      );
 
       flushRegistry();
       TestBed.tick();
       expect(component.effectiveDetectorName()).toBe('Birdsong');
-      expect(component.formValues['filepath']).toBe('data/Good-Birdsong-My Dataset.json');
+      expect(component.formValues['filepath']).toBe(
+        'data/Good-Birdsong-My Dataset.json',
+      );
     });
 
     it('leaves a user-edited filename alone when the name arrives late', async () => {
@@ -493,7 +574,11 @@ describe('ExportModalComponent', () => {
 
   describe('preview column resize', () => {
     /** Build a detached preview-style table and return its parts. */
-    function makeTable(): { table: HTMLTableElement; th1: HTMLElement; handle: HTMLElement } {
+    function makeTable(): {
+      table: HTMLTableElement;
+      th1: HTMLElement;
+      handle: HTMLElement;
+    } {
       const table = document.createElement('table');
       const thead = document.createElement('thead');
       const tr = document.createElement('tr');

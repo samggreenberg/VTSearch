@@ -17,7 +17,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Any, Iterator
 
-from vtscore.exporters.base import PluginField, LabelsetExporter, resolve_stream_batch_size
+from vtscore.exporters.base import PluginField, ResultsExporter, resolve_stream_batch_size
 
 # Pragmatic address check: a non-empty local part, a single ``@``, and a
 # dotted domain, none of which may contain whitespace.  Not full RFC 5322
@@ -94,6 +94,80 @@ def _default_subject(results: dict[str, Any]) -> str:
     return f"VTSearch Auto-Detect: {total_hits} hit(s) on {media_type} dataset"
 
 
+def _labelset_counts(labels: list[dict[str, Any]]) -> tuple[int, int]:
+    """Return ``(good, bad)`` counts for a labelset's entries."""
+    good = sum(1 for e in labels if e.get("label") == "good")
+    return good, len(labels) - good
+
+
+def _label_row_values(entry: dict[str, Any]) -> tuple[str, str, str]:
+    """Return the ``(label, name, origin)`` cells shown for one label entry.
+
+    ``origin_name`` beats ``filename`` because it is what the item is called
+    inside its source, which is the name a recipient can act on; the origin
+    itself is rendered through :meth:`~vtscore.datasets.origin.Origin.display`
+    so the email says where the item came from rather than dumping a dict.
+    """
+    from vtscore.datasets.origin import Origin
+
+    origin = entry.get("origin")
+    try:
+        origin_str = Origin.from_dict(origin).display() if origin else ""
+    except Exception:  # noqa: BLE001 - a malformed origin must not sink the email
+        origin_str = ""
+    name = entry.get("origin_name") or entry.get("filename") or entry.get("md5", "")
+    return str(entry.get("label", "")), str(name), origin_str
+
+
+def _build_labelset_plain(labelset: dict[str, Any]) -> str:
+    """Render a labelset as a human-readable plain-text listing."""
+    labels = labelset.get("labels", []) or []
+    good, bad = _labelset_counts(labels)
+    lines: list[str] = [
+        "VTSearch Labels",
+        "===============",
+        f"Labels: {len(labels)}  ({good} good, {bad} bad)",
+        "",
+    ]
+    for entry in labels:
+        label, name, origin_str = _label_row_values(entry)
+        lines.append(f"  [{label or '?'}] {name}" + (f"  ({origin_str})" if origin_str else ""))
+    if not labels:
+        lines.append("  No labels in this export.")
+    return "\n".join(lines)
+
+
+def _build_labelset_html(labelset: dict[str, Any]) -> str:
+    """Render a labelset as a minimal HTML table."""
+    from html import escape
+
+    labels = labelset.get("labels", []) or []
+    good, bad = _labelset_counts(labels)
+    rows = ""
+    for entry in labels:
+        label, name, origin_str = _label_row_values(entry)
+        rows += f"<tr><td>{escape(label)}</td><td>{escape(name)}</td><td>{escape(origin_str)}</td></tr>"
+    if not rows:
+        rows = '<tr><td colspan="3"><em>No labels in this export.</em></td></tr>'
+    return (
+        f"<html><body>"
+        f"<h2>VTSearch Labels</h2>"
+        f"<p><strong>Labels:</strong> {len(labels)} "
+        f"({good} good, {bad} bad)</p>"
+        f"<table border='1' cellpadding='4' cellspacing='0'>"
+        f"<tr><th>Label</th><th>Name</th><th>Origin</th></tr>"
+        f"{rows}</table>"
+        f"</body></html>"
+    )
+
+
+def _default_labelset_subject(labelset: dict[str, Any]) -> str:
+    """Auto-generated subject used when the user leaves the field blank."""
+    labels = labelset.get("labels", []) or []
+    good, bad = _labelset_counts(labels)
+    return f"VTSearch Labels: {len(labels)} label(s) ({good} good, {bad} bad)"
+
+
 def _group_batch_by_detector(batch: list[tuple[str, dict[str, Any]]]) -> dict[str, list[dict[str, Any]]]:
     """Group a streamed ``(detector_name, hit)`` batch into ``{detector: [hits]}``."""
     grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -161,8 +235,8 @@ def _resolve_mx(domain: str) -> str:
     return str(best.exchange).rstrip(".")
 
 
-class EmailLabelsetExporter(LabelsetExporter):
-    """Send auto-detect results by e-mail via direct MX delivery.
+class EmailResultsExporter(ResultsExporter):
+    """Send a scored run or a labelset by e-mail via direct MX delivery.
 
     Looks up the recipient domain's MX record and connects directly - no
     SMTP credentials or server configuration required.  The caller must
@@ -172,7 +246,7 @@ class EmailLabelsetExporter(LabelsetExporter):
 
     name = "email_smtp"
     display_name = "Send by Email"
-    description = "Email the results summary to any address."
+    description = "Email the results or labels to any address."
     icon = "📧"
     fields = [
         PluginField(
@@ -217,7 +291,20 @@ class EmailLabelsetExporter(LabelsetExporter):
         ),
     ]
 
-    def export(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+    def _send(
+        self,
+        field_values: dict[str, Any],
+        default_subject: str,
+        plain: str,
+        html: str,
+        sent_detail: str,
+    ) -> dict[str, Any]:
+        """Validate the addresses, resolve MX, and deliver one message.
+
+        Shared by both payload kinds: what differs between a scored run and a
+        labelset is only the rendering and the fallback subject, never the
+        delivery.
+        """
         from_addr = field_values["from"]
         to_addr = field_values["to"]
 
@@ -229,19 +316,13 @@ class EmailLabelsetExporter(LabelsetExporter):
         domain = to_addr.rsplit("@", 1)[1]
         mx_host = _resolve_mx(domain)
 
-        total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
         # The framework substitutes any {template} vars into ``subject`` at
         # ingress (see vtscore.plugins.normalize); a blank field falls back to
         # the auto-generated summary so existing behaviour is preserved.
-        subject = field_values.get("subject") or _default_subject(results)
-
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = subject
+        msg["Subject"] = field_values.get("subject") or default_subject
         msg["From"] = from_addr
         msg["To"] = to_addr
-
-        plain = _build_plain_text(results)
-        html = _build_html(results)
         msg.attach(MIMEText(plain, "plain", "utf-8"))
         msg.attach(MIMEText(html, "html", "utf-8"))
 
@@ -250,9 +331,36 @@ class EmailLabelsetExporter(LabelsetExporter):
             server.sendmail(from_addr, [to_addr], msg.as_string())
 
         return {
-            "message": (f"Email with {total_hits} hit(s) sent to {to_addr} via {mx_host}."),
+            "message": f"Email with {sent_detail} sent to {to_addr} via {mx_host}.",
             "to": to_addr,
         }
+
+    def export_find_results(self, results: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """Email a per-detector summary of the scored run."""
+        total_hits = sum(r.get("total_hits", 0) for r in results.get("results", {}).values())
+        return self._send(
+            field_values,
+            _default_subject(results),
+            _build_plain_text(results),
+            _build_html(results),
+            f"{total_hits} hit(s)",
+        )
+
+    def export_labelset(self, labelset: dict[str, Any], field_values: dict[str, Any]) -> dict[str, Any]:
+        """Email the labelset as a good/bad listing with each item's origin.
+
+        Before this existed the exporter understood only the scored-run shape,
+        so a labelset export from the Export modal mailed an empty body under a
+        "0 hit(s)" subject and still reported success.
+        """
+        labels = labelset.get("labels", []) or []
+        return self._send(
+            field_values,
+            _default_labelset_subject(labelset),
+            _build_labelset_plain(labelset),
+            _build_labelset_html(labelset),
+            f"{len(labels)} label(s)",
+        )
 
     @property
     def supports_streaming(self) -> bool:
@@ -334,4 +442,4 @@ class EmailLabelsetExporter(LabelsetExporter):
         }
 
 
-EXPORTER = EmailLabelsetExporter()
+EXPORTER = EmailResultsExporter()

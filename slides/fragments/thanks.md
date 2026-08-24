@@ -7,8 +7,11 @@
 ### sam.greenberg@gmail.com
 
 <!-- Invite questions, and offer the receipts: every number in the talk lives
-     in a committed report under docs/experiments/, so any slide can be
-     followed to its evidence. Good seeds if the room is quiet: why the
-     midpoint survived every attempt to out-smart it, what a κ schedule would
-     look like, or what "characterize transfer" (#2883) will actually
-     measure. -->
+     in a committed experiment report, so any slide can be followed to its
+     evidence.
+
+     Good seeds if the room is quiet: why the midpoint survived every attempt
+     to out-smart it; what an anchor-mass schedule would look like; what
+     "characterize transfer" will actually measure; or, for a room that came
+     for the tool rather than the statistics, what happens on a corpus where
+     the concept genuinely is not present at all. -->

@@ -29,7 +29,11 @@ import { SortingApiService } from '../../../services/sorting-api.service';
 import type { LabelFilter } from '../../../services/sorting-api.service';
 import { ToastService } from '../../../services/toast.service';
 import { ImporterField } from '../../../models/api.models';
-import { openBlankTab, openExternalUrl, safeExternalUrl } from '../../../utils/external-url';
+import {
+  openBlankTab,
+  openExternalUrl,
+  safeExternalUrl,
+} from '../../../utils/external-url';
 import type { ExporterEntry } from '../../../generated/api-client/models/exporter-entry';
 import type { LabeledElement } from '../../../generated/api-client/models/labeled-element';
 
@@ -90,13 +94,23 @@ export class ExportModalComponent implements OnInit {
   private readonly labelsResource = rxResource({
     params: () => (this.labelsReady() ? this.serverFilter : undefined),
     stream: () => {
-      const labelFilter = this.serverFilter === 'both' ? undefined : this.serverFilter;
+      const labelFilter =
+        this.serverFilter === 'both' ? undefined : this.serverFilter;
       return this.sortingApi.exportLabels(false, { enrich: true, labelFilter });
     },
   });
 
   readonly exporters = computed<ExporterEntry[]>(() =>
-    (this.exportersResource.value() ?? []).filter((e) => !e.hidden_from_picker),
+    // Two filters, and they answer different questions. `hidden_from_picker`
+    // is the plugin author saying "not in a generic list"; `supported_payloads`
+    // is the framework saying "this one cannot read a labelset". Offering an
+    // exporter that can't is how a labelset email used to go out empty and
+    // still report success (#3219).
+    (this.exportersResource.value() ?? []).filter(
+      (e) =>
+        !e.hidden_from_picker &&
+        (e.supported_payloads ?? []).includes('labelset'),
+    ),
   );
 
   /** Labels fetched from the server. */
@@ -104,7 +118,9 @@ export class ExportModalComponent implements OnInit {
     () => this.labelsResource.value()?.labels ?? [],
   );
   readonly labelsLoaded = computed(
-    () => this.labelsResource.hasValue() || this.labelsResource.error() !== undefined,
+    () =>
+      this.labelsResource.hasValue() ||
+      this.labelsResource.error() !== undefined,
   );
 
   /** Error from a failed export action; the read failures are merged in below. */
@@ -140,7 +156,9 @@ export class ExportModalComponent implements OnInit {
   readonly submitting = signal(false);
 
   /** Dataset display name for default filenames. */
-  private readonly datasetName = computed(() => this.statusResource.value()?.display_name || '');
+  private readonly datasetName = computed(
+    () => this.statusResource.value()?.display_name || '',
+  );
 
   /** Base columns that are always present. */
   private static readonly BASE_COLUMNS: { key: string; label: string }[] = [
@@ -172,7 +190,10 @@ export class ExportModalComponent implements OnInit {
    *  the label session carried. A signal, not a getter, so a name that lands
    *  after the modal opened still reaches the default filename below. */
   readonly effectiveDetectorName = computed(
-    () => this.detectorName() || this.activeDetector.detectorName() || this.labelSession.modelName,
+    () =>
+      this.detectorName() ||
+      this.activeDetector.detectorName() ||
+      this.labelSession.modelName,
   );
 
   constructor() {
@@ -256,7 +277,9 @@ export class ExportModalComponent implements OnInit {
 
   /** Build column definitions from available_columns or fall back to defaults. */
   private buildColumns(availableColumns?: string[]): void {
-    const baseKeys = new Set(ExportModalComponent.BASE_COLUMNS.map((c) => c.key));
+    const baseKeys = new Set(
+      ExportModalComponent.BASE_COLUMNS.map((c) => c.key),
+    );
     const alwaysKeys = new Set(ExportModalComponent.ALWAYS_EXPORT_KEYS);
     // Start with base columns
     this.columns = ExportModalComponent.BASE_COLUMNS.map((c) => ({
@@ -316,7 +339,11 @@ export class ExportModalComponent implements OnInit {
   /** Once true, the table uses `table-layout: fixed` with explicit widths. */
   tableFixed = false;
 
-  private colResize: { key: string; startX: number; startWidth: number } | null = null;
+  private colResize: {
+    key: string;
+    startX: number;
+    startWidth: number;
+  } | null = null;
 
   /** Begin dragging a column divider: freeze current widths, then track the
    *  grabbed column so `onColResizeMove` can size it. */
@@ -529,7 +556,9 @@ export class ExportModalComponent implements OnInit {
 
   /** Apply the dynamic default filename to the filepath form field if present. */
   private applyDefaultFilename(exporter: ExporterEntry): void {
-    const filepathField = this.exporterFieldsOf(exporter).find((f) => f.key === 'filepath');
+    const filepathField = this.exporterFieldsOf(exporter).find(
+      (f) => f.key === 'filepath',
+    );
     if (filepathField) {
       const staticDefault = filepathField.default || '';
       // Derive extension from the static default (e.g. ".json", ".csv") or fall back
@@ -593,10 +622,12 @@ export class ExportModalComponent implements OnInit {
     if (!exp) return 'Export';
     // A declared `opens_url` beats the name-sniffing below: the exporter has
     // told us the run ends in a new browser tab, so the button says so.
-    if (exp.opens_url) return `Open Labelset in ${exp.display_name || exp.name}`;
+    if (exp.opens_url)
+      return `Open Labelset in ${exp.display_name || exp.name}`;
     const name = (exp.display_name || exp.name).toLowerCase();
     if (name.includes('email') || name.includes('smtp')) return 'Send';
-    if (name.includes('csv') || name.includes('file') || name.includes('json')) return 'Save';
+    if (name.includes('csv') || name.includes('file') || name.includes('json'))
+      return 'Save';
     if (name.includes('webhook')) return 'Send';
     return 'Export';
   }
@@ -619,10 +650,15 @@ export class ExportModalComponent implements OnInit {
     this.exportLabelsWith(this.selectedExporter, { ...this.formValues });
   }
 
-  exportLabelsWith(exporter: ExporterEntry, fieldValues: Record<string, string>): void {
+  exportLabelsWith(
+    exporter: ExporterEntry,
+    fieldValues: Record<string, string>,
+  ): void {
     const exporterLabel = exporter.display_name || exporter.name;
     const labelCount = this.filteredLabels.length;
-    this.status.set(`Exporting ${labelCount.toLocaleString()} labels to ${exporterLabel}…`);
+    this.status.set(
+      `Exporting ${labelCount.toLocaleString()} labels to ${exporterLabel}…`,
+    );
     this.actionError.set('');
     this.submitting.set(true);
 
@@ -644,6 +680,7 @@ export class ExportModalComponent implements OnInit {
         exporter_name: exporter.name,
         field_values: fieldValues,
         results: labelsData,
+        payload_kind: 'labelset',
       })
       .subscribe({
         next: (response) => {
@@ -656,7 +693,9 @@ export class ExportModalComponent implements OnInit {
           const openUrl = safeExternalUrl(response?.open_url);
           let opened = false;
           if (openUrl) {
-            opened = pendingTab ? pendingTab.navigate(openUrl) : openExternalUrl(openUrl);
+            opened = pendingTab
+              ? pendingTab.navigate(openUrl)
+              : openExternalUrl(openUrl);
           } else {
             // The exporter advertised a URL and didn't produce one; don't leave
             // a blank tab sitting there.
@@ -670,7 +709,9 @@ export class ExportModalComponent implements OnInit {
           // why nothing happened rather than leaving the user staring at an
           // unchanged screen.
           let message = `Exported ${labelCount.toLocaleString()} label${plural} to ${exporterLabel}`;
-          let detail = fieldValues['filepath'] ? `Destination: ${fieldValues['filepath']}` : undefined;
+          let detail = fieldValues['filepath']
+            ? `Destination: ${fieldValues['filepath']}`
+            : undefined;
           if (openUrl) {
             message = opened
               ? `Opened ${labelCount.toLocaleString()} label${plural} in ${exporterLabel}`
@@ -688,7 +729,11 @@ export class ExportModalComponent implements OnInit {
             // through — it doubles as the blocked-popup escape hatch and as a
             // way to reopen a tab the user closed by accident.
             action: openUrl
-              ? { label: 'Open', title: openUrl, onClick: () => openExternalUrl(openUrl) }
+              ? {
+                  label: 'Open',
+                  title: openUrl,
+                  onClick: () => openExternalUrl(openUrl),
+                }
               : undefined,
             // A blocked tab makes that button the only way to reach the site,
             // so the toast has to outlive the 5s success default — otherwise
@@ -712,7 +757,12 @@ export class ExportModalComponent implements OnInit {
   getExporterIconType(exp: ExporterEntry): string {
     const icon = exp.icon || '';
     if (icon === '📧' || icon.includes('📧')) return 'email';
-    if (icon === '🖥️' || icon === '\uD83D\uDDA5' || icon === '\uD83D\uDDA5\uFE0F') return 'server';
+    if (
+      icon === '🖥️' ||
+      icon === '\uD83D\uDDA5' ||
+      icon === '\uD83D\uDDA5\uFE0F'
+    )
+      return 'server';
     if (icon === '🌐' || icon === '\uD83C\uDF10') return 'webhook';
     // An exporter that ends in a new browser tab reads as a link, whichever
     // emoji its author picked.
@@ -729,7 +779,9 @@ export class ExportModalComponent implements OnInit {
   get modalTitle(): string {
     if (this.serverFilter === 'unverified') {
       // The left work-queue export opens on the above-threshold good slice.
-      return this.labelFilter === 'good' ? 'Export Unverified Good' : 'Export Unverified';
+      return this.labelFilter === 'good'
+        ? 'Export Unverified Good'
+        : 'Export Unverified';
     }
     if (this.serverFilter === 'verified') return 'Export Verified';
     return 'Export';

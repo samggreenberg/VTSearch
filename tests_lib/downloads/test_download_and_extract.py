@@ -1234,6 +1234,91 @@ class TestConnectFailureHandling:
         ]
 
 
+class TestRetryableStatusExhaustion:
+    """A retryable status the server never stops returning ends in the same
+    actionable sentence a connection failure does (issue #3227).
+
+    The Internet Archive answered HTTP 500 for one Apollo track on all six
+    attempts; ``raise_for_status`` surfaced that as a raw ``HTTPError`` naming
+    the redirect's data-node URL, which says neither which site failed nor that
+    the failure was the server's rather than the user's.
+    """
+
+    def test_download_retries_a_500_then_names_the_host(self, tmp_path, monkeypatch):
+        from vtscore.datasets.downloader import core as dl_core
+
+        responses = [_FakeResponse([], status_code=500) for _ in range(dl_core._MAX_DOWNLOAD_ATTEMPTS)]
+        calls = TestDownloadResume._install(monkeypatch, responses)
+
+        url = "https://archive.org/download/Apollo11Audio/11-03303.mp3"
+        with pytest.raises(dl_core.RemoteUnreachableError) as excinfo:
+            dl_core.download_file_with_progress(url, tmp_path / "11-03303.mp3", on_progress=lambda *a: None)
+
+        # Every attempt was spent before giving up.
+        assert len(calls) == dl_core._MAX_DOWNLOAD_ATTEMPTS
+        message = str(excinfo.value)
+        assert message.startswith("archive.org kept returning an internal server error (HTTP 500)")
+        assert "server's side, not yours" in message
+        # Not the raw HTTPError, and not a URL the user can't act on.
+        assert url not in message
+        assert excinfo.value.url == url
+        assert excinfo.value.attempts == dl_core._MAX_DOWNLOAD_ATTEMPTS
+
+    def test_a_recovering_server_still_downloads(self, tmp_path, monkeypatch):
+        """The 500 path must stay a *retry*, not become a fail-fast."""
+        from vtscore.datasets.downloader import core as dl_core
+
+        payload = b"ID3" + b"\x00" * 61
+        responses = [
+            _FakeResponse([], status_code=503),
+            _FakeResponse([], status_code=500),
+            _FakeResponse([payload], status_code=200, headers={"content-length": str(len(payload))}),
+        ]
+        TestDownloadResume._install(monkeypatch, responses)
+
+        dest = tmp_path / "11-03303.mp3"
+        dl_core.download_file_with_progress(str("https://archive.org/x"), dest, on_progress=lambda *a: None)
+
+        assert dest.read_bytes() == payload
+
+    def test_rate_limit_reads_as_a_rate_limit(self, tmp_path, monkeypatch):
+        from vtscore.datasets.downloader import core as dl_core
+
+        responses = [_FakeResponse([], status_code=429) for _ in range(dl_core._MAX_DOWNLOAD_ATTEMPTS)]
+        TestDownloadResume._install(monkeypatch, responses)
+
+        with pytest.raises(dl_core.RemoteUnreachableError) as excinfo:
+            dl_core.download_file_with_progress(
+                "https://huggingface.co/datasets/x/y.tar", tmp_path / "y.tar", on_progress=lambda *a: None
+            )
+        assert "a rate-limit refusal (HTTP 429)" in str(excinfo.value)
+
+    def test_a_non_retryable_status_still_raises_http_error(self, tmp_path, monkeypatch):
+        """404 is not the server wobbling - it is the URL being wrong, and it
+        must not be dressed up as a transient outage."""
+        import requests
+
+        from vtscore.datasets.downloader import core as dl_core
+
+        calls = TestDownloadResume._install(monkeypatch, [_FakeResponse([], status_code=404)])
+
+        with pytest.raises(requests.HTTPError):
+            dl_core.download_file_with_progress(
+                "https://archive.org/download/x/gone.mp3", tmp_path / "gone.mp3", on_progress=lambda *a: None
+            )
+        assert len(calls) == 1, "a 404 must not burn the retry budget"
+
+    def test_text_fetch_names_the_host_too(self, monkeypatch):
+        from vtscore.datasets.downloader import core as dl_core
+
+        responses = [_FakeResponse([], status_code=502) for _ in range(dl_core._MAX_DOWNLOAD_ATTEMPTS)]
+        TestDownloadResume._install(monkeypatch, responses)
+
+        with pytest.raises(dl_core.RemoteUnreachableError) as excinfo:
+            dl_core.fetch_text_with_retry("https://archive.org/metadata/Apollo11Audio", on_progress=lambda *a: None)
+        assert str(excinfo.value).startswith("archive.org kept returning a bad-gateway error (HTTP 502)")
+
+
 class TestFetchTextWithRetry:
     """Manifest/index fetches share the transfer's retry budget and error shape.
 

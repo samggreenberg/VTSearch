@@ -326,7 +326,7 @@ def validate_browser_url(url: str) -> str:
 
     Used for the ``open_url`` an exporter can return so the frontend opens a
     third-party page in a new tab (see
-    :meth:`vtscore.exporters.base.LabelsetExporter.export`).  The fetch is made
+    :meth:`vtscore.exporters.base.ResultsExporter.export`).  The fetch is made
     by the browser, not by us, so this is deliberately *not*
     :func:`validate_url`: resolving the host and refusing private IPs would
     block a perfectly reasonable ``http://localhost:9000/viewer`` companion app

@@ -13,8 +13,8 @@ earlier stage of the slide (the content above the marker, the figure swapped
 when the marker names one), all sharing one page number; the speaker build
 keeps one page per fragment — the final stage. See slides/README.md.
 
-    ./build.py scale26-review        # -> _build/scale26-review.md
-    ./build.py --speaker scale26-review  # -> _build/scale26-review.speaker.md
+    ./build.py hold-the-line         # -> _build/hold-the-line.md
+    ./build.py --speaker hold-the-line   # -> _build/hold-the-line.speaker.md
     ./build.py --all
     ./build.py --check               # preflight only, write nothing
     ./build.py --list                # decks, slide counts, unused fragments

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from marshmallow import Schema, fields, validate
 
+from vtscore.exporters.base import PAYLOAD_KINDS
 from vtsearch.schemas.media import OriginSchema
 
 
@@ -229,13 +230,17 @@ class _PluginEntrySchema(Schema):
 class ExporterEntrySchema(_PluginEntrySchema):
     """One entry in ``GET /api/exporters``.
 
-    Adds the exporter-only ``opens_url`` flag (see
-    :attr:`vtscore.exporters.base.LabelsetExporter.opens_url`), which tells the
+    Adds the two exporter-only fields. ``opens_url`` (see
+    :attr:`vtscore.exporters.base.ResultsExporter.opens_url`) tells the
     frontend this exporter ends in a new browser tab so the button can say so
-    before the export runs.
+    before the export runs. ``supported_payloads`` (see
+    :attr:`~vtscore.exporters.base.ResultsExporter.supported_payloads`) lists
+    the payload kinds it implements, so each picker can offer only the
+    exporters that can read what it is about to send.
     """
 
     opens_url = fields.Boolean(required=True)
+    supported_payloads = fields.List(fields.String(), required=True)
 
 
 class RunExportRequestSchema(Schema):
@@ -249,6 +254,20 @@ class RunExportRequestSchema(Schema):
     exporter_name = fields.String(required=True, validate=validate.Length(min=1))
     field_values = fields.Dict(load_default=dict)
     results = fields.Dict(load_default=dict)
+    payload_kind = fields.String(
+        required=False,
+        load_default=None,
+        allow_none=True,
+        validate=validate.OneOf(PAYLOAD_KINDS),
+        metadata={
+            "description": (
+                "Which payload ``results`` carries. Omit and the handler infers it from the dict "
+                "shape, which is what pre-payload-kind API clients get; send it explicitly and the "
+                "handler rejects an exporter that does not implement that kind instead of letting it "
+                "deliver an empty export."
+            )
+        },
+    )
 
 
 class RunExportResponseSchema(Schema):
@@ -259,7 +278,7 @@ class RunExportResponseSchema(Schema):
     are documented optionals. ``display_results`` is the GUI exporter's
     pass-through of the auto-detect results dict (or LabelSet).
     ``open_url`` is an ``http(s)`` URL the frontend opens in a new tab
-    (see :meth:`vtscore.exporters.base.LabelsetExporter.export`); the
+    (see :meth:`vtscore.exporters.base.ResultsExporter.export`); the
     handler has already run it through
     :func:`~vtscore.security.url_validation.validate_browser_url`.
     """

@@ -538,7 +538,7 @@ def _run_exporter(
     Most exporters consume the scored *results*.  An exporter that instead
     exports the trained classifiers themselves (``needs_trained_detectors``,
     the portable-detector bundle) is handed the *detector_mlps* the pipeline
-    trained, via :meth:`LabelsetExporter.export_cli_detectors`.
+    trained, via :meth:`ResultsExporter.export_cli_detectors`.
 
     An exporter that returns an ``open_url`` gets it surfaced here rather than
     dropped: there is no browser to open it on the command line, so the URL is
@@ -554,7 +554,7 @@ def _run_exporter(
         raise ValueError(f"Unknown exporter: {exporter_name}. Available: {', '.join(available)}")
 
     exporter.validate_cli_field_values(field_values)
-    if getattr(exporter, "needs_trained_detectors", False):
+    if "detector_bundles" in exporter.supported_payloads:
         descriptors = _portable_detector_descriptors(detector_mlps or {})
         result = exporter.export_cli_detectors(descriptors, field_values)
     else:
@@ -598,7 +598,7 @@ def _portable_detector_descriptors(detector_mlps: dict[str, dict[str, Any]]) -> 
     """Serialise each trained detector into a portable-export descriptor.
 
     Turns the pipeline's ``{name: {"mlp", "threshold", ...}}`` map into the
-    list of plain-data dicts :meth:`LabelsetExporter.export_cli_detectors`
+    list of plain-data dicts :meth:`ResultsExporter.export_cli_detectors`
     consumes - the live torch model is reduced to nested-list weights here so
     the exporter itself stays torch-free.
     """
