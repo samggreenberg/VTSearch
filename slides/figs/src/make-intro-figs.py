@@ -63,7 +63,7 @@ import numpy as np
 from sklearn.svm import SVC
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from slide_figure import SIDEBAR_WIDE, save, tight_box  # noqa: E402
+from slide_figure import FULL_BLEED, save, tight_box  # noqa: E402
 
 OUT = Path(__file__).resolve().parent.parent
 
@@ -404,7 +404,20 @@ def _window(pts: np.ndarray, curves: list[np.ndarray]) -> tuple[float, float, fl
     high = ink.max(axis=0) + (R + 0.45)
     side = float(max(high - low))
     centre = (low + high) / 2
-    return (centre[0] - side / 2, centre[0] + side / 2, centre[1] - side / 2, centre[1] + side / 2)
+    # Slid left so the drawing sits right, clear of the title notch (#3242).
+    # The field's top-left corner used to graze the reserve by about fifteen
+    # slide pixels, which is the whole reason this slide carried no headline.
+    # Panning the window is the honest fix and the cheapest: the square keeps
+    # its side, so nothing is rescaled and no item moves relative to any other
+    # — the drawing is the same drawing, framed a third of a unit further left.
+    # The margin `_window` already leaves on every side is what pays for it.
+    pan = 0.62
+    return (
+        centre[0] - side / 2 - pan,
+        centre[0] + side / 2 - pan,
+        centre[1] - side / 2,
+        centre[1] + side / 2,
+    )
 
 
 @functools.lru_cache(maxsize=1)
@@ -575,8 +588,8 @@ def vote_boundary_fig() -> None:
     final = _vote_boundary_stage(VOTE_BOUNDARY_STAGES)
     box = tight_box(final)
     for stage in range(1, VOTE_BOUNDARY_STAGES):
-        save(_vote_boundary_stage(stage), OUT, f"vote-boundary.build{stage}.png", column=SIDEBAR_WIDE, box=box)
-    save(final, OUT, "vote-boundary.png", column=SIDEBAR_WIDE, box=box)
+        save(_vote_boundary_stage(stage), OUT, f"vote-boundary.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "vote-boundary.png", column=FULL_BLEED, box=box)
 
 
 def _vote_boundary_stage(stage: int) -> plt.Figure:

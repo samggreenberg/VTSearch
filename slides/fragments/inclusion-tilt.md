@@ -2,10 +2,10 @@
 
 ![bg fit](figs/calib-tilt-flow.png)
 
-<!-- Untitled by design: this figure's own axis starts in the
-     top-left corner, where a headline would go, so the slide carries none.
-     The line to say as it comes up is “Keep the midpoint. Borrow the tilt.”.
-     -->
+## On Tilt
+
+<!-- The line to say as the figure comes up is “Keep the midpoint. Borrow the tilt.” — the
+     headline names the slide, this names the move. -->
 
 <!-- build: figs/calib-tilt-flow.build1.png -->
 

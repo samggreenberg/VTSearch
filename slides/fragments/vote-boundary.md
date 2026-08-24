@@ -2,10 +2,10 @@
 
 ![bg fit](figs/vote-boundary.png)
 
-<!-- Untitled by design: this figure's own axis starts in the
-     top-left corner, where a headline would go, so the slide carries none.
-     The line to say as it comes up is “Every answer moves the boundary”.
-     -->
+## Rock the Vote
+
+<!-- The line to say as the figure comes up is “Every answer moves the boundary” — the
+     headline names the slide, this names the move. -->
 
 <!-- build: figs/vote-boundary.build1.png -->
 
