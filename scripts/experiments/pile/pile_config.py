@@ -287,6 +287,13 @@ SCALE_N_NEG_SPARE = int(os.environ.get("VTS_SCALE_N_NEG_SPARE", "300"))
 MAX_ASPECT_DRIFT = float(os.environ.get("VTS_MAX_ASPECT_DRIFT", "0.01"))
 
 
+#: Which images each cell currently holds. Selection is hash-stable, but a
+#: roster is what carries membership across a CHANGE of selection rule -- and
+#: across the corrections that are the whole point of the review, since a review
+#: is only worth what it still covers after the next rebuild.
+ROSTER = Path(os.environ.get("VTS_SCALE_ROSTER", str(PILE / "vg_scale_roster.json")))
+
+
 def scale_cell(category: str, band: str) -> str:
     """The band-suffixed category name a harness cell is keyed on.
 

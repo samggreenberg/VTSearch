@@ -495,14 +495,24 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
         exhaustive.add(iid)
         n_anchored += 1
 
+    # A pair a reviewer ruled "present" without drawing a box cannot be banded:
+    # a band is a claim about size, and no size was measured. It leaves every
+    # cell of that class instead -- neither a positive nor a negative -- which
+    # is precisely what the third value is for.
+    unbanded: set[tuple[int, str]] = set()
     for (iid, name), verdict in corrections.items():
         if iid not in labels:
             continue
         if verdict.get("present"):
-            labels[iid][name] = verdict.get("boxes") or labels[iid].get(name, [])
+            boxes = verdict.get("boxes") or []
+            if boxes:
+                labels[iid][name] = boxes
+            else:
+                labels[iid].pop(name, None)
+                unbanded.add((iid, name))
         else:
             labels[iid].pop(name, None)
-        exhaustive.add(iid)  # a human looked at this pair
+        exhaustive.add(iid)  # someone looked at this pair
 
     log(
         f"  labels: {len(labels)} VG images, {n_anchored} repaired from COCO, "
@@ -518,7 +528,9 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
         W, H = box_dims[iid]
         area = float(W * H)
         if not by_name:
-            clean.append(iid)
+            # Only a true negative for every class in C may join the shared pool.
+            if not any((iid, c) in unbanded for c in pc.SCALE_CLASSES):
+                clean.append(iid)
             continue
         for name, bs in by_name.items():
             ux0 = min(b[0] for b in bs)
@@ -549,6 +561,18 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
     def _rank(cell: str, iid: int) -> str:
         return hashlib.sha1(f"{cell}:{iid}".encode()).hexdigest()  # noqa: S324 - not security
 
+    # A roster pins the membership a review was actually carried out against.
+    # Without it, switching selection rules retires images a human has already
+    # judged -- the hash draw and the earlier random draw share only ~228 of
+    # 3,900 negatives, so the entire negative review would have been orphaned.
+    # Entries that are no longer eligible (a correction moved or removed them)
+    # drop out and the shortfall is backfilled by rank, so the roster adapts
+    # without ever reshuffling what it can keep.
+    roster = {}
+    if pc.ROSTER.exists():
+        roster = json.loads(pc.ROSTER.read_text())
+        log(f"  roster: {pc.ROSTER.name} pins {len(roster.get('cells', {}))} cells")
+
     chosen: dict[str, list[int]] = {}
     for c in pc.SCALE_CLASSES:
         for band in bands:
@@ -559,15 +583,27 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
                 # prevalence between bands is the defect this construction
                 # exists to remove.
                 log(f"  UNDER-SUPPLIED {cell}: {len(pool)} positives (wanted {pc.SCALE_N_POS})")
-            chosen[cell] = sorted(pool, key=lambda i: _rank(cell, i))[: pc.SCALE_N_POS]
+            eligible = set(pool)
+            kept = [i for i in roster.get("cells", {}).get(cell, []) if i in eligible]
+            if len(kept) < pc.SCALE_N_POS:
+                spare = sorted(eligible - set(kept), key=lambda i: _rank(cell, i))
+                kept += spare[: pc.SCALE_N_POS - len(kept)]
+            chosen[cell] = kept[: pc.SCALE_N_POS]
 
     clean.sort()
     # Draw spares beyond the designated pool. A human verdict can retire a
     # contaminated negative later, and re-designating from spares costs a
     # relabel rather than a re-embed of every cell.
-    drawn = sorted(clean, key=lambda i: _rank("__negatives__", i))[: pc.SCALE_N_NEG + pc.SCALE_N_NEG_SPARE]
+    want_neg = pc.SCALE_N_NEG + pc.SCALE_N_NEG_SPARE
+    clean_set = set(clean)
+    drawn = [i for i in roster.get("negatives", []) + roster.get("spares", []) if i in clean_set]
+    if len(drawn) < want_neg:
+        extra = sorted(clean_set - set(drawn), key=lambda i: _rank("__negatives__", i))
+        drawn += extra[: want_neg - len(drawn)]
+    drawn = drawn[:want_neg]
     negatives, spares = drawn[: pc.SCALE_N_NEG], drawn[pc.SCALE_N_NEG :]
     neg_set = set(negatives)
+    pc.ROSTER.write_text(json.dumps({"cells": chosen, "negatives": negatives, "spares": spares}, indent=1) + "\n")
     log(
         f"  {sum(len(v) for v in chosen.values())} positives over {len(cells)} cells, "
         f"{len(negatives)} shared negatives + {len(spares)} spares (from {len(clean)} clean images)"
