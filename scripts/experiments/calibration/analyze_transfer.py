@@ -273,6 +273,23 @@ def reference_sanity(df: pd.DataFrame, diag: pd.DataFrame) -> dict:
 # ------------------------------------------------------------------
 
 
+def _spearman(a: np.ndarray, b: np.ndarray) -> float:
+    """Rank correlation, NaN when either side is constant or too short.
+
+    Rank rather than Pearson: the relationship under test is "does this slope
+    move with prevalence at all", and prevalence spans two orders of magnitude
+    across categories, so a linear correlation would be dominated by the densest
+    few and answer a different question.
+    """
+    from scipy.stats import spearmanr  # noqa: PLC0415
+
+    ok = np.isfinite(a) & np.isfinite(b)
+    if ok.sum() < 4 or np.ptp(a[ok]) == 0 or np.ptp(b[ok]) == 0:
+        return float("nan")
+    rho, _p = spearmanr(a[ok], b[ok])
+    return float(rho)
+
+
 def _fit_inverse(x: np.ndarray, y: np.ndarray) -> tuple[float, float, float]:
     """Least squares ``y = a + b * (1/x)``; returns ``(a, b, r2)``."""
     ok = np.isfinite(x) & np.isfinite(y) & (x > 0)
@@ -318,6 +335,7 @@ def learning_curve(df: pd.DataFrame, diag: pd.DataFrame, agg_dir: Path) -> tuple
             continue
         j = v.join(sizes, how="inner").reset_index()
         j["frac"] = frac
+        j["prevalence"] = j["sim_prevalence"]
         # The realised counts, from the run - a level's m is a fraction of the
         # sim set this cell actually had, not of the dataset's nominal size.
         j["m"] = j["sim_n"] * frac
@@ -331,7 +349,7 @@ def learning_curve(df: pd.DataFrame, diag: pd.DataFrame, agg_dir: Path) -> tuple
     for wname, (lo, hi) in WINDOWS.items():
         w = _window(long, lo, hi)
         for arm, sub in w.groupby("arm"):
-            per_cell = sub.groupby([*CELL, "frac"])[[METRIC, "m", "n_pos"]].mean().reset_index()
+            per_cell = sub.groupby([*CELL, "frac"])[[METRIC, "m", "n_pos", "prevalence"]].mean().reset_index()
             for frac, lvl in per_cell.groupby("frac"):
                 mean, sem, _p, n = _mean_sem(lvl[METRIC].to_numpy())
                 curve_rows.append(
@@ -348,8 +366,19 @@ def learning_curve(df: pd.DataFrame, diag: pd.DataFrame, agg_dir: Path) -> tuple
                 )
             # Per-cell fits give the intercept an honest error bar; a single fit
             # to the five arm-level means would have none.
+            #
+            # **The axis question cannot be answered from these fits.**  Within a
+            # cell the category is fixed, so prevalence is fixed, so
+            # `n_pos = prevalence * m` exactly - the two candidate x-axes are the
+            # same axis up to a constant and fit identically by construction
+            # (R^2 agreed to four decimals in the selftest, on data planted to
+            # scale with positives).  The discriminating information is *across*
+            # cells: if cost really goes as `a + b/n_pos`, the n_pos-axis slope is
+            # a constant of the problem and does not move with prevalence, while
+            # the m-axis slope must go as `1/prevalence` to compensate.  So the
+            # axis is decided by which slope is *independent* of prevalence.
             for axis in ("m", "n_pos"):
-                a_s, b_s, r2_s = [], [], []
+                a_s, b_s, r2_s, prev_s = [], [], [], []
                 for _cell, g in per_cell.groupby(CELL):
                     if len(g) < 3:
                         continue
@@ -358,6 +387,7 @@ def learning_curve(df: pd.DataFrame, diag: pd.DataFrame, agg_dir: Path) -> tuple
                         a_s.append(a)
                         b_s.append(b)
                         r2_s.append(r2)
+                        prev_s.append(float(g["prevalence"].mean()))
                 if not a_s:
                     continue
                 a_mean, a_sem, _p, n = _mean_sem(np.asarray(a_s))
@@ -372,6 +402,7 @@ def learning_curve(df: pd.DataFrame, diag: pd.DataFrame, agg_dir: Path) -> tuple
                         "slope": b_mean,
                         "sem_slope": b_sem,
                         "median_r2": float(np.nanmedian(r2_s)),
+                        "slope_prevalence_rho": _spearman(np.asarray(b_s), np.asarray(prev_s)),
                         "n_cells": n,
                     }
                 )
@@ -538,8 +569,14 @@ def decisions(
             out[f"h3_{axis}_slope"] = float(f["slope"])
             out[f"h3_{axis}_intercept"] = float(f["intercept"])
             out[f"h3_{axis}_median_r2"] = float(f["median_r2"])
-    if "h3_m_median_r2" in out and "h3_n_pos_median_r2" in out:
-        out["h3_better_axis"] = "n_pos" if out["h3_n_pos_median_r2"] > out["h3_m_median_r2"] else "m"
+            out[f"h3_{axis}_slope_prevalence_rho"] = float(f["slope_prevalence_rho"])
+    # NOT by R^2: the two axes are proportional within a cell and fit equally
+    # well by construction.  The axis whose slope does not move with prevalence
+    # is the one the cost actually scales with.  See `learning_curve`.
+    rho_m = out.get("h3_m_slope_prevalence_rho", float("nan"))
+    rho_p = out.get("h3_n_pos_slope_prevalence_rho", float("nan"))
+    if np.isfinite(rho_m) and np.isfinite(rho_p):
+        out["h3_better_axis"] = "n_pos" if abs(rho_p) < abs(rho_m) else "m"
 
     # H4
     beaten = []

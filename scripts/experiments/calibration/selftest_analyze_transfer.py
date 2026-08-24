@@ -67,7 +67,10 @@ SIM_N = 2000.0
 #: Per-category prevalence, deliberately spread so ``n_pos`` and ``m`` are NOT
 #: proportional across cells - otherwise the two candidate x-axes would be the
 #: same axis and the "which one fits better" test could not fail.
-PREVALENCE = {"cat_a": 0.005, "cat_b": 0.02, "cat_c": 0.08, "cat_d": 0.30}
+#: Chosen so the smallest level (5 %) still leaves >= 1 positive: the analyzer
+#: computes n_pos as sim_n * prevalence * frac with no floor, so a fabrication
+#: that clamps would be planting a curve the analyzer cannot see.
+PREVALENCE = {"cat_a": 0.01, "cat_b": 0.03, "cat_c": 0.10, "cat_d": 0.30}
 
 LEVELS = [
     (0.05, "pooled_sim_oracle_f050"),
@@ -123,7 +126,7 @@ def _fabricate(root: Path, rng: np.random.Generator, *, break_join: bool = False
                     # The curve: cost falls like 1/n_pos toward CURVE_A.
                     lvl_cost = {}
                     for frac, variant in LEVELS:
-                        n_pos = max(1.0, n_pos_full * frac)
+                        n_pos = n_pos_full * frac
                         lvl_cost[variant] = CURVE_A + CURVE_B / n_pos + rng.normal(0, 0.002)
                     erm_cost = lvl_cost["pooled_sim_oracle"]
                     # References, planted relative to the ERM's test cost.
@@ -285,9 +288,14 @@ def main() -> int:
             f"{dec['h3_n_pos_slope']:.3f} vs planted {CURVE_B}",
         )
         ok &= _check(
+            "H3 the two axes are NOT separated by fit quality",
+            abs(dec["h3_n_pos_median_r2"] - dec["h3_m_median_r2"]) < 1e-3,
+            f"r2(n_pos)={dec['h3_n_pos_median_r2']:.4f} r2(m)={dec['h3_m_median_r2']:.4f}",
+        )
+        ok &= _check(
             "H3 picks the positives axis",
             dec["h3_better_axis"] == "n_pos",
-            f"r2(n_pos)={dec['h3_n_pos_median_r2']:.4f} r2(m)={dec['h3_m_median_r2']:.4f}",
+            f"rho(n_pos)={dec['h3_n_pos_slope_prevalence_rho']:+.3f} rho(m)={dec['h3_m_slope_prevalence_rho']:+.3f}",
         )
 
         # --- H4: the bound is refuted, by the right arm ---------------------
