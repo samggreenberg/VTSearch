@@ -227,8 +227,14 @@ def transfer_bracket(df: pd.DataFrame, diag: pd.DataFrame, agg_dir: Path) -> pd.
     for wname, (lo, hi) in WINDOWS.items():
         w = _window(j, lo, hi)
         for arm, sub in w.groupby("arm"):
-            per_cell = sub.groupby(CELL)[["transfer_naive", "transfer_honest", "optimism"]].mean()
+            cols = ["transfer_naive", "transfer_honest", "optimism", *needed]
+            per_cell = sub.groupby(CELL)[cols].mean()
             entry: dict = {"window": wname, "arm": arm}
+            # The reference *levels*, not just the gaps: H3's intercept is a
+            # third estimate of the same reference and can only be read against
+            # them if they are in the table beside it.
+            entry["ref_naive"] = float(np.nanmean(per_cell["cost_test_oracle_naive"].to_numpy()))
+            entry["ref_honest"] = float(np.nanmean(per_cell["cost_test_oracle_honest"].to_numpy()))
             for col in ("transfer_naive", "transfer_honest", "optimism"):
                 mean, sem, p, n = _mean_sem(per_cell[col].to_numpy())
                 entry[col] = mean
@@ -577,6 +583,33 @@ def decisions(
     rho_p = out.get("h3_n_pos_slope_prevalence_rho", float("nan"))
     if np.isfinite(rho_m) and np.isfinite(rho_p):
         out["h3_better_axis"] = "n_pos" if abs(rho_p) < abs(rho_m) else "m"
+
+    # The three estimates of one reference point, side by side.  This is the
+    # check the pre-registration commits to: the cross-fitted reference is an
+    # upper bound that carries a cross-fitting penalty, the sample minimum is a
+    # lower bound, and the curve's intercept is fitted from neither.  If the
+    # intercept sits inside the bracket, H2 is real; if it sits outside by more
+    # than the bracket's own width, H2 is reported UNRESOLVED, not won.
+    if b is not None and "h3_n_pos_intercept" in out:
+        intercept = out["h3_n_pos_intercept"]
+        out["h3_reference_estimates"] = {
+            "naive_lower_bound": float(b["ref_naive"]),
+            "curve_intercept": float(intercept),
+            "honest_upper_bound": float(b["ref_honest"]),
+        }
+        lo, hi = float(b["ref_naive"]), float(b["ref_honest"])
+        width = hi - lo
+        inside = lo - 1e-9 <= intercept <= hi + 1e-9
+        out["h3_intercept_inside_bracket"] = bool(inside)
+        out["h3_intercept_excess_over_bracket"] = (
+            0.0 if inside else float(min(abs(intercept - lo), abs(intercept - hi)))
+        )
+        if not inside and width > 0 and out["h3_intercept_excess_over_bracket"] > width:
+            out["h2_verdict"] = "unresolved - the curve intercept falls outside the bracket by more than its width"
+        elif out.get("h2_majority_is_reference"):
+            out["h2_verdict"] = "the majority of `transfer` is the reference point"
+        else:
+            out["h2_verdict"] = "the reference point is not the majority of `transfer`"
 
     # H4
     beaten = []
