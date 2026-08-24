@@ -61,6 +61,12 @@ from typing import Any
 import numpy as np
 
 from vtscore.eval.calibration_metrics import oracle_cut
+from vtscore.eval.transfer_rules import (
+    BAGGED_FIT_RULES,
+    TRANSFER_ORACLE_RULES,
+    bagged_gaussian_fit_cuts,
+    transfer_oracle_cuts,
+)
 from vtscore.training.evt_mixture import (
     GumbelNormalFit1D,
     fit_gumbel_normal_mixture_state,
@@ -208,7 +214,24 @@ EVT_FIT_RULES: tuple[str, ...] = (*EVT_RULES, *TAIL_RULES)
 #: reported to locate the error rather than to be shipped.
 ORACLE_RULES: tuple[str, ...] = ("supervised", "sim_oracle")
 
-ALL_RULES: tuple[str, ...] = (*GAUSSIAN_RULES, *EVT_RULES, *TAIL_RULES, *ORACLE_RULES)
+#: #2883's readings of the **same** sim set as ``sim_oracle``: four subsample
+#: levels (the learning curve in sim-set size) and two variance-reduced
+#: estimators.  Label-reading like ``ORACLE_RULES``, and kept separate from them
+#: because these do not sit on the decomposition chain - they measure the last
+#: link's *shape* rather than adding a link to it.  See
+#: :mod:`vtscore.eval.transfer_rules`.
+#:
+#: ``BAGGED_FIT_RULES`` is the label-free counterpart and does belong with the
+#: Gaussian family: same fit, same rules, averaged over bootstrap refits.
+
+ALL_RULES: tuple[str, ...] = (
+    *GAUSSIAN_RULES,
+    *BAGGED_FIT_RULES,
+    *EVT_RULES,
+    *TAIL_RULES,
+    *ORACLE_RULES,
+    *TRANSFER_ORACLE_RULES,
+)
 
 
 def _finite(x: float | None) -> float:
@@ -488,6 +511,10 @@ def decomposition_cuts(
     # pooled into one fallback count.
     reasons: dict[str, str] = dict.fromkeys(EVT_FIT_RULES, f"fit_{params['evt_fit_fail']}")
 
+    # Label-free, so it is computed whether or not the single full-sample fit
+    # succeeded: a bootstrap refit can find a mixture where one EM run on the
+    # whole haystack did not, and vice versa.
+    cuts.update(bagged_gaussian_fit_cuts(scores, gaussian_cuts, fpr_weight, fnr_weight))
     if gmm is not None:
         cuts.update(gaussian_cuts(gmm, fpr_weight, fnr_weight))
     else:
@@ -507,6 +534,10 @@ def decomposition_cuts(
     params.update(sup_stats)
     cuts["supervised"] = sup
     cuts["sim_oracle"] = sim_oracle_cut(scores, sim_labels, fpr_weight, fnr_weight)
+    # #2883: the same target read off less data, and off the same data with two
+    # different regularisers.  Together these say whether the last link of the
+    # chain is a bias the fit could remove or a variance the sample size sets.
+    cuts.update(transfer_oracle_cuts(scores, sim_labels, fpr_weight, fnr_weight))
 
     # Where the true optimum sits in the *fitted* Bad component's upper tail.  If
     # this is stable across steps and categories it is itself a shippable rule
