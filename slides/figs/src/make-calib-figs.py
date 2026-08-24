@@ -3456,7 +3456,10 @@ def decomposition_fig() -> None:
 #: The loop schematic's canvas. Wider than the calibration schematics because
 #: the cut forks left and right on the same row; the height matches theirs so a
 #: 16pt label renders at the same size on every schematic in the deck.
-LOOP_CANVAS = (13.6, FLOW_CANVAS_H)
+#: 16:9, because the loop owns a full-bleed slide. The old canvas was 1.24:1
+#: — right for the nearly square `bg right:70%` sidebar, and 200px of dead
+#: white down each side of a slide that has no sidebar left to fill.
+LOOP_CANVAS = (17.4, 9.8)
 
 #: How far the whole-corpus score line's own label sits above it. The
 #: calibration schematics clear a check mark (`SCORE_LABEL_LIFT`); this line
@@ -3484,8 +3487,8 @@ def vts_loop_fig() -> None:
     final = _vts_loop_stage(LOOP_STAGES)
     box = tight_box(final)
     for stage in range(1, LOOP_STAGES):
-        save(_vts_loop_stage(stage), OUT, f"vts-loop.build{stage}.png", column=SIDEBAR_WIDE, box=box)
-    save(final, OUT, "vts-loop.png", column=SIDEBAR_WIDE, box=box)
+        save(_vts_loop_stage(stage), OUT, f"vts-loop.build{stage}.png", column=FULL_BLEED, box=box, notch=False)
+    save(final, OUT, "vts-loop.png", column=FULL_BLEED, box=box)
 
 
 def _vts_loop_stage(stage: int) -> plt.Figure:
@@ -3501,25 +3504,32 @@ def _vts_loop_stage(stage: int) -> plt.Figure:
 
     # ── layout ────────────────────────────────────────────────────────────────
     # One spine down the middle (corpus, detector, scores, cut), then a fork.
-    bx = 7.4
-    pool_x0, pool_w, pool_y0, pool_h = 2.6, 9.6, 9.95, 0.85
-    det_cy, det_w, det_h = 8.2, 2.9, 0.78
-    score_len = 1.5
+    # The spine sits right of centre: the slide's title notch owns the top-left
+    # corner (`slide_figure.TITLE_NOTCH_PX`), so the corpus bar — the one row
+    # that reaches the top of the drawing — starts clear of it. Everything
+    # below the notch may use the full width, and the retrain rail does.
+    bx = 11.45
+    pool_x0, pool_w, pool_y0, pool_h = 6.7, 9.5, 8.5, 0.85
+    det_cy, det_w, det_h = 6.9, 2.9, 0.78
+    score_len = 1.55
 
     score_tail = det_cy - det_h / 2 - OBJECT_GAP
     score_tip = score_tail - score_len
     # The arrow points at the score-line *group*, so it stops an object gap
     # above the group's topmost ink — which is the line's label, not the line.
     line_y = score_tip - (OBJECT_GAP + CAP_16 + LOOP_LABEL_LIFT)
-    line_half = 3.5
+    line_half = 4.2
     theta_x = bx + 0.1 * line_half
 
     # Both forks leave from directly under the cut's own label.
     fork = (theta_x, line_y - 0.32 - LABEL_GAP - CAP_16 - OBJECT_GAP)
 
-    votes_x0, votes_w, votes_y0, votes_h = 2.6, 3.2, 0.85, 0.95
+    # Both outputs sit low and wide apart, so the fork's arrows are nearly
+    # horizontal. That is where the height came from: on the old tall canvas
+    # the same fork was two long diagonals costing three units of drop.
+    votes_x0, votes_w, votes_y0, votes_h = 5.4, 3.4, 0.2, 0.9
     votes_cx = votes_x0 + votes_w / 2
-    keep_cx, keep_cy, keep_w, keep_h = 11.5, 1.6, 3.2, 0.8
+    keep_cx, keep_cy, keep_w, keep_h = 14.6, 1.15, 3.4, 0.8
 
     # ── stage 1: the corpus — everything the user has, none of it labelled ────
     ax.add_patch(
@@ -3649,7 +3659,7 @@ def _vts_loop_stage(stage: int) -> plt.Figure:
     # through the score line, and the point of the last step is that the loop
     # closes, which a clean rectangular return says more plainly.
     if stage >= 7:
-        rail_x = 0.75
+        rail_x = 0.9
         rail_y = votes_y0 + votes_h / 2
         head_from = bx - det_w / 2 - OBJECT_GAP - 0.55
         ax.plot(
