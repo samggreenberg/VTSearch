@@ -1,14 +1,17 @@
-![bg right:56% fit](figs/calib-blend-schedule.png)
+<!-- _class: full -->
+
+![bg fit](figs/calib-blend-schedule.png)
 
 ### Iteration 3½ — measured again
 
 ## Never hand over completely
 
-- Nine schedules swept: the 20-vote handoff was too fast
-- Winners cap x-cal at **half weight, forever**: region −0.058, binary −0.019
-- 300 clicks ≈ **13 positives** — x-cal converges in positives, not clicks
+<!-- Say the three numbers; they are no longer on the slide. Nine schedules
+     swept, and the 20-vote handoff was too fast. The winners cap x-cal at half
+     weight forever: region −0.058, binary −0.019. And 300 clicks buys about 13
+     positives, because x-cal converges in positives, not clicks.
 
-<!-- Iteration 3½ went back and swept the three choices that had been baked
+     Iteration 3½ went back and swept the three choices that had been baked
      into that one hard-coded line: nine schedules, re-run at ten times the
      original horizon to make sure the answer was a finding and not an
      artefact of stopping early.

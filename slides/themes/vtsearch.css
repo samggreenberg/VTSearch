@@ -201,17 +201,26 @@ section.outline ol li::before {
 section.outline ol li.here { font-weight: 700; }
 section.outline ol li em { color: var(--ink-soft); font-style: normal; }
 
-/* Full-bleed figure: kill the padding so a background image owns the slide. */
-section.full { padding: 0; }
-section.full h2 {
-  position: absolute;
-  top: 42px;
-  left: 60px;
-  right: 60px;
-  background: rgba(255, 255, 255, 0.92);
-  padding: 0.25em 0.5em;
-  border-radius: 6px;
+/* Full-bleed figure: the figure owns the whole 1280x720 slide, and the title
+   sits in a notch cut out of its top-left corner.
+
+   The notch is a fixed standard, not a per-slide choice, and that is the whole
+   point of it: a headline that moves to dodge each figure stops being a
+   headline and becomes another thing to find. A figure that genuinely cannot
+   spare its top-left corner therefore carries NO title — it does not put one
+   somewhere else. The same rectangle lives in Python as
+   `slide_figure.TITLE_NOTCH_PX`, where `save()` refuses to write a full-bleed
+   figure that draws inside it; keep the two in sync.
+
+   The background image is a Marpit layer behind the section, so the padding
+   here insets only the title — the figure still bleeds to all four edges. */
+section.full {
+  padding: 42px 60px;
+  align-content: start;
 }
+section.full h2,
+section.full h3 { max-width: 600px; }
+section.full h2 { margin: 0; }
 
 /* Build groups (progressive reveal): build.py injects this class on every
    page of the group, the final page included. Anchoring the column to the

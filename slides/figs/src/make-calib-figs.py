@@ -36,7 +36,15 @@ from matplotlib import patheffects
 from matplotlib.patches import Ellipse, FancyArrow, FancyArrowPatch, Polygon, Rectangle
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from slide_figure import LABEL_GAP_PT, OBJECT_GAP_PT, SIDEBAR, SIDEBAR_WIDE, save, tight_box  # noqa: E402
+from slide_figure import (  # noqa: E402
+    FULL_BLEED,
+    LABEL_GAP_PT,
+    OBJECT_GAP_PT,
+    SIDEBAR,
+    SIDEBAR_WIDE,
+    save,
+    tight_box,
+)
 
 from vtscore.training.blend_schedules import BlendContext, get_schedule
 from vtscore.training.thresholds import (
@@ -3307,12 +3315,17 @@ def blend_schedule_fig() -> None:
     ax.set_ylim(-0.02, 1.08)
     ax.set_yticks([0, 0.5, 1.0], ["pure\nGMM", "0.5", "pure\nx-cal"])
     ax.set_xlabel("votes")
-    ax.set_ylabel("weight on the cross-calibration cut")
-    ax.set_title("Measured schedules never hand over", loc="left", pad=14, fontsize=16)
+    # Short enough not to overflow the (shortened) axes above the title notch;
+    # the tick labels already read "pure GMM" to "pure x-cal", so the axis name
+    # only has to name the quantity, not re-explain the ends.
+    ax.set_ylabel("weight on the x-cal cut")
     ax.grid(axis="y", color=RULE, linewidth=0.8)
     ax.set_axisbelow(True)
-    fig.tight_layout()
-    save(fig, OUT, "calib-blend-schedule.png")
+    # Full-bleed: no in-figure title (the slide's headline is the title, and it
+    # is drawn over this band), and the plot is pushed below TITLE_NOTCH_PX
+    # rather than tight-cropped, so the reserved corner survives the write.
+    fig.subplots_adjust(left=0.20, right=0.97, top=0.69, bottom=0.13)
+    save(fig, OUT, "calib-blend-schedule.png", column=FULL_BLEED, tight=False)
 
 
 def anchored_fig() -> None:
@@ -3424,7 +3437,9 @@ def decomposition_fig() -> None:
     ax.spines["left"].set_visible(False)
     ax.spines["bottom"].set_visible(False)
     ax.tick_params(left=False)
-    ax.set_title("Where the threshold error lives", loc="left", pad=34, fontsize=16)
+    # Full-bleed: the in-figure title is gone (the slide's headline says the
+    # same thing, over this band), but the units line stays — it is the one
+    # thing the bars do not say for themselves.
     ax.annotate(
         "excess cost vs the test oracle, region arm",
         xy=(0, 1.0),
@@ -3434,8 +3449,8 @@ def decomposition_fig() -> None:
         fontsize=15,
         color=SOFT,
     )
-    fig.tight_layout()
-    save(fig, OUT, "calib-error-decomposition.png")
+    fig.subplots_adjust(left=0.28, right=0.97, top=0.645, bottom=0.05)
+    save(fig, OUT, "calib-error-decomposition.png", column=FULL_BLEED, tight=False)
 
 
 #: The loop schematic's canvas. Wider than the calibration schematics because

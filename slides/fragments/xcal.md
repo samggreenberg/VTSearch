@@ -1,4 +1,6 @@
-![bg right:70% fit](figs/calib-xcal-flow.png)
+<!-- _class: full -->
+
+![bg fit](figs/calib-xcal-flow.png)
 
 ### Iteration 1 — the idea
 

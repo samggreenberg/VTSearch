@@ -1,14 +1,17 @@
-![bg right:56% fit](figs/calib-error-decomposition.png)
+<!-- _class: full -->
+
+![bg fit](figs/calib-error-decomposition.png)
 
 ### Epilogue — why it closed
 
 ## The anchored fit ate the cut axis
 
-- The tail rule at its own best tuning: **+0.0069**, worse at p = 0.001
-- The label-reading oracle of **every** cut rule: −0.0055, not significant
-- What is left is **transfer**, and no cut rule can touch it
+<!-- Say the three numbers; they are no longer on the slide. The tail rule at
+     its own best tuning is +0.0069, worse at p = 0.001. The label-reading
+     oracle of every cut rule is −0.0055, not significant. What is left is
+     transfer, and no cut rule can touch it.
 
-<!-- The answer, from the re-measurement: judged against the anchored fit that
+     The answer, from the re-measurement: judged against the anchored fit that
      had shipped in the meantime, the extreme-value rule is worse — by 0.0069
      even at its own best tuning, significant at p = 0.001. That alone would
      just close one idea.
