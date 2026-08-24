@@ -173,6 +173,11 @@ rewrites the whole archive.
   enormous line anyway.
 - **SVG for diagrams** with a few dozen shapes: smaller, and genuinely
   diffable.
+- **WebP for screenshots.** A screenshot is a photograph behind UI chrome,
+  which is the one thing PNG is bad at: the two UI figures weigh 2.7 MB as PNG
+  and 0.4 MB as WebP at a quality no projector resolves the difference at — and
+  they are re-shot on every GUI change, so the cost is paid again and again.
+  Marp rasterises through Chromium, which reads WebP natively.
 - Iterate in the working tree and `--amend` while a figure is still ugly, so
   only the final render becomes permanent history.
 
@@ -183,8 +188,8 @@ plot can be regenerated when the underlying numbers move —
 (see [`STYLE.md`](STYLE.md)) and refuses to write a figure whose labels would
 be unreadable in its slot.
 
-**Screenshots of the app are generated too.** `figs/ui-three-panel.png` and
-`figs/ui-region-voting.png` come from `figs/src/shoot-ui-figs.mjs`, which builds
+**Screenshots of the app are generated too.** `figs/ui-three-panel.webp` and
+`figs/ui-region-voting.webp` come from `figs/src/shoot-ui-figs.mjs`, which builds
 a corpus of real photographs out of the Caltech-101 download, trains a detector
 on cats by voting, and drives headless chromium:
 

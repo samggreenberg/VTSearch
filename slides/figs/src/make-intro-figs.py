@@ -182,9 +182,7 @@ def _obvious(pts: np.ndarray, model: SVC, labeled: tuple[int, ...], n: int = 3) 
     inside = (model.decision_function(cells) > 0).reshape(xx.shape)
     # The curve, as the inside cells that have an outside neighbour. Close
     # enough at this resolution to measure a gap in figure units.
-    rim = inside & ~(
-        np.roll(inside, 1, 0) & np.roll(inside, -1, 0) & np.roll(inside, 1, 1) & np.roll(inside, -1, 1)
-    )
+    rim = inside & ~(np.roll(inside, 1, 0) & np.roll(inside, -1, 0) & np.roll(inside, 1, 1) & np.roll(inside, -1, 1))
     curve = cells[rim.ravel()]
     depth = np.where(
         model.decision_function(pts) > 0,

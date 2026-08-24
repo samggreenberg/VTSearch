@@ -1,4 +1,4 @@
-![bg right:56% fit](figs/ui-three-panel.png)
+![bg right:56% fit](figs/ui-three-panel.webp)
 
 ### What it is
 
@@ -10,6 +10,10 @@
 
 <!-- Walk the three panels left to right, slowly; this is the audience's
      first sight of the tool.
+
+     Say what is on the screen first, because it is a real session and it
+     helps: a few hundred photographs, and someone about ten votes into
+     looking for the cats in them. Nothing was labelled when they started.
 
      Left: the corpus, ordered by how well it currently matches. Nothing here
      is labelled — this is just everything the user has. Middle: one item,

@@ -4,7 +4,7 @@
  *   node slides/figs/src/shoot-ui-figs.mjs        # both shots
  *   node slides/figs/src/shoot-ui-figs.mjs three-panel
  *
- * Writes `slides/figs/ui-three-panel.png` and `slides/figs/ui-region-voting.png`.
+ * Writes `slides/figs/ui-three-panel.webp` and `slides/figs/ui-region-voting.webp`.
  *
  * These used to be the light-theme frames of the `three-panel` and
  * `region-voting` shots in `docs/user/screenshots.manifest.ts`, copied across.
@@ -30,7 +30,7 @@
  * if absent — so a re-run after a UI change is just the captures.
  */
 import { launchChromium } from '../../../scripts/screenshots/launch.mjs';
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -67,6 +67,35 @@ const HERO = ['cougar_face/image_0012.jpg', 'cougar_face/image_0022.jpg', 'couga
 const HERO_REGION = ['wild_cat/image_0002.jpg', 'wild_cat/image_0004.jpg', 'Leopards/image_0005.jpg'];
 
 const log = (...a) => console.log('[slide-shots]', ...a);
+
+/**
+ * Screenshot, then re-encode as WebP.
+ *
+ * These two figures are photographs behind UI chrome, which is the one thing
+ * PNG is bad at: the same frames weigh 2.7 MB as PNG and 0.4 MB as WebP at a
+ * quality no projector will resolve the difference at — and unlike the deck's
+ * plots, they are re-shot on every GUI change, so the cost is paid again and
+ * again. Marp rasterises through Chromium, which reads WebP natively.
+ *
+ * Pillow does the encode (a project dependency; `scripts/screenshots/refresh.sh`
+ * shells out to it for the same reason) because Playwright writes PNG or JPEG
+ * and nothing else.
+ */
+async function shoot(page, name) {
+  const png = await page.screenshot({ type: 'png' });
+  execFileSync(
+    'python',
+    [
+      '-c',
+      'import sys;from io import BytesIO;from PIL import Image;'
+        + 'Image.open(BytesIO(sys.stdin.buffer.read())).convert("RGB")'
+        + '.save(sys.argv[1],"WEBP",quality=92,method=6)',
+      join(FIGS, `${name}.webp`),
+    ],
+    { cwd: REPO, input: png, stdio: ['pipe', 'inherit', 'inherit'] }
+  );
+  log(`wrote figs/${name}.webp`);
+}
 const only = process.argv.slice(2);
 const wanted = (id) => only.length === 0 || only.includes(id);
 
@@ -291,7 +320,7 @@ async function annotate(page, annotations) {
       // is what silently dropped those labels off-screen before.
       const below = r.y + r.height + 60 < window.innerHeight;
       const above = r.y > 60;
-      const top = below ? r.y + r.height + pad + 8 : above ? r.y - pad - 52 : r.y + pad + 8;
+      const top = below ? r.y + r.height + pad + 8 : above ? r.y - pad - 56 : r.y + pad + 8;
       Object.assign(label.style, {
         position: 'absolute',
         left: `${r.x + r.width / 2}px`,
@@ -299,9 +328,10 @@ async function annotate(page, annotations) {
         transform: 'translateX(-50%)',
         background: accent,
         color: '#fff',
-        // Sized for the slot, not the screenshot: this lands at ~18px once
-        // the frame is scaled into a slide sidebar, which is the floor.
-        font: '600 30px/1.2 system-ui, sans-serif',
+        // Sized for the slot, not the screenshot. The narrower of the two
+        // slots scales a 1180px window by 0.61, so 34px is what clears
+        // STYLE.md's 20px floor there; it lands larger on the full-bleed one.
+        font: '600 34px/1.2 system-ui, sans-serif',
         padding: '7px 14px',
         borderRadius: '6px',
         whiteSpace: 'nowrap',
@@ -318,11 +348,17 @@ async function enterLabelView(page, datasetName, detectorName) {
   // Selection persists server-side, so a rerun (or the other shot's fixture)
   // can leave the wrong rows ticked. Drive every row to what this shot needs
   // rather than only ticking the one we want.
+  //
+  // Match the name cell exactly, not the row's text: `cats` is a substring of
+  // `cats-regions`, and a substring match ticks both, which leaves Train
+  // permanently disabled and looks exactly like a hung page.
   const selectOnly = async (tag, name) => {
     const rows = page.locator(tag);
     for (let i = 0; i < (await rows.count()); i++) {
       const row = rows.nth(i);
-      const wanted = ((await row.textContent()) || '').includes(name);
+      const cell = row.locator('.name-cell').first();
+      const label = (await cell.count()) ? (await cell.textContent()) || '' : '';
+      const wanted = label.trim() === name;
       const box = row.locator('.select-checkbox').first();
       if (((await box.getAttribute('aria-checked')) === 'true') === wanted) continue;
       await box.click();
@@ -363,12 +399,11 @@ async function shootThreePanel(page) {
   // layout does not; a label on each says it in type too small to read from
   // the slot. What the slide is actually for is the pair of buttons.
   await annotate(page, [{ target: '.vote-buttons, .btn-good', label: 'One item. Good or Bad.' }]);
-  await page.screenshot({ path: join(FIGS, 'ui-three-panel.png') });
-  log('wrote figs/ui-three-panel.png');
+  await shoot(page, 'ui-three-panel');
 }
 
 async function shootRegionVoting(page) {
-  await enterLabelView(page, 'photo-regions', 'cats');
+  await enterLabelView(page, 'photo-regions', 'cats-regions');
   await leftTab(page, 'Manual');
   await serveItem(page, HERO_REGION);
   await page.locator('.ivc-btn-toggle, button[title*="Marquee" i]').first().click();
@@ -388,8 +423,7 @@ async function shootRegionVoting(page) {
   await page.waitForSelector('.region-box', { timeout: 15000 });
   await page.waitForTimeout(700);
   await annotate(page, [{ target: '.region-box', label: 'Vote good on this region' }]);
-  await page.screenshot({ path: join(FIGS, 'ui-region-voting.png') });
-  log('wrote figs/ui-region-voting.png');
+  await shoot(page, 'ui-region-voting');
 }
 
 // ── main ─────────────────────────────────────────────────────────────────────
@@ -422,7 +456,17 @@ const photos = await ensureDataset('photos', { ...CATS, ...NOT_CATS }, 'siglip')
 const detector = await ensureDetector('cats', photos);
 await ensureVotes(photos, detector);
 if (wanted('region-voting')) {
-  await ensureDataset('photo-regions', { ...REGION_CATS, ...REGION_NOT_CATS }, 'dinov2_patch');
+  // A second detector, not the same one: a detector binds an embedder *type*
+  // at creation, and a patch dataset offers `patch_semantic` where the SigLIP
+  // one offers `semantic`. Point `cats` at `photo-regions` and the app
+  // correctly refuses the pair — which is the whole reason region voting needs
+  // its own dataset in the first place.
+  const regions = await ensureDataset(
+    'photo-regions',
+    { ...REGION_CATS, ...REGION_NOT_CATS },
+    'dinov2_patch'
+  );
+  await ensureVotes(regions, await ensureDetector('cats-regions', regions));
 }
 
 const browser = await launchChromium();
