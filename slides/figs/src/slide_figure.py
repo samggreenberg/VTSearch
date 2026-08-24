@@ -72,8 +72,13 @@ def enforce_type_floor(fig: plt.Figure, column: float = SIDEBAR) -> None:
     px_per_pt = rendered_px_per_pt(fig, column)
     smallest = min(
         (t.get_fontsize() for t in fig.findobj(matplotlib.text.Text) if t.get_text().strip()),
-        default=0.0,
+        default=float("inf"),
     )
+    if smallest == float("inf"):
+        # A figure with no labels at all cannot miss the floor. This is a real
+        # case, not a degenerate one: the opening stage of a build often draws
+        # the bare situation and lets the first advance name it.
+        return
     rendered = smallest * px_per_pt
     if rendered < TYPE_FLOOR_PX:
         raise SystemExit(
