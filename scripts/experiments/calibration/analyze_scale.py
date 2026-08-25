@@ -107,12 +107,28 @@ def main() -> int:
     ap.add_argument("--exp", default=f"/expscratch/{os.environ.get('USER', 'sgreenberg')}/scale-3156")
     ap.add_argument("--at-step", type=int, default=150, help="votes spent at which to read the headline")
     ap.add_argument("--expect", type=int, default=324, help="cells the grid should have produced")
+    ap.add_argument(
+        "--extra-cells",
+        default="",
+        help="another cells dir to merge in, e.g. the same encoder with geometry OFF -- "
+        "the control that separates region voting from encoder quality",
+    )
     ap.add_argument("--out", default="")
     args = ap.parse_args()
 
     cells = Path(args.exp) / "results" / "cells"
     freshness_report(cells, args.expect)
     rows, n_files, dropped = load_rows(cells)
+    if args.extra_cells:
+        extra, n_extra, d_extra = load_rows(Path(args.extra_cells))
+        # Relabel so the control cannot be confused with the live arm: same
+        # encoder, same cells, same seeds, geometry off.
+        for r in extra:
+            r["style"] = r.get("style", "") + "(control)"
+        rows += extra
+        n_files += n_extra
+        dropped += d_extra
+        print(f"merged {len(extra)} control rows from {args.extra_cells}")
     print(f"loaded {len(rows)} rows from {n_files} cell files ({dropped} unreadable)")
 
     # The endpoint of each trajectory: the last row at or before --at-step for
@@ -180,6 +196,29 @@ def main() -> int:
         m, se = mean_se(diffs)
         verdict = "yes" if (se == se and abs(m) > 2 * se) else "NOT RESOLVABLE"
         print(f"{style:<26}{fmt(m, se):>16}{len(diffs):>9}{verdict:>14}")
+
+    ctrl = [a for a in styles if "(control)" in a]
+    if ctrl:
+        print()
+        print("=== region voting vs the SAME encoder with geometry off, per band ===")
+        print(f"{'band':<10}{'max_patch':>14}{'whole_image':>14}{'paired diff':>18}{'n':>5}")
+        print("-" * 62)
+        live = next((a for a in styles if a.startswith("dinov3") and "(control)" not in a), None)
+        base = ctrl[0]
+        for b in BANDS:
+            diffs = []
+            for (st, cls, seed, bb), v in by_key.items():
+                if st != live or bb != b:
+                    continue
+                other = by_key.get((base, cls, seed, b))
+                if other is not None:
+                    diffs.append(v - other)
+            m, se = mean_se(diffs)
+            lm, _ = mean_se(per_band[(live, b)])
+            cm, _ = mean_se(per_band[(base, b)])
+            print(f"{b:<10}{fmt(lm):>14}{fmt(cm):>14}{fmt(m, se):>18}{len(diffs):>5}")
+        print("Negative = region voting costs less. Same encoder and cells on both")
+        print("sides, so this isolates the geometry from the encoder.")
 
     print()
     print("Cost is the harness's operating-point cost; every comparison above is")
