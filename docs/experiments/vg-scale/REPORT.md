@@ -103,7 +103,13 @@ encoder.
   uncertainty is real and measured, not zero.
 - **The negative pool carries ~2.0% residual contamination** (95% CI 0.8–5.0%),
   concentrated in `book` — which is also the one class whose penalty flips sign
-  under region voting. Treat `book` as the least trustworthy row here.
+  under region voting. `book` is very likely a *definition* problem rather than
+  sloppy annotation: COCO has no magazine class, so magazines land in `book`,
+  62% of its instances are shelf spines, and a DVD case on a TV stand is a coin
+  toss. **It changes nothing.** Dropping `book` entirely moves the headline from
+  0.31/0.41/0.41 to 0.34/0.43/0.43 — inside the standard error, and in the
+  direction of a *stronger* effect. It dilutes the result slightly; it does not
+  produce it. No conclusion here rests on `book`.
 - **Three seeds.** Differences smaller than twice their standard error are
   reported as unresolvable rather than quoted to a decimal the sample cannot
   support.
