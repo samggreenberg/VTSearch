@@ -51,6 +51,7 @@ from vtscore.training.thresholds import (
     FOLD_ANCHOR_WEIGHT,
     FoldAnchoredCut,
     GmmFit1D,
+    _anchored_em,
     acquisition_inclusion,
     conformal_threshold,
     fit_anchored_score_gmm,
@@ -160,6 +161,7 @@ def arrow_len_for(label: str, fontsize: float = ARROW_LABEL_PT) -> float:
     """
     width = TextPath((0, 0), label, size=fontsize, prop=FontProperties(family="DejaVu Sans")).get_extents().width
     return width / FLOW_UNIT_PT + 2 * ARROW_HEAD_L
+
 
 #: A 16pt label's cap height in drawing units, and how far a score line's own
 #: label sits above the line: clear of the tallest check mark by one label gap.
@@ -4216,12 +4218,247 @@ def _region_max_stage(stage: int) -> plt.Figure:
     return fig
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+# How the mixture is actually fitted — the two teaching figures (#3254)
+# ──────────────────────────────────────────────────────────────────────────────
+
+#: How many build stages each EM teaching figure reveals in: the guess; the
+#: E-step; the M-step; and the same pair of steps run to convergence.
+EM_STAGES = 4
+
+#: 16:9 for a full-bleed slot, and the deck's shared schematic height.
+EM_CANVAS = (19.8, FLOW_CANVAS_H)
+
+#: Bins in a teaching panel's histogram. Coarser than `GMM_FLOW_BINS` because
+#: the E-step panel splits every bar in two by colour, and a bar four slide
+#: pixels wide cannot be seen to be split.
+EM_BINS = 26
+
+#: The deliberately wrong pair of components EM is started from: both means in
+#: the valley, both narrow, equal weight. A guess this bad is the point — what
+#: the figure has to show is that the answer does not depend on where you
+#: start, and a near-correct initialisation shows nothing move.
+EM_INIT = GmmFit1D(w_lo=0.5, mu_lo=0.34, var_lo=0.010, w_hi=0.5, mu_hi=0.52, var_hi=0.010)
+
+#: The panels' captions, left to right.
+EM_CAPTIONS = ("a guess", "who claims what", "re-fit to that", "repeat: done")
+
+#: What the arrows between the panels are called.
+EM_ARROWS = ("E", "M", "repeat")
+
+
+def _em_iterate(scores: np.ndarray, anchors: dict | None, rounds: int) -> GmmFit1D:
+    """`rounds` rounds of the **shipped** EM, from `EM_INIT`.
+
+    Runs `vtscore`'s own `_anchored_em` rather than a re-implementation, which
+    is what lets a figure about the algorithm be a figure *of* the algorithm.
+    With no anchors the labelled terms drop out and it is the plain EM that
+    `fit_score_gmm` fits by another route; with anchors it is the shipped
+    fold-anchored fit at its shipped mass.
+
+    `tol=0.0` so a fixed number of rounds really is that number of rounds: the
+    figure's whole subject is what one round does, and a convergence test that
+    stopped early would draw a different picture than it claims to.
+    """
+    a_lo = np.array(anchors["bad"] if anchors else (), dtype=float)
+    a_hi = np.array(anchors["good"] if anchors else (), dtype=float)
+    fit = _anchored_em(
+        scores,
+        a_lo,
+        a_hi,
+        init=EM_INIT,
+        anchor_weight=FOLD_ANCHOR_WEIGHT,
+        max_iter=rounds,
+        tol=0.0,
+    )
+    assert fit is not None, "the teaching EM failed to run"
+    return fit
+
+
+def _em_panel(
+    ax: plt.Axes,
+    x0: float,
+    y_base: float,
+    w: float,
+    h: float,
+    scores: np.ndarray,
+    fit: GmmFit1D,
+    sy: float,
+    *,
+    claimed: bool = False,
+    anchors: dict | None = None,
+) -> None:
+    """One panel: the same scores, under whichever pair of curves it is up to.
+
+    `claimed` is the E-step's own picture — every bar split by how much each
+    component claims the scores in it. Solid colour rather than the deck's
+    hatching, and this is the one place that is right: a bar here is seven
+    slide pixels wide, and a hatch that narrow reads as a smudge. The split is
+    the E-step, drawn: nothing else in the figure says what a responsibility
+    *is*.
+    """
+    density, edges = np.histogram(scores, bins=EM_BINS, range=(0.0, 1.0), density=True)
+    centres = 0.5 * (edges[:-1] + edges[1:])
+    lo = fit.w_lo * gaussian(centres, fit.mu_lo, fit.var_lo)
+    hi = fit.w_hi * gaussian(centres, fit.mu_hi, fit.var_hi)
+    share_lo = np.where(lo + hi > 0, lo / np.maximum(lo + hi, 1e-300), 1.0)
+
+    for i, (left, right) in enumerate(zip(edges[:-1], edges[1:], strict=True)):
+        top = density[i] * sy
+        if top <= 0:
+            continue
+        bx0, bw = x0 + left * w, (right - left) * w
+        if claimed:
+            split = top * float(share_lo[i])
+            ax.add_patch(Rectangle((bx0, y_base), bw, split, facecolor=RUST, edgecolor="none", zorder=2))
+            ax.add_patch(Rectangle((bx0, y_base + split), bw, top - split, facecolor=GREEN, edgecolor="none", zorder=2))
+        else:
+            ax.add_patch(
+                Rectangle((bx0, y_base), bw, top, facecolor=NEUTRAL_FILL, edgecolor=INK, linewidth=0.6, zorder=2)
+            )
+
+    xs = np.linspace(0.0, 1.0, 600)
+    for mu, var, weight, colour in (
+        (fit.mu_lo, fit.var_lo, fit.w_lo, RUST),
+        (fit.mu_hi, fit.var_hi, fit.w_hi, GREEN),
+    ):
+        density_y = y_base + weight * gaussian(xs, mu, var) * sy
+        curve = density_y - HUMP_DROP
+        visible = np.flatnonzero(density_y > y_base + TAIL_FLOOR)
+        if visible.size:
+            lo_v, hi_v = visible[0], visible[-1] + 1
+            ax.plot(x0 + xs[lo_v:hi_v] * w, curve[lo_v:hi_v], color=colour, linewidth=HUMP_LW, zorder=4)
+
+    if anchors:
+        for score in anchors["bad"]:
+            ax.text(x0 + score * w, y_base - 0.12, "✗", ha="center", va="top", fontsize=15, color=RUST, zorder=5)
+        for score in anchors["good"]:
+            ax.text(x0 + score * w, y_base - 0.12, "✓", ha="center", va="top", fontsize=15, color=GREEN, zorder=5)
+
+    _range_line(ax, x0, x0 + w, y_base, z=5)
+
+
+def em_steps_fig() -> None:
+    """How a two-component mixture is fitted, and what a label changes (#3254).
+
+    Two figures from one generator, because they are the same four pictures
+    with one difference, and that difference is the whole of iteration 4: the
+    plain fit reads scores, and the anchored fit reads scores *and* a handful
+    of votes that are not allowed to change component.
+
+    Both are asides. The deck asserts "fit a two-component Gaussian mixture"
+    twice and a room that has not met EM has to take both on trust; four
+    panels — a guess, who claims what, re-fit to that, repeat — is the whole
+    algorithm, and it is cheaper to show than to apologise for.
+
+    Every panel is a real iterate of the shipped estimator (see `_em_iterate`),
+    including the two intermediate ones, which is the only reason the middle
+    of the figure is worth anything: a hand-drawn "sort of moves this way"
+    would be a diagram of what EM is supposed to do rather than of what it did.
+    """
+    _fit, scores = _haystack_scores()
+    anchors = XSEMI_ANCHORS[0]
+    fold_scores = _xsemi_folds()[0][1]
+    for name, sample, votes in (
+        ("calib-em-steps", scores, None),
+        ("calib-em-anchored", fold_scores, anchors),
+    ):
+        final = _em_stage(EM_STAGES, sample, votes)
+        box = tight_box(final)
+        for stage in range(1, EM_STAGES):
+            save(_em_stage(stage, sample, votes), OUT, f"{name}.build{stage}.png", column=FULL_BLEED, box=box)
+        save(final, OUT, f"{name}.png", column=FULL_BLEED, box=box)
+
+
+def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figure:
+    """Draw the first *stage* panels (1-based, cumulative) of a teaching figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in EM_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, EM_CANVAS[0])
+    ax.set_ylim(0, EM_CANVAS[1])
+    ax.set_axis_off()
+
+    canvas_w, canvas_h = EM_CANVAS
+    margin = 0.55
+    arrow_lens = [arrow_len_for(label) for label in EM_ARROWS]
+    panel_w = (canvas_w - 2 * margin - sum(arrow_lens) - 6 * OBJECT_GAP) / 4
+
+    # The panel row sits low enough that the slide's title reserve falls above
+    # the leftmost panel, and the two definition lines start right of it. That
+    # pair is what keeps the top-left corner of the *cropped* figure empty:
+    # a figure with nothing over there at all would simply be cropped narrower
+    # and hand the notch straight back to the panels.
+    y_base = 2.35
+    panel_h = 4.85
+    caption_y = y_base - 0.32 - LABEL_GAP - CAP_16 - LABEL_GAP
+    # Where the two definition lines start: past the first arrow, because the
+    # slide's title reserve reaches a little further right than the first
+    # panel does. They are the only ink above the row, and they are what keeps
+    # the crop tall enough for the reserve to fall on empty paper.
+    rule_x = margin + panel_w + 3 * OBJECT_GAP + arrow_lens[0]
+
+    # The tallest thing any panel has to hold, over *every* stage, so the four
+    # panels share one vertical scale and the curves are seen to move rather
+    # than to be redrawn at a new size each time.
+    density, _edges = np.histogram(scores, bins=EM_BINS, range=(0.0, 1.0), density=True)
+    peak = float(density.max())
+    for rounds in (0, 1, 2, 200):
+        fit = _em_iterate(scores, anchors, rounds) if rounds else EM_INIT
+        for mu, var, weight in ((fit.mu_lo, fit.var_lo, fit.w_lo), (fit.mu_hi, fit.var_hi, fit.w_hi)):
+            peak = max(peak, float(weight * gaussian(np.array([mu]), mu, var)[0]))
+    sy = panel_h / peak
+
+    # Panel k shows the fit after k − 1 rounds, except the last, which shows
+    # what the loop settles on. The E-step panel draws the *same* pair of
+    # curves as the guess beside it — the E-step does not move a curve, it
+    # decides who each score belongs to, and drawing it with moved curves is
+    # the single most common way this algorithm is taught wrong.
+    panels = (
+        (EM_INIT, False),
+        (EM_INIT, True),
+        (_em_iterate(scores, anchors, 1), False),
+        (_em_iterate(scores, anchors, 200), False),
+    )
+
+    x = margin
+    for i, ((fit, claimed), caption) in enumerate(zip(panels, EM_CAPTIONS, strict=True)):
+        if i >= stage:
+            break
+        if i:
+            tail = x - OBJECT_GAP - arrow_lens[i - 1]
+            _labeled_arrow(
+                ax, (tail, y_base + panel_h / 2), (tail + arrow_lens[i - 1], y_base + panel_h / 2), EM_ARROWS[i - 1]
+            )
+        _em_panel(ax, x, y_base, panel_w, panel_h, scores, fit, sy, claimed=claimed, anchors=anchors)
+        ax.text(x + panel_w / 2, caption_y, caption, ha="center", va="top", fontsize=16, color=INK)
+        x += panel_w + 2 * OBJECT_GAP + (arrow_lens[i] if i < 3 else 0.0)
+
+    # The two steps, named. Right of the title reserve, and above the row,
+    # because they are what the row is a picture of.
+    lines = (
+        (
+            "E — how much does each curve claim each score?",
+            "M — re-fit each curve to what it claims.",
+        )
+        if anchors is None
+        else (
+            "E — a vote is claimed by its own side, whatever the curves say.",
+            "M — and it counts κ times over.",
+        )
+    )
+    for k, line in enumerate(lines):
+        ax.text(rule_x, canvas_h - 0.55 - k * 0.85, line, ha="left", va="top", fontsize=17, color=INK)
+
+    return fig
+
+
 if __name__ == "__main__":
     cost_knob_fig()
     crossing_fig()
     region_max_fig()
     xcal_flow_fig()
     gmm_flow_fig()
+    em_steps_fig()
     blend_flow_fig()
     xsemi_flow_fig()
     xquant_flow_fig()

@@ -32,9 +32,11 @@ slides:
   outline-hold-the-line +at2
   xcal
   gmm-idea
+  gmm-em
   blend
   blend-schedule
   anchored-gmm
+  anchored-em
   quantile-transfer
 
   # 3 — Where you want it instead
