@@ -2,9 +2,9 @@
 
 With ``emit_calibration_metrics=True``, a style, and ``fold_count_variants``
 the harness trains ``max(calibrate_count, *variants)`` calibration folds per
-step and emits one ``folds_k{K}_xcal`` row per K - plus a ``folds_k{K}_blend``
-row wherever a safe-threshold fit exists - each carrying that fold count's
-regret and its measured wall clock.
+step and emits one ``folds_k{K}_xcal`` row per K - plus ``folds_k{K}_blend`` and
+``folds_k{K}_anchored`` rows wherever a safe-threshold fit exists - each
+carrying that fold count's regret and its measured wall clock.
 
 The invariants the whole study rests on:
 
@@ -241,6 +241,93 @@ class TestFoldCountBlendArm:
             assert np.isfinite(b["blend_weight"])
             if b["blend_weight"] == 1.0:
                 assert b["threshold"] == xcal[t]["threshold"]
+
+
+class TestFoldCountAnchoredArm:
+    """The arm that measures **production's** threshold rule across K (#3116).
+
+    The other two arms cannot: ``xcal`` is the raw conformal cut, and ``blend``
+    is the retired ``cap50`` mix-in whose GMM half is a single unanchored fit on
+    the sim haystack - K-independent by construction, so only its x-cal half
+    ever moved.  The shipped path fits one *anchored* mixture per fold, so K
+    multiplies the number of mixtures combined.
+    """
+
+    def test_anchored_arm_only_under_safe_thresholds(self):
+        off = _run(fold_counts=_COUNTS, safe=False)
+        assert not any(r["gmm_variant"].endswith("_anchored") for r in off)
+        on = _run(fold_counts=_COUNTS, safe=True)
+        assert any(r["gmm_variant"].endswith("_anchored") for r in on), "no anchored fold-count arm"
+
+    def test_arm_at_live_count_reproduces_the_shipped_threshold(self):
+        """The control that licenses the arm: at K == calibrate_count it *is* production.
+
+        The base row's threshold on a safe-threshold run is
+        ``fold_anchored_gmm_threshold`` over the live folds.  The K=2 anchored
+        arm re-derives it from the Kmax run's own fold prefix, so any drift
+        between the arm and the shipped rule - a mis-sliced prefix, haystacks
+        out of step with their orderings, the wrong inclusion - shows up here as
+        an inequality rather than as a plausible number in a report.
+        """
+        rows = _run(fold_counts=_COUNTS, calibrate_count=2, safe=True)
+        base = _base_rows(rows)
+        live = _arm_rows(rows, "folds_k2_anchored")
+        assert live, "no live-count anchored arm emitted"
+        compared = 0
+        for t, arm in live.items():
+            # Only on steps the shipped rule actually anchored; a step that fell
+            # back to the blend has no fold-anchored threshold to reproduce.
+            if base[t]["threshold_provenance"].startswith("fold_anchored"):
+                assert arm["threshold"] == base[t]["threshold"], t
+                assert arm["threshold_provenance"] == base[t]["threshold_provenance"], t
+                compared += 1
+        assert compared, "no step reached a fold-anchored cut"
+
+    def test_anchored_arm_fits_k_mixtures_at_k(self):
+        """K must actually drive the number of anchored mixtures - the point of the arm.
+
+        Asserted through **provenance** rather than through the threshold.
+        ``fold_anchored_gmm_threshold`` reports ``fold_anchored[a/k]`` naming
+        how many folds it anchored, so a mis-sliced prefix - the live count
+        reused at every K, the haystacks out of step with their orderings -
+        shows up here as the wrong ``k`` and cannot be missed.
+
+        The realized *threshold* is deliberately not the assertion: it is a
+        quantile carried onto the final model's haystack, and this fixture's
+        haystack is small enough that neighbouring quantiles routinely land on
+        the same order statistic.  Two fold counts producing the same float
+        here is therefore an artefact of a 40-media-per-category fixture, not
+        evidence that the fit was reused - which is exactly why the count, not
+        the value, is what this pins.
+        """
+        rows = _run(fold_counts=_COUNTS, calibrate_count=2, safe=True)
+        seen: dict[int, set[str]] = {}
+        for k in _COUNTS:
+            for r in _arm_rows(rows, f"folds_k{k}_anchored").values():
+                seen.setdefault(k, set()).add(r["threshold_provenance"])
+        assert set(seen) == set(_COUNTS), f"missing anchored arms: {set(_COUNTS) - set(seen)}"
+        for k, provs in seen.items():
+            anchored = {p for p in provs if p.startswith("fold_anchored[")}
+            assert anchored, f"K={k} never reached an anchored fit: {provs}"
+            # `[a/k]` - `a` folds anchored of `k` used; `k` is the knob.
+            assert {p.split("/")[1].rstrip("]") for p in anchored} == {str(k)}, (k, anchored)
+
+    def test_extra_haystacks_do_not_perturb_the_live_threshold(self):
+        """Scoring the Kmax fold models must leave the shipped cut byte-identical.
+
+        The extra haystacks ride in ``fold_count_data`` precisely so the live
+        fit keeps using only ``calibrate_count`` of them; this pins that the
+        observer effect is zero.
+        """
+        screened = _base_rows(_run(fold_counts=_COUNTS, calibrate_count=2, safe=True))
+        plain = _base_rows(_run(fold_counts=None, calibrate_count=2, safe=True))
+        compared = 0
+        for t, row in screened.items():
+            if t in plain:
+                assert row["threshold"] == plain[t]["threshold"], t
+                assert row["threshold_provenance"] == plain[t]["threshold_provenance"], t
+                compared += 1
+        assert compared, "no comparable steps"
 
 
 class TestFoldCountBinaryVoting:

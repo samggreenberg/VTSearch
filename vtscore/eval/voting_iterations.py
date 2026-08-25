@@ -230,10 +230,14 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     "oracle_fpr",
     "oracle_fnr",
     "regret",
+    "oracle_threshold_honest",
+    "oracle_cost_honest",
+    "regret_honest",
     "cal_oracle_threshold",
     "cal_oracle_cost",
     "rule_inefficiency",
     "calibration_shift",
+    "calibration_shift_honest",
     "n_pool_rows",
     "fold_count",
     "fold_seconds",
@@ -642,6 +646,22 @@ def _safe_threshold_for_step(
         _fids, fscores = _score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
         fold_haystacks.append(np.asarray(fscores, dtype=np.float64))
 
+    # #3116: the #2897 fold-count arms need a haystack per fold to re-fit the
+    # *shipped* rule at each K, and `details["fold_models"]` is trimmed to the
+    # live `calibrate_count`.  Score the extra Kmax-run folds here, where the
+    # sim set and the scoring machinery are already in hand, and stash them
+    # beside the orderings for :func:`_fold_count_variant_rows`.  Only the
+    # models past the live prefix are scored - the folds are nested, so the
+    # first `n_folds` haystacks are the ones just computed above, and this adds
+    # `Kmax - calibrate_count` scoring passes rather than Kmax of them.
+    fold_data = details.get("fold_count_data")
+    if fold_data is not None and fold_data.get("models"):
+        extended = list(fold_haystacks)
+        for model in fold_data["models"][len(extended) :]:
+            _fids, fscores = _score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
+            extended.append(np.asarray(fscores, dtype=np.float64))
+        fold_data["haystacks"] = extended
+
     cut = fit_fold_anchored_cut(fold_haystacks, fold_orderings[:n_folds], all_scores) if fold_haystacks else None
     if cut is not None:
         anchored = cut.threshold_at(inclusion)
@@ -740,6 +760,49 @@ def _r(x: float) -> float:
     return round(x, 6) if math.isfinite(x) else x
 
 
+#: Memo for :func:`_honest_oracle`, keyed on a digest of its exact inputs.
+#: Bounded because the only reuse that matters is *within* a step, where every
+#: variant row measures the same ``(base_scores, base_labels)`` at the same
+#: inclusion: a step emits dozens of rows and the cross-fitted oracle is five
+#: sorts, so recomputing it per row would be the dominant cost of the
+#: decomposition.  Across steps the key changes and the old entry is dead, so a
+#: handful of slots is all this ever needs.
+_HONEST_ORACLE_MEMO: "dict[bytes, tuple[float, float]]" = {}
+_HONEST_ORACLE_MEMO_MAX = 8
+
+
+def _honest_oracle(scores: "np.ndarray", labels: "np.ndarray", wf: float, wn: float) -> tuple[float, float]:
+    """Memoized :func:`~vtscore.eval.transfer_rules.honest_test_oracle`.
+
+    Safe to memoize because the estimator is a pure function of its arguments -
+    its own resampling is seeded from a digest of the score array rather than
+    from global RNG state (see :func:`vtscore.eval.transfer_rules._rng`), so two
+    calls on equal inputs return bit-identical results with or without the cache.
+    The key is a digest of both arrays *and* the cost weights, because the same
+    test scores are decomposed at more than one inclusion in a single run.
+    """
+    import hashlib  # noqa: PLC0415
+
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval.transfer_rules import honest_test_oracle  # noqa: PLC0415
+
+    s = np.ascontiguousarray(scores, dtype=np.float64)
+    lb = np.ascontiguousarray(labels, dtype=np.float64)
+    h = hashlib.blake2b(s.tobytes(), digest_size=16)
+    h.update(lb.tobytes())
+    h.update(np.asarray([wf, wn], dtype=np.float64).tobytes())
+    key = h.digest()
+    hit = _HONEST_ORACLE_MEMO.get(key)
+    if hit is not None:
+        return hit
+    out = honest_test_oracle(s, lb, wf, wn)
+    if len(_HONEST_ORACLE_MEMO) >= _HONEST_ORACLE_MEMO_MAX:
+        _HONEST_ORACLE_MEMO.clear()
+    _HONEST_ORACLE_MEMO[key] = out
+    return out
+
+
 def _operating_metrics(
     scores: "np.ndarray",
     labels: "np.ndarray",
@@ -762,6 +825,43 @@ def _operating_metrics(
     on calibration vs. best cut on test).  ``cal_scores``/``cal_labels`` are the
     pooled calibration fold orderings under the same pooling; ``None`` skips the
     decomposition (leaves those columns NaN).
+
+    **Two reference points, because the naive one is optimistic** (#3116, #3248).
+    ``oracle_cost`` is the minimum of the empirical cost over the very test
+    sample it is then scored on - :func:`~vtscore.eval.calibration_metrics.oracle_cut`'s
+    own docstring calls it a lower bound on achievable cost rather than a rule -
+    so every gap measured against it is inflated by however much that minimum
+    overfits.  #2883 measured that optimism directly and found it was the *whole*
+    of the sibling ``transfer`` term (+0.041 naive, −0.001 cross-fitted).
+    ``oracle_cost_honest`` is the same quantity cross-fitted
+    (:func:`~vtscore.eval.transfer_rules.honest_test_oracle`: cut chosen on K−1
+    folds, paid on the held-out one), and the pair **brackets** the population
+    optimum rather than pinning it - naive from below, honest from above, since
+    the honest cut sees only ``(K−1)/K`` of the sample.  ``regret`` and
+    ``calibration_shift`` therefore ship beside ``regret_honest`` and
+    ``calibration_shift_honest``; read the two as an interval, and prefer the
+    honest one whenever a *level* rather than a paired contrast is being quoted.
+    ``rule_inefficiency`` is untouched by the choice - it never references the
+    test oracle - so both decompositions telescope exactly:
+
+    * ``rule_inefficiency + calibration_shift        == regret``
+    * ``rule_inefficiency + calibration_shift_honest == regret_honest``
+
+    **The split's reference moves with anything that feeds ``cal_scores``**
+    (#3116).  ``c_thr`` is estimated *from the calibration set*, so a study that
+    sweeps a knob changing that set's size or content - ``calibrate_count`` is
+    the case on record - is moving the yardstick it measures against.  As the
+    calibration set grows, ``c_thr`` converges on the test-oracle cut, which
+    shrinks ``calibration_shift`` and widens ``rule_inefficiency`` **from one
+    cause, in opposite directions**, with their sum pinned to ``regret`` by
+    construction.  #2897 read exactly that anti-correlation as a finding; it is
+    algebra.  Do not report the two terms as independent effects of such a knob
+    without a reference held fixed across the arms - and note that
+    ``rule_inefficiency`` is a signed cost gap between two cuts, **not** a
+    variance: it is routinely negative (the trained cut beating a
+    calibration-set "oracle" that overfits a handful of scores), and a study
+    asking whether the *threshold* got less variable wants ``sd(threshold)``
+    across seeds, which ``analyze_folds_2897.py`` reports.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -781,6 +881,11 @@ def _operating_metrics(
     cost, fpr, fnr = operating_cost(scores, labels, threshold, wf, wn)
     o_thr, o_cost, o_fpr, o_fnr = oracle_cut(scores, labels, wf, wn)
     regret = cost - o_cost
+    # The honest half of the bracket; NaN on a test sample too small or too
+    # one-sided to cross-fit, which leaves the honest columns empty rather than
+    # silently falling back to the optimistic reference they exist to correct.
+    o_cost_honest, o_thr_honest = _honest_oracle(scores, labels, wf, wn)
+    regret_honest = cost - o_cost_honest
 
     nan = float("nan")
     if cal_scores is not None and np.asarray(cal_scores).size > 0:
@@ -790,11 +895,13 @@ def _operating_metrics(
         cal_oracle_cost, _, _ = operating_cost(scores, labels, c_thr, wf, wn)
         rule_inefficiency = cost - cal_oracle_cost
         calibration_shift = cal_oracle_cost - o_cost
+        calibration_shift_honest = cal_oracle_cost - o_cost_honest
     else:
         c_thr = nan
         cal_oracle_cost = nan
         rule_inefficiency = nan
         calibration_shift = nan
+        calibration_shift_honest = nan
 
     return {
         "pool_variant": pool_variant,
@@ -835,10 +942,18 @@ def _operating_metrics(
         "oracle_fpr": _r(o_fpr),
         "oracle_fnr": _r(o_fnr),
         "regret": _r(regret),
+        # The cross-fitted reference and the two terms it re-bases (#3116).
+        # Bracket, not replacement: `oracle_cost` bounds the population optimum
+        # from below and `oracle_cost_honest` from above, so a level quoted from
+        # either alone is one end of an interval.
+        "oracle_threshold_honest": _r(float(o_thr_honest)),
+        "oracle_cost_honest": _r(o_cost_honest),
+        "regret_honest": _r(regret_honest),
         "cal_oracle_threshold": _r(float(c_thr)),
         "cal_oracle_cost": _r(cal_oracle_cost),
         "rule_inefficiency": _r(rule_inefficiency),
         "calibration_shift": _r(calibration_shift),
+        "calibration_shift_honest": _r(calibration_shift_honest),
         "n_pool_rows": _r(float(n_pool_rows)),
     }
 
@@ -1213,16 +1328,33 @@ def _fold_count_variant_rows(
     reproduces this step's own pre-blend conformal cut - the control that
     licenses the rest of the table.
 
-    Two arms per K, because the fold count and the shipped threshold are
+    Three arms per K, because the fold count and the shipped threshold are
     different questions:
 
     * ``folds_k{K}_xcal`` - the raw cross-calibration cut, the thing K is
       actually a knob on.
-    * ``folds_k{K}_blend`` - that cut after the safe-threshold mix-in the user
-      really gets.  The blend weight depends only on the vote counts, so it is
-      identical across K and this arm isolates how much of K's benefit survives
-      being averaged with the GMM cut.  Emitted only when the step has the
-      pooled sim scores the blend fits.
+    * ``folds_k{K}_blend`` - that cut after the ``cap50`` safe-threshold mix-in.
+      The blend weight depends only on the vote counts, so it is identical
+      across K and this arm isolates how much of K's benefit survives being
+      averaged with the GMM cut.  Emitted only when the step has the pooled sim
+      scores the blend fits.
+    * ``folds_k{K}_anchored`` - **production's rule** (#3116).  The blend above
+      was retired by the 2026-08-05 population-anchored run; the shipped path is
+      :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold`, which
+      fits one anchored mixture *per fold* and combines them in quantile space.
+      K therefore moves the shipped threshold through a path the other two arms
+      do not exercise at all - the blend's GMM half is a single unanchored fit
+      on the sim haystack and is K-independent by construction, so ``blend``
+      varies only in its x-cal half.  Without this arm every conclusion about
+      what ``calibrate_count`` does to the threshold users actually get is
+      partial.  Emitted when the step carries at least K fold haystacks, which
+      :func:`_safe_threshold_for_step` supplies (so: under safe thresholds).
+
+    Note what is *not* a defect here: the unanchored ``fit_gmm_threshold`` is
+    hoisted out of the K loop, and that is correct rather than a frozen
+    reference - it reads only ``sim_pooled_scores``, which no fold count
+    touches, so re-fitting it per K would return the same cut at K times the
+    price.  The gap #3116 identified is the missing arm above, not the hoist.
 
     ``fold_seconds`` is the calibration wall clock this K would have cost: the
     measured fit time of its own folds plus the count-independent overhead of
@@ -1241,6 +1373,7 @@ def _fold_count_variant_rows(
     from vtscore.training.thresholds import (  # noqa: PLC0415
         blend_gmm_threshold,
         fit_gmm_threshold,
+        fold_anchored_gmm_threshold,
         safe_blend_weight,
         threshold_from_fold_orderings,
     )
@@ -1251,6 +1384,7 @@ def _fold_count_variant_rows(
     orderings = fold_data["orderings"]
     seconds = fold_data["seconds"]
     overhead = float(fold_data.get("overhead_seconds") or 0.0)
+    haystacks = fold_data.get("haystacks") or []
     if not orderings:
         return []
 
@@ -1279,6 +1413,10 @@ def _fold_count_variant_rows(
             weight = safe_blend_weight(ctx, schedule)
             blended = blend_gmm_threshold(xcal, gmm_cut, ctx, schedule=schedule, fit=gmm_fit)
             arms.append(("blend", blended, "gmm_blend" if weight < 1.0 else "conformal", weight))
+        # The arm that answers the question for the rule users actually get.
+        if len(haystacks) >= k and sim_pooled_scores:
+            anchored, anchored_prov = fold_anchored_gmm_threshold(haystacks[:k], prefix, sim_pooled_scores, inclusion)
+            arms.append(("anchored", anchored, anchored_prov, float("nan")))
 
         for arm, threshold, provenance, weight in arms:
             row = _operating_metrics(
@@ -2326,6 +2464,11 @@ def _calibrate_with_details(
         if fold_count_variants:
             details["fold_count_data"] = {
                 "orderings": orderings,
+                # The **untrimmed** fold models, so the #3116 anchored arm can
+                # re-fit production's rule at every K.  `details["fold_models"]`
+                # is deliberately cut to the live count so nothing downstream
+                # can accidentally widen the shipped threshold's own fit.
+                "models": list(fold_models),
                 "seconds": fold_seconds,
                 # Everything in the calibration wall clock that is *not* a fold
                 # fit (the pooled conformal rule, the node max-pool): paid once

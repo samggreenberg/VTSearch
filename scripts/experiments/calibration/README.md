@@ -187,9 +187,10 @@ regret? Both voting modes, since the calibrators differ (VG region voting runs
 the bag-aware calibrator, Caltech binary voting the row-wise one).
 
 `CALIB_FOLD_COUNTS=1,2,3,4,6,8,16` makes every step train `max(counts)` folds
-and emit one `folds_k{K}_xcal` row per count — plus `folds_k{K}_blend`, the
-shipped threshold after the safe-threshold mix-in — each carrying that K's
-regret and its measured `fold_seconds`. This is cheap and **exact** rather than
+and emit one `folds_k{K}_xcal` row per count — plus `folds_k{K}_blend` (the
+retired `cap50` mix-in) and `folds_k{K}_anchored` (production's fold-anchored
+rule, and the only arm in which K moves *both* halves of the threshold) — each
+carrying that K's regret and its measured `fold_seconds`. This is cheap and **exact** rather than
 approximate because the folds are nested: each is an independent stratified draw
 off one `RandomState(42)` at a per-fold size that ignores the count, so the K
 folds a live `calibrate_count=K` run trains are the first K of these. Every K is

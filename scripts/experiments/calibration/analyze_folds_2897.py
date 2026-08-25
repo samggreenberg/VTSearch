@@ -3,8 +3,9 @@
 Consumes ``results/cells/task_*.csv`` from a run launched with
 ``CALIB_FOLD_COUNTS`` set (see ``launch_folds_2897.sh``), where every trainable
 step emits one ``folds_k{K}_xcal`` row per fold count - and, under safe
-thresholds, a ``folds_k{K}_blend`` row - carrying that K's regret and its
-measured ``fold_seconds``.
+thresholds, a ``folds_k{K}_blend`` row and a ``folds_k{K}_anchored`` row (the
+shipped fold-anchored rule, #3116) - carrying that K's regret and its measured
+``fold_seconds``.
 
 **What makes this analysis paired.** The fold arms are nested prefixes of one
 Kmax calibration, so every K in a step re-cuts the *same* votes, the *same*
@@ -25,9 +26,12 @@ Pre-registered deliverables (``docs/experiments/calibration-fold-count/REPORT.md
   the pre-registered :data:`MARGIN`, which is the number the study recommends.
 * **Exchange rate** - regret bought per extra second of calibration, so a
   "significant but tiny" win is visible as such.
-* **Mechanism** - whether K's benefit tracks the pooled calibration-set size and
-  lands on the *rule inefficiency* term (sampling noise in the cut) rather than
-  the calibration->test *shift* term, which K cannot touch.
+* **Mechanism** - ``sd(threshold)`` across seeds per K: does more calibration
+  actually make the shipped cut less variable?  #3116 established that the
+  regret decomposition cannot answer this (``rule_inefficiency`` is a signed
+  cost gap, not a variance, and its reference grows with K), so the dispersion
+  of the threshold is measured directly and the two decomposition terms are
+  reported as arithmetic with a guard flag rather than as a mechanism.
 
 Writes ``results/summary.json``, ``results/agg/*.csv`` and ``results/REPORT.md``.
 
@@ -51,8 +55,8 @@ import pandas as pd  # noqa: E402
 from _cells_io import main_frame_files  # noqa: E402
 from scipy.stats import mannwhitneyu, wilcoxon  # noqa: E402
 
-#: ``folds_k{K}_{xcal,blend}`` - the arms this analyzer owns.
-FOLD_RE = re.compile(r"^folds_k(?P<k>\d+)_(?P<arm>xcal|blend)$")
+#: ``folds_k{K}_{xcal,blend,anchored}`` - the arms this analyzer owns.
+FOLD_RE = re.compile(r"^folds_k(?P<k>\d+)_(?P<arm>xcal|blend|anchored)$")
 
 #: Production's fold count: the baseline every delta is measured against.
 BASELINE_K = 2
@@ -127,12 +131,28 @@ def load_cells(cells_dir: Path) -> pd.DataFrame:
     return df
 
 
+def _optional(v: pd.DataFrame, col: str) -> pd.Series:
+    """*col* when the run emitted it, else an all-NaN stand-in of the right shape.
+
+    The honest-reference columns (#3116) postdate the #2897 cells, so an
+    analyzer that must still read those runs cannot assume they are there.
+    """
+    return v[col] if col in v.columns else pd.Series(np.nan, index=v.index, dtype=float)
+
+
 def fold_frame(df: pd.DataFrame) -> pd.DataFrame:
     """Just the fold-count arms, with K and arm parsed out and windows assigned."""
     m = df["gmm_variant"].str.extract(FOLD_RE)
     v = df[m["k"].notna()].copy()
     v["k"] = pd.to_numeric(m.loc[v.index, "k"]).astype(int)
     v["arm"] = m.loc[v.index, "arm"]
+    # #3116: `calibration_shift` is measured against the *sample minimum* of the
+    # test cost, which is optimistic, so the term is inflated by however much
+    # that reference overfits.  Carry the cross-fitted version beside it where
+    # the run emitted one; `rule_inefficiency` needs no such twin because it
+    # never references the test oracle.
+    v["calibration_shift_honest"] = _optional(v, "calibration_shift_honest")
+    v["regret_honest"] = _optional(v, "regret_honest")
     edges = [1, *sorted(CHECKPOINTS)]
     v["window"] = pd.cut(v["n_votes"], bins=edges, labels=[f"le_{c}" for c in sorted(CHECKPOINTS)])
     v["window_hi"] = pd.cut(v["n_votes"], bins=edges, labels=sorted(CHECKPOINTS)).astype("Int64")
@@ -155,6 +175,8 @@ def level_table(v: pd.DataFrame, agg: Path) -> pd.DataFrame:
             fnr=("fnr", "mean"),
             rule_inefficiency=("rule_inefficiency", "mean"),
             calibration_shift=("calibration_shift", "mean"),
+            calibration_shift_honest=("calibration_shift_honest", "mean"),
+            regret_honest=("regret_honest", "mean"),
             n_cal_scores=("n_cal_scores", "mean"),
             fold_seconds=("fold_seconds", "mean"),
             cal_share=("cal_share", "mean"),
@@ -166,6 +188,48 @@ def level_table(v: pd.DataFrame, agg: Path) -> pd.DataFrame:
     )
     g.to_csv(agg / "folds_levels.csv", index=False)
     return g
+
+
+def threshold_dispersion(v: pd.DataFrame, agg: Path) -> pd.DataFrame:
+    """``sd(threshold)`` across **seeds**, per (voting, arm, window, K) - issue #3116.
+
+    The quantity H4 was actually reaching for.  #2897 tried to read "did more
+    folds make the cut less noisy" out of the regret decomposition, which cannot
+    answer it: ``rule_inefficiency`` is a signed cost gap between two cuts, not a
+    variance, and its reference moves with K (see :func:`verdicts`).  The
+    dispersion of the shipped threshold itself has no such problem.
+
+    Taken **across seeds at a fixed step**, then averaged over steps - not as one
+    pooled standard deviation.  A pooled sd would mix the variation this study is
+    asking about (same votes, different draw -> different cut) with the variation
+    it is not (the threshold legitimately moving as the trajectory collects
+    votes), and the second is far larger, so the pooled number would be
+    dominated by an effect that has nothing to do with K.
+
+    Steps carrying a single seed contribute nothing (an sd of one observation is
+    undefined, not zero), so a single-seed run yields an empty frame rather than
+    a column of zeros that would read as "perfectly stable".
+    """
+    keys = ["voting", "arm", "window", "k"]
+    cols = [*keys, "sd_threshold", "n_seeds", "n_steps"]
+    per_step = (
+        v.groupby([*keys, "env", "category", "t"], observed=True)["threshold"]
+        .agg(sd="std", n_seeds="count")
+        .reset_index()
+    )
+    per_step = per_step[(per_step["n_seeds"] >= 2) & per_step["sd"].notna()]
+    if per_step.empty:
+        t = pd.DataFrame(columns=cols)
+        t.to_csv(agg / "folds_threshold_sd.csv", index=False)
+        return t
+    t = (
+        per_step.groupby(keys, observed=True)
+        .agg(sd_threshold=("sd", "mean"), n_seeds=("n_seeds", "max"), n_steps=("sd", "size"))
+        .reset_index()
+        .sort_values(keys)
+    )
+    t.to_csv(agg / "folds_threshold_sd.csv", index=False)
+    return t
 
 
 def paired_vs_baseline(v: pd.DataFrame, agg: Path) -> pd.DataFrame:
@@ -186,10 +250,11 @@ def paired_vs_baseline(v: pd.DataFrame, agg: Path) -> pd.DataFrame:
                 continue
             a = a.set_index(STEP_KEYS)
             a = a[~a.index.duplicated()]
+            terms = ["rule_inefficiency", "calibration_shift", "calibration_shift_honest"]
             j = pd.concat(
                 [
-                    a[["regret", "fold_seconds", "window", "rule_inefficiency", "calibration_shift"]].add_suffix("_a"),
-                    base[["regret", "fold_seconds", "rule_inefficiency", "calibration_shift"]].add_suffix("_b"),
+                    a[["regret", "fold_seconds", "window", *terms]].add_suffix("_a"),
+                    base[["regret", "fold_seconds", *terms]].add_suffix("_b"),
                 ],
                 axis=1,
                 join="inner",
@@ -200,9 +265,11 @@ def paired_vs_baseline(v: pd.DataFrame, agg: Path) -> pd.DataFrame:
             j["d_seconds"] = j["fold_seconds_a"] - j["fold_seconds_b"]
             j["d_rule"] = j["rule_inefficiency_a"] - j["rule_inefficiency_b"]
             j["d_shift"] = j["calibration_shift_a"] - j["calibration_shift_b"]
+            j["d_shift_honest"] = j["calibration_shift_honest_a"] - j["calibration_shift_honest_b"]
             j = j.rename(columns={"window_a": "window"})
+            deltas = ["d_regret", "d_seconds", "d_rule", "d_shift", "d_shift_honest"]
             for window, w in j.groupby("window", observed=True):
-                cells = w.groupby(CELL_KEYS, observed=True)[["d_regret", "d_seconds", "d_rule", "d_shift"]].mean()
+                cells = w.groupby(CELL_KEYS, observed=True)[deltas].mean()
                 d = cells["d_regret"].to_numpy()
                 p = float("nan")
                 if len(d) >= 6 and not np.allclose(d, 0):
@@ -219,6 +286,7 @@ def paired_vs_baseline(v: pd.DataFrame, agg: Path) -> pd.DataFrame:
                         "d_regret": float(d.mean()),
                         "d_rule_inefficiency": float(cells["d_rule"].mean()),
                         "d_calibration_shift": float(cells["d_shift"].mean()),
+                        "d_calibration_shift_honest": float(cells["d_shift_honest"].mean()),
                         "d_seconds": d_sec,
                         # Regret bought per extra second of calibration.  A win
                         # that is real but costs 10x the wall clock for 0.001
@@ -244,6 +312,7 @@ def paired_vs_baseline(v: pd.DataFrame, agg: Path) -> pd.DataFrame:
         "d_regret",
         "d_rule_inefficiency",
         "d_calibration_shift",
+        "d_calibration_shift_honest",
         "d_seconds",
         "regret_per_extra_second",
         "win_rate",
@@ -292,7 +361,7 @@ def knee_table(paired: pd.DataFrame, levels: pd.DataFrame, agg: Path) -> pd.Data
     return t
 
 
-def verdicts(paired: pd.DataFrame, knee: pd.DataFrame, levels: pd.DataFrame) -> dict:
+def verdicts(paired: pd.DataFrame, knee: pd.DataFrame, levels: pd.DataFrame, disp: pd.DataFrame) -> dict:
     """Mechanically apply the plan's decision rules.
 
     H1 (benefit): does any K beat K=2 by more than :data:`MARGIN` in the deep
@@ -301,8 +370,29 @@ def verdicts(paired: pd.DataFrame, knee: pd.DataFrame, levels: pd.DataFrame) -> 
     :data:`COST_CEILING_X` of production's?
     H3 (recommendation): the smallest K satisfying both, per voting mode -
     ``2`` (keep production) when H1 fails.
-    H4 (mechanism): does K's benefit land on the rule-inefficiency term rather
-    than the calibration->test shift, as the variance story predicts?
+    H4 (mechanism): **re-posed after #3116.**  It used to ask whether K's benefit
+    lands on ``rule_inefficiency`` rather than on ``calibration_shift``, read as
+    "sampling noise in the cut fell".  That question is not answerable from those
+    two terms, for two independent reasons:
+
+    * ``rule_inefficiency`` is a *signed cost gap between two cuts*, not a
+      variance.  It was negative in every row of #2897 (-0.291 at K=1 ->
+      -0.080 at K=16), i.e. the trained cut beating a calibration-set "oracle"
+      that overfits a handful of scores.  Rising toward zero is not variance
+      falling.
+    * Its reference moves with the arm.  ``c_thr`` is estimated from the pooled
+      calibration set, which grows linearly in K, so as K rises ``c_thr``
+      converges on the test-oracle cut - shrinking ``calibration_shift`` and
+      widening ``rule_inefficiency`` **from one cause, in opposite directions**,
+      with the sum pinned to regret by construction.  The anti-correlation
+      #2897 reported is algebra, not evidence.
+
+    So the arithmetic comparison is still emitted, under a name that describes
+    only the arithmetic (``h4_d_rule_below_d_shift``), together with
+    ``h4_reference_moves_with_k`` recording that its reference is not fixed
+    across the arms.  The mechanism question is answered instead by
+    ``h4_sd_threshold_by_k`` (:func:`threshold_dispersion`), which measures the
+    dispersion of the shipped threshold directly.
     """
     out: dict = {"margin": MARGIN, "cost_ceiling_x": COST_CEILING_X, "baseline_k": BASELINE_K, "by_voting": {}}
     # The shipped threshold is the blended one; fall back to the raw
@@ -316,6 +406,7 @@ def verdicts(paired: pd.DataFrame, knee: pd.DataFrame, levels: pd.DataFrame) -> 
             d_regret=("d_regret", "mean"),
             d_rule=("d_rule_inefficiency", "mean"),
             d_shift=("d_calibration_shift", "mean"),
+            d_shift_honest=("d_calibration_shift_honest", "mean"),
             p=("p_wilcoxon", "max"),
             d_seconds=("d_seconds", "mean"),
         )
@@ -330,6 +421,24 @@ def verdicts(paired: pd.DataFrame, knee: pd.DataFrame, levels: pd.DataFrame) -> 
         recommended = int(min(affordable.index)) if len(affordable) else BASELINE_K
 
         best = agg_k["d_regret"].idxmin() if len(agg_k) else BASELINE_K
+
+        # #3116's guard: the decomposition's reference is estimated from the
+        # calibration set, so if that set's size moves with K the two terms are
+        # not independent readings and must not be reported as if they were.
+        # In this study it always does move - that is what K *is* - so this
+        # flag is expected to be true, and its job is to make the caveat
+        # travel with the number instead of living in someone's memory.
+        n_cal_by_k = lv.groupby("k", observed=True)["n_cal_scores"].mean().dropna()
+        reference_moves = bool(len(n_cal_by_k) > 1 and float(n_cal_by_k.max() - n_cal_by_k.min()) > 0.0)
+
+        # The mechanism question, asked of the threshold directly.
+        sd = disp[(disp["voting"] == voting) & (disp["arm"] == arm)]
+        sd = sd[sd["window"].astype(str).map(_window_hi) >= DEEP_MIN]
+        sd_by_k = sd.groupby("k", observed=True)["sd_threshold"].mean().dropna() if len(sd) else pd.Series(dtype=float)
+        sd_falls = None
+        if BASELINE_K in sd_by_k.index and best in sd_by_k.index and best != BASELINE_K:
+            sd_falls = bool(sd_by_k[best] < sd_by_k[BASELINE_K])
+
         out["by_voting"][voting] = {
             "h1_any_k_beats_baseline": bool(len(beats)),
             "h1_ks_beating_baseline": [int(k) for k in beats.index],
@@ -339,11 +448,15 @@ def verdicts(paired: pd.DataFrame, knee: pd.DataFrame, levels: pd.DataFrame) -> 
             "best_k_ignoring_cost": int(best),
             "best_d_regret": float(agg_k["d_regret"].min()) if len(agg_k) else 0.0,
             "cost_x_at_recommended": float(sec_x.get(recommended, float("nan"))) if sec_x is not None else None,
-            "h4_benefit_is_rule_inefficiency": bool(
-                len(agg_k) and agg_k.loc[best, "d_rule"] <= agg_k.loc[best, "d_shift"]
-            ),
+            # Arithmetic only - see this function's docstring.  The old name for
+            # this key asserted a mechanism the terms cannot carry (#3116).
+            "h4_d_rule_below_d_shift": bool(len(agg_k) and agg_k.loc[best, "d_rule"] <= agg_k.loc[best, "d_shift"]),
+            "h4_reference_moves_with_k": reference_moves,
+            "h4_sd_threshold_by_k": {int(k): float(x) for k, x in sd_by_k.items()},
+            "h4_sd_threshold_falls_at_best_k": sd_falls,
             "d_rule_at_best": float(agg_k.loc[best, "d_rule"]) if len(agg_k) else 0.0,
             "d_shift_at_best": float(agg_k.loc[best, "d_shift"]) if len(agg_k) else 0.0,
+            "d_shift_honest_at_best": float(agg_k.loc[best, "d_shift_honest"]) if len(agg_k) else 0.0,
         }
     out["knee_by_window"] = knee[knee["arm"] == arm].to_dict(orient="records")
     return out
@@ -357,8 +470,16 @@ def _window_hi(label) -> int:
 
 
 def shipped_arm(v: pd.DataFrame) -> str:
-    """The arm the verdict reads: the blended threshold users get, when present."""
-    return "blend" if "blend" in set(v["arm"]) else "xcal"
+    """The arm the verdict reads: the closest thing in the run to what users get.
+
+    ``anchored`` first (#3116): :func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold`
+    has been the shipped path since the 2026-08-05 population-anchored run, and
+    it is the only arm in which K moves *both* halves of the threshold.  ``blend``
+    is the retired ``cap50`` mix-in, kept so pre-#3116 runs still read; ``xcal``
+    is the raw cut, the fallback for a run without safe thresholds.
+    """
+    arms = set(v["arm"])
+    return next((name for name in ("anchored", "blend", "xcal") if name in arms), "xcal")
 
 
 def ab_check(screen: pd.DataFrame, ab_dirs: list[Path], agg: Path) -> pd.DataFrame:
@@ -433,7 +554,7 @@ def _cell_deltas(v: pd.DataFrame, k: int) -> pd.Series:
     return (j["a"] - j["b"]).groupby([j["env"], j["category"], j["seed"]]).mean()
 
 
-def write_report(results: Path, levels, paired, knee, verd, ab) -> None:
+def write_report(results: Path, levels, paired, knee, verd, ab, disp) -> None:
     lines = [
         "# Calibration fold-count study (#2897)",
         "",
@@ -466,6 +587,18 @@ def write_report(results: Path, levels, paired, knee, verd, ab) -> None:
         "",
         _md(knee),
         "",
+        "## Threshold dispersion: sd(threshold) across seeds, per K",
+        "",
+        "The direct form of H4's question (#3116).  `rule_inefficiency` is a",
+        "signed cost gap between two cuts, not a variance, and its reference is",
+        "estimated from a calibration set that grows with K - so the two",
+        "decomposition terms move in opposite directions from one cause and",
+        "cannot answer 'did the cut get less noisy'.  This can: it is the spread",
+        "of the shipped threshold across seeds at a fixed step, averaged over",
+        "steps.",
+        "",
+        _md(disp) if len(disp) else "_No step carries >=2 seeds; dispersion is undefined for this run._",
+        "",
         "## A/B check: does a run that lives at K reproduce the screen?",
         "",
         _md(ab) if len(ab) else "_No A/B run dirs passed; screen only._",
@@ -490,14 +623,17 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     levels = level_table(v, agg)
+    disp = threshold_dispersion(v, agg)
+    if disp.empty:
+        common.log("  sd(threshold): no step carries >=2 seeds; H4's direct instrument is unavailable")
     paired = paired_vs_baseline(v, agg)
     knee = knee_table(paired, levels, agg)
-    verd = verdicts(paired, knee, levels)
+    verd = verdicts(paired, knee, levels, disp)
     ab = ab_check(v, [Path(d) / "results" for d in argv], agg) if argv else pd.DataFrame()
     verd["ab_check"] = ab.to_dict(orient="records") if len(ab) else None
 
     (results / "summary.json").write_text(json.dumps(verd, indent=2))
-    write_report(results, levels, paired, knee, verd, ab)
+    write_report(results, levels, paired, knee, verd, ab, disp)
     common.log(f"wrote {results / 'summary.json'} and {results / 'REPORT.md'}")
     return 0
 
