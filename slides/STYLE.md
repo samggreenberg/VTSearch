@@ -161,6 +161,16 @@ another thing to hunt for. So a figure that genuinely cannot spare its top-left
 corner **carries no title at all** — it does not put one somewhere else. That
 is the standard working, not failing.
 
+**Its height is the one part a figure may trim**, because 200px is a reserve
+for the deck's *longest* headline and most slides carry a shorter one. Pass the
+rectangle to `save(notch=...)`, with the height measured — by the recipe above,
+on the slide the figure actually appears on — rather than guessed, and re-take
+that measurement if the headline changes. `vote-boundary` is the one figure
+that does it: "Rock the Vote" is one line and measures 56.8px, and the 100px of
+unused reserve left a band under the title with no title in it and no items
+either. Do not trim x, y or width; the notch's *position* is the standard, and
+a figure whose ink reaches the top-left corner still carries no title.
+
 Three rules follow.
 
 **No kicker on a full-bleed slide.** The figure already says which mechanism
@@ -262,6 +272,14 @@ survives being dropped into any figure: divide by the points-per-unit that
 figure is drawn at and use the result for every gap in it. The ratio is the
 part that matters, and it wants to be roughly 3:1 — eyeballing the two
 separately is what produces 1:1, which is exactly the failure above.
+
+**An arrow is never shorter than the word written along it.** A block arrow
+carries its label centred on the whole arrow, head included, so an arrow that
+is shorter than the label plus two arrowheads prints its own word over its own
+point. `make-calib-figs.arrow_len_for` measures the glyphs and returns the
+minimum, `_labeled_arrow` asserts it, and a layout that wants a longer arrow
+pays for it in canvas rather than in legibility — the canvas grows at the top,
+where these schematics pin their first row, so no other row moves.
 
 Two consequences worth spelling out, because they are the ones that get
 fudged:

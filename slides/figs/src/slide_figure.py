@@ -31,7 +31,9 @@ goes*: `TITLE_NOTCH_PX`. A figure that owns the whole 1280x720 slide has to
 leave its top-left corner empty for the slide's own kicker and headline. That
 rectangle is a fixed standard rather than a per-slide choice, because a title
 that moves is worse than no title at all — a figure that cannot spare its
-top-left corner carries no title, it does not put one somewhere else.
+top-left corner carries no title, it does not put one somewhere else. Its
+*height* is the one part a figure may trim, and only against a measurement of
+its own slide's headline; see the constant.
 """
 
 from __future__ import annotations
