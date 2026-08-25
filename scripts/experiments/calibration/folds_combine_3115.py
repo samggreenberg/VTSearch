@@ -299,6 +299,12 @@ def verdicts(t: pd.DataFrame, deep_min: int, margin: float) -> dict:
             "pooling_is_wrong": bool(decided and total.get("favours") == "arm"),
             "averaging_is_wrong": bool(decided and total.get("favours") == "ref"),
             "unresolved": bool(total and not decided),
+            # Distinguished from `unresolved` on purpose: "measured, and the
+            # difference is too small to act on" and "never measured here"
+            # are different facts, and three `false` flags in a row would read
+            # as the first when it was the second.  The `q*` arms need a
+            # haystack per fold, so a run without safe thresholds has no total.
+            "total_absent": not total,
         }
     return out
 
