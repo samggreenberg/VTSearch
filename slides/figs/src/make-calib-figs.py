@@ -65,7 +65,15 @@ OUT = Path(__file__).resolve().parent.parent
 INK = "#14181f"
 SOFT = "#5b6472"
 RULE = "#d8dee6"
-NEUTRAL_FILL = "#e8ebef"
+NEUTRAL_FILL = "#e8ebef"  # a wash *behind* other ink: a band, a shaded interval
+#: The fill for a block of media nobody has looked at — D₋₁, and the cells of
+#: the two grid figures. Darker than `NEUTRAL_FILL`, because this one is the
+#: object rather than a wash under one: at 4% off white the haystack rectangle
+#: read as an empty outline in a projected PDF, where its neighbour D₀ is a
+#: solidly hatched block (#3254). Still quiet — the shape says "media", the
+#: absence of hatching says "classes unknown", and neither is a claim that
+#: wants colour.
+UNLABELED_FILL = "#dae0e8"
 BLUE = "#0b5fa5"  # production / the shipped thing
 RUST = "#b45309"  # the Bad component / cross-calibration
 GREEN = "#0d8a5f"  # the Good component
@@ -645,7 +653,7 @@ def _haystack_block(ax: plt.Axes, x0: float, y0: float, w: float, h: float) -> N
     Beside a hatched `_data_block` it reads as "same kind of thing, classes
     unknown", which is exactly what the haystack is.
     """
-    ax.add_patch(Rectangle((x0, y0), w, h, facecolor=NEUTRAL_FILL, edgecolor=INK, linewidth=1.6, zorder=2))
+    ax.add_patch(Rectangle((x0, y0), w, h, facecolor=UNLABELED_FILL, edgecolor=INK, linewidth=1.6, zorder=2))
 
 
 def _staircase(x0: float, y_base: float, w: float, sy: float, edges, density, first: int, last: int) -> "Polygon":
@@ -768,11 +776,8 @@ def _score_histogram(
     `fill` names what the silhouette is filled with, and across the
     progression the three fills *are* the argument:
 
-    * `"plain"` — bars in outline, filled the same neutral grey as the
-      unlabeled block they are the scores of: the shape of the data, which is
-      all anyone actually has before a fit is claimed. The grey is what makes
-      that panel read as *D₋₁*, the same kind of filled object as the hatched
-      D₀ beside it, rather than as an empty frame among solid ones (#3254).
+    * `"plain"` — hollow bars in outline: the shape of the data, which is all
+      anyone actually has before a fit is claimed.
     * `"query"` — the same silhouette re-filled, split at the components'
       crossing and hatched with question marks in rust or green. The mixture
       has read no labels, so "this hump is the Bad one" is a guess and the
@@ -793,16 +798,15 @@ def _score_histogram(
     sy = h / float(density.max())
 
     if fill == "plain":
-        # Bars in outline over a neutral wash rather than a solid black mass.
-        # The silhouette is the same polygon the fitted forms re-draw, so
-        # nothing moves between build stages; what makes it read as *bars* is
-        # one separator per internal bin
+        # Bars in outline rather than a solid black mass. The silhouette is the
+        # same polygon the fitted forms re-draw, so nothing moves between build
+        # stages; what makes it read as *bars* is one separator per internal bin
         # boundary. Each separator stops at the shorter of the two bars it
         # divides, because the staircase's own riser already carries the rest of
         # that boundary — drawn full height they would double-stroke every riser
         # in the figure and the outline would thicken wherever the data steps.
         bars = _staircase(x0, y_base, w, sy, edges, density, 0, len(density) - 1)
-        bars.set(facecolor=NEUTRAL_FILL, edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
+        bars.set(facecolor="white", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
         ax.add_patch(bars)
         for i in range(1, len(density)):
             top = y_base + float(min(density[i - 1], density[i])) * sy
@@ -3318,7 +3322,7 @@ def acq_flow_fig() -> None:
 def _acq_cell(ax: plt.Axes, x0: float, y0: float, w: float, h: float, kind: str, lw: float = 1.2) -> None:
     """One item of the zoomed ranking: unlabeled, or a vote already cast."""
     if kind == "unlabeled":
-        ax.add_patch(Rectangle((x0, y0), w, h, facecolor=NEUTRAL_FILL, edgecolor=INK, linewidth=lw, zorder=3))
+        ax.add_patch(Rectangle((x0, y0), w, h, facecolor=UNLABELED_FILL, edgecolor=INK, linewidth=lw, zorder=3))
         return
     color, hatch = (GREEN, "//////") if kind == "good" else (RUST, "\\\\\\")
     ax.add_patch(Rectangle((x0, y0), w, h, facecolor="white", edgecolor=color, hatch=hatch, linewidth=0, zorder=3))
@@ -4116,7 +4120,7 @@ def _region_max_stage(stage: int) -> plt.Figure:
                     (grid_x0 + c * cell, grid_top - (r + 1) * cell),
                     cell,
                     cell,
-                    facecolor=NEUTRAL_FILL if not won else "white",
+                    facecolor=UNLABELED_FILL if not won else "white",
                     edgecolor=INK if won else RULE,
                     linewidth=2.6 if won else 1.2,
                     zorder=3 if won else 2,
@@ -4162,7 +4166,7 @@ def _region_max_stage(stage: int) -> plt.Figure:
         density, edges = np.histogram(sample, bins=REGION_BINS, range=REGION_RANGE, density=True)
         sy = panel_h / float(density.max())
         bars = _staircase(panel_x0, y_base, panel_w / (hi - lo), sy, (edges - lo), density, 0, len(density) - 1)
-        bars.set(facecolor=NEUTRAL_FILL, edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
+        bars.set(facecolor="white", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=2)
         ax.add_patch(bars)
         _range_line(ax, panel_x0, panel_x0 + panel_w, y_base, z=5)
         ax.text(
@@ -4313,9 +4317,7 @@ def _em_panel(
             ax.add_patch(Rectangle((bx0, y_base), bw, split, facecolor=RUST, edgecolor="none", zorder=2))
             ax.add_patch(Rectangle((bx0, y_base + split), bw, top - split, facecolor=GREEN, edgecolor="none", zorder=2))
         else:
-            ax.add_patch(
-                Rectangle((bx0, y_base), bw, top, facecolor=NEUTRAL_FILL, edgecolor=INK, linewidth=0.6, zorder=2)
-            )
+            ax.add_patch(Rectangle((bx0, y_base), bw, top, facecolor="white", edgecolor=INK, linewidth=0.6, zorder=2))
 
     xs = np.linspace(0.0, 1.0, 600)
     for mu, var, weight, colour in (
