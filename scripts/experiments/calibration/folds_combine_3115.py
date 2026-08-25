@@ -275,7 +275,15 @@ def verdicts(t: pd.DataFrame, deep_min: int, margin: float) -> dict:
             # count as much as the well-populated small ones.
             wts = sub["n_cells"].to_numpy(dtype=float)
             d = float(np.average(sub["d_regret"].to_numpy(), weights=wts)) if wts.sum() else float("nan")
-            se = float(np.sqrt(np.average(np.square(sub["se_regret"].to_numpy()), weights=wts) / len(sub)))
+            # Pooled SE as the weighted MEAN of the per-row SEs, not
+            # `sqrt(mean(se^2)/n_rows)`.  The rows being pooled are the same
+            # cells re-cut at each K, so they are almost perfectly correlated;
+            # dividing by sqrt(n_rows) treats them as independent replicates and
+            # overstates the precision by ~3.5x on this grid's six K values.
+            # Averaging instead is the conservative reading - it credits the pool
+            # with no variance reduction at all - which is the right default for
+            # a number a ship decision is read off.
+            se = float(np.average(sub["se_regret"].to_numpy(), weights=wts)) if wts.sum() else float("nan")
             per[name] = {
                 "d_regret": d,
                 "se": se,
