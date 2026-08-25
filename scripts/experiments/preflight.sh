@@ -21,6 +21,7 @@ NEED_GB="${PREFLIGHT_NEED_GB:-5}"
 WARN_ONLY=0
 REPO="${VTS_REPO:-}"
 REGION_ARM=""
+MIN_POSITIVES=""
 REUSE_PREPARE=""
 JOB_NAME=""
 MEM_PER_TASK=""
@@ -33,6 +34,7 @@ while [[ $# -gt 0 ]]; do
     --arms) ARMS="$2"; shift 2 ;;
     --need-gb) NEED_GB="$2"; shift 2 ;;
     --require-region-voting) REGION_ARM="$2"; shift 2 ;;
+    --require-min-positives) MIN_POSITIVES="$2"; shift 2 ;;
     --reuse-prepare) REUSE_PREPARE="$2"; shift 2 ;;
     --job-name) JOB_NAME="$2"; shift 2 ;;
     --diverges) DIVERGES="$2"; shift 2 ;;
@@ -556,6 +558,54 @@ PYDIV
   if [[ "$unacked" -gt 0 ]]; then
     echo "        -> if that is the axis this study sweeps, pass --diverges <knob>[,<knob>]"
     echo "        -> if it is not, the run would measure a detector nobody ships"
+  fi
+fi
+
+# --- 13. Categories thin enough to produce no trainable step ------------------
+# A cell whose category is too rare never collects both classes, so the
+# simulation writes its CSV **header and nothing else**.  That file is
+# non-empty, parses cleanly, and passes `find -size 0`, so every "N/N cells"
+# count reports it as present - the failure is invisible at exactly the moment
+# it matters.  #3115 launched a 208-cell array on `visual_genome_m` and its
+# first two completed cells were header-only (`ball`, 51 positives in 4193).
+#
+# Reads `prepare_info.json`, which already holds `category_counts` and
+# `selected_categories`, so this costs no pickle load.  Opt-in with a floor the
+# study picks: what counts as "too thin" depends on the horizon and on
+# SIM_FRACTION, and a wrong default here would be worse than none.
+if [[ -n "$MIN_POSITIVES" ]]; then
+  INFO="${CALIB_RESULTS:-$EXP/results}/prepare_info.json"
+  if [[ ! -f "$INFO" ]]; then
+    say_fail "--require-min-positives: no prepare_info.json at $INFO (run prepare first)"
+  elif [[ "$PY_USABLE" == "0" ]]; then
+    say_fail "category depth NOT checked: python cannot import the tree (see above)"
+  else
+    THIN=$(python - "$INFO" "$MIN_POSITIVES" <<'PY' 2>&1
+import json
+import sys
+
+info, floor = json.load(open(sys.argv[1])), int(sys.argv[2])
+thin, seen = [], 0
+for ds, embs in info.get("datasets", {}).items():
+    for emb, d in embs.items():
+        counts = d.get("category_counts") or {}
+        for cat in d.get("selected_categories") or []:
+            seen += 1
+            n = int(counts.get(cat, 0))
+            if n < floor:
+                thin.append(f"{ds}x{emb}:{cat}={n}")
+print(("FAILS " + "; ".join(sorted(thin))) if thin else f"HOLDS {seen} selected cells, all >= {floor} positives")
+PY
+)
+    case "$THIN" in
+      HOLDS*) say_ok "category depth: ${THIN#HOLDS }" ;;
+      FAILS*)
+        say_fail "categories below the $MIN_POSITIVES-positive floor: ${THIN#FAILS }"
+        echo "        -> a category this thin can finish with NO trainable step and write a"
+        echo "           header-only CSV, which every 'N/N cells' count reports as present"
+        ;;
+      *) say_fail "could not check category depth: $THIN" ;;
+    esac
   fi
 fi
 

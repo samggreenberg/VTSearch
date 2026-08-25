@@ -264,8 +264,15 @@ case "$MODE" in
       # No `--diverges`: this run pins nothing off-production.  The combine rule
       # is the axis it sweeps and the shipped rule is one of the arms, so even
       # that is a comparison rather than a divergence.
+      # --require-min-positives is the control for what actually went wrong on
+      # the first attempt: `visual_genome_m x siglip x ball` (51 positives) ran
+      # to completion and wrote a header-only CSV, which every "N/N cells" count
+      # reports as a present cell.  100 is a floor this grid clears by 3x - every
+      # class has exactly 300 - so it is a tripwire for a future edit that
+      # repoints the run at a thinner dataset, not a constraint on this one.
       bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb 20 \
         --require-region-voting vg_scale_any:dinov3_patch \
+        --require-min-positives 100 \
         --job-name cal-cells --mem "$CALIB_MEM" --conc "$CALIB_CONC" || {
         echo "preflight FAILED" >&2; [[ "${PREFLIGHT_SKIP:-0}" == "1" ]] || exit 1
       }
