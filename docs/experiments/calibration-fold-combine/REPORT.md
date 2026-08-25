@@ -339,13 +339,36 @@ this way. On region-voting detectors it is currently **0.063 ± 0.008 worse than
 what a freshly trained detector gets**, and roughly two-thirds of that gap
 (−0.048 ± 0.007) is recoverable by changing nothing but the combine rule.
 
-### What this study does not license
+### The acquisition caveat does **not** apply here — measured, not assumed
 
-- **No acquisition feedback.** Every arm is a counterfactual re-cut of a
-  trajectory that lived under production's rule. A different combine rule would
-  have collected *different votes*, and no screen holding the trajectory fixed
-  can see that. #2897's live A/B effect sank below its ship margin; this one may
-  too.
+The standing objection to a screen like this one is that it freezes the
+acquisition loop: the threshold decides which item is offered next
+(`_hard_pick_by_index` takes "the unlabeled item nearest the cutoff by rank"), so
+a rule that cuts differently collects *different votes*, and a screen holding the
+trajectory fixed cannot see it. That is what dissolved #2897's K=6 result.
+
+**It does not bite on this contrast, and the run says so.** On every step where a
+threshold is actually on screen driving the next pick (`app_trained == 1`), the
+live threshold's provenance is `fold_anchored` — **100% in both voting modes**
+(the 3–4% of steps that fall back to `gmm_blend` are all steps where the app
+would have had no trained detector on screen at all):
+
+| voting | `fold_anchored` | `gmm_blend` |
+|---|---:|---:|
+| binary, all steps | 96.1% | 3.9% |
+| region, all steps | 97.1% | 2.9% |
+| **binary, `app_trained` only** | **100 %** | 0 % |
+| **region, `app_trained` only** | **100 %** | 0 % |
+
+The conformal cut these arms contrast **never drives acquisition** under safe
+thresholds. Switching it from pooled to `qmean` would leave both arms of a live
+A/B collecting identical votes, so such an A/B is a null by construction rather
+than a check. The screen answers this question completely.
+
+The acquisition question is real for a *different* trajectory — see the
+load-then-continue follow-up below.
+
+### What this study does not license
 - **One dataset.** `vg_scale_any` is 12 hand-checked classes at uniform
   prevalence — chosen to isolate the combine rule, which also means the result
   has not been shown to travel. The mode contrast is internal to this dataset,
@@ -356,9 +379,19 @@ what a freshly trained detector gets**, and roughly two-thirds of that gap
 
 ## Follow-ups
 
-- **Book the A/B** — the pre-registered gate is met on region voting
-  (−0.048 ± 0.007, ~10× the 0.005 margin) and on binary (+0.028 ± 0.004, in the
-  other direction). Both need a live run before a rule changes.
+- **~~Book the A/B~~ — withdrawn, and the reason is the useful part.** The
+  pre-registered gate is met on both modes by effect size, but the gate was
+  written against a hazard this contrast does not have: the conformal cut never
+  drives acquisition (see above), so both arms would collect identical votes.
+  The gate should be read as *"resolve above margin **and** the swept rule
+  reaches the acquisition path"* — the second clause was implicit and should not
+  have been.
+- **The trajectory that *is* worth measuring: load-then-continue.** The conformal
+  cut is the **load-time** threshold, so a user who opens a saved detector and
+  then keeps voting starts the session on it, and that first threshold steers
+  everything after. This harness always trains fresh, so it never exercises that
+  path. That is a different experiment from an A/B of the rule, and it is the one
+  with real acquisition feedback in it.
 - **A mode-dependent combine for the conformal path.** The evidence points at
   quantile space for region and score space for binary. `threshold_from_fold_orderings`
   takes no voting-mode argument today, so this is a signature change, not a
