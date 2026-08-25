@@ -4,11 +4,11 @@
 combine rule) and [#3116](https://github.com/samggreenberg/VTSearch/issues/3116)
 (the instruments) · one run, by construction · harness PR pending · Refs #2897**
 
-> **Status: pre-registered, not yet run.** Everything below the *Design* heading
-> was written before any cell existed and lives as module constants in
+> **Status: complete, 2026-08-25.** Everything under *Design* was written before
+> any cell existed and lives as module constants in
 > `scripts/experiments/calibration/folds_combine_3115.py`, which applies it
-> mechanically. Results replace the *Results* placeholder; nothing in *Design*
-> is edited after seeing a number.
+> mechanically. Nothing in *Design* was edited after seeing a number — including
+> the caveat about contamination exposure, which the run then confirmed.
 
 ## The question
 
@@ -180,8 +180,195 @@ legs are untested rather than refuted, and the report must say so.
 
 ## Results
 
-_Pending — the run has not completed. This section is written from the analyzer's
-`summary.json`, `agg/*.csv` and `figures/`, and not before._
+**Run**: SLURM array 539811, **96/96 cells, 0 failures, 0 zero-byte, 0 unreadable,
+0 header-only**, 1,342,324 rows. `vg_scale_any` × {`siglip`, `dinov3_patch`},
+12 classes × 4 seeds, K ∈ {1,2,3,4,6,8,12,16}, `calibrate_count=2` live,
+inclusion 0, `PRODUCTION_HEAD`. Analyzed at dev `e87c90956` + this branch.
+
+### BLUF
+
+**Both docstrings are wrong, and they are wrong in different places.**
+
+- **Pooling loses to averaging in both voting modes.** The pooled path's stated
+  reason — *"the pool is exchangeable enough for the quantile rule"* — does not
+  survive contact: averaging the folds' own conformal cuts beats pooling their
+  scores by **−0.0078 ± 0.0015** (binary) and **−0.016 ± 0.003** (region).
+- **The comparability premise is mode-dependent, and that is the finding.** The
+  anchored path keeps each fold's haystack *"to read a cut's quantile in the
+  scale it was measured on"*. On **region** voting that is right and worth
+  **−0.032 ± 0.005**; on **binary** voting it is wrong and costs
+  **+0.036 ± 0.004**. Same rule, opposite sign, and one function serves both.
+- **The contamination argument cannot fire at all** — not on this grid, and not
+  on any grid. See *The third argument is prevented by construction*.
+- **Nothing here indicts the shipped threshold.** Production's
+  `fold_anchored_gmm_threshold` beats the pooled conformal cut in both modes
+  (−0.0066 ± 0.0025 binary, **−0.063 ± 0.008** region), and swapping its combine
+  to `qmedian` is a non-event (−0.0001 ± 0.0002, unresolved).
+
+### The verdict table
+
+Paired within the step, cell-mean ± SE over (class, seed, window), K ≥ 3, deep
+windows (≥ 100 votes). Negative favours the first-named arm.
+
+| leg | what it isolates | binary | region |
+|---|---|---:|---:|
+| `combine` — `tmean` vs pooled | pooling vs **averaging**, space fixed | **−0.0078 ± 0.0015** | **−0.016 ± 0.003** |
+| `space` — `qmean` vs `tmean` | score vs **quantile** space, combine fixed | **+0.036 ± 0.004** | **−0.032 ± 0.005** |
+| `total` — `qmean` vs pooled | what #3115 asked for | **+0.028 ± 0.004** | **−0.048 ± 0.007** |
+| `anchored` vs pooled | production's rule vs the control | −0.0066 ± 0.0025 | **−0.063 ± 0.008** |
+| `anchored_qmedian` vs `anchored` | the combine, on the **shipped** path | −0.0001 ± 0.0002 *(unresolved)* | +0.0008 ± 0.0002 *(below margin)* |
+
+`moved_rate` is 0.97–1.00 on every leg: these rules genuinely disagree about
+where to cut, so no row here is a no-exposure null.
+
+**The factoring is what makes this readable.** Run as the issue literally asks —
+`pooled → qmean` alone — binary reads *"pooling is right"* and region reads
+*"pooling is wrong"*, and the study ends in a contradiction. Split into its legs,
+the contradiction resolves: the combine axis agrees in both modes, and only the
+*space* axis flips. A one-line change to the run design bought the difference
+between a paradox and a mechanism.
+
+![Region voting](figures/regret_over_votes_region_k4.png)
+
+*Region voting, K=4: paired Δregret against the pooled cut over the vote axis,
+averaged over 48 runs with ±1 SE bands. Every combine rule beats pooling past
+~20 votes; production's anchored rule (green) is best. Read the **shape**, not
+the endpoint — the ordering before ~15 votes is reversed, and this figure does
+not license the deep-regime numbers being applied to the cold start.*
+
+![Binary voting](figures/regret_over_votes_binary_k4.png)
+
+*Binary voting, same axes. The sign of the quantile-space arms (orange) flips
+relative to region: worse past ~20 votes, not better. The anchored rule's huge
+cold-start advantage (−0.09 at 10 votes) is a different effect from the combine
+question and is not what this study measures.*
+
+### Both modes cross zero, in opposite directions
+
+A single deep-regime mean hides a sign change in **both** modes:
+
+| votes | binary `total` | region `total` |
+|---|---:|---:|
+| ≤ 20 | **−0.023** | **+0.020** |
+| 21–50 | +0.014 | −0.034 |
+| 51–100 | +0.023 | −0.051 |
+| 101–200 | +0.035 | −0.047 |
+
+So `qmean` is *better* than pooling for the first ~20 votes on binary and
+*worse* on region, and both reverse thereafter. The deep window is the right
+regime to ship on — it is where a real search spends its votes — but a
+recommendation quoted without the band is wrong about the first twenty clicks in
+both modes.
+
+### Does the gap grow with K?
+
+#3115 predicts it should: *"pooling estimates the quantile of the mixture of K
+half-trained models … that mixture is wider than any single model's score
+distribution, and the widening grows with K."*
+
+**Partly.** The prediction holds for the combine leg on region voting and
+nowhere else:
+
+| leg | K=2 | K=4 | K=8 | K=16 |
+|---|---:|---:|---:|---:|
+| `combine`, region | −0.0095 | −0.015 | −0.017 | **−0.017** |
+| `combine`, binary | −0.0069 | −0.0083 | −0.0079 | −0.0074 |
+| `space`, binary | +0.039 | +0.037 | +0.035 | +0.035 |
+| `space`, region | −0.038 | −0.034 | −0.032 | −0.031 |
+
+Region's combine gap grows and saturates by K≈8; binary's is flat from K=2. The
+*space* leg shrinks with K in both — the opposite of the predicted direction.
+Since production ships K=2, none of this changes what a user gets today.
+
+![Contrasts over K](figures/contrasts_over_k_region.png)
+
+*Region voting: each contrast over the fold count, ±1 SE. The shaded band at
+K<3 is where mean and median are the same rule by construction, so the median
+legs are zero there by definition rather than by measurement.*
+
+### The third argument is prevented by construction
+
+#3115's third argument is that *"a degenerate fold (holdout with no positives)
+injects its scores straight into a pooled quantile"*, which `qmedian` would
+resist. **`any_dropped_rate` is 0.000 in every window, at every K, in both
+modes** — no fold was ever unable to contribute a cut.
+
+That is not a property of `vg_scale_any`. `compute_fold_orderings`:
+
+- refuses outright unless there are **≥ 2 of each class**, returning *no*
+  orderings rather than a degenerate one; and
+- sizes each class's train side as `max(1, min(class_total - 1, target))`, so
+  every class keeps **at least one item on each side of every split**.
+
+A single-class holdout therefore cannot be produced, and `conformal_threshold`'s
+0.5 single-class branch is unreachable from this path. The shipped stratified
+splitter already prevents the hazard. This is pinned by tests
+(`TestDegeneracyIsStructurallyImpossible`) so a future change that drops
+stratification fails loudly rather than silently reviving it.
+
+**The evidence the issue cites for this argument measures something else.** It
+points at #2897's `degenerate_rate` rising 0.0 → 0.0031 with K as *"the
+signature this predicts"*. That column is `is_degenerate(test_scores,
+threshold)` — a **cut** that classifies every test item the same way. It carries
+no information about a fold's holdout. Two different quantities sharing a word.
+
+So the `*median − *mean` legs measure **aggregation robustness over
+non-degenerate folds** — resistance to a fold whose cut *transfers* badly, not
+to a fold that had no cut to give. That effect is real and grows with K
+(`contamination_q`: −0.0045 at K=3 → −0.0093 at K=16 on binary), but it is a
+different mechanism, and #3115's contamination hypothesis stands **untested
+rather than refuted**.
+
+### Which production path this is actually about
+
+`threshold_from_fold_orderings` is **not** the main trained-detector threshold.
+A freshly trained detector with a haystack gets `fold_anchored_gmm_threshold`,
+which already combines in quantile space at `qmean` — the arm this study finds a
+non-event to re-cut. The pooled conformal path reaches users in two narrower
+places:
+
+- **`vtscore/state/core.py:1367`** — the Inclusion slider's re-cut, for
+  detectors with *no* anchored cut (a degenerate anchored fit that fell back to
+  the blend).
+- **`vtscore/detectors/training.py:1288`** — the **load-time** path that
+  re-derives a detector from saved origins, where there is no haystack to fuse
+  against and *"the conformal cut ships alone"*.
+
+That second one is ordinary: every saved detector a user re-opens is thresholded
+this way. On region-voting detectors it is currently **0.063 ± 0.008 worse than
+what a freshly trained detector gets**, and roughly two-thirds of that gap
+(−0.048 ± 0.007) is recoverable by changing nothing but the combine rule.
+
+### What this study does not license
+
+- **No acquisition feedback.** Every arm is a counterfactual re-cut of a
+  trajectory that lived under production's rule. A different combine rule would
+  have collected *different votes*, and no screen holding the trajectory fixed
+  can see that. #2897's live A/B effect sank below its ship margin; this one may
+  too.
+- **One dataset.** `vg_scale_any` is 12 hand-checked classes at uniform
+  prevalence — chosen to isolate the combine rule, which also means the result
+  has not been shown to travel. The mode contrast is internal to this dataset,
+  which removes the dataset/mode confound but does not replace a second
+  environment.
+- **Uniform prevalence.** The grid deliberately holds prevalence fixed at 7.1%,
+  so nothing here says how the combine rule behaves on a rare category.
+
+## Follow-ups
+
+- **Book the A/B** — the pre-registered gate is met on region voting
+  (−0.048 ± 0.007, ~10× the 0.005 margin) and on binary (+0.028 ± 0.004, in the
+  other direction). Both need a live run before a rule changes.
+- **A mode-dependent combine for the conformal path.** The evidence points at
+  quantile space for region and score space for binary. `threshold_from_fold_orderings`
+  takes no voting-mode argument today, so this is a signature change, not a
+  constant.
+- **`tmean` is the cheap, safe half.** Averaging beats pooling in *both* modes
+  and needs no haystack, no rank transfer, and no mode switch. It is the part of
+  this result that could ship on its own.
+- **#3115's contamination hypothesis needs a different instrument** — the
+  splitter prevents it, so testing it at all would mean deliberately disabling
+  stratification, which is not obviously worth doing.
 
 ## Reproducing
 
