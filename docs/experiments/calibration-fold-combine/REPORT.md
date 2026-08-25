@@ -116,11 +116,52 @@ and that is the finding.
 |---|---|
 | Fold counts | K ∈ {1, 2, 3, 4, 6, 8, 12, 16} — same as #2897, so the fold-count axis stays comparable |
 | Live count | `calibrate_count = 2` (the trajectory users get; every arm scored on the same votes) |
-| Environments | `visual_genome_m` × {`siglip`, `dinov3_patch`/`max_patch`}, `caltech101_m` × `siglip` |
-| Voting | derived **per cell** (boxes **and** a patch grid), so `visual_genome_m × siglip` is binary — see *Errata inherited* |
+| Environment | **`vg_scale_any`** × {`siglip` → binary, `dinov3_patch`/`max_patch` → region} |
+| Categories | all 12 classes; 300 positives each against one shared 3900-image negative pool |
+| Prevalence | **7.1% in every cell**, by construction |
+| Voting | derived **per cell** (boxes **and** a patch grid), never from the dataset name |
 | Head | unset → `PRODUCTION_HEAD` (the linear SVM) |
-| Sizing | 4 seeds × 150 steps |
+| Sizing | 4 seeds × 150 steps → 96 cells |
 | Inclusion | 0 |
+
+#### Why not `visual_genome_m`
+
+This study began on `visual_genome_m` + `caltech101_m`, the #2897 grid, and that
+was the wrong instrument. Its selected categories run from **25** positives
+(`banana`) to **1645** (`building`), and the thin end does not merely add noise:
+the first two cells of the first attempt completed in seconds as **header-only
+CSVs with zero rows** — `ball`, 51 positives in 4193 media, never reached a
+trainable step. Such a file is non-empty, parses cleanly and passes
+`find -size 0`, so it counts as a present cell while contributing nothing.
+
+A threshold *is* a quantile of the calibration set. A grid whose calibration sets
+differ 60-fold in size is confounding the axis the study reads, and a difference
+between two combine rules could be a prevalence difference wearing a disguise.
+
+`vg_scale_any` is #3156's hand-checked scale dataset with the box-size band
+collapsed away (`class@band → class`), derived from the built `vg_scale` pickle
+so it is provably the same images, boxes and label corrections. Its exclusion
+semantics are preserved and are the part that matters: the 300 media that hold
+one of the 12 classes at a size outside every band stay **evaluable on nothing**,
+rather than becoming negatives — scoring them as negatives would penalise a
+detector for finding a real bus, which is what #3156 exists to prevent.
+
+Two further gains fall out. Both voting modes now come from **one** dataset, so
+the mode contrast is no longer confounded with the dataset the way #2897's
+caltech-vs-VG split was; and `caltech101_m` is dropped rather than kept as a
+second binary environment, since a second *environment* is what the
+pre-registered A/B gate below is for.
+
+#### The cost of that choice, stated up front
+
+Uniform 7.1% prevalence is what makes the combine and space legs clean, and it is
+also the thing most likely to make the **contamination** legs read null: a
+degenerate (single-class) fold is the hazard `qmedian` is robust to, and a
+well-populated grid presents fewer of them. The exposure term is therefore
+reported beside every robustness claim, and the cold-start windows — where even a
+7.1% dataset yields folds with one or two positives — are where that exposure
+lives. If `any_dropped_rate` comes back near zero in every window, the median
+legs are untested rather than refuted, and the report must say so.
 
 ### Errata inherited from #2897, fixed here
 
@@ -132,6 +173,10 @@ and that is the finding.
   uses — so the next study does not have to know.
 - **The launcher pinned `CALIB_HEAD=linear`**, which stopped being production at
   PR #3198. This run names no head.
+- **Header-only cells were invisible.** A cell whose simulation never reached a
+  trainable step writes its header and nothing else — non-empty, parseable, zero
+  rows. The analyzer now counts and names them alongside zero-byte and
+  unreadable cells, so "96/96 cells" cannot quietly mean something else.
 
 ## Results
 

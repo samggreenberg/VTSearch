@@ -88,16 +88,34 @@ export CALIB_FOLD_COUNTS="${CALIB_FOLD_COUNTS:-1,2,3,4,6,8,12,16}"
 export CALIB_CALIBRATE_COUNT=2
 
 # --- environments ---
-# Both voting modes, with the premise asserted per CELL rather than per dataset.
-# Region voting needs BOTH halves - ground-truth boxes (dataset) and a patch grid
-# (embedder) - so `visual_genome_m x siglip` is a BINARY environment however
-# boxed its dataset is; that is the trap behind #2877, #2905 and #2897's own
-# errata.  `visual_genome_m x dinov3_patch` is the only region arm here, and it
-# is where the bag-aware calibrator lives - with a much smaller effective
-# calibration set, which is where a combine rule has the most room to matter.
-export CALIB_DATASETS="${CALIB_DATASETS:-visual_genome_m,caltech101_m}"
-export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,dinov3_patch}"
-export CALIB_CALTECH_EMBEDDERS="${CALIB_CALTECH_EMBEDDERS:-siglip}"
+# ONE dataset, `vg_scale_any`: #3156's hand-checked scale set with the box-size
+# band collapsed away (12 classes x 300 positives against one shared 3900-image
+# negative pool, so the evaluable pool is 4200 at 7.1% prevalence, IDENTICAL in
+# every cell).
+#
+# It replaces `visual_genome_m`, which this study started on and which is the
+# wrong instrument for a calibration question.  Its selected categories run from
+# 25 positives (`banana`) to 1645 (`building`), and the thin end does not merely
+# add noise - it produces cells with **no trainable step at all**: the first two
+# cells of the first attempt came back as header-only CSVs, `ball` (51 positives)
+# among them.  A threshold is a quantile of the calibration set, so a grid whose
+# calibration sets differ 60-fold in size is confounding the very axis the study
+# reads.  Uniform prevalence also means a difference between two combine rules
+# cannot be a prevalence difference wearing a disguise.
+#
+# Both voting modes come from this ONE dataset, so the mode contrast is no
+# longer confounded with the dataset the way #2897's caltech-vs-VG split was.
+# The premise is still asserted per CELL, not per dataset: region voting needs
+# ground-truth boxes (dataset) AND a patch grid (embedder), so
+# `vg_scale_any x siglip` is BINARY and `vg_scale_any x dinov3_patch` is REGION.
+#
+# All 12 classes, not a scale-stratified subset: the band is exactly what this
+# dataset collapsed, so there is no scale axis left to stratify on.  With 12
+# categories of identical count, `prevalence` mode returns all of them.
+export CALIB_DATASETS="${CALIB_DATASETS:-vg_scale_any}"
+export CALIB_VGSCALE_EMBEDDERS="${CALIB_VGSCALE_EMBEDDERS:-siglip,dinov3_patch}"
+export CALIB_CATEGORY_MODE="${CALIB_CATEGORY_MODE:-prevalence}"
+export CALIB_N_CATEGORIES="${CALIB_N_CATEGORIES:-12}"
 export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
 export CALIB_REPOOL_VARIANTS=""
 
@@ -247,7 +265,7 @@ case "$MODE" in
       # is the axis it sweeps and the shipped rule is one of the arms, so even
       # that is a comparison rather than a divergence.
       bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb 20 \
-        --require-region-voting visual_genome_m:dinov3_patch \
+        --require-region-voting vg_scale_any:dinov3_patch \
         --job-name cal-cells --mem "$CALIB_MEM" --conc "$CALIB_CONC" || {
         echo "preflight FAILED" >&2; [[ "${PREFLIGHT_SKIP:-0}" == "1" ]] || exit 1
       }
