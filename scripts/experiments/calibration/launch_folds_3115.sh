@@ -24,11 +24,23 @@
 # invisible there.  The grid must reach past it; the analyzer reads its verdict
 # from K>=3 only, and treats the K<3 rows as a control that must read zero.
 #
-# Cost note: the sweep is nearly free.  Every arm re-cuts the SAME already-
+# Cost note, MEASURED rather than argued.  Every arm re-cuts the SAME already-
 # trained fold prefix, so a combine rule costs arithmetic on cached arrays and
 # no fits - and the anchored pair shares one EM per fold (`_fold_count_arms`),
-# because `FoldAnchoredCut` reads the combine at cut time.  The marginal cost
-# over a plain #2897-shaped run is the extra fold fits Kmax already implies.
+# because `FoldAnchoredCut` reads the combine at cut time.  What the K grid
+# actually costs is training Kmax folds once per step (the arms are nested
+# prefixes of that one calibration, not K separate ones), which `fold_seconds`
+# reports at K=Kmax:
+#
+#   binary cell: 0.15 s/step of a 20m33s cell   (~2%)
+#   region cell: 19.7 s/step of a 1h32m cell    (~31%)
+#
+# Both cells are dominated by the harness's per-step Autopilot simulation, which
+# a #2897-shaped run pays identically.  Note that summing `fold_seconds` ACROSS
+# the K grid double-counts - the prefixes share their fold models - so the sum is
+# not the cost of the sweep and reading it as one overstates the region cell by
+# 3.6x.  Halving Kmax to 8 would save ~14% of a region cell and cost the study
+# half its K axis, which is the axis the growth-with-K mechanism lives on.
 #
 # Design + pre-registered decision rules:
 #   docs/experiments/calibration-fold-combine/REPORT.md
@@ -109,10 +121,28 @@ export CALIB_GRES=none
 
 # Concurrency is capped by the `cpu_limit` QOS: cpu=240 with 2 charged per task
 # (=120), so asking for more only parks the excess behind your own array.
-export CALIB_MEM="${CALIB_MEM:-8G}"
+# --- MEASURED on this grid, 2026-08-25, by `size` (jobs 538980/538983) ---
+#
+#   cell   1  visual_genome_m x siglip       whole_image  20m33s   594 MB
+#   cell  92  visual_genome_m x dinov3_patch max_patch  1h32m11s  5.52 GB
+#
+# The region cell is 4.5x the binary one and 10x its memory, so IT sets both
+# knobs; sizing from the binary cell alone would have picked a memory limit the
+# region arm cannot run in.
+#
+# 10G, not 8G: the region cell peaked at 5.5 GB, so 8G left only 31% headroom on
+# a 1.5-hour cell across categories whose positive counts vary.  An OOM here is
+# not a slow cell, it is a lost one that resume has to redo.
+#
+# 100, not the 120 the `cpu_limit` QOS allows: 100 x 10G = 1000G of the 1074G
+# per-user memory allowance, and it costs nothing in wall clock.  The critical
+# path is "a region cell that starts once the binary cells free their slots",
+# which is ~21m + ~92m either way; concurrency above 100 only widens the first
+# wave, which is already all binary cells.
+export CALIB_MEM="${CALIB_MEM:-10G}"
 export CALIB_CPUS=1
 export CALIB_TIME="${CALIB_TIME:-12:00:00}"
-export CALIB_CONC="${CALIB_CONC:-120}"
+export CALIB_CONC="${CALIB_CONC:-100}"
 export CALIB_ANALYZE_MEM="${CALIB_ANALYZE_MEM:-48G}"
 export CALIB_ANALYZE_TIME="${CALIB_ANALYZE_TIME:-2:00:00}"
 
