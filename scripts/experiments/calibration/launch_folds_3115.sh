@@ -130,19 +130,27 @@ export CALIB_GRES=none
 # knobs; sizing from the binary cell alone would have picked a memory limit the
 # region arm cannot run in.
 #
-# 10G, not 8G: the region cell peaked at 5.5 GB, so 8G left only 31% headroom on
-# a 1.5-hour cell across categories whose positive counts vary.  An OOM here is
-# not a slow cell, it is a lost one that resume has to redo.
+# 9G x 105 = 945G of the 1074G per-user allowance under QOS `cpu_limit` (88%),
+# which is what preflight's check 8 will accept - it fails at 90%, because an
+# array claiming the whole allowance parks your OWN later jobs behind it in
+# QOSMaxMemoryPerUser (#3129, three times in one evening).
 #
-# 100, not the 120 the `cpu_limit` QOS allows: 100 x 10G = 1000G of the 1074G
-# per-user memory allowance, and it costs nothing in wall clock.  The critical
-# path is "a region cell that starts once the binary cells free their slots",
-# which is ~21m + ~92m either way; concurrency above 100 only widens the first
-# wave, which is already all binary cells.
-export CALIB_MEM="${CALIB_MEM:-10G}"
+# 9G, not 8G: the region cell peaked at 5.7 GB, so 8G leaves 29% headroom on a
+# 1.5-hour cell and an OOM there is a lost cell, not a slow one.  Not more than
+# 9G either - that memory is *dataset* load, essentially identical for every
+# VG x dinov3_patch cell (the same 4193 medias), so the category-to-category
+# variance this is buying headroom against is small.
+#
+# 105, and specifically NOT below ~100: the array runs binary cells first
+# (indices 0-91), so the critical path is "a region cell that starts once those
+# free their slots" ~= 21m + 92m ~= 113m.  Concurrency at or above 100 keeps
+# every region cell inside that one wave; at 90 the last few region cells start
+# only after a SECOND wave and the array stretches to ~205m.  Higher than 105
+# buys nothing - the first wave is already all binary cells.
+export CALIB_MEM="${CALIB_MEM:-9G}"
 export CALIB_CPUS=1
 export CALIB_TIME="${CALIB_TIME:-12:00:00}"
-export CALIB_CONC="${CALIB_CONC:-100}"
+export CALIB_CONC="${CALIB_CONC:-105}"
 export CALIB_ANALYZE_MEM="${CALIB_ANALYZE_MEM:-48G}"
 export CALIB_ANALYZE_TIME="${CALIB_ANALYZE_TIME:-2:00:00}"
 
