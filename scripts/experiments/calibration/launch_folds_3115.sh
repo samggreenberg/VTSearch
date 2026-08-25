@@ -139,36 +139,35 @@ export CALIB_GRES=none
 
 # Concurrency is capped by the `cpu_limit` QOS: cpu=240 with 2 charged per task
 # (=120), so asking for more only parks the excess behind your own array.
-# --- MEASURED on this grid, 2026-08-25, by `size` (jobs 538980/538983) ---
+# --- MEASURED on THIS grid, 2026-08-25, by `size` (jobs 539432/539433) ---
 #
-#   cell   1  visual_genome_m x siglip       whole_image  20m33s   594 MB
-#   cell  92  visual_genome_m x dinov3_patch max_patch  1h32m11s  5.52 GB
+#   cell  0  vg_scale_any x siglip        whole_image  20m55s  0.53 GB
+#   cell 48  vg_scale_any x dinov3_patch  max_patch     >1h    7.12 GB
 #
-# The region cell is 4.5x the binary one and 10x its memory, so IT sets both
-# knobs; sizing from the binary cell alone would have picked a memory limit the
-# region arm cannot run in.
+# Sized on `vg_scale_any`, not carried over from the `visual_genome_m` grid this
+# study started on: that one's region cell peaked at 5.52 GB and this one is
+# already at 7.12 GB, so reusing the old number would have under-provisioned
+# every region cell by 29%.  1.85x the medias (7749 vs 4193) barely moved the
+# BINARY cell (20m33s -> 20m55s) but moved the region cell's memory a lot, which
+# is why both have to be measured rather than scaled.
 #
-# 9G x 105 = 945G of the 1074G per-user allowance under QOS `cpu_limit` (88%),
-# which is what preflight's check 8 will accept - it fails at 90%, because an
-# array claiming the whole allowance parks your OWN later jobs behind it in
-# QOSMaxMemoryPerUser (#3129, three times in one evening).
+# The region cell sets both knobs; sizing from the binary cell alone would pick a
+# limit the region arm cannot run in (0.53 GB vs 7.12 GB is a 13x difference).
 #
-# 9G, not 8G: the region cell peaked at 5.7 GB, so 8G leaves 29% headroom on a
-# 1.5-hour cell and an OOM there is a lost cell, not a slow one.  Not more than
-# 9G either - that memory is *dataset* load, essentially identical for every
-# VG x dinov3_patch cell (the same 4193 medias), so the category-to-category
-# variance this is buying headroom against is small.
+# 12G: the region peak is 7.12 GB, held flat across three sstat samples a minute
+# apart, so that IS the peak and not a still-climbing reading.  12G leaves 41%
+# headroom; an OOM here is a lost cell, not a slow one.
 #
-# 105, and specifically NOT below ~100: the array runs binary cells first
-# (indices 0-91), so the critical path is "a region cell that starts once those
-# free their slots" ~= 21m + 92m ~= 113m.  Concurrency at or above 100 keeps
-# every region cell inside that one wave; at 90 the last few region cells start
-# only after a SECOND wave and the array stretches to ~205m.  Higher than 105
-# buys nothing - the first wave is already all binary cells.
-export CALIB_MEM="${CALIB_MEM:-9G}"
+# 80: 80 x 12G = 960G of the 1074G per-user allowance under QOS `cpu_limit`
+# (89%), just inside preflight check 8's 90% failure line.  An array claiming the
+# whole allowance parks your OWN later jobs behind it in QOSMaxMemoryPerUser
+# (#3129, three times in one evening).  The array runs binary cells first
+# (indices 0-47), so the critical path is a region cell starting once those free
+# their slots: ~21m + one region cell.
+export CALIB_MEM="${CALIB_MEM:-12G}"
 export CALIB_CPUS=1
 export CALIB_TIME="${CALIB_TIME:-12:00:00}"
-export CALIB_CONC="${CALIB_CONC:-105}"
+export CALIB_CONC="${CALIB_CONC:-80}"
 export CALIB_ANALYZE_MEM="${CALIB_ANALYZE_MEM:-48G}"
 export CALIB_ANALYZE_TIME="${CALIB_ANALYZE_TIME:-2:00:00}"
 
