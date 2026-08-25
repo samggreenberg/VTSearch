@@ -64,6 +64,40 @@ reorders what was previously planned here.
 
 <!-- item-sep -->
 
+- **DocMarks — finish the scanned-document corpus and run it.** The builder is in
+  `scripts/experiments/docmarks/` (see its README): SPODS + StaVer + Tobacco800
+  as real-GT anchor classes, UCSF IDL as haystack and weakly-labelled letterhead
+  classes, LogoDet-3K artwork on held-out scans as a sweepable synthetic
+  stratum, in one manifest with nested 5k/50k/200k tiers. It exists because the
+  2026-07-13 result — the first configuration where structural search beats the
+  deep embedder on a real corpus — rests on two corpora of 259 and 1,088 pages
+  with as few as 9 instances per class, which cannot separate a good ranker from
+  a lucky one. Owed:
+  - **Run it.** `build_corpus.py --probe`, then tier `s`, then
+    `embed_corpus.py`. Nothing here has touched the real archives yet: the
+    parsers are tested against fixtures built from each source's documented
+    layout, and SPODS's layout is confirmed from its RAR headers, but StaVer's
+    and Tobacco800's Kaggle mirrors are unverified until a token is present.
+  - **The eval side of the contamination rule.** `classes.json` records each
+    class's `eligible_distractor_sources` and *nothing consumes it yet*. Until a
+    scoring path restricts each class's candidate pool to its eligible sources,
+    a Tobacco800 query scored over the whole corpus is being marked wrong for
+    retrieving real matches out of UCSF's tobacco archive. This is the one item
+    that makes the rest of the design load-bearing rather than decorative.
+  - **The three human passes**, in value order: `letterhead` (does the weak UCSF
+    label hold? the whole haystack layer's usability is downstream of this
+    number), `cluster` (are the derived SPODS/StaVer identities real?),
+    `distinctive` (which marks are instances rather than shapes?).
+  - **Set `--min-instances` from the real survival curve**, which the build
+    prints. The default of 10 is a placeholder chosen without data.
+  - **More artwork and more haystack, if the first run justifies it**: the ICDAR
+    2023 ReST seal set (10,000 real seals, behind an RRC registration, so it
+    needs a manual fetch into `--synth-pool-dir`), full RVL-CDIP rather than the
+    100-per-class sample the downloader currently wires, and DocILE (~932k real
+    invoices grouped into vendor layout clusters, behind a research access form).
+
+<!-- item-sep -->
+
 - **3-DoF geometry as a per-media-profile default.** `scale_translation`
   (isotropic scale + translation, no rotation) is implemented in
   `vtscore/media/structural_geometry.py` and is a **free precision win** on flat
