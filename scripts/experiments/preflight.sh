@@ -26,6 +26,7 @@ MODE_CONTRAST=""
 REUSE_PREPARE=""
 JOB_NAME=""
 MEM_PER_TASK=""
+HAS_PATCH_CELLS=0
 CONC=""
 DIVERGES="${PREFLIGHT_DIVERGES:-}"
 
@@ -41,6 +42,7 @@ while [[ $# -gt 0 ]]; do
     --job-name) JOB_NAME="$2"; shift 2 ;;
     --diverges) DIVERGES="$2"; shift 2 ;;
     --mem) MEM_PER_TASK="$2"; shift 2 ;;
+    --patch) HAS_PATCH_CELLS=1; shift ;;
     --conc) CONC="$2"; shift 2 ;;
     --warn-only) WARN_ONLY=1; shift ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
@@ -50,7 +52,7 @@ done
   echo "usage: preflight.sh --exp DIR [--arms a,b,c] [--need-gb N]" >&2
   echo "                    [--require-region-voting DATASET:EMBEDDER]" >&2
   echo "                    [--reuse-prepare RESULTS_DIR]" >&2
-  echo "                    [--job-name NAME] [--mem 64G] [--conc N]" >&2
+  echo "                    [--job-name NAME] [--mem 64G] [--conc N] [--patch]" >&2
   echo "                    [--diverges knob1,knob2]   # knobs this study MEANS to pin off-production" >&2
   exit 2
 }
@@ -310,6 +312,24 @@ PY
       ;;
     *) say_fail "could not check patch styles: $STYLE_VERDICT" ;;
   esac
+fi
+
+# --- 7b. A region-voting cell needs region-voting memory ---------------------
+# A max_patch cell carries the patch grid and max-pools over it; measured peaks
+# are 9-14 GB depending on pool size (GRID-PLAYBOOK.md).  Sizing such an array
+# from a whole-image cell is not a near miss -- it is a different order of
+# magnitude, and the failure arrives as OUT_OF_MEMORY on most of the arm after
+# the array has been running long enough to look healthy (#3156: 74 of 108).
+if [[ "$HAS_PATCH_CELLS" == "1" && -n "$MEM_PER_TASK" ]]; then
+  mem_mb=$(_to_mb "$MEM_PER_TASK")
+  if (( mem_mb < 12288 )); then
+    say_fail "patch cells requested with --mem $MEM_PER_TASK (< 12G)"
+    echo "        -> measured max_patch peaks are 9-14 GB; see GRID-PLAYBOOK.md"
+    echo "        -> size from a cell that actually resolved to a patch style,"
+    echo "           not from one that fell back to whole_image"
+  else
+    say_ok "patch cells with --mem $MEM_PER_TASK (measured peaks 9-14 GB)"
+  fi
 fi
 
 # --- 8. Your own per-user memory allowance ----------------------------------

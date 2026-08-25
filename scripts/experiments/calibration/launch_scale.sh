@@ -136,8 +136,10 @@ cells)
     echo "ERROR: could not determine cell count (got '$N')" >&2; exit 1
   fi
   echo "cells: $N (array 0-$((N-1))%$CONC on $PARTITION)"
+  PATCH_FLAG=""
+  case "$CALIB_VGSCALE_EMBEDDERS" in *_patch*) PATCH_FLAG="--patch" ;; esac
   bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod \
-    --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC" || {
+    --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC" $PATCH_FLAG || {
     echo "PREFLIGHT FAILED" >&2; exit 2; }
   submit cells --job-name="$JOB_NAME" --array="0-$((N-1))%$CONC" \
     --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
