@@ -120,7 +120,12 @@ def load_cells(cells_dir: Path) -> pd.DataFrame:
             empty += 1
             continue
         try:
-            f = pd.read_csv(p)
+            # `low_memory=False` because pandas otherwise types each chunk of a
+            # column independently and warns on `cut_fallback` /
+            # `cut_fallback_kind`, whose values differ between the base rows and
+            # the variant rows.  The warning is noise, but it fires once per cell
+            # and buries the load line that reports what was actually dropped.
+            f = pd.read_csv(p, low_memory=False)
         except Exception as exc:  # noqa: BLE001 - a truncated cell must be counted, not crash the run
             common.log(f"  UNREADABLE {p.name}: {exc}")
             unreadable += 1
