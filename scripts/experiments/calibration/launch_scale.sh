@@ -146,6 +146,23 @@ cells)
     --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
   ;;
 
+redo)
+  # Re-run a specific set of array indices. A failed task leaves its PREVIOUS
+  # output in place, so a partial re-run silently mixes two runs' cells unless
+  # the stale files are deleted first -- delete them, then pass the indices
+  # here. `--mem` must be sized from a cell of the SAME KIND that failed: a
+  # max_patch cell peaks near 9G where a whole_image one peaks under 1G, and
+  # sizing the array from the wrong kind is what produced the OOMs this
+  # subcommand exists to repair.
+  IDXS="${2:?usage: launch_scale.sh redo <comma-separated indices>}"
+  echo "re-running indices: $IDXS (mem=$MEM)"
+  submit redo --job-name="$JOB_NAME-redo" --array="$IDXS%$CONC" \
+    --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
+    --partition="$PARTITION" --export=ALL \
+    --output="$LOGS/redo-%A_%a.out" \
+    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
+  ;;
+
 status)
   echo "=== queue ==="
   squeue -u "$USER" -o "%.10i %.16j %.9T %.11M %.6D %R" | grep -E "scale|JOBID" || true
@@ -153,5 +170,5 @@ status)
   ls "$CALIB_RESULTS/cells" 2>/dev/null | wc -l
   ;;
 *)
-  echo "usage: launch_scale.sh {prepare|size <idx>|cells|status}" >&2; exit 1 ;;
+  echo "usage: launch_scale.sh {prepare|size <idx>|cells|redo <idx-list>|status}" >&2; exit 1 ;;
 esac
