@@ -74,6 +74,7 @@ correct union of the two branches with no judgement involved.
 |---|---|---|
 | 2026-08-24 | [a cost re-evaluated at a rounded threshold is a different cost](lessons/2026-08-24-a-cost-recomputed-at-a-rounded-threshold.md) | #2883 |
 | 2026-08-24 | [a login-node timing nearly cut a whole arm from a study](lessons/2026-08-24-a-login-node-timing-nearly-cut-an-arm.md) | #2883 |
+| 2026-08-24 | [a rebuild silently retired the images a human had just reviewed](lessons/2026-08-24-review-orphaned-by-resampling.md) | — |
 | 2026-08-21 | [a launcher pinned a head that stopped being production](lessons/2026-08-21-a-launcher-pinned-a-head-that-stopped.md) | #2865 |
 | 2026-08-21 | [a pooled number over an axis that rescales the metric is that axis's endpoints](lessons/2026-08-21-a-pooled-number-over-an-axis-that-rescales.md) | #2865 |
 | 2026-08-20 | [the rebuild fixed one axis and silently moved another](lessons/2026-08-20-the-rebuild-reproduced-the-pin-and-moved-the-card.md) | #3160 |
