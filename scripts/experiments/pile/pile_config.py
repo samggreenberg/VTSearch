@@ -65,7 +65,14 @@ DATASETS: dict[str, dict] = {
     # replacement for `vg_box_*` -- those measured what they measured and stay
     # reproducible -- but the two are not comparable: disjoint vocabularies
     # against a fixed one.
-    "vg_scale": {"boxed": True, "kind": "vg_scale"},
+    #
+    # Drawn from the half of VG that COCO sourced, and labelled from COCO's
+    # exhaustive annotation rather than VG's free text, because VG's own labels
+    # cannot support the construction: measured on this pool its recall over C
+    # is 0.76, and 1.4% of the images it calls negative actually hold the object
+    # (`coco_anchor.py`). At 80 positives per cell that would be ~54 hidden
+    # positives sitting in the negatives.
+    "vg_scale": {"boxed": True, "kind": "vg_scale", "labels": "coco"},
 }
 
 #: Box-size bands, as a fraction of image area, anchored to the patch
@@ -254,9 +261,9 @@ SCALE_CLASSES: tuple[str, ...] = (
 )
 
 #: Images per ``(class, band)`` cell, and the shared negative pool every cell
-#: draws from. ``stop sign`` binds the positive count: 104 images in its small
-#: band is the smallest per-band supply in *C*, so 100 is the largest round
-#: number every one of the 36 cells can fill without replacement.
+#: draws from. The pool is the whole of VG, labelled by VG and repaired from
+#: COCO where an exhaustive reference exists, so the binding supply is the union
+#: of both halves; the builder logs any cell it cannot fill.
 #:
 #: Cells are **designated**, not inferred: each is exactly these positives plus
 #: this negative pool, and every other image in the pickle is excluded from it.
@@ -266,6 +273,25 @@ SCALE_CLASSES: tuple[str, ...] = (
 #: wave 2 of the overview benchmark non-comparable.
 SCALE_N_POS = int(os.environ.get("VTS_SCALE_N_POS", "100"))
 SCALE_N_NEG = int(os.environ.get("VTS_SCALE_N_NEG", "3900"))
+#: Extra negatives drawn into the pickle but designated into no cell. A human
+#: verdict can retire a contaminated negative later; re-designating from a spare
+#: is a relabel, while drawing a fresh one would mean re-embedding every cell.
+SCALE_N_NEG_SPARE = int(os.environ.get("VTS_SCALE_N_NEG_SPARE", "300"))
+
+
+#: How far a VG copy's aspect ratio may drift from the COCO original before its
+#: boxes are considered untransferable. Normalised coordinates survive a rescale
+#: but not a re-crop or a rotation, and 49 of the 51,497 overlaps are one of
+#: those -- small enough to ignore by accident, which is why it is a constant
+#: with a check rather than an assumption.
+MAX_ASPECT_DRIFT = float(os.environ.get("VTS_MAX_ASPECT_DRIFT", "0.01"))
+
+
+#: Which images each cell currently holds. Selection is hash-stable, but a
+#: roster is what carries membership across a CHANGE of selection rule -- and
+#: across the corrections that are the whole point of the review, since a review
+#: is only worth what it still covers after the next rebuild.
+ROSTER = Path(os.environ.get("VTS_SCALE_ROSTER", str(PILE / "vg_scale_roster.json")))
 
 
 def scale_cell(category: str, band: str) -> str:
