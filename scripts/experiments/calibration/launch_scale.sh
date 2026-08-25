@@ -28,12 +28,18 @@ export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/scale-3156}"
 export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
 export CALIB_DATASETS="${CALIB_DATASETS:-vg_scale}"
-# siglip is the shipped default and votes binary; dinov3_patch is the only
-# patch-capable embedder in the pile and is what makes region voting real.
-# siglip2_l is deliberately absent: the overview benchmark could not resolve
-# siglip vs siglip2_l on cost at three seeds, so a third encoder would buy an
-# unreadable column at 1.5x the array.
-export CALIB_VGSCALE_EMBEDDERS="${CALIB_VGSCALE_EMBEDDERS:-siglip,dinov3_patch}"
+# siglip is the shipped default and votes binary; siglip2_l is the premium
+# whole-image end; dinov3_patch is the only patch-capable embedder in the pile
+# and is what makes region voting real.
+#
+# All three cells are already embedded in the pile, so a column costs training
+# and inference only -- no encoder time. And the encoder here is a BLOCKING
+# factor, not the contrast: the question is whether the band effect holds
+# across encoders, so a second whole-image encoder replicates the finding
+# rather than competing with the first. ("siglip vs siglip2_l is unresolvable
+# on cost at three seeds" is a fact about comparing the two encoders, and says
+# nothing about whether each one shows the same size penalty.)
+export CALIB_VGSCALE_EMBEDDERS="${CALIB_VGSCALE_EMBEDDERS:-siglip,siglip2_l,dinov3_patch}"
 # Every category is a designated cell; selecting a subset would discard the
 # design, and prevalence-spreading is meaningless when prevalence is 0.0250
 # everywhere by construction.
