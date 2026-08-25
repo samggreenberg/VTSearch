@@ -118,15 +118,22 @@ export CALIB_ANALYZE_TIME="${CALIB_ANALYZE_TIME:-2:00:00}"
 
 # Pin the BLAS pools to one thread each.  sklearn's `GaussianMixture` spawns a
 # pool per fit, and this study's dominant cost is the anchored arm's per-fold EM
-# - sum over the K grid, so 52 fits per step at Kmax=16.  At these sizes the pool
-# costs more than the arithmetic, so the default threading makes each fit
-# *slower*; and 120 concurrent cells each spawning a node-sized pool
-# oversubscribes whatever node they land on, which is antisocial as well as slow
-# (#2883's lesson: `lessons/2026-08-24-a-login-node-timing-nearly-cut-an-arm.md`).
+# - summed over the K grid, 52 fits per step at Kmax=16 - so #2883's lesson
+# (`lessons/2026-08-24-a-login-node-timing-nearly-cut-an-arm.md`) predicts the
+# pool costing more than the arithmetic at these sizes.
 #
-# Exported HERE rather than inside a mode, so `size` and `arms` measure and run
-# under the SAME environment - a cell timed with different threading than the
-# array will use is a guess with a unit attached.
+# MEASURED, and the prediction does NOT hold on a compute node.  Cell 1
+# (visual_genome_m x siglip, whole_image, 150 steps) came back at **20m33s**
+# unpinned and **20m31s** pinned - two seconds apart, i.e. nothing.  #2883's 36x
+# was a LOGIN-node effect, where the box is shared and already oversubscribed;
+# a cpu-partition task with `--cpus-per-task=1` does not reproduce it.
+#
+# The pins stay anyway, on the other half of that lesson: 120 concurrent cells
+# each spawning a node-sized pool oversubscribes whatever node they land on,
+# which is antisocial whether or not it is slow for us.  They are exported HERE
+# rather than inside a mode so `size` and `arms` measure and run under the SAME
+# environment - a cell timed with different threading than the array will use is
+# a guess with a unit attached, which is the part of the lesson that did apply.
 export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
 export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
 export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"

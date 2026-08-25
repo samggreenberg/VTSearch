@@ -48,3 +48,31 @@ resolve the import, and checks 6, 7 and 12 fail with a one-line
 *"NOT checked: python cannot import the tree (see above)"* instead of a
 traceback. They still **fail** — nothing is downgraded, and a run cannot launch
 on unverified premises.
+
+
+---
+
+## Addendum, same day — and the sibling lesson did not replicate
+
+While sizing this study's cells I applied #2883's thread-pinning fix
+(`OMP_NUM_THREADS=1` and siblings) on the reasoning that the anchored arm fits 52
+`GaussianMixture` mixtures per step, so the per-fit BLAS pool should dominate.
+Then I measured it, paired, on the same cell:
+
+| cell 1 — `visual_genome_m x siglip`, whole_image, 150 steps | elapsed | MaxRSS |
+|---|---:|---:|
+| unpinned | 20m33s | 594 MB |
+| pinned | 20m31s | 511 MB |
+
+**Two seconds apart.** #2883's 36x was a *login-node* effect — a shared box,
+already oversubscribed — and a cpu-partition task with `--cpus-per-task=1` does
+not reproduce it. The pins stayed, but on the other half of that lesson (120
+concurrent cells each spawning a node-sized pool is antisocial regardless), and
+the launcher's comment now carries both numbers instead of the prediction.
+
+Worth recording because of *how* nearly it went the other way: mid-run I reported
+that pinning "looks like it helps", comparing a job **8:43 into its run** against
+a **completed 20:33** one. That is not a comparison at all, and it would have
+written a fictional speedup into a launcher comment where the next reader would
+have believed it. A partial timing is not a timing — the same shape as the
+lesson it came from, one level up.
