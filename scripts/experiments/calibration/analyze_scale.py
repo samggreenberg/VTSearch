@@ -33,6 +33,31 @@ from pathlib import Path
 BANDS = ("small", "medium", "large")
 
 
+def freshness_report(cells_dir: Path, expected: int) -> tuple[int, list[str]]:
+    """How many cells exist, and how many share the newest run's generation.
+
+    File existence is not evidence of a result: a task that dies leaves its
+    PREVIOUS output in place, so a directory can hold a full set of cells from
+    two different runs and look complete. Cells more than a few hours older than
+    the newest are reported as suspect rather than silently averaged in.
+    """
+    import time
+
+    files = [f for f in sorted(cells_dir.glob("task_*.csv")) if "__" not in f.name]
+    if not files:
+        return 0, []
+    newest = max(f.stat().st_mtime for f in files)
+    stale = [f.name for f in files if newest - f.stat().st_mtime > 6 * 3600]
+    print(f"cells present: {len(files)} of {expected} expected")
+    print(f"newest cell written: {time.strftime('%Y-%m-%d %H:%M', time.localtime(newest))}")
+    if stale:
+        print(f"WARNING: {len(stale)} cells are >6h older than the newest — from an earlier run?")
+        print(f"         e.g. {', '.join(stale[:5])}")
+    if len(files) != expected:
+        print(f"WARNING: {expected - len(files)} cells missing; results below are a SUBSET")
+    return len(files), stale
+
+
 def load_rows(cells_dir: Path) -> list[dict]:
     import csv
 
@@ -81,10 +106,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--exp", default=f"/expscratch/{os.environ.get('USER', 'sgreenberg')}/scale-3156")
     ap.add_argument("--at-step", type=int, default=150, help="votes spent at which to read the headline")
+    ap.add_argument("--expect", type=int, default=324, help="cells the grid should have produced")
     ap.add_argument("--out", default="")
     args = ap.parse_args()
 
     cells = Path(args.exp) / "results" / "cells"
+    freshness_report(cells, args.expect)
     rows, n_files, dropped = load_rows(cells)
     print(f"loaded {len(rows)} rows from {n_files} cell files ({dropped} unreadable)")
 
