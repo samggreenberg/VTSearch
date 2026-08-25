@@ -146,4 +146,9 @@ the fix.
 - **#3116** — re-decompose against a fixed reference, emit `sd(threshold)` per
   K, and unfreeze the GMM cut in the fold-count arms.
 
-Both are answered by one run and should not be run separately.
+Both are answered by one run and should not be run separately — that run is
+[`calibration-fold-combine/`](../calibration-fold-combine/REPORT.md), which also
+corrects two errata recorded above: the `voting` label is now derived per cell
+from `experiment_config.region_voting_for` rather than from the dataset name (so
+`visual_genome_m × siglip` groups as binary in the code and not only by hand),
+and no head is pinned.
