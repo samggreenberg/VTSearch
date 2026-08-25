@@ -14,6 +14,8 @@
 
 <!-- build: figs/calib-fold-anchored-flow.build5.png -->
 
+<!-- build: figs/calib-fold-anchored-flow.build6.png -->
+
 <!-- Open with the headline, because it is the whole iteration. The blend
      averages two finished answers. This one fuses the evidence *before*
      answering — the difference between asking two people and getting one
@@ -26,15 +28,20 @@
 <!-- **c** — Where the two lines meet. Each fold model scores the whole corpus,
      and that is the panel underneath it: the same histogram iteration 2
      fitted, one per fold, drawn as bare bars with nothing over them. Say that
-     out loud — it is the shape of the data and it is all anyone has.
-     Iteration 2 had to look at exactly this and *assume* which mound was
-     Good. -->
+     out loud — it is the shape of the data and it is all anyone has. -->
 
-<!-- **d** — The beat of the talk. The held-out votes arrive — the same checks
+<!-- **d** — Fit it, and there is iteration 2 again: two components, one low
+     and one high. But look at what fills them. Every one of those question
+     marks is the same question — *which of these is the Good one?* — and the
+     fit cannot answer it, because it has read no labels. That colouring is an
+     assumption, and iteration 2 shipped it. -->
+
+<!-- **e** — The beat of the talk. The held-out votes arrive — the same checks
      and crosses from iteration 1, on the same baseline, the identical evidence
-     — and the humps take the Good and Bad hatching of the block they came
-     from. Nothing about the shape changed. What changed is that the components
-     are now *identified* rather than guessed, and you can see who did it. -->
+     — and the question marks give way to the Good and Bad hatching of the
+     block those votes came from. Nothing about the shape changed. What changed
+     is that the components are now *identified* rather than guessed, and you
+     can see who did it. -->
 
 <!-- The line the iteration turns on: the labels' job is to **identify** the
      components, not to estimate them. Fifty thousand scores describe two mounds
@@ -55,11 +62,11 @@
      around two and a half percent at the shipped setting. That ratio is the
      previous slide's hand-tuned ramp arriving *derived*. -->
 
-<!-- **e** — Each fold cuts at the midpoint of its own two fitted means. Same
+<!-- **f** — Each fold cuts at the midpoint of its own two fitted means. Same
      rule iteration 2 used, on a fit that has now been told which mound is
      which. -->
 
-<!-- **f** — And the last line, which you should undercut in the same breath.
+<!-- **g** — And the last line, which you should undercut in the same breath.
      Averaging θ₁ and θ₂ is drawn plainly here and production does not do it:
      two fold models score the same corpus on scales that need not agree. The
      fix is the next slide, so spend one sentence on it. -->

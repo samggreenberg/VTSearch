@@ -10,10 +10,6 @@
 
 <!-- build: figs/calib-blend-flow.build3.png -->
 
-<!-- build: figs/calib-blend-flow.build4.png -->
-
-<!-- build: figs/calib-blend-flow.build5.png -->
-
 <!-- Open by naming what the room is looking at, because this is the first
      figure that is an assembly rather than a new idea: the left half is the
      cross-calibration slide, the right half is the mixture slide, and the top
@@ -21,24 +17,26 @@
      only new thing is the last line. -->
 
 <!-- **a** — The spine: the corpus, the votes drawn out of it, the model trained
-     on those votes. -->
+     on those votes. That much is "how we made M₀", and the room has seen it
+     twice. -->
 
-<!-- **b** — The mixture branch: M₀ scores the whole corpus. **c** — Fit it, cut
-     at the midpoint. The estimator that reads no labels and so cannot
-     starve. -->
+<!-- **b** — The mixture branch, arriving whole: M₀ scores the corpus, the fit
+     goes on, the midpoint is cut. Say it as a reminder rather than a
+     derivation — *remember how we made θ_G* — the estimator that reads no
+     labels and so cannot starve. -->
 
-<!-- **d** — The fold branch: split the votes, a model per half, each scoring
-     the half it never saw. **e** — Cut each, average. The estimator that reads
-     nothing but labels and so starves early. -->
+<!-- **c** — And the fold branch, whole in the same way: split the votes, a
+     model per half, each scoring the half it never saw, cut each, average.
+     *Remember how we made θ_X* — the estimator that reads nothing but labels
+     and so starves early. Note the geometry while it lands: the three cuts are
+     ticked on one baseline because they are three answers to the same
+     question, and the two rivals are drawn the same width because neither
+     dominates. -->
 
-<!-- **f** — The property the whole slide turns on, which the figure states by
-     geometry: the three cuts are ticked on one baseline because they are three
-     answers to the same question, and the two rivals are drawn the same width
-     because neither dominates. -->
+<!-- **d** — The move, which is embarrassingly simple. -->
 
-<!-- Then the move, which is embarrassingly simple: do not choose. Average them.
-     That shipped as "safe thresholds", and it is the single biggest win in the
-     line. -->
+<!-- Do not choose. Average them. That shipped as "safe thresholds", and it is
+     the single biggest win in the line. -->
 
 <!-- Say aloud what the figure does *not* say, rather than letting someone ask:
      that average is a **weighted** one. How much weight, and how the weight

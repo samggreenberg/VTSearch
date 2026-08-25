@@ -61,7 +61,7 @@
      those items come back under one cut and not the other. Where the line goes
      is the user's call, not the data's. -->
 
-<!-- **i** — And here is the sting. Go back to the moment it chose a question:
+<!-- **i** — And here is the twist. Go back to the moment it chose a question:
      the same three cuts were available *then*. Which one you were on decides
      which item sits nearest the line — so the threshold did not only pick what
      came back at the end, it picked the question that got you here. Land on
