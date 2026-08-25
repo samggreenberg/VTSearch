@@ -52,7 +52,11 @@ def _cell_band(cell: str) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     base = pc.PILE.parent / "vgscale-3156"
-    ap.add_argument("--verdicts", default=str(base / "verdicts_20260820b.json"))
+    ap.add_argument(
+        "--verdicts",
+        default=f"{base / 'verdicts_20260820b.json'},/exp/sgreenberg/vgscale-3156-labelsets/verdicts_audit_20260825.json",
+        help="verdict files, comma-separated; later files win",
+    )
     ap.add_argument("--triage", default=str(base / "tri_flags_all.json"))
     ap.add_argument("--adjudication", default=str(base / "adjudication_ml_20260820.json"))
     ap.add_argument("--sheets", default=str(base / "sheets_neg"))
@@ -79,10 +83,20 @@ def main() -> int:
             adj[(int(a["image_id"]), a["class"])] = a
 
     # --- human verdicts
-    for v in json.loads(Path(args.verdicts).read_text()):
+    # `ruled` records every pair a human decided, in EITHER direction. A triage
+    # flag must never overrule one: the audit measured the flags at 0.44
+    # precision, so applying an unaudited flag over a human "absent" would
+    # inject more error than it removes.
+    ruled: set[tuple[int, str]] = set()
+    verdicts = []
+    for path in args.verdicts.split(","):
+        if Path(path).exists():
+            verdicts += json.loads(Path(path).read_text())
+    for v in verdicts:
         key = (int(v["image_id"]), v["class"])
+        ruled.add(key)
         band = _cell_band(cells.get(key, ""))
-        if v["stratum"] in ("boundary", "random"):
+        if v["stratum"] in ("boundary", "random", "flag", "audit"):
             if v["human"] == "present":
                 box = v.get("box")
                 out[key] = {
@@ -143,7 +157,7 @@ def main() -> int:
                 if iid is None:
                     continue
                 key = (iid, cls)
-                if key in out:  # a human already ruled on this pair
+                if key in ruled:  # a human ruled on this pair, either way
                     stats["triage_deferred_to_human"] += 1
                     continue
                 out[key] = {
