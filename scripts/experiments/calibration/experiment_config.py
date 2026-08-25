@@ -99,6 +99,14 @@ BOXED_BY_DATASET: dict[str, bool] = {
     "vg_box_small": True,
     "vg_box_medium": True,
     "vg_box_large": True,
+    # The same-class-across-bands set (#3156). Omitting it here does not fail
+    # loudly: `styles_for` reads a missing entry as boxless and silently falls a
+    # patch embedder back to whole_image, which is the right behaviour for a
+    # genuinely boxless dataset and the wrong one for a boxed dataset the table
+    # has simply never heard of. That cost a full 108-cell arm, and it is the
+    # same shape as #2877/#2897/#2905: the premise has to be asserted per cell,
+    # and here the premise itself lived in a second registry that drifted from
+    # `pile_config.DATASETS`.
     "vg_scale": True,
     "vg_scale_any": True,
 }

@@ -92,6 +92,22 @@ prepare)
   # checked (see scripts/experiments/lessons/).
   ( cd "$WT/scripts/experiments/pile" && python check_review_coverage.py ) || {
     echo "REVIEW COVERAGE FAILED — refusing to launch a study on it" >&2; exit 3; }
+  # Assert the arm the study is FOR actually exists. A patch embedder on a
+  # dataset the config forgot to mark boxed runs whole_image without complaint,
+  # which is indistinguishable from success in every output.
+  python - <<'PYCHK' || { echo "REGION VOTING IS OFF for the patch arm — refusing to launch" >&2; exit 4; }
+import sys
+sys.path.insert(0, ".")
+import experiment_config as cfg
+ds = cfg.DATASETS[0]
+bad = [e for e in cfg.embedders_for_dataset(ds)
+       if cfg.is_patch_embedder(e) and not cfg.region_voting_for(ds, e)]
+if bad:
+    print(f"  {ds}: patch embedders {bad} would run whole_image", file=sys.stderr)
+    raise SystemExit(1)
+for e in cfg.embedders_for_dataset(ds):
+    print(f"  {ds} x {e}: styles={cfg.styles_for(ds, e)} region_voting={cfg.region_voting_for(ds, e)}")
+PYCHK
   echo "CALIB_EXP=$CALIB_EXP  datasets=$CALIB_DATASETS  embedders=$CALIB_VGSCALE_EMBEDDERS  seeds=$CALIB_N_SEEDS"
   submit prepare --job-name=scale-prep --mem=96G --cpus-per-task=8 \
     --time=3:00:00 --partition="$PARTITION" --export=ALL \
