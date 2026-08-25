@@ -174,6 +174,63 @@ class TestDegenerateFolds:
         assert value == threshold_from_fold_orderings([self.SINGLE_CLASS], 0)
 
 
+class TestDegeneracyIsStructurallyImpossible:
+    """#3115's contamination hypothesis cannot fire under the shipped splitter.
+
+    The issue's third argument is that *"a degenerate fold (holdout with no
+    positives) injects its scores straight into a pooled quantile"*, which the
+    median combine would resist. Measured on the #3115 run, **no fold was ever
+    dropped** - `any_dropped_rate` is 0.000 in every window at every K. That is
+    not a property of the dataset; it is `compute_fold_orderings`:
+
+    * it refuses outright unless there are **>= 2 of each class**, returning no
+      orderings at all rather than a degenerate one, and
+    * its per-class train size is ``max(1, min(class_total - 1, target))``, so
+      each class keeps **at least one** item on each side of every split.
+
+    So a single-class holdout cannot be produced, and `conformal_threshold`'s
+    0.5 single-class branch is unreachable from this path. These tests pin that,
+    because it is what licenses reading the median legs as "aggregation
+    robustness over non-degenerate folds" rather than as the contamination test
+    the issue asked for - and because a future change to the splitter that
+    quietly drops stratification would otherwise revive the hazard in silence.
+    """
+
+    @staticmethod
+    def _orderings(n_pos, n_neg, k, seed=0):
+        from vtscore.training.thresholds import compute_fold_orderings
+
+        rng = np.random.default_rng(seed)
+        dim = 8
+        X = [rng.standard_normal(dim).astype(np.float32) for _ in range(n_pos + n_neg)]
+        y = [1.0] * n_pos + [0.0] * n_neg
+        return compute_fold_orderings(X, y, dim, rng=np.random.RandomState(0), calibrate_count=k)
+
+    @pytest.mark.parametrize("n_pos", [2, 3, 5, 9])
+    @pytest.mark.parametrize("k", [1, 2, 4])
+    def test_every_holdout_carries_both_classes(self, n_pos, k):
+        orderings, fallback = self._orderings(n_pos, 12, k)
+        assert fallback is None, "expected real orderings, got a fallback"
+        assert len(orderings) == k
+        for i, (_scores, labels) in enumerate(orderings):
+            arr = np.asarray(labels, dtype=np.float64)
+            assert (arr == 1.0).any(), f"fold {i} holdout has no positives"
+            assert (arr != 1.0).any(), f"fold {i} holdout has no negatives"
+
+    @pytest.mark.parametrize("n_pos", [0, 1])
+    def test_too_few_of_a_class_yields_no_orderings_at_all(self, n_pos):
+        """The refusal is total: no degenerate fold is emitted to be combined."""
+        orderings, fallback = self._orderings(n_pos, 12, 4)
+        assert orderings == []
+        assert fallback is not None
+
+    def test_so_the_combine_never_drops_a_fold(self, folds):
+        """The end-to-end consequence: provenance always reads ``[k/k]``."""
+        orderings, _fallback = self._orderings(6, 12, 4)
+        _v, prov = combined_fold_conformal_threshold(orderings, 0, combine="tmean")
+        assert prov == "fold_conformal_tmean[4/4]"
+
+
 def test_unknown_combine_is_rejected(folds):
     orderings, _haystacks, _final = folds
     with pytest.raises(ValueError, match="unknown fold conformal combine"):

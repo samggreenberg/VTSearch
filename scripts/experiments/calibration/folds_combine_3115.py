@@ -365,13 +365,54 @@ def report_lines(t: pd.DataFrame, degen: pd.DataFrame, checks: dict, verd: dict,
         "",
         "A single-class holdout is silently *inside* a pooled quantile and explicitly",
         "*outside* a mean.  `any_dropped_rate` bounds how much of any pooled-vs-averaged",
-        "difference that channel could explain; a near-zero rate means the median legs",
-        "are testing robustness against a hazard this grid never presents.",
+        "difference that channel could explain.",
+        "",
+        *_exposure_verdict(degen),
         "",
         md(degen) if len(degen) else "_No fold-usage counts in this run (pre-#3115 cells)._",
         "",
     ]
     return lines
+
+
+def _exposure_verdict(degen: pd.DataFrame) -> list[str]:
+    """What the measured drop rate licenses the median legs to be called.
+
+    Emitted from the data rather than written into the prose, because the honest
+    reading of ``*median - *mean`` **changes** with this number and a report that
+    fixed the wording in advance would be wrong half the time.
+    """
+    if degen.empty or "any_dropped_rate" not in degen.columns:
+        return ["_Exposure not measured in this run._"]
+    worst = float(degen["any_dropped_rate"].max())
+    if worst > 0.01:
+        return [
+            f"**Exposure is real**: up to {worst:.1%} of steps drop at least one fold, so the",
+            "median legs below are a genuine test of #3115's contamination hypothesis.",
+        ]
+    return [
+        f"**Exposure is {worst:.3f} — the contamination hypothesis is untestable here, and**",
+        "**that is a property of the estimator, not of this grid.**",
+        "",
+        "`compute_fold_orderings` refuses outright unless there are **at least two of each",
+        "class**, returning no orderings rather than a degenerate one; and its per-class",
+        "train size is `max(1, min(class_total - 1, target))`, so every class keeps at",
+        "least one item on *each* side of *every* split.  A single-class holdout therefore",
+        "cannot be produced, and `conformal_threshold`'s 0.5 single-class branch is",
+        "unreachable from this path.  #3115's third argument — *\"a degenerate fold injects",
+        'its scores straight into a pooled quantile"* — describes something the shipped',
+        "stratified splitter already prevents.",
+        "",
+        "The issue cites #2897's rising `degenerate_rate` as the signature of this, but",
+        "that column is `is_degenerate(test_scores, threshold)`: a **cut** that classifies",
+        "every test item the same way.  It says nothing about a fold's holdout.  The two",
+        "are different quantities that share a word.",
+        "",
+        "So read the `*median - *mean` legs below as **aggregation robustness over",
+        "non-degenerate folds** — resistance to a fold whose cut transfers badly, not to a",
+        "fold that had no cut to give.  That is a real effect and a different one, and the",
+        "contamination hypothesis stands untested rather than refuted.",
+    ]
 
 
 def _json(obj) -> str:
