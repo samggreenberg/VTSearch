@@ -34,7 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import docmarks_config as cfg  # noqa: E402
 from sources import _common  # noqa: E402
-from sources._common import Mark, Page  # noqa: E402
+from sources._common import Page  # noqa: E402
 
 ALL_SOURCES = ("spods", "staver", "tobacco800", "ucsf", "synth")
 
@@ -124,9 +124,7 @@ def admit_classes(
             "median_mark_px": median_px,
             "provenance": sorted(provenances),
             "page_ids": sorted(pages[pi].page_id for pi, _ in refs),
-            "eligible_distractor_sources": sorted(
-                s for s in ALL_SOURCES if cfg.eligible_distractor(source, s)
-            ),
+            "eligible_distractor_sources": sorted(s for s in ALL_SOURCES if cfg.eligible_distractor(source, s)),
             # Filled by the human passes; see make_audit_slate.py.
             "audit": {"distinctive": None, "cluster_ok": None, "letterhead_precision": None, "notes": ""},
         }
@@ -397,7 +395,9 @@ def probe(raw: Path) -> int:
 
 def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--sources", default=",".join(ALL_SOURCES), help="comma-separated subset of " + ",".join(ALL_SOURCES))
+    ap.add_argument(
+        "--sources", default=",".join(ALL_SOURCES), help="comma-separated subset of " + ",".join(ALL_SOURCES)
+    )
     ap.add_argument("--raw", type=Path, default=cfg.RAW)
     ap.add_argument("--out", type=Path, default=cfg.OUT)
     ap.add_argument("--limit", type=int, default=None, help="cap pages per anchor source (smoke builds)")
@@ -513,9 +513,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
             print(f"synth: {len(synth_pages)} page(s) over {len(pool)} class(es); {len(used)} background(s) held out")
             inventory = class_inventory(pages)
 
-    admitted, rejected = admit_classes(
-        pages, inventory, min_instances=args.min_instances, min_mark_px=args.min_mark_px
-    )
+    admitted, rejected = admit_classes(pages, inventory, min_instances=args.min_instances, min_mark_px=args.min_mark_px)
     print(f"\nadmitted {len(admitted)} class(es); rejected {len(rejected)}")
 
     needs_hand_crop = write_query_crops(pages, inventory, admitted, args.out / "queries")
@@ -580,7 +578,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
     (args.out / "build_report.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     print(f"\nwrote {n} page(s) to {args.out / 'corpus.jsonl'}")
-    print(f"  tiers (cumulative): " + ", ".join(f"{t}={cumulative[t]}" for t in cfg.TIER_ORDER))
+    print("  tiers (cumulative): " + ", ".join(f"{t}={cumulative[t]}" for t in cfg.TIER_ORDER))
     if dropped:
         print(f"  {dropped} page(s) dropped: past the largest tier's budget")
     for w in warnings:

@@ -247,9 +247,7 @@ class TestUcsf:
 
     def test_decade_split_makes_separate_classes(self, mods):
         doc = {"id": "ffbb0019", "documentdate": "1965 May 3"}
-        page = mods["ucsf"].doc_to_page(
-            doc, "/tmp/x.png", 10, 10, letterhead_author="RJR", split_by_decade=True
-        )
+        page = mods["ucsf"].doc_to_page(doc, "/tmp/x.png", 10, 10, letterhead_author="RJR", split_by_decade=True)
         assert page.marks[0].class_id == "ucsf/letterhead_rjr_1960s"
 
     def test_a_page_with_no_author_carries_no_marks(self, mods):
@@ -505,9 +503,7 @@ class TestSynthesis:
         from PIL import Image
 
         page = Image.new("RGBA", (800, 1000), (255, 255, 255, 255))
-        box = mods["synth"].paste_mark(
-            page, self._artwork(), target_px=200, rotation_deg=30.0, position=(0.5, 0.5)
-        )
+        box = mods["synth"].paste_mark(page, self._artwork(), target_px=200, rotation_deg=30.0, position=(0.5, 0.5))
         x, y, w, h = box
         # A 30-degree rotation expands the paste rectangle well beyond the mark.
         # The recorded box must follow the ink, not the rectangle.
@@ -522,9 +518,7 @@ class TestSynthesis:
 
         page = Image.new("RGBA", (600, 800), (255, 255, 255, 255))
         for pos in ((0.0, 0.0), (1.0, 1.0), (0.5, 0.5)):
-            x, y, w, h = mods["synth"].paste_mark(
-                page, self._artwork(), target_px=120, rotation_deg=0.0, position=pos
-            )
+            x, y, w, h = mods["synth"].paste_mark(page, self._artwork(), target_px=120, rotation_deg=0.0, position=pos)
             assert 0 <= x and 0 <= y and x + w <= page.width and y + h <= page.height
 
     def test_build_synthetic_pages_records_exact_ground_truth(self, mods, tmp_path):
@@ -570,8 +564,13 @@ class TestSynthesis:
     def test_empty_pool_is_an_error_not_an_empty_corpus(self, mods, tmp_path):
         with pytest.raises(ValueError, match="artwork pool"):
             mods["synth"].build_synthetic_pages(
-                [tmp_path / "bg.png"], {}, tmp_path, instances_per_class=1, size_px=(64, 128),
-                rotation_deg=(0, 0), seed=1
+                [tmp_path / "bg.png"],
+                {},
+                tmp_path,
+                instances_per_class=1,
+                size_px=(64, 128),
+                rotation_deg=(0, 0),
+                seed=1,
             )
 
 
@@ -660,6 +659,4 @@ class TestEmbedCells:
 
         forward = mods["embed"].load_medias(pages, {}, "siglip")
         reverse = mods["embed"].load_medias(list(reversed(pages)), {}, "siglip")
-        assert {i: m["origin_name"] for i, m in forward.items()} == {
-            i: m["origin_name"] for i, m in reverse.items()
-        }
+        assert {i: m["origin_name"] for i, m in forward.items()} == {i: m["origin_name"] for i, m in reverse.items()}

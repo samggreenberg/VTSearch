@@ -34,7 +34,9 @@ RAW = Path(os.environ.get("VTS_DOCMARKS_RAW", "/expscratch/{u}/docmarks/raw".for
 
 #: Where the assembled corpus lands: ``images/``, ``queries/``, ``corpus.jsonl``,
 #: ``classes.json``.  This is what a study reads and what the pile embeds.
-OUT = Path(os.environ.get("VTS_DOCMARKS_OUT", "/expscratch/{u}/docmarks/corpus".format(u=os.environ.get("USER", "user"))))
+OUT = Path(
+    os.environ.get("VTS_DOCMARKS_OUT", "/expscratch/{u}/docmarks/corpus".format(u=os.environ.get("USER", "user")))
+)
 
 # --------------------------------------------------------------------------
 # Tiers — nested by construction

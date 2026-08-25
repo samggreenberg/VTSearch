@@ -231,9 +231,7 @@ def build_synthetic_pages(
                 path=str(out_path),
                 width=width,
                 height=height,
-                marks=[
-                    Mark(kind="logo", box=p.box, class_id=p.class_id, provenance="synthetic") for p in placements
-                ],
+                marks=[Mark(kind="logo", box=p.box, class_id=p.class_id, provenance="synthetic") for p in placements],
                 meta={
                     "background": str(background),
                     "placements": [
