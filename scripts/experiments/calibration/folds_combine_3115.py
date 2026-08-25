@@ -42,6 +42,22 @@ than hoped for:
   Averaging one number is the identity.  That gives the study an exact,
   run-level acceptance check that is independent of anything the run measures:
   see :func:`control_checks`.
+
+**These arms do not reach the acquisition loop, so the usual screen caveat does
+not apply.**  The standing objection to a counterfactual re-cut is that the
+threshold chooses which item is offered next, so a different rule collects
+different votes and the screen cannot see it - that is what dissolved #2897's
+K=6 result.  Measured on the #3115 run: on **100 %** of the steps where the app
+would have had a trained detector on screen (``app_trained == 1``), the live
+threshold's provenance is ``fold_anchored``, in both voting modes; the 3-4 % of
+steps falling back to the blend all have ``app_trained == 0``.  The conformal cut
+these rules re-combine therefore never picks the next item to label, and a live
+A/B of them would have both arms collecting identical votes - a null by
+construction rather than a check.
+
+Do **not** restore that caveat without re-measuring the provenance split.  It is
+a property of this configuration (safe thresholds on, so the anchored fit almost
+always succeeds), not a standing fact about the harness.
 """
 
 from __future__ import annotations
