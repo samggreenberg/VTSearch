@@ -47,16 +47,25 @@ import sys
 from pathlib import Path
 
 import common
+import folds_combine_3115
 
 common.setup_env()
 
+# After `setup_env`: `experiment_config` imports `vtscore` at module scope.
+from experiment_config import region_voting_for  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 from _cells_io import main_frame_files  # noqa: E402
 from scipy.stats import mannwhitneyu, wilcoxon  # noqa: E402
 
-#: ``folds_k{K}_{xcal,blend,anchored}`` - the arms this analyzer owns.
-FOLD_RE = re.compile(r"^folds_k(?P<k>\d+)_(?P<arm>xcal|blend|anchored)$")
+#: The arms this analyzer owns.  ``xcal`` / ``blend`` / ``anchored`` are the
+#: fold-**count** arms (#2897, #3116); the rest are the fold-**combine** arms
+#: (#3115), which ride the same rows because they re-cut the same fold prefix.
+#: ``anchored_qmedian`` must precede ``anchored`` in the alternation - a regex
+#: alternation is first-match, not longest-match, so the other order silently
+#: parses every ``anchored_qmedian`` row's arm as ``anchored`` and then fails to
+#: anchor at ``$``, dropping the arm from the frame entirely.
+FOLD_RE = re.compile(r"^folds_k(?P<k>\d+)_(?P<arm>xcal|blend|anchored_qmedian|anchored|tmean|tmedian|qmean|qmedian)$")
 
 #: Production's fold count: the baseline every delta is measured against.
 BASELINE_K = 2
@@ -105,28 +114,61 @@ def _md(df: pd.DataFrame) -> str:
 def load_cells(cells_dir: Path) -> pd.DataFrame:
     """Load the fold-count rows, reporting what was dropped rather than hiding it."""
     files = main_frame_files(cells_dir)
-    frames, empty, unreadable = [], 0, 0
+    frames, empty, unreadable, headers_only = [], 0, 0, []
     for p in files:
         if p.stat().st_size == 0:
             empty += 1
             continue
         try:
-            frames.append(pd.read_csv(p))
+            # `low_memory=False` because pandas otherwise types each chunk of a
+            # column independently and warns on `cut_fallback` /
+            # `cut_fallback_kind`, whose values differ between the base rows and
+            # the variant rows.  The warning is noise, but it fires once per cell
+            # and buries the load line that reports what was actually dropped.
+            f = pd.read_csv(p, low_memory=False)
         except Exception as exc:  # noqa: BLE001 - a truncated cell must be counted, not crash the run
             common.log(f"  UNREADABLE {p.name}: {exc}")
             unreadable += 1
+            continue
+        # A cell whose simulation never reached a trainable step writes its
+        # HEADER and nothing else.  That file is non-empty, parses cleanly, and
+        # contributes zero rows - so it is invisible to a zero-byte check, to
+        # `find -size 0`, and to any count of "cells present".  A rare category
+        # can legitimately produce one (Autopilot never collects both classes),
+        # which is exactly why it has to be *counted* rather than assumed away:
+        # "208/208 cells" over a grid where 20 of them are empty is a different
+        # study from the one that sentence describes.
+        if f.empty:
+            headers_only.append(p.name)
+            continue
+        frames.append(f)
+    if headers_only:
+        common.log(f"  {len(headers_only)} header-only cells (0 rows): {', '.join(sorted(headers_only)[:8])}...")
     if not frames:
         return pd.DataFrame()
     df = pd.concat(frames, ignore_index=True)
     df["gmm_variant"] = df["gmm_variant"].fillna("")
     df["env"] = df["dataset"] + "/" + df["embedder"] + "/" + df["style"]
     df["n_votes"] = df["n_good"] + df["n_bad"]
-    # Region voting is a property of the dataset, and it selects which
-    # calibrator ran (bag-aware vs row-wise) - the axis #2897 asks about.
-    df["voting"] = np.where(df["dataset"].eq("visual_genome_m"), "region", "binary")
+    # Which calibrator actually ran - bag-aware (region) or row-wise (binary) -
+    # which is the axis this study splits on.
+    #
+    # Read per **cell**, from the same predicate the runner uses, not from the
+    # dataset name.  Region voting needs *both* halves: boxes from the dataset
+    # and a patch grid from the embedder.  `visual_genome_m x siglip` has the
+    # first and not the second, so it silently trains and scores whole-image -
+    # the trap behind #2877, #2905 and #2897's own errata, where a boxed dataset
+    # on a single-vector embedder was reported as a region arm.  #2897's report
+    # regrouped that cell into binary **by hand** while this column still called
+    # it region; deriving it here is what stops the next study needing to know.
+    df["voting"] = np.where(
+        [region_voting_for(d, e) for d, e in zip(df["dataset"], df["embedder"], strict=True)],
+        "region",
+        "binary",
+    )
     common.log(
         f"loaded {len(df):,} rows from {len(frames)}/{len(files)} cells "
-        f"({empty} zero-byte, {unreadable} unreadable, skipped)"
+        f"({empty} zero-byte, {unreadable} unreadable, {len(headers_only)} header-only, skipped)"
     )
     return df
 
@@ -153,6 +195,9 @@ def fold_frame(df: pd.DataFrame) -> pd.DataFrame:
     # never references the test oracle.
     v["calibration_shift_honest"] = _optional(v, "calibration_shift_honest")
     v["regret_honest"] = _optional(v, "regret_honest")
+    # #3115: how many folds contributed a cut.  NaN on the pooled arm by design
+    # (it never reads a per-fold cut) and on every pre-#3115 cell.
+    v["n_folds_used"] = _optional(v, "n_folds_used")
     edges = [1, *sorted(CHECKPOINTS)]
     v["window"] = pd.cut(v["n_votes"], bins=edges, labels=[f"le_{c}" for c in sorted(CHECKPOINTS)])
     v["window_hi"] = pd.cut(v["n_votes"], bins=edges, labels=sorted(CHECKPOINTS)).astype("Int64")
@@ -482,6 +527,13 @@ def shipped_arm(v: pd.DataFrame) -> str:
     return next((name for name in ("anchored", "blend", "xcal") if name in arms), "xcal")
 
 
+#: The fold-**count** axis reads one rule at a time.  #3115's challenger arms
+#: re-cut the same prefix under a *different* rule, so leaving them in would make
+#: every K-vs-K table a mixture of two questions - and the knee, the cost curve
+#: and H4 would all be computed over rows that are not the arm they name.
+COUNT_AXIS_ARMS: tuple[str, ...] = ("xcal", "blend", "anchored")
+
+
 def ab_check(screen: pd.DataFrame, ab_dirs: list[Path], agg: Path) -> pd.DataFrame:
     """Does a run that *lives* at K reproduce the screen's delta for K?
 
@@ -554,9 +606,9 @@ def _cell_deltas(v: pd.DataFrame, k: int) -> pd.Series:
     return (j["a"] - j["b"]).groupby([j["env"], j["category"], j["seed"]]).mean()
 
 
-def write_report(results: Path, levels, paired, knee, verd, ab, disp) -> None:
+def write_report(results: Path, levels, paired, knee, verd, ab, disp, combine, degen, checks, combine_verd) -> None:
     lines = [
-        "# Calibration fold-count study (#2897)",
+        "# Calibration fold study (#2897 / #3116 / #3115)",
         "",
         "How much does raising `calibrate_count` above production's 2 reduce",
         "oracle-regret, and what does it cost in calibration wall clock?",
@@ -568,6 +620,11 @@ def write_report(results: Path, levels, paired, knee, verd, ab, disp) -> None:
         "the votes a different K would have collected - that is the A/B section.",
         "",
         "Design + decision rules: `docs/experiments/calibration-fold-count/REPORT.md`.",
+        "",
+        "Two axes share these rows, because every arm re-cuts the *same* trained fold",
+        "prefix.  Sections up to the A/B check sweep the fold **count** at one rule",
+        "(#2897, instrumented by #3116); the last section sweeps the **combine rule**",
+        "at fixed count (#3115).",
         "",
         "## Verdicts (mechanical; read the tables before believing them)",
         "",
@@ -603,6 +660,7 @@ def write_report(results: Path, levels, paired, knee, verd, ab, disp) -> None:
         "",
         _md(ab) if len(ab) else "_No A/B run dirs passed; screen only._",
         "",
+        *folds_combine_3115.report_lines(combine, degen, checks, combine_verd, DEEP_MIN),
     ]
     (results / "REPORT.md").write_text("\n".join(lines))
 
@@ -622,18 +680,34 @@ def main(argv: list[str] | None = None) -> int:
         common.log(f"ERROR: no K={BASELINE_K} rows; every contrast here is against production's count")
         return 1
 
-    levels = level_table(v, agg)
-    disp = threshold_dispersion(v, agg)
+    # The fold-COUNT axis reads one rule per arm; #3115's challengers re-cut the
+    # same prefix under a different rule and belong to the other axis entirely.
+    count_v = v[v["arm"].isin(COUNT_AXIS_ARMS)]
+    levels = level_table(count_v, agg)
+    disp = threshold_dispersion(count_v, agg)
     if disp.empty:
         common.log("  sd(threshold): no step carries >=2 seeds; H4's direct instrument is unavailable")
-    paired = paired_vs_baseline(v, agg)
+    paired = paired_vs_baseline(count_v, agg)
     knee = knee_table(paired, levels, agg)
     verd = verdicts(paired, knee, levels, disp)
-    ab = ab_check(v, [Path(d) / "results" for d in argv], agg) if argv else pd.DataFrame()
+    ab = ab_check(count_v, [Path(d) / "results" for d in argv], agg) if argv else pd.DataFrame()
     verd["ab_check"] = ab.to_dict(orient="records") if len(ab) else None
 
+    # The fold-COMBINE axis (#3115): same rows, contrasted across rules at fixed K.
+    combine = folds_combine_3115.contrast_table(v, agg)
+    degen = folds_combine_3115.degenerate_table(v, agg)
+    checks = folds_combine_3115.control_checks(v)
+    combine_verd = folds_combine_3115.verdicts(combine, DEEP_MIN, MARGIN)
+    combine_verd["control_checks"] = checks
+    verd["combine_3115"] = combine_verd
+    if not checks.get("k1_score_space_is_pooled", True):
+        common.log(
+            f"  ACCEPTANCE FAILED: at K=1 the score-space arm must reproduce the pooled cut exactly; "
+            f"{checks.get('k1_mismatches')} of {checks.get('k1_n_steps')} steps disagree"
+        )
+
     (results / "summary.json").write_text(json.dumps(verd, indent=2))
-    write_report(results, levels, paired, knee, verd, ab, disp)
+    write_report(results, levels, paired, knee, verd, ab, disp, combine, degen, checks, combine_verd)
     common.log(f"wrote {results / 'summary.json'} and {results / 'REPORT.md'}")
     return 0
 

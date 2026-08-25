@@ -243,6 +243,129 @@ class TestFoldCountBlendArm:
                 assert b["threshold"] == xcal[t]["threshold"]
 
 
+class TestFoldCountCombineArms:
+    """The combine-rule arms (#3115): pooled vs averaged, in two spaces.
+
+    ``xcal`` is already the pooled control - it calls
+    ``threshold_from_fold_orderings`` verbatim - so these four arms are the
+    challengers, and the contrast factors into two legs that isolate different
+    things: ``xcal -> tmean`` is pooling vs averaging with the space held fixed,
+    and ``tmean -> qmean`` is score space vs quantile space with the combine held
+    fixed.  What these pin is that the arms are *emitted*, that they are wired to
+    the same fold prefix as the control, and that the exact K=1 control holds
+    end to end - not which of them wins, which is what the run is for.
+    """
+
+    def test_score_space_arms_need_no_safe_thresholds(self):
+        """They read only the fold orderings, which every calibratable step has."""
+        rows = _run(fold_counts=_COUNTS, safe=False)
+        for combine in ("tmean", "tmedian"):
+            assert any(r["gmm_variant"] == f"folds_k4_{combine}" for r in rows), combine
+
+    def test_quantile_space_arms_need_the_fold_haystacks(self):
+        """They carry each cut through its fold's own distribution, so they share
+        the anchored arm's condition rather than the control's."""
+        off = _run(fold_counts=_COUNTS, safe=False)
+        assert not any(r["gmm_variant"].endswith(("_qmean", "_qmedian")) for r in off)
+        on = _run(fold_counts=_COUNTS, safe=True)
+        assert any(r["gmm_variant"] == "folds_k4_qmean" for r in on), "no quantile-space arm"
+
+    def test_single_fold_score_space_arm_is_the_pooled_arm(self):
+        """The exact control, asserted through the harness and not only the rule.
+
+        At K=1 there is one cut to average, so ``tmean`` must reproduce
+        ``xcal``'s threshold *and* every metric computed from it.  A mis-sliced
+        prefix, or haystacks out of step with their orderings, breaks this.
+        """
+        rows = _run(fold_counts=_COUNTS, safe=True)
+        xcal = _arm_rows(rows, "folds_k1_xcal")
+        assert xcal, "no K=1 control arm"
+        for combine in ("tmean", "tmedian"):
+            arm = _arm_rows(rows, f"folds_k1_{combine}")
+            assert arm, combine
+            for t, row in arm.items():
+                assert row["threshold"] == xcal[t]["threshold"], (combine, t)
+                assert row["cost"] == xcal[t]["cost"], (combine, t)
+                assert row["regret"] == xcal[t]["regret"], (combine, t)
+
+    def test_mean_and_median_are_one_arm_below_three_folds(self):
+        """Production's ``calibrate_count=2`` is exactly where the question hides."""
+        rows = _run(fold_counts=_COUNTS, safe=True)
+        for k in (1, 2):
+            for family in ("t", "q"):
+                mean = _arm_rows(rows, f"folds_k{k}_{family}mean")
+                median = _arm_rows(rows, f"folds_k{k}_{family}median")
+                assert mean and set(mean) == set(median), (k, family)
+                for t in mean:
+                    assert mean[t]["threshold"] == median[t]["threshold"], (k, family, t)
+
+    def test_some_step_actually_separates_the_rules(self):
+        """A run where every arm agrees measures nothing; this fixture must not be one."""
+        rows = _run(fold_counts=_COUNTS, safe=True)
+        xcal = _arm_rows(rows, "folds_k4_xcal")
+        moved = {
+            combine: sum(
+                1 for t, r in _arm_rows(rows, f"folds_k4_{combine}").items() if r["threshold"] != xcal[t]["threshold"]
+            )
+            for combine in ("tmean", "tmedian", "qmean", "qmedian")
+        }
+        assert all(n > 0 for n in moved.values()), moved
+
+    def test_n_folds_used_counts_only_contributed_cuts(self):
+        """NaN where no fold ever "contributes a cut" - the pooled arm and the blend.
+
+        Reporting K there would read as agreement with the combining arms and
+        hide the asymmetry the study is about: a single-class fold is silently
+        *in* a pooled quantile and explicitly *out* of a mean.
+        """
+        rows = [r for r in _run(fold_counts=_COUNTS, safe=True) if r["gmm_variant"].startswith("folds_k")]
+        assert rows
+        for r in rows:
+            k = int(r["fold_count"])
+            arm = r["gmm_variant"].split(f"folds_k{k}_", 1)[1]
+            used = r["n_folds_used"]
+            if arm in ("xcal", "blend"):
+                assert np.isnan(used), r["gmm_variant"]
+            else:
+                assert 1 <= used <= k, (r["gmm_variant"], used)
+
+
+class TestFoldCountAnchoredQmedianArm:
+    """#3115's contamination question, put on the **shipped** rule.
+
+    ``fold_anchored_gmm_threshold`` already combines its per-fold cuts in
+    quantile space; production picks the mean (``FOLD_ANCHOR_COMBINE``).  This
+    arm re-cuts the *same* per-fold fits under the median, so the difference
+    between the two rows is the combine and nothing else.
+    """
+
+    def test_only_under_safe_thresholds(self):
+        off = _run(fold_counts=_COUNTS, safe=False)
+        assert not any(r["gmm_variant"].endswith("_anchored_qmedian") for r in off)
+        on = _run(fold_counts=_COUNTS, safe=True)
+        assert any(r["gmm_variant"] == "folds_k4_anchored_qmedian" for r in on)
+
+    def test_shares_the_anchored_arms_fits(self):
+        """Same fits, same fold count, same anchored/unanchored split - only the
+        combine differs, which is what makes the pair a clean contrast."""
+        rows = _run(fold_counts=_COUNTS, safe=True)
+        mean = _arm_rows(rows, "folds_k4_anchored")
+        median = _arm_rows(rows, "folds_k4_anchored_qmedian")
+        assert mean and set(mean) == set(median)
+        for t, row in mean.items():
+            assert row["threshold_provenance"] == median[t]["threshold_provenance"], t
+
+    def test_collapses_onto_production_below_three_folds(self):
+        """Mean and median of at most two quantiles are the same number."""
+        rows = _run(fold_counts=_COUNTS, safe=True)
+        for k in (1, 2):
+            mean = _arm_rows(rows, f"folds_k{k}_anchored")
+            median = _arm_rows(rows, f"folds_k{k}_anchored_qmedian")
+            assert mean and set(mean) == set(median), k
+            for t, row in mean.items():
+                assert row["threshold"] == median[t]["threshold"], (k, t)
+
+
 class TestFoldCountAnchoredArm:
     """The arm that measures **production's** threshold rule across K (#3116).
 

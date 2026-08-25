@@ -1248,6 +1248,16 @@ class TestConcurrentWeightInterception:
         b_calls: list[tuple] = []
         errors: list[BaseException] = []
 
+        # Generous on purpose.  These are a four-step handshake between two
+        # threads, so every wait is bounded by how long the OTHER thread takes to
+        # be scheduled - not by any work this test does.  On a shared cluster node
+        # running ~80 other tasks that scheduling delay ran past 10s and failed
+        # the run; the test does not get slower by raising the ceiling, because a
+        # passing run never reaches it.  (The repo's flaky-test guide asks for
+        # `threading.Event` over `sleep`, which this already does, *and* for
+        # generous timeouts, which it did not.)
+        _HANDSHAKE_TIMEOUT = 60.0
+
         a_entered = threading.Event()
         b_entered = threading.Event()
         a_load_done = threading.Event()
@@ -1261,10 +1271,10 @@ class TestConcurrentWeightInterception:
             try:
                 with intercept_weight_loading_progress(lambda *c: a_calls.append(c), "A"):
                     a_entered.set()
-                    assert b_entered.wait(timeout=10)
+                    assert b_entered.wait(timeout=_HANDSHAKE_TIMEOUT)
                     nn.Linear(4, 2).load_state_dict(small.state_dict())
                     a_load_done.set()
-                    assert b_load_done.wait(timeout=10)
+                    assert b_load_done.wait(timeout=_HANDSHAKE_TIMEOUT)
             except BaseException as exc:  # noqa: BLE001
                 errors.append(exc)
             finally:
@@ -1274,12 +1284,12 @@ class TestConcurrentWeightInterception:
 
         def thread_b() -> None:
             try:
-                assert a_entered.wait(timeout=10)
+                assert a_entered.wait(timeout=_HANDSHAKE_TIMEOUT)
                 with intercept_weight_loading_progress(lambda *c: b_calls.append(c), "B"):
                     b_entered.set()
                     nn.Sequential(nn.Linear(4, 8), nn.Linear(8, 2)).load_state_dict(big.state_dict())
                     b_load_done.set()
-                    assert a_exited.wait(timeout=10)
+                    assert a_exited.wait(timeout=_HANDSHAKE_TIMEOUT)
             except BaseException as exc:  # noqa: BLE001
                 errors.append(exc)
             finally:

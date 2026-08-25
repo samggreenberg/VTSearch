@@ -21,6 +21,7 @@ NEED_GB="${PREFLIGHT_NEED_GB:-5}"
 WARN_ONLY=0
 REPO="${VTS_REPO:-}"
 REGION_ARM=""
+MIN_POSITIVES=""
 REUSE_PREPARE=""
 JOB_NAME=""
 MEM_PER_TASK=""
@@ -33,6 +34,7 @@ while [[ $# -gt 0 ]]; do
     --arms) ARMS="$2"; shift 2 ;;
     --need-gb) NEED_GB="$2"; shift 2 ;;
     --require-region-voting) REGION_ARM="$2"; shift 2 ;;
+    --require-min-positives) MIN_POSITIVES="$2"; shift 2 ;;
     --reuse-prepare) REUSE_PREPARE="$2"; shift 2 ;;
     --job-name) JOB_NAME="$2"; shift 2 ;;
     --diverges) DIVERGES="$2"; shift 2 ;;
@@ -181,6 +183,13 @@ fi
 # that merely changes behaviour would have produced a clean, plausible, wrong
 # table.  So resolve the import the way a job does - through common.setup_env() -
 # and check where it landed.
+# Checks 6, 7 and 12 are also python, and they import the same tree.  When this
+# one fails there is no point running them: each re-derives the identical cause
+# and prints it as a raw traceback, so the three of them bury the single line
+# that says what to do.  Measured: launching without a venv on a non-interactive
+# ssh (where the system python is too old for `X | None` at import time) turned
+# one actionable failure into thirty lines of stack.
+PY_USABLE=1
 if [[ -n "$REPO" && -d "$REPO/vtscore" ]]; then
   RESOLVED=$(CALIB_EXP="$EXP" python - "$REPO" <<'PY' 2>/dev/null
 import pathlib, sys
@@ -193,6 +202,7 @@ PY
 )
   if [[ -z "$RESOLVED" ]]; then
     say_fail "could not resolve 'import vtscore' - is the venv active (source gridenv.sh)?"
+    PY_USABLE=0
   else
     REPO_REAL=$(cd "$REPO" && pwd -P)
     case "$RESOLVED" in
@@ -217,7 +227,9 @@ fi
 # Opt-in, because most studies do not claim region voting — but any study whose
 # *rationale* rests on the scoring geometry ("a max over region nodes") should
 # pass it.  One pickle open, and it either holds or it does not.
-if [[ -n "$REGION_ARM" ]]; then
+if [[ -n "$REGION_ARM" && "$PY_USABLE" == "0" ]]; then
+  say_fail "region-voting premise NOT checked: python cannot import the tree (see above)"
+elif [[ -n "$REGION_ARM" ]]; then
   ds="${REGION_ARM%%:*}"; emb="${REGION_ARM##*:}"
   if [[ -z "$ds" || -z "$emb" || "$ds" == "$REGION_ARM" ]]; then
     say_fail "--require-region-voting wants DATASET:EMBEDDER, got '$REGION_ARM'"
@@ -263,7 +275,9 @@ fi
 #
 # Reads the study's own config, so it needs no arguments and cannot drift from
 # what the run will actually do.
-if [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
+if [[ -n "$REPO" && "$PY_USABLE" == "0" ]]; then
+  say_fail "patch styles NOT checked: python cannot import the tree (see above)"
+elif [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
   STYLE_VERDICT=$(CALIB_EXP="$EXP" python - "$REPO" <<'PY' 2>&1
 import pathlib, sys
 repo = sys.argv[1]
@@ -435,7 +449,9 @@ fi
 # divergence must be **declared** to pass: `--diverges head,anchor_weight`.  That
 # is the whole design - a study is always allowed to pin the axis it sweeps, and
 # is never allowed to pin one silently.
-if [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
+if [[ -n "$REPO" && "$PY_USABLE" == "0" ]]; then
+  say_fail "pinned knobs NOT compared against production: python cannot import the tree (see above)"
+elif [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
   DIVERGENCE=$(CALIB_EXP="$EXP" python - "$REPO" <<'PYDIV' 2>&1
 import os
 import pathlib
@@ -542,6 +558,54 @@ PYDIV
   if [[ "$unacked" -gt 0 ]]; then
     echo "        -> if that is the axis this study sweeps, pass --diverges <knob>[,<knob>]"
     echo "        -> if it is not, the run would measure a detector nobody ships"
+  fi
+fi
+
+# --- 13. Categories thin enough to produce no trainable step ------------------
+# A cell whose category is too rare never collects both classes, so the
+# simulation writes its CSV **header and nothing else**.  That file is
+# non-empty, parses cleanly, and passes `find -size 0`, so every "N/N cells"
+# count reports it as present - the failure is invisible at exactly the moment
+# it matters.  #3115 launched a 208-cell array on `visual_genome_m` and its
+# first two completed cells were header-only (`ball`, 51 positives in 4193).
+#
+# Reads `prepare_info.json`, which already holds `category_counts` and
+# `selected_categories`, so this costs no pickle load.  Opt-in with a floor the
+# study picks: what counts as "too thin" depends on the horizon and on
+# SIM_FRACTION, and a wrong default here would be worse than none.
+if [[ -n "$MIN_POSITIVES" ]]; then
+  INFO="${CALIB_RESULTS:-$EXP/results}/prepare_info.json"
+  if [[ ! -f "$INFO" ]]; then
+    say_fail "--require-min-positives: no prepare_info.json at $INFO (run prepare first)"
+  elif [[ "$PY_USABLE" == "0" ]]; then
+    say_fail "category depth NOT checked: python cannot import the tree (see above)"
+  else
+    THIN=$(python - "$INFO" "$MIN_POSITIVES" <<'PY' 2>&1
+import json
+import sys
+
+info, floor = json.load(open(sys.argv[1])), int(sys.argv[2])
+thin, seen = [], 0
+for ds, embs in info.get("datasets", {}).items():
+    for emb, d in embs.items():
+        counts = d.get("category_counts") or {}
+        for cat in d.get("selected_categories") or []:
+            seen += 1
+            n = int(counts.get(cat, 0))
+            if n < floor:
+                thin.append(f"{ds}x{emb}:{cat}={n}")
+print(("FAILS " + "; ".join(sorted(thin))) if thin else f"HOLDS {seen} selected cells, all >= {floor} positives")
+PY
+)
+    case "$THIN" in
+      HOLDS*) say_ok "category depth: ${THIN#HOLDS }" ;;
+      FAILS*)
+        say_fail "categories below the $MIN_POSITIVES-positive floor: ${THIN#FAILS }"
+        echo "        -> a category this thin can finish with NO trainable step and write a"
+        echo "           header-only CSV, which every 'N/N cells' count reports as present"
+        ;;
+      *) say_fail "could not check category depth: $THIN" ;;
+    esac
   fi
 fi
 

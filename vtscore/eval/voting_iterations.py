@@ -32,6 +32,7 @@ one.
 
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
@@ -200,8 +201,10 @@ _VOTING_COLUMNS: tuple[str, ...] = (
 #: emitted only when ``emit_calibration_metrics``.  One row per ``pool_variant``;
 #: under ``safe_thresholds`` additionally one row per safe-threshold GMM variant
 #: (issue #2799), tagged in ``gmm_variant`` (``""`` on every other row).  The
-#: fold-count arms (issue #2897) ride the same tag as ``folds_k{K}_{xcal,blend}``
-#: and additionally fill ``fold_count`` / ``fold_seconds`` / ``n_cal_scores``.
+#: fold-count arms (issues #2897, #3116, #3115) ride the same tag as
+#: ``folds_k{K}_{xcal,blend,anchored,anchored_qmedian,tmean,tmedian,qmean,qmedian}``
+#: and additionally fill ``fold_count`` / ``fold_seconds`` / ``n_cal_scores`` /
+#: ``n_folds_used``.
 _CALIBRATION_COLUMNS: tuple[str, ...] = (
     *_IDENT_COLUMNS,
     "pool_variant",
@@ -242,6 +245,7 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     "fold_count",
     "fold_seconds",
     "n_cal_scores",
+    "n_folds_used",
     "train_seconds",
     "xcal_seconds",
     "pool_score_seconds",
@@ -753,6 +757,24 @@ def _evaluate_on_test(
     }
 
 
+#: ``fold_anchored[2/4]`` / ``fold_conformal_qmean[3/4]`` - *a* of *k*.
+_PROVENANCE_USED_RE = re.compile(r"\[(\d+)/(\d+)\]$")
+
+
+def _folds_used(provenance: str, k: int) -> float:
+    """How many of the *k* folds contributed a cut, read off *provenance*.
+
+    NaN for the arms where the question has no answer: the pooled conformal cut
+    and the blend take one quantile over every fold's scores at once, so no fold
+    ever "contributes a cut" that could be counted or dropped.  Reporting *k*
+    there would look like agreement with the combining arms and hide exactly the
+    asymmetry #3115 is about - a single-class fold is silently *in* the pool and
+    explicitly *out* of a mean.
+    """
+    m = _PROVENANCE_USED_RE.search(provenance)
+    return float(m.group(1)) if m else float("nan")
+
+
 def _r(x: float) -> float:
     """Round to 6 dp when finite, else pass NaN/inf through unchanged."""
     import math  # noqa: PLC0415
@@ -918,6 +940,12 @@ def _operating_metrics(
         "fold_count": nan,
         "fold_seconds": nan,
         "n_cal_scores": nan,
+        # #3115: how many of the K folds actually contributed a cut, parsed off
+        # the arm's own provenance.  A combine rule and a pooled quantile weight
+        # a degenerate (single-class) fold completely differently, so a contrast
+        # between them is only readable next to the count of folds that were
+        # dropped rather than averaged.
+        "n_folds_used": nan,
         # Cut-rule study columns (issue #2836); only the variant rows set them.
         # ``cut_fallback_kind`` says *what was substituted* where ``cut_fallback``
         # only says *that* something was, which the two emitting families answer
@@ -1305,6 +1333,96 @@ def _schedule_variant_rows(
     return rows
 
 
+def _fold_count_arms(
+    prefix: list[tuple[list[float], list[float]]],
+    xcal: float,
+    inclusion: int,
+    haystacks: "list[np.ndarray] | None",
+    sim_pooled_scores: list[float] | None,
+    ctx: BlendContext | None,
+    gmm_cut: float | None,
+    gmm_fit: Any,
+    schedule: str | None,
+) -> list[tuple[str, float, str, float]]:
+    """``(arm, threshold, provenance, blend weight)`` for one fold prefix.
+
+    Split out of :func:`_fold_count_variant_rows` so the arm table is one
+    readable list rather than a branch pile inside the K loop; every arm here is
+    a different *rule* applied to the **same** already-trained folds, so adding
+    one costs arithmetic and no fits.
+
+    ``haystacks`` is ``None`` when the step does not carry one sim-set score
+    array per fold in the prefix, which gates every arm that has to read a cut
+    in the fold's own distribution (:func:`~vtscore.training.thresholds.rank_transfer`).
+    """
+    import dataclasses  # noqa: PLC0415
+
+    from vtscore.training.thresholds import (  # noqa: PLC0415
+        FOLD_CONFORMAL_COMBINES,
+        blend_gmm_threshold,
+        combined_fold_conformal_threshold,
+        fit_fold_anchored_cut,
+        fold_anchored_gmm_threshold,
+        safe_blend_weight,
+    )
+
+    nan = float("nan")
+    arms: list[tuple[str, float, str, float]] = [("xcal", xcal, "conformal", nan)]
+    if ctx is not None and gmm_cut is not None:
+        weight = safe_blend_weight(ctx, schedule)
+        blended = blend_gmm_threshold(xcal, gmm_cut, ctx, schedule=schedule, fit=gmm_fit)
+        arms.append(("blend", blended, "gmm_blend" if weight < 1.0 else "conformal", weight))
+
+    # #3115, the combine rule.  ``xcal`` above IS the pooled control - it calls
+    # `threshold_from_fold_orderings` verbatim - so these are challengers rather
+    # than a re-emission of it.  The score-space pair needs nothing the pooled
+    # arm does not already have; the quantile-space pair needs a haystack per
+    # fold, the same condition the anchored arms carry.
+    #
+    # `transferable` binds that condition once - "can this arm read a cut in a
+    # fold's own scale?" - so it is asked in one place instead of re-derived at
+    # each use site, and so both `None` cases narrow for the type checker.
+    final_scores = sim_pooled_scores if sim_pooled_scores else None
+    transferable = haystacks if (haystacks is not None and final_scores is not None) else None
+    for combine in FOLD_CONFORMAL_COMBINES:
+        quantile_space = combine.startswith("q")
+        if quantile_space and transferable is None:
+            continue
+        value, prov = combined_fold_conformal_threshold(
+            prefix,
+            inclusion,
+            combine=combine,
+            fold_haystacks=transferable if quantile_space else None,
+            final_scores=final_scores if quantile_space else None,
+        )
+        arms.append((combine, value, prov, nan))
+
+    # The arms for the rule users actually get.  ``anchored`` is production
+    # (`FOLD_ANCHOR_COMBINE`); ``anchored_qmedian`` re-cuts the *same* fit under
+    # the robust combine, which puts #3115's contamination question on the
+    # shipped path rather than only on the retired blend.
+    #
+    # Fitted **once** and re-cut, not fitted twice.  `FoldAnchoredCut` exists to
+    # separate the fit from the cut, and the combine rule is read at cut time, so
+    # a second `fold_anchored_gmm_threshold` call would re-run one anchored EM
+    # per fold to reach the same mixtures - doubling the study's dominant cost
+    # (sum over the K grid, so 52 EM fits per step at K<=16, not 16).  It is also
+    # the stronger contrast: the two rows differ in the combine and in *nothing
+    # else*, including the fits' own numerical noise.
+    if transferable is not None and final_scores is not None:
+        cut = fit_fold_anchored_cut(transferable, prefix, final_scores)
+        if cut is None:
+            # Both arms land on the same terminal fallback; take it from the
+            # shipped helper rather than duplicating its ladder here.
+            value, prov = fold_anchored_gmm_threshold(transferable, prefix, final_scores, inclusion)
+            arms.extend([("anchored", value, prov, nan), ("anchored_qmedian", value, prov, nan)])
+        else:
+            arms.append(("anchored", cut.threshold_at(inclusion), cut.provenance, nan))
+            robust = dataclasses.replace(cut, combine="qmedian")
+            arms.append(("anchored_qmedian", robust.threshold_at(inclusion), robust.provenance, nan))
+    return arms
+
+
 def _fold_count_variant_rows(
     details: dict[str, Any],
     base_scores: "np.ndarray",
@@ -1328,8 +1446,10 @@ def _fold_count_variant_rows(
     reproduces this step's own pre-blend conformal cut - the control that
     licenses the rest of the table.
 
-    Three arms per K, because the fold count and the shipped threshold are
-    different questions:
+    Arms per K, because the fold count and the shipped threshold are different
+    questions - and, since #3115, because *how* the folds are combined is a
+    third one.  Every arm below re-reads the same already-trained fold prefix,
+    so the whole table costs arithmetic:
 
     * ``folds_k{K}_xcal`` - the raw cross-calibration cut, the thing K is
       actually a knob on.
@@ -1349,6 +1469,18 @@ def _fold_count_variant_rows(
       what ``calibrate_count`` does to the threshold users actually get is
       partial.  Emitted when the step carries at least K fold haystacks, which
       :func:`_safe_threshold_for_step` supplies (so: under safe thresholds).
+    * ``folds_k{K}_{tmean,tmedian,qmean,qmedian}`` - **the combine rule**
+      (#3115).  ``xcal`` above *is* the pooled control: it calls
+      :func:`~vtscore.training.thresholds.threshold_from_fold_orderings`
+      verbatim, which pools every fold's held-out scores into one bag and takes
+      a single conformal quantile.  These four take one cut per fold and combine
+      them instead, in score space (``t*``) or in fold-quantile space (``q*``);
+      see :data:`~vtscore.training.thresholds.FOLD_CONFORMAL_COMBINES` for what
+      each leg of the contrast isolates.  ``q*`` needs a haystack per fold and
+      so shares the ``anchored`` arm's condition.
+    * ``folds_k{K}_anchored_qmedian`` - production's rule re-cut under the
+      robust combine, which puts the contamination question on the **shipped**
+      path and not only on the retired blend.
 
     Note what is *not* a defect here: the unanchored ``fit_gmm_threshold`` is
     hoisted out of the K loop, and that is correct rather than a frozen
@@ -1371,10 +1503,7 @@ def _fold_count_variant_rows(
     import numpy as np  # noqa: PLC0415
 
     from vtscore.training.thresholds import (  # noqa: PLC0415
-        blend_gmm_threshold,
         fit_gmm_threshold,
-        fold_anchored_gmm_threshold,
-        safe_blend_weight,
         threshold_from_fold_orderings,
     )
 
@@ -1408,15 +1537,17 @@ def _fold_count_variant_rows(
         xcal = threshold_from_fold_orderings(prefix, inclusion)
         fold_seconds = _r(float(sum(seconds[:k])) + overhead)
 
-        arms: list[tuple[str, float, str, float]] = [("xcal", xcal, "conformal", float("nan"))]
-        if ctx is not None and gmm_cut is not None:
-            weight = safe_blend_weight(ctx, schedule)
-            blended = blend_gmm_threshold(xcal, gmm_cut, ctx, schedule=schedule, fit=gmm_fit)
-            arms.append(("blend", blended, "gmm_blend" if weight < 1.0 else "conformal", weight))
-        # The arm that answers the question for the rule users actually get.
-        if len(haystacks) >= k and sim_pooled_scores:
-            anchored, anchored_prov = fold_anchored_gmm_threshold(haystacks[:k], prefix, sim_pooled_scores, inclusion)
-            arms.append(("anchored", anchored, anchored_prov, float("nan")))
+        arms = _fold_count_arms(
+            prefix,
+            xcal,
+            inclusion,
+            haystacks[:k] if len(haystacks) >= k else None,
+            sim_pooled_scores,
+            ctx,
+            gmm_cut,
+            gmm_fit,
+            schedule,
+        )
 
         for arm, threshold, provenance, weight in arms:
             row = _operating_metrics(
@@ -1438,6 +1569,7 @@ def _fold_count_variant_rows(
             row["fold_count"] = k
             row["fold_seconds"] = fold_seconds
             row["n_cal_scores"] = int(cal_scores.size)
+            row["n_folds_used"] = _folds_used(provenance, k)
             rows.append(row)
     return rows
 

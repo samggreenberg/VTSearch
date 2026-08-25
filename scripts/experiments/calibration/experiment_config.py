@@ -49,6 +49,16 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     "vg_box_small": os.environ.get("CALIB_VGBOX_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
     "vg_box_medium": os.environ.get("CALIB_VGBOX_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
     "vg_box_large": os.environ.get("CALIB_VGBOX_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
+    # #3156's verified scale dataset with the box-size band collapsed away
+    # (#3115): 12 hand-checked classes, 300 positives each against one shared
+    # 3900-image negative pool, so **prevalence is identical in every cell**.
+    # That is what a calibration study wants and what `visual_genome_m` is not -
+    # its selected categories run 25 to 1645 positives, and the thin ones
+    # produce cells with no trainable step at all.  Both embedders are in the
+    # pile, so one dataset supplies BOTH voting modes and the mode contrast
+    # stops being confounded with the dataset.
+    "vg_scale_any": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,dinov3_patch").split(","),
+    "vg_scale": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,dinov3_patch").split(","),
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
@@ -84,6 +94,8 @@ BOXED_BY_DATASET: dict[str, bool] = {
     "vg_box_small": True,
     "vg_box_medium": True,
     "vg_box_large": True,
+    "vg_scale": True,
+    "vg_scale_any": True,
 }
 
 
@@ -410,7 +422,7 @@ def select_categories(medias: dict, category_counts: dict[str, int]) -> tuple[li
     if CATEGORY_MODE == "prevalence":
         return select_categories_by_prevalence(category_counts), {
             "mode": "prevalence",
-            "reason": "forced by CALIB_CATEGORY_MODE (dataset is already banded on box size)",
+            "reason": "forced by CALIB_CATEGORY_MODE (the dataset has no scale axis to stratify on)",
         }
     selected, report = select_categories_by_scale(medias, category_counts)
     if selected:

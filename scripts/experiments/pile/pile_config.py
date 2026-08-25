@@ -73,6 +73,19 @@ DATASETS: dict[str, dict] = {
     # (`coco_anchor.py`). At 80 positives per cell that would be ~54 hidden
     # positives sitting in the negatives.
     "vg_scale": {"boxed": True, "kind": "vg_scale", "labels": "coco"},
+    # `vg_scale` with the box-size band collapsed away (#3115): the same images,
+    # boxes and corrections, keyed on the bare class.  A calibration study wants
+    # uniform prevalence across cells and does not care how big the box is;
+    # `visual_genome_m` gives neither (25 to 1645 positives, and its thin
+    # categories produce cells with no trainable step at all).
+    #
+    # DERIVED from the built `vg_scale` pickle, so it must be listed AFTER it -
+    # and so it inherits whatever that cell currently holds.  #3252 changed how
+    # `vg_scale` selects and corrects its cells, which means a `vg_scale_any`
+    # built before that commit is NOT the same dataset as one built after it.
+    # Rebuild it whenever `vg_scale` is rebuilt; `build_pile.py --force` on
+    # `vg_scale` alone silently leaves this one stale.
+    "vg_scale_any": {"boxed": True, "kind": "vg_scale_any"},
 }
 
 #: Box-size bands, as a fraction of image area, anchored to the patch
