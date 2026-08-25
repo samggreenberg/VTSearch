@@ -415,13 +415,13 @@ Still: `vg_scale_any` inherits whatever `vg_scale` holds, and `build_pile.py
   The gate should be read as *"resolve above margin **and** the swept rule
   reaches the acquisition path"* — the second clause was implicit and should not
   have been.
-- **The trajectory that *is* worth measuring: load-then-continue.** The conformal
+- **#3257 — the trajectory that *is* worth measuring: load-then-continue.** The conformal
   cut is the **load-time** threshold, so a user who opens a saved detector and
   then keeps voting starts the session on it, and that first threshold steers
   everything after. This harness always trains fresh, so it never exercises that
   path. That is a different experiment from an A/B of the rule, and it is the one
   with real acquisition feedback in it.
-- **A mode-dependent combine for the conformal path.** The evidence points at
+- **#3258 — a mode-dependent combine for the conformal path.** The evidence points at
   quantile space for region and score space for binary. `threshold_from_fold_orderings`
   takes no voting-mode argument today, so this is a signature change, not a
   constant.
