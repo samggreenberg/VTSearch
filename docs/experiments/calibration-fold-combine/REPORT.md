@@ -368,6 +368,35 @@ than a check. The screen answers this question completely.
 The acquisition question is real for a *different* trajectory — see the
 load-then-continue follow-up below.
 
+### Label provenance: this run predates #3252's human review, by one label
+
+`vg_scale_any` is derived from the pile's `vg_scale` pickle, **built
+2026-08-18**. PR #3252 landed a human-review pipeline on 2026-08-25 whose
+`corrections.json` (256 reviewed `(image, class)` verdicts) is a *build input* —
+so it is not in the pickle this run read. Checked rather than assumed:
+
+| | |
+|---|---:|
+| reviewed `(image, class)` pairs | 256 |
+| images not in this run's cells at all | 124 |
+| verdicts **agreeing** with the labels this run used | **131** |
+| verdicts **disagreeing** — real flips | **1** |
+
+One flip in 3549 labelled positives (**0.03%**): image 2344692 gains a `knife`.
+Cell membership is unaffected — #3252 pins it with `vg_scale_roster.json`
+precisely so a review survives a rebuild, and this run's pickle matches that
+roster cell-for-cell at 100 positives each.
+
+Two reasons this does not move the numbers above. The obvious one is size. The
+structural one is that **every contrast here is paired within the step**: both
+arms score against identical labels, so a corrected label moves every arm's
+regret together and cancels in the difference. Levels are more exposed than
+contrasts, and nothing in the verdict table is a level.
+
+Still: `vg_scale_any` inherits whatever `vg_scale` holds, and `build_pile.py
+--force` on `vg_scale` alone leaves it stale. That warning is now in
+`pile_config.py` beside the dataset entry.
+
 ### What this study does not license
 - **One dataset.** `vg_scale_any` is 12 hand-checked classes at uniform
   prevalence — chosen to isolate the combine rule, which also means the result

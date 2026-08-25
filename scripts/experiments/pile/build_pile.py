@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import hashlib
 import json
 import os
 import sys
@@ -304,6 +305,20 @@ def _load_vg_band(band: str, medias: dict[int, dict], embedder_name: str) -> Non
         }
 
 
+def _vg_image_paths() -> dict[int, Path]:
+    """``{image_id: path}`` over both VG image dirs."""
+    vg_root = pc.DEMO_CACHE / "visual_genome"
+    paths: dict[int, Path] = {}
+    for d in (vg_root / "VG_100K", vg_root / "VG_100K_2"):
+        for p in d.iterdir():
+            if p.suffix.lower() == ".jpg":
+                try:
+                    paths[int(p.stem)] = p
+                except ValueError:
+                    continue
+    return paths
+
+
 def _vg_source() -> tuple[dict[int, Path], list, dict[int, tuple[int, int]]]:
     """``(image paths, objects.json records, image dims)`` for the whole VG source.
 
@@ -315,20 +330,11 @@ def _vg_source() -> tuple[dict[int, Path], list, dict[int, tuple[int, int]]]:
 
     from PIL import Image  # noqa: PLC0415
 
-    vg_root = pc.DEMO_CACHE / "visual_genome"
-    objects_json = vg_root / "objects.json"
+    objects_json = pc.DEMO_CACHE / "visual_genome" / "objects.json"
     if not objects_json.exists():
         raise SystemExit(f"missing {objects_json}")
 
-    paths: dict[int, Path] = {}
-    for d in (vg_root / "VG_100K", vg_root / "VG_100K_2"):
-        for p in d.iterdir():
-            if p.suffix.lower() == ".jpg":
-                try:
-                    paths[int(p.stem)] = p
-                except ValueError:
-                    continue
-
+    paths = _vg_image_paths()
     cache = pc.PILE / "vg_image_dims.json"
     dims: dict[int, tuple[int, int]] = {}
     if cache.exists():
@@ -358,6 +364,27 @@ def _vg_source() -> tuple[dict[int, Path], list, dict[int, tuple[int, int]]]:
     return paths, records, dims
 
 
+def _load_corrections() -> dict[tuple[int, str], dict]:
+    """``{(image_id, class): verdict}`` from the corrections file, if any.
+
+    Verdicts, not corrections: a row exists for every reviewed ``(image, class)``
+    pair whether or not the human disagreed, so review *coverage* is knowable.
+    Without that, "no bus here" and "nobody looked" are the same absence, and
+    every rate computed afterwards is biased by an unknown amount.
+
+    Written by ``ingest_slate.py``; absent until the first review lands, which
+    is why this returns empty rather than failing.
+    """
+    path = Path(os.environ.get("VTS_CORRECTIONS", pc.PILE / "corrections.json"))
+    if not path.exists():
+        return {}
+    rows = json.loads(path.read_text())
+    out: dict[tuple[int, str], dict] = {}
+    for r in rows:
+        out[(int(r["image_id"]), r["class"])] = r
+    return out
+
+
 def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
     """One pickle holding every ``(class, band)`` cell of the scale study (#3156).
 
@@ -375,32 +402,51 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
     therefore has identical prevalence and identical negatives, so a
     small-vs-large difference is a paired contrast on one class rather than two
     datasets of different difficulty.
-    """
-    import random  # noqa: PLC0415
 
+    **The labels are COCO's, and the pool is the half of VG that can carry
+    them.** VG's own annotation is not exhaustive and measurably fails this
+    construction -- see the note in the body and ``coco_anchor.py``.
+    """
     from PIL import Image  # noqa: PLC0415
+
+    import coco_anchor as ca  # noqa: PLC0415
 
     wanted = set(pc.SCALE_CLASSES)
     bands = list(pc.BOX_BANDS)
     cells = [pc.scale_cell(c, b) for c in pc.SCALE_CLASSES for b in bands]
 
-    paths, records, dims = _vg_source()
-    log(f"  scanning {len(records)} VG records for {len(wanted)} classes")
+    paths = _vg_image_paths()
+    _, records, dims = _vg_source()
 
-    # class -> band -> [image_id], plus the boxes to stamp and the clean pool.
-    supply: dict[str, dict[str, list[int]]] = {c: {b: [] for b in bands} for c in pc.SCALE_CLASSES}
-    boxes_for: dict[tuple[int, str], list[list[float]]] = {}
-    clean: list[int] = []
+    # --- labels: VG, repaired where a better reference exists ---------------
+    #
+    # VG's own annotation is not exhaustive: measured against COCO its recall
+    # over C is 0.61, and 1.35% of the images it treats as negatives actually
+    # hold the object -- ~54 hidden positives against 100 labelled ones per cell,
+    # and 4.1% for `backpack` puts more real backpacks among the negatives than
+    # among the positives (`coco_anchor.py`, issue #3156).
+    #
+    # 48% of VG's images ARE COCO images, and COCO annotates C exhaustively, so
+    # on that half the repair is free and total. The other half has no reference
+    # and is what the human slates are for (`make_audit_slate.py`); its verdicts
+    # arrive here through the same corrections file. The pool stays the whole of
+    # VG either way -- restricting it to the COCO half would make this a COCO
+    # subset with extra steps, losing VG's non-COCO diversity for nothing.
+    image_data, instances = ca.ensure_sources(pc.PILE / "coco_anchor", fetch=False)
+    truth = ca.coco_truth(instances, wanted)
+    with image_data.open() as fh:
+        coco_of = {int(m["image_id"]): int(m["coco_id"]) for m in json.load(fh) if m.get("coco_id")}
 
+    corrections = _load_corrections()
+    log(f"  {len(coco_of)} VG images carry a coco_id; {len(corrections)} human verdicts on file")
+
+    # image -> {class: [boxes]}, and whether the image's labels are exhaustive.
+    labels: dict[int, dict[str, list[list[float]]]] = {}
+    exhaustive: set[int] = set()
     for rec in records:
         iid = int(rec["image_id"])
-        wh = dims.get(iid)
-        if iid not in paths or wh is None:
+        if iid not in paths or dims.get(iid) is None:
             continue
-        W, H = wh
-        if W <= 0 or H <= 0:
-            continue
-        area = float(W * H)
         by_name: dict[str, list[list[float]]] = defaultdict(list)
         for obj in rec.get("objects") or []:
             names = obj.get("names") or []
@@ -413,9 +459,80 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
             w, h = float(obj.get("w", 0)), float(obj.get("h", 0))
             if w > 0 and h > 0:
                 by_name[name].append([x, y, x + w, y + h])
+        labels[iid] = dict(by_name)
+
+    # The pixel space each image's boxes live in. VG ships DOWNSCALED copies of
+    # the COCO originals -- 500 px wide against COCO's 640, on 95% of the
+    # overlap -- so a COCO box normalised by the VG file's dimensions lands in
+    # the wrong place and with the wrong extent. Normalise every box by the
+    # dimensions of the image its coordinates were measured on.
+    box_dims: dict[int, tuple[int, int]] = dict(dims)
+    n_anchored = 0
+    n_reframed = 0
+    for iid in labels:
+        cid = coco_of.get(iid)
+        ref = truth.get(cid) if cid is not None else None
+        if ref is None:
+            continue
+        wh = ca.COCO_DIMS.get(cid)
+        if wh is None:
+            continue
+        # A normalised box only transfers between two copies of an image if they
+        # frame the same thing. 49 of the 51,497 overlaps disagree on aspect
+        # ratio -- some are transposed (VG 500x375 against COCO 375x500), i.e. a
+        # rotated or re-cropped copy -- and there COCO's box does not describe
+        # VG's pixels at all. Those keep VG's own labels and stay unanchored
+        # rather than importing a box that points at the wrong part of a
+        # different framing.
+        vw, vh = dims[iid]
+        if abs((vw / vh) - (wh[0] / wh[1])) / (wh[0] / wh[1]) > pc.MAX_ASPECT_DRIFT:
+            n_reframed += 1
+            continue
+        box_dims[iid] = wh
+        # COCO's annotation REPLACES VG's for this image rather than merging
+        # with it: the two disagree in both directions, and only one of them is
+        # exhaustive. Keeping VG's extra boxes would reintroduce exactly the
+        # unverifiable labels this is repairing.
+        labels[iid] = {name: bs for name, bs in ref.items() if name in wanted}
+        exhaustive.add(iid)
+        n_anchored += 1
+
+    # A pair a reviewer ruled "present" without drawing a box cannot be banded:
+    # a band is a claim about size, and no size was measured. It leaves every
+    # cell of that class instead -- neither a positive nor a negative -- which
+    # is precisely what the third value is for.
+    unbanded: set[tuple[int, str]] = set()
+    for (iid, name), verdict in corrections.items():
+        if iid not in labels:
+            continue
+        if verdict.get("present"):
+            boxes = verdict.get("boxes") or []
+            if boxes:
+                labels[iid][name] = boxes
+            else:
+                labels[iid].pop(name, None)
+                unbanded.add((iid, name))
+        else:
+            labels[iid].pop(name, None)
+        exhaustive.add(iid)  # someone looked at this pair
+
+    log(
+        f"  labels: {len(labels)} VG images, {n_anchored} repaired from COCO, "
+        f"{len(exhaustive)} with a verified pair, {n_reframed} skipped as re-framed copies"
+    )
+
+    # --- candidates ---------------------------------------------------------
+    supply: dict[str, dict[str, list[int]]] = {c: {b: [] for b in bands} for c in pc.SCALE_CLASSES}
+    boxes_for: dict[tuple[int, str], list[list[float]]] = {}
+    clean: list[int] = []
+
+    for iid, by_name in labels.items():
+        W, H = box_dims[iid]
+        area = float(W * H)
         if not by_name:
-            # Holds none of C at any size: a sound negative for every cell.
-            clean.append(iid)
+            # Only a true negative for every class in C may join the shared pool.
+            if not any((iid, c) in unbanded for c in pc.SCALE_CLASSES):
+                clean.append(iid)
             continue
         for name, bs in by_name.items():
             ux0 = min(b[0] for b in bs)
@@ -436,7 +553,28 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
                     boxes_for[(iid, pc.scale_cell(name, band))] = bs
                     break
 
-    rng = random.Random(0x5CA1E)  # deterministic sample, stable across rebuilds
+    # Selection must be stable under a changing candidate list, not merely
+    # deterministic. `rng.sample` is deterministic given the same list, but any
+    # edit to the pool -- a label fix, an image excluded as a re-framed copy --
+    # reshuffles the entire draw, and a rebuild then silently retires images a
+    # human already reviewed (49 of 360 in one such rebuild). Ranking each
+    # candidate by a hash of (cell, image_id) instead means adding or removing
+    # one image changes only that image's membership.
+    def _rank(cell: str, iid: int) -> str:
+        return hashlib.sha1(f"{cell}:{iid}".encode()).hexdigest()  # noqa: S324 - not security
+
+    # A roster pins the membership a review was actually carried out against.
+    # Without it, switching selection rules retires images a human has already
+    # judged -- the hash draw and the earlier random draw share only ~228 of
+    # 3,900 negatives, so the entire negative review would have been orphaned.
+    # Entries that are no longer eligible (a correction moved or removed them)
+    # drop out and the shortfall is backfilled by rank, so the roster adapts
+    # without ever reshuffling what it can keep.
+    roster = {}
+    if pc.ROSTER.exists():
+        roster = json.loads(pc.ROSTER.read_text())
+        log(f"  roster: {pc.ROSTER.name} pins {len(roster.get('cells', {}))} cells")
+
     chosen: dict[str, list[int]] = {}
     for c in pc.SCALE_CLASSES:
         for band in bands:
@@ -447,13 +585,40 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
                 # prevalence between bands is the defect this construction
                 # exists to remove.
                 log(f"  UNDER-SUPPLIED {cell}: {len(pool)} positives (wanted {pc.SCALE_N_POS})")
-            chosen[cell] = rng.sample(pool, min(pc.SCALE_N_POS, len(pool)))
+            eligible = set(pool)
+            pinned = [i for i in roster.get("cells", {}).get(cell, []) if i in eligible]
+            # A correction can move an image to another band -- that is the
+            # point of re-drawing a box. If the destination cell is already full
+            # of images nobody has looked at, the reviewed one lands nowhere and
+            # the review quietly stops covering it (99 of 360 boxed positives,
+            # first time round). Reviewed images therefore outrank unreviewed
+            # ones for a seat, wherever their box now puts them.
+            reviewed = {i for i in eligible if (i, c) in corrections}
+            order = (
+                [i for i in pinned if i in reviewed]
+                + sorted(reviewed - set(pinned), key=lambda i: _rank(cell, i))
+                + [i for i in pinned if i not in reviewed]
+                + sorted(eligible - reviewed - set(pinned), key=lambda i: _rank(cell, i))
+            )
+            chosen[cell] = order[: pc.SCALE_N_POS]
 
     clean.sort()
-    negatives = rng.sample(clean, min(pc.SCALE_N_NEG, len(clean)))
+    # Draw spares beyond the designated pool. A human verdict can retire a
+    # contaminated negative later, and re-designating from spares costs a
+    # relabel rather than a re-embed of every cell.
+    want_neg = pc.SCALE_N_NEG + pc.SCALE_N_NEG_SPARE
+    clean_set = set(clean)
+    drawn = [i for i in roster.get("negatives", []) + roster.get("spares", []) if i in clean_set]
+    if len(drawn) < want_neg:
+        extra = sorted(clean_set - set(drawn), key=lambda i: _rank("__negatives__", i))
+        drawn += extra[: want_neg - len(drawn)]
+    drawn = drawn[:want_neg]
+    negatives, spares = drawn[: pc.SCALE_N_NEG], drawn[pc.SCALE_N_NEG :]
+    neg_set = set(negatives)
+    pc.ROSTER.write_text(json.dumps({"cells": chosen, "negatives": negatives, "spares": spares}, indent=1) + "\n")
     log(
         f"  {sum(len(v) for v in chosen.values())} positives over {len(cells)} cells, "
-        f"{len(negatives)} shared negatives (from {len(clean)} clean images)"
+        f"{len(negatives)} shared negatives + {len(spares)} spares (from {len(clean)} clean images)"
     )
 
     # media id -> the cells it is a positive for. Negatives get every cell.
@@ -462,16 +627,21 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
         for iid in ids:
             positive_in[iid].append(cell)
 
-    for iid in sorted(set(positive_in) | set(negatives)):
+    for iid in sorted(set(positive_in) | set(negatives) | set(spares)):
         path = paths[iid]
         try:
             with Image.open(path) as im:
-                W, H = im.size
+                vw, vh = im.size
             data = path.read_bytes()
         except Exception:  # noqa: BLE001 - a corrupt file just drops out
             continue
-        if W <= 0 or H <= 0:
+        if vw <= 0 or vh <= 0:
             continue
+        # Normalised region boxes are resolution-independent, so they must be
+        # divided by the size of the image the coordinates came from -- which is
+        # the COCO original for a repaired image, not the VG copy carrying the
+        # pixels.
+        W, H = box_dims[iid]
         cats = sorted(positive_in.get(iid, []))
         regions = [
             {"box": [b[0] / W, b[1] / H, b[2] / W, b[3] / H], "label": cell}
@@ -494,9 +664,13 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
             # A designated cell membership, not a closed world: a positive is
             # scorable only in the cells it was drawn for, and the shared
             # negatives are scorable everywhere.
-            "evaluable_categories": cats if cats else list(cells),
+            "evaluable_categories": cats if cats else (list(cells) if iid in neg_set else []),
+            # Whether this image's labels rest on an exhaustive reference (COCO,
+            # or a human who looked). False means VG's silence is the only
+            # evidence of absence -- which is what the review slates target.
+            "labels_exhaustive": iid in exhaustive,
             "regions": regions,
-            "origin": {"importer": "vg_scale", "params": {"embedder": embedder_name}},
+            "origin": {"importer": "vg_scale", "params": {"embedder": embedder_name, "labels": "coco"}},
             "origin_name": str(path),
         }
 
@@ -899,6 +1073,42 @@ def verify() -> int:
             problems.append(f"{ds} x {emb}: single-vector embedder carries patch grids")
         rows.append((ds, emb, state, str(n), f"{n_patch}/{n}", dim))
 
+    # A banded cell's NAME asserts the size of its boxes, so the stored box has
+    # to agree with it. That is what catches a coordinate-space mistake: VG
+    # ships 500 px copies of COCO's 640 px originals, and normalising a COCO box
+    # by the VG file's dimensions leaves every box shifted and mis-scaled while
+    # every other check still passes -- the medias load, the vectors are there,
+    # the patch grids are there, and the boxes are quietly pointing at the wrong
+    # pixels. Recomputing the band from the box is cheap and would have caught
+    # it at build time instead of via a human noticing a box drawn on snow.
+    for ds, emb in pc.cells():
+        if pc.DATASETS.get(ds, {}).get("kind") != "vg_scale":
+            continue
+        path = pc.cell_path(ds, emb)
+        if not path.exists():
+            continue
+        medias = io.load_medias(path)
+        bad = 0
+        checked = 0
+        for m in medias.values():
+            for cell in m.get("categories") or []:
+                boxes = [r["box"] for r in (m.get("regions") or []) if r.get("label") == cell]
+                if not boxes:
+                    continue
+                area = (max(b[2] for b in boxes) - min(b[0] for b in boxes)) * (
+                    max(b[3] for b in boxes) - min(b[1] for b in boxes)
+                )
+                lo, hi = pc.BOX_BANDS[cell.rsplit("@", 1)[1]]
+                checked += 1
+                if not (lo <= area < hi):
+                    bad += 1
+        if checked and bad:
+            problems.append(
+                f"{ds} x {emb}: {bad}/{checked} region boxes fall outside the band their cell "
+                f"name claims -- boxes and bands were measured in different pixel spaces"
+            )
+        break  # one embedder is enough; the boxes are identical across cells
+
     # A dataset's cells must all cover the same medias, or cross-embedder
     # comparisons silently compare different populations. This is not
     # hypothetical: a datadir missing its demo-source symlink sent the loader
@@ -916,6 +1126,22 @@ def verify() -> int:
     log(f"{'dataset':18s} {'embedder':14s} {'state':16s} {'medias':>7s} {'patch':>12s} {'dim':>6s}")
     for ds, emb, state, n, patch, dim in rows:
         log(f"{ds:18s} {emb:14s} {state:16s} {n:>7s} {patch:>12s} {dim:>6s}")
+
+    # Coverage is not implied by anything above: a cell can be structurally
+    # perfect and no longer contain the images a human reviewed. Reported here
+    # so a rebuild cannot be declared healthy without it being looked at.
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        import check_review_coverage  # noqa: PLC0415
+
+        if pc.cell_path("vg_scale", "siglip").exists():
+            log("")
+            log("review coverage:")
+            sys.argv = ["check_review_coverage"]
+            if check_review_coverage.main() != 0:
+                problems.append("vg_scale: the rebuild retired images that had been reviewed")
+    except Exception as exc:  # noqa: BLE001 - an absent review is not a build failure
+        log(f"  (review-coverage check skipped: {exc})")
 
     if problems:
         log("")
