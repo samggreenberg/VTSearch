@@ -126,11 +126,18 @@ _Pending — the run has not completed. This section is written from the analyze
 ## Reproducing
 
 ```bash
-bash scripts/experiments/calibration/launch_folds_3115.sh
-python scripts/experiments/calibration/analyze_folds_2897.py
+bash scripts/experiments/calibration/launch_folds_3115.sh prepare   # cpu; reads the pile in place
+bash scripts/experiments/calibration/launch_folds_3115.sh size      # time ONE cell first
+bash scripts/experiments/calibration/launch_folds_3115.sh arms      # array + analysis
 python scripts/experiments/calibration/make_folds_3115_figs.py \
     --results "$CALIB_RESULTS" --out docs/experiments/calibration-fold-combine/figures
 ```
+
+The run reads the shared pre-embedded pile (`scripts/experiments/pile/pile_env.sh`),
+so no cell re-embeds and no stage needs a GPU. `size` exists because this run's
+per-cell cost is **not** #2897's — Kmax fold fits now carry an anchored EM per
+fold — and quoting a previous grid's seconds is exactly how #3129 produced a
+90-minute overestimate.
 
 Analysis code, all in-tree: `scripts/experiments/calibration/folds_combine_3115.py`
 (the contrast), `scripts/experiments/calibration/analyze_folds_2897.py` (the
