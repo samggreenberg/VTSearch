@@ -230,12 +230,20 @@ case "$MODE" in
     # per fold, so this run's per-cell cost is NOT #2897's - and quoting a
     # previous grid's seconds is how #3129 produced a 90-minute overestimate.
     IDX="${2:-0}"
+    # Sizing cells go in a dir named for the GRID they belong to.  A cell index
+    # means something different under a different dataset, so a shared `sizing/`
+    # silently mixes two grids' timings under filenames that look comparable -
+    # `task_0001.csv` from a 4193-media dataset beside `task_0000.csv` from a
+    # 7749-media one, with nothing in either saying so.  This study changed its
+    # dataset mid-flight and hit exactly that; preflight's "one study, one
+    # results dir" check covers `results/` and not this.
+    SIZING="$CALIB_EXP/sizing/${CALIB_DATASETS//,/_}"
     S=$(sbatch --parsable --job-name=f3115-size --mem="$CALIB_MEM" --cpus-per-task="$CALIB_CPUS" \
       --time="$CALIB_TIME" --partition=cpu --export=ALL \
       --output="$LOGS/size-%j.out" \
-      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $CALIB_EXP/sizing")
+      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
     require_jobid "$S" "size"
-    echo "size job: $S (cell $IDX)  ->  $LOGS/size-$S.out"
+    echo "size job: $S (cell $IDX)  ->  $LOGS/size-$S.out   cells -> $SIZING"
     ;;
 
   arms)
