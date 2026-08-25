@@ -72,6 +72,7 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-08-25 | [preflight failed for a reason that had nothing to do with the run](lessons/2026-08-25-preflight-without-a-venv.md) | #3115 |
 | 2026-08-24 | [a cost re-evaluated at a rounded threshold is a different cost](lessons/2026-08-24-a-cost-recomputed-at-a-rounded-threshold.md) | #2883 |
 | 2026-08-24 | [a login-node timing nearly cut a whole arm from a study](lessons/2026-08-24-a-login-node-timing-nearly-cut-an-arm.md) | #2883 |
 | 2026-08-21 | [a launcher pinned a head that stopped being production](lessons/2026-08-21-a-launcher-pinned-a-head-that-stopped.md) | #2865 |

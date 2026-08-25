@@ -181,6 +181,13 @@ fi
 # that merely changes behaviour would have produced a clean, plausible, wrong
 # table.  So resolve the import the way a job does - through common.setup_env() -
 # and check where it landed.
+# Checks 6, 7 and 12 are also python, and they import the same tree.  When this
+# one fails there is no point running them: each re-derives the identical cause
+# and prints it as a raw traceback, so the three of them bury the single line
+# that says what to do.  Measured: launching without a venv on a non-interactive
+# ssh (where the system python is too old for `X | None` at import time) turned
+# one actionable failure into thirty lines of stack.
+PY_USABLE=1
 if [[ -n "$REPO" && -d "$REPO/vtscore" ]]; then
   RESOLVED=$(CALIB_EXP="$EXP" python - "$REPO" <<'PY' 2>/dev/null
 import pathlib, sys
@@ -193,6 +200,7 @@ PY
 )
   if [[ -z "$RESOLVED" ]]; then
     say_fail "could not resolve 'import vtscore' - is the venv active (source gridenv.sh)?"
+    PY_USABLE=0
   else
     REPO_REAL=$(cd "$REPO" && pwd -P)
     case "$RESOLVED" in
@@ -217,7 +225,9 @@ fi
 # Opt-in, because most studies do not claim region voting — but any study whose
 # *rationale* rests on the scoring geometry ("a max over region nodes") should
 # pass it.  One pickle open, and it either holds or it does not.
-if [[ -n "$REGION_ARM" ]]; then
+if [[ -n "$REGION_ARM" && "$PY_USABLE" == "0" ]]; then
+  say_fail "region-voting premise NOT checked: python cannot import the tree (see above)"
+elif [[ -n "$REGION_ARM" ]]; then
   ds="${REGION_ARM%%:*}"; emb="${REGION_ARM##*:}"
   if [[ -z "$ds" || -z "$emb" || "$ds" == "$REGION_ARM" ]]; then
     say_fail "--require-region-voting wants DATASET:EMBEDDER, got '$REGION_ARM'"
@@ -263,7 +273,9 @@ fi
 #
 # Reads the study's own config, so it needs no arguments and cannot drift from
 # what the run will actually do.
-if [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
+if [[ -n "$REPO" && "$PY_USABLE" == "0" ]]; then
+  say_fail "patch styles NOT checked: python cannot import the tree (see above)"
+elif [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
   STYLE_VERDICT=$(CALIB_EXP="$EXP" python - "$REPO" <<'PY' 2>&1
 import pathlib, sys
 repo = sys.argv[1]
@@ -435,7 +447,9 @@ fi
 # divergence must be **declared** to pass: `--diverges head,anchor_weight`.  That
 # is the whole design - a study is always allowed to pin the axis it sweeps, and
 # is never allowed to pin one silently.
-if [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
+if [[ -n "$REPO" && "$PY_USABLE" == "0" ]]; then
+  say_fail "pinned knobs NOT compared against production: python cannot import the tree (see above)"
+elif [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
   DIVERGENCE=$(CALIB_EXP="$EXP" python - "$REPO" <<'PYDIV' 2>&1
 import os
 import pathlib

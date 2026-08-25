@@ -170,6 +170,18 @@ case "$MODE" in
     # (#2877).  This study reports its verdict per voting mode, so a region arm
     # that is secretly binary would not break anything - it would just answer a
     # different question under the region heading.
+    # Preflight's checks are mostly PYTHON: it imports vtscore to assert the
+    # region-voting premise and to compare every pinned knob against its shipped
+    # constant.  The login shell has no venv on a non-interactive ssh, where the
+    # system python is old enough that `X | None` raises at import time - so all
+    # three of those checks came back FAIL for a reason that has nothing to do
+    # with the run.  Loud, and therefore survivable; the dangerous version of
+    # this is preflight reporting `ok` without having looked (#2905).  Activate
+    # the venv first so the checks actually run.
+    # shellcheck disable=SC1091
+    source "$WT/gridenv.sh" >/dev/null 2>&1 || {
+      echo "ERROR: could not activate the venv at $WT/gridenv.sh" >&2; exit 1
+    }
     if [[ -x "$WT/scripts/experiments/preflight.sh" ]]; then
       # No `--diverges`: this run pins nothing off-production.  The combine rule
       # is the axis it sweeps and the shipped rule is one of the arms, so even
