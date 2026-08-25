@@ -116,6 +116,21 @@ export CALIB_CONC="${CALIB_CONC:-120}"
 export CALIB_ANALYZE_MEM="${CALIB_ANALYZE_MEM:-48G}"
 export CALIB_ANALYZE_TIME="${CALIB_ANALYZE_TIME:-2:00:00}"
 
+# Pin the BLAS pools to one thread each.  sklearn's `GaussianMixture` spawns a
+# pool per fit, and this study's dominant cost is the anchored arm's per-fold EM
+# - sum over the K grid, so 52 fits per step at Kmax=16.  At these sizes the pool
+# costs more than the arithmetic, so the default threading makes each fit
+# *slower*; and 120 concurrent cells each spawning a node-sized pool
+# oversubscribes whatever node they land on, which is antisocial as well as slow
+# (#2883's lesson: `lessons/2026-08-24-a-login-node-timing-nearly-cut-an-arm.md`).
+#
+# Exported HERE rather than inside a mode, so `size` and `arms` measure and run
+# under the SAME environment - a cell timed with different threading than the
+# array will use is a guess with a unit attached.
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
+export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
+export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
+
 # Read the pre-embedded pile in place: no re-embed, no GPU, no model download.
 source "$WT/scripts/experiments/pile/pile_env.sh"
 
