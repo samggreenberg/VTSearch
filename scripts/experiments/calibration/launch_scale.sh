@@ -95,9 +95,10 @@ prepare)
   # Assert the arm the study is FOR actually exists. A patch embedder on a
   # dataset the config forgot to mark boxed runs whole_image without complaint,
   # which is indistinguishable from success in every output.
-  python - <<'PYCHK' || { echo "REGION VOTING IS OFF for the patch arm — refusing to launch" >&2; exit 4; }
+  ( cd "$HERE" && python - <<'PYCHK' ) || { echo "REGION VOTING IS OFF for the patch arm — refusing to launch" >&2; exit 4; }
+import os
 import sys
-sys.path.insert(0, ".")
+sys.path.insert(0, os.getcwd())
 import experiment_config as cfg
 ds = cfg.DATASETS[0]
 bad = [e for e in cfg.embedders_for_dataset(ds)
