@@ -1378,17 +1378,22 @@ def _fold_count_arms(
     # than a re-emission of it.  The score-space pair needs nothing the pooled
     # arm does not already have; the quantile-space pair needs a haystack per
     # fold, the same condition the anchored arms carry.
-    transferable = haystacks is not None and bool(sim_pooled_scores)
+    #
+    # `transferable` binds that condition once - "can this arm read a cut in a
+    # fold's own scale?" - so it is asked in one place instead of re-derived at
+    # each use site, and so both `None` cases narrow for the type checker.
+    final_scores = sim_pooled_scores if sim_pooled_scores else None
+    transferable = haystacks if (haystacks is not None and final_scores is not None) else None
     for combine in FOLD_CONFORMAL_COMBINES:
         quantile_space = combine.startswith("q")
-        if quantile_space and not transferable:
+        if quantile_space and transferable is None:
             continue
         value, prov = combined_fold_conformal_threshold(
             prefix,
             inclusion,
             combine=combine,
-            fold_haystacks=haystacks if quantile_space else None,
-            final_scores=sim_pooled_scores if quantile_space else None,
+            fold_haystacks=transferable if quantile_space else None,
+            final_scores=final_scores if quantile_space else None,
         )
         arms.append((combine, value, prov, nan))
 
@@ -1404,13 +1409,12 @@ def _fold_count_arms(
     # (sum over the K grid, so 52 EM fits per step at K<=16, not 16).  It is also
     # the stronger contrast: the two rows differ in the combine and in *nothing
     # else*, including the fits' own numerical noise.
-    if transferable:
-        assert haystacks is not None
-        cut = fit_fold_anchored_cut(haystacks, prefix, sim_pooled_scores)
+    if transferable is not None and final_scores is not None:
+        cut = fit_fold_anchored_cut(transferable, prefix, final_scores)
         if cut is None:
             # Both arms land on the same terminal fallback; take it from the
             # shipped helper rather than duplicating its ladder here.
-            value, prov = fold_anchored_gmm_threshold(haystacks, prefix, sim_pooled_scores, inclusion)
+            value, prov = fold_anchored_gmm_threshold(transferable, prefix, final_scores, inclusion)
             arms.extend([("anchored", value, prov, nan), ("anchored_qmedian", value, prov, nan)])
         else:
             arms.append(("anchored", cut.threshold_at(inclusion), cut.provenance, nan))

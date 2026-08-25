@@ -112,7 +112,7 @@ class TestScoreSpaceCombine:
     def test_is_the_mean_of_the_folds_own_cuts(self, folds):
         """Stated as arithmetic, so a wrong axis fails rather than merely looking plausible."""
         orderings, haystacks, final = folds
-        cuts = [conformal_threshold(*ordering, 0) for ordering in orderings]
+        cuts = [conformal_threshold(scores, labels, 0) for scores, labels in orderings]
         assert _combined(orderings, haystacks, final, "tmean", 4)[0] == pytest.approx(float(np.mean(cuts)))
         assert _combined(orderings, haystacks, final, "tmedian", 4)[0] == pytest.approx(float(np.median(cuts)))
 
@@ -150,7 +150,7 @@ class TestDegenerateFolds:
     SINGLE_CLASS = ([0.90, 0.80, 0.85], [1.0, 1.0, 1.0])
 
     def test_single_class_fold_yields_no_cut(self):
-        assert conformal_threshold(*self.SINGLE_CLASS, 0) == 0.5
+        assert conformal_threshold(self.SINGLE_CLASS[0], self.SINGLE_CLASS[1], 0) == 0.5
         assert per_fold_conformal_cuts([self.SINGLE_CLASS], 0) == []
 
     def test_dropped_from_the_combine_and_counted(self, folds):

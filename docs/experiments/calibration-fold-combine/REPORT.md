@@ -95,6 +95,21 @@ Fixed before the run, in `folds_combine_3115.py`:
   a cut. A near-zero rate means the median arms were tested against a hazard
   this grid never presented, and their result must be read that way.
 
+### What this run structurally cannot see, and the gate that follows from it
+
+Every arm is a **counterfactual re-cut** of a trajectory that lived under
+production's rule, so the votes are held fixed. But the threshold is the rank
+position Autopilot's Hard pick samples around: a different combine rule would
+have collected *different votes*, and no screen holding the trajectory fixed can
+see that. This is the same limit #2897's screen had, and there its live A/B
+effect sank below the ship margin — a screen result is a **reason to book an
+A/B, not a substitute for one**.
+
+Pre-registered gate: **an A/B is booked only if the screen resolves a contrast
+above `MARGIN` in the deep regime.** If the screen comes back unresolved, the
+answer is "the disagreement does not matter enough to spend cluster time on",
+and that is the finding.
+
 ### Grid
 
 | | |
