@@ -103,6 +103,20 @@ OBJECT_GAP_PT = 16.0
 #: whose ink merely grazed the reserve's lower half.
 TITLE_NOTCH_PX = (60.0, 42.0, 300.0, 200.0)
 
+#: A figure may pass its *own* rectangle to `save(notch=...)`, and exactly one
+#: does. The x, y and width are not negotiable — that is the standard, and a
+#: headline that moved would stop being a headline — but the *height* is only
+#: ever a reserve for the deck's **longest** headline, and a figure whose slide
+#: carries a one-line one is holding back 100px it will never use. On a
+#: schematic that costs nothing (the drawing does not reach up there anyway);
+#: on `vote-boundary`, whose whole first page is a field of items filling the
+#: slide, it left a band under the title with no title in it and no items
+#: either, which reads as a mistake rather than as a margin (#3254).
+#:
+#: The height is measured the same way `TITLE_NOTCH_PX`'s is, on the slide the
+#: figure actually appears on, and a figure that trims it owns that
+#: measurement: re-take it if the headline changes. See `slides/STYLE.md`.
+
 INK = "#14181f"
 SOFT = "#5b6472"
 
@@ -129,8 +143,13 @@ def _slot_placement(width: float, height: float, column: float) -> tuple[float, 
     return (box_w - drawn_w) / 2, (box_h - drawn_h) / 2, drawn_w, drawn_h
 
 
-def notch_box(width: float, height: float, column: float = FULL_BLEED) -> tuple[float, float, float, float] | None:
-    """`TITLE_NOTCH_PX` as a fraction of a `width` x `height` drawing, or None.
+def notch_box(
+    width: float,
+    height: float,
+    column: float = FULL_BLEED,
+    notch: tuple[float, float, float, float] | None = None,
+) -> tuple[float, float, float, float] | None:
+    """The title notch as a fraction of a `width` x `height` drawing, or None.
 
     The result is `(x0, y0, x1, y1)` in matplotlib's figure-fraction
     convention (origin bottom-left), ready to hand to `transFigure`, so a
@@ -141,11 +160,14 @@ def notch_box(width: float, height: float, column: float = FULL_BLEED) -> tuple[
     and the generator has nothing to do. That is the common case for the
     tall flow figures, and it is why going full-bleed costs them no redraw.
 
+    `notch` overrides `TITLE_NOTCH_PX` for a figure that has measured its own
+    slide's headline; see the constant's note for when that is legitimate.
+
     Only meaningful for `FULL_BLEED`: the notch is a full-bleed standard, and
     a split-background slot is not anchored at the slide's left edge anyway.
     """
     offset_x, offset_y, drawn_w, drawn_h = _slot_placement(width, height, column)
-    notch_x, notch_y, notch_w, notch_h = TITLE_NOTCH_PX
+    notch_x, notch_y, notch_w, notch_h = notch or TITLE_NOTCH_PX
     left = (notch_x - offset_x) / drawn_w
     right = (notch_x + notch_w - offset_x) / drawn_w
     # Notch y runs down from the slide's top; figure fractions run up.
@@ -159,7 +181,11 @@ def notch_box(width: float, height: float, column: float = FULL_BLEED) -> tuple[
     return x0, y0, x1, y1
 
 
-def enforce_title_notch(path: Path, column: float = FULL_BLEED) -> None:
+def enforce_title_notch(
+    path: Path,
+    column: float = FULL_BLEED,
+    notch: tuple[float, float, float, float] | None = None,
+) -> None:
     """Raise if the written figure puts ink where the slide's title goes.
 
     Checked against the *file* rather than the live figure because `save`
@@ -170,7 +196,7 @@ def enforce_title_notch(path: Path, column: float = FULL_BLEED) -> None:
     with Image.open(path) as image:
         pixels = np.asarray(image.convert("RGBA"))
     height, width = pixels.shape[:2]
-    box = notch_box(width, height, column)
+    box = notch_box(width, height, column, notch)
     if box is None:
         return
     x0, y0, x1, y1 = box
@@ -231,7 +257,7 @@ def save(
     *,
     tight: bool = True,
     box: matplotlib.transforms.Bbox | None = None,
-    notch: bool = True,
+    notch: bool | tuple[float, float, float, float] = True,
 ) -> None:
     """Write `fig`, refusing it if any label would miss the type floor.
 
@@ -247,9 +273,11 @@ def save(
     A `FULL_BLEED` figure is additionally checked against `TITLE_NOTCH_PX`,
     the top-left corner its slide reserves for kicker and headline. Pass
     `notch=False` for a full-bleed slide that carries no title — a legitimate
-    choice, and the only one available to a figure that needs its own corner.
-    The check is a no-op at any other `column`, where the title sits beside
-    the figure rather than over it.
+    choice, and the only one available to a figure that needs its own corner —
+    or a rectangle of its own for a slide whose headline has been *measured*
+    shorter than the deck's longest (see `TITLE_NOTCH_PX`). The check is a
+    no-op at any other `column`, where the title sits beside the figure rather
+    than over it.
     """
     enforce_type_floor(fig, column)
     if box is not None:
@@ -260,5 +288,5 @@ def save(
         fig.savefig(out / name)
     plt.close(fig)
     if notch and column == FULL_BLEED:
-        enforce_title_notch(out / name, column)
+        enforce_title_notch(out / name, column, None if notch is True else notch)
     print(f"wrote figs/{name}")

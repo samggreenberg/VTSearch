@@ -300,9 +300,22 @@ The theme takes the marked line to full weight and quiets the rest, which is
 the deck's one rule for emphasis — weight and darkness, never hue — used to say
 *you are here*. It costs one slide per section and buys two things: the listener
 is anchored in the argument, and a topic change gets an unmistakable signal to
-wake up for. It is also why the opening outline carries `+at1` rather than
-appearing unmarked and then again marked; showing the same list twice in a row
-is a stutter, not an anchor.
+wake up for.
+
+**The opening list is unmarked, and the marked first section follows it.** The
+room reads `1 … 5` all one weight — every section still ahead of them — and
+only then does section 1 go bold and the rest go quiet. Those two pages are not
+a stutter: the first is the shape of the talk and the second is the entry into
+it, and running them together (opening straight on `+at1`) means the whole list
+is never once shown as a list. So a deck's outline appears *N* + 1 times for
+*N* sections: bare, then `+at1`, section 1, `+at2`, section 2, and so on.
+
+**It is laid out like the deck's other slides**, not as its own kind of page:
+the headline sits in the same top-left notch a full-bleed figure leaves for it,
+and the list occupies the rectangle the figure would. The outline *is* that
+slide's figure — it is the one thing the room is asked to look at — so it gets
+the slot the deck gives figures, and the title does not move on the one slide
+that comes back six times.
 
 An outline lives in its own fragment (`fragments/outline-<deck>.md`) so a deck
 that re-tailors the argument gets its own, rather than inheriting a list that

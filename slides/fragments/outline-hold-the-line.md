@@ -8,10 +8,11 @@
 4. A Smarter Cut
 5. What Is Still Open
 
-<!-- One fragment, used five times: the manifest marks the section we are
-     entering with `+at1` … `+at5`, so this slide comes back between sections
-     with a different line bold each time. Say the whole list the first time
-     and only the bold line afterwards. -->
+<!-- One fragment, used six times: it opens the talk bare — every section
+     still ahead, none of them marked — and the manifest then marks the section
+     we are entering with `+at1` … `+at5`, so this slide comes back between
+     sections with a different line bold each time. Say the whole list on the
+     bare page, and only the bold line afterwards. -->
 
 <!-- The names are bare on purpose. Explaining each one is the presenter's job,
      and a list the room can read at a glance is worth more than a list they
