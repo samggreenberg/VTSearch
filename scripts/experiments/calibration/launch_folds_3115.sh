@@ -99,6 +99,14 @@ export CALIB_MAX_STEPS="${CALIB_MAX_STEPS:-150}"
 # taken ACROSS seeds at a fixed step, so a single-seed run has no instrument.
 export CALIB_N_SEEDS="${CALIB_N_SEEDS:-4}"
 
+# The cells train a linear head on cached embeddings: no GPU work anywhere in
+# this study, and `launch_cells.sh` defaults to `--partition=gpu --gres=gpu:v100:1`,
+# where the `4gpu_tier` QOS would cap the array at 2 concurrent tasks.  Both must
+# be named, not just the partition: the flag is dropped rather than passed as
+# `--gres=none`, which this cluster's submit filter rewrites and then rejects.
+export CALIB_PARTITION=cpu
+export CALIB_GRES=none
+
 # Concurrency is capped by the `cpu_limit` QOS: cpu=240 with 2 charged per task
 # (=120), so asking for more only parks the excess behind your own array.
 export CALIB_MEM="${CALIB_MEM:-8G}"
