@@ -58,6 +58,11 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     # pile, so one dataset supplies BOTH voting modes and the mode contrast
     # stops being confounded with the dataset.
     "vg_scale_any": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,dinov3_patch").split(","),
+    # The same-class-across-bands set (#3156): one class list at three box
+    # scales, so a small-vs-large difference is about size rather than about
+    # which words happen to live at which size. Its categories are
+    # band-suffixed (`bus@small`), and every one of them is the experiment --
+    # see CATEGORY_MODE "all".
     "vg_scale": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,dinov3_patch").split(","),
 }
 
@@ -419,6 +424,15 @@ def select_categories(medias: dict, category_counts: dict[str, int]) -> tuple[li
 
     ``CALIB_CATEGORY_MODE`` overrides the inference in either direction.
     """
+    if CATEGORY_MODE == "all":
+        # A designated dataset carries its design in its category list: the
+        # cells were built to be run, prevalence is identical across them by
+        # construction, and re-banding an already-banded set would discard the
+        # experiment. Take every category the pickle holds.
+        return sorted(category_counts), {
+            "mode": "all",
+            "reason": "dataset's categories are the experimental design (designated cells)",
+        }
     if CATEGORY_MODE == "prevalence":
         return select_categories_by_prevalence(category_counts), {
             "mode": "prevalence",

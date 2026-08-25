@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# The scale study (#3156): one class list, three box-size bands.
+#
+#   bash launch_scale.sh prepare      # exemplar crops for all 36 cells
+#   bash launch_scale.sh size 0,40    # time one whole-image and one patch cell
+#   bash launch_scale.sh cells        # the full array
+#   bash launch_scale.sh status
+#
+# The question is whether detection cost rises as the target shrinks, and
+# whether region voting's advantage depends on target size. `vg_box_*` cannot
+# answer it: those sets band each category by its median box, so their
+# vocabularies are disjoint and a small-vs-large gap confounds size with class
+# identity. Here the twelve classes are held fixed and only the band moves,
+# paired on identical negatives at identical prevalence.
+#
+# Shipped defaults only, as in launch_bench.sh: the contrast under test is the
+# BAND, so any other knob left non-default would be a second, uncontrolled one.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WT="$(cd "$HERE/../../.." && pwd)"
+
+source "$WT/gridenv.sh"
+source "$WT/scripts/experiments/pile/pile_env.sh"
+
+export VTS_REPO="$WT"
+export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/scale-3156}"
+export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
+
+export CALIB_DATASETS="${CALIB_DATASETS:-vg_scale}"
+# siglip is the shipped default and votes binary; dinov3_patch is the only
+# patch-capable embedder in the pile and is what makes region voting real.
+# siglip2_l is deliberately absent: the overview benchmark could not resolve
+# siglip vs siglip2_l on cost at three seeds, so a third encoder would buy an
+# unreadable column at 1.5x the array.
+export CALIB_VGSCALE_EMBEDDERS="${CALIB_VGSCALE_EMBEDDERS:-siglip,dinov3_patch}"
+# Every category is a designated cell; selecting a subset would discard the
+# design, and prevalence-spreading is meaningless when prevalence is 0.0250
+# everywhere by construction.
+export CALIB_CATEGORY_MODE=all
+export CALIB_N_SEEDS="${CALIB_N_SEEDS:-3}"
+export CALIB_MAX_STEPS="${CALIB_MAX_STEPS:-150}"
+
+export CALIB_REPOOL_VARIANTS=""
+export CALIB_SCHEDULE_VARIANTS=""
+export CALIB_FOLD_COUNTS=""
+export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
+
+LOGS="$CALIB_EXP/logs"
+mkdir -p "$LOGS" "$CALIB_RESULTS/cells"
+
+MEM="${CALIB_MEM:-64G}"
+CPUS="${CALIB_CPUS:-6}"
+TIME="${CALIB_TIME:-6:00:00}"
+PARTITION="${CALIB_PARTITION:-cpu}"
+CONC="${CALIB_CONC:-24}"
+JOB_NAME="${CALIB_JOB_NAME:-scale-$(basename "$CALIB_EXP")}"
+
+ENVX="export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS"
+ENVX="$ENVX VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
+ENVX="$ENVX VTS_REPO=$VTS_REPO CALIB_DATASETS=$CALIB_DATASETS"
+ENVX="$ENVX CALIB_VGSCALE_EMBEDDERS=$CALIB_VGSCALE_EMBEDDERS CALIB_CATEGORY_MODE=$CALIB_CATEGORY_MODE"
+ENVX="$ENVX CALIB_N_SEEDS=$CALIB_N_SEEDS CALIB_MAX_STEPS=$CALIB_MAX_STEPS"
+ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
+ENVX="$ENVX CALIB_PATCH_STYLES=$CALIB_PATCH_STYLES"
+
+# A submission is not a launch: --parsable returns an EMPTY id when the submit
+# filter refuses the job (#2897 lost both arms exactly this way).
+submit() {
+  local name="$1"; shift
+  local J
+  J=$(sbatch --parsable "$@") || { echo "SUBMIT FAILED for $name" >&2; return 1; }
+  if [[ "$J" =~ ^[0-9]+$ ]]; then
+    echo "$J" > "$LOGS/.jobid_$name"
+    echo "$name -> job $J"
+  else
+    echo "$name SUBMIT FAILED (empty job id) — NOT LAUNCHED" >&2
+    return 1
+  fi
+}
+
+case "${1:-status}" in
+prepare)
+  # The dataset's own review coverage is a precondition, not a detail: a cell
+  # whose reviewed images have been rebuilt away is measuring labels nobody
+  # checked (see scripts/experiments/lessons/).
+  ( cd "$WT/scripts/experiments/pile" && python check_review_coverage.py ) || {
+    echo "REVIEW COVERAGE FAILED — refusing to launch a study on it" >&2; exit 3; }
+  echo "CALIB_EXP=$CALIB_EXP  datasets=$CALIB_DATASETS  embedders=$CALIB_VGSCALE_EMBEDDERS  seeds=$CALIB_N_SEEDS"
+  submit prepare --job-name=scale-prep --mem=96G --cpus-per-task=8 \
+    --time=3:00:00 --partition="$PARTITION" --export=ALL \
+    --output="$LOGS/prepare-%j.out" \
+    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python prepare_data.py"
+  ;;
+
+size)
+  IDXS="${2:?usage: launch_scale.sh size <comma-separated cell indices>}"
+  SIZE_RESULTS="$CALIB_EXP/sizing"
+  mkdir -p "$SIZE_RESULTS/cells"
+  ln -sfn "$CALIB_RESULTS/prepare_info.json" "$SIZE_RESULTS/prepare_info.json"
+  ln -sfn "$CALIB_RESULTS/crops" "$SIZE_RESULTS/crops"
+  for idx in ${IDXS//,/ }; do
+    submit "size$idx" --job-name="scale-size$idx" --mem="$MEM" --cpus-per-task="$CPUS" \
+      --time=2:00:00 --partition="$PARTITION" --export=ALL \
+      --output="$LOGS/size-$idx-%j.out" \
+      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$SIZE_RESULTS && cd $HERE && time python run_cells.py --index $idx"
+  done
+  ;;
+
+cells)
+  N=$(cd "$HERE" && python run_cells.py --print-cells 2>/dev/null | tail -1)
+  if ! [[ "$N" =~ ^[0-9]+$ ]] || [[ "$N" -eq 0 ]]; then
+    echo "ERROR: could not determine cell count (got '$N')" >&2; exit 1
+  fi
+  echo "cells: $N (array 0-$((N-1))%$CONC on $PARTITION)"
+  bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod \
+    --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC" || {
+    echo "PREFLIGHT FAILED" >&2; exit 2; }
+  submit cells --job-name="$JOB_NAME" --array="0-$((N-1))%$CONC" \
+    --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \
+    --partition="$PARTITION" --export=ALL \
+    --output="$LOGS/cells-%A_%a.out" \
+    --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py"
+  ;;
+
+status)
+  echo "=== queue ==="
+  squeue -u "$USER" -o "%.10i %.16j %.9T %.11M %.6D %R" | grep -E "scale|JOBID" || true
+  echo "=== cells written ==="
+  ls "$CALIB_RESULTS/cells" 2>/dev/null | wc -l
+  ;;
+*)
+  echo "usage: launch_scale.sh {prepare|size <idx>|cells|status}" >&2; exit 1 ;;
+esac
