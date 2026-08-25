@@ -66,6 +66,14 @@ DATASETS: dict[str, dict] = {
     # reproducible -- but the two are not comparable: disjoint vocabularies
     # against a fixed one.
     "vg_scale": {"boxed": True, "kind": "vg_scale"},
+    # `vg_scale` with the band collapsed away (#3115): the same verified images
+    # and hand-checked labels, keyed on the bare class.  12 classes x 300
+    # positives against one 3900-image negative pool, so prevalence is identical
+    # everywhere - which is what a calibration study wants and what
+    # `visual_genome_m` is not (25 to 1645 positives, and its thin categories
+    # produce cells with no trainable step at all).  Derived from the built
+    # `vg_scale` pickle, so it must be listed AFTER it.
+    "vg_scale_any": {"boxed": True, "kind": "vg_scale_any"},
 }
 
 #: Box-size bands, as a fraction of image area, anchored to the patch

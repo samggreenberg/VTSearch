@@ -114,16 +114,31 @@ def _md(df: pd.DataFrame) -> str:
 def load_cells(cells_dir: Path) -> pd.DataFrame:
     """Load the fold-count rows, reporting what was dropped rather than hiding it."""
     files = main_frame_files(cells_dir)
-    frames, empty, unreadable = [], 0, 0
+    frames, empty, unreadable, headers_only = [], 0, 0, []
     for p in files:
         if p.stat().st_size == 0:
             empty += 1
             continue
         try:
-            frames.append(pd.read_csv(p))
+            f = pd.read_csv(p)
         except Exception as exc:  # noqa: BLE001 - a truncated cell must be counted, not crash the run
             common.log(f"  UNREADABLE {p.name}: {exc}")
             unreadable += 1
+            continue
+        # A cell whose simulation never reached a trainable step writes its
+        # HEADER and nothing else.  That file is non-empty, parses cleanly, and
+        # contributes zero rows - so it is invisible to a zero-byte check, to
+        # `find -size 0`, and to any count of "cells present".  A rare category
+        # can legitimately produce one (Autopilot never collects both classes),
+        # which is exactly why it has to be *counted* rather than assumed away:
+        # "208/208 cells" over a grid where 20 of them are empty is a different
+        # study from the one that sentence describes.
+        if f.empty:
+            headers_only.append(p.name)
+            continue
+        frames.append(f)
+    if headers_only:
+        common.log(f"  {len(headers_only)} header-only cells (0 rows): {', '.join(sorted(headers_only)[:8])}...")
     if not frames:
         return pd.DataFrame()
     df = pd.concat(frames, ignore_index=True)
@@ -148,7 +163,7 @@ def load_cells(cells_dir: Path) -> pd.DataFrame:
     )
     common.log(
         f"loaded {len(df):,} rows from {len(frames)}/{len(files)} cells "
-        f"({empty} zero-byte, {unreadable} unreadable, skipped)"
+        f"({empty} zero-byte, {unreadable} unreadable, {len(headers_only)} header-only, skipped)"
     )
     return df
 
