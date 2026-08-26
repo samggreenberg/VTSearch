@@ -72,6 +72,7 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-08-26 | [a stale base silently ran a retired detector head](lessons/2026-08-26-a-stale-base-changed-the-default-head.md) | #3156 |
 | 2026-08-25 | [a "voting mode" headline that was equally an embedder headline](lessons/2026-08-25-a-mode-contrast-that-was-an-embedder-contrast.md) | #3115 |
 | 2026-08-25 | [preflight failed for a reason that had nothing to do with the run](lessons/2026-08-25-preflight-without-a-venv.md) | #3115 |
 | 2026-08-25 | [timing and memory measured a run that wasn't the experiment](lessons/2026-08-25-sized-from-the-wrong-configuration.md) | #3156 |
