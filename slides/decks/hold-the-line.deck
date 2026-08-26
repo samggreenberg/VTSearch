@@ -11,15 +11,16 @@
 # the Questions slide as backup: this talk presents findings, and a room that
 # wants the study behind one of them can be shown it. See #3246.
 #
-# The outline fragment appears five times, once before each section, marked
-# with `+at1` … `+at5` — one fragment used five ways rather than five copies to
-# keep in step.
+# The outline fragment appears six times: once bare, as the opening list, and
+# then once before each section marked with `+at1` … `+at5` — one fragment used
+# six ways rather than six copies to keep in step.
 
 theme: vtsearch
 paginate: true
 
 slides:
   title-hold-the-line
+  outline-hold-the-line
 
   # 1 — VTSearch
   outline-hold-the-line +at1
@@ -31,9 +32,11 @@ slides:
   outline-hold-the-line +at2
   xcal
   gmm-idea
+  gmm-em
   blend
   blend-schedule
   anchored-gmm
+  anchored-em
   quantile-transfer
 
   # 3 — Where you want it instead

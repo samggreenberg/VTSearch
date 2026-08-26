@@ -224,7 +224,31 @@ BAND_WIDTH = 0.62
 #: curve rather than a level the far field also clears.
 BAND_MARGIN_CAP = 0.85
 
-VOTE_BOUNDARY_STAGES = 7
+#: This figure's own title reserve, in slide pixels — the deck standard's
+#: rectangle with its *height* trimmed to the headline this slide actually
+#: carries. "Rock the Vote" is one line and its box measures 56.8px, so
+#: `slide_figure.TITLE_NOTCH_PX`'s 200px reserve — sized for the deck's
+#: longest, four-line headline — left 100px of band under the title with no
+#: title in it and, because the field is rejected from the whole reserve, no
+#: items either. On a schematic that costs nothing; here the field *is* the
+#: slide, and a hole in it reads as a mistake rather than as a margin (#3254).
+#: 88px is the measured box plus one `OBJECT_GAP_PT` (16pt renders at ~28px on
+#: this figure), so the nearest circle still clears the headline by a gap of
+#: the deck's own standard size. Re-measure if the headline changes; the
+#: recipe is in `slides/STYLE.md`.
+VOTE_NOTCH_PX = (60.0, 42.0, 300.0, 88.0)
+
+#: The nine pages of the build. See `vote_boundary_fig`.
+VOTE_BOUNDARY_STAGES = 9
+
+#: The page that goes *back*: the flashback re-draws stage 5's picture — the
+#: first boundary, the item it cannot call — with the loose and tight cuts
+#: added, to say that the threshold was already choosing the question that got
+#: us here. Held as a constant because two functions have to agree on which
+#: page is not simply "the first N steps".
+FLASHBACK_STAGE = 9
+#: The step the flashback re-draws.
+FLASHBACK_OF = 5
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -240,7 +264,7 @@ def _notch_rect() -> tuple[float, float, float, float]:
     PNG *is* the window, so a fraction of the image is the same fraction of
     the canvas.
     """
-    box = notch_box(*CANVAS, FULL_BLEED)
+    box = notch_box(*CANVAS, FULL_BLEED, VOTE_NOTCH_PX)
     assert box is not None, "a 16:9 full-bleed figure always overlaps the notch"
     x0, y0, x1, y1 = box
     width, height = CANVAS
@@ -783,18 +807,20 @@ def _scene() -> tuple[np.ndarray, SVC, SVC, np.ndarray, np.ndarray, int, int, tu
     # of them misreads a vote, the votes *can* choose between them and the
     # slide's claim — that this is the user's call and not the data's — is
     # false. And there has to be something in the strip for the choice to be
-    # about.
-    level = _band_level(first, pts, labeled)
-    for side in (-level, level):
-        drawn = _contour(first, side)
-        assert len(drawn), "the loosened or tightened cut is not a curve at all"
-        assert drawn[:, 0].min() > 0.2 and drawn[:, 0].max() < CANVAS[0] - 0.2, "a band cut runs off the side"
-        assert drawn[:, 1].min() > 0.2 and drawn[:, 1].max() < CANVAS[1] - 0.2, "a band cut runs off the top"
-        assert not any(_in_notch(p, 0.0) for p in drawn), "a band cut runs into the title reserve"
-    swung = np.abs(first.decision_function(pts)) < level
-    assert not swung[list(labeled)].any(), "a vote falls inside the band — the two cuts are not equally defensible"
-    swung[list(labeled)] = False
-    assert swung.sum() >= 5, f"only {swung.sum()} unlabeled items change hands between the two cuts"
+    # about. Checked on *both* detectors: the build draws the band on the
+    # retrained one and then, as a flashback, on the first.
+    for model, votes in ((first, labeled), (second, labeled + (asked,))):
+        level = _band_level(model, pts, votes)
+        for side in (-level, level):
+            drawn = _contour(model, side)
+            assert len(drawn), "the loosened or tightened cut is not a curve at all"
+            assert drawn[:, 0].min() > 0.2 and drawn[:, 0].max() < CANVAS[0] - 0.2, "a band cut runs off the side"
+            assert drawn[:, 1].min() > 0.2 and drawn[:, 1].max() < CANVAS[1] - 0.2, "a band cut runs off the top"
+            assert not any(_in_notch(p, 0.0) for p in drawn), "a band cut runs into the title reserve"
+        swung = np.abs(model.decision_function(pts)) < level
+        assert not swung[list(votes)].any(), "a vote falls inside the band — the two cuts are not equally defensible"
+        swung[list(votes)] = False
+        assert swung.sum() >= 5, f"only {swung.sum()} unlabeled items change hands between the two cuts"
     return pts, first, second, curve, curve_after, asked, asked_again, labeled
 
 
@@ -906,12 +932,20 @@ def _halo(ax: plt.Axes, p: np.ndarray) -> None:
 def vote_boundary_fig() -> None:
     """One line, both of its jobs, drawn in the space the items live in.
 
-    Seven pages: the corpus; the votes so far and the boundary they imply; that
-    boundary cut looser and tighter, which is what the threshold decides for
-    the answer; the two items nobody should be asked about; the one item that
-    is worth a question, which is what the threshold decides for the loop; that
-    item answered and the boundary redrawn; and the next question, which exists
-    only because the boundary moved.
+    Nine pages. The first seven are the loop, in order: the corpus; the votes
+    so far; the detector they imply; the two items nobody should be asked
+    about; the one item that is worth a question, which is what the threshold
+    decides for the loop; that item answered and the boundary redrawn; and the
+    next question, which exists only because the boundary moved.
+
+    The last two are the threshold's *other* job, deliberately held back to the
+    end (#3254). Page 8 cuts the retrained detector looser and tighter — three
+    concentric curves, all of them consistent with every vote on screen, so
+    what comes back is still the user's call and not the data's. Page 9 then
+    goes back and draws the same three cuts on the *first* detector, at the
+    moment it was choosing what to ask. That is the point the pair exists to
+    make: a threshold is not only how you cut now, it is which questions got
+    you here.
     """
     for stage in range(1, VOTE_BOUNDARY_STAGES):
         save(
@@ -920,14 +954,28 @@ def vote_boundary_fig() -> None:
             f"vote-boundary.build{stage}.png",
             column=FULL_BLEED,
             tight=False,
+            notch=VOTE_NOTCH_PX,
         )
-    save(_vote_boundary_stage(VOTE_BOUNDARY_STAGES), OUT, "vote-boundary.png", column=FULL_BLEED, tight=False)
+    save(
+        _vote_boundary_stage(VOTE_BOUNDARY_STAGES),
+        OUT,
+        "vote-boundary.png",
+        column=FULL_BLEED,
+        tight=False,
+        notch=VOTE_NOTCH_PX,
+    )
 
 
 def _vote_boundary_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative)."""
+    """Draw the first *stage* steps (1-based, cumulative).
+
+    `FLASHBACK_STAGE` is the one page that is not cumulative: it re-draws step
+    `FLASHBACK_OF` and adds the band to *that* detector, so `step` below is
+    what the page shows and `stage` is only which page it is.
+    """
     pts, first, second, curve, _curve_after, asked, asked_again, labeled = _scene()
     seed_good, seed_bad = _seed_votes()
+    step = FLASHBACK_OF if stage == FLASHBACK_STAGE else stage
 
     fig, ax = plt.subplots(figsize=tuple(c * UNIT_PT / 72 for c in CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
@@ -938,18 +986,21 @@ def _vote_boundary_stage(stage: int) -> plt.Figure:
 
     # ── stage 1: the corpus — one hollow circle per item, none of them known ──
     voted = {
-        **({i: "good" for i in seed_good} if stage >= 2 else {}),
-        **({i: "bad" for i in seed_bad} if stage >= 2 else {}),
-        **({asked: "good"} if stage >= 6 else {}),
+        **({i: "good" for i in seed_good} if step >= 2 else {}),
+        **({i: "bad" for i in seed_bad} if step >= 2 else {}),
+        **({asked: "good"} if step >= 6 else {}),
     }
-    asking = {asked} if stage == 5 else ({asked_again} if stage >= 7 else set())
+    asking = {asked} if step == 5 else ({asked_again} if step >= 7 else set())
 
-    # ── stage 3: the same cut, loosened and tightened — what comes back ───────
-    # Drawn under the items, and gone once the argument moves to which item to
-    # ask about: it is scaffolding for one beat, and leaving it up would have
-    # the eye reading a band while the words are about a single point.
-    if 3 <= stage <= 5:
+    # ── stages 8 and 9: the same detector, cut looser and cut tighter ─────────
+    # Drawn under the items, and only on the two pages that are about it: page
+    # 8 on the retrained detector — what comes back, now — and page 9 back on
+    # the first one, where the same three cuts were already deciding what to
+    # ask. Which detector the band belongs to is the whole content of the pair.
+    if stage == FLASHBACK_STAGE:
         _band(ax, first, _band_level(first, pts, labeled))
+    elif stage == VOTE_BOUNDARY_STAGES - 1:
+        _band(ax, second, _band_level(second, pts, labeled + (asked,)))
 
     for i, p in enumerate(pts):
         mark = voted.get(i)
@@ -960,18 +1011,18 @@ def _vote_boundary_stage(stage: int) -> plt.Figure:
         else:
             _circle(ax, p, asking=i in asking)
 
-    # ── stage 2: the votes so far, and the detector they imply ───────────────
-    if 2 <= stage <= 6:
-        _boundary(ax, first, ghost=stage == 6)
+    # ── stage 3: the detector the votes imply ────────────────────────────────
+    if 3 <= step <= 6:
+        _boundary(ax, first, ghost=step == 6)
 
     # ── stage 4: the two it is already sure about — the wrong ones to ask ────
-    if stage == 4:
+    if step == 4:
         for i in _obvious_pair(curve, first, pts, labeled):
             _halo(ax, pts[i])
 
-    # ── stage 5: the question mark above — the one item it cannot guess ──────
+    # ── stage 5: the question mark — the one item it cannot guess ────────────
     # ── stage 6: the answer, and the boundary the retrain draws instead ──────
-    if stage >= 6:
+    if step >= 6:
         _boundary(ax, second)
 
     # ── stage 7: which puts a different item on the new line. Repeat. ────────

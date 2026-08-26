@@ -161,6 +161,16 @@ another thing to hunt for. So a figure that genuinely cannot spare its top-left
 corner **carries no title at all** — it does not put one somewhere else. That
 is the standard working, not failing.
 
+**Its height is the one part a figure may trim**, because 200px is a reserve
+for the deck's *longest* headline and most slides carry a shorter one. Pass the
+rectangle to `save(notch=...)`, with the height measured — by the recipe above,
+on the slide the figure actually appears on — rather than guessed, and re-take
+that measurement if the headline changes. `vote-boundary` is the one figure
+that does it: "Rock the Vote" is one line and measures 56.8px, and the 100px of
+unused reserve left a band under the title with no title in it and no items
+either. Do not trim x, y or width; the notch's *position* is the standard, and
+a figure whose ink reaches the top-left corner still carries no title.
+
 Three rules follow.
 
 **No kicker on a full-bleed slide.** The figure already says which mechanism
@@ -263,6 +273,14 @@ figure is drawn at and use the result for every gap in it. The ratio is the
 part that matters, and it wants to be roughly 3:1 — eyeballing the two
 separately is what produces 1:1, which is exactly the failure above.
 
+**An arrow is never shorter than the word written along it.** A block arrow
+carries its label centred on the whole arrow, head included, so an arrow that
+is shorter than the label plus two arrowheads prints its own word over its own
+point. `make-calib-figs.arrow_len_for` measures the glyphs and returns the
+minimum, `_labeled_arrow` asserts it, and a layout that wants a longer arrow
+pays for it in canvas rather than in legibility — the canvas grows at the top,
+where these schematics pin their first row, so no other row moves.
+
 Two consequences worth spelling out, because they are the ones that get
 fudged:
 
@@ -300,9 +318,22 @@ The theme takes the marked line to full weight and quiets the rest, which is
 the deck's one rule for emphasis — weight and darkness, never hue — used to say
 *you are here*. It costs one slide per section and buys two things: the listener
 is anchored in the argument, and a topic change gets an unmistakable signal to
-wake up for. It is also why the opening outline carries `+at1` rather than
-appearing unmarked and then again marked; showing the same list twice in a row
-is a stutter, not an anchor.
+wake up for.
+
+**The opening list is unmarked, and the marked first section follows it.** The
+room reads `1 … 5` all one weight — every section still ahead of them — and
+only then does section 1 go bold and the rest go quiet. Those two pages are not
+a stutter: the first is the shape of the talk and the second is the entry into
+it, and running them together (opening straight on `+at1`) means the whole list
+is never once shown as a list. So a deck's outline appears *N* + 1 times for
+*N* sections: bare, then `+at1`, section 1, `+at2`, section 2, and so on.
+
+**It is laid out like the deck's other slides**, not as its own kind of page:
+the headline sits in the same top-left notch a full-bleed figure leaves for it,
+and the list occupies the rectangle the figure would. The outline *is* that
+slide's figure — it is the one thing the room is asked to look at — so it gets
+the slot the deck gives figures, and the title does not move on the one slide
+that comes back six times.
 
 An outline lives in its own fragment (`fragments/outline-<deck>.md`) so a deck
 that re-tailors the argument gets its own, rather than inheriting a list that
