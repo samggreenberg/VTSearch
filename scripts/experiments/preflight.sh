@@ -63,6 +63,21 @@ say_fail() {
 }
 say_ok() { echo "  ok    $*"; }
 
+# Memory strings ("14G", "900M") to MB.  Defined up here beside the other
+# helpers because bash resolves a function only once execution reaches its
+# definition: while this lived further down, the patch-memory check above it
+# called an undefined name, `mem_mb` came back empty, and `(( "" < 12288 ))`
+# evaluated the empty string as 0 -- so a correctly-sized `--mem 14G` was
+# reported as "(< 12G)".  The gate failed closed, which is the safe direction,
+# but it failed for a reason its own message contradicted.
+_to_mb() {
+  local v="${1^^}"; local n="${v%[GMT]*}"
+  case "$v" in *T) awk "BEGIN{print $n*1024*1024}";;
+                *G) awk "BEGIN{print $n*1024}";;
+                *M) echo "$n";;
+                *)  echo "$n";; esac
+}
+
 echo "preflight: $EXP"
 
 # --- 1. One experiment, one results dir -------------------------------------
@@ -342,13 +357,6 @@ fi
 # Size memory from a real cell's MaxRSS, not from a round number:
 #   sacct -j <jobid> --format=JobID,MaxRSS,Elapsed
 if [[ -n "$MEM_PER_TASK" && -n "$CONC" ]]; then
-  _to_mb() {
-    local v="${1^^}"; local n="${v%[GMT]*}"
-    case "$v" in *T) awk "BEGIN{print $n*1024*1024}";;
-                  *G) awk "BEGIN{print $n*1024}";;
-                  *M) echo "$n";;
-                  *)  echo "$n";; esac
-  }
   req_mb=$(awk "BEGIN{print $(_to_mb "$MEM_PER_TASK") * $CONC}")
   # Two QOS can bind and they disagree: the job's association QOS and the
   # partition's.  In #3129 `squeue %q` said 4gpu_tier while the cpu partition
