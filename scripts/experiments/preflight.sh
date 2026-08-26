@@ -22,6 +22,7 @@ WARN_ONLY=0
 REPO="${VTS_REPO:-}"
 REGION_ARM=""
 MIN_POSITIVES=""
+MODE_CONTRAST=""
 REUSE_PREPARE=""
 JOB_NAME=""
 MEM_PER_TASK=""
@@ -35,6 +36,7 @@ while [[ $# -gt 0 ]]; do
     --need-gb) NEED_GB="$2"; shift 2 ;;
     --require-region-voting) REGION_ARM="$2"; shift 2 ;;
     --require-min-positives) MIN_POSITIVES="$2"; shift 2 ;;
+    --contrasts-voting-modes) MODE_CONTRAST=1; shift ;;
     --reuse-prepare) REUSE_PREPARE="$2"; shift 2 ;;
     --job-name) JOB_NAME="$2"; shift 2 ;;
     --diverges) DIVERGES="$2"; shift 2 ;;
@@ -558,6 +560,62 @@ PYDIV
   if [[ "$unacked" -gt 0 ]]; then
     echo "        -> if that is the axis this study sweeps, pass --diverges <knob>[,<knob>]"
     echo "        -> if it is not, the run would measure a detector nobody ships"
+  fi
+fi
+
+# --- 13b. A contrast axis that is confounded with another axis -----------------
+# #3115 swept the fold COMBINE rule and reported its headline per "voting mode".
+# Its grid held exactly two cells - `siglip x whole_image` and
+# `dinov3_patch x max_patch` - so every binary cell was SigLIP and every region
+# cell DINOv3.  The sign flip it measured is real; its ATTRIBUTION to voting mode
+# is not, because the embedder moved with it.  Check 6 asserts that region voting
+# genuinely *happens* on a cell; nothing asserted that a per-mode contrast is
+# attributable to the mode.
+#
+# So: whenever a run will be read per voting mode, both modes need more than one
+# embedder between them, or the two axes cannot be told apart.  Opt-in, because
+# plenty of studies legitimately report a single cell per mode and never contrast
+# across them - the failure is claiming the contrast, not running the grid.
+if [[ -n "$MODE_CONTRAST" && -n "$REPO" ]]; then
+  if [[ "$PY_USABLE" == "0" ]]; then
+    say_fail "mode-contrast confound NOT checked: python cannot import the tree (see above)"
+  else
+    CONF=$(CALIB_EXP="$EXP" python - "$REPO" <<'PY' 2>&1
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(sys.argv[1]) / "scripts" / "experiments" / "calibration"))
+import experiment_config as cfg
+
+by_mode: dict[str, set[str]] = {"binary": set(), "region": set()}
+for ds in cfg.DATASETS:
+    for emb in cfg.embedders_for_dataset(ds):
+        for style in cfg.styles_for(ds, emb):
+            mode = "region" if (cfg.region_voting_for(ds, emb) and style != "whole_image") else "binary"
+            by_mode[mode].add(emb)
+shared = by_mode["binary"] & by_mode["region"]
+if not by_mode["binary"] or not by_mode["region"]:
+    print("SKIP only one voting mode in this grid; there is no cross-mode contrast to confound")
+elif shared:
+    print("HOLDS embedder(s) in BOTH modes: " + ", ".join(sorted(shared)))
+else:
+    print(
+        "FAILS binary={%s} region={%s} - disjoint"
+        % (",".join(sorted(by_mode["binary"])), ",".join(sorted(by_mode["region"])))
+    )
+PY
+)
+    case "$CONF" in
+      HOLDS*) say_ok "mode contrast is not embedder-confounded (${CONF#HOLDS })" ;;
+      SKIP*)  say_ok "mode-contrast check skipped (${CONF#SKIP })" ;;
+      FAILS*)
+        say_fail "voting mode is CONFOUNDED with the embedder: ${CONF#FAILS }"
+        echo "        -> a per-mode headline from this grid is equally a per-embedder one"
+        echo "        -> give one embedder both modes (a patch embedder can run whole_image"
+        echo "           too: add it to CALIB_PATCH_STYLES), or do not contrast across modes"
+        ;;
+      *) say_fail "could not check the mode-contrast confound: $CONF" ;;
+    esac
   fi
 fi
 

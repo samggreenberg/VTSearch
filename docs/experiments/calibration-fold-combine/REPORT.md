@@ -185,6 +185,44 @@ legs are untested rather than refuted, and the report must say so.
 12 classes × 4 seeds, K ∈ {1,2,3,4,6,8,12,16}, `calibrate_count=2` live,
 inclusion 0, `PRODUCTION_HEAD`. Analyzed at dev `e87c90956` + this branch.
 
+> ### ⚠ Correction, 2026-08-25: the mode attribution is confounded
+>
+> This grid has exactly two cells — `vg_scale_any × siglip × whole_image`
+> (labelled "binary") and `vg_scale_any × dinov3_patch × max_patch` (labelled
+> "region"). **Voting mode and embedder are perfectly confounded.** Every claim
+> below that attributes the `space` leg's sign flip to *voting mode* is equally
+> consistent with attributing it to *the embedder* — e.g. "DINOv3's fold models
+> have less comparable score scales than SigLIP's, so percentiles help." The data
+> cannot separate the two.
+>
+> **What survives:** `combine` (averaging beats pooling) is measured *within*
+> each cell, so the confound does not touch it. `tmean` remains the safe floor.
+>
+> **What does not:** every recommendation about *which* rule to use *where*. The
+> sign flip is real; its attribution is not.
+>
+> The design was sold as removing a confound ("both voting modes from one
+> dataset") — true of the **dataset**, while substituting the **embedder**.
+> Preflight asserted that region voting genuinely *happens* on the DINOv3 cell;
+> nothing asserted the contrast was *attributable* to it.
+>
+> The disambiguating run is cheap and is tracked in #3258: `dinov3_patch` can run
+> `whole_image` alongside `max_patch` in the same cell, which fills the missing
+> corner and decomposes mode from embedder. Read everything below as
+> "cell A vs cell B", not "binary vs region", until that lands.
+>
+> **What that run can and cannot settle.** It makes one sharp prediction — if the
+> `space` leg follows the *embedder*, `dinov3 × whole_image` should prefer
+> percentiles like `dinov3 × max_patch` does; if it follows the *voting mode*, it
+> should prefer raw scores like `siglip × whole_image` does. Those are
+> distinguishable outcomes and one of them will be observed.
+>
+> It is still **one embedder for the mode contrast and one mode for the embedder
+> contrast**, so it discriminates between two hypotheses rather than establishing
+> either. A third outcome — the new cell landing between the two — would say the
+> effect is neither cleanly, and would need a second patch embedder to take
+> further.
+
 ### BLUF
 
 **Both docstrings are wrong, and they are wrong in different places.**
@@ -398,11 +436,13 @@ Still: `vg_scale_any` inherits whatever `vg_scale` holds, and `build_pile.py
 `pile_config.py` beside the dataset entry.
 
 ### What this study does not license
-- **One dataset.** `vg_scale_any` is 12 hand-checked classes at uniform
-  prevalence — chosen to isolate the combine rule, which also means the result
-  has not been shown to travel. The mode contrast is internal to this dataset,
-  which removes the dataset/mode confound but does not replace a second
-  environment.
+- **One dataset, and — the real limit — one embedder per voting mode.**
+  `vg_scale_any` is 12 hand-checked classes at uniform prevalence, chosen to
+  isolate the combine rule. Holding the dataset fixed removed the dataset/mode
+  confound that #2897 had, but it left **mode perfectly confounded with the
+  embedder**: SigLIP is the only binary cell and DINOv3 the only region one. See
+  the correction at the top; this is the study's principal weakness and it was
+  not caught before the run.
 - **Uniform prevalence.** The grid deliberately holds prevalence fixed at 7.1%,
   so nothing here says how the combine rule behaves on a rare category.
 

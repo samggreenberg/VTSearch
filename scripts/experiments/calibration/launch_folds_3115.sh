@@ -55,7 +55,8 @@ HERE="$WT/scripts/experiments/calibration"
 
 # /exp is a shared quota; the fold-count arms emit ~8 arms x 8 counts per step,
 # so the cells dir runs to a few GB.  Keep it on the 500G scratch.
-export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/folds-combine-3115}"
+# One study, one dir: this is the confound-breaking grid, not the first run's.
+export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/folds-combine-3115-modes}"
 export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
 # --- science knobs ---
@@ -116,7 +117,23 @@ export CALIB_DATASETS="${CALIB_DATASETS:-vg_scale_any}"
 export CALIB_VGSCALE_EMBEDDERS="${CALIB_VGSCALE_EMBEDDERS:-siglip,dinov3_patch}"
 export CALIB_CATEGORY_MODE="${CALIB_CATEGORY_MODE:-prevalence}"
 export CALIB_N_CATEGORIES="${CALIB_N_CATEGORIES:-12}"
-export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
+# BOTH styles on the patch embedder, which is what breaks the mode-vs-embedder
+# confound the first run shipped with.  That run held exactly two cells -
+# `siglip x whole_image` (all the "binary" rows) and `dinov3_patch x max_patch`
+# (all the "region" rows) - so voting mode and embedder moved together and its
+# per-mode headline was equally a per-embedder one.
+#
+# `dinov3_patch x whole_image` is the missing corner, and it is a genuine BINARY
+# cell: under `whole_image` a Bad vote contributes one row rather than ~197, so
+# `_flood_context` finds no flooding, `cal_groups` stays None and the row-wise
+# calibrator runs.  It costs almost nothing - the style runs inside the existing
+# cell on the already-loaded pickle.
+#
+#   siglip/whole  vs  dinov3/whole      -> the EMBEDDER, at fixed voting mode
+#   dinov3/whole  vs  dinov3/max_patch  -> the VOTING MODE, at fixed embedder
+#
+# (`siglip x max_patch` is the impossible fourth corner: no patch grid.)
+export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-whole_image,max_patch}"
 export CALIB_REPOOL_VARIANTS=""
 
 # --- sizing ---
@@ -280,6 +297,7 @@ case "$MODE" in
       bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb 20 \
         --require-region-voting vg_scale_any:dinov3_patch \
         --require-min-positives 100 \
+        --contrasts-voting-modes \
         --job-name cal-cells --mem "$CALIB_MEM" --conc "$CALIB_CONC" || {
         echo "preflight FAILED" >&2; [[ "${PREFLIGHT_SKIP:-0}" == "1" ]] || exit 1
       }

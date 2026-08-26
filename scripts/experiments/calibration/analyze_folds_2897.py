@@ -161,8 +161,17 @@ def load_cells(cells_dir: Path) -> pd.DataFrame:
     # on a single-vector embedder was reported as a region arm.  #2897's report
     # regrouped that cell into binary **by hand** while this column still called
     # it region; deriving it here is what stops the next study needing to know.
+    # Style is part of it, not just (dataset, embedder).  A patch embedder can be
+    # asked to run `whole_image`, and then each Bad vote contributes ONE row
+    # rather than ~197, so `_flood_context` finds no flooding, `cal_groups` stays
+    # None and the ROW-WISE calibrator runs - a binary cell on a patch embedder.
+    # That combination is exactly how #3115's mode-vs-embedder confound gets
+    # broken, so mislabelling it as region would defeat the run that fixes it.
     df["voting"] = np.where(
-        [region_voting_for(d, e) for d, e in zip(df["dataset"], df["embedder"], strict=True)],
+        [
+            region_voting_for(d, e) and st != "whole_image"
+            for d, e, st in zip(df["dataset"], df["embedder"], df["style"], strict=True)
+        ],
         "region",
         "binary",
     )

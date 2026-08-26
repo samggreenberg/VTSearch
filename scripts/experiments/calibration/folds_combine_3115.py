@@ -118,7 +118,7 @@ def _paired(v: pd.DataFrame, arm: str, ref: str) -> pd.DataFrame:
     than being compared against a different set of steps.
     """
     keys = [*STEP_KEYS, "k"]
-    cols = ["threshold", "n_folds_used", "window", "window_hi", "voting", *METRICS]
+    cols = ["threshold", "n_folds_used", "window", "window_hi", "voting", "env", *METRICS]
     a = v[v["arm"] == arm].set_index(keys)
     b = v[v["arm"] == ref].set_index(keys)
     a, b = a[~a.index.duplicated()], b[~b.index.duplicated()]
@@ -126,7 +126,9 @@ def _paired(v: pd.DataFrame, arm: str, ref: str) -> pd.DataFrame:
     j = pd.concat([a[have].add_suffix("_a"), b[have].add_suffix("_b")], axis=1, join="inner")
     if j.empty:
         return j
-    j = j.reset_index().rename(columns={"window_a": "window", "window_hi_a": "window_hi", "voting_a": "voting"})
+    j = j.reset_index().rename(
+        columns={"window_a": "window", "window_hi_a": "window_hi", "voting_a": "voting", "env_a": "env"}
+    )
     for m in METRICS:
         if f"{m}_a" in j.columns:
             j[f"d_{m}"] = j[f"{m}_a"] - j[f"{m}_b"]
@@ -150,7 +152,12 @@ def _summarise(j: pd.DataFrame, name: str, arm: str, ref: str, collapses: bool) 
     if j.empty:
         return rows
     deltas = [f"d_{m}" for m in METRICS if f"d_{m}" in j.columns]
-    for (voting, window, k), g in j.groupby(["voting", "window", "k"], observed=True):
+    # Grouped by ENV as well as voting mode.  #3115's first run had one env per
+    # mode, so "binary" and "SigLIP" named the same rows and the headline could
+    # not tell a voting-mode effect from an embedder effect.  Keeping env here
+    # lets a grid with two envs in one mode separate them; where there is only
+    # one env per mode this changes nothing.
+    for (voting, env, window, k), g in j.groupby(["voting", "env", "window", "k"], observed=True):
         cells = g.groupby(CELL_KEYS, observed=True)[[*deltas, "moved", "dropped_a"]].mean()
         d = cells["d_regret"].to_numpy()
         n = len(d)
@@ -163,6 +170,7 @@ def _summarise(j: pd.DataFrame, name: str, arm: str, ref: str, collapses: bool) 
             "arm": arm,
             "ref": ref,
             "voting": voting,
+            "env": env,
             "window": str(window),
             "window_hi": int(g["window_hi"].iloc[0]),
             "k": int(k),
@@ -197,7 +205,7 @@ def contrast_table(v: pd.DataFrame, agg) -> pd.DataFrame:
         rows.extend(_summarise(_paired(v, arm, ref), name, arm, ref, collapses))
     t = pd.DataFrame(rows)
     if not t.empty:
-        t = t.sort_values(["contrast", "voting", "window_hi", "k"])
+        t = t.sort_values(["contrast", "voting", "env", "window_hi", "k"])
     t.to_csv(agg / "combine_contrasts.csv", index=False)
     return t
 
@@ -283,6 +291,21 @@ def verdicts(t: pd.DataFrame, deep_min: int, margin: float) -> dict:
     if t.empty:
         return out
     deep = t[(t["window_hi"] >= deep_min) & (t["k"] >= COLLAPSE_BELOW_K)]
+    # Per ENV as well as per mode.  When a mode holds more than one env, the
+    # per-mode number is an average over cells that may disagree - which is the
+    # #3115 confound in miniature - so the env breakdown is what a reader should
+    # check before believing a mode headline.
+    out["by_env"] = {}
+    for env, g in deep.groupby("env", observed=True):
+        out["by_env"][env] = {
+            name: {
+                "d_regret": float(np.average(sub["d_regret"], weights=sub["n_cells"])),
+                "se": float(np.average(sub["se_regret"], weights=sub["n_cells"])),
+                "n_cells": int(sub["n_cells"].sum()),
+            }
+            for name, sub in g.groupby("contrast", observed=True)
+            if sub["n_cells"].sum()
+        }
     for voting, g in deep.groupby("voting", observed=True):
         per: dict = {}
         for name, sub in g.groupby("contrast", observed=True):
