@@ -189,9 +189,9 @@ RANK_GAP = 0.11
 #: The tile row's own top must stay under `RANK_TOP`, which is where the
 #: slide's title reserve ends; `save()` checks the written PNG, but a retune
 #: that breaks it should say so here first.
-RANK_TILE_Y = 4.30
-RANK_MARK_Y = 3.80
-RANK_CUT_LABEL_Y = 2.70
+RANK_TILE_Y = 4.15
+RANK_MARK_Y = 3.62
+RANK_CUT_LABEL_Y = 2.20
 
 
 assert RANK_TILE_Y + RANK_TILE <= RANK_TOP, "the tile row has grown into the title notch"
@@ -225,7 +225,7 @@ def _rank_stage(stage: int) -> plt.Figure:
     # The score axis, indented past the title notch and spending the right
     # margin to buy the width back — the standard repair for a figure whose top
     # row spans the drawing (slides/STYLE.md).
-    axis_y = 7.30
+    axis_y = 7.05
     ax.annotate(
         "",
         xy=(width - 0.5, axis_y),

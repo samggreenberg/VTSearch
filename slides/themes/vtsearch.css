@@ -419,6 +419,17 @@ section .pageno {
 section.lead .pageno,
 section.statement .pageno { display: none; }
 
+/* A split-background slide is not the full slide. Marpit renders its text into
+   a `foreignObject` the width of the text column, so nothing inside the section
+   can reach the slide's right edge — a number set 70px in from it lands in the
+   middle of the slide, reading as a stray numeral rather than a folio. Put it
+   at the column's own left margin instead, where it lines up with the text it
+   belongs to. */
+section[data-marpit-advanced-background-split] .pageno {
+  right: auto;
+  left: 70px;
+}
+
 /* A numbering group shares one page number, so "the slide with the mixture
    plot" still names one slide — but the room and the presenter still need to
    say *which* reveal. Every page of a group carries a letter after the number:
