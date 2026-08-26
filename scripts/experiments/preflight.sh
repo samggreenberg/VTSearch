@@ -60,6 +60,7 @@ say_fail() {
   if [[ "$WARN_ONLY" == "1" ]]; then echo "  WARN  $*"; else echo "  FAIL  $*"; FAILED=1; fi
 }
 say_ok() { echo "  ok    $*"; }
+say_note() { echo "  note  $*"; }
 
 echo "preflight: $EXP"
 
@@ -120,18 +121,43 @@ else
   fi
 fi
 
-# --- 3. Zero-byte cells from a previous incident ----------------------------
+# --- 3. Zero-byte and header-only cells from a previous incident ------------
 # A cell killed mid-write leaves a 0-byte CSV.  It counts as "present" to the
 # resume logic, so it is never re-run, and it crashes or silently shrinks the
 # analysis later.
+#
+# Its quieter twin is the header-only cell: a category that never collects both
+# classes writes the CSV header and nothing else.  That file is non-empty and
+# parses cleanly, so `-size 0` clears it and every "N/N cells" count calls it
+# present.  Check 13 predicts the condition from prepare_info.json *before* a
+# launch; this is the after-the-fact half, because a resumed grid inherits
+# whatever the previous attempt left behind.  Some are legitimate (a genuinely
+# thin category has no trainable step - the #3156 overview ended with 23 such
+# cells of 6480), so this REPORTS a count rather than blocking on it.
 ZROOTS=()
 for root in results-ab results; do [[ -d "$EXP/$root" ]] && ZROOTS+=("$EXP/$root"); done
 if [[ "${#ZROOTS[@]}" -gt 0 ]]; then
-  z=$(find "${ZROOTS[@]}" -name 'task_*.csv' ! -name '*sweep*' -size 0 2>/dev/null | wc -l)
+  z=$(find "${ZROOTS[@]}" -name 'task_*.csv' ! -name '*__*' -size 0 2>/dev/null | wc -l)
   if [[ "$z" -gt 0 ]]; then
     say_fail "$z zero-byte cell files present - delete them or they will never be re-run"
   else
     say_ok "no zero-byte cell files"
+  fi
+  # `! -name '*__*'` excludes every side frame at once (__sweep, __cutdiag,
+  # __cutincl - see _cells_io.SIDE_FRAME_SUFFIXES).  Naming them one at a time
+  # is how this check drifted: it still said `! -name '*sweep*'` two side frames
+  # later, and each of those is a long-format table that is *legitimately*
+  # header-only, so on #3156 the honest answer of 23 came back as 12983.
+  #
+  # `-size -2k -size +0` narrows to plausible candidates before the per-file
+  # `wc -l`, so the fork runs over a handful and not the whole grid: a cell CSV
+  # holding even one run is far larger than its ~700-byte header.
+  h=$(find "${ZROOTS[@]}" -name 'task_*.csv' ! -name '*__*' -size -2k -size +0 \
+        -exec sh -c '[ "$(wc -l < "$1")" -le 1 ]' _ {} \; -print 2>/dev/null | wc -l)
+  if [[ "$h" -gt 0 ]]; then
+    say_note "$h header-only cell file(s) - present, parse clean, carry no data row (see check 13)"
+  else
+    say_ok "no header-only cell files"
   fi
 fi
 
@@ -172,6 +198,27 @@ else
     fi
     if [[ -n "$(git -C "$REPO" status --porcelain --untracked-files=no)" ]]; then
       say_fail "worktree has uncommitted tracked changes - the run would be unreproducible"
+    fi
+    # How far behind the integration branch?  Check 12 compares the study's pins
+    # against `PRODUCTION_*`, but it reads those constants **out of this same
+    # worktree** - so a checkout that predates a production change has a stale
+    # pin AND a stale constant, they agree, and check 12 says ok.  That is how
+    # #3156's 6480-cell overview trained the retired `linear` head from a base
+    # 321 commits behind dev: nothing was pinned wrong, the baseline had simply
+    # moved.  Distance from origin/dev is the only signal that catches it, and
+    # it is cheap.
+    BASE_BRANCH="${PREFLIGHT_BASE_BRANCH:-dev}"
+    if git -C "$REPO" rev-parse --verify -q "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+      behind=$(git -C "$REPO" rev-list --count "HEAD..origin/$BASE_BRANCH" 2>/dev/null || echo 0)
+      if [[ "$behind" -ge "${PREFLIGHT_MAX_BEHIND:-100}" ]]; then
+        say_fail "worktree is $behind commits behind origin/$BASE_BRANCH"
+        echo "        -> every PRODUCTION_* constant check 12 reads is that old too, so it"
+        echo "           cannot see a baseline that moved. Rebase, or set PREFLIGHT_MAX_BEHIND."
+      elif [[ "$behind" -gt 0 ]]; then
+        say_note "worktree is $behind commits behind origin/$BASE_BRANCH (under the ${PREFLIGHT_MAX_BEHIND:-100} gate)"
+      else
+        say_ok "worktree is level with origin/$BASE_BRANCH"
+      fi
     fi
   fi
 fi

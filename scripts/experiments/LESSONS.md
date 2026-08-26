@@ -72,6 +72,8 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-08-26 | [a completed grid reported "0 / 6480" cells](lessons/2026-08-26-a-completed-grid-reported-zero-cells.md) | #3156 |
+| 2026-08-26 | [both sides of the knob check were stale](lessons/2026-08-26-both-sides-of-the-knob-check-were-stale.md) | #3156 |
 | 2026-08-25 | [a "voting mode" headline that was equally an embedder headline](lessons/2026-08-25-a-mode-contrast-that-was-an-embedder-contrast.md) | #3115 |
 | 2026-08-25 | [preflight failed for a reason that had nothing to do with the run](lessons/2026-08-25-preflight-without-a-venv.md) | #3115 |
 | 2026-08-24 | [a cost re-evaluated at a rounded threshold is a different cost](lessons/2026-08-24-a-cost-recomputed-at-a-rounded-threshold.md) | #2883 |
