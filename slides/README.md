@@ -73,12 +73,12 @@ Layout is a background-image directive, which is why placement survives in
 version control as a diffable line rather than a repacked binary:
 
 ```markdown
-![bg right:56% fit](figs/positive-starvation.png)
+![bg right:56% fit](figs/book-boundary.png)
 
-### Finding 2
-## Positives are the binding constraint
+### The Problem
+## A Concept in Your Head, a Million Items on Disk
 
-- After **150 votes**: a median of only **4–11** positives
+- Easy to name, impossible to query: *find me the books*
 ```
 
 Figure paths are written relative to `slides/`, not to the fragment — `build.py`
@@ -246,8 +246,10 @@ be unreadable in its slot.
 
 **Screenshots of the app are generated too.** `figs/ui-three-panel.webp` and
 `figs/ui-region-voting.webp` come from `figs/src/shoot-ui-figs.mjs`, which builds
-a corpus of real photographs out of the Caltech-101 download, trains a detector
-on cats by voting, and drives headless chromium:
+a corpus of real photographs out of COCO val2017 (`figs/src/coco_fixture.py`
+downloads it and files it by subject), trains a detector on **books** by voting
+— the deck's running example, and a concept with real near-misses in that pile —
+and drives headless chromium:
 
 ```bash
 cd scripts/screenshots && npm install     # once — playwright lives here

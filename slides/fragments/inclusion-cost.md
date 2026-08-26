@@ -15,8 +15,8 @@
 <!-- The previous slide put three cuts up and refused to choose between them.
      This is how you choose: put a price on each of the two mistakes. -->
 
-<!-- **a** — The same ranking, drawn as a line. Mostly right, wrong in the
-     middle, and nothing on it says where to cut. -->
+<!-- **a** — The same shape of ranking, drawn as a bare score line and longer:
+     mostly right, wrong in the middle, and nothing on it says where to cut. -->
 
 <!-- **b** — Weigh the two mistakes and you get a rule. At equal prices the best
      cut is here, and it is not obviously the one anyone would want. -->

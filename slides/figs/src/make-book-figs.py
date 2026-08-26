@@ -17,19 +17,17 @@ is a decision, not a fact. That is not hypothetical here. Visual Genome's own
 `vg_scale`: 3 of 20 sampled negatives actually held one, against zero for eight
 of the other classes (`docs/experiments/vg-scale/DATASHEET.md`).
 
-The photographs are **COCO val2017**, which the app already knows how to reach
-and which carries `book` as an annotated class. They are downloaded on demand
-into `data/coco-val2017/` and never committed; what is committed is the
+The photographs are **COCO val2017**, which carries `book` as an annotated
+class. `coco_fixture.ensure_corpus` downloads it on demand into
+`data/coco-val2017/`; nothing of it is committed, and what is committed is the
 rendered figure, exactly as for the two UI screenshots. The roster below pins
-the twelve frames by COCO image id and crops them by a hand-measured square, so
-a re-run reproduces the same figure rather than resampling the corpus.
+the ten frames by COCO image id and crops them by a hand-measured square, so a
+re-run reproduces the same figure rather than resampling the corpus.
 """
 
 from __future__ import annotations
 
 import sys
-import urllib.request
-import zipfile
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -45,6 +43,7 @@ from matplotlib.patches import Rectangle
 from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from coco_fixture import IMAGES, ensure_corpus  # noqa: E402
 from slide_figure import (  # noqa: E402
     FULL_BLEED,
     SIDEBAR,
@@ -53,13 +52,6 @@ from slide_figure import (  # noqa: E402
 )
 
 OUT = Path(__file__).resolve().parent.parent
-CORPUS = _REPO_ROOT / "data" / "coco-val2017"
-
-# Plain HTTP: the COCO host's certificate does not match its own name through a
-# TLS-terminating proxy, and these are public research images with published
-# checksums nowhere in the pipeline that follows.
-COCO_IMAGES_URL = "http://images.cocodataset.org/zips/val2017.zip"
-COCO_ANNOTATIONS_URL = "http://images.cocodataset.org/annotations/annotations_trainval2017.zip"
 
 INK = "#14181f"
 SOFT = "#5b6472"
@@ -68,7 +60,7 @@ RUST = "#b45309"
 GREEN = "#0d8a5f"
 BLUE = "#0b5fa5"
 
-#: Every frame the two figures use, as `(coco file, crop, what it is)`. The
+#: Every frame the two figures use, as `name: (coco file, crop)`. The
 #: crop is `(left, top, side)` in fractions of the image's own *width*, square
 #: by construction, measured by eye against the frame rather than derived from
 #: the annotation box — a box round one spine on a shelf is not the picture the
@@ -115,32 +107,10 @@ RANKING = (
 CUTS = (3, 5, 7)
 
 
-def ensure_corpus() -> None:
-    """Download COCO val2017 into `data/coco-val2017/` if it is not there yet.
-
-    Idempotent, like the UI-screenshot harness it sits beside: a re-run after
-    one of the crops is adjusted re-reads the images it already has.
-    """
-    images = CORPUS / "val2017"
-    if images.is_dir() and any(images.iterdir()):
-        return
-    CORPUS.mkdir(parents=True, exist_ok=True)
-    for url, members in ((COCO_ANNOTATIONS_URL, "annotations/instances_val2017.json"), (COCO_IMAGES_URL, None)):
-        archive = CORPUS / url.rsplit("/", 1)[-1]
-        if not archive.exists():
-            print(f"downloading {url} ...")
-            with urllib.request.urlopen(url) as response, archive.open("wb") as out:  # noqa: S310
-                while chunk := response.read(1 << 20):
-                    out.write(chunk)
-        with zipfile.ZipFile(archive) as zf:
-            zf.extractall(CORPUS, members=[members] if members else None)
-        archive.unlink()
-
-
 def tile(name: str, size: int = 512) -> np.ndarray:
     """One roster frame, cropped square and resampled to `size`."""
     file, (left, top, side) = TILES[name]
-    with Image.open(CORPUS / "val2017" / file) as image:
+    with Image.open(IMAGES / file) as image:
         frame = image.convert("RGB")
         width, height = frame.size
         span = min(side * width, height)
