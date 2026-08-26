@@ -1,4 +1,4 @@
-# Timing and memory measured a run that wasn't the experiment
+# 2026-08-25 — timing and memory measured a run that wasn't the experiment
 
 **Cost:** a 108-cell arm ran the wrong algorithm to completion; then 74 of 108
 cells died OUT_OF_MEMORY on the re-run. Two wasted arrays, ~40 minutes of
