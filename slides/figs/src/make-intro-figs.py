@@ -93,7 +93,7 @@ INK = "#14181f"
 SOFT = "#5b6472"
 BLUE = "#0b5fa5"  # the detector's boundary — the shipped decision
 BAND = "#dce7f2"  # the strip between the loose and the tight cut
-RUST = "#b45309"  # the Bad side
+RED = "#b91c1c"  # the Bad side
 GREEN = "#0d8a5f"  # the Good side
 GHOST = "#aab3c0"  # the boundary as it was before the retrain
 
@@ -870,7 +870,7 @@ def _cross(ax: plt.Axes, p: np.ndarray) -> None:
         ax.plot(
             [x - dx * R, x + dx * R],
             [y - R, y + R],
-            color=RUST,
+            color=RED,
             linewidth=3.2,
             solid_capstyle="round",
             zorder=6,

@@ -56,7 +56,7 @@ OUT = Path(__file__).resolve().parent.parent
 INK = "#14181f"
 SOFT = "#5b6472"
 RULE = "#d8dee6"
-RUST = "#b45309"
+RED = "#b91c1c"
 GREEN = "#0d8a5f"
 BLUE = "#0b5fa5"
 
@@ -158,7 +158,7 @@ def boundary_fig() -> None:
 
     rows = (
         (BOUNDARY_YES, "Book", GREEN),
-        (BOUNDARY_MAYBE, "Book?", RUST),
+        (BOUNDARY_MAYBE, "Book?", RED),
     )
     y = height
     for names, label, colour in rows:
@@ -253,7 +253,7 @@ def _rank_stage(stage: int) -> plt.Figure:
                 ha="center",
                 va="top",
                 fontsize=26,
-                color=GREEN if positive else RUST,
+                color=GREEN if positive else RED,
             )
 
     if stage >= 3:

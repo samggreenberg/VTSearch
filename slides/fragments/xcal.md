@@ -33,7 +33,7 @@
      between. **f** — Same on the other half, and note the Bad above θ₂: each
      cut is a trade-off, not a free gap. -->
 
-<!-- **g** — Average the two cuts and hand θ₀ to M₀. Green is Good media, rust
+<!-- **g** — Average the two cuts and hand θ₀ to M₀. Green is Good media, red
      is Bad. -->
 
 <!-- The shipped code has refined this since — pooled scores, a quantile the

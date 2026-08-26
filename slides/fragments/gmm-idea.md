@@ -27,6 +27,6 @@
      in the bottom half of the figure ever looks at a vote. -->
 
 <!-- The midpoint looks naive and survived two separate attempts to replace it.
-     And colouring the low mode rust and the high mode green is an assumption
+     And colouring the low mode red and the high mode green is an assumption
      the fit cannot justify: measured later, it was wrong by a factor of four —
      a fitted high-component weight of 0.35 against a true prevalence of 0.09. -->

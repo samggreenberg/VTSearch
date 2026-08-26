@@ -16,7 +16,7 @@
  *    slide as it does in the chart beside it:
  *
  *      --hue-cut   blue   the threshold, and the shipped decision it makes
- *      --hue-neg   rust   the negative side: the Bad component, the losing arm
+ *      --hue-neg   red    the negative side: the Bad component, the losing arm
  *      --hue-pos   green  the positive side: the Good component, a measured win
  *
  *    Use them through the .cut / .neg / .pos span classes, and only when the
@@ -38,7 +38,7 @@
 
   /* Identity hues — see rule 2 above. Kept in sync with make-calib-figs.py. */
   --hue-cut: #0b5fa5;
-  --hue-neg: #b45309;
+  --hue-neg: #b91c1c;
   --hue-pos: #0d8a5f;
 
   font-family: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;

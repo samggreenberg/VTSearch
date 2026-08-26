@@ -70,7 +70,7 @@ beside it.** `themes/vtsearch.css` defines three, matching the palette in
 | class | hue | means |
 |---|---|---|
 | `.cut` | blue | the threshold, and the shipped decision it makes |
-| `.neg` | rust | the negative side: the Bad component, the losing arm |
+| `.neg` | red | the negative side: the Bad component, the losing arm |
 | `.pos` | green | the positive side: the Good component, a measured win |
 
 Use them only when the coloured word names something the figure on that slide

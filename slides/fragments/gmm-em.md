@@ -18,7 +18,7 @@
      terrible — both sit in the valley. Where you start does not matter. -->
 
 <!-- **b** — The E step. For every score, ask each curve how much it claims it:
-     not yes or no, a share. Rust takes almost all of the low mound, green
+     not yes or no, a share. Red takes almost all of the low mound, green
      almost all of the high, and in between the bar is genuinely split. Nothing
      has moved yet. -->
 
