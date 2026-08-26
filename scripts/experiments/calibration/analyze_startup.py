@@ -325,8 +325,8 @@ def verdict(summary: dict) -> str:
     the mechanism, and no arm-vs-control number in the run is interpretable
     until that is understood.
     """
-    fals = summary["arms"].get(FALSIFIER, {})
-    fals_pos = fals.get("positives_100", {})
+    fals_arm = summary["arms"].get(FALSIFIER, {})
+    fals_pos = fals_arm.get("positives_100", {})
     if not fals_pos.get("n_pairs"):
         return f"WITHHELD: the falsification arm ({FALSIFIER}) produced no pairs."
     if fals_pos.get("median_delta", 0.0) >= 0:
