@@ -121,11 +121,21 @@ CONTAMINATES: dict[str, frozenset[str]] = {
 #: scanned letterhead for the weakly-labelled classes, not despite the clash.
 UCSF_INDUSTRIES: tuple[str, ...] = ("Tobacco", "Opioids", "Chemical", "Fossil Fuel", "Drug", "Food")
 
-#: Companies whose single-page letters form the weakly-labelled letterhead
-#: classes.  ``author`` (who wrote it), not ``collection`` (whose files it sat
-#: in): a letter *in* the Philip Morris collection is as likely to be incoming
-#: mail on a law firm's letterhead.  Live counts of single-page ``type:letter``
+#: Fraction of page height treated as the letterhead band on a UCSF candidate
+#: page.  UCSF ships no boxes, and a mark nobody can see cannot be adjudicated;
+#: a letterhead is at the top of the page by definition, so the top strip is a
+#: coarse but honest locator to cluster on.  It is never a ground-truth box —
+#: the tight box comes from the hand-drawn query crop after adjudication.
+LETTERHEAD_BAND_FRAC = float(os.environ.get("VTS_DOCMARKS_LETTERHEAD_BAND_FRAC", "0.22"))
+
+#: Companies whose single-page letters form the letterhead **candidate pool**.
+#: ``author`` (who wrote it), not ``collection`` (whose files it sat in): a
+#: letter *in* the Philip Morris collection is as likely to be incoming mail on
+#: a law firm's letterhead.  Live counts of single-page ``type:letter``
 #: documents per author, measured 2026-08-25, are in the README.
+#:
+#: An author is a pool, never a class.  See ``sources/ucsf.py`` for why turning
+#: one into a class id would write two guaranteed errors into the ground truth.
 UCSF_LETTERHEAD_AUTHORS: tuple[str, ...] = (
     "PHILIP MORRIS",
     "RJR",

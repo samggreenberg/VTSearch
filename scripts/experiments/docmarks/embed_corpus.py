@@ -119,11 +119,12 @@ def pages_for_tier(corpus: Path, tier: str) -> list[Page]:
 def load_medias(pages: Sequence[Page], classes: dict[str, Any], embedder: str) -> dict[int, dict]:
     """Turn manifest pages into the media dicts the embedding stage expects.
 
-    ``regions`` carries every ground-truth mark, so a region-voting arm can drag
-    the real box rather than the whole page.  Weak (boxless) marks are recorded
-    in ``categories`` but contribute no region — a zero-area box would be
-    indistinguishable from a real one downstream, which is exactly the
-    distinction the corpus is built to preserve.
+    ``regions`` carries every located mark, so a region-voting arm can drag the
+    real box rather than the whole page.  A region records the ``provenance`` it
+    came with, so a downstream arm can tell an adjudicated box from a coarse
+    letterhead band; unlocated marks contribute no region at all, because a
+    zero-area box would be indistinguishable from a real one and that is exactly
+    the distinction the corpus exists to preserve.
     """
     medias: dict[int, dict] = {}
     for index, page in enumerate(sorted(pages, key=lambda p: p.page_id)):
@@ -170,7 +171,7 @@ def load_medias(pages: Sequence[Page], classes: dict[str, Any], embedder: str) -
                 "tier": page.meta.get("tier"),
                 "provenances": sorted({m.provenance for m in page.marks}),
                 "industry": page.meta.get("industry"),
-                "decade": page.meta.get("decade"),
+                "year": page.meta.get("year"),
             },
         }
     return medias
