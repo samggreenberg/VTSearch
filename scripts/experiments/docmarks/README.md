@@ -1,39 +1,70 @@
-# DocMarks — stamps and logos in scanned documents
+# DocMarks — eval data for stamp detection
 
-One instance-retrieval corpus, assembled from four sources in three strata, with
-nested size tiers. Built for structural-search experiments: the 2026-07-13
-screenshot/scanned-document study found the **first configuration where
-structural search beats the deep embedder on a real corpus**
-(SuperPoint+LightGlue, AP 0.395/0.481 vs SigLIP's 0.204/0.235), and then could
-not push on that result because the two document corpora it used are far too
-small — 259 and 1,088 pages, with as few as 9 instances per class.
+Labelled data for evaluating **structural similarity search on small marks in
+scanned documents** — finding a given stamp, seal or letterhead logo in a pile
+of pages. Built for the feature the structural embedder is heading toward, and
+for the experiments that will decide how it should work.
+
+The 2026-07-13 study found the first configuration where structural search beats
+the deep embedder on a real corpus (SuperPoint+LightGlue, AP 0.395/0.481 vs
+SigLIP's 0.204/0.235), then ran out of road: its two document corpora are 259
+and 1,088 pages, with as few as 9 instances per class, and their class
+identities were derived by that study rather than verified by anyone.
 
 ```bash
-python build_corpus.py --probe                        # can I reach every source?
-python build_corpus.py --sources spods --limit 40     # small real build
-python build_corpus.py --survival                     # class counts vs threshold
-python build_corpus.py                                # the whole thing
+python build_corpus.py --probe                       # can I reach every source?
+python build_corpus.py --sources spods               # cluster into candidates
+python shortlist.py --corpus <dir> --write-roster     # rank them, draft a roster
+$EDITOR <dir>/roster.json                             # pick your two dozen
+python build_corpus.py --sources spods --roster <dir>/roster.json
 
-python make_audit_slate.py --task cluster             # the human passes
-python audit_to_corrections.py --task cluster --apply
+python make_audit_slate.py --task membership          # verify every instance
+python make_audit_slate.py --task confusable          # adjudicate every pair
+python audit_to_corrections.py --task membership --apply
 
 source ../pile/pile_env.sh
 python embed_corpus.py --tier s --embedders sift_vlad,siglip
 ```
 
-## The three strata
+## The design in one idea: a curated roster, not an inventory
 
-| stratum | source | what it gives | what it costs |
-|---|---|---|---|
-| anchor | SPODS, StaVer, Tobacco800 | real marks, real scans, real boxes | small; ~2,700 pages, and two of the three ship no identities |
-| haystack | UCSF Industry Documents Library | millions of real scanned pages; weak letterhead classes at 10⁵ instances | labels are metadata-derived and unverified |
-| synth | LogoDet-3K artwork on held-out real scans | exact ground truth, sweepable size/rotation/count | pasted marks are not printed marks |
+The corpus holds two populations with completely different standards of
+evidence, and keeping them apart is the whole point:
 
-The rule that comes with the third one: **synthetic numbers quantify a
-mechanism, real numbers size the effect.** A finding that appears only in
-`synth` is a hypothesis about the pipeline, not a claim about documents.
+- **Roster classes** — a small, named, checked-in set of about two dozen. Every
+  instance is adjudicated in or out by hand; every confusable pair is
+  adjudicated same or different. Nothing enters by heuristic.
+- **Distractors** — everything else, unlabelled and unexamined, in whatever
+  quantity the tier budget allows. They need no labels, only to be *safe to
+  score against*.
 
-## What each source actually ships
+That split is what buys a trustworthy eval at a cost a person can pay.
+Verifying 24 classes exhaustively is an afternoon; verifying 400 is not, and a
+benchmark whose labels nobody checked is a benchmark whose numbers nobody should
+quote. Without a `--roster`, the builder emits candidate classes for
+`shortlist.py` to rank — those are *proposals*, and the build says so.
+
+## Both directions of the ground truth
+
+An eval for "find this mark" needs two kinds of label, and clustering can only
+ever propose one:
+
+- **same** — a shared `class_id`. These instances must all be found.
+- **different** — a recorded separation. These must be told apart.
+
+The second is what usually goes missing, and its absence is invisible: without
+it, the only thing keeping two similar marks in separate classes is where a
+distance threshold happened to land, so nudging the threshold silently rewrites
+the ground truth. Measured on the fixture corpus at a loose threshold, three
+distinct marks collapse into one class — unless the separations are on disk, in
+which case all three survive.
+
+So a `different` verdict is stored permanently in `separations.json`, keyed on
+**page ids** (which survive a re-cluster; class ids do not) and enforced as a
+cannot-link constraint on every future run. The constraint propagates, so two
+separated marks cannot be reunited through some third ambiguous crop.
+
+## What each source ships
 
 **SPODS** — 1,088 scanned pseudo-official pages, direct download, no
 registration. Confirmed by walking the RAR headers:
@@ -46,30 +77,28 @@ Ground truth (GT1)/{logo,signature,stamp,text}/image (1..1088).png
 Four **binary pixel masks per page**, one per category. Note what is *not*
 there: any notion of *which* logo. A previous study reported "64 logo/stamp
 classes" for SPODS with names like `logo_14` — those identities were derived by
-that study, not read off the dataset, and nothing verified them. Since class
-identity is the entire ground truth of an instance benchmark, that inventory was
-a hypothesis with unmeasured error bars. Here the derivation is explicit
-(`cluster_marks.py`), flagged (`provenance="clustered"`), and audited.
+that study and never verified. Since class identity is the entire ground truth
+of an instance benchmark, that inventory was a hypothesis with unmeasured error
+bars. Here the derivation is explicit (`cluster_marks.py`), flagged
+(`provenance="clustered"`), and only becomes ground truth after the membership
+audit.
 
-SPODS is **not offline**, despite having been recorded that way. Its own page
-still advertises `www.facweb.iitkgp.ernet.in`, a decommissioned host that 503s;
+SPODS is **not offline**, despite having been recorded that way: its own page
+advertises `www.facweb.iitkgp.ernet.in`, a decommissioned host that 503s, while
 `facweb.iitkgp.ac.in` serves the same 2.94 GB file. The authors' Scanned
-Document Degradation Tool is beside it (`sddt.zip`, 689 MB).
+Document Degradation Tool sits beside it (`sddt.zip`, 689 MB).
 
-**StaVer** — 400 scanned dummy bills with pixel-accurate stamp GT plus per-file
-`info` text (stamp count, colour, overlap, signature presence). Kaggle mirror;
-the DFKI original was unreachable when this was written. Again: locations, no
-identities. The recorded stamp count is used as an independent check on the mask
-decomposition — a page the dataset says has one stamp that decomposes to four
-means the merge gap is wrong, which is otherwise invisible.
+**StaVer** — 400 scanned dummy bills, pixel-accurate stamp GT, per-file `info`
+text (stamp count, colour, overlap). Kaggle mirror; DFKI's original was
+unreachable. Locations, no identities. The recorded stamp count is used as an
+independent check on the mask decomposition — a page the dataset says has one
+stamp that decomposes to four means the merge gap is wrong.
 
-**Tobacco800** — 1,290 real scanned business documents, 412 carrying a logo,
-GEDI XML ground truth from UMD's LAMP. The published logo protocol keeps the 21
-categories with **≥2 occurrences**, which cannot support a train-and-search
-eval: at two instances, using one as the query leaves one thing to retrieve. Use
-`--min-instances` and read the survival curve.
+**Tobacco800** — 1,290 real scanned business documents, 412 with a logo, GEDI
+XML ground truth from UMD's LAMP. Its published protocol keeps the 21 logo
+categories with ≥2 occurrences, which cannot support a train-and-search eval.
 
-**UCSF IDL** — an open Solr index. Measured live on 2026-08-25:
+**UCSF IDL** — an open Solr index; measured live 2026-08-25:
 
 | query | count |
 |---|---:|
@@ -77,115 +106,137 @@ eval: at two instances, using one as the query leaves one thing to retrieve. Use
 | tobacco, 1 page, `type:letter` | 1,802,100 |
 | `author:"RJR"` 1-page letters | 162,197 |
 | `author:"PHILIP MORRIS"` | 73,320 |
-| `author:"LOR, LORILLARD"` | 21,120 |
 
-Prefer `author` over `collection`. `collection` is provenance — whose filing
-cabinet the page sat in — so a letter *in* the Philip Morris collection is about
-as likely to be incoming mail on someone else's letterhead.
+**`author` is a candidate pool, not a class.** The field asserts a page is
+*from* a company; it has never looked at the mark. Making it a class id writes
+two guaranteed errors into the ground truth: a company that redesigned its
+letterhead yields one class holding two artworks (so a detector is punished for
+telling them apart), and two subsidiaries sharing artwork yield two classes
+holding one mark (so it is punished for recognising it). Those are exactly the
+errors the eval exists to measure. So the author narrows millions of pages to a
+high-yield pool, each candidate gets a coarse top-of-page band to locate the
+mark, and identity is settled by clustering plus adjudication like everything
+else. `documentdate` is recorded and never enters a class id: era is a fact
+about the calendar, not about the mark.
 
-## Contamination is prevented by construction, not by annotation
+Distractors only: `--ucsf-letterhead-per-author 0`.
 
-The trap: RVL-CDIP, Tobacco800 and UCSF's Tobacco industry all descend from
-IIT-CDIP. An American Tobacco letterhead is *certain* to appear in an RVL-CDIP
-"distractor" pool. Unlabelled positives in a distractor set do not make a
-benchmark slightly noisy — they make a correct retrieval count as a false
-positive, so the metric punishes the model for being right.
+**Synth** — real artwork (LogoDet-3K, or any `--synth-pool-dir`) pasted onto
+held-out real scans at known `(x, y, scale, rotation)` with scanner-style
+degradation. Exact ground truth, and the only stratum that can be *swept*: size,
+rotation and count are inputs, so an experiment can locate the ~32px floor or
+the inlier-count working point instead of straddling it. The rule that comes
+with it: **synthetic numbers quantify a mechanism, real numbers size the
+effect.** A finding that appears only in `synth` is a hypothesis about the
+pipeline, not a claim about documents.
 
-No amount of hand annotation fixes that at 200k pages. `CONTAMINATES` in
-`docmarks_config.py` encodes which sources may serve as distractors for which
-classes, `classes.json` records the resolved list per class, and eval code must
-score a class against its `eligible_distractor_sources` rather than the whole
-corpus. Tobacco800 classes therefore get UCSF's *non-tobacco* industries; SPODS
-and StaVer, whose marks exist nowhere else, get everything.
+## Three kinds of negative
 
-Note one residual: companies span industries (Philip Morris reaches Food through
-Kraft), so industry exclusion is a strong filter, not a proof.
+Not all distractors are equal, and the manifest keeps them distinct:
+
+- **known negative** — a page from a source exhaustively checked for this class,
+  so its *absence* of the mark is verified. These are the valuable ones: same
+  scanner, same paper, same era, known clean. A SPODS page carrying a different
+  mark is the hardest possible negative for a SPODS class, and the membership
+  audit is what makes it usable instead of a contamination risk.
+- **presumed negative** — from a contamination-safe source nobody checked
+  individually. Fine in bulk, and the only way to reach 200k.
+- **excluded** — a contamination risk, never scored.
+
+The trap that last category exists for: RVL-CDIP, Tobacco800 and UCSF's Tobacco
+industry all descend from IIT-CDIP, so an American Tobacco letterhead is
+*certain* to appear in an RVL-CDIP "distractor" pool. Unlabelled positives don't
+make a benchmark slightly noisy — they make a correct retrieval count as a false
+positive, so the metric punishes the model for being right. No hand pass fixes
+that at 200k pages; `CONTAMINATES` in `docmarks_config.py` fixes it by
+construction, and each class records its resolved
+`eligible_distractor_sources`.
 
 ## Tiers
 
 `s`=5k, `m`=50k, `l`=200k pages, **nested**: every page in `s` is in `m` is in
-`l`, and all three share class ids, so a result on one is comparable to a result
-on another. Positives are in every tier — a tier keeping 3 of a class's 30
-instances measures a different and much harder problem, not the same one more
-cheaply. Distractors get a stable hash rank and tiers are prefixes of it.
+`l`, sharing class ids, so a result on one is comparable to a result on another.
+Roster positives are in every tier — a tier keeping 3 of a class's 30 instances
+measures a different and harder problem, not the same one more cheaply.
+Distractors get a stable hash rank and tiers are prefixes of it.
 
 Two stability promises are on offer and they genuinely conflict:
 
-* **within a build** (default): exact budgets, nested. Run on `s`, then on `l`,
-  no rebuild.
-* **across builds** (`--pin-tiers <earlier build_report.json>`): membership fixed
+- **within a build** (default): exact budgets, nested. Run on `s`, then `l`, no
+  rebuild.
+- **across builds** (`--pin-tiers <earlier build_report.json>`): membership fixed
   by absolute rank cutoff, so a grown source pool cannot evict a page from a
   tier it was already in. Budgets drift instead.
 
-Without pinning, a build over a different page set is a **new corpus version**
-and should be named as one. `tests_lib/datasets/test_docmarks_corpus.py` pins
-both behaviours, including the negative one.
+Without pinning, a build over a different page set is a **new corpus version**.
+Both behaviours are pinned by tests, including the negative one.
 
-## The three human passes — and the one that isn't
+## The human passes
 
-Each exists because a specific number is otherwise *unknowable*, not merely
-unverified. In value order:
+In the order you run them. Only the first two are needed for a first eval.
 
-1. **`letterhead`** — sample ~100 pages per weak-label author and count how many
-   really carry the mark. This is the single highest-value check in the corpus:
-   at 90% the UCSF stratum is usable with a noise model, at 40% it is not usable
-   at all, and nothing except looking can tell you which. Everything else in the
-   haystack layer is downstream of this number.
-2. **`cluster`** — confirm the derived SPODS/StaVer classes. One contact sheet
-   per class, all instances; single linkage's failure mode (two classes bridged
-   by one ambiguous crop) is obvious on sight. Verdicts: `ok`, `split`,
-   `merge_into:<id>`, `drop`.
-3. **`distinctive`** — one sheet of every class's exemplar, marked `distinctive`
-   or `generic`. A plain warning triangle or a ruled box is a *shape*, not an
-   *instance*: "find this rectangle" is not a well-posed retrieval query. The
-   prior study's worst classes (`warning_diamond` at 17 keypoints,
-   `hospital_cross`) are exactly this, and averaging them into a headline AP
-   measures the dataset's junk. Generic classes are **kept and labelled**, never
-   deleted, so both numbers stay reportable.
+1. **`membership`** — every instance of every roster class, numbered on contact
+   sheets. Verdict is `ok` or the indices that are *not* this mark (`3,17`), so
+   a 30-crop class is one line. Afterwards no positive is unexamined, which is
+   what lets a miss be blamed on the detector rather than the label. A rejected
+   crop keeps its box and stays on its page — it becomes a known negative.
+2. **`confusable`** — every roster pair side by side, ranked by distance. 24
+   classes is 276 pairs, so the full matrix is adjudicated rather than sampled.
+   `same` sends you to `merge_into:` on the cluster task; `different` writes a
+   permanent separation.
+3. **`cluster`** — is a class one mark at all? Mostly useful while choosing a
+   roster. `split` is productive: it re-clusters that class alone at half the
+   threshold and re-sheets the pieces, disturbing nothing else.
+4. **`distinctive`** — mark vs shape. A plain warning triangle or ruled box is a
+   *shape*: "find this rectangle" is not a well-posed retrieval query. The prior
+   study's worst classes (`warning_diamond` at 17 keypoints, `hospital_cross`)
+   are exactly this. Generic classes are kept and labelled, never deleted.
+5. **`letterhead`** — for the later UCSF expansion: sample bands per candidate
+   author and count how many carry a printed mark at all. Decides whether that
+   pool is worth clustering.
 
-Query crops are generated automatically from each class's largest boxed instance
-(the prior study measured a 2.2× AP advantage for a clean query over a small
-in-scene crop). Weak-label classes have no box, so they are listed in
-`build_report.json` under `needs_hand_crop` — one hand-drawn crop each.
-
-**Not a pass:** exhaustively checking the distractor pool for unlabelled
-positives. Unfixable by hand at this scale; prevented by construction above.
-What *is* worth doing after a run is adjudicating the top-k false positives per
-query — a few hundred thumbnails that separate a model error from a missing
-label, which no aggregate can do.
+Query crops come from each class's largest boxed instance automatically (the
+prior study measured a 2.2× AP advantage for a clean query over a small in-scene
+crop). Band-located classes get none — auto-cropping the strip would hand the
+query a banner of letterhead plus address plus rule line and call it a logo,
+which is worse than no crop because it looks like ground truth. They are listed
+in `build_report.json` under `needs_hand_crop`.
 
 ## Output
 
 ```
 corpus.jsonl        one record per page: path, size, marks, provenance, tier
-classes.json        class inventory: instances, median px, eligible distractors, audit slots
-queries/            one query crop per admitted class
-cluster_report.json what the identity clustering did
-build_report.json   counts, survival curve, tier cutoffs, rejections with reasons, warnings
+classes.json        per class: instances, distinct_from, caveats, eligible distractors, audit state
+roster.json         the hand-picked classes an eval runs on
+separations.json    adjudicated "different mark" pairs, keyed on page ids
+queries/            one query crop per box-located roster class
+shortlist.png/json  ranked candidates for choosing a roster
+cluster_report.json what clustering did, and how many separations it honoured
+build_report.json   counts, survival curve, tier cutoffs, rejections, warnings
 ```
 
-Every mark carries a `provenance`: `gt` (shipped by the source), `clustered`
-(derived here, audit pending), `weak` (metadata-implied, unverified) or
-`synthetic` (true by construction). Do not aggregate across them without saying
-so.
+Every mark carries a `provenance`: `gt` (a box shipped by the source),
+`clustered` (identity derived here), `clustered_band` (identity derived from a
+coarse strip, so the box locates a region and not the mark), `candidate` (pool
+member, no identity yet) or `synthetic` (true by construction). A class also
+carries `audit.membership_verified` — **false means it is still a proposal**.
+Do not aggregate across provenances without saying so.
 
 ## Embedding cells
 
 `embed_corpus.py` writes `docmarks_<tier>__<embedder>.pkl` into the shared
-pile's `embeddings/` dir, in the pile's own format, via the pile's own pickle
-IO. It is deliberately *not* a `pile_config.DATASETS` entry: the pile builds the
-full dataset × embedder cross-product, so adding DocMarks and `sift_vlad` there
-would silently schedule `sift_vlad` cells for all six existing datasets — a
-dozen-odd cells nobody asked for, on a mount the playbook already calls
-chronically full.
+pile's `embeddings/` dir, in the pile's format, via its pickle IO. It is
+deliberately *not* a `pile_config.DATASETS` entry: the pile builds the full
+dataset × embedder cross-product, so adding DocMarks and `sift_vlad` there would
+silently schedule `sift_vlad` cells for all six existing datasets, on a mount
+the playbook already calls chronically full.
 
 ## Before running this on the grid
 
 `python build_corpus.py --probe` first. Every source fails differently — a
 decommissioned hostname, a missing Kaggle token, an absent RAR extractor — and
 finding out which costs seconds now and a queue slot later. SPODS needs one of
-`bsdtar` / `7z` / `unar` / `unrar`; StaVer and Tobacco800 need a Kaggle token at
-`~/.kaggle/kaggle.json` or in `KAGGLE_USERNAME`/`KAGGLE_KEY`.
+`bsdtar` / `7z` / `unar` / `unrar`; StaVer and Tobacco800 need a Kaggle token.
 
-Then `bash ../preflight.sh` as usual, and size from a real cell rather than a
-guess: build tier `s` first and read its actual seconds.
+Then `bash ../preflight.sh`, and size from a real cell rather than a guess:
+build tier `s` first and read its actual seconds.

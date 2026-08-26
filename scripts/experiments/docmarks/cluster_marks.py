@@ -178,8 +178,29 @@ def distance_matrix(
 # --------------------------------------------------------------------------
 
 
-def single_linkage(dist: np.ndarray, threshold: float) -> list[int]:
-    """Union-find single-linkage clustering.  Returns a label per row."""
+def single_linkage(
+    dist: np.ndarray,
+    threshold: float,
+    *,
+    cannot_link: Optional[Sequence[tuple[int, int]]] = None,
+) -> list[int]:
+    """Union-find single-linkage clustering.  Returns a label per row.
+
+    *cannot_link* is a list of index pairs a human has adjudicated as **different
+    marks**.  Those pairs are never merged, however similar they look, and the
+    constraint propagates: once ``a`` and ``b`` are separated, nothing may join
+    their groups through some third crop either.
+
+    This is the half of the ground truth that pure clustering cannot supply.
+    Two visually confusable marks — the same company's logo beside its
+    subsidiary's, a stamp and its reissue — are precisely the pairs an
+    instance-retrieval benchmark must pin, and precisely the pairs single
+    linkage will chain together.  Recording "these are different" makes the
+    distinction enforceable rather than a matter of where the threshold landed.
+
+    Merges are applied in increasing distance order so the result does not
+    depend on iteration order once constraints start blocking merges.
+    """
     n = dist.shape[0]
     parent = list(range(n))
 
@@ -189,12 +210,39 @@ def single_linkage(dist: np.ndarray, threshold: float) -> list[int]:
             i = parent[i]
         return i
 
-    for i in range(n):
-        for j in range(i + 1, n):
-            if dist[i, j] <= threshold:
-                ri, rj = find(i), find(j)
-                if ri != rj:
-                    parent[max(ri, rj)] = min(ri, rj)
+    # Groups that must stay apart, tracked by representative and kept current
+    # as unions happen.
+    forbidden: set[tuple[int, int]] = set()
+
+    def forbid(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            forbidden.add((min(ra, rb), max(ra, rb)))
+
+    def blocked(ra: int, rb: int) -> bool:
+        return (min(ra, rb), max(ra, rb)) in forbidden
+
+    for a, b in cannot_link or ():
+        forbid(a, b)
+
+    candidates = sorted(
+        ((dist[i, j], i, j) for i in range(n) for j in range(i + 1, n) if dist[i, j] <= threshold),
+        key=lambda t: (t[0], t[1], t[2]),
+    )
+    for _d, i, j in candidates:
+        ri, rj = find(i), find(j)
+        if ri == rj or blocked(ri, rj):
+            continue
+        keep, gone = min(ri, rj), max(ri, rj)
+        parent[gone] = keep
+        # Re-key every constraint that referenced the absorbed group.
+        if forbidden:
+            rekeyed = set()
+            for x, y in forbidden:
+                nx = keep if x == gone else x
+                ny = keep if y == gone else y
+                rekeyed.add((min(nx, ny), max(nx, ny)))
+            forbidden = rekeyed
 
     # Relabel roots to dense 0..k-1 in first-appearance order, so the labelling
     # is a pure function of the distance matrix and not of dict iteration.
@@ -214,6 +262,7 @@ def assign_class_ids(
     labels: Sequence[int],
     *,
     source: str,
+    provenance: str = "clustered",
 ) -> dict[str, list[MarkRef]]:
     """Write clustered ``class_id``\\ s back onto the pages' marks.
 
@@ -237,8 +286,38 @@ def assign_class_ids(
                 kind=mark.kind,
                 box=mark.box,
                 class_id=class_id,
-                provenance="clustered",
+                provenance=provenance,
             )
+    return out
+
+
+def resolve_separations(
+    refs: Sequence[MarkRef],
+    separations: Sequence[tuple[str, str]],
+) -> list[tuple[int, int]]:
+    """Turn adjudicated ``(page_id, page_id)`` pairs into row-index pairs.
+
+    Separations are stored against **page ids**, not row indices or class ids,
+    because those are the only identifiers that survive a re-cluster.  A row
+    index changes whenever the corpus grows; a class id changes whenever the
+    threshold moves — and a human decision that "these two marks are different"
+    must outlive both, or every re-run quietly discards the adjudication it was
+    supposed to be built on.
+
+    A pair naming a page that is no longer in the corpus is skipped rather than
+    raising: pages come and go with tier budgets, and a dropped page is not a
+    reason to refuse to build.
+    """
+    rows_by_page: dict[str, list[int]] = {}
+    for index, ref in enumerate(refs):
+        rows_by_page.setdefault(ref.page_id, []).append(index)
+
+    out: list[tuple[int, int]] = []
+    for left, right in separations:
+        for a in rows_by_page.get(left, ()):
+            for b in rows_by_page.get(right, ()):
+                if a != b:
+                    out.append((a, b))
     return out
 
 
@@ -262,16 +341,24 @@ def cluster_source(
     kinds: Iterable[str] = ("logo", "stamp"),
     backend: str = "phash",
     threshold: float = 0.18,
+    separations: Optional[Sequence[tuple[str, str]]] = None,
+    provenance: str = "clustered",
 ) -> dict[str, Any]:
-    """Cluster one source's marks in place.  Returns a summary for the report."""
+    """Cluster one source's marks in place.  Returns a summary for the report.
+
+    *separations* are adjudicated "these are different marks" pairs, as
+    ``(page_id, page_id)``.  They survive re-clustering: a human decision about
+    two marks must not be undone by someone later nudging the threshold.
+    """
     refs = collect_refs(pages, kinds=kinds, source=source)
     if not refs:
         return {"source": source, "marks": 0, "classes": 0, "backend": backend, "threshold": threshold}
 
     desc = describe_marks(pages, refs, backend=backend)
     dist = distance_matrix(desc, refs, backend=backend)
-    labels = single_linkage(dist, threshold)
-    classes = assign_class_ids(pages, refs, labels, source=source)
+    cannot_link = resolve_separations(refs, separations or ())
+    labels = single_linkage(dist, threshold, cannot_link=cannot_link)
+    classes = assign_class_ids(pages, refs, labels, source=source, provenance=provenance)
 
     sizes = sorted((len(v) for v in classes.values()), reverse=True)
     return {
@@ -280,6 +367,7 @@ def cluster_source(
         "classes": len(classes),
         "backend": backend,
         "threshold": threshold,
+        "separations_applied": len(cannot_link),
         "largest_clusters": sizes[:10],
         "singletons": sum(1 for s in sizes if s == 1),
     }
@@ -288,3 +376,39 @@ def cluster_source(
 def write_cluster_report(summaries: list[dict[str, Any]], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(summaries, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+# --------------------------------------------------------------------------
+# Adjudicated same/different decisions
+# --------------------------------------------------------------------------
+#
+# The corpus stores *both* directions of the ground truth, because a benchmark
+# needs both: same-mark pairs say what the detector must find, different-mark
+# pairs say what it must keep apart.  Clustering can only ever propose the
+# first; the second has to be adjudicated and then enforced, which is what
+# `cannot_link` in single_linkage does with these.
+
+
+def load_separations(path: Path) -> list[tuple[str, str]]:
+    """Read adjudicated different-mark pairs.  Missing file means none yet."""
+    if not path.exists():
+        return []
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    return [(row["left_page_id"], row["right_page_id"]) for row in payload.get("separations", [])]
+
+
+def save_separations(pairs: Sequence[dict[str, Any]], path: Path) -> None:
+    """Write adjudicated different-mark pairs, deduplicated and ordered.
+
+    Pairs are stored unordered-within-pair (sorted) so that adjudicating
+    ``(a, b)`` and later ``(b, a)`` records one decision rather than two.
+    """
+    seen: dict[tuple[str, str], dict[str, Any]] = {}
+    for row in pairs:
+        key = tuple(sorted((row["left_page_id"], row["right_page_id"])))
+        merged = dict(row)
+        merged["left_page_id"], merged["right_page_id"] = key
+        seen[key] = merged  # type: ignore[index]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"separations": [seen[k] for k in sorted(seen)]}
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")

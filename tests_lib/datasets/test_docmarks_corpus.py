@@ -58,6 +58,9 @@ def mods(_on_path):
         "build": importlib.import_module("build_corpus"),
         "synth": importlib.import_module("synth_compose"),
         "embed": importlib.import_module("embed_corpus"),
+        "roster": importlib.import_module("roster"),
+        "shortlist": importlib.import_module("shortlist"),
+        "audit": importlib.import_module("audit_to_corrections"),
     }
 
 
@@ -224,31 +227,45 @@ class TestUcsf:
 
     @pytest.mark.parametrize(
         "date,expected",
-        [("1996 January 24", "1990s"), ("1965", "1960s"), ("2003 December 04", "2000s"), ("", None), (None, None)],
+        [("1996 January 24", 1996), ("1965", 1965), ("2003 December 04", 2003), ("", None), (None, None)],
     )
-    def test_decade(self, mods, date, expected):
-        assert mods["ucsf"].decade(date) == expected
+    def test_year(self, mods, date, expected):
+        assert mods["ucsf"].year(date) == expected
 
     def test_first_value_unwraps_solr_multivalued_fields(self, mods):
         assert mods["ucsf"].first_value({"collection": ["Lorillard Records", "MSA"]}, "collection") == (
             "Lorillard Records"
         )
 
-    def test_letterhead_mark_is_weak_and_boxless(self, mods):
+    def test_an_author_is_a_candidate_pool_never_a_class(self, mods):
+        # The metadata says the page is *from* Philip Morris; it has never
+        # looked at the mark. Making it a class id would put two different
+        # artworks in one class whenever a company redesigned its letterhead,
+        # and split one artwork across two classes whenever subsidiaries shared
+        # it -- both of them errors the eval exists to measure, written straight
+        # into the labels.
         doc = {"id": "ffbb0019", "author": ["PHILIP MORRIS"], "documentdate": "1996 January 24"}
         page = mods["ucsf"].doc_to_page(doc, "/tmp/x.png", 1700, 2200, letterhead_author="PHILIP MORRIS")
         (mark,) = page.marks
-        assert mark.class_id == "ucsf/letterhead_philip_morris"
-        # No box is invented. The metadata says the page is *from* Philip Morris,
-        # not where on it the logo sits, and a fabricated box would be
-        # indistinguishable downstream from a real one.
-        assert mark.box == (0, 0, 0, 0)
-        assert mark.provenance == "weak"
+        assert mark.class_id is None
+        assert mark.provenance == "candidate"
+        assert page.meta["letterhead_author"] == "PHILIP MORRIS"
 
-    def test_decade_split_makes_separate_classes(self, mods):
+    def test_candidate_carries_a_locatable_band(self, mods):
+        page = mods["ucsf"].doc_to_page(
+            {"id": "ffbb0019"}, "/tmp/x.png", 1700, 2200, letterhead_author="RJR", band_frac=0.2
+        )
+        # A mark nobody can see cannot be adjudicated, so the candidate gets a
+        # coarse top-of-page strip to cluster on -- never a ground-truth box.
+        assert page.marks[0].box == (0, 0, 1700, 440)
+
+    def test_the_year_never_reaches_a_class_id(self, mods):
         doc = {"id": "ffbb0019", "documentdate": "1965 May 3"}
-        page = mods["ucsf"].doc_to_page(doc, "/tmp/x.png", 10, 10, letterhead_author="RJR", split_by_decade=True)
-        assert page.marks[0].class_id == "ucsf/letterhead_rjr_1960s"
+        page = mods["ucsf"].doc_to_page(doc, "/tmp/x.png", 100, 100, letterhead_author="RJR")
+        assert page.meta["year"] == 1965
+        # Era is a fact about the calendar, not about the mark. A class means
+        # "this artwork" and nothing else.
+        assert page.marks[0].class_id is None
 
     def test_a_page_with_no_author_carries_no_marks(self, mods):
         page = mods["ucsf"].doc_to_page({"id": "ffbb0019"}, "/tmp/x.png", 10, 10)
@@ -334,15 +351,29 @@ class TestClassAdmission:
         assert admitted == {}
         assert "not queryable" in rejected["tobacco800/signature_x"]
 
-    def test_weak_boxless_classes_are_admitted(self, mods):
+    def test_band_classes_skip_the_mark_size_floor(self, mods):
+        # A band's pixel size describes the top-of-page strip, not the mark, so
+        # checking it against the 32px mark floor compares the wrong number
+        # against the wrong threshold -- and reporting it as median_mark_px
+        # would misdescribe the class.
         pages = [
-            _page(mods, f"ucsf/{i:03d}", "ucsf", [("logo", (0, 0, 0, 0), "ucsf/letterhead_rjr", "weak")])
+            _page(mods, f"ucsf/{i:03d}", "ucsf", [("logo", (0, 0, 1700, 440), "ucsf/logo_a_0", "clustered_band")])
             for i in range(40)
         ]
         inv = mods["build"].class_inventory(pages)
         admitted, _ = mods["build"].admit_classes(pages, inv, min_instances=10, min_mark_px=32)
-        assert admitted["ucsf/letterhead_rjr"]["median_mark_px"] is None
-        assert admitted["ucsf/letterhead_rjr"]["provenance"] == ["weak"]
+        assert admitted["ucsf/logo_a_0"]["located_by"] == "band"
+        assert admitted["ucsf/logo_a_0"]["median_mark_px"] is None
+
+    def test_unlocated_classes_are_rejected(self, mods):
+        pages = [
+            _page(mods, f"ucsf/{i:03d}", "ucsf", [("logo", (0, 0, 0, 0), "ucsf/nowhere", "candidate")])
+            for i in range(40)
+        ]
+        inv = mods["build"].class_inventory(pages)
+        admitted, rejected = mods["build"].admit_classes(pages, inv, min_instances=10, min_mark_px=32)
+        assert admitted == {}
+        assert "no located instances" in rejected["ucsf/nowhere"]
 
     def test_admitted_classes_record_their_eligible_distractors(self, mods):
         pages = self._corpus(mods)
@@ -351,6 +382,148 @@ class TestClassAdmission:
         eligible = admitted["spods/a"]["eligible_distractor_sources"]
         assert "spods" not in eligible
         assert "ucsf" in eligible
+
+
+# ------------------------------------------------------------------- roster
+
+
+class TestRoster:
+    def _pages(self, mods, n_a=14, n_b=3):
+        pages = [
+            _page(mods, f"spods/a{i:03d}", "spods", [("logo", (0, 0, 200, 120), "spods/a", "clustered")])
+            for i in range(n_a)
+        ]
+        pages += [
+            _page(mods, f"spods/b{i:03d}", "spods", [("logo", (0, 0, 12, 10), "spods/b", "clustered")])
+            for i in range(n_b)
+        ]
+        return pages
+
+    def _admit(self, mods, pages, roster=None):
+        inv = mods["build"].class_inventory(pages)
+        return mods["build"].admit_classes(pages, inv, min_instances=10, min_mark_px=32, roster=roster)
+
+    def test_without_a_roster_the_bars_decide(self, mods):
+        admitted, rejected = self._admit(mods, self._pages(mods))
+        assert set(admitted) == {"spods/a"}
+        assert "spods/b" in rejected
+
+    def test_a_roster_restricts_admission_to_its_own_classes(self, mods):
+        roster = mods["roster"].Roster(name="t", classes=["spods/a"])
+        admitted, rejected = self._admit(mods, self._pages(mods), roster)
+        assert set(admitted) == {"spods/a"}
+        assert rejected["spods/b"] == "not on the roster"
+
+    def test_a_roster_class_overrides_the_bars_but_records_why(self, mods):
+        # The human who picked it knows something the threshold does not; the
+        # override is kept visible in the artifact rather than silently waived.
+        roster = mods["roster"].Roster(name="t", classes=["spods/a", "spods/b"])
+        admitted, _ = self._admit(mods, self._pages(mods), roster)
+        assert set(admitted) == {"spods/a", "spods/b"}
+        assert admitted["spods/a"]["caveats"] == []
+        assert any("min_instances" in c for c in admitted["spods/b"]["caveats"])
+        assert any("min_mark_px" in c for c in admitted["spods/b"]["caveats"])
+
+    def test_classes_start_unverified(self, mods):
+        roster = mods["roster"].Roster(name="t", classes=["spods/a"])
+        admitted, _ = self._admit(mods, self._pages(mods), roster)
+        # Until the membership pass runs, a class is a clustering proposal.
+        assert admitted["spods/a"]["audit"]["membership_verified"] is False
+        assert admitted["spods/a"]["on_roster"] is True
+
+    def test_check_reports_drift_between_roster_and_corpus(self, mods):
+        roster = mods["roster"].Roster(name="t", classes=["spods/a", "spods/gone"])
+        present, missing = mods["roster"].check(roster, ["spods/a", "spods/b"])
+        assert present == ["spods/a"]
+        assert missing == ["spods/gone"]
+
+    def test_roster_round_trips_and_deduplicates(self, mods, tmp_path):
+        path = tmp_path / "roster.json"
+        mods["roster"].save(mods["roster"].Roster("t", ["b", "a", "b"], notes="why"), path)
+        back = mods["roster"].load(path)
+        assert back.classes == ["a", "b"]
+        assert back.notes == "why"
+
+    def test_known_negatives_come_only_from_verified_sources(self, mods):
+        meta = {
+            "page_ids": ["spods/a000"],
+            "eligible_distractor_sources": ["ucsf", "synth"],
+        }
+        pages_by_source = {
+            "spods": ["spods/a000", "spods/x001"],
+            "ucsf": ["ucsf/d1", "ucsf/d2"],
+        }
+        # SPODS contaminates SPODS by default -- but once SPODS has been
+        # exhaustively checked for this class, its non-members become *known*
+        # negatives: same scanner, same paper, verified clean, which is the
+        # hardest and most useful negative there is.
+        split = mods["roster"].eligible_pages(meta, pages_by_source, verified_negative_sources=["spods"])
+        assert split["positive"] == ["spods/a000"]
+        assert split["known_negative"] == ["spods/x001"]
+        assert split["presumed_negative"] == ["ucsf/d1", "ucsf/d2"]
+
+    def test_without_verification_same_source_pages_are_not_usable(self, mods):
+        meta = {"page_ids": ["spods/a000"], "eligible_distractor_sources": ["ucsf"]}
+        split = mods["roster"].eligible_pages(meta, {"spods": ["spods/a000", "spods/x001"], "ucsf": ["ucsf/d1"]})
+        assert split["known_negative"] == []
+        assert split["presumed_negative"] == ["ucsf/d1"]
+
+
+class TestMembershipAudit:
+    def _setup(self, mods):
+        pages = [
+            _page(mods, f"spods/{i:03d}", "spods", [("logo", (0, 0, 200, 120), "spods/a", "clustered")])
+            for i in range(5)
+        ]
+        classes = {
+            "spods/a": {
+                "class_id": "spods/a",
+                "n_instances": 5,
+                "page_ids": [f"spods/{i:03d}" for i in range(5)],
+                "audit": {"membership_verified": False, "rejected_page_ids": []},
+            }
+        }
+        return pages, classes
+
+    def test_ok_verifies_without_dropping_anything(self, mods):
+        pages, classes = self._setup(mods)
+        row = {"class_id": "spods/a", "page_ids": classes["spods/a"]["page_ids"], "verdict": "ok"}
+        changes, problems = mods["audit"].apply_membership(pages, classes, [row])
+        assert not problems
+        assert classes["spods/a"]["n_instances"] == 5
+        assert classes["spods/a"]["audit"]["membership_verified"] is True
+
+    def test_rejected_indices_are_removed_from_the_class(self, mods):
+        pages, classes = self._setup(mods)
+        row = {"class_id": "spods/a", "page_ids": classes["spods/a"]["page_ids"], "verdict": "1, 3"}
+        mods["audit"].apply_membership(pages, classes, [row])
+        assert classes["spods/a"]["page_ids"] == ["spods/000", "spods/002", "spods/004"]
+        assert classes["spods/a"]["audit"]["rejected_page_ids"] == ["spods/001", "spods/003"]
+
+    def test_a_rejected_instance_keeps_its_box_and_page(self, mods):
+        # It stops being a positive, but the page stays a *known* negative and
+        # the mark is still a real mark a later roster might want.
+        pages, classes = self._setup(mods)
+        row = {"class_id": "spods/a", "page_ids": classes["spods/a"]["page_ids"], "verdict": "1"}
+        mods["audit"].apply_membership(pages, classes, [row])
+        dropped = next(p for p in pages if p.page_id == "spods/001")
+        assert len(dropped.marks) == 1
+        assert dropped.marks[0].class_id is None
+        assert dropped.marks[0].box == (0, 0, 200, 120)
+
+    def test_an_out_of_range_index_is_refused_not_silently_clamped(self, mods):
+        pages, classes = self._setup(mods)
+        row = {"class_id": "spods/a", "page_ids": classes["spods/a"]["page_ids"], "verdict": "9"}
+        changes, problems = mods["audit"].apply_membership(pages, classes, [row])
+        assert not changes
+        assert "outside 0..4" in problems[0]
+        assert classes["spods/a"]["n_instances"] == 5
+
+    def test_a_malformed_verdict_is_refused(self, mods):
+        pages, classes = self._setup(mods)
+        row = {"class_id": "spods/a", "page_ids": classes["spods/a"]["page_ids"], "verdict": "maybe"}
+        _changes, problems = mods["audit"].apply_membership(pages, classes, [row])
+        assert "must be 'ok' or comma-separated indices" in problems[0]
 
 
 # -------------------------------------------------------------------- tiers
@@ -477,6 +650,70 @@ class TestClustering:
         desc = np.ones((2, 64), dtype=bool)  # identical hashes
         dist = mods["cluster"].distance_matrix(desc, refs, backend="phash")
         assert dist[0, 1] == 1.0
+
+    def test_cannot_link_keeps_adjudicated_marks_apart(self, mods):
+        # Two crops close enough that the threshold would merge them, which a
+        # human has said are different marks. The whole point of recording that
+        # is that it survives the clustering that would otherwise overrule it.
+        dist = np.array([[0.0, 0.05], [0.05, 0.0]])
+        assert mods["cluster"].single_linkage(dist, 0.2) == [0, 0]
+        assert mods["cluster"].single_linkage(dist, 0.2, cannot_link=[(0, 1)]) == [0, 1]
+
+    def test_a_separation_propagates_through_a_third_crop(self, mods):
+        # a-b are separated; c is near both. Without propagation c would merge
+        # with a and then with b, reuniting the pair through the back door.
+        dist = np.array(
+            [
+                [0.0, 0.9, 0.05],
+                [0.9, 0.0, 0.05],
+                [0.05, 0.05, 0.0],
+            ]
+        )
+        labels = mods["cluster"].single_linkage(dist, 0.2, cannot_link=[(0, 1)])
+        assert labels[0] != labels[1]
+
+    def test_separations_resolve_by_page_id_not_row_index(self, mods):
+        MarkRef = mods["cluster"].MarkRef
+        refs = [
+            MarkRef(0, 0, "spods/001", "logo", (0, 0, 10, 10)),
+            MarkRef(1, 0, "spods/002", "logo", (0, 0, 10, 10)),
+        ]
+        assert mods["cluster"].resolve_separations(refs, [("spods/001", "spods/002")]) == [(0, 1)]
+
+    def test_a_separation_naming_a_dropped_page_is_skipped(self, mods):
+        MarkRef = mods["cluster"].MarkRef
+        refs = [MarkRef(0, 0, "spods/001", "logo", (0, 0, 10, 10))]
+        # Pages come and go with tier budgets; a stale pair must not refuse the
+        # build.
+        assert mods["cluster"].resolve_separations(refs, [("spods/001", "spods/999")]) == []
+
+    def test_separations_round_trip_and_deduplicate(self, mods, tmp_path):
+        path = tmp_path / "separations.json"
+        mods["cluster"].save_separations(
+            [
+                {"left_page_id": "b", "right_page_id": "a"},
+                {"left_page_id": "a", "right_page_id": "b"},
+            ],
+            path,
+        )
+        # (a, b) and (b, a) are one decision, not two.
+        assert mods["cluster"].load_separations(path) == [("a", "b")]
+
+    def test_no_separations_file_means_no_constraints(self, mods, tmp_path):
+        assert mods["cluster"].load_separations(tmp_path / "missing.json") == []
+
+    def test_merge_order_is_independent_of_row_order(self, mods):
+        # Once constraints can block a merge, "which merge happened first"
+        # decides the outcome, so merges are applied in distance order rather
+        # than whatever order the loops produce.
+        dist = np.array(
+            [
+                [0.0, 0.10, 0.15],
+                [0.10, 0.0, 0.05],
+                [0.15, 0.05, 0.0],
+            ]
+        )
+        assert mods["cluster"].single_linkage(dist, 0.12, cannot_link=[(0, 2)]) == [0, 1, 1]
 
     def test_class_ids_are_anchored_to_a_page_not_a_counter(self, mods):
         MarkRef = mods["cluster"].MarkRef
