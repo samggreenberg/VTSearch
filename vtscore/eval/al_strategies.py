@@ -49,6 +49,8 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import numpy as np
 
+from vtscore.eval.startup_schedule import is_startup_phase
+
 if TYPE_CHECKING:
     from vtscore.state.coverage_atlas import CoverageAtlas
 
@@ -106,6 +108,11 @@ class ALContext:
             learned sort.  ``None`` selects the legacy behaviour (train from
             the first vote pair, parity-interleaved Hard/New), kept so
             published studies stay reproducible; see ``docs/EVAL.md``.
+        startup_cut: The cut a parameterised opening's current round samples
+            against (issue #3267), from
+            :func:`vtscore.eval.startup_schedule.round_cut`.  Read only while
+            :attr:`phase` names a schedule round (``s0``, ``s1``, ...);
+            ``None`` everywhere else, including on every default-arm run.
     """
 
     pool_ids: list[int]
@@ -119,6 +126,7 @@ class ALContext:
     pool_labels: Optional[dict[int, float]] = None
     seed_scores: Optional[dict[int, float]] = None
     phase: Optional[str] = None
+    startup_cut: Optional[float] = None
 
 
 # ------------------------------------------------------------------
@@ -279,6 +287,24 @@ def _pick_good_phase(ctx: ALContext) -> int:
     return _uniform_pick(ctx, positives or pool)
 
 
+def _pick_on_seed_sort(ctx: ALContext, cut: Optional[float]) -> int:
+    """Rank-space ``hard`` select on the text/example sort, against *cut*.
+
+    The one operation both pre-detector phases are made of: rank the seed sort,
+    find *cut*'s rank position, take the nearest unlabelled item.  ``None``
+    means the sort's own GMM line - the app's cutoff for every cosine sort.
+    """
+    ranking = ctx.seed_scores
+    if ranking is None:
+        ranking = _centroid_similarities(ctx, list(ctx.embeddings))
+    if ranking:
+        line = _sort_threshold(ranking) if cut is None else cut
+        pick = _hard_pick_by_index(ctx, ranking, line)
+        if pick is not None:
+            return pick
+    return _uniform_pick(ctx, ctx.pool_ids)
+
+
 def _pick_bad_phase(ctx: ALContext) -> int:
     """Bad phase: the cutoff of the text/example sort — never the detector.
 
@@ -289,14 +315,18 @@ def _pick_bad_phase(ctx: ALContext) -> int:
     Finding negatives is easy; the ones worth spending a vote on are the ones
     the query ranking cannot separate.
     """
-    ranking = ctx.seed_scores
-    if ranking is None:
-        ranking = _centroid_similarities(ctx, list(ctx.embeddings))
-    if ranking:
-        pick = _hard_pick_by_index(ctx, ranking, _sort_threshold(ranking))
-        if pick is not None:
-            return pick
-    return _uniform_pick(ctx, ctx.pool_ids)
+    return _pick_on_seed_sort(ctx, None)
+
+
+def _pick_startup_round(ctx: ALContext) -> int:
+    """A parameterised opening's round (issue #3267): the same seed-sort
+    ``hard`` select, against the cut its round names.
+
+    ``top`` arrives here as ``+inf`` and reproduces the Good phase's ``top``
+    select exactly; ``mid`` arrives as the sort's GMM line and reproduces the
+    Bad phase.  Everything between and beyond is the study's territory.
+    """
+    return _pick_on_seed_sort(ctx, ctx.startup_cut)
 
 
 def _select_phase_faithful(ctx: ALContext, phase: str) -> int:
@@ -313,7 +343,14 @@ def _select_phase_faithful(ctx: ALContext, phase: str) -> int:
     ``bad``     text / example         ``hard``
     ``hard``    learned                ``hard``
     ``new``     learned                ``new``
+    ``s``\ *i*   text / example         ``hard`` @ the round's cut
     ==========  =====================  =============
+
+    The ``s``\ *i* row is a parameterised opening's round (issue #3267), which
+    exists only when the harness was given a
+    :class:`~vtscore.eval.startup_schedule.StartupState`.  It generalises the
+    two rows above it: ``good`` is that select against a cut above every score,
+    ``bad`` against the sort's own GMM line.
 
     The load-bearing detail is that ``bad`` is still on the *text* sort: no
     detector is trained until the quorum is met, so the harness must not
@@ -321,6 +358,8 @@ def _select_phase_faithful(ctx: ALContext, phase: str) -> int:
     """
     pool = ctx.pool_ids
 
+    if is_startup_phase(phase):
+        return _pick_startup_round(ctx)
     if phase == "good":
         return _pick_good_phase(ctx)
     if phase == "bad":
