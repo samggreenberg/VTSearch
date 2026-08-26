@@ -446,6 +446,76 @@ Still: `vg_scale_any` inherits whatever `vg_scale` holds, and `build_pile.py
 - **Uniform prevalence.** The grid deliberately holds prevalence fixed at 7.1%,
   so nothing here says how the combine rule behaves on a rare category.
 
+## Second run: the confound broken, and what it says (2026-08-26)
+
+Array 541929, **96/96 cells, 0 failures**, same grid plus `dinov3_patch` under
+`whole_image` — the missing corner. Both acceptance identities hold again.
+
+| env | `combine` | `space` | `total` |
+|---|---:|---:|---:|
+| `dinov3_patch` / `max_patch` (region) | −0.0160 | **−0.0324** | −0.0484 |
+| `dinov3_patch` / `whole_image` (binary) | +0.0001 | **+0.0248** | +0.0249 |
+| `siglip` / `whole_image` (binary) | −0.0078 | **+0.0357** | +0.0280 |
+
+**The `space` leg tracks the geometry, not the encoder.** DINOv3 under
+`whole_image` sits with SigLIP under `whole_image` (+0.025 vs +0.036), not with
+DINOv3 under `max_patch` (−0.032). That is the pre-registered outcome for "it
+follows the voting mode", and it refutes the competing reading — that DINOv3's
+fold models are simply less scale-comparable — which the first run could not
+distinguish. The original per-mode attribution survives, on evidence that can
+now support it.
+
+**The `combine` leg does not survive as stated.** It is +0.0001 on
+`dinov3/whole` — a null — against −0.0078 and −0.0160 on the other two cells. So
+*"averaging beats pooling in both voting modes"* was a fact about two cells, not
+a general one, and `tmean` is a safe floor on two of three environments rather
+than everywhere. The confound cut both ways: it hid a real effect's cause **and**
+inflated a secondary claim.
+
+## Why any of this happens: the rule and the metric want different things
+
+Post-hoc (not pre-registered), from the same cells via `drill_folds_3115.py`.
+
+Every arm sits **below** the oracle cut on 70–92 % of deep steps — the trained
+threshold systematically over-admits — and regret tracks how *unbalanced* the two
+error rates are rather than which combine rule ran:
+
+| voting | arm | FPR | FNR | ratio | below oracle | regret |
+|---|---|---:|---:|---:|---:|---:|
+| binary | `xcal` (pooled) | 0.207 | 0.146 | 1.4× | 78 % | 0.043 |
+| binary | `tmean` | 0.184 | 0.160 | **1.15×** | 70 % | **0.034** |
+| region | `xcal` (pooled) | 0.257 | 0.059 | **4.3×** | 92 % | 0.098 |
+| region | `qmean` | 0.179 | 0.089 | 2.0× | 79 % | 0.049 |
+| region | `anchored` | 0.165 | 0.089 | 1.85× | 87 % | **0.036** |
+
+The cause is a documented mismatch, not a defect. `CONFORMAL_BASE_BUDGET = 0.25`
+makes the conformal rule cap **false negatives** at 25 % and only put a *floor*
+under false positives — deliberately asymmetric, "don't miss matches". But
+`inclusion_cost_weights(0)` is **(1.0, 1.0)**: the metric weights the two errors
+equally. Measured FNR lands far under its budget (0.146 / 0.059) while FPR runs
+1.4–4.3× higher. The rule is doing exactly what it documents, scored against a
+different objective.
+
+That explains the whole result set without appealing to anything about pooling:
+
+- Any rule that **raises** the cut moves toward the cost optimum. `qmean` raises
+  it on region (87 % of steps) and lowers it on binary (87 % of steps) — hence
+  the sign flip, and hence why the flip follows the geometry, which is what
+  determines the direction of the rank transfer.
+- Production's **anchored** rule follows no miss budget at all — it cuts from the
+  fitted score distribution — and lands at 0.035 / 0.036, near-identical across
+  modes and best in both.
+
+**For improving binary specifically:** its problem is the same over-admission,
+milder (1.4× vs 4.3×), which is *why* the combine rule matters less there. The
+lever that moves it is the one production already pulled on the main path — cut
+from the fitted distribution rather than from a miss budget. The binary conformal
+path (load-time detectors) still pays it.
+
+And the mechanism is not uniform either: within binary, `boat` carries 16 % of
+the effect against `umbrella`'s 1 %, and `boat`'s worst run is 3× its best. The
+per-category imbalance is the next thing to open up.
+
 ## Follow-ups
 
 - **~~Book the A/B~~ — withdrawn, and the reason is the useful part.** The
