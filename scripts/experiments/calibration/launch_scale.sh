@@ -55,7 +55,15 @@ export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
 LOGS="$CALIB_EXP/logs"
 mkdir -p "$LOGS" "$CALIB_RESULTS/cells"
 
-MEM="${CALIB_MEM:-64G}"
+# Sized from the array that actually ran this grid (job 539790, 324 tasks):
+# MaxRSS peaked at 8.73G, typical ~7G, on the dinov3_patch/max_patch cells that
+# dominate the memory profile. 64G was a guess carried over from a different
+# study and it is 7x the measured peak -- which is not free: memory is the
+# binding per-user quota here (cpu_limit, ~1074G), so an oversized --mem caps
+# concurrency and parks your own later jobs behind the array in
+# QOSMaxMemoryPerUser. 16G keeps ~2x headroom over the measured peak and stays
+# above preflight's 12G floor for patch cells.
+MEM="${CALIB_MEM:-16G}"
 CPUS="${CALIB_CPUS:-6}"
 TIME="${CALIB_TIME:-6:00:00}"
 PARTITION="${CALIB_PARTITION:-cpu}"
