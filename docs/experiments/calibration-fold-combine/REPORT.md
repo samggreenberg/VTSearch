@@ -210,6 +210,18 @@ inclusion 0, `PRODUCTION_HEAD`. Analyzed at dev `e87c90956` + this branch.
 > `whole_image` alongside `max_patch` in the same cell, which fills the missing
 > corner and decomposes mode from embedder. Read everything below as
 > "cell A vs cell B", not "binary vs region", until that lands.
+>
+> **What that run can and cannot settle.** It makes one sharp prediction — if the
+> `space` leg follows the *embedder*, `dinov3 × whole_image` should prefer
+> percentiles like `dinov3 × max_patch` does; if it follows the *voting mode*, it
+> should prefer raw scores like `siglip × whole_image` does. Those are
+> distinguishable outcomes and one of them will be observed.
+>
+> It is still **one embedder for the mode contrast and one mode for the embedder
+> contrast**, so it discriminates between two hypotheses rather than establishing
+> either. A third outcome — the new cell landing between the two — would say the
+> effect is neither cleanly, and would need a second patch embedder to take
+> further.
 
 ### BLUF
 
