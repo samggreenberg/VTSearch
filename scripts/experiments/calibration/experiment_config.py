@@ -276,6 +276,24 @@ if ACQ_INCLUSION_OFFSET is None:
 #: ``CALIB_ACQ_INCLUSION_OFFSET=0``; the two name the same cut.
 ACQ_RANK_PERCENTILE = _opt_float("CALIB_ACQ_RANK_PERCENTILE")
 
+#: The **Autopilot opening** this arm runs (issue #3267), in the grammar of
+#: :mod:`vtscore.eval.startup_schedule` - e.g. ``"n6@k-6,n6@k-2,n6@k0"``.
+#:
+#: Unset = the app's own opening (three positives off the top of the seed sort,
+#: then four negatives at its cutoff), which is what every study before #3267
+#: ran and what the `prod` control arm must keep running.  Do **not** write the
+#: production spelling in here as a "default": a schedule string frozen in this
+#: file goes stale the moment the app's opening moves, and the control arm would
+#: then quietly stop being the control.  ``PRODUCTION_STARTUP`` exists for a run
+#: that wants to name it explicitly, and is pinned against the app.
+STARTUP_SCHEDULE = os.environ.get("CALIB_STARTUP_SCHEDULE", "").strip() or None
+
+#: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
+#: #3267 run and harmless everywhere else - one small row per vote.  It is the
+#: only frame that records the **opening**, which emits no main row because no
+#: detector exists yet, so an arm's mining behaviour is invisible without it.
+EMIT_PICKS = os.environ.get("CALIB_EMIT_PICKS", "1") not in ("", "0")
+
 #: Minimum positives a category must have **in the simulation half** to be kept.
 #: A long-horizon run (#2841 follow-up: does pure x-cal ever overtake the blend?)
 #: is bounded by positives, not pool size: once autopilot has exhausted them,

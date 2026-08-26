@@ -82,7 +82,8 @@ def main(argv: list[str] | None = None) -> int:
         f"styles={styles} head={cfg.HEAD or 'default (production)'} safe_thresholds={cfg.SAFE_THRESHOLDS} "
         f"calibrate_count={cfg.CALIBRATE_COUNT} fold_counts={cfg.FOLD_COUNTS or 'off'} "
         f"cut_incl_ks={cfg.CUT_INCLUSION_KS or 'off'} "
-        f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE}"
+        f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
+        f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'}"
     )
 
     import pandas as pd
@@ -93,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
         _CUT_DIAGNOSTIC_COLUMNS,
         _CUT_INCLUSION_COLUMNS,
         _INCLUSION_SWEEP_COLUMNS,
+        _PICK_COLUMNS,
         simulate_voting_iterations,
     )
 
@@ -112,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
     all_sweep: list[dict] = []
     all_cutdiag: list[dict] = []
     all_cutincl: list[dict] = []
+    all_picks: list[dict] = []
     for style in styles:
         seed_scores = None
         if crop_vec is not None:
@@ -120,6 +123,7 @@ def main(argv: list[str] | None = None) -> int:
         sweep_local: list[dict] = []
         cutdiag_local: list[dict] = []
         cutincl_local: list[dict] = []
+        picks_local: list[dict] | None = [] if cfg.EMIT_PICKS else None
         rows = simulate_voting_iterations(
             medias,
             target_category=cat,
@@ -155,6 +159,8 @@ def main(argv: list[str] | None = None) -> int:
             cut_inclusion_qtilt_steps=cfg.CUT_INCLUSION_QTILT_STEPS or None,
             acq_inclusion_offset=cfg.ACQ_INCLUSION_OFFSET,
             acq_rank_percentile=cfg.ACQ_RANK_PERCENTILE,
+            startup_schedule=cfg.STARTUP_SCHEDULE,
+            pick_sink=picks_local,
         )
         for r in rows:
             r["embedder"] = emb
@@ -165,10 +171,13 @@ def main(argv: list[str] | None = None) -> int:
             dr["embedder"] = emb
         for cr in cutincl_local:
             cr["embedder"] = emb
+        for pr in picks_local or []:
+            pr["embedder"] = emb
         all_rows.extend(rows)
         all_sweep.extend(sweep_local)
         all_cutdiag.extend(cutdiag_local)
         all_cutincl.extend(cutincl_local)
+        all_picks.extend(picks_local or [])
         common.log(
             f"  style={style}: {len(rows)} rows, {len(sweep_local)} sweep rows, "
             f"{len(cutdiag_local)} cut-diagnostic rows, {len(cutincl_local)} cut-inclusion rows"
@@ -193,10 +202,17 @@ def main(argv: list[str] | None = None) -> int:
     cutincl_cols = [*_CUT_INCLUSION_COLUMNS, "embedder"]
     cutincl_out = outdir / f"task_{idx:04d}__cutincl.csv"
     pd.DataFrame(all_cutincl, columns=pd.Index(cutincl_cols)).to_csv(cutincl_out, index=False)
+    # The #3267 per-click pick log.  Written unconditionally, like the frames
+    # above, so an empty file with the right header says "the log was off"
+    # rather than "the cell failed".
+    picks_cols = [*_PICK_COLUMNS, "embedder"]
+    picks_out = outdir / f"task_{idx:04d}__picks.csv"
+    pd.DataFrame(all_picks, columns=pd.Index(picks_cols)).to_csv(picks_out, index=False)
     common.log(
         f"wrote {len(all_rows)} rows to {out}, {len(all_sweep)} sweep rows to {sweep_out}, "
         f"{len(all_cutdiag)} cut-diagnostic rows to {cutdiag_out}, "
-        f"and {len(all_cutincl)} cut-inclusion rows to {cutincl_out}"
+        f"{len(all_cutincl)} cut-inclusion rows to {cutincl_out}, "
+        f"and {len(all_picks)} pick rows to {picks_out}"
     )
     return 0
 
