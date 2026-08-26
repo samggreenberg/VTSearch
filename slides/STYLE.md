@@ -328,6 +328,18 @@ it, and running them together (opening straight on `+at1`) means the whole list
 is never once shown as a list. So a deck's outline appears *N* + 1 times for
 *N* sections: bare, then `+at1`, section 1, `+at2`, section 2, and so on.
 
+**All of those pages are one slide**, numbered `1a … 1f` — see *Numbering* in
+[`README.md`](README.md). The room is being shown the same thing again with a
+different line marked, and the deck should say so rather than spending six
+numbers on it.
+
+**The last section is the end of the talk, and its marked outline is the last
+slide.** A deck does not need a separate "Questions" page: the room is already
+looking at the list of everything it just heard, with the final line marked,
+which is a better thing to take questions against than the word *Questions*.
+Name that last section for what it is — `The End` — and let the fragment's
+final showing close the deck.
+
 **It is laid out like the deck's other slides**, not as its own kind of page:
 the headline sits in the same top-left notch a full-bleed figure leaves for it,
 and the list occupies the rectangle the figure would. The outline *is* that

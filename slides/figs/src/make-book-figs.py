@@ -118,8 +118,8 @@ CUTS = (3, 5, 7)
 def ensure_corpus() -> None:
     """Download COCO val2017 into `data/coco-val2017/` if it is not there yet.
 
-    Idempotent, like the UI-screenshot harness it sits beside: a re-run after a
-    crop is retuned re-reads the images it already has.
+    Idempotent, like the UI-screenshot harness it sits beside: a re-run after
+    one of the crops is adjusted re-reads the images it already has.
     """
     images = CORPUS / "val2017"
     if images.is_dir() and any(images.iterdir()):

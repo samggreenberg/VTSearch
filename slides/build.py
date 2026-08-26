@@ -485,25 +485,23 @@ def check_fragment(name: str, text: str, problems: list[str]) -> None:
             problems.append(f"fragments/{name}.md:{line}: figure not found: {target}")
 
 
-def assemble(deck: str, write: bool, speaker: bool = False) -> list[str]:
-    """Preflight one deck; write _build/<deck>[.speaker].md unless write=False.
+#: One showing of a fragment: its name, that use's extra classes, the audience
+#: slides it renders as, and the audience page numbers they occupy.
+Showing = tuple[str, list[str], list[str], list[int]]
 
-    Returns the list of problems found (empty means the deck is clean).
+
+def lay_out(
+    deck: str, names: list[tuple[str, list[str]]], problems: list[str]
+) -> tuple[list[Showing], dict[str, str], dict[str, list[int]]]:
+    """Read every fragment and lay out the deck's audience pages.
+
+    Returns the showings in manifest order, each fragment's text, and each
+    fragment's whole numbering *group* — every page it renders as across the
+    deck. The group is what a fragment cannot know about itself: shown more
+    than once, it is one slide shown several ways, and its number and letters
+    belong to all its showings together.
     """
-    manifest = DECKS / f"{deck}.deck"
-    if not manifest.exists():
-        raise DeckError(f"no such deck: {manifest.relative_to(ROOT)}")
-
-    front, names = parse_manifest(manifest)
-    problems: list[str] = []
-    bodies: list[str] = []
-
-    # Pass one: read every fragment and lay out the audience pages, so the
-    # second pass knows each fragment's whole numbering group. A fragment shown
-    # more than once is one slide shown several ways, and its number and its
-    # letters are properties of all its showings together — which is a fact
-    # about the manifest, not about any one fragment.
-    showings: list[tuple[str, list[str], list[str], list[int]]] = []
+    showings: list[Showing] = []
     texts: dict[str, str] = {}
     group: dict[str, list[int]] = {}
     page = 0  # audience-deck page count, builds included
@@ -519,35 +517,48 @@ def assemble(deck: str, write: bool, speaker: bool = False) -> list[str]:
         page += len(stages)
         group.setdefault(name, []).extend(pages)
         showings.append((name, extras, stages, pages))
+    return showings, texts, group
 
-    for name, text in texts.items():
-        check_note_letters(name, text, len(group[name]), problems)
 
-    # Pass two: number the pages and emit them. A slide's number is claimed by
-    # its fragment's first showing and reused by the rest; the title slide opts
-    # out with `_paginate: false` and does not consume one, so the first real
-    # slide is 1.
+def audience_bodies(showings: list[Showing], texts: dict[str, str], group: dict[str, list[int]]) -> list[str]:
+    """The audience deck's slides, each carrying its page number and letter.
+
+    A slide's number is claimed by its fragment's first showing and reused by
+    the rest; a fragment marked `_paginate: false` — the title slide — takes no
+    number and does not consume one, so the first real slide is 1 rather than 2.
+    """
     numbers: dict[str, int] = {}
-    next_number = 1
+    bodies: list[str] = []
     for name, _extras, stages, pages in showings:
-        text = texts[name]
-        numbered = not UNPAGINATED_RE.search(text)
+        numbered = not UNPAGINATED_RE.search(texts[name])
         if numbered and name not in numbers:
-            numbers[name] = next_number
-            next_number += 1
-        if not speaker:
-            for offset, stage in enumerate(stages):
-                marks = ""
-                if numbered:
-                    marks = "\n\n" + PAGENO_DIV.format(numbers[name])
-                    if len(group[name]) > 1:
-                        marks += "\n\n" + LETTER_DIV.format(stage_letter(group[name].index(pages[offset])))
-                bodies.append(stage + marks)
-            continue
-        # One speaker page per showing (more when its notes overflow); the
-        # miniature is the *final* stage of the audience build, which is the
-        # page the fragment's notes narrate, and the lettered contact sheet
-        # beneath it is every page of the numbering group.
+            numbers[name] = len(numbers) + 1
+        for offset, stage in enumerate(stages):
+            marks = ""
+            if numbered:
+                marks = "\n\n" + PAGENO_DIV.format(numbers[name])
+                if len(group[name]) > 1:
+                    marks += "\n\n" + LETTER_DIV.format(stage_letter(group[name].index(pages[offset])))
+            bodies.append(stage + marks)
+    return bodies
+
+
+def speaker_bodies(
+    deck: str,
+    showings: list[Showing],
+    texts: dict[str, str],
+    group: dict[str, list[int]],
+    write: bool,
+    problems: list[str],
+) -> list[str]:
+    """The speaker deck's pages: one per showing, more when its notes overflow.
+
+    The miniature is the *final* stage of the audience build, which is the page
+    the fragment's notes narrate, and the lettered contact sheet beneath it is
+    every page of the numbering group.
+    """
+    bodies: list[str] = []
+    for name, _extras, _stages, pages in showings:
         for number in pages if write else []:
             if not (BUILD / "imgs" / f"{deck}.{number:03d}.png").exists():
                 problems.append(
@@ -555,7 +566,30 @@ def assemble(deck: str, write: bool, speaker: bool = False) -> list[str]:
                     f"the speaker build needs the audience deck rendered to per-slide PNGs "
                     f"first; use `./render.sh {deck} pdf --speaker`, which does both"
                 )
-        bodies.extend(speaker_page(deck, pages, group[name], text))
+        bodies.extend(speaker_page(deck, pages, group[name], texts[name]))
+    return bodies
+
+
+def assemble(deck: str, write: bool, speaker: bool = False) -> list[str]:
+    """Preflight one deck; write _build/<deck>[.speaker].md unless write=False.
+
+    Returns the list of problems found (empty means the deck is clean).
+    """
+    manifest = DECKS / f"{deck}.deck"
+    if not manifest.exists():
+        raise DeckError(f"no such deck: {manifest.relative_to(ROOT)}")
+
+    front, names = parse_manifest(manifest)
+    problems: list[str] = []
+    showings, texts, group = lay_out(deck, names, problems)
+
+    for name, text in texts.items():
+        check_note_letters(name, text, len(group[name]), problems)
+
+    if speaker:
+        bodies = speaker_bodies(deck, showings, texts, group, write, problems)
+    else:
+        bodies = audience_bodies(showings, texts, group)
 
     if problems or not write:
         return problems

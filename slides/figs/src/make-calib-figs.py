@@ -2591,7 +2591,6 @@ def _incl_figure(canvas_h: float) -> tuple[plt.Figure, plt.Axes]:
 INCL_CANVAS_H = 11.2
 
 
-
 def _incl_rows(canvas_h: float = INCL_CANVAS_H) -> dict:
     """Every shared y in the knob pair, measured down from the canvas top.
 
@@ -4296,6 +4295,31 @@ def _em_iterate(scores: np.ndarray, anchors: dict | None, rounds: int) -> GmmFit
     return fit
 
 
+def _claimed_bars(ax: plt.Axes, x0: float, y_base: float, w: float, sy: float, edges, density, share_lo) -> None:
+    """The E step, drawn: the histogram split by who claims each score.
+
+    Two hollow hatched regions in the deck's own rust and green — not two solid
+    colours meeting at a ragged seam, which is a colour boundary doing all the
+    work and the one a deuteranope cannot see (#3265). Polygons over the whole
+    row rather than a pair of patches per bin, so the bins' internal dividers
+    never appear: what is left is the silhouette, the seam, and two fills.
+    """
+    tops = density * sy
+    seam = tops * share_lo
+    for lower, upper, colour, hatch in ((np.zeros_like(tops), seam, RUST, "\\\\\\"), (seam, tops, GREEN, "//////")):
+        band = _band(x0, y_base, w, edges, lower, upper)
+        band.set(facecolor="white", edgecolor=colour, hatch=hatch, linewidth=0, zorder=2)
+        ax.add_patch(band)
+    silhouette = _staircase(x0, y_base, w, sy, edges, density, 0, len(density) - 1)
+    silhouette.set(facecolor="none", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=3)
+    ax.add_patch(silhouette)
+    seam_x, seam_y = [], []
+    for i in range(len(seam)):
+        seam_x += [x0 + edges[i] * w, x0 + edges[i + 1] * w]
+        seam_y += [y_base + seam[i]] * 2
+    ax.plot(seam_x, seam_y, color=INK, linewidth=BAR_EDGE_LW, zorder=3)
+
+
 def _em_panel(
     ax: plt.Axes,
     x0: float,
@@ -4334,20 +4358,7 @@ def _em_panel(
     share_lo = np.where(lo + hi > 0, lo / np.maximum(lo + hi, 1e-300), 1.0)
 
     if claimed:
-        tops = density * sy
-        seam = tops * share_lo
-        for lower, upper, colour, hatch in ((np.zeros_like(tops), seam, RUST, "\\\\\\"), (seam, tops, GREEN, "//////")):
-            band = _band(x0, y_base, w, edges, lower, upper)
-            band.set(facecolor="white", edgecolor=colour, hatch=hatch, linewidth=0, zorder=2)
-            ax.add_patch(band)
-        silhouette = _staircase(x0, y_base, w, sy, edges, density, 0, len(density) - 1)
-        silhouette.set(facecolor="none", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=3)
-        ax.add_patch(silhouette)
-        seam_x, seam_y = [], []
-        for i in range(len(seam)):
-            seam_x += [x0 + edges[i] * w, x0 + edges[i + 1] * w]
-            seam_y += [y_base + seam[i]] * 2
-        ax.plot(seam_x, seam_y, color=INK, linewidth=BAR_EDGE_LW, zorder=3)
+        _claimed_bars(ax, x0, y_base, w, sy, edges, density, share_lo)
     else:
         for i, (left, right) in enumerate(zip(edges[:-1], edges[1:], strict=True)):
             top = density[i] * sy
