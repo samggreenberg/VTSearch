@@ -55,14 +55,23 @@ SRC_RE = re.compile(r'src="([^"]+)"')
 BUILD_RE = re.compile(r"^\s*<!--\s*build(?:\s*:\s*(\S+))?\s*-->\s*$")
 # The same marker as a comment body, so notes extraction can skip it.
 BUILD_BODY_RE = re.compile(r"\s*build(?:\s*:\s*\S+)?\s*")
-# Injected on every slide of a build group after the first, so the whole
-# progression shares one page number (Marpit's `paginate: hold`).
-HOLD = "<!-- _paginate: hold -->"
-# Emitted on every page of a build group, and nowhere else: the letter that
-# distinguishes 5a from 5b. Absolutely positioned by the theme just right of
-# Marp's own page number, and drawn fainter than it, so the pair reads as one
-# label with the letter subordinate to the number.
+# The page number, emitted by this script rather than by Marpit. Marpit can
+# only count pages or hold the previous count, and this deck needs neither: the
+# title slide takes no number at all (so the first real slide is 1, not 2), and
+# a fragment shown six times over is *one* slide shown six ways, which wants one
+# number and six letters however far apart the six pages fall. Both are rules
+# about fragments, which Marpit cannot see, so `paginate: false` goes in the
+# front matter and the number is drawn here.
+PAGENO_DIV = '<div class="pageno">{}</div>'
+# Emitted on every page of a numbering group, and nowhere else: the letter that
+# distinguishes 5a from 5b. Absolutely positioned by the theme just right of the
+# page number, and drawn fainter than it, so the pair reads as one label with
+# the letter subordinate to the number.
 LETTER_DIV = '<div class="pageno-letter">{}</div>'
+# A fragment that opts out of numbering entirely — the title slide. It keeps
+# Marpit's own spelling because that is what the directive means; what this
+# script adds is that such a slide does not *consume* a number either.
+UNPAGINATED_RE = re.compile(r"<!--\s*_paginate:\s*false\s*-->")
 # A fragment's own per-slide class directive, merged into the injected one.
 CLASS_RE = re.compile(r"<!--\s*_class:\s*(.+?)\s*-->")
 # A line that is exactly a Marp slide separator.
@@ -78,7 +87,7 @@ DIRECTIVE_LINE_RE = re.compile(
 )
 
 # Front-matter keys we default when a manifest doesn't set them.
-DEFAULT_FRONTMATTER = {"marp": "true", "theme": "vtsearch", "paginate": "true"}
+DEFAULT_FRONTMATTER = {"marp": "true", "theme": "vtsearch", "paginate": "false"}
 
 
 class DeckError(Exception):
@@ -241,12 +250,14 @@ def expand_builds(text: str) -> list[str]:
     chops an earlier reveal out of it: a slide holding only the content above
     the marker, with the figure swapped when the marker names one, and with
     presenter notes stripped (they belong to the final slide alone). The final
-    slide — the full fragment, markers removed — comes last. Every slide after
-    the first holds the page number, so the whole progression reads as one
-    slide to the audience, and every slide (the final one included) gets the
-    theme's top-anchoring `build` class, so a reveal adds ink below what is
-    already on screen instead of re-centring the column between pages. A
-    fragment with no markers returns itself.
+    slide — the full fragment, markers removed — comes last. Every slide (the
+    final one included) gets the theme's top-anchoring `build` class, so a
+    reveal adds ink below what is already on screen instead of re-centring the
+    column between pages. A fragment with no markers returns itself.
+
+    Page numbers and letters are *not* set here: they belong to the fragment's
+    whole numbering group, which `assemble` knows about and one fragment does
+    not — a fragment shown six times over is six pages of one slide.
     """
     lines = text.splitlines()
     markers = [(i, m.group(1)) for i, m in ((i, BUILD_RE.match(line)) for i, line in enumerate(lines)) if m]
@@ -264,11 +275,15 @@ def expand_builds(text: str) -> list[str]:
         body = strip_notes("\n".join(kept)).strip("\n")
         if figure:
             body = swap_figure(body, figure)
-        prefix = f"{HOLD}\n\n" if count else ""
-        slides.append(f"{prefix}{body}\n\n{build_class}\n\n{LETTER_DIV.format(stage_letter(count))}")
+        slides.append(f"{body}\n\n{build_class}")
     final = "\n".join(line for line in lines if not BUILD_RE.match(line)).strip("\n")
-    slides.append(f"{HOLD}\n\n{final}\n\n{build_class}\n\n{LETTER_DIV.format(stage_letter(len(markers)))}")
+    slides.append(f"{final}\n\n{build_class}")
     return slides
+
+
+def page_count(text: str) -> int:
+    """How many audience pages one *use* of a fragment renders as."""
+    return len([line for line in text.splitlines() if BUILD_RE.match(line)]) + 1
 
 
 #: What one speaker page's notes column holds, measured against the theme:
@@ -328,24 +343,53 @@ def _frame_strip(deck: str, pages: list[int]) -> str:
     return f'<div class="speaker-frames">\n{cells}\n</div>\n'
 
 
-def speaker_page(deck: str, pages: list[int], text: str) -> list[str]:
-    """Build the speaker pages for one fragment: the slide beside its notes.
+def notes_for_showing(notes: list[str], letters: set[str], first: bool) -> list[str]:
+    """The notes belonging to one *showing* of a fragment shown several times.
+
+    A fragment used once narrates all of itself on its one speaker page. A
+    fragment used six times — the outline, coming back before each section —
+    does not: the presenter reaching section 3 wants the line about section 3,
+    not the four paragraphs they read at section 1 for the third time (#3265).
+
+    So a note that names a letter goes to the showing that prints that letter,
+    and a note that names none is general to the slide and goes to its first
+    showing only.
+    """
+    kept = []
+    for note in notes:
+        named = set(NOTE_LETTER_RE.findall(note))
+        if named & letters or (not named and first):
+            kept.append(note)
+    return kept
+
+
+def speaker_page(deck: str, pages: list[int], group: list[int], text: str) -> list[str]:
+    """Build the speaker pages for one showing of a fragment: slide beside notes.
 
     The miniature is the per-slide PNG of the audience deck (rendered by
     render.sh into _build/imgs/ before this runs), so the speaker sees exactly
     what the audience sees, pixel for pixel — page number included. When the
-    fragment is a build, the frames of the whole group follow it as a lettered
-    contact sheet, filling the space the single miniature left empty. The paths
-    are written repo-`slides/`-relative like every fragment figure, and
-    rewrite_images repoints them for _build/.
+    fragment is more than one page, the frames of the whole numbering *group*
+    follow it as a lettered contact sheet, filling the space the single
+    miniature left empty. The paths are written repo-`slides/`-relative like
+    every fragment figure, and rewrite_images repoints them for _build/.
+
+    *pages* is this showing's audience pages; *group* is every page the fragment
+    renders as across the deck. They differ only for a fragment shown more than
+    once, where the contact sheet still shows the whole slide and the notes are
+    narrowed to this showing.
 
     Returns one page per chunk of notes: usually one, more when the notes are
     too long to fit at the type floor.
     """
     last = pages[-1]
     image = f"_build/imgs/{deck}.{last:03d}.png"
-    chunks = _notes_pages(fragment_notes(text))
-    strip = _frame_strip(deck, pages)
+    notes = fragment_notes(text)
+    if pages != group:
+        letters = {stage_letter(group.index(page)) for page in pages}
+        notes = notes_for_showing(notes, letters, first=pages[0] == group[0])
+    chunks = _notes_pages(notes)
+    strip = _frame_strip(deck, group)
     out: list[str] = []
     for number, chunk in enumerate(chunks):
         # The contact sheet goes on the first page only: a continuation page is
@@ -388,27 +432,31 @@ def check_build_markers(name: str, text: str, problems: list[str]) -> None:
 NOTE_LETTER_RE = re.compile(r"\*\*([a-z])\*\*")
 
 
-def check_note_letters(name: str, text: str, problems: list[str]) -> None:
-    """Preflight that a build's notes name every page of the group.
+def check_note_letters(name: str, text: str, pages: int, problems: list[str]) -> None:
+    """Preflight that a numbering group's notes name every page of it.
 
-    The audience deck prints a letter on every page of a build (5a, 5b, 5c) and
+    The audience deck prints a letter on every page of a group (5a, 5b, 5c) and
     the speaker build labels every frame of its contact sheet with the same
     letter, so a presenter reads the notes *against* those letters — which only
     works if there is a note for each. A frame nobody wrote a line for is the
     failure this catches, and it is the kind that is invisible until you are
     standing in front of a room (#3246).
 
+    *pages* is the group's size across the whole deck, not the fragment's own
+    reveal count, so a fragment shown six times owes six lettered notes even
+    though it carries no build markers — and gets one note per showing rather
+    than the same four paragraphs six times over.
+
     A single note may name several letters (`**a**, **b** — recapitulation`);
     what is checked is coverage, not one note per page.
     """
-    pages = len([line for line in text.splitlines() if BUILD_RE.match(line)]) + 1
     if pages < 2:
         return
     named = {m.group(1) for comment in COMMENT_RE.finditer(text) for m in NOTE_LETTER_RE.finditer(comment.group(1))}
     missing = [stage_letter(i) for i in range(pages) if stage_letter(i) not in named]
     if missing:
         problems.append(
-            f"fragments/{name}.md: this build is {pages} pages, but its presenter notes "
+            f"fragments/{name}.md: this slide is {pages} pages, but its presenter notes "
             f"never mention page {', '.join(missing)} — write a note per reveal, named by "
             f"the letter the deck prints on it (`**{missing[0]}** — ...`)"
         )
@@ -416,7 +464,7 @@ def check_note_letters(name: str, text: str, problems: list[str]) -> None:
     if stray:
         problems.append(
             f"fragments/{name}.md: presenter notes name page {', '.join(stray)}, but this "
-            f"build is only {pages} pages (a-{stage_letter(pages - 1)})"
+            f"slide is only {pages} pages (a-{stage_letter(pages - 1)})"
         )
 
 
@@ -428,7 +476,6 @@ def check_fragment(name: str, text: str, problems: list[str]) -> None:
                 f"slides; use `***` for a horizontal rule"
             )
     check_build_markers(name, text, problems)
-    check_note_letters(name, text, problems)
     for match in IMAGE_RE.finditer(text):
         target = match.group(1)
         if target.startswith(("http://", "https://", "data:")):
@@ -450,25 +497,57 @@ def assemble(deck: str, write: bool, speaker: bool = False) -> list[str]:
     front, names = parse_manifest(manifest)
     problems: list[str] = []
     bodies: list[str] = []
-    page = 0  # audience-deck page count, builds included
 
+    # Pass one: read every fragment and lay out the audience pages, so the
+    # second pass knows each fragment's whole numbering group. A fragment shown
+    # more than once is one slide shown several ways, and its number and its
+    # letters are properties of all its showings together — which is a fact
+    # about the manifest, not about any one fragment.
+    showings: list[tuple[str, list[str], list[str], list[int]]] = []
+    texts: dict[str, str] = {}
+    group: dict[str, list[int]] = {}
+    page = 0  # audience-deck page count, builds included
     for name, extras in names:
         fragment = SLIDES / f"{name}.md"
         if not fragment.exists():
             problems.append(f"{deck}.deck: missing fragment: fragments/{name}.md")
             continue
-        text = fragment.read_text().strip("\n")
+        text = texts.setdefault(name, fragment.read_text().strip("\n"))
         check_fragment(name, text, problems)
         stages = [with_extra_classes(stage, extras) for stage in expand_builds(text)]
         pages = list(range(page + 1, page + 1 + len(stages)))
         page += len(stages)
+        group.setdefault(name, []).extend(pages)
+        showings.append((name, extras, stages, pages))
+
+    for name, text in texts.items():
+        check_note_letters(name, text, len(group[name]), problems)
+
+    # Pass two: number the pages and emit them. A slide's number is claimed by
+    # its fragment's first showing and reused by the rest; the title slide opts
+    # out with `_paginate: false` and does not consume one, so the first real
+    # slide is 1.
+    numbers: dict[str, int] = {}
+    next_number = 1
+    for name, _extras, stages, pages in showings:
+        text = texts[name]
+        numbered = not UNPAGINATED_RE.search(text)
+        if numbered and name not in numbers:
+            numbers[name] = next_number
+            next_number += 1
         if not speaker:
-            bodies.extend(stages)
+            for offset, stage in enumerate(stages):
+                marks = ""
+                if numbered:
+                    marks = "\n\n" + PAGENO_DIV.format(numbers[name])
+                    if len(group[name]) > 1:
+                        marks += "\n\n" + LETTER_DIV.format(stage_letter(group[name].index(pages[offset])))
+                bodies.append(stage + marks)
             continue
-        # One speaker page per fragment (more when its notes overflow); the
+        # One speaker page per showing (more when its notes overflow); the
         # miniature is the *final* stage of the audience build, which is the
         # page the fragment's notes narrate, and the lettered contact sheet
-        # beneath it is every page of the group.
+        # beneath it is every page of the numbering group.
         for number in pages if write else []:
             if not (BUILD / "imgs" / f"{deck}.{number:03d}.png").exists():
                 problems.append(
@@ -476,7 +555,7 @@ def assemble(deck: str, write: bool, speaker: bool = False) -> list[str]:
                     f"the speaker build needs the audience deck rendered to per-slide PNGs "
                     f"first; use `./render.sh {deck} pdf --speaker`, which does both"
                 )
-        bodies.extend(speaker_page(deck, pages, text))
+        bodies.extend(speaker_page(deck, pages, group[name], text))
 
     if problems or not write:
         return problems
@@ -530,7 +609,7 @@ def cmd_list() -> None:
         pages = 0
         for name, _ in names:
             fragment = SLIDES / f"{name}.md"
-            pages += len(expand_builds(fragment.read_text().strip("\n"))) if fragment.exists() else 1
+            pages += page_count(fragment.read_text().strip("\n")) if fragment.exists() else 1
         builds = f"  ({pages} pages with builds)" if pages != len(names) else ""
         print(f"  {deck:<24} {len(names):>2} slides{builds}")
 

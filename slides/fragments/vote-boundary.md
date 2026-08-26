@@ -20,50 +20,26 @@
 
 <!-- build: figs/vote-boundary.build8.png -->
 
-<!-- The figure is the slide; the words are yours. Say first that this is a
-     drawing, not a plot: the real detector is a linear SVM in a few hundred
-     dimensions, where the boundary is a flat plane. Squeeze that onto a page
-     and it curves. Every curve here is still a real fit to the votes on
-     screen. -->
+<!-- **a** — One circle per item: a photo, a clip, a document. Nothing labelled,
+     nothing known — and it is a drawing, not a plot. -->
 
-<!-- **a** — One circle per item: a photo, a clip, a document. Nothing is
-     labelled and nothing is known. This is the pile, drawn. -->
+<!-- **b** — Five Good, five Bad: two minutes of clicking. Ten marks against
+     eighty-six circles, and that ratio is the situation. -->
 
-<!-- **b** — Five Good, five Bad: a couple of minutes of clicking. Ten of the
-     circles are now marks and the other eighty-six are exactly as they were.
-     That ratio is the situation, and it is worth a beat before anything is
-     fitted to it. -->
+<!-- **c** — Already enough to fit a detector. The curve is everything the model
+     now calls a match: mostly circles, not checks. -->
 
-<!-- **c** — Already enough to fit a detector. The curve is everything the
-     model now calls a match. Note what it enclosed — mostly circles, not
-     checks: it has generalised from ten answers to a hundred items. -->
+<!-- **d** — Two items nobody should be asked about: the model wins either bet.
+     **e** — So it asks about this one, on the line, where it cannot call it. -->
 
-<!-- **d** — Two items no one should be asked about: one deep inside, one far
-     outside. The model would bet on either and be right, so a vote spent on
-     either buys nothing. This is the trap in "just show them the top of the
-     ranking" — the top is exactly where the model is already sure. -->
+<!-- **f** — Good. Retrain, and the boundary moves; dashed is where it was. A
+     Bad there would have pulled it in on that side. -->
 
-<!-- **e** — So it asks about this one instead: right on the line, where the
-     model genuinely cannot call it. The least comfortable item to be shown and
-     the most valuable one to answer. -->
+<!-- **g** — The loop closes: a different item is now on the line. -->
 
-<!-- **f** — The user says Good. Retrain, and the boundary is somewhere else;
-     dashed is where it was. Say that the other branch is just as real: a Bad
-     there would have pulled the curve *in* on that side. One answer, and the
-     model's opinion about a dozen items it has never seen has changed. -->
+<!-- **h** — Now the other job. Same detector, cut looser and tighter. Both keep
+     every check in and every cross out, so the votes cannot choose — but the
+     strip between comes back under one cut and not the other. -->
 
-<!-- **g** — And the loop closes. The boundary moved, so a *different* item is
-     now the one on it, and that is the next thing the user sees. -->
-
-<!-- **h** — Now the other job. Same detector, cut looser and cut tighter. Both
-     dashed curves still keep every check in and every cross out, so nothing
-     the user has said can choose between them — but look inside the strip:
-     those items come back under one cut and not the other. Where the line goes
-     is the user's call, not the data's. -->
-
-<!-- **i** — And here is the twist. Go back to the moment it chose a question:
-     the same three cuts were available *then*. Which one you were on decides
-     which item sits nearest the line — so the threshold did not only pick what
-     came back at the end, it picked the question that got you here. Land on
-     that: get the line wrong and you do not just return the wrong set, you
-     spend the user's next twenty votes on the wrong questions. -->
+<!-- **i** — The twist: those cuts were on offer when it picked the question,
+     too. A wrong line costs the next twenty votes, not just the final set. -->

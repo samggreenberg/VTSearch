@@ -675,6 +675,24 @@ def _staircase(x0: float, y_base: float, w: float, sy: float, edges, density, fi
     return Polygon(pts, closed=True)
 
 
+def _band(x0: float, y_base: float, w: float, edges, lower, upper) -> "Polygon":
+    """The staircase region between two per-bin heights, as one closed shape.
+
+    `_staircase`'s two-sided form: up along the top edge, back along the
+    bottom. One polygon rather than N rectangles is what lets the region carry
+    a hatch that reads as a fill, and what keeps the bins' internal dividers
+    off a drawing that has no use for them.
+    """
+    pts = []
+    for i in range(len(upper)):
+        pts.append((x0 + edges[i] * w, y_base + upper[i]))
+        pts.append((x0 + edges[i + 1] * w, y_base + upper[i]))
+    for i in reversed(range(len(lower))):
+        pts.append((x0 + edges[i + 1] * w, y_base + lower[i]))
+        pts.append((x0 + edges[i] * w, y_base + lower[i]))
+    return Polygon(pts, closed=True)
+
+
 #: Height below which a fitted component's tail stops being drawn, in drawing
 #: units. Half the baseline's own stroke, so a tail that stops is already
 #: inside the black rule and merges with it — set as a fraction of the panel
@@ -2409,7 +2427,7 @@ INCL_VOTES = XQUANT_ANCHORS[0]
 INCL_POPULATION = XQUANT_POPULATIONS[0]
 
 #: How many build stages each of the four reveal in.
-KNOB_FLOW_STAGES = 5
+KNOB_FLOW_STAGES = 4
 WALK_FLOW_STAGES = 6
 TILT_FLOW_STAGES = 6
 ACQ_FLOW_STAGES = 5
@@ -2565,24 +2583,24 @@ def _incl_figure(canvas_h: float) -> tuple[plt.Figure, plt.Axes]:
 
 
 #: The knob pair's shared canvas height. `calib-knob-flow` and `calib-walk-flow`
-#: are a matched pair — the same panel, the same votes, the same gauge row, with
-#: one row swapped between them — so every row lands on the same drawing unit in
-#: both and the deck's flip from one to the other moves only the thing that
-#: changed. `_incl_rows` is where that is enforced; the height is set so the
-#: lower of the two figures' conclusion lines ends just inside the canvas.
+#: are drawn on one grid — the same panel, the same votes, the same middle row —
+#: so every row they share lands on the same drawing unit in both. `_incl_rows`
+#: is where that is enforced; the height is set so the walk figure's conclusion
+#: line ends just inside the canvas. The knob figure stops at the middle row and
+#: is cropped there: it carries no gauges (#3265), so its own crop is shorter.
 INCL_CANVAS_H = 11.2
 
 
-def _incl_rows() -> dict:
-    """Every shared y in the knob pair, so the two figures overlay exactly.
+
+def _incl_rows(canvas_h: float = INCL_CANVAS_H) -> dict:
+    """Every shared y in the knob pair, measured down from the canvas top.
 
     `calib-walk-flow` has no cut notch hanging under its panel and
     `calib-knob-flow` has no two-line anchor names under its middle row; both
-    reserve the other's space anyway. Spending a few empty drawing units is what
-    buys the property the pair exists for — flipping between the two slides
-    moves the middle row and nothing else.
+    reserve the other's space anyway, so the rows they share stay registered.
+    The rows below `mid_bottom` are the walk figure's alone.
     """
-    panel_top = INCL_CANVAS_H - (LABEL_GAP + CAP_16 + LABEL_GAP + CAP_16)
+    panel_top = canvas_h - (LABEL_GAP + CAP_16 + LABEL_GAP + CAP_16)
     y_base = panel_top - INCL_PANEL_H
     # Reserved on both: a cut notch under the panel and its name (knob only).
     theta_bottom = y_base - 0.32 - LABEL_GAP - CAP_16
@@ -2612,6 +2630,15 @@ def _incl_rows() -> dict:
     }
 
 
+#: The knob figure's own height. Every row is measured down from the canvas
+#: top, so the two figures still draw an identical panel and an identical
+#: middle row; the knob figure simply has nothing under that row to hold up
+#: (#3265) and stops 0.25 units below its last line rather than reserving three
+#: more rows of white. Derived rather than set, so a retune of the shared rows
+#: moves it too.
+KNOB_CANVAS_H = INCL_CANVAS_H - _incl_rows()["mid_bottom"] + 0.25
+
+
 def knob_flow_fig() -> None:
     """Schematic of the knob that did not turn — Part 2's opening figure (#3218).
 
@@ -2627,7 +2654,7 @@ def knob_flow_fig() -> None:
     between the classes; both ends of the knob price the two errors a thousand
     to one in opposite directions, and *both cost curves are zero across the
     whole band*, so every cut in it ties at every setting. Twenty-one stops, one
-    answer, three identical gauges (#2693,
+    answer (#2693,
     ``docs/experiments/inclusion-knob/REPORT.md``: 100% flat sweeps on the
     separable arm, and ~1.8 distinct admitted sizes across eleven stops on real
     embeddings).
@@ -2649,16 +2676,15 @@ def knob_flow_fig() -> None:
 
 def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
-    fig, ax = _incl_figure(INCL_CANVAS_H)
+    fig, ax = _incl_figure(KNOB_CANVAS_H)
     x0, w = INCL_PANEL_X0, INCL_PANEL_W
 
     # The cost panel's own labels sit above it, so the object gap below the cut's
     # name is measured to *them* rather than to the curves they name; `_incl_rows`
     # holds that arithmetic, because the walk figure has to land on it too.
-    rows = _incl_rows()
+    rows = _incl_rows(KNOB_CANVAS_H)
     panel_top, y_base = rows["panel_top"], rows["y_base"]
     cost_label_y, cost_h, cost_base = rows["mid_label_y"], rows["mid_h"], rows["mid_base"]
-    stop_label_y, gauge_y0, conclusion_y = rows["stop_label_y"], rows["gauge_y0"], rows["conclusion_y"]
 
     # ── stage 1: the corpus, and the seven held-out votes standing on it ──────
     _incl_panel(ax, corpus, y_base=y_base, top=panel_top)
@@ -2784,20 +2810,11 @@ def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels:
             color=INK,
         )
 
-    # ── stage 5: three settings of the knob, three identical answers ──────────
-    if stage >= 5:
-        cuts = [_argmin_cut(scores, labels, k) for k in KNOB_STOPS]
-        _incl_gauges(ax, corpus, KNOB_STOPS, cuts, y0=gauge_y0, stop_label_y=stop_label_y)
-        ax.text(
-            x0 + w / 2,
-            conclusion_y,
-            "one answer, whichever way you turn it",
-            ha="center",
-            va="center",
-            fontsize=17,
-            color=INK,
-        )
-
+    # There is deliberately no gauge row here. The figure's whole claim is that
+    # the two ends of the knob minimise in the same place, and the two cost
+    # curves lying on top of each other across the band say that outright; three
+    # gauges under them said it a second time, in a picture whose own content is
+    # that the three pictures are the same one (#3265).
     return fig
 
 
@@ -4294,12 +4311,21 @@ def _em_panel(
 ) -> None:
     """One panel: the same scores, under whichever pair of curves it is up to.
 
-    `claimed` is the E-step's own picture — every bar split by how much each
-    component claims the scores in it. Solid colour rather than the deck's
-    hatching, and this is the one place that is right: a bar here is seven
-    slide pixels wide, and a hatch that narrow reads as a smudge. The split is
-    the E-step, drawn: nothing else in the figure says what a responsibility
-    *is*.
+    `claimed` is the E-step's own picture — the histogram split by how much
+    each component claims the scores under it. It is drawn as **two hollow
+    hatched regions**, in the same rust and green hatching a `_data_block`
+    uses for Bad and Good, rather than as two solid colours: solid rust meeting
+    solid green across a ragged seam is a colour boundary doing all the work,
+    which is exactly the boundary a deuteranope cannot see, and at this size a
+    large flat area of rust reads as brown besides (#3265). Hatching carries the
+    same distinction in *texture*, and it is the distinction the rest of the
+    deck already draws.
+
+    The two regions are polygons over the whole row rather than one pair of
+    patches per bin, so nothing draws the bins' internal dividers: what is left
+    is the histogram's own silhouette, one seam where the split falls, and two
+    fills. The split is the E-step, drawn — nothing else in the figure says
+    what a responsibility *is*.
     """
     density, edges = np.histogram(scores, bins=EM_BINS, range=(0.0, 1.0), density=True)
     centres = 0.5 * (edges[:-1] + edges[1:])
@@ -4307,16 +4333,27 @@ def _em_panel(
     hi = fit.w_hi * gaussian(centres, fit.mu_hi, fit.var_hi)
     share_lo = np.where(lo + hi > 0, lo / np.maximum(lo + hi, 1e-300), 1.0)
 
-    for i, (left, right) in enumerate(zip(edges[:-1], edges[1:], strict=True)):
-        top = density[i] * sy
-        if top <= 0:
-            continue
-        bx0, bw = x0 + left * w, (right - left) * w
-        if claimed:
-            split = top * float(share_lo[i])
-            ax.add_patch(Rectangle((bx0, y_base), bw, split, facecolor=RUST, edgecolor="none", zorder=2))
-            ax.add_patch(Rectangle((bx0, y_base + split), bw, top - split, facecolor=GREEN, edgecolor="none", zorder=2))
-        else:
+    if claimed:
+        tops = density * sy
+        seam = tops * share_lo
+        for lower, upper, colour, hatch in ((np.zeros_like(tops), seam, RUST, "\\\\\\"), (seam, tops, GREEN, "//////")):
+            band = _band(x0, y_base, w, edges, lower, upper)
+            band.set(facecolor="white", edgecolor=colour, hatch=hatch, linewidth=0, zorder=2)
+            ax.add_patch(band)
+        silhouette = _staircase(x0, y_base, w, sy, edges, density, 0, len(density) - 1)
+        silhouette.set(facecolor="none", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=3)
+        ax.add_patch(silhouette)
+        seam_x, seam_y = [], []
+        for i in range(len(seam)):
+            seam_x += [x0 + edges[i] * w, x0 + edges[i + 1] * w]
+            seam_y += [y_base + seam[i]] * 2
+        ax.plot(seam_x, seam_y, color=INK, linewidth=BAR_EDGE_LW, zorder=3)
+    else:
+        for i, (left, right) in enumerate(zip(edges[:-1], edges[1:], strict=True)):
+            top = density[i] * sy
+            if top <= 0:
+                continue
+            bx0, bw = x0 + left * w, (right - left) * w
             ax.add_patch(Rectangle((bx0, y_base), bw, top, facecolor="white", edgecolor=INK, linewidth=0.6, zorder=2))
 
     xs = np.linspace(0.0, 1.0, 600)
