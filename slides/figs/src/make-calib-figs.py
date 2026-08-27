@@ -75,7 +75,7 @@ NEUTRAL_FILL = "#e8ebef"  # a wash *behind* other ink: a band, a shaded interval
 #: wants colour.
 UNLABELED_FILL = "#dae0e8"
 BLUE = "#0b5fa5"  # production / the shipped thing
-RUST = "#b45309"  # the Bad component / cross-calibration
+RED = "#b91c1c"  # the Bad component / cross-calibration
 GREEN = "#0d8a5f"  # the Good component
 
 plt.rcParams.update(
@@ -262,7 +262,7 @@ def _data_block(ax: plt.Axes, x0: float, y0: float, w: float, h: float, split: b
         )
     )
     ax.add_patch(
-        Rectangle((x0, y0), w, h - good_h, facecolor="white", edgecolor=RUST, hatch="\\\\\\", linewidth=0, zorder=2)
+        Rectangle((x0, y0), w, h - good_h, facecolor="white", edgecolor=RED, hatch="\\\\\\", linewidth=0, zorder=2)
     )
     ax.add_patch(Rectangle((x0, y0), w, h, facecolor="none", edgecolor=INK, linewidth=1.6, zorder=3))
     ax.plot([x0, x0 + w], [y0 + h - good_h] * 2, color=INK, linewidth=1.0, zorder=3)
@@ -417,7 +417,7 @@ def _score_line(
     _range_line(ax, cx - half, cx + half, y)
     ax.text(cx, y + SCORE_LABEL_LIFT, _sub(label), ha="center", va="bottom", fontsize=16, color=INK)
     for x in bad:
-        ax.text(cx + x, y - 0.12, "✗", ha="center", va="top", fontsize=16, color=RUST, fontweight="bold")
+        ax.text(cx + x, y - 0.12, "✗", ha="center", va="top", fontsize=16, color=RED, fontweight="bold")
     for x in good:
         ax.text(cx + x, y + 0.08, "✓", ha="center", va="bottom", fontsize=16, color=GREEN, fontweight="bold")
     if not cut:
@@ -497,7 +497,7 @@ def _xcal_flow_stage(stage: int) -> plt.Figure:
         ha="right",
         va="center",
         fontsize=15,
-        color=RUST,
+        color=RED,
     )
     train_x = bx + block_w / 2 + OBJECT_GAP
     labeled_arrow((train_x, block_y0 + block_h / 2), (train_x + 2.4, block_y0 + block_h / 2), "train")
@@ -675,6 +675,24 @@ def _staircase(x0: float, y_base: float, w: float, sy: float, edges, density, fi
     return Polygon(pts, closed=True)
 
 
+def _band(x0: float, y_base: float, w: float, edges, lower, upper) -> "Polygon":
+    """The staircase region between two per-bin heights, as one closed shape.
+
+    `_staircase`'s two-sided form: up along the top edge, back along the
+    bottom. One polygon rather than N rectangles is what lets the region carry
+    a hatch that reads as a fill, and what keeps the bins' internal dividers
+    off a drawing that has no use for them.
+    """
+    pts = []
+    for i in range(len(upper)):
+        pts.append((x0 + edges[i] * w, y_base + upper[i]))
+        pts.append((x0 + edges[i + 1] * w, y_base + upper[i]))
+    for i in reversed(range(len(lower))):
+        pts.append((x0 + edges[i + 1] * w, y_base + lower[i]))
+        pts.append((x0 + edges[i] * w, y_base + lower[i]))
+    return Polygon(pts, closed=True)
+
+
 #: Height below which a fitted component's tail stops being drawn, in drawing
 #: units. Half the baseline's own stroke, so a tail that stops is already
 #: inside the black rule and merges with it — set as a fraction of the panel
@@ -688,7 +706,7 @@ TAIL_FLOOR = 0.9 / FLOW_UNIT_PT
 #:
 #: The drop exists because a stroke has width. Ended at `TAIL_FLOOR` — half the
 #: baseline's own stroke — the curve's *centre* is inside the black rule but
-#: its upper edge stands `HUMP_LW / 2` above it, so a rust or green step
+#: its upper edge stands `HUMP_LW / 2` above it, so a red or green step
 #: appears at each of the four places a component starts and stops (#3254).
 #: Lowering the whole curve by that half-width puts its upper edge exactly on
 #: the baseline's, and the tails merge into the rule instead of sitting on it.
@@ -779,7 +797,7 @@ def _score_histogram(
     * `"plain"` — hollow bars in outline: the shape of the data, which is all
       anyone actually has before a fit is claimed.
     * `"query"` — the same silhouette re-filled, split at the components'
-      crossing and hatched with question marks in rust or green. The mixture
+      crossing and hatched with question marks in red or green. The mixture
       has read no labels, so "this hump is the Bad one" is a guess and the
       texture says so (the label-free figure, `calib-gmm-flow`).
     * `"class"` — the same two humps hatched the way `_data_block` hatches
@@ -824,7 +842,7 @@ def _score_histogram(
     crossing = int(np.argmax(hi_d > lo_d)) if (hi_d > lo_d).any() else len(xs)
 
     for lo_i, hi_i, mu, var, weight, color, hatch, name in (
-        (0, crossing, fit.mu_lo, fit.var_lo, fit.w_lo, RUST, "\\\\\\", r"\mu_{lo}"),
+        (0, crossing, fit.mu_lo, fit.var_lo, fit.w_lo, RED, "\\\\\\", r"\mu_{lo}"),
         (crossing, len(xs), fit.mu_hi, fit.var_hi, fit.w_hi, GREEN, "//////", r"\mu_{hi}"),
     ):
         # Drawn `HUMP_DROP` below the density it plots, so the ends merge into
@@ -856,13 +874,13 @@ def _score_histogram(
         # Each Gaussian is drawn only where it is visibly off the baseline.
         # Plotted over the full axis, a component's far tail lies flat along
         # the bottom of the *other* hump, and a green line running under the
-        # rust distribution reads as a stray mark rather than as the tail of
+        # red distribution reads as a stray mark rather than as the tail of
         # something that is genuinely still there.
         visible = np.flatnonzero(density_y > y_base + TAIL_FLOOR)
         if visible.size:
             lo_v, hi_v = visible[0], visible[-1] + 1
             ax.plot(x0 + xs[lo_v:hi_v] * w, curve[lo_v:hi_v], color=color, linewidth=HUMP_LW, zorder=3)
-        # Black, not the component's colour: against a rust or green hatch a
+        # Black, not the component's colour: against a red or green hatch a
         # matching dashed line stops reading as a separate mark, and this one
         # has a job of its own — θ_G is ticked midway between the two.
         peak = y_base + weight * gaussian(np.array([mu]), mu, var)[0] * sy - HUMP_DROP
@@ -989,7 +1007,7 @@ def _gmm_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Figu
             ha="right",
             va="center",
             fontsize=15,
-            color=RUST,
+            color=RED,
         )
         _disc_label(ax, bx, row_y, "D_0")
         labeled_arrow((train_x, row_y), (train_x + train_len, row_y), "train")
@@ -1240,7 +1258,7 @@ def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Fi
         ha="right",
         va="center",
         fontsize=15,
-        color=RUST,
+        color=RED,
     )
     # D₀ is named from *above*, not on a disc inside itself as the mixture
     # figure names it: the inside of this block is about to be divided into D₁
@@ -1493,7 +1511,7 @@ def _hump_marks(ax: plt.Axes, x0: float, y_base: float, w: float, anchors: dict)
     the glyph itself identical.
     """
     halo = [patheffects.withStroke(linewidth=4.0, foreground="white")]
-    for key, color, glyph, dy, va in (("bad", RUST, "✗", -0.12, "top"), ("good", GREEN, "✓", 0.08, "bottom")):
+    for key, color, glyph, dy, va in (("bad", RED, "✗", -0.12, "top"), ("good", GREEN, "✓", 0.08, "bottom")):
         for score in anchors[key]:
             ax.text(
                 x0 + score * w,
@@ -1528,7 +1546,7 @@ def _mark_legend(ax: plt.Axes, x_outer: float, y: float, name: str, *, mirrored:
     """
     step, gap = 0.30, 0.30
     d = -1.0 if mirrored else 1.0
-    pair = (("✓", GREEN), ("✗", RUST)) if mirrored else (("✗", RUST), ("✓", GREEN))
+    pair = (("✓", GREEN), ("✗", RED)) if mirrored else (("✗", RED), ("✓", GREEN))
     for k, (glyph, color) in enumerate(pair):
         ax.text(
             x_outer + d * (0.15 + step * k),
@@ -1646,7 +1664,7 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
         ha="right",
         va="center",
         fontsize=15,
-        color=RUST,
+        color=RED,
     )
     ax.text(block_x0, block_top + LABEL_GAP, _sub("D_0"), ha="left", va="bottom", fontsize=16, color=INK)
     labeled_arrow((train_x, row_y), (train_x + train_len, row_y), "train")
@@ -1980,9 +1998,7 @@ def _quantile_gauge(
     shows is the thing worth showing — three notches at three different places
     along three score axes, at nearly the same place along three rank axes.
     """
-    ax.add_patch(
-        Rectangle((x0, y0), q * w, h, facecolor="white", edgecolor=RUST, hatch="\\\\\\", linewidth=0, zorder=2)
-    )
+    ax.add_patch(Rectangle((x0, y0), q * w, h, facecolor="white", edgecolor=RED, hatch="\\\\\\", linewidth=0, zorder=2))
     ax.add_patch(
         Rectangle(
             (x0 + q * w, y0), (1 - q) * w, h, facecolor="white", edgecolor=GREEN, hatch="////", linewidth=0, zorder=2
@@ -2228,7 +2244,7 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
     good_h = 0.42 * block_h
     ax.text(block_x0 - LABEL_GAP, block_top - good_h / 2, "Good", ha="right", va="center", fontsize=15, color=GREEN)
     ax.text(
-        block_x0 - LABEL_GAP, block_y0 + (block_h - good_h) / 2, "Bad", ha="right", va="center", fontsize=15, color=RUST
+        block_x0 - LABEL_GAP, block_y0 + (block_h - good_h) / 2, "Bad", ha="right", va="center", fontsize=15, color=RED
     )
     ax.text(block_x0, block_top + LABEL_GAP, _sub("D_0"), ha="left", va="bottom", fontsize=16, color=INK)
     labeled_arrow((train_x, row_y), (train_x + train_len, row_y), "train")
@@ -2409,7 +2425,7 @@ INCL_VOTES = XQUANT_ANCHORS[0]
 INCL_POPULATION = XQUANT_POPULATIONS[0]
 
 #: How many build stages each of the four reveal in.
-KNOB_FLOW_STAGES = 5
+KNOB_FLOW_STAGES = 4
 WALK_FLOW_STAGES = 6
 TILT_FLOW_STAGES = 6
 ACQ_FLOW_STAGES = 5
@@ -2565,24 +2581,23 @@ def _incl_figure(canvas_h: float) -> tuple[plt.Figure, plt.Axes]:
 
 
 #: The knob pair's shared canvas height. `calib-knob-flow` and `calib-walk-flow`
-#: are a matched pair — the same panel, the same votes, the same gauge row, with
-#: one row swapped between them — so every row lands on the same drawing unit in
-#: both and the deck's flip from one to the other moves only the thing that
-#: changed. `_incl_rows` is where that is enforced; the height is set so the
-#: lower of the two figures' conclusion lines ends just inside the canvas.
+#: are drawn on one grid — the same panel, the same votes, the same middle row —
+#: so every row they share lands on the same drawing unit in both. `_incl_rows`
+#: is where that is enforced; the height is set so the walk figure's conclusion
+#: line ends just inside the canvas. The knob figure stops at the middle row and
+#: is cropped there: it carries no gauges (#3265), so its own crop is shorter.
 INCL_CANVAS_H = 11.2
 
 
-def _incl_rows() -> dict:
-    """Every shared y in the knob pair, so the two figures overlay exactly.
+def _incl_rows(canvas_h: float = INCL_CANVAS_H) -> dict:
+    """Every shared y in the knob pair, measured down from the canvas top.
 
     `calib-walk-flow` has no cut notch hanging under its panel and
     `calib-knob-flow` has no two-line anchor names under its middle row; both
-    reserve the other's space anyway. Spending a few empty drawing units is what
-    buys the property the pair exists for — flipping between the two slides
-    moves the middle row and nothing else.
+    reserve the other's space anyway, so the rows they share stay registered.
+    The rows below `mid_bottom` are the walk figure's alone.
     """
-    panel_top = INCL_CANVAS_H - (LABEL_GAP + CAP_16 + LABEL_GAP + CAP_16)
+    panel_top = canvas_h - (LABEL_GAP + CAP_16 + LABEL_GAP + CAP_16)
     y_base = panel_top - INCL_PANEL_H
     # Reserved on both: a cut notch under the panel and its name (knob only).
     theta_bottom = y_base - 0.32 - LABEL_GAP - CAP_16
@@ -2612,6 +2627,15 @@ def _incl_rows() -> dict:
     }
 
 
+#: The knob figure's own height. Every row is measured down from the canvas
+#: top, so the two figures still draw an identical panel and an identical
+#: middle row; the knob figure simply has nothing under that row to hold up
+#: (#3265) and stops 0.25 units below its last line rather than reserving three
+#: more rows of white. Derived rather than set, so a retune of the shared rows
+#: moves it too.
+KNOB_CANVAS_H = INCL_CANVAS_H - _incl_rows()["mid_bottom"] + 0.25
+
+
 def knob_flow_fig() -> None:
     """Schematic of the knob that did not turn — Part 2's opening figure (#3218).
 
@@ -2627,7 +2651,7 @@ def knob_flow_fig() -> None:
     between the classes; both ends of the knob price the two errors a thousand
     to one in opposite directions, and *both cost curves are zero across the
     whole band*, so every cut in it ties at every setting. Twenty-one stops, one
-    answer, three identical gauges (#2693,
+    answer (#2693,
     ``docs/experiments/inclusion-knob/REPORT.md``: 100% flat sweeps on the
     separable arm, and ~1.8 distinct admitted sizes across eleven stops on real
     embeddings).
@@ -2649,16 +2673,15 @@ def knob_flow_fig() -> None:
 
 def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
-    fig, ax = _incl_figure(INCL_CANVAS_H)
+    fig, ax = _incl_figure(KNOB_CANVAS_H)
     x0, w = INCL_PANEL_X0, INCL_PANEL_W
 
     # The cost panel's own labels sit above it, so the object gap below the cut's
     # name is measured to *them* rather than to the curves they name; `_incl_rows`
     # holds that arithmetic, because the walk figure has to land on it too.
-    rows = _incl_rows()
+    rows = _incl_rows(KNOB_CANVAS_H)
     panel_top, y_base = rows["panel_top"], rows["y_base"]
     cost_label_y, cost_h, cost_base = rows["mid_label_y"], rows["mid_h"], rows["mid_base"]
-    stop_label_y, gauge_y0, conclusion_y = rows["stop_label_y"], rows["gauge_y0"], rows["conclusion_y"]
 
     # ── stage 1: the corpus, and the seven held-out votes standing on it ──────
     _incl_panel(ax, corpus, y_base=y_base, top=panel_top)
@@ -2784,20 +2807,11 @@ def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels:
             color=INK,
         )
 
-    # ── stage 5: three settings of the knob, three identical answers ──────────
-    if stage >= 5:
-        cuts = [_argmin_cut(scores, labels, k) for k in KNOB_STOPS]
-        _incl_gauges(ax, corpus, KNOB_STOPS, cuts, y0=gauge_y0, stop_label_y=stop_label_y)
-        ax.text(
-            x0 + w / 2,
-            conclusion_y,
-            "one answer, whichever way you turn it",
-            ha="center",
-            va="center",
-            fontsize=17,
-            color=INK,
-        )
-
+    # There is deliberately no gauge row here. The figure's whole claim is that
+    # the two ends of the knob minimise in the same place, and the two cost
+    # curves lying on top of each other across the band say that outright; three
+    # gauges under them said it a second time, in a picture whose own content is
+    # that the three pictures are the same one (#3265).
     return fig
 
 
@@ -3324,7 +3338,7 @@ def _acq_cell(ax: plt.Axes, x0: float, y0: float, w: float, h: float, kind: str,
     if kind == "unlabeled":
         ax.add_patch(Rectangle((x0, y0), w, h, facecolor=UNLABELED_FILL, edgecolor=INK, linewidth=lw, zorder=3))
         return
-    color, hatch = (GREEN, "//////") if kind == "good" else (RUST, "\\\\\\")
+    color, hatch = (GREEN, "//////") if kind == "good" else (RED, "\\\\\\")
     ax.add_patch(Rectangle((x0, y0), w, h, facecolor="white", edgecolor=color, hatch=hatch, linewidth=0, zorder=3))
     ax.add_patch(Rectangle((x0, y0), w, h, facecolor="none", edgecolor=INK, linewidth=lw, zorder=4))
 
@@ -3585,14 +3599,14 @@ def anchored_fig() -> None:
         linestyle=(0, (4, 3)),
         zorder=2,
     )
-    ax.plot(x, anchored.w_lo * gaussian(x, anchored.mu_lo, anchored.var_lo), color=RUST, linewidth=2.4, zorder=3)
+    ax.plot(x, anchored.w_lo * gaussian(x, anchored.mu_lo, anchored.var_lo), color=RED, linewidth=2.4, zorder=3)
     ax.plot(x, anchored.w_hi * gaussian(x, anchored.mu_hi, anchored.var_hi), color=GREEN, linewidth=2.4, zorder=3)
     ax.axvline(plain_mid, color=SOFT, linewidth=2.0, linestyle=(0, (4, 3)), zorder=4)
     ax.axvline(anch_mid, color=BLUE, linewidth=2.4, zorder=4)
 
     ymax = ax.get_ylim()[1]
     for s in bad_anchors:
-        ax.plot([s, s], [-0.05 * ymax, 0.035 * ymax], color=RUST, linewidth=2.2, zorder=5, clip_on=False)
+        ax.plot([s, s], [-0.05 * ymax, 0.035 * ymax], color=RED, linewidth=2.2, zorder=5, clip_on=False)
     for s in good_anchors:
         ax.plot([s, s], [-0.05 * ymax, 0.035 * ymax], color=GREEN, linewidth=2.2, zorder=5, clip_on=False)
     ax.annotate(
@@ -3792,7 +3806,7 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
     # ── stage 1: one imperfect ranking ────────────────────────────────────────
     _range_line(ax, x0, x0 + w, rank_y, z=3)
     for score in bad:
-        ax.text(x0 + score * w, rank_y - 0.14, "✗", ha="center", va="top", fontsize=16, color=RUST, fontweight="bold")
+        ax.text(x0 + score * w, rank_y - 0.14, "✗", ha="center", va="top", fontsize=16, color=RED, fontweight="bold")
     for score in good:
         ax.text(
             x0 + score * w, rank_y + 0.10, "✓", ha="center", va="bottom", fontsize=16, color=GREEN, fontweight="bold"
@@ -3955,10 +3969,10 @@ def _crossing_stage(stage: int) -> plt.Figure:
 
     # ── stage 1: the fit, as the mixture slide left it — two shapes and two means
     peak = float(max(lo.max(), hi.max()))
-    for curve, colour, name, hatch in ((lo, RUST, r"\mu_{lo}", "\\\\\\"), (hi, GREEN, r"\mu_{hi}", "//////")):
+    for curve, colour, name, hatch in ((lo, RED, r"\mu_{lo}", "\\\\\\"), (hi, GREEN, r"\mu_{hi}", "//////")):
         density_ys = shape_base + curve / peak * shape_h * CROSSING_SHAPE_H
         ys = density_ys - HUMP_DROP
-        mu = mu_lo if colour == RUST else mu_hi
+        mu = mu_lo if colour == RED else mu_hi
         keep = np.flatnonzero(density_ys > shape_base + TAIL_FLOOR)
         ax.plot(x0 + xs[keep] * w, ys[keep], color=colour, linewidth=HUMP_LW, zorder=3)
         pts = [(x0 + xs[keep[0]] * w, shape_base)]
@@ -3985,7 +3999,7 @@ def _crossing_stage(stage: int) -> plt.Figure:
 
     # ── stage 3: the same two components, priced by how likely each is ────────
     if stage >= 3:
-        weighted = [(w_lo * lo, RUST, "\\\\\\"), (w_hi * hi, GREEN, "//////")]
+        weighted = [(w_lo * lo, RED, "\\\\\\"), (w_hi * hi, GREEN, "//////")]
         top = float(max(c.max() for c, _c, _h in weighted))
         for curve, colour, hatch in weighted:
             density_ys = weighted_base + curve / top * weighted_h
@@ -4279,6 +4293,31 @@ def _em_iterate(scores: np.ndarray, anchors: dict | None, rounds: int) -> GmmFit
     return fit
 
 
+def _claimed_bars(ax: plt.Axes, x0: float, y_base: float, w: float, sy: float, edges, density, share_lo) -> None:
+    """The E step, drawn: the histogram split by who claims each score.
+
+    Two hollow hatched regions in the deck's own red and green — not two solid
+    colours meeting at a ragged seam, which is a colour boundary doing all the
+    work and the one a deuteranope cannot see (#3265). Polygons over the whole
+    row rather than a pair of patches per bin, so the bins' internal dividers
+    never appear: what is left is the silhouette, the seam, and two fills.
+    """
+    tops = density * sy
+    seam = tops * share_lo
+    for lower, upper, colour, hatch in ((np.zeros_like(tops), seam, RED, "\\\\\\"), (seam, tops, GREEN, "//////")):
+        band = _band(x0, y_base, w, edges, lower, upper)
+        band.set(facecolor="white", edgecolor=colour, hatch=hatch, linewidth=0, zorder=2)
+        ax.add_patch(band)
+    silhouette = _staircase(x0, y_base, w, sy, edges, density, 0, len(density) - 1)
+    silhouette.set(facecolor="none", edgecolor=INK, linewidth=BAR_EDGE_LW, zorder=3)
+    ax.add_patch(silhouette)
+    seam_x, seam_y = [], []
+    for i in range(len(seam)):
+        seam_x += [x0 + edges[i] * w, x0 + edges[i + 1] * w]
+        seam_y += [y_base + seam[i]] * 2
+    ax.plot(seam_x, seam_y, color=INK, linewidth=BAR_EDGE_LW, zorder=3)
+
+
 def _em_panel(
     ax: plt.Axes,
     x0: float,
@@ -4294,12 +4333,20 @@ def _em_panel(
 ) -> None:
     """One panel: the same scores, under whichever pair of curves it is up to.
 
-    `claimed` is the E-step's own picture — every bar split by how much each
-    component claims the scores in it. Solid colour rather than the deck's
-    hatching, and this is the one place that is right: a bar here is seven
-    slide pixels wide, and a hatch that narrow reads as a smudge. The split is
-    the E-step, drawn: nothing else in the figure says what a responsibility
-    *is*.
+    `claimed` is the E-step's own picture — the histogram split by how much
+    each component claims the scores under it. It is drawn as **two hollow
+    hatched regions**, in the same red and green hatching a `_data_block`
+    uses for Bad and Good, rather than as two solid colours: solid red meeting
+    solid green across a ragged seam is a colour boundary doing all the work,
+    and it is exactly the boundary a deuteranope cannot see. Hatching carries
+    the same distinction in *texture*, and it is the distinction the rest of
+    the deck already draws (#3265).
+
+    The two regions are polygons over the whole row rather than one pair of
+    patches per bin, so nothing draws the bins' internal dividers: what is left
+    is the histogram's own silhouette, one seam where the split falls, and two
+    fills. The split is the E-step, drawn — nothing else in the figure says
+    what a responsibility *is*.
     """
     density, edges = np.histogram(scores, bins=EM_BINS, range=(0.0, 1.0), density=True)
     centres = 0.5 * (edges[:-1] + edges[1:])
@@ -4307,21 +4354,19 @@ def _em_panel(
     hi = fit.w_hi * gaussian(centres, fit.mu_hi, fit.var_hi)
     share_lo = np.where(lo + hi > 0, lo / np.maximum(lo + hi, 1e-300), 1.0)
 
-    for i, (left, right) in enumerate(zip(edges[:-1], edges[1:], strict=True)):
-        top = density[i] * sy
-        if top <= 0:
-            continue
-        bx0, bw = x0 + left * w, (right - left) * w
-        if claimed:
-            split = top * float(share_lo[i])
-            ax.add_patch(Rectangle((bx0, y_base), bw, split, facecolor=RUST, edgecolor="none", zorder=2))
-            ax.add_patch(Rectangle((bx0, y_base + split), bw, top - split, facecolor=GREEN, edgecolor="none", zorder=2))
-        else:
+    if claimed:
+        _claimed_bars(ax, x0, y_base, w, sy, edges, density, share_lo)
+    else:
+        for i, (left, right) in enumerate(zip(edges[:-1], edges[1:], strict=True)):
+            top = density[i] * sy
+            if top <= 0:
+                continue
+            bx0, bw = x0 + left * w, (right - left) * w
             ax.add_patch(Rectangle((bx0, y_base), bw, top, facecolor="white", edgecolor=INK, linewidth=0.6, zorder=2))
 
     xs = np.linspace(0.0, 1.0, 600)
     for mu, var, weight, colour in (
-        (fit.mu_lo, fit.var_lo, fit.w_lo, RUST),
+        (fit.mu_lo, fit.var_lo, fit.w_lo, RED),
         (fit.mu_hi, fit.var_hi, fit.w_hi, GREEN),
     ):
         density_y = y_base + weight * gaussian(xs, mu, var) * sy
@@ -4333,7 +4378,7 @@ def _em_panel(
 
     if anchors:
         for score in anchors["bad"]:
-            ax.text(x0 + score * w, y_base - 0.12, "✗", ha="center", va="top", fontsize=15, color=RUST, zorder=5)
+            ax.text(x0 + score * w, y_base - 0.12, "✗", ha="center", va="top", fontsize=15, color=RED, zorder=5)
         for score in anchors["good"]:
             ax.text(x0 + score * w, y_base - 0.12, "✓", ha="center", va="top", fontsize=15, color=GREEN, zorder=5)
 

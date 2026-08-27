@@ -16,7 +16,7 @@
  *    slide as it does in the chart beside it:
  *
  *      --hue-cut   blue   the threshold, and the shipped decision it makes
- *      --hue-neg   rust   the negative side: the Bad component, the losing arm
+ *      --hue-neg   red    the negative side: the Bad component, the losing arm
  *      --hue-pos   green  the positive side: the Good component, a measured win
  *
  *    Use them through the .cut / .neg / .pos span classes, and only when the
@@ -38,7 +38,7 @@
 
   /* Identity hues — see rule 2 above. Kept in sync with make-calib-figs.py. */
   --hue-cut: #0b5fa5;
-  --hue-neg: #b45309;
+  --hue-neg: #b91c1c;
   --hue-pos: #0d8a5f;
 
   font-family: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
@@ -399,28 +399,48 @@ section.speaker .speaker-notes p { margin: 0 0 0.55em; }
 /* --- Pagination ------------------------------------------------------ */
 
 /* No running footer: the audience knows which talk they are in. Only the page
-   number, and only where it is useful. */
-section::after {
+   number, and only where it is useful.
+
+   The number is a div `build.py` emits, not Marpit's own `::after` counter —
+   the deck front matter sets `paginate: false`. Marpit can only count pages or
+   hold the previous count, and this deck needs neither: the title slide takes
+   no number at all, so the first real slide is 1 rather than 2, and a fragment
+   shown six times over is one slide shown six ways, wanting one number and six
+   letters however far apart the six pages fall. Both are rules about fragments,
+   which Marpit cannot see. */
+section .pageno {
+  position: absolute;
   color: var(--ink-soft);
   font-size: 20px;
   right: 70px;
   bottom: 26px;
 }
 
-section.lead::after,
-section.statement::after { content: ""; }
+section.lead .pageno,
+section.statement .pageno { display: none; }
 
-/* A build group shares one page number, so "the slide with the mixture plot"
-   still names one slide — but the room and the presenter still need to say
-   *which* reveal. Every page of a group carries a letter after the number:
+/* A split-background slide is not the full slide. Marpit renders its text into
+   a `foreignObject` the width of the text column, so nothing inside the section
+   can reach the slide's right edge — a number set 70px in from it lands in the
+   middle of the slide, reading as a stray numeral rather than a folio. Put it
+   at the column's own left margin instead, where it lines up with the text it
+   belongs to. */
+section[data-marpit-advanced-background-split] .pageno {
+  right: auto;
+  left: 70px;
+}
+
+/* A numbering group shares one page number, so "the slide with the mixture
+   plot" still names one slide — but the room and the presenter still need to
+   say *which* reveal. Every page of a group carries a letter after the number:
    5a, 5b, 5c. It is drawn a step lighter than the number, because the number
    is the address and the letter is the sub-address; and it sits in a
    fixed-width box to the right of the number rather than inside it, so a
    one-character suffix cannot shift the number it follows. The box is offset
    by a word space (6px at 20px) rather than butted against the number: set
    flush, "5a" read as one two-character token instead of a number with a
-   sub-address after it. build.py emits it, and only on the pages of a build
-   group. */
+   sub-address after it. build.py emits it, and only on the pages of a
+   numbering group. */
 section .pageno-letter {
   position: absolute;
   right: 50px;
@@ -430,4 +450,5 @@ section .pageno-letter {
   font-size: 20px;
   color: #a9b2be;
 }
+section.speaker .pageno,
 section.speaker .pageno-letter { display: none; }

@@ -16,10 +16,12 @@
  * problem. The screenshots have to look like the job.
  *
  * So this harness keeps the docs fixtures untouched and builds its own corpus
- * out of Caltech-101, which the app already knows how to download: a few
- * thousand real photographs filed by subject, including four kinds of cat. The
- * detector is trained on cats, by voting, exactly as a user would — the ranking
- * in the captured frame is a real ranking from a real trained head.
+ * out of COCO val2017: a few hundred real photographs filed by subject, with
+ * `book` — the deck's running example — as a real concept among real
+ * near-misses (a laptop, a monitor, a keyboard: rectangular, printed, shelved).
+ * `coco_fixture.py` downloads and materialises it. The detector is trained on
+ * books, by voting, exactly as a user would — the ranking in the captured frame
+ * is a real ranking from a real trained head.
  *
  * Like `scripts/screenshots/refresh.sh`, this drives a SINGLE running app
  * rather than booting its own: the box is RAM-tight and two instances would
@@ -31,7 +33,6 @@
  */
 import { launchChromium } from '../../../scripts/screenshots/launch.mjs';
 import { execFileSync, spawn } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -39,8 +40,7 @@ const APP = process.env.APP || 'http://localhost:5000';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '../../..');
 const FIGS = resolve(HERE, '..');
-const CALTECH = join(REPO, 'data', 'caltech-101', '101_ObjectCategories');
-const FIXTURES = join(REPO, 'data', 'slide-fixtures');
+const FIXTURE_BUILDER = join(REPO, 'slides', 'figs', 'src', 'coco_fixture.py');
 
 // A screenshot's text renders at (slot width / CSS width) of its authored size,
 // so what matters is not how many pixels the PNG has but how wide the browser
@@ -56,20 +56,50 @@ const SCALE = 2;
 
 // Which photo the centre viewer shows. Ranked by the detector, the top of the
 // list is whatever the model likes best, and "whatever the model likes best"
-// is regularly a greyscale scan or a pencil drawing of a cougar — true to the
-// corpus and a poor first sight of the product. So: prefer a specific frame,
-// fall back to any cat, fall back to whatever is first.
-const HERO = ['cougar_face/image_0012.jpg', 'cougar_face/image_0022.jpg', 'cougar_face/image_0018.jpg'];
+// is regularly a dim scan of a page or a shelf shot side-on — true to the
+// corpus and a poor first sight of the product. So: prefer a named frame, in
+// order, and fall back to any book. The first choice is a living room with a
+// full bookcase *and* two DVD wall racks, which is the slide before this one
+// standing in the room the tool is searching; the alternates are there because
+// only what the Manual grid has on screen can be clicked, and which frames
+// those are moves with the ranking.
+const HERO = [
+  'book/000000395701.jpg', 'book/000000520077.jpg', 'book/000000386912.jpg',
+  'book/000000536038.jpg', 'book/000000520531.jpg',
+];
 
-// The region shot wants the opposite of a portrait: a photo where the cat is a
-// *part* of the frame, so that a box drawn round it is visibly a claim about
-// where the evidence is rather than a box round the whole picture. Caltech-101
-// is an object-centric set and most of it is portraits, which is why this is
-// one named frame with a hand-measured box rather than a preference list: three
-// cheetahs in a wide grass field, and the box goes round the standing one.
-// The fractions are of the displayed image, measured off the source (#3246).
-const HERO_REGION = 'Leopards/image_0005.jpg';
-const REGION_BOX = { x0: 0.40, y0: 0.25, x1: 0.62, y1: 0.84 };
+// Which frames get voted on, named rather than counted. The obvious rule —
+// take the N frames with the largest `book` box — does not work: COCO's largest
+// one is a game manual inside a Wii case, and its second is a cat on a bed with
+// a shelf behind it. Both are exactly the near-misses the deck puts up as
+// *hard negatives*, so a corpus that votes Good on them contradicts the slide
+// two before it. Box area is not a proxy for "this photograph is about a book",
+// so the frames are chosen by eye and pinned by COCO id. The Bad side does not
+// need the same care — any laptop is a laptop — so it stays a count per
+// category, taken in sorted order.
+const BOOK_VOTES = {
+  good: [
+    'book/000000183049.jpg', 'book/000000509260.jpg', 'book/000000121586.jpg',
+    'book/000000262938.jpg', 'book/000000542776.jpg', 'book/000000551439.jpg',
+  ],
+  bad: { laptop: 2, tv: 1, keyboard: 1 },
+};
+const REGION_VOTES = {
+  good: [
+    'book/000000262938.jpg', 'book/000000520077.jpg',
+    'book/000000542776.jpg', 'book/000000395701.jpg',
+  ],
+  bad: { laptop: 2, tv: 1, dog: 1 },
+};
+
+// The region shot wants the opposite of a portrait: a photo where the books are
+// a *part* of the frame, so that a box drawn round them is visibly a claim
+// about where the evidence is rather than a box round the whole picture. Hence
+// one named frame with a hand-measured box rather than a preference list: a
+// bookcase behind a television, and the box goes round the shelf rather than
+// the room. The fractions are of the displayed image, measured off the source.
+const HERO_REGION = 'book/000000509260.jpg';
+const REGION_BOX = { x0: 0.46, y0: 0.06, x1: 0.86, y1: 0.44 };
 
 const log = (...a) => console.log('[slide-shots]', ...a);
 
@@ -117,44 +147,18 @@ const only = process.argv.slice(2);
 const wanted = (id) => only.length === 0 || only.includes(id);
 
 // ── the corpus ───────────────────────────────────────────────────────────────
-// Caltech-101 filed by subject, so "cats" is a real concept with real
-// near-misses in the pile (a dalmatian is a four-legged animal photographed
-// side-on; a leopard is a cat that does not look like a cougar). Counts are
-// per category and files are taken in sorted order, so the corpus is a pure
-// function of the download.
+// COCO val2017, filed by subject, so "book" is a real concept with real
+// near-misses in the pile. Which frames land in which category is decided by
+// `coco_fixture.py` — deterministically, from the annotations — so the corpus
+// is a pure function of the download and this file does not have to hold a
+// second copy of the plan.
 
-const CATS = { cougar_face: 30, cougar_body: 24, wild_cat: 20, Leopards: 24 };
-const NOT_CATS = {
-  dalmatian: 14, elephant: 14, llama: 12, kangaroo: 12, panda: 12, rhino: 12,
-  emu: 12, flamingo: 12, rooster: 12, butterfly: 12, crab: 12, dolphin: 12,
-  sunflower: 12, lotus: 12, watch: 12, ketch: 12, helicopter: 12, car_side: 12,
-  chandelier: 12, grand_piano: 12, umbrella: 12, soccer_ball: 12,
-};
-// The region-voting corpus is separate and much smaller: it is embedded with
-// DINOv2 patch (per-region vectors, so many times the work per image) and the
-// shot only ever shows one item and the left-hand thumbnails.
-const REGION_CATS = { cougar_face: 12, Leopards: 10, wild_cat: 8 };
-const REGION_NOT_CATS = { dalmatian: 8, elephant: 8, flamingo: 8, sunflower: 6 };
-
-function buildCorpus(name, plan) {
-  const root = join(FIXTURES, name);
-  if (existsSync(root)) return root;
-  if (!existsSync(CALTECH)) {
-    throw new Error(
-      `Caltech-101 is not downloaded. Run:\n` +
-        `  python -c "from vtscore.datasets.downloader.images import download_caltech101 as d; d()"`
-    );
-  }
-  for (const [category, count] of Object.entries(plan)) {
-    const src = join(CALTECH, category);
-    const dst = join(root, category);
-    mkdirSync(dst, { recursive: true });
-    for (const f of readdirSync(src).sort().slice(0, count)) {
-      cpSync(join(src, f), join(dst, f));
-    }
-  }
-  log(`built corpus ${name}`);
-  return root;
+function buildCorpus(name) {
+  return execFileSync('python', [FIXTURE_BUILDER, name], {
+    cwd: REPO,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'inherit'],
+  }).trim();
 }
 
 // ── talking to the app ───────────────────────────────────────────────────────
@@ -188,7 +192,7 @@ const datasets = async () => (await api('/api/datasets/registry')).datasets || [
 const detectors = async () => (await api('/api/detectors/registry')).detectors || [];
 const named = (rows, name) => rows.find((r) => r.name === name);
 
-async function ensureDataset(name, plan, embedder) {
+async function ensureDataset(name, embedder) {
   const existing = named(await datasets(), name);
   if (existing) {
     log(`dataset ${name} exists (${existing.num_items} items)`);
@@ -202,7 +206,7 @@ async function ensureDataset(name, plan, embedder) {
     }
     return existing;
   }
-  const path = buildCorpus(name, plan);
+  const path = buildCorpus(name);
   log(`importing ${name} (${embedder}) — embedding takes a while on CPU`);
   await api('/api/dataset/import/server_folder', {
     method: 'POST',
@@ -228,7 +232,7 @@ async function ensureDetector(name, dataset) {
       await api('/api/detectors/registry', {
         method: 'POST',
         dataset: dataset.id,
-        body: { name, media_type: 'image', text_query: 'a photo of a cat', trainable: true },
+        body: { name, media_type: 'image', text_query: 'a photo of a book', trainable: true },
       })
     ).detector;
   await api('/api/detectors/registry/load', {
@@ -241,12 +245,12 @@ async function ensureDetector(name, dataset) {
 }
 
 /**
- * Vote the way a user would: Good on cats, Bad on the things that keep coming
+ * Vote the way a user would: Good on books, Bad on the things that keep coming
  * back with them. Enough votes to have a trained head and a plausible pair of
  * piles, few enough to still look like the first two minutes of a session —
  * which is the situation the deck is describing.
  */
-async function ensureVotes(dataset, detector) {
+async function ensureVotes(dataset, detector, plan) {
   const ids = (await api('/api/medias/ids', { dataset: dataset.id, detector: detector.id })).map(
     (m) => m.id
   );
@@ -257,13 +261,19 @@ async function ensureVotes(dataset, detector) {
     body: { ids },
   });
   const byCategory = {};
+  const byName = {};
   for (const m of meta) {
     const category = m.filename.split('/')[0];
     (byCategory[category] ||= []).push(m.id);
+    byName[m.filename] = m.id;
   }
   const pick = (category, n) => (byCategory[category] || []).slice(0, n);
-  const good = [...pick('cougar_face', 3), ...pick('Leopards', 2), ...pick('wild_cat', 1)];
-  const bad = [...pick('dalmatian', 2), ...pick('llama', 1), ...pick('elephant', 1)];
+  const good = plan.good.map((name) => {
+    const id = byName[name];
+    if (!id) throw new Error(`${name} is not in the ${dataset.name} corpus`);
+    return id;
+  });
+  const bad = Object.entries(plan.bad).flatMap(([category, n]) => pick(category, n));
 
   const vote = async (id, target) => {
     for (let attempt = 0; attempt < 20; attempt++) {
@@ -320,8 +330,8 @@ async function enterLabelView(page, datasetName, detectorName) {
   // can leave the wrong rows ticked. Drive every row to what this shot needs
   // rather than only ticking the one we want.
   //
-  // Match the name cell exactly, not the row's text: `cats` is a substring of
-  // `cats-regions`, and a substring match ticks both, which leaves Train
+  // Match the name cell exactly, not the row's text: `books` is a substring of
+  // `books-regions`, and a substring match ticks both, which leaves Train
   // permanently disabled and looks exactly like a hung page.
   const selectOnly = async (tag, name) => {
     const rows = page.locator(tag);
@@ -387,7 +397,7 @@ async function serveItem(page, prefer = [], voted = new Set()) {
   const all = await page.locator('.thumbnail-wrap img').evaluateAll((es) => es.map((e) => e.alt));
   const shown = all.filter((n) => !voted.has(n));
   const target =
-    prefer.find((name) => shown.includes(name)) ?? shown.find((n) => n.startsWith('cougar_face/'));
+    prefer.find((name) => shown.includes(name)) ?? shown.find((n) => n.startsWith('book/'));
   const thumb = target
     ? page.locator(`.thumbnail-wrap:has(img[alt="${target}"])`).first()
     : page.locator('.thumbnail-wrap:visible').first();
@@ -397,7 +407,7 @@ async function serveItem(page, prefer = [], voted = new Set()) {
 }
 
 async function shootThreePanel(page, voted) {
-  await enterLabelView(page, 'photos', 'cats');
+  await enterLabelView(page, 'photos', 'books');
   // Manual only long enough to choose the frame: the corpus grid lives in that
   // tab, and it is the only way to put a named item in the centre viewer.
   await leftTab(page, 'Manual');
@@ -411,7 +421,7 @@ async function shootThreePanel(page, voted) {
 }
 
 async function shootRegionVoting(page, voted) {
-  await enterLabelView(page, 'photo-regions', 'cats-regions');
+  await enterLabelView(page, 'photo-regions', 'books-regions');
   await leftTab(page, 'Manual');
   await serveItem(page, [HERO_REGION], voted);
   await collapseIntoAutopilot(page);
@@ -476,22 +486,18 @@ async function ensureApp() {
 }
 
 await ensureApp();
-const photos = await ensureDataset('photos', { ...CATS, ...NOT_CATS }, 'siglip');
-const detector = await ensureDetector('cats', photos);
-const photosVoted = await ensureVotes(photos, detector);
+const photos = await ensureDataset('photos', 'siglip');
+const detector = await ensureDetector('books', photos);
+const photosVoted = await ensureVotes(photos, detector, BOOK_VOTES);
 let regionsVoted = new Set();
 if (wanted('region-voting')) {
   // A second detector, not the same one: a detector binds an embedder *type*
   // at creation, and a patch dataset offers `patch_semantic` where the SigLIP
-  // one offers `semantic`. Point `cats` at `photo-regions` and the app
+  // one offers `semantic`. Point `books` at `photo-regions` and the app
   // correctly refuses the pair — which is the whole reason region voting needs
   // its own dataset in the first place.
-  const regions = await ensureDataset(
-    'photo-regions',
-    { ...REGION_CATS, ...REGION_NOT_CATS },
-    'dinov2_patch'
-  );
-  regionsVoted = await ensureVotes(regions, await ensureDetector('cats-regions', regions));
+  const regions = await ensureDataset('photo-regions', 'dinov2_patch');
+  regionsVoted = await ensureVotes(regions, await ensureDetector('books-regions', regions), REGION_VOTES);
 }
 
 const browser = await launchChromium();

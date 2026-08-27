@@ -7,16 +7,15 @@
 # the *user* wants it — and then the epilogue that closed the cut-rule question
 # for good.
 #
-# The deck is ideas, not experiments. Every measurement slide is parked after
-# the Questions slide as backup: this talk presents findings, and a room that
-# wants the study behind one of them can be shown it. See #3246.
+# The deck is ideas, not experiments: it presents findings, and the studies
+# behind them live in the reports the presenter notes cite (see #3246, #3265).
 #
 # The outline fragment appears six times: once bare, as the opening list, and
-# then once before each section marked with `+at1` … `+at5` — one fragment used
-# six ways rather than six copies to keep in step.
+# then once before each section marked with `+at1` … `+at5`. It is one slide
+# shown six ways rather than six slides — `build.py` numbers it 1a…1f — and the
+# last showing, with "The End" marked, is the deck's closing slide.
 
 theme: vtsearch
-paginate: true
 
 slides:
   title-hold-the-line
@@ -28,7 +27,7 @@ slides:
   ui-tour
   vote-boundary
 
-  # 2 — Where the line goes
+  # 2 — Calibration
   outline-hold-the-line +at2
   xcal
   gmm-idea
@@ -39,33 +38,21 @@ slides:
   anchored-em
   quantile-transfer
 
-  # 3 — Where you want it instead
+  # 3 — Preference
   outline-hold-the-line +at3
+  inclusion-rank
   inclusion-cost
   inclusion-knob
   inclusion-walk
   inclusion-tilt
   inclusion-acq
 
-  # 4 — A smarter cut
+  # 4 — Regions
   outline-hold-the-line +at4
+  voting-modes
   evt-midpoint
   evt-gumbel
   evt-close
 
-  # 5 — What is still open
+  # 5 — The End
   outline-hold-the-line +at5
-  calib-roadmap
-
-  thanks
-
-  # ── Backup, after the Questions slide ───────────────────────────────────
-  # Region voting, and every measurement the talk asserts without showing.
-  # Parked rather than deleted: asked "how do you know?", turn to one of these.
-  voting-modes
-  how-we-measure
-  positives
-  xcal-results
-  gmm-fragility
-  blend-results
-  anchored-results
