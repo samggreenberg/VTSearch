@@ -31,7 +31,14 @@ export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
 export CALIB_SAFE_THRESHOLDS=1
 export CALIB_ANALYZE=analyze_cut.py
-export CALIB_HEAD="${CALIB_HEAD:-linear}"
+# The head a live detector actually has, because the tail rules' ship gate is only worth
+# measuring on the model users actually get.  NOT `linear`: that was production
+# when this launcher was written, and PR #3198 moved `PRODUCTION_HEAD` to the
+# linear SVM, so the pin outlived the thing it was pinning -- preflight check 12
+# has been failing on it since.  Named rather than left unset, which is what
+# `launch_transfer_2883.sh` settled on: the run's head is then readable from the
+# launcher instead of from a default three modules away.
+export CALIB_HEAD="${CALIB_HEAD:-linear_svm}"
 
 # Visual Genome region voting; production patch arm + the single-vector control.
 # The control is the ship gate's other half: `calculate_gmm_threshold` also backs

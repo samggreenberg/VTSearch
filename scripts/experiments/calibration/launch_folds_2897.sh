@@ -30,11 +30,18 @@ set -uo pipefail
 export CALIB_EXP="${CALIB_EXP:-/exp/$USER/calibration-folds-2897}"
 export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
-# The shipped path: safe thresholds on, production linear head.  The fold count
+# The shipped path: safe thresholds on, the production head.  The fold count
 # is a knob on the cross-calibration term, but what a user gets is that term
 # after the blend, so both arms are emitted per K (folds_k{K}_xcal / _blend).
 export CALIB_SAFE_THRESHOLDS="${CALIB_SAFE_THRESHOLDS:-1}"
-export CALIB_HEAD="${CALIB_HEAD:-linear}"
+# The head a live detector actually has, because regret(K) is only worth
+# measuring on the model users actually get.  NOT `linear`: that was production
+# when this launcher was written, and PR #3198 moved `PRODUCTION_HEAD` to the
+# linear SVM, so the pin outlived the thing it was pinning -- preflight check 12
+# has been failing on it since.  Named rather than left unset, which is what
+# `launch_transfer_2883.sh` settled on: the run's head is then readable from the
+# launcher instead of from a default three modules away.
+export CALIB_HEAD="${CALIB_HEAD:-linear_svm}"
 export CALIB_BLEND_SCHEDULE="${CALIB_BLEND_SCHEDULE:-prod}"
 export CALIB_ANALYZE=analyze_folds_2897.py
 

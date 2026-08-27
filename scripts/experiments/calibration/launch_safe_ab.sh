@@ -46,7 +46,14 @@ export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
 export CALIB_REPOOL_VARIANTS="${CALIB_REPOOL_VARIANTS:-}"
 export CALIB_MAX_STEPS="${CALIB_MAX_STEPS:-30}"
 export CALIB_N_SEEDS="${CALIB_N_SEEDS:-8}"
-export CALIB_HEAD="${CALIB_HEAD:-linear}"
+# The head a live detector actually has, because a ship/no-ship decision is only worth
+# measuring on the model users actually get.  NOT `linear`: that was production
+# when this launcher was written, and PR #3198 moved `PRODUCTION_HEAD` to the
+# linear SVM, so the pin outlived the thing it was pinning -- preflight check 12
+# has been failing on it since.  Named rather than left unset, which is what
+# `launch_transfer_2883.sh` settled on: the run's head is then readable from the
+# launcher instead of from a default three modules away.
+export CALIB_HEAD="${CALIB_HEAD:-linear_svm}"
 # The inclusion-budget sweep is #2781's question, not this one: keep one k so
 # the side CSVs stay tiny (/exp is a shared 50G volume).
 export CALIB_SWEEP_KS="${CALIB_SWEEP_KS:-0}"

@@ -56,7 +56,14 @@ export CALIB_REQUIRE_SEED_QUERY=1
 # HAC styles would measure a path no user is on.
 export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
 export CALIB_SAFE_THRESHOLDS=1
-export CALIB_HEAD="${CALIB_HEAD:-linear}"
+# The head a live detector actually has, because the mix-in schedule's effect is only worth
+# measuring on the model users actually get.  NOT `linear`: that was production
+# when this launcher was written, and PR #3198 moved `PRODUCTION_HEAD` to the
+# linear SVM, so the pin outlived the thing it was pinning -- preflight check 12
+# has been failing on it since.  Named rather than left unset, which is what
+# `launch_transfer_2883.sh` settled on: the run's head is then readable from the
+# launcher instead of from a default three modules away.
+export CALIB_HEAD="${CALIB_HEAD:-linear_svm}"
 export CALIB_MAX_STEPS="${CALIB_MAX_STEPS:-30}"
 export CALIB_N_SEEDS="${CALIB_N_SEEDS:-12}"
 export CALIB_SWEEP_KS="${CALIB_SWEEP_KS:-0}"

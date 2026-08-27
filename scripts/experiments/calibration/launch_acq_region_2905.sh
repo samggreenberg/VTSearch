@@ -123,7 +123,14 @@ export CALIB_REPOOL_VARIANTS=
 export CALIB_SCHEDULE_VARIANTS=
 export CALIB_MAX_STEPS=100
 export CALIB_N_SEEDS=48   # DECLARED; see the header. The study runs --seeds 24.
-export CALIB_HEAD=linear
+# The head a live detector actually has, because the acquisition offset is only worth
+# measuring on the model users actually get.  NOT `linear`: that was production
+# when this launcher was written, and PR #3198 moved `PRODUCTION_HEAD` to the
+# linear SVM, so the pin outlived the thing it was pinning -- preflight check 12
+# has been failing on it since.  Named rather than left unset, which is what
+# `launch_transfer_2883.sh` settled on: the run's head is then readable from the
+# launcher instead of from a default three modules away.
+export CALIB_HEAD=linear_svm
 export CALIB_SAFE_THRESHOLDS=1
 export CALIB_ANCHORED=0
 # CALIB_BLEND_SCHEDULE deliberately unset: the run must live under whatever
