@@ -237,6 +237,20 @@ def main() -> int:
             "the report says how many clicks it takes to beat the text sort",
             "clicks to beat it" in report and bool(summary.get("crossover", {}).get("cost")),
         )
+        # Cost and AP answer different questions - whether the cut moved, and
+        # whether the ranking did - so an arm can beat the typed query on one and
+        # never on the other.  Reporting only cost would call that arm a winner.
+        ok &= _check(
+            "the crossover is reported for the ranking too, not only the cut",
+            bool(summary.get("crossover", {}).get("average_precision")) and "Average precision (AP" in report,
+        )
+        # A crossing read off a starved arm is a crossing over the cells that
+        # trained.  The column is what stops it being read as the grid.
+        ok &= _check(
+            "each crossing carries the coverage it was computed over",
+            "| measured |" in report
+            and all("coverage_final" in row for rows in summary.get("crossover", {}).values() for row in rows),
+        )
 
         # 8. The interactive viewer, and the link the report owes it.
         vp = tmp / "analysis" / "viewer.html"

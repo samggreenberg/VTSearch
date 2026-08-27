@@ -932,27 +932,51 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
             f"| `{arm}` | {_fmt(pos, 'mean_delta')} | [{_fmt(pos, 'ci95_lo')}, {_fmt(pos, 'ci95_hi')}] | "
             f"{_fmt(cost, 'mean_delta')} | [{_fmt(cost, 'ci95_lo')}, {_fmt(cost, 'ci95_hi')}] |"
         )
-    x = (summary.get("crossover") or {}).get("cost") or []
-    if x:
+    xover = summary.get("crossover") or {}
+    if xover.get("cost") or xover.get("average_precision"):
         lines += [
             "",
             "## Is clicking worth it at all? — against the zero-click text sort",
             "",
             "Typing the query and reading the ranked haystack is **free**, so it is the thing a",
-            "clicked detector has to beat. `baseline` is that zero-click cost, `final` is the cost",
+            "clicked detector has to beat. `baseline` is that zero-click value, `final` is the value",
             "at the horizon, and `crossover` is the first click at which the arm's mean is better",
             "than the baseline. An arm that never crosses is reported as `never`, which is a",
             "finding about that arm and not a missing number.",
             "",
-            "| arm | dataset | text sort (0 clicks) | final | clicks to beat it |",
-            "|---|---|---:|---:|---:|",
+            "The two metrics answer different questions and do not have to agree. **Cost** is where",
+            "the detector puts its threshold as well as how it ranks; **average precision** is the",
+            "ranking alone. An arm that beats the typed query on cost but not on AP has not learned",
+            "to rank better than the query the user already typed - it has learned where to cut.",
+            "",
+            "`measured` is the fraction of that arm's cells that still have a detector at the",
+            "horizon. **A crossing on a low-`measured` arm is a crossing over the subset that",
+            "trained**, not over the grid: the starved cells emit no row and so cannot pull the mean",
+            "up, which flatters exactly the arms that starve. Read those rows as an upper bound.",
         ]
-        for row in sorted(x, key=lambda r: (ARMS.index(r["arm"]) if r["arm"] in ARMS else 99, r["dataset"])):
-            ct = row.get("crossover_t")
-            crossed = "never" if ct is None or ct != ct else f"{int(ct)}"
-            lines.append(
-                f"| `{row['arm']}` | {row['dataset']} | {row['baseline']:.3g} | {row['final']:.3g} | {crossed} |"
-            )
+        for metric, label, unit in (
+            ("cost", "Cost", "cost"),
+            ("average_precision", "Average precision", "AP"),
+        ):
+            rows = xover.get(metric) or []
+            if not rows:
+                continue
+            lines += [
+                "",
+                f"### {label} ({unit}, {'lower' if metric == 'cost' else 'higher'} is better)",
+                "",
+                "| arm | dataset | text sort (0 clicks) | final | clicks to beat it | measured |",
+                "|---|---|---:|---:|---:|---:|",
+            ]
+            for row in sorted(rows, key=lambda r: (ARMS.index(r["arm"]) if r["arm"] in ARMS else 99, r["dataset"])):
+                ct = row.get("crossover_t")
+                crossed = "never" if ct is None or ct != ct else f"{int(ct)}"
+                cov = row.get("coverage_final")
+                cov_s = "n/a" if cov is None or cov != cov else f"{float(cov):.0%}"
+                lines.append(
+                    f"| `{row['arm']}` | {row['dataset']} | {row['baseline']:.3g} | "
+                    f"{row['final']:.3g} | {crossed} | {cov_s} |"
+                )
     if (outdir / "viewer.html").exists():
         lines += [
             "",
@@ -1112,8 +1136,14 @@ def analyze(root: Path, outdir: Path) -> dict:
         curve_csv = outdir / "figures" / f"{metric}_vs_clicks.csv"
         if not curve_csv.exists():
             continue
-        x = curves.crossover(pd.read_csv(curve_csv), lower_is_better=metric == "cost")
+        curve_df = pd.read_csv(curve_csv)
+        x = curves.crossover(curve_df, lower_is_better=metric == "cost")
         if not x.empty:
+            # Carry each arm's coverage at the horizon alongside its crossing: a
+            # crossing read off a starved arm is a crossing over the cells that
+            # trained, and the table has to say so rather than imply the grid.
+            cov = curve_df.sort_values("t").groupby(["arm", "dataset"])["coverage"].last()
+            x["coverage_final"] = [cov.get((r.arm, r.dataset), float("nan")) for r in x.itertuples()]
             summary["crossover"][metric] = x.to_dict(orient="records")
     (outdir / "startup_summary.json").write_text(json.dumps(summary, indent=2, default=str))
     write_report(summary, figures, outdir)
