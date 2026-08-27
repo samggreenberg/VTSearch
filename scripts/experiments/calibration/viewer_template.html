@@ -618,30 +618,31 @@
       `<text x="${x(t).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--muted)">${Math.round(t)}</text>`);
     parts.push(`<line x1="${M.l}" x2="${W - M.r}" y1="${H - M.b}" y2="${H - M.b}" stroke="var(--axis)"/>`);
 
-    let anchor = NaNv;
-    if (P.anchor.has) {
-      const vals = pnl.per.map((q) => q.agg.mean[0]).filter(Number.isFinite);
-      if (vals.length) anchor = vals.reduce((a, b) => a + b, 0) / vals.length;
-    }
-    if (Number.isFinite(anchor) && anchor >= lo && anchor <= hi) {
-      parts.push(
-        `<line x1="${M.l}" x2="${W - M.r}" y1="${y(anchor).toFixed(1)}" y2="${y(anchor).toFixed(1)}" stroke="var(--ink)" stroke-width="1.1" stroke-dasharray="2 3"/>`,
-        `<circle cx="${x(0).toFixed(1)}" cy="${y(anchor).toFixed(1)}" r="4" fill="var(--ink)"/>`,
-        `<text x="${W - M.r - 3}" y="${(y(anchor) - 5).toFixed(1)}" text-anchor="end" font-size="10.5" fill="var(--ink-2)">${esc(P.anchor.label)}</text>`);
-    }
-
     for (const q of pnl.per) {
       if (state.seedMode === "each") {
-        for (const v of q.runs) parts.push(
-          `<path d="${path(P.runs.t, v, x, y, lo, hi)}" fill="none" stroke="${q.color}" stroke-width="1" opacity="0.16"/>`);
+        for (const v of q.runs) {
+          parts.push(
+            `<path d="${path(P.runs.t, v, x, y, lo, hi, true)}" fill="none" stroke="${q.color}" stroke-width="1" opacity="0.16"/>`);
+          // A run that never trained has ONLY its click-0 point, and a
+          // single-point path draws nothing - so mark it, or total starvation
+          // renders as an absent line.
+          if (P.anchor.has && Number.isFinite(v[0])) parts.push(
+            `<circle cx="${x(0).toFixed(1)}" cy="${y(Math.min(hi, Math.max(lo, v[0]))).toFixed(1)}" r="1.5" fill="${q.color}" opacity="0.3"/>`);
+        }
       } else {
         parts.push(`<path d="${band(q.agg, x, y, lo, hi)}" fill="${q.color}" opacity="0.10"/>`);
       }
+      // Click 0 IS the text sort, drawn as this series' own first point rather
+      // than as a rule across the panel.  A horizontal reference line dominated
+      // the figure to make a point the leftmost marker already makes, and it
+      // implied a level that holds at every click when it holds at one.
+      if (P.anchor.has && Number.isFinite(q.agg.mean[0]) && q.agg.mean[0] >= lo && q.agg.mean[0] <= hi) parts.push(
+        `<circle cx="${x(0).toFixed(1)}" cy="${y(q.agg.mean[0]).toFixed(1)}" r="2.5" fill="${q.color}"/>`);
       // The mean, dashed wherever it describes fewer than SOLID of that
       // series' cells - including the stretch from click 0 to the first
       // trained click, where nothing was measured at all.
       parts.push(
-        `<path d="${path(P.t, q.agg.mean, x, y, lo, hi)}" fill="none" stroke="${q.color}" stroke-width="1.1" stroke-dasharray="3 3" opacity="0.85"/>`,
+        `<path d="${path(P.t, q.agg.mean, x, y, lo, hi, true)}" fill="none" stroke="${q.color}" stroke-width="1.1" stroke-dasharray="3 3" opacity="0.85"/>`,
         `<path d="${path(P.t, mask(q.agg.mean, q.agg.cov), x, y, lo, hi)}" fill="none" stroke="${q.color}" stroke-width="2"/>`,
         `<path d="${path(P.t.slice(1), q.agg.cov.slice(1), x, yc, 0, 1)}" fill="none" stroke="${q.color}" stroke-width="1.2"/>`);
       // Click 0 is a point, not the start of the line: every cell is measured
@@ -693,11 +694,16 @@
     for (let i = 0; i < vals.length; i++) out[i] = cov[i] >= SOLID ? vals[i] : NaNv;
     return out;
   }
-  function path(ts, vals, x, y, lo, hi) {
+  // `bridge` draws straight through the clicks with no measurement instead of
+  // lifting the pen.  Used for the thin dashed line only, and that is the whole
+  // reason it is dashed: it is what carries a series from its click-0 text-sort
+  // point to its first trained click, across a stretch where nothing was
+  // measured.  The solid line never bridges - a solid segment must be a level.
+  function path(ts, vals, x, y, lo, hi, bridge) {
     let d = "", pen = false;
     for (let i = 0; i < ts.length; i++) {
       const v = vals[i];
-      if (!Number.isFinite(v)) { pen = false; continue; }
+      if (!Number.isFinite(v)) { if (!bridge) pen = false; continue; }
       const px = x(ts[i]).toFixed(1), py = y(Math.min(hi, Math.max(lo, v))).toFixed(1);
       d += (pen ? "L" : "M") + px + " " + py + " ";
       pen = true;
@@ -789,8 +795,9 @@
       `series' cells are measured at that click — there it describes a subset, not the grid, so only a solid ` +
       `segment is a level worth quoting. The strip underneath is that fraction.`);
     if (P.anchor.has) bits.push(
-      `<b>Click 0</b> is the ${esc(P.anchor.label)}: what typing the query got for free. A series is only worth ` +
-      `its clicks to the right of where it crosses the dotted line.`);
+      `<b>Click 0 is the ${esc(P.anchor.label)}</b> — what typing the query got for free. It is each series' own ` +
+      `leftmost point, so a curve is worth its clicks only once it has moved past where it started. ` +
+      `Nothing is measured between click 0 and a series' first trained click, which is why that stretch is dashed.`);
     if (state.seedMode === "each" && P.runs_note) bits.push(esc(P.runs_note));
     if (state.embedders.size > 1) bits.push(
       `<b>Embedders are never averaged</b> — each gets its own panel. Two embedders are two different ` +

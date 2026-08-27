@@ -288,11 +288,11 @@ study shares (see the `grid-experiments` skill for the rule):
   coloured by the category's prevalence.
 
 **Click 0 is the free text sort.** There is no detector at the far left, so each
-curve is anchored on what typing the query got for nothing (`text_baseline.py`,
-per cell) and that level is carried across the panel as a dotted line. The far
-left is what typing was worth, the far right is what clicking was worth, and the
-crossing between them — reported as a table in `REPORT_startup.md` — is how many
-clicks it took before the detector was worth more than the query.
+curve *begins* on what typing the query got for nothing (`text_baseline.py`, per
+cell) — its own leftmost point, in its own colour, rather than a rule across the
+panel. The far left is what typing was worth, the far right is what clicking was
+worth, and how many clicks it took to overtake the query is reported as a number
+in `REPORT_startup.md`'s crossover table rather than eyeballed off a crossing.
 
 The coverage strip under each panel is the denominator: a starved cell trains no
 detector and emits no metric row, so an arm that starves on a third of its grid

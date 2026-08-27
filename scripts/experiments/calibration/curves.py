@@ -29,10 +29,14 @@ reading the ranked haystack is *free* and is what clicking has to beat.  Pass
 ``baseline`` (see :func:`text_sort_baseline`) and every curve is anchored at
 ``t=0`` on that cell's own text-sort quality: the far left is what the query got
 for nothing, the far right is what the clicking got, and the distance between
-them is the whole value of the loop.  The baseline is also drawn as a horizontal
-reference across the panel, so "has this arm beaten typing yet?" is answerable at
-every click rather than only at the ends, and :func:`crossover` turns that into
-the click count it takes.
+them is the whole value of the loop.
+
+The anchor is **each series' own leftmost point**, not a rule across the panel.
+A horizontal reference line dominated the figure to make a point the leftmost
+marker already makes, and it implied a level that holds at every click when it
+holds at one.  "How many clicks before this beat typing?" is a number, so it is
+reported as one — :func:`crossover` — rather than left to be eyeballed off a
+crossing.
 
 Three things it refuses to do quietly, because each one turns a failing arm
 into a good-looking curve:
@@ -206,6 +210,18 @@ def _wide(
     return wide
 
 
+def _bridge(t: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Drop the un-measured clicks so a line draws straight through them.
+
+    Used for the thin dashed line only, and that is the whole reason it is
+    dashed: it is what carries a series from its click-0 text-sort point to its
+    first trained click, across a stretch where nothing was measured.  The solid
+    line never bridges — a solid segment has to be a level.
+    """
+    ok = np.isfinite(y)
+    return t[ok], y[ok]
+
+
 def _coverage(wide: pd.DataFrame, n_cells: int) -> np.ndarray:
     """Fraction of the arm's cells that are **measured** at each click.
 
@@ -312,10 +328,11 @@ def mean_figure(  # noqa: C901
             if base and 0 in wide.index:
                 base_level = float(centre.loc[0])
             # The whole curve, thin and dashed: this is the level over whatever
-            # subset of cells had a detector at that click.  The stretch from
-            # t=0 to the first trainable click is dashed by the same rule and
-            # correctly so - nothing was measured in there.
-            ax.plot(t_index, y, color=palette[arm], lw=1.0, ls=(0, (2, 2)), alpha=0.9)
+            # subset of cells had a detector at that click.  Bridged across the
+            # clicks with no measurement, which is what carries the line from
+            # its click-0 text-sort point to its first trained click - dashed
+            # exactly because nothing was measured in there.
+            ax.plot(*_bridge(t_index, y), color=palette[arm], lw=1.0, ls=(0, (2, 2)), alpha=0.9)
             # The same curve, solid, only where it describes (nearly) the whole
             # grid.  A solid line is the one a reader may quote a level off.
             solid = np.where(cov >= SOLID_COVERAGE, y, np.nan)
@@ -334,6 +351,12 @@ def mean_figure(  # noqa: C901
             # a joined line would render that as a spike rather than as two
             # different facts.
             clicked = t_index > 0
+            # Click 0 IS the text sort, drawn as this arm's own first point.
+            # It used to be a rule across the whole panel, which dominated the
+            # figure to make a point the leftmost marker already makes - and
+            # implied a level that holds at every click when it holds at one.
+            if base and np.isfinite(y[0]):
+                ax.plot(0, y[0], marker="o", ms=4.5, color=palette[arm], zorder=5)
             axc.plot(t_index[clicked], 100.0 * cov[clicked], color=palette[arm], lw=1.2)
             if not clicked.all():
                 axc.plot(0, 100.0 * cov[0], marker="o", ms=2.5, color=palette[arm])
@@ -351,29 +374,10 @@ def mean_figure(  # noqa: C901
                         "baseline": base_level,
                     }
                 )
-        if np.isfinite(base_level):
-            # The zero-click level, carried across the panel: clicking is only
-            # worth anything to the right of where an arm crosses this line.
-            # The marker at x=0 is the same number, placed where the reader is
-            # told to look for it - the anchor is a property of the seed sort,
-            # so it is one point for every arm rather than one per arm.
-            ax.axhline(base_level, color="#111", lw=1.1, ls=":", zorder=1)
-            ax.plot(0, base_level, marker="o", ms=5, color="#111", zorder=5)
-            ax.plot([], [], color="#111", lw=1.1, ls=":", marker="o", ms=5, label=baseline_label)
-            ax.annotate(
-                baseline_label,
-                xy=(float(t_index[-1]), base_level),
-                xytext=(-4, 3),
-                textcoords="offset points",
-                ha="right",
-                va="bottom",
-                fontsize=7,
-                color="#111",
-            )
         ax.set_title(ds, fontsize=10)
         ax.tick_params(labelbottom=False)
         axc.set_ylim(0, 105)
-        axc.set_xlabel("clicks spent  (0 = the free text sort)" if base else "clicks spent")
+        axc.set_xlabel(f"clicks spent  (0 = {baseline_label})" if base else "clicks spent")
         if di == 0:
             ax.set_ylabel(f"{metric} ({stat} over cells)", fontsize=9)
             axc.set_ylabel("% of cells\nmeasured", fontsize=8)
@@ -495,7 +499,7 @@ def per_run_figures(  # noqa: C901
                 wide = _wide(g, metric, kk, t_index, base, cells)
                 cov = _coverage(wide, int(wide.shape[1]))
                 med = wide.median(axis=1).to_numpy(dtype=float)
-                ax.plot(t_index, med, color="#111", lw=0.9, ls=(0, (2, 2)))
+                ax.plot(*_bridge(t_index, med), color="#111", lw=0.9, ls=(0, (2, 2)))
                 ax.plot(t_index, np.where(cov >= SOLID_COVERAGE, med, np.nan), color="#111", lw=1.6, label="median")
             bits = [arm]
             if dropped:

@@ -175,11 +175,18 @@ Three things it enforces, each of which is how one of these figures lies:
   decides whether the loop is worth anything at all. Typing a query and reading
   the ranked haystack is **free**; that is the number the clicked detector has
   to beat. Anchor every curve at `t=0` on the cell's own text-sort quality
-  (`text_baseline.py` computes it, keyed by cell), carry it across the panel as
-  a reference line, and report the **crossover** — the first click at which the
-  arm is worth more than the query. An arm that never crosses must say `never`.
-  The left end is then "what typing got me", the right end is "what clicking got
-  me", and the distance between them is the study's whole subject.
+  (`text_baseline.py` computes it, keyed by cell) and report the **crossover** —
+  the first click at which the arm is worth more than the query. An arm that
+  never crosses must say `never`. The left end is then "what typing got me", the
+  right end is "what clicking got me", and the distance between them is the
+  study's whole subject.
+
+  The anchor is **each series' own leftmost point**, not a rule across the
+  panel. A horizontal reference line dominates the figure to make a point the
+  leftmost marker already makes, and it implies a level that holds at every
+  click when it holds at one. Bridge the un-measured stretch between click 0 and
+  a series' first trained click with the dashed line — that is exactly what the
+  dash is for — and leave the crossing to the number.
 - **The denominator, drawn.** The metric frame starts at the first *trainable*
   step, so a cell that never found both classes contributes no rows and silently
   leaves the average. An arm starving on a third of its grid then gets its mean
