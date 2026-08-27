@@ -106,13 +106,18 @@ mkdir -p "$LOGS" "$CALIB_RESULTS/cells"
 #   measured 5.02G AND is preflight check 7b's floor for patch cells, which
 #   exists because UNDER-sizing killed 74 of 108 cells in #3156.
 #
-# CONC 85 sits just under both caps (170 CPUs, 1020G) with margin for the
-# whole-image cells, which need 0.5G and hold a 12G slot regardless.
+# CONC is then bounded by preflight check 8, not by the raw cap: an array may
+# claim at most 90% of the ~1074G allowance before your OWN later jobs -- the
+# analyzer, a `redo`, a diagnostic -- start queueing behind it in
+# QOSMaxMemoryPerUser. 85 asks for 1020G (95%) and is refused, correctly; 70
+# asks for 840G (78%, 140 CPUs) and leaves 234G free for exactly those jobs.
+# Note the whole-image cells hold a 12G slot while needing 0.5G, which is the
+# price of running one array over a grid with two cost classes.
 MEM="${CALIB_MEM:-12G}"
 CPUS="${CALIB_CPUS:-2}"
 TIME="${CALIB_TIME:-6:00:00}"
 PARTITION="${CALIB_PARTITION:-cpu}"
-CONC="${CALIB_CONC:-85}"
+CONC="${CALIB_CONC:-70}"
 JOB_NAME="${CALIB_JOB_NAME:-scale-$(basename "$CALIB_EXP")}"
 
 ENVX="export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS"
