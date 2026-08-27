@@ -44,8 +44,10 @@ import common
 
 common.setup_env()
 
+import curves  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+import viewer as viewer_mod  # noqa: E402
 
 import analyze_spikes as sp  # noqa: E402  (reuse the #2847 loader)
 
@@ -99,6 +101,13 @@ CLICK_MARKS = tuple(int(c) for c in os.environ.get("GM_CLICK_MARKS", "10,20,50,1
 
 OUT = Path(os.environ.get("GM_OUT", str(common.EXP / "analysis")))
 KEYS = ("dataset", "embedder", "category", "seed")
+
+#: ``text_baseline.py``'s CSV — the ZERO-CLICK anchor every quality curve is
+#: drawn against.  Typing the query and reading the ranked haystack is free, so
+#: it is what a clicked detector has to beat, and without it the curves start at
+#: the first trainable click with nothing to compare the far right against.
+#: Optional: absent, the curves simply have no ``t=0`` point.
+TEXT_BASELINE = os.environ.get("GM_TEXT_BASELINE", "")
 
 
 # ---------------------------------------------------------------------------
@@ -464,8 +473,10 @@ def make_figures(
     outdir: Path,
     prevalence: dict[tuple[str, str], float] | None = None,
     traj: pd.DataFrame | None = None,
+    main: pd.DataFrame | None = None,
+    baseline: pd.DataFrame | None = None,
 ) -> list[str]:
-    """Mining curve (mean and per-run), opening depth, prevalence, starvation."""
+    """Cost curves, mining curve (mean and per-run), opening depth, prevalence, starvation."""
     import matplotlib
 
     matplotlib.use("Agg")
@@ -473,6 +484,35 @@ def make_figures(
 
     outdir.mkdir(parents=True, exist_ok=True)
     written: list[str] = []
+
+    # 0. THE HEADLINE, and the standard every simulated-user report owes: how
+    #    good the user's detector is as they keep clicking - averaged per
+    #    dataset, and again with every single run drawn.  Delegated to
+    #    ``curves.py`` rather than written here, so the figure a reader learns
+    #    to read in one report is literally the same figure in the next one.
+    #
+    #    ``opening`` is the denominator on purpose: it has a row for every cell
+    #    the run ATTEMPTED, including the ones that never trained a detector and
+    #    so appear nowhere in ``main``.  Without it the coverage strip would be
+    #    computed from the cells that produced rows and read 100% for an arm
+    #    that starved on a third of its grid.
+    if main is not None and not main.empty:
+        for metric, lower_better in (("cost", True), ("average_precision", False)):
+            if metric not in main.columns:
+                continue
+            written.extend(
+                curves.quality_vs_clicks(
+                    main,
+                    outdir,
+                    arms=ARMS,
+                    metric=metric,
+                    denominator=opening if not opening.empty else None,
+                    baseline=baseline,
+                    prevalence=prevalence,
+                    lower_is_better=lower_better,
+                )
+            )
+
     if picks.empty:
         return written
 
@@ -728,6 +768,51 @@ def _fmt(d: dict, key: str, digits: int = 2) -> str:
     return "-" if v is None or (isinstance(v, float) and not np.isfinite(v)) else f"{v:.{digits}g}"
 
 
+#: Captions for the figures whose *reading* is not obvious from the axes - what
+#: the line means, and what it does NOT license.  A figure without one still
+#: renders; a figure whose dashed segments go unexplained is worse than absent.
+FIGURE_CAPTIONS: dict[str, str] = {
+    "cost_vs_clicks.png": (
+        "**The headline: how good the user's detector is as they keep clicking.** One panel per "
+        "dataset, one line per arm, mean over every seed and category on that dataset, with an "
+        "inter-quartile band. **Click 0 is the free text sort** - what the typed query got for "
+        "nothing - drawn as each arm's own leftmost point, so the far left is what typing was "
+        "worth and the far right is what clicking was worth. Nothing is measured between click 0 "
+        "and an arm's first trained click, which is why that stretch is dashed; the click at which "
+        "an arm overtakes its own start is reported as a number in the crossover table rather than "
+        "eyeballed off the curve. The lower strip is the "
+        "denominator: what fraction of that arm's cells are measured at that click (all of them at "
+        "click 0, which has a text sort; from click 1 only the ones with a detector). The mean is "
+        "**dashed** wherever that is below "
+        f"{curves.SOLID_COVERAGE:.0%} - there it is a level over the subset of cells that trained, "
+        "not over the grid, and an arm that starves looks better than it is on exactly those "
+        "clicks. Read a level only off a solid segment. Averaged across a wide prevalence range, "
+        "so it says which arm, not how well any one category does."
+    ),
+    "average_precision_vs_clicks.png": (
+        "The same figure for **average precision** - the ranking, with the threshold taken out of "
+        "it. Higher is better here. An arm that improves cost but not AP moved the *threshold*; "
+        "one that improves both moved the *ranking*. Same dashed-means-subset rule."
+    ),
+}
+
+
+def _runs_caption(metric: str, dataset: str) -> str:
+    better = "lower is better" if metric == "cost" else "higher is better"
+    return (
+        f"**The individuals, on `{dataset}`: every seed of every arm as its own line** ({metric}, "
+        f"{better}), coloured by the category's prevalence in the pool. A mean cannot show that two "
+        "arms with the same level are 'every run is mediocre' and 'half the runs are excellent and "
+        "half never start', and on this axis that is usually the finding. A run that never trained "
+        "a detector draws **no line at all** - the panel title counts those, because an absent "
+        "curve and a missing seed look identical otherwise. The black line is the median over the "
+        "runs present at that click, dashed where that is a median over a subset. Each line starts "
+        "at **that cell's own text-sort quality at click 0**, so the leftmost point is what the "
+        "typed query was worth on that exact cell; a never-trained run is the lone `x` at click 0 "
+        "with nothing to its right."
+    )
+
+
 def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
     lines = [
         "# Good Mining: does a different Autopilot opening find better positives?",
@@ -847,12 +932,55 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
             f"| `{arm}` | {_fmt(pos, 'mean_delta')} | [{_fmt(pos, 'ci95_lo')}, {_fmt(pos, 'ci95_hi')}] | "
             f"{_fmt(cost, 'mean_delta')} | [{_fmt(cost, 'ci95_lo')}, {_fmt(cost, 'ci95_hi')}] |"
         )
+    x = (summary.get("crossover") or {}).get("cost") or []
+    if x:
+        lines += [
+            "",
+            "## Is clicking worth it at all? — against the zero-click text sort",
+            "",
+            "Typing the query and reading the ranked haystack is **free**, so it is the thing a",
+            "clicked detector has to beat. `baseline` is that zero-click cost, `final` is the cost",
+            "at the horizon, and `crossover` is the first click at which the arm's mean is better",
+            "than the baseline. An arm that never crosses is reported as `never`, which is a",
+            "finding about that arm and not a missing number.",
+            "",
+            "| arm | dataset | text sort (0 clicks) | final | clicks to beat it |",
+            "|---|---|---:|---:|---:|",
+        ]
+        for row in sorted(x, key=lambda r: (ARMS.index(r["arm"]) if r["arm"] in ARMS else 99, r["dataset"])):
+            ct = row.get("crossover_t")
+            crossed = "never" if ct is None or ct != ct else f"{int(ct)}"
+            lines.append(
+                f"| `{row['arm']}` | {row['dataset']} | {row['baseline']:.3g} | {row['final']:.3g} | {crossed} |"
+            )
+    if (outdir / "viewer.html").exists():
+        lines += [
+            "",
+            "## The interactive viewer",
+            "",
+            "[`viewer.html`](viewer.html) carries **every** slice of this run, not the handful the",
+            "figures below happen to show: one dataset or all of them, one category or each of them,",
+            "any subset of arms, seeds averaged or every seed as its own line, and any metric the run",
+            "emitted (cost, precision, recall, F1, FPR, FNR, average precision, AUROC). Open it when",
+            "the answer you want is a slice this report did not think to plot.",
+            "",
+        ]
     sheets = sorted(f for f in figures if f.startswith("opening_") and f.endswith(".jpg"))
     figures = [f for f in figures if f not in sheets]
+    # The cost-over-clicks pair leads: it is the figure that answers the
+    # question the user actually has ("is what I am building getting better as
+    # I keep clicking?"), and every other figure here explains it.
+    curve_figs = [f for f in figures if "_vs_clicks" in f]
+    figures = curve_figs + [f for f in figures if f not in curve_figs]
     if figures:
         lines += ["", "## Figures", ""]
         for name in figures:
             lines.append(f"![{name}](figures/{name})")
+            if name in FIGURE_CAPTIONS:
+                lines += ["", f"*{FIGURE_CAPTIONS[name]}*"]
+            elif name.startswith(("cost_vs_clicks_runs__", "average_precision_vs_clicks_runs__")):
+                metric, ds = name[: -len(".png")].split("_vs_clicks_runs__")
+                lines += ["", f"*{_runs_caption(metric, ds)}*"]
             lines.append("")
     lines += [
         "## The openings themselves",
@@ -947,7 +1075,46 @@ def analyze(root: Path, outdir: Path) -> dict:
         opening.to_csv(agg / "opening_stats.csv", index=False)
     if not traj.empty:
         traj.to_csv(agg / "trajectory_stats.csv", index=False)
-    figures = make_figures(picks, opening, outdir / "figures", prevalence_table(root), traj)
+    baseline = None
+    if TEXT_BASELINE and Path(TEXT_BASELINE).exists():
+        baseline = curves.text_sort_baseline(TEXT_BASELINE)
+    elif TEXT_BASELINE:
+        print(f"WARNING: GM_TEXT_BASELINE={TEXT_BASELINE!r} does not exist - curves will have no zero-click anchor")
+    figures = make_figures(picks, opening, outdir / "figures", prevalence_table(root), traj, main, baseline)
+    # The interactive viewer, which every simulated-user report links to.  The
+    # PNGs answer the questions this analyzer asks; the viewer is what lets a
+    # reader ask their own - a different dataset, a single category, recall
+    # instead of cost - without waiting on a re-run.
+    if not main.empty:
+        try:
+            vp = viewer_mod.build_viewer(
+                main,
+                outdir / "viewer.html",
+                arms=ARMS,
+                denominator=opening if not opening.empty else None,
+                baseline=baseline,
+                title="Good Mining (#3267) — quality over clicks",
+                subtitle=(
+                    f"{summary['n_main_rows']} metric rows over "
+                    f"{(summary.get('balance') or {}).get('cells_complete', '?')} balanced cells, "
+                    f"{len(ARMS)} arms. Click 0 is the zero-click text sort."
+                ),
+            )
+            print(f"viewer -> {vp} ({vp.stat().st_size / 1e6:.2f} MB)")
+        except Exception as exc:  # noqa: BLE001
+            # A viewer that fails to build must not cost the run its tables.
+            print(f"WARNING: viewer build failed ({exc}); tables and figures are unaffected")
+    # How many clicks each arm needs before it is worth more than the free text
+    # sort.  Read off the same curves the figure plots, so the number in the
+    # table and the crossing in the picture cannot disagree.
+    summary["crossover"] = {}
+    for metric in ("cost", "average_precision"):
+        curve_csv = outdir / "figures" / f"{metric}_vs_clicks.csv"
+        if not curve_csv.exists():
+            continue
+        x = curves.crossover(pd.read_csv(curve_csv), lower_is_better=metric == "cost")
+        if not x.empty:
+            summary["crossover"][metric] = x.to_dict(orient="records")
     (outdir / "startup_summary.json").write_text(json.dumps(summary, indent=2, default=str))
     write_report(summary, figures, outdir)
     return summary

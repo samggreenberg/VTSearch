@@ -231,8 +231,19 @@ So the opening collapses to a list of rounds, each naming *how many clicks* and
 ```bash
 GM_STAGE=live bash launch_good_mining.sh    # coco_val + visual_genome_m
 GM_STAGE=bands bash launch_good_mining.sh   # vg_box_small/medium/large
-python analyze_startup.py                   # once every arm drains
+bash analyse_good_mining.sh                 # once every arm drains: everything
 python selftest_analyze_startup.py          # planted-answer check on the analyzer
+python selftest_curves.py                   # ...and on the quality-over-clicks pair
+```
+
+`analyse_good_mining.sh` is the whole analysis in one command, because the pieces
+have to agree. To re-run only the analyzer, give it the zero-click anchor
+yourself — without it the quality curves have no `t=0` and the far right has
+nothing to be compared against:
+
+```bash
+python text_baseline.py --results "$CALIB_EXP/results" --out "$OUT/text_baseline.csv"
+GM_TEXT_BASELINE="$OUT/text_baseline.csv" GM_OUT="$OUT" python analyze_startup.py
 ```
 
 Grammar (full reference: [`vtscore/eval/startup_schedule.py`](../../../vtscore/eval/startup_schedule.py)):
@@ -261,6 +272,81 @@ beside it — `q` establishes whether *position* is the mechanism, `k` asks whet
 the app's existing Inclusion knob is a usable handle on it. The analyzer reads
 each arm's realized `startup_cut_percentile` and reports "measured nothing"
 rather than "the lever does nothing".
+
+### Quality over clicks — the standard figure pair
+
+Every arm's whole point is what the *user's detector* is worth after N clicks, so
+`analyze_startup.py` emits that as its headline figure and delegates the drawing
+to [`curves.py`](curves.py), which is the one implementation every simulated-user
+study shares (see the `grid-experiments` skill for the rule):
+
+- `cost_vs_clicks.png` / `average_precision_vs_clicks.png` — **the averages**: a
+  panel per dataset, a line per arm, averaged over every seed and category, with an
+  inter-quartile band.
+- `cost_vs_clicks_runs__<dataset>.png` — **the individuals**: a panel per arm
+  holding every one of that arm's seeds on that dataset as its own line,
+  coloured by the category's prevalence.
+
+**Click 0 is the free text sort.** There is no detector at the far left, so each
+curve *begins* on what typing the query got for nothing (`text_baseline.py`, per
+cell) — its own leftmost point, in its own colour, rather than a rule across the
+panel. The far left is what typing was worth, the far right is what clicking was
+worth, and how many clicks it took to overtake the query is reported as a number
+in `REPORT_startup.md`'s crossover table rather than eyeballed off a crossing.
+
+The coverage strip under each panel is the denominator: a starved cell trains no
+detector and emits no metric row, so an arm that starves on a third of its grid
+would otherwise have its mean computed over the two thirds that worked and look
+*better* for it. The mean is dashed wherever it describes fewer than 95% of the
+arm's cells; only a solid segment is a level worth quoting.
+
+### The interactive viewer
+
+`analyze_startup.py` also writes `viewer.html` — a single self-contained page
+carrying **every** slice of the run, which the report links to. The PNGs above
+answer the questions the analyzer asked; the viewer is what lets a reader ask
+their own without a re-run.
+
+| Control | Choices |
+|---|---|
+| dataset | one, all (averaged), or each (its own line or panel) |
+| category | one, all (averaged), or each |
+| embedder | any **non-empty** subset — **one panel each, never averaged** |
+| arms | any **non-empty** subset |
+| seeds | averaged, or every seed its own line |
+| metric | cost, precision, recall, F1, FPR, FNR, average precision, AUROC |
+
+Hue is assigned to whichever dimension is actually being compared — the first
+varying one among arm → category → dataset that has at most 8 values — and every
+other varying dimension becomes a panel. The legend states which, in words. A
+dimension with more values than the palette's 8 validated slots folds into small
+multiples rather than getting invented hues.
+
+Both chip controls are non-empty by construction — the last remaining chip is
+locked, with a tooltip, rather than snapping silently back — because an empty
+selection has no honest rendering: the page would either go blank or fall back
+to "all", and a reader who missed that would take a chart of everything for a
+chart of nothing.
+
+The per-seed payload is packed to a byte budget by coarsening the *click* axis,
+never by dropping runs or metrics, and the page says which grid it got. Build it
+standalone with:
+
+```bash
+python viewer.py --results "$CALIB_EXP/results" \
+  --arms prod,top_long,easy_med_hard,band_wide,incl_k,incl_k_wide,flat_mid,deep_first \
+  --baseline "$OUT/text_baseline.csv" --out "$OUT/viewer.html"
+python selftest_viewer.py     # planted-answer check on the codec and the pooling
+```
+
+To redraw the PNGs without re-running the analysis:
+
+```bash
+python curves.py --results "$CALIB_EXP/results" \
+  --arms prod,top_long,easy_med_hard,band_wide,incl_k,incl_k_wide,flat_mid,deep_first \
+  --baseline "$OUT/text_baseline.csv" --prevalence "$CALIB_EXP/results/prepare_info.json" \
+  --out "$OUT/figures"
+```
 
 ### The pick log
 

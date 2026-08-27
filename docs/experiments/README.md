@@ -7,12 +7,28 @@ and they are not pruned when the work they justified ships.
 
 **What a report owes its reader** (the long form is in the `grid-experiments`
 skill): two significant digits unless a decision needs a third, arm differences
-**paired** and carrying a standard error; **figures** — the headline metric over
-the axis the user spends, averaged over seeds *and* broken out per run — emitted
-by a committed script from the same CSVs as the tables; and **literal examples**
-of the errors behind every error rate, so a reader can tell a model error from an
-annotation error. Analysis scripts must be committed: the doc gate checks that
-paths cited here resolve.
+**paired** and carrying a standard error; **figures** emitted by a committed
+script from the same CSVs as the tables; and **literal examples** of the errors
+behind every error rate, so a reader can tell a model error from an annotation
+error. Analysis scripts must be committed: the doc gate checks that paths cited
+here resolve.
+
+**Every study that simulates a user clicking owes the quality-over-clicks pair**
+— how good that user's detector is as they click more, **averaged** (one panel
+per dataset, one line per arm) and again **per run** (one panel per arm, every
+seed as its own line). Click 0 is the free text sort, so the far left is what
+typing was worth and the far right is what clicking was worth. One
+implementation, [`scripts/experiments/calibration/curves.py`](../../scripts/experiments/calibration/curves.py);
+do not write it again.
+
+**…and it owes an interactive `viewer.html`, linked from the report.** The PNGs
+answer the questions the analyzer asked; the viewer is what lets a reader ask
+their own — any dataset (one / all / each), any category (one / all / each), any
+subset of arms, any subset of embedders (one panel each, never averaged), seeds
+averaged or every seed, and any metric the run emitted (cost, precision, recall,
+F1, FPR, FNR, average precision, AUROC). Built by
+[`scripts/experiments/calibration/viewer.py`](../../scripts/experiments/calibration/viewer.py)
+from the same CSVs as everything else, self-contained, no network.
 
 **The other archives.** [`docs/reports/`](../reports/) holds standalone HTML study
 pages (narrative write-ups with inlined charts — see [its

@@ -59,13 +59,16 @@ def main() -> int:
     from vtscore.eval.labels import evaluable_pool, media_is_positive
     from vtscore.eval.patch_styles import resolve_style
     from vtscore.eval.score_dumps import write_prediction_dump
-    from vtscore.training.thresholds import calculate_gmm_threshold
+    from vtscore.eval.calibration_metrics import detection_metrics
+    from vtscore.training.thresholds import calculate_gmm_threshold, inclusion_cost_weights
 
     from vtscore.datasets import loader as _loader  # isort: skip
 
     from _cells_io import load_medias  # noqa: PLC0415
 
     prepare = json.loads((Path(args.results) / "prepare_info.json").read_text())
+    wf, wn = inclusion_cost_weights(cfg.INCLUSION)
+    common.log(f"cost weights at inclusion {cfg.INCLUSION}: fpr x{wf:g}, fnr x{wn:g}")
     rows: list[dict] = []
 
     for ds, per_emb in prepare.get("datasets", {}).items():
@@ -91,7 +94,15 @@ def main() -> int:
             style = resolve_style("whole_image")
 
             for cat in cats:
-                tvec = embed_text_query(cat, "image", embedder_name=emb)
+                # The SAME text the cells seeded from, not the bare category
+                # name.  ``run_cells.py`` seeds through ``seed_query_text``, and
+                # the two tables differ on purpose: as bare nouns `mouse`,
+                # `remote`, `orange` and `tv` rank a different concept, which is
+                # why the COCO-80 query table exists.  Embedding `cat` here
+                # measured a *different sort* from the one every arm opened on,
+                # so the zero-click anchor was not the run's own seed sort.
+                query = cfg.seed_query_text(ds, cat) or cat
+                tvec = embed_text_query(query, "image", embedder_name=emb)
                 if tvec is None:
                     rows.append({"dataset": ds, "embedder": emb, "category": cat, "supports_text": 0})
                     continue
@@ -134,12 +145,21 @@ def main() -> int:
                     pred = s >= gmm_cut
                     fpr = float(((pred == 1) & (y == 0)).sum() / nneg)
                     fnr = float(((pred == 0) & (y == 1)).sum() / npos)
-                    # Oracle: best achievable cut on these same text scores.
+                    # precision / recall / f1 through the SAME definition the
+                    # metric rows use, so the viewer's t=0 anchor and the curve
+                    # it anchors cannot mean different things by "precision".
+                    det = detection_metrics(s, y, gmm_cut)
+                    # Weighted by the run's OWN inclusion, through the same
+                    # production definition the metric frame's cost uses.  At
+                    # the default inclusion 0 these are (1, 1) and this is the
+                    # plain fpr+fnr it always was; at any other inclusion the
+                    # unweighted number would be an anchor on a different scale
+                    # from the curve it anchors, which is worse than no anchor.
                     order = np.argsort(-s)
                     ys = y[order]
                     tp = np.cumsum(ys)
                     fp = np.cumsum(1 - ys)
-                    ocost = np.min(fp / max(nneg, 1) + (npos - tp) / max(npos, 1))
+                    ocost = np.min(wf * (fp / max(nneg, 1)) + wn * ((npos - tp) / max(npos, 1)))
                     rows.append(
                         {
                             "dataset": ds,
@@ -147,13 +167,17 @@ def main() -> int:
                             "category": cat,
                             "seed": seed,
                             "supports_text": 1,
+                            "query": query,
                             "n_test": int(mask.sum()),
                             "n_test_pos": npos,
                             "prevalence": round(npos / max(npos + nneg, 1), 6),
                             "text_gmm_cut": round(gmm_cut, 6),
-                            "text_cost": round(fpr + fnr, 6),
+                            "text_cost": round(wf * fpr + wn * fnr, 6),
                             "text_fpr": round(fpr, 6),
                             "text_fnr": round(fnr, 6),
+                            "text_precision": round(det["precision"], 6),
+                            "text_recall": round(det["recall"], 6),
+                            "text_f1": round(det["f1"], 6),
                             "text_oracle_cost": round(float(ocost), 6),
                             "text_AP": round(float(average_precision_score(y, s)), 6),
                             "text_auroc": round(float(roc_auc_score(y, s)), 6),

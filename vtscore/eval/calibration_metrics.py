@@ -9,6 +9,9 @@ a CPU-only box without the model stack.  It provides:
   score/label set (the best a threshold rule could possibly do on this ranking),
   via an O(n log n) sweep over the observed scores.  The gap between the trained
   cost and this is the **calibration regret** of issue #2781.
+* :func:`detection_metrics` — ``precision`` / ``recall`` / ``f1`` at the same
+  cut, plus the counts behind them.  One definition, shared by both metric-row
+  builders, so every study emits them whether or not it thought to ask.
 * :func:`threshold_percentile` / :func:`is_degenerate` — where the trained
   threshold sits in a score distribution, and the ``degenerate`` flag (a cut
   above every score or below every score) that is the #2781 runaway-threshold
@@ -67,6 +70,75 @@ def operating_cost(
     fpr = fp / total_neg if total_neg > 0 else 0.0
     fnr = fn / total_pos if total_pos > 0 else 0.0
     return fpr_weight * fpr + fnr_weight * fnr, fpr, fnr
+
+
+#: Every metric :func:`detection_metrics` returns, and how a reader should read
+#: it.  Kept beside the function because a viewer or a report that offers a
+#: metric picker needs the direction and the range, and deriving those from the
+#: name is how "lower is better" gets attached to recall.
+#:
+#: ``(label, lower_is_better, domain)``.
+DETECTION_METRICS: dict[str, tuple[str, bool, tuple[float, float]]] = {
+    "cost": ("Cost (weighted FPR+FNR)", True, (0.0, 2.0)),
+    "precision": ("Precision", False, (0.0, 1.0)),
+    "recall": ("Recall (= 1 - FNR)", False, (0.0, 1.0)),
+    "f1": ("F1", False, (0.0, 1.0)),
+    "fpr": ("False-positive rate", True, (0.0, 1.0)),
+    "fnr": ("False-negative rate", True, (0.0, 1.0)),
+    "average_precision": ("Average precision (ranking)", False, (0.0, 1.0)),
+    "auroc": ("AUROC (ranking)", False, (0.0, 1.0)),
+}
+
+
+def detection_metrics(scores: np.ndarray, labels: np.ndarray, threshold: float) -> dict[str, float]:
+    """``precision`` / ``recall`` / ``f1`` at *threshold*, plus the counts behind them.
+
+    The one definition, so the two places that build a metric row
+    (:func:`vtscore.eval.voting_iterations._evaluate_on_test` and its
+    calibration sibling) cannot come to disagree about what "precision" means -
+    and so a study that never thought to compute these still emits them.
+
+    Three conventions worth stating, because each is a place a plausible
+    alternative would quietly corrupt an average:
+
+    * **``precision`` is NaN when the detector flags nothing.**  It is genuinely
+      undefined there - there is no set of retrieved items to be right about.
+      Reporting 0 would drag a mean down for a reason that is not "the model was
+      wrong", and 1 is simply false.  NaN drops the cell out of an average and
+      shows up in a coverage count, which is the honest handling.
+    * **``f1`` uses ``2TP / (2TP + FP + FN)``**, which needs no precision and is
+      therefore well-defined at 0 when nothing is flagged.  Deriving it from a
+      NaN precision would lose a value that exists.
+    * **``recall`` is exactly ``1 - fnr``** and is emitted anyway.  It is
+      redundant with a column already present and it is the word a reader picks
+      off a menu; asking them to invert an FNR in their head is where the
+      reading errors come from.
+
+    Empty denominators follow :func:`operating_cost`: no positives in the sample
+    means recall is undefined (NaN), which is different from a recall of 0.
+    """
+    scores = np.asarray(scores, dtype=np.float64)
+    labels = np.asarray(labels, dtype=np.float64)
+    nan = float("nan")
+    predicted = scores >= threshold
+    pos = labels == 1.0
+    tp = float(np.count_nonzero(predicted & pos))
+    fp = float(np.count_nonzero(predicted & ~pos))
+    fn = float(np.count_nonzero(~predicted & pos))
+    n_pos = float(np.count_nonzero(pos))
+    flagged = tp + fp
+    precision = tp / flagged if flagged > 0 else nan
+    recall = tp / n_pos if n_pos > 0 else nan
+    f1_denom = 2.0 * tp + fp + fn
+    f1 = (2.0 * tp / f1_denom) if f1_denom > 0 else nan
+    return {
+        "precision": precision,
+        "recall": recall,
+        "f1": f1,
+        "n_test_pos": n_pos,
+        "n_test_neg": float(len(labels) - n_pos),
+        "n_flagged": flagged,
+    }
 
 
 def oracle_cut(

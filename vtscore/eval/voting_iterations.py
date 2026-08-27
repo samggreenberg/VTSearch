@@ -192,6 +192,18 @@ _VOTING_COLUMNS: tuple[str, ...] = (
     "cost",
     "fpr",
     "fnr",
+    #: The operating point in the words a reader picks off a menu (#3281).
+    #: ``recall`` is exactly ``1 - fnr`` and is emitted anyway: asking someone to
+    #: invert an FNR in their head is where the reading errors come from.  One
+    #: definition for all three, in ``calibration_metrics.detection_metrics``.
+    "precision",
+    "recall",
+    "f1",
+    #: The counts behind them, so a rate can be re-derived, weighted or pooled
+    #: without going back to the cells.
+    "n_test_pos",
+    "n_test_neg",
+    "n_flagged",
     "auroc",
     "average_precision",
     "train_seconds",
@@ -288,6 +300,12 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     "cost",
     "fpr",
     "fnr",
+    "precision",
+    "recall",
+    "f1",
+    "n_test_pos",
+    "n_test_neg",
+    "n_flagged",
     "auroc",
     "average_precision",
     "oracle_threshold",
@@ -766,7 +784,9 @@ def _evaluate_on_test(
     """Score *test_ids* with *step* and return the per-step metrics.
 
     Returns the operating-point metrics the user cares about — inclusion-weighted
-    ``cost``, ``fpr``, ``fnr`` (all computed at *threshold*) — plus the
+    ``cost``, ``fpr``, ``fnr``, ``precision``, ``recall`` and ``f1`` (all
+    computed at *threshold*, the last three via
+    :func:`~vtscore.eval.calibration_metrics.detection_metrics`) — plus the
     threshold-independent ranking metrics ``auroc`` and ``average_precision``,
     which isolate "how good is the ranking" from "how good is the threshold".
 
@@ -782,7 +802,19 @@ def _evaluate_on_test(
 
     nan = float("nan")
     if not test_ids:
-        return {"cost": nan, "fpr": nan, "fnr": nan, "auroc": nan, "average_precision": nan}
+        return {
+            "cost": nan,
+            "fpr": nan,
+            "fnr": nan,
+            "precision": nan,
+            "recall": nan,
+            "f1": nan,
+            "n_test_pos": nan,
+            "n_test_neg": nan,
+            "n_flagged": nan,
+            "auroc": nan,
+            "average_precision": nan,
+        }
 
     if style_obj is not None:
         # Explicit detection style (see vtscore.eval.patch_styles): the style
@@ -826,10 +858,14 @@ def _evaluate_on_test(
 
     scores_arr = np.asarray(scores, dtype=np.float64)
     labels_arr = np.asarray(true_labels, dtype=np.float64)
+    from vtscore.eval.calibration_metrics import detection_metrics  # noqa: PLC0415
+
+    det = detection_metrics(scores_arr, labels_arr, threshold)
     return {
         "cost": round(cost, 6),
         "fpr": round(fpr, 6),
         "fnr": round(fnr, 6),
+        **{k: _r(v) for k, v in det.items()},
         "auroc": round(_auroc(scores_arr, labels_arr), 6),
         "average_precision": round(_average_precision(scores_arr, labels_arr), 6),
     }
@@ -966,6 +1002,7 @@ def _operating_metrics(
     import numpy as np  # noqa: PLC0415
 
     from vtscore.eval.calibration_metrics import (  # noqa: PLC0415
+        detection_metrics,
         inclusion_weights,
         is_degenerate,
         operating_cost,
@@ -1041,6 +1078,7 @@ def _operating_metrics(
         "cost": _r(cost),
         "fpr": _r(fpr),
         "fnr": _r(fnr),
+        **{k: _r(v) for k, v in detection_metrics(scores, labels, threshold).items()},
         "auroc": _r(float(_auroc(scores, labels))),
         "average_precision": _r(float(_average_precision(scores, labels))),
         "oracle_threshold": _r(float(o_thr)),

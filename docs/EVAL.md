@@ -315,6 +315,18 @@ Rounds appear in the `phase` column as `s0`, `s1`, …, and `app_trained` is `0`
 
 `@k` and `@q` are not redundant. `@k` is the arm that could *ship* — the app has an Inclusion knob and no rank-position knob — but how far a given inclusion moves the pick is a property of the fitted mixture, so on a steep sort the whole usable range can land inside a couple of rank percent. `@q` names the position directly, which is what establishes whether *position* is the mechanism before asking whether `k` is a usable handle on it.
 
+#### What every step measures
+
+Each metric row carries the operating point at that step's threshold — `cost` (the inclusion-weighted `FPR + FNR`), `fpr`, `fnr`, `precision`, `recall` and `f1` — plus the counts they come from (`n_test_pos`, `n_test_neg`, `n_flagged`) and the two threshold-independent ranking metrics, `auroc` and `average_precision`, which isolate "how good is the ranking" from "how good is the threshold".
+
+`precision` / `recall` / `f1` come from one definition, [`vtscore.eval.calibration_metrics.detection_metrics`](../vtscore/eval/calibration_metrics.py), shared by both row builders so they cannot come to disagree. Three conventions in it are load-bearing:
+
+- **`precision` is `NaN` when the detector flags nothing** — genuinely undefined, since there is no retrieved set to be right about. A 0 would drag an average down for a reason that is not "the model was wrong"; a 1 is simply false.
+- **`f1` uses `2TP / (2TP + FP + FN)`**, so it needs no precision and is well-defined at 0 when nothing is flagged.
+- **`recall` is exactly `1 - fnr`** and is emitted anyway: it is the word a reader picks off a menu, and asking them to invert an FNR in their head is where reading errors come from.
+
+`DETECTION_METRICS` in the same module carries each metric's label and its **direction**, and is what the report figures and the interactive viewer read — so nothing downstream decides for itself which way is "better".
+
 #### The pick log (`pick_sink`)
 
 Pass a list as `pick_sink` to get one row per **click** (columns: `_PICK_COLUMNS`) — what was picked, whether it was a positive, and where on the seed sort it came from. The main frame starts at the first *trainable* step, because before one Good and one Bad vote coexist there is no model, no threshold and no metrics row; so the opening is exactly the part it does not record. An opening that never finds both classes emits **no main row at all**, which is a result about that opening rather than a missing cell.
