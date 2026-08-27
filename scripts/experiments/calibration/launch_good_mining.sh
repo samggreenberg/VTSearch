@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-# Good Mining — does a different Autopilot *opening* find better positives?  (#3267)
+# Good Mining - does a different Autopilot *opening* find better positives?  (#3267)
+#
+#   bash launch_good_mining.sh prepare   # stage 0 (cpu, reads the pile in place)
+#   bash launch_good_mining.sh size      # time ONE cell before committing
+#   bash launch_good_mining.sh arms      # the 8-arm grid
 #
 # Getting enough Goods looks like what separates a VTSearch run that works from
 # one that fails, and the opening is where Goods come from.  Today it is fixed:
@@ -39,12 +43,19 @@
 #
 # Prepare is REUSED (no GPU stage): every cell reads a pile pickle.
 set -uo pipefail
+trap 'echo "ABORTED: $0 line $LINENO exited $? -- NOTHING WAS SUBMITTED" >&2' ERR
 
-export VTS_REPO=${VTS_REPO:-/exp/$USER/projects/vts-good-mining}
+MODE="${1:-arms}"
+
+export VTS_REPO="${VTS_REPO:-/exp/$USER/projects/vts-goodmine-3267}"
 WT="$VTS_REPO"
 HERE="$WT/scripts/experiments/calibration"
 
-export CALIB_EXP="/exp/$USER/good-mining"
+# One study, one dir.  On the 500G scratch: the pick log emits a row per click
+# per cell, which is the frame this study is actually about, and /exp is a
+# shared quota.
+export CALIB_EXP="${CALIB_EXP:-/expscratch/$USER/good-mining-3267}"
+export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
 # --- stages ---------------------------------------------------------------
 # `live` is the two environments the acquisition-inclusion study ran on, so this
@@ -61,15 +72,69 @@ esac
 # One embedder everywhere: siglip is the shipped default and the only pile
 # column present for all five datasets, so an arm difference is never confounded
 # with which embedder that dataset happened to carry.
+#
+# It is also the only choice this study CAN make.  Every arm names a position on
+# the **seed sort**, and the seed sort is a text sort - the user types a query
+# and votes down the ranking.  DINOv3 has no text tower (`embed_text` returns
+# None), so a DINOv3 cell falls back to the app's other start, three random
+# known-goods, and a cut at "the 2nd rank percentile" of that ranking is a cut on
+# a different object.  A text-seeded and a known-good-seeded cell cannot be arms
+# of one experiment.
 export CALIB_COCO_EMBEDDERS=siglip
 export CALIB_VG_EMBEDDERS=siglip
 export CALIB_VGBOX_EMBEDDERS=siglip
 
-export CALIB_MAX_STEPS=${CALIB_MAX_STEPS:-100}
+# ...and the other half of that premise, asserted rather than assumed.  Whether
+# a cell seeds from text is decided silently by whether a query text exists for
+# its (dataset, category): `coco_val` and `vg_box_*` had NONE (they are
+# experiment fixtures, not demo datasets, so they are absent from the app's
+# EVAL_DATASETS query table), which is the gap
+# lessons/2026-08-26-the-harness-seeded-from-a-crop.md closed for `vg_scale` and
+# left open here in as many words.  Two controls now:
+#   - EXPERIMENT_QUERIES gained a COCO-80 table and the vg_box_* bands;
+#   - CALIB_REQUIRE_SEED_QUERY makes prepare select only from categories that
+#     have one, so a category with no sensible query is replaced rather than
+#     silently seeded the other way;
+#   - preflight's --require-text-seed refuses to launch if any selected cell
+#     would still take the known-good start.
+export CALIB_REQUIRE_SEED_QUERY=1
+
+# --- the horizon ----------------------------------------------------------
+# 200 CLICKS PER RUN, and the opening's clicks are inside that number.
+# `max_steps` bounds the whole voting loop (`n_steps = min(max_steps, len(pool))`
+# and every iteration is one vote) - the opening's clicks simply emit no *metric*
+# row, because before one Good and one Bad coexist there is no model to score.
+# Counting them is what makes the arms comparable: every banded arm spends 16
+# clicks opening against prod's ~7, so at a fixed 200 clicks a win is a better
+# use of the same user effort rather than more of it.
+export CALIB_MAX_STEPS=${CALIB_MAX_STEPS:-200}
+
+# --- environments ---------------------------------------------------------
+# PREVALENCE, not scale bands.  Both datasets are boxed, so selection would
+# default to stratifying on box scale - but the mechanism this study runs on is
+# how RARE the positives are (Good-starvation), and #3156 established that
+# scatter is a property of an image rather than of a class, which is what a
+# per-class scale band claims to be.  A prevalence spread gives the analyzer the
+# axis to band on.
+export CALIB_CATEGORY_MODE=prevalence
+export CALIB_N_CATEGORIES=${CALIB_N_CATEGORIES:-8}
+# Applied BEFORE the spread is drawn, so the rare end of the axis is the rarest
+# category the horizon can actually sustain rather than one that gets dropped
+# afterwards and shortens the axis.
+export CALIB_MIN_CAT_COUNT=${CALIB_MIN_CAT_COUNT:-50}
+# ...and the same floor again as a tripwire on the sim half (a header-only CSV
+# passes every "N/N cells" count - see preflight check 13).
+export CALIB_MIN_SIM_POSITIVES=${CALIB_MIN_SIM_POSITIVES:-25}
+
 export CALIB_N_SEEDS=${CALIB_N_SEEDS:-6}
-export CALIB_N_CATEGORIES=${CALIB_N_CATEGORIES:-6}
-export CALIB_N_PER_BAND=${CALIB_N_PER_BAND:-3}
-export CALIB_HEAD=linear
+
+# --- production-faithful fixed choices ------------------------------------
+# CALIB_HEAD is deliberately UNSET: `head=None` resolves to
+# `voting_iterations.PRODUCTION_HEAD`, the linear SVM a live detector has trained
+# since PR #3198.  The shipped launcher pinned `CALIB_HEAD=linear`, the logistic
+# head that was production for #2790-#2865 - carrying that pin forward would
+# measure an opening on a detector nobody has.  That is the failure preflight
+# check 12 exists for (#2865).
 export CALIB_SAFE_THRESHOLDS=1
 export CALIB_ANCHORED=0
 export CALIB_SCHEDULE_VARIANTS=
@@ -81,25 +146,48 @@ export CALIB_EMIT_PICKS=1
 # --- ops: cpu partition, single-threaded cells (see launch_acq_incl.sh) ---
 export CALIB_PARTITION=cpu
 export CALIB_GRES=none
-export CALIB_MEM=${CALIB_MEM:-8G}
+export CALIB_MEM=${CALIB_MEM:-4G}
 export CALIB_CPUS=1
 export CALIB_TIME=${CALIB_TIME:-2:00:00}
-export CALIB_CONC=${CALIB_CONC:-18}
+# Per ARM, and there are eight arrays.  The binding cap is the `cpu_limit` QOS
+# (cpu=240, 2 charged per task = 120 running), so a per-array %N above that
+# simply lets SLURM fill every slot the QOS allows instead of leaving arms 2-8
+# idle behind arm 1's self-imposed limit.  Memory is not binding here: 120 x 4G
+# is 480G of the 1074G allowance (45%), well inside preflight check 8's line.
+export CALIB_CONC=${CALIB_CONC:-120}
+export CALIB_ANALYZE_MEM=${CALIB_ANALYZE_MEM:-32G}
+export CALIB_ANALYZE_TIME=${CALIB_ANALYZE_TIME:-1:00:00}
 
-export VTSEARCH_DATA_DIR="$CALIB_EXP/datadir"
-export VTSEARCH_MODELS_DIR="/exp/$USER/max-patch/models"
-export HF_HOME="/exp/$USER/.cache/huggingface"
+# Pin the BLAS pools to one thread each: 120 concurrent cells each spawning a
+# node-sized pool oversubscribes whatever node they land on (#2883, and the
+# half of that lesson that survived measurement).  Exported HERE so `size` and
+# `arms` measure and run under the same environment - a cell timed with
+# different threading than the array will use is a guess with a unit attached.
+export OMP_NUM_THREADS="${OMP_NUM_THREADS:-1}"
+export MKL_NUM_THREADS="${MKL_NUM_THREADS:-1}"
+export OPENBLAS_NUM_THREADS="${OPENBLAS_NUM_THREADS:-1}"
+
+# Read the pre-embedded pile in place: no re-embed, no GPU, no model download.
+# The shipped launcher pointed VTSEARCH_DATA_DIR at "$CALIB_EXP/datadir", which
+# does not exist - every cell would have re-fetched and re-embedded.
+source "$WT/scripts/experiments/pile/pile_env.sh"
 
 # Analysis is cross-arm and runs once, by hand, after every arm drains.
 export CALIB_ANALYZE=${CALIB_ANALYZE:-noop.py}
 
-mkdir -p "$CALIB_EXP/logs"
+LOGS="$CALIB_EXP/logs"
+mkdir -p "$LOGS" "$CALIB_RESULTS/cells" "$CALIB_RESULTS/crops"
 
-if [[ ! -f "$CALIB_EXP/results/prepare_info.json" ]]; then
-  echo "ERROR: no prepare_info.json at $CALIB_EXP/results" >&2
-  echo "  Reuse a finished study's prepare, or run prepare_data.py for this grid." >&2
-  exit 1
-fi
+ENVX="export CALIB_EXP=$CALIB_EXP VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
+
+require_jobid() {
+  local id="$1" what="$2"
+  if ! [[ "$id" =~ ^[0-9]+$ ]]; then
+    echo "ERROR: $what was REFUSED by sbatch (no job id came back)." >&2
+    echo "       Nothing downstream can run; fix the submission and re-launch." >&2
+    exit 1
+  fi
+}
 
 ARM_ORDER=(prod top_long easy_med_hard band_wide incl_k incl_k_wide flat_mid deep_first)
 declare -A ARMS=(
@@ -113,45 +201,106 @@ declare -A ARMS=(
   [deep_first]="n10@q0.35,n6@mid"
 )
 
-# Reject a typo'd schedule here, not four hours into the array.  Every arm is
-# parsed by the same code the cells will run.
-for arm in "${ARM_ORDER[@]}"; do
-  [[ -z "${ARMS[$arm]}" ]] && continue
-  ( cd "$HERE" && python -c "
+case "$MODE" in
+  prepare)
+    # Stage 0 on the CPU partition: every pair is already in the pile, so this
+    # loads each pickle, re-derives the selected categories and writes the
+    # startup-exemplar vectors.  No model is constructed.
+    P=$(sbatch --parsable --job-name=gm-prep --mem=24G --cpus-per-task=2 \
+      --time=1:00:00 --partition=cpu --export=ALL \
+      --output="$LOGS/prepare-%j.out" \
+      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$CALIB_RESULTS && cd $HERE && python prepare_data.py")
+    require_jobid "$P" "prepare"
+    echo "prepare job: $P  ->  $LOGS/prepare-$P.out"
+    ;;
+
+  size)
+    # Time ONE cell before committing to the array.  This run's horizon is 200
+    # clicks against #3115's 150 and its per-step training cost grows with the
+    # label count, so that study's 20m55s is not this study's number - and
+    # quoting a previous grid's seconds is how #3129 produced a 90-minute
+    # overestimate.  A sizing dir per GRID: a cell index means something
+    # different under a different dataset.
+    IDX="${2:-0}"
+    ARM="${3:-prod}"
+    export CALIB_STARTUP_SCHEDULE="${ARMS[$ARM]}"
+    SIZING="$CALIB_EXP/sizing/${GM_STAGE}_${ARM}"
+    mkdir -p "$SIZING"
+    S=$(sbatch --parsable --job-name=gm-size --mem=8G --cpus-per-task="$CALIB_CPUS" \
+      --time=2:00:00 --partition=cpu --export=ALL \
+      --output="$LOGS/size-%j.out" \
+      --wrap="source $WT/gridenv.sh && $ENVX && export CALIB_RESULTS=$CALIB_RESULTS CALIB_STARTUP_SCHEDULE='${ARMS[$ARM]}' && cd $HERE && time python run_cells.py --index $IDX --outdir $SIZING")
+    require_jobid "$S" "size"
+    echo "size job: $S (cell $IDX, arm $ARM)  ->  $LOGS/size-$S.out   cells -> $SIZING"
+    ;;
+
+  arms)
+    if [[ ! -f "$CALIB_RESULTS/prepare_info.json" ]]; then
+      echo "ERROR: no prepare_info.json at $CALIB_RESULTS - run '$0 prepare' first." >&2
+      exit 1
+    fi
+    # Preflight's checks are mostly PYTHON: it imports vtscore to compare every
+    # pinned knob against its shipped constant.  A non-interactive login shell
+    # has no venv, where the system python is old enough that `X | None` raises
+    # at import time - so those checks come back FAIL for a reason that has
+    # nothing to do with the run.  Activate the venv first so they actually run;
+    # the dangerous version of this is preflight reporting `ok` without having
+    # looked (#2905).
+    # shellcheck disable=SC1091
+    source "$WT/gridenv.sh" >/dev/null 2>&1 || {
+      echo "ERROR: could not activate the venv at $WT/gridenv.sh" >&2; exit 1
+    }
+
+    # Reject a typo'd schedule here, not four hours into the array.  Every arm is
+    # parsed by the same code the cells will run.
+    for arm in "${ARM_ORDER[@]}"; do
+      [[ -z "${ARMS[$arm]}" ]] && continue
+      ( cd "$HERE" && python -c "
 import sys
 sys.path.insert(0, '$WT')
 from vtscore.eval.startup_schedule import parse_startup_schedule
 parse_startup_schedule('${ARMS[$arm]}')
 " ) || { echo "ERROR: arm '$arm' has an unparseable schedule '${ARMS[$arm]}'" >&2; exit 1; }
-done
+    done
 
-if [[ -x "$WT/scripts/experiments/preflight.sh" ]]; then
-  bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" \
-    --arms "$(IFS=,; echo "${ARM_ORDER[*]}")" --job-name cal-cells \
-    --mem "$CALIB_MEM" --conc "$CALIB_CONC" --need-gb 4 || {
-    echo "preflight FAILED" >&2; [[ "${PREFLIGHT_SKIP:-0}" == "1" ]] || exit 1
-  }
-fi
+    if [[ -x "$WT/scripts/experiments/preflight.sh" ]]; then
+      # No --diverges: this run pins nothing off-production.  The opening is the
+      # axis it sweeps and the shipped opening is the `prod` arm, so even that is
+      # a comparison rather than a divergence.
+      bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" \
+        --arms "$(IFS=,; echo "${ARM_ORDER[*]}")" --job-name cal-cells \
+        --mem "$CALIB_MEM" --conc "$CALIB_CONC" --need-gb 20 \
+        --require-min-positives 50 --require-text-seed || {
+        echo "preflight FAILED" >&2; [[ "${PREFLIGHT_SKIP:-0}" == "1" ]] || exit 1
+      }
+    fi
 
-for arm in "${ARM_ORDER[@]}"; do
-  export CALIB_STARTUP_SCHEDULE="${ARMS[$arm]}"
-  export CALIB_RESULTS="$CALIB_EXP/results/$arm"
-  mkdir -p "$CALIB_RESULTS/cells"
-  ln -sfn "$CALIB_EXP/results/prepare_info.json" "$CALIB_RESULTS/prepare_info.json"
-  ln -sfn "$CALIB_EXP/results/crops" "$CALIB_RESULTS/crops"
-  echo "=== arm $arm (startup_schedule='${CALIB_STARTUP_SCHEDULE:-app default}')"
-  bash "$HERE/launch_cells.sh" || echo "ARM $arm SUBMIT FAILED" >&2
-done
+    for arm in "${ARM_ORDER[@]}"; do
+      export CALIB_STARTUP_SCHEDULE="${ARMS[$arm]}"
+      export CALIB_RESULTS="$CALIB_EXP/results/$arm"
+      mkdir -p "$CALIB_RESULTS/cells"
+      ln -sfn "$CALIB_EXP/results/prepare_info.json" "$CALIB_RESULTS/prepare_info.json"
+      ln -sfn "$CALIB_EXP/results/crops" "$CALIB_RESULTS/crops"
+      echo "=== arm $arm (startup_schedule='${CALIB_STARTUP_SCHEDULE:-app default}')"
+      bash "$HERE/launch_cells.sh" || echo "ARM $arm SUBMIT FAILED" >&2
+    done
 
-cat <<'NOTE'
+    cat <<NOTE
 
 Submitted.  A submission is not a launch: check every arm came back with a
 numeric job id, then watch cells appear rather than watching squeue.
 
-  squeue -u $USER -n cal-cells
-  for a in prod top_long easy_med_hard band_wide incl_k incl_k_wide flat_mid deep_first; do
-    printf '%-14s %s\n' "$a" "$(ls $CALIB_EXP/results/$a/cells/task_*.csv 2>/dev/null | grep -c . )"
+  squeue -u \$USER -n cal-cells
+  for a in ${ARM_ORDER[*]}; do
+    printf '%-14s %s\n' "\$a" "\$(ls $CALIB_EXP/results/\$a/cells/task_*.csv 2>/dev/null | grep -c . )"
   done
 
 When the queue drains:  python analyze_startup.py
 NOTE
+    ;;
+
+  *)
+    echo "usage: $0 {prepare|size [cell] [arm]|arms}" >&2
+    exit 2
+    ;;
+esac

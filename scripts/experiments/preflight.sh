@@ -22,6 +22,7 @@ WARN_ONLY=0
 REPO="${VTS_REPO:-}"
 REGION_ARM=""
 MIN_POSITIVES=""
+REQUIRE_TEXT_SEED=""
 MODE_CONTRAST=""
 REUSE_PREPARE=""
 JOB_NAME=""
@@ -36,6 +37,7 @@ while [[ $# -gt 0 ]]; do
     --need-gb) NEED_GB="$2"; shift 2 ;;
     --require-region-voting) REGION_ARM="$2"; shift 2 ;;
     --require-min-positives) MIN_POSITIVES="$2"; shift 2 ;;
+    --require-text-seed) REQUIRE_TEXT_SEED=1; shift ;;
     --contrasts-voting-modes) MODE_CONTRAST=1; shift ;;
     --reuse-prepare) REUSE_PREPARE="$2"; shift 2 ;;
     --job-name) JOB_NAME="$2"; shift 2 ;;
@@ -49,6 +51,7 @@ done
 [[ -n "$EXP" ]] || {
   echo "usage: preflight.sh --exp DIR [--arms a,b,c] [--need-gb N]" >&2
   echo "                    [--require-region-voting DATASET:EMBEDDER]" >&2
+  echo "                    [--require-text-seed]      # every cell must seed from a TYPED QUERY" >&2
   echo "                    [--reuse-prepare RESULTS_DIR]" >&2
   echo "                    [--job-name NAME] [--mem 64G] [--conc N]" >&2
   echo "                    [--diverges knob1,knob2]   # knobs this study MEANS to pin off-production" >&2
@@ -710,6 +713,80 @@ PY
         echo "           header-only CSV, which every 'N/N cells' count reports as present"
         ;;
       *) say_fail "could not check category depth: $THIN" ;;
+    esac
+  fi
+fi
+
+# --- 14. Every cell seeds from a TYPED QUERY, not from known-goods ------------
+# The autopilot has two documented starts, and which one a cell takes is decided
+# silently by whether a query text happens to exist for its (dataset, category)
+# and whether its embedder has a text tower.  With a query the seed sort is
+# cosine to the typed text; without one the app falls back to three random
+# known-good examples.  Both are real user flows, so neither errors and every
+# downstream column is populated either way - the same shape as
+# `lessons/2026-08-26-the-harness-seeded-from-a-crop.md`, where a parameter was
+# fed something other than what its name says it holds.
+#
+# That is merely untidy for most studies and fatal for one whose arms are
+# POSITIONS ON THE SEED SORT (#3267): a cut at the 2nd rank percentile of a text
+# sort and the same cut on a known-good sort are cuts on different objects, so a
+# grid split across the two is not one experiment.  The lesson above closed this
+# for `vg_scale` and left it open for `coco_val` and `vg_box_*` in as many words
+# ("Still only advice ... config-only to fix"). This is the control.
+#
+# Reads `prepare_info.json` for the categories actually selected, so it sees the
+# grid that will run rather than the one the launcher asked for.
+if [[ -n "$REQUIRE_TEXT_SEED" ]]; then
+  INFO="${CALIB_RESULTS:-$EXP/results}/prepare_info.json"
+  if [[ ! -f "$INFO" ]]; then
+    say_fail "--require-text-seed: no prepare_info.json at $INFO (run prepare first)"
+  elif [[ "$PY_USABLE" == "0" ]]; then
+    say_fail "seed mode NOT checked: python cannot import the tree (see above)"
+  else
+    SEEDCHK=$(cd "$REPO/scripts/experiments/calibration" && python - "$INFO" <<'PY' 2>&1
+import json
+import sys
+
+sys.path.insert(0, ".")
+import experiment_config as cfg  # noqa: E402
+
+from vtscore.media import get_embedder  # noqa: E402
+
+info = json.load(open(sys.argv[1]))
+bad, seen, texts = [], 0, 0
+no_tower = set()
+for ds, embs in info.get("datasets", {}).items():
+    for emb, d in embs.items():
+        # The other half of the seed mode: an embedder with no text tower can
+        # never produce a text sort however good the query is (DINOv3).
+        try:
+            has_tower = get_embedder(emb).embed_text("probe") is not None
+        except Exception as exc:  # noqa: BLE001
+            bad.append(f"{ds}x{emb}: embedder failed to load ({type(exc).__name__})")
+            continue
+        if not has_tower:
+            no_tower.add(emb)
+        for cat in d.get("selected_categories") or []:
+            seen += 1
+            text = cfg.seed_query_text(ds, cat)
+            if not text:
+                bad.append(f"{ds}x{emb}:{cat}=no query")
+            elif not has_tower:
+                bad.append(f"{ds}x{emb}:{cat}=no text tower on {emb}")
+            else:
+                texts += 1
+print(("FAILS " + "; ".join(sorted(bad)[:12])) if bad else f"HOLDS {texts}/{seen} selected cells seed from a typed query")
+PY
+)
+    case "$SEEDCHK" in
+      HOLDS*) say_ok "seed mode: ${SEEDCHK#HOLDS }" ;;
+      FAILS*)
+        say_fail "cells that would NOT seed from a text sort: ${SEEDCHK#FAILS }"
+        echo "        -> these take the known-good start instead, so their seed sort is a"
+        echo "           different ranking; add the query to EXPERIMENT_QUERIES, or set"
+        echo "           CALIB_REQUIRE_SEED_QUERY=1 so prepare never selects them"
+        ;;
+      *) say_fail "could not check seed mode: $SEEDCHK" ;;
     esac
   fi
 fi

@@ -61,11 +61,147 @@ _VG_SCALE_TEXTS = {
     "umbrella": "an umbrella",
 }
 
+#: COCO-2017-val's 80 categories as **typed queries**.
+#:
+#: ``coco_val`` is assembled by ``build_coco_pickle.py`` and so is an experiment
+#: fixture, not a demo dataset - ``vtscore.eval.config.EVAL_DATASETS`` is
+#: asserted to hold only real demo datasets, so its query table has to live
+#: here.  Without one, ``_seed_query_text`` returns "" and the autopilot takes
+#: its *other* documented start (three random known-goods), which is the gap
+#: ``lessons/2026-08-26-the-harness-seeded-from-a-crop.md`` closed for
+#: ``vg_scale`` and explicitly left open here.  #3267 is a study **about the
+#: text sort**, so the gap is load-bearing rather than cosmetic.
+#:
+#: The text is what a user would plausibly type, not the raw label: COCO's
+#: category strings are terse ("tv", "remote", "skis") and several are ambiguous
+#: out of context ("mouse", "orange", "remote"), where a bare noun would rank a
+#: different concept and the study would measure the query rather than the
+#: opening.
+_COCO_TEXTS = {
+    "person": "a person",
+    "bicycle": "a bicycle",
+    "car": "a car on the street",
+    "motorcycle": "a motorcycle",
+    "airplane": "an airplane",
+    "bus": "a bus",
+    "train": "a train",
+    "truck": "a truck",
+    "boat": "a boat on the water",
+    "traffic light": "a traffic light",
+    "fire hydrant": "a fire hydrant",
+    "stop sign": "a stop sign",
+    "parking meter": "a parking meter",
+    "bench": "a bench",
+    "bird": "a bird",
+    "cat": "a cat",
+    "dog": "a dog",
+    "horse": "a horse",
+    "sheep": "a sheep",
+    "cow": "a cow",
+    "elephant": "an elephant",
+    "bear": "a bear",
+    "zebra": "a zebra",
+    "giraffe": "a giraffe",
+    "backpack": "a backpack",
+    "umbrella": "an umbrella",
+    "handbag": "a handbag",
+    "tie": "a person wearing a necktie",
+    "suitcase": "a suitcase",
+    "frisbee": "a frisbee",
+    "skis": "a pair of skis",
+    "snowboard": "a snowboard",
+    "sports ball": "a sports ball",
+    "kite": "a kite in the sky",
+    "baseball bat": "a baseball bat",
+    "baseball glove": "a baseball glove",
+    "skateboard": "a skateboard",
+    "surfboard": "a surfboard",
+    "tennis racket": "a tennis racket",
+    "bottle": "a bottle",
+    "wine glass": "a wine glass",
+    "cup": "a cup",
+    "fork": "a fork",
+    "knife": "a knife",
+    "spoon": "a spoon",
+    "bowl": "a bowl",
+    "banana": "a banana",
+    "apple": "an apple",
+    "sandwich": "a sandwich",
+    "orange": "an orange fruit",
+    "broccoli": "broccoli",
+    "carrot": "a carrot",
+    "hot dog": "a hot dog",
+    "pizza": "a pizza",
+    "donut": "a donut",
+    "cake": "a cake",
+    "chair": "a chair",
+    "couch": "a couch",
+    "potted plant": "a potted plant",
+    "bed": "a bed",
+    "dining table": "a dining table",
+    "toilet": "a toilet",
+    "tv": "a television screen",
+    "laptop": "a laptop computer",
+    "mouse": "a computer mouse",
+    "remote": "a tv remote control",
+    "keyboard": "a computer keyboard",
+    "cell phone": "a cell phone",
+    "microwave": "a microwave oven",
+    "oven": "an oven",
+    "toaster": "a toaster",
+    "sink": "a sink",
+    "refrigerator": "a refrigerator",
+    "book": "a book",
+    "clock": "a clock",
+    "vase": "a vase",
+    "scissors": "a pair of scissors",
+    "teddy bear": "a teddy bear",
+    "hair drier": "a hair dryer",
+    "toothbrush": "a toothbrush",
+}
+
+
 EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
     "vg_scale": {
         f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
     },
+    "coco_val": _COCO_TEXTS,
+    # The box-size bands are built from the FULL Visual Genome vocabulary, so
+    # their categories are VG's, not COCO's.  A band is a property of the cell -
+    # someone hunting a small bus and someone hunting a large one both type
+    # "a bus" - so the same text serves all three.
+    "vg_box_small": dict(_VG_SCALE_TEXTS),
+    "vg_box_medium": dict(_VG_SCALE_TEXTS),
+    "vg_box_large": dict(_VG_SCALE_TEXTS),
 }
+
+
+def seed_query_text(dataset: str, category: str) -> str:
+    """The text a user would type to find *category* in *dataset*, or "".
+
+    One implementation, read by three callers that must agree: ``run_cells.py``
+    (which seeds the run), ``prepare_data.py`` (which may filter selection to
+    categories that have one), and ``preflight.sh`` (which refuses to launch a
+    text-sort study whose cells would silently take the known-good start).  Two
+    copies of this lookup is how a preflight check comes to pass while the run
+    does something else.
+
+    :data:`EXPERIMENT_QUERIES` wins over the app's demo-dataset table so a
+    fixture can override, but neither is required.
+    """
+    local = EXPERIMENT_QUERIES.get(dataset) or {}
+    if category in local:
+        return local[category]
+
+    from vtscore.eval.config import EVAL_DATASETS  # noqa: PLC0415
+
+    info = EVAL_DATASETS.get(dataset)
+    if not info:
+        return ""
+    for query in info["queries"]:
+        if query.target_category == category:
+            return query.text
+    return ""
 
 
 DATASET_EMBEDDERS: dict[str, list[str]] = {
@@ -465,12 +601,44 @@ def select_categories_by_scale(
 #: ``"scale"`` forces banding; unset infers as before.
 CATEGORY_MODE = os.environ.get("CALIB_CATEGORY_MODE", "").strip().lower()
 
+#: Restrict category selection to categories that have a typed query (#3267).
+#:
+#: The autopilot's opening is a walk down the **seed sort**, and where that sort
+#: comes from is a property of the cell: with a query the app ranks by cosine to
+#: the typed text, without one it falls back to three random known-goods.  A
+#: study that sweeps the opening on a text sort cannot have half its cells on
+#: the other start - the arms' cuts are positions in a ranking, and the two
+#: rankings are not the same object.
+#:
+#: This filter runs BEFORE selection rather than after, so a dropped category is
+#: replaced by the next eligible one instead of shrinking the grid.  0 (the
+#: default) is the behaviour of every run before #3267.
+REQUIRE_SEED_QUERY = os.environ.get("CALIB_REQUIRE_SEED_QUERY", "0") == "1"
 
-def select_categories(medias: dict, category_counts: dict[str, int]) -> tuple[list[str], dict]:
+
+def select_categories(
+    medias: dict, category_counts: dict[str, int], dataset: str | None = None
+) -> tuple[list[str], dict]:
     """Scale-stratified when boxed, else prevalence-spread.
 
     ``CALIB_CATEGORY_MODE`` overrides the inference in either direction.
+    ``CALIB_REQUIRE_SEED_QUERY=1`` additionally drops categories with no typed
+    query *before* selecting, so the surviving grid is entirely text-seeded.
     """
+    dropped_no_query: list[str] = []
+    if REQUIRE_SEED_QUERY and dataset is not None:
+        eligible = {c: n for c, n in category_counts.items() if seed_query_text(dataset, c)}
+        dropped_no_query = sorted(set(category_counts) - set(eligible))
+        category_counts = eligible
+
+    selected, report = _select_categories_inner(medias, category_counts)
+    if REQUIRE_SEED_QUERY and dataset is not None:
+        report["require_seed_query"] = True
+        report["dropped_no_seed_query"] = dropped_no_query
+    return selected, report
+
+
+def _select_categories_inner(medias: dict, category_counts: dict[str, int]) -> tuple[list[str], dict]:
     if CATEGORY_MODE == "prevalence":
         return select_categories_by_prevalence(category_counts), {
             "mode": "prevalence",
