@@ -71,19 +71,34 @@ export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
 LOGS="$CALIB_EXP/logs"
 mkdir -p "$LOGS" "$CALIB_RESULTS/cells"
 
-# Sized from the array that actually ran this grid (job 539790, 324 tasks):
-# MaxRSS peaked at 8.73G, typical ~7G, on the dinov3_patch/max_patch cells that
-# dominate the memory profile. 64G was a guess carried over from a different
-# study and it is 7x the measured peak -- which is not free: memory is the
-# binding per-user quota here (cpu_limit, ~1074G), so an oversized --mem caps
-# concurrency and parks your own later jobs behind the array in
-# QOSMaxMemoryPerUser. 16G keeps ~2x headroom over the measured peak and stays
-# above preflight's 12G floor for patch cells.
-MEM="${CALIB_MEM:-16G}"
-CPUS="${CALIB_CPUS:-6}"
+# Sized from `size 0,72` on THIS configuration -- the text-seeded, paired grid --
+# rather than from an earlier one. A cell's cost moved when its opening did:
+# finding positives immediately means training on more of them, and the region
+# cell went from ~5 min typical (crop-seeded, job 549465) to 18m02s.
+#
+#   whole_image cell (index 0)   47s    MaxRSS 0.50 G   0.7 cores
+#   max_patch   cell (index 72)  18m02s MaxRSS 5.02 G   1.0 cores
+#
+# Two things follow, and both were wrong before:
+#
+# * 6 CPUs was waste. user+sys is 17m47s against 18m02s wall -- the cell is
+#   effectively SINGLE-THREADED, so the extra cores bought nothing and cost
+#   quota. `cpu_limit` is cpu=240, so 6 CPUs/task caps the array at 40 tasks;
+#   2 CPUs/task lifts that to 120 and lets memory be the binding constraint
+#   instead, which is the one that reflects real usage.
+# * 16G was 3.2x the measured peak. Memory is the other half of `cpu_limit`
+#   (~1074G), so an oversized --mem is a direct concurrency cut: 12G allows 89
+#   concurrent tasks where 16G allows 67. 12G keeps 2.4x headroom over the
+#   measured 5.02G AND is preflight check 7b's floor for patch cells, which
+#   exists because UNDER-sizing killed 74 of 108 cells in #3156.
+#
+# CONC 85 sits just under both caps (170 CPUs, 1020G) with margin for the
+# whole-image cells, which need 0.5G and hold a 12G slot regardless.
+MEM="${CALIB_MEM:-12G}"
+CPUS="${CALIB_CPUS:-2}"
 TIME="${CALIB_TIME:-6:00:00}"
 PARTITION="${CALIB_PARTITION:-cpu}"
-CONC="${CALIB_CONC:-24}"
+CONC="${CALIB_CONC:-85}"
 JOB_NAME="${CALIB_JOB_NAME:-scale-$(basename "$CALIB_EXP")}"
 
 ENVX="export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS"
