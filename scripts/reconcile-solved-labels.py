@@ -37,6 +37,30 @@ pointer naming a commit instead of a PR cannot be resolved here at all.
 Getting any of those subtly wrong silently corrupts both views above.
 Encoding it here makes it testable; see tests/core/test_reconcile_solved_labels.py.
 
+## The assignee half, and why it only ever removes
+
+Assignment carries a second status alongside the label: a session assigns the
+owner when it *starts* work on an issue, and takes them back off once the issue
+is solved (CLAUDE.md, "Assign the owner while you are working an issue"). So the
+open-issue queue reads:
+
+    is:issue is:open -label:solved             # nobody has solved this
+    is:issue is:open -label:solved no:assignee # ...and nobody is on it right now
+
+That second view is what stops two people picking up the same issue, and it
+only works if the assignee comes off again. Nothing observes the moment it
+should, which is the same gap that left `solved` unapplied for weeks -- hence
+this backstop.
+
+It reconciles in **one direction only**. An issue that is closed, or solved,
+must carry no assignee, and the script plans that removal. It never plans an
+*addition*, because from this input "nobody is working on it" and "a session
+started work on it a minute ago" are the same JSON: an unlabelled, unassigned
+issue. Guessing there would either evict a session mid-flight or fabricate work
+nobody is doing. For the same reason an issue whose label is ambiguous
+(`NEEDS REVIEW`) or whose fix fell through has its assignee left strictly
+alone -- the script has no opinion it can defend.
+
 ## Why it takes input instead of fetching
 
 The GitHub REST API is not reachable from a Claude session — `GITHUB_TOKEN` is
@@ -58,9 +82,13 @@ Input schema (unknown keys are ignored, so richer API payloads pipe in as-is):
       "abandoned_prs": [ {"number": 3155, "body": "... Closes #3090 ..."} ],
       "issues": [
         {"number": 3077, "state": "open", "labels": ["claude"],
+         "assignees": ["samggreenberg"],
          "comments": [ {"body": "Addressed in #3128"} ]}
       ]
     }
+
+`assignees` accepts either bare logins or the GitHub API's `{"login": ...}`
+objects, so both the MCP tools' output and a raw REST payload pipe in as-is.
 
 `release_prs` are the PRs merged into `dev` since the last release — the same
 `origin/main..origin/dev` window step 6 uses. `open_prs` are the PRs currently
@@ -191,6 +219,50 @@ def _sha_pointer(issue: dict) -> str | None:
     return None
 
 
+def _is_labelled(issue: dict) -> bool:
+    return SOLVED_LABEL in {str(item).strip().lower() for item in (issue.get("labels") or [])}
+
+
+def _is_open(issue: dict) -> bool:
+    return str(issue.get("state") or "open").lower() == "open"
+
+
+def _assignees(issue: dict) -> list[str]:
+    """Normalise an issue's assignees to logins.
+
+    The github MCP tools hand back bare strings (`["samggreenberg"]`) while the
+    REST API hands back objects (`[{"login": "samggreenberg"}]`); both forms
+    reach this script depending on who gathered the data, so both are accepted.
+    """
+    logins = []
+    for entry in issue.get("assignees") or []:
+        login = entry.get("login") if isinstance(entry, dict) else entry
+        if login:
+            logins.append(str(login))
+    return logins
+
+
+def _assignee_action(issue: dict, label_action: str, labelled: bool, is_open: bool) -> tuple[str, str]:
+    """Return (action, reason) for one issue's assignees. Action is unassign/none.
+
+    Removal only -- see the module docstring. The trigger is "this issue has no
+    problem-solving left in it", which is exactly the state the label already
+    encodes, so this reads that verdict rather than re-deriving it.
+    """
+    logins = _assignees(issue)
+    if not logins:
+        return "none", "no assignee"
+
+    who = ", ".join(f"@{login}" for login in logins)
+    if not is_open:
+        return "unassign", f"issue is closed but is still assigned to {who}"
+    if label_action == "add":
+        return "unassign", f"solved by this run's fix PR, but still assigned to {who}"
+    if labelled and label_action == "none":
+        return "unassign", f"already carries `{SOLVED_LABEL}` but is still assigned to {who}"
+    return "none", f"assigned to {who}; not solved, so the assignment stands"
+
+
 def _describe(pr_number: int, kind: str, issue_number: int) -> str:
     article = "open PR" if kind == "open" else "merged PR"
     return f"{article} #{pr_number} claims `Closes #{issue_number}`"
@@ -204,8 +276,8 @@ def _classify(
 ) -> tuple[str, str]:
     """Return (action, reason) for one issue. Action is add/remove/review/none."""
     number = issue.get("number")
-    labelled = SOLVED_LABEL in {str(item).strip().lower() for item in (issue.get("labels") or [])}
-    is_open = str(issue.get("state") or "open").lower() == "open"
+    labelled = _is_labelled(issue)
+    is_open = _is_open(issue)
 
     if not is_open:
         if labelled:
@@ -255,10 +327,17 @@ def reconcile(data: dict) -> dict[str, list[tuple[int, str]]]:
     live_numbers = {number for number, _, kind in prs if kind != DEAD_KIND}
     dead_numbers = {number for number, _, kind in prs if kind == DEAD_KIND}
 
-    plan: dict[str, list[tuple[int, str]]] = {"add": [], "remove": [], "review": [], "none": []}
+    plan: dict[str, list[tuple[int, str]]] = {"add": [], "remove": [], "review": [], "none": [], "unassign": []}
     for issue in data.get("issues") or []:
         action, reason = _classify(issue, closers, live_numbers, dead_numbers)
         plan[action].append((issue.get("number"), reason))
+
+        # Orthogonal to the label buckets: an issue can be `none` for its label
+        # (already correct) and still owe an assignee removal, so it lands in
+        # both rather than being moved out of one.
+        assignee_action, assignee_reason = _assignee_action(issue, action, _is_labelled(issue), _is_open(issue))
+        if assignee_action == "unassign":
+            plan["unassign"].append((issue.get("number"), assignee_reason))
     for bucket in plan.values():
         bucket.sort()
     return plan
@@ -269,6 +348,7 @@ def render(plan: dict[str, list[tuple[int, str]]]) -> str:
         ("add", f"ADD `{SOLVED_LABEL}`"),
         ("remove", f"REMOVE `{SOLVED_LABEL}`"),
         ("review", "NEEDS REVIEW (ambiguous — do not guess)"),
+        ("unassign", "CLEAR ASSIGNEE (solved or closed; nobody is working it)"),
     ]
     lines = ["", "solved-label reconciliation", "=" * 40]
     for key, heading in headings:
@@ -309,7 +389,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(render(plan))
 
-    if args.check and (plan["add"] or plan["remove"] or plan["review"]):
+    if args.check and (plan["add"] or plan["remove"] or plan["review"] or plan["unassign"]):
         return 1
     return 0
 
