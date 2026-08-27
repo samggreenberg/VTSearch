@@ -132,17 +132,61 @@ much more useful one than a false decimal.
 as the tables.** Prose plus a deep-regime table cannot show a curve's shape, a
 crossover, or how unlike the mean a single run is. At minimum:
 
-- the headline metric over the axis the user spends (votes / labels / time),
-  averaged over seeds, one line per arm, with a band — this is the figure that
-  answers "what do I get after 20 clicks?";
-- the same metric **broken out one line per run**, because a mean hides that
-  some runs never leave the floor, and the spread is usually the real finding;
+- **the quality-over-clicks pair** (see below) — mandatory for every simulated-user
+  study, no exceptions;
 - whatever axis the study's mechanism runs on (scale band, prevalence, κ …);
 - the binding constraint, if the study found one.
 
 Put them in the study's own `figures/` directory, PNG at ~130 dpi, embedded with
 a relative-path image link and a caption that says how to read the figure and what it does *not* license
 (averaging across prevalences, log axes, unpaired panels).
+
+### The quality-over-clicks pair (mandatory, and there is one implementation)
+
+**Any study that simulates a VTSearch user clicking owes two figures showing how
+good that user's detector is as they click more.** Not positives mined — that is
+what the *acquisition* did; an arm can mine well and rank badly. The metric is
+the one the ship decision reads (`cost`, and `average_precision` beside it),
+plotted against the axis the user actually spends:
+
+- **the averages** — one panel **per dataset**, one line **per arm**, averaged
+  over every seed and category on that dataset, with an inter-quartile band.
+  This is the figure someone reads to pick an arm.
+- **the individuals** — one file per dataset, one panel **per arm**, and inside
+  it **every seed of that arm on that dataset as its own line**. A mean hides
+  that some runs never leave the floor, and on this axis the spread is routinely
+  the finding: two arms with the same mean can be "every run is mediocre" and
+  "half the runs are excellent and half never start".
+
+Do **not** write this plotting code again. `scripts/experiments/calibration/curves.py`
+is the single implementation — `curves.quality_vs_clicks(main, figdir, arms=…,
+denominator=…, baseline=…)` — so that the figure a reader learns to read in one
+report is literally the same figure in the next one. It also has a CLI, for
+regenerating a finished study's curves without redoing its analysis.
+`selftest_curves.py` is its planted-answer test.
+
+Three things it enforces, each of which is how one of these figures lies:
+
+- **Click 0 is the zero-click text sort, and it is not optional.** There is no
+  measurable detector at the far left, so the tempting thing is to start the
+  axis at the first trainable click — which throws away the comparison that
+  decides whether the loop is worth anything at all. Typing a query and reading
+  the ranked haystack is **free**; that is the number the clicked detector has
+  to beat. Anchor every curve at `t=0` on the cell's own text-sort quality
+  (`text_baseline.py` computes it, keyed by cell), carry it across the panel as
+  a reference line, and report the **crossover** — the first click at which the
+  arm is worth more than the query. An arm that never crosses must say `never`.
+  The left end is then "what typing got me", the right end is "what clicking got
+  me", and the distance between them is the study's whole subject.
+- **The denominator, drawn.** The metric frame starts at the first *trainable*
+  step, so a cell that never found both classes contributes no rows and silently
+  leaves the average. An arm starving on a third of its grid then gets its mean
+  computed over the two thirds that worked — and looks *better* for it. Pass the
+  cell list as `denominator`, and the figure carries a coverage strip plus a
+  dashed-where-partial rule so no level is quoted off a subset by accident.
+- **No silent subsampling.** If the per-run panel is capped, the cap goes in the
+  panel title. A hairball with a third of its lines removed reads as a tighter
+  arm, not a truncated figure.
 
 **Show the errors themselves, not just the error rate.** Any claim about a
 *kind* of mistake ("it over-includes on scene categories") owes literal

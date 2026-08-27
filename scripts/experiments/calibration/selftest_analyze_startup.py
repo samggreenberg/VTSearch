@@ -116,6 +116,30 @@ def _write_arm(root: Path, arm: str, *, starved_cells: int = 0) -> None:
             idx += 1
 
 
+#: The free text sort, planted worse than every arm's cost so that every arm
+#: crosses it.
+TEXT_COST = 0.30
+
+
+def _write_text_baseline(path: Path) -> Path:
+    """A ``text_baseline.py``-shaped CSV covering every planted cell."""
+    rows = [
+        {
+            "dataset": "ds",
+            "embedder": "siglip",
+            "category": f"cat{cat}",
+            "seed": seed,
+            "supports_text": 1,
+            "text_cost": TEXT_COST,
+            "text_AP": 0.40,
+        }
+        for cat in range(N_CAT)
+        for seed in range(N_SEED)
+    ]
+    pd.DataFrame(rows).to_csv(path, index=False)
+    return path
+
+
 def _check(label: str, ok: bool, detail: str = "") -> bool:
     print(f"  {'PASS' if ok else 'FAIL'}  {label}{(' - ' + detail) if detail and not ok else ''}")
     return ok
@@ -127,6 +151,10 @@ def main() -> int:
         root = tmp / "results"
         for arm in A.ARMS:
             _write_arm(root, arm, starved_cells=3 if arm == "deep_first" else 0)
+        # The zero-click anchor the quality curves are drawn against.  Planted
+        # WORSE than every arm's cost, so every arm must cross it - an anchor
+        # the analyzer failed to wire through shows up as a curve with no t=0.
+        A.TEXT_BASELINE = str(_write_text_baseline(tmp / "text_baseline.csv"))
         summary = A.analyze(root, tmp / "analysis")
 
         ok = True
@@ -180,6 +208,35 @@ def main() -> int:
         report = (tmp / "analysis" / "REPORT_startup.md").read_text()
         ok &= _check("report names every arm", all(f"`{a}`" in report for a in A.ARMS))
         ok &= _check("report flags the stuck lever", "**no**" in report)
+
+        # 7. The standard quality-over-clicks figures, and the wiring that
+        #    makes them honest.
+        figdir = tmp / "analysis" / "figures"
+        ok &= _check(
+            "the standard cost-over-clicks pair is emitted",
+            (figdir / "cost_vs_clicks.png").exists() and (figdir / "cost_vs_clicks_runs__ds.png").exists(),
+            str(sorted(f.name for f in figdir.glob("*.png"))),
+        )
+        curve = pd.read_csv(figdir / "cost_vs_clicks.csv")
+        ok &= _check(
+            "the curve is anchored at click 0 on the text sort",
+            int(curve["t"].min()) == 0 and bool(np.allclose(curve.loc[curve["t"] == 0, "mean"], TEXT_COST)),
+            str(curve.loc[curve["t"] == 0, "mean"].unique()),
+        )
+        # THE wiring check: the analyzer must hand `curves` its own cell list as
+        # the denominator, or the starving arm's mean is drawn over the cells
+        # that worked and reads as a full-coverage curve.
+        starved = curve[(curve["arm"] == A.FALSIFIER) & (curve["t"] > 0)]
+        healthy = curve[(curve["arm"] == A.CONTROL) & (curve["t"] > 0)]
+        ok &= _check(
+            "the starving arm's coverage stays below the healthy arm's",
+            starved["coverage"].max() < healthy["coverage"].max(),
+            f"{starved['coverage'].max():.3f} vs {healthy['coverage'].max():.3f}",
+        )
+        ok &= _check(
+            "the report says how many clicks it takes to beat the text sort",
+            "clicks to beat it" in report and bool(summary.get("crossover", {}).get("cost")),
+        )
 
         print("\nSELFTEST", "PASSED" if ok else "FAILED")
         return 0 if ok else 1
