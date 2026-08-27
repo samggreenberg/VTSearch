@@ -96,7 +96,12 @@ def main() -> int:
         key = (int(v["image_id"]), v["class"])
         ruled.add(key)
         band = _cell_band(cells.get(key, ""))
-        if v["stratum"] in ("boundary", "random", "flag", "audit"):
+        # Any stratum that reviews a current NEGATIVE folds in here. Listing
+        # them explicitly means a new stratum is ignored rather than
+        # mishandled -- safe, but silent, so the list has to be updated when one
+        # is added. `redef*` came from re-reviewing a class whose definition
+        # changed (`make_definition_reslate.py`).
+        if v["stratum"] in ("boundary", "random", "flag", "audit", "redef", "redef_fresh"):
             if v["human"] == "present":
                 box = v.get("box")
                 out[key] = {
@@ -141,6 +146,8 @@ def main() -> int:
                 stats["rejection_overturned"] += 1
             else:
                 stats["rejection_unadjudicated"] += 1
+            continue
+        stats[f"IGNORED_unknown_stratum:{v['stratum']}"] += 1
 
     # --- triage flags: contaminated negatives, no boxes, so they exclude
     if Path(args.triage).exists():

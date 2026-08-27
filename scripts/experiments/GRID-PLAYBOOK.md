@@ -192,7 +192,21 @@ Measured peaks for the calibration harness (#3129):
 | whole-image, 12k set | 12k | ~3 GB | 8G |
 | `max_patch` (dinov3, 4–5k) | 4–5k | ~13–14 GB | 24G |
 | `max_patch` (dinov3, 12k) | 12k | ~14 GB | 24G |
+| `max_patch` (dinov3, `vg_scale`) | 7.7k | ~9.1 GB | 16G |
 | prepare (loads every pickle) | — | ~3.4 GB | 24G |
+
+`vg_scale` peaks *lower* than the 4–5k sets above despite holding more medias,
+because its cells are designated: three-valued labels cut each cell's evaluable
+pool to 4,000, and the working set is the cell, not the pickle. Do not read that
+as "patch cells got cheaper" — read it as "measure the cell you are about to
+run", which is the whole point of this table.
+
+**Size from a cell of the same KIND, and check the kind is the one you meant.**
+A `dinov3` cell that has silently fallen back to `whole_image` peaks near 4 GB
+and finishes in the same two minutes as a `siglip` cell — it looks like a
+perfectly good patch measurement and is not one (#3156: 74 of 108 cells then
+died at a `--mem` sized from it). `styles=` in the harness's own resolution
+output is the thing to read, not the runtime.
 
 Two QOS can bind and they disagree: `squeue %q` reports the association QOS
 while the partition carries its own. Read both and use the tightest —

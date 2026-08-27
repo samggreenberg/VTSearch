@@ -27,6 +27,7 @@ MODE_CONTRAST=""
 REUSE_PREPARE=""
 JOB_NAME=""
 MEM_PER_TASK=""
+HAS_PATCH_CELLS=0
 CONC=""
 DIVERGES="${PREFLIGHT_DIVERGES:-}"
 
@@ -43,6 +44,7 @@ while [[ $# -gt 0 ]]; do
     --job-name) JOB_NAME="$2"; shift 2 ;;
     --diverges) DIVERGES="$2"; shift 2 ;;
     --mem) MEM_PER_TASK="$2"; shift 2 ;;
+    --patch) HAS_PATCH_CELLS=1; shift ;;
     --conc) CONC="$2"; shift 2 ;;
     --warn-only) WARN_ONLY=1; shift ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
@@ -53,7 +55,7 @@ done
   echo "                    [--require-region-voting DATASET:EMBEDDER]" >&2
   echo "                    [--require-text-seed]      # every cell must seed from a TYPED QUERY" >&2
   echo "                    [--reuse-prepare RESULTS_DIR]" >&2
-  echo "                    [--job-name NAME] [--mem 64G] [--conc N]" >&2
+  echo "                    [--job-name NAME] [--mem 64G] [--conc N] [--patch]" >&2
   echo "                    [--diverges knob1,knob2]   # knobs this study MEANS to pin off-production" >&2
   exit 2
 }
@@ -64,6 +66,21 @@ say_fail() {
 }
 say_ok() { echo "  ok    $*"; }
 say_note() { echo "  note  $*"; }
+
+# Memory strings ("14G", "900M") to MB.  Defined up here beside the other
+# helpers because bash resolves a function only once execution reaches its
+# definition: while this lived further down, the patch-memory check above it
+# called an undefined name, `mem_mb` came back empty, and `(( "" < 12288 ))`
+# evaluated the empty string as 0 -- so a correctly-sized `--mem 14G` was
+# reported as "(< 12G)".  The gate failed closed, which is the safe direction,
+# but it failed for a reason its own message contradicted.
+_to_mb() {
+  local v="${1^^}"; local n="${v%[GMT]*}"
+  case "$v" in *T) awk "BEGIN{print $n*1024*1024}";;
+                *G) awk "BEGIN{print $n*1024}";;
+                *M) echo "$n";;
+                *)  echo "$n";; esac
+}
 
 echo "preflight: $EXP"
 
@@ -362,6 +379,24 @@ PY
   esac
 fi
 
+# --- 7b. A region-voting cell needs region-voting memory ---------------------
+# A max_patch cell carries the patch grid and max-pools over it; measured peaks
+# are 9-14 GB depending on pool size (GRID-PLAYBOOK.md).  Sizing such an array
+# from a whole-image cell is not a near miss -- it is a different order of
+# magnitude, and the failure arrives as OUT_OF_MEMORY on most of the arm after
+# the array has been running long enough to look healthy (#3156: 74 of 108).
+if [[ "$HAS_PATCH_CELLS" == "1" && -n "$MEM_PER_TASK" ]]; then
+  mem_mb=$(_to_mb "$MEM_PER_TASK")
+  if (( mem_mb < 12288 )); then
+    say_fail "patch cells requested with --mem $MEM_PER_TASK (< 12G)"
+    echo "        -> measured max_patch peaks are 9-14 GB; see GRID-PLAYBOOK.md"
+    echo "        -> size from a cell that actually resolved to a patch style,"
+    echo "           not from one that fell back to whole_image"
+  else
+    say_ok "patch cells with --mem $MEM_PER_TASK (measured peaks 9-14 GB)"
+  fi
+fi
+
 # --- 8. Your own per-user memory allowance ----------------------------------
 # The cluster caps MEMORY per user, not only CPU.  An array that claims the whole
 # allowance does not fail - it just parks every later job of YOUR OWN behind it in
@@ -372,13 +407,6 @@ fi
 # Size memory from a real cell's MaxRSS, not from a round number:
 #   sacct -j <jobid> --format=JobID,MaxRSS,Elapsed
 if [[ -n "$MEM_PER_TASK" && -n "$CONC" ]]; then
-  _to_mb() {
-    local v="${1^^}"; local n="${v%[GMT]*}"
-    case "$v" in *T) awk "BEGIN{print $n*1024*1024}";;
-                  *G) awk "BEGIN{print $n*1024}";;
-                  *M) echo "$n";;
-                  *)  echo "$n";; esac
-  }
   req_mb=$(awk "BEGIN{print $(_to_mb "$MEM_PER_TASK") * $CONC}")
   # Two QOS can bind and they disagree: the job's association QOS and the
   # partition's.  In #3129 `squeue %q` said 4gpu_tier while the cpu partition

@@ -1,4 +1,4 @@
-# 2026-08-24 — a rebuild silently retired the images a human had just reviewed
+# 2026-08-24 — a rebuild silently retired the images a human had just reviewed (#3156)
 
 **Cost:** ~1 hour of the owner's labelling and a full model triage pass (2,698
 tiles) were inert for a day, and were only recovered because the selection was
