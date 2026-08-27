@@ -67,10 +67,12 @@ if [[ "$MODE" == "curves" ]]; then
   echo
   echo "figures -> $OUT/figures"
   ls -1 "$OUT/figures"/*_vs_clicks*.png 2>/dev/null
+  ls -lh "$OUT/viewer.html" 2>/dev/null
   echo
   echo "To land these in the repo's report, copy them back and commit:"
   echo "  rsync -av --include='*_vs_clicks*.png' --exclude='*' \\"
   echo "    grid:$OUT/figures/ docs/experiments/good-mining-3267/figures/"
+  echo "  scp grid:$OUT/viewer.html docs/experiments/good-mining-3267/viewer.html"
   echo "  cp $OUT/REPORT_startup.md docs/experiments/good-mining-3267/REPORT_generated.md"
   echo "report -> $OUT/REPORT_startup.md"
   exit 0

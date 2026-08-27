@@ -300,7 +300,40 @@ would otherwise have its mean computed over the two thirds that worked and look
 *better* for it. The mean is dashed wherever it describes fewer than 95% of the
 arm's cells; only a solid segment is a level worth quoting.
 
-To redraw them without re-running the analysis:
+### The interactive viewer
+
+`analyze_startup.py` also writes `viewer.html` — a single self-contained page
+carrying **every** slice of the run, which the report links to. The PNGs above
+answer the questions the analyzer asked; the viewer is what lets a reader ask
+their own without a re-run.
+
+| Control | Choices |
+|---|---|
+| dataset | one, all (averaged), or each (its own line or panel) |
+| category | one, all (averaged), or each |
+| embedder | any non-empty subset — **one panel each, never averaged** |
+| arms | any subset |
+| seeds | averaged, or every seed its own line |
+| metric | cost, precision, recall, F1, FPR, FNR, average precision, AUROC |
+
+Hue is assigned to whichever dimension is actually being compared — the first
+varying one among arm → category → dataset that has at most 8 values — and every
+other varying dimension becomes a panel. The legend states which, in words. A
+dimension with more values than the palette's 8 validated slots folds into small
+multiples rather than getting invented hues.
+
+The per-seed payload is packed to a byte budget by coarsening the *click* axis,
+never by dropping runs or metrics, and the page says which grid it got. Build it
+standalone with:
+
+```bash
+python viewer.py --results "$CALIB_EXP/results" \
+  --arms prod,top_long,easy_med_hard,band_wide,incl_k,incl_k_wide,flat_mid,deep_first \
+  --baseline "$OUT/text_baseline.csv" --out "$OUT/viewer.html"
+python selftest_viewer.py     # planted-answer check on the codec and the pooling
+```
+
+To redraw the PNGs without re-running the analysis:
 
 ```bash
 python curves.py --results "$CALIB_EXP/results" \

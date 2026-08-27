@@ -134,6 +134,8 @@ crossover, or how unlike the mean a single run is. At minimum:
 
 - **the quality-over-clicks pair** (see below) — mandatory for every simulated-user
   study, no exceptions;
+- **the interactive viewer** (see below) — likewise mandatory, and linked from the
+  report;
 - whatever axis the study's mechanism runs on (scale band, prevalence, κ …);
 - the binding constraint, if the study found one.
 
@@ -187,6 +189,60 @@ Three things it enforces, each of which is how one of these figures lies:
 - **No silent subsampling.** If the per-run panel is capped, the cap goes in the
   panel title. A hairball with a third of its lines removed reads as a tighter
   arm, not a truncated figure.
+
+### The interactive viewer (mandatory, and there is one implementation)
+
+Two PNGs answer the questions the *analyzer* asked. They cannot answer the ones
+a reader has after reading it — *"does that hold on the other dataset?"*, *"is it
+the scarce categories doing all the work?"*, *"does it survive on recall, or only
+on cost?"* — because each is a different slice, and a PNG is one slice chosen in
+advance. Every simulated-user study therefore also ships
+`scripts/experiments/calibration/viewer.py`'s output, `viewer.html`, in its own
+directory, linked from the first section of the report. It carries every slice:
+
+| Control | Choices |
+|---|---|
+| dataset | one, **all** (averaged), or **each** (a line/panel per dataset) |
+| category | one, **all** (averaged), or **each** |
+| embedder | any non-empty subset — **one panel each, never averaged** |
+| arms | any subset |
+| seeds | averaged, or every seed its own line |
+| metric | every metric the run emitted |
+
+Four rules it enforces, none of which is optional:
+
+- **Hue means whatever the reader is comparing, and it is stated.** Three
+  dimensions can vary — arm, category, dataset. The first varying one (in that
+  order) with at most 8 values takes hue; every other varying one becomes a
+  panel. A ninth hue is never invented: a dimension with more values than the
+  palette has validated slots folds into small multiples instead. The legend
+  says *"Colour = arm · one panel per embedder × category"* in as many words,
+  because a legend that only lists values leaves the reader guessing which
+  dimension they are looking at. Colour follows the value's position in the
+  **study**, never in the current selection, so deselecting a series does not
+  repaint the survivors.
+- **Embedders are never averaged.** Two embedders are two representations of the
+  haystack and their mean describes no system anyone could run. Faceting makes
+  that structural rather than a rule someone has to remember.
+- **Pooling is weighted by the cells that contributed**, not a mean of means —
+  the payload stores `n` beside the moments so "all categories" is exact. The
+  two differ exactly when one category trained on fewer cells, which is the
+  survivorship the coverage strip exists to expose.
+- **Nothing is thinned in silence.** The per-seed payload is packed to a byte
+  budget by coarsening the *click* axis — never by dropping runs or metrics —
+  and the page says which grid it landed on. If it cannot fit, per-seed mode is
+  disabled with the reason on screen.
+
+`selftest_viewer.py` is its planted-answer test: it checks the codec round-trip,
+the weighted pooling against a hand-computed answer, the click-0 anchor, and the
+budget note.
+
+**The metrics come from the harness, not from the viewer.** `cost`, `precision`,
+`recall`, `f1`, `fpr`, `fnr`, `average_precision` and `auroc` are emitted by
+every run through `vtscore.eval.calibration_metrics.detection_metrics` and
+`DETECTION_METRICS`, which also carries each metric's label and *direction*. A
+report or viewer that decides for itself which way is "better" is how "lower is
+better" gets attached to recall. If you add a metric, add it there.
 
 **Show the errors themselves, not just the error rate.** Any claim about a
 *kind* of mistake ("it over-includes on scene categories") owes literal

@@ -21,6 +21,15 @@ typing was worth and the far right is what clicking was worth. One
 implementation, [`scripts/experiments/calibration/curves.py`](../../scripts/experiments/calibration/curves.py);
 do not write it again.
 
+**…and it owes an interactive `viewer.html`, linked from the report.** The PNGs
+answer the questions the analyzer asked; the viewer is what lets a reader ask
+their own — any dataset (one / all / each), any category (one / all / each), any
+subset of arms, any subset of embedders (one panel each, never averaged), seeds
+averaged or every seed, and any metric the run emitted (cost, precision, recall,
+F1, FPR, FNR, average precision, AUROC). Built by
+[`scripts/experiments/calibration/viewer.py`](../../scripts/experiments/calibration/viewer.py)
+from the same CSVs as everything else, self-contained, no network.
+
 **The other archives.** [`docs/reports/`](../reports/) holds standalone HTML study
 pages (narrative write-ups with inlined charts — see [its
 index](../reports/README.md)); [`docs/plans/`](../plans/) holds work still owed.

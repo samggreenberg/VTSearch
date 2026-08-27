@@ -47,6 +47,7 @@ common.setup_env()
 import curves  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
+import viewer as viewer_mod  # noqa: E402
 
 import analyze_spikes as sp  # noqa: E402  (reuse the #2847 loader)
 
@@ -950,6 +951,18 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
             lines.append(
                 f"| `{row['arm']}` | {row['dataset']} | {row['baseline']:.3g} | {row['final']:.3g} | {crossed} |"
             )
+    if (outdir / "viewer.html").exists():
+        lines += [
+            "",
+            "## The interactive viewer",
+            "",
+            "[`viewer.html`](viewer.html) carries **every** slice of this run, not the handful the",
+            "figures below happen to show: one dataset or all of them, one category or each of them,",
+            "any subset of arms, seeds averaged or every seed as its own line, and any metric the run",
+            "emitted (cost, precision, recall, F1, FPR, FNR, average precision, AUROC). Open it when",
+            "the answer you want is a slice this report did not think to plot.",
+            "",
+        ]
     sheets = sorted(f for f in figures if f.startswith("opening_") and f.endswith(".jpg"))
     figures = [f for f in figures if f not in sheets]
     # The cost-over-clicks pair leads: it is the figure that answers the
@@ -1066,6 +1079,29 @@ def analyze(root: Path, outdir: Path) -> dict:
     elif TEXT_BASELINE:
         print(f"WARNING: GM_TEXT_BASELINE={TEXT_BASELINE!r} does not exist - curves will have no zero-click anchor")
     figures = make_figures(picks, opening, outdir / "figures", prevalence_table(root), traj, main, baseline)
+    # The interactive viewer, which every simulated-user report links to.  The
+    # PNGs answer the questions this analyzer asks; the viewer is what lets a
+    # reader ask their own - a different dataset, a single category, recall
+    # instead of cost - without waiting on a re-run.
+    if not main.empty:
+        try:
+            vp = viewer_mod.build_viewer(
+                main,
+                outdir / "viewer.html",
+                arms=ARMS,
+                denominator=opening if not opening.empty else None,
+                baseline=baseline,
+                title="Good Mining (#3267) — quality over clicks",
+                subtitle=(
+                    f"{summary['n_main_rows']} metric rows over "
+                    f"{(summary.get('balance') or {}).get('cells_complete', '?')} balanced cells, "
+                    f"{len(ARMS)} arms. Click 0 is the zero-click text sort."
+                ),
+            )
+            print(f"viewer -> {vp} ({vp.stat().st_size / 1e6:.2f} MB)")
+        except Exception as exc:  # noqa: BLE001
+            # A viewer that fails to build must not cost the run its tables.
+            print(f"WARNING: viewer build failed ({exc}); tables and figures are unaffected")
     # How many clicks each arm needs before it is worth more than the free text
     # sort.  Read off the same curves the figure plots, so the number in the
     # table and the crossing in the picture cannot disagree.

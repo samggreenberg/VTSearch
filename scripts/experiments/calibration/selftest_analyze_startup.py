@@ -238,6 +238,11 @@ def main() -> int:
             "clicks to beat it" in report and bool(summary.get("crossover", {}).get("cost")),
         )
 
+        # 8. The interactive viewer, and the link the report owes it.
+        vp = tmp / "analysis" / "viewer.html"
+        ok &= _check("the interactive viewer is built", vp.exists() and vp.stat().st_size > 5000)
+        ok &= _check("the report links it", "](viewer.html)" in report)
+
         print("\nSELFTEST", "PASSED" if ok else "FAILED")
         return 0 if ok else 1
     finally:
