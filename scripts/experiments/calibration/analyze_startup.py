@@ -201,7 +201,13 @@ def opening_stats(picks: pd.DataFrame) -> pd.DataFrame:
             # An opening that never produced both classes: the harness kept
             # voting past the schedule to get a trainable pair.  A non-zero
             # count is a finding about that arm's opening, not noise.
-            open_overrun=int(max(0, len(op) - _declared_clicks(g))),
+            # Clicks the arm spent as WRITTEN, and clicks it was held past the
+            # schedule for want of a trainable pair.  Kept apart because only
+            # the first is the arm's design: `flat_mid` is the length-matched
+            # control and stops being one the moment it overruns.
+            open_scheduled_clicks=int(_scheduled(op).sum()) if len(op) else 0,
+            open_overrun=int((~_scheduled(op)).sum()) if len(op) else 0,
+            open_starved=bool(len(op) and int(op["picked_label"].sum()) == 0),
             trained_at=int(g.loc[g["phase"].astype(str).isin(("hard", "new", "done")), "t"].min())
             if g["phase"].astype(str).isin(("hard", "new", "done")).any()
             else -1,
@@ -213,19 +219,23 @@ def opening_stats(picks: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(out)
 
 
-def _declared_clicks(g: pd.DataFrame) -> int:
-    """How many opening clicks the arm's schedule *asked* for.
+def _scheduled(op: pd.DataFrame) -> pd.Series:
+    """Per click: was it spent as the schedule was WRITTEN (not held past it)?
 
-    Read off the pick log rather than re-parsing the spec, so an arm whose
-    rounds were cut short by a small pool is measured as it ran.
+    Read from the harness's own ``startup_held`` column.  This was previously
+    reconstructed from the round indices, and the reconstruction was a no-op -
+    it subtracted ``min(count_of_last_round, len(rounds))``, which is just
+    ``count_of_last_round``, so the overrun it computed was identically zero
+    and an arm that burned its whole horizon waiting for a first positive
+    reported an opening exactly as long as it had asked for.  The state was
+    never derivable from the round indices; it is now recorded.
     """
-    rounds = g[g["startup_round"] >= 0]
-    if rounds.empty:
-        return int(len(g[g["phase"].astype(str).isin(("good", "bad"))]))
-    # Every click in a round the trajectory genuinely entered, minus the ones
-    # spent held on the last round waiting for the missing vote class.
-    last = int(rounds["startup_round"].max())
-    return int((rounds["startup_round"] < last).sum() + min((rounds["startup_round"] == last).sum(), len(rounds)))
+    if "startup_held" not in op.columns:
+        # A pick log from before the column existed.  Say so rather than
+        # inventing zeros: silently reporting "no overrun" is the failure this
+        # replaced.
+        return pd.Series(np.nan, index=op.index, dtype="float64").notna()
+    return ~op["startup_held"].fillna(False).astype(bool)
 
 
 # ---------------------------------------------------------------------------

@@ -201,7 +201,10 @@ def render_arm(
         ax.set_title(
             f"t={int(r['t'])} {'GOOD' if hit else 'bad'}\n"
             f"round {rnd if rnd >= 0 else '-'} · rank {int(r['picked_seed_rank'])}"
-            f" ({float(r['picked_seed_percentile']):.1f}%)",
+            # `picked_seed_percentile` is a FRACTION of the sort (0 = top), not
+            # a percent, whatever the name says - read it off a pick log before
+            # trusting either.
+            f" ({100.0 * float(r['picked_seed_percentile']):.1f}%)",
             fontsize=7,
             color=("#1a7f37" if hit else "#b91c1c"),
         )
@@ -216,7 +219,7 @@ def render_arm(
     fig.tight_layout(rect=(0, 0, 1, 0.93))
     out.mkdir(parents=True, exist_ok=True)
     p = out / f"opening_{dataset}_{category.replace(' ', '-')}_s{seed}_{arm}.jpg"
-    fig.savefig(p, dpi=130, quality=88)
+    fig.savefig(p, dpi=130, pil_kwargs={"quality": 88})
     plt.close(fig)
     print(f"  wrote {p.name}  ({n_pos}/{n} positive)")
     return p

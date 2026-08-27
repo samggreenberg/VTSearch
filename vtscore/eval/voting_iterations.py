@@ -244,6 +244,14 @@ _PICK_COLUMNS: tuple[str, ...] = (
     #: acquisition cut it was picked against.  NaN before a model exists.
     "picked_detector_score",
     "acq_threshold",
+    #: Whether this click was spent PAST the written schedule, held on its last
+    #: round because one vote class was still empty.  An arm's opening is only
+    #: as long as it was written where this is False, so it is what makes a
+    #: length-matched control actually length-matched - and a cell whose whole
+    #: horizon is held is total Good-starvation, the phenomenon #3267 is about.
+    "startup_held",
+    #: How many such clicks have been spent so far in this trajectory.
+    "startup_extended_clicks",
     #: Running vote totals **after** this click.
     "n_good",
     "n_bad",
@@ -3347,6 +3355,8 @@ def simulate_voting_iterations(  # noqa: C901
                     "t": t,
                     "phase": phase or "",
                     "startup_round": startup_round,
+                    "startup_held": bool(startup_state.held_for_quorum) if startup_state is not None else False,
+                    "startup_extended_clicks": int(startup_state.extended_clicks) if startup_state is not None else 0,
                     "startup_cut": _r(startup_cut) if startup_cut is not None else float("nan"),
                     "startup_cut_percentile": (
                         _sorted_percentile(seed_sorted_scores, startup_cut) if startup_cut is not None else float("nan")
