@@ -125,6 +125,12 @@ def _prepare_pair(ds: str, emb_name: str, info: dict) -> None:
 
     from _cells_io import dump_medias, load_medias  # noqa: PLC0415
 
+    # A paired arm (`siglip+dinov3_patch`) prepares the LEARN half: that is the
+    # pickle its cells load and the space its detector lives in.  The text half
+    # contributes only the opening, so it needs no crops and no selection - but
+    # it does need to EXIST, and to cover the same medias, or every cell will
+    # die one at a time deep inside the array instead of here, once.
+    learn_name = cfg.learn_embedder(emb_name)
     pkl = _loader.EMBEDDINGS_DIR / cfg.pickle_name(ds, emb_name)
     crops_np = common.RESULTS / "crops" / f"{cfg.crops_basename(ds, emb_name)}.npz"
     crops_js = crops_np.with_suffix(".json")
@@ -138,21 +144,37 @@ def _prepare_pair(ds: str, emb_name: str, info: dict) -> None:
         with common.timed(f"load_cache:{ds}:{emb_name}", timings):
             medias = load_medias(pkl)
     else:
-        common.log(f"\n=== {ds} x {emb_name} === (embedding fresh)")
-        if emb_name.startswith("dinov3") and not os.environ.get("HF_TOKEN"):
-            common.log(f"SKIPPING {emb_name}: HF_TOKEN not set (DINOv3 weights are licence-gated).")
+        common.log(f"\n=== {ds} x {emb_name} === (embedding fresh as {learn_name})")
+        if learn_name.startswith("dinov3") and not os.environ.get("HF_TOKEN"):
+            common.log(f"SKIPPING {learn_name}: HF_TOKEN not set (DINOv3 weights are licence-gated).")
             info.setdefault("failed", []).append(f"{ds}:{emb_name}")
             return
         from vtscore.datasets.loader_demo import load_demo_dataset  # noqa: PLC0415
         from vtscore.datasets.stages.embedding import embed_missing  # noqa: PLC0415
         from vtscore.media import get_embedder  # noqa: PLC0415
 
-        embedder = get_embedder(emb_name)
+        embedder = get_embedder(learn_name)
         with common.timed(f"load:{ds}:{emb_name}", timings):
-            load_demo_dataset(ds, medias, embedder_name=emb_name)
-            embed_missing(medias, emb_name)
+            load_demo_dataset(ds, medias, embedder_name=learn_name)
+            embed_missing(medias, learn_name)
         nbytes = dump_medias(medias, pkl)
         common.log(f"  wrote cell pickle {pkl.name}: {nbytes / 1e6:.0f} MB")
+
+    text_pickle = None
+    if cfg.is_paired(emb_name):
+        text_pkl = _loader.EMBEDDINGS_DIR / cfg.text_pickle_name(ds, emb_name)
+        if not text_pkl.exists():
+            raise FileNotFoundError(f"{emb_name}: text half's pickle {text_pkl.name} does not exist")
+        text_medias = load_medias(text_pkl)
+        missing = set(medias) - set(text_medias)
+        if missing:
+            raise ValueError(
+                f"{emb_name}: {text_pkl.name} is missing {len(missing)} of {len(medias)} medias "
+                f"(e.g. {sorted(missing)[:5]}); the opening would rank a different set than the run walks"
+            )
+        text_pickle = text_pkl.name
+        common.log(f"  paired opening: {text_pkl.name} covers all {len(medias)} medias")
+        del text_medias
 
     cats = _category_counts(medias)
     selected, sel_report = cfg.select_categories(medias, cats, dataset=ds)
@@ -204,6 +226,9 @@ def _prepare_pair(ds: str, emb_name: str, info: dict) -> None:
         "selected_categories": selected,
         "category_selection": sel_report,
         "reused_pickle": pkl.exists() and embedder is None,
+        "learn_embedder": learn_name,
+        "text_embedder": cfg.text_embedder(emb_name),
+        "text_pickle": text_pickle,
         "load_seconds": timings.get(f"load:{ds}:{emb_name}") or timings.get(f"load_cache:{ds}:{emb_name}"),
         "crops_seconds": timings.get(f"crops:{ds}:{emb_name}"),
         "pickle": cfg.pickle_name(ds, emb_name),

@@ -34,7 +34,11 @@ from pathlib import Path
 BANDS = ("small", "medium", "large")
 BAND_COLORS = {"small": "#c2410c", "medium": "#0f766e", "large": "#3730a3"}
 MODE_COLORS = {
-    "dinov3_patch/max_patch": "#7c3aed",
+    # The region arm is the SigLIP+DINOv3 pair since #3276; the bare-DINOv3 key
+    # stays so a figure re-made from an older grid keeps its colour and the two
+    # are not confusable across reports.
+    "siglip+dinov3_patch/max_patch": "#7c3aed",
+    "dinov3_patch/max_patch": "#a78bfa",
     "siglip/whole_image": "#0891b2",
     "siglip2_l/whole_image": "#b45309",
 }

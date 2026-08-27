@@ -49,6 +49,65 @@ def _seed_query_text(ds: str, cat: str) -> str:
     return cfg.seed_query_text(ds, cat)
 
 
+def _text_seed_vectors(ds: str, emb: str, medias: dict) -> tuple[dict, str]:
+    """``(medias_to_rank, provenance)`` for the opening's cosine sort.
+
+    For an ordinary embedder that is the cell's own medias -- one pickle, one
+    space.  For a **paired** embedder (``siglip+dinov3_patch``) the opening runs
+    in the text half's space, and there are two ways to have those vectors:
+
+    * the media already carries them.  ``media["embeddings"]`` is a dict keyed
+      by embedder name (three-slot embedders, ``docs/plans/patch-embedder.md``),
+      so one media can hold a SigLIP vector and a DINOv3 vector at once.  This
+      is the shape production would ship, and it needs no second file.
+    * the pile stores one embedder per cell pickle, which is what it actually
+      does today -- so the text half's pickle is opened and its vectors used.
+
+    Preferring the first means the harness reads a multi-vector media correctly
+    the day the pile writes one, instead of silently ranking against a stale
+    side file.
+
+    Either way the two must describe the same medias.  A seed sort covering a
+    different set than the run walks is not the app's opening at all: the ids it
+    ranks are the ids the autopilot steps through, so a media missing from the
+    text side is a media the opening can never reach -- silently, in every
+    column.  It is asserted per cell rather than assumed, because "the flag you
+    passed is not the property you got" is how #2877, #2897 and #2905 each went
+    wrong.
+    """
+    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+
+    if not cfg.is_paired(emb):
+        return medias, "cell"
+
+    text_emb = cfg.text_embedder(emb)
+    probe = next(iter(medias.values()), None)
+    if probe is not None and media_embedding(probe, text_emb) is not None:
+        common.log(f"  paired opening: {text_emb} vectors already on the cell's medias")
+        return medias, "multi_vector"
+
+    from vtscore.datasets import loader as _loader  # noqa: PLC0415
+
+    from _cells_io import load_medias  # noqa: PLC0415
+
+    text_pkl = _loader.EMBEDDINGS_DIR / cfg.text_pickle_name(ds, emb)
+    if not text_pkl.exists():
+        raise FileNotFoundError(
+            f"paired embedder {emb!r} needs {text_emb} vectors: neither the cell's medias nor "
+            f"{text_pkl.name} (which does not exist) supplies them"
+        )
+    text_medias = load_medias(text_pkl)
+    missing = sorted(set(medias) - set(text_medias))
+    if missing:
+        raise ValueError(
+            f"{text_pkl.name} is missing {len(missing)} of {len(medias)} medias in "
+            f"{cfg.pickle_name(ds, emb)} (e.g. {missing[:5]}); the opening would rank "
+            "a different set than the run walks"
+        )
+    common.log(f"  paired opening: ranked in {text_emb} space from {text_pkl.name}")
+    return text_medias, text_pkl.name
+
+
 def _text_seed_scores(ds: str, emb: str, cat: str, medias: dict) -> "dict[int, float] | None":
     """The app's text sort: cosine from the typed query to every media.
 
@@ -57,10 +116,15 @@ def _text_seed_scores(ds: str, emb: str, cat: str, medias: dict) -> "dict[int, f
     (``al_strategies``, ``EVAL.md``, ``voting_iterations`` all say "similarity to
     the typed query").
 
-    Returns ``None`` when no query is defined for the cell, or when the embedder
-    has no text tower -- DINOv3 does not, so ``embed_text`` is the base class's
-    ``return None`` and ``embed_text_query`` yields nothing.  ``None`` is the
-    signal for the autopilot to seed from *three random known-good examples*
+    The query is embedded by the **text half** of the embedder name and scored
+    against that half's media vectors, while the ids returned are the *cell's*
+    ids -- so a paired arm hands the autopilot a SigLIP ranking of exactly the
+    medias it will then learn about in DINOv3 space.
+
+    Returns ``None`` when no query is defined for the cell, or when the text
+    embedder has no text tower -- DINOv3 does not, so ``embed_text`` is the base
+    class's ``return None`` and ``embed_text_query`` yields nothing.  ``None`` is
+    the signal for the autopilot to seed from *three random known-good examples*
     instead, the app's other real start ("3 random examples pulled from the
     Good").  Both are things a user does; ranking by cosine to a cropped box is
     not, which is why this no longer seeds from crops.
@@ -68,10 +132,11 @@ def _text_seed_scores(ds: str, emb: str, cat: str, medias: dict) -> "dict[int, f
     from vtscore.embedding.helpers import embed_text_query  # noqa: PLC0415
     from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
 
+    text_emb = cfg.text_embedder(emb)
     text = _seed_query_text(ds, cat)
     if not text:
         return None
-    qvec = embed_text_query(text, "image", embedder_name=emb)
+    qvec = embed_text_query(text, "image", embedder_name=text_emb)
     if qvec is None:
         return None
 
@@ -83,7 +148,17 @@ def _text_seed_scores(ds: str, emb: str, cat: str, medias: dict) -> "dict[int, f
     ids = list(medias.keys())
     if not ids:
         return None
-    matrix = np.stack([_unit(media_embedding(medias[c])) for c in ids])
+    vectors, _provenance = _text_seed_vectors(ds, emb, medias)
+    # Named on the paired path, primary on the ordinary one.  Asking for the
+    # name is what makes a wrong-space vector a KeyError-shaped None rather than
+    # a plausible ranking built from the wrong embedder.
+    rows = []
+    for c in ids:
+        vec = media_embedding(vectors[c], text_emb) if cfg.is_paired(emb) else media_embedding(vectors[c])
+        if vec is None:
+            raise ValueError(f"media {c} carries no {text_emb} vector for the opening of {ds}:{cat}")
+        rows.append(_unit(vec))
+    matrix = np.stack(rows)
     cos = matrix @ _unit(qvec)
     return {ids[k]: float(cos[k]) for k in range(len(ids))}
 
@@ -111,7 +186,8 @@ def main(argv: list[str] | None = None) -> int:
     styles = cfg.styles_for(ds, emb)
     region_voting = cfg.region_voting_for(ds, emb)
     common.log(
-        f"cell {idx}/{len(cells)}: dataset={ds} embedder={emb} category={cat} seed={seed} "
+        f"cell {idx}/{len(cells)}: dataset={ds} embedder={emb} "
+        f"(learn={cfg.learn_embedder(emb)} text={cfg.text_embedder(emb)}) category={cat} seed={seed} "
         f"styles={styles} head={cfg.HEAD or 'default (production)'} safe_thresholds={cfg.SAFE_THRESHOLDS} "
         f"calibrate_count={cfg.CALIBRATE_COUNT} fold_counts={cfg.FOLD_COUNTS or 'off'} "
         f"cut_incl_ks={cfg.CUT_INCLUSION_KS or 'off'} "
@@ -141,7 +217,18 @@ def main(argv: list[str] | None = None) -> int:
     seed_scores = _text_seed_scores(ds, emb, cat, medias)
     seed_mode = "text" if seed_scores is not None else "known_good"
     seed_query = _seed_query_text(ds, cat) if seed_scores is not None else ""
-    common.log(f"seed: mode={seed_mode} query={seed_query!r}")
+    seed_embedder = cfg.text_embedder(emb) if seed_scores is not None else ""
+    if cfg.is_paired(emb) and seed_mode != "text":
+        # A pair exists FOR the text sort.  Falling back to known-goods here
+        # would run an arm that is identical to the bare learn embedder while
+        # being labelled as something else -- a cell that looks like the
+        # experiment and is not it.  Fail the cell instead: a missing cell is
+        # visible and a mislabelled one is not.
+        raise RuntimeError(
+            f"paired embedder {emb!r} fell back to the known-good start for {ds}:{cat} "
+            f"(query={_seed_query_text(ds, cat)!r}); the pair exists to take the text sort"
+        )
+    common.log(f"seed: mode={seed_mode} embedder={seed_embedder or '-'} query={seed_query!r}")
 
     all_rows: list[dict] = []
     all_sweep: list[dict] = []
@@ -196,6 +283,7 @@ def main(argv: list[str] | None = None) -> int:
             r["embedder"] = emb
             r["seed_mode"] = seed_mode
             r["seed_query"] = seed_query
+            r["seed_embedder"] = seed_embedder
         for sr in sweep_local:
             sr["embedder"] = emb
         for dr in cutdiag_local:
@@ -216,7 +304,11 @@ def main(argv: list[str] | None = None) -> int:
 
     outdir = common.Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
-    main_cols = [*_CALIBRATION_COLUMNS, "embedder", "seed_mode", "seed_query"]
+    # `seed_embedder` joins `seed_mode`/`seed_query` for the same reason those
+    # two exist: the #3156 rerun's root cause was that how a run started was
+    # unnameable after the fact.  A paired arm's opening lives in a different
+    # space than its `embedder` column implies, so the space has to be a column.
+    main_cols = [*_CALIBRATION_COLUMNS, "embedder", "seed_mode", "seed_query", "seed_embedder"]
     out = outdir / f"task_{idx:04d}.csv"
     pd.DataFrame(all_rows, columns=pd.Index(main_cols)).to_csv(out, index=False)
     sweep_cols = [*_INCLUSION_SWEEP_COLUMNS, "embedder"]

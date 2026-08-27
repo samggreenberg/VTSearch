@@ -29,22 +29,38 @@ export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
 export CALIB_DATASETS="${CALIB_DATASETS:-vg_scale}"
 # siglip is the shipped default and votes binary; siglip2_l is the premium
-# whole-image end; dinov3_patch is the only patch-capable embedder in the pile
-# and is what makes region voting real.
+# whole-image end; the region arm is the PAIR `siglip+dinov3_patch` -- DINOv3
+# supplies the patch grid that makes region voting real, SigLIP supplies the
+# text sort the run opens on.
 #
-# All three cells are already embedded in the pile, so a column costs training
-# and inference only -- no encoder time. And the encoder here is a BLOCKING
-# factor, not the contrast: the question is whether the band effect holds
-# across encoders, so a second whole-image encoder replicates the finding
-# rather than competing with the first. ("siglip vs siglip2_l is unresolvable
-# on cost at three seeds" is a fact about comparing the two encoders, and says
-# nothing about whether each one shows the same size penalty.)
-export CALIB_VGSCALE_EMBEDDERS="${CALIB_VGSCALE_EMBEDDERS:-siglip,siglip2_l,dinov3_patch}"
+# Bare `dinov3_patch` was the region arm until #3276 and it could not open the
+# way the app does: DINOv3 has no text tower, so its cells fell back to the
+# three-random-known-goods start while both whole-image arms opened on a typed
+# query. The study's headline axis is VOTING MODE, and a seeding difference sat
+# inside it -- an arm-dependent difference, so unlike the #3156 seeding fix it
+# does not cancel in a contrast. The pair removes it: all three arms now open on
+# the same SigLIP text sort of the same 7749 medias, and only the space the
+# detector learns in differs.
+#
+# All three columns are already embedded in the pile, so a column costs training
+# and inference only -- no encoder time; the pair adds one 26 MB pickle open per
+# cell. And the encoder here is a BLOCKING factor, not the contrast: the
+# question is whether the band effect holds across encoders, so a second
+# whole-image encoder replicates the finding rather than competing with the
+# first. ("siglip vs siglip2_l is unresolvable on cost at three seeds" is a fact
+# about comparing the two encoders, and says nothing about whether each one
+# shows the same size penalty.)
+export CALIB_VGSCALE_EMBEDDERS="${CALIB_VGSCALE_EMBEDDERS:-siglip,siglip2_l,siglip+dinov3_patch}"
 # Every category is a designated cell; selecting a subset would discard the
 # design, and prevalence-spreading is meaningless when prevalence is 0.0250
 # everywhere by construction.
 export CALIB_CATEGORY_MODE=all
 export CALIB_N_SEEDS="${CALIB_N_SEEDS:-3}"
+# Walk every environment at seed 0, then every environment at seed 1, and so on.
+# A SLURM array dispatches roughly in index order, so if this run is cut short
+# it loses SEEDS uniformly rather than whole categories: the design stays intact
+# and only the standard errors widen, which a report can simply state.
+export CALIB_CELL_ORDER="${CALIB_CELL_ORDER:-seed}"
 export CALIB_MAX_STEPS="${CALIB_MAX_STEPS:-150}"
 
 export CALIB_REPOOL_VARIANTS=""
@@ -75,6 +91,11 @@ ENVX="$ENVX VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_M
 ENVX="$ENVX VTS_REPO=$VTS_REPO CALIB_DATASETS=$CALIB_DATASETS"
 ENVX="$ENVX CALIB_VGSCALE_EMBEDDERS=$CALIB_VGSCALE_EMBEDDERS CALIB_CATEGORY_MODE=$CALIB_CATEGORY_MODE"
 ENVX="$ENVX CALIB_N_SEEDS=$CALIB_N_SEEDS CALIB_MAX_STEPS=$CALIB_MAX_STEPS"
+# Named explicitly rather than left to --export=ALL: the launcher computes the
+# cell COUNT and each task computes the cell LIST, and the two must enumerate
+# the same grid.  A knob that reaches one but not the other maps an index to a
+# different cell.
+ENVX="$ENVX CALIB_CELL_ORDER=$CALIB_CELL_ORDER"
 ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
 ENVX="$ENVX CALIB_PATCH_STYLES=$CALIB_PATCH_STYLES"
 
@@ -115,7 +136,8 @@ if bad:
     print(f"  {ds}: patch embedders {bad} would run whole_image", file=sys.stderr)
     raise SystemExit(1)
 for e in cfg.embedders_for_dataset(ds):
-    print(f"  {ds} x {e}: styles={cfg.styles_for(ds, e)} region_voting={cfg.region_voting_for(ds, e)}")
+    print(f"  {ds} x {e}: styles={cfg.styles_for(ds, e)} region_voting={cfg.region_voting_for(ds, e)} "
+          f"learn={cfg.learn_embedder(e)} text={cfg.text_embedder(e)}")
 PYCHK
   echo "CALIB_EXP=$CALIB_EXP  datasets=$CALIB_DATASETS  embedders=$CALIB_VGSCALE_EMBEDDERS  seeds=$CALIB_N_SEEDS"
   submit prepare --job-name=scale-prep --mem=96G --cpus-per-task=8 \
@@ -146,8 +168,19 @@ cells)
   echo "cells: $N (array 0-$((N-1))%$CONC on $PARTITION)"
   PATCH_FLAG=""
   case "$CALIB_VGSCALE_EMBEDDERS" in *_patch*) PATCH_FLAG="--patch" ;; esac
+  # Both premises this study now rests on, asserted before the array rather
+  # than discovered in the rows afterwards: every cell opens on a TYPED QUERY
+  # (check 14, which for a paired arm probes the text half's tower and the text
+  # pickle's coverage), and the region arm really region-votes (check 6, which
+  # reads the learn half's pickle for a patch grid).
+  REGION_FLAG=""
+  case "$CALIB_VGSCALE_EMBEDDERS" in
+    *_patch*) REGION_FLAG="--require-region-voting ${CALIB_DATASETS%%,*}:$(
+      tr ',' '\n' <<<"$CALIB_VGSCALE_EMBEDDERS" | grep -- '_patch' | head -1)" ;;
+  esac
   bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --arms prod \
-    --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC" $PATCH_FLAG || {
+    --job-name "$JOB_NAME" --mem "$MEM" --conc "$CONC" $PATCH_FLAG \
+    --require-text-seed $REGION_FLAG || {
     echo "PREFLIGHT FAILED" >&2; exit 2; }
   submit cells --job-name="$JOB_NAME" --array="0-$((N-1))%$CONC" \
     --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" \

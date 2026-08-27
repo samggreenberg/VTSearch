@@ -3,7 +3,9 @@
 One place the prepare stage, the SLURM array indexer, and the analyzer all agree
 on.  See ``docs/plans/calibration-experiment.md`` for the design.
 
-Arms (each an ``(embedder, style)`` pair):
+Arms (each an ``(embedder, style)`` pair).  An embedder is either a single
+registered name or a **paired** ``"<text>+<learn>"`` name (see :data:`PAIR_SEP`),
+which opens on one space's text sort and learns in another's:
 
 * ``visual_genome_m`` (boxed; ground-truth regions):
   ``siglip`` / ``siglip_l`` × ``whole_image`` (row-wise conformal), and
@@ -233,6 +235,12 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     # which words happen to live at which size. Its categories are
     # band-suffixed (`bus@small`), and every one of them is the experiment --
     # see CATEGORY_MODE "all".
+    #
+    # The region-voting arm here is normally the PAIR `siglip+dinov3_patch`
+    # rather than bare `dinov3_patch`: DINOv3 has no text tower, so on its own
+    # it opens on three random known-goods while the whole-image arms open on a
+    # text sort, and the voting-mode contrast carries a seeding contrast inside
+    # it. See PAIR_SEP.
     "vg_scale": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,dinov3_patch").split(","),
 }
 
@@ -501,9 +509,64 @@ SCALE_BANDS: list[tuple[str, float, float]] = [
 ]
 
 
+#: Separator in a **paired embedder** name, ``"<text>+<learn>"``.
+#:
+#: Autopilot asks an embedding space for two different things, and nothing says
+#: they must be the same space:
+#:
+#: * the **opening** is a text sort - the user types a query and votes down the
+#:   cosine ranking - which needs a *text tower*;
+#: * everything after it - training the detector, pooling a dragged box, and
+#:   re-sorting by the trained model - happens in the *media* space, which needs
+#:   a *patch grid* for region voting and no text tower at all.
+#:
+#: ``dinov3_patch`` is the only patch-capable embedder in the pile and it has no
+#: text tower, so on its own it can never take the app's real opening: every
+#: DINOv3 cell falls back to the three-random-known-goods start.  That made the
+#: voting-mode contrast a *seeding* contrast as well - the binary arms opened on
+#: a text sort and the region arm did not - which is a confound in the axis the
+#: study exists to measure, not a detail.
+#:
+#: ``siglip+dinov3_patch`` removes it: SigLIP (the shipped default embedder, and
+#: the one whose text sort users actually see) ranks the typed query, and DINOv3
+#: does every piece of learning - vector learning, region learning, and the
+#: learn-sort.  Production would have to keep two vectors per image to ship it;
+#: the pile already does, which is why it is measurable here first.
+PAIR_SEP = "+"
+
+
+def split_embedder(embedder: str) -> tuple[str, str]:
+    """``"<text>+<learn>"`` -> ``(text_embedder, learn_embedder)``.
+
+    A plain name is both of its own halves, so callers can split
+    unconditionally instead of branching on whether a name is paired.
+    """
+    text, sep, learn = embedder.partition(PAIR_SEP)
+    return (text, learn) if sep else (embedder, embedder)
+
+
+def learn_embedder(embedder: str) -> str:
+    """The space the detector trains, scores and sorts in - i.e. which pickle."""
+    return split_embedder(embedder)[1]
+
+
+def text_embedder(embedder: str) -> str:
+    """The space the typed query is embedded in - i.e. which opening."""
+    return split_embedder(embedder)[0]
+
+
+def is_paired(embedder: str) -> bool:
+    """True when the opening and the learning run in *different* spaces."""
+    return PAIR_SEP in embedder
+
+
 def is_patch_embedder(embedder: str) -> bool:
-    """True for embedders that produce a patch grid + HAC tree."""
-    return embedder.endswith("_patch")
+    """True for embedders that produce a patch grid + HAC tree.
+
+    Reads the **learn** half: ``siglip+dinov3_patch`` region-votes because
+    DINOv3 supplies the patches, whatever supplies the opening.
+    """
+    return learn_embedder(embedder).endswith("_patch")
 
 
 def styles_for_embedder(embedder: str) -> list[str]:
@@ -536,11 +599,27 @@ def embedders_for_dataset(dataset: str) -> list[str]:
 
 
 def pickle_name(dataset: str, embedder: str) -> str:
-    return f"{dataset}__{embedder}.pkl"
+    """The cell pickle an arm loads its medias from.
+
+    A paired arm loads the **learn** half's pickle, because that is where the
+    vectors the detector is trained and scored on live.  The text half's pickle
+    is opened separately, once, and only to rank the opening - see
+    :func:`text_pickle_name` and ``run_cells._text_seed_scores``.
+    """
+    return f"{dataset}__{learn_embedder(embedder)}.pkl"
+
+
+def text_pickle_name(dataset: str, embedder: str) -> str:
+    """The pickle whose vectors the typed query is ranked against.
+
+    Equal to :func:`pickle_name` for an unpaired embedder, which is what makes
+    the paired path a generalisation of the ordinary one rather than a branch.
+    """
+    return f"{dataset}__{text_embedder(embedder)}.pkl"
 
 
 def crops_basename(dataset: str, embedder: str) -> str:
-    return f"{dataset}__{embedder}__crops"
+    return f"{dataset}__{learn_embedder(embedder)}__crops"
 
 
 def category_rng_seed(category: str) -> int:
