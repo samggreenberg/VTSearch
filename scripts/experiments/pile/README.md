@@ -114,6 +114,37 @@ COCO is built from the staged images rather than the #2790 vector cache, which
 stores HAC region vectors but not the raw patch grid and so can never carry a
 region arm.
 
+## Boxes arrive in two spaces, and the file has to say which
+
+VG's and COCO's boxes are in **pixels**. A correction box is the reviewer's
+`region_box` from the app, already **normalised** to [0, 1]. The builder merges
+all three and normalises on the way into the pickle, so a correction box merged
+unconverted is normalised *twice*: divided by ~500 a second time and parked on
+the frame origin. That is #3281 — 130 boxes, and with them 97 images filed into
+`@small` whose object is medium or large, on the one axis `vg_scale` exists to
+measure.
+
+Three things now stop it, because none of them alone would have:
+
+- `corrections.json` rows carry `box_space`, and `build_pile.py` refuses a row
+  whose boxes contradict it. Inference cannot do this job: a normalised box and
+  a pixel box are the same numbers for a box in the top-left corner of a 1×1
+  image, which is precisely the shape the bug produced.
+- The conversion happens **once**, against the same `(W, H)` the region write
+  divides by, so the round trip is exact rather than close.
+- `--verify` (and the build, before the GPU hours) checks boxes against the
+  **frame**: a sub-pixel side is a failure outright, and the share crushed into
+  the top-left 1% of the frame is a failure as a rate. The older check — box
+  against the band its cell name claims — passed happily through all of this,
+  because the band is *derived from* the box and moved with it. A consistency
+  check between two values computed from one source is not a check.
+
+`vg_scale_any` is a relabel of the built `vg_scale` pickle and shares its
+vectors, so a parent rebuild used to leave it holding the parent's previous
+labels with a perfectly healthy media count. It now stamps a digest of the
+parent's labels, `--verify` compares that against the live parent, and a run
+that rebuilds `vg_scale` pulls the derived dataset in with it.
+
 ## Voted-box scale bands (`--bands`)
 
 Orthogonal to the `_s`/`_m`/`_l` suffix, which is a **dataset size tier** (a

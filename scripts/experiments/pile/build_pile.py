@@ -22,7 +22,11 @@ Usage::
 
 ``--verify`` is the guard the region-voting studies needed: it asserts that
 every cell whose ``(dataset, embedder)`` pair claims region capability actually
-carries ``patch_grid`` on its medias, and that no cell silently holds zero.
+carries ``patch_grid`` on its medias, and that no cell silently holds zero. It
+also checks the *geometry*: boxes against the band their cell name claims, and
+boxes against the frame -- the second because the first cannot see a box
+corrupted before banding, since the band is derived from that same box and moves
+with it (#3281).
 """
 
 from __future__ import annotations
@@ -374,6 +378,11 @@ def _load_corrections() -> dict[tuple[int, str], dict]:
 
     Written by ``ingest_slate.py``; absent until the first review lands, which
     is why this returns empty rather than failing.
+
+    **Boxes here are NORMALISED, unlike VG's and COCO's** -- they come from the
+    app's ``region_box``. The space is validated on the way in and converted to
+    pixels once, by :func:`_correction_boxes_px`, so that everything downstream
+    of this function is in one space. See ``pile_config.CORRECTION_BOX_SPACE``.
     """
     path = Path(os.environ.get("VTS_CORRECTIONS", pc.PILE / "corrections.json"))
     if not path.exists():
@@ -381,8 +390,131 @@ def _load_corrections() -> dict[tuple[int, str], dict]:
     rows = json.loads(path.read_text())
     out: dict[tuple[int, str], dict] = {}
     for r in rows:
+        _assert_correction_box_space(r, path)
         out[(int(r["image_id"]), r["class"])] = r
     return out
+
+
+def _assert_correction_box_space(row: dict, path: Path) -> None:
+    """Refuse a correction row whose boxes are not in the declared space.
+
+    The space is a *declaration*, not a guess: a pixel-space box handed to the
+    normalised path is undetectable once it has been divided by (W, H) -- the
+    result is a small, plausible, entirely wrong box, which is #3281 in the
+    other direction. Checking it here costs one comparison per row and is the
+    only point at which the two spaces are still distinguishable.
+    """
+    space = row.get("box_space", pc.CORRECTION_BOX_SPACE)
+    where = f"{path.name}: image {row.get('image_id')} / {row.get('class')!r}"
+    if space != pc.CORRECTION_BOX_SPACE:
+        raise SystemExit(f"{where}: box_space {space!r}, expected {pc.CORRECTION_BOX_SPACE!r}")
+    for b in row.get("boxes") or []:
+        if len(b) != 4:
+            raise SystemExit(f"{where}: box {b} is not [x0, y0, x1, y1]")
+        if not all(-1e-6 <= float(v) <= 1.0 + 1e-6 for v in b):
+            raise SystemExit(
+                f"{where}: box {b} has a coordinate outside [0, 1], so it is in PIXEL space "
+                f"while the file declares {pc.CORRECTION_BOX_SPACE!r}"
+            )
+        if float(b[2]) <= float(b[0]) or float(b[3]) <= float(b[1]):
+            raise SystemExit(f"{where}: box {b} is degenerate (x1 <= x0 or y1 <= y0)")
+
+
+def _correction_boxes_px(row: dict, W: int, H: int) -> list[list[float]]:
+    """A verdict's boxes in the pixel space of ``(W, H)``.
+
+    ``(W, H)`` is the space the image's *other* boxes were measured in -- the
+    COCO original for an anchored image, the VG copy otherwise -- because that
+    is what the region write later divides by. Scaling up here and dividing down
+    there is an exact round trip, so the stored box is the reviewer's box to the
+    last bit rather than merely close to it.
+    """
+    return [[float(b[0]) * W, float(b[1]) * H, float(b[2]) * W, float(b[3]) * H] for b in (row.get("boxes") or [])]
+
+
+def scale_label_digest(medias: dict[int, dict]) -> str:
+    """A hash of exactly what ``vg_scale_any`` copies out of ``vg_scale``.
+
+    ``vg_scale_any`` is a *relabel* of the built ``vg_scale`` pickle, so a fix to
+    ``vg_scale``'s labels, boxes or bands leaves the derived cell holding the old
+    ones -- with the right media count, the right vectors and a healthy-looking
+    ``--verify``. #3281 is the case: the box repair moves 97 images between
+    bands, and ``build_pile.py --force vg_scale`` alone would ship a
+    ``vg_scale_any`` still carrying the pre-repair regions.
+
+    Vectors are deliberately not in it: they are identical by construction (the
+    derived build never re-embeds) and ``cell_fingerprint`` already covers them.
+    What this pins is the half a rebuild of the parent can actually change.
+    """
+    h = hashlib.sha256()
+    for mid in sorted(medias):
+        m = medias[mid]
+        h.update(
+            json.dumps(
+                [
+                    mid,
+                    m.get("category"),
+                    m.get("categories"),
+                    m.get("evaluable_categories"),
+                    [
+                        [r.get("label"), [round(float(v), 9) for v in r.get("box") or []]]
+                        for r in m.get("regions") or []
+                    ],
+                ],
+                sort_keys=True,
+            ).encode()
+        )
+    return h.hexdigest()
+
+
+def region_geometry_problems(medias: dict[int, dict]) -> list[str]:
+    """Geometry no honest normalised region box can have (#3281).
+
+    The band check in :func:`verify` cannot see a coordinate-space mistake made
+    *before* banding, because the band is computed from the very box it would be
+    checking: crush a box to the origin and it is filed under ``@small``, where
+    a sub-pixel area is exactly what the band's name claims. Both sides move
+    together and the cell stays self-consistent. So the box has to be checked
+    against the frame rather than against its own label.
+
+    Two rules, and they are different in kind:
+
+    * **Sub-pixel** is absolute. A side below ``MIN_BOX_SIDE`` is under one pixel
+      on any image the pile holds, so no such box was ever drawn or annotated.
+      One is a failure.
+    * **Crushed to the origin** is a rate. A real small object can sit in the
+      top-left corner and 1.2% of healthy boxes do, so a single hit proves
+      nothing; a *population* of them is a double-normalise, which put 100% of
+      the affected images there.
+    """
+    problems: list[str] = []
+    n_boxes = 0
+    subpixel: list[str] = []
+    cornered = 0
+    edge = pc.CORNER_AREA_FRAC**0.5
+    for mid, m in medias.items():
+        for r in m.get("regions") or []:
+            b = r.get("box") or []
+            if len(b) != 4:
+                problems.append(f"media {mid} / {r.get('label')!r}: box {b} is not [x0, y0, x1, y1]")
+                continue
+            n_boxes += 1
+            if (b[2] - b[0]) < pc.MIN_BOX_SIDE or (b[3] - b[1]) < pc.MIN_BOX_SIDE:
+                subpixel.append(f"media {mid} / {r.get('label')!r} {[round(v, 6) for v in b]}")
+            if b[2] <= edge and b[3] <= edge:
+                cornered += 1
+    if subpixel:
+        problems.append(
+            f"{len(subpixel)} region boxes are sub-pixel (side < {pc.MIN_BOX_SIDE:g} of the frame), "
+            f"which no drawn or annotated box is -- e.g. {'; '.join(subpixel[:3])}"
+        )
+    if n_boxes and cornered / n_boxes > pc.MAX_CORNER_RATE:
+        problems.append(
+            f"{cornered}/{n_boxes} ({cornered / n_boxes:.1%}) of region boxes lie wholly inside the "
+            f"top-left {pc.CORNER_AREA_FRAC:.0%} of the frame, against a healthy rate near 1% -- "
+            f"the signature of a box normalised twice"
+        )
+    return problems
 
 
 def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
@@ -501,12 +633,20 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
     # a band is a claim about size, and no size was measured. It leaves every
     # cell of that class instead -- neither a positive nor a negative -- which
     # is precisely what the third value is for.
+    #
+    # The box, when there is one, is NORMALISED and everything in `labels` is in
+    # pixels, so it is converted here -- once, against the same (W, H) the region
+    # write divides by. Merging it unconverted is #3281: the region write then
+    # normalises a normalised coordinate, which divides it by ~500 and parks the
+    # box on the frame origin. Nothing downstream could see that, because the
+    # BAND is derived from the same corrupted box, so the cell name and its boxes
+    # stayed consistent with each other all the way into the study.
     unbanded: set[tuple[int, str]] = set()
     for (iid, name), verdict in corrections.items():
         if iid not in labels:
             continue
         if verdict.get("present"):
-            boxes = verdict.get("boxes") or []
+            boxes = _correction_boxes_px(verdict, *box_dims[iid])
             if boxes:
                 labels[iid][name] = boxes
             else:
@@ -674,6 +814,13 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
             "origin_name": str(path),
         }
 
+    # Refuse to embed a pickle whose boxes are impossible. `--verify` runs the
+    # same check, but only after the GPU hours are spent and the cell is on
+    # disk; #3281 got as far as three published studies that way.
+    bad = region_geometry_problems(medias)
+    if bad:
+        raise SystemExit("vg_scale: " + "; ".join(bad))
+
 
 def _load_vg_scale_any(medias: dict[int, dict], embedder_name: str) -> None:
     """``vg_scale`` with the box-size band collapsed away (#3115).
@@ -725,7 +872,8 @@ def _load_vg_scale_any(medias: dict[int, dict], embedder_name: str) -> None:
         return list(dict.fromkeys(_base(c) for c in (labels or [])))
 
     loaded = _cells_io().load_medias(src)
-    log(f"  derived from {src.name}: {len(loaded)} medias")
+    parent_digest = scale_label_digest(loaded)
+    log(f"  derived from {src.name}: {len(loaded)} medias, parent labels {parent_digest[:12]}")
     for mid, media in loaded.items():
         d = dict(media)
         d["categories"] = _collapse(d.get("categories"))
@@ -736,7 +884,13 @@ def _load_vg_scale_any(medias: dict[int, dict], embedder_name: str) -> None:
         if d.get("category"):
             d["category"] = _base(d["category"])
         d["regions"] = [{**r, "label": _base(r["label"])} for r in (d.get("regions") or [])]
-        d["origin"] = {"importer": "vg_scale_any", "params": {"embedder": embedder_name, "derived_from": src.name}}
+        # The parent's label digest travels with every media, so `--verify` can
+        # tell a derived cell that is merely older than its parent from one that
+        # no longer agrees with it. Without it a stale derivation is invisible.
+        d["origin"] = {
+            "importer": "vg_scale_any",
+            "params": {"embedder": embedder_name, "derived_from": src.name, "parent_labels": parent_digest},
+        }
         medias[mid] = d
 
     n_pos = sum(1 for d in medias.values() if d["categories"])
@@ -1107,7 +1261,39 @@ def verify() -> int:
                 f"{ds} x {emb}: {bad}/{checked} region boxes fall outside the band their cell "
                 f"name claims -- boxes and bands were measured in different pixel spaces"
             )
+        # The band check above compares a box against its own label, so it is
+        # blind to a box corrupted BEFORE banding -- the band moves with it and
+        # the two stay consistent (#3281). This one compares the box against the
+        # frame, which nothing can drag along with it.
+        problems += [f"{ds} x {emb}: {g}" for g in region_geometry_problems(medias)]
         break  # one embedder is enough; the boxes are identical across cells
+
+    # A derived cell that no longer matches its parent. `vg_scale_any` is a
+    # relabel of the built `vg_scale` pickle and shares its vectors, so it
+    # survives a parent rebuild looking perfect while carrying the parent's
+    # PREVIOUS labels, boxes and bands -- which is how a box repair ships to one
+    # study and not the other.
+    live_digest: dict[Path, str] = {}  # one parent serves every derived cell built from it
+    for ds, emb in pc.cells():
+        if pc.DATASETS.get(ds, {}).get("kind") != "vg_scale_any":
+            continue
+        path, parent = pc.cell_path(ds, emb), pc.cell_path("vg_scale", emb)
+        if not path.exists() or not parent.exists():
+            continue
+        medias = io.load_medias(path)
+        problems += [f"{ds} x {emb}: {g}" for g in region_geometry_problems(medias)]
+        first = next(iter(medias.values()), None)
+        stamped = ((first or {}).get("origin") or {}).get("params", {}).get("parent_labels")
+        if parent not in live_digest:
+            live_digest[parent] = scale_label_digest(io.load_medias(parent))
+        live = live_digest[parent]
+        if stamped is None:
+            problems.append(f"{ds} x {emb}: no parent_labels stamp -- built before the staleness check, rebuild it")
+        elif stamped != live:
+            problems.append(
+                f"{ds} x {emb}: derived from a {parent.name} that has since changed "
+                f"({stamped[:12]} != {live[:12]}) -- rebuild it, --force on the parent alone leaves it stale"
+            )
 
     # A dataset's cells must all cover the same medias, or cross-embedder
     # comparisons silently compare different populations. This is not
@@ -1481,6 +1667,21 @@ def main() -> int:
         raise SystemExit(f"unknown dataset {bad!r}; known: {sorted(pc.DATASETS)}")
     for bad in [e for e in embedders if e not in pc.EMBEDDERS]:
         raise SystemExit(f"unknown embedder {bad!r}; known: {sorted(pc.EMBEDDERS)}")
+
+    # A derived dataset joins the run whenever its parent is in it. `vg_scale`
+    # rebuilt without `vg_scale_any` leaves the derived cell holding the
+    # parent's previous labels, boxes and bands -- with the right media count
+    # and the right vectors, so nothing looks wrong (#3281 shipped that way).
+    # Pulling it in costs a relabel and no embedding pass, and `--force` is what
+    # makes it actually happen: the derived cell already exists.
+    derived = [
+        d
+        for d, spec in pc.DATASETS.items()
+        if spec.get("kind") == "vg_scale_any" and d not in datasets and "vg_scale" in datasets
+    ]
+    if derived:
+        log(f"including {', '.join(derived)}: derived from vg_scale, and stale the moment it is rebuilt")
+        datasets += derived
 
     summaries = []
     for ds in datasets:

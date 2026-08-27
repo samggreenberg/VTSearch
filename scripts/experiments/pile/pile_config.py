@@ -83,8 +83,13 @@ DATASETS: dict[str, dict] = {
     # and so it inherits whatever that cell currently holds.  #3252 changed how
     # `vg_scale` selects and corrects its cells, which means a `vg_scale_any`
     # built before that commit is NOT the same dataset as one built after it.
-    # Rebuild it whenever `vg_scale` is rebuilt; `build_pile.py --force` on
-    # `vg_scale` alone silently leaves this one stale.
+    # Rebuild it whenever `vg_scale` is rebuilt.  That used to be a rule nobody
+    # could check: `--force` on `vg_scale` alone left this cell holding the old
+    # labels with the right media count and the right vectors, so it looked
+    # healthy (#3281 shipped a box repair to one study and not the other).  It
+    # is now enforced twice -- `build_pile.py` pulls this dataset into any run
+    # that rebuilds its parent, and `--verify` compares the parent-label digest
+    # stamped on each derived media against the parent's live one.
     "vg_scale_any": {"boxed": True, "kind": "vg_scale_any"},
 }
 
@@ -298,6 +303,36 @@ SCALE_N_NEG_SPARE = int(os.environ.get("VTS_SCALE_N_NEG_SPARE", "300"))
 #: those -- small enough to ignore by accident, which is why it is a constant
 #: with a check rather than an assumption.
 MAX_ASPECT_DRIFT = float(os.environ.get("VTS_MAX_ASPECT_DRIFT", "0.01"))
+
+
+#: The coordinate space a correction box is recorded in. VG's and COCO's boxes
+#: arrive in **pixels**; a correction box comes from the app's ``region_box``,
+#: which is already **normalised** to [0, 1]. The builder divides every box by
+#: (W, H) on the way into the pickle, so a correction box merged in unconverted
+#: is normalised twice: it lands on the frame origin, sub-pixel, and takes its
+#: band with it (#3281 -- 130 boxes, and 97 images filed in ``@small`` whose
+#: object is medium or large). The space is therefore *declared* in the file and
+#: converted once at read, never inferred: the two spaces are indistinguishable
+#: for a box in the top-left corner of a 1x1 image, which is exactly the shape
+#: the bug produced.
+CORRECTION_BOX_SPACE = "normalised"
+
+#: Below this normalised side length a box is sub-pixel on any image the pile
+#: holds -- VG's largest copy is 1280 px wide -- so it cannot describe anything
+#: that was observed. Zero legitimate boxes are anywhere near it; the 130
+#: double-normalised ones were all under 1e-3.
+MIN_BOX_SIDE = float(os.environ.get("VTS_MIN_BOX_SIDE", "0.000244"))  # 1/4096
+
+#: "Crushed to the origin": both corners inside the top-left square holding this
+#: fraction of the frame area. Unlike the sub-pixel rule this one has genuine
+#: hits -- a small object really can sit in the top-left corner, 43 of 3470
+#: healthy boxes do -- so it gates on the *rate*, not on any single box.
+CORNER_AREA_FRAC = float(os.environ.get("VTS_CORNER_AREA_FRAC", "0.01"))
+
+#: The share of a cell's boxes that may be crushed to the origin before the
+#: build is refused. The measured healthy rate is 1.2% and the defect put it at
+#: 100% of the affected images, so anything in between separates them.
+MAX_CORNER_RATE = float(os.environ.get("VTS_MAX_CORNER_RATE", "0.05"))
 
 
 #: Which images each cell currently holds. Selection is hash-stable, but a
