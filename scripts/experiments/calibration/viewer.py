@@ -94,10 +94,19 @@ FILL = 0
 #: stream still compresses.
 SCALE = int(os.environ.get("VIEWER_SCALE", "4000"))
 
+#: Quantisation for the **per-seed** payload, coarser than :data:`SCALE` on
+#: purpose.  The aggregate means are the numbers a reader quotes and keep the
+#: fine grid; per-seed lines are read for spread and for which runs never leave
+#: the floor, and 1/1000 is already finer than a screen pixel on any of these
+#: axes.  It matters because the entropy in this payload is the per-step jitter,
+#: so two fewer bits per sample buys most of a click grid's worth of budget.
+RUNS_SCALE = int(os.environ.get("VIEWER_RUNS_SCALE", "1000"))
+
 #: Byte budget for the per-seed payload, before base64.  The click grid is
 #: thinned until it fits.  Raise it for a study small enough to afford full
-#: resolution; the page always says which grid it got.
-RUNS_BUDGET_MB = float(os.environ.get("VIEWER_RUNS_BUDGET_MB", "1.5"))
+#: resolution; the page always says which grid it got.  The ceiling that matters
+#: is the repo's 4 MB large-file gate, which the aggregate payload also draws on.
+RUNS_BUDGET_MB = float(os.environ.get("VIEWER_RUNS_BUDGET_MB", "2.0"))
 
 TEMPLATE = Path(__file__).with_name("viewer_template.html")
 
@@ -439,7 +448,7 @@ def build_viewer(  # noqa: C901
         pos = {int(t): i for i, t in enumerate(t_full)}
         for keep in candidates:
             grid = _thin(t_full, keep)
-            enc = _encode(full_vals[:, :, [pos[int(t)] for t in grid]])
+            enc = _encode(full_vals[:, :, [pos[int(t)] for t in grid]], scale=RUNS_SCALE)
             fits = _payload_bytes(enc) <= budget
             if fits or keep == candidates[-1]:
                 if not fits:
