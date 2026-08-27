@@ -789,8 +789,8 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
         "## Mining and outcome, paired against the control",
         "",
         "| arm | open clicks (written) | held past it | starved | labelset @200 (good/bad) | "
-        "open yield | positives@100 Δ | [95% CI] | final cost Δ | [95% CI] | AP Δ |",
-        "|---|---:|---:|---:|:--:|---:|---:|---|---:|---|---:|",
+        "open yield | positives@100 Δ | [95% CI] | median | final cost Δ | [95% CI] | median | AP Δ |",
+        "|---|---:|---:|---:|:--:|---:|---:|---|---:|---:|---|---:|---:|",
     ]
     for arm in ARMS:
         if arm == CONTROL:
@@ -801,9 +801,11 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
             f"| `{arm}` | {_fmt(rec, 'open_scheduled_clicks')} | {_fmt(rec, 'open_overrun_median')} | "
             f"{_fmt(rec, 'open_starved_pct')}% | "
             f"{_fmt(rec, 'n_good_final')}/{_fmt(rec, 'n_bad_final')} | {_fmt(rec, 'open_yield')} | "
-            f"{_fmt(pos, 'median_delta')} | [{_fmt(pos, 'ci95_lo')}, {_fmt(pos, 'ci95_hi')}] | "
-            f"{_fmt(cost, 'median_delta')} | [{_fmt(cost, 'ci95_lo')}, {_fmt(cost, 'ci95_hi')}] | "
-            f"{_fmt(ap, 'median_delta')} |"
+            f"{_fmt(pos, 'mean_delta')} | [{_fmt(pos, 'ci95_lo')}, {_fmt(pos, 'ci95_hi')}] | "
+            f"{_fmt(pos, 'median_delta')} | "
+            f"{_fmt(cost, 'mean_delta')} | [{_fmt(cost, 'ci95_lo')}, {_fmt(cost, 'ci95_hi')}] | "
+            f"{_fmt(cost, 'median_delta')} | "
+            f"{_fmt(ap, 'mean_delta')} |"
         )
     lines += [
         "",
@@ -818,6 +820,12 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
         "whether the answer counts. A held arm is piling up negatives at full rate. What it lacks is",
         "a *positive*, and one class cannot be fitted, so no detector exists and no metric row is",
         "emitted. `labelset @200` below reports what the model was actually handed.",
+        "",
+        "The interval is a bootstrap of the **mean** paired delta, so the mean is what sits beside",
+        "it; the median is given too because these distributions are skewed - a third of some arms'",
+        "cells find no positive at all, and a mean and a median say different true things about",
+        "that. Reading a median against a mean's interval, as an earlier draft of this table did,",
+        "produces the nonsense of a point estimate outside its own interval.",
         "",
         "Every delta is paired on the identical (dataset, embedder, category, seed).  A difference",
         "smaller than twice its standard error is not resolvable here, and saying so is a finding.",
@@ -836,23 +844,46 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
         vs = summary["arms"].get(arm, {}).get("vs_length_control", {})
         pos, cost = vs.get("positives_100", {}), vs.get("final_cost", {})
         lines.append(
-            f"| `{arm}` | {_fmt(pos, 'median_delta')} | [{_fmt(pos, 'ci95_lo')}, {_fmt(pos, 'ci95_hi')}] | "
-            f"{_fmt(cost, 'median_delta')} | [{_fmt(cost, 'ci95_lo')}, {_fmt(cost, 'ci95_hi')}] |"
+            f"| `{arm}` | {_fmt(pos, 'mean_delta')} | [{_fmt(pos, 'ci95_lo')}, {_fmt(pos, 'ci95_hi')}] | "
+            f"{_fmt(cost, 'mean_delta')} | [{_fmt(cost, 'ci95_lo')}, {_fmt(cost, 'ci95_hi')}] |"
         )
+    sheets = sorted(f for f in figures if f.startswith("opening_") and f.endswith(".jpg"))
+    figures = [f for f in figures if f not in sheets]
     if figures:
         lines += ["", "## Figures", ""]
         for name in figures:
             lines.append(f"![{name}](figures/{name})")
             lines.append("")
     lines += [
-        "## What is still owed",
+        "## The openings themselves",
         "",
-        "This analyzer reports *whether* an opening mined better.  The issue also asks **why**,",
-        "and that is a question about the items themselves: dump the opening's picks with",
-        "`VTS_DUMP_TEST_SCORES` and render them with `make_error_sheets.py`, so a winning arm's",
-        "extra positives can be looked at rather than counted.  On image data, show the images.",
+        "The tables say *whether* an opening mined better.  The issue also asks **why**, and that",
+        "is a question about the items, so here are the items: every click of each arm's opening",
+        "on one cell, in the order it was made, captioned with its round, its rank in the seed",
+        "sort, and whether it turned out to be a positive, with the dataset's ground-truth box",
+        "drawn where it has one.  Read two arms side by side and the mechanism is visible rather",
+        "than inferred.  Rendered by `make_startup_sheets.py`; a starved arm shows its written",
+        "opening in full plus a sample of the clicks it was held for, and the caption says how",
+        "many are not shown.",
         "",
     ]
+    if sheets:
+        by_cell: dict[str, list[str]] = {}
+        for f in sheets:
+            by_cell.setdefault(f.rsplit("_", 1)[0], []).append(f)
+
+        def _arm_rank(x: str) -> int:
+            arm = x.rsplit("_", 1)[1][:-4]
+            return ARMS.index(arm) if arm in ARMS else 99
+
+        for cell, files in sorted(by_cell.items()):
+            lines += [
+                "",
+                f"### `{cell[len(chr(111) + chr(112) + chr(101) + chr(110) + chr(105) + chr(110) + chr(103) + chr(95)) :]}`",
+                "",
+            ]
+            for f in sorted(files, key=_arm_rank):
+                lines.append(f"![{f}](figures/{f})")
     outdir.mkdir(parents=True, exist_ok=True)
     path = outdir / "REPORT_startup.md"
     path.write_text("\n".join(lines))
