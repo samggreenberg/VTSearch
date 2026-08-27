@@ -281,7 +281,7 @@ to [`curves.py`](curves.py), which is the one implementation every simulated-use
 study shares (see the `grid-experiments` skill for the rule):
 
 - `cost_vs_clicks.png` / `average_precision_vs_clicks.png` — **the averages**: a
-  panel per dataset, a line per arm, meaned over every seed and category, with an
+  panel per dataset, a line per arm, averaged over every seed and category, with an
   inter-quartile band.
 - `cost_vs_clicks_runs__<dataset>.png` — **the individuals**: a panel per arm
   holding every one of that arm's seeds on that dataset as its own line,
