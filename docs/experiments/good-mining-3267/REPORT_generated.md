@@ -90,7 +90,100 @@ budget rather than depth.  `flat_mid` spends the same budget with no mining roun
 | `incl_k_wide` | 8.4 | [8, 8.9] | -0.091 | [-0.11, -0.077] |
 | `deep_first` | 0.12 | [-0.056, 0.29] | 0.015 | [0.0066, 0.024] |
 
+## Is clicking worth it at all? — against the zero-click text sort
+
+Typing the query and reading the ranked haystack is **free**, so it is the thing a
+clicked detector has to beat. `baseline` is that zero-click value, `final` is the value
+at the horizon, and `crossover` is the first click at which the arm's mean is better
+than the baseline. An arm that never crosses is reported as `never`, which is a
+finding about that arm and not a missing number.
+
+The two metrics answer different questions and do not have to agree. **Cost** is where
+the detector puts its threshold as well as how it ranks; **average precision** is the
+ranking alone. An arm that beats the typed query on cost but not on AP has not learned
+to rank better than the query the user already typed - it has learned where to cut.
+
+`measured` is the fraction of that arm's cells that still have a detector at the
+horizon. **A crossing on a low-`measured` arm is a crossing over the subset that
+trained**, not over the grid: the starved cells emit no row and so cannot pull the mean
+up, which flatters exactly the arms that starve. Read those rows as an upper bound.
+
+### Cost (cost, lower is better)
+
+| arm | dataset | text sort (0 clicks) | final | clicks to beat it | measured |
+|---|---|---:|---:|---:|---:|
+| `prod` | coco_val | 0.39 | 0.2 | 10 | 100% |
+| `prod` | visual_genome_m | 0.511 | 0.392 | 23 | 100% |
+| `top_long` | coco_val | 0.39 | 0.182 | 14 | 100% |
+| `top_long` | visual_genome_m | 0.511 | 0.374 | 24 | 100% |
+| `easy_med_hard` | coco_val | 0.39 | 0.205 | 17 | 94% |
+| `easy_med_hard` | visual_genome_m | 0.511 | 0.395 | 36 | 99% |
+| `band_wide` | coco_val | 0.39 | 0.305 | 53 | 63% |
+| `band_wide` | visual_genome_m | 0.511 | 0.435 | 87 | 92% |
+| `incl_k` | coco_val | 0.39 | 0.201 | 17 | 99% |
+| `incl_k` | visual_genome_m | 0.511 | 0.39 | 32 | 100% |
+| `incl_k_wide` | coco_val | 0.39 | 0.184 | 16 | 100% |
+| `incl_k_wide` | visual_genome_m | 0.511 | 0.382 | 28 | 100% |
+| `flat_mid` | coco_val | 0.39 | 0.344 | 104 | 51% |
+| `flat_mid` | visual_genome_m | 0.511 | 0.495 | 172 | 83% |
+| `deep_first` | coco_val | 0.39 | 0.368 | 114 | 51% |
+| `deep_first` | visual_genome_m | 0.511 | 0.503 | 181 | 85% |
+
+### Average precision (AP, higher is better)
+
+| arm | dataset | text sort (0 clicks) | final | clicks to beat it | measured |
+|---|---|---:|---:|---:|---:|
+| `prod` | coco_val | 0.666 | 0.717 | 29 | 100% |
+| `prod` | visual_genome_m | 0.53 | 0.492 | never | 100% |
+| `top_long` | coco_val | 0.666 | 0.743 | 19 | 100% |
+| `top_long` | visual_genome_m | 0.53 | 0.524 | never | 100% |
+| `easy_med_hard` | coco_val | 0.666 | 0.693 | 45 | 94% |
+| `easy_med_hard` | visual_genome_m | 0.53 | 0.484 | never | 99% |
+| `band_wide` | coco_val | 0.666 | 0.548 | never | 63% |
+| `band_wide` | visual_genome_m | 0.53 | 0.445 | never | 92% |
+| `incl_k` | coco_val | 0.666 | 0.7 | 57 | 99% |
+| `incl_k` | visual_genome_m | 0.53 | 0.494 | never | 100% |
+| `incl_k_wide` | coco_val | 0.666 | 0.734 | 23 | 100% |
+| `incl_k_wide` | visual_genome_m | 0.53 | 0.513 | never | 100% |
+| `flat_mid` | coco_val | 0.666 | 0.507 | never | 51% |
+| `flat_mid` | visual_genome_m | 0.53 | 0.406 | never | 83% |
+| `deep_first` | coco_val | 0.666 | 0.48 | 8 | 51% |
+| `deep_first` | visual_genome_m | 0.53 | 0.397 | never | 85% |
+
+## The interactive viewer
+
+[`viewer.html`](viewer.html) carries **every** slice of this run, not the handful the
+figures below happen to show: one dataset or all of them, one category or each of them,
+any subset of arms, seeds averaged or every seed as its own line, and any metric the run
+emitted (cost, precision, recall, F1, FPR, FNR, average precision, AUROC). Open it when
+the answer you want is a slice this report did not think to plot.
+
+
 ## Figures
+
+![cost_vs_clicks.png](figures/cost_vs_clicks.png)
+
+***The headline: how good the user's detector is as they keep clicking.** One panel per dataset, one line per arm, mean over every seed and category on that dataset, with an inter-quartile band. **Click 0 is the free text sort** - what the typed query got for nothing - drawn as each arm's own leftmost point, so the far left is what typing was worth and the far right is what clicking was worth. Nothing is measured between click 0 and an arm's first trained click, which is why that stretch is dashed; the click at which an arm overtakes its own start is reported as a number in the crossover table rather than eyeballed off the curve. The lower strip is the denominator: what fraction of that arm's cells are measured at that click (all of them at click 0, which has a text sort; from click 1 only the ones with a detector). The mean is **dashed** wherever that is below 95% - there it is a level over the subset of cells that trained, not over the grid, and an arm that starves looks better than it is on exactly those clicks. Read a level only off a solid segment. Averaged across a wide prevalence range, so it says which arm, not how well any one category does.*
+
+![cost_vs_clicks_runs__coco_val.png](figures/cost_vs_clicks_runs__coco_val.png)
+
+***The individuals, on `coco_val`: every seed of every arm as its own line** (cost, lower is better), coloured by the category's prevalence in the pool. A mean cannot show that two arms with the same level are 'every run is mediocre' and 'half the runs are excellent and half never start', and on this axis that is usually the finding. A run that never trained a detector draws **no line at all** - the panel title counts those, because an absent curve and a missing seed look identical otherwise. The black line is the median over the runs present at that click, dashed where that is a median over a subset. Each line starts at **that cell's own text-sort quality at click 0**, so the leftmost point is what the typed query was worth on that exact cell; a never-trained run is the lone `x` at click 0 with nothing to its right.*
+
+![cost_vs_clicks_runs__visual_genome_m.png](figures/cost_vs_clicks_runs__visual_genome_m.png)
+
+***The individuals, on `visual_genome_m`: every seed of every arm as its own line** (cost, lower is better), coloured by the category's prevalence in the pool. A mean cannot show that two arms with the same level are 'every run is mediocre' and 'half the runs are excellent and half never start', and on this axis that is usually the finding. A run that never trained a detector draws **no line at all** - the panel title counts those, because an absent curve and a missing seed look identical otherwise. The black line is the median over the runs present at that click, dashed where that is a median over a subset. Each line starts at **that cell's own text-sort quality at click 0**, so the leftmost point is what the typed query was worth on that exact cell; a never-trained run is the lone `x` at click 0 with nothing to its right.*
+
+![average_precision_vs_clicks.png](figures/average_precision_vs_clicks.png)
+
+*The same figure for **average precision** - the ranking, with the threshold taken out of it. Higher is better here. An arm that improves cost but not AP moved the *threshold*; one that improves both moved the *ranking*. Same dashed-means-subset rule.*
+
+![average_precision_vs_clicks_runs__coco_val.png](figures/average_precision_vs_clicks_runs__coco_val.png)
+
+***The individuals, on `coco_val`: every seed of every arm as its own line** (average_precision, higher is better), coloured by the category's prevalence in the pool. A mean cannot show that two arms with the same level are 'every run is mediocre' and 'half the runs are excellent and half never start', and on this axis that is usually the finding. A run that never trained a detector draws **no line at all** - the panel title counts those, because an absent curve and a missing seed look identical otherwise. The black line is the median over the runs present at that click, dashed where that is a median over a subset. Each line starts at **that cell's own text-sort quality at click 0**, so the leftmost point is what the typed query was worth on that exact cell; a never-trained run is the lone `x` at click 0 with nothing to its right.*
+
+![average_precision_vs_clicks_runs__visual_genome_m.png](figures/average_precision_vs_clicks_runs__visual_genome_m.png)
+
+***The individuals, on `visual_genome_m`: every seed of every arm as its own line** (average_precision, higher is better), coloured by the category's prevalence in the pool. A mean cannot show that two arms with the same level are 'every run is mediocre' and 'half the runs are excellent and half never start', and on this axis that is usually the finding. A run that never trained a detector draws **no line at all** - the panel title counts those, because an absent curve and a missing seed look identical otherwise. The black line is the median over the runs present at that click, dashed where that is a median over a subset. Each line starts at **that cell's own text-sort quality at click 0**, so the leftmost point is what the typed query was worth on that exact cell; a never-trained run is the lone `x` at click 0 with nothing to its right.*
 
 ![mining_curve.png](figures/mining_curve.png)
 
