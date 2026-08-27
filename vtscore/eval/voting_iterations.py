@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, select_next
 from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector
+from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.labels import evaluable_pool, media_is_positive, region_box_for_category
 from vtscore.eval.score_dumps import maybe_dump_predictions
 from vtscore.eval.trainers import _cross_calibrated_threshold, _parse_trainer_spec
@@ -164,6 +165,11 @@ _IDENT_COLUMNS: tuple[str, ...] = (
     "n_bad",
     "phase",
     "app_trained",
+    #: The parameterised opening this run took (issue #3267), verbatim - so a
+    #: pooled frame says which arm each row came from without depending on the
+    #: directory it was read out of.  Empty on every run that took the app's
+    #: own opening, which is every study before #3267.
+    "startup_schedule",
     # --- Acquisition/reporting decoupling (docs/ML.md, threshold calibration).
     #: The threshold handed to the *selector* this step - cut
     #: ``acq_inclusion_offset`` inclusion steps below ``threshold``.  Equal to it
@@ -195,6 +201,54 @@ _VOTING_COLUMNS: tuple[str, ...] = (
     "backend",
     "device",
     "elapsed_seconds",
+)
+
+#: Column order for the per-click **pick log** (issue #3267): one row for every
+#: vote the simulated user casts, emitted only when the caller passes a
+#: ``pick_sink``.
+#:
+#: The main frame cannot answer the questions this study asks.  It starts at the
+#: first *trainable* step - before one Good and one Bad vote coexist there is no
+#: model, no threshold and no metrics row - so the opening, which is the whole
+#: subject here, is exactly the part it does not record.  This frame records
+#: every click instead: what was picked, whether it turned out to be a positive,
+#: and **where on the seed sort it came from**, which is what makes "why was this
+#: arm better" answerable rather than merely visible in the totals.
+_PICK_COLUMNS: tuple[str, ...] = (
+    "seed",
+    "dataset",
+    "category",
+    "startup_schedule",
+    "style",
+    "t",
+    "phase",
+    #: Index of the schedule round this click was spent in, or -1 outside one.
+    "startup_round",
+    #: The round's cut on the seed sort, and where that lands in the sort's own
+    #: score distribution - the sampling *position*, which is what the arms
+    #: actually differ by.  NaN / -1 outside a round.
+    "startup_cut",
+    "startup_cut_percentile",
+    "picked_id",
+    #: Ground truth for the click: 1 if the item was a positive.
+    "picked_label",
+    #: Where the picked item sat in the seed sort - as a 0-based rank over the
+    #: whole sort and as a percentile (0 = top).  Together with ``picked_label``
+    #: this is the mining record: how deep the arm had to reach for each
+    #: positive it found.
+    "picked_seed_rank",
+    "picked_seed_percentile",
+    #: The seed-sort similarity of the picked item.
+    "picked_seed_score",
+    #: The detector score the *previous* step's model gave this item, and the
+    #: acquisition cut it was picked against.  NaN before a model exists.
+    "picked_detector_score",
+    "acq_threshold",
+    #: Running vote totals **after** this click.
+    "n_good",
+    "n_bad",
+    #: Pool items still unlabelled after this click.
+    "n_pool",
 )
 
 #: Column order for the calibration study's main per-step frame (issue #2781),
@@ -552,6 +606,22 @@ def _pool_percentile(pool_scores: dict[int, float], threshold: float) -> float:
         return float("nan")
     arr = np.asarray(list(pool_scores.values()), dtype=np.float64)
     return round(float((arr < threshold).mean()), 6)
+
+
+def _sorted_percentile(descending: list[float], value: float) -> float:
+    """Where *value* cuts a **descending** score list, as a fraction from the top.
+
+    ``0`` = above every score, ``1`` = below every score.  Used for the pick
+    log's ``startup_cut_percentile``, so a round's cut is reported as the
+    sampling *position* it actually is rather than as a bare similarity whose
+    scale differs per category.  Infinite cuts (the ``top`` round) read 0.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    if not descending:
+        return float("nan")
+    idx = int(np.searchsorted(-np.asarray(descending, dtype=np.float64), -value, side="left"))
+    return _r(idx / len(descending))
 
 
 def _blend_xcal_input(threshold: float, details: dict[str, Any]) -> float:
@@ -2794,6 +2864,8 @@ def simulate_voting_iterations(  # noqa: C901
     cut_inclusion_qtilt_steps: Optional[list[float]] = None,
     acq_inclusion_offset: int = ACQUISITION_INCLUSION_OFFSET,
     acq_rank_percentile: Optional[float] = None,
+    startup_schedule: Optional[str] = None,
+    pick_sink: Optional[list[dict[str, Any]]] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -2919,6 +2991,19 @@ def simulate_voting_iterations(  # noqa: C901
             ranking, and so returns *more* positives.  Requires a fold-anchored
             cut for the step; steps that fall back to the schedule blend keep
             the reporting threshold (the blend has no inclusion-aware form).
+        startup_schedule: A parameterised Autopilot **opening** (issue #3267),
+            e.g. ``"n6@k-6,n6@k-2,n6@k0"``; see
+            :mod:`vtscore.eval.startup_schedule` for the grammar.  ``None``
+            (default) is the **app's own** opening - three positives off the top
+            of the seed sort, four negatives at its cutoff - and leaves the
+            trajectory byte-for-byte what it was before the knob existed.  A
+            schedule replaces only the pre-detector phases; the learned Hard
+            sort that follows is unchanged and still samples at
+            *acq_inclusion_offset*.  Requires *seed_scores*: a schedule names
+            positions on the seed sort, so there has to be one.
+        pick_sink: List the per-click :data:`_PICK_COLUMNS` rows are appended
+            to - one per vote, including the opening's, which emit no main row
+            because no model exists yet.  ``None`` (default) = off.
         acq_rank_percentile: Alternative acquisition cut - place it at this
             quantile of the simulation-set score distribution directly, rather
             than by naming an inclusion.  This is the ``rank_pin`` arm: same
@@ -2999,6 +3084,17 @@ def simulate_voting_iterations(  # noqa: C901
     # These are pre-registered experiment knobs, so they are validated beside
     # the other argument checks rather than deep in the loop: a run that dies
     # forty minutes in on a typo has held a cluster slot for nothing.
+    startup_state: StartupState | None = None
+    if startup_schedule:
+        if seed_scores is None:
+            raise ValueError(
+                "startup_schedule needs seed_scores: a schedule names positions on the "
+                "seed sort, and there is no sort to name them on without one"
+            )
+        if not autopilot_fidelity or strategy != "autopilot":
+            raise ValueError("startup_schedule requires autopilot_fidelity and the autopilot strategy")
+        startup_state = StartupState(parse_startup_schedule(startup_schedule))
+
     if acq_rank_percentile is not None:
         if acq_inclusion_offset != 0:
             raise ValueError(
@@ -3182,7 +3278,20 @@ def simulate_voting_iterations(  # noqa: C901
     # selector on its legacy parity interleave.
     flow: Any = None
     if autopilot_fidelity and strategy == "autopilot":
-        flow = AutopilotFlow()
+        flow = AutopilotFlow(startup=startup_state)
+    # Each schedule round's cut on the seed sort, resolved once: the app fits a
+    # cosine sort's GMM over the whole sort and never refits it as votes come
+    # in, so these are constants of the run rather than per-step state.
+    startup_cuts: list[float] = []
+    if startup_state is not None and seed_scores is not None:
+        sort_values = list(seed_scores.values())
+        startup_cuts = [round_cut(sort_values, rnd) for rnd in startup_state.rounds]
+    # The seed sort as a ranking, for the pick log: where in the sort each click
+    # landed is the mining record the study reads.
+    seed_rank: dict[int, int] = {}
+    if pick_sink is not None and seed_scores is not None:
+        seed_rank = {cid: i for i, cid in enumerate(sorted(seed_scores, key=lambda c: seed_scores[c], reverse=True))}
+    seed_sorted_scores: list[float] = sorted(seed_scores.values(), reverse=True) if seed_scores else []
     # Recent per-step models (each with the threshold it was calibrated at),
     # re-scored every step against the *current* labelset so the Smart
     # indicator's slope regresses over one shared eval set - exactly what the
@@ -3193,6 +3302,8 @@ def simulate_voting_iterations(  # noqa: C901
         if not pool:
             break
         phase = flow.phase if flow is not None else None
+        startup_round = startup_state.index if (startup_state is not None and not startup_state.done) else -1
+        startup_cut = startup_cuts[startup_round] if startup_round >= 0 else None
         ctx = ALContext(
             pool_ids=pool,
             embeddings=sim_embeddings,
@@ -3207,6 +3318,7 @@ def simulate_voting_iterations(  # noqa: C901
             pool_labels=pool_labels,
             seed_scores=seed_scores,
             phase=phase,
+            startup_cut=startup_cut,
         )
         cid = select_next(strategy, ctx)
         pool.remove(cid)
@@ -3221,6 +3333,38 @@ def simulate_voting_iterations(  # noqa: C901
         # advances past covered regions (the app labels the atlas the same way).
         if atlas is not None and cid in atlas.vector_to_leaf:
             atlas.label(cid, good=is_positive)
+
+        if pick_sink is not None:
+            rank = seed_rank.get(cid, -1)
+            n_sorted = len(seed_rank)
+            pick_sink.append(
+                {
+                    "seed": seed,
+                    "dataset": dataset_name,
+                    "category": target_category,
+                    "startup_schedule": startup_schedule or "",
+                    "style": style or "",
+                    "t": t,
+                    "phase": phase or "",
+                    "startup_round": startup_round,
+                    "startup_cut": _r(startup_cut) if startup_cut is not None else float("nan"),
+                    "startup_cut_percentile": (
+                        _sorted_percentile(seed_sorted_scores, startup_cut) if startup_cut is not None else float("nan")
+                    ),
+                    "picked_id": cid,
+                    "picked_label": 1 if is_positive else 0,
+                    "picked_seed_rank": rank,
+                    "picked_seed_percentile": (
+                        _r(rank / (n_sorted - 1)) if n_sorted > 1 and rank >= 0 else float("nan")
+                    ),
+                    "picked_seed_score": _r(seed_scores[cid]) if seed_scores and cid in seed_scores else float("nan"),
+                    "picked_detector_score": _r(pool_scores[cid]) if cid in pool_scores else float("nan"),
+                    "acq_threshold": _r(acq_threshold),
+                    "n_good": len(good_votes),
+                    "n_bad": len(bad_votes),
+                    "n_pool": len(pool),
+                }
+            )
 
         # Need at least 1 good and 1 bad to train
         if not good_votes or not bad_votes:
@@ -3399,6 +3543,7 @@ def simulate_voting_iterations(  # noqa: C901
             "n_bad": len(bad_votes),
             "phase": flow.phase if flow is not None else "",
             "app_trained": 1 if (flow is None or app_has_detector(flow.phase)) else 0,
+            "startup_schedule": startup_schedule or "",
             "acq_threshold": round(float(acq_threshold), 6),
             # Measured against the pool the selector ranks, not the test set, so
             # the pair answers "how much did the sampling position move".
@@ -3552,6 +3697,7 @@ def run_voting_iterations_eval(
     prevalence_arms: Optional[list[Optional[float]]] = None,
     styles: Optional[list[Optional[str]]] = None,
     autopilot_fidelity: bool = True,
+    startup_schedule: Optional[str] = None,
 ) -> pd.DataFrame:
     """Run the voting-iterations evaluation over multiple seeds/datasets/categories.
 
@@ -3607,6 +3753,9 @@ def run_voting_iterations_eval(
             (default ``True``); see :func:`simulate_voting_iterations`.  Pass
             ``False`` to reproduce studies published before the flow was
             aligned.
+        startup_schedule: A parameterised Autopilot opening (issue #3267); see
+            :func:`simulate_voting_iterations`.  ``None`` (default) is the app's
+            own opening.  Requires a *seed_scores* entry for every cell run.
 
     Returns:
         A :class:`~pandas.DataFrame` with the columns listed in
@@ -3659,6 +3808,7 @@ def run_voting_iterations_eval(
                                     target_prevalence=arm,
                                     style=style,
                                     autopilot_fidelity=autopilot_fidelity,
+                                    startup_schedule=startup_schedule,
                                 )
                                 all_rows.extend(rows)
 
@@ -3683,6 +3833,7 @@ def run_voting_iterations_eval_from_pickles(
     prevalence_arms: Optional[list[Optional[float]]] = None,
     styles: Optional[list[Optional[str]]] = None,
     autopilot_fidelity: bool = True,
+    startup_schedule: Optional[str] = None,
 ) -> pd.DataFrame:
     """Convenience wrapper that loads datasets from pickle files.
 
@@ -3741,4 +3892,5 @@ def run_voting_iterations_eval_from_pickles(
         prevalence_arms=prevalence_arms,
         styles=styles,
         autopilot_fidelity=autopilot_fidelity,
+        startup_schedule=startup_schedule,
     )

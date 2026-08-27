@@ -53,6 +53,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PINS_PATH = REPO_ROOT / "scripts" / "eval-app-sync.pins.json"
 
 AUTOPILOT_TS = "frontend/src/app/services/autopilot-state.service.ts"
+LABEL_VIEW_TS = "frontend/src/app/components/label-view/label-view.component.ts"
 
 
 @dataclass(frozen=True)
@@ -105,6 +106,42 @@ MIRRORS: list[Mirror] = [
             "goodToStart / badToStart are copied as GOOD_TARGET / BAD_TARGET, which decide how "
             "many votes the simulation spends before its first learned sort. Pinned literally "
             "by tests_lib/detectors/test_autopilot_flow.py::TestPortedConstants."
+        ),
+    ),
+    Mirror(
+        id="autopilot.phase_sort_select",
+        app=f"ts:{LABEL_VIEW_TS}::onAutopilotStop(",
+        harness="vtscore/eval/al_strategies.py::_select_phase_faithful",
+        kind="ported",
+        note=(
+            "Which Sort and which Select each Autopilot phase drives - good=text+top, "
+            "bad=text+hard, hard=learned+hard, new=learned+new. The simulated user picks the "
+            "next item from exactly this pairing, so re-pointing a phase at a different sort "
+            "or select here silently changes what every study's vote order means. The load- "
+            "bearing row is `bad`: it is still on the TEXT sort, so the harness must not "
+            "consult detector scores there even though a model exists for measurement."
+        ),
+        divergence=(
+            "onAutopilotStop applies the mapping when the user stops Autopilot; the live "
+            "mapping is the phase subscription in the same component, which additionally "
+            "kicks off the sort request. This anchor is the one place the whole table is "
+            "written out in one block, so it is what the digest watches."
+        ),
+    ),
+    Mirror(
+        id="autopilot.startup_default",
+        app=f"ts:{AUTOPILOT_TS}::const INITIAL_STATE",
+        harness="vtscore/eval/startup_schedule.py::PRODUCTION_STARTUP",
+        kind="default",
+        note=(
+            "issue #3267 made the Autopilot opening a parameter, so the harness now has a "
+            "spelling of the app's own opening - 'g3@top,b4@mid' - that a study's control arm "
+            "runs. If goodToStart/badToStart move, or the opening stops being 'top of the "
+            "seed sort then its cutoff', this constant has to move with them or every #3267 "
+            "study measures its deviations from an opening nobody ships. "
+            "tests_lib/detectors/test_startup_schedule.py pins it two ways: literally against "
+            "GOOD_TARGET/BAD_TARGET, and behaviourally by requiring it to reproduce a "
+            "default-arm run click for click."
         ),
     ),
     Mirror(

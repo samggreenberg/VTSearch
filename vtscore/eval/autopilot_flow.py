@@ -46,6 +46,8 @@ from __future__ import annotations
 
 from typing import Any, Literal, Optional
 
+from vtscore.eval.startup_schedule import StartupState, is_startup_phase
+
 Phase = Literal["idle", "good", "bad", "hard", "new", "done", "exhausted"]
 Status = Literal["red", "yellow", "green"]
 
@@ -206,6 +208,10 @@ def app_has_detector(phase: str) -> bool:
     about threshold quality (issue #2788) must filter on it rather than
     counting every simulated step.
     """
+    if is_startup_phase(phase):
+        # A schedule's rounds are on the seed sort by construction, so the app
+        # would have no detector on screen however many votes have been cast.
+        return False
     return phase in TRAINED_PHASES
 
 
@@ -226,11 +232,23 @@ class AutopilotFlow:
     confound model improvement with labelset growth (issue #2923).
     """
 
-    def __init__(self, *, good_target: int = GOOD_TARGET, bad_target: int = BAD_TARGET, span_green: int | None = None):
+    def __init__(
+        self,
+        *,
+        good_target: int = GOOD_TARGET,
+        bad_target: int = BAD_TARGET,
+        span_green: int | None = None,
+        startup: Optional[StartupState] = None,
+    ):
         self.good_target = good_target
         self.bad_target = bad_target
         self.span_green = SPAN_GREEN_DEFAULT if span_green is None else span_green
-        self.phase: Phase = "good"
+        #: A parameterised opening (issue #3267).  ``None`` - the default - is
+        #: the app's own: the Good/Bad targets above, resolved by
+        #: :func:`next_phase`.  When set, the schedule owns every phase until it
+        #: runs out and the app's machine takes over from ``hard``.
+        self.startup = startup
+        self.phase: Phase = "good" if startup is None else startup.phase_name()  # type: ignore[assignment]
         #: The most recent Smart window: the last :data:`SMART_WINDOW` models'
         #: costs, all against the *current* labelset.  Replaced, never appended.
         self.recent_error_costs: list[float] = []
@@ -261,7 +279,20 @@ class AutopilotFlow:
         self._prev_predictions = dict(predictions)
 
     def update(self, good_count: int, bad_count: int, remaining_unlabeled: float, span: dict[str, Any] | None) -> Phase:
-        """Recompute and return the phase after a vote."""
+        """Recompute and return the phase after a vote.
+
+        With a :class:`~vtscore.eval.startup_schedule.StartupState` attached the
+        opening is the schedule's, not :data:`GOOD_TARGET` / :data:`BAD_TARGET`;
+        once it is spent the app's machine resumes with both targets already
+        met, so the trajectory continues into ``hard`` / ``new`` / ``done``
+        exactly as it would have.
+        """
+        if self.startup is not None:
+            self.startup.on_click()
+            self.startup.advance(good_count, bad_count, remaining_unlabeled)
+            if not self.startup.done:
+                self.phase = self.startup.phase_name()  # type: ignore[assignment]
+                return self.phase
         smart = smart_status(self.recent_error_costs, good_count, bad_count)
         stable = stable_status(self.stability, good_count, bad_count)
         sp: Status = span_status(int(span["level"]), int(span["depth"]), self.span_green) if span is not None else "red"
@@ -272,7 +303,7 @@ class AutopilotFlow:
             smart=smart,
             stable=stable,
             span=sp,
-            good_target=self.good_target,
-            bad_target=self.bad_target,
+            good_target=0 if self.startup is not None else self.good_target,
+            bad_target=0 if self.startup is not None else self.bad_target,
         )
         return self.phase
