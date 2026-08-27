@@ -111,14 +111,6 @@ describe('DetectorsCrudApiService', () => {
     req.flush({});
   });
 
-  it('exportPortableBundle should POST for a blob', () => {
-    service.exportPortableBundle('d/1').subscribe();
-    const req = httpMock.expectOne('/api/detectors/d%2F1/portable-bundle');
-    expect(req.request.method).toBe('POST');
-    expect(req.request.responseType).toBe('blob');
-    req.flush(new Blob(['zip']));
-  });
-
   it('labelPreviewUrl routes through ActiveContextService.mediaUrl with encoded segments', () => {
     const url = service.labelPreviewUrl('my det', 'el/7');
     expect(url).toBe('/api/detectors/my%20det/labels/el%2F7/preview?dataset_id=ds1');

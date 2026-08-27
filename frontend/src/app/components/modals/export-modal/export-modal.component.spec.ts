@@ -199,7 +199,7 @@ describe('ExportModalComponent', () => {
       expect(component.filteredLabels.length).toBe(3);
     });
 
-    it('names the payload in the title, apart from "Export model"', async () => {
+    it('names the payload in the title', async () => {
       await flushInit();
       expect(component.modalTitle).toBe('Export Labels');
     });

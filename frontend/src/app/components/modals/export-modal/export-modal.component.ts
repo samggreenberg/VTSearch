@@ -816,8 +816,9 @@ export class ExportModalComponent implements OnInit {
         : 'Export Unverified';
     }
     if (this.serverFilter === 'verified') return 'Export Verified';
-    // Name the payload in the detector-scoped case, where the row's other
-    // action ("Export model") exports something genuinely different.
+    // Name the payload in the detector-scoped case: the user arrived here
+    // from a *detector*, and what leaves is its labelset, not the detector
+    // as an artifact.
     return this.scope() === 'detector' ? 'Export Labels' : 'Export';
   }
 

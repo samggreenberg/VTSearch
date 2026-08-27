@@ -6,9 +6,9 @@ import type { ContextMenuItem } from '../context-menu/context-menu.component';
  * point. The Actions column renders only the two universal verbs inline (Load
  * when unloaded, Delete); the ⋯ overflow button reuses this same list but drops
  * those inline verbs (see ``overflowMenuItems``) so it reads as "more" — Browse,
- * Rename, Stats, and detector-only Import Labels / Export labels / Export model,
- * plus Edit-access in multi-user mode — rather than repeating icons already
- * visible in the row.
+ * Rename, Stats, and detector-only Import Labels / Export labels, plus
+ * Edit-access in multi-user mode — rather than repeating icons already visible
+ * in the row.
  * Rename is additionally surfaced as a pencil next to the row name. Availability
  * rules: Load only shows when the item is unloaded; Edit-access only shows in
  * multi-user mode and is disabled for non-owners.
@@ -150,16 +150,17 @@ export function buildDetectorCardMenuItems(
     items.push({ id: 'rename', label: 'Rename', title: 'Rename', iconSvg: ICON.rename });
     items.push({ id: 'add-labels', label: 'Import Labels', title: 'Import Labels', iconSvg: ICON.addLabels });
   }
+  // Exporting the detector's *labels* is the only export offered here. The
+  // portable ONNX bundle (POST /api/detectors/<id>/portable-bundle) is a
+  // deliberate expert affordance called directly against the API, not a menu
+  // item: it sat one line below this one under a near-identical name and icon,
+  // and the two are not variants of one action — one moves the detector between
+  // VTSearch instances, the other hands a frozen scorer to someone who does not
+  // run VTSearch at all.
   items.push({
     id: 'export',
     label: 'Export labels',
     title: "Export this detector's labeled items; the full set is what re-imports as the detector",
-    iconSvg: ICON.export,
-  });
-  items.push({
-    id: 'export-model',
-    label: 'Export model',
-    title: 'Export a portable, standalone scoring model (ONNX) to share with others',
     iconSvg: ICON.export,
   });
   items.push({ id: 'stats', label: 'Stats', title: 'Stats', iconSvg: ICON.stats });

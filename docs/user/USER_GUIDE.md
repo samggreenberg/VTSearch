@@ -753,15 +753,15 @@ with bulk-action and per-card controls.
     Like datasets, the name carries a **Rename** pencil and **Delete**
     is inline; the **⋯** overflow menu holds the rest, including
     **Import Labels** (import labels into this detector), **Export
-    labels**, **Export model** (a standalone ONNX scoring bundle - see
-    [Exporting your work](#exporting-your-work)), and **Move to AutoRun**.
+    labels** (see [Exporting your work](#exporting-your-work)), and
+    **Move to AutoRun**.
   - **AutoRun** holds finalized detectors. They run automatically
     against every dataset as it is imported (and during CLI
     autodetect), and they are *frozen*: no rename, delete, retrain, or
     label import until you pick **Move to Drafts** from the **⋯** menu
     to unfreeze them. Read-only actions (**Load**, **Browse
-    positives**, **Stats**, **Export labels**, **Export model**) stay
-    available, and **Find** works as usual.
+    positives**, **Stats**, **Export labels**) stay available, and
+    **Find** works as usual.
 
   A detector lives on exactly one tab at a time, and every user
   curates their own AutoRun list. The typical loop: build and test a
@@ -968,38 +968,54 @@ delimiter to use.
 
 ### Exporting a detector
 
-The Detectors dashboard's **⋯** overflow menu exports the detector
-itself, two different ways:
+The Detectors dashboard's **⋯** overflow menu offers **Export labels**:
+the same exporter modal described above, scoped to that detector. This
+is how you move a detector to another VTSearch instance. A detector *is*
+its labels - VTSearch re-derives the trained ranker from them every time
+it loads - so exporting the labels and importing them there with
+**Import Labels** reconstructs it.
 
-- **Export labels** - opens the same exporter modal described above,
-  scoped to that detector. This is how you move a detector to another
-  VTSearch instance: a detector *is* its labels (VTSearch re-derives the
-  trained ranker from them every time it loads), so exporting the labels
-  and importing them there with **Import Labels** reconstructs it.
+Opened this way the modal's **Categories** filter starts on **All**,
+which is what you want: the negatives are half of what the ranker learns
+from, and a good-only or bad-only file can't rebuild the detector at the
+other end (training needs both classes and refuses a one-sided
+labelset). Narrowing to **Good** or **Bad** is still available - it's a
+useful way to get just the hits as a list - and the modal says what
+you're giving up when you do.
 
-  Opened this way the modal's **Categories** filter starts on **All**,
-  which is what you want: the negatives are half of what the ranker
-  learns from, and a good-only or bad-only file can't rebuild the
-  detector at the other end (training needs both classes and refuses a
-  one-sided labelset). Narrowing to **Good** or **Bad** is still
-  available - it's a useful way to get just the hits as a list - and the
-  modal says what you're giving up when you do.
-- **Export model** - a **portable, standalone scoring bundle**: a zip
-  holding `detector.onnx` (the trained ranker, which runs anywhere ONNX
-  does), `manifest.json` (which embedder to use and where the good/bad
-  cutoff sits), and a `README.md` with a copy-paste scoring snippet. This
-  is how you hand the detector to someone who doesn't run VTSearch at all.
+#### Portable ONNX bundles (advanced)
 
-  This is the one place VTSearch writes a trained ranker to disk - it
-  normally keeps them in memory only - so the modal says so before you
-  download. The bundle contains **no media and no fingerprints**, just the
-  small trained ranker, but a trained ranker can still reveal something
-  about the data it was trained on, so share it only with people you'd
-  trust with the labels themselves. A compatible dataset must be loaded,
-  since the ranker is trained against that dataset's embedder.
-  Pattern-matching (structural) detectors can't be exported this way -
-  their second verification stage has no ONNX equivalent - and region
-  (patch) detectors export in a whole-item-only scoring mode.
+There is a second, quite different thing you can export: a **portable,
+standalone scoring bundle**. It is a zip holding `detector.onnx` (the
+trained ranker, which runs anywhere ONNX does), `manifest.json` (which
+embedder to use and where the good/bad cutoff sits), and a `README.md`
+with a copy-paste scoring snippet. Where **Export labels** moves a
+detector *between VTSearch instances*, this hands a frozen scorer to
+someone who doesn't run VTSearch at all.
+
+It is deliberately **not** a menu item - most people never need it, and
+sitting beside **Export labels** it read as a confusing second "export".
+Reach it directly instead, either way round:
+
+- **From the API**, against a loaded dataset:
+  `POST /api/detectors/{detector_id}/portable-bundle` (see
+  [`docs/api/detectors.md`](../api/detectors.md#export-portable-bundle)),
+  which streams the zip back.
+- **From the CLI**, as part of an autodetect run: the
+  `portable_detector` exporter, which writes one bundle per detector the
+  run trained (see
+  [`docs/CLI.md`](../CLI.md#auto-detect-run-detectors-on-a-dataset)).
+
+Both paths behave the same way. This is the one place VTSearch writes a
+trained ranker to disk - it normally keeps them in memory only. The
+bundle contains **no media and no fingerprints**, just the small trained
+ranker, but a trained ranker can still reveal something about the data it
+was trained on, so share it only with people you'd trust with the labels
+themselves. A compatible dataset must be loaded, since the ranker is
+trained against that dataset's embedder. Pattern-matching (structural)
+detectors can't be exported this way - their second verification stage
+has no ONNX equivalent - and region (patch) detectors export in a
+whole-item-only scoring mode.
 
 ---
 

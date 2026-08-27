@@ -375,12 +375,6 @@ ship on its own.
 
 <!-- item-sep -->
 
-- **detector-portable-export-modal: densest cluster of token violations in the codebase** — `frontend/src/app/components/modals/detector-portable-export-modal/detector-portable-export-modal.component.scss:4` (medium impact)
-
-  One 44-line file commits five distinct style-guide violations: raw spacing values `gap: 0.75rem` (line 4), `padding: 0.75rem` (13), `margin: 0.4rem 0 0` (19), `padding-left: 1.2rem` (25) — all have exact or near tokens (`--space-lg`, `--space-md`, `--space-xl`); an off-scale `font-size: 0.95rem` restyling `h3` down (lines 7-10, anti-patterns 2+7 — the §1.2 table says 0.95rem does not exist; the element should just be an `h4`/`.subhead`); and `max-width: var(--modal-w-sm)` set on the inner `.pexport` wrapper instead of on `.modal-content` via `::ng-deep`, which §2.4 explicitly calls out ("Set the width on .modal-content ... not on an inner wrapper"). This modal appears to have been written without the guide and is the top offender in the repo's own `/style-check` scan.
-
-  *Direction:* Swap the four raw values for `--space-*` tokens, change the `h3` to an `h4` (or apply `.subhead`) and drop the font-size override, and move the width cap to `.modal-content` via the standard `::ng-deep` pattern.
-
 <!-- item-sep -->
 
 - **Toast countdown uses forbidden `&hellip;` entity; toast/list button labels break Title Case** — `frontend/src/app/components/toast-container/toast-container.component.html:44` (low impact)
