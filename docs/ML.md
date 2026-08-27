@@ -65,7 +65,7 @@ The SVM head needs no such insurance and does not use it: the margin objective h
 
 A decision threshold separating "good" from "bad" predictions is computed via **cross-calibration**:
 
-1. Split labeled data into Train (1 − `calibration_fraction`) and Calibrate (`calibration_fraction`).
+1. Split labeled data into Train (1 − `calibration_fraction`) and Calibrate (`calibration_fraction`). The two sizes are **dithered rather than rounded**: a fractional split rounds up with probability equal to its fractional part, so the count is unbiased instead of pinned to whichever side `round` picks. At the default 0.5 this fires only on an odd label count — an exact tie, where "nearest" has no answer. It matters because `round` is round-half-to-**even**, which made the odd vote's destination alternate with the label count (Train at `n % 4 == 1`, Calibrate at `n % 4 == 3`); one user never notices, but the eval casts one vote per step, so that seesaw was phase-locked across every simulated run and survived averaging as a spurious 4-vote ripple on the learning curves (issue #3286). The tie-break RNG is seeded from a digest of the labelset itself, so a threshold stays a pure function of the votes that produced it.
 2. Train a fold model on Train **using the same head as the final model**, score the held-out Calibrate portion.
 3. Repeat for `calibrate_count` independent random splits.
 4. Pool every fold's held-out (score, label) pairs and apply the **conformal inclusion rule** (`conformal_threshold`) once. Pooling — rather than averaging per-fold thresholds — is deliberate: the knob's resolution is bounded by how many calibration scores the quantiles are taken over.
