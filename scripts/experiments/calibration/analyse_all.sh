@@ -32,6 +32,7 @@ echo "cells present: $CELLS / 6480"
 
 step overview      bash -c "python analyze_overview.py --exp $EXP > $OUT/REPORT_overview.txt 2>&1; tail -5 $OUT/REPORT_overview.txt"
 step scale         bash -c "python analyze_scale.py --exp $EXP > $OUT/REPORT_scale.txt 2>&1; tail -5 $OUT/REPORT_scale.txt"
+step phases       bash -c "python analyze_phases.py --exp $EXP > $OUT/REPORT_phases.txt 2>&1; tail -8 $OUT/REPORT_phases.txt"
 step tail_overlap  bash -c "python analyze_tail_overlap.py --exp $EXP --metric average_precision > $OUT/REPORT_tail.txt 2>&1; tail -6 $OUT/REPORT_tail.txt"
 step figs_overview python figures_overview.py --exp "$EXP" --out "$FIGS"
 step figs_scale    python figures_scale.py --exp "$EXP" --out "$FIGS"
