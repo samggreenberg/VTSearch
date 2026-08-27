@@ -495,6 +495,19 @@ describe('ExportModalComponent', () => {
       fixture.componentRef.setInput('detectorName', 'Sirens');
       await flushInit();
       component.selectExporterTab(fileExporter as never);
+      // No category prefix: a detector-scoped export opens on All, and the
+      // whole labelset is what the plain name describes.
+      expect(component.formValues['filepath']).toBe(
+        'data/Sirens-My Dataset.json',
+      );
+    });
+
+    it('prefixes the category once the export is narrowed to one', async () => {
+      fixture.componentRef.setInput('detectorName', 'Sirens');
+      await flushInit();
+      component.selectExporterTab(fileExporter as never);
+      component.labelFilter = 'good';
+      component.onLabelFilterChange();
       expect(component.formValues['filepath']).toBe(
         'data/Good-Sirens-My Dataset.json',
       );
@@ -507,15 +520,13 @@ describe('ExportModalComponent', () => {
       await flushInit();
       TestBed.inject(ActiveContextService).setActivePair('ds1', 'd1');
       component.selectExporterTab(fileExporter as never);
-      expect(component.formValues['filepath']).toBe(
-        'data/Good-My Dataset.json',
-      );
+      expect(component.formValues['filepath']).toBe('data/My Dataset.json');
 
       flushRegistry();
       TestBed.tick();
       expect(component.effectiveDetectorName()).toBe('Birdsong');
       expect(component.formValues['filepath']).toBe(
-        'data/Good-Birdsong-My Dataset.json',
+        'data/Birdsong-My Dataset.json',
       );
     });
 

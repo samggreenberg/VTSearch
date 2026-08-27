@@ -146,7 +146,11 @@ describe('DetectorCardComponent', () => {
     await settleZoneless(fixture);
     const items = Array.from(el.querySelectorAll('.menu-item')) as HTMLElement[];
     expect(items.some((b) => b.textContent?.includes('Import Labels'))).toBe(true);
-    const exportItem = items.find((b) => b.textContent?.includes('Export'));
+    // "Export labels" and "Export model" are both in this menu and emit
+    // different outputs, so match the full label rather than the prefix.
+    const exportItem = items.find((b) =>
+      b.textContent?.includes('Export labels'),
+    );
     expect(exportItem).toBeTruthy();
     exportItem!.click();
     expect(component.export.emit).toHaveBeenCalled();
@@ -188,7 +192,7 @@ describe('DetectorCardComponent', () => {
       expect(full).not.toContain('Delete');
       expect(full).toContain('Browse positives');
       expect(full).toContain('Stats');
-      expect(full).toContain('Export');
+      expect(full).toContain('Export labels');
     });
 
     it('offers "Move to Drafts" and emits setAutorun(false)', async () => {
