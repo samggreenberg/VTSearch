@@ -55,7 +55,7 @@ common.setup_env()
 from experiment_config import region_voting_for  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from _cells_io import main_frame_files  # noqa: E402
+from _cells_io import assert_one_opening, main_frame_files  # noqa: E402
 from scipy.stats import mannwhitneyu, wilcoxon  # noqa: E402
 
 #: The arms this analyzer owns.  ``xcal`` / ``blend`` / ``anchored`` are the
@@ -147,6 +147,7 @@ def load_cells(cells_dir: Path) -> pd.DataFrame:
     if not frames:
         return pd.DataFrame()
     df = pd.concat(frames, ignore_index=True)
+    assert_one_opening(df, "analyze_folds_2897.py")
     df["gmm_variant"] = df["gmm_variant"].fillna("")
     df["env"] = df["dataset"] + "/" + df["embedder"] + "/" + df["style"]
     df["n_votes"] = df["n_good"] + df["n_bad"]

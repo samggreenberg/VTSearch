@@ -68,15 +68,41 @@ caller builds, so the simulator needed no change at all.
   `--require-region-voting`, so both premises are asserted before the array
   instead of read out of the rows afterwards.
 
-**This is not fixed everywhere, and deliberately so.** Sixteen other launchers
-carry a DINOv3 arm and none passes `--require-text-seed` (#3278). Their existing
-results are fine — they all ran before #3269, so every arm seeded from a crop and
-the shift was shared. It is their *next* run that inherits this. The right answer
-differs per launcher: a mode-contrast study wants the pair, a single-arm region
-study has no contrast to confound but still would not open the way the app does,
-and a study whose subject *is* the known-good start should pin that choice rather
-than inherit it. Sweeping all sixteen would have replaced one unexamined default
-with another.
+**This was not fixed everywhere at first, and deliberately so.** Sixteen other
+launchers carried a DINOv3 arm and none passed `--require-text-seed`. Their
+existing results are fine — they all ran before #3269, so every arm seeded from a
+crop and the shift was shared. It was their *next* run that inherited this.
+Sweeping all sixteen in one edit would have replaced one unexamined default with
+another, so #3278 went through them one at a time; the answers did differ.
+Fourteen pair the region arm, because every one of them reads a patch arm against
+a whole-image control, contrasts voting modes, or compares environments — and one
+of those (#2905) is a *single-arm* study whose entire purpose is a comparison
+against two SigLIP environments, which is the case that shows "no contrast inside
+the grid" is not the same as "no contrast". Two are not studies at all
+(`launch_errdump.sh`, `launch_horizon.sh`): they re-run named cells of a
+completed grid against its own `prepare_info.json`, so their arms are pinned by
+that grid and renaming one would drop it from the enumeration and shift every
+later index.
+
+**What made the pins worth more than a comment.** Two of the sixteen keep an
+opening the rest do not, and a pin nobody can check reads exactly like an
+oversight a year later. So the opening became a *declaration* — `run_cells.py`
+raises on a cell that opened differently from `CALIB_REQUIRE_OPENING`, preflight
+check 14 refuses the array in either direction, and `assert_one_opening` refuses
+to pool two openings at analysis time. The third one is not redundant: cells are
+skipped when their CSV exists, so a resume across this fix leaves old cells
+beside new ones *inside one arm*, where every count still reads N/N.
+
+**And the rename needed a check of its own.** `array_cells` enumerates
+`DATASETS x embedders x the categories PREPARE selected`, so an arm prepare never
+wrote an entry for contributes **zero cells** — silently, with every later index
+meaning a different cell. Most of these launchers reuse a finished study's
+`prepare_info.json` to skip a GPU stage, and it is keyed by embedder name, so
+`dinov3_patch` -> `siglip+dinov3_patch` is exactly the rename that lands there.
+Preflight check 15 compares the configured grid against prepare's own entries;
+re-running prepare for the new name reuses the cached pickle and costs no encoder
+time, which is the point — the expensive thing was never the fix, it was not
+knowing you needed one.
 
 **One thing worth keeping beyond this study.** `media["embeddings"]` is already
 a dict keyed by embedder name, so one media *can* carry both vectors — that is

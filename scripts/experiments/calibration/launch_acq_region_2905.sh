@@ -56,12 +56,25 @@
 # `--seeds 24-47` and every cell already on disk still counts — the mistake
 # #2877 could not undo becomes a second submission.
 #
+# "Still counts" is about the INDEX mapping, and it stops at the seeding fix:
+# cells written before #3269 seeded from a crop, and cells written now open on a
+# text sort (see the environment note below), so the two cannot be pooled into
+# one number however stable the indices are.  `_cells_io.assert_one_opening`
+# refuses that pooling at analysis time rather than leaving it to be noticed.
+#
 # A seed's trajectory does not depend on the declared count: `seed` is passed
 # to the simulator directly and the exemplar is `candidates[seed % len]`.  Only
 # the index mapping moves, which is exactly what this pins.
 #
 # Prepare is REUSED (no GPU stage): the dinov3_patch pickle and exemplar crops
-# from the #2861 anchor-rate run, so the categories are the same 23.
+# from the #2861 anchor-rate run, so the categories are the same 23.  The pair
+# reads that same pickle (`pickle_name` resolves the LEARN half) and opens the
+# `visual_genome_m__siglip.pkl` beside it, which that run also embedded.  What
+# it cannot reuse is a prepare_info.json keyed by the old bare name: the grid
+# enumerates by embedder, so a missing key means the arm contributes ZERO cells
+# rather than failing.  Re-run prepare for the paired name -- it reuses the
+# cached pickles, so it costs no encoder time -- and preflight check 15 is what
+# says whether you did.
 #
 # Usage:
 #   bash launch_acq_region_2905.sh --seeds 24                  # the study
@@ -88,14 +101,36 @@ HERE="$WT/scripts/experiments/calibration"
 export CALIB_EXP="${CALIB_EXP:-/home/hltcoe/$USER/experiments/acq-region-2905}"
 
 # --- environment: the one VG arm that genuinely region-votes ---
+# ...as the PAIR `siglip+dinov3_patch` (#3278).  This study has a single
+# environment, so nothing inside it can be confounded -- but its whole purpose
+# is a COMPARISON ACROSS environments: k_acq=-3 ships on COCO-siglip and fails
+# its own rule on VG-siglip, and this run is the third, region-voting reading
+# that decides whether the offset should be gated by voting mode.  The other two
+# were measured on siglip, which since #3269 opens on a typed query; bare
+# `dinov3_patch` has no text tower and would open on three random known-goods,
+# so the environment that breaks the tie would have differed from both of them
+# in two ways at once.  k_acq is an offset applied to a RANK POSITION in the
+# acquisition ranking, which is precisely the object the opening creates.
 export CALIB_DATASETS=visual_genome_m
-export CALIB_VG_EMBEDDERS=dinov3_patch
+export CALIB_VG_EMBEDDERS=siglip+dinov3_patch
+export CALIB_REQUIRE_OPENING=text
+# A paired arm cannot fall back to the known-good start (`run_cells.py` raises),
+# so every selected category must have a typed query.  Selection filters to the
+# eligible ones before it picks, replacing rather than dropping.
+export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_PATCH_STYLES=max_patch
 export CALIB_REPOOL_VARIANTS=
 export CALIB_SCHEDULE_VARIANTS=
 export CALIB_MAX_STEPS=100
 export CALIB_N_SEEDS=48   # DECLARED; see the header. The study runs --seeds 24.
-export CALIB_HEAD=linear
+# The head a live detector actually has, because the acquisition offset is only worth
+# measuring on the model users actually get.  NOT `linear`: that was production
+# when this launcher was written, and PR #3198 moved `PRODUCTION_HEAD` to the
+# linear SVM, so the pin outlived the thing it was pinning -- preflight check 12
+# has been failing on it since.  Named rather than left unset, which is what
+# `launch_transfer_2883.sh` settled on: the run's head is then readable from the
+# launcher instead of from a default three modules away.
+export CALIB_HEAD=linear_svm
 export CALIB_SAFE_THRESHOLDS=1
 export CALIB_ANCHORED=0
 # CALIB_BLEND_SCHEDULE deliberately unset: the run must live under whatever

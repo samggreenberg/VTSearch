@@ -16,6 +16,25 @@
 # The profile must reproduce the source run's grid exactly, because the index
 # is a position in an enumerated list.  A profile that sets a different dataset
 # or embedder list silently dumps a DIFFERENT cell under the tag you asked for.
+#
+# THE OPENING IS PINNED BY THAT, NOT CHOSEN (#3278).  Sixteen launchers carried
+# a bare `dinov3_patch` arm that opens on three random known-goods where every
+# SigLIP arm opens on a typed query; most of them are now the pair
+# `siglip+dinov3_patch`, which holds the opening fixed across the arms of one
+# study.  These profiles are not a study.  They re-run named cells of a
+# COMPLETED grid, against that grid's own `prepare_info.json` by symlink -- and
+# prepare_info is keyed by embedder name, so renaming an arm here drops it from
+# the enumeration entirely (zero categories -> zero cells) and every index after
+# it means a different cell.  So each profile keeps its source run's arms
+# verbatim, and each declares what it therefore gets: `CALIB_REQUIRE_OPENING`
+# is `mixed` for the two profiles whose source grid holds both openings and
+# `known_good` for the all-DINOv3 `binary` one.  Change a profile only when its
+# SOURCE run is re-launched with a new grid, and change it to match.
+#
+# One thing the source runs no longer promise: a cell re-run today opens on a
+# text sort wherever it can (#3269), while the wave1/vgbox/binary runs on disk
+# were crop-seeded.  A dump is therefore a reading of the same CELL, not a replay
+# of the same TRAJECTORY, until the source grid is re-run.
 set -euo pipefail
 
 WT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
@@ -37,6 +56,9 @@ case "$PROFILE" in
 text) ;;  # resolved below, after the source run is known
 wave1)
   SRC=/expscratch/$USER/bench-overview
+  # Both openings, because the source grid holds SigLIP arms (typed query) and a
+  # bare DINOv3 arm (three random known-goods) side by side.
+  OPENING=mixed
   GRID="CALIB_DATASETS=visual_genome_m,caltech101_m,coco_val"
   GRID="$GRID CALIB_VG_EMBEDDERS=siglip,siglip2_l,dinov3_patch"
   GRID="$GRID CALIB_CALTECH_EMBEDDERS=siglip,siglip2_l,dinov3_patch"
@@ -46,6 +68,7 @@ wave1)
   ;;
 vgbox)
   SRC=/expscratch/$USER/bench-vgbox2
+  OPENING=mixed
   GRID="CALIB_DATASETS=vg_box_small,vg_box_medium,vg_box_large"
   GRID="$GRID CALIB_VGBOX_EMBEDDERS=siglip,siglip2_l,dinov3_patch"
   GRID="$GRID CALIB_N_SEEDS=3 CALIB_N_CATEGORIES=10"
@@ -55,6 +78,10 @@ binary)
   # The box-averse arm: dinov3_patch forced through the whole-image style, so
   # the only difference from its boxed twin is whether a box is dragged.
   SRC=/expscratch/$USER/bench-binary
+  # This one IS uniform: every arm is bare DINOv3, so every cell takes the
+  # known-good start.  Pinned rather than left implicit, so a future edit that
+  # pairs an arm here fails instead of quietly re-seeding a dump.
+  OPENING=known_good
   GRID="CALIB_DATASETS=visual_genome_m,coco_val"
   GRID="$GRID CALIB_VG_EMBEDDERS=dinov3_patch CALIB_COCO_EMBEDDERS=dinov3_patch"
   GRID="$GRID CALIB_N_SEEDS=3 CALIB_N_PER_BAND=2 CALIB_N_CATEGORIES=6"
@@ -98,6 +125,11 @@ ENVX="export CALIB_EXP=$EXP CALIB_RESULTS=$EXP/results"
 ENVX="$ENVX VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
 ENVX="$ENVX VTS_REPO=$WT"
 ENVX="$ENVX $GRID CALIB_MAX_STEPS=150"
+# Declared, not inherited (#3278).  A mirrored grid that holds a text-seeded
+# SigLIP arm and a known-good-seeded DINOv3 arm at once is `mixed` -- neither
+# uniform assertion is true of it, and saying so keeps `run_cells.py` from
+# raising on a cell that is doing exactly what was asked.
+ENVX="$ENVX CALIB_REQUIRE_OPENING=$OPENING"
 ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
 ENVX="$ENVX VTS_DUMP_TEST_SCORES=$DUMP"
 

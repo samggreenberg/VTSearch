@@ -36,7 +36,25 @@ already using**, which silently breaks the per-name completion waiter below.
 Add `--reuse-prepare "$PREPARE_DIR"` when you are skipping a GPU prepare stage by
 reusing a finished study's output. It checks that every `crops/` entry still
 resolves — the links point into the study that generated them, and `readlink -f`
-recreates them happily after that study is archived (#2881).
+recreates them happily after that study is archived (#2881) — and it is where the
+grid-vs-prepare check reads from when the run has not copied `prepare_info.json`
+in yet.
+
+**Declare the opening.** `export CALIB_REQUIRE_OPENING=text` (or `known_good`, or
+`mixed`) in the launcher. Autopilot has two real starts and which one a cell takes
+is decided silently, by whether its category has a typed query and whether its
+embedder has a text tower — so a grid holding a SigLIP arm and a bare
+`dinov3_patch` one opens two ways along one axis, and nothing says so (#3278).
+The declaration is asserted per grid by preflight and per cell by `run_cells.py`,
+and `_cells_io.assert_one_opening` refuses to pool two openings at analysis time.
+An arm that must region-vote *and* open on a query is the pair
+`siglip+dinov3_patch` (#3276): SigLIP ranks the query, DINOv3 does the learning.
+
+Renaming an arm — pairing one included — means **re-running prepare**, even when
+every pickle is cached. `prepare_info.json` is keyed by embedder name and the grid
+enumerates from it, so an arm with no entry contributes zero cells silently and
+every later array index means a different cell. Preflight check 15 is what says
+whether you did.
 
 It refuses to pass when the results dir already holds another grid's cells,
 when the *actual* mount is low on space, when zero-byte cells from a previous

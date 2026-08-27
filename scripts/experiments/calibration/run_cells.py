@@ -163,6 +163,32 @@ def _text_seed_scores(ds: str, emb: str, cat: str, medias: dict) -> "dict[int, f
     return {ids[k]: float(cos[k]) for k in range(len(ids))}
 
 
+def check_declared_opening(ds: str, emb: str, cat: str, seed_mode: str) -> None:
+    """Raise unless this cell opened the way the study said it would (#3278).
+
+    Which start a cell takes is decided silently, by whether its (dataset,
+    category) has a query and whether its embedder's text half has a tower.  So
+    a grid mixing SigLIP and DINOv3 arms opens two different ways along one axis
+    and nothing anywhere says so -- the confound
+    ``lessons/2026-08-27-the-region-arm-could-not-open-the-way-the-app-does.md``
+    describes.  ``CALIB_REQUIRE_OPENING`` is the study saying which opening it
+    means; this is the per-cell half of enforcing it, beside preflight check 14's
+    per-grid half.
+
+    It raises rather than warning for the reason the paired-arm guard in
+    :func:`main` does: a cell missing from the array is visible in any count of
+    it, and a cell that ran under the wrong opening is not.  ``mixed`` (and unset) assert
+    nothing -- a re-runner mirroring a completed grid legitimately holds both.
+    """
+    if cfg.REQUIRE_OPENING not in ("text", "known_good") or seed_mode == cfg.REQUIRE_OPENING:
+        return
+    raise RuntimeError(
+        f"cell {ds}x{emb}:{cat} opened on {seed_mode!r} but this study declares "
+        f"CALIB_REQUIRE_OPENING={cfg.REQUIRE_OPENING!r} "
+        f"(query={_seed_query_text(ds, cat)!r}, text half={cfg.text_embedder(emb)})"
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Calibration: one cell (dataset,embedder,category,seed).")
     parser.add_argument("--index", type=int, default=None, help="Cell index; defaults to $SLURM_ARRAY_TASK_ID.")
@@ -228,7 +254,13 @@ def main(argv: list[str] | None = None) -> int:
             f"paired embedder {emb!r} fell back to the known-good start for {ds}:{cat} "
             f"(query={_seed_query_text(ds, cat)!r}); the pair exists to take the text sort"
         )
-    common.log(f"seed: mode={seed_mode} embedder={seed_embedder or '-'} query={seed_query!r}")
+    # After the pair guard, which says the same thing about a paired arm in more
+    # useful words.
+    check_declared_opening(ds, emb, cat, seed_mode)
+    common.log(
+        f"seed: mode={seed_mode} embedder={seed_embedder or '-'} query={seed_query!r} "
+        f"declared={cfg.REQUIRE_OPENING or 'nothing'}"
+    )
 
     all_rows: list[dict] = []
     all_sweep: list[dict] = []

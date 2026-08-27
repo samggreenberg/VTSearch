@@ -38,7 +38,7 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from _cells_io import main_frame_files  # noqa: E402
+from _cells_io import assert_one_opening, main_frame_files  # noqa: E402
 
 #: Vote-count windows the comparison aggregates over.  Below 6 votes the blend
 #: is pure GMM (full authority), 6-20 is the ramp, above 20 it is pure
@@ -88,6 +88,7 @@ def load_base_rows(results_dir: Path, label: str) -> pd.DataFrame:
     if not files:
         return pd.DataFrame()
     df = pd.concat([pd.read_csv(p) for p in files], ignore_index=True)
+    assert_one_opening(df, f"analyze_ab.py ({label})")
     if "gmm_variant" in df.columns:
         df["gmm_variant"] = df["gmm_variant"].fillna("")
         df = df[df["gmm_variant"] == ""]

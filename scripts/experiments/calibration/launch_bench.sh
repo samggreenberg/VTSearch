@@ -25,9 +25,40 @@ export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
 # --- the grid (sizing only) ------------------------------------------------
 export CALIB_DATASETS="${CALIB_DATASETS:-visual_genome_m,caltech101_m,coco_val}"
-export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,siglip2_l,dinov3_patch}"
-export CALIB_CALTECH_EMBEDDERS="${CALIB_CALTECH_EMBEDDERS:-siglip,siglip2_l,dinov3_patch}"
-export CALIB_COCO_EMBEDDERS="${CALIB_COCO_EMBEDDERS:-siglip,siglip2_l,dinov3_patch}"
+# The region arm is the PAIR `siglip+dinov3_patch`, not bare `dinov3_patch`
+# (#3278).  DINOv3 has no text tower, so on its own it opens on three random
+# known-goods while both SigLIP arms open on a typed query -- and this benchmark
+# reads its three arms SIDE BY SIDE per dataset, which is precisely where an
+# arm-dependent difference in the opening stops cancelling.  The pair holds the
+# opening fixed (SigLIP ranks the query for every arm) and lets the arms differ
+# only in what the detector learns in, which is the axis being reported.
+#
+# The honest caveat, because this study's charter is "what does a current
+# VTSearch user get?": the app cannot pair two spaces today (#3276 "Not in
+# scope"), so a real user with a DINOv3 detector *does* get the known-good
+# start.  The paired arm therefore prices REGION VOTING rather than today's
+# DINOv3 flow end to end.  That is the right trade for a table whose rows are
+# compared against each other -- the alternative measures voting mode and
+# opening at once and can separate neither -- but it is a divergence, not a
+# default, which is why it is written down here.
+export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,siglip2_l,siglip+dinov3_patch}"
+export CALIB_CALTECH_EMBEDDERS="${CALIB_CALTECH_EMBEDDERS:-siglip,siglip2_l,siglip+dinov3_patch}"
+export CALIB_COCO_EMBEDDERS="${CALIB_COCO_EMBEDDERS:-siglip,siglip2_l,siglip+dinov3_patch}"
+# One declaration, two enforcement points: preflight check 14 refuses the array
+# if any selected cell would take the other start, and run_cells.py raises on a
+# cell that did.  Either alone leaves a hole -- preflight cannot see a cell that
+# resumes months later, and a per-cell raise costs a queue slot per cell.
+export CALIB_REQUIRE_OPENING=text
+# ...and the other half of that declaration, which pairing makes mandatory rather
+# than tidy: a paired arm has no known-good fallback (falling back would run bare
+# `dinov3_patch` under the pair's name, so `run_cells.py` raises instead), and
+# category selection here runs over the dataset's FULL vocabulary while the query
+# tables cover part of it.  `CALIB_REQUIRE_SEED_QUERY=1` filters the ineligible
+# categories out BEFORE selection, so each is replaced by the next eligible one
+# rather than shrinking the grid.  It does move the selected set: that is the
+# price of every cell opening the way a user would, and the alternative is cells
+# that die one at a time deep inside the array.
+export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_N_SEEDS="${CALIB_N_SEEDS:-3}"
 export CALIB_N_PER_BAND="${CALIB_N_PER_BAND:-2}"
 export CALIB_N_CATEGORIES="${CALIB_N_CATEGORIES:-6}"
@@ -67,6 +98,10 @@ ENVX="$ENVX VTS_REPO=$VTS_REPO"
 ENVX="$ENVX CALIB_DATASETS=$CALIB_DATASETS"
 ENVX="$ENVX CALIB_VG_EMBEDDERS=$CALIB_VG_EMBEDDERS CALIB_CALTECH_EMBEDDERS=$CALIB_CALTECH_EMBEDDERS"
 ENVX="$ENVX CALIB_COCO_EMBEDDERS=$CALIB_COCO_EMBEDDERS"
+# Named explicitly for the same reason CALIB_PATCH_STYLES is below: it decides
+# what the run is allowed to have measured, so it must not depend on the
+# submitting shell's environment surviving into the job.
+ENVX="$ENVX CALIB_REQUIRE_OPENING=$CALIB_REQUIRE_OPENING CALIB_REQUIRE_SEED_QUERY=$CALIB_REQUIRE_SEED_QUERY"
 ENVX="$ENVX CALIB_N_SEEDS=$CALIB_N_SEEDS CALIB_N_PER_BAND=$CALIB_N_PER_BAND"
 ENVX="$ENVX CALIB_N_CATEGORIES=$CALIB_N_CATEGORIES CALIB_MAX_STEPS=$CALIB_MAX_STEPS"
 ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="

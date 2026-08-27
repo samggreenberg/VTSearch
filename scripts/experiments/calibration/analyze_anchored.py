@@ -37,7 +37,7 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from _cells_io import main_frame_files  # noqa: E402
+from _cells_io import assert_one_opening, main_frame_files  # noqa: E402
 
 import experiment_config as cfg  # noqa: E402
 
@@ -65,6 +65,7 @@ def load_cells(cells_dir: Path) -> pd.DataFrame:
     if not files:
         return pd.DataFrame()
     df = pd.concat([pd.read_csv(p) for p in files], ignore_index=True)
+    assert_one_opening(df, "analyze_anchored.py")
     df["gmm_variant"] = df["gmm_variant"].fillna("")
     df["arm"] = df["dataset"] + "/" + df["embedder"] + "/" + df["style"]
     df["n_votes"] = df["n_good"] + df["n_bad"]
