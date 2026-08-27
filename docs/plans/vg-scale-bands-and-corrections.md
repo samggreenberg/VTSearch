@@ -1,7 +1,5 @@
 # Same-class scale bands for VG, and the label corrections they need
 
-Refs [#3156](https://github.com/samggreenberg/VTSearch/issues/3156).
-
 ## Why the current `vg_box_*` sets can't answer the scale question
 
 `scan_vg_boxes.py` measures each VG category's **median** voted-box area, and
@@ -159,18 +157,23 @@ Two measurements constrain what comes next:
 
 <!-- item-sep -->
 
-- **Slate builder and correction ingest.** Per-class review slates from the
-  score dumps (`vtscore/eval/score_dumps.py`) in three recorded strata —
-  `boundary`, `extreme`, `random` — written as a folder plus manifest for
-  `server_folder` import; and the reverse script turning an exported LabelSet
-  JSON back into verdict rows keyed `(image_id, class)`. (Sonnet 5)
+- **Finish the review and close the loop.** The negative review is drafted by a
+  triage pass and awaits the reviewer's audit slate (`make_audit_pass.py`: the
+  flags, whose disagreement rate is the triage's precision, plus an unflagged
+  random sample, which is the only thing that can bound what it missed). Then
+  re-run `verdicts_to_corrections.py` and rebuild. **Check
+  `check_review_coverage.py` before trusting any rebuilt cell** — no structural
+  check implies coverage, and three rebuilds once retired 577 of 743 reviewed
+  images while every other check passed. (human + Sonnet 5)
 
 <!-- item-sep -->
 
-- **COCO-anchored noise measurement.** For classes in both vocabularies, VG's
-  miss rate can be measured against COCO val2017's exhaustive annotation with no
-  human review at all — and the same comparison scores our own annotators. Worth
-  running *before* the manual pass, to size it. (Sonnet 5)
+- **Report the residual error rate the review actually bounds.** Per band, from
+  the random stratum only, with the small band's limit stated rather than
+  hidden: boxed review confirms ~2/3 of sub-patch positives and the model fails
+  the same ones, so a small-band "not confirmed" is recorded as unconfirmed and
+  the label stands. That number belongs in the report beside any small-band
+  result. (Sonnet 5)
 
 <!-- item-sep -->
 

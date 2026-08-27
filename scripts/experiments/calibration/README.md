@@ -187,9 +187,10 @@ regret? Both voting modes, since the calibrators differ (VG region voting runs
 the bag-aware calibrator, Caltech binary voting the row-wise one).
 
 `CALIB_FOLD_COUNTS=1,2,3,4,6,8,16` makes every step train `max(counts)` folds
-and emit one `folds_k{K}_xcal` row per count — plus `folds_k{K}_blend`, the
-shipped threshold after the safe-threshold mix-in — each carrying that K's
-regret and its measured `fold_seconds`. This is cheap and **exact** rather than
+and emit one `folds_k{K}_xcal` row per count — plus `folds_k{K}_blend` (the
+retired `cap50` mix-in) and `folds_k{K}_anchored` (production's fold-anchored
+rule, and the only arm in which K moves *both* halves of the threshold) — each
+carrying that K's regret and its measured `fold_seconds`. This is cheap and **exact** rather than
 approximate because the folds are nested: each is an independent stratified draw
 off one `RandomState(42)` at a per-fold size that ignores the count, so the K
 folds a live `calibrate_count=K` run trains are the first K of these. Every K is
@@ -212,3 +213,69 @@ pre-registered decision rules: `docs/experiments/calibration-fold-count/REPORT.m
 Not to be confused with the older `analyze_folds.py` / `launch_folds_2861.sh`,
 which moved the fold count to 4 only to unlock the anchored `qmean`/`qmedian`
 combine question — it measures no cost and covers region voting only.
+
+## Good Mining: sweeping the Autopilot **opening** (issue #3267)
+
+Getting enough Goods looks like what separates a VTSearch run that works from
+one that fails, and the *opening* is where Goods come from. Today it is fixed:
+the top of the seed sort until 3 positives, that sort's cutoff until 4
+negatives, then the learned Hard sort ever after.
+
+Both of those phases are the **same operation** — a rank-space `hard` select
+against a cut drawn on the seed sort — at two different cuts. The Good phase's
+`top` select is that select against a cut placed above every score; the Bad
+phase's is against the sort's own fitted GMM, split at the production midpoint.
+So the opening collapses to a list of rounds, each naming *how many clicks* and
+*where on the sort*, which is what `CALIB_STARTUP_SCHEDULE` sweeps.
+
+```bash
+GM_STAGE=live bash launch_good_mining.sh    # coco_val + visual_genome_m
+GM_STAGE=bands bash launch_good_mining.sh   # vg_box_small/medium/large
+python analyze_startup.py                   # once every arm drains
+python selftest_analyze_startup.py          # planted-answer check on the analyzer
+```
+
+Grammar (full reference: [`vtscore/eval/startup_schedule.py`](../../../vtscore/eval/startup_schedule.py)):
+`<g|b|n><count>@<top|mid|k[-]N|q<frac>>`, comma-separated. `g3` stays until 3
+goods exist, `b4` until 4 bads, `n8` for 8 clicks; `@top` cuts above every score,
+`@mid` at the shipped GMM midpoint, `@k-3` at that GMM split under inclusion −3,
+`@q0.05` at the sort's 5th rank percentile. `g3@top,b4@mid` is today's opening
+and is *required* to reproduce a default run click for click.
+
+**Two arms are load-bearing.**
+
+- `deep_first` (`n10@q0.35,n6@mid`) is the **falsifier**: it opens below the good
+  mass and must mine *fewer* positives. If it does not, depth is not the
+  mechanism and no other number in the run is interpretable — `analyze_startup.py`
+  withholds the verdict rather than reporting one.
+- `flat_mid` (`n16@mid`) is the **length-matched control**. Every banded arm
+  spends 16 opening clicks against `prod`'s ~7, so a win over `prod` alone could
+  be "spend more clicks before training". Read each banded arm against both.
+
+**Expect the `k` family to be partly inert, and check rather than assume.** How
+far a given inclusion moves the pick is a property of the fitted mixture, not of
+the inclusion: on a steep sort the whole usable range can land inside a couple of
+rank percent, so a grid that looks well spread in `k` can be nearly a point in
+the space the picks actually live in. That is exactly why the `q` family exists
+beside it — `q` establishes whether *position* is the mechanism, `k` asks whether
+the app's existing Inclusion knob is a usable handle on it. The analyzer reads
+each arm's realized `startup_cut_percentile` and reports "measured nothing"
+rather than "the lever does nothing".
+
+### The pick log
+
+`CALIB_EMIT_PICKS=1` (the default) writes `task_*__picks.csv`: **one row per
+click**, carrying what was picked, whether it turned out to be a positive, and
+where on the seed sort it came from. The main frame cannot answer this study's
+questions — it starts at the first *trainable* step, so the opening, which is
+the whole subject, is exactly the part it does not record. A cell whose opening
+never found both classes emits no main row at all; that is a result about that
+arm (the starvation regime), and the analyzer counts those cells rather than
+dropping them.
+
+### Sizing
+
+`live` is 2 datasets × `siglip` × (6 COCO + 4 bands × 3 VG) categories × 6 seeds
+× 8 arms ≈ 860 cells at `CALIB_MAX_STEPS=100`. `bands` triples the dataset count.
+Per the [GRID playbook](../GRID-PLAYBOOK.md), time **one real cell** before
+submitting `bands` — do not extrapolate from the `live` stage's slowest cell.

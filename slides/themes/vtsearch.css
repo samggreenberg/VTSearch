@@ -16,7 +16,7 @@
  *    slide as it does in the chart beside it:
  *
  *      --hue-cut   blue   the threshold, and the shipped decision it makes
- *      --hue-neg   rust   the negative side: the Bad component, the losing arm
+ *      --hue-neg   red    the negative side: the Bad component, the losing arm
  *      --hue-pos   green  the positive side: the Good component, a measured win
  *
  *    Use them through the .cut / .neg / .pos span classes, and only when the
@@ -38,7 +38,7 @@
 
   /* Identity hues — see rule 2 above. Kept in sync with make-calib-figs.py. */
   --hue-cut: #0b5fa5;
-  --hue-neg: #b45309;
+  --hue-neg: #b91c1c;
   --hue-pos: #0d8a5f;
 
   font-family: "Helvetica Neue", Helvetica, Arial, "Liberation Sans", sans-serif;
@@ -179,8 +179,42 @@ section.statement {
 section.statement h1 { font-size: 54px; line-height: 1.2; }
 
 /* Outline slide: the "where this is going" list. Numbered, quiet numerals, one
-   line per section so the audience can hold the whole shape at once. */
-section.outline ol { padding-left: 0; list-style: none; counter-reset: outline; }
+   line per section so the audience can hold the whole shape at once.
+
+   Laid out like every other slide in the deck rather than as its own kind of
+   page: the headline sits in the same top-left notch a full-bleed figure
+   leaves for it (`section.full` below, and `slide_figure.TITLE_NOTCH_PX`),
+   and the list occupies the rectangle a figure would. The outline *is* this
+   slide's figure — it is the one thing the room is meant to look at — so it
+   gets the slot the deck gives figures, and the audience is not asked to
+   re-find the title on the one slide that comes back six times. */
+section.outline {
+  padding: 42px 60px;
+  align-content: start;
+}
+section.outline h2 {
+  max-width: 300px;
+  margin: 0;
+  font-size: 40px;
+  line-height: 1.12;
+}
+section.outline ol {
+  /* The figure slot: right of the notch, inset from the page-number corner.
+     Centred in it the way `bg fit` centres a drawing in the space it is
+     given. */
+  position: absolute;
+  left: 400px;
+  right: 70px;
+  top: 42px;
+  bottom: 60px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  font-size: 34px;
+  padding-left: 0;
+  list-style: none;
+  counter-reset: outline;
+}
 section.outline ol li {
   counter-increment: outline;
   margin-bottom: 0.5em;
@@ -197,20 +231,79 @@ section.outline ol li::before {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+/* The trailing item's own bottom margin would otherwise push the whole list
+   above the centre of the slot it is centred in. */
+section.outline ol li:last-child { margin-bottom: 0; }
 /* The section we are about to enter, or the one being revisited. */
 section.outline ol li.here { font-weight: 700; }
+/* Weight is set here, not with `**bold**` in the fragment: the whole point of
+   the marked variants below is that one line is heavier and darker than the
+   rest, and a `<strong>` in the markdown would pin every line to the same
+   weight whichever one is marked. */
+section.outline ol li { font-weight: 600; }
 section.outline ol li em { color: var(--ink-soft); font-style: normal; }
 
-/* Full-bleed figure: kill the padding so a background image owns the slide. */
-section.full { padding: 0; }
+/* The same outline, shown again before each section with that section marked:
+   `outline-<deck> +at3` in the manifest. The marked line goes bold and the
+   rest go quiet, which is the deck's one rule for emphasis — weight and
+   darkness, never hue — used to say "you are here" without adding a mark the
+   audience has to decode. The opening outline carries no `atN` and so is all
+   one weight, because at that point every section is still ahead. */
+section.outline[class*="at"] ol li { color: var(--ink-soft); }
+section.outline[class*="at"] ol li::before { color: var(--rule); }
+section.outline.at1 ol li:nth-of-type(1),
+section.outline.at2 ol li:nth-of-type(2),
+section.outline.at3 ol li:nth-of-type(3),
+section.outline.at4 ol li:nth-of-type(4),
+section.outline.at5 ol li:nth-of-type(5),
+section.outline.at6 ol li:nth-of-type(6) { color: var(--ink); font-weight: 700; }
+section.outline.at1 ol li:nth-of-type(1)::before,
+section.outline.at2 ol li:nth-of-type(2)::before,
+section.outline.at3 ol li:nth-of-type(3)::before,
+section.outline.at4 ol li:nth-of-type(4)::before,
+section.outline.at5 ol li:nth-of-type(5)::before,
+section.outline.at6 ol li:nth-of-type(6)::before { color: var(--ink-soft); }
+
+/* Full-bleed figure: the figure owns the whole 1280x720 slide, and the title
+   sits in a notch cut out of its top-left corner.
+
+   The notch is a fixed standard, not a per-slide choice, and that is the whole
+   point of it: a headline that moves to dodge each figure stops being a
+   headline and becomes another thing to find. A figure that genuinely cannot
+   spare its top-left corner therefore carries NO title — it does not put one
+   somewhere else. The same rectangle lives in Python as
+   `slide_figure.TITLE_NOTCH_PX`, where `save()` refuses to write a full-bleed
+   figure that draws inside it; keep the two in sync. Its height is a
+   measurement of this deck's longest full-bleed headline rather than a round
+   number — see the Python constant for how to re-take it.
+
+   The background image is a Marpit layer behind the section, so the padding
+   here insets only the title — the figure still bleeds to all four edges. */
+section.full {
+  padding: 42px 60px;
+  align-content: start;
+}
+/* No kicker on a full-bleed slide: the figure says which mechanism this is,
+   and "Iteration 1 — the idea" over the top of it is a second thing to read
+   before the first. The headline alone, larger than the deck's body headline
+   and set tight, because a title that wraps into a squarer block keeps the
+   notch out of the figure's way. */
 section.full h2 {
-  position: absolute;
-  top: 42px;
-  left: 60px;
-  right: 60px;
-  background: rgba(255, 255, 255, 0.92);
-  padding: 0.25em 0.5em;
-  border-radius: 6px;
+  max-width: 300px;
+  margin: 0;
+  font-size: 40px;
+  line-height: 1.12;
+  /* A white halo, not a white plate. On a generated figure — white paper with
+     its ink kept out of the notch — it is invisible by construction, so those
+     slides pay nothing for it. On a screenshot, which is a photograph and
+     cannot leave a corner blank, it is what separates the headline from the
+     app's own chrome. One rule for both, so the title looks the same
+     everywhere instead of growing a plate on the slides that need one. */
+  text-shadow:
+    0 0 6px #fff,
+    0 0 14px #fff,
+    0 0 28px #fff,
+    0 0 28px #fff;
 }
 
 /* Build groups (progressive reveal): build.py injects this class on every
@@ -246,11 +339,54 @@ section.speaker .speaker-page {
 section.speaker .speaker-slide {
   flex: 0 0 44%;
 }
+section.speaker .speaker-slide > p { margin: 0; }
 section.speaker .speaker-slide img {
   width: 100%;
   border: 1px solid var(--rule);
   border-radius: 4px;
   box-shadow: 0 2px 10px rgba(20, 24, 31, 0.10);
+}
+
+/* The build group's reveals, as a lettered contact sheet under the miniature.
+   It fills the quarter-page the single miniature used to leave empty, and it
+   replaces the sentence of prose ("in the audience deck this slide is a
+   seven-page build...") that used to spend the notes column saying what a
+   picture says better. Three across, because at four the frames stop being
+   readable as drawings; the strip wraps to as many rows as the group needs. */
+section.speaker .speaker-frames {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+section.speaker .speaker-frames figure {
+  margin: 0;
+  flex: 0 0 calc((100% - 20px) / 3);
+  position: relative;
+}
+section.speaker .speaker-frames img {
+  width: 100%;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  box-shadow: none;
+}
+/* The letter, in the corner of the frame it names — same pairing the audience
+   deck makes at the bottom-right of every page of the group. */
+section.speaker .speaker-frames figcaption {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  min-width: 26px;
+  padding: 1px 5px 2px;
+  background: var(--wash);
+  border-top: 1px solid var(--rule);
+  border-right: 1px solid var(--rule);
+  border-radius: 0 4px 0 3px;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink);
+  line-height: 1.1;
+  text-align: center;
 }
 section.speaker .speaker-notes {
   flex: 1;
@@ -263,13 +399,56 @@ section.speaker .speaker-notes p { margin: 0 0 0.55em; }
 /* --- Pagination ------------------------------------------------------ */
 
 /* No running footer: the audience knows which talk they are in. Only the page
-   number, and only where it is useful. */
-section::after {
+   number, and only where it is useful.
+
+   The number is a div `build.py` emits, not Marpit's own `::after` counter —
+   the deck front matter sets `paginate: false`. Marpit can only count pages or
+   hold the previous count, and this deck needs neither: the title slide takes
+   no number at all, so the first real slide is 1 rather than 2, and a fragment
+   shown six times over is one slide shown six ways, wanting one number and six
+   letters however far apart the six pages fall. Both are rules about fragments,
+   which Marpit cannot see. */
+section .pageno {
+  position: absolute;
   color: var(--ink-soft);
   font-size: 20px;
   right: 70px;
   bottom: 26px;
 }
 
-section.lead::after,
-section.statement::after { content: ""; }
+section.lead .pageno,
+section.statement .pageno { display: none; }
+
+/* A split-background slide is not the full slide. Marpit renders its text into
+   a `foreignObject` the width of the text column, so nothing inside the section
+   can reach the slide's right edge — a number set 70px in from it lands in the
+   middle of the slide, reading as a stray numeral rather than a folio. Put it
+   at the column's own left margin instead, where it lines up with the text it
+   belongs to. */
+section[data-marpit-advanced-background-split] .pageno {
+  right: auto;
+  left: 70px;
+}
+
+/* A numbering group shares one page number, so "the slide with the mixture
+   plot" still names one slide — but the room and the presenter still need to
+   say *which* reveal. Every page of a group carries a letter after the number:
+   5a, 5b, 5c. It is drawn a step lighter than the number, because the number
+   is the address and the letter is the sub-address; and it sits in a
+   fixed-width box to the right of the number rather than inside it, so a
+   one-character suffix cannot shift the number it follows. The box is offset
+   by a word space (6px at 20px) rather than butted against the number: set
+   flush, "5a" read as one two-character token instead of a number with a
+   sub-address after it. build.py emits it, and only on the pages of a
+   numbering group. */
+section .pageno-letter {
+  position: absolute;
+  right: 50px;
+  bottom: 26px;
+  width: 14px;
+  text-align: left;
+  font-size: 20px;
+  color: #a9b2be;
+}
+section.speaker .pageno,
+section.speaker .pageno-letter { display: none; }

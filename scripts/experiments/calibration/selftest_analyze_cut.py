@@ -235,7 +235,8 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                             backend="torch",
                             device="cpu",
                             elapsed_seconds=1.0,
-                            exemplar_id=-1,
+                            seed_mode="text",
+                            seed_query="a bus",
                         )
                         rows.append(row)
 
@@ -304,9 +305,9 @@ def _fabricate(root: Path, rng: np.random.Generator) -> None:
                         )
                         diag.append(d)
 
-                pd.DataFrame(rows, columns=pd.Index([*_CALIBRATION_COLUMNS, "embedder", "exemplar_id"])).to_csv(
-                    cells / f"task_{idx:04d}.csv", index=False
-                )
+                pd.DataFrame(
+                    rows, columns=pd.Index([*_CALIBRATION_COLUMNS, "embedder", "seed_mode", "seed_query"])
+                ).to_csv(cells / f"task_{idx:04d}.csv", index=False)
                 pd.DataFrame(diag, columns=pd.Index([*_CUT_DIAGNOSTIC_COLUMNS, "embedder"])).to_csv(
                     cells / f"task_{idx:04d}__cutdiag.csv", index=False
                 )

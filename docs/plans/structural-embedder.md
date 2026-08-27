@@ -64,6 +64,43 @@ reorders what was previously planned here.
 
 <!-- item-sep -->
 
+- **DocMarks — build the stamp-detection eval set and run it.** The builder is
+  in `scripts/experiments/docmarks/` (see its README). It exists because the
+  2026-07-13 result — the first configuration where structural search beats the
+  deep embedder on a real corpus — rests on two corpora of 259 and 1,088 pages
+  with as few as 9 instances per class, whose class identities that study
+  derived and nobody verified.
+
+  The shape is a **curated roster**, not an inventory: about two dozen
+  hand-picked classes whose every instance is adjudicated in or out, plus
+  unlimited unlabelled distractors. Both directions of the ground truth are
+  stored — a shared class id for "must be found together", a permanent
+  `separations.json` entry for "must be told apart" — because a threshold alone
+  decides the second one, and moving the threshold silently rewrites it. Owed:
+  - **Run it, SPODS-first.** `build_corpus.py --probe`, cluster into candidates,
+    `shortlist.py` to rank, pick ~24, then the `membership` and `confusable`
+    passes, then `embed_corpus.py`. Nothing has touched the real archives yet:
+    the parsers are tested against fixtures built from each source's documented
+    layout, and SPODS's layout is confirmed from its RAR headers, but StaVer's
+    and Tobacco800's Kaggle mirrors are unverified until a token is present.
+  - **The eval side of the contamination rule.** `classes.json` records each
+    class's `eligible_distractor_sources`, and `roster.eligible_pages` splits a
+    corpus into positive / known-negative / presumed-negative — but *nothing
+    consumes either yet*. Until a scoring path honours them, a Tobacco800 query
+    scored over the whole corpus is marked wrong for retrieving real matches out
+    of UCSF's tobacco archive. This is the item that makes the rest of the
+    design load-bearing rather than decorative.
+  - **Expand the roster past SPODS** once the first eval runs: StaVer stamps
+    (the line-art case where SIFT collapsed to 5.1%), then Tobacco800 logos,
+    then UCSF letterhead via the `letterhead` candidate pass.
+  - **More artwork and more haystack, if the first run justifies it**: the ICDAR
+    2023 ReST seal set (10,000 real seals, behind an RRC registration, so it
+    needs a manual fetch into `--synth-pool-dir`), full RVL-CDIP rather than the
+    100-per-class sample the downloader currently wires, and DocILE (~932k real
+    invoices grouped into vendor layout clusters, behind a research access form).
+
+<!-- item-sep -->
+
 - **3-DoF geometry as a per-media-profile default.** `scale_translation`
   (isotropic scale + translation, no rotation) is implemented in
   `vtscore/media/structural_geometry.py` and is a **free precision win** on flat

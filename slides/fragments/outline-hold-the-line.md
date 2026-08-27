@@ -1,37 +1,29 @@
 <!-- _class: outline -->
 
-### Where this goes
+## Outline & OutLyin'
 
-## One line, and five attempts to move it
+1. VTSearch
+2. Calibration
+3. Preference
+4. Regions
+5. The End
 
-1. **What VTSearch is** *— you vote on a handful; a detector ranks the rest*
-2. **The threshold decides twice** *— what you keep, and what you are asked next*
-3. **Four iterations on the line** *— each one shipped or died on a measurement*
-4. **The other axis** *— what if you wanted more false positives, or fewer?*
-5. **An epilogue that closed a line** *— pre-registered, measured twice, negative*
-6. **What is still open**
+<!-- **a** — Five stops, in order. Promise the room the shape: the first third
+     builds the tool, the middle two sections are the same machinery walked
+     twice, and the last one closes a question for good. -->
 
-<!-- Walk the list slowly; the whole talk should be legible from this slide.
+<!-- **b** — Section 1 is the tool, from nothing — nobody needs to have seen it
+     before. Three slides, and the last of them is where the whole talk's
+     object turns up: one line through a ranking, doing two jobs. -->
 
-     Sections 1 and 2 are the setup: what the tool does, and why one number
-     inside it is worth a whole talk. Nobody needs prior exposure to the app —
-     that is what those slides are for.
+<!-- **c** — Section 2 puts the line where the *data* says. Four ideas in
+     order, each one repairing what the last one starved on. -->
 
-     Section 3 is the body, and it has a fixed rhythm: the idea first, then
-     what the measurement said about it. The audience should always know
-     whether they are hearing a proposal or a result. The shape of the arc is
-     two estimators with opposite failure modes — one that is right in the
-     limit but starved early, one that is well-fed but permanently biased —
-     then the obvious fix of averaging them, then the principled fix of fusing
-     them into one fit.
+<!-- **d** — Section 3 puts it where the *user* says instead. Same machinery,
+     second axis: one slider, and what it took to make it mean anything. -->
 
-     Section 4 is the same machinery walked a second time, and say so when you
-     get to this line: everything in section 3 asks where the line goes, and
-     section 4 asks what happens when the user wants it somewhere else. It is
-     four slides and it is where the second job of the threshold — the one
-     named in section 2 — comes back and closes the loop.
+<!-- **e** — Section 4 introduces region voting, then runs the epilogue: is
+     there a smarter cut rule than the midpoint? One small win, then a
+     principled idea that lost. -->
 
-     Say now that section 5 is a negative result and that it is here on
-     purpose: once the fused fit shipped, even a rule that reads the true
-     labels could not beat it, which is the strongest evidence that section 3
-     finished the job rather than leaving it half done. -->
+<!-- **f** — The End. Take questions. -->

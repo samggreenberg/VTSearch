@@ -21,9 +21,13 @@ NEED_GB="${PREFLIGHT_NEED_GB:-5}"
 WARN_ONLY=0
 REPO="${VTS_REPO:-}"
 REGION_ARM=""
+MIN_POSITIVES=""
+REQUIRE_TEXT_SEED=""
+MODE_CONTRAST=""
 REUSE_PREPARE=""
 JOB_NAME=""
 MEM_PER_TASK=""
+HAS_PATCH_CELLS=0
 CONC=""
 DIVERGES="${PREFLIGHT_DIVERGES:-}"
 
@@ -33,10 +37,14 @@ while [[ $# -gt 0 ]]; do
     --arms) ARMS="$2"; shift 2 ;;
     --need-gb) NEED_GB="$2"; shift 2 ;;
     --require-region-voting) REGION_ARM="$2"; shift 2 ;;
+    --require-min-positives) MIN_POSITIVES="$2"; shift 2 ;;
+    --require-text-seed) REQUIRE_TEXT_SEED=1; shift ;;
+    --contrasts-voting-modes) MODE_CONTRAST=1; shift ;;
     --reuse-prepare) REUSE_PREPARE="$2"; shift 2 ;;
     --job-name) JOB_NAME="$2"; shift 2 ;;
     --diverges) DIVERGES="$2"; shift 2 ;;
     --mem) MEM_PER_TASK="$2"; shift 2 ;;
+    --patch) HAS_PATCH_CELLS=1; shift ;;
     --conc) CONC="$2"; shift 2 ;;
     --warn-only) WARN_ONLY=1; shift ;;
     *) echo "unknown flag: $1" >&2; exit 2 ;;
@@ -45,8 +53,9 @@ done
 [[ -n "$EXP" ]] || {
   echo "usage: preflight.sh --exp DIR [--arms a,b,c] [--need-gb N]" >&2
   echo "                    [--require-region-voting DATASET:EMBEDDER]" >&2
+  echo "                    [--require-text-seed]      # every cell must seed from a TYPED QUERY" >&2
   echo "                    [--reuse-prepare RESULTS_DIR]" >&2
-  echo "                    [--job-name NAME] [--mem 64G] [--conc N]" >&2
+  echo "                    [--job-name NAME] [--mem 64G] [--conc N] [--patch]" >&2
   echo "                    [--diverges knob1,knob2]   # knobs this study MEANS to pin off-production" >&2
   exit 2
 }
@@ -56,6 +65,22 @@ say_fail() {
   if [[ "$WARN_ONLY" == "1" ]]; then echo "  WARN  $*"; else echo "  FAIL  $*"; FAILED=1; fi
 }
 say_ok() { echo "  ok    $*"; }
+say_note() { echo "  note  $*"; }
+
+# Memory strings ("14G", "900M") to MB.  Defined up here beside the other
+# helpers because bash resolves a function only once execution reaches its
+# definition: while this lived further down, the patch-memory check above it
+# called an undefined name, `mem_mb` came back empty, and `(( "" < 12288 ))`
+# evaluated the empty string as 0 -- so a correctly-sized `--mem 14G` was
+# reported as "(< 12G)".  The gate failed closed, which is the safe direction,
+# but it failed for a reason its own message contradicted.
+_to_mb() {
+  local v="${1^^}"; local n="${v%[GMT]*}"
+  case "$v" in *T) awk "BEGIN{print $n*1024*1024}";;
+                *G) awk "BEGIN{print $n*1024}";;
+                *M) echo "$n";;
+                *)  echo "$n";; esac
+}
 
 echo "preflight: $EXP"
 
@@ -116,18 +141,43 @@ else
   fi
 fi
 
-# --- 3. Zero-byte cells from a previous incident ----------------------------
+# --- 3. Zero-byte and header-only cells from a previous incident ------------
 # A cell killed mid-write leaves a 0-byte CSV.  It counts as "present" to the
 # resume logic, so it is never re-run, and it crashes or silently shrinks the
 # analysis later.
+#
+# Its quieter twin is the header-only cell: a category that never collects both
+# classes writes the CSV header and nothing else.  That file is non-empty and
+# parses cleanly, so `-size 0` clears it and every "N/N cells" count calls it
+# present.  Check 13 predicts the condition from prepare_info.json *before* a
+# launch; this is the after-the-fact half, because a resumed grid inherits
+# whatever the previous attempt left behind.  Some are legitimate (a genuinely
+# thin category has no trainable step - the #3156 overview ended with 23 such
+# cells of 6480), so this REPORTS a count rather than blocking on it.
 ZROOTS=()
 for root in results-ab results; do [[ -d "$EXP/$root" ]] && ZROOTS+=("$EXP/$root"); done
 if [[ "${#ZROOTS[@]}" -gt 0 ]]; then
-  z=$(find "${ZROOTS[@]}" -name 'task_*.csv' ! -name '*sweep*' -size 0 2>/dev/null | wc -l)
+  z=$(find "${ZROOTS[@]}" -name 'task_*.csv' ! -name '*__*' -size 0 2>/dev/null | wc -l)
   if [[ "$z" -gt 0 ]]; then
     say_fail "$z zero-byte cell files present - delete them or they will never be re-run"
   else
     say_ok "no zero-byte cell files"
+  fi
+  # `! -name '*__*'` excludes every side frame at once (__sweep, __cutdiag,
+  # __cutincl - see _cells_io.SIDE_FRAME_SUFFIXES).  Naming them one at a time
+  # is how this check drifted: it still said `! -name '*sweep*'` two side frames
+  # later, and each of those is a long-format table that is *legitimately*
+  # header-only, so on #3156 the honest answer of 23 came back as 12983.
+  #
+  # `-size -2k -size +0` narrows to plausible candidates before the per-file
+  # `wc -l`, so the fork runs over a handful and not the whole grid: a cell CSV
+  # holding even one run is far larger than its ~700-byte header.
+  h=$(find "${ZROOTS[@]}" -name 'task_*.csv' ! -name '*__*' -size -2k -size +0 \
+        -exec sh -c '[ "$(wc -l < "$1")" -le 1 ]' _ {} \; -print 2>/dev/null | wc -l)
+  if [[ "$h" -gt 0 ]]; then
+    say_note "$h header-only cell file(s) - present, parse clean, carry no data row (see check 13)"
+  else
+    say_ok "no header-only cell files"
   fi
 fi
 
@@ -169,6 +219,27 @@ else
     if [[ -n "$(git -C "$REPO" status --porcelain --untracked-files=no)" ]]; then
       say_fail "worktree has uncommitted tracked changes - the run would be unreproducible"
     fi
+    # How far behind the integration branch?  Check 12 compares the study's pins
+    # against `PRODUCTION_*`, but it reads those constants **out of this same
+    # worktree** - so a checkout that predates a production change has a stale
+    # pin AND a stale constant, they agree, and check 12 says ok.  That is how
+    # #3156's 6480-cell overview trained the retired `linear` head from a base
+    # 321 commits behind dev: nothing was pinned wrong, the baseline had simply
+    # moved.  Distance from origin/dev is the only signal that catches it, and
+    # it is cheap.
+    BASE_BRANCH="${PREFLIGHT_BASE_BRANCH:-dev}"
+    if git -C "$REPO" rev-parse --verify -q "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+      behind=$(git -C "$REPO" rev-list --count "HEAD..origin/$BASE_BRANCH" 2>/dev/null || echo 0)
+      if [[ "$behind" -ge "${PREFLIGHT_MAX_BEHIND:-100}" ]]; then
+        say_fail "worktree is $behind commits behind origin/$BASE_BRANCH"
+        echo "        -> every PRODUCTION_* constant check 12 reads is that old too, so it"
+        echo "           cannot see a baseline that moved. Rebase, or set PREFLIGHT_MAX_BEHIND."
+      elif [[ "$behind" -gt 0 ]]; then
+        say_note "worktree is $behind commits behind origin/$BASE_BRANCH (under the ${PREFLIGHT_MAX_BEHIND:-100} gate)"
+      else
+        say_ok "worktree is level with origin/$BASE_BRANCH"
+      fi
+    fi
   fi
 fi
 
@@ -181,6 +252,13 @@ fi
 # that merely changes behaviour would have produced a clean, plausible, wrong
 # table.  So resolve the import the way a job does - through common.setup_env() -
 # and check where it landed.
+# Checks 6, 7 and 12 are also python, and they import the same tree.  When this
+# one fails there is no point running them: each re-derives the identical cause
+# and prints it as a raw traceback, so the three of them bury the single line
+# that says what to do.  Measured: launching without a venv on a non-interactive
+# ssh (where the system python is too old for `X | None` at import time) turned
+# one actionable failure into thirty lines of stack.
+PY_USABLE=1
 if [[ -n "$REPO" && -d "$REPO/vtscore" ]]; then
   RESOLVED=$(CALIB_EXP="$EXP" python - "$REPO" <<'PY' 2>/dev/null
 import pathlib, sys
@@ -193,6 +271,7 @@ PY
 )
   if [[ -z "$RESOLVED" ]]; then
     say_fail "could not resolve 'import vtscore' - is the venv active (source gridenv.sh)?"
+    PY_USABLE=0
   else
     REPO_REAL=$(cd "$REPO" && pwd -P)
     case "$RESOLVED" in
@@ -217,7 +296,9 @@ fi
 # Opt-in, because most studies do not claim region voting — but any study whose
 # *rationale* rests on the scoring geometry ("a max over region nodes") should
 # pass it.  One pickle open, and it either holds or it does not.
-if [[ -n "$REGION_ARM" ]]; then
+if [[ -n "$REGION_ARM" && "$PY_USABLE" == "0" ]]; then
+  say_fail "region-voting premise NOT checked: python cannot import the tree (see above)"
+elif [[ -n "$REGION_ARM" ]]; then
   ds="${REGION_ARM%%:*}"; emb="${REGION_ARM##*:}"
   if [[ -z "$ds" || -z "$emb" || "$ds" == "$REGION_ARM" ]]; then
     say_fail "--require-region-voting wants DATASET:EMBEDDER, got '$REGION_ARM'"
@@ -263,7 +344,9 @@ fi
 #
 # Reads the study's own config, so it needs no arguments and cannot drift from
 # what the run will actually do.
-if [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
+if [[ -n "$REPO" && "$PY_USABLE" == "0" ]]; then
+  say_fail "patch styles NOT checked: python cannot import the tree (see above)"
+elif [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
   STYLE_VERDICT=$(CALIB_EXP="$EXP" python - "$REPO" <<'PY' 2>&1
 import pathlib, sys
 repo = sys.argv[1]
@@ -296,6 +379,24 @@ PY
   esac
 fi
 
+# --- 7b. A region-voting cell needs region-voting memory ---------------------
+# A max_patch cell carries the patch grid and max-pools over it; measured peaks
+# are 9-14 GB depending on pool size (GRID-PLAYBOOK.md).  Sizing such an array
+# from a whole-image cell is not a near miss -- it is a different order of
+# magnitude, and the failure arrives as OUT_OF_MEMORY on most of the arm after
+# the array has been running long enough to look healthy (#3156: 74 of 108).
+if [[ "$HAS_PATCH_CELLS" == "1" && -n "$MEM_PER_TASK" ]]; then
+  mem_mb=$(_to_mb "$MEM_PER_TASK")
+  if (( mem_mb < 12288 )); then
+    say_fail "patch cells requested with --mem $MEM_PER_TASK (< 12G)"
+    echo "        -> measured max_patch peaks are 9-14 GB; see GRID-PLAYBOOK.md"
+    echo "        -> size from a cell that actually resolved to a patch style,"
+    echo "           not from one that fell back to whole_image"
+  else
+    say_ok "patch cells with --mem $MEM_PER_TASK (measured peaks 9-14 GB)"
+  fi
+fi
+
 # --- 8. Your own per-user memory allowance ----------------------------------
 # The cluster caps MEMORY per user, not only CPU.  An array that claims the whole
 # allowance does not fail - it just parks every later job of YOUR OWN behind it in
@@ -306,13 +407,6 @@ fi
 # Size memory from a real cell's MaxRSS, not from a round number:
 #   sacct -j <jobid> --format=JobID,MaxRSS,Elapsed
 if [[ -n "$MEM_PER_TASK" && -n "$CONC" ]]; then
-  _to_mb() {
-    local v="${1^^}"; local n="${v%[GMT]*}"
-    case "$v" in *T) awk "BEGIN{print $n*1024*1024}";;
-                  *G) awk "BEGIN{print $n*1024}";;
-                  *M) echo "$n";;
-                  *)  echo "$n";; esac
-  }
   req_mb=$(awk "BEGIN{print $(_to_mb "$MEM_PER_TASK") * $CONC}")
   # Two QOS can bind and they disagree: the job's association QOS and the
   # partition's.  In #3129 `squeue %q` said 4gpu_tier while the cpu partition
@@ -435,7 +529,9 @@ fi
 # divergence must be **declared** to pass: `--diverges head,anchor_weight`.  That
 # is the whole design - a study is always allowed to pin the axis it sweeps, and
 # is never allowed to pin one silently.
-if [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
+if [[ -n "$REPO" && "$PY_USABLE" == "0" ]]; then
+  say_fail "pinned knobs NOT compared against production: python cannot import the tree (see above)"
+elif [[ -n "$REPO" && -f "$REPO/scripts/experiments/calibration/experiment_config.py" ]]; then
   DIVERGENCE=$(CALIB_EXP="$EXP" python - "$REPO" <<'PYDIV' 2>&1
 import os
 import pathlib
@@ -487,9 +583,18 @@ v = env("CALIB_BLEND_SCHEDULE")
 if v is not None:
     rows.append(("blend_schedule", v, "<unset> = the app's per-mode default"))
 
-must_contain("cut_rule", "CALIB_ANCHORED_RULES", T.FOLD_ANCHOR_CUT_RULE, "mid,rate")
-must_contain("fold_combine", "CALIB_ANCHORED_FOLD_COMBINES", T.FOLD_ANCHOR_COMBINE, "qmean,qmedian")
-must_contain("anchor_weight", "CALIB_ANCHORED_WEIGHTS", "%g" % T.FOLD_ANCHOR_WEIGHT, "1,3,10,30,100")
+# The anchored/fold-anchored grid (#2852) is emitted only under CALIB_ANCHORED=1
+# and is off by default.  Checking its knobs unconditionally makes every study
+# that does not use the family declare a divergence it does not have - and a
+# declared-but-fictional divergence is worse than no check, because the next
+# reader cannot tell the real ones from the noise.  Check them when the family is
+# actually on; say plainly that they were skipped when it is not.
+if os.environ.get("CALIB_ANCHORED") == "1":
+    must_contain("cut_rule", "CALIB_ANCHORED_RULES", T.FOLD_ANCHOR_CUT_RULE, "mid,rate")
+    must_contain("fold_combine", "CALIB_ANCHORED_FOLD_COMBINES", T.FOLD_ANCHOR_COMBINE, "qmean,qmedian")
+    must_contain("anchor_weight", "CALIB_ANCHORED_WEIGHTS", "%g" % T.FOLD_ANCHOR_WEIGHT, "1,3,10,30,100")
+else:
+    print("SKIPPED\tanchored grid (CALIB_ANCHORED is not 1, so no anchored row is emitted)")
 must_contain("patch_style", "CALIB_PATCH_STYLES", PRODUCTION_PATCH_STYLE, "max_patch,max_patch_pca_hac")
 
 if not rows:
@@ -499,25 +604,224 @@ else:
         print("DIVERGES\t%s\t%s\t%s" % (knob, got, want))
 PYDIV
 )
-  if [[ "$DIVERGENCE" == "MATCHES" ]]; then
-    say_ok "every pinned knob matches the shipped value"
-  elif [[ "$DIVERGENCE" != DIVERGES* ]]; then
+  # Tag-dispatched rather than prefix-matched on the whole blob: the probe emits
+  # SKIPPED lines for knob families this run does not enable, and those have to
+  # be *reported* (a skipped check is not a passed one) without being mistaken
+  # for a divergence or for a broken probe.
+  unacked=0
+  understood=0
+  while IFS=$'\t' read -r tag knob got want; do
+    [[ -z "$tag" ]] && continue
+    case "$tag" in
+      MATCHES)
+        say_ok "every pinned knob matches the shipped value"
+        understood=1 ;;
+      SKIPPED)
+        say_ok "knob check skipped: $knob"
+        understood=1 ;;
+      DIVERGES)
+        understood=1
+        if [[ ",${DIVERGES}," == *",${knob},"* ]]; then
+          say_ok "declared divergence on '$knob' ($got, shipped is $want)"
+        else
+          say_fail "UNDECLARED divergence from production: $knob = $got, shipped is $want"
+          unacked=$((unacked + 1))
+        fi ;;
+      *)
+        say_fail "could not compare this run's knobs against production: $tag $knob $got $want"
+        understood=1 ;;
+    esac
+  done <<< "$DIVERGENCE"
+  if [[ "$understood" -eq 0 ]]; then
     say_fail "could not compare this run's knobs against production: $DIVERGENCE"
+  fi
+  if [[ "$unacked" -gt 0 ]]; then
+    echo "        -> if that is the axis this study sweeps, pass --diverges <knob>[,<knob>]"
+    echo "        -> if it is not, the run would measure a detector nobody ships"
+  fi
+fi
+
+# --- 13b. A contrast axis that is confounded with another axis -----------------
+# #3115 swept the fold COMBINE rule and reported its headline per "voting mode".
+# Its grid held exactly two cells - `siglip x whole_image` and
+# `dinov3_patch x max_patch` - so every binary cell was SigLIP and every region
+# cell DINOv3.  The sign flip it measured is real; its ATTRIBUTION to voting mode
+# is not, because the embedder moved with it.  Check 6 asserts that region voting
+# genuinely *happens* on a cell; nothing asserted that a per-mode contrast is
+# attributable to the mode.
+#
+# So: whenever a run will be read per voting mode, both modes need more than one
+# embedder between them, or the two axes cannot be told apart.  Opt-in, because
+# plenty of studies legitimately report a single cell per mode and never contrast
+# across them - the failure is claiming the contrast, not running the grid.
+if [[ -n "$MODE_CONTRAST" && -n "$REPO" ]]; then
+  if [[ "$PY_USABLE" == "0" ]]; then
+    say_fail "mode-contrast confound NOT checked: python cannot import the tree (see above)"
   else
-    unacked=0
-    while IFS=$'\t' read -r _ knob got want; do
-      [[ -z "$knob" ]] && continue
-      if [[ ",${DIVERGES}," == *",${knob},"* ]]; then
-        say_ok "declared divergence on '$knob' ($got, shipped is $want)"
-      else
-        say_fail "UNDECLARED divergence from production: $knob = $got, shipped is $want"
-        unacked=$((unacked + 1))
-      fi
-    done <<< "$DIVERGENCE"
-    if [[ "$unacked" -gt 0 ]]; then
-      echo "        -> if that is the axis this study sweeps, pass --diverges <knob>[,<knob>]"
-      echo "        -> if it is not, the run would measure a detector nobody ships"
-    fi
+    CONF=$(CALIB_EXP="$EXP" python - "$REPO" <<'PY' 2>&1
+import pathlib
+import sys
+
+sys.path.insert(0, str(pathlib.Path(sys.argv[1]) / "scripts" / "experiments" / "calibration"))
+import experiment_config as cfg
+
+by_mode: dict[str, set[str]] = {"binary": set(), "region": set()}
+for ds in cfg.DATASETS:
+    for emb in cfg.embedders_for_dataset(ds):
+        for style in cfg.styles_for(ds, emb):
+            mode = "region" if (cfg.region_voting_for(ds, emb) and style != "whole_image") else "binary"
+            by_mode[mode].add(emb)
+shared = by_mode["binary"] & by_mode["region"]
+if not by_mode["binary"] or not by_mode["region"]:
+    print("SKIP only one voting mode in this grid; there is no cross-mode contrast to confound")
+elif shared:
+    print("HOLDS embedder(s) in BOTH modes: " + ", ".join(sorted(shared)))
+else:
+    print(
+        "FAILS binary={%s} region={%s} - disjoint"
+        % (",".join(sorted(by_mode["binary"])), ",".join(sorted(by_mode["region"])))
+    )
+PY
+)
+    case "$CONF" in
+      HOLDS*) say_ok "mode contrast is not embedder-confounded (${CONF#HOLDS })" ;;
+      SKIP*)  say_ok "mode-contrast check skipped (${CONF#SKIP })" ;;
+      FAILS*)
+        say_fail "voting mode is CONFOUNDED with the embedder: ${CONF#FAILS }"
+        echo "        -> a per-mode headline from this grid is equally a per-embedder one"
+        echo "        -> give one embedder both modes (a patch embedder can run whole_image"
+        echo "           too: add it to CALIB_PATCH_STYLES), or do not contrast across modes"
+        ;;
+      *) say_fail "could not check the mode-contrast confound: $CONF" ;;
+    esac
+  fi
+fi
+
+# --- 13. Categories thin enough to produce no trainable step ------------------
+# A cell whose category is too rare never collects both classes, so the
+# simulation writes its CSV **header and nothing else**.  That file is
+# non-empty, parses cleanly, and passes `find -size 0`, so every "N/N cells"
+# count reports it as present - the failure is invisible at exactly the moment
+# it matters.  #3115 launched a 208-cell array on `visual_genome_m` and its
+# first two completed cells were header-only (`ball`, 51 positives in 4193).
+#
+# Reads `prepare_info.json`, which already holds `category_counts` and
+# `selected_categories`, so this costs no pickle load.  Opt-in with a floor the
+# study picks: what counts as "too thin" depends on the horizon and on
+# SIM_FRACTION, and a wrong default here would be worse than none.
+if [[ -n "$MIN_POSITIVES" ]]; then
+  INFO="${CALIB_RESULTS:-$EXP/results}/prepare_info.json"
+  if [[ ! -f "$INFO" ]]; then
+    say_fail "--require-min-positives: no prepare_info.json at $INFO (run prepare first)"
+  elif [[ "$PY_USABLE" == "0" ]]; then
+    say_fail "category depth NOT checked: python cannot import the tree (see above)"
+  else
+    THIN=$(python - "$INFO" "$MIN_POSITIVES" <<'PY' 2>&1
+import json
+import sys
+
+info, floor = json.load(open(sys.argv[1])), int(sys.argv[2])
+thin, seen = [], 0
+for ds, embs in info.get("datasets", {}).items():
+    for emb, d in embs.items():
+        counts = d.get("category_counts") or {}
+        for cat in d.get("selected_categories") or []:
+            seen += 1
+            n = int(counts.get(cat, 0))
+            if n < floor:
+                thin.append(f"{ds}x{emb}:{cat}={n}")
+print(("FAILS " + "; ".join(sorted(thin))) if thin else f"HOLDS {seen} selected cells, all >= {floor} positives")
+PY
+)
+    case "$THIN" in
+      HOLDS*) say_ok "category depth: ${THIN#HOLDS }" ;;
+      FAILS*)
+        say_fail "categories below the $MIN_POSITIVES-positive floor: ${THIN#FAILS }"
+        echo "        -> a category this thin can finish with NO trainable step and write a"
+        echo "           header-only CSV, which every 'N/N cells' count reports as present"
+        ;;
+      *) say_fail "could not check category depth: $THIN" ;;
+    esac
+  fi
+fi
+
+# --- 14. Every cell seeds from a TYPED QUERY, not from known-goods ------------
+# The autopilot has two documented starts, and which one a cell takes is decided
+# silently by whether a query text happens to exist for its (dataset, category)
+# and whether its embedder has a text tower.  With a query the seed sort is
+# cosine to the typed text; without one the app falls back to three random
+# known-good examples.  Both are real user flows, so neither errors and every
+# downstream column is populated either way - the same shape as
+# `lessons/2026-08-26-the-harness-seeded-from-a-crop.md`, where a parameter was
+# fed something other than what its name says it holds.
+#
+# That is merely untidy for most studies and fatal for one whose arms are
+# POSITIONS ON THE SEED SORT (#3267): a cut at the 2nd rank percentile of a text
+# sort and the same cut on a known-good sort are cuts on different objects, so a
+# grid split across the two is not one experiment.  The lesson above closed this
+# for `vg_scale` and left it open for `coco_val` and `vg_box_*` in as many words
+# ("Still only advice ... config-only to fix"). This is the control.
+#
+# Reads `prepare_info.json` for the categories actually selected, so it sees the
+# grid that will run rather than the one the launcher asked for.
+if [[ -n "$REQUIRE_TEXT_SEED" ]]; then
+  INFO="${CALIB_RESULTS:-$EXP/results}/prepare_info.json"
+  if [[ ! -f "$INFO" ]]; then
+    say_fail "--require-text-seed: no prepare_info.json at $INFO (run prepare first)"
+  elif [[ "$PY_USABLE" == "0" ]]; then
+    say_fail "seed mode NOT checked: python cannot import the tree (see above)"
+  else
+    SEEDCHK=$(cd "$REPO/scripts/experiments/calibration" && python - "$INFO" <<'PY' 2>&1
+import json
+import sys
+
+sys.path.insert(0, ".")
+import experiment_config as cfg  # noqa: E402
+
+from vtscore.media import get_embedder  # noqa: E402
+
+info = json.load(open(sys.argv[1]))
+bad, seen, texts = [], 0, 0
+no_tower = set()
+for ds, embs in info.get("datasets", {}).items():
+    for emb, d in embs.items():
+        # The other half of the seed mode: an embedder with no text tower can
+        # never produce a text sort however good the query is (DINOv3).
+        try:
+            has_tower = get_embedder(emb).embed_text("probe") is not None
+        except Exception as exc:  # noqa: BLE001
+            bad.append(f"{ds}x{emb}: embedder failed to load ({type(exc).__name__})")
+            continue
+        if not has_tower:
+            no_tower.add(emb)
+        for cat in d.get("selected_categories") or []:
+            seen += 1
+            text = cfg.seed_query_text(ds, cat)
+            if not text:
+                bad.append(f"{ds}x{emb}:{cat}=no query")
+            elif not has_tower:
+                bad.append(f"{ds}x{emb}:{cat}=no text tower on {emb}")
+            else:
+                texts += 1
+print(("FAILS " + "; ".join(sorted(bad)[:12])) if bad else f"HOLDS {texts}/{seen} selected cells seed from a typed query")
+PY
+    )
+    # Keep the LAST line only.  Loading a SigLIP text tower prints transformers'
+    # bos/eos token-id warnings to stderr, and 2>&1 folds them into the verdict,
+    # where they match no `case` branch - so a check that HELD reported "could
+    # not check".  A gate whose own plumbing can turn a pass into a fail teaches
+    # people to pass --warn-only, which is worse than not having the gate.
+    SEEDCHK=$(printf '%s\n' "$SEEDCHK" | tail -1)
+    case "$SEEDCHK" in
+      HOLDS*) say_ok "seed mode: ${SEEDCHK#HOLDS }" ;;
+      FAILS*)
+        say_fail "cells that would NOT seed from a text sort: ${SEEDCHK#FAILS }"
+        echo "        -> these take the known-good start instead, so their seed sort is a"
+        echo "           different ranking; add the query to EXPERIMENT_QUERIES, or set"
+        echo "           CALIB_REQUIRE_SEED_QUERY=1 so prepare never selects them"
+        ;;
+      *) say_fail "could not check seed mode: $SEEDCHK" ;;
+    esac
   fi
 fi
 

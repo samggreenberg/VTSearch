@@ -1,8 +1,8 @@
-![bg right:70% fit](figs/calib-blend-flow.png)
+<!-- _class: full -->
 
-### Iteration 3 — the idea
+![bg fit](figs/calib-blend-flow.png)
 
-## Average the rivals
+## Just an Average Guy
 
 <!-- build: figs/calib-blend-flow.build1.png -->
 
@@ -10,42 +10,25 @@
 
 <!-- build: figs/calib-blend-flow.build3.png -->
 
-<!-- build: figs/calib-blend-flow.build4.png -->
+<!-- The left half is the cross-calibration slide, the right half is the mixture
+     slide, and the top row is the spine they share. Nothing here is new
+     machinery; only the last line is new. -->
 
-<!-- build: figs/calib-blend-flow.build5.png -->
+<!-- **a** — The spine: the corpus, the votes drawn out of it, the model trained
+     on them. The room has seen it twice. -->
 
-<!-- In the audience deck this slide is a six-page build sharing one page
-     number: the figure assembles a step per advance, and this page — the
-     complete picture — is where it lands. There are no bullets by design.
+<!-- **b** — The mixture branch, whole: M₀ scores the corpus, the fit goes on,
+     the midpoint is cut. *Remember how we made θ_G* — the estimator that reads
+     no labels and so cannot starve. -->
 
-     Open by naming what the room is looking at, because this is the first
-     figure in the talk that is an assembly rather than a new idea: the left
-     half is the cross-calibration slide, the right half is the mixture slide,
-     and the top row — the corpus, the votes drawn out of it, the model
-     trained on those votes — is the spine they already share. Nothing here is
-     new machinery. The only new thing is the last line.
+<!-- **c** — The fold branch, whole: split the votes, a model per half, each
+     scores the half it never saw, cut each, average. *Remember how we made
+     θ_X* — reads nothing but labels, and so starves early. -->
 
-     Walk the stages as they arrive. The spine. Then the mixture branch: the
-     model scores the whole corpus, the shape of those scores gets a
-     two-component fit, cut at the midpoint — the estimator that reads no
-     labels and so cannot starve. Then the fold branch: split the votes, train
-     a model per half, score the half it never saw, cut each, average — the
-     estimator that reads nothing but labels and so starves early. Land on the
-     property the whole slide turns on, which the figure states by geometry:
-     the three cuts are ticked on one baseline because they are three answers
-     to the same question, and the two rivals are drawn the same width because
-     neither of them dominates.
-
-     Then the move, which is embarrassingly simple: do not choose. Average
+<!-- **d** — The move, which is embarrassingly simple. Do not choose. Average
      them. That shipped as "safe thresholds", and it is the single biggest win
-     in the line, which is the next slide.
+     in the line. -->
 
-     Note what the figure does NOT say, and say it aloud rather than letting
-     someone ask: that average is a *weighted* one, and the slide stops there.
-     How much weight, and how the weight moves as votes accumulate, is a whole
-     question of its own. The first version was one hard-coded line: pure
-     mixture at six votes or fewer, pure cross-calibration at twenty or more,
-     straight line between. Three unmeasured choices baked into it — the two
-     endpoints, the shape of the ramp, and what it counts — and iteration 3½
-     goes back and sweeps all three. Promise that slide here; do not draw its
-     curve on this one. -->
+<!-- Say what the figure does not: the average is **weighted**, and how the
+     weight moves as votes accumulate is the next slide. The first version was
+     one hard-coded line with three unmeasured choices baked into it. -->

@@ -49,6 +49,7 @@ import pandas as pd  # noqa: E402
 from _cells_io import main_frame_files  # noqa: E402
 
 from vtscore.eval.cut_rules import TAIL_ALPHA_PREREGISTERED, TAIL_RULES  # noqa: E402
+from vtscore.eval.transfer_rules import BAGGED_FIT_RULES, TRANSFER_ORACLE_RULES  # noqa: E402
 
 #: Vote-count windows (inclusive).  Below 6 votes the blend is pure GMM (total
 #: authority, but #2799 showed the app shows no trained detector before 7 votes);
@@ -68,6 +69,21 @@ CONTROL_ARM_SUBSTR = "whole_image"
 #: first lose one.
 TAIL_VARIANTS: tuple[str, ...] = tuple(f"pooled_{r}" for r in TAIL_RULES)
 
+#: #2883's label-free arm: the production Gaussian rules re-cut over bootstrap
+#: refits of the haystack.  Shippable in principle - it reads no labels - but
+#: pre-registered as **exploratory** and kept out of the ship gate below, because
+#: #2883 item 1 asks for the characterisation of ``transfer`` before a remedy,
+#: and a remedy that wins in the run that diagnoses the disease is the
+#: wrong-but-plausible result this line has already paid for twice.
+BAGFIT_VARIANTS: tuple[str, ...] = tuple(f"pooled_{r}" for r in BAGGED_FIT_RULES)
+
+#: #2883's label-reading readings of the same sim set as ``pooled_sim_oracle``:
+#: the four subsample levels and the two variance-reduced estimators.  They are
+#: oracles, so they join ``ORACLE_VARIANTS`` rather than the allowlist - but they
+#: are the arms that decide whether ``family_headroom_exhausted`` is measuring a
+#: bound or one estimator, so ``analyze_transfer.py`` reads them by name.
+TRANSFER_ORACLE_VARIANTS: tuple[str, ...] = tuple(f"pooled_{r}" for r in TRANSFER_ORACLE_RULES)
+
 #: Rules that could actually ship: unsupervised, computable from the sim scores.
 SHIPPABLE: tuple[str, ...] = (
     "pooled_mid",
@@ -81,6 +97,7 @@ SHIPPABLE: tuple[str, ...] = (
     "pooled_gumbel_any_priorfree",
     "pooled_gumbel_any_rate",
     *TAIL_VARIANTS,
+    *BAGFIT_VARIANTS,
 )
 
 #: Measured and reported, but **not eligible to be the ship candidate**.
@@ -94,14 +111,17 @@ SHIPPABLE: tuple[str, ...] = (
 #: curve in alpha, which is the actual claim the stability finding makes.  If the
 #: curve turns out to peak somewhere else entirely, that is a finding for the
 #: next pre-registration, not a rule to ship off this run.
-SWEEP_ONLY: tuple[str, ...] = tuple(
-    v for v in TAIL_VARIANTS if v != f"pooled_tail_a{round(TAIL_ALPHA_PREREGISTERED * 1000):03d}"
+SWEEP_ONLY: tuple[str, ...] = (
+    *(v for v in TAIL_VARIANTS if v != f"pooled_tail_a{round(TAIL_ALPHA_PREREGISTERED * 1000):03d}"),
+    # #2883's label-free bagged arms: measured and reported, deliberately unable
+    # to win.  See BAGFIT_VARIANTS.
+    *BAGFIT_VARIANTS,
 )
 #: What the ship decision, the oracle-distance tie-break and ``best_by_cost`` read.
 SHIP_ELIGIBLE: tuple[str, ...] = tuple(v for v in SHIPPABLE if v not in SWEEP_ONLY)
 
 #: Label-reading diagnostics — bounds and decomposition anchors, never candidates.
-ORACLE_VARIANTS: tuple[str, ...] = ("pooled_supervised", "pooled_sim_oracle")
+ORACLE_VARIANTS: tuple[str, ...] = ("pooled_supervised", "pooled_sim_oracle", *TRANSFER_ORACLE_VARIANTS)
 
 #: ``pooled_tail_a158`` -> ``0.158``.  Parsed from the *data's* variant names
 #: rather than read off the imported grid, so re-analyzing an older run whose

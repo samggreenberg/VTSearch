@@ -2048,6 +2048,154 @@ def threshold_from_fold_orderings(
     return conformal_threshold(pooled_scores, pooled_labels, inclusion_value)
 
 
+#: Combine rules for the cross-calibration fold cuts (issue #3115), eval-only.
+#:
+#: Two functions in this module disagree about the same empirical fact.
+#: :func:`threshold_from_fold_orderings` **pools** every fold's held-out scores
+#: and takes one conformal quantile, justified by "all folds' scores live on the
+#: same sigmoid scale".  :meth:`FoldAnchoredCut._combined_fold_quantile` takes
+#: one cut per fold and averages them in **quantile** space specifically so that
+#: no cross-scale averaging of raw cuts ever happens - i.e. it is built on the
+#: premise that fold scores are *not* directly comparable.  Both cannot be right,
+#: and nobody has measured which.
+#:
+#: The four rules here are the challengers, and they factor the disagreement
+#: rather than confounding it.  Against the pooled control they decompose as:
+#:
+#: * ``pooled -> tmean``  - pooling vs **averaging**, held in one score space.
+#: * ``tmean  -> qmean``  - score space vs **quantile** space, i.e. exactly the
+#:   comparability premise the two docstrings disagree on, with the combine held
+#:   fixed.
+#: * ``*mean  -> *median`` - **contamination**: a degenerate fold pours its
+#:   scores straight into a pooled quantile, gets 1/K weight under a mean, and
+#:   ~none under a median.
+#:
+#: There is no ``qpooled``: a pooled cut has no single fold haystack to read a
+#: quantile in, so that cell of the 2x2 does not exist.  That is why the total
+#: ``pooled -> qmean`` contrast the issue asks for has to be read through the
+#: two legs above rather than attributed to either on its own.
+FOLD_CONFORMAL_COMBINES: tuple[str, ...] = ("tmean", "tmedian", "qmean", "qmedian")
+
+
+def per_fold_conformal_cuts(
+    fold_orderings: list[tuple[list[float], list[float]]],
+    inclusion_value: int,
+) -> list[tuple[int, float]]:
+    """``(fold index, conformal cut)`` for every fold that can produce one.
+
+    A fold whose scored held-out set is empty or **single-class** is skipped
+    rather than cut: :func:`conformal_threshold` answers 0.5 there, which is a
+    "no calibration evidence" sentinel and not a threshold, and averaging it in
+    would move the combined cut toward the middle of the sigmoid for a reason
+    that has nothing to do with where the classes sit.  Skipping is also what
+    makes the contamination question *measurable* - the caller reports how many
+    folds it dropped, so a row where the mean and the pooled quantile disagree
+    can be attributed to the drop or exonerated of it.
+    """
+    cuts: list[tuple[int, float]] = []
+    for i, ordering in enumerate(fold_orderings):
+        scores, labels = scored_ordering(ordering)
+        if not scores:
+            continue
+        arr = np.asarray(labels, dtype=np.float64)
+        if not (bool(np.any(arr == 1.0)) and bool(np.any(arr != 1.0))):
+            continue
+        cuts.append((i, conformal_threshold(scores, labels, inclusion_value)))
+    return cuts
+
+
+def combined_fold_conformal_threshold(
+    fold_orderings: list[tuple[list[float], list[float]]],
+    inclusion_value: int,
+    *,
+    combine: str,
+    fold_haystacks: "list[np.ndarray] | None" = None,
+    final_scores: "list[float] | np.ndarray | None" = None,
+) -> tuple[float, str]:
+    """Combine the folds' *own* conformal cuts instead of pooling their scores.
+
+    The challenger to :func:`threshold_from_fold_orderings` (issue #3115); see
+    :data:`FOLD_CONFORMAL_COMBINES` for what each rule isolates.  **Eval-only**
+    - nothing in the app calls this, and the run it exists for is what would
+    license changing that.
+
+    ``"tmean"`` / ``"tmedian"`` average the per-fold cuts in **score** space.
+    This is the rule that presumes the folds' sigmoid scales are comparable, and
+    it is the one with an exact control: at ``K == 1`` there is a single cut to
+    average, so both reproduce the pooled cut *bit for bit* - including the
+    conformal rule's gap midpoint, which is a specific point inside an empty
+    band rather than an order statistic.
+
+    ``"qmean"`` / ``"qmedian"`` carry each fold's cut to the final model as a
+    quantile of **that fold's own haystack** (:func:`rank_transfer`'s argument),
+    combine the quantiles, then realize the result on *final_scores* and
+    :func:`snap_cut_to_sample` it - the same chain
+    :meth:`FoldAnchoredCut.threshold_at` runs, so the two paths differ in what
+    is being cut and not in how the cut travels.  Note that this **cannot**
+    reproduce the pooled cut even at ``K == 1``: a quantile records which
+    observed scores a cut sits between and not where inside that gap it sat, so
+    the conformal midpoint is destroyed by the round trip.  That is a real
+    property of quantile-space combining and not an implementation wart, which
+    is why the ``tmean`` leg exists to separate it from the combine itself.
+
+    Reading each fold's quantile in its own haystack, rather than in its handful
+    of held-out votes, also answers the resolution objection
+    :func:`threshold_from_fold_orderings`' docstring raises: per-fold quantiles
+    are coarse only when taken over the votes.  Taken over the sim set they are
+    finer than the pooled rule's, not coarser.
+
+    Args:
+        fold_orderings: The fold prefix's cached ``(scores, labels)`` holdouts.
+        inclusion_value: Passed through to :func:`conformal_threshold`.
+        combine: One of :data:`FOLD_CONFORMAL_COMBINES`.
+        fold_haystacks: Per-fold sim-set score arrays, index-aligned with
+            *fold_orderings*.  Required by the ``q*`` rules, ignored by ``t*``.
+        final_scores: The final model's sim-set scores, the array a ``q*``
+            result is realized on.
+
+    Returns:
+        ``(threshold, provenance)``.  Provenance is
+        ``"fold_conformal_{combine}[a/k]"`` with *a* the folds that contributed
+        of the *k* offered, or ``"fold_conformal_fallback_pooled"`` when no fold
+        could contribute one and the pooled rule answers instead - which keeps
+        the arm defined on exactly the steps the control is defined on, so the
+        contrast never silently drops rows.
+    """
+    if combine not in FOLD_CONFORMAL_COMBINES:
+        raise ValueError(f"unknown fold conformal combine {combine!r}; expected one of {FOLD_CONFORMAL_COMBINES}")
+    n_offered = len(fold_orderings)
+    cuts = per_fold_conformal_cuts(fold_orderings, inclusion_value)
+
+    if combine in ("tmean", "tmedian"):
+        values = [c for _i, c in cuts]
+    else:
+        if fold_haystacks is None or final_scores is None:
+            raise ValueError(f"combine {combine!r} needs fold_haystacks and final_scores")
+        values = []
+        for i, cut in cuts:
+            if i >= len(fold_haystacks):
+                continue
+            src = np.sort(np.asarray(fold_haystacks[i], dtype=np.float64).ravel())
+            if src.size == 0:
+                continue
+            values.append(float(np.searchsorted(src, cut, side="left")) / float(src.size))
+
+    if not values:
+        return threshold_from_fold_orderings(fold_orderings, inclusion_value), "fold_conformal_fallback_pooled"
+
+    agg = float(np.mean(values)) if combine.endswith("mean") else float(np.median(values))
+    provenance = f"fold_conformal_{combine}[{len(values)}/{n_offered}]"
+
+    if combine in ("tmean", "tmedian"):
+        return agg, provenance
+
+    target = np.asarray(final_scores, dtype=np.float64).ravel()
+    if target.size == 0:
+        return threshold_from_fold_orderings(fold_orderings, inclusion_value), "fold_conformal_fallback_pooled"
+    realized = float(np.quantile(target, min(1.0, max(0.0, agg))))
+    return snap_cut_to_sample(realized, np.sort(target)), provenance
+
+
 def calculate_cross_calibration_threshold(
     X_list: list[np.ndarray],
     y_list: list[float],

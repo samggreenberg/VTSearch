@@ -62,12 +62,31 @@ export interface ColumnDef {
 export class ExportModalComponent implements OnInit {
   readonly detectorName = input('');
   /**
+   * What the caller is exporting, which decides both the default category and
+   * how a one-sided selection is framed.
+   *
+   * ``detector`` (the Dashboard row action and the train-mode right panel) is
+   * exporting *this detector's own labelset* — the thing you re-import to
+   * rebuild it. A good-only or bad-only slice of that is not a detector:
+   * training rejects a single-class labelset outright (see
+   * ``check_both_classes`` in ``vtscore/detectors/training.py``), so the
+   * modal opens on ``both`` and says so if you narrow it (issue #3263).
+   *
+   * ``results`` (the Find view's work-queue and right-panel exports) is
+   * exporting a *slice of a scored run* — "the good hits" is the normal ask
+   * there, not a trap, so it defaults to whatever slice the caller asked for
+   * and the note stays off.
+   */
+  readonly scope = input<'detector' | 'results'>('detector');
+  /**
    * The filter the modal opens on. ``unverified`` / ``verified`` are
    * server-side partitions (by Find ``verified_ids``) that can't be derived
    * client-side, so the modal fetches them with that ``label_filter``; the
    * other values are client-side category filters over the full fetched set.
+   *
+   * Defaults to ``both`` for the detector-scoped callers, which pass nothing.
    */
-  readonly initialFilter = input<LabelFilter>('good');
+  readonly initialFilter = input<LabelFilter>('both');
   readonly closed = output<void>();
   readonly exported = output<void>();
 
@@ -776,6 +795,19 @@ export class ExportModalComponent implements OnInit {
   }
 
   /** Modal heading, noting the server-side partition (and category slice) when present. */
+  /**
+   * Whether to warn that the current selection can't rebuild the detector:
+   * a detector-scoped export narrowed to a single class. ``corrections`` is
+   * a deliberate diff export rather than a labelset, and the Find view's
+   * ``results`` scope is slicing hits, so neither warns.
+   */
+  get showPartialLabelsetNote(): boolean {
+    return (
+      this.scope() === 'detector' &&
+      (this.labelFilter === 'good' || this.labelFilter === 'bad')
+    );
+  }
+
   get modalTitle(): string {
     if (this.serverFilter === 'unverified') {
       // The left work-queue export opens on the above-threshold good slice.
@@ -784,7 +816,10 @@ export class ExportModalComponent implements OnInit {
         : 'Export Unverified';
     }
     if (this.serverFilter === 'verified') return 'Export Verified';
-    return 'Export';
+    // Name the payload in the detector-scoped case: the user arrived here
+    // from a *detector*, and what leaves is its labelset, not the detector
+    // as an artifact.
+    return this.scope() === 'detector' ? 'Export Labels' : 'Export';
   }
 
   close(): void {

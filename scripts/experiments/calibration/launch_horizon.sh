@@ -127,7 +127,11 @@ status)
   for p in wave1 vgbox binary; do
     d="$ROOT/$p/results/cells"
     [ -d "$d" ] || continue
-    files=$(ls "$d"/task_*.csv 2>/dev/null | grep -vc 'sweep\|cutdiag\|cutincl' || true)
+    # find, not `ls "$d"/task_*.csv`: past ~25k cells the expanded glob exceeds
+    # ARG_MAX, ls dies with "Argument list too long", and `grep -vc` turns that
+    # into a count of 0 - a finished grid reporting as "0 cell files".
+    files=$(find "$d" -maxdepth 1 -name 'task_*.csv' \
+              ! -name '*sweep*' ! -name '*cutdiag*' ! -name '*cutincl*' 2>/dev/null | wc -l)
     rows=0
     for f in "$d"/task_*.csv; do
       case "$f" in *sweep*|*cutdiag*|*cutincl*) continue;; esac

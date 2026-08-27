@@ -1,5 +1,28 @@
 # Is 2 still the right number of cross-calibration folds?
 
+> # ⚠️ SEEDING CAVEAT — these runs did not start the way the app does
+>
+> **Recorded 2026-08-26 (#3156).** Autopilot seeds its first three Good votes from
+> a **text sort**: the user types a query and votes down that ranking. Until
+> PR #3269 this harness instead ranked every item by cosine to a **crop of one
+> boxed positive** — a ranking no user ever produces — and passed it as
+> `seed_scores`, the argument that `al_strategies`, `EVAL.md` and
+> `voting_iterations` all describe as "similarity to the **typed query**".
+>
+> **What to distrust here:** anything that depends on *how a run starts* —
+> positive starvation, stuck or never-got-going runs, `n_good`, and
+> early-trajectory cost. Measured on one cell after the fix, text seeding put the
+> first positive at **rank 1** with five in the top 20, while the exemplar that
+> crop-seeding made look like the dataset's hardest positive ranked **4006 of
+> 7749** for its own class.
+>
+> **What still holds:** within-study contrasts where every arm seeded identically,
+> which is most of what these reports conclude — the seeding is a shared baseline
+> shift, not an arm-dependent one.
+>
+> See [the harness seeded from a crop](../../../scripts/experiments/lessons/2026-08-26-the-harness-seeded-from-a-crop.md).
+
+
 **Issue #2897 · design pre-registered in a plan file, deleted by the PR that added this
 report · harness PR #2902 · run + fixes PR #2906 · follow-ups #3115, #3116**
 
@@ -146,4 +169,9 @@ the fix.
 - **#3116** — re-decompose against a fixed reference, emit `sd(threshold)` per
   K, and unfreeze the GMM cut in the fold-count arms.
 
-Both are answered by one run and should not be run separately.
+Both are answered by one run and should not be run separately — that run is
+[`calibration-fold-combine/`](../calibration-fold-combine/REPORT.md), which also
+corrects two errata recorded above: the `voting` label is now derived per cell
+from `experiment_config.region_voting_for` rather than from the dataset name (so
+`visual_genome_m × siglip` groups as binary in the code and not only by hand),
+and no head is pinned.

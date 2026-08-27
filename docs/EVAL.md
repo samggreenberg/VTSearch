@@ -279,11 +279,11 @@ Two columns make this visible in the output:
 
 Metrics are still recorded at every trainable step in both modes — fidelity changes the *vote order* and the `app_trained` flag, not measurement coverage.
 
-#### The acquisition cut (`acq_inclusion_offset`, default `-3`)
+#### The acquisition cut (`acq_inclusion_offset`, default: whatever `vtscore.training.thresholds` ships)
 
 The selector and the metrics read **different thresholds**. Reporting and every emitted metric stay at `inclusion`; the threshold handed to the picks is re-cut at `inclusion + acq_inclusion_offset` from the same fold-anchored fit. This mirrors production, which decoupled the two jobs in PR #2876 — see [`docs/ML.md`](ML.md#threshold-calibration) for the mechanism and the measured effect.
 
-The default is the shipped `-3`, **not** `0`, so an unconfigured run measures what users actually get. Pass `acq_inclusion_offset=0` for the pre-#2876 control where one threshold did both jobs; that is also the value the study's `prod` arm ran at. Note that this changes what a re-run of any *pre-#2876* study measures: those runs were all implicitly at offset 0, so reproducing one byte-for-byte means passing it explicitly, the same way `autopilot_fidelity=False` reproduces the pre-fidelity harness.
+The default is `ACQUISITION_INCLUSION_OFFSET` — the shipped value, **not** `0` — so an unconfigured run measures what users actually get. (PR #2876 shipped `-3`; PR #2891 cut it to `-1` after a second environment rejected `-3`. Read the constant, not a number written here.) Pass `acq_inclusion_offset=0` for the pre-#2876 control where one threshold did both jobs; that is also the value the study's `prod` arm ran at. Note that this changes what a re-run of any *pre-#2876* study measures: those runs were all implicitly at offset 0, so reproducing one byte-for-byte means passing it explicitly, the same way `autopilot_fidelity=False` reproduces the pre-fidelity harness.
 
 Three columns make the lever verifiable rather than assumed, all measured in the **pool** distribution the selector ranks:
 
@@ -293,6 +293,31 @@ Three columns make the lever verifiable rather than assumed, all measured in the
 The pool is scored in **the same geometry the cuts are fitted in** — the style's region max-pool on a patch dataset, the whole-image vector on a single-vector one — because the Hard pick locates its cutoff by comparing scores against the threshold *absolutely*, so a ranking and a cut in different spaces put the cutoff index in the wrong place. Before #2943 the pool was scored whole-image while every cut was fitted on pooled scores; since a max over ~197 patch rows dominates the single whole-image row, the whole pool sat below the cut, both percentiles pinned at `1.0` on every patch step, and the simulated picks came from systematically higher-ranked items than the app's. Patch-dataset studies published before that fix — including the #2876 acquisition-inclusion report — measured that mismatch.
 
 The direction is counter-intuitive (negative offset → *higher* cut → *more* positives, because the pick reads the threshold as a rank position), so a sign error would otherwise look exactly like the lever not working. `acq_rank_percentile` is the alternative parameterisation — pin the cut at a fixed quantile of the simulation-set scores — and it requires `acq_inclusion_offset=0`, since the two name the same cut. It is measured and **worse**; it exists as an arm, not as an option.
+
+#### The opening (`startup_schedule`, default: the app's own)
+
+Autopilot's **opening** — the clicks spent before the first learned sort — is what decides how many positives a run has when its detector is first trained, and a Good-starved run is the one that fails (issue #3267). It is a parameter, so a study can ask whether a different opening mines better.
+
+The parameterisation rests on one observation: both of today's opening phases are the *same operation* at two different cuts. The Good phase's `top` select is the rank-space `hard` select against a cut placed above every score; the Bad phase's is that select against the seed sort's own fitted GMM, split at the production midpoint. So an opening is a list of rounds, each naming how many clicks to spend and where on the sort — which is what a schedule spells:
+
+| round | meaning |
+|---|---|
+| `g3` / `b4` | stay until 3 goods / 4 bads exist (a **global** count, as in the app) |
+| `n8` | stay for 8 clicks, whatever they turn out to be |
+| `@top` | cut above every score — the top of the sort |
+| `@mid` | the shipped GMM midpoint, i.e. every cosine sort's cutoff |
+| `@k-3` | that same fitted GMM, split at **inclusion −3** |
+| `@q0.05` | the sort's 5th rank percentile, named directly |
+
+`PRODUCTION_STARTUP` (`"g3@top,b4@mid"`) is today's opening, and [`vtscore/eval/startup_schedule.py`](../vtscore/eval/startup_schedule.py) is the full reference. `startup_schedule=None` — the default — leaves every trajectory byte-for-byte what it was; the explicit production spec is *required* to reproduce a default run click for click, which `tests_lib/detectors/test_startup_schedule.py` asserts and `scripts/check-eval-app-sync.py`'s `autopilot.startup_default` mirror keeps true.
+
+Rounds appear in the `phase` column as `s0`, `s1`, …, and `app_trained` is `0` throughout one: a round is on the seed sort by construction, so the app would have no detector on screen however many votes have been cast. Every row also carries **`startup_schedule`**, so a pooled frame says which arm it came from without depending on the directory it was read out of.
+
+`@k` and `@q` are not redundant. `@k` is the arm that could *ship* — the app has an Inclusion knob and no rank-position knob — but how far a given inclusion moves the pick is a property of the fitted mixture, so on a steep sort the whole usable range can land inside a couple of rank percent. `@q` names the position directly, which is what establishes whether *position* is the mechanism before asking whether `k` is a usable handle on it.
+
+#### The pick log (`pick_sink`)
+
+Pass a list as `pick_sink` to get one row per **click** (columns: `_PICK_COLUMNS`) — what was picked, whether it was a positive, and where on the seed sort it came from. The main frame starts at the first *trainable* step, because before one Good and one Bad vote coexist there is no model, no threshold and no metrics row; so the opening is exactly the part it does not record. An opening that never finds both classes emits **no main row at all**, which is a result about that opening rather than a missing cell.
 
 Pass `autopilot_fidelity=False` to reproduce studies published before the flow was aligned (the Max-Patch, MLP-vs-SVM, and Inclusion-knob reports); that path is byte-for-byte the old behaviour. New studies should leave it on.
 

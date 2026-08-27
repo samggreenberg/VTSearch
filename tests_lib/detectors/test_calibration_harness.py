@@ -196,6 +196,19 @@ def test_calibration_columns_and_invariants():
         # regret decomposition identity (when the calibration oracle exists)
         if np.isfinite(r["rule_inefficiency"]) and np.isfinite(r["calibration_shift"]):
             assert r["rule_inefficiency"] + r["calibration_shift"] == pytest.approx(r["regret"], abs=1e-5)
+        # #3116: the honest re-decomposition telescopes the same way, off the
+        # cross-fitted reference instead of the sample minimum.
+        if np.isfinite(r["rule_inefficiency"]) and np.isfinite(r["calibration_shift_honest"]):
+            assert r["rule_inefficiency"] + r["calibration_shift_honest"] == pytest.approx(r["regret_honest"], abs=1e-5)
+        # `regret_honest` is the same subtraction off the other reference.
+        # Deliberately NOT asserting `oracle_cost <= oracle_cost_honest` per
+        # row: the cross-fitted rule applies a *different* cut per fold, so it
+        # has freedom the single-threshold sample minimum does not and can beat
+        # it on a given draw.  The bracket is a statement about the population
+        # optimum, not a per-sample ordering, and asserting it here would be a
+        # coin-flip test.
+        if np.isfinite(r["oracle_cost_honest"]):
+            assert r["regret_honest"] == pytest.approx(r["cost"] - r["oracle_cost_honest"], abs=1e-5)
         assert 0.0 <= r["threshold_percentile"] <= 1.0 or np.isnan(r["threshold_percentile"])
     # tree arm pools over many nodes; base n_pool_rows should exceed 1
     assert max(r["n_pool_rows"] for r in rows if r["pool_variant"] == "max") > 1.0

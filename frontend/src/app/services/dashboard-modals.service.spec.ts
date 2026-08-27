@@ -15,7 +15,6 @@ describe('DashboardModalsService', () => {
     expect(service.combineDatasets.open).toBe(false);
     expect(service.combineDetectors.open).toBe(false);
     expect(service.export.open).toBe(false);
-    expect(service.portableExport.open).toBe(false);
     expect(service.addLabels.open).toBe(false);
     expect(service.findResults.open).toBe(false);
     expect(service.stats.open).toBe(false);
@@ -43,13 +42,6 @@ describe('DashboardModalsService', () => {
     expect(service.export).toEqual({ open: true, detectorName: 'my-detector' });
     service.closeExport();
     expect(service.export).toEqual({ open: false, detectorName: '' });
-  });
-
-  it('openPortableExport carries id + name; close clears both', () => {
-    service.openPortableExport('id-1', 'Nice Name');
-    expect(service.portableExport).toEqual({ open: true, detectorId: 'id-1', detectorName: 'Nice Name' });
-    service.closePortableExport();
-    expect(service.portableExport).toEqual({ open: false, detectorId: '', detectorName: '' });
   });
 
   it('openAddLabels carries id + name; close clears both', () => {

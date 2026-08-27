@@ -57,7 +57,7 @@ for mode, b in (s.get("by_voting") or {}).items():
     print(f"    {mode}: recommended_k={b.get('h3_recommended_k')} "
           f"kept_production={b.get('h3_kept_production')} "
           f"best_ignoring_cost={b.get('best_k_ignoring_cost')} "
-          f"H4_rule_inefficiency={b.get('h4_benefit_is_rule_inefficiency')}")
+          f"sd_thr_falls={b.get('h4_sd_threshold_falls_at_best_k')}")
 PY
   fi
   echo

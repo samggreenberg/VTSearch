@@ -16,12 +16,6 @@ export interface ExportState {
   detectorName: string;
 }
 
-export interface PortableExportState {
-  open: boolean;
-  detectorId: string;
-  detectorName: string;
-}
-
 export interface AddLabelsState {
   open: boolean;
   detectorId: string;
@@ -69,11 +63,6 @@ export class DashboardModalsService {
     open: false,
     detectorName: '',
   });
-  private readonly portableExportSubject = new BehaviorSubject<PortableExportState>({
-    open: false,
-    detectorId: '',
-    detectorName: '',
-  });
   private readonly addLabelsSubject = new BehaviorSubject<AddLabelsState>({
     open: false,
     detectorId: '',
@@ -97,7 +86,6 @@ export class DashboardModalsService {
   readonly combineDatasets$ = this.combineDatasetsSubject.asObservable();
   readonly combineDetectors$ = this.combineDetectorsSubject.asObservable();
   readonly export$ = this.exportSubject.asObservable();
-  readonly portableExport$ = this.portableExportSubject.asObservable();
   readonly addLabels$ = this.addLabelsSubject.asObservable();
   readonly findResults$ = this.findResultsSubject.asObservable();
   readonly stats$ = this.statsSubject.asObservable();
@@ -113,10 +101,6 @@ export class DashboardModalsService {
 
   get export(): ExportState {
     return this.exportSubject.value;
-  }
-
-  get portableExport(): PortableExportState {
-    return this.portableExportSubject.value;
   }
 
   get addLabels(): AddLabelsState {
@@ -157,14 +141,6 @@ export class DashboardModalsService {
 
   closeExport(): void {
     this.exportSubject.next({ open: false, detectorName: '' });
-  }
-
-  openPortableExport(detectorId: string, detectorName: string): void {
-    this.portableExportSubject.next({ open: true, detectorId, detectorName });
-  }
-
-  closePortableExport(): void {
-    this.portableExportSubject.next({ open: false, detectorId: '', detectorName: '' });
   }
 
   openAddLabels(detectorId: string, detectorName: string): void {

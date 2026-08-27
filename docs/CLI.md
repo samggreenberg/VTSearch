@@ -112,9 +112,13 @@ Available exporters: `server_json_file` (JSON to server path), `server_csv_file`
 **Exporting the detectors themselves** (`portable_detector`): instead of the
 scored hits, write one standalone, portable scoring bundle per detector the run
 trained — the ONNX head (sigmoid baked in) plus a `manifest.json` and `README.md`,
-carrying **no embeddings and no raw media**. This is the headless counterpart to
-the GUI's portable-export modal, letting CI/automation produce a shareable
-scoring model. The `--dataset`/`--importer` still supplies the embedder space the
+carrying **no embeddings and no raw media**. It lets CI/automation produce a
+shareable scoring model; the request-scoped equivalent is
+`POST /api/detectors/{detector_id}/portable-bundle`
+(see [`docs/api/detectors.md`](api/detectors.md#export-portable-bundle)). There is
+deliberately no GUI affordance for either — the bundle is an expert artifact, and
+as a dashboard menu item it read as a confusing second "export" beside **Export
+labels**. The `--dataset`/`--importer` still supplies the embedder space the
 detector trains in; the media is embedded but the hits are discarded.
 
 ```bash

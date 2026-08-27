@@ -1,45 +1,58 @@
 # (thresh)Hold The Line — advances in VTSearch calibration.
-# Mildly technical audience with no prior exposure to VTSearch: the first
-# third builds the loop the threshold lives inside, so that the second job of
-# the threshold — choosing the next question — lands before the iterations do.
-# Then four iterations, each as [the idea, then the measurement] — the fourth
-# carrying an extra slide between the two, because its idea is not finished
-# until scores stop being averaged as numbers. Then the same machinery walked a
-# second time along the Inclusion axis — the knob that did nothing, the quantile
-# rule that repaired it, the tilt that gave it back once the fused fit had taken
-# it away again, and the second cut that closes the loop onto the promise made
-# on slide seven — and the cut-rule line told as the epilogue that proves the
-# anchored fit won.
+# Mildly technical audience with no prior exposure to VTSearch: the opening
+# third builds the tool, and lands on the one object the whole talk is about —
+# a line through a ranking that decides twice, what comes back and what you are
+# asked next. Then the ideas, in order: four iterations on where the line goes,
+# then the same machinery walked a second time along the Inclusion axis — where
+# the *user* wants it — and then the epilogue that closed the cut-rule question
+# for good.
+#
+# The deck is ideas, not experiments: it presents findings, and the studies
+# behind them live in the reports the presenter notes cite (see #3246, #3265).
+#
+# The outline fragment appears six times: once bare, as the opening list, and
+# then once before each section marked with `+at1` … `+at5`. It is one slide
+# shown six ways rather than six slides — `build.py` numbers it 1a…1f — and the
+# last showing, with "The End" marked, is the deck's closing slide.
 
 theme: vtsearch
-paginate: true
 
 slides:
   title-hold-the-line
   outline-hold-the-line
+
+  # 1 — VTSearch
+  outline-hold-the-line +at1
   problem
   ui-tour
-  voting-modes
-  vts-loop
-  threshold-two-jobs
-  how-we-measure
-  positives
+  vote-boundary
+
+  # 2 — Calibration
+  outline-hold-the-line +at2
   xcal
-  xcal-results
   gmm-idea
-  gmm-fragility
+  gmm-em
   blend
-  blend-results
   blend-schedule
   anchored-gmm
+  anchored-em
   quantile-transfer
-  anchored-results
-  anchored-kappa
+
+  # 3 — Preference
+  outline-hold-the-line +at3
+  inclusion-rank
+  inclusion-cost
   inclusion-knob
   inclusion-walk
   inclusion-tilt
   inclusion-acq
-  evt-line
+
+  # 4 — Regions
+  outline-hold-the-line +at4
+  voting-modes
+  evt-midpoint
+  evt-gumbel
   evt-close
-  calib-roadmap
-  thanks
+
+  # 5 — The End
+  outline-hold-the-line +at5

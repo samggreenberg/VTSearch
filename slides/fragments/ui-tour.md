@@ -1,29 +1,26 @@
-![bg right:56% fit](figs/ui-three-panel.png)
+<!-- _class: full -->
 
-### What it is
+![bg fit](figs/ui-three-panel.webp)
 
-## Search, judge, repeat
+## Judging by Appearances
 
-- Seed with **text** or an **example item**
-- Judge what comes back: **Good** or **Bad**
-- The ranking updates in seconds — then it asks again
+<!-- The audience's first sight of the tool, and it is a real session: a few
+     thousand photographs, someone about ten votes into looking for the books
+     in them, nothing labelled when they started. -->
 
-<!-- Walk the three panels left to right, slowly; this is the audience's
-     first sight of the tool.
+<!-- Two things on screen, and that is the whole interaction. In the middle,
+     one item, large, with Good and Bad under it. On the right, the votes cast
+     so far, kept as two piles. Nothing else is asked of the user. -->
 
-     Left: the corpus, ordered by how well it currently matches. Nothing here
-     is labelled — this is just everything the user has. Middle: one item,
-     large, with two buttons under it. That is the entire interaction the user
-     performs — Good or Bad, one item at a time. Right: the votes cast so far,
-     kept as two piles.
+<!-- They are not scrolling a result list choosing what to judge. **The system
+     is choosing what to put in front of them** — that is the sliver on the far
+     left, autopilot working through its phases. -->
 
-     The loop starts from a seed, because a model with no votes has nothing to
-     rank by: type a phrase, or point at one example item you already have.
-     From then on it is vote, retrain, re-rank. A retrain is a fraction of a
-     second, because the thing being trained is a small linear head on top of
-     frozen embeddings — the heavy model never moves.
+<!-- The loop starts from a seed, because a model with no votes has nothing to
+     rank by: type a phrase, or point at one example. From then on it is vote,
+     retrain, re-rank. A retrain is a fraction of a second — a small linear head
+     on frozen embeddings, and the heavy model never moves. -->
 
-     Worth pointing at, because it is where the next slides go: the "Select"
-     control on the left panel. The user is not scrolling a result list
-     choosing what to judge. The system is choosing what to put in front of
-     them. -->
+<!-- If someone asks where the rest of the corpus is: there is a manual mode
+     with the whole pile in a grid, sort controls and a threshold slider. That
+     slider is a character in the second half of the talk. -->
