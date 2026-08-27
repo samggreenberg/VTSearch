@@ -31,8 +31,25 @@ export CALIB_ANALYZE=analyze_anchored.py
 export CALIB_HEAD="${CALIB_HEAD:-linear}"
 
 # Visual Genome region voting; production patch arm + single-vector control.
+# The region arm is the PAIR `siglip+dinov3_patch` (#3278): the anchored
+# estimator is characterised HERE against the whole-image control, and bare
+# `dinov3_patch` cannot open the way that control does -- no text tower means
+# three random known-goods where the control gets a typed query.  An anchored
+# mixture is fitted to the score distribution the votes produce, and the opening
+# is what produces the first of them, so a per-mode reading of this study would
+# have been part voting mode and part start.  The pair holds the opening fixed
+# and leaves the geometry as the only difference.
 export CALIB_DATASETS="${CALIB_DATASETS:-visual_genome_m}"
-export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,dinov3_patch}"
+export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,siglip+dinov3_patch}"
+# Asserted per cell by run_cells.py, and by preflight check 14 wherever this
+# chain reaches a preflight with prepare already staged.  `launch_all.sh`
+# submits the array from a grid job, so the per-cell guard is the one that
+# always runs; --export=ALL carries this to it.
+export CALIB_REQUIRE_OPENING=text
+# A paired arm cannot fall back to the known-good start (`run_cells.py` raises),
+# so every selected category must have a typed query.  Selection filters to the
+# eligible ones before it picks, replacing rather than dropping.
+export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
 # No raw-patch tree arm -> nothing to re-pool.
 export CALIB_REPOOL_VARIANTS="${CALIB_REPOOL_VARIANTS:-}"

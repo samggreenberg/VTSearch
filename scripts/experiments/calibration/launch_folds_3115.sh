@@ -114,7 +114,22 @@ export CALIB_CALIBRATE_COUNT=2
 # dataset collapsed, so there is no scale axis left to stratify on.  With 12
 # categories of identical count, `prevalence` mode returns all of them.
 export CALIB_DATASETS="${CALIB_DATASETS:-vg_scale_any}"
-export CALIB_VGSCALE_EMBEDDERS="${CALIB_VGSCALE_EMBEDDERS:-siglip,dinov3_patch}"
+# The region half is the PAIR `siglip+dinov3_patch` (#3278).  This grid exists
+# to SEPARATE the embedder from the voting mode -- `siglip/whole` vs
+# `dinov3/whole` is the embedder at fixed mode, `dinov3/whole` vs
+# `dinov3/max_patch` is the mode at fixed embedder -- and bare `dinov3_patch`
+# would have put a third axis through both of them: DINOv3 has no text tower, so
+# every DINOv3 cell (in EITHER style) opens on three random known-goods while
+# every SigLIP cell opens on a typed query.  The first contrast would then be
+# "embedder AND opening" and the second would be clean, which is worse than both
+# being dirty because only one of them looks confounded.  With the pair all four
+# corners open on the same SigLIP text sort of the same 12 classes.
+export CALIB_VGSCALE_EMBEDDERS="${CALIB_VGSCALE_EMBEDDERS:-siglip,siglip+dinov3_patch}"
+export CALIB_REQUIRE_OPENING=text
+# A paired arm cannot fall back to the known-good start (`run_cells.py` raises),
+# so every selected category must have a typed query.  Selection filters to the
+# eligible ones before it picks, replacing rather than dropping.
+export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_CATEGORY_MODE="${CALIB_CATEGORY_MODE:-prevalence}"
 export CALIB_N_CATEGORIES="${CALIB_N_CATEGORIES:-12}"
 # BOTH styles on the patch embedder, which is what breaks the mode-vs-embedder
@@ -295,7 +310,7 @@ case "$MODE" in
       # class has exactly 300 - so it is a tripwire for a future edit that
       # repoints the run at a thinner dataset, not a constraint on this one.
       bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb 20 \
-        --require-region-voting vg_scale_any:dinov3_patch \
+        --require-region-voting vg_scale_any:siglip+dinov3_patch \
         --require-min-positives 100 \
         --contrasts-voting-modes \
         --job-name cal-cells --mem "$CALIB_MEM" --conc "$CALIB_CONC" || {

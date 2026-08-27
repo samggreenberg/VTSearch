@@ -38,8 +38,20 @@ LOGS="$CALIB_EXP/logs"; mkdir -p "$LOGS"
 
 # --- the pre-registered grid (identical across both phases) ---
 export CALIB_DATASETS="${CALIB_DATASETS:-visual_genome_m,coco_val}"
-export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,dinov3_patch}"
+# The region arm is the PAIR `siglip+dinov3_patch` (#3278).  #2841 explicitly
+# allows region and binary voting to want DIFFERENT mix-in curves, so the
+# per-mode split is the deliverable rather than a slice of it -- and bare
+# `dinov3_patch` would have made "region" mean "region voting AND a known-good
+# start", since DINOv3 has no text tower.  The mix-in schedule governs the first
+# ~20 votes, which is the stretch the opening determines, so the two would not
+# have been separable afterwards.
+export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,siglip+dinov3_patch}"
 export CALIB_COCO_EMBEDDERS="${CALIB_COCO_EMBEDDERS:-siglip,siglip2}"
+export CALIB_REQUIRE_OPENING=text
+# A paired arm cannot fall back to the known-good start (`run_cells.py` raises),
+# so every selected category must have a typed query.  Selection filters to the
+# eligible ones before it picks, replacing rather than dropping.
+export CALIB_REQUIRE_SEED_QUERY=1
 # Tree-free MaxPatch only: #2749 shipped it and dropped the HAC tree, so the
 # HAC styles would measure a path no user is on.
 export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
@@ -61,7 +73,8 @@ BASE_ENV="export VTS_REPO=$WT CALIB_EXP=$CALIB_EXP \
 CALIB_DATASETS=$CALIB_DATASETS CALIB_VG_EMBEDDERS=$CALIB_VG_EMBEDDERS \
 CALIB_COCO_EMBEDDERS=$CALIB_COCO_EMBEDDERS CALIB_PATCH_STYLES=$CALIB_PATCH_STYLES \
 CALIB_SAFE_THRESHOLDS=1 CALIB_HEAD=$CALIB_HEAD CALIB_MAX_STEPS=$CALIB_MAX_STEPS \
-CALIB_N_SEEDS=$CALIB_N_SEEDS CALIB_SWEEP_KS=$CALIB_SWEEP_KS"
+CALIB_N_SEEDS=$CALIB_N_SEEDS CALIB_SWEEP_KS=$CALIB_SWEEP_KS \
+CALIB_REQUIRE_OPENING=$CALIB_REQUIRE_OPENING CALIB_REQUIRE_SEED_QUERY=$CALIB_REQUIRE_SEED_QUERY"
 
 cell_count() {
   local envx="$1"

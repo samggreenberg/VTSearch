@@ -34,7 +34,19 @@ export CALIB_HEAD="${CALIB_HEAD:-linear}"
 # The control is not decoration here: `calculate_gmm_threshold` also backs the
 # cosine/text sort, so a winning rule has to not regress the no-max-pool geometry.
 export CALIB_DATASETS="${CALIB_DATASETS:-visual_genome_m}"
-export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,dinov3_patch}"
+# The region arm is the PAIR `siglip+dinov3_patch` (#3278).  A cut rule is a
+# statement about a score distribution, and the control above is here because
+# `calculate_gmm_threshold` also backs the cosine/text sort -- so the two arms
+# have to differ in the pooling geometry and in NOTHING ELSE.  Bare
+# `dinov3_patch` has no text tower and would open on three random known-goods
+# against the control's typed query, which moves the early score distribution
+# the 6-20-vote window is entirely about.
+export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,siglip+dinov3_patch}"
+export CALIB_REQUIRE_OPENING=text
+# A paired arm cannot fall back to the known-good start (`run_cells.py` raises),
+# so every selected category must have a typed query.  Selection filters to the
+# eligible ones before it picks, replacing rather than dropping.
+export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
 # No raw-patch tree arm -> nothing to re-pool.
 export CALIB_REPOOL_VARIANTS="${CALIB_REPOOL_VARIANTS:-}"

@@ -37,7 +37,19 @@ export CALIB_HEAD="${CALIB_HEAD:-linear}"
 # The control is the ship gate's other half: `calculate_gmm_threshold` also backs
 # the cosine/text sort, which has no max-pool and so no extreme-value tail at all.
 export CALIB_DATASETS="${CALIB_DATASETS:-visual_genome_m}"
-export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,dinov3_patch}"
+# The region arm is the PAIR `siglip+dinov3_patch` (#3278).  The ship gate here
+# is literally "the tail rules must not regress the arm with no extreme-value
+# tail", so the control and the arm have to be the same run under two
+# geometries; bare `dinov3_patch` cannot be, because with no text tower it opens
+# on three random known-goods while the control opens on a typed query.  An EVT
+# fit is a statement about the top of a score distribution, and the opening
+# decides what is at the top when the first fit is taken.
+export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,siglip+dinov3_patch}"
+export CALIB_REQUIRE_OPENING=text
+# A paired arm cannot fall back to the known-good start (`run_cells.py` raises),
+# so every selected category must have a typed query.  Selection filters to the
+# eligible ones before it picks, replacing rather than dropping.
+export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
 export CALIB_REPOOL_VARIANTS="${CALIB_REPOOL_VARIANTS:-}"
 export CALIB_SWEEP_KS="${CALIB_SWEEP_KS:-0}"
@@ -74,7 +86,7 @@ REUSE="${TAIL_REUSE_PREPARE:-/exp/$USER/calibration-safe-linear/results}"
 # that only *changes* behaviour (this one adds seven rules, so it would in fact
 # have been caught by the missing-symbol crash, but the next one may not) would
 # otherwise produce a clean, plausible, wrong table.
-PREFLIGHT_ARGS=(--exp "$CALIB_EXP" --arms siglip,dinov3_patch)
+PREFLIGHT_ARGS=(--exp "$CALIB_EXP" --arms siglip,siglip+dinov3_patch)
 [[ -d "$REUSE" ]] && PREFLIGHT_ARGS+=(--reuse-prepare "$REUSE")
 bash "$WT/scripts/experiments/preflight.sh" "${PREFLIGHT_ARGS[@]}" || exit 1
 

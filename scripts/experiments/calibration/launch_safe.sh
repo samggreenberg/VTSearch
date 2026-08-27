@@ -22,8 +22,20 @@ export CALIB_ANALYZE=analyze_safe.py
 export CALIB_HEAD="${CALIB_HEAD:-linear}"
 
 # Visual Genome region voting only; production patch arm + single-vector control.
+# The region arm is the PAIR `siglip+dinov3_patch` (#3278).  The control is what
+# says a winning GMM variant does not regress the no-max-pool geometry, and a
+# control that opens differently from the arm it controls is not one: DINOv3 has
+# no text tower, so bare `dinov3_patch` starts on three random known-goods while
+# the SigLIP control starts on a typed query.  The blend this study measures has
+# authority only in the first ~20 votes, which is exactly the stretch the
+# opening determines.
 export CALIB_DATASETS="${CALIB_DATASETS:-visual_genome_m}"
-export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,dinov3_patch}"
+export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,siglip+dinov3_patch}"
+export CALIB_REQUIRE_OPENING=text
+# A paired arm cannot fall back to the known-good start (`run_cells.py` raises),
+# so every selected category must have a typed query.  Selection filters to the
+# eligible ones before it picks, replacing rather than dropping.
+export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
 # No raw-patch tree arm -> nothing to re-pool.
 export CALIB_REPOOL_VARIANTS="${CALIB_REPOOL_VARIANTS:-}"

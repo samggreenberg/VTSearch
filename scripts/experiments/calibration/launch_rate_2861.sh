@@ -36,8 +36,19 @@ export CALIB_HEAD=linear
 # Six environments.  Order matters: the array is enumerated
 # dataset -> embedder -> category -> seed, so the LONG arm (VG dinov3 max_patch,
 # ~75 min/cell) is listed first and starts in the first concurrency wave.
+# The region environment is the PAIR `siglip+dinov3_patch` (#3278).  "kappa* is
+# stable across six environments" is a claim about ENVIRONMENTS, so an
+# environment has to differ from its neighbours in the things that name it --
+# dataset, embedder, voting mode -- and not also in how the run started.  Bare
+# `dinov3_patch` has no text tower, which would have made the single region
+# environment the only one of the six opening on three random known-goods.
 export CALIB_DATASETS=visual_genome_m,coco_val,caltech101_m
-export CALIB_VG_EMBEDDERS=dinov3_patch,siglip
+export CALIB_VG_EMBEDDERS=siglip+dinov3_patch,siglip
+export CALIB_REQUIRE_OPENING=text
+# A paired arm cannot fall back to the known-good start (`run_cells.py` raises),
+# so every selected category must have a typed query.  Selection filters to the
+# eligible ones before it picks, replacing rather than dropping.
+export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_COCO_EMBEDDERS=siglip,siglip2
 export CALIB_CALTECH_EMBEDDERS=siglip,siglip_l
 export CALIB_PATCH_STYLES=max_patch

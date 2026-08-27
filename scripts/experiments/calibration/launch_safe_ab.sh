@@ -29,8 +29,19 @@ export CALIB_AB_OFF_EXP="${CALIB_AB_OFF_EXP:-/exp/$USER/calibration-off-linear}"
 # Shared pre-registered knobs.
 # Visual Genome region voting only: the production max_patch arm plus a
 # single-vector whole_image control.
+# The region arm is the PAIR `siglip+dinov3_patch` (#3278).  The ON/OFF pairing
+# is per (arm, category, seed) and would survive any opening, but the deployment
+# question this answers -- "should safe_thresholds be forced on for EVERY
+# user?" -- is answered by reading the region arm against the whole-image
+# control, and bare `dinov3_patch` cannot open the way that control does (no
+# text tower, so three random known-goods against the control's typed query).
 export CALIB_DATASETS="${CALIB_DATASETS:-visual_genome_m}"
-export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,dinov3_patch}"
+export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,siglip+dinov3_patch}"
+export CALIB_REQUIRE_OPENING=text
+# A paired arm cannot fall back to the known-good start (`run_cells.py` raises),
+# so every selected category must have a typed query.  Selection filters to the
+# eligible ones before it picks, replacing rather than dropping.
+export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
 export CALIB_REPOOL_VARIANTS="${CALIB_REPOOL_VARIANTS:-}"
 export CALIB_MAX_STEPS="${CALIB_MAX_STEPS:-30}"
@@ -65,7 +76,8 @@ CALIB_PATCH_STYLES=$CALIB_PATCH_STYLES CALIB_REPOOL_VARIANTS='$CALIB_REPOOL_VARI
 CALIB_MAX_STEPS=$CALIB_MAX_STEPS CALIB_N_SEEDS=$CALIB_N_SEEDS CALIB_HEAD=$CALIB_HEAD \
 CALIB_SWEEP_KS=$CALIB_SWEEP_KS VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR \
 VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME \
-CALIB_AB_ON_EXP=$CALIB_AB_ON_EXP CALIB_AB_OFF_EXP=$CALIB_AB_OFF_EXP VTS_REPO=$WT"
+CALIB_AB_ON_EXP=$CALIB_AB_ON_EXP CALIB_AB_OFF_EXP=$CALIB_AB_OFF_EXP VTS_REPO=$WT \
+CALIB_REQUIRE_OPENING=$CALIB_REQUIRE_OPENING CALIB_REQUIRE_SEED_QUERY=$CALIB_REQUIRE_SEED_QUERY"
 
 # --- Stage 0: prepare, once, into the ON run's results dir (the OFF run copies
 # its prepare_info.json so both enumerate the identical cells). ---
