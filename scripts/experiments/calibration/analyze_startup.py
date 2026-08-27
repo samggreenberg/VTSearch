@@ -817,7 +817,10 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
     lines = [
         "# Good Mining: does a different Autopilot opening find better positives?",
         "",
-        f"Issue #3267.  Arms: `{'`, `'.join(ARMS)}`.  Control: `{CONTROL}`; ",
+        # No trailing space: a lone one is not a markdown hard break, and the
+        # trailing-whitespace hook strips it, so the committed copy of this
+        # report would otherwise never match what the analyzer writes.
+        f"Issue #3267.  Arms: `{'`, `'.join(ARMS)}`.  Control: `{CONTROL}`;",
         f"length-matched control: `{LENGTH_CONTROL}`; falsifier: `{FALSIFIER}`.",
         "",
         f"**Verdict.** {summary['verdict']}",
