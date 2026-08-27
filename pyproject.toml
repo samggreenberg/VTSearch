@@ -242,7 +242,7 @@ extend_exclude = [
 # Sibling modules that slides/figs/src/*.py import off their own directory
 # (they are scripts run by path, not an installed package, so deptry reads the
 # imports as third-party). Everything else under slides/ is still checked.
-known_first_party = ["report_svg", "slide_figure"]
+known_first_party = ["coco_fixture", "report_svg", "slide_figure"]
 
 # Module name → distribution name. Deptry needs these when the importable
 # module differs from the PyPI package.
