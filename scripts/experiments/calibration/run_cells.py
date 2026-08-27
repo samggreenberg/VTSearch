@@ -41,29 +41,12 @@ def _categories_by_dataset(prepare_info: dict) -> dict[str, dict[str, list[str]]
 def _seed_query_text(ds: str, cat: str) -> str:
     """The text a user would type to find *cat* in *ds*, or "" if none is known.
 
-    Two tables, because there are two kinds of dataset.  ``EXPERIMENT_QUERIES``
-    covers fixtures that exist only inside this experiment (``vg_scale``);
-    ``vtscore.eval.config.EVAL_DATASETS`` covers the real demo datasets the app
-    ships (``visual_genome_m``, ``caltech101_m``).  The experiment table wins so
-    a fixture can override, but neither is required -- an unknown dataset simply
-    has no query, and the autopilot seeds from known-goods instead.
+    Delegates to :func:`experiment_config.seed_query_text`, the single
+    implementation ``prepare_data.py`` filters on and ``preflight.sh`` checks
+    against.  It used to be inlined here; a second copy of a lookup is how a
+    preflight gate comes to pass while the run seeds differently.
     """
-    try:
-        local = cfg.EXPERIMENT_QUERIES.get(ds) or {}
-    except AttributeError:
-        local = {}
-    if cat in local:
-        return local[cat]
-
-    from vtscore.eval.config import EVAL_DATASETS  # noqa: PLC0415
-
-    info = EVAL_DATASETS.get(ds)
-    if not info:
-        return ""
-    for query in info["queries"]:
-        if query.target_category == cat:
-            return query.text
-    return ""
+    return cfg.seed_query_text(ds, cat)
 
 
 def _text_seed_scores(ds: str, emb: str, cat: str, medias: dict) -> "dict[int, float] | None":

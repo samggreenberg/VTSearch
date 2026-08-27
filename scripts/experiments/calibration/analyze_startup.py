@@ -95,7 +95,7 @@ COST_REGRESSION_TOLERANCE = float(os.environ.get("GM_COST_TOL", "0.01"))
 ALPHA = 0.05
 #: Click marks the mining curve is read at.  The axis a user spends is clicks,
 #: which is not the axis the method converges on - so both are reported.
-CLICK_MARKS = (10, 20, 50, 100)
+CLICK_MARKS = tuple(int(c) for c in os.environ.get("GM_CLICK_MARKS", "10,20,50,100,200").split(",") if c.strip())
 
 OUT = Path(os.environ.get("GM_OUT", str(common.EXP / "analysis")))
 KEYS = ("dataset", "embedder", "category", "seed")
@@ -158,6 +158,52 @@ def _keys(df: pd.DataFrame) -> list[str]:
     return [k for k in KEYS if k in df.columns]
 
 
+#: Restrict every table to cells that exist in **all** arms.
+#:
+#: The paired contrasts already drop unmatched cells, but the per-arm columns -
+#: open yield, starvation rate, sampling depth - do not, and those are read
+#: side by side as though they described the same grid.  A run stopped on a
+#: wall clock, or one arm losing cells to a node failure, then shifts an arm's
+#: unpaired number for a reason that has nothing to do with its opening.
+#:
+#: On by default: a balanced grid is what every table here claims to describe.
+#: The count dropped is reported, because silently analysing a subset is how a
+#: disk incident becomes a wrong verdict.
+BALANCED = os.environ.get("GM_BALANCED", "1") not in ("", "0")
+
+
+def balance(main: pd.DataFrame, picks: pd.DataFrame, arms: list[str]) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    """Keep only the cells every arm has, so unpaired columns compare like with like."""
+    if picks.empty or not BALANCED:
+        return main, picks, {"balanced": False}
+    keys = _keys(picks)
+    if not keys:
+        return main, picks, {"balanced": False}
+    seen = picks.groupby(keys)["arm"].nunique()
+    complete = seen[seen == len(arms)].index
+    before = int(picks.groupby(keys).ngroups)
+    if len(complete) == 0:
+        return main, picks, {"balanced": False, "reason": "no cell is present in every arm"}
+    idx = pd.MultiIndex.from_tuples(list(complete), names=keys) if len(keys) > 1 else pd.Index(complete, name=keys[0])
+    pk = picks.set_index(keys)
+    pk = pk.loc[pk.index.isin(idx)].reset_index()
+    mn = main
+    if not main.empty and all(k in main.columns for k in keys):
+        mi = main.set_index(keys)
+        mn = mi.loc[mi.index.isin(idx)].reset_index()
+    return (
+        mn,
+        pk,
+        {
+            "balanced": True,
+            "cells_complete": int(len(complete)),
+            "cells_seen": before,
+            "cells_dropped": int(before - len(complete)),
+            "arms_required": len(arms),
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # Mining: what the opening actually did
 # ---------------------------------------------------------------------------
@@ -201,7 +247,20 @@ def opening_stats(picks: pd.DataFrame) -> pd.DataFrame:
             # An opening that never produced both classes: the harness kept
             # voting past the schedule to get a trainable pair.  A non-zero
             # count is a finding about that arm's opening, not noise.
-            open_overrun=int(max(0, len(op) - _declared_clicks(g))),
+            # Clicks the arm spent as WRITTEN, and clicks it was held past the
+            # schedule for want of a trainable pair.  Kept apart because only
+            # the first is the arm's design: `flat_mid` is the length-matched
+            # control and stops being one the moment it overruns.
+            open_scheduled_clicks=int(_scheduled(op).sum()) if len(op) else 0,
+            open_overrun=int((~_scheduled(op)).sum()) if len(op) else 0,
+            open_starved=bool(len(op) and int(op["picked_label"].sum()) == 0),
+            # The labelset at the horizon, which is the thing a detector is
+            # actually trained on.  Every click labels an item regardless of
+            # phase, so a held arm is not idling - it is piling up negatives.
+            # Reporting both makes the failure legible as what it is: a
+            # one-class labelset, not a shortage of votes.
+            n_good_final=int(g["n_good"].iloc[-1]) if "n_good" in g.columns and len(g) else np.nan,
+            n_bad_final=int(g["n_bad"].iloc[-1]) if "n_bad" in g.columns and len(g) else np.nan,
             trained_at=int(g.loc[g["phase"].astype(str).isin(("hard", "new", "done")), "t"].min())
             if g["phase"].astype(str).isin(("hard", "new", "done")).any()
             else -1,
@@ -213,19 +272,24 @@ def opening_stats(picks: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(out)
 
 
-def _declared_clicks(g: pd.DataFrame) -> int:
-    """How many opening clicks the arm's schedule *asked* for.
+def _scheduled(op: pd.DataFrame) -> pd.Series:
+    """Per click: was it spent as the schedule was WRITTEN (not held past it)?
 
-    Read off the pick log rather than re-parsing the spec, so an arm whose
-    rounds were cut short by a small pool is measured as it ran.
+    Read from the harness's own ``startup_held`` column.  This was previously
+    reconstructed from the round indices, and the reconstruction was a no-op -
+    it subtracted ``min(count_of_last_round, len(rounds))``, which is just
+    ``count_of_last_round``, so the overrun it computed was identically zero
+    and an arm that spent its whole horizon under the seed sort, still waiting
+    for a first positive, reported an opening exactly as long as it had asked
+    for.  The state was
+    never derivable from the round indices; it is now recorded.
     """
-    rounds = g[g["startup_round"] >= 0]
-    if rounds.empty:
-        return int(len(g[g["phase"].astype(str).isin(("good", "bad"))]))
-    # Every click in a round the trajectory genuinely entered, minus the ones
-    # spent held on the last round waiting for the missing vote class.
-    last = int(rounds["startup_round"].max())
-    return int((rounds["startup_round"] < last).sum() + min((rounds["startup_round"] == last).sum(), len(rounds)))
+    if "startup_held" not in op.columns:
+        # A pick log from before the column existed.  Say so rather than
+        # inventing zeros: silently reporting "no overrun" is the failure this
+        # replaced.
+        return pd.Series(np.nan, index=op.index, dtype="float64").notna()
+    return ~op["startup_held"].fillna(False).astype(bool)
 
 
 # ---------------------------------------------------------------------------
@@ -372,8 +436,36 @@ def verdict(summary: dict) -> str:
 # ---------------------------------------------------------------------------
 
 
-def make_figures(picks: pd.DataFrame, opening: pd.DataFrame, outdir: Path) -> list[str]:
-    """Mining curve (mean and per-run), opening depth, and yield by depth."""
+def prevalence_table(root: Path) -> dict[tuple[str, str], float]:
+    """``(dataset, category) -> prevalence``, from the prepare stage's own counts.
+
+    Prevalence is the axis this study's mechanism runs on: an opening that mines
+    better should matter most where positives are scarce, and an average taken
+    across a 50x prevalence range is precisely the number that hides that.
+    """
+    info_p = root / "prepare_info.json"
+    if not info_p.exists():
+        return {}
+    info = json.loads(info_p.read_text())
+    out: dict[tuple[str, str], float] = {}
+    for ds, embs in info.get("datasets", {}).items():
+        for _emb, d in embs.items():
+            n = int(d.get("n_medias") or 0)
+            counts = d.get("category_counts") or {}
+            for cat in d.get("selected_categories") or []:
+                if n:
+                    out[(ds, cat)] = float(counts.get(cat, 0)) / n
+    return out
+
+
+def make_figures(
+    picks: pd.DataFrame,
+    opening: pd.DataFrame,
+    outdir: Path,
+    prevalence: dict[tuple[str, str], float] | None = None,
+    traj: pd.DataFrame | None = None,
+) -> list[str]:
+    """Mining curve (mean and per-run), opening depth, prevalence, starvation."""
     import matplotlib
 
     matplotlib.use("Agg")
@@ -445,6 +537,184 @@ def make_figures(picks: pd.DataFrame, opening: pd.DataFrame, outdir: Path) -> li
         fig.savefig(p, dpi=130)
         plt.close(fig)
         written.append(p.name)
+
+    # 4. THE AXIS THE MECHANISM RUNS ON.  "Mine more Goods" should matter most
+    #    where Goods are scarce, and these environments span ~50x in prevalence,
+    #    so one pooled number per arm is an average across the very crossover
+    #    the study is looking for.
+    #
+    #    Two panels, because they answer different halves and one of them lies
+    #    on its own.  LEFT bands prevalence into three and shows the mean paired
+    #    contrast per band with its standard error - the readable answer.  RIGHT
+    #    keeps every category as a point so the band means cannot hide a
+    #    category that disagrees with its own band.
+    #
+    #    Points are NOT joined.  A line between two categories implies a series
+    #    and there is none: the x axis is a property each category happens to
+    #    have, not an axis anything moves along.  Joining them made a noisy
+    #    scatter read as a trend.
+    if prevalence and not picks.empty:
+        keys = _keys(picks)
+        totals = picks.groupby(["arm", *keys])["picked_label"].sum().rename("positives").reset_index()
+        ctrl = totals[totals["arm"] == CONTROL].drop(columns="arm").rename(columns={"positives": "ctrl"})
+        merged = totals.merge(ctrl, on=keys, how="inner")
+        merged["delta"] = merged["positives"] - merged["ctrl"]
+        merged["prevalence"] = [prevalence.get((d, c), np.nan) for d, c in zip(merged["dataset"], merged["category"])]
+        merged = merged.dropna(subset=["prevalence"])
+        arms_here = [a for a in ARMS if a != CONTROL and (merged["arm"] == a).any()]
+        if not merged.empty and arms_here:
+            cats = merged[["dataset", "category", "prevalence"]].drop_duplicates().sort_values("prevalence")
+            # Terciles of the CATEGORIES, not of the cells: every category
+            # carries the same number of seeds, so an equal-count split of
+            # categories is an equal-weight split of the evidence.
+            n = len(cats)
+            edges = [
+                cats["prevalence"].iloc[0],
+                cats["prevalence"].iloc[max(0, n // 3 - 1)],
+                cats["prevalence"].iloc[max(0, 2 * n // 3 - 1)],
+                cats["prevalence"].iloc[-1],
+            ]
+            names = [
+                f"scarce\n(<{edges[1] * 100:.1f}%)",
+                f"mid\n({edges[1] * 100:.1f}-{edges[2] * 100:.1f}%)",
+                f"common\n(>{edges[2] * 100:.1f}%)",
+            ]
+
+            def _band(v: float) -> int:
+                return 0 if v <= edges[1] else (1 if v <= edges[2] else 2)
+
+            merged["band"] = [_band(v) for v in merged["prevalence"]]
+
+            fig, (axb, axs) = plt.subplots(1, 2, figsize=(12.5, 4.8), width_ratios=[1.0, 1.25])
+            # One colour per ARM, fixed across both panels.  Letting matplotlib
+            # cycle per call gave the two panels different colours for the same
+            # arm, which is worse than no colour: a reader matches the legend on
+            # the left to a cloud on the right and reads the wrong arm.
+            palette = {a: f"C{i}" for i, a in enumerate(arms_here)}
+            width = 0.8 / len(arms_here)
+            for i, arm in enumerate(arms_here):
+                g = merged[merged["arm"] == arm]
+                means = [g.loc[g["band"] == b, "delta"].mean() for b in range(3)]
+                std_errs = [g.loc[g["band"] == b, "delta"].sem() for b in range(3)]
+                axb.bar(
+                    np.arange(3) + i * width - 0.4 + width / 2,
+                    means,
+                    width,
+                    yerr=np.nan_to_num(std_errs),
+                    capsize=2,
+                    label=arm,
+                    color=palette[arm],
+                )
+            axb.axhline(0.0, color="#444", lw=1.0)
+            axb.set_xticks(np.arange(3))
+            axb.set_xticklabels(names, fontsize=8)
+            axb.set_ylabel(f"positives at the horizon, minus {CONTROL}")
+            axb.set_title("Banded by prevalence (mean ± SE)")
+            axb.legend(fontsize=7, ncol=2)
+
+            markers = {"coco_val": "o", "visual_genome_m": "^"}
+            for arm in arms_here:
+                g = merged[merged["arm"] == arm]
+                per_cat = g.groupby(["dataset", "category", "prevalence"])["delta"].mean().reset_index()
+                first = True
+                for ds, sub in per_cat.groupby("dataset"):
+                    axs.scatter(
+                        sub["prevalence"],
+                        sub["delta"],
+                        s=22,
+                        alpha=0.75,
+                        color=palette[arm],
+                        marker=markers.get(ds, "o"),
+                        label=arm if first else None,
+                    )
+                    first = False
+            axs.axhline(0.0, color="#444", lw=1.0, ls="--")
+            axs.set_xscale("log")
+            axs.set_xlabel("category prevalence in the pool (log) — o coco_val, ^ visual_genome_m")
+            axs.set_title("Every category as its own point (not a series - points are not joined)")
+            axs.legend(fontsize=7, ncol=2)
+            fig.suptitle("Does a better opening matter more where Goods are scarce?", fontsize=11)
+            fig.tight_layout(rect=(0, 0, 1, 0.94))
+            p = outdir / "mining_by_prevalence.png"
+            fig.savefig(p, dpi=130)
+            plt.close(fig)
+            written.append(p.name)
+
+    # 5. THE BINDING CONSTRAINT, and this study's headline failure mode: an
+    #    opening that finds no positive at all.  The harness then holds the
+    #    trajectory on the schedule's last round rather than hand a one-class
+    #    labelset to a learned sort.
+    #
+    #    Those clicks are NOT wasted votes: every click labels an item and goes
+    #    into the training data whatever phase the autopilot thinks it is in -
+    #    the phase decides only which item is shown next, never whether the
+    #    answer counts.  A held arm is accumulating negatives at full rate.
+    #    What it does not have is a POSITIVE, and one class cannot be fitted,
+    #    so no detector exists and no metric row is emitted.  The cost is that
+    #    the clicks buy labels the model cannot yet use, and are spent under the
+    #    seed sort rather than under a learned one.
+    #    Two bars because they are different facts: how often an arm starves,
+    #    and how much of the horizon it loses when it does.
+    if not opening.empty and "open_starved" in opening.columns:
+        arms_present = [a for a in ARMS if (opening["arm"] == a).any()]
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(9.5, 4.0))
+        x = np.arange(len(arms_present))
+        starved = [100.0 * opening.loc[opening["arm"] == a, "open_starved"].mean() for a in arms_present]
+        ax1.bar(x, starved, 0.6, color="#b91c1c")
+        ax1.set_xticks(x)
+        ax1.set_xticklabels(arms_present, rotation=30, ha="right", fontsize=8)
+        ax1.set_ylabel("% of cells whose opening found NO positive")
+        ax1.set_title("How often an opening starves")
+        if "open_overrun" in opening.columns:
+            data = [opening.loc[opening["arm"] == a, "open_overrun"].dropna().to_numpy() for a in arms_present]
+            data = [d if len(d) else np.array([0.0]) for d in data]
+            ax2.boxplot(data, tick_labels=arms_present, showfliers=False)
+            ax2.set_xticklabels(arms_present, rotation=30, ha="right", fontsize=8)
+            ax2.set_ylabel("clicks held past the written schedule")
+            ax2.set_title("What it costs when it does")
+        fig.tight_layout()
+        p = outdir / "starvation.png"
+        fig.savefig(p, dpi=130)
+        plt.close(fig)
+        written.append(p.name)
+
+    # 6. THE ISSUE'S PREMISE, tested directly.  #3267 opens by asserting it:
+    #    "getting enough Goods is important to VTSearch runs doing well.
+    #    (Certainly being Good-starved seems related to failing.)"  Everything
+    #    else here assumes that and asks which opening mines best; this asks
+    #    whether the assumption holds, on this run's own data.
+    #
+    #    Pooled over ALL arms on purpose - the relationship is a claim about
+    #    trajectories, not about openings - with the arms coloured so a reader
+    #    can see whether it is one arm's cloud doing the work.  Binned medians
+    #    over the top, because a scatter of thousands of cells shows a shape
+    #    only by accident.
+    if traj is not None and not traj.empty and not opening.empty:
+        keys = [k for k in ["arm", *_keys(opening)] if k in traj.columns and k in opening.columns]
+        merged = opening.merge(traj, on=keys, how="inner", suffixes=("", "_traj"))
+        if "final_cost" in merged.columns and "open_positives" in merged.columns:
+            m = merged.dropna(subset=["final_cost", "open_positives"])
+            if len(m) > 10:
+                fig, ax = plt.subplots(figsize=(7.5, 4.6))
+                for arm in ARMS:
+                    g = m[m["arm"] == arm]
+                    if g.empty:
+                        continue
+                    ax.scatter(g["open_positives"], g["final_cost"], s=7, alpha=0.30, label=arm)
+                bins = np.arange(-0.5, float(m["open_positives"].max()) + 1.5, 1.0)
+                m = m.assign(_b=pd.cut(m["open_positives"], bins))
+                med = m.groupby("_b", observed=True)["final_cost"].agg(["median", "size"])
+                centres = [iv.mid for iv in med.index]
+                ax.plot(centres, med["median"], color="#111", lw=2.0, marker="o", ms=4, label="median (all arms)")
+                ax.set_xlabel("positives found in the opening")
+                ax.set_ylabel("final cost (lower is better)")
+                ax.set_title("Is a Good-starved opening really a failing run?")
+                ax.legend(fontsize=7, ncol=2)
+                fig.tight_layout()
+                p = outdir / "premise_starvation_vs_cost.png"
+                fig.savefig(p, dpi=130)
+                plt.close(fig)
+                written.append(p.name)
     return written
 
 
@@ -479,6 +749,18 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
             f"| `{arm}` | `{ARM_SCHEDULE.get(arm, '?')}` | {m.get('n_read', 0)} | {p.get('n_read', 0)} | "
             f"{len(m.get('no_positive_found', []))} | {len(m.get('unreadable', [])) + len(p.get('unreadable', []))} |"
         )
+    bal = summary.get("balance") or {}
+    if bal.get("balanced"):
+        lines += [
+            "",
+            f"Analysed on the **balanced** grid: {bal['cells_complete']} cells present in all "
+            f"{bal['arms_required']} arms, of {bal['cells_seen']} seen "
+            f"({bal['cells_dropped']} dropped). The paired contrasts would drop the unmatched cells",
+            "anyway; the per-arm columns would not, and they are read side by side as though they",
+            "described the same grid. Set `GM_BALANCED=0` to analyse every cell that exists.",
+        ]
+    elif bal.get("reason"):
+        lines += ["", f"**Not balanced**: {bal['reason']}. Per-arm columns below may not describe the same cells."]
     lines += [
         "",
         "A cell under **no detector trained** is a result, not a missing file: that opening never",
@@ -506,8 +788,9 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
         "",
         "## Mining and outcome, paired against the control",
         "",
-        "| arm | open clicks | open yield | positives@100 Δ | [95% CI] | final cost Δ | [95% CI] | AP Δ |",
-        "|---|---:|---:|---:|---|---:|---|---:|",
+        "| arm | open clicks (written) | held past it | starved | labelset @200 (good/bad) | "
+        "open yield | positives@100 Δ | [95% CI] | median | final cost Δ | [95% CI] | median | AP Δ |",
+        "|---|---:|---:|---:|:--:|---:|---:|---|---:|---:|---|---:|---:|",
     ]
     for arm in ARMS:
         if arm == CONTROL:
@@ -515,12 +798,34 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
         rec = summary["arms"].get(arm, {})
         pos, cost, ap = rec.get("positives_100", {}), rec.get("final_cost", {}), rec.get("final_ap", {})
         lines.append(
-            f"| `{arm}` | {_fmt(rec, 'open_clicks')} | {_fmt(rec, 'open_yield')} | "
-            f"{_fmt(pos, 'median_delta')} | [{_fmt(pos, 'ci95_lo')}, {_fmt(pos, 'ci95_hi')}] | "
-            f"{_fmt(cost, 'median_delta')} | [{_fmt(cost, 'ci95_lo')}, {_fmt(cost, 'ci95_hi')}] | "
-            f"{_fmt(ap, 'median_delta')} |"
+            f"| `{arm}` | {_fmt(rec, 'open_scheduled_clicks')} | {_fmt(rec, 'open_overrun_median')} | "
+            f"{_fmt(rec, 'open_starved_pct')}% | "
+            f"{_fmt(rec, 'n_good_final')}/{_fmt(rec, 'n_bad_final')} | {_fmt(rec, 'open_yield')} | "
+            f"{_fmt(pos, 'mean_delta')} | [{_fmt(pos, 'ci95_lo')}, {_fmt(pos, 'ci95_hi')}] | "
+            f"{_fmt(pos, 'median_delta')} | "
+            f"{_fmt(cost, 'mean_delta')} | [{_fmt(cost, 'ci95_lo')}, {_fmt(cost, 'ci95_hi')}] | "
+            f"{_fmt(cost, 'median_delta')} | "
+            f"{_fmt(ap, 'mean_delta')} |"
         )
     lines += [
+        "",
+        "**open clicks (written)** is the opening the arm's schedule asked for; **held past it** is",
+        "the clicks it was then held on the last round for, because one vote class was still empty",
+        "and handing a learned sort a one-class labelset would leave the selector picking at random.",
+        "**starved** is the share of cells whose opening found no positive at all - the extreme of",
+        "the regime this study is about, and the reason the two click columns cannot be added.",
+        "",
+        "A held click is **not** an idle one: every click labels an item and enters the training",
+        "data whatever phase the autopilot is in - the phase chooses which item is shown next, never",
+        "whether the answer counts. A held arm is piling up negatives at full rate. What it lacks is",
+        "a *positive*, and one class cannot be fitted, so no detector exists and no metric row is",
+        "emitted. `labelset @200` below reports what the model was actually handed.",
+        "",
+        "The interval is a bootstrap of the **mean** paired delta, so the mean is what sits beside",
+        "it; the median is given too because these distributions are skewed - a third of some arms'",
+        "cells find no positive at all, and a mean and a median say different true things about",
+        "that. Reading a median against a mean's interval, as an earlier draft of this table did,",
+        "produces the nonsense of a point estimate outside its own interval.",
         "",
         "Every delta is paired on the identical (dataset, embedder, category, seed).  A difference",
         "smaller than twice its standard error is not resolvable here, and saying so is a finding.",
@@ -539,23 +844,46 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
         vs = summary["arms"].get(arm, {}).get("vs_length_control", {})
         pos, cost = vs.get("positives_100", {}), vs.get("final_cost", {})
         lines.append(
-            f"| `{arm}` | {_fmt(pos, 'median_delta')} | [{_fmt(pos, 'ci95_lo')}, {_fmt(pos, 'ci95_hi')}] | "
-            f"{_fmt(cost, 'median_delta')} | [{_fmt(cost, 'ci95_lo')}, {_fmt(cost, 'ci95_hi')}] |"
+            f"| `{arm}` | {_fmt(pos, 'mean_delta')} | [{_fmt(pos, 'ci95_lo')}, {_fmt(pos, 'ci95_hi')}] | "
+            f"{_fmt(cost, 'mean_delta')} | [{_fmt(cost, 'ci95_lo')}, {_fmt(cost, 'ci95_hi')}] |"
         )
+    sheets = sorted(f for f in figures if f.startswith("opening_") and f.endswith(".jpg"))
+    figures = [f for f in figures if f not in sheets]
     if figures:
         lines += ["", "## Figures", ""]
         for name in figures:
             lines.append(f"![{name}](figures/{name})")
             lines.append("")
     lines += [
-        "## What is still owed",
+        "## The openings themselves",
         "",
-        "This analyzer reports *whether* an opening mined better.  The issue also asks **why**,",
-        "and that is a question about the items themselves: dump the opening's picks with",
-        "`VTS_DUMP_TEST_SCORES` and render them with `make_error_sheets.py`, so a winning arm's",
-        "extra positives can be looked at rather than counted.  On image data, show the images.",
+        "The tables say *whether* an opening mined better.  The issue also asks **why**, and that",
+        "is a question about the items, so here are the items: every click of each arm's opening",
+        "on one cell, in the order it was made, captioned with its round, its rank in the seed",
+        "sort, and whether it turned out to be a positive, with the dataset's ground-truth box",
+        "drawn where it has one.  Read two arms side by side and the mechanism is visible rather",
+        "than inferred.  Rendered by `make_startup_sheets.py`; a starved arm shows its written",
+        "opening in full plus a sample of the clicks it was held for, and the caption says how",
+        "many are not shown.",
         "",
     ]
+    if sheets:
+        by_cell: dict[str, list[str]] = {}
+        for f in sheets:
+            by_cell.setdefault(f.rsplit("_", 1)[0], []).append(f)
+
+        def _arm_rank(x: str) -> int:
+            arm = x.rsplit("_", 1)[1][:-4]
+            return ARMS.index(arm) if arm in ARMS else 99
+
+        for cell, files in sorted(by_cell.items()):
+            lines += [
+                "",
+                f"### `{cell[len(chr(111) + chr(112) + chr(101) + chr(110) + chr(105) + chr(110) + chr(103) + chr(95)) :]}`",
+                "",
+            ]
+            for f in sorted(files, key=_arm_rank):
+                lines.append(f"![{f}](figures/{f})")
     outdir.mkdir(parents=True, exist_ok=True)
     path = outdir / "REPORT_startup.md"
     path.write_text("\n".join(lines))
@@ -564,19 +892,37 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
 
 def analyze(root: Path, outdir: Path) -> dict:
     main, picks, prov = load_all(root)
+    arms_present = [a for a in ARMS if not picks[picks["arm"] == a].empty] if not picks.empty else []
+    main, picks, bal = balance(main, picks, arms_present)
     opening = opening_stats(picks)
     traj = trajectory_stats(main)
 
-    summary: dict = {"provenance": prov, "arms": {}, "n_main_rows": int(len(main)), "n_pick_rows": int(len(picks))}
+    summary: dict = {
+        "provenance": prov,
+        "balance": bal,
+        "arms": {},
+        "n_main_rows": int(len(main)),
+        "n_pick_rows": int(len(picks)),
+    }
     for arm in ARMS:
         rec: dict = {"schedule": ARM_SCHEDULE.get(arm, "?")}
         if not opening.empty and (opening["arm"] == arm).any():
             g = opening[opening["arm"] == arm]
             rec["open_clicks"] = float(g["open_clicks"].median())
+            # As WRITTEN, and the overrun separately.  Reporting only the total
+            # is what made `flat_mid` look like a 200-click opening on a starved
+            # cell instead of a 16-click one that could not finish.
+            rec["open_scheduled_clicks"] = float(g["open_scheduled_clicks"].median())
             rec["open_yield"] = float(g["open_yield"].median())
             rec["open_cut_depth"] = float(g["open_cut_depth"].median())
             rec["open_pos_depth"] = float(g["open_pos_depth"].median())
             rec["open_overrun_cells"] = int((g["open_overrun"] > 0).sum())
+            rec["open_overrun_median"] = float(g["open_overrun"].median())
+            rec["open_starved_cells"] = int(g["open_starved"].sum())
+            rec["open_starved_pct"] = float(100.0 * g["open_starved"].mean())
+            rec["n_good_final"] = float(g["n_good_final"].median())
+            rec["n_bad_final"] = float(g["n_bad_final"].median())
+            rec["n_cells"] = int(len(g))
         rec["lever"] = lever_moved(opening, arm)
         if arm != CONTROL:
             if not opening.empty:
@@ -601,7 +947,7 @@ def analyze(root: Path, outdir: Path) -> dict:
         opening.to_csv(agg / "opening_stats.csv", index=False)
     if not traj.empty:
         traj.to_csv(agg / "trajectory_stats.csv", index=False)
-    figures = make_figures(picks, opening, outdir / "figures")
+    figures = make_figures(picks, opening, outdir / "figures", prevalence_table(root), traj)
     (outdir / "startup_summary.json").write_text(json.dumps(summary, indent=2, default=str))
     write_report(summary, figures, outdir)
     return summary

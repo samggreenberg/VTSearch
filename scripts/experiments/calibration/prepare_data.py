@@ -155,7 +155,7 @@ def _prepare_pair(ds: str, emb_name: str, info: dict) -> None:
         common.log(f"  wrote cell pickle {pkl.name}: {nbytes / 1e6:.0f} MB")
 
     cats = _category_counts(medias)
-    selected, sel_report = cfg.select_categories(medias, cats)
+    selected, sel_report = cfg.select_categories(medias, cats, dataset=ds)
     if cfg.MIN_SIM_POSITIVES > 0:
         # Keep only categories deep enough to sustain a long horizon.  The
         # simulation set is SIM_FRACTION of the medias, so a category's usable

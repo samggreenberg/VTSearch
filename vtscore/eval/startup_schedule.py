@@ -234,6 +234,21 @@ class StartupState:
     def done(self) -> bool:
         return self.index >= len(self.rounds)
 
+    @property
+    def held_for_quorum(self) -> bool:
+        """Whether the schedule is spent but one vote class is still empty.
+
+        Public because it has to reach the **rows**.  ``extended_clicks``
+        already counted these, but it lived only on this object, so nothing
+        downstream could tell "16 opening clicks, as written" from "16 as
+        written and 184 more waiting for a first positive" - the two look
+        identical in a pick log, and the second is this study's headline
+        failure mode rather than a footnote.  It also silently broke the
+        length-matched control: an arm that spends 16 clicks by design is only
+        comparable to `flat_mid` if `flat_mid` really spent 16.
+        """
+        return self._held_for_quorum
+
     def current(self) -> Optional[StartupRound]:
         """The round now being voted, or ``None`` once the schedule is spent."""
         return None if self.done else self.rounds[self.index]

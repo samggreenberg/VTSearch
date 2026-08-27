@@ -58,7 +58,17 @@ user hunting a small boat still types "boat".
 was wrong but that it was **unnameable after the fact** — the study's own rows
 could not say how it had started. A resolved default belongs in the data.
 
-**Still only advice:** `coco_val` and `vg_box_{small,medium,large}` have no
+~~**Still only advice:** `coco_val` and `vg_box_{small,medium,large}` have no
 `EvalQuery` entries, so they now take the known-good start even on SigLIP, where
 text is available and would be more faithful. Config-only to fix; the mechanism
-picks it up with no code change.
+picks it up with no code change.~~
+
+**CLOSED 2026-08-26 by #3267**, which was the next study to touch those datasets
+and — being a sweep of *positions on the seed sort* — could not have run on the
+known-good start at all. `EXPERIMENT_QUERIES` gained the COCO-80 table and the
+`vg_box_*` bands, `CALIB_REQUIRE_SEED_QUERY` filters selection to categories
+that have a query, and `preflight.sh --require-text-seed` now refuses to launch
+a grid whose cells would seed the other way. See
+[a fixture dataset has no query](2026-08-26-a-fixture-dataset-has-no-query.md).
+The residue this leaves is smaller and named there: the flag is opt-in, because
+the known-good start is legitimate wherever the embedder has no text tower.
