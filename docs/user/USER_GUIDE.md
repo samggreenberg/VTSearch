@@ -752,15 +752,15 @@ with bulk-action and per-card controls.
   - **Drafts** holds detectors you're still building or evaluating.
     Like datasets, the name carries a **Rename** pencil and **Delete**
     is inline; the **⋯** overflow menu holds the rest, including
-    **Import Labels** (import labels into this detector), **Export**,
-    **Export model** (a standalone ONNX scoring bundle - see
+    **Import Labels** (import labels into this detector), **Export
+    labels**, **Export model** (a standalone ONNX scoring bundle - see
     [Exporting your work](#exporting-your-work)), and **Move to AutoRun**.
   - **AutoRun** holds finalized detectors. They run automatically
     against every dataset as it is imported (and during CLI
     autodetect), and they are *frozen*: no rename, delete, retrain, or
     label import until you pick **Move to Drafts** from the **⋯** menu
     to unfreeze them. Read-only actions (**Load**, **Browse
-    positives**, **Stats**, **Export**, **Export model**) stay
+    positives**, **Stats**, **Export labels**, **Export model**) stay
     available, and **Find** works as usual.
 
   A detector lives on exactly one tab at a time, and every user
@@ -971,11 +971,19 @@ delimiter to use.
 The Detectors dashboard's **⋯** overflow menu exports the detector
 itself, two different ways:
 
-- **Export** - opens the same exporter modal described above, scoped to
-  that detector. This is how you move a detector to another VTSearch
-  instance: a detector *is* its labels (VTSearch re-derives the trained
-  ranker from them every time it loads), so exporting the labels and
-  importing them there with **Import Labels** reconstructs it.
+- **Export labels** - opens the same exporter modal described above,
+  scoped to that detector. This is how you move a detector to another
+  VTSearch instance: a detector *is* its labels (VTSearch re-derives the
+  trained ranker from them every time it loads), so exporting the labels
+  and importing them there with **Import Labels** reconstructs it.
+
+  Opened this way the modal's **Categories** filter starts on **All**,
+  which is what you want: the negatives are half of what the ranker
+  learns from, and a good-only or bad-only file can't rebuild the
+  detector at the other end (training needs both classes and refuses a
+  one-sided labelset). Narrowing to **Good** or **Bad** is still
+  available - it's a useful way to get just the hits as a list - and the
+  modal says what you're giving up when you do.
 - **Export model** - a **portable, standalone scoring bundle**: a zip
   holding `detector.onnx` (the trained ranker, which runs anywhere ONNX
   does), `manifest.json` (which embedder to use and where the good/bad

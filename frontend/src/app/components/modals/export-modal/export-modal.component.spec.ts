@@ -187,6 +187,49 @@ describe('ExportModalComponent', () => {
     expect(component.filteredLabels.length).toBe(1);
   });
 
+  // Issue #3263: the Dashboard row action and the train-mode right panel open
+  // this modal with no filter at all, and what they are exporting is the
+  // detector's *own* labelset — the thing that re-imports as the detector. A
+  // good-only slice of that cannot rebuild it (training rejects a single-class
+  // labelset), so the detector scope opens on All and says so when narrowed.
+  describe('detector scope', () => {
+    it('opens on All when the caller passes no filter', async () => {
+      await flushInit();
+      expect(component.labelFilter).toBe('both');
+      expect(component.filteredLabels.length).toBe(3);
+    });
+
+    it('names the payload in the title, apart from "Export model"', async () => {
+      await flushInit();
+      expect(component.modalTitle).toBe('Export Labels');
+    });
+
+    it('flags a one-sided selection, and only a one-sided one', async () => {
+      await flushInit();
+      expect(component.showPartialLabelsetNote).toBe(false); // opens on All
+      component.labelFilter = 'good';
+      expect(component.showPartialLabelsetNote).toBe(true);
+      component.labelFilter = 'bad';
+      expect(component.showPartialLabelsetNote).toBe(true);
+      // A corrections export is a deliberate diff, not a would-be labelset.
+      component.labelFilter = 'corrections';
+      expect(component.showPartialLabelsetNote).toBe(false);
+    });
+  });
+
+  // The Find view slices a scored run: "the good hits" is the normal ask
+  // there, so it keeps the caller's filter and never warns.
+  describe('results scope', () => {
+    it('keeps the caller filter and stays quiet about it', async () => {
+      fixture.componentRef.setInput('scope', 'results');
+      fixture.componentRef.setInput('initialFilter', 'good');
+      await flushInit();
+      expect(component.labelFilter).toBe('good');
+      expect(component.showPartialLabelsetNote).toBe(false);
+      expect(component.modalTitle).toBe('Export');
+    });
+  });
+
   it('reports correction availability', async () => {
     await flushInit();
     expect(component.hasCorrections).toBe(true);
