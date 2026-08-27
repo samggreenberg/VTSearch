@@ -34,6 +34,14 @@ umap-learn
 # ── PyTorch (CPU) ────────────────────────────────────────────────────
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch>=2.0.0
+# SigLIP's image processor is requested by backend name rather than
+# inheriting a default (#3173), and the name we ask for is `torchvision`
+# — so torchvision is a hard requirement of the preprocessing path, not
+# an optional accelerator. `torch` does not pull it in and neither does
+# `transformers`, so without this line the processor import raises
+# ImportError the first time an image is embedded. Listed under `torch`
+# so it resolves against the CPU wheel index above.
+torchvision
 
 # ── Image media type ─────────────────────────────────────────────────
 Pillow
