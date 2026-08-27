@@ -323,8 +323,74 @@ When the queue drains:  python analyze_startup.py
 NOTE
     ;;
 
+  topup)
+    # Add seeds to a grid that is already running or finished, WITHOUT
+    # re-running a single cell of it.
+    #
+    # This is free only because the run is seed-major (CALIB_CELL_ORDER=seed):
+    # index = seed * n_environments + environment, so a 30-seed grid is an exact
+    # PREFIX of a 42-seed one and indices 720-1007 are precisely seeds 30-41.
+    # Under the default category-major ordering the same request renumbers every
+    # cell, and a "top-up" would silently re-run the whole grid into filenames
+    # that collide with the results already on disk.
+    #
+    #   bash launch_good_mining.sh topup 42     # extend a 30-seed grid to 42
+    #
+    # Verify the prefix property rather than trusting it: this asserts that the
+    # first N_OLD cells of the new grid are identical to the old grid's, and
+    # refuses to submit if they are not.
+    NEW_SEEDS="${2:?usage: $0 topup <total_seeds>}"
+    OLD_SEEDS="$CALIB_N_SEEDS"
+    if [[ "$NEW_SEEDS" -le "$OLD_SEEDS" ]]; then
+      echo "ERROR: topup wants MORE seeds than the $OLD_SEEDS already submitted (got $NEW_SEEDS)" >&2
+      exit 1
+    fi
+    # shellcheck disable=SC1091
+    source "$WT/gridenv.sh" >/dev/null 2>&1 || { echo "ERROR: no venv at $WT/gridenv.sh" >&2; exit 1; }
+    ( cd "$HERE" && OLD="$OLD_SEEDS" NEW="$NEW_SEEDS" python -c "
+import importlib, json, os, sys
+info = json.load(open(os.environ['CALIB_RESULTS'] + '/prepare_info.json'))
+cats = {ds: {e: v['selected_categories'] for e, v in d.items()} for ds, d in info['datasets'].items()}
+def grid(n):
+    os.environ['CALIB_N_SEEDS'] = str(n)
+    import experiment_config as cfg
+    importlib.reload(cfg)
+    return cfg.array_cells(cats)
+old, new = grid(int(os.environ['OLD'])), grid(int(os.environ['NEW']))
+if old != new[:len(old)]:
+    sys.exit('FATAL: the existing grid is NOT a prefix of the extended one; a topup would renumber cells')
+print(len(old), len(new))
+" ) || exit 1
+    read -r LO HI < <(cd "$HERE" && OLD="$OLD_SEEDS" NEW="$NEW_SEEDS" python -c "
+import importlib, json, os
+info = json.load(open(os.environ['CALIB_RESULTS'] + '/prepare_info.json'))
+cats = {ds: {e: v['selected_categories'] for e, v in d.items()} for ds, d in info['datasets'].items()}
+def grid(n):
+    os.environ['CALIB_N_SEEDS'] = str(n)
+    import experiment_config as cfg
+    importlib.reload(cfg)
+    return cfg.array_cells(cats)
+print(len(grid(int(os.environ['OLD']))), len(grid(int(os.environ['NEW']))) - 1)
+")
+    echo "topup: seeds $OLD_SEEDS..$((NEW_SEEDS - 1)) = array indices $LO-$HI, per arm"
+    export CALIB_N_SEEDS="$NEW_SEEDS"
+    for arm in "${ARM_ORDER[@]}"; do
+      export CALIB_STARTUP_SCHEDULE="${ARMS[$arm]}"
+      R="$CALIB_EXP/results/$arm"
+      B=$(sbatch --parsable --job-name=cal-topup --array="$LO-$HI%$CALIB_CONC" \
+        --mem="$CALIB_MEM" --cpus-per-task="$CALIB_CPUS" --time="$CALIB_TIME" \
+        --partition="$CALIB_PARTITION" --export=ALL \
+        --output="$LOGS/topup-%A_%a.out" \
+        --wrap="source $WT/gridenv.sh && export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$R \
+          VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME \
+          CALIB_N_SEEDS=$NEW_SEEDS CALIB_STARTUP_SCHEDULE='${ARMS[$arm]}' && cd $HERE && python run_cells.py")
+      require_jobid "$B" "topup arm $arm"
+      echo "  $arm -> $B"
+    done
+    ;;
+
   *)
-    echo "usage: $0 {prepare|size [cell] [arm]|arms}" >&2
+    echo "usage: $0 {prepare|size [cell] [arm]|arms|topup <total_seeds>}" >&2
     exit 2
     ;;
 esac
