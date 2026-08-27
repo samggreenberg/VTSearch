@@ -68,6 +68,16 @@ caller builds, so the simulator needed no change at all.
   `--require-region-voting`, so both premises are asserted before the array
   instead of read out of the rows afterwards.
 
+**This is not fixed everywhere, and deliberately so.** Sixteen other launchers
+carry a DINOv3 arm and none passes `--require-text-seed` (#3278). Their existing
+results are fine — they all ran before #3269, so every arm seeded from a crop and
+the shift was shared. It is their *next* run that inherits this. The right answer
+differs per launcher: a mode-contrast study wants the pair, a single-arm region
+study has no contrast to confound but still would not open the way the app does,
+and a study whose subject *is* the known-good start should pin that choice rather
+than inherit it. Sweeping all sixteen would have replaced one unexamined default
+with another.
+
 **One thing worth keeping beyond this study.** `media["embeddings"]` is already
 a dict keyed by embedder name, so one media *can* carry both vectors — that is
 production's three-slot design, not a harness trick. The pile happens to store
