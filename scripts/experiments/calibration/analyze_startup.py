@@ -455,6 +455,7 @@ def make_figures(
     opening: pd.DataFrame,
     outdir: Path,
     prevalence: dict[tuple[str, str], float] | None = None,
+    traj: pd.DataFrame | None = None,
 ) -> list[str]:
     """Mining curve (mean and per-run), opening depth, prevalence, starvation."""
     import matplotlib
@@ -604,6 +605,44 @@ def make_figures(
         fig.savefig(p, dpi=130)
         plt.close(fig)
         written.append(p.name)
+
+    # 6. THE ISSUE'S PREMISE, tested directly.  #3267 opens by asserting it:
+    #    "getting enough Goods is important to VTSearch runs doing well.
+    #    (Certainly being Good-starved seems related to failing.)"  Everything
+    #    else here assumes that and asks which opening mines best; this asks
+    #    whether the assumption holds, on this run's own data.
+    #
+    #    Pooled over ALL arms on purpose - the relationship is a claim about
+    #    trajectories, not about openings - with the arms coloured so a reader
+    #    can see whether it is one arm's cloud doing the work.  Binned medians
+    #    over the top, because a scatter of thousands of cells shows a shape
+    #    only by accident.
+    if traj is not None and not traj.empty and not opening.empty:
+        keys = [k for k in ["arm", *_keys(opening)] if k in traj.columns and k in opening.columns]
+        merged = opening.merge(traj, on=keys, how="inner", suffixes=("", "_traj"))
+        if "final_cost" in merged.columns and "open_positives" in merged.columns:
+            m = merged.dropna(subset=["final_cost", "open_positives"])
+            if len(m) > 10:
+                fig, ax = plt.subplots(figsize=(7.5, 4.6))
+                for arm in ARMS:
+                    g = m[m["arm"] == arm]
+                    if g.empty:
+                        continue
+                    ax.scatter(g["open_positives"], g["final_cost"], s=7, alpha=0.30, label=arm)
+                bins = np.arange(-0.5, float(m["open_positives"].max()) + 1.5, 1.0)
+                m = m.assign(_b=pd.cut(m["open_positives"], bins))
+                med = m.groupby("_b", observed=True)["final_cost"].agg(["median", "size"])
+                centres = [iv.mid for iv in med.index]
+                ax.plot(centres, med["median"], color="#111", lw=2.0, marker="o", ms=4, label="median (all arms)")
+                ax.set_xlabel("positives found in the opening")
+                ax.set_ylabel("final cost (lower is better)")
+                ax.set_title("Is a Good-starved opening really a failing run?")
+                ax.legend(fontsize=7, ncol=2)
+                fig.tight_layout()
+                p = outdir / "premise_starvation_vs_cost.png"
+                fig.savefig(p, dpi=130)
+                plt.close(fig)
+                written.append(p.name)
     return written
 
 
@@ -796,7 +835,7 @@ def analyze(root: Path, outdir: Path) -> dict:
         opening.to_csv(agg / "opening_stats.csv", index=False)
     if not traj.empty:
         traj.to_csv(agg / "trajectory_stats.csv", index=False)
-    figures = make_figures(picks, opening, outdir / "figures", prevalence_table(root))
+    figures = make_figures(picks, opening, outdir / "figures", prevalence_table(root), traj)
     (outdir / "startup_summary.json").write_text(json.dumps(summary, indent=2, default=str))
     write_report(summary, figures, outdir)
     return summary
