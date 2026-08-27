@@ -16,6 +16,12 @@ are the point of testing it:
   tracks "solved", not "merged"), while a PR closed *without* merging un-solves
   it and must take the label back off.
 
+It also reconciles the *assignee*, which carries the companion status "a
+session is working this right now". That half removes only: a solved or closed
+issue must end up unassigned, but nothing in this input can distinguish "nobody
+is on it" from "a session just started", so an assignment is never invented and
+an ambiguous issue is never touched.
+
 Getting any of these wrong silently corrupts both views the label powers:
 `-label:solved` (what a human should pick up next) and `label:solved`
 (solved, waiting only on merges).
@@ -43,11 +49,19 @@ def _load():
 mod = _load()
 
 
-def issue(number: int, *, state: str = "open", labels: list[str] | None = None, comments: list[str] | None = None):
+def issue(
+    number: int,
+    *,
+    state: str = "open",
+    labels: list[str] | None = None,
+    comments: list[str] | None = None,
+    assignees: list | None = None,
+):
     return {
         "number": number,
         "state": state,
         "labels": labels or [],
+        "assignees": assignees or [],
         "comments": [{"body": body} for body in (comments or [])],
     }
 
@@ -384,3 +398,92 @@ class TestCommandLine:
 
     def test_empty_input_is_not_an_error(self):
         assert self.run({}).returncode == 0
+
+
+class TestAssigneeRemoval:
+    """The assignee comes off once an issue is solved or closed -- and only then."""
+
+    def test_issue_solved_by_this_run_is_unassigned(self):
+        prs = [{"number": 3128, "body": "Closes #3077"}]
+        plan = plan_for(prs, [issue(3077, assignees=["samggreenberg"])])
+        assert 3077 in plan["add"]
+        assert "@samggreenberg" in plan["unassign"][3077]
+
+    def test_already_solved_issue_still_assigned_is_unassigned(self):
+        """The label went on but the assignee was forgotten -- the common miss."""
+        prs = [{"number": 3128, "body": "Closes #3077"}]
+        plan = plan_for(prs, [issue(3077, labels=["claude", "solved"], assignees=["samggreenberg"])])
+        assert 3077 in plan["none"]  # label is already correct...
+        assert 3077 in plan["unassign"]  # ...but the assignee is not
+
+    def test_closed_issue_is_unassigned(self):
+        plan = plan_for([], [issue(3077, state="closed", assignees=["samggreenberg"])])
+        assert 3077 in plan["unassign"]
+
+    def test_unsolved_issue_keeps_its_assignee(self):
+        """An assignee on an unsolved issue means a session is working it now."""
+        plan = plan_for([], [issue(3077, assignees=["samggreenberg"])])
+        assert 3077 not in plan["unassign"]
+
+    def test_refs_only_issue_keeps_its_assignee(self):
+        prs = [{"number": 3128, "body": "Refs #3077"}]
+        assert 3077 not in plan_for(prs, [issue(3077, assignees=["samggreenberg"])])["unassign"]
+
+    def test_unassigned_issue_is_never_planned_for_assignment(self):
+        """The script only ever removes -- it cannot know who, if anyone, is working."""
+        prs = [{"number": 3128, "body": "Closes #3077"}]
+        plan = plan_for(prs, [issue(3077)])
+        assert plan["unassign"] == {}
+
+    def test_ambiguous_issue_is_left_alone(self):
+        """A `NEEDS REVIEW` label verdict must not drag the assignee with it."""
+        plan = plan_for([], [issue(3077, labels=["solved"], assignees=["samggreenberg"])])
+        assert 3077 in plan["review"]
+        assert 3077 not in plan["unassign"]
+
+    def test_fallen_through_fix_leaves_the_assignee_alone(self):
+        """The label comes off, but whoever is picking the work back up may be assigned."""
+        plan = plan_for(
+            [],
+            [issue(3077, labels=["solved"], assignees=["samggreenberg"])],
+            abandoned_prs=[{"number": 3155, "body": "Closes #3077"}],
+        )
+        assert 3077 in plan["remove"]
+        assert 3077 not in plan["unassign"]
+
+    @pytest.mark.parametrize(
+        "assignees", [["samggreenberg"], [{"login": "samggreenberg"}]], ids=["mcp-strings", "rest-objects"]
+    )
+    def test_both_assignee_payload_shapes_are_understood(self, assignees):
+        """MCP tools hand back logins; the REST API hands back objects."""
+        plan = plan_for([{"number": 3128, "body": "Closes #3077"}], [issue(3077, assignees=assignees)])
+        assert "@samggreenberg" in plan["unassign"][3077]
+
+    def test_multiple_assignees_are_all_named(self):
+        plan = plan_for(
+            [{"number": 3128, "body": "Closes #3077"}], [issue(3077, assignees=["samggreenberg", "Khamersk"])]
+        )
+        assert "@samggreenberg" in plan["unassign"][3077]
+        assert "@Khamersk" in plan["unassign"][3077]
+
+    def test_empty_and_missing_assignees_are_both_quiet(self):
+        prs = [{"number": 3128, "body": "Closes #3077"}]
+        assert plan_for(prs, [{"number": 3077, "state": "open", "labels": [], "comments": []}])["unassign"] == {}
+
+    def test_check_flags_an_owed_unassignment_alone(self):
+        """A tree whose labels are all correct still fails the gate on a stale assignee."""
+        data = {
+            "release_prs": [{"number": 3128, "body": "Closes #3077"}],
+            "issues": [issue(3077, labels=["solved"], assignees=["samggreenberg"])],
+        }
+        assert mod.reconcile(data)["add"] == []
+        assert mod.reconcile(data)["unassign"] != []
+
+    def test_render_names_the_bucket(self):
+        plan = mod.reconcile(
+            {
+                "release_prs": [{"number": 3128, "body": "Closes #3077"}],
+                "issues": [issue(3077, assignees=["samggreenberg"])],
+            }
+        )
+        assert "CLEAR ASSIGNEE" in mod.render(plan)
