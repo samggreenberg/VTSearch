@@ -654,19 +654,48 @@ def _select_categories_inner(medias: dict, category_counts: dict[str, int]) -> t
     }
 
 
+#: Which index varies fastest in :func:`array_cells`.
+#:
+#: ``category`` (the default, and every run before #3267) walks a category's
+#: whole seed block before moving on.  ``seed`` walks every environment at seed
+#: 0, then every environment at seed 1, and so on.
+#:
+#: The difference only shows up when an array does **not** finish, and then it
+#: decides what the run loses.  A SLURM array dispatches roughly in index order,
+#: so under ``category`` a truncated run is missing its last *categories
+#: entirely* - whole environments, gone, and the prevalence axis the analysis
+#: bands on is short at one end.  Under ``seed`` it is missing its last *seeds*,
+#: uniformly across every environment: the design is intact and only the
+#: standard errors are wider, which is a thing a report can simply state.
+#:
+#: That makes it the right ordering for any run against a wall-clock deadline -
+#: it converts "ran out of time" from a design failure into a power one.
+CELL_ORDER = os.environ.get("CALIB_CELL_ORDER", "category").strip().lower()
+
+
 def array_cells(categories_by_dataset: dict[str, dict[str, list[str]]]) -> list[dict]:
     """Enumerate ``(dataset, embedder, category, seed)`` cells for the SLURM array.
 
     Each cell runs **all styles** for its embedder inside one task (they share
     the loaded pickle), so an embedder's arms are paired on identical data,
     splits, and exemplar.  Deterministic order -> a task index maps to a stable
-    cell across submissions.
+    cell across submissions.  :data:`CELL_ORDER` chooses which index varies
+    fastest; see the note there for why that matters to a truncated run.
     """
-    cells: list[dict] = []
+    envs: list[tuple[str, str, str]] = []
     for ds in DATASETS:
         per_emb = categories_by_dataset.get(ds, {})
         for emb in embedders_for_dataset(ds):
             for cat in per_emb.get(emb, []):
-                for seed in SEEDS:
-                    cells.append({"dataset": ds, "embedder": emb, "category": cat, "seed": seed})
+                envs.append((ds, emb, cat))
+
+    cells: list[dict] = []
+    if CELL_ORDER == "seed":
+        for seed in SEEDS:
+            for ds, emb, cat in envs:
+                cells.append({"dataset": ds, "embedder": emb, "category": cat, "seed": seed})
+    else:
+        for ds, emb, cat in envs:
+            for seed in SEEDS:
+                cells.append({"dataset": ds, "embedder": emb, "category": cat, "seed": seed})
     return cells

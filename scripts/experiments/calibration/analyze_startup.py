@@ -95,7 +95,7 @@ COST_REGRESSION_TOLERANCE = float(os.environ.get("GM_COST_TOL", "0.01"))
 ALPHA = 0.05
 #: Click marks the mining curve is read at.  The axis a user spends is clicks,
 #: which is not the axis the method converges on - so both are reported.
-CLICK_MARKS = (10, 20, 50, 100)
+CLICK_MARKS = tuple(int(c) for c in os.environ.get("GM_CLICK_MARKS", "10,20,50,100,200").split(",") if c.strip())
 
 OUT = Path(os.environ.get("GM_OUT", str(common.EXP / "analysis")))
 KEYS = ("dataset", "embedder", "category", "seed")

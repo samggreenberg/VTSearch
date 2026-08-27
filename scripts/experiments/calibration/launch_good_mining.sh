@@ -117,7 +117,7 @@ export CALIB_MAX_STEPS=${CALIB_MAX_STEPS:-200}
 # per-class scale band claims to be.  A prevalence spread gives the analyzer the
 # axis to band on.
 export CALIB_CATEGORY_MODE=prevalence
-export CALIB_N_CATEGORIES=${CALIB_N_CATEGORIES:-8}
+export CALIB_N_CATEGORIES=${CALIB_N_CATEGORIES:-12}
 # Applied BEFORE the spread is drawn, so the rare end of the axis is the rarest
 # category the horizon can actually sustain rather than one that gets dropped
 # afterwards and shortens the axis.
@@ -126,7 +126,23 @@ export CALIB_MIN_CAT_COUNT=${CALIB_MIN_CAT_COUNT:-50}
 # passes every "N/N cells" count - see preflight check 13).
 export CALIB_MIN_SIM_POSITIVES=${CALIB_MIN_SIM_POSITIVES:-25}
 
-export CALIB_N_SEEDS=${CALIB_N_SEEDS:-6}
+# Seeds, and the ordering that makes the number safe to be ambitious about.
+#
+# MEASURED on this grid (jobs 554487-554490, 2026-08-26): a 200-click cell is
+# 4m19s - 5m26s at 0.86 GB peak on either dataset and on both a schedule arm and
+# `prod`.  That is a quarter of #3115's cell, because this run carries no fold
+# grid and no anchored arms - which is exactly why its own number had to be
+# measured rather than scaled from that study's 20m55s.
+#
+# CELL_ORDER=seed walks every environment at seed 0, then every environment at
+# seed 1.  A SLURM array dispatches roughly in index order, so this decides what
+# a run that does not finish LOSES: seed-major loses high seeds uniformly (wider
+# error bars, design intact), category-major loses whole environments off the end
+# of the prevalence axis.  With that in place, over-provisioning seeds is the
+# right call rather than a gamble - the grid degrades into a smaller version of
+# itself instead of a different one.
+export CALIB_CELL_ORDER=${CALIB_CELL_ORDER:-seed}
+export CALIB_N_SEEDS=${CALIB_N_SEEDS:-30}
 
 # --- production-faithful fixed choices ------------------------------------
 # CALIB_HEAD is deliberately UNSET: `head=None` resolves to
@@ -146,15 +162,23 @@ export CALIB_EMIT_PICKS=1
 # --- ops: cpu partition, single-threaded cells (see launch_acq_incl.sh) ---
 export CALIB_PARTITION=cpu
 export CALIB_GRES=none
-export CALIB_MEM=${CALIB_MEM:-4G}
+# 3G against a measured 0.86 GB peak (3.5x headroom): an OOM here is a lost
+# cell, not a slow one.  120 x 3G = 360G of the 1074G per-user allowance (34%),
+# well inside preflight check 8's 90% line.
+export CALIB_MEM=${CALIB_MEM:-3G}
 export CALIB_CPUS=1
-export CALIB_TIME=${CALIB_TIME:-2:00:00}
-# Per ARM, and there are eight arrays.  The binding cap is the `cpu_limit` QOS
-# (cpu=240, 2 charged per task = 120 running), so a per-array %N above that
-# simply lets SLURM fill every slot the QOS allows instead of leaving arms 2-8
-# idle behind arm 1's self-imposed limit.  Memory is not binding here: 120 x 4G
-# is 480G of the 1074G allowance (45%), well inside preflight check 8's line.
-export CALIB_CONC=${CALIB_CONC:-120}
+# 11x the measured cell, which is generous on purpose: a tight limit on a
+# shared node buys nothing and turns a slow node into a lost cell.
+export CALIB_TIME=${CALIB_TIME:-1:00:00}
+# Per ARM, and there are eight arrays: 15 x 8 = 120, which is the whole cap the
+# `cpu_limit` QOS allows (cpu=240, 2 charged per task).
+#
+# Deliberately split EVENLY rather than letting each array ask for the full 120.
+# The arms then advance in lockstep, so a run that is stopped early has the same
+# seeds finished in every arm - and every contrast in this study is PAIRED within
+# (dataset, category, seed), so an arm that raced ahead would contribute cells
+# with no partner and buy nothing.
+export CALIB_CONC=${CALIB_CONC:-15}
 export CALIB_ANALYZE_MEM=${CALIB_ANALYZE_MEM:-32G}
 export CALIB_ANALYZE_TIME=${CALIB_ANALYZE_TIME:-1:00:00}
 

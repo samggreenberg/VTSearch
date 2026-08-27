@@ -777,7 +777,13 @@ for ds, embs in info.get("datasets", {}).items():
                 texts += 1
 print(("FAILS " + "; ".join(sorted(bad)[:12])) if bad else f"HOLDS {texts}/{seen} selected cells seed from a typed query")
 PY
-)
+    )
+    # Keep the LAST line only.  Loading a SigLIP text tower prints transformers'
+    # bos/eos token-id warnings to stderr, and 2>&1 folds them into the verdict,
+    # where they match no `case` branch - so a check that HELD reported "could
+    # not check".  A gate whose own plumbing can turn a pass into a fail teaches
+    # people to pass --warn-only, which is worse than not having the gate.
+    SEEDCHK=$(printf '%s\n' "$SEEDCHK" | tail -1)
     case "$SEEDCHK" in
       HOLDS*) say_ok "seed mode: ${SEEDCHK#HOLDS }" ;;
       FAILS*)
