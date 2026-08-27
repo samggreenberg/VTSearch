@@ -326,6 +326,7 @@ _VISUAL_GENOME_QUERIES = [
     EvalQuery("a snowy scene", "snow"),
 ]
 
+
 # ------------------------------------------------------------------
 # Faces eval queries  (VGGFace2 - one query per curated identity)
 # ------------------------------------------------------------------

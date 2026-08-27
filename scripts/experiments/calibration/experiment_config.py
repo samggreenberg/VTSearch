@@ -34,6 +34,40 @@ import zlib
 # --- Datasets and their embedders (arms differ per dataset) ---
 DATASETS = os.environ.get("CALIB_DATASETS", "visual_genome_m,caltech101_m").split(",")
 
+#: Text a user would type, for datasets that exist only inside this experiment.
+#:
+#: ``vtscore.eval.config.EVAL_DATASETS`` is the app's demo-dataset query table and
+#: is asserted to hold only real demo datasets, so purpose-built fixtures like
+#: ``vg_scale`` cannot live there.  They still need a query: Autopilot's Good
+#: phase seeds from a **text sort**, and seeding it any other way measures a flow
+#: no user has (see lessons/2026-08-26-the-harness-seeded-from-a-crop.md).
+#:
+#: Keyed ``dataset -> {category: text}``.  For banded datasets the band is a
+#: property of the *cell*, not the query: someone hunting a distant boat and
+#: someone hunting a close one both type "boat", so one text serves all three
+#: bands and only the labels differ.
+_VG_SCALE_TEXTS = {
+    "backpack": "a backpack",
+    "bicycle": "a bicycle",
+    "bird": "a bird",
+    "boat": "a boat on the water",
+    "book": "a book",
+    "bus": "a bus",
+    "clock": "a clock",
+    "dog": "a dog",
+    "kite": "a kite in the sky",
+    "knife": "a knife",
+    "stop sign": "a stop sign",
+    "umbrella": "an umbrella",
+}
+
+EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
+    "vg_scale": {
+        f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
+    },
+}
+
+
 DATASET_EMBEDDERS: dict[str, list[str]] = {
     "visual_genome_m": os.environ.get("CALIB_VG_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
     "caltech101_m": os.environ.get("CALIB_CALTECH_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),

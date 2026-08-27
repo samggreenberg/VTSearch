@@ -1,5 +1,28 @@
 # #3156 — the `vg_scale` overview grid, on a head that no longer ships
 
+> # ⚠️ SEEDING CAVEAT — these runs did not start the way the app does
+>
+> **Recorded 2026-08-26 (#3156).** Autopilot seeds its first three Good votes from
+> a **text sort**: the user types a query and votes down that ranking. Until
+> PR #3269 this harness instead ranked every item by cosine to a **crop of one
+> boxed positive** — a ranking no user ever produces — and passed it as
+> `seed_scores`, the argument that `al_strategies`, `EVAL.md` and
+> `voting_iterations` all describe as "similarity to the **typed query**".
+>
+> **What to distrust here:** anything that depends on *how a run starts* —
+> positive starvation, stuck or never-got-going runs, `n_good`, and
+> early-trajectory cost. Measured on one cell after the fix, text seeding put the
+> first positive at **rank 1** with five in the top 20, while the exemplar that
+> crop-seeding made look like the dataset's hardest positive ranked **4006 of
+> 7749** for its own class.
+>
+> **What still holds:** within-study contrasts where every arm seeded identically,
+> which is most of what these reports conclude — the seeding is a shared baseline
+> shift, not an arm-dependent one.
+>
+> See [the harness seeded from a crop](../../../scripts/experiments/lessons/2026-08-26-the-harness-seeded-from-a-crop.md).
+
+
 **Verdict: the grid is complete and clean, and it measures the wrong head.**
 All 6480 cells ran, 0 failed, 0 are zero-byte — but every row of it carries
 `trainer=mlp head=linear`, and `linear` stopped being the shipped head in
@@ -20,9 +43,10 @@ findings are about the **dataset**, not the head, and hold either way.
 - **Grid:** `vg_scale` × {`siglip`, `siglip2_l`, `dinov3_patch`} × 12 classes ×
   3 size bands × 60 seeds, horizon 150 votes. Only `dinov3_patch` carries patch
   grids, so it is the only mode where `max_patch` region voting is real.
-- **Data:** `/expscratch/$USER/scale-3156-final`. Analysis
-  [`analyze_overview.py`](../../../scripts/experiments/calibration/analyze_overview.py),
-  figures [`figures_overview.py`](../../../scripts/experiments/calibration/figures_overview.py).
+- **Data:** `/expscratch/$USER/scale-3156-final`. The analysis and figure scripts
+  (analyze_overview and figures_overview, in the calibration experiment
+  directory) are still on the unmerged `claude/vg-scale-scan-3156` branch, so
+  they are named here rather than linked.
 - **Dataset:** [`DATASHEET.md`](DATASHEET.md).
 
 ## How the head got retired under the run
@@ -172,8 +196,9 @@ hull, stored on a cradle and heavily occluded by a tree:
 ![boat 2321462](figures/exemplar_2321462_boat_real.png)
 
 At 1.16% of the image, occluded, and in a scene whose every other cue says
-"tennis", this is a legitimately hard positive — not noise. The runs failed
-honestly.
+"tennis", it is a genuinely atypical example of its class — but see below: under
+the query a user would actually type it ranks 4006 of 7749, so it would never
+have seeded a run at all. Its stuck count is not a difficulty measurement.
 
 **`knife@small` 2322075 — the label is WRONG.** The image is a railway scene, and
 the box lands on empty red-paved walkway beside the track. There is no knife in
@@ -183,6 +208,40 @@ the box, and none anywhere in the frame:
 
 The same image also carries a VG `pizza` box a little further along the same
 empty pavement, so it has at least two spurious objects.
+
+### Both stuck counts are artefacts of how this grid seeded runs
+
+**This grid did not seed the way the app does, and that changes both verdicts.**
+The app's Autopilot starts on a **text sort**: the user types a query and votes
+down the ranking until it has `GOOD_TARGET` (3) positives. This grid instead
+ranked every media by cosine to a **crop of one boxed positive**, chosen by
+`seed % len(candidates)` — a ranking no user ever produces. Details and the fix
+are in
+[the harness seeded from a crop where the app types a query](../../../scripts/experiments/lessons/2026-08-26-the-harness-seeded-from-a-crop.md).
+
+Measured on this exact cell after wiring text seeding (`boat@medium`, `siglip`,
+7749 medias, 100 positives):
+
+| seeding | first positive | positives in first 20 votes | rank of 2321462 |
+|---|---|---|---|
+| text — `"a boat on the water"` | **rank 1** | **5** | **4006 / 7749** |
+| crop of 2321462 (what ran) | — | too few to leave the Good phase | 1 (it *is* the query) |
+
+So:
+
+- **`knife@small` 2322075** was stuck because the crop is of **empty pavement** —
+  the box is wrong, so the run queried the dataset with a pavement vector. That
+  is why `n_good` is exactly 1 in all 15 runs. The mislabel is real and worth
+  fixing; the stuck count is a consequence of seeding *from* it.
+- **`boat@medium` 2321462** is correctly labelled but ranks **4006 of 7749** for
+  its own class under the query a user would type. Under the app's flow it would
+  never anchor a run — the first three Goods come from the five obvious boats in
+  the top 20. Its 18 stuck runs measure crop-seeding, not difficulty.
+
+Neither survives as a modelling result. **Do not quote the stuck rates in this
+report as app behaviour.** The `good`-phase bucket — 128 of the 266 stuck runs,
+which never reached 3 positives — is the one most likely to shrink under text
+seeding, though that is one cell measured, not the grid re-run.
 
 ### The heuristic that built this shortlist is too strong
 
@@ -232,8 +291,8 @@ Reproducing one costs nothing: rerun `knife@small` at seed 0 on any embedder.
 1. **Do not quote these numbers as production.** They are the retired `linear`
    head. Difference them against 549465 when it lands.
 2. **Drop or relabel `knife@small` exemplar 2322075** — confirmed to contain no
-   knife. Leave `boat@medium` 2321462 alone: the label is right and the run
-   difficulty is real.
+   knife. Leave `boat@medium` 2321462 alone: the label is right, and its stuck
+   count was a seeding artefact rather than anything about the image.
 3. **Look at `knife@small` as a cell.** 9 of 23 header-only cells, plus its worst
    exemplar now confirmed mislabelled, is enough signal to re-examine how its
    positives were drawn. Two independent routes point at the same class.
