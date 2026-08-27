@@ -158,6 +158,52 @@ def _keys(df: pd.DataFrame) -> list[str]:
     return [k for k in KEYS if k in df.columns]
 
 
+#: Restrict every table to cells that exist in **all** arms.
+#:
+#: The paired contrasts already drop unmatched cells, but the per-arm columns -
+#: open yield, starvation rate, sampling depth - do not, and those are read
+#: side by side as though they described the same grid.  A run stopped on a
+#: wall clock, or one arm losing cells to a node failure, then shifts an arm's
+#: unpaired number for a reason that has nothing to do with its opening.
+#:
+#: On by default: a balanced grid is what every table here claims to describe.
+#: The count dropped is reported, because silently analysing a subset is how a
+#: disk incident becomes a wrong verdict.
+BALANCED = os.environ.get("GM_BALANCED", "1") not in ("", "0")
+
+
+def balance(main: pd.DataFrame, picks: pd.DataFrame, arms: list[str]) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    """Keep only the cells every arm has, so unpaired columns compare like with like."""
+    if picks.empty or not BALANCED:
+        return main, picks, {"balanced": False}
+    keys = _keys(picks)
+    if not keys:
+        return main, picks, {"balanced": False}
+    seen = picks.groupby(keys)["arm"].nunique()
+    complete = seen[seen == len(arms)].index
+    before = int(picks.groupby(keys).ngroups)
+    if len(complete) == 0:
+        return main, picks, {"balanced": False, "reason": "no cell is present in every arm"}
+    idx = pd.MultiIndex.from_tuples(list(complete), names=keys) if len(keys) > 1 else pd.Index(complete, name=keys[0])
+    pk = picks.set_index(keys)
+    pk = pk.loc[pk.index.isin(idx)].reset_index()
+    mn = main
+    if not main.empty and all(k in main.columns for k in keys):
+        mi = main.set_index(keys)
+        mn = mi.loc[mi.index.isin(idx)].reset_index()
+    return (
+        mn,
+        pk,
+        {
+            "balanced": True,
+            "cells_complete": int(len(complete)),
+            "cells_seen": before,
+            "cells_dropped": int(before - len(complete)),
+            "arms_required": len(arms),
+        },
+    )
+
+
 # ---------------------------------------------------------------------------
 # Mining: what the opening actually did
 # ---------------------------------------------------------------------------
@@ -592,6 +638,18 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
             f"| `{arm}` | `{ARM_SCHEDULE.get(arm, '?')}` | {m.get('n_read', 0)} | {p.get('n_read', 0)} | "
             f"{len(m.get('no_positive_found', []))} | {len(m.get('unreadable', [])) + len(p.get('unreadable', []))} |"
         )
+    bal = summary.get("balance") or {}
+    if bal.get("balanced"):
+        lines += [
+            "",
+            f"Analysed on the **balanced** grid: {bal['cells_complete']} cells present in all "
+            f"{bal['arms_required']} arms, of {bal['cells_seen']} seen "
+            f"({bal['cells_dropped']} dropped). The paired contrasts would drop the unmatched cells",
+            "anyway; the per-arm columns would not, and they are read side by side as though they",
+            "described the same grid. Set `GM_BALANCED=0` to analyse every cell that exists.",
+        ]
+    elif bal.get("reason"):
+        lines += ["", f"**Not balanced**: {bal['reason']}. Per-arm columns below may not describe the same cells."]
     lines += [
         "",
         "A cell under **no detector trained** is a result, not a missing file: that opening never",
@@ -685,10 +743,18 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
 
 def analyze(root: Path, outdir: Path) -> dict:
     main, picks, prov = load_all(root)
+    arms_present = [a for a in ARMS if not picks[picks["arm"] == a].empty] if not picks.empty else []
+    main, picks, bal = balance(main, picks, arms_present)
     opening = opening_stats(picks)
     traj = trajectory_stats(main)
 
-    summary: dict = {"provenance": prov, "arms": {}, "n_main_rows": int(len(main)), "n_pick_rows": int(len(picks))}
+    summary: dict = {
+        "provenance": prov,
+        "balance": bal,
+        "arms": {},
+        "n_main_rows": int(len(main)),
+        "n_pick_rows": int(len(picks)),
+    }
     for arm in ARMS:
         rec: dict = {"schedule": ARM_SCHEDULE.get(arm, "?")}
         if not opening.empty and (opening["arm"] == arm).any():
