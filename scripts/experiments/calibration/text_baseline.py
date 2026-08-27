@@ -59,6 +59,7 @@ def main() -> int:
     from vtscore.eval.labels import evaluable_pool, media_is_positive
     from vtscore.eval.patch_styles import resolve_style
     from vtscore.eval.score_dumps import write_prediction_dump
+    from vtscore.eval.calibration_metrics import detection_metrics
     from vtscore.training.thresholds import calculate_gmm_threshold, inclusion_cost_weights
 
     from vtscore.datasets import loader as _loader  # isort: skip
@@ -144,6 +145,10 @@ def main() -> int:
                     pred = s >= gmm_cut
                     fpr = float(((pred == 1) & (y == 0)).sum() / nneg)
                     fnr = float(((pred == 0) & (y == 1)).sum() / npos)
+                    # precision / recall / f1 through the SAME definition the
+                    # metric rows use, so the viewer's t=0 anchor and the curve
+                    # it anchors cannot mean different things by "precision".
+                    det = detection_metrics(s, y, gmm_cut)
                     # Weighted by the run's OWN inclusion, through the same
                     # production definition the metric frame's cost uses.  At
                     # the default inclusion 0 these are (1, 1) and this is the
@@ -170,6 +175,9 @@ def main() -> int:
                             "text_cost": round(wf * fpr + wn * fnr, 6),
                             "text_fpr": round(fpr, 6),
                             "text_fnr": round(fnr, 6),
+                            "text_precision": round(det["precision"], 6),
+                            "text_recall": round(det["recall"], 6),
+                            "text_f1": round(det["f1"], 6),
                             "text_oracle_cost": round(float(ocost), 6),
                             "text_AP": round(float(average_precision_score(y, s)), 6),
                             "text_auroc": round(float(roc_auc_score(y, s)), 6),

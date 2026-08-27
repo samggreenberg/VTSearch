@@ -1,0 +1,804 @@
+<!doctype html>
+<!--
+  Template for scripts/experiments/calibration/viewer.py.  The builder swaps the
+  placeholder token in the payload script tag below for the study's JSON;
+  everything else here is static, so this file is the whole of the viewer's
+  behaviour and is edited directly rather than through a Python string.
+
+  Do not write that token anywhere else in this file - not even in a comment.
+  The substitution is a plain string replace, and a second occurrence silently
+  doubles the page.  viewer.py asserts there is exactly one.
+
+  Self-contained on purpose: no CDN, no fetch, no fonts.  These pages are read
+  off a laptop with no network and out of a repo checkout over file://, where a
+  fetch of a sibling file is blocked by CORS.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Quality over clicks</title>
+<style>
+  :root {
+    color-scheme: light;
+    --plane:          #f9f9f7;
+    --surface:        #fcfcfb;
+    --ink:            #0b0b0b;
+    --ink-2:          #52514e;
+    --muted:          #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+    --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --plane:   #0d0d0d;
+      --surface: #1a1a19;
+      --ink:     #ffffff;
+      --ink-2:   #c3c2b7;
+      --muted:   #898781;
+      --grid:    #2c2c2a;
+      --axis:    #383835;
+      --border:  rgba(255,255,255,0.10);
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+      --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --plane:#0d0d0d; --surface:#1a1a19; --ink:#ffffff; --ink-2:#c3c2b7;
+    --muted:#898781; --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,0.10);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+    --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--plane); color: var(--ink);
+    font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 1500px; margin: 0 auto; padding: 24px 20px 64px; }
+  h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
+  .sub { color: var(--ink-2); margin: 0 0 18px; font-size: 13px; max-width: 90ch; }
+
+  .controls {
+    display: flex; flex-wrap: wrap; gap: 18px 26px; align-items: flex-start;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 16px;
+  }
+  .ctl { display: flex; flex-direction: column; gap: 6px; }
+  .ctl > label.h {
+    font-size: 11px; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--muted); font-weight: 600;
+  }
+  select {
+    font: inherit; padding: 5px 8px; border-radius: 6px;
+    border: 1px solid var(--axis); background: var(--surface); color: var(--ink);
+    min-width: 170px;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; max-width: 620px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    border: 1px solid var(--axis); border-radius: 999px; padding: 3px 11px 3px 8px;
+    font-size: 13px; background: var(--surface); color: var(--ink-2); user-select: none;
+  }
+  .chip input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .chip .sw { width: 11px; height: 11px; border-radius: 3px; background: var(--axis); flex: none; }
+  .chip[data-on="1"] { color: var(--ink); border-color: currentColor; font-weight: 500; }
+  .chip[data-off-disabled="1"] { opacity: .45; cursor: not-allowed; }
+  .chip:focus-within { outline: 2px solid var(--s1); outline-offset: 2px; }
+  .radios { display: flex; gap: 4px; }
+  .radios label {
+    cursor: pointer; border: 1px solid var(--axis); padding: 5px 10px; font-size: 13px;
+    background: var(--surface); color: var(--ink-2);
+  }
+  .radios label:first-of-type { border-radius: 6px 0 0 6px; }
+  .radios label:last-of-type { border-radius: 0 6px 6px 0; }
+  .radios input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .radios label[data-on="1"] { color: var(--ink); font-weight: 500; border-color: var(--ink-2); }
+  .radios label:focus-within { outline: 2px solid var(--s1); outline-offset: 2px; }
+
+  /* Grid, not flex: a flex row lets the last panel of an uneven row stretch to
+     the full width, so the same series is drawn at two different sizes on one
+     screen and the small multiples stop being comparable. */
+  .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); gap: 14px; }
+  .panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 12px 6px; position: relative; min-width: 0;
+  }
+  .panel h2 { font-size: 13px; margin: 0 0 2px; font-weight: 600; }
+  .panel .pn { font-size: 11px; color: var(--muted); margin: 0 0 6px; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .tip {
+    position: absolute; pointer-events: none; z-index: 5; opacity: 0;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 7px 9px; font-size: 12px; min-width: 140px;
+    box-shadow: 0 4px 14px rgba(0,0,0,.13); transition: opacity .08s;
+  }
+  .tip table { border-collapse: collapse; }
+  .tip td { padding: 1px 0; }
+  .tip td.k { padding-right: 10px; }
+  .tip td.v { text-align: right; font-variant-numeric: tabular-nums; }
+  .tip .hd { font-weight: 600; margin-bottom: 3px; }
+  .tip .sw { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; }
+
+  #legend {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 14px; margin: 14px 0 0;
+  }
+  .legend-head { font-size: 12.5px; color: var(--ink-2); margin-bottom: 6px; }
+  .legend-head b { color: var(--ink); font-weight: 600; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--ink-2); }
+  .legend i { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+
+  .note { color: var(--muted); font-size: 12px; margin: 14px 0 0; max-width: 100ch; }
+  .note b { color: var(--ink-2); font-weight: 600; }
+  details { margin-top: 16px; }
+  summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+  table.data { border-collapse: collapse; margin-top: 10px; font-size: 12.5px; }
+  table.data th, table.data td {
+    border-bottom: 1px solid var(--grid); padding: 4px 12px 4px 0; text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+  table.data th:first-child, table.data td:first-child { text-align: left; }
+  table.data th { color: var(--muted); font-weight: 600; }
+  .empty { color: var(--muted); padding: 40px 0; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 id="title">Quality over clicks</h1>
+  <p class="sub" id="subtitle"></p>
+
+  <div class="controls" id="controls">
+    <div class="ctl">
+      <label class="h" for="ds">Dataset</label>
+      <select id="ds"></select>
+    </div>
+    <div class="ctl">
+      <label class="h" for="cat">Category</label>
+      <select id="cat"></select>
+    </div>
+    <div class="ctl">
+      <label class="h" for="metric">Metric</label>
+      <select id="metric"></select>
+    </div>
+    <div class="ctl" id="embWrap">
+      <label class="h">Embedder <span style="text-transform:none;letter-spacing:0">— one panel each, never averaged</span></label>
+      <div class="chips" id="emb"></div>
+    </div>
+    <div class="ctl">
+      <label class="h">Seeds</label>
+      <div class="radios" id="seedMode">
+        <label data-on="1"><input type="radio" name="sm" value="avg" checked>averaged</label>
+        <label><input type="radio" name="sm" value="each">each its own line</label>
+      </div>
+    </div>
+    <div class="ctl" style="flex:1 1 100%">
+      <label class="h">Arms</label>
+      <div class="chips" id="arms"></div>
+    </div>
+  </div>
+
+  <div id="legend"></div>
+
+  <div class="panels" id="panels" style="margin-top:14px"></div>
+
+  <p class="note" id="reading"></p>
+
+  <details id="tableWrap">
+    <summary>Table view — the plotted numbers</summary>
+    <div id="table"></div>
+  </details>
+</div>
+
+<script id="payload" type="application/json">__VIEWER_PAYLOAD__</script>
+<script>
+"use strict";
+(async function () {
+  const P = JSON.parse(document.getElementById("payload").textContent);
+  const $ = (id) => document.getElementById(id);
+  const NaNv = Number.NaN;
+
+  // ---- decode -------------------------------------------------------------
+  const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  async function gunzip(bytes) {
+    if (typeof DecompressionStream !== "function") throw new Error("no DecompressionStream");
+    const ds = new DecompressionStream("gzip");
+    const buf = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer();
+    return new Uint8Array(buf);
+  }
+  // Undo delta + mask.  Returns Float64Array shaped [...outer, nT] flattened.
+  async function decode(enc) {
+    const shape = enc.shape, nT = shape[shape.length - 1];
+    const rows = shape.slice(0, -1).reduce((a, b) => a * b, 1);
+    const dv = new Int16Array((await gunzip(b64(enc.v))).buffer);
+    const mask = await gunzip(b64(enc.m));
+    const out = new Float64Array(rows * nT);
+    for (let r = 0; r < rows; r++) {
+      let acc = 0;
+      const off = r * nT;
+      for (let t = 0; t < nT; t++) {
+        acc += dv[off + t];
+        const bit = off + t;
+        const on = (mask[bit >> 3] >> (7 - (bit & 7))) & 1;
+        out[off + t] = on ? acc / enc.scale : NaNv;
+      }
+    }
+    return out;
+  }
+
+  let A;
+  try {
+    A = {
+      mean: await decode(P.agg.mean),
+      sd: await decode(P.agg.sd),
+      n: await decode(P.agg.n),
+      cells: await decode(P.agg.cells),
+      runs: P.runs ? await decode(P.runs.values) : null,
+    };
+  } catch (err) {
+    document.getElementById("panels").innerHTML =
+      '<p class="empty">This page needs a browser with <code>DecompressionStream</code> ' +
+      "(Chrome 80+, Firefox 113+, Safari 16.4+).<br>" + String(err) + "</p>";
+    return;
+  }
+
+  const nG = P.groups.length, nA = P.arms.length, nM = P.metrics.length, nT = P.t.length;
+  const aggAt = (buf, g, a, m) => buf.subarray(((g * nA + a) * nM + m) * nT, ((g * nA + a) * nM + m + 1) * nT);
+  const cellsAt = (g, a) => A.cells[g * nA + a];
+  const rT = P.runs ? P.runs.t.length : 0;
+  const runAt = (i, m) => A.runs.subarray((i * nM + m) * rT, (i * nM + m + 1) * rT);
+
+  // ---- state --------------------------------------------------------------
+  const SERIES = ["--s1","--s2","--s3","--s4","--s5","--s6","--s7","--s8"];
+  const MAX_HUES = SERIES.length;
+  const ALL = "__all__", EACH = "__each__";
+
+  const state = {
+    dataset: P.datasets.length > 1 ? ALL : P.datasets[0],
+    category: ALL,
+    metric: P.metrics[0].key,
+    embedders: new Set(P.embedders),
+    arms: new Set(P.arms.slice(0, MAX_HUES)),
+    seedMode: "avg",
+  };
+
+  const gDataset = (g) => P.groups[g][0];
+  const gEmb = (g) => P.groups[g][1];
+  const gCat = (g) => P.groups[g][2];
+
+  function datasetsInPlay() {
+    return state.dataset === ALL || state.dataset === EACH ? P.datasets : [state.dataset];
+  }
+  function categoriesInPlay() {
+    const ds = new Set(datasetsInPlay());
+    const s = new Set();
+    P.groups.forEach((g, i) => { if (ds.has(gDataset(i))) s.add(gCat(i)); });
+    const all = [...s].sort();
+    return state.category === ALL || state.category === EACH ? all : all.filter((c) => c === state.category);
+  }
+
+  // ---- controls -----------------------------------------------------------
+  $("title").textContent = P.title;
+  $("subtitle").textContent = P.subtitle;
+
+  const dsSel = $("ds");
+  dsSel.innerHTML =
+    (P.datasets.length > 1
+      ? `<option value="${ALL}">All datasets — averaged together</option>` +
+        `<option value="${EACH}">Each dataset — one line each</option>`
+      : "") +
+    P.datasets.map((d) => `<option value="${esc(d)}">${esc(d)}</option>`).join("");
+  dsSel.value = state.dataset;
+  dsSel.onchange = () => { state.dataset = dsSel.value; fillCats(); render(); };
+
+  const catSel = $("cat");
+  function fillCats() {
+    const cur = state.category;
+    const ds = new Set(datasetsInPlay());
+    const s = new Set();
+    P.groups.forEach((g, i) => { if (ds.has(gDataset(i))) s.add(gCat(i)); });
+    const cats = [...s].sort();
+    catSel.innerHTML =
+      `<option value="${ALL}">All categories — averaged together</option>` +
+      `<option value="${EACH}">Each category — one line each</option>` +
+      cats.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("");
+    state.category = cur === ALL || cur === EACH || cats.includes(cur) ? cur : ALL;
+    catSel.value = state.category;
+  }
+  catSel.onchange = () => { state.category = catSel.value; render(); };
+  fillCats();
+
+  const mSel = $("metric");
+  mSel.innerHTML = P.metrics.map((m) => `<option value="${esc(m.key)}">${esc(m.label)}</option>`).join("");
+  mSel.value = state.metric;
+  mSel.onchange = () => { state.metric = mSel.value; render(); };
+
+  // Embedders: a non-empty subset, one panel each.  Hidden entirely when the
+  // study ran a single embedder - a control with one option is furniture.
+  if (P.embedders.length < 2) $("embWrap").style.display = "none";
+  chips($("emb"), P.embedders.map((e) => ({ id: e, label: e || "(unnamed)" })), state.embedders, null, render);
+  chips($("arms"), P.arms.map((a) => ({ id: a, label: a })), state.arms, null, render);
+
+  $("seedMode").querySelectorAll("input").forEach((inp) => {
+    inp.onchange = () => {
+      state.seedMode = inp.value;
+      $("seedMode").querySelectorAll("label").forEach((l) =>
+        l.dataset.on = l.querySelector("input").checked ? "1" : "0");
+      render();
+    };
+  });
+  if (!P.runs) {
+    const each = $("seedMode").querySelector('input[value="each"]');
+    each.disabled = true;
+    each.closest("label").title = P.runs_note || "no per-seed data in this payload";
+    each.closest("label").style.opacity = ".45";
+  }
+
+  function chips(host, items, set, cap, onChange) {
+    host.innerHTML = "";
+    items.forEach((it) => {
+      const lab = document.createElement("label");
+      lab.className = "chip";
+      lab.innerHTML = `<input type="checkbox"><span class="sw"></span><span>${esc(it.label)}</span>`;
+      const box = lab.querySelector("input");
+      box.checked = set.has(it.id);
+      box.onchange = () => {
+        if (box.checked) set.add(it.id); else set.delete(it.id);
+        if (set.size === 0) { set.add(it.id); box.checked = true; }   // never empty
+        onChange();
+      };
+      host.appendChild(lab);
+      lab._box = box; lab._id = it.id;
+    });
+    host._sync = () => {
+      [...host.children].forEach((lab) => {
+        const on = set.has(lab._id);
+        lab.dataset.on = on ? "1" : "0";
+        const col = on ? (host._colorOf ? host._colorOf(lab._id) : "") : "";
+        lab.querySelector(".sw").style.background = col || "var(--axis)";
+        lab.querySelector(".sw").style.visibility = host._colorOf ? "visible" : "hidden";
+      });
+    };
+    host._sync();
+  }
+
+  function esc(s) {
+    return String(s).replace(/[&<>"']/g, (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  }
+
+  // ---- the series model ---------------------------------------------------
+  //
+  // Hue must mean whatever the reader is actually comparing, so it is assigned
+  // from the selection rather than nailed to one dimension.  Three dimensions
+  // can vary - arm, category, dataset - and the rule is:
+  //
+  //   * the FIRST varying dimension, in the order arm -> category -> dataset,
+  //     that has at most 8 values takes HUE (the palette has 8 validated
+  //     categorical slots and a 9th is never invented);
+  //   * every other varying dimension, plus embedder, becomes a PANEL.
+  //
+  // So one arm across each category is coloured by category; eight arms across
+  // each category is coloured by arm and split into a panel per category; and
+  // twelve categories with a single arm - too many for the palette - fold into
+  // twelve panels rather than twelve made-up hues.  Colour follows the VALUE,
+  // not its position in the current selection, so deselecting a series never
+  // repaints the survivors.
+  const DIMS = ["arm", "category", "dataset"];
+
+  function plan() {
+    const values = {
+      arm: P.arms.filter((a) => state.arms.has(a)),
+      // `null` means "pooled over everything in play" rather than a single value.
+      category: state.category === EACH ? categoriesInPlay() : [state.category === ALL ? null : state.category],
+      dataset: state.dataset === EACH ? datasetsInPlay() : [state.dataset === ALL ? null : state.dataset],
+    };
+    const varying = DIMS.filter((d) => values[d].length > 1);
+    const hueDim = varying.find((d) => values[d].length <= MAX_HUES) || null;
+    const facetDims = varying.filter((d) => d !== hueDim);
+    return { values, varying, hueDim, facetDims };
+  }
+
+  // Colour index is the value's position in the STUDY's own list, never in the
+  // current selection.
+  const ORDER = {
+    arm: (v) => P.arms.indexOf(v),
+    category: (v) => P.categories.indexOf(v),
+    dataset: (v) => P.datasets.indexOf(v),
+  };
+  const hueOf = (dim, v) => `var(${SERIES[((dim && ORDER[dim](v)) + SERIES.length) % SERIES.length]})`;
+
+  function groupsFor(sel) {
+    const cats = new Set(sel.category === null ? categoriesInPlay() : [sel.category]);
+    const dss = new Set(sel.dataset === null ? datasetsInPlay() : [sel.dataset]);
+    const out = [];
+    P.groups.forEach((_, i) => {
+      if (gEmb(i) === sel.embedder && dss.has(gDataset(i)) && cats.has(gCat(i))) out.push(i);
+    });
+    return out;
+  }
+
+  // ---- pooling ------------------------------------------------------------
+  // Exact, because the payload carries n beside the moments: a mean of means
+  // would weight a category that trained on 3 cells like one that trained on
+  // 42, which is the survivorship the coverage strip exists to expose.
+  function pooled(groups, ai, mi) {
+    const mean = new Float64Array(nT).fill(NaNv);
+    const sd = new Float64Array(nT).fill(NaNv);
+    const cov = new Float64Array(nT);
+    let cells = 0;
+    for (const g of groups) cells += cellsAt(g, ai);
+    for (let t = 0; t < nT; t++) {
+      let n = 0, s1 = 0, s2 = 0;
+      for (const g of groups) {
+        const c = aggAt(A.n, g, ai, mi)[t];
+        if (!(c > 0)) continue;
+        const mu = aggAt(A.mean, g, ai, mi)[t];
+        const s = aggAt(A.sd, g, ai, mi)[t];
+        if (!Number.isFinite(mu)) continue;
+        n += c; s1 += c * mu; s2 += c * (s * s + mu * mu);
+      }
+      if (n > 0) {
+        const mu = s1 / n;
+        mean[t] = mu;
+        sd[t] = Math.sqrt(Math.max(0, s2 / n - mu * mu));
+      }
+      cov[t] = cells > 0 ? n / cells : 0;
+    }
+    return { mean, sd, cov, cells };
+  }
+
+  function runLines(groups, ai, mi) {
+    if (!P.runs) return [];
+    const want = new Set(groups);
+    const out = [];
+    P.runs.index.forEach((ix, i) => {
+      if (ix[1] !== ai || !want.has(ix[0])) return;
+      const v = runAt(i, mi);
+      for (let t = 0; t < rT; t++) if (Number.isFinite(v[t])) { out.push(v); return; }
+    });
+    return out;
+  }
+
+  // ---- render -------------------------------------------------------------
+  const SOLID = P.solid_coverage;
+  const MAX_PANELS = 16;
+  const fmt = (v, d = 3) => (Number.isFinite(v) ? v.toFixed(d) : "—");
+  const shortLabel = (dim, v) => (v === null ? (dim === "category" ? "all categories" : "all datasets") : String(v));
+
+  function render() {
+    const host = $("panels");
+    host.innerHTML = "";
+    const pl = plan();
+    const mi = P.metrics.findIndex((m) => m.key === state.metric);
+    const spec = P.metrics[mi];
+
+    // Chip swatches only carry colour when that dimension IS the hue.
+    $("arms")._colorOf = pl.hueDim === "arm" ? (v) => hueOf("arm", v) : null;
+    $("arms")._sync();
+    $("emb")._sync();
+
+    // Panels: embedder x every varying dimension that did not get the hue.
+    let facetKeys = [{ embedder: null }];
+    const embs = P.embedders.filter((e) => state.embedders.has(e));
+    facetKeys = embs.map((e) => ({ embedder: e }));
+    for (const dim of pl.facetDims) {
+      const next = [];
+      for (const fk of facetKeys) for (const v of pl.values[dim]) next.push({ ...fk, [dim]: v });
+      facetKeys = next;
+    }
+    let hidden = 0;
+    if (facetKeys.length > MAX_PANELS) { hidden = facetKeys.length - MAX_PANELS; facetKeys = facetKeys.slice(0, MAX_PANELS); }
+
+    const hueValues = pl.hueDim ? pl.values[pl.hueDim] : [null];
+    const panels = facetKeys.map((fk) => {
+      const per = [];
+      for (const hv of hueValues) {
+        for (const arm of (pl.hueDim === "arm" ? [hv] : pl.values.arm)) {
+          const sel = {
+            embedder: fk.embedder,
+            arm,
+            category: pl.hueDim === "category" ? hv : ("category" in fk ? fk.category : pl.values.category[0]),
+            dataset: pl.hueDim === "dataset" ? hv : ("dataset" in fk ? fk.dataset : pl.values.dataset[0]),
+          };
+          const ai = P.arms.indexOf(arm);
+          if (ai < 0) continue;
+          const groups = groupsFor(sel);
+          if (!groups.length) continue;
+          per.push({
+            sel, ai,
+            color: pl.hueDim ? hueOf(pl.hueDim, hv) : hueOf("arm", arm),
+            name: pl.hueDim ? shortLabel(pl.hueDim, hv) : String(arm),
+            agg: pooled(groups, ai, mi),
+            runs: state.seedMode === "each" ? runLines(groups, ai, mi) : [],
+          });
+        }
+      }
+      return { fk, per };
+    }).filter((p) => p.per.length);
+
+    // One y-scale across every panel: two panels on two scales is a dual-axis
+    // chart wearing a disguise.
+    let lo = Infinity, hi = -Infinity;
+    for (const p of panels) for (const q of p.per) {
+      for (let t = 0; t < nT; t++) {
+        const m = q.agg.mean[t], sd = q.agg.sd[t];
+        if (!Number.isFinite(m)) continue;
+        const wide = state.seedMode === "avg" && Number.isFinite(sd);
+        lo = Math.min(lo, wide ? m - sd : m);
+        hi = Math.max(hi, wide ? m + sd : m);
+      }
+      for (const v of q.runs) for (let t = 0; t < rT; t++) {
+        if (Number.isFinite(v[t])) { lo = Math.min(lo, v[t]); hi = Math.max(hi, v[t]); }
+      }
+    }
+    if (!Number.isFinite(lo) || !panels.length) {
+      host.innerHTML = '<p class="empty">Nothing measured in this slice.</p>';
+      $("reading").textContent = ""; $("table").innerHTML = ""; $("legend").innerHTML = "";
+      return;
+    }
+    const pad = (hi - lo) * 0.06 || 0.02;
+    lo = Math.max(spec.lo, lo - pad); hi = Math.min(spec.hi, hi + pad);
+
+    for (const p of panels) host.appendChild(panel(p, pl, spec, lo, hi));
+    legend(pl, panels);
+    reading(spec, pl, hidden, facetKeys.length);
+    tableView(spec, panels);
+  }
+
+  const W = 660, H = 300, CH = 54, M = { l: 56, r: 14, t: 10, b: 26 };
+
+  function panelTitle(fk, pl) {
+    const bits = [];
+    if (P.embedders.length > 1) bits.push(fk.embedder || "(unnamed embedder)");
+    for (const dim of pl.facetDims) bits.push(shortLabel(dim, fk[dim]));
+    return bits.length ? bits.join(" · ") : (P.embedders[0] || P.title);
+  }
+
+  function panelSub(pl) {
+    const bits = [];
+    bits.push(pl.hueDim === "dataset" || pl.facetDims.includes("dataset")
+      ? null
+      : (state.dataset === ALL ? `all ${P.datasets.length} datasets pooled` : state.dataset));
+    bits.push(pl.hueDim === "category" || pl.facetDims.includes("category")
+      ? null
+      : (state.category === ALL ? "all categories pooled" : state.category));
+    bits.push(state.seedMode === "each" ? "every seed" : "seeds averaged");
+    return bits.filter(Boolean).join(" · ");
+  }
+
+  function panel(pnl, pl, spec, lo, hi) {
+    const el = document.createElement("div");
+    el.className = "panel";
+    const tmax = P.t[nT - 1];
+    const x = (t) => M.l + (t / tmax) * (W - M.l - M.r);
+    const y = (v) => M.t + (1 - (v - lo) / (hi - lo || 1)) * (H - M.t - M.b);
+    const yc = (c) => H + 16 + (1 - c) * (CH - 22);
+
+    const nCells = pnl.per.reduce((a, q) => a + q.agg.cells, 0);
+    el.innerHTML =
+      `<h2>${esc(panelTitle(pnl.fk, pl))}</h2>` +
+      `<p class="pn">${esc(panelSub(pl))} · ${nCells} cell${nCells === 1 ? "" : "s"}</p>`;
+
+    const parts = [];
+    const yticks = ticks(lo, hi, 5);
+    const xticks = [...new Set([0, ...ticks(0, tmax, 5), tmax])].filter((t) => t >= 0 && t <= tmax);
+    for (const v of yticks) parts.push(
+      `<line x1="${M.l}" x2="${W - M.r}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" stroke="var(--grid)" stroke-width="1"/>`,
+      `<text x="${M.l - 8}" y="${(y(v) + 4).toFixed(1)}" text-anchor="end" font-size="11" fill="var(--muted)">${trim(v)}</text>`);
+    for (const t of xticks) parts.push(
+      `<text x="${x(t).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="11" fill="var(--muted)">${Math.round(t)}</text>`);
+    parts.push(`<line x1="${M.l}" x2="${W - M.r}" y1="${H - M.b}" y2="${H - M.b}" stroke="var(--axis)"/>`);
+
+    let anchor = NaNv;
+    if (P.anchor.has) {
+      const vals = pnl.per.map((q) => q.agg.mean[0]).filter(Number.isFinite);
+      if (vals.length) anchor = vals.reduce((a, b) => a + b, 0) / vals.length;
+    }
+    if (Number.isFinite(anchor) && anchor >= lo && anchor <= hi) {
+      parts.push(
+        `<line x1="${M.l}" x2="${W - M.r}" y1="${y(anchor).toFixed(1)}" y2="${y(anchor).toFixed(1)}" stroke="var(--ink)" stroke-width="1.1" stroke-dasharray="2 3"/>`,
+        `<circle cx="${x(0).toFixed(1)}" cy="${y(anchor).toFixed(1)}" r="4" fill="var(--ink)"/>`,
+        `<text x="${W - M.r - 3}" y="${(y(anchor) - 5).toFixed(1)}" text-anchor="end" font-size="10.5" fill="var(--ink-2)">${esc(P.anchor.label)}</text>`);
+    }
+
+    for (const q of pnl.per) {
+      if (state.seedMode === "each") {
+        for (const v of q.runs) parts.push(
+          `<path d="${path(P.runs.t, v, x, y, lo, hi)}" fill="none" stroke="${q.color}" stroke-width="1" opacity="0.16"/>`);
+      } else {
+        parts.push(`<path d="${band(q.agg, x, y, lo, hi)}" fill="${q.color}" opacity="0.10"/>`);
+      }
+      // The mean, dashed wherever it describes fewer than SOLID of that
+      // series' cells - including the stretch from click 0 to the first
+      // trained click, where nothing was measured at all.
+      parts.push(
+        `<path d="${path(P.t, q.agg.mean, x, y, lo, hi)}" fill="none" stroke="${q.color}" stroke-width="1.1" stroke-dasharray="3 3" opacity="0.85"/>`,
+        `<path d="${path(P.t, mask(q.agg.mean, q.agg.cov), x, y, lo, hi)}" fill="none" stroke="${q.color}" stroke-width="2"/>`,
+        `<path d="${path(P.t.slice(1), q.agg.cov.slice(1), x, yc, 0, 1)}" fill="none" stroke="${q.color}" stroke-width="1.2"/>`);
+      // Click 0 is a point, not the start of the line: every cell is measured
+      // there (it has a text sort) and none has a detector at click 1, so a
+      // joined line renders two different facts as a spike.
+      if (P.anchor.has && Number.isFinite(q.agg.cov[0])) parts.push(
+        `<circle cx="${x(0).toFixed(1)}" cy="${yc(q.agg.cov[0]).toFixed(1)}" r="2" fill="${q.color}"/>`);
+    }
+    parts.push(
+      `<line x1="${M.l}" x2="${W - M.r}" y1="${yc(SOLID).toFixed(1)}" y2="${yc(SOLID).toFixed(1)}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="1 3"/>`,
+      `<text x="${M.l - 8}" y="${(yc(1) + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">100%</text>`,
+      `<text x="${M.l - 8}" y="${(yc(0) + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">0%</text>`,
+      `<text x="${W - M.r}" y="${(yc(0) + 14).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">cells measured</text>`,
+      `<text x="${(M.l + (W - M.l) / 2).toFixed(0)}" y="${H + CH + 12}" text-anchor="middle" font-size="11" fill="var(--muted)">clicks spent${P.anchor.has ? "  (0 = the free text sort)" : ""}</text>`,
+      `<text transform="translate(13,${(M.t + (H - M.b) / 2).toFixed(0)}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--muted)">${esc(spec.label)}</text>`);
+
+    el.insertAdjacentHTML("beforeend",
+      `<svg viewBox="0 0 ${W} ${H + CH + 20}" role="img" aria-label="${esc(spec.label)} against clicks">${parts.join("")}</svg>`);
+    hover(el, pnl, spec, x, y);
+    return el;
+  }
+
+  // ---- legend -------------------------------------------------------------
+  // Always present, and it says what hue MEANS in this configuration - which
+  // changes with the selection, so a legend that only listed values would leave
+  // a reader guessing which dimension they are looking at.
+  function legend(pl, panels) {
+    const host = $("legend");
+    const seen = new Map();
+    for (const p of panels) for (const q of p.per) if (!seen.has(q.name)) seen.set(q.name, q.color);
+    const what = pl.hueDim
+      ? { arm: "arm", category: "category", dataset: "dataset" }[pl.hueDim]
+      : null;
+    const rows = [...seen].map(([name, col]) =>
+      `<span><i style="background:${col}"></i>${esc(name)}</span>`).join("");
+    const heading = what
+      ? `Colour = <b>${esc(what)}</b>`
+      : (panels.length > 1 ? `Colour = <b>arm</b> (one panel per split below)` : `Colour = <b>arm</b>`);
+    const facet = [];
+    if (P.embedders.length > 1) facet.push("embedder");
+    facet.push(...pl.facetDims);
+    host.innerHTML =
+      `<div class="legend-head">${heading}${facet.length ? ` · one panel per <b>${facet.map(esc).join(" × ")}</b>` : ""}</div>` +
+      `<div class="legend">${rows}</div>`;
+  }
+
+  function mask(vals, cov) {
+    const out = new Float64Array(vals.length);
+    for (let i = 0; i < vals.length; i++) out[i] = cov[i] >= SOLID ? vals[i] : NaNv;
+    return out;
+  }
+  function path(ts, vals, x, y, lo, hi) {
+    let d = "", pen = false;
+    for (let i = 0; i < ts.length; i++) {
+      const v = vals[i];
+      if (!Number.isFinite(v)) { pen = false; continue; }
+      const px = x(ts[i]).toFixed(1), py = y(Math.min(hi, Math.max(lo, v))).toFixed(1);
+      d += (pen ? "L" : "M") + px + " " + py + " ";
+      pen = true;
+    }
+    return d;
+  }
+  // Segmented on purpose.  Skipping the un-measured clicks and joining what is
+  // left would draw one polygon straight from the click-0 anchor to the first
+  // trained click - a wedge across the region where nothing was measured, which
+  // is the exact opposite of what the dashed-mean rule says there.
+  function band(agg, x, y, lo, hi) {
+    const segs = [];
+    let up = [], dn = [];
+    const flush = () => {
+      if (up.length > 1) segs.push("M" + up.join(" L") + " L" + dn.reverse().join(" L") + " Z");
+      up = []; dn = [];
+    };
+    for (let i = 0; i < nT; i++) {
+      const m = agg.mean[i], s = agg.sd[i];
+      if (!Number.isFinite(m) || !Number.isFinite(s) || agg.cov[i] < SOLID) { flush(); continue; }
+      up.push(`${x(P.t[i]).toFixed(1)} ${y(Math.min(hi, m + s)).toFixed(1)}`);
+      dn.push(`${x(P.t[i]).toFixed(1)} ${y(Math.max(lo, m - s)).toFixed(1)}`);
+    }
+    flush();
+    return segs.join(" ");
+  }
+  // Round tick values, not range/n: an axis reading 0.475 / 0.391 / 0.307 is a
+  // number the reader has to decode before they can use it.
+  function ticks(a, b, n) {
+    const raw = (b - a) / Math.max(1, n);
+    if (!(raw > 0)) return [a];
+    const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((v) => v >= raw) || 10 * mag;
+    const out = [];
+    for (let v = Math.ceil(a / step) * step; v <= b + step * 1e-9; v += step) out.push(Math.round(v / step) * step);
+    return out;
+  }
+  const trim = (v) => {
+    const a = Math.abs(v);
+    if (a >= 100 || v === 0) return v.toFixed(0);
+    return a >= 1 ? String(+v.toFixed(2)) : String(+v.toFixed(4));
+  };
+
+  // ---- hover: crosshair + tooltip ----------------------------------------
+  function hover(el, pnl, spec, x, y) {
+    const svg = el.querySelector("svg");
+    const tip = document.createElement("div");
+    tip.className = "tip";
+    el.appendChild(tip);
+    const cross = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    cross.setAttribute("stroke", "var(--axis)");
+    cross.setAttribute("stroke-width", "1");
+    cross.setAttribute("y1", M.t); cross.setAttribute("y2", H - M.b);
+    cross.style.opacity = "0";
+    svg.appendChild(cross);
+    const tmax = P.t[nT - 1];
+
+    svg.addEventListener("pointermove", (ev) => {
+      const r = svg.getBoundingClientRect();
+      const vx = ((ev.clientX - r.left) / r.width) * W;
+      if (vx < M.l || vx > W - M.r) return hide();
+      const t = Math.round(((vx - M.l) / (W - M.l - M.r)) * tmax);
+      let i = P.t.indexOf(Math.max(P.t[0], Math.min(tmax, t)));
+      if (i < 0) i = 0;
+      cross.setAttribute("x1", x(P.t[i])); cross.setAttribute("x2", x(P.t[i]));
+      cross.style.opacity = "1";
+      const rows = pnl.per.map((q) =>
+        `<tr><td class="k"><span class="sw" style="background:${q.color}"></span>${esc(q.name)}</td>` +
+        `<td class="v">${fmt(q.agg.mean[i])}</td>` +
+        `<td class="v" style="color:var(--muted);padding-left:10px">${(q.agg.cov[i] * 100).toFixed(0)}%</td></tr>`).join("");
+      tip.innerHTML =
+        `<div class="hd">${P.t[i]} click${P.t[i] === 1 ? "" : "s"}${P.t[i] === 0 && P.anchor.has ? " — " + esc(P.anchor.label) : ""}</div>` +
+        `<table>${rows}</table>` +
+        `<div style="color:var(--muted);margin-top:4px">${esc(spec.label)} · % = cells measured</div>`;
+      tip.style.opacity = "1";
+      tip.style.left = Math.min(ev.clientX - r.left + 14, r.width - tip.offsetWidth - 8) + "px";
+      tip.style.top = Math.max(4, ev.clientY - r.top - 10) + "px";
+    });
+    svg.addEventListener("pointerleave", hide);
+    function hide() { tip.style.opacity = "0"; cross.style.opacity = "0"; }
+  }
+
+  // ---- prose + table ------------------------------------------------------
+  function reading(spec, pl, hidden, wanted) {
+    const bits = [];
+    bits.push(
+      `<b>Reading it.</b> Each line is the ${state.seedMode === "each" ? "individual run" : "mean over the cells it pools"}; ` +
+      `the shaded band is ±1 SD. A line is <b>dashed</b> wherever fewer than ${(SOLID * 100).toFixed(0)}% of that ` +
+      `series' cells are measured at that click — there it describes a subset, not the grid, so only a solid ` +
+      `segment is a level worth quoting. The strip underneath is that fraction.`);
+    if (P.anchor.has) bits.push(
+      `<b>Click 0</b> is the ${esc(P.anchor.label)}: what typing the query got for free. A series is only worth ` +
+      `its clicks to the right of where it crosses the dotted line.`);
+    if (state.seedMode === "each" && P.runs_note) bits.push(esc(P.runs_note));
+    if (state.embedders.size > 1) bits.push(
+      `<b>Embedders are never averaged</b> — each gets its own panel. Two embedders are two different ` +
+      `representations of the haystack and their mean describes no system anyone could run.`);
+    if (pl.varying.length && !pl.hueDim) bits.push(
+      `<b>${esc(pl.varying[0])}</b> has more than ${MAX_HUES} values, which is more than the palette's validated ` +
+      `slots, so it is split into panels rather than given invented hues.`);
+    if (hidden) bits.push(
+      `<b>${hidden} of ${wanted} panels are not drawn</b> (the page caps at ${MAX_PANELS}). Narrow the selection ` +
+      `to see them.`);
+    $("reading").innerHTML = bits.join(" ");
+  }
+
+  function tableView(spec, panels) {
+    const marks = [0, 10, 20, 50, 100, P.t[nT - 1]].filter((t, i, a) => P.t.includes(t) && a.indexOf(t) === i);
+    let html = "";
+    for (const p of panels) {
+      html += `<table class="data"><caption style="text-align:left;color:var(--muted);padding:8px 0 2px">${esc(panelTitle(p.fk, plan()))}</caption>` +
+        `<thead><tr><th>series</th>` + marks.map((t) => `<th>${t}</th>`).join("") + `</tr></thead><tbody>`;
+      for (const q of p.per) {
+        html += `<tr><td><span class="sw" style="display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px;background:${q.color}"></span>${esc(q.name)}${q.sel.arm && q.name !== q.sel.arm ? " · " + esc(q.sel.arm) : ""}</td>` +
+          marks.map((t) => `<td>${fmt(q.agg.mean[P.t.indexOf(t)])}</td>`).join("") + `</tr>`;
+      }
+      html += `</tbody></table>`;
+    }
+    $("table").innerHTML = html + `<p class="note">${esc(spec.label)} at the click marks above, for the current selection.</p>`;
+  }
+
+  render();
+})();
+</script>
+</body>
+</html>

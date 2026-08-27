@@ -114,6 +114,11 @@ BASELINE_COLUMNS: dict[str, tuple[str, ...]] = {
     "oracle_cost": ("text_oracle_cost",),
     "average_precision": ("text_AP", "text_average_precision"),
     "auroc": ("text_auroc",),
+    "precision": ("text_precision",),
+    "recall": ("text_recall",),
+    "f1": ("text_f1",),
+    "fpr": ("text_fpr",),
+    "fnr": ("text_fnr",),
 }
 
 
@@ -134,7 +139,7 @@ def text_sort_baseline(path: str | Path, keys: Sequence[str] = KEYS) -> pd.DataF
     return df.loc[:, [c for c in df.columns if c in wanted or c.startswith("text_")]].copy()
 
 
-def _baseline_map(
+def baseline_map(
     baseline: pd.DataFrame | None,
     metric: str,
     keys: list[str],
@@ -280,7 +285,7 @@ def mean_figure(  # noqa: C901
     if not datasets or not arms_present:
         return None, pd.DataFrame()
 
-    base = _baseline_map(baseline, metric, kk, baseline_col)
+    base = baseline_map(baseline, metric, kk, baseline_col)
     t_index = np.arange(0 if base else 1, int(main["t"].max()) + 1)
     index = _cell_index(main, kk, denominator)
     rows: list[dict] = []
@@ -421,7 +426,7 @@ def per_run_figures(  # noqa: C901
     norm = _prevalence_norm(prevalence)
     cmap = plt.get_cmap("viridis_r")
     index = _cell_index(main, kk, denominator)
-    base = _baseline_map(baseline, metric, kk, baseline_col)
+    base = baseline_map(baseline, metric, kk, baseline_col)
     t_max = int(main["t"].max())
     written: list[str] = []
     outdir.mkdir(parents=True, exist_ok=True)
