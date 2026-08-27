@@ -72,12 +72,26 @@ LOGS="$CALIB_EXP/logs"
 mkdir -p "$LOGS" "$CALIB_RESULTS/cells"
 
 # Sized from `size 0,72` on THIS configuration -- the text-seeded, paired grid --
-# rather than from an earlier one. A cell's cost moved when its opening did:
-# finding positives immediately means training on more of them, and the region
-# cell went from ~5 min typical (crop-seeded, job 549465) to 18m02s.
+# and cross-checked against the SAME cell in the crop-seeded run it replaces
+# (job 549465 index 4320: backpack@large, seed 0, max_patch).
 #
-#   whole_image cell (index 0)   47s    MaxRSS 0.50 G   0.7 cores
-#   max_patch   cell (index 72)  18m02s MaxRSS 5.02 G   1.0 cores
+#   whole_image cell (index 0)   47s     MaxRSS 0.50 G   0.7 cores
+#   max_patch   cell (index 72)  18m02s  MaxRSS 5.02 G   1.0 cores
+#   ...the same cell, crop-seeded: 11m28s MaxRSS 10.36 G
+#
+# The opening moved BOTH numbers, in opposite directions. Slower, because a text
+# sort finds positives immediately and the detector then trains on more of them.
+# Cheaper, because the crop path scored the query against every PATCH of every
+# media (7749 x ~197 x 768) where a text sort scores whole-image vectors only.
+#
+# For the array's shape, what matters is the whole region arm, not one cell.
+# Across the 532 region cells that finished in job 549465:
+#
+#   elapsed  p50 627s   p90 1206s  max 1345s
+#   MaxRSS   p50 4.9 G  p90 7.8 G  max 9.9 G
+#
+# So 12G clears the worst region cell ever observed on this grid, on a path that
+# has since become the cheaper of the two.
 #
 # Two things follow, and both were wrong before:
 #
