@@ -18,6 +18,14 @@ Green border = the user voted Good, red = Bad. The number under each tile is the
 click; `s` is the item's rank in the opening text sort, so a run that keeps
 picking from deep in the sort is visibly doing something different from one
 working the top.
+
+**`s` is a rank over the WHOLE dataset, not over the pool the run walks.**
+``voting_iterations`` builds ``seed_rank`` from every id in ``seed_scores``
+while ``pool = sorted(sim_ids)`` is the simulation split -- about half of them
+under the default ``sim_fraction=0.5``. So ``s227`` is not "the app went 227
+deep": roughly half of those items were never available to pick. The sheet
+prints this in its footer, because a rank with an unstated denominator is
+exactly the kind of number that gets quoted without it.
 """
 
 from __future__ import annotations
@@ -101,7 +109,8 @@ def main(argv: list[str] | None = None) -> int:
     TILE, PAD, HDR, CAP = 132, 8, 26, 18
     cols = args.clicks
     row_h = HDR + TILE + CAP + PAD
-    sheet = Image.new("RGB", (cols * (TILE + PAD) + PAD, len(modes) * row_h + PAD), "#fcfcfb")
+    FOOT = 16
+    sheet = Image.new("RGB", (cols * (TILE + PAD) + PAD, len(modes) * row_h + PAD + FOOT), "#fcfcfb")
     draw = ImageDraw.Draw(sheet)
     try:
         font = ImageFont.truetype("/usr/share/fonts/dejavu-sans-fonts/DejaVuSans.ttf", 11)
@@ -148,6 +157,13 @@ def main(argv: list[str] | None = None) -> int:
                 font=font,
             )
 
+    draw.text(
+        (PAD, sheet.height - 13),
+        "s = rank in the full text sort over all medias; the run walks only the "
+        "simulation split (~half), so s overstates depth-into-the-pool by ~2x",
+        fill="#a8a29e",
+        font=font,
+    )
     sheet.save(args.out, quality=92)
     print(f"wrote {args.out} {sheet.size}")
     return 0
