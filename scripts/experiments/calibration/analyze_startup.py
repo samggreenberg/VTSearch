@@ -254,6 +254,13 @@ def opening_stats(picks: pd.DataFrame) -> pd.DataFrame:
             open_scheduled_clicks=int(_scheduled(op).sum()) if len(op) else 0,
             open_overrun=int((~_scheduled(op)).sum()) if len(op) else 0,
             open_starved=bool(len(op) and int(op["picked_label"].sum()) == 0),
+            # The labelset at the horizon, which is the thing a detector is
+            # actually trained on.  Every click labels an item regardless of
+            # phase, so a held arm is not idling - it is piling up negatives.
+            # Reporting both makes the failure legible as what it is: a
+            # one-class labelset, not a shortage of votes.
+            n_good_final=int(g["n_good"].iloc[-1]) if "n_good" in g.columns and len(g) else np.nan,
+            n_bad_final=int(g["n_bad"].iloc[-1]) if "n_bad" in g.columns and len(g) else np.nan,
             trained_at=int(g.loc[g["phase"].astype(str).isin(("hard", "new", "done")), "t"].min())
             if g["phase"].astype(str).isin(("hard", "new", "done")).any()
             else -1,
@@ -272,8 +279,9 @@ def _scheduled(op: pd.DataFrame) -> pd.Series:
     reconstructed from the round indices, and the reconstruction was a no-op -
     it subtracted ``min(count_of_last_round, len(rounds))``, which is just
     ``count_of_last_round``, so the overrun it computed was identically zero
-    and an arm that burned its whole horizon waiting for a first positive
-    reported an opening exactly as long as it had asked for.  The state was
+    and an arm that spent its whole horizon under the seed sort, still waiting
+    for a first positive, reported an opening exactly as long as it had asked
+    for.  The state was
     never derivable from the round indices; it is now recorded.
     """
     if "startup_held" not in op.columns:
@@ -580,7 +588,16 @@ def make_figures(
     # 5. THE BINDING CONSTRAINT, and this study's headline failure mode: an
     #    opening that finds no positive at all.  The harness then holds the
     #    trajectory on the schedule's last round rather than hand a one-class
-    #    labelset to a learned sort, so those clicks are spent and buy nothing.
+    #    labelset to a learned sort.
+    #
+    #    Those clicks are NOT wasted votes: every click labels an item and goes
+    #    into the training data whatever phase the autopilot thinks it is in -
+    #    the phase decides only which item is shown next, never whether the
+    #    answer counts.  A held arm is accumulating negatives at full rate.
+    #    What it does not have is a POSITIVE, and one class cannot be fitted,
+    #    so no detector exists and no metric row is emitted.  The cost is that
+    #    the clicks buy labels the model cannot yet use, and are spent under the
+    #    seed sort rather than under a learned one.
     #    Two bars because they are different facts: how often an arm starves,
     #    and how much of the horizon it loses when it does.
     if not opening.empty and "open_starved" in opening.columns:
@@ -716,9 +733,9 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
         "",
         "## Mining and outcome, paired against the control",
         "",
-        "| arm | open clicks (written) | held past it | starved | open yield | "
-        "positives@100 Δ | [95% CI] | final cost Δ | [95% CI] | AP Δ |",
-        "|---|---:|---:|---:|---:|---:|---|---:|---|---:|",
+        "| arm | open clicks (written) | held past it | starved | labelset @200 (good/bad) | "
+        "open yield | positives@100 Δ | [95% CI] | final cost Δ | [95% CI] | AP Δ |",
+        "|---|---:|---:|---:|:--:|---:|---:|---|---:|---|---:|",
     ]
     for arm in ARMS:
         if arm == CONTROL:
@@ -727,7 +744,8 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
         pos, cost, ap = rec.get("positives_100", {}), rec.get("final_cost", {}), rec.get("final_ap", {})
         lines.append(
             f"| `{arm}` | {_fmt(rec, 'open_scheduled_clicks')} | {_fmt(rec, 'open_overrun_median')} | "
-            f"{_fmt(rec, 'open_starved_pct')}% | {_fmt(rec, 'open_yield')} | "
+            f"{_fmt(rec, 'open_starved_pct')}% | "
+            f"{_fmt(rec, 'n_good_final')}/{_fmt(rec, 'n_bad_final')} | {_fmt(rec, 'open_yield')} | "
             f"{_fmt(pos, 'median_delta')} | [{_fmt(pos, 'ci95_lo')}, {_fmt(pos, 'ci95_hi')}] | "
             f"{_fmt(cost, 'median_delta')} | [{_fmt(cost, 'ci95_lo')}, {_fmt(cost, 'ci95_hi')}] | "
             f"{_fmt(ap, 'median_delta')} |"
@@ -739,6 +757,12 @@ def write_report(summary: dict, figures: list[str], outdir: Path) -> Path:
         "and handing a learned sort a one-class labelset would leave the selector picking at random.",
         "**starved** is the share of cells whose opening found no positive at all - the extreme of",
         "the regime this study is about, and the reason the two click columns cannot be added.",
+        "",
+        "A held click is **not** an idle one: every click labels an item and enters the training",
+        "data whatever phase the autopilot is in - the phase chooses which item is shown next, never",
+        "whether the answer counts. A held arm is piling up negatives at full rate. What it lacks is",
+        "a *positive*, and one class cannot be fitted, so no detector exists and no metric row is",
+        "emitted. `labelset @200` below reports what the model was actually handed.",
         "",
         "Every delta is paired on the identical (dataset, embedder, category, seed).  A difference",
         "smaller than twice its standard error is not resolvable here, and saying so is a finding.",
@@ -810,6 +834,8 @@ def analyze(root: Path, outdir: Path) -> dict:
             rec["open_overrun_median"] = float(g["open_overrun"].median())
             rec["open_starved_cells"] = int(g["open_starved"].sum())
             rec["open_starved_pct"] = float(100.0 * g["open_starved"].mean())
+            rec["n_good_final"] = float(g["n_good_final"].median())
+            rec["n_bad_final"] = float(g["n_bad_final"].median())
             rec["n_cells"] = int(len(g))
         rec["lever"] = lever_moved(opening, arm)
         if arm != CONTROL:
