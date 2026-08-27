@@ -309,10 +309,14 @@ repo, ds, emb = sys.argv[1], sys.argv[2], sys.argv[3]
 sys.path.insert(0, str(pathlib.Path(repo) / "scripts" / "experiments" / "calibration"))
 import common
 common.setup_env()
+import experiment_config as cfg
 from _cells_io import load_medias
 from vtscore.datasets import loader as _loader
 
-pkl = _loader.EMBEDDINGS_DIR / f"{ds}__{emb}.pkl"
+# A paired arm (`siglip+dinov3_patch`) carries its patch grid in the LEARN
+# half's pickle; naming the file by hand here would look for a pickle that has
+# never existed and report the premise as MISSING rather than as held.
+pkl = _loader.EMBEDDINGS_DIR / cfg.pickle_name(ds, emb)
 if not pkl.exists():
     print(f"MISSING {pkl}")
     raise SystemExit(0)
@@ -786,21 +790,32 @@ no_tower = set()
 for ds, embs in info.get("datasets", {}).items():
     for emb, d in embs.items():
         # The other half of the seed mode: an embedder with no text tower can
-        # never produce a text sort however good the query is (DINOv3).
+        # never produce a text sort however good the query is (DINOv3).  For a
+        # PAIRED arm the tower that matters is the text half's, which is the
+        # whole point of pairing - probing the arm name itself would ask the
+        # registry for an embedder called "siglip+dinov3_patch" and report a
+        # working pair as a broken one.
+        text_emb = cfg.text_embedder(emb)
         try:
-            has_tower = get_embedder(emb).embed_text("probe") is not None
+            has_tower = get_embedder(text_emb).embed_text("probe") is not None
         except Exception as exc:  # noqa: BLE001
-            bad.append(f"{ds}x{emb}: embedder failed to load ({type(exc).__name__})")
+            bad.append(f"{ds}x{emb}: embedder {text_emb} failed to load ({type(exc).__name__})")
             continue
         if not has_tower:
-            no_tower.add(emb)
+            no_tower.add(text_emb)
+        # And a pair can only rank the run's own medias if the text half's
+        # pickle holds them.  prepare_data checks this too; checking it again
+        # here is what stops an array of thousands of cells from being submitted
+        # against a pickle that cannot serve them.
+        if cfg.is_paired(emb) and d.get("text_pickle") is None:
+            bad.append(f"{ds}x{emb}: prepare recorded no text_pickle (rerun prepare on this branch)")
         for cat in d.get("selected_categories") or []:
             seen += 1
             text = cfg.seed_query_text(ds, cat)
             if not text:
                 bad.append(f"{ds}x{emb}:{cat}=no query")
             elif not has_tower:
-                bad.append(f"{ds}x{emb}:{cat}=no text tower on {emb}")
+                bad.append(f"{ds}x{emb}:{cat}=no text tower on {text_emb}")
             else:
                 texts += 1
 print(("FAILS " + "; ".join(sorted(bad)[:12])) if bad else f"HOLDS {texts}/{seen} selected cells seed from a typed query")

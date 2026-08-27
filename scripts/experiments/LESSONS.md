@@ -72,6 +72,7 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-08-27 | [the region arm could not open the way the app does](lessons/2026-08-27-the-region-arm-could-not-open-the-way-the-app-does.md) | #3276 |
 | 2026-08-26 | [a completed grid reported "0 / 6480" cells](lessons/2026-08-26-a-completed-grid-reported-zero-cells.md) | #3156 |
 | 2026-08-26 | [a counter that never reached the rows, and a check that was a no-op](lessons/2026-08-26-a-counter-that-never-reached-the-rows.md) | #3267 |
 | 2026-08-26 | [a fixture dataset has no query, so it seeds from somewhere else](lessons/2026-08-26-a-fixture-dataset-has-no-query.md) | #3267 |
