@@ -540,11 +540,19 @@ def make_figures(
 
     # 4. THE AXIS THE MECHANISM RUNS ON.  "Mine more Goods" should matter most
     #    where Goods are scarce, and these environments span ~50x in prevalence,
-    #    so a single pooled number for an arm is an average across the very
-    #    crossover the study is looking for.  Plotted as each arm's positives at
-    #    the horizon MINUS the control's, paired within (dataset, category,
-    #    seed) and then averaged per category, so a point is a contrast rather
-    #    than two levels the reader has to difference by eye.
+    #    so one pooled number per arm is an average across the very crossover
+    #    the study is looking for.
+    #
+    #    Two panels, because they answer different halves and one of them lies
+    #    on its own.  LEFT bands prevalence into three and shows the mean paired
+    #    contrast per band with its standard error - the readable answer.  RIGHT
+    #    keeps every category as a point so the band means cannot hide a
+    #    category that disagrees with its own band.
+    #
+    #    Points are NOT joined.  A line between two categories implies a series
+    #    and there is none: the x axis is a property each category happens to
+    #    have, not an axis anything moves along.  Joining them made a noisy
+    #    scatter read as a trend.
     if prevalence and not picks.empty:
         keys = _keys(picks)
         totals = picks.groupby(["arm", *keys])["picked_label"].sum().rename("positives").reset_index()
@@ -553,33 +561,80 @@ def make_figures(
         merged["delta"] = merged["positives"] - merged["ctrl"]
         merged["prevalence"] = [prevalence.get((d, c), np.nan) for d, c in zip(merged["dataset"], merged["category"])]
         merged = merged.dropna(subset=["prevalence"])
-        if not merged.empty:
-            fig, ax = plt.subplots(figsize=(7.5, 4.6))
-            for arm in ARMS:
-                if arm == CONTROL:
-                    continue
+        arms_here = [a for a in ARMS if a != CONTROL and (merged["arm"] == a).any()]
+        if not merged.empty and arms_here:
+            cats = merged[["dataset", "category", "prevalence"]].drop_duplicates().sort_values("prevalence")
+            # Terciles of the CATEGORIES, not of the cells: every category
+            # carries the same number of seeds, so an equal-count split of
+            # categories is an equal-weight split of the evidence.
+            n = len(cats)
+            edges = [
+                cats["prevalence"].iloc[0],
+                cats["prevalence"].iloc[max(0, n // 3 - 1)],
+                cats["prevalence"].iloc[max(0, 2 * n // 3 - 1)],
+                cats["prevalence"].iloc[-1],
+            ]
+            names = [
+                f"scarce\n(<{edges[1] * 100:.1f}%)",
+                f"mid\n({edges[1] * 100:.1f}-{edges[2] * 100:.1f}%)",
+                f"common\n(>{edges[2] * 100:.1f}%)",
+            ]
+
+            def _band(v: float) -> int:
+                return 0 if v <= edges[1] else (1 if v <= edges[2] else 2)
+
+            merged["band"] = [_band(v) for v in merged["prevalence"]]
+
+            fig, (axb, axs) = plt.subplots(1, 2, figsize=(12.5, 4.8), width_ratios=[1.0, 1.25])
+            # One colour per ARM, fixed across both panels.  Letting matplotlib
+            # cycle per call gave the two panels different colours for the same
+            # arm, which is worse than no colour: a reader matches the legend on
+            # the left to a cloud on the right and reads the wrong arm.
+            palette = {a: f"C{i}" for i, a in enumerate(arms_here)}
+            width = 0.8 / len(arms_here)
+            for i, arm in enumerate(arms_here):
                 g = merged[merged["arm"] == arm]
-                if g.empty:
-                    continue
-                per_cat = g.groupby(["dataset", "category", "prevalence"])["delta"].agg(["mean", "sem", "size"])
-                per_cat = per_cat.reset_index().sort_values("prevalence")
-                ax.errorbar(
-                    per_cat["prevalence"],
-                    per_cat["mean"],
-                    yerr=per_cat["sem"].fillna(0.0),
-                    marker="o",
-                    ms=3.5,
-                    lw=1.2,
+                means = [g.loc[g["band"] == b, "delta"].mean() for b in range(3)]
+                std_errs = [g.loc[g["band"] == b, "delta"].sem() for b in range(3)]
+                axb.bar(
+                    np.arange(3) + i * width - 0.4 + width / 2,
+                    means,
+                    width,
+                    yerr=np.nan_to_num(std_errs),
                     capsize=2,
                     label=arm,
+                    color=palette[arm],
                 )
-            ax.axhline(0.0, color="#444", lw=1.0, ls="--")
-            ax.set_xscale("log")
-            ax.set_xlabel("category prevalence in the pool (log)")
-            ax.set_ylabel(f"positives at the horizon, minus {CONTROL}")
-            ax.set_title("Does a better opening matter more where Goods are scarce?")
-            ax.legend(fontsize=7, ncol=2)
-            fig.tight_layout()
+            axb.axhline(0.0, color="#444", lw=1.0)
+            axb.set_xticks(np.arange(3))
+            axb.set_xticklabels(names, fontsize=8)
+            axb.set_ylabel(f"positives at the horizon, minus {CONTROL}")
+            axb.set_title("Banded by prevalence (mean ± SE)")
+            axb.legend(fontsize=7, ncol=2)
+
+            markers = {"coco_val": "o", "visual_genome_m": "^"}
+            for arm in arms_here:
+                g = merged[merged["arm"] == arm]
+                per_cat = g.groupby(["dataset", "category", "prevalence"])["delta"].mean().reset_index()
+                first = True
+                for ds, sub in per_cat.groupby("dataset"):
+                    axs.scatter(
+                        sub["prevalence"],
+                        sub["delta"],
+                        s=22,
+                        alpha=0.75,
+                        color=palette[arm],
+                        marker=markers.get(ds, "o"),
+                        label=arm if first else None,
+                    )
+                    first = False
+            axs.axhline(0.0, color="#444", lw=1.0, ls="--")
+            axs.set_xscale("log")
+            axs.set_xlabel("category prevalence in the pool (log) — o coco_val, ^ visual_genome_m")
+            axs.set_title("Every category as its own point (not a series - points are not joined)")
+            axs.legend(fontsize=7, ncol=2)
+            fig.suptitle("Does a better opening matter more where Goods are scarce?", fontsize=11)
+            fig.tight_layout(rect=(0, 0, 1, 0.94))
             p = outdir / "mining_by_prevalence.png"
             fig.savefig(p, dpi=130)
             plt.close(fig)
