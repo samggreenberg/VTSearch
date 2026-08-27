@@ -48,7 +48,7 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from _cells_io import main_frame_files  # noqa: E402
+from _cells_io import assert_one_opening, main_frame_files  # noqa: E402
 
 import experiment_config as cfg  # noqa: E402
 
@@ -99,6 +99,7 @@ def load_cells(cells_dir: Path) -> pd.DataFrame:
     if not frames:
         return pd.DataFrame()
     df = pd.concat(frames, ignore_index=True)
+    assert_one_opening(df, "analyze_rate.py")
     df["gmm_variant"] = df["gmm_variant"].fillna("")
     df["schedule"] = df["schedule"].fillna("")
     # A schedule row is the shipped blend under an alternative mix-in curve; it

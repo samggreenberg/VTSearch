@@ -168,6 +168,12 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
         f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
     },
     "coco_val": _COCO_TEXTS,
+    # `vg_scale` with the band collapsed away (#3115): the same verified images
+    # under the bare class name, so the same twelve texts serve it.  Without this
+    # entry every `vg_scale_any` cell falls back to the known-good start -- which
+    # is what it silently did until #3278 paired its region arm and the pair's
+    # own guard refused to run, since a pair exists FOR the text sort.
+    "vg_scale_any": dict(_VG_SCALE_TEXTS),
     # The box-size bands are built from the FULL Visual Genome vocabulary, so
     # their categories are VG's, not COCO's.  A band is a property of the cell -
     # someone hunting a small bus and someone hunting a large one both type
@@ -706,6 +712,39 @@ CATEGORY_MODE = os.environ.get("CALIB_CATEGORY_MODE", "").strip().lower()
 #: replaced by the next eligible one instead of shrinking the grid.  0 (the
 #: default) is the behaviour of every run before #3267.
 REQUIRE_SEED_QUERY = os.environ.get("CALIB_REQUIRE_SEED_QUERY", "0") == "1"
+
+
+#: The opening this study **declares**, asserted per cell (#3278).
+#:
+#: Autopilot has two real starts and which one a cell takes is decided silently:
+#: a text sort when the (dataset, category) has a query *and* the embedder's text
+#: half has a tower, three random known-goods otherwise.  Since #3269 the harness
+#: takes the first wherever it can, which means a grid mixing SigLIP and DINOv3
+#: arms now opens two different ways along one axis - the confound
+#: ``lessons/2026-08-27-the-region-arm-could-not-open-the-way-the-app-does.md``
+#: describes, and the reason :data:`PAIR_SEP` exists.
+#:
+#: Values, all of them a *declaration* rather than a switch - none of them
+#: changes how a cell seeds, only what it is allowed to have seeded from:
+#:
+#: * ``"text"`` - every cell must open on a typed query.  A cell that falls back
+#:   raises instead of running, for the reason the paired-arm guard in
+#:   ``run_cells`` does: a mislabelled cell is invisible where a missing one is
+#:   not.
+#: * ``"known_good"`` - every cell must open on three random known-goods.  This
+#:   is the pin for a study whose subject *is* that flow (or one re-running a
+#:   finished grid that took it), and it fails if an arm silently gains a text
+#:   tower or a query.
+#: * ``"mixed"`` - the grid deliberately holds both openings, e.g. a re-runner
+#:   mirroring a completed study's arms.  Nothing is asserted per cell; the
+#:   declaration is what stops the mix reading as an oversight, and the analyzer
+#:   guard (``_cells_io.assert_one_opening``) is what stops two openings being
+#:   pooled into one number.
+#: * ``""`` (unset) - no assertion, the behaviour of every run before #3278.
+REQUIRE_OPENING = os.environ.get("CALIB_REQUIRE_OPENING", "").strip().lower()
+_OPENINGS = ("", "text", "known_good", "mixed")
+if REQUIRE_OPENING not in _OPENINGS:
+    raise ValueError(f"CALIB_REQUIRE_OPENING={REQUIRE_OPENING!r} is not one of {_OPENINGS[1:]}")
 
 
 def select_categories(

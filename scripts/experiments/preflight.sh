@@ -54,11 +54,32 @@ done
   echo "usage: preflight.sh --exp DIR [--arms a,b,c] [--need-gb N]" >&2
   echo "                    [--require-region-voting DATASET:EMBEDDER]" >&2
   echo "                    [--require-text-seed]      # every cell must seed from a TYPED QUERY" >&2
+  echo "                    (or declare it once with CALIB_REQUIRE_OPENING=text|known_good|mixed," >&2
+  echo "                     which run_cells.py also asserts per cell)" >&2
   echo "                    [--reuse-prepare RESULTS_DIR]" >&2
   echo "                    [--job-name NAME] [--mem 64G] [--conc N] [--patch]" >&2
   echo "                    [--diverges knob1,knob2]   # knobs this study MEANS to pin off-production" >&2
   exit 2
 }
+
+# The opening this run asserts, from either half of one declaration: the flag a
+# launcher passes here, or `CALIB_REQUIRE_OPENING` -- which `run_cells.py`
+# asserts per CELL as well, so the pre-array gate and the per-cell guard cannot
+# disagree about what the study meant (#3278).  `mixed` declares a grid that
+# deliberately holds both openings, so there is nothing uniform to check here.
+WANT_OPENING=""
+[[ -n "$REQUIRE_TEXT_SEED" ]] && WANT_OPENING="text"
+case "${CALIB_REQUIRE_OPENING:-}" in
+  text) WANT_OPENING="text" ;;
+  known_good)
+    if [[ "$WANT_OPENING" == "text" ]]; then
+      echo "--require-text-seed contradicts CALIB_REQUIRE_OPENING=known_good; pick one" >&2
+      exit 2
+    fi
+    WANT_OPENING="known_good" ;;
+  mixed|"") ;;
+  *) echo "CALIB_REQUIRE_OPENING=${CALIB_REQUIRE_OPENING} is not text|known_good|mixed" >&2; exit 2 ;;
+esac
 
 FAILED=0
 say_fail() {
@@ -749,7 +770,7 @@ PY
   fi
 fi
 
-# --- 14. Every cell seeds from a TYPED QUERY, not from known-goods ------------
+# --- 14. Every cell takes the opening this study DECLARED ---------------------
 # The autopilot has two documented starts, and which one a cell takes is decided
 # silently by whether a query text happens to exist for its (dataset, category)
 # and whether its embedder has a text tower.  With a query the seed sort is
@@ -766,16 +787,49 @@ fi
 # for `vg_scale` and left it open for `coco_val` and `vg_box_*` in as many words
 # ("Still only advice ... config-only to fix"). This is the control.
 #
+# Both directions are checkable, because both are real choices (#3278).  A study
+# that pins the known-good start - because that flow IS its subject, or because
+# it re-runs a completed grid that took it - declares
+# `CALIB_REQUIRE_OPENING=known_good`, and this check then fails on a cell that
+# *would* text-seed.  A pin nobody can check is a comment, and the sixteen
+# launchers #3278 went through are what a comment was worth.
+#
 # Reads `prepare_info.json` for the categories actually selected, so it sees the
-# grid that will run rather than the one the launcher asked for.
-if [[ -n "$REQUIRE_TEXT_SEED" ]]; then
-  INFO="${CALIB_RESULTS:-$EXP/results}/prepare_info.json"
-  if [[ ! -f "$INFO" ]]; then
-    say_fail "--require-text-seed: no prepare_info.json at $INFO (run prepare first)"
+# grid that will run rather than the one the launcher asked for.  `run_cells.py`
+# asserts the same declaration per cell, which is what covers a study whose
+# array is submitted from a job where no preflight runs.
+
+# The prepare output this check and check 15 read: this run's own, or - when the study
+# has not copied it in yet - the one it declared it will reuse.  A launcher that
+# preflights BEFORE staging its reused prepare (launch_tail_2881.sh,
+# launch_transfer_2883.sh) would otherwise be checking a file that does not exist
+# yet, which is the moment its checks are most worth running.
+resolve_info() {
+  local own="${CALIB_RESULTS:-$EXP/results}/prepare_info.json"
+  if [[ -f "$own" ]]; then echo "$own"
+  elif [[ -n "$REUSE_PREPARE" && -f "$REUSE_PREPARE/prepare_info.json" ]]; then
+    echo "$REUSE_PREPARE/prepare_info.json"
+  fi
+}
+
+if [[ -n "$WANT_OPENING" ]]; then
+  INFO="$(resolve_info)"
+  if [[ -z "$INFO" ]]; then
+    # An explicit --require-text-seed is a caller asking for the check NOW, so a
+    # missing prepare is a failure.  A study-wide `CALIB_REQUIRE_OPENING` is a
+    # declaration that `run_cells.py` also asserts per cell, so a launcher that
+    # preflights before prepare has run has not lost the guarantee - it has only
+    # moved it later.  Saying which of the two happened matters: a skipped check
+    # is not a passed one.
+    if [[ -n "$REQUIRE_TEXT_SEED" ]]; then
+      say_fail "--require-text-seed: no prepare_info.json under ${CALIB_RESULTS:-$EXP/results} (run prepare first)"
+    else
+      say_note "opening check skipped: no prepare_info.json yet; run_cells.py asserts CALIB_REQUIRE_OPENING=$WANT_OPENING per cell"
+    fi
   elif [[ "$PY_USABLE" == "0" ]]; then
     say_fail "seed mode NOT checked: python cannot import the tree (see above)"
   else
-    SEEDCHK=$(cd "$REPO/scripts/experiments/calibration" && python - "$INFO" <<'PY' 2>&1
+    SEEDCHK=$(cd "$REPO/scripts/experiments/calibration" && python - "$INFO" "$WANT_OPENING" <<'PY' 2>&1
 import json
 import sys
 
@@ -784,9 +838,8 @@ import experiment_config as cfg  # noqa: E402
 
 from vtscore.media import get_embedder  # noqa: E402
 
-info = json.load(open(sys.argv[1]))
-bad, seen, texts = [], 0, 0
-no_tower = set()
+info, want = json.load(open(sys.argv[1])), sys.argv[2]
+bad, seen, held = [], 0, 0
 for ds, embs in info.get("datasets", {}).items():
     for emb, d in embs.items():
         # The other half of the seed mode: an embedder with no text tower can
@@ -801,8 +854,6 @@ for ds, embs in info.get("datasets", {}).items():
         except Exception as exc:  # noqa: BLE001
             bad.append(f"{ds}x{emb}: embedder {text_emb} failed to load ({type(exc).__name__})")
             continue
-        if not has_tower:
-            no_tower.add(text_emb)
         # And a pair can only rank the run's own medias if the text half's
         # pickle holds them.  prepare_data checks this too; checking it again
         # here is what stops an array of thousands of cells from being submitted
@@ -812,13 +863,14 @@ for ds, embs in info.get("datasets", {}).items():
         for cat in d.get("selected_categories") or []:
             seen += 1
             text = cfg.seed_query_text(ds, cat)
-            if not text:
-                bad.append(f"{ds}x{emb}:{cat}=no query")
-            elif not has_tower:
-                bad.append(f"{ds}x{emb}:{cat}=no text tower on {text_emb}")
+            got = "text" if (text and has_tower) else "known_good"
+            if got == want:
+                held += 1
+            elif want == "text":
+                bad.append(f"{ds}x{emb}:{cat}=" + ("no query" if not text else f"no text tower on {text_emb}"))
             else:
-                texts += 1
-print(("FAILS " + "; ".join(sorted(bad)[:12])) if bad else f"HOLDS {texts}/{seen} selected cells seed from a typed query")
+                bad.append(f"{ds}x{emb}:{cat}=would text-seed on {text_emb} ({text!r})")
+print(("FAILS " + "; ".join(sorted(bad)[:12])) if bad else f"HOLDS {held}/{seen} selected cells open on {want}")
 PY
     )
     # Keep the LAST line only.  Loading a SigLIP text tower prints transformers'
@@ -830,14 +882,80 @@ PY
     case "$SEEDCHK" in
       HOLDS*) say_ok "seed mode: ${SEEDCHK#HOLDS }" ;;
       FAILS*)
-        say_fail "cells that would NOT seed from a text sort: ${SEEDCHK#FAILS }"
-        echo "        -> these take the known-good start instead, so their seed sort is a"
-        echo "           different ranking; add the query to EXPERIMENT_QUERIES, or set"
-        echo "           CALIB_REQUIRE_SEED_QUERY=1 so prepare never selects them"
+        if [[ "$WANT_OPENING" == "text" ]]; then
+          say_fail "cells that would NOT seed from a text sort: ${SEEDCHK#FAILS }"
+          echo "        -> these take the known-good start instead, so their seed sort is a"
+          echo "           different ranking; add the query to EXPERIMENT_QUERIES, pair the arm"
+          echo "           with a text tower (siglip+dinov3_patch), or set"
+          echo "           CALIB_REQUIRE_SEED_QUERY=1 so prepare never selects them"
+        else
+          say_fail "cells that would NOT take the known-good start: ${SEEDCHK#FAILS }"
+          echo "        -> this study PINS the known-good opening, and these cells can open on"
+          echo "           a typed query instead; drop the pin if the text sort is now wanted"
+        fi
         ;;
       *) say_fail "could not check seed mode: $SEEDCHK" ;;
     esac
   fi
+fi
+
+# --- 15. Every arm in the grid has a prepare entry ----------------------------
+# `array_cells` enumerates the grid as `DATASETS x embedders_for_dataset(ds) x
+# the categories PREPARE selected for that (dataset, embedder)`.  So an arm with
+# no prepare entry contributes **zero cells**, silently: the array is that many
+# indices shorter, every index past the gap maps to a different cell than the
+# launcher's log says, and the run still comes back complete.
+#
+# The way to land there is ordinary: reuse a finished study's prepare_info.json
+# (the standard way to skip a GPU stage) after renaming an arm.  `dinov3_patch`
+# -> `siglip+dinov3_patch` is exactly that rename - #3278 made it in fourteen
+# launchers, most of which copy a `$REUSE/prepare_info.json` keyed by the old
+# bare name.  Prepare has to run again for the new key; it reuses the cached
+# pickle, so it costs no encoder time, and this check is what says so instead of
+# an array that quietly drops its region arm.  A skipped or failed embedder
+# (`prepare_info["failed"]`, e.g. DINOv3 without HF_TOKEN) lands here too.
+INFO15="$(resolve_info)"
+if [[ -z "$INFO15" ]]; then
+  say_note "grid-vs-prepare check skipped: no prepare_info.json under ${CALIB_RESULTS:-$EXP/results} yet"
+elif [[ -z "$REPO" ]]; then
+  say_note "grid-vs-prepare check skipped: VTS_REPO unset"
+elif [[ "$PY_USABLE" == "0" ]]; then
+  say_fail "grid vs prepare NOT checked: python cannot import the tree (see above)"
+else
+  GRIDCHK=$(cd "$REPO/scripts/experiments/calibration" && python - "$INFO15" <<'PY' 2>&1
+import json
+import sys
+
+sys.path.insert(0, ".")
+import experiment_config as cfg  # noqa: E402
+
+info = json.load(open(sys.argv[1]))
+prepared = info.get("datasets", {})
+failed = set(info.get("failed") or [])
+missing, seen = [], 0
+for ds in cfg.DATASETS:
+    for emb in cfg.embedders_for_dataset(ds):
+        seen += 1
+        if emb in prepared.get(ds, {}):
+            continue
+        why = "prepare FAILED it" if f"{ds}:{emb}" in failed else "prepare has no entry"
+        have = ", ".join(sorted(prepared.get(ds, {}))) or "nothing"
+        missing.append(f"{ds}x{emb} ({why}; prepared: {have})")
+print(("FAILS " + "; ".join(missing[:8])) if missing else f"HOLDS all {seen} grid arms are in prepare_info")
+PY
+  )
+  GRIDCHK=$(printf '%s\n' "$GRIDCHK" | tail -1)
+  case "$GRIDCHK" in
+    HOLDS*) say_ok "grid vs prepare: ${GRIDCHK#HOLDS }" ;;
+    FAILS*)
+      say_fail "arms in the grid that prepare never wrote: ${GRIDCHK#FAILS }"
+      echo "        -> each contributes ZERO cells, so the array is short and every index"
+      echo "           after the gap means a different cell than the launcher printed"
+      echo "        -> re-run prepare_data.py for this grid (a cached pickle is reused,"
+      echo "           so a renamed arm costs no encoder time), or fix the arm name"
+      ;;
+    *) say_fail "could not check the grid against prepare: $GRIDCHK" ;;
+  esac
 fi
 
 echo
