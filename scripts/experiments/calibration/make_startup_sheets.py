@@ -158,8 +158,27 @@ def pick_best_cell(root: Path) -> tuple[str, str, int]:
     return ds, cat, int(seed)
 
 
+def _held(df: pd.DataFrame) -> pd.Series:
+    """Per click: was it spent past the written schedule, held for a quorum?
+
+    Recorded by the harness (`startup_held`). A pick log predating that column
+    has no way to know, so it answers False and the caption simply says nothing
+    about an overrun rather than claiming there was none.
+    """
+    if "startup_held" not in df.columns:
+        return pd.Series(False, index=df.index)
+    return df["startup_held"].fillna(False).astype(bool)
+
+
 def render_arm(
-    g: pd.DataFrame, dataset: str, category: str, seed: int, meta: dict, images: _Images, out: Path
+    g: pd.DataFrame,
+    dataset: str,
+    category: str,
+    seed: int,
+    meta: dict,
+    images: _Images,
+    out: Path,
+    total_held: int = 0,
 ) -> Path | None:
     from vtscore.eval.labels import region_box_for_category
 
@@ -175,7 +194,12 @@ def render_arm(
         ax.axis("off")
     for ax, (_, r) in zip(axes, g.iterrows()):
         m = meta.get(int(r["picked_id"])) or {}
-        img = images.open(m.get("file_id") or m.get("path") or "")
+        # `filename` is the key the media dicts actually carry (`000000000139.jpg`,
+        # `2307.jpg`); COCO`s zip stores it under `val2017/`, which _Images
+        # matches on the stem. There is no `file_id` on these medias - asking
+        # for one renders a grid of "image not found" that still looks like a
+        # working sheet.
+        img = images.open(m.get("filename") or m.get("origin_name") or "")
         if img is not None:
             w, h = img.size
             img.thumbnail((THUMB, THUMB))
@@ -210,10 +234,25 @@ def render_arm(
         )
         ax.axis("off")
     arm = str(g["arm"].iloc[0])
-    sched = str(g["startup_schedule"].iloc[0]) or "(app default: g3@top,b4@mid)"
+    sched = str(g["startup_schedule"].iloc[0])
+    if not sched or sched == "nan":
+        sched = "(app default: g3@top,b4@mid)"
     n_pos = int(g["picked_label"].sum())
+    n_written = int((~_held(g)).sum())
+    shown_held = int(_held(g).sum())
+    # Say what is on the sheet AND what is not.  A starved arm is held on its
+    # last round for the whole horizon, so its opening really is 200 clicks;
+    # trimming that to a readable grid without saying so would make the arm
+    # look merely short instead of stuck, which is the opposite of the finding.
+    tail = ""
+    if total_held:
+        hidden = total_held - shown_held
+        tail = f", then held {total_held} more clicks waiting for a first positive"
+        if hidden > 0:
+            tail += f" ({shown_held} shown, {hidden} not)"
     fig.suptitle(
-        f"{arm} — {sched}\n{dataset} / {category} / seed {seed}: {n_pos} positives in {n} opening clicks",
+        f"{arm} — {sched}\n{dataset} / {category} / seed {seed}: "
+        f"{n_pos} positives in {n_written} opening clicks as written{tail}",
         fontsize=11,
     )
     fig.tight_layout(rect=(0, 0, 1, 0.93))
@@ -221,7 +260,7 @@ def render_arm(
     p = out / f"opening_{dataset}_{category.replace(' ', '-')}_s{seed}_{arm}.jpg"
     fig.savefig(p, dpi=130, pil_kwargs={"quality": 88})
     plt.close(fig)
-    print(f"  wrote {p.name}  ({n_pos}/{n} positive)")
+    print(f"  wrote {p.name}  ({n_pos} positive; {n_written} written, {total_held} held)")
     return p
 
 
@@ -230,6 +269,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--results", default=os.environ.get("CALIB_EXP", "") + "/results")
     ap.add_argument("--cell", default=None, help="dataset:category:seed; default = widest-spread cell")
     ap.add_argument("--out", required=True)
+    ap.add_argument(
+        "--max-extended",
+        type=int,
+        default=8,
+        help="How many held-past-the-schedule clicks to render (0 = none); the rest are captioned.",
+    )
     args = ap.parse_args(argv)
 
     root = Path(args.results)
@@ -245,20 +290,31 @@ def main(argv: list[str] | None = None) -> int:
     # The opening only.  A schedule arm tags its rounds; `prod` has no schedule,
     # so its opening is every click before the first trained phase.
     op = picks[picks["startup_round"] >= 0]
-    prod = picks[(picks["arm"] == "prod")]
+    prod = picks[picks["arm"] == "prod"]
     if not prod.empty:
-        pre = prod[~prod["phase"].astype(str).str.startswith(("hard", "new", "smart", "trained"))]
+        pre = prod[prod["phase"].astype(str).isin(("good", "bad"))]
         op = pd.concat([op, pre], ignore_index=True).drop_duplicates(subset=["arm", "t"])
+
+    # Show the opening as WRITTEN in full, plus a sample of what it was reduced
+    # to afterwards. A starved arm's opening is the whole 200-click horizon, and
+    # 200 thumbnails is unreadable - which would hide the very cell worth
+    # looking at. The caption reports how many are not shown.
+    held = _held(op)
+    op = pd.concat(
+        [op[~held], op[held].sort_values("t").head(max(0, args.max_extended))],
+        ignore_index=True,
+    )
 
     meta = _load_meta(ds)
     images = _Images(ds)
     out = Path(args.out)
     written = []
     for arm in ARMS:
-        g = op[op["arm"] == arm]
+        g = op[op["arm"] == arm].sort_values("t")
         if g.empty:
             continue
-        p = render_arm(g, ds, cat, seed, meta, images, out)
+        total_held = int(_held(picks[picks["arm"] == arm]).sum())
+        p = render_arm(g, ds, cat, seed, meta, images, out, total_held=total_held)
         if p:
             written.append(p)
     print(f"\n{len(written)} sheets -> {out}")
