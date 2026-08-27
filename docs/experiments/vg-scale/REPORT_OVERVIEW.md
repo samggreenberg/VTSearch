@@ -151,20 +151,57 @@ for 46 of the 266 stuck runs (17%):
 | `knife@small` | `siglip` | 2322075 | 5 / 5 |
 | `knife@small` | `siglip2_l` | 2322075 | 4 / 4 |
 
-**Two of them fail across all three embedders**, which is the signature worth
-acting on — three independent representations and ~15–20 independent seeds, and
-essentially nothing ever gets going:
+**Two of them fail across all three embedders** — three independent
+representations and ~15–20 independent seeds, and essentially nothing ever gets
+going:
 
 | category | `exemplar_id` | `siglip` | `siglip2_l` | `dinov3_patch` | total |
 |---|---|---|---|---|---|
 | `boat@medium` | **2321462** | 6/6 | 8/8 | 4/6 | **18/20** |
 | `knife@small` | **2322075** | 5/5 | 4/4 | 4/6 | **13/15** |
 
-A model failure should not survive a change of representation. **Check these two
-images before treating them as a modelling result** — if the box or the label is
-wrong, the fix is to clean `vg_scale`, not to tune the selector. No exemplar is
-stuck 100% across all three, so this is a shortlist of two, not a systemic
-labelling problem.
+### Both were adjudicated by looking. They are not the same thing.
+
+This was the interesting part, and it corrects the reasoning that produced the
+shortlist.
+
+**`boat@medium` 2321462 — the label is CORRECT.** The image is a tennis court,
+and the box lands beyond the court fence. Behind the foliage there **is** a boat
+hull, stored on a cradle and heavily occluded by a tree:
+
+![boat 2321462](figures/exemplar_2321462_boat_real.png)
+
+At 1.16% of the image, occluded, and in a scene whose every other cue says
+"tennis", this is a legitimately hard positive — not noise. The runs failed
+honestly.
+
+**`knife@small` 2322075 — the label is WRONG.** The image is a railway scene, and
+the box lands on empty red-paved walkway beside the track. There is no knife in
+the box, and none anywhere in the frame:
+
+![knife 2322075](figures/exemplar_2322075_knife_absent.png)
+
+The same image also carries a VG `pizza` box a little further along the same
+empty pavement, so it has at least two spurious objects.
+
+### The heuristic that built this shortlist is too strong
+
+The shortlist came from the rule *"a model failure should not survive a change of
+representation."* **2321462 refutes it.** A positive that is genuinely tiny,
+occluded and out of context fails on every representation too, for the ordinary
+reason that it is hard — so cross-embedder persistence cannot, on its own,
+separate a bad label from a hard example. Both look identical in every column
+this grid records.
+
+Cross-embedder persistence is therefore a **shortlist generator, not a verdict.**
+It cost two minutes of looking to split these two, and there is no metric in the
+run that would have done it.
+
+**What that means for the stuck tail.** Of the 266 stuck runs, **13 trace to a
+confirmed mislabel** (2322075) and are recoverable by cleaning; **18 trace to a
+confirmed-real hard positive** (2321462) and are not — they are the dataset
+working as intended. The other five repeat-offender exemplars are
+**unadjudicated**: each is single-embedder, and none has been looked at.
 
 ## The 23 header-only cells are seed-determined, not random
 
@@ -194,12 +231,15 @@ Reproducing one costs nothing: rerun `knife@small` at seed 0 on any embedder.
 
 1. **Do not quote these numbers as production.** They are the retired `linear`
    head. Difference them against 549465 when it lands.
-2. **Inspect `vg_scale` exemplars 2321462 (`boat@medium`) and 2322075
-   (`knife@small`).** Two images, a few minutes, and the answer decides whether
-   17% of the stuck tail is a data bug or a modelling result.
-3. **Look at `knife@small` as a cell.** 9 of 23 header-only cells and a
-   cross-embedder stuck candidate is enough signal to re-examine how its
-   positives were drawn.
-4. **No cut-rule work from this grid.** `calibration_shift` dominates
+2. **Drop or relabel `knife@small` exemplar 2322075** — confirmed to contain no
+   knife. Leave `boat@medium` 2321462 alone: the label is right and the run
+   difficulty is real.
+3. **Look at `knife@small` as a cell.** 9 of 23 header-only cells, plus its worst
+   exemplar now confirmed mislabelled, is enough signal to re-examine how its
+   positives were drawn. Two independent routes point at the same class.
+4. **Adjudicate the other five repeat-offender exemplars by eye** — 2381555,
+   2414453, 1159597, and the two single-embedder repeats. No column in the run
+   can substitute for looking.
+5. **No cut-rule work from this grid.** `calibration_shift` dominates
    `rule_inefficiency` 8:1; that is transfer, and #2883 already showed cut rules
    cannot reach it. Re-check once the `linear_svm` rerun lands.
