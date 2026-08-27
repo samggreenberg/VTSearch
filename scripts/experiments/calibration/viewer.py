@@ -17,8 +17,11 @@ What the page lets a reader pick:
   representations of the haystack, and their mean is a number describing no
   system anyone could run.  Faceting makes that structural rather than a rule
   someone has to remember;
-* **arms** — any subset, each carrying its own colour, fixed by the arm's
-  position in the study rather than by which arms happen to be on screen;
+* **arms** — any non-empty subset.  Non-empty for the same reason the embedder
+  subset is: an empty selection has no honest rendering, since the page either
+  goes blank or falls back to "all" and a reader who misses that takes a chart
+  of everything for a chart of nothing.  The page locks the last remaining chip
+  rather than snapping it silently back on;
 * **seeds** — averaged, or every seed as its own line;
 * **metric** — cost, precision, recall, F1, FPR, FNR, average precision, AUROC:
   whatever the run emitted, from one shared definition

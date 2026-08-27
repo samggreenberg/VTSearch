@@ -204,8 +204,8 @@ directory, linked from the first section of the report. It carries every slice:
 |---|---|
 | dataset | one, **all** (averaged), or **each** (a line/panel per dataset) |
 | category | one, **all** (averaged), or **each** |
-| embedder | any non-empty subset — **one panel each, never averaged** |
-| arms | any subset |
+| embedder | any **non-empty** subset — **one panel each, never averaged** |
+| arms | any **non-empty** subset |
 | seeds | averaged, or every seed its own line |
 | metric | every metric the run emitted |
 
@@ -232,6 +232,12 @@ Four rules it enforces, none of which is optional:
   budget by coarsening the *click* axis — never by dropping runs or metrics —
   and the page says which grid it landed on. If it cannot fit, per-seed mode is
   disabled with the reason on screen.
+- **Every subset control is non-empty, and says so.** An empty selection has no
+  honest rendering: the page either goes blank or quietly falls back to "all",
+  and a reader who did not notice takes a chart of everything for a chart of
+  nothing. The last remaining chip is **locked** rather than silently snapped
+  back on — both stop the same thing, but only one of them tells the reader why
+  the click did nothing, and a control that ignores a click reads as broken.
 
 `selftest_viewer.py` is its planted-answer test: it checks the codec round-trip,
 the weighted pooling against a hand-computed answer, the click-0 anchor, and the

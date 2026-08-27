@@ -311,8 +311,8 @@ their own without a re-run.
 |---|---|
 | dataset | one, all (averaged), or each (its own line or panel) |
 | category | one, all (averaged), or each |
-| embedder | any non-empty subset — **one panel each, never averaged** |
-| arms | any subset |
+| embedder | any **non-empty** subset — **one panel each, never averaged** |
+| arms | any **non-empty** subset |
 | seeds | averaged, or every seed its own line |
 | metric | cost, precision, recall, F1, FPR, FNR, average precision, AUROC |
 
@@ -321,6 +321,12 @@ varying one among arm → category → dataset that has at most 8 values — and
 other varying dimension becomes a panel. The legend states which, in words. A
 dimension with more values than the palette's 8 validated slots folds into small
 multiples rather than getting invented hues.
+
+Both chip controls are non-empty by construction — the last remaining chip is
+locked, with a tooltip, rather than snapping silently back — because an empty
+selection has no honest rendering: the page would either go blank or fall back
+to "all", and a reader who missed that would take a chart of everything for a
+chart of nothing.
 
 The per-seed payload is packed to a byte budget by coarsening the *click* axis,
 never by dropping runs or metrics, and the page says which grid it got. Build it

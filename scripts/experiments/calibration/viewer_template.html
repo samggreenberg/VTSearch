@@ -88,7 +88,12 @@
   .chip input { position: absolute; opacity: 0; width: 0; height: 0; }
   .chip .sw { width: 11px; height: 11px; border-radius: 3px; background: var(--axis); flex: none; }
   .chip[data-on="1"] { color: var(--ink); border-color: currentColor; font-weight: 500; }
-  .chip[data-off-disabled="1"] { opacity: .45; cursor: not-allowed; }
+  /* The last selection in a group cannot be turned off; say so rather than
+     ignoring the click. */
+  .chip[data-locked="1"] { cursor: not-allowed; }
+  .chip[data-locked="1"]::after {
+    content: "\00a0\1F512"; font-size: 9px; opacity: .55; margin-left: -2px;
+  }
   .chip:focus-within { outline: 2px solid var(--s1); outline-offset: 2px; }
   .radios { display: flex; gap: 4px; }
   .radios label {
@@ -168,7 +173,7 @@
       <select id="metric"></select>
     </div>
     <div class="ctl" id="embWrap">
-      <label class="h">Embedder <span style="text-transform:none;letter-spacing:0">— one panel each, never averaged</span></label>
+      <label class="h">Embedder <span style="text-transform:none;letter-spacing:0">— one or more; one panel each, never averaged</span></label>
       <div class="chips" id="emb"></div>
     </div>
     <div class="ctl">
@@ -179,7 +184,7 @@
       </div>
     </div>
     <div class="ctl" style="flex:1 1 100%">
-      <label class="h">Arms</label>
+      <label class="h">Arms <span style="text-transform:none;letter-spacing:0">— one or more</span></label>
       <div class="chips" id="arms"></div>
     </div>
   </div>
@@ -322,8 +327,8 @@
   // Embedders: a non-empty subset, one panel each.  Hidden entirely when the
   // study ran a single embedder - a control with one option is furniture.
   if (P.embedders.length < 2) $("embWrap").style.display = "none";
-  chips($("emb"), P.embedders.map((e) => ({ id: e, label: e || "(unnamed)" })), state.embedders, null, render);
-  chips($("arms"), P.arms.map((a) => ({ id: a, label: a })), state.arms, null, render);
+  chips($("emb"), P.embedders.map((e) => ({ id: e, label: e || "(unnamed)" })), state.embedders, render);
+  chips($("arms"), P.arms.map((a) => ({ id: a, label: a })), state.arms, render);
 
   $("seedMode").querySelectorAll("input").forEach((inp) => {
     inp.onchange = () => {
@@ -340,7 +345,15 @@
     each.closest("label").style.opacity = ".45";
   }
 
-  function chips(host, items, set, cap, onChange) {
+  // Every chip group is a NON-EMPTY subset - arms exactly as much as embedders.
+  // An empty one has no honest rendering: the page would either go blank or
+  // quietly fall back to "all", and a reader who did not notice would take a
+  // chart of everything for a chart of nothing.
+  //
+  // The last chip still on is therefore LOCKED rather than silently snapped
+  // back. Both stop the same thing; only one of them tells the reader why the
+  // click did nothing, and a control that ignores a click reads as broken.
+  function chips(host, items, set, onChange) {
     host.innerHTML = "";
     items.forEach((it) => {
       const lab = document.createElement("label");
@@ -349,20 +362,26 @@
       const box = lab.querySelector("input");
       box.checked = set.has(it.id);
       box.onchange = () => {
-        if (box.checked) set.add(it.id); else set.delete(it.id);
-        if (set.size === 0) { set.add(it.id); box.checked = true; }   // never empty
+        if (box.checked) set.add(it.id);
+        else if (set.size > 1) set.delete(it.id);
+        else { box.checked = true; return; }   // the lock, as a failsafe
+        host._sync();
         onChange();
       };
       host.appendChild(lab);
       lab._box = box; lab._id = it.id;
     });
     host._sync = () => {
+      const last = set.size === 1;
       [...host.children].forEach((lab) => {
         const on = set.has(lab._id);
         lab.dataset.on = on ? "1" : "0";
         const col = on ? (host._colorOf ? host._colorOf(lab._id) : "") : "";
         lab.querySelector(".sw").style.background = col || "var(--axis)";
         lab.querySelector(".sw").style.visibility = host._colorOf ? "visible" : "hidden";
+        const locked = on && last;
+        lab.dataset.locked = locked ? "1" : "0";
+        lab.title = locked ? "At least one must stay selected" : "";
       });
     };
     host._sync();
@@ -480,7 +499,10 @@
     const spec = P.metrics[mi];
 
     // Chip swatches only carry colour when that dimension IS the hue.
-    $("arms")._colorOf = pl.hueDim === "arm" ? (v) => hueOf("arm", v) : null;
+    // The legend's fallback branch colours by arm too, so the chips must carry
+    // swatches there as well - a legend reading "Colour = arm" beside swatchless
+    // chips is two answers to one question.
+    $("arms")._colorOf = pl.hueDim === "arm" || pl.hueDim === null ? (v) => hueOf("arm", v) : null;
     $("arms")._sync();
     $("emb")._sync();
 
