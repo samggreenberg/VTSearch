@@ -1,7 +1,5 @@
 # Same-class scale bands for VG, and the label corrections they need
 
-Refs [#3156](https://github.com/samggreenberg/VTSearch/issues/3156).
-
 ## Why the current `vg_box_*` sets can't answer the scale question
 
 `scan_vg_boxes.py` measures each VG category's **median** voted-box area, and
