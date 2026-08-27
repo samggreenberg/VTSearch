@@ -22,6 +22,7 @@ WARN_ONLY=0
 REPO="${VTS_REPO:-}"
 REGION_ARM=""
 MIN_POSITIVES=""
+REQUIRE_TEXT_SEED=""
 MODE_CONTRAST=""
 REUSE_PREPARE=""
 JOB_NAME=""
@@ -37,6 +38,7 @@ while [[ $# -gt 0 ]]; do
     --need-gb) NEED_GB="$2"; shift 2 ;;
     --require-region-voting) REGION_ARM="$2"; shift 2 ;;
     --require-min-positives) MIN_POSITIVES="$2"; shift 2 ;;
+    --require-text-seed) REQUIRE_TEXT_SEED=1; shift ;;
     --contrasts-voting-modes) MODE_CONTRAST=1; shift ;;
     --reuse-prepare) REUSE_PREPARE="$2"; shift 2 ;;
     --job-name) JOB_NAME="$2"; shift 2 ;;
@@ -51,6 +53,7 @@ done
 [[ -n "$EXP" ]] || {
   echo "usage: preflight.sh --exp DIR [--arms a,b,c] [--need-gb N]" >&2
   echo "                    [--require-region-voting DATASET:EMBEDDER]" >&2
+  echo "                    [--require-text-seed]      # every cell must seed from a TYPED QUERY" >&2
   echo "                    [--reuse-prepare RESULTS_DIR]" >&2
   echo "                    [--job-name NAME] [--mem 64G] [--conc N] [--patch]" >&2
   echo "                    [--diverges knob1,knob2]   # knobs this study MEANS to pin off-production" >&2
@@ -62,6 +65,7 @@ say_fail() {
   if [[ "$WARN_ONLY" == "1" ]]; then echo "  WARN  $*"; else echo "  FAIL  $*"; FAILED=1; fi
 }
 say_ok() { echo "  ok    $*"; }
+say_note() { echo "  note  $*"; }
 
 # Memory strings ("14G", "900M") to MB.  Defined up here beside the other
 # helpers because bash resolves a function only once execution reaches its
@@ -137,18 +141,43 @@ else
   fi
 fi
 
-# --- 3. Zero-byte cells from a previous incident ----------------------------
+# --- 3. Zero-byte and header-only cells from a previous incident ------------
 # A cell killed mid-write leaves a 0-byte CSV.  It counts as "present" to the
 # resume logic, so it is never re-run, and it crashes or silently shrinks the
 # analysis later.
+#
+# Its quieter twin is the header-only cell: a category that never collects both
+# classes writes the CSV header and nothing else.  That file is non-empty and
+# parses cleanly, so `-size 0` clears it and every "N/N cells" count calls it
+# present.  Check 13 predicts the condition from prepare_info.json *before* a
+# launch; this is the after-the-fact half, because a resumed grid inherits
+# whatever the previous attempt left behind.  Some are legitimate (a genuinely
+# thin category has no trainable step - the #3156 overview ended with 23 such
+# cells of 6480), so this REPORTS a count rather than blocking on it.
 ZROOTS=()
 for root in results-ab results; do [[ -d "$EXP/$root" ]] && ZROOTS+=("$EXP/$root"); done
 if [[ "${#ZROOTS[@]}" -gt 0 ]]; then
-  z=$(find "${ZROOTS[@]}" -name 'task_*.csv' ! -name '*sweep*' -size 0 2>/dev/null | wc -l)
+  z=$(find "${ZROOTS[@]}" -name 'task_*.csv' ! -name '*__*' -size 0 2>/dev/null | wc -l)
   if [[ "$z" -gt 0 ]]; then
     say_fail "$z zero-byte cell files present - delete them or they will never be re-run"
   else
     say_ok "no zero-byte cell files"
+  fi
+  # `! -name '*__*'` excludes every side frame at once (__sweep, __cutdiag,
+  # __cutincl - see _cells_io.SIDE_FRAME_SUFFIXES).  Naming them one at a time
+  # is how this check drifted: it still said `! -name '*sweep*'` two side frames
+  # later, and each of those is a long-format table that is *legitimately*
+  # header-only, so on #3156 the honest answer of 23 came back as 12983.
+  #
+  # `-size -2k -size +0` narrows to plausible candidates before the per-file
+  # `wc -l`, so the fork runs over a handful and not the whole grid: a cell CSV
+  # holding even one run is far larger than its ~700-byte header.
+  h=$(find "${ZROOTS[@]}" -name 'task_*.csv' ! -name '*__*' -size -2k -size +0 \
+        -exec sh -c '[ "$(wc -l < "$1")" -le 1 ]' _ {} \; -print 2>/dev/null | wc -l)
+  if [[ "$h" -gt 0 ]]; then
+    say_note "$h header-only cell file(s) - present, parse clean, carry no data row (see check 13)"
+  else
+    say_ok "no header-only cell files"
   fi
 fi
 
@@ -189,6 +218,27 @@ else
     fi
     if [[ -n "$(git -C "$REPO" status --porcelain --untracked-files=no)" ]]; then
       say_fail "worktree has uncommitted tracked changes - the run would be unreproducible"
+    fi
+    # How far behind the integration branch?  Check 12 compares the study's pins
+    # against `PRODUCTION_*`, but it reads those constants **out of this same
+    # worktree** - so a checkout that predates a production change has a stale
+    # pin AND a stale constant, they agree, and check 12 says ok.  That is how
+    # #3156's 6480-cell overview trained the retired `linear` head from a base
+    # 321 commits behind dev: nothing was pinned wrong, the baseline had simply
+    # moved.  Distance from origin/dev is the only signal that catches it, and
+    # it is cheap.
+    BASE_BRANCH="${PREFLIGHT_BASE_BRANCH:-dev}"
+    if git -C "$REPO" rev-parse --verify -q "origin/$BASE_BRANCH" >/dev/null 2>&1; then
+      behind=$(git -C "$REPO" rev-list --count "HEAD..origin/$BASE_BRANCH" 2>/dev/null || echo 0)
+      if [[ "$behind" -ge "${PREFLIGHT_MAX_BEHIND:-100}" ]]; then
+        say_fail "worktree is $behind commits behind origin/$BASE_BRANCH"
+        echo "        -> every PRODUCTION_* constant check 12 reads is that old too, so it"
+        echo "           cannot see a baseline that moved. Rebase, or set PREFLIGHT_MAX_BEHIND."
+      elif [[ "$behind" -gt 0 ]]; then
+        say_note "worktree is $behind commits behind origin/$BASE_BRANCH (under the ${PREFLIGHT_MAX_BEHIND:-100} gate)"
+      else
+        say_ok "worktree is level with origin/$BASE_BRANCH"
+      fi
     fi
   fi
 fi
@@ -691,6 +741,86 @@ PY
         echo "           header-only CSV, which every 'N/N cells' count reports as present"
         ;;
       *) say_fail "could not check category depth: $THIN" ;;
+    esac
+  fi
+fi
+
+# --- 14. Every cell seeds from a TYPED QUERY, not from known-goods ------------
+# The autopilot has two documented starts, and which one a cell takes is decided
+# silently by whether a query text happens to exist for its (dataset, category)
+# and whether its embedder has a text tower.  With a query the seed sort is
+# cosine to the typed text; without one the app falls back to three random
+# known-good examples.  Both are real user flows, so neither errors and every
+# downstream column is populated either way - the same shape as
+# `lessons/2026-08-26-the-harness-seeded-from-a-crop.md`, where a parameter was
+# fed something other than what its name says it holds.
+#
+# That is merely untidy for most studies and fatal for one whose arms are
+# POSITIONS ON THE SEED SORT (#3267): a cut at the 2nd rank percentile of a text
+# sort and the same cut on a known-good sort are cuts on different objects, so a
+# grid split across the two is not one experiment.  The lesson above closed this
+# for `vg_scale` and left it open for `coco_val` and `vg_box_*` in as many words
+# ("Still only advice ... config-only to fix"). This is the control.
+#
+# Reads `prepare_info.json` for the categories actually selected, so it sees the
+# grid that will run rather than the one the launcher asked for.
+if [[ -n "$REQUIRE_TEXT_SEED" ]]; then
+  INFO="${CALIB_RESULTS:-$EXP/results}/prepare_info.json"
+  if [[ ! -f "$INFO" ]]; then
+    say_fail "--require-text-seed: no prepare_info.json at $INFO (run prepare first)"
+  elif [[ "$PY_USABLE" == "0" ]]; then
+    say_fail "seed mode NOT checked: python cannot import the tree (see above)"
+  else
+    SEEDCHK=$(cd "$REPO/scripts/experiments/calibration" && python - "$INFO" <<'PY' 2>&1
+import json
+import sys
+
+sys.path.insert(0, ".")
+import experiment_config as cfg  # noqa: E402
+
+from vtscore.media import get_embedder  # noqa: E402
+
+info = json.load(open(sys.argv[1]))
+bad, seen, texts = [], 0, 0
+no_tower = set()
+for ds, embs in info.get("datasets", {}).items():
+    for emb, d in embs.items():
+        # The other half of the seed mode: an embedder with no text tower can
+        # never produce a text sort however good the query is (DINOv3).
+        try:
+            has_tower = get_embedder(emb).embed_text("probe") is not None
+        except Exception as exc:  # noqa: BLE001
+            bad.append(f"{ds}x{emb}: embedder failed to load ({type(exc).__name__})")
+            continue
+        if not has_tower:
+            no_tower.add(emb)
+        for cat in d.get("selected_categories") or []:
+            seen += 1
+            text = cfg.seed_query_text(ds, cat)
+            if not text:
+                bad.append(f"{ds}x{emb}:{cat}=no query")
+            elif not has_tower:
+                bad.append(f"{ds}x{emb}:{cat}=no text tower on {emb}")
+            else:
+                texts += 1
+print(("FAILS " + "; ".join(sorted(bad)[:12])) if bad else f"HOLDS {texts}/{seen} selected cells seed from a typed query")
+PY
+    )
+    # Keep the LAST line only.  Loading a SigLIP text tower prints transformers'
+    # bos/eos token-id warnings to stderr, and 2>&1 folds them into the verdict,
+    # where they match no `case` branch - so a check that HELD reported "could
+    # not check".  A gate whose own plumbing can turn a pass into a fail teaches
+    # people to pass --warn-only, which is worse than not having the gate.
+    SEEDCHK=$(printf '%s\n' "$SEEDCHK" | tail -1)
+    case "$SEEDCHK" in
+      HOLDS*) say_ok "seed mode: ${SEEDCHK#HOLDS }" ;;
+      FAILS*)
+        say_fail "cells that would NOT seed from a text sort: ${SEEDCHK#FAILS }"
+        echo "        -> these take the known-good start instead, so their seed sort is a"
+        echo "           different ranking; add the query to EXPERIMENT_QUERIES, or set"
+        echo "           CALIB_REQUIRE_SEED_QUERY=1 so prepare never selects them"
+        ;;
+      *) say_fail "could not check seed mode: $SEEDCHK" ;;
     esac
   fi
 fi

@@ -47,6 +47,17 @@ _ALWAYS_REQUIRED: frozenset[str] = frozenset(
 )
 
 
+# Packages that any slim file shipping an *image* embedder requires. The
+# image-processor backend is now requested by name (`torchvision`) rather than
+# inherited from a transformers default (#3173), so torchvision is part of the
+# preprocessing path itself and not an optional accelerator. Nothing carries it
+# transitively — `torch` does not pull it in and neither does `transformers` —
+# which is how issue #3264 (LabBench image built without torchvision) happened.
+# Keyed off Pillow, the dep every image-capable variant declares.
+_IMAGE_MARKER = "pillow"
+_IMAGE_REQUIRED: frozenset[str] = frozenset({"torchvision"})
+
+
 def _normalise(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
 
@@ -80,4 +91,17 @@ def test_slim_requirements_include_core_deps(req_file: Path) -> None:
         f"{req_file.name} is missing deps every deployment needs: {sorted(missing)}\n"
         "Add them to that file (core framework / numeric stack entries near the top; "
         "umap-learn under the '── VTSBrowse projection ──' heading)."
+    )
+
+
+@pytest.mark.parametrize("req_file", _SLIM_FILES, ids=[p.name for p in _SLIM_FILES])
+def test_slim_requirements_include_image_deps(req_file: Path) -> None:
+    declared = _parse_packages(req_file)
+    if _IMAGE_MARKER not in declared:
+        pytest.skip(f"{req_file.name} ships no image media type")
+    missing = {_normalise(p) for p in _IMAGE_REQUIRED} - declared
+    assert not missing, (
+        f"{req_file.name} ships image embedders but is missing: {sorted(missing)}\n"
+        "Add them to that file under the PyTorch heading so they resolve against "
+        "the same wheel index as torch."
     )

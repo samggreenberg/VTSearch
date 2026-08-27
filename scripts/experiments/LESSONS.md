@@ -72,7 +72,12 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-08-26 | [a completed grid reported "0 / 6480" cells](lessons/2026-08-26-a-completed-grid-reported-zero-cells.md) | #3156 |
+| 2026-08-26 | [a counter that never reached the rows, and a check that was a no-op](lessons/2026-08-26-a-counter-that-never-reached-the-rows.md) | #3267 |
+| 2026-08-26 | [a fixture dataset has no query, so it seeds from somewhere else](lessons/2026-08-26-a-fixture-dataset-has-no-query.md) | #3267 |
 | 2026-08-26 | [a stale base silently ran a retired detector head](lessons/2026-08-26-a-stale-base-changed-the-default-head.md) | #3156 |
+| 2026-08-26 | [both sides of the knob check were stale](lessons/2026-08-26-both-sides-of-the-knob-check-were-stale.md) | #3156 |
+| 2026-08-26 | [the harness seeded from a crop where the app types a query](lessons/2026-08-26-the-harness-seeded-from-a-crop.md) | #3156 |
 | 2026-08-25 | [a "voting mode" headline that was equally an embedder headline](lessons/2026-08-25-a-mode-contrast-that-was-an-embedder-contrast.md) | #3115 |
 | 2026-08-25 | [preflight failed for a reason that had nothing to do with the run](lessons/2026-08-25-preflight-without-a-venv.md) | #3115 |
 | 2026-08-25 | [timing and memory measured a run that wasn't the experiment](lessons/2026-08-25-sized-from-the-wrong-configuration.md) | #3156 |

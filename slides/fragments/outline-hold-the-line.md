@@ -1,27 +1,29 @@
 <!-- _class: outline -->
 
-## Outline & Outliars
+## Outline & OutLyin'
 
 1. VTSearch
-2. Where the Line Goes
-3. Where You Want It Instead
-4. A Smarter Cut
-5. What Is Still Open
+2. Calibration
+3. Preference
+4. Regions
+5. The End
 
-<!-- One fragment, used five times: the manifest marks the section we are
-     entering with `+at1` … `+at5`, so this slide comes back between sections
-     with a different line bold each time. Say the whole list the first time
-     and only the bold line afterwards. -->
+<!-- **a** — Five stops, in order. Promise the room the shape: the first third
+     builds the tool, the middle two sections are the same machinery walked
+     twice, and the last one closes a question for good. -->
 
-<!-- The names are bare on purpose. Explaining each one is the presenter's job,
-     and a list the room can read at a glance is worth more than a list they
-     have to study. -->
+<!-- **b** — Section 1 is the tool, from nothing — nobody needs to have seen it
+     before. Three slides, and the last of them is where the whole talk's
+     object turns up: one line through a ranking, doing two jobs. -->
 
-<!-- Section 1 is the tool. Nobody needs prior exposure — that is what those
-     three slides are for, and the last of them is where the whole talk's
-     object appears: one line through a ranking, doing two jobs. -->
+<!-- **c** — Section 2 puts the line where the *data* says. Four ideas in
+     order, each one repairing what the last one starved on. -->
 
-<!-- Sections 2 and 3 are the same machinery walked twice. Two asks where the
-     line goes; three asks what happens when the user wants it somewhere else.
-     Section 4 is the epilogue that closed the question, and five is what is
-     left. -->
+<!-- **d** — Section 3 puts it where the *user* says instead. Same machinery,
+     second axis: one slider, and what it took to make it mean anything. -->
+
+<!-- **e** — Section 4 introduces region voting, then runs the epilogue: is
+     there a smarter cut rule than the midpoint? One small win, then a
+     principled idea that lost. -->
+
+<!-- **f** — The End. Take questions. -->

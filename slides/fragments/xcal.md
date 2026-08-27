@@ -16,34 +16,26 @@
 
 <!-- build: figs/calib-xcal-flow.build6.png -->
 
-<!-- The pre-history of the line: the textbook answer everything else is measured
-     against. Walk the mechanism off the figure, top to bottom, and land on the
-     property that defines it — this estimator is *consistent*. With enough
-     labels it converges on the right answer. -->
+<!-- The textbook answer, and the thing everything else is measured against.
+     Land on the property that defines it: with enough labels this estimator
+     converges on the right answer. -->
 
-<!-- **a** — D₀ is every vote so far, and M₀ is the model trained on all of it.
-     M₀ is the model you keep; the problem is that its scores on its own
-     training votes are optimistically shifted, so you cannot cut on them. -->
+<!-- **a** — D₀ is every vote so far and M₀ is the model trained on all of it.
+     M₀ is the model you keep; its scores on its own training votes are
+     optimistically shifted, so you cannot cut on them. -->
 
-<!-- **b** — So split the votes in half. -->
-
-<!-- **c** — And train a model on each half. -->
+<!-- **b** — So split the votes in half. **c** — And train a model on each half. -->
 
 <!-- **d** — Now cross them: each fold model scores the half it never trained
-     on. Honest scores, at the price of training extra models on half the
-     data. That X in the middle of the figure is the "cross" in
-     cross-calibration. -->
+     on. Honest scores, at the price of two extra models on half the data. -->
 
-<!-- **e** — On each half the Bad scores mostly pile up low and the Good scores
-     high, and a cut goes between them. **f** — Same on the other half — and
-     note the Bad that lands above θ₂. Each cut is a trade-off, not a free
-     gap. -->
+<!-- **e** — On each half the Bad pile up low and the Good high, and a cut goes
+     between. **f** — Same on the other half, and note the Bad above θ₂: each
+     cut is a trade-off, not a free gap. -->
 
-<!-- **g** — Average the two cuts and hand θ₀ to M₀. Green is Good media, rust
-     is Bad, matching the checks and crosses on the score lines. -->
+<!-- **g** — Average the two cuts and hand θ₀ to M₀. Green is Good media, red
+     is Bad. -->
 
-<!-- The shipped code has since refined this — the halves are pooled into one
-     score set rather than cut separately, the cut is a quantile the Inclusion
-     knob can bias, the splits are redrawn rather than fixed. Later polish, not
-     the idea; do not front-load it. The next slide is what happens *before*
-     "enough labels". -->
+<!-- The shipped code has refined this since — pooled scores, a quantile the
+     Inclusion knob can bias, redrawn splits. Polish, not the idea. The next
+     slide is what happens *before* "enough labels". -->

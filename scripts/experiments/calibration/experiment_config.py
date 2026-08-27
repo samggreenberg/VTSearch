@@ -34,6 +34,176 @@ import zlib
 # --- Datasets and their embedders (arms differ per dataset) ---
 DATASETS = os.environ.get("CALIB_DATASETS", "visual_genome_m,caltech101_m").split(",")
 
+#: Text a user would type, for datasets that exist only inside this experiment.
+#:
+#: ``vtscore.eval.config.EVAL_DATASETS`` is the app's demo-dataset query table and
+#: is asserted to hold only real demo datasets, so purpose-built fixtures like
+#: ``vg_scale`` cannot live there.  They still need a query: Autopilot's Good
+#: phase seeds from a **text sort**, and seeding it any other way measures a flow
+#: no user has (see lessons/2026-08-26-the-harness-seeded-from-a-crop.md).
+#:
+#: Keyed ``dataset -> {category: text}``.  For banded datasets the band is a
+#: property of the *cell*, not the query: someone hunting a distant boat and
+#: someone hunting a close one both type "boat", so one text serves all three
+#: bands and only the labels differ.
+_VG_SCALE_TEXTS = {
+    "backpack": "a backpack",
+    "bicycle": "a bicycle",
+    "bird": "a bird",
+    "boat": "a boat on the water",
+    "book": "a book",
+    "bus": "a bus",
+    "clock": "a clock",
+    "dog": "a dog",
+    "kite": "a kite in the sky",
+    "knife": "a knife",
+    "stop sign": "a stop sign",
+    "umbrella": "an umbrella",
+}
+
+#: COCO-2017-val's 80 categories as **typed queries**.
+#:
+#: ``coco_val`` is assembled by ``build_coco_pickle.py`` and so is an experiment
+#: fixture, not a demo dataset - ``vtscore.eval.config.EVAL_DATASETS`` is
+#: asserted to hold only real demo datasets, so its query table has to live
+#: here.  Without one, ``_seed_query_text`` returns "" and the autopilot takes
+#: its *other* documented start (three random known-goods), which is the gap
+#: ``lessons/2026-08-26-the-harness-seeded-from-a-crop.md`` closed for
+#: ``vg_scale`` and explicitly left open here.  #3267 is a study **about the
+#: text sort**, so the gap is load-bearing rather than cosmetic.
+#:
+#: The text is what a user would plausibly type, not the raw label: COCO's
+#: category strings are terse ("tv", "remote", "skis") and several are ambiguous
+#: out of context ("mouse", "orange", "remote"), where a bare noun would rank a
+#: different concept and the study would measure the query rather than the
+#: opening.
+_COCO_TEXTS = {
+    "person": "a person",
+    "bicycle": "a bicycle",
+    "car": "a car on the street",
+    "motorcycle": "a motorcycle",
+    "airplane": "an airplane",
+    "bus": "a bus",
+    "train": "a train",
+    "truck": "a truck",
+    "boat": "a boat on the water",
+    "traffic light": "a traffic light",
+    "fire hydrant": "a fire hydrant",
+    "stop sign": "a stop sign",
+    "parking meter": "a parking meter",
+    "bench": "a bench",
+    "bird": "a bird",
+    "cat": "a cat",
+    "dog": "a dog",
+    "horse": "a horse",
+    "sheep": "a sheep",
+    "cow": "a cow",
+    "elephant": "an elephant",
+    "bear": "a bear",
+    "zebra": "a zebra",
+    "giraffe": "a giraffe",
+    "backpack": "a backpack",
+    "umbrella": "an umbrella",
+    "handbag": "a handbag",
+    "tie": "a person wearing a necktie",
+    "suitcase": "a suitcase",
+    "frisbee": "a frisbee",
+    "skis": "a pair of skis",
+    "snowboard": "a snowboard",
+    "sports ball": "a sports ball",
+    "kite": "a kite in the sky",
+    "baseball bat": "a baseball bat",
+    "baseball glove": "a baseball glove",
+    "skateboard": "a skateboard",
+    "surfboard": "a surfboard",
+    "tennis racket": "a tennis racket",
+    "bottle": "a bottle",
+    "wine glass": "a wine glass",
+    "cup": "a cup",
+    "fork": "a fork",
+    "knife": "a knife",
+    "spoon": "a spoon",
+    "bowl": "a bowl",
+    "banana": "a banana",
+    "apple": "an apple",
+    "sandwich": "a sandwich",
+    "orange": "an orange fruit",
+    "broccoli": "broccoli",
+    "carrot": "a carrot",
+    "hot dog": "a hot dog",
+    "pizza": "a pizza",
+    "donut": "a donut",
+    "cake": "a cake",
+    "chair": "a chair",
+    "couch": "a couch",
+    "potted plant": "a potted plant",
+    "bed": "a bed",
+    "dining table": "a dining table",
+    "toilet": "a toilet",
+    "tv": "a television screen",
+    "laptop": "a laptop computer",
+    "mouse": "a computer mouse",
+    "remote": "a tv remote control",
+    "keyboard": "a computer keyboard",
+    "cell phone": "a cell phone",
+    "microwave": "a microwave oven",
+    "oven": "an oven",
+    "toaster": "a toaster",
+    "sink": "a sink",
+    "refrigerator": "a refrigerator",
+    "book": "a book",
+    "clock": "a clock",
+    "vase": "a vase",
+    "scissors": "a pair of scissors",
+    "teddy bear": "a teddy bear",
+    "hair drier": "a hair dryer",
+    "toothbrush": "a toothbrush",
+}
+
+
+EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
+    "vg_scale": {
+        f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
+    },
+    "coco_val": _COCO_TEXTS,
+    # The box-size bands are built from the FULL Visual Genome vocabulary, so
+    # their categories are VG's, not COCO's.  A band is a property of the cell -
+    # someone hunting a small bus and someone hunting a large one both type
+    # "a bus" - so the same text serves all three.
+    "vg_box_small": dict(_VG_SCALE_TEXTS),
+    "vg_box_medium": dict(_VG_SCALE_TEXTS),
+    "vg_box_large": dict(_VG_SCALE_TEXTS),
+}
+
+
+def seed_query_text(dataset: str, category: str) -> str:
+    """The text a user would type to find *category* in *dataset*, or "".
+
+    One implementation, read by three callers that must agree: ``run_cells.py``
+    (which seeds the run), ``prepare_data.py`` (which may filter selection to
+    categories that have one), and ``preflight.sh`` (which refuses to launch a
+    text-sort study whose cells would silently take the known-good start).  Two
+    copies of this lookup is how a preflight check comes to pass while the run
+    does something else.
+
+    :data:`EXPERIMENT_QUERIES` wins over the app's demo-dataset table so a
+    fixture can override, but neither is required.
+    """
+    local = EXPERIMENT_QUERIES.get(dataset) or {}
+    if category in local:
+        return local[category]
+
+    from vtscore.eval.config import EVAL_DATASETS  # noqa: PLC0415
+
+    info = EVAL_DATASETS.get(dataset)
+    if not info:
+        return ""
+    for query in info["queries"]:
+        if query.target_category == category:
+            return query.text
+    return ""
+
+
 DATASET_EMBEDDERS: dict[str, list[str]] = {
     "visual_genome_m": os.environ.get("CALIB_VG_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
     "caltech101_m": os.environ.get("CALIB_CALTECH_EMBEDDERS", "siglip,siglip2_l,dinov3_patch").split(","),
@@ -289,6 +459,24 @@ if ACQ_INCLUSION_OFFSET is None:
 #: ``CALIB_ACQ_INCLUSION_OFFSET=0``; the two name the same cut.
 ACQ_RANK_PERCENTILE = _opt_float("CALIB_ACQ_RANK_PERCENTILE")
 
+#: The **Autopilot opening** this arm runs (issue #3267), in the grammar of
+#: :mod:`vtscore.eval.startup_schedule` - e.g. ``"n6@k-6,n6@k-2,n6@k0"``.
+#:
+#: Unset = the app's own opening (three positives off the top of the seed sort,
+#: then four negatives at its cutoff), which is what every study before #3267
+#: ran and what the `prod` control arm must keep running.  Do **not** write the
+#: production spelling in here as a "default": a schedule string frozen in this
+#: file goes stale the moment the app's opening moves, and the control arm would
+#: then quietly stop being the control.  ``PRODUCTION_STARTUP`` exists for a run
+#: that wants to name it explicitly, and is pinned against the app.
+STARTUP_SCHEDULE = os.environ.get("CALIB_STARTUP_SCHEDULE", "").strip() or None
+
+#: Emit the per-click pick log (``task_*__picks.csv``).  On by default for a
+#: #3267 run and harmless everywhere else - one small row per vote.  It is the
+#: only frame that records the **opening**, which emits no main row because no
+#: detector exists yet, so an arm's mining behaviour is invisible without it.
+EMIT_PICKS = os.environ.get("CALIB_EMIT_PICKS", "1") not in ("", "0")
+
 #: Minimum positives a category must have **in the simulation half** to be kept.
 #: A long-horizon run (#2841 follow-up: does pure x-cal ever overtake the blend?)
 #: is bounded by positives, not pool size: once autopilot has exhausted them,
@@ -426,12 +614,44 @@ def select_categories_by_scale(
 #: ``"scale"`` forces banding; unset infers as before.
 CATEGORY_MODE = os.environ.get("CALIB_CATEGORY_MODE", "").strip().lower()
 
+#: Restrict category selection to categories that have a typed query (#3267).
+#:
+#: The autopilot's opening is a walk down the **seed sort**, and where that sort
+#: comes from is a property of the cell: with a query the app ranks by cosine to
+#: the typed text, without one it falls back to three random known-goods.  A
+#: study that sweeps the opening on a text sort cannot have half its cells on
+#: the other start - the arms' cuts are positions in a ranking, and the two
+#: rankings are not the same object.
+#:
+#: This filter runs BEFORE selection rather than after, so a dropped category is
+#: replaced by the next eligible one instead of shrinking the grid.  0 (the
+#: default) is the behaviour of every run before #3267.
+REQUIRE_SEED_QUERY = os.environ.get("CALIB_REQUIRE_SEED_QUERY", "0") == "1"
 
-def select_categories(medias: dict, category_counts: dict[str, int]) -> tuple[list[str], dict]:
+
+def select_categories(
+    medias: dict, category_counts: dict[str, int], dataset: str | None = None
+) -> tuple[list[str], dict]:
     """Scale-stratified when boxed, else prevalence-spread.
 
     ``CALIB_CATEGORY_MODE`` overrides the inference in either direction.
+    ``CALIB_REQUIRE_SEED_QUERY=1`` additionally drops categories with no typed
+    query *before* selecting, so the surviving grid is entirely text-seeded.
     """
+    dropped_no_query: list[str] = []
+    if REQUIRE_SEED_QUERY and dataset is not None:
+        eligible = {c: n for c, n in category_counts.items() if seed_query_text(dataset, c)}
+        dropped_no_query = sorted(set(category_counts) - set(eligible))
+        category_counts = eligible
+
+    selected, report = _select_categories_inner(medias, category_counts)
+    if REQUIRE_SEED_QUERY and dataset is not None:
+        report["require_seed_query"] = True
+        report["dropped_no_seed_query"] = dropped_no_query
+    return selected, report
+
+
+def _select_categories_inner(medias: dict, category_counts: dict[str, int]) -> tuple[list[str], dict]:
     if CATEGORY_MODE == "all":
         # A designated dataset carries its design in its category list: the
         # cells were built to be run, prevalence is identical across them by
@@ -456,19 +676,48 @@ def select_categories(medias: dict, category_counts: dict[str, int]) -> tuple[li
     }
 
 
+#: Which index varies fastest in :func:`array_cells`.
+#:
+#: ``category`` (the default, and every run before #3267) walks a category's
+#: whole seed block before moving on.  ``seed`` walks every environment at seed
+#: 0, then every environment at seed 1, and so on.
+#:
+#: The difference only shows up when an array does **not** finish, and then it
+#: decides what the run loses.  A SLURM array dispatches roughly in index order,
+#: so under ``category`` a truncated run is missing its last *categories
+#: entirely* - whole environments, gone, and the prevalence axis the analysis
+#: bands on is short at one end.  Under ``seed`` it is missing its last *seeds*,
+#: uniformly across every environment: the design is intact and only the
+#: standard errors are wider, which is a thing a report can simply state.
+#:
+#: That makes it the right ordering for any run against a wall-clock deadline -
+#: it converts "ran out of time" from a design failure into a power one.
+CELL_ORDER = os.environ.get("CALIB_CELL_ORDER", "category").strip().lower()
+
+
 def array_cells(categories_by_dataset: dict[str, dict[str, list[str]]]) -> list[dict]:
     """Enumerate ``(dataset, embedder, category, seed)`` cells for the SLURM array.
 
     Each cell runs **all styles** for its embedder inside one task (they share
     the loaded pickle), so an embedder's arms are paired on identical data,
     splits, and exemplar.  Deterministic order -> a task index maps to a stable
-    cell across submissions.
+    cell across submissions.  :data:`CELL_ORDER` chooses which index varies
+    fastest; see the note there for why that matters to a truncated run.
     """
-    cells: list[dict] = []
+    envs: list[tuple[str, str, str]] = []
     for ds in DATASETS:
         per_emb = categories_by_dataset.get(ds, {})
         for emb in embedders_for_dataset(ds):
             for cat in per_emb.get(emb, []):
-                for seed in SEEDS:
-                    cells.append({"dataset": ds, "embedder": emb, "category": cat, "seed": seed})
+                envs.append((ds, emb, cat))
+
+    cells: list[dict] = []
+    if CELL_ORDER == "seed":
+        for seed in SEEDS:
+            for ds, emb, cat in envs:
+                cells.append({"dataset": ds, "embedder": emb, "category": cat, "seed": seed})
+    else:
+        for ds, emb, cat in envs:
+            for seed in SEEDS:
+                cells.append({"dataset": ds, "embedder": emb, "category": cat, "seed": seed})
     return cells

@@ -14,52 +14,29 @@
 
 <!-- build: figs/calib-fold-anchored-flow.build5.png -->
 
-<!-- Open with the headline, because it is the whole iteration. The blend
-     averages two finished answers. This one fuses the evidence *before*
-     answering — the difference between asking two people and getting one
-     opinion out of everything they both saw. -->
+<!-- build: figs/calib-fold-anchored-flow.build6.png -->
 
-<!-- **a**, **b** — Pure recapitulation, so move fast: the corpus, the votes,
-     the model, the split, a model per half. The cross from iteration 1,
-     unchanged, because held-out votes are about to be the point. -->
+<!-- The headline is the iteration: the blend averaged two finished answers;
+     this fuses the evidence *before* answering. -->
+
+<!-- **a**, **b** — Recapitulation, so move fast: the corpus, the votes, the
+     model, the split, a model per half. -->
 
 <!-- **c** — Where the two lines meet. Each fold model scores the whole corpus,
-     and that is the panel underneath it: the same histogram iteration 2
-     fitted, one per fold, drawn as bare bars with nothing over them. Say that
-     out loud — it is the shape of the data and it is all anyone has.
-     Iteration 2 had to look at exactly this and *assume* which mound was
-     Good. -->
+     and that is the panel underneath: bare bars with nothing over them. The
+     shape of the data, and all anyone has. -->
 
-<!-- **d** — The beat of the talk. The held-out votes arrive — the same checks
-     and crosses from iteration 1, on the same baseline, the identical evidence
-     — and the humps take the Good and Bad hatching of the block they came
-     from. Nothing about the shape changed. What changed is that the components
-     are now *identified* rather than guessed, and you can see who did it. -->
+<!-- **d** — Fit it, and there is iteration 2 again: one low component, one
+     high. But every question mark asks the same thing — *which is the Good
+     one?* — and the fit cannot answer, having read no labels. -->
 
-<!-- The line the iteration turns on: the labels' job is to **identify** the
-     components, not to estimate them. Fifty thousand scores describe two mounds
-     perfectly well; what they cannot say is which mound is Good. Five votes
-     settle that. Identification is a far cheaper question than estimation,
-     which is exactly why this estimator does not starve. -->
+<!-- **e** — The beat of the talk. The held-out votes arrive, the same checks
+     and crosses as iteration 1, and the question marks give way to hatching.
+     The shape did not change; the components are now *identified*. That is the
+     line it turns on — labels identify the components, they do not estimate
+     them, and identification is the cheap question. -->
 
-<!-- Two things the figure shows if you point at them. The votes in each panel
-     are the ones that fold's model never trained on, so they carry no
-     train-set optimism. And one cross in the right-hand panel sits above its
-     own fold's cut: a fold model's ranking of votes it never saw is not
-     trivially clean, and the fit has to survive that. -->
-
-<!-- Two numbers the figure deliberately does not carry. Each vote enters the
-     fit pinned to its component and weighing κ, not one — a vote is a claim
-     about identity, not a thirty-thousandth of the shape. And the labels'
-     share of the fit is κ times the vote count over that plus the corpus size,
-     around two and a half percent at the shipped setting. That ratio is the
-     previous slide's hand-tuned ramp arriving *derived*. -->
-
-<!-- **e** — Each fold cuts at the midpoint of its own two fitted means. Same
-     rule iteration 2 used, on a fit that has now been told which mound is
-     which. -->
-
-<!-- **f** — And the last line, which you should undercut in the same breath.
-     Averaging θ₁ and θ₂ is drawn plainly here and production does not do it:
-     two fold models score the same corpus on scales that need not agree. The
-     fix is the next slide, so spend one sentence on it. -->
+<!-- **f** — Each fold cuts at the midpoint of its own two means. **g** — Undercut
+     the last line in the same breath: averaging θ₁ and θ₂ is drawn plainly and
+     production does not do it, because two fold models score on scales that
+     need not agree. -->

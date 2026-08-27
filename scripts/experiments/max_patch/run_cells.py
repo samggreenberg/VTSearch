@@ -42,22 +42,71 @@ def _categories_by_dataset(prepare_info: dict) -> dict[str, dict[str, list[str]]
     return out
 
 
-def _load_exemplar(ds: str, emb: str, cat: str, seed: int) -> tuple[int | None, np.ndarray | None]:
-    """Return ``(exemplar_media_id, crop_vector)`` for this cell, or ``(None, None)``."""
-    base = common.RESULTS / "crops" / cfg.crops_basename(ds, emb)
-    json_path = base.with_suffix(".json")
-    npz_path = base.with_suffix(".npz")
-    if not json_path.exists() or not npz_path.exists():
-        return None, None
-    candidates = json.loads(json_path.read_text()).get(cat) or []
-    if not candidates:
-        return None, None
-    exemplar_id = int(candidates[seed % len(candidates)])
-    with np.load(npz_path) as z:
-        key = f"{cat}::{exemplar_id}"
-        if key not in z:
-            return None, None
-        return exemplar_id, z[key].astype(np.float32)
+def _seed_query_text(ds: str, cat: str) -> str:
+    """The text a user would type to find *cat* in *ds*, or "" if none is known.
+
+    Two tables, because there are two kinds of dataset.  ``EXPERIMENT_QUERIES``
+    covers fixtures that exist only inside this experiment (``vg_scale``);
+    ``vtscore.eval.config.EVAL_DATASETS`` covers the real demo datasets the app
+    ships (``visual_genome_m``, ``caltech101_m``).  The experiment table wins so
+    a fixture can override, but neither is required -- an unknown dataset simply
+    has no query, and the autopilot seeds from known-goods instead.
+    """
+    try:
+        local = cfg.EXPERIMENT_QUERIES.get(ds) or {}
+    except AttributeError:
+        local = {}
+    if cat in local:
+        return local[cat]
+
+    from vtscore.eval.config import EVAL_DATASETS  # noqa: PLC0415
+
+    info = EVAL_DATASETS.get(ds)
+    if not info:
+        return ""
+    for query in info["queries"]:
+        if query.target_category == cat:
+            return query.text
+    return ""
+
+
+def _text_seed_scores(ds: str, emb: str, cat: str, medias: dict) -> "dict[int, float] | None":
+    """The app's text sort: cosine from the typed query to every media.
+
+    This is what a real user starts from -- they type "boat" and vote down the
+    ranking -- and it is what ``seed_scores`` has always been documented to hold
+    (``al_strategies``, ``EVAL.md``, ``voting_iterations`` all say "similarity to
+    the typed query").
+
+    Returns ``None`` when no query is defined for the cell, or when the embedder
+    has no text tower -- DINOv3 does not, so ``embed_text`` is the base class's
+    ``return None`` and ``embed_text_query`` yields nothing.  ``None`` is the
+    signal for the autopilot to seed from *three random known-good examples*
+    instead, the app's other real start ("3 random examples pulled from the
+    Good").  Both are things a user does; ranking by cosine to a cropped box is
+    not, which is why this no longer seeds from crops.
+    """
+    from vtscore.embedding.helpers import embed_text_query  # noqa: PLC0415
+    from vtscore.embedding.media_vectors import media_embedding  # noqa: PLC0415
+
+    text = _seed_query_text(ds, cat)
+    if not text:
+        return None
+    qvec = embed_text_query(text, "image", embedder_name=emb)
+    if qvec is None:
+        return None
+
+    def _unit(vec):
+        v = np.asarray(vec, dtype=np.float32)
+        n = float(np.linalg.norm(v))
+        return v / n if n > 1e-12 else v
+
+    ids = list(medias.keys())
+    if not ids:
+        return None
+    matrix = np.stack([_unit(media_embedding(medias[c])) for c in ids])
+    cos = matrix @ _unit(qvec)
+    return {ids[k]: float(cos[k]) for k in range(len(ids))}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -87,7 +136,6 @@ def main(argv: list[str] | None = None) -> int:
 
     import pandas as pd
 
-    from vtscore.eval.patch_styles import resolve_style
     from vtscore.eval.voting_iterations import _VOTING_COLUMNS, simulate_voting_iterations
 
     from vtscore.datasets import loader as _loader  # isort: skip
@@ -98,16 +146,14 @@ def main(argv: list[str] | None = None) -> int:
     medias: dict[int, dict] = load_medias(pkl)
     common.log(f"loaded {len(medias)} medias from {pkl}")
 
-    exemplar_id, crop_vec = _load_exemplar(ds, emb, cat, seed)
-    if crop_vec is None:
-        common.log(f"WARNING: no exemplar crop for ({ds}, {emb}, {cat}); seeding from random known-goods instead")
+    seed_scores = _text_seed_scores(ds, emb, cat, medias)
+    seed_mode = "text" if seed_scores is not None else "known_good"
+    seed_query = _seed_query_text(ds, cat) if seed_scores is not None else ""
+    common.log(f"seed: mode={seed_mode} query={seed_query!r}")
 
     all_rows: list[dict] = []
     for style in styles:
         # The exemplar startup sort, computed in this style's own geometry.
-        seed_scores = None
-        if crop_vec is not None:
-            seed_scores = resolve_style(style).exemplar_sims(medias, crop_vec)
         rows = simulate_voting_iterations(
             medias,
             target_category=cat,
@@ -126,14 +172,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         for r in rows:
             r["embedder"] = emb
-            r["exemplar_id"] = exemplar_id if exemplar_id is not None else -1
+            r["seed_mode"] = seed_mode
+            r["seed_query"] = seed_query
         all_rows.extend(rows)
         common.log(f"  style={style}: {len(rows)} rows")
 
     outdir = common.Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
     out = outdir / f"task_{idx:04d}.csv"
-    columns = [*_VOTING_COLUMNS, "embedder", "exemplar_id"]
+    columns = [*_VOTING_COLUMNS, "embedder", "seed_mode", "seed_query"]
     pd.DataFrame(all_rows, columns=pd.Index(columns)).to_csv(out, index=False)
     common.log(f"wrote {len(all_rows)} rows to {out}")
     return 0

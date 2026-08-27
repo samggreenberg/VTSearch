@@ -1,19 +1,26 @@
 #!/usr/bin/env python
-"""Assemble the DocMarks corpus: stamps and logos in scanned documents.
+"""Assemble the DocMarks corpus: eval data for stamp detection.
 
-    python build_corpus.py --probe                      # what can I reach?
-    python build_corpus.py --sources spods --limit 40   # small real build
-    python build_corpus.py --survival                   # class counts vs threshold
-    python build_corpus.py                              # the whole thing
+    python build_corpus.py --probe                       # what can I reach?
+    python build_corpus.py --sources spods               # cluster into candidates
+    python build_corpus.py --sources spods --roster r.json   # the eval corpus
+
+Two modes, and which one you are in decides what the output *means*:
+
+* **candidate mode** (no ``--roster``) proposes every class clearing the numeric
+  bars, for ``shortlist.py`` to rank.  These are proposals.
+* **roster mode** admits only the hand-picked classes named in the roster file.
+  Their instances are then adjudicated one by one (``make_audit_slate.py --task
+  membership``), and *that* is the ground truth an eval quotes.
 
 Outputs, under ``docmarks_config.OUT``:
 
     corpus.jsonl      one record per page: path, size, marks, provenance, tier
-    classes.json      the class inventory, with eligibility and audit slots
-    queries/          one query crop per admitted class
-    build_report.json counts, warnings, the survival curve, what was dropped
+    classes.json      per class: instances, distinct_from, caveats, audit state
+    queries/          one query crop per box-located class
+    build_report.json counts, survival curve, tier cutoffs, rejections, warnings
 
-The three strata (anchor / haystack / synth) live in one manifest with **nested
+The strata (anchor / haystack / synth) live in one manifest with **nested
 tiers**, so ``docmarks_s`` and ``docmarks_l`` share class ids and a result on
 one is comparable to a result on the other.
 
@@ -78,42 +85,70 @@ def admit_classes(
     *,
     min_instances: int,
     min_mark_px: int,
+    roster: Optional[Any] = None,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
-    """Split the inventory into admitted query classes and rejects-with-reasons.
+    """Split the inventory into candidate classes and rejects-with-reasons.
 
-    A class is admitted when it has enough instances *and* its typical instance
-    is big enough to be findable.  The size bar matters as much as the count
-    bar: the 2026-07-13 study measured a hard floor near 32 px below which no
-    structural pipeline recovers anything, so a class built from sub-floor marks
-    measures the floor rather than the method, and averaging it in with the rest
-    drags every aggregate toward zero for a reason that has nothing to do with
-    what is being compared.
+    Two modes, and the difference is what the corpus is *for*:
+
+    * **With a roster** — only the named classes are admitted, and the numeric
+      bars are advisory.  This is the mode an eval runs in: a small hand-picked
+      set whose every instance a person has adjudicated, which is the only kind
+      of ground truth worth quoting.  A roster class that fails a bar is still
+      admitted and the reason is recorded on it, because the human who chose it
+      knows something the threshold does not.
+    * **Without one** — everything clearing both bars is admitted, as the
+      candidate pool ``shortlist.py`` ranks for roster selection.  These are
+      proposals, not ground truth.
+
+    The bars themselves: instance count, because a class you cannot both query
+    and retrieve from is not measurable; and mark size, because the 2026-07-13
+    study found a hard floor near 32 px below which no structural pipeline
+    recovers anything, so a sub-floor class measures the floor rather than the
+    method.
     """
     admitted: dict[str, dict[str, Any]] = {}
     rejected: dict[str, str] = {}
 
     for class_id, refs in sorted(inventory.items()):
+        on_roster = roster is not None and class_id in roster
+        if roster is not None and not on_roster:
+            rejected[class_id] = "not on the roster"
+            continue
+
         marks = [pages[pi].marks[mi] for pi, mi in refs]
         kinds = {m.kind for m in marks}
+        caveats: list[str] = []
+
         if not kinds & set(QUERYABLE_KINDS):
             rejected[class_id] = f"kind {sorted(kinds)} is not queryable"
             continue
         if len(refs) < min_instances:
-            rejected[class_id] = f"{len(refs)} instance(s) < min_instances={min_instances}"
-            continue
+            note = f"{len(refs)} instance(s) < min_instances={min_instances}"
+            if not on_roster:
+                rejected[class_id] = note
+                continue
+            caveats.append(note)
 
         boxed = [m for m in marks if m.area() > 0]
         provenances = {m.provenance for m in marks}
+        # A band class is located by a coarse top-of-page strip rather than a
+        # real mark box, so its pixel size describes the strip and says nothing
+        # about the mark.  Applying the size floor to it would compare the
+        # wrong number against the wrong threshold.
+        banded = provenances == {"clustered_band"}
         median_px: Optional[int] = None
-        if boxed:
-            sides = sorted(m.longest_side() for m in boxed)
-            median_px = sides[len(sides) // 2]
-            if median_px < min_mark_px:
-                rejected[class_id] = f"median mark {median_px}px < min_mark_px={min_mark_px}"
-                continue
-        elif provenances != {"weak"}:
-            rejected[class_id] = "no boxed instances and not a weak-label class"
+        if not boxed:
+            rejected[class_id] = "no located instances"
             continue
+        sides = sorted(m.longest_side() for m in boxed)
+        median_px = sides[len(sides) // 2]
+        if not banded and median_px < min_mark_px:
+            note = f"median mark {median_px}px < min_mark_px={min_mark_px}"
+            if not on_roster:
+                rejected[class_id] = note
+                continue
+            caveats.append(note)
 
         source = class_id.split("/", 1)[0]
         admitted[class_id] = {
@@ -121,12 +156,31 @@ def admit_classes(
             "source": source,
             "kind": sorted(kinds)[0],
             "n_instances": len(refs),
-            "median_mark_px": median_px,
+            "median_mark_px": None if banded else median_px,
+            "located_by": "band" if banded else "box",
             "provenance": sorted(provenances),
             "page_ids": sorted(pages[pi].page_id for pi, _ in refs),
             "eligible_distractor_sources": sorted(s for s in ALL_SOURCES if cfg.eligible_distractor(source, s)),
+            # Adjudicated "this is a different mark" partners, filled by the
+            # audit.  The corpus stores both directions of the ground truth:
+            # a shared class id says what must be found together, and this says
+            # what must be told apart.
+            "distinct_from": [],
+            "on_roster": on_roster,
+            # Bars this class fails but a human kept it anyway.  Recorded rather
+            # than silently waived: the roster overrides the threshold, and the
+            # override should be visible in the artifact.
+            "caveats": caveats,
             # Filled by the human passes; see make_audit_slate.py.
-            "audit": {"distinctive": None, "cluster_ok": None, "letterhead_precision": None, "notes": ""},
+            "audit": {
+                "distinctive": None,
+                "cluster_ok": None,
+                # Per-instance membership verification: every page id checked in
+                # or out by hand.  Until this is done the class is a proposal.
+                "membership_verified": False,
+                "rejected_page_ids": [],
+                "notes": "",
+            },
         }
     return admitted, rejected
 
@@ -226,6 +280,13 @@ def write_query_crops(
     needs_hand_crop: list[str] = []
 
     for class_id, meta in sorted(admitted.items()):
+        # A band class is located by a top-of-page strip, not by the mark. Auto-
+        # cropping the strip would hand the query a banner of letterhead plus
+        # address plus rule line and call it a logo, which is worse than having
+        # no crop: it looks like ground truth.
+        if meta.get("located_by") == "band":
+            needs_hand_crop.append(class_id)
+            continue
         refs = inventory[class_id]
         boxed = [(pi, mi) for pi, mi in refs if pages[pi].marks[mi].area() > 0]
         if not boxed:
@@ -289,10 +350,15 @@ def load_ucsf(
     *,
     distractor_budget: int,
     letterhead_per_author: int,
-    split_by_decade: bool,
+    band_frac: float,
     warnings: list[str],
 ) -> list[Page]:
-    """Pull the haystack and the weakly-labelled letterhead classes."""
+    """Pull the haystack, plus letterhead *candidate* pages.
+
+    Candidates are not classes.  They are pages an author query says are likely
+    to carry a company letterhead, carrying a coarse top-of-page band so the
+    mark can be clustered and adjudicated like any other.
+    """
     from sources import ucsf
 
     failures: list[str] = []
@@ -316,7 +382,7 @@ def load_ucsf(
                 raw,
                 out_images / "ucsf",
                 letterhead_author=author,
-                split_by_decade=split_by_decade,
+                band_frac=band_frac,
                 on_error=note,
             )
         )
@@ -401,13 +467,29 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
     ap.add_argument("--raw", type=Path, default=cfg.RAW)
     ap.add_argument("--out", type=Path, default=cfg.OUT)
     ap.add_argument("--limit", type=int, default=None, help="cap pages per anchor source (smoke builds)")
+    ap.add_argument(
+        "--roster",
+        type=Path,
+        default=None,
+        help="roster.json naming the hand-picked classes; without it every class clearing the bars is a candidate",
+    )
     ap.add_argument("--min-instances", type=int, default=cfg.MIN_INSTANCES)
     ap.add_argument("--min-mark-px", type=int, default=cfg.MIN_MARK_PX)
     ap.add_argument("--cluster-backend", default=cfg.CLUSTER_BACKEND, choices=("phash", "siglip"))
     ap.add_argument("--cluster-threshold", type=float, default=cfg.CLUSTER_THRESHOLD)
     ap.add_argument("--ucsf-distractors", type=int, default=0, help="total UCSF distractor pages to pull")
-    ap.add_argument("--ucsf-letterhead-per-author", type=int, default=0)
-    ap.add_argument("--split-letterhead-by-decade", action="store_true")
+    ap.add_argument(
+        "--ucsf-letterhead-per-author",
+        type=int,
+        default=0,
+        help="pages per author to pull as letterhead candidates (0 = distractors only)",
+    )
+    ap.add_argument(
+        "--letterhead-band-frac",
+        type=float,
+        default=cfg.LETTERHEAD_BAND_FRAC,
+        help="fraction of page height treated as the letterhead band on UCSF candidates",
+    )
     ap.add_argument("--synth-per-class", type=int, default=cfg.SYNTH_INSTANCES_PER_CLASS)
     ap.add_argument("--synth-pool-dir", type=Path, default=None, help="local artwork dir (else LogoDet-3K via Kaggle)")
     ap.add_argument("--synth-max-classes", type=int, default=200)
@@ -436,37 +518,49 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
     pages = load_anchor_sources(selected, args.raw, limit=args.limit, warnings=warnings)
     print(f"anchor sources: {len(pages)} page(s)")
 
-    # Identity clustering, for the sources that ship location without identity.
-    from cluster_marks import cluster_source, write_cluster_report
-
-    summaries = []
-    for source in ("spods", "staver"):
-        if source in selected:
-            summary = cluster_source(
-                pages,
-                source,
-                backend=args.cluster_backend,
-                threshold=args.cluster_threshold,
-            )
-            summaries.append(summary)
-            print(
-                f"  {source}: {summary['marks']} mark(s) -> {summary['classes']} candidate class(es) "
-                f"({summary.get('singletons', 0)} singleton) via {summary['backend']}"
-            )
-    if summaries:
-        write_cluster_report(summaries, args.out / "cluster_report.json")
-
     if "ucsf" in selected and (args.ucsf_distractors or args.ucsf_letterhead_per_author):
         ucsf_pages = load_ucsf(
             args.raw,
             images_dir,
             distractor_budget=args.ucsf_distractors,
             letterhead_per_author=args.ucsf_letterhead_per_author,
-            split_by_decade=args.split_letterhead_by_decade,
+            band_frac=args.letterhead_band_frac,
             warnings=warnings,
         )
         pages.extend(ucsf_pages)
         print(f"ucsf: {len(ucsf_pages)} page(s)")
+
+    # Identity clustering, for every source that ships location without
+    # identity.  UCSF is in this list on purpose: its `author` metadata is a
+    # candidate pool, not a class, so its letterhead bands are adjudicated by
+    # the same path as SPODS's and StaVer's marks rather than being trusted.
+    from cluster_marks import cluster_source, load_separations, write_cluster_report
+
+    separations = load_separations(args.out / "separations.json")
+    if separations:
+        print(f"\nhonouring {len(separations)} adjudicated different-mark pair(s)")
+
+    summaries = []
+    for source in ("spods", "staver", "ucsf"):
+        if source not in selected:
+            continue
+        summary = cluster_source(
+            pages,
+            source,
+            backend=args.cluster_backend,
+            threshold=args.cluster_threshold,
+            separations=separations,
+            provenance="clustered_band" if source == "ucsf" else "clustered",
+        )
+        if not summary["marks"]:
+            continue
+        summaries.append(summary)
+        print(
+            f"  {source}: {summary['marks']} mark(s) -> {summary['classes']} candidate class(es) "
+            f"({summary.get('singletons', 0)} singleton) via {summary['backend']}"
+        )
+    if summaries:
+        write_cluster_report(summaries, args.out / "cluster_report.json")
 
     inventory = class_inventory(pages)
     curve = survival_curve(inventory, (2, 5, 10, 15, 20, 30, 50))
@@ -513,8 +607,37 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
             print(f"synth: {len(synth_pages)} page(s) over {len(pool)} class(es); {len(used)} background(s) held out")
             inventory = class_inventory(pages)
 
-    admitted, rejected = admit_classes(pages, inventory, min_instances=args.min_instances, min_mark_px=args.min_mark_px)
-    print(f"\nadmitted {len(admitted)} class(es); rejected {len(rejected)}")
+    chosen = None
+    if args.roster:
+        import roster as _roster
+
+        chosen = _roster.load(args.roster)
+        print(f"\nroster {chosen.name!r}: {len(chosen)} class(es)")
+
+    admitted, rejected = admit_classes(
+        pages,
+        inventory,
+        min_instances=args.min_instances,
+        min_mark_px=args.min_mark_px,
+        roster=chosen,
+    )
+
+    if chosen is not None:
+        _present, missing = _roster.check(chosen, list(inventory))
+        if missing:
+            # A roster naming a class that no longer exists means the roster and
+            # the clustering have drifted apart — which would otherwise show up
+            # only as a quietly smaller eval.
+            warnings.append(f"roster names {len(missing)} class(es) absent from this build: {missing[:5]}")
+        caveated = {c: m["caveats"] for c, m in admitted.items() if m["caveats"]}
+        if caveated:
+            print(f"  {len(caveated)} roster class(es) kept despite a failed bar:")
+            for cid, notes in sorted(caveated.items()):
+                print(f"    {cid}: {'; '.join(notes)}")
+        print(f"admitted {len(admitted)} roster class(es)")
+    else:
+        print(f"\nadmitted {len(admitted)} candidate class(es); rejected {len(rejected)}")
+        print("  no roster given — these are proposals, not ground truth; rank them with shortlist.py")
 
     needs_hand_crop = write_query_crops(pages, inventory, admitted, args.out / "queries")
     if needs_hand_crop:
@@ -562,9 +685,23 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         "tier_cutoffs": tier_cutoffs,
         "classes_admitted": len(admitted),
         "classes_rejected": len(rejected),
-        "rejection_reasons": rejected,
+        "roster": chosen.name if chosen is not None else None,
+        "membership_verified": sorted(c for c, m in admitted.items() if m["audit"]["membership_verified"]),
+        # Rejection reasons are only interesting for the candidate-pool mode; in
+        # roster mode almost every entry is the uninformative "not on the
+        # roster", which would bury the real ones.
+        "rejection_reasons": ({c: r for c, r in rejected.items() if r != "not on the roster"} if chosen else rejected),
         "survival_curve": {str(k): v for k, v in curve.items()},
         "needs_hand_crop": needs_hand_crop,
+        "separations_honoured": len(separations),
+        "hard_negative_pairs": sorted(
+            {
+                tuple(sorted((cid, other)))
+                for cid, meta in admitted.items()
+                for other in meta.get("distinct_from", [])
+                if other in admitted
+            }
+        ),
         "warnings": warnings,
         "settings": {
             "sources": selected,

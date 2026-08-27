@@ -1,4 +1,4 @@
-"""UCSF Industry Documents Library — the haystack, and weak letterhead classes.
+"""UCSF Industry Documents Library — the haystack, and letterhead candidates.
 
 Two jobs, from one open Solr index (no registration, no token):
 
@@ -7,11 +7,9 @@ makes a retrieval number mean something: StaVer's own 259 pages cannot separate
 a good ranker from a lucky one, and the shipped SPODS/StaVer/Tobacco800 sets
 together are ~2,700 pages.
 
-**Weakly-labelled letterhead classes.** Single-page documents of ``type:letter``
-written by a given company are, in the overwhelming majority, that company's
-letterhead — so the ``author`` field is an instance label for the letterhead
-logo, at a scale no hand annotation reaches.  Measured 2026-08-25 against the
-live index, single-page ``type:letter`` counts per author:
+**Letterhead candidates.** Single-page ``type:letter`` documents written by a
+given company are, in the overwhelming majority, printed on that company's
+letterhead.  Measured 2026-08-25 against the live index:
 
     RJR                          162,197
     PHILIP MORRIS                 73,320
@@ -20,14 +18,26 @@ live index, single-page ``type:letter`` counts per author:
 with 1,802,100 single-page tobacco letters in total and 13,216,456 short
 tobacco documents carrying a ``collection``.
 
-**The label is weak and this module never pretends otherwise.**  Marks it emits
-carry ``provenance="weak"`` and no box: the metadata says the page is *from*
-Philip Morris, not *where* on the page the logo is, nor even that a logo was
-printed at all.  Two things must happen before this stratum is quoted:
+**``author`` is a candidate pool, not a class.**  This is the one thing to get
+right here.  The field asserts a page is *from* a company; it has never looked
+at the mark.  Making it a class id bakes two failures straight into the ground
+truth:
 
-1. a human spot-check of sampled pages per author, to estimate what fraction
-   really carry the letterhead (``make_audit_slate.py --task letterhead``), and
-2. one hand-drawn query crop per class, since there is no box to crop from.
+* a company that redesigned its letterhead yields **one class holding two
+  different artworks**, so a detector is punished for telling them apart;
+* two subsidiaries sharing artwork yield **two classes holding the same mark**,
+  so a detector is punished for recognising it.
+
+Both are exactly the errors a mark-retrieval eval exists to measure, silently
+written into the labels.  A class means *this artwork* and nothing else, so the
+author narrows millions of pages to a high-yield pool and identity is then
+settled by looking: cluster the letterhead bands, adjudicate the clusters, and
+record same/different explicitly.  Marks emitted here carry
+``provenance="candidate"`` and are never admitted as query classes until that
+has happened.
+
+For the same reason ``documentdate`` is recorded but never enters a class id.
+Era is a fact about the calendar, not about the mark.
 
 Prefer ``author`` over ``collection``.  ``collection`` is provenance — whose
 filing cabinet the page sat in — so a letter *in* the Philip Morris collection
@@ -47,9 +57,8 @@ from ._common import Mark, Page
 API_URL = "https://metadata.idl.ucsf.edu/solr/ltdl3/query"
 DOWNLOAD_URL = "https://download.industrydocuments.ucsf.edu"
 
-#: Fields worth carrying into the manifest.  ``documentdate`` earns its place:
-#: a corporate logo is redesigned every decade or so, and a class that silently
-#: spans two designs will look like a method failure rather than what it is.
+#: Fields worth carrying into the manifest, as provenance for a page.  None of
+#: them decides a class: identity comes from adjudicating the mark itself.
 FIELDS = "id,collection,collectioncode,author,industry,type,documentdate,pages,title,brand"
 
 #: The endpoint ignores ``rows`` and returns up to this many docs per request.
@@ -152,20 +161,31 @@ def first_value(doc: dict[str, Any], key: str) -> Optional[str]:
     return str(value) if value is not None else None
 
 
-def decade(documentdate: Optional[str]) -> Optional[str]:
-    """``"1996 January 24"`` -> ``"1990s"``.
+def year(documentdate: Optional[str]) -> Optional[int]:
+    """``"1996 January 24"`` -> ``1996``.
 
-    Used to optionally split a letterhead class by era.  A 1965 Philip Morris
-    mark and a 1995 one may be different artwork; whether structural search
-    should treat them as one class is a *finding*, not a nuisance, so the corpus
-    records the decade and lets the study decide.
+    Recorded as provenance only.  It is deliberately **not** part of any class
+    id: a class means "this artwork", and splitting one artwork across eras — or
+    fusing two different artworks because they share an era — would make the
+    label a statement about the calendar rather than about the mark.
     """
     if not documentdate:
         return None
     m = re.search(r"\b(1[89]\d{2}|20\d{2})\b", documentdate)
-    if not m:
-        return None
-    return f"{int(m.group(1)) // 10 * 10}s"
+    return int(m.group(1)) if m else None
+
+
+def letterhead_band(width: int, height: int, band_frac: float) -> tuple[int, int, int, int]:
+    """The top-of-page strip a letterhead occupies, as ``(x, y, w, h)``.
+
+    UCSF ships no boxes, and a class cannot be adjudicated from a mark nobody
+    can see.  A letterhead sits at the top of the page by definition, so the top
+    strip is a coarse but *honest* locator: wide enough to contain the mark,
+    tight enough that clustering the strips separates one company's artwork from
+    another's.  It is a candidate region, never a ground-truth box — the tight
+    box comes from the hand-drawn query crop after adjudication.
+    """
+    return (0, 0, width, max(1, int(round(height * band_frac))))
 
 
 def doc_to_page(
@@ -176,25 +196,36 @@ def doc_to_page(
     *,
     page_index: int = 0,
     letterhead_author: Optional[str] = None,
-    split_by_decade: bool = False,
+    band_frac: float = 0.22,
 ) -> Page:
     """One rendered page image plus its Solr metadata as a :class:`Page`.
 
-    When *letterhead_author* is given the page gets a boxless ``weak`` mark for
-    that author's letterhead class.  No box is invented: a fabricated box would
-    be indistinguishable downstream from a real one, and the whole point of the
-    ``provenance`` field is that the difference stays visible.
+    When *letterhead_author* is given, the page gets a **candidate** mark over
+    the top-of-page band — deliberately *not* a class.  The author field says
+    the page is *from* a company; it has not looked at the mark, so it cannot
+    say which artwork is on it, or whether one is there at all.  Turning that
+    into a class id would bake two failures into the ground truth: one company
+    that redesigned its letterhead becomes a single class holding two different
+    marks, and two subsidiaries sharing artwork become two classes holding the
+    same mark.
+
+    So the author narrows millions of pages to a high-yield pool, and identity
+    is settled downstream by clustering the bands and adjudicating them — the
+    same path SPODS and StaVer take.  ``provenance="candidate"`` marks are never
+    admitted as query classes until that has happened.
     """
     doc_id = str(doc["id"])
-    industry = first_value(doc, "industry")
-    era = decade(first_value(doc, "documentdate"))
 
     marks: list[Mark] = []
     if letterhead_author:
-        class_id = f"ucsf/letterhead_{_slug(letterhead_author)}"
-        if split_by_decade and era:
-            class_id = f"{class_id}_{era}"
-        marks.append(Mark(kind="logo", box=(0, 0, 0, 0), class_id=class_id, provenance="weak"))
+        marks.append(
+            Mark(
+                kind="logo",
+                box=letterhead_band(width, height, band_frac),
+                class_id=None,
+                provenance="candidate",
+            )
+        )
 
     return Page(
         page_id=f"ucsf/{doc_id}#{page_index}",
@@ -205,12 +236,13 @@ def doc_to_page(
         marks=marks,
         meta={
             "doc_id": doc_id,
-            "industry": industry,
+            "industry": first_value(doc, "industry"),
             "collection": first_value(doc, "collection"),
             "author": first_value(doc, "author"),
+            "letterhead_author": letterhead_author,
             "type": first_value(doc, "type"),
             "documentdate": first_value(doc, "documentdate"),
-            "decade": era,
+            "year": year(first_value(doc, "documentdate")),
             "title": first_value(doc, "title"),
         },
     )
@@ -223,7 +255,7 @@ def fetch_and_render(
     *,
     dpi: int = 150,
     letterhead_author: Optional[str] = None,
-    split_by_decade: bool = False,
+    band_frac: float = 0.22,
     max_pages_per_doc: int = 1,
     on_error: Optional[Any] = None,
 ) -> list[Page]:
@@ -267,7 +299,7 @@ def fetch_and_render(
                     image.height,
                     page_index=idx,
                     letterhead_author=letterhead_author,
-                    split_by_decade=split_by_decade,
+                    band_frac=band_frac,
                 )
             )
     return pages
