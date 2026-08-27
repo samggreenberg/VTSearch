@@ -120,6 +120,13 @@ VTSearch supplies the loop with no new plugin code: a Good vote already carries
 import → vote → `server_json_file` export round-trip emits exactly the required
 record. The box fixes presence *and* band membership in one gesture.
 
+**But `region_box` is normalised and VG's shape is pixels**, so "VG's own shape"
+above is a claim about the *record*, not about the numbers. A correction row
+therefore declares `box_space` and the builder converts once; merging it
+unconverted normalises it twice and parks the box on the frame origin, taking
+its band with it (#3281). Both halves are checked at build time — see the pile
+[`README.md`](../../scripts/experiments/pile/README.md).
+
 **The negatives are the expensive half.** They are ~95% of *I* and rest on an
 absence claim, which is precisely what VG cannot support (`498326.jpg` is
 annotated `car, clouds` and has a bus front and centre). Review them in
