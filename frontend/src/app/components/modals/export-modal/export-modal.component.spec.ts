@@ -477,6 +477,7 @@ describe('ExportModalComponent', () => {
     const fileExporter = {
       name: 'server_json_file',
       display_name: 'Server JSON',
+      supported_payloads: ['labelset'],
       fields: [
         { key: 'filepath', field_type: 'text', default: 'data/labels.json' },
       ],
@@ -504,7 +505,9 @@ describe('ExportModalComponent', () => {
 
     it('prefixes the category once the export is narrowed to one', async () => {
       fixture.componentRef.setInput('detectorName', 'Sirens');
-      await flushInit();
+      // This one flips the radio *after* picking the tab, so the exporter has
+      // to be resolvable by name off the loaded list, not just passed in.
+      await flushInit([fileExporter]);
       component.selectExporterTab(fileExporter as never);
       component.labelFilter = 'good';
       component.onLabelFilterChange();
