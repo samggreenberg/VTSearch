@@ -123,6 +123,7 @@
 
 @if (showExport) {
   <vt-export-modal
+    scope="results"
     [initialFilter]="exportFilter"
     (closed)="showExport = false"
     (exported)="showExport = false"

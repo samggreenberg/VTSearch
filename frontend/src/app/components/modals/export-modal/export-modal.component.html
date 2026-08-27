@@ -7,11 +7,11 @@
         <input type="radio" name="labelFilter" value="both" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
         All
       </label>
-      <label class="delimiter-option" title="Include only items labeled as good (positive examples)">
+      <label class="delimiter-option" [title]="scope() === 'detector' ? 'Include only items labeled as good (positive examples). Not enough on its own to rebuild this detector.' : 'Include only items labeled as good (positive examples)'">
         <input type="radio" name="labelFilter" value="good" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
         Good
       </label>
-      <label class="delimiter-option" title="Include only items labeled as bad (negative examples)">
+      <label class="delimiter-option" [title]="scope() === 'detector' ? 'Include only items labeled as bad (negative examples). Not enough on its own to rebuild this detector.' : 'Include only items labeled as bad (negative examples)'">
         <input type="radio" name="labelFilter" value="bad" [(ngModel)]="labelFilter" (ngModelChange)="onLabelFilterChange()" />
         Bad
       </label>
@@ -20,6 +20,12 @@
         Corrections
       </label>
     </div>
+    @if (showPartialLabelsetNote) {
+      <p class="info-text partial-labelset-note">
+        Exports only the {{ labelFilter }} examples. Training needs both classes, so this file
+        can't rebuild the detector on its own &mdash; choose <strong>All</strong> for that.
+      </p>
+    }
   </div>
 
   <!-- Column Selection -->

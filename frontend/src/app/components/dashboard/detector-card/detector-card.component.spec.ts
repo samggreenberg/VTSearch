@@ -146,10 +146,18 @@ describe('DetectorCardComponent', () => {
     await settleZoneless(fixture);
     const items = Array.from(el.querySelectorAll('.menu-item')) as HTMLElement[];
     expect(items.some((b) => b.textContent?.includes('Import Labels'))).toBe(true);
-    const exportItem = items.find((b) => b.textContent?.includes('Export'));
+    const exportItem = items.find((b) =>
+      b.textContent?.includes('Export labels'),
+    );
     expect(exportItem).toBeTruthy();
     exportItem!.click();
     expect(component.export.emit).toHaveBeenCalled();
+
+    // The portable ONNX bundle is an expert affordance called directly against
+    // POST /api/detectors/<id>/portable-bundle, deliberately not a menu item:
+    // it read as a second, near-identical "Export" to every user who had no
+    // use for it.
+    expect(items.some((b) => /onnx|export model/i.test(b.textContent ?? ''))).toBe(false);
   });
 
   it('should offer "Move to AutoRun" on a draft detector and emit setAutorun(true)', async () => {
@@ -188,7 +196,7 @@ describe('DetectorCardComponent', () => {
       expect(full).not.toContain('Delete');
       expect(full).toContain('Browse positives');
       expect(full).toContain('Stats');
-      expect(full).toContain('Export');
+      expect(full).toContain('Export labels');
     });
 
     it('offers "Move to Drafts" and emits setAutorun(false)', async () => {

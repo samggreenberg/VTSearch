@@ -300,3 +300,13 @@
     margin-top: var(--space-md);
   }
 }
+
+// --- Partial-labelset note ---
+//
+// Shown under the Categories radios when a *detector*-scoped export is
+// narrowed to Good or Bad. `.info-text` (from `_components.scss`) supplies
+// the type; the warning colour and top margin are the contextual override.
+.partial-labelset-note {
+  margin-top: var(--space-sm);
+  color: var(--text-warning);
+}

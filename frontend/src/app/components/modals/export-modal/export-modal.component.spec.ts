@@ -187,6 +187,49 @@ describe('ExportModalComponent', () => {
     expect(component.filteredLabels.length).toBe(1);
   });
 
+  // Issue #3263: the Dashboard row action and the train-mode right panel open
+  // this modal with no filter at all, and what they are exporting is the
+  // detector's *own* labelset — the thing that re-imports as the detector. A
+  // good-only slice of that cannot rebuild it (training rejects a single-class
+  // labelset), so the detector scope opens on All and says so when narrowed.
+  describe('detector scope', () => {
+    it('opens on All when the caller passes no filter', async () => {
+      await flushInit();
+      expect(component.labelFilter).toBe('both');
+      expect(component.filteredLabels.length).toBe(3);
+    });
+
+    it('names the payload in the title', async () => {
+      await flushInit();
+      expect(component.modalTitle).toBe('Export Labels');
+    });
+
+    it('flags a one-sided selection, and only a one-sided one', async () => {
+      await flushInit();
+      expect(component.showPartialLabelsetNote).toBe(false); // opens on All
+      component.labelFilter = 'good';
+      expect(component.showPartialLabelsetNote).toBe(true);
+      component.labelFilter = 'bad';
+      expect(component.showPartialLabelsetNote).toBe(true);
+      // A corrections export is a deliberate diff, not a would-be labelset.
+      component.labelFilter = 'corrections';
+      expect(component.showPartialLabelsetNote).toBe(false);
+    });
+  });
+
+  // The Find view slices a scored run: "the good hits" is the normal ask
+  // there, so it keeps the caller's filter and never warns.
+  describe('results scope', () => {
+    it('keeps the caller filter and stays quiet about it', async () => {
+      fixture.componentRef.setInput('scope', 'results');
+      fixture.componentRef.setInput('initialFilter', 'good');
+      await flushInit();
+      expect(component.labelFilter).toBe('good');
+      expect(component.showPartialLabelsetNote).toBe(false);
+      expect(component.modalTitle).toBe('Export');
+    });
+  });
+
   it('reports correction availability', async () => {
     await flushInit();
     expect(component.hasCorrections).toBe(true);
@@ -434,6 +477,7 @@ describe('ExportModalComponent', () => {
     const fileExporter = {
       name: 'server_json_file',
       display_name: 'Server JSON',
+      supported_payloads: ['labelset'],
       fields: [
         { key: 'filepath', field_type: 'text', default: 'data/labels.json' },
       ],
@@ -452,6 +496,21 @@ describe('ExportModalComponent', () => {
       fixture.componentRef.setInput('detectorName', 'Sirens');
       await flushInit();
       component.selectExporterTab(fileExporter as never);
+      // No category prefix: a detector-scoped export opens on All, and the
+      // whole labelset is what the plain name describes.
+      expect(component.formValues['filepath']).toBe(
+        'data/Sirens-My Dataset.json',
+      );
+    });
+
+    it('prefixes the category once the export is narrowed to one', async () => {
+      fixture.componentRef.setInput('detectorName', 'Sirens');
+      // This one flips the radio *after* picking the tab, so the exporter has
+      // to be resolvable by name off the loaded list, not just passed in.
+      await flushInit([fileExporter]);
+      component.selectExporterTab(fileExporter as never);
+      component.labelFilter = 'good';
+      component.onLabelFilterChange();
       expect(component.formValues['filepath']).toBe(
         'data/Good-Sirens-My Dataset.json',
       );
@@ -464,15 +523,13 @@ describe('ExportModalComponent', () => {
       await flushInit();
       TestBed.inject(ActiveContextService).setActivePair('ds1', 'd1');
       component.selectExporterTab(fileExporter as never);
-      expect(component.formValues['filepath']).toBe(
-        'data/Good-My Dataset.json',
-      );
+      expect(component.formValues['filepath']).toBe('data/My Dataset.json');
 
       flushRegistry();
       TestBed.tick();
       expect(component.effectiveDetectorName()).toBe('Birdsong');
       expect(component.formValues['filepath']).toBe(
-        'data/Good-Birdsong-My Dataset.json',
+        'data/Birdsong-My Dataset.json',
       );
     });
 

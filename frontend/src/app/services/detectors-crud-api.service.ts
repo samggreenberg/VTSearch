@@ -122,17 +122,4 @@ export class DetectorsCrudApiService {
       body: { names, new_name: newName, conflict_policy: conflictPolicy },
     }).pipe(map((r) => r.body));
   }
-
-  /**
-   * Download a portable, standalone scoring bundle (ONNX model + manifest +
-   * README) for a detector. Trains the detector against the active dataset
-   * server-side, so a compatible dataset must be loaded. Returns the raw zip
-   * blob; the dataset/detector headers are attached by the active-context
-   * interceptor (mirrors {@link DatasetsCrudApiService.exportDataset}).
-   */
-  exportPortableBundle(detectorId: string): Observable<Blob> {
-    return this.http.post(`/api/detectors/${encodeURIComponent(detectorId)}/portable-bundle`, null, {
-      responseType: 'blob',
-    });
-  }
 }

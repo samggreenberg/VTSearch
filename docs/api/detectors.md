@@ -190,6 +190,12 @@ Retrains the detector from its on-disk labelset in the **active dataset's**
 embedder space and streams a zipped, standalone scoring bundle (ONNX model +
 manifest + README).
 
+This route has no GUI affordance and is meant to be called directly: the bundle
+is an expert artifact most users never need, and as a dashboard menu item it sat
+beside **Export labels** reading as a confusing second "export". The headless
+equivalent is the `portable_detector` CLI exporter (see
+[`docs/CLI.md`](../CLI.md#auto-detect-run-detectors-on-a-dataset)).
+
 → Binary `.zip` download (`<detector>-detector.zip`).
 
 400 (no medias loaded, or no labels to score), 404 (detector not found), 409
