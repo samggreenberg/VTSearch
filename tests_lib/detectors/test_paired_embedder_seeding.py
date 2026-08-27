@@ -25,6 +25,7 @@ import importlib.util
 import sys
 import types
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -48,7 +49,10 @@ def cfg():
 @pytest.fixture(scope="module")
 def run_cells(cfg):
     """``run_cells`` with a stub ``common`` so importing it has no side effects."""
-    stub = types.ModuleType("common")
+    # `Any` rather than `ModuleType`: a stub module is built by assigning
+    # attributes that the type does not declare, and pyright is right to object
+    # to that on a real ModuleType.
+    stub: Any = types.ModuleType("common")
     stub.setup_env = lambda: None
     stub.log = lambda _msg: None
     stub.Path = Path
@@ -137,7 +141,7 @@ def text_tower(monkeypatch):
     """``embed_text_query`` answering only for SigLIP, as the real towers do."""
     import vtscore.embedding.helpers as helpers
 
-    calls: list[tuple[str, str]] = []
+    calls: list[tuple[str, str | None]] = []
 
     def _embed(text, media_type, embedder_name=None):  # noqa: ARG001
         calls.append((text, embedder_name))
@@ -239,7 +243,7 @@ def test_no_text_tower_means_no_text_sort(run_cells, queried, text_tower):
 
 def _cells_io_stub(text_medias):
     """A ``_cells_io`` whose ``load_medias`` returns *text_medias* (or refuses)."""
-    module = types.ModuleType("_cells_io")
+    module: Any = types.ModuleType("_cells_io")
 
     def load_medias(_path):
         if text_medias is None:

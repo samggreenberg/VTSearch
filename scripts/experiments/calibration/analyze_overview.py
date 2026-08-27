@@ -1,8 +1,15 @@
 """What is VTSearch good at, what is it bad at, and why — descriptively.
 
 No arms, no winners. Three modes a real user could pick (`siglip` whole-image,
-`siglip2_l` whole-image, `dinov3_patch` region voting) run many times under
-shipped defaults, characterised rather than ranked.
+`siglip2_l` whole-image, `siglip+dinov3_patch` region voting) run many times
+under shipped defaults, characterised rather than ranked.
+
+The region mode is a **pair** (#3276): SigLIP embeds the typed query and ranks
+the opening, DINOv3 does the learning. DINOv3 has no text tower, so bare
+`dinov3_patch` cannot open on a text sort at all -- it falls back to three
+random known-goods, which would put a seeding difference inside the voting-mode
+comparison this file draws. All three modes now open the same way and differ
+only in the space the detector learns in.
 
 The "why" comes from a decomposition the harness already emits per step:
 
