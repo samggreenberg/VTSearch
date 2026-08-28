@@ -235,19 +235,27 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     # produce cells with no trainable step at all.  Both embedders are in the
     # pile, so one dataset supplies BOTH voting modes and the mode contrast
     # stops being confounded with the dataset.
-    "vg_scale_any": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,dinov3_patch").split(","),
+    # The region arm is the PAIR, for the reason spelled out on `vg_scale` below:
+    # bare `dinov3_patch` cannot open on a text sort, and `EXPERIMENT_QUERIES`
+    # gives this dataset a query for every category precisely so it can.
+    "vg_scale_any": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
     # The same-class-across-bands set (#3156): one class list at three box
     # scales, so a small-vs-large difference is about size rather than about
     # which words happen to live at which size. Its categories are
     # band-suffixed (`bus@small`), and every one of them is the experiment --
     # see CATEGORY_MODE "all".
     #
-    # The region-voting arm here is normally the PAIR `siglip+dinov3_patch`
-    # rather than bare `dinov3_patch`: DINOv3 has no text tower, so on its own
-    # it opens on three random known-goods while the whole-image arms open on a
-    # text sort, and the voting-mode contrast carries a seeding contrast inside
-    # it. See PAIR_SEP.
-    "vg_scale": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,dinov3_patch").split(","),
+    # The region-voting arm is the PAIR `siglip+dinov3_patch` rather than bare
+    # `dinov3_patch`: DINOv3 has no text tower, so on its own it opens on three
+    # random known-goods while the whole-image arms open on a text sort, and the
+    # voting-mode contrast carries a seeding contrast inside it. See PAIR_SEP.
+    #
+    # The DEFAULT carries the pair, not just the launchers. Every caller that
+    # sets `CALIB_VGSCALE_EMBEDDERS` already names it, so the bare fallback was
+    # reachable only by the callers that name nothing -- a direct
+    # `run_cells.py --index`, a preflight run without the env -- which are
+    # exactly the ones with no launcher comment to warn them.
+    "vg_scale": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
