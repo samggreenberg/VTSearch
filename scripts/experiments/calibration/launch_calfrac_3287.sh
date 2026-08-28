@@ -123,6 +123,17 @@ export CALIB_REPOOL_VARIANTS=""
 # so the trade-off is predicted to REVERSE inside the horizon.  A pooled winner
 # over a crossing is precisely the number that hides it.
 export CALIB_MAX_STEPS="${CALIB_MAX_STEPS:-150}"
+# Seed-major, not the `category` default.  This run has a wall-clock deadline,
+# and `CELL_ORDER`'s own note says which ordering that calls for: a SLURM array
+# dispatches roughly in index order, so a truncated `category` run is missing its
+# last CATEGORIES entirely - whole environments gone, and the per-mode contrast
+# short at one end - while a truncated `seed` run is missing its last SEEDS,
+# uniformly across every environment.  The first is a design failure and the
+# second is a power one, and only the second is something a report can state and
+# still be read.  It also means every arm degrades the SAME way, which matters
+# more here than in a single-array study: five arms that lost different
+# categories would not be comparable at all.
+export CALIB_CELL_ORDER="${CALIB_CELL_ORDER:-seed}"
 # 4 seeds is the minimum that makes `sd(threshold)` - one of the issue's four
 # metrics - computable at all: it is taken ACROSS seeds at a fixed step.
 export CALIB_N_SEEDS="${CALIB_N_SEEDS:-4}"
@@ -219,8 +230,13 @@ case "$MODE" in
     # Time ONE cell before committing to five arrays.  Quoting a previous grid's
     # seconds is how #3129 produced a 90-minute overestimate; this run's per-cell
     # cost is not #3115's, because its fold-count grid and anchored EM are off.
-    # Cell 0 is a binary cell, cell 48 the first region one - size from BOTH,
-    # because the region cell sets the memory and the critical path.
+    # Under `CALIB_CELL_ORDER=seed` the first seed's 24 environments come first:
+    # cells 0-11 are `siglip` (binary), cells 12-23 the `siglip+dinov3_patch`
+    # pair (region).  So size from cell 0 AND cell 12 - the region cell sets the
+    # memory and the critical path, and sizing off the binary one alone would
+    # pick a limit the region arm cannot run in.  (Note this differs from
+    # #3115's 0/48: that run took the `category` default, where the ordering -
+    # and therefore what a cell index MEANS - is different.)
     IDX="${2:-0}"
     F="${3:-0.5}"
     export CALIB_CALIBRATION_FRACTION="$F"

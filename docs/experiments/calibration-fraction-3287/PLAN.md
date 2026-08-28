@@ -62,6 +62,7 @@ acquisition cannot be screened inside one trajectory.
 | opening | SigLIP text sort in every cell (`siglip+dinov3_patch` pair) | DINOv3 has no text tower; a bare arm would put a *seeding* contrast inside the mode contrast (#3278) |
 | seeds | 4 | the minimum that makes `sd(threshold)` — taken *across* seeds at a fixed step — computable at all |
 | steps | 150 | the trade-off is predicted to reverse inside the horizon; the crossing has to be *in* the window |
+| cell order | `seed`, not the `category` default | the run has a wall-clock deadline. A truncated `category` array loses its last **categories** entirely — whole environments, and the per-mode contrast short at one end; a truncated `seed` array loses its last **seeds**, uniformly, which widens the standard errors and leaves the design intact. With five arms it matters twice over: arms that lost *different* categories would not be comparable at all. |
 
 Uniform prevalence is the instrument, not a nicety. A threshold **is** a
 quantile of the calibration set, and this study's subject is how big that set
@@ -134,7 +135,7 @@ cd /exp/$USER/projects/vts-calfrac-3287/scripts/experiments/calibration
 python selftest_analyze_calfrac.py            # planted answer; before the array
 bash launch_calfrac_3287.sh prepare           # once, shared by every arm
 bash launch_calfrac_3287.sh size 0            # a binary cell
-bash launch_calfrac_3287.sh size 48           # a region cell: it sets mem + the critical path
+bash launch_calfrac_3287.sh size 12           # a region cell: it sets mem + the critical path
 bash launch_calfrac_3287.sh arms              # five arrays + one cross-arm analyze
 ```
 
