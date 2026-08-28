@@ -16,9 +16,17 @@ Usage::
     python build_pile.py --datasets coco_val         # just COCO's cells
     python build_pile.py --embedders siglip2,siglip2_l
     python build_pile.py --verify                    # load every cell, check geometry
+    python build_pile.py --rebuildable               # can every cell still be REBUILT?
     python build_pile.py --manifest                  # (re)write MANIFEST.{json,md}
     python build_pile.py --provenance                # which device built each cell
     python build_pile.py --backfill-provenance       # fingerprint the pre-#3160 cells
+
+``--rebuildable`` is the complement to ``--verify``, and the two answer
+different questions. ``--verify`` asks whether the cells on disk are usable;
+``--rebuildable`` asks whether they could be produced again. A cell that loads
+says nothing about whether it can be rebuilt -- the paths share no code -- which
+is how the ``vg_box_*`` rebuild sat broken for eleven days behind a pile that
+verified clean (#3297). Run it before trusting the pile to be purgeable.
 
 ``--verify`` is the guard the region-voting studies needed: it asserts that
 every cell whose ``(dataset, embedder)`` pair claims region capability actually
@@ -179,6 +187,60 @@ def _load_coco(medias: dict[int, dict], embedder_name: str) -> None:
 # --------------------------------------------------------------------------
 
 
+#: The only per-category fields :func:`_band_categories` reads. Named once so
+#: the tolerance check below stays honest: if the selector ever starts reading
+#: a field the pre-envelope scans do not carry, this list is what makes the old
+#: shape fail loudly instead of selecting from partial statistics.
+_SCAN_FIELDS = ("voted_area", "n_images", "union_inflation")
+
+
+def load_box_scan_categories() -> dict[str, dict]:
+    """Read the full-VG box scan, tolerating both eras of its file format.
+
+    Two shapes exist in the wild, and the reader accepts either:
+
+    * **Pre-2026-08-17** — the bare ``{category: stats}`` dict at top level.
+      This is what the published ``vg_box_*`` sets were selected from.
+    * **2026-08-17 and later** — ``fb4f4ec03`` wrapped that dict in
+      ``{"meta": {...}, "categories": {...}}`` so per-band supply could be
+      recorded alongside it.
+
+    Tolerating both is deliberate rather than lazy. The envelope was the *only*
+    incompatibility: the newer scan also carries ``bands``, ``bands_compact``,
+    ``n_compact`` and ``compact_frac`` per category, and
+    :func:`_band_categories` reads none of them -- only ``voted_area``,
+    ``n_images`` and ``union_inflation``, all three present in the old shape.
+    So an old scan still selects exactly what it always selected, and the
+    alternative repair (re-running ``scan_vg_boxes.py``) would *not*: the
+    current scanner applies per-image compact filtering (``10239c24e``) and
+    per-band supply (``fb4f4ec03``), which qualify categories differently and
+    would silently redefine three datasets whose numbers are published in
+    #3129 and #3156. Old scans also sit on other people's scratch, so the
+    reader is the right place to absorb this rather than the file.
+    """
+    scan_path = pc.PILE / "vg_box_scale.json"
+    if not scan_path.exists():
+        raise SystemExit(f"missing {scan_path}; run scan_vg_boxes.py first")
+    scan = json.loads(scan_path.read_text())
+    if not isinstance(scan, dict) or not scan:
+        raise SystemExit(f"{scan_path} is not a non-empty JSON object; re-run scan_vg_boxes.py")
+    # Discriminate on shape, not just on the key being present: a bare scan is
+    # keyed by VG's free-text vocabulary, so "categories" is a name it could in
+    # principle hold. An envelope's "categories" maps to the stats dict; a
+    # category of that name would map to a stats entry carrying `voted_area`.
+    envelope = isinstance(scan.get("categories"), dict) and "voted_area" not in scan["categories"]
+    stats = scan["categories"] if envelope else scan
+    if not isinstance(stats, dict) or not stats:
+        raise SystemExit(f"{scan_path} holds no categories; re-run scan_vg_boxes.py")
+    # Fail here rather than with a bare KeyError deep inside the comprehension:
+    # a scan missing a field the selector needs is a format problem, and saying
+    # so by name is what tells the next person which era the file is from.
+    missing = sorted({f for f in _SCAN_FIELDS for s in stats.values() if isinstance(s, dict) and f not in s})
+    if missing:
+        raise SystemExit(f"{scan_path} categories lack {', '.join(missing)}; re-run scan_vg_boxes.py")
+    return stats
+
+
 def _band_categories(band: str) -> list[str]:
     """Pick this band's categories from the full-VG scan, stratified within it.
 
@@ -188,10 +250,7 @@ def _band_categories(band: str) -> list[str]:
     voted-area rank and taking the best-supported category in each keeps the
     band spanning its own range.
     """
-    scan_path = pc.PILE / "vg_box_scale.json"
-    if not scan_path.exists():
-        raise SystemExit(f"missing {scan_path}; run scan_vg_boxes.py first")
-    stats = json.loads(scan_path.read_text())["categories"]
+    stats = load_box_scan_categories()
     lo, hi = pc.BOX_BANDS[band]
 
     pool = [
@@ -1338,6 +1397,78 @@ def verify() -> int:
     return 0
 
 
+def rebuildable(datasets: list[str] | None = None) -> int:
+    """Exercise every dataset's *selection* step without embedding anything.
+
+    The pile documents itself as purgeable -- ``pile_config``: "every cell must
+    be rebuildable from sources that are **not** on scratch". Nothing checked
+    that. ``--verify`` loads the built cells, and a cell that loads says
+    nothing about whether it can be rebuilt: the two paths share no code, so a
+    rebuild path can rot for months behind a pile that verifies clean. It did
+    (#3297): a scan-format change on 2026-08-17 outran the scan file the
+    ``vg_box_*`` cells were selected from, and the break surfaced only when
+    somebody asked for a rebuild eleven days later.
+
+    So this is the canary that would have caught it the same day, for a few
+    seconds. It runs the part of each build that reads sources and decides
+    *what goes in the cell*, and skips the part that costs GPU-hours. For a
+    banded dataset that means really running :func:`_band_categories` and
+    reporting what it chose; elsewhere it means confirming the sources a
+    rebuild would read are present and in a shape the current code accepts.
+
+    Deliberately does not parse the multi-GB sources (VG's ``objects.json``,
+    the COCO zip). A canary nobody runs is worth nothing, and the way to make
+    it run is to keep it cheap enough to sit in front of every build.
+    """
+    for bad in [d for d in (datasets or []) if d not in pc.DATASETS]:
+        raise SystemExit(f"unknown dataset {bad!r}; known: {sorted(pc.DATASETS)}")
+    wanted = list(datasets) if datasets else list(pc.DATASETS)
+
+    problems: list[str] = []
+
+    for ds in wanted:
+        spec = pc.DATASETS[ds]
+        kind = spec.get("kind")
+        try:
+            if kind == "demo":
+                pc.require_demo_source(ds)
+                log(f"  {ds:18s} ok       demo source staged")
+            elif kind == "coco":
+                for path in (pc.COCO_ANNOTATIONS, pc.COCO_IMAGES):
+                    if not path.exists():
+                        raise SystemExit(f"{ds}: missing {path}")
+                log(f"  {ds:18s} ok       annotations + images present")
+            elif kind == "vg_band":
+                chosen = _band_categories(spec["band"])
+                log(f"  {ds:18s} ok       {len(chosen)} categories selected")
+            elif kind == "vg_scale":
+                objects_json = pc.DEMO_CACHE / "visual_genome" / "objects.json"
+                if not objects_json.exists():
+                    raise SystemExit(f"{ds}: missing {objects_json}")
+                n_cells = len(pc.SCALE_CLASSES) * len(pc.BOX_BANDS)
+                roster = "roster present" if pc.ROSTER.exists() else "NO ROSTER (membership would be redrawn)"
+                log(f"  {ds:18s} ok       VG source present, {n_cells} cells, {roster}")
+            elif kind == "vg_scale_any":
+                # Derived from the built parent, so its "source" is a cell.
+                # Absent parents are not a problem here: a full run builds the
+                # parent first, and a purged pile rebuilds both in order.
+                built = [e for e in pc.EMBEDDERS if pc.cell_path("vg_scale", e).exists()]
+                log(f"  {ds:18s} ok       derives from vg_scale ({len(built)} parent cells built)")
+            else:
+                raise SystemExit(f"{ds}: unknown kind {kind!r}; this check needs teaching about it")
+        except SystemExit as exc:  # the loaders' own way of reporting a bad source
+            log(f"  {ds:18s} BROKEN   {exc}")
+            problems.append(f"{ds}: {exc}")
+
+    if problems:
+        log(f"{len(problems)} dataset(s) CANNOT be rebuilt from their sources:")
+        for p in problems:
+            log(f"REBUILD-BROKEN: {p}")
+        return 1
+    log("every dataset's selection step runs against its current sources")
+    return 0
+
+
 def report_bands() -> int:
     """Report voted-box scale-band populations for each boxed dataset.
 
@@ -1635,6 +1766,11 @@ def main() -> int:
     ap.add_argument("--force", action="store_true", help="rebuild cells that already exist")
     ap.add_argument("--list", action="store_true", help="show cell status and exit")
     ap.add_argument("--verify", action="store_true", help="load every cell and check geometry")
+    ap.add_argument(
+        "--rebuildable",
+        action="store_true",
+        help="run every dataset's selection step against its sources, embedding nothing",
+    )
     ap.add_argument("--bands", action="store_true", help="report voted-box scale bands for boxed datasets")
     ap.add_argument("--manifest", action="store_true", help="(re)write the manifest and exit")
     ap.add_argument("--provenance", action="store_true", help="show which device built each cell")
@@ -1653,6 +1789,8 @@ def main() -> int:
         return 0
     if args.verify:
         return verify()
+    if args.rebuildable:
+        return rebuildable(args.datasets.split(",") if args.datasets else None)
     if args.bands:
         return report_bands()
     if args.manifest:

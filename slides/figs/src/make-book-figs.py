@@ -89,17 +89,22 @@ BOUNDARY_MAYBE = ("magazine", "dvd", "notebook")
 #: The full-bleed figure: ten items in the order a detector put them, and what
 #: they actually are. Mostly right, wrong in the middle — the arrangement every
 #: cut rule in Part 3 is arguing about.
+#:
+#: **Lowest score first**, so the row reads left to right the way every other
+#: score axis in the deck does and the way a chart does: positives and high
+#: scores on the right (#3296). The admitted set is therefore the *tail* of
+#: this tuple, which is what `_cut_x` converts a "include N" count into.
 RANKING = (
-    ("stack", True),
-    ("shelf", True),
-    ("bookcase", True),
-    ("magazine", False),
-    ("open", True),
-    ("gamecase", False),
-    ("bird", True),
-    ("dvd", False),
-    ("newspaper", False),
     ("notebook", False),
+    ("newspaper", False),
+    ("dvd", False),
+    ("bird", True),
+    ("gamecase", False),
+    ("open", True),
+    ("magazine", False),
+    ("bookcase", True),
+    ("shelf", True),
+    ("stack", True),
 )
 
 #: Where the three drawn cuts fall, as a count of items admitted. Each is a
@@ -178,34 +183,67 @@ def boundary_fig() -> None:
 
 #: A 16:9 canvas at 80 slide pixels per unit, so the title notch — 300x200
 #: pixels at a 60x42 inset — is the rectangle x 0.75..4.50, y 5.98..8.48 in
-#: these coordinates. Nothing above `RANK_TOP` may reach left of `RANK_INDENT`.
+#: these coordinates. `RANK_TOP` is that rectangle's floor: nothing that spans
+#: the drawing may sit above it, which is what pins the score axis and, under
+#: it, the tile row.
 RANK_CANVAS = (16.0, 9.0)
 RANK_UNIT = 80.0
-RANK_INDENT = 4.80
-RANK_TOP = 5.85
+RANK_TOP = 5.97
 
 RANK_TILE = 1.44
 RANK_GAP = 0.11
-#: The tile row's own top must stay under `RANK_TOP`, which is where the
-#: slide's title reserve ends; `save()` checks the written PNG, but a retune
-#: that breaks it should say so here first.
-RANK_TILE_Y = 4.15
-RANK_MARK_Y = 3.62
-RANK_CUT_LABEL_Y = 2.20
+#: The score axis runs the *exact* width of the tile row and sits directly
+#: above it. It used to be indented past the notch and stop short of the last tile,
+#: which left a line whose length matched nothing on the slide and read as a
+#: second, unrelated object (#3296). Ducking under the notch's floor instead
+#: buys the full span for the price of 1.2 units of headroom nothing was using.
+RANK_AXIS_Y = 5.80
+RANK_AXIS_LABEL_Y = 6.06
+RANK_TILE_Y = 4.05
+RANK_MARK_Y = 3.60
+RANK_CUT_LABEL_Y = 2.78
+
+#: Big enough to read from the back of the room. The mark is the *only* thing
+#: on the slide that says which tiles are books — the thumbnails read as
+#: photographs and not as their contents at this size — so it is sized like a
+#: headline rather than like an annotation (#3296).
+RANK_MARK_PT = 56
 
 
-assert RANK_TILE_Y + RANK_TILE <= RANK_TOP, "the tile row has grown into the title notch"
+assert RANK_TILE_Y + RANK_TILE < RANK_AXIS_Y < RANK_TOP, "the score axis no longer clears the tile row"
 
 
 def _rank_x(index: int) -> float:
     """Left edge of the `index`-th tile, laid out centred on the canvas."""
-    span = len(RANKING) * RANK_TILE + (len(RANKING) - 1) * RANK_GAP
-    return (RANK_CANVAS[0] - span) / 2 + index * (RANK_TILE + RANK_GAP)
+    return _rank_left() + index * (RANK_TILE + RANK_GAP)
+
+
+def _rank_left() -> float:
+    """Left edge of the tile row, and so of the score axis above it."""
+    return (RANK_CANVAS[0] - _rank_span()) / 2
+
+
+def _rank_span() -> float:
+    """Width of the whole tile row."""
+    return len(RANKING) * RANK_TILE + (len(RANKING) - 1) * RANK_GAP
 
 
 def _cut_x(admitted: int) -> float:
-    """The gap between the `admitted`-th tile and the next one."""
-    return _rank_x(admitted) - RANK_GAP / 2
+    """The gap that leaves the top `admitted` items to its right.
+
+    The row runs low score first, so "include 7 of 10" is the boundary before
+    the 4th tile, not after the 7th.
+    """
+    return _rank_x(len(RANKING) - admitted) - RANK_GAP / 2
+
+
+def _errors(admitted: int) -> str:
+    """The two error counts a cut makes, in the words the rest of the deck uses."""
+    kept = RANKING[len(RANKING) - admitted :]
+    dropped = RANKING[: len(RANKING) - admitted]
+    false_pos = sum(1 for _, positive in kept if not positive)
+    false_neg = sum(1 for _, positive in dropped if positive)
+    return f"{false_pos} false positive{'' if false_pos == 1 else 's'}\n{false_neg} false negative{'' if false_neg == 1 else 's'}"
 
 
 def rank_fig() -> None:
@@ -222,20 +260,22 @@ def _rank_stage(stage: int) -> plt.Figure:
     width, height = RANK_CANVAS
     fig, ax = _canvas(width, height, RANK_UNIT)
 
-    # The score axis, indented past the title notch and spending the right
-    # margin to buy the width back — the standard repair for a figure whose top
-    # row spans the drawing (slides/STYLE.md).
-    axis_y = 7.05
+    # The score axis, the exact width of the row it describes and immediately
+    # above it, so that it reads as that row's axis rather than as a second
+    # object. It ducks under the title notch's floor rather than indenting past
+    # its right edge (slides/STYLE.md's "move the one thing that reaches left",
+    # applied vertically): the notch reserves a corner, not a band.
+    left, right = _rank_left(), _rank_left() + _rank_span()
     ax.annotate(
         "",
-        xy=(width - 0.5, axis_y),
-        xytext=(RANK_INDENT, axis_y),
+        xy=(right, RANK_AXIS_Y),
+        xytext=(left, RANK_AXIS_Y),
         arrowprops={"arrowstyle": "-|>,head_width=0.16,head_length=0.34", "color": SOFT, "linewidth": 1.6},
     )
     ax.text(
-        (RANK_INDENT + width - 0.5) / 2,
-        axis_y + 0.22,
-        "detector score, high to low",
+        (left + right) / 2,
+        RANK_AXIS_LABEL_Y,
+        "detector score, low to high",
         ha="center",
         va="bottom",
         fontsize=21,
@@ -252,7 +292,7 @@ def _rank_stage(stage: int) -> plt.Figure:
                 "✓" if positive else "✗",
                 ha="center",
                 va="top",
-                fontsize=26,
+                fontsize=RANK_MARK_PT,
                 color=GREEN if positive else RED,
             )
 
@@ -261,28 +301,26 @@ def _rank_stage(stage: int) -> plt.Figure:
             x = _cut_x(admitted)
             ax.plot(
                 [x, x],
-                [RANK_CUT_LABEL_Y + 0.62, RANK_TOP],
+                [RANK_CUT_LABEL_Y + 0.12, RANK_TILE_Y + RANK_TILE + 0.22],
                 color=BLUE,
                 linewidth=2.2,
                 linestyle=(0, (4, 3)),
                 zorder=4,
             )
-            wrong_in = sum(1 for _, positive in RANKING[:admitted] if not positive)
-            missed = sum(1 for _, positive in RANKING[admitted:] if positive)
             ax.text(
                 x,
-                RANK_CUT_LABEL_Y + 0.34,
-                f"keep {admitted}",
+                RANK_CUT_LABEL_Y,
+                f"Include {admitted}",
                 ha="center",
                 va="top",
-                fontsize=20,
+                fontsize=22,
                 color=BLUE,
                 fontweight="bold",
             )
             ax.text(
                 x,
-                RANK_CUT_LABEL_Y - 0.28,
-                f"{wrong_in} wrong in\n{missed} left out",
+                RANK_CUT_LABEL_Y - 0.42,
+                _errors(admitted),
                 ha="center",
                 va="top",
                 fontsize=21,

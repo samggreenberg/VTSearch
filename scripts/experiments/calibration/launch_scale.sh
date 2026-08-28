@@ -68,6 +68,18 @@ export CALIB_SCHEDULE_VARIANTS=""
 export CALIB_FOLD_COUNTS=""
 export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
 
+# Declare the opening this study is FOR (#3278), rather than leaving it to be
+# decided per cell by whether a query happens to exist.  The pair guards itself
+# -- `siglip+dinov3_patch` exists to take the text sort, so falling back raises
+# -- but the WHOLE-IMAGE arms have no such guard: a category with no typed query
+# would open on three random known-goods while the others opened on a sort, and
+# that is the same arm-dependent seeding confound the pair was added to remove,
+# entering from the other side.  `all` categories are designated here, so the
+# `REQUIRE_SEED_QUERY` filter drops nothing: EXPERIMENT_QUERIES["vg_scale"]
+# covers every `<class>@<band>` cell.  It is a guard, not a selection knob.
+export CALIB_REQUIRE_OPENING="${CALIB_REQUIRE_OPENING:-text}"
+export CALIB_REQUIRE_SEED_QUERY="${CALIB_REQUIRE_SEED_QUERY:-1}"
+
 LOGS="$CALIB_EXP/logs"
 mkdir -p "$LOGS" "$CALIB_RESULTS/cells"
 
@@ -132,6 +144,10 @@ ENVX="$ENVX CALIB_N_SEEDS=$CALIB_N_SEEDS CALIB_MAX_STEPS=$CALIB_MAX_STEPS"
 ENVX="$ENVX CALIB_CELL_ORDER=$CALIB_CELL_ORDER"
 ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
 ENVX="$ENVX CALIB_PATCH_STYLES=$CALIB_PATCH_STYLES"
+# `REQUIRE_SEED_QUERY` filters CATEGORIES, so it reaches the cell list: it has to
+# travel with the rest or a task enumerates a different grid than the launcher
+# counted.  `REQUIRE_OPENING` is checked per cell and travels beside it.
+ENVX="$ENVX CALIB_REQUIRE_OPENING=$CALIB_REQUIRE_OPENING CALIB_REQUIRE_SEED_QUERY=$CALIB_REQUIRE_SEED_QUERY"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).

@@ -10,6 +10,7 @@ source scripts/experiments/pile/pile_env.sh   # point a study at it
 python build_pile.py --list                   # what exists
 python build_pile.py                          # build whatever is missing
 python build_pile.py --verify                 # check every cell is usable
+python build_pile.py --rebuildable            # check every cell could be REBUILT
 python build_pile.py --bands                  # voted-box scale bands (boxed datasets)
 ```
 
@@ -193,6 +194,25 @@ which once substituted a partial re-download and produced a healthy-looking
 `visual_genome_m` cell holding 1662 of 4193 medias. `require_demo_source`
 blocks that, and `--verify` cross-checks that a dataset's cells agree on media
 count.
+
+**`--verify` does not tell you the pile is rebuildable; `--rebuildable` does.**
+The two paths share no code, so a cell can load perfectly while the code that
+would produce it again is broken. That is not hypothetical: `scan_vg_boxes.py`
+grew a `{"meta": …, "categories": …}` envelope on 2026-08-17, the scan file on
+scratch stayed pre-envelope, and every `vg_box_*` rebuild died with
+`KeyError: 'categories'` for eleven days behind a pile that verified clean
+(#3297). `--rebuildable` runs each dataset's *selection* step — really choosing
+`vg_box_*`'s categories, confirming everything else's sources are present and
+readable — and embeds nothing, so it costs seconds. Run it after changing
+anything a build reads, and before trusting scratch to be purgeable.
+
+The reader now accepts **both** scan shapes, which is deliberate: re-running
+`scan_vg_boxes.py` would produce a current-format file, but with per-image
+compact filtering (`10239c24e`) and per-band supply (`fb4f4ec03`) that qualify
+categories differently — silently redefining three datasets whose numbers are
+published in #3129 and #3156. The envelope was the only incompatibility; the
+selector reads `voted_area`, `n_images` and `union_inflation` and nothing else,
+all three present in the 2026-08-12 file.
 
 ## Building on the GRID
 
