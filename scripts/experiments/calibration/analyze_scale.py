@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import json
 import math
 import os
 from collections import defaultdict
@@ -48,12 +49,15 @@ def freshness_report(cells_dir: Path, expected: int) -> tuple[int, list[str]]:
         return 0, []
     newest = max(f.stat().st_mtime for f in files)
     stale = [f.name for f in files if newest - f.stat().st_mtime > 6 * 3600]
-    print(f"cells present: {len(files)} of {expected} expected")
+    if not expected:
+        print(f"cells present: {len(files)} (no grid_shape.json, so the expected count is unknown)")
+    else:
+        print(f"cells present: {len(files)} of {expected} expected")
     print(f"newest cell written: {time.strftime('%Y-%m-%d %H:%M', time.localtime(newest))}")
     if stale:
         print(f"WARNING: {len(stale)} cells are >6h older than the newest — from an earlier run?")
         print(f"         e.g. {', '.join(stale[:5])}")
-    if len(files) != expected:
+    if expected and len(files) != expected:
         print(f"WARNING: {expected - len(files)} cells missing; results below are a SUBSET")
     return len(files), stale
 
@@ -106,7 +110,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--exp", default=f"/expscratch/{os.environ.get('USER', 'sgreenberg')}/scale-3156")
     ap.add_argument("--at-step", type=int, default=150, help="votes spent at which to read the headline")
-    ap.add_argument("--expect", type=int, default=324, help="cells the grid should have produced")
+    # Read from the run, not baked in here. A literal belongs to whichever grid
+    # was current when it was typed: 324 was the three-seed grid's, and against
+    # the 3600-cell run that replaced it this printed "3600 of 324 expected" and
+    # "WARNING: -3276 cells missing", which is a complete grid reported as a
+    # subset. `launch_scale.sh` records the shape it launched.
+    ap.add_argument("--expect", type=int, default=0, help="expected cell count; 0 = read results/grid_shape.json")
     ap.add_argument(
         "--extra-cells",
         default="",
@@ -117,7 +126,14 @@ def main() -> int:
     args = ap.parse_args()
 
     cells = Path(args.exp) / "results" / "cells"
-    freshness_report(cells, args.expect)
+    expect = args.expect
+    if not expect:
+        shape = Path(args.exp) / "results" / "grid_shape.json"
+        try:
+            expect = int(json.loads(shape.read_text())["n_cells"])
+        except (OSError, ValueError, KeyError, TypeError):
+            expect = 0
+    freshness_report(cells, expect)
     rows, n_files, dropped = load_rows(cells)
     if args.extra_cells:
         extra, n_extra, d_extra = load_rows(Path(args.extra_cells))

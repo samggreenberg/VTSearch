@@ -94,7 +94,7 @@ step viewer python viewer.py --results "$EXP" --arms results=prod \
   --title "VTSearch on vg_scale: quality over clicks" \
   --subtitle "Twelve classes x three target-size bands x five embedder columns, shipped defaults (#3156, #3276)"
 
-step overview      bash -c "python analyze_overview.py --exp $EXP > $OUT/REPORT_overview.txt 2>&1; tail -5 $OUT/REPORT_overview.txt"
+step overview      bash -c "python analyze_overview.py --exp $EXP --baseline $TEXT_BASELINE > $OUT/REPORT_overview.txt 2>&1; tail -5 $OUT/REPORT_overview.txt"
 step scale         bash -c "python analyze_scale.py --exp $EXP > $OUT/REPORT_scale.txt 2>&1; tail -5 $OUT/REPORT_scale.txt"
 step phases       bash -c "python analyze_phases.py --exp $EXP > $OUT/REPORT_phases.txt 2>&1; tail -8 $OUT/REPORT_phases.txt"
 step tail_overlap  bash -c "python analyze_tail_overlap.py --exp $EXP --metric average_precision > $OUT/REPORT_tail.txt 2>&1; tail -6 $OUT/REPORT_tail.txt"
