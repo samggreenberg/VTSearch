@@ -19,10 +19,11 @@
      looks like twenty votes into a real session, and it is the labels that say
      so. -->
 
-<!-- **c** — Three cuts, and every one of them defensible. Include three and you
-     hand back nothing embarrassing and miss two books. Include seven and you
-     miss no book and hand back two things that are not books. Include five
-     splits it. Put the question to the room, then give them the honest answer:
-     the ranking cannot choose, because all three agree with every label on
-     screen. What chooses is what the two mistakes are worth to the person who
-     asked. -->
+<!-- **c** — Three cuts, and every one of them defensible. Include two and you
+     hand back nothing embarrassing and miss three books. Include eight and you
+     miss no book and hand back three things that are not books. Include five
+     splits it down the middle: one mistake of each kind. Put the question to
+     the room, then give them the honest answer: the ranking cannot choose,
+     because all three are consistent with every label on screen. What chooses
+     is what the two mistakes are worth to the person who asked — and that is
+     the next slide, which prices them and gets a different cut each time. -->
