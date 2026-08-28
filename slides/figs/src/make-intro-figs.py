@@ -82,6 +82,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.font_manager import FontProperties
+from matplotlib.textpath import TextPath
 from sklearn.svm import SVC
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -276,30 +278,47 @@ def _in_notch(p: np.ndarray, margin: float) -> bool:
     return x0 - margin < p[0] < x1 + margin and y0 - margin < p[1] < y1 + margin
 
 
+#: How many candidate positions each item is chosen from. This is Mitchell's
+#: best-candidate rule: draw this many uniform points, keep whichever is
+#: furthest from everything already placed. The dart-throwing sampler it
+#: replaced accepted the *first* candidate that cleared a minimum separation,
+#: which is a weaker thing to ask — it forbids clumps but does nothing about
+#: voids, and on a field this sparse (96 discs on 144 square units is 27%
+#: packing) it left holes several items wide that read as regions the drawing
+#: was making a claim about (#3301). Best-candidate spends its randomness on
+#: the emptiest place instead, so the field stays irregular — it must not read
+#: as a lattice — without opening a gap the eye stops on.
+FIELD_CANDIDATES = 48
+
+
 @functools.lru_cache(maxsize=1)
 def _field() -> np.ndarray:
-    """A fixed field of items in 2D, spread with a minimum separation.
+    """A fixed field of items in 2D, spread evenly without being regular.
 
-    Poisson-ish rather than uniform: a uniform draw clumps, and a clump reads
-    as one blurred object at slide size rather than as several items. Laid out
-    across the whole 16:9 canvas apart from the title reserve, because the
-    opening stage's claim is that there is too much of this to look through.
+    Blue-noise rather than uniform: a uniform draw clumps *and* voids, and both
+    read as structure at slide size — a clump as one blurred object, a void as
+    somewhere the figure means something by. Laid out across the whole 16:9
+    canvas apart from the title reserve, because the opening stage's claim is
+    that there is too much of this to look through.
     """
     rng = np.random.default_rng(11)
     margin = 0.55
     low = np.array([margin, margin])
     high = np.array(CANVAS) - margin
     pts: list[np.ndarray] = []
-    for _ in range(400_000):
-        if len(pts) == FIELD_ITEMS:
-            break
-        p = rng.uniform(low, high)
-        if _in_notch(p, R + 0.22):
-            continue
-        if all(np.hypot(*(p - q)) > 0.72 for q in pts):
-            pts.append(p)
-    else:
-        raise SystemExit(f"the field would not pack {FIELD_ITEMS} items — lower FIELD_ITEMS or ITEM_APART")
+    for _ in range(FIELD_ITEMS):
+        best: np.ndarray | None = None
+        best_gap = -1.0
+        for _ in range(FIELD_CANDIDATES):
+            p = rng.uniform(low, high)
+            if _in_notch(p, R + 0.22):
+                continue
+            gap = min((float(np.hypot(*(p - q))) for q in pts), default=float("inf"))
+            if gap > best_gap:
+                best, best_gap = p, gap
+        if best is None:
+            raise SystemExit("every candidate landed in the title reserve — the margins are wrong")
+        pts.append(best)
     return np.array(pts)
 
 
@@ -829,6 +848,17 @@ def _scene() -> tuple[np.ndarray, SVC, SVC, np.ndarray, np.ndarray, int, int, tu
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+#: Type size of the "?" an item under consideration carries.
+QUERY_PT = 13
+
+
+@functools.lru_cache(maxsize=1)
+def _query_drop() -> float:
+    """How far above its baseline to set the "?" so its ink straddles the centre."""
+    box = TextPath((0, 0), "?", size=QUERY_PT, prop=FontProperties(family="DejaVu Sans", weight="bold")).get_extents()
+    return -(box.y0 + box.y1) / 2 / UNIT_PT
+
+
 def _circle(ax: plt.Axes, p: np.ndarray, *, asking: bool = False) -> None:
     """An item: a hollow circle, with a question mark in it while it is being asked.
 
@@ -848,7 +878,21 @@ def _circle(ax: plt.Axes, p: np.ndarray, *, asking: bool = False) -> None:
         )
     )
     if asking:
-        ax.text(p[0], p[1], "?", color=INK, fontsize=13, fontweight="bold", ha="center", va="center", zorder=6)
+        # `va="center"` centres the font's *box*, not the glyph, and a "?" has
+        # no descender to fill the bottom of that box — so it sat visibly high
+        # in a circle it is supposed to be centred in (#3301). Measured off the
+        # outline instead and set from its baseline.
+        ax.text(
+            p[0],
+            p[1] + _query_drop(),
+            "?",
+            color=INK,
+            fontsize=QUERY_PT,
+            fontweight="bold",
+            ha="center",
+            va="baseline",
+            zorder=6,
+        )
 
 
 def _check(ax: plt.Axes, p: np.ndarray) -> None:
@@ -990,7 +1034,13 @@ def _vote_boundary_stage(stage: int) -> plt.Figure:
         **({i: "bad" for i in seed_bad} if step >= 2 else {}),
         **({asked: "good"} if step >= 6 else {}),
     }
-    asking = {asked} if step == 5 else ({asked_again} if step >= 7 else set())
+    # Page g asks the next question; page h does not. Page h has moved on from
+    # *what gets asked* to *what comes back*: it is the same detector cut two
+    # ways, and both cuts agree with every vote on screen, so there is nothing
+    # being asked on it. Page i is the one that puts the question back, because
+    # its whole point is that those cuts were on offer when the question was
+    # picked (#3301).
+    asking = {asked} if step == 5 else ({asked_again} if step == 7 else set())
 
     # ── stages 8 and 9: the same detector, cut looser and cut tighter ─────────
     # Drawn under the items, and only on the two pages that are about it: page

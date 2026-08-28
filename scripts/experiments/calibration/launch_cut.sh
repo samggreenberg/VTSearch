@@ -26,15 +26,32 @@ export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
 export CALIB_SAFE_THRESHOLDS=1
 export CALIB_ANALYZE=analyze_cut.py
-# The head the live detector ships since #2790/#2809 - the cut's authority is
-# only worth measuring on the model users actually get.
-export CALIB_HEAD="${CALIB_HEAD:-linear}"
+# The head a live detector actually has, because the cut's authority is only worth
+# measuring on the model users actually get.  NOT `linear`: that was production
+# when this launcher was written, and PR #3198 moved `PRODUCTION_HEAD` to the
+# linear SVM, so the pin outlived the thing it was pinning -- preflight check 12
+# has been failing on it since.  Named rather than left unset, which is what
+# `launch_transfer_2883.sh` settled on: the run's head is then readable from the
+# launcher instead of from a default three modules away.
+export CALIB_HEAD="${CALIB_HEAD:-linear_svm}"
 
 # Visual Genome region voting only; production patch arm + single-vector control.
 # The control is not decoration here: `calculate_gmm_threshold` also backs the
 # cosine/text sort, so a winning rule has to not regress the no-max-pool geometry.
 export CALIB_DATASETS="${CALIB_DATASETS:-visual_genome_m}"
-export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,dinov3_patch}"
+# The region arm is the PAIR `siglip+dinov3_patch` (#3278).  A cut rule is a
+# statement about a score distribution, and the control above is here because
+# `calculate_gmm_threshold` also backs the cosine/text sort -- so the two arms
+# have to differ in the pooling geometry and in NOTHING ELSE.  Bare
+# `dinov3_patch` has no text tower and would open on three random known-goods
+# against the control's typed query, which moves the early score distribution
+# the 6-20-vote window is entirely about.
+export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,siglip+dinov3_patch}"
+export CALIB_REQUIRE_OPENING=text
+# A paired arm cannot fall back to the known-good start (`run_cells.py` raises),
+# so every selected category must have a typed query.  Selection filters to the
+# eligible ones before it picks, replacing rather than dropping.
+export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
 # No raw-patch tree arm -> nothing to re-pool.
 export CALIB_REPOOL_VARIANTS="${CALIB_REPOOL_VARIANTS:-}"

@@ -51,8 +51,30 @@ const FIXTURE_BUILDER = join(REPO, 'slides', 'figs', 'src', 'coco_fixture.py');
 // The window is also nearly square, because the slot is: a 16:10 frame wastes
 // two fifths of a `bg right:56%` box, which is the same as choosing to draw
 // the whole thing smaller.
-const VIEWPORT = { width: 1180, height: 940 };
+//
+// The *height* is the app's own layout knob. At 940 the shot filled the slide
+// top to bottom with no margin at all — a projector that overscans clips the
+// chrome — and the centre viewer, whose photo is width-bound, spent the
+// surplus on empty bands above and below it that pushed the Good/Bad buttons
+// into the bottom eighth of the slide (#3301). A shorter window takes that
+// surplus out of the app's own layout rather than out of the figure.
+//
+// How short is bounded by the headline, not by taste. The composed canvas is
+// 16:9, so the app's width on the slide is `720·(1−2·SHOT_MARGIN)·1180/height`
+// and what is left of 1280 is the column the title lives in. That column has
+// to clear `slide_figure.TITLE_NOTCH_PX` — 300px at a 60px inset — so:
+//
+//     height ≥ 720·1180·(1 − 2·SHOT_MARGIN) / (1280 − 375)
+//
+// which at SHOT_MARGIN = 0.06 is 826. 830 takes it with 4px to spare.
+const VIEWPORT = { width: 1180, height: 830 };
 const SCALE = 2;
+
+// White above and below the frame, as a fraction of the shot's own height, so
+// the app does not bleed to the slide's edges. Spent out of the same 16:9
+// canvas as the title column, which is why the two numbers are chosen
+// together.
+const SHOT_MARGIN = 0.06;
 
 // Which photo the centre viewer shows. Ranked by the detector, the top of the
 // list is whatever the model likes best, and "whatever the model likes best"
@@ -92,14 +114,21 @@ const REGION_VOTES = {
   bad: { laptop: 2, tv: 1, dog: 1 },
 };
 
-// The region shot wants the opposite of a portrait: a photo where the books are
-// a *part* of the frame, so that a box drawn round them is visibly a claim
-// about where the evidence is rather than a box round the whole picture. Hence
-// one named frame with a hand-measured box rather than a preference list: a
-// bookcase behind a television, and the box goes round the shelf rather than
-// the room. The fractions are of the displayed image, measured off the source.
-const HERO_REGION = 'book/000000509260.jpg';
-const REGION_BOX = { x0: 0.46, y0: 0.06, x1: 0.86, y1: 0.44 };
+// The region shot wants the opposite of a portrait: a photo where the book is
+// a *part* of the frame, so that a box drawn round it is visibly a claim about
+// where the evidence is rather than a box round the whole picture. Hence one
+// named frame with a measured box rather than a preference list.
+//
+// It used to be a bookcase behind a television, with the box round one shelf.
+// That taught the wrong thing twice over: a frame already filled with books
+// makes the box look like a crop rather than a claim, and a box round a third
+// of fourteen tiny spines is not a region anyone would actually draw (#3296).
+// This is one book — a boxed game on a bed, a fifth of the frame — beside a
+// camera lens, a phone and a remote that are not books. The box is COCO's own
+// `book` annotation on that frame, as a fraction of the displayed image, which
+// is why it is tight on the object rather than eyeballed round it.
+const HERO_REGION = 'book/000000396729.jpg';
+const REGION_BOX = { x0: 0.156, y0: 0.222, x1: 0.910, y1: 0.601 };
 
 const log = (...a) => console.log('[slide-shots]', ...a);
 
@@ -118,7 +147,8 @@ const log = (...a) => console.log('[slide-shots]', ...a);
  */
 async function shoot(page, name) {
   const png = await page.screenshot({ type: 'png' });
-  // Padded on the left to exactly 16:9 before the encode. These go on
+  // Padded on the left to exactly 16:9 before the encode, and by `SHOT_MARGIN`
+  // above and below so the frame does not run to the slide's own edges. These go on
   // `_class: full` slides, which reserve their top-left corner for the
   // headline; a 1.25:1 frame letterboxes into that slot with white bands too
   // narrow to hold it, so the title landed across the app's own chrome. The
@@ -133,11 +163,14 @@ async function shoot(page, name) {
       '-c',
       'import sys;from io import BytesIO;from PIL import Image;'
         + 'shot=Image.open(BytesIO(sys.stdin.buffer.read())).convert("RGB");'
-        + 'w=max(shot.width,round(shot.height*16/9));'
-        + 'canvas=Image.new("RGB",(w,shot.height),"white");'
-        + 'canvas.paste(shot,(w-shot.width,0));'
+        + 'm=round(shot.height*float(sys.argv[2]));'
+        + 'h=shot.height+2*m;'
+        + 'w=max(shot.width,round(h*16/9));'
+        + 'canvas=Image.new("RGB",(w,h),"white");'
+        + 'canvas.paste(shot,(w-shot.width,m));'
         + 'canvas.save(sys.argv[1],"WEBP",quality=92,method=6)',
       join(FIGS, `${name}.webp`),
+      String(SHOT_MARGIN),
     ],
     { cwd: REPO, input: png, stdio: ['pipe', 'inherit', 'inherit'] }
   );

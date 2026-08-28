@@ -73,7 +73,9 @@ class AppSettingsSchema(Schema):
     theme = fields.String(validate=validate.OneOf(VALID_THEMES))
     enrich_descriptions = fields.Boolean()
     calibrate_count = fields.Integer()
-    calibration_fraction = fields.Float()
+    # ``null`` = no explicit split; the per-embedder production default applies
+    # (0.3 single-vector / 0.5 patch, issue #3287).
+    calibration_fraction = fields.Float(allow_none=True)
     audio_playing = fields.Boolean()
     show_animations = fields.String(validate=validate.OneOf(VALID_ANIMATION_MODES))
     show_metadata = fields.Boolean()
@@ -247,7 +249,9 @@ class SettingsUpdateSchema(Schema):
     theme = fields.String(validate=validate.OneOf(VALID_THEMES))
     enrich_descriptions = fields.Boolean()
     calibrate_count = fields.Integer()
-    calibration_fraction = fields.Float()
+    # ``null`` = no explicit split; the per-embedder production default applies
+    # (0.3 single-vector / 0.5 patch, issue #3287).
+    calibration_fraction = fields.Float(allow_none=True)
     audio_playing = fields.Boolean()
     show_animations = fields.String(validate=validate.OneOf(VALID_ANIMATION_MODES))
     show_metadata = fields.Boolean()

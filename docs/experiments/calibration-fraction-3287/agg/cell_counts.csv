@@ -1,0 +1,16 @@
+arm,geometry,n_cells
+0.30,dinov3_patch/max_patch,48
+0.30,dinov3_patch/whole_image,48
+0.30,siglip/whole_image,48
+0.40,dinov3_patch/max_patch,48
+0.40,dinov3_patch/whole_image,48
+0.40,siglip/whole_image,48
+0.50,dinov3_patch/max_patch,48
+0.50,dinov3_patch/whole_image,48
+0.50,siglip/whole_image,48
+0.60,dinov3_patch/max_patch,48
+0.60,dinov3_patch/whole_image,48
+0.60,siglip/whole_image,48
+0.70,dinov3_patch/max_patch,48
+0.70,dinov3_patch/whole_image,48
+0.70,siglip/whole_image,48

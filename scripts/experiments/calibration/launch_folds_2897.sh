@@ -30,11 +30,18 @@ set -uo pipefail
 export CALIB_EXP="${CALIB_EXP:-/exp/$USER/calibration-folds-2897}"
 export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
 
-# The shipped path: safe thresholds on, production linear head.  The fold count
+# The shipped path: safe thresholds on, the production head.  The fold count
 # is a knob on the cross-calibration term, but what a user gets is that term
 # after the blend, so both arms are emitted per K (folds_k{K}_xcal / _blend).
 export CALIB_SAFE_THRESHOLDS="${CALIB_SAFE_THRESHOLDS:-1}"
-export CALIB_HEAD="${CALIB_HEAD:-linear}"
+# The head a live detector actually has, because regret(K) is only worth
+# measuring on the model users actually get.  NOT `linear`: that was production
+# when this launcher was written, and PR #3198 moved `PRODUCTION_HEAD` to the
+# linear SVM, so the pin outlived the thing it was pinning -- preflight check 12
+# has been failing on it since.  Named rather than left unset, which is what
+# `launch_transfer_2883.sh` settled on: the run's head is then readable from the
+# launcher instead of from a default three modules away.
+export CALIB_HEAD="${CALIB_HEAD:-linear_svm}"
 export CALIB_BLEND_SCHEDULE="${CALIB_BLEND_SCHEDULE:-prod}"
 export CALIB_ANALYZE=analyze_folds_2897.py
 
@@ -53,9 +60,23 @@ export CALIB_CALIBRATE_COUNT="${CALIB_CALIBRATE_COUNT:-2}"
 # the Kmax fold budget goes into seeds and steps instead of arms.  The region
 # side additionally runs the production patch arm, which is where the bag-aware
 # calibrator (and its much smaller effective calibration set) lives.
+# The region side is the PAIR `siglip+dinov3_patch` (#3278).  This study reports
+# per voting mode because the calibrators differ (bag-aware vs row-wise), and
+# with bare `dinov3_patch` the region side would also have been the only side
+# opening on three random known-goods -- DINOv3 has no text tower.  regret(K) is
+# read across the cold start, where the calibration set is a handful of scores
+# and therefore most sensitive to which items the opening put in front of the
+# user, so the difference lands squarely inside the deliverable.
 export CALIB_DATASETS="${CALIB_DATASETS:-visual_genome_m,caltech101_m}"
-export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,dinov3_patch}"
+export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,siglip+dinov3_patch}"
 export CALIB_CALTECH_EMBEDDERS="${CALIB_CALTECH_EMBEDDERS:-siglip}"
+# The preflight below runs BEFORE prepare (this is a full chain), so check 14
+# reports itself skipped there and run_cells.py is what asserts this per cell.
+export CALIB_REQUIRE_OPENING=text
+# A paired arm cannot fall back to the known-good start (`run_cells.py` raises),
+# so every selected category must have a typed query.  Selection filters to the
+# eligible ones before it picks, replacing rather than dropping.
+export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
 export CALIB_REPOOL_VARIANTS="${CALIB_REPOOL_VARIANTS:-}"
 

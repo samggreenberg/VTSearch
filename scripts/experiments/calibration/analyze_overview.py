@@ -1,8 +1,15 @@
 """What is VTSearch good at, what is it bad at, and why — descriptively.
 
 No arms, no winners. Three modes a real user could pick (`siglip` whole-image,
-`siglip2_l` whole-image, `dinov3_patch` region voting) run many times under
-shipped defaults, characterised rather than ranked.
+`siglip2_l` whole-image, `siglip+dinov3_patch` region voting) run many times
+under shipped defaults, characterised rather than ranked.
+
+The region mode is a **pair** (#3276): SigLIP embeds the typed query and ranks
+the opening, DINOv3 does the learning. DINOv3 has no text tower, so bare
+`dinov3_patch` cannot open on a text sort at all -- it falls back to three
+random known-goods, which would put a seeding difference inside the voting-mode
+comparison this file draws. All three modes now open the same way and differ
+only in the space the detector learns in.
 
 The "why" comes from a decomposition the harness already emits per step:
 
@@ -112,7 +119,18 @@ def main() -> int:
     def mode(r: dict) -> str:
         return f"{r.get('embedder', '')}/{r.get('style', '')}".strip("/")
 
+    def mode_w(names, floor: int = 26) -> int:
+        """Width of the mode column, from the widest name actually present.
+
+        A constant 26 was wide enough for `dinov3_patch/max_patch` and is two
+        short of `siglip+dinov3_patch/max_patch`, so the by-band table printed
+        `...max_patchsmall` -- the band welded onto the arm. Tables are how this
+        study is read, so the width follows the data.
+        """
+        return max(floor, max((len(str(n)) for n in names), default=floor) + 2)
+
     modes = sorted({mode(r) for r in rows})
+    MW = mode_w(modes)
     cats = sorted({r["category"] for r in rows})
     seeds = sorted({r["seed"] for r in rows})
     expected = args.expect or len(cats) * len(modes) * len(seeds)
@@ -148,26 +166,28 @@ def main() -> int:
     deep = {k: v for k, v in snap.items() if k[3] == DEEP}
 
     print("=== what a run looks like: cost distribution (lower is better) ===")
-    print(f"{'mode':<26}{'votes':>6}{'p10':>7}{'median':>8}{'p90':>7}{'worst':>7}{'n':>6}")
-    print("-" * 67)
+    hdr = f"{'mode':<{MW}}{'votes':>6}{'p10':>7}{'median':>8}{'p90':>7}{'worst':>7}{'n':>6}"
+    print(hdr)
+    print("-" * len(hdr))
     for m in modes:
         for s in STEPS:
             xs = [fnum(v, "cost") for k, v in snap.items() if k[0] == m and k[3] == s]
             xs = [x for x in xs if x == x]
             print(
-                f"{m:<26}{s:>6}{f(q(xs, 0.1)):>7}{f(q(xs, 0.5)):>8}"
+                f"{m:<{MW}}{s:>6}{f(q(xs, 0.1)):>7}{f(q(xs, 0.5)):>8}"
                 f"{f(q(xs, 0.9)):>7}{f(max(xs)) if xs else 'n/a':>7}{len(xs):>6}"
             )
         print()
 
     print(f"=== runs that never got going (cost >= {args.floor} at {DEEP} votes) ===")
-    print(f"{'mode':<26}{'stuck':>7}{'of':>6}{'rate':>8}")
-    print("-" * 47)
+    hdr = f"{'mode':<{MW}}{'stuck':>7}{'of':>6}{'rate':>8}"
+    print(hdr)
+    print("-" * len(hdr))
     for m in modes:
         xs = [fnum(v, "cost") for k, v in deep.items() if k[0] == m]
         xs = [x for x in xs if x == x]
         stuck = [x for x in xs if x >= args.floor]
-        print(f"{m:<26}{len(stuck):>7}{len(xs):>6}{f(len(stuck) / len(xs)) if xs else 'n/a':>8}")
+        print(f"{m:<{MW}}{len(stuck):>7}{len(xs):>6}{f(len(stuck) / len(xs)) if xs else 'n/a':>8}")
 
     # --- the profile of a stuck run -----------------------------------------
     print()
@@ -175,8 +195,9 @@ def main() -> int:
     metrics = ("n_good", "n_bad", "average_precision", "auroc", "oracle_cost", "regret")
     bad = [v for k, v in deep.items() if fnum(v, "cost") >= args.floor]
     good = [v for k, v in deep.items() if fnum(v, "cost") < args.floor]
-    print(f"{'metric':<22}{'stuck':>14}{'healthy':>14}   n={len(bad)} vs {len(good)}")
-    print("-" * 62)
+    hdr = f"{'metric':<22}{'stuck':>14}{'healthy':>14}   n={len(bad)} vs {len(good)}"
+    print(hdr)
+    print("-" * len(hdr))
     for met in metrics:
         b = [x for x in (fnum(v, met) for v in bad) if x == x]
         g = [x for x in (fnum(v, met) for v in good) if x == x]
@@ -192,8 +213,9 @@ def main() -> int:
         ph_bad[v.get("phase", "?")] += 1
     for v in good:
         ph_good[v.get("phase", "?")] += 1
-    print(f"{'phase':<12}{'stuck':>8}{'healthy':>9}   what it means")
-    print("-" * 72)
+    hdr = f"{'phase':<12}{'stuck':>8}{'healthy':>9}   what it means"
+    print(hdr)
+    print("-" * len(hdr))
     meaning = {
         "good": "never found GOOD_TARGET positives — still on the text sort",
         "bad": "still collecting the initial negatives",
@@ -208,8 +230,9 @@ def main() -> int:
     print()
     print("=== why: is the ranking the limit, or the cut rule? ===")
     print("cost = oracle_cost (the ranking's own limit) + regret (what the cut gives away)")
-    print(f"{'mode':<26}{'cost':>13}{'oracle':>13}{'regret':>13}{'regret share':>14}")
-    print("-" * 79)
+    hdr = f"{'mode':<{MW}}{'cost':>13}{'oracle':>13}{'regret':>13}{'regret share':>14}"
+    print(hdr)
+    print("-" * len(hdr))
     for m in modes:
         sel = [v for k, v in deep.items() if k[0] == m]
         c = [x for x in (fnum(v, "cost") for v in sel) if x == x]
@@ -217,22 +240,24 @@ def main() -> int:
         g = [x for x in (fnum(v, "regret") for v in sel) if x == x]
         mc = mean_se(c)[0]
         share = mean_se(g)[0] / mc if mc else float("nan")
-        print(f"{m:<26}{pm(c):>13}{pm(o):>13}{pm(g):>13}{f(share):>14}")
+        print(f"{m:<{MW}}{pm(c):>13}{pm(o):>13}{pm(g):>13}{f(share):>14}")
 
     print()
     print("=== and inside regret: a bad rule, or a shifted calibration? ===")
-    print(f"{'mode':<26}{'regret':>13}{'rule_ineff':>13}{'cal_shift':>13}")
-    print("-" * 66)
+    hdr = f"{'mode':<{MW}}{'regret':>13}{'rule_ineff':>13}{'cal_shift':>13}"
+    print(hdr)
+    print("-" * len(hdr))
     for m in modes:
         sel = [v for k, v in deep.items() if k[0] == m]
         cols = ("regret", "rule_inefficiency", "calibration_shift")
         vals = [[x for x in (fnum(v, c) for v in sel) if x == x] for c in cols]
-        print(f"{m:<26}" + "".join(f"{pm(v):>13}" for v in vals))
+        print(f"{m:<{MW}}" + "".join(f"{pm(v):>13}" for v in vals))
 
     print()
     print("=== the same split, by target size ===")
-    print(f"{'mode':<26}{'band':<8}{'cost':>13}{'oracle':>13}{'regret':>13}{'stuck':>8}")
-    print("-" * 82)
+    hdr = f"{'mode':<{MW}}{'band':<8}{'cost':>13}{'oracle':>13}{'regret':>13}{'stuck':>8}"
+    print(hdr)
+    print("-" * len(hdr))
     for m in modes:
         for b in BANDS:
             sel = [v for k, v in deep.items() if k[0] == m and k[1].endswith("@" + b)]
@@ -240,7 +265,7 @@ def main() -> int:
             o = [x for x in (fnum(v, "oracle_cost") for v in sel) if x == x]
             g = [x for x in (fnum(v, "regret") for v in sel) if x == x]
             rate = (sum(1 for x in c if x >= args.floor) / len(c)) if c else float("nan")
-            print(f"{m:<26}{b:<8}{pm(c):>13}{pm(o):>13}{pm(g):>13}{f(rate):>8}")
+            print(f"{m:<{MW}}{b:<8}{pm(c):>13}{pm(o):>13}{pm(g):>13}{f(rate):>8}")
         print()
 
     # --- per-cell reliability ------------------------------------------------
@@ -263,7 +288,7 @@ def main() -> int:
         print(f"({skipped} cell x mode combinations had < {args.min_seeds} runs and are not rated)")
     for cat, m, rate, med, n in sorted(scored, key=lambda r: -r[2])[: args.top]:
         bar = "#" * int(round(rate * 20))
-        print(f"{cat:<20}{m:<26}rate {rate:>5.2f}  median {med:>5.2f}  n={n:<4} {bar}")
+        print(f"{cat:<20}{m:<{MW}}rate {rate:>5.2f}  median {med:>5.2f}  n={n:<4} {bar}")
 
     print()
     print("=== hard for everyone, or hard for one mode? ===")

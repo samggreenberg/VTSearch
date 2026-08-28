@@ -87,6 +87,7 @@ Anything else stays open — a genuinely partial `Refs` is doing its job.
 - Skip it if it is already closed. Never reopen or re-close.
 - Close it with `state_reason: completed`.
 - **Strip the `solved` label in the same write.** `solved` means "the development is done; only merges remain" (see CLAUDE.md), and this close is the moment the last merge lands — so the label has nothing left to say. Pass `labels` explicitly with every label the issue keeps (`claude`, `experiment`, …) minus `solved`; `labels` *replaces* the whole set, so passing `[]` would wipe the rest. A `PreToolUse` hook blocks a `completed` close that keeps `solved` or omits the array.
+- **Clear the assignee in the same write.** Pass `assignees: []`. An assignee means "somebody is working this right now" (see CLAUDE.md), which a closed issue cannot be. Unlike `labels`, there is nothing to preserve here — the empty array is always the right value on a close.
 - Add a one-line comment noting it shipped to `main` in today's release and linking the fix PR (e.g. `Shipped to main in the 2026-07-14 release — fixed
   in #M.`). When the PR used a non-closing keyword, say so in that comment, so the mislabel is visible on the issue rather than silently corrected.
 
@@ -94,7 +95,7 @@ Anything else stays open — a genuinely partial `Refs` is doing its job.
 
 ## 6b. Audit the `solved` label
 
-`solved` means "the development is done; only merges remain", and the fix session applies it when it opens the PR (CLAUDE.md). So by the time you get here the label should already be right, and this step is an **audit**: `scripts/reconcile-solved-labels.py` catches issues a session forgot to label, issues whose fix PR was later abandoned, and stale labels left behind by step 6's closes.
+`solved` means "the development is done; only merges remain", and the fix session applies it when it opens the PR (CLAUDE.md). So by the time you get here the label should already be right, and this step is an **audit**: `scripts/reconcile-solved-labels.py` catches issues a session forgot to label, issues whose fix PR was later abandoned, and stale labels left behind by step 6's closes. It audits the **assignee** on the same pass, for the same reason — an assignee outlives its purpose exactly when `solved` does.
 
 Run it right after step 6 to confirm nothing was left behind. It is also worth running **between** releases — the views it keeps honest (`is:issue is:open -label:solved`, what a human should pick up next) matter most while the release is still weeks away.
 
@@ -102,7 +103,7 @@ The script is a pure function from data to plan — it does no network I/O, beca
 
 1. List the PRs merged into `dev` since the last release — the same `origin/main..origin/dev` window as step 3 — and read each one's **body**. These are `release_prs`.
 2. List the PRs currently **open** against `dev` (`open_prs`) and those **closed without merging** since the last release (`abandoned_prs`), with their bodies. The open ones are why an issue can be labelled before any merge; the abandoned ones are the only way a label comes off outside a close.
-3. List the repo's issues with their `labels` and `state`, and fetch each one's **comments** in chronological order (the API default).
+3. List the repo's issues with their `labels`, `state`, and `assignees`, and fetch each one's **comments** in chronological order (the API default).
 4. Assemble them into one JSON object and run the script:
 
 ```json
@@ -112,6 +113,7 @@ The script is a pure function from data to plan — it does no network I/O, beca
   "abandoned_prs": [{"number": 3155, "body": "... Closes #3090 ..."}],
   "issues": [
     {"number": 3077, "state": "open", "labels": ["claude"],
+     "assignees": ["samggreenberg"],
      "comments": [{"body": "Addressed in #3128"}]}
   ]
 }
@@ -121,13 +123,15 @@ The script is a pure function from data to plan — it does no network I/O, beca
 python scripts/reconcile-solved-labels.py --input plan-input.json
 ```
 
-It prints four buckets. **Apply `ADD` and `REMOVE` directly** — they are unambiguous. **Do not apply `NEEDS REVIEW`**; read those issues yourself. An issue lands there for one of three reasons, all genuinely undecidable from the outside:
+It prints five buckets. **Apply `ADD`, `REMOVE`, and `CLEAR ASSIGNEE` directly** — they are unambiguous. **Do not apply `NEEDS REVIEW`**; read those issues yourself. An issue lands there for one of three reasons, all genuinely undecidable from the outside:
 
 - **A fix pointer is not the newest comment.** The later comment may be a maintainer saying "thanks" or the reporter saying the fix does not work. Tagging would bury a dispute — hiding an issue that still needs solving — while skipping would leave solved work in the human queue.
 - **A comment claims a fix by commit SHA** instead of `Addressed in #M`. The script has only the JSON you piped in, so it cannot map a commit to its PR — but the claim is real, so it is surfaced. Resolve it with `git log --ancestry-path <sha>..origin/dev --merges --oneline | tail -1` to find the merge that carried it, then re-run with a corrected pointer.
 - **The issue carries `solved` but nothing resolves it** — stale, or fixed in an earlier release.
 
 That is the same "not silently skipped" principle step 6 applies to non-closing references.
+
+`CLEAR ASSIGNEE` is orthogonal to the label buckets — an issue whose label is already correct can still owe an assignee removal, so it appears under `CLEAR ASSIGNEE` while also counting as "no change" for its label. The bucket only ever asks you to *remove* an assignee: the script cannot tell "nobody is working this" from "a session started five minutes ago", so it never proposes assigning anyone, and it leaves `NEEDS REVIEW` issues and fallen-through fixes alone.
 
 Add `--check` to make it exit non-zero when anything needs attention, and `--json` for machine-readable output.
 

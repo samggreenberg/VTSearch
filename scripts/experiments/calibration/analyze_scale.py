@@ -203,7 +203,11 @@ def main() -> int:
         print("=== region voting vs the SAME encoder with geometry off, per band ===")
         print(f"{'band':<10}{'max_patch':>14}{'whole_image':>14}{'paired diff':>18}{'n':>5}")
         print("-" * 62)
-        live = next((a for a in styles if a.startswith("dinov3") and "(control)" not in a), None)
+        # Identify the region arm by its STYLE, not by its embedder's name: the
+        # region arm is `siglip+dinov3_patch/max_patch` since #3276, and a
+        # `startswith("dinov3")` test silently finds nothing and prints an empty
+        # control table rather than failing.
+        live = next((a for a in styles if a.endswith("/max_patch") and "(control)" not in a), None)
         base = ctrl[0]
         for b in BANDS:
             diffs = []

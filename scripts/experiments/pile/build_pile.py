@@ -16,13 +16,25 @@ Usage::
     python build_pile.py --datasets coco_val         # just COCO's cells
     python build_pile.py --embedders siglip2,siglip2_l
     python build_pile.py --verify                    # load every cell, check geometry
+    python build_pile.py --rebuildable               # can every cell still be REBUILT?
     python build_pile.py --manifest                  # (re)write MANIFEST.{json,md}
     python build_pile.py --provenance                # which device built each cell
     python build_pile.py --backfill-provenance       # fingerprint the pre-#3160 cells
 
+``--rebuildable`` is the complement to ``--verify``, and the two answer
+different questions. ``--verify`` asks whether the cells on disk are usable;
+``--rebuildable`` asks whether they could be produced again. A cell that loads
+says nothing about whether it can be rebuilt -- the paths share no code -- which
+is how the ``vg_box_*`` rebuild sat broken for eleven days behind a pile that
+verified clean (#3297). Run it before trusting the pile to be purgeable.
+
 ``--verify`` is the guard the region-voting studies needed: it asserts that
 every cell whose ``(dataset, embedder)`` pair claims region capability actually
-carries ``patch_grid`` on its medias, and that no cell silently holds zero.
+carries ``patch_grid`` on its medias, and that no cell silently holds zero. It
+also checks the *geometry*: boxes against the band their cell name claims, and
+boxes against the frame -- the second because the first cannot see a box
+corrupted before banding, since the band is derived from that same box and moves
+with it (#3281).
 """
 
 from __future__ import annotations
@@ -127,7 +139,7 @@ def _load_coco(medias: dict[int, dict], embedder_name: str) -> None:
     """
     if not pc.COCO_ANNOTATIONS.exists():
         raise SystemExit(f"missing COCO annotations: {pc.COCO_ANNOTATIONS}")
-    zip_path = pc.COCO_ROOT / "images" / "val2017.zip"
+    zip_path = pc.COCO_VAL_ZIP
     if not zip_path.exists():
         raise SystemExit(f"missing COCO images zip: {zip_path}")
 
@@ -175,6 +187,60 @@ def _load_coco(medias: dict[int, dict], embedder_name: str) -> None:
 # --------------------------------------------------------------------------
 
 
+#: The only per-category fields :func:`_band_categories` reads. Named once so
+#: the tolerance check below stays honest: if the selector ever starts reading
+#: a field the pre-envelope scans do not carry, this list is what makes the old
+#: shape fail loudly instead of selecting from partial statistics.
+_SCAN_FIELDS = ("voted_area", "n_images", "union_inflation")
+
+
+def load_box_scan_categories() -> dict[str, dict]:
+    """Read the full-VG box scan, tolerating both eras of its file format.
+
+    Two shapes exist in the wild, and the reader accepts either:
+
+    * **Pre-2026-08-17** — the bare ``{category: stats}`` dict at top level.
+      This is what the published ``vg_box_*`` sets were selected from.
+    * **2026-08-17 and later** — ``fb4f4ec03`` wrapped that dict in
+      ``{"meta": {...}, "categories": {...}}`` so per-band supply could be
+      recorded alongside it.
+
+    Tolerating both is deliberate rather than lazy. The envelope was the *only*
+    incompatibility: the newer scan also carries ``bands``, ``bands_compact``,
+    ``n_compact`` and ``compact_frac`` per category, and
+    :func:`_band_categories` reads none of them -- only ``voted_area``,
+    ``n_images`` and ``union_inflation``, all three present in the old shape.
+    So an old scan still selects exactly what it always selected, and the
+    alternative repair (re-running ``scan_vg_boxes.py``) would *not*: the
+    current scanner applies per-image compact filtering (``10239c24e``) and
+    per-band supply (``fb4f4ec03``), which qualify categories differently and
+    would silently redefine three datasets whose numbers are published in
+    #3129 and #3156. Old scans also sit on other people's scratch, so the
+    reader is the right place to absorb this rather than the file.
+    """
+    scan_path = pc.PILE / "vg_box_scale.json"
+    if not scan_path.exists():
+        raise SystemExit(f"missing {scan_path}; run scan_vg_boxes.py first")
+    scan = json.loads(scan_path.read_text())
+    if not isinstance(scan, dict) or not scan:
+        raise SystemExit(f"{scan_path} is not a non-empty JSON object; re-run scan_vg_boxes.py")
+    # Discriminate on shape, not just on the key being present: a bare scan is
+    # keyed by VG's free-text vocabulary, so "categories" is a name it could in
+    # principle hold. An envelope's "categories" maps to the stats dict; a
+    # category of that name would map to a stats entry carrying `voted_area`.
+    envelope = isinstance(scan.get("categories"), dict) and "voted_area" not in scan["categories"]
+    stats = scan["categories"] if envelope else scan
+    if not isinstance(stats, dict) or not stats:
+        raise SystemExit(f"{scan_path} holds no categories; re-run scan_vg_boxes.py")
+    # Fail here rather than with a bare KeyError deep inside the comprehension:
+    # a scan missing a field the selector needs is a format problem, and saying
+    # so by name is what tells the next person which era the file is from.
+    missing = sorted({f for f in _SCAN_FIELDS for s in stats.values() if isinstance(s, dict) and f not in s})
+    if missing:
+        raise SystemExit(f"{scan_path} categories lack {', '.join(missing)}; re-run scan_vg_boxes.py")
+    return stats
+
+
 def _band_categories(band: str) -> list[str]:
     """Pick this band's categories from the full-VG scan, stratified within it.
 
@@ -184,10 +250,7 @@ def _band_categories(band: str) -> list[str]:
     voted-area rank and taking the best-supported category in each keeps the
     band spanning its own range.
     """
-    scan_path = pc.PILE / "vg_box_scale.json"
-    if not scan_path.exists():
-        raise SystemExit(f"missing {scan_path}; run scan_vg_boxes.py first")
-    stats = json.loads(scan_path.read_text())["categories"]
+    stats = load_box_scan_categories()
     lo, hi = pc.BOX_BANDS[band]
 
     pool = [
@@ -374,6 +437,11 @@ def _load_corrections() -> dict[tuple[int, str], dict]:
 
     Written by ``ingest_slate.py``; absent until the first review lands, which
     is why this returns empty rather than failing.
+
+    **Boxes here are NORMALISED, unlike VG's and COCO's** -- they come from the
+    app's ``region_box``. The space is validated on the way in and converted to
+    pixels once, by :func:`_correction_boxes_px`, so that everything downstream
+    of this function is in one space. See ``pile_config.CORRECTION_BOX_SPACE``.
     """
     path = Path(os.environ.get("VTS_CORRECTIONS", pc.PILE / "corrections.json"))
     if not path.exists():
@@ -381,8 +449,131 @@ def _load_corrections() -> dict[tuple[int, str], dict]:
     rows = json.loads(path.read_text())
     out: dict[tuple[int, str], dict] = {}
     for r in rows:
+        _assert_correction_box_space(r, path)
         out[(int(r["image_id"]), r["class"])] = r
     return out
+
+
+def _assert_correction_box_space(row: dict, path: Path) -> None:
+    """Refuse a correction row whose boxes are not in the declared space.
+
+    The space is a *declaration*, not a guess: a pixel-space box handed to the
+    normalised path is undetectable once it has been divided by (W, H) -- the
+    result is a small, plausible, entirely wrong box, which is #3281 in the
+    other direction. Checking it here costs one comparison per row and is the
+    only point at which the two spaces are still distinguishable.
+    """
+    space = row.get("box_space", pc.CORRECTION_BOX_SPACE)
+    where = f"{path.name}: image {row.get('image_id')} / {row.get('class')!r}"
+    if space != pc.CORRECTION_BOX_SPACE:
+        raise SystemExit(f"{where}: box_space {space!r}, expected {pc.CORRECTION_BOX_SPACE!r}")
+    for b in row.get("boxes") or []:
+        if len(b) != 4:
+            raise SystemExit(f"{where}: box {b} is not [x0, y0, x1, y1]")
+        if not all(-1e-6 <= float(v) <= 1.0 + 1e-6 for v in b):
+            raise SystemExit(
+                f"{where}: box {b} has a coordinate outside [0, 1], so it is in PIXEL space "
+                f"while the file declares {pc.CORRECTION_BOX_SPACE!r}"
+            )
+        if float(b[2]) <= float(b[0]) or float(b[3]) <= float(b[1]):
+            raise SystemExit(f"{where}: box {b} is degenerate (x1 <= x0 or y1 <= y0)")
+
+
+def _correction_boxes_px(row: dict, W: int, H: int) -> list[list[float]]:
+    """A verdict's boxes in the pixel space of ``(W, H)``.
+
+    ``(W, H)`` is the space the image's *other* boxes were measured in -- the
+    COCO original for an anchored image, the VG copy otherwise -- because that
+    is what the region write later divides by. Scaling up here and dividing down
+    there is an exact round trip, so the stored box is the reviewer's box to the
+    last bit rather than merely close to it.
+    """
+    return [[float(b[0]) * W, float(b[1]) * H, float(b[2]) * W, float(b[3]) * H] for b in (row.get("boxes") or [])]
+
+
+def scale_label_digest(medias: dict[int, dict]) -> str:
+    """A hash of exactly what ``vg_scale_any`` copies out of ``vg_scale``.
+
+    ``vg_scale_any`` is a *relabel* of the built ``vg_scale`` pickle, so a fix to
+    ``vg_scale``'s labels, boxes or bands leaves the derived cell holding the old
+    ones -- with the right media count, the right vectors and a healthy-looking
+    ``--verify``. #3281 is the case: the box repair moves 97 images between
+    bands, and ``build_pile.py --force vg_scale`` alone would ship a
+    ``vg_scale_any`` still carrying the pre-repair regions.
+
+    Vectors are deliberately not in it: they are identical by construction (the
+    derived build never re-embeds) and ``cell_fingerprint`` already covers them.
+    What this pins is the half a rebuild of the parent can actually change.
+    """
+    h = hashlib.sha256()
+    for mid in sorted(medias):
+        m = medias[mid]
+        h.update(
+            json.dumps(
+                [
+                    mid,
+                    m.get("category"),
+                    m.get("categories"),
+                    m.get("evaluable_categories"),
+                    [
+                        [r.get("label"), [round(float(v), 9) for v in r.get("box") or []]]
+                        for r in m.get("regions") or []
+                    ],
+                ],
+                sort_keys=True,
+            ).encode()
+        )
+    return h.hexdigest()
+
+
+def region_geometry_problems(medias: dict[int, dict]) -> list[str]:
+    """Geometry no honest normalised region box can have (#3281).
+
+    The band check in :func:`verify` cannot see a coordinate-space mistake made
+    *before* banding, because the band is computed from the very box it would be
+    checking: crush a box to the origin and it is filed under ``@small``, where
+    a sub-pixel area is exactly what the band's name claims. Both sides move
+    together and the cell stays self-consistent. So the box has to be checked
+    against the frame rather than against its own label.
+
+    Two rules, and they are different in kind:
+
+    * **Sub-pixel** is absolute. A side below ``MIN_BOX_SIDE`` is under one pixel
+      on any image the pile holds, so no such box was ever drawn or annotated.
+      One is a failure.
+    * **Crushed to the origin** is a rate. A real small object can sit in the
+      top-left corner and 1.2% of healthy boxes do, so a single hit proves
+      nothing; a *population* of them is a double-normalise, which put 100% of
+      the affected images there.
+    """
+    problems: list[str] = []
+    n_boxes = 0
+    subpixel: list[str] = []
+    cornered = 0
+    edge = pc.CORNER_AREA_FRAC**0.5
+    for mid, m in medias.items():
+        for r in m.get("regions") or []:
+            b = r.get("box") or []
+            if len(b) != 4:
+                problems.append(f"media {mid} / {r.get('label')!r}: box {b} is not [x0, y0, x1, y1]")
+                continue
+            n_boxes += 1
+            if (b[2] - b[0]) < pc.MIN_BOX_SIDE or (b[3] - b[1]) < pc.MIN_BOX_SIDE:
+                subpixel.append(f"media {mid} / {r.get('label')!r} {[round(v, 6) for v in b]}")
+            if b[2] <= edge and b[3] <= edge:
+                cornered += 1
+    if subpixel:
+        problems.append(
+            f"{len(subpixel)} region boxes are sub-pixel (side < {pc.MIN_BOX_SIDE:g} of the frame), "
+            f"which no drawn or annotated box is -- e.g. {'; '.join(subpixel[:3])}"
+        )
+    if n_boxes and cornered / n_boxes > pc.MAX_CORNER_RATE:
+        problems.append(
+            f"{cornered}/{n_boxes} ({cornered / n_boxes:.1%}) of region boxes lie wholly inside the "
+            f"top-left {pc.CORNER_AREA_FRAC:.0%} of the frame, against a healthy rate near 1% -- "
+            f"the signature of a box normalised twice"
+        )
+    return problems
 
 
 def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
@@ -501,12 +692,20 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
     # a band is a claim about size, and no size was measured. It leaves every
     # cell of that class instead -- neither a positive nor a negative -- which
     # is precisely what the third value is for.
+    #
+    # The box, when there is one, is NORMALISED and everything in `labels` is in
+    # pixels, so it is converted here -- once, against the same (W, H) the region
+    # write divides by. Merging it unconverted is #3281: the region write then
+    # normalises a normalised coordinate, which divides it by ~500 and parks the
+    # box on the frame origin. Nothing downstream could see that, because the
+    # BAND is derived from the same corrupted box, so the cell name and its boxes
+    # stayed consistent with each other all the way into the study.
     unbanded: set[tuple[int, str]] = set()
     for (iid, name), verdict in corrections.items():
         if iid not in labels:
             continue
         if verdict.get("present"):
-            boxes = verdict.get("boxes") or []
+            boxes = _correction_boxes_px(verdict, *box_dims[iid])
             if boxes:
                 labels[iid][name] = boxes
             else:
@@ -674,6 +873,13 @@ def _load_vg_scale(medias: dict[int, dict], embedder_name: str) -> None:
             "origin_name": str(path),
         }
 
+    # Refuse to embed a pickle whose boxes are impossible. `--verify` runs the
+    # same check, but only after the GPU hours are spent and the cell is on
+    # disk; #3281 got as far as three published studies that way.
+    bad = region_geometry_problems(medias)
+    if bad:
+        raise SystemExit("vg_scale: " + "; ".join(bad))
+
 
 def _load_vg_scale_any(medias: dict[int, dict], embedder_name: str) -> None:
     """``vg_scale`` with the box-size band collapsed away (#3115).
@@ -725,7 +931,8 @@ def _load_vg_scale_any(medias: dict[int, dict], embedder_name: str) -> None:
         return list(dict.fromkeys(_base(c) for c in (labels or [])))
 
     loaded = _cells_io().load_medias(src)
-    log(f"  derived from {src.name}: {len(loaded)} medias")
+    parent_digest = scale_label_digest(loaded)
+    log(f"  derived from {src.name}: {len(loaded)} medias, parent labels {parent_digest[:12]}")
     for mid, media in loaded.items():
         d = dict(media)
         d["categories"] = _collapse(d.get("categories"))
@@ -736,7 +943,13 @@ def _load_vg_scale_any(medias: dict[int, dict], embedder_name: str) -> None:
         if d.get("category"):
             d["category"] = _base(d["category"])
         d["regions"] = [{**r, "label": _base(r["label"])} for r in (d.get("regions") or [])]
-        d["origin"] = {"importer": "vg_scale_any", "params": {"embedder": embedder_name, "derived_from": src.name}}
+        # The parent's label digest travels with every media, so `--verify` can
+        # tell a derived cell that is merely older than its parent from one that
+        # no longer agrees with it. Without it a stale derivation is invisible.
+        d["origin"] = {
+            "importer": "vg_scale_any",
+            "params": {"embedder": embedder_name, "derived_from": src.name, "parent_labels": parent_digest},
+        }
         medias[mid] = d
 
     n_pos = sum(1 for d in medias.values() if d["categories"])
@@ -1107,7 +1320,39 @@ def verify() -> int:
                 f"{ds} x {emb}: {bad}/{checked} region boxes fall outside the band their cell "
                 f"name claims -- boxes and bands were measured in different pixel spaces"
             )
+        # The band check above compares a box against its own label, so it is
+        # blind to a box corrupted BEFORE banding -- the band moves with it and
+        # the two stay consistent (#3281). This one compares the box against the
+        # frame, which nothing can drag along with it.
+        problems += [f"{ds} x {emb}: {g}" for g in region_geometry_problems(medias)]
         break  # one embedder is enough; the boxes are identical across cells
+
+    # A derived cell that no longer matches its parent. `vg_scale_any` is a
+    # relabel of the built `vg_scale` pickle and shares its vectors, so it
+    # survives a parent rebuild looking perfect while carrying the parent's
+    # PREVIOUS labels, boxes and bands -- which is how a box repair ships to one
+    # study and not the other.
+    live_digest: dict[Path, str] = {}  # one parent serves every derived cell built from it
+    for ds, emb in pc.cells():
+        if pc.DATASETS.get(ds, {}).get("kind") != "vg_scale_any":
+            continue
+        path, parent = pc.cell_path(ds, emb), pc.cell_path("vg_scale", emb)
+        if not path.exists() or not parent.exists():
+            continue
+        medias = io.load_medias(path)
+        problems += [f"{ds} x {emb}: {g}" for g in region_geometry_problems(medias)]
+        first = next(iter(medias.values()), None)
+        stamped = ((first or {}).get("origin") or {}).get("params", {}).get("parent_labels")
+        if parent not in live_digest:
+            live_digest[parent] = scale_label_digest(io.load_medias(parent))
+        live = live_digest[parent]
+        if stamped is None:
+            problems.append(f"{ds} x {emb}: no parent_labels stamp -- built before the staleness check, rebuild it")
+        elif stamped != live:
+            problems.append(
+                f"{ds} x {emb}: derived from a {parent.name} that has since changed "
+                f"({stamped[:12]} != {live[:12]}) -- rebuild it, --force on the parent alone leaves it stale"
+            )
 
     # A dataset's cells must all cover the same medias, or cross-embedder
     # comparisons silently compare different populations. This is not
@@ -1149,6 +1394,127 @@ def verify() -> int:
             log(f"PROBLEM: {p}")
         return 1
     log("all present cells verified")
+    return 0
+
+
+def _band_vocab_drift(dataset: str, chosen: list[str]) -> str:
+    """Would rebuilding this band reproduce the cells that already exist?
+
+    ``--rebuildable`` on its own answers a weaker question than it looks like it
+    answers: that selection *runs*, not that it selects the same thing. Those
+    come apart in the direction that hurts. #3297's two candidate repairs both
+    made the selector run again; only one of them kept picking the categories
+    the published ``vg_box_*`` sets were built from, and taking the other would
+    have silently redefined three datasets whose numbers are cited in #3129 and
+    #3156 -- with the right media count, the right vectors, and nothing to look
+    at that would say so.
+
+    So where a cell is already built, compare its vocabulary against what the
+    selector picks today. Reads the smallest present cell: every cell carries
+    ``categories``, so there is no reason to page in the multi-GB patch one.
+    Returns an empty string when they agree (or when nothing is built yet --
+    a purged pile has nothing to reproduce, which is not a failure).
+    """
+    present = [(pc.cell_path(dataset, e).stat().st_size, e) for e in pc.EMBEDDERS if pc.cell_path(dataset, e).exists()]
+    if not present:
+        return ""
+    _, emb = min(present)
+    medias = _cells_io().load_medias(pc.cell_path(dataset, emb))
+    live = {c for m in medias.values() for c in (m.get("categories") or [])}
+    gained = sorted(set(chosen) - live)
+    lost = sorted(live - set(chosen))
+    if not gained and not lost:
+        return ""
+    return (
+        f"{dataset}: a rebuild would NOT reproduce the built cells -- selection now differs "
+        f"from {dataset}__{emb}.pkl by {len(gained)} added and {len(lost)} dropped "
+        f"categories (added {gained[:5]}, dropped {lost[:5]}). That is a dataset change, "
+        f"not a rebuild; published numbers that cite this set would need re-examining."
+    )
+
+
+def rebuildable(datasets: list[str] | None = None) -> int:
+    """Exercise every dataset's *selection* step without embedding anything.
+
+    The pile documents itself as purgeable -- ``pile_config``: "every cell must
+    be rebuildable from sources that are **not** on scratch". Nothing checked
+    that. ``--verify`` loads the built cells, and a cell that loads says
+    nothing about whether it can be rebuilt: the two paths share no code, so a
+    rebuild path can rot for months behind a pile that verifies clean. It did
+    (#3297): a scan-format change on 2026-08-17 outran the scan file the
+    ``vg_box_*`` cells were selected from, and the break surfaced only when
+    somebody asked for a rebuild eleven days later.
+
+    So this is the canary that would have caught it the same day, for a few
+    seconds. It runs the part of each build that reads sources and decides
+    *what goes in the cell*, and skips the part that costs GPU-hours. For a
+    banded dataset that means really running :func:`_band_categories` and
+    reporting what it chose; elsewhere it means confirming the sources a
+    rebuild would read are present and in a shape the current code accepts.
+
+    Where a banded dataset is already built it goes one question further, via
+    :func:`_band_vocab_drift`: not only "would a rebuild run?" but "would a
+    rebuild produce *this*?". A repair that restores the former while quietly
+    changing the latter is the expensive kind, and it is invisible from the
+    built cell.
+
+    Deliberately does not parse the multi-GB sources (VG's ``objects.json``,
+    the COCO zip). A canary nobody runs is worth nothing, and the way to make
+    it run is to keep it cheap enough to sit in front of every build.
+    """
+    for bad in [d for d in (datasets or []) if d not in pc.DATASETS]:
+        raise SystemExit(f"unknown dataset {bad!r}; known: {sorted(pc.DATASETS)}")
+    wanted = list(datasets) if datasets else list(pc.DATASETS)
+
+    problems: list[str] = []
+
+    for ds in wanted:
+        spec = pc.DATASETS[ds]
+        kind = spec.get("kind")
+        try:
+            if kind == "demo":
+                pc.require_demo_source(ds)
+                log(f"  {ds:18s} ok       demo source staged")
+            elif kind == "coco":
+                # The *zip*, which is what `_load_coco` opens. Checking the
+                # extracted directory instead reported this dataset broken
+                # against sources that were entirely intact (#3299) -- a canary
+                # that names a different path than the build is not a canary.
+                for path in (pc.COCO_ANNOTATIONS, pc.COCO_VAL_ZIP):
+                    if not path.exists():
+                        raise SystemExit(f"{ds}: missing {path}")
+                log(f"  {ds:18s} ok       annotations + image zip present")
+            elif kind == "vg_band":
+                chosen = _band_categories(spec["band"])
+                drift = _band_vocab_drift(ds, chosen)
+                if drift:
+                    raise SystemExit(drift)
+                log(f"  {ds:18s} ok       {len(chosen)} categories selected")
+            elif kind == "vg_scale":
+                objects_json = pc.DEMO_CACHE / "visual_genome" / "objects.json"
+                if not objects_json.exists():
+                    raise SystemExit(f"{ds}: missing {objects_json}")
+                n_cells = len(pc.SCALE_CLASSES) * len(pc.BOX_BANDS)
+                roster = "roster present" if pc.ROSTER.exists() else "NO ROSTER (membership would be redrawn)"
+                log(f"  {ds:18s} ok       VG source present, {n_cells} cells, {roster}")
+            elif kind == "vg_scale_any":
+                # Derived from the built parent, so its "source" is a cell.
+                # Absent parents are not a problem here: a full run builds the
+                # parent first, and a purged pile rebuilds both in order.
+                built = [e for e in pc.EMBEDDERS if pc.cell_path("vg_scale", e).exists()]
+                log(f"  {ds:18s} ok       derives from vg_scale ({len(built)} parent cells built)")
+            else:
+                raise SystemExit(f"{ds}: unknown kind {kind!r}; this check needs teaching about it")
+        except SystemExit as exc:  # the loaders' own way of reporting a bad source
+            log(f"  {ds:18s} BROKEN   {exc}")
+            problems.append(f"{ds}: {exc}")
+
+    if problems:
+        log(f"{len(problems)} dataset(s) CANNOT be rebuilt from their sources:")
+        for p in problems:
+            log(f"REBUILD-BROKEN: {p}")
+        return 1
+    log("every dataset's selection step runs against its current sources")
     return 0
 
 
@@ -1449,6 +1815,11 @@ def main() -> int:
     ap.add_argument("--force", action="store_true", help="rebuild cells that already exist")
     ap.add_argument("--list", action="store_true", help="show cell status and exit")
     ap.add_argument("--verify", action="store_true", help="load every cell and check geometry")
+    ap.add_argument(
+        "--rebuildable",
+        action="store_true",
+        help="run every dataset's selection step against its sources, embedding nothing",
+    )
     ap.add_argument("--bands", action="store_true", help="report voted-box scale bands for boxed datasets")
     ap.add_argument("--manifest", action="store_true", help="(re)write the manifest and exit")
     ap.add_argument("--provenance", action="store_true", help="show which device built each cell")
@@ -1467,6 +1838,8 @@ def main() -> int:
         return 0
     if args.verify:
         return verify()
+    if args.rebuildable:
+        return rebuildable(args.datasets.split(",") if args.datasets else None)
     if args.bands:
         return report_bands()
     if args.manifest:
@@ -1481,6 +1854,21 @@ def main() -> int:
         raise SystemExit(f"unknown dataset {bad!r}; known: {sorted(pc.DATASETS)}")
     for bad in [e for e in embedders if e not in pc.EMBEDDERS]:
         raise SystemExit(f"unknown embedder {bad!r}; known: {sorted(pc.EMBEDDERS)}")
+
+    # A derived dataset joins the run whenever its parent is in it. `vg_scale`
+    # rebuilt without `vg_scale_any` leaves the derived cell holding the
+    # parent's previous labels, boxes and bands -- with the right media count
+    # and the right vectors, so nothing looks wrong (#3281 shipped that way).
+    # Pulling it in costs a relabel and no embedding pass, and `--force` is what
+    # makes it actually happen: the derived cell already exists.
+    derived = [
+        d
+        for d, spec in pc.DATASETS.items()
+        if spec.get("kind") == "vg_scale_any" and d not in datasets and "vg_scale" in datasets
+    ]
+    if derived:
+        log(f"including {', '.join(derived)}: derived from vg_scale, and stale the moment it is rebuilt")
+        datasets += derived
 
     summaries = []
     for ds in datasets:

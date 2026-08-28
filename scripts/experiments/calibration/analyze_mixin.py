@@ -31,7 +31,7 @@ common.setup_env()
 
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from _cells_io import main_frame_files  # noqa: E402
+from _cells_io import assert_one_opening, main_frame_files  # noqa: E402
 
 #: The window every headline number is computed over: the app's first trained
 #: detector appears at 7 votes, and the production ramp ends at 20.  Below 7 no
@@ -77,6 +77,7 @@ def load_cells(results: Path) -> pd.DataFrame:
     if not frames:
         raise SystemExit(f"every cell CSV under {results / 'cells'} was unreadable")
     df = pd.concat([f for f in frames if len(f)], ignore_index=True)
+    assert_one_opening(df, f"analyze_mixin.py ({results.name})")
     for col in ("schedule", "gmm_variant"):
         df[col] = df[col].fillna("")
     df["n_votes"] = df["n_good"] + df["n_bad"]

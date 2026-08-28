@@ -416,11 +416,14 @@ exclude_lines = [
 # virtualenv (third-party site-packages must never be spell-checked).
 # docs/reports/*.html are generated experiment reports with embedded
 # base64 image data URIs, the same class of binary-ish content *.svg is
-# already skipped for.
+# already skipped for.  A study's viewer.html (scripts/experiments/
+# calibration/viewer.py) is the same class again: a self-contained page
+# carrying the run's per-cell numbers as an encoded payload, which
+# codespell reads as thousands of misspelled two-letter words.
 # slides/_build and slides/_out are gitignored deck-build artifacts; the
 # rendered PDFs there decode as mojibake that codespell "corrects", which
 # used to fail any test run that happened after `slides/render.sh`.
-skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/reports/*.html,*vtscore/projection/assets*,*slides/_build*,*slides/_out*"
+skip = "*.lock,*.svg,*.json,*.pkl,*.npz,*.min.js,*.min.css,*node_modules*,data,static,model_cache,.git,*.ipynb,package-lock.json,*venv*,.venv,venv,*docs/reports/*.html,*docs/experiments/*/viewer.html,*vtscore/projection/assets*,*slides/_build*,*slides/_out*"
 # Domain terms (clap/siglip/xclip = embedder names; wrest/caller/recaller =
 # extension scaffold names), legitimate code identifiers (numer/denom in
 # slope formulas, medias as the global state proxy, goup as a TS method,

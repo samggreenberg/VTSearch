@@ -47,7 +47,7 @@ python -m vtscore.eval [OPTIONS]
 | `--no-plot` | Disable plot generation | off |
 | `--enrich-descriptions` | Use enriched (wrapper-averaged) text embeddings for text-sort | off |
 | `--calibrate-count K` | Number of random Train/Calibrate splits for threshold calibration | `2` |
-| `--calibration-fraction F` | Fraction of training data reserved for calibration | `0.5` |
+| `--calibration-fraction F` | Fraction of training data reserved for calibration | unset = the app's per-space default (0.3 single-vector / 0.5 patch) |
 | `--embedder NAME` | Build each demo dataset with this embedder (empty = media-type default) | `` |
 | `--region-voting` | Region-pool learned-sort Good votes from each media's ground-truth box (needs `--embedder <patch>` + a dataset with stored regions, e.g. Visual Genome) | off |
 | `--list` | List available eval datasets and exit | - |
@@ -315,6 +315,18 @@ Rounds appear in the `phase` column as `s0`, `s1`, …, and `app_trained` is `0`
 
 `@k` and `@q` are not redundant. `@k` is the arm that could *ship* — the app has an Inclusion knob and no rank-position knob — but how far a given inclusion moves the pick is a property of the fitted mixture, so on a steep sort the whole usable range can land inside a couple of rank percent. `@q` names the position directly, which is what establishes whether *position* is the mechanism before asking whether `k` is a usable handle on it.
 
+#### What every step measures
+
+Each metric row carries the operating point at that step's threshold — `cost` (the inclusion-weighted `FPR + FNR`), `fpr`, `fnr`, `precision`, `recall` and `f1` — plus the counts they come from (`n_test_pos`, `n_test_neg`, `n_flagged`) and the two threshold-independent ranking metrics, `auroc` and `average_precision`, which isolate "how good is the ranking" from "how good is the threshold".
+
+`precision` / `recall` / `f1` come from one definition, [`vtscore.eval.calibration_metrics.detection_metrics`](../vtscore/eval/calibration_metrics.py), shared by both row builders so they cannot come to disagree. Three conventions in it are load-bearing:
+
+- **`precision` is `NaN` when the detector flags nothing** — genuinely undefined, since there is no retrieved set to be right about. A 0 would drag an average down for a reason that is not "the model was wrong"; a 1 is simply false.
+- **`f1` uses `2TP / (2TP + FP + FN)`**, so it needs no precision and is well-defined at 0 when nothing is flagged.
+- **`recall` is exactly `1 - fnr`** and is emitted anyway: it is the word a reader picks off a menu, and asking them to invert an FNR in their head is where reading errors come from.
+
+`DETECTION_METRICS` in the same module carries each metric's label and its **direction**, and is what the report figures and the interactive viewer read — so nothing downstream decides for itself which way is "better".
+
 #### The pick log (`pick_sink`)
 
 Pass a list as `pick_sink` to get one row per **click** (columns: `_PICK_COLUMNS`) — what was picked, whether it was a positive, and where on the seed sort it came from. The main frame starts at the first *trainable* step, because before one Good and one Bad vote coexist there is no model, no threshold and no metrics row; so the opening is exactly the part it does not record. An opening that never finds both classes emits **no main row at all**, which is a result about that opening rather than a missing cell.
@@ -440,7 +452,7 @@ Three ways the harness relates to the app, in descending order of safety:
 |---|---|---|
 | **Delegated** | The harness calls the app's function. `MaxPatchStyle.good_vec` / `.bad_vecs` / `._rows_for_media` are thin wrappers over `pool_box_from_media`, `bad_negative_vecs`, and `media_score_rows`. | No — by construction. |
 | **Ported** | The app's logic is re-implemented, because the original is unreachable or unusable. `vtscore/eval/autopilot_flow.py` ports the phase machine from `AutopilotStateService.checkPhaseTransition` (TypeScript — nothing to import) and the three indicators from `vtscore.detectors.labeling_progress` (wrapped in an interactive, lock-guarded single-detector cache a simulation can't use). | Yes — a copy goes stale the moment the original moves. |
-| **Default resolution** | The harness resolves "no explicit arm" to whatever the app currently defaults to: `style=None` → `max_patch` on a patch dataset, `blend_schedule=None` → `production_schedule_for(...)`. | Yes — the app changes its default and the harness keeps serving the old one *under the name "default"*. |
+| **Default resolution** | The harness resolves "no explicit arm" to whatever the app currently defaults to: `style=None` → `max_patch` on a patch dataset, `blend_schedule=None` → `production_schedule_for(...)`, `calibration_fraction=None` → `production_split_for(...)` (0.3 single-vector / 0.5 patch, keyed on `patch_grid` presence — the harness's spelling of the app's `supports_patch_regions` predicate). | Yes — the app changes its default and the harness keeps serving the old one *under the name "default"*. |
 
 Prefer delegation whenever it's possible; it's the only fix that can't rot.
 

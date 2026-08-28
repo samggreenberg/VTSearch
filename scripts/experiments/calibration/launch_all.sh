@@ -15,6 +15,36 @@ HERE="$WT/scripts/experiments/calibration"
 MAXPATCH="/exp/$USER/max-patch"
 export CALIB_EXP="${CALIB_EXP:-/exp/$USER/calibration}"
 export CALIB_RESULTS="${CALIB_RESULTS:-$CALIB_EXP/results}"
+
+# --- the opening every arm of this chain takes (#3278) -----------------------
+# Region voting arrives as the PAIR `siglip+dinov3_patch` rather than bare
+# `dinov3_patch`.  DINOv3 has no text tower, so since #3269 a bare DINOv3 arm
+# opens on three random known-goods while every SigLIP arm opens on a typed
+# query -- an arm-dependent difference, which unlike the seeding fix itself does
+# NOT cancel in a contrast.  This chain's studies all read a patch arm against a
+# whole-image one, so that difference would sit inside their headline axis.
+#
+# `:-` throughout: every wrapper (launch_safe.sh, launch_cut.sh,
+# launch_anchored.sh, launch_folds_2897.sh, launch_tail_2881.sh) sets its own
+# grid before exec'ing this, and each carries the same declaration with its own
+# reason.  These defaults are for `launch_all.sh` run directly, i.e. the #2781
+# study itself.
+export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,siglip2_l,siglip+dinov3_patch}"
+export CALIB_CALTECH_EMBEDDERS="${CALIB_CALTECH_EMBEDDERS:-siglip,siglip2_l,siglip+dinov3_patch}"
+# The array is submitted from the `cal-launch` grid job below, where no
+# preflight runs, so `run_cells.py`'s per-cell assertion is the enforcement
+# point here; `--export=ALL` is what carries this to it.
+export CALIB_REQUIRE_OPENING="${CALIB_REQUIRE_OPENING:-text}"
+# ...and the other half of that declaration, which pairing makes mandatory rather
+# than tidy: a paired arm has no known-good fallback (falling back would run bare
+# `dinov3_patch` under the pair's name, so `run_cells.py` raises instead), and
+# category selection here runs over the dataset's FULL vocabulary while the query
+# tables cover part of it.  `CALIB_REQUIRE_SEED_QUERY=1` filters the ineligible
+# categories out BEFORE selection, so each is replaced by the next eligible one
+# rather than shrinking the grid.  It does move the selected set: that is the
+# price of every cell opening the way a user would, and the alternative is cells
+# that die one at a time deep inside the array.
+export CALIB_REQUIRE_SEED_QUERY="${CALIB_REQUIRE_SEED_QUERY:-1}"
 # Reuse the Max-Patch datadir (demo data + embeddings pickles + models) directly;
 # siglip_l pickles land alongside them, harmlessly.
 export VTSEARCH_DATA_DIR="${VTSEARCH_DATA_DIR:-$MAXPATCH/datadir}"
@@ -24,7 +54,8 @@ LOGS="$CALIB_EXP/logs"
 mkdir -p "$LOGS" "$CALIB_RESULTS/crops" "$CALIB_RESULTS/cells"
 
 # --- Symlink the reusable Max-Patch crops (embeddings pickles are read in place
-# from the shared datadir). ---
+# from the shared datadir).  A paired arm's crops are its LEARN half's
+# (`crops_basename` resolves it), so these names are unchanged by #3278. ---
 for base in visual_genome_m__siglip__crops visual_genome_m__dinov3_patch__crops; do
   for ext in npz json; do
     src="$MAXPATCH/results/crops/$base.$ext"

@@ -50,7 +50,18 @@ export CALIB_HEAD="${CALIB_HEAD:-linear_svm}"
 # max-pool, so if the transfer story is really about a max-pooled Bad tail rather
 # than about sample size, the two arms have to disagree.
 export CALIB_DATASETS="${CALIB_DATASETS:-visual_genome_m}"
-export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,dinov3_patch}"
+# The region arm is the PAIR `siglip+dinov3_patch` (#3278).  Every claim here is
+# "the two arms have to disagree" -- if transfer is about a max-pooled Bad tail
+# rather than about sample size, the whole_image control must not show it -- and
+# a disagreement is only evidence when the arms differ in one thing.  Bare
+# `dinov3_patch` has no text tower, so it would also differ in how it started,
+# and #3267 puts the largest measured effects in exactly that.
+export CALIB_VG_EMBEDDERS="${CALIB_VG_EMBEDDERS:-siglip,siglip+dinov3_patch}"
+export CALIB_REQUIRE_OPENING=text
+# A paired arm cannot fall back to the known-good start (`run_cells.py` raises),
+# so every selected category must have a typed query.  Selection filters to the
+# eligible ones before it picks, replacing rather than dropping.
+export CALIB_REQUIRE_SEED_QUERY=1
 export CALIB_PATCH_STYLES="${CALIB_PATCH_STYLES:-max_patch}"
 export CALIB_REPOOL_VARIANTS="${CALIB_REPOOL_VARIANTS:-}"
 export CALIB_SWEEP_KS="${CALIB_SWEEP_KS:-0}"
@@ -93,7 +104,7 @@ REUSE="${TRANSFER_REUSE_PREPARE:-/exp/$USER/tail2881-prepare/results}"
 # crops are symlinks into whichever study generated them, `readlink -f` will
 # happily recreate a dangling link, and a study that is archived between runs
 # leaves exactly that behind (#2881).
-PREFLIGHT_ARGS=(--exp "$CALIB_EXP" --arms siglip,dinov3_patch
+PREFLIGHT_ARGS=(--exp "$CALIB_EXP" --arms siglip,siglip+dinov3_patch
                 --job-name cal-cells --mem "$CALIB_MEM" --conc "$CALIB_CONC")
 [[ -d "$REUSE" ]] && PREFLIGHT_ARGS+=(--reuse-prepare "$REUSE")
 bash "$WT/scripts/experiments/preflight.sh" "${PREFLIGHT_ARGS[@]}" || exit 1

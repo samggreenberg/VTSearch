@@ -21,6 +21,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from _cells_io import assert_one_opening
+
 #: Identifies one run of the loop: a (dataset, embedder, category, seed) cell.
 CELL_KEY = ["dataset", "embedder", "category", "seed"]
 _SIDECARS = ("sweep", "cutdiag", "cutincl")
@@ -50,6 +52,7 @@ def load_cells(results: Path, embedder_suffix: str = "", quiet: bool = False) ->
             continue
         frames.append(df)
     out = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    assert_one_opening(out, f"bench_cells.load_cells({results})")
     if embedder_suffix and not out.empty:
         out["embedder"] = out["embedder"] + embedder_suffix
     prov = {

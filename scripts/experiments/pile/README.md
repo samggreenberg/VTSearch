@@ -10,6 +10,7 @@ source scripts/experiments/pile/pile_env.sh   # point a study at it
 python build_pile.py --list                   # what exists
 python build_pile.py                          # build whatever is missing
 python build_pile.py --verify                 # check every cell is usable
+python build_pile.py --rebuildable            # check every cell could be REBUILT
 python build_pile.py --bands                  # voted-box scale bands (boxed datasets)
 ```
 
@@ -23,18 +24,27 @@ Embedders got re-run because the cache had no home of its own.
 
 ## The grid
 
-Three datasets x three embedders: `siglip` (the shipped default, 768-d),
-`siglip2_l` (the premium end, 1152-d) and `dinov3_patch` (768-d, the only
-patch-capable one). Differing dims mean galleries are **not** interchangeable
-between `siglip` and `siglip2_l`.
+Eight datasets x five embedders, complete — 40 of 40 cells built as of
+2026-08-28.
 
-The middle columns (`siglip_l`, `siglip2`) were deliberately dropped: a study
-learns little from interpolating between the endpoints, and the compute is
-better spent on more runs of the ones that matter. The cost is that
+| embedder | dim | note |
+|---|---:|---|
+| `siglip` | 768 | the shipped default |
+| `siglip2_l` | 1152 | the premium end |
+| `dinov3_patch` | 768 | the only patch-capable one, so the only region-voting column |
+| `clip` | 512 | a different pretraining *family*, at base capacity |
+| `clip_l` | 768 | the same family at large capacity |
+
+Differing dims mean galleries are **not** interchangeable across columns.
+
 `siglip` -> `siglip2_l` moves *generation* (1 -> 2) and *capacity* (base ->
-SO400M) together, so a difference between them cannot be attributed to either
-alone. `build_pile.py --embedders siglip2` rebuilds a middle column if a result
-ever needs that split.
+SO400M) together, so a difference between those two cannot be attributed to
+either alone. That is what the CLIP columns are for: `clip`/`clip_l` change the
+pretraining family at two capacities, which is the axis #3292 needed and could
+not get from the SigLIP pair. The middle SigLIP columns (`siglip_l`, `siglip2`)
+are still deliberately absent — a study learns little from interpolating
+between endpoints — and `build_pile.py --embedders siglip2` rebuilds one if a
+result ever needs that split.
 
 | dataset | medias | boxed | note |
 |---|---:|:--:|---|
@@ -44,6 +54,16 @@ ever needs that split.
 | `vg_box_small` | 12000 | yes | box-banded VG: union box **below one patch** |
 | `vg_box_medium` | 12000 | yes | box-banded VG: patch → HAC leaf |
 | `vg_box_large` | 12000 | yes | box-banded VG: leaf → 80% of the image |
+| `vg_scale` | 7747 | yes | one class list held fixed across every box-size band |
+| `vg_scale_any` | 7747 | yes | derived from `vg_scale`, band collapsed away (#3115) |
+
+The six `vg_box_* x {clip, clip_l}` cells were the last gap, and they were
+unbuildable rather than merely unbuilt: band selection died before the embedder
+was ever reached (#3297). They were built on 2026-08-28 once that was repaired.
+Unlike their `siglip2_l` siblings from 2026-08-12 they carry the
+`ATEN_CPU_CAPABILITY=avx2` pin, but no comparison rests on that: the CPU-dispatch
+divergence #3160 measured is in the **384px** resize, and both CLIP columns are
+224px models, where the resize is bit-identical either way.
 
 ### The box-banded VG sets
 
@@ -114,6 +134,37 @@ COCO is built from the staged images rather than the #2790 vector cache, which
 stores HAC region vectors but not the raw patch grid and so can never carry a
 region arm.
 
+## Boxes arrive in two spaces, and the file has to say which
+
+VG's and COCO's boxes are in **pixels**. A correction box is the reviewer's
+`region_box` from the app, already **normalised** to [0, 1]. The builder merges
+all three and normalises on the way into the pickle, so a correction box merged
+unconverted is normalised *twice*: divided by ~500 a second time and parked on
+the frame origin. That is #3281 — 130 boxes, and with them 97 images filed into
+`@small` whose object is medium or large, on the one axis `vg_scale` exists to
+measure.
+
+Three things now stop it, because none of them alone would have:
+
+- `corrections.json` rows carry `box_space`, and `build_pile.py` refuses a row
+  whose boxes contradict it. Inference cannot do this job: a normalised box and
+  a pixel box are the same numbers for a box in the top-left corner of a 1×1
+  image, which is precisely the shape the bug produced.
+- The conversion happens **once**, against the same `(W, H)` the region write
+  divides by, so the round trip is exact rather than close.
+- `--verify` (and the build, before the GPU hours) checks boxes against the
+  **frame**: a sub-pixel side is a failure outright, and the share crushed into
+  the top-left 1% of the frame is a failure as a rate. The older check — box
+  against the band its cell name claims — passed happily through all of this,
+  because the band is *derived from* the box and moved with it. A consistency
+  check between two values computed from one source is not a check.
+
+`vg_scale_any` is a relabel of the built `vg_scale` pickle and shares its
+vectors, so a parent rebuild used to leave it holding the parent's previous
+labels with a perfectly healthy media count. It now stamps a digest of the
+parent's labels, `--verify` compares that against the live parent, and a run
+that rebuilds `vg_scale` pulls the derived dataset in with it.
+
 ## Voted-box scale bands (`--bands`)
 
 Orthogonal to the `_s`/`_m`/`_l` suffix, which is a **dataset size tier** (a
@@ -163,14 +214,52 @@ which once substituted a partial re-download and produced a healthy-looking
 blocks that, and `--verify` cross-checks that a dataset's cells agree on media
 count.
 
+**`--verify` does not tell you the pile is rebuildable; `--rebuildable` does.**
+The two paths share no code, so a cell can load perfectly while the code that
+would produce it again is broken. That is not hypothetical: `scan_vg_boxes.py`
+grew a `{"meta": …, "categories": …}` envelope on 2026-08-17, the scan file on
+scratch stayed pre-envelope, and every `vg_box_*` rebuild died with
+`KeyError: 'categories'` for eleven days behind a pile that verified clean
+(#3297). `--rebuildable` runs each dataset's *selection* step — really choosing
+`vg_box_*`'s categories, confirming everything else's sources are present and
+readable — and embeds nothing, so it costs seconds. Run it after changing
+anything a build reads, and before trusting scratch to be purgeable.
+
+The reader now accepts **both** scan shapes, which is deliberate: re-running
+`scan_vg_boxes.py` would produce a current-format file, but with per-image
+compact filtering (`10239c24e`) and per-band supply (`fb4f4ec03`) that qualify
+categories differently — silently redefining three datasets whose numbers are
+published in #3129 and #3156. The envelope was the only incompatibility; the
+selector reads `voted_area`, `n_images` and `union_inflation` and nothing else,
+all three present in the 2026-08-12 file.
+
+**Where a band is already built, `--rebuildable` also asks whether a rebuild
+would produce *that*.** "Selection runs" and "selection picks the same thing"
+come apart in the direction that hurts: both candidate repairs for #3297 made
+the selector run again, and only one kept choosing the categories the published
+sets hold — the other would have redefined three datasets with the right media
+count, the right vectors and nothing visible to say so. So the canary compares
+today's selection against the vocabulary the smallest built cell carries and
+reports `REBUILD-BROKEN` on any difference. Verified against the live pile on
+2026-08-28: all three bands reproduce exactly, 40/40 categories, agreeing
+across all three cells present at the time (#3299).
+
 ## Building on the GRID
 
 ```bash
-bash launch_pile.sh              # prefetch weights (CPU), then one GPU job per dataset
+bash launch_pile.sh              # canary + weights (CPU), then one GPU job per dataset
 bash launch_pile.sh coco_val     # just one dataset
 ```
 
-Weights are prefetched in a separate CPU stage because parallel GPU jobs would
+`--rebuildable` runs in front of every launch. That is the answer to "what runs
+the canary periodically": every build already touches the pile, the check costs
+a fraction of a second, and a purge is the worst possible moment to learn the
+rebuild path rotted. It reports **all** datasets — rot under one you are not
+building today still gets seen — but only the datasets being launched gate the
+submission, since a broken source under a dataset nobody asked for is news
+rather than grounds to refuse.
+
+Weights are prefetched in the same CPU stage because parallel GPU jobs would
 otherwise race on the shared HF cache, and because the embedders load with
 `cache_dir=<VTSEARCH_MODELS_DIR>` — prefetching to the HF default instead leaves
 weights the jobs cannot see.
@@ -183,3 +272,10 @@ hardcoded `v100`, which is why every cell built before 2026-08-17 was embedded o
 the slowest GPU on the cluster — 2.3× slower for `siglip2_l` than the L40S nodes
 sitting idle beside it. Set `VTS_GPU` to pin a type anyway; see
 [`docs/SETUP.md`](../../../docs/SETUP.md#which-gpu-type-gets-requested).
+
+Until 2026-08-28 that query was answering from a field this cluster does not
+emit, so it read every GPU as free and always returned the first candidate —
+a hardcoded `a100` wearing a query, which sent the #3299 build into a 24-hour
+queue with 109 V100s idle. It now reads `AllocTRES` where `GresUsed` is absent
+and refuses to count a node whose usage it cannot read; see
+[the lesson](../lessons/2026-08-28-the-gpu-picker-reported-every-gpu-free.md).

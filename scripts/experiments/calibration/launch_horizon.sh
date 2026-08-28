@@ -14,6 +14,23 @@
 # the check, because "the same cells, longer" is a premise worth asserting rather
 # than assuming.
 #
+# That premise is also why the arms here are NOT paired (#3278).  Most launchers
+# with a bare `dinov3_patch` arm now run `siglip+dinov3_patch`, so that every arm
+# of one study opens the same way; this is not a study but a continuation of one,
+# read against cells the source run already wrote.  Its grid is keyed to that
+# run's `prepare_info.json` (renaming an arm drops it from the enumeration and
+# shifts every later index), so each profile keeps the source's arms verbatim and
+# declares the mix with `CALIB_REQUIRE_OPENING` instead.  Re-pair a profile only
+# when its SOURCE study is re-launched paired.
+#
+# Note the bit-for-bit claim has a seam of its own: cells re-run today open on a
+# text sort wherever they can (#3269), and the runs on disk were crop-seeded.  So
+# until a source grid is re-run, `status`'s reproduction check is comparing across
+# that fix and will not match -- the horizon run is the same CELLS, not the same
+# trajectory.  Its own cells stay internally consistent (they land in this
+# profile's results dir, not the source's), which is what keeps
+# `_cells_io.assert_one_opening` quiet about them.
+#
 # Per-step cost RISES with the vote count (each Good vote adds patch rows to the
 # training set): measured at 3.7 s/step early against 7.3 s/step at vote 150 for a
 # patch cell, so a horizon extension is superlinear in wall time and has to be
@@ -38,6 +55,9 @@ profile_env() {
   case "$1" in
   wave1)
     SRC=/expscratch/$USER/bench-overview
+    # Both openings: SigLIP arms take a typed query, the bare DINOv3 arm takes
+    # three random known-goods.  Declared so the mix reads as the mirror it is.
+    OPENING=mixed
     GRID="CALIB_DATASETS=visual_genome_m,caltech101_m,coco_val"
     GRID="$GRID CALIB_VG_EMBEDDERS=siglip,siglip2_l,dinov3_patch"
     GRID="$GRID CALIB_CALTECH_EMBEDDERS=siglip,siglip2_l,dinov3_patch"
@@ -47,6 +67,7 @@ profile_env() {
     ;;
   vgbox)
     SRC=/expscratch/$USER/bench-vgbox2
+    OPENING=mixed
     GRID="CALIB_DATASETS=vg_box_small,vg_box_medium,vg_box_large"
     GRID="$GRID CALIB_VGBOX_EMBEDDERS=siglip,siglip2_l,dinov3_patch"
     GRID="$GRID CALIB_N_SEEDS=3 CALIB_N_CATEGORIES=10"
@@ -54,6 +75,10 @@ profile_env() {
     ;;
   binary)
     SRC=/expscratch/$USER/bench-binary
+    # Uniform: every arm is bare DINOv3, so every cell takes the known-good
+    # start.  Pinned, so pairing an arm here fails instead of re-seeding a
+    # continuation of cells that started the other way.
+    OPENING=known_good
     GRID="CALIB_DATASETS=visual_genome_m,coco_val"
     GRID="$GRID CALIB_VG_EMBEDDERS=dinov3_patch CALIB_COCO_EMBEDDERS=dinov3_patch"
     GRID="$GRID CALIB_N_SEEDS=3 CALIB_N_PER_BAND=2 CALIB_N_CATEGORIES=6"
@@ -68,6 +93,7 @@ profile_env() {
   ENVX="$ENVX VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
   ENVX="$ENVX VTS_REPO=$WT $GRID CALIB_MAX_STEPS=$HORIZON"
   ENVX="$ENVX CALIB_REPOOL_VARIANTS= CALIB_SCHEDULE_VARIANTS= CALIB_FOLD_COUNTS="
+  ENVX="$ENVX CALIB_REQUIRE_OPENING=$OPENING"
 }
 
 link_prepare() {

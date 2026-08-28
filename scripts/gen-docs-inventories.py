@@ -111,6 +111,8 @@ def build_embedders() -> str:
         notes = []
         if e.is_default:
             notes.append("**default** for its media type")
+        if e.eval_only:
+            notes.append("**evaluation only** — registered, but withheld from the app's pickers")
         if not e.supports_text:
             notes.append("no text queries")
         if e.supports_patch_regions:

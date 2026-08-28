@@ -156,13 +156,39 @@ is:issue is:open label:solved     # solved; waiting only on merges
 
 Three rules bind you directly:
 
-- **Apply it when you open the fix PR**, in the same motion as the `Addressed in #M` comment (see "Linking a fix PR to its GitHub issue" above). Pass `labels` explicitly with the issue's existing labels plus `solved` — `labels` *replaces* the whole set, so read the issue first if you don't already know them.
+- **Apply it when you open the fix PR**, in the same motion as the `Addressed in #M` comment (see "Linking a fix PR to its GitHub issue" above). Pass `labels` explicitly with the issue's existing labels plus `solved` — `labels` *replaces* the whole set, so read the issue first if you don't already know them. **Clear the assignee in the same write** — see "Assign the owner while you are working an issue" below.
 - **Take it back off if the fix falls through.** If your PR is closed without merging, or review concludes the fix is wrong and the issue needs solving again, strip `solved` — the issue belongs back in the human queue. This is the one removal a fix session does itself.
 - **Closing an issue strips `solved`.** Pass `labels` explicitly on a `completed` close, listing every label the issue keeps (`claude`, `experiment`, …) and omitting `solved`; passing `[]` would wipe the rest. A `PreToolUse` hook blocks a close that keeps the label or omits the array.
 
-`scripts/reconcile-solved-labels.py` is the backstop for all three — it catches issues a session forgot to label, issues whose fix PR was abandoned, and stale labels left behind by a close. It encodes `docs/RELEASE.md` step 6's resolution logic — closing keywords vs. `Refs`, `Partially addressed in #M` vs. `Addressed in #M`, and the ambiguity of a comment posted *after* a fix pointer. It is a pure function from data to plan: the GitHub REST API is unreachable from a Claude session (`GITHUB_TOKEN` is present but 403s, since GitHub access is intermediated by the MCP server), so gather the PR and issue data with the `github` MCP tools and pipe it in. See `docs/RELEASE.md` for the recipe.
+`scripts/reconcile-solved-labels.py` is the backstop for all three, and for the assignee — it catches issues a session forgot to label, issues whose fix PR was abandoned, stale labels left behind by a close, and solved or closed issues still showing an assignee. It encodes `docs/RELEASE.md` step 6's resolution logic — closing keywords vs. `Refs`, `Partially addressed in #M` vs. `Addressed in #M`, and the ambiguity of a comment posted *after* a fix pointer. It is a pure function from data to plan: the GitHub REST API is unreachable from a Claude session (`GITHUB_TOKEN` is present but 403s, since GitHub access is intermediated by the MCP server), so gather the PR and issue data with the `github` MCP tools and pipe it in. See `docs/RELEASE.md` for the recipe.
 
 **A comment after the fix pointer is never guessed at.** If someone comments below an `Addressed in #M` pointer, the script reports the issue as needing review rather than tagging or skipping it. The later comment might be a maintainer saying "thanks" or the reporter saying the fix doesn't work; tagging would bury a dispute (hiding an issue that still needs solving), and skipping would leave solved work in the human queue. Ambiguity gets surfaced, not resolved by a coin flip.
+
+## Assign the owner while you are working an issue
+
+**Assign `samggreenberg` to an issue the moment you start working it, and take the assignee off the moment the issue is solved.** Assignment answers a different question from the labels: not "is this solved?" but **"is somebody on it right now?"** Together they give the tracker two views instead of one:
+
+```
+is:issue is:open -label:solved              # nobody has solved this
+is:issue is:open -label:solved no:assignee  # ...and nobody is on it right now — free to pick up
+```
+
+That second view is the one that stops two sessions — or a session and a human — starting the same issue an hour apart. It only works if the assignee goes on *early* and comes off *promptly*; a stale assignee is worse than none, because it makes free work look taken.
+
+Assignment is writable exactly like labels: `issue_write` with `method: "update"` and an `assignees` array. Two mechanics matter, and they differ from the label rules:
+
+- **`assignees` replaces the whole set**, just as `labels` does. Pass `["samggreenberg"]` to assign and `[]` to clear.
+- **Omitting `assignees` leaves the existing assignees untouched.** So a label-only write never disturbs assignment, and an assignment-only write never disturbs labels — you do *not* need to read the issue first the way you do for labels. Pass only the field you mean to change.
+
+Three rules bind you directly:
+
+- **Assign at the start.** When you begin work on an issue — before the first edit, not after the PR — write `assignees: ["samggreenberg"]`. Do this even when you filed the issue yourself in the same session, and even for issues filed by someone else: the assignee names who is *doing* the work, not who reported it, and every Claude session here works through the owner's account.
+- **Unassign when you apply `solved`.** In the same motion as the `solved` label and the `Addressed in #M` comment, write `assignees: []`. Once the issue is solved, nobody is working it — only merges remain — so an assignee would assert something false. (These are two separate fields on one `issue_write` call; set both.)
+- **Re-assign if the fix falls through and you pick it back up.** Stripping `solved` (per the rule above) puts the issue back in the human queue. If you are the one resuming it, assign again; if you are walking away, leave it unassigned so someone else can take it.
+
+**Closing an issue clears the assignee too** — `docs/RELEASE.md` step 6 passes `assignees: []` alongside the label list, for the same reason it strips `solved`: a closed issue has nobody working it.
+
+`scripts/reconcile-solved-labels.py` backstops this, reporting a `CLEAR ASSIGNEE` bucket beside its label buckets. It reconciles in **one direction only** — it plans removals from solved and closed issues, and never invents an assignment, because "nobody is working on it" and "a session started five minutes ago" are the same JSON from its input. That asymmetry is why the *assign* half of the rule above has no safety net and has to be done by hand.
 
 ## Recommend a Claude model in every issue you file
 

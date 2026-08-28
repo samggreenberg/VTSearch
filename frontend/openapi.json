@@ -264,6 +264,7 @@
             "type": "integer"
           },
           "calibration_fraction": {
+            "nullable": true,
             "type": "number"
           },
           "dataset_max_age_days": {
@@ -5843,6 +5844,7 @@
             "type": "integer"
           },
           "calibration_fraction": {
+            "nullable": true,
             "type": "number"
           },
           "detectors_dir": {

@@ -239,6 +239,50 @@ def enforce_type_floor(fig: plt.Figure, column: float = SIDEBAR) -> None:
         )
 
 
+def slot_px_per_pt(path: Path, column: float = FULL_BLEED) -> float:
+    """Slide pixels per printed point for a figure **as written to disk**.
+
+    `rendered_px_per_pt` answers the same question about the live canvas, and
+    for a cropped figure the two disagree: `save` trims the declared bounds
+    down to the ink, so the drawing that reaches the slot is not the one the
+    canvas holds. Everything a reader actually measures — glyph size, the gap
+    under a baseline — is a property of the cropped file, so it is the file
+    this reads.
+
+    That gap is not academic. Two figures in one progression share a canvas
+    *height* precisely so that a 16pt label is 16pt on both slides, but they
+    crop to different aspects, so the slot binds one on width and the other on
+    height and the same 16pt lands 14% smaller on one of them (#3301). A
+    figure that cares about its rendered size has to say so in pixels and
+    convert here.
+    """
+    with Image.open(path) as image:
+        width, height = image.size
+        dpi = image.info.get("dpi", (matplotlib.rcParams["savefig.dpi"],) * 2)[0]
+    return (float(dpi) / 72.0) * min(SLIDE_PX * column / width, SLIDE_PX * 9 / 16 / height)
+
+
+def enforce_rendered_px(
+    path: Path, pt: float, target_px: float, what: str, column: float = FULL_BLEED, tol: float = 0.6
+) -> None:
+    """Raise unless `pt` type in the written figure renders at `target_px` on the slide.
+
+    The point size that hits a given rendered size depends on the figure's
+    crop, so it cannot be shared between two figures as a number — only as a
+    *target*, with each figure carrying the points that reach it. This is what
+    keeps the two of them honest when a later edit reflows one and moves its
+    crop.
+    """
+    rendered = pt * slot_px_per_pt(path, column)
+    if abs(rendered - target_px) > tol:
+        raise SystemExit(
+            f"rendered size: {path.name}'s {what} is set at {pt:g}pt, which renders at "
+            f"{rendered:.1f}px in a {column:.0%} slot — the target is {target_px:g}px. "
+            f"This figure's crop has moved; re-derive the point size as "
+            f"{target_px:g} / {slot_px_per_pt(path, column):.4f} = {target_px / slot_px_per_pt(path, column):.1f}pt."
+        )
+
+
 def tight_box(fig: plt.Figure) -> matplotlib.transforms.Bbox:
     """The crop box (in inches) that `save`'s default tight crop would use.
 

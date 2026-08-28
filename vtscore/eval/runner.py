@@ -140,7 +140,7 @@ def eval_learned_sort(
     train_fraction: float = 0.5,
     seed: int = 42,
     calibrate_count: int = 2,
-    calibration_fraction: float = 0.5,
+    calibration_fraction: float | None = None,
     start_time: float | None = None,
     region_voting: bool = False,
 ) -> list[LearnedSortMetrics]:
@@ -163,7 +163,9 @@ def eval_learned_sort(
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for
-            calibration in each split (default 0.5).
+            calibration in each split.  ``None`` (default) resolves to the
+            app's per-space production split for the dataset's embedder
+            (0.3 single-vector / 0.5 patch, issue #3287).
         start_time: Monotonic timestamp from the start of the eval run.
             When provided, each result records ``elapsed_seconds``.
         region_voting: When ``True``, each Good vote passes the media's
@@ -266,7 +268,7 @@ def run_eval(
     seed: int = 42,
     enrich: bool = False,
     calibrate_count: int = 2,
-    calibration_fraction: float = 0.5,
+    calibration_fraction: float | None = None,
     embedder_name: str = "",
     region_voting: bool = False,
 ) -> list[DatasetResult]:
@@ -288,7 +290,9 @@ def run_eval(
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for
-            calibration in each split (default 0.5).
+            calibration in each split.  ``None`` (default) resolves to the
+            app's per-space production split for the dataset's embedder
+            (0.3 single-vector / 0.5 patch, issue #3287).
         embedder_name: Optional embedder to build each demo dataset with
             (empty = the media type's default).  Pass a patch embedder
             (e.g. ``"dinov3_patch"``) to make ``region_voting`` meaningful -

@@ -3,7 +3,9 @@
 One place the prepare stage, the SLURM array indexer, and the analyzer all agree
 on.  See ``docs/plans/calibration-experiment.md`` for the design.
 
-Arms (each an ``(embedder, style)`` pair):
+Arms (each an ``(embedder, style)`` pair).  An embedder is either a single
+registered name or a **paired** ``"<text>+<learn>"`` name (see :data:`PAIR_SEP`),
+which opens on one space's text sort and learns in another's:
 
 * ``visual_genome_m`` (boxed; ground-truth regions):
   ``siglip`` / ``siglip_l`` × ``whole_image`` (row-wise conformal), and
@@ -166,6 +168,12 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
         f"{cls}@{band}": text for cls, text in _VG_SCALE_TEXTS.items() for band in ("small", "medium", "large")
     },
     "coco_val": _COCO_TEXTS,
+    # `vg_scale` with the band collapsed away (#3115): the same verified images
+    # under the bare class name, so the same twelve texts serve it.  Without this
+    # entry every `vg_scale_any` cell falls back to the known-good start -- which
+    # is what it silently did until #3278 paired its region arm and the pair's
+    # own guard refused to run, since a pair exists FOR the text sort.
+    "vg_scale_any": dict(_VG_SCALE_TEXTS),
     # The box-size bands are built from the FULL Visual Genome vocabulary, so
     # their categories are VG's, not COCO's.  A band is a property of the cell -
     # someone hunting a small bus and someone hunting a large one both type
@@ -227,13 +235,27 @@ DATASET_EMBEDDERS: dict[str, list[str]] = {
     # produce cells with no trainable step at all.  Both embedders are in the
     # pile, so one dataset supplies BOTH voting modes and the mode contrast
     # stops being confounded with the dataset.
-    "vg_scale_any": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,dinov3_patch").split(","),
+    # The region arm is the PAIR, for the reason spelled out on `vg_scale` below:
+    # bare `dinov3_patch` cannot open on a text sort, and `EXPERIMENT_QUERIES`
+    # gives this dataset a query for every category precisely so it can.
+    "vg_scale_any": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
     # The same-class-across-bands set (#3156): one class list at three box
     # scales, so a small-vs-large difference is about size rather than about
     # which words happen to live at which size. Its categories are
     # band-suffixed (`bus@small`), and every one of them is the experiment --
     # see CATEGORY_MODE "all".
-    "vg_scale": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,dinov3_patch").split(","),
+    #
+    # The region-voting arm is the PAIR `siglip+dinov3_patch` rather than bare
+    # `dinov3_patch`: DINOv3 has no text tower, so on its own it opens on three
+    # random known-goods while the whole-image arms open on a text sort, and the
+    # voting-mode contrast carries a seeding contrast inside it. See PAIR_SEP.
+    #
+    # The DEFAULT carries the pair, not just the launchers. Every caller that
+    # sets `CALIB_VGSCALE_EMBEDDERS` already names it, so the bare fallback was
+    # reachable only by the callers that name nothing -- a direct
+    # `run_cells.py --index`, a preflight run without the env -- which are
+    # exactly the ones with no launcher comment to warn them.
+    "vg_scale": os.environ.get("CALIB_VGSCALE_EMBEDDERS", "siglip,siglip+dinov3_patch").split(","),
 }
 
 #: Region voting (drag the ground-truth box) only makes sense on a boxed dataset.
@@ -319,7 +341,29 @@ SIM_FRACTION = 0.5
 #: it.  Changing this changes the *trajectory* (different splits, different
 #: per-fold models), so a folds contrast is a run-level A/B, not a paired arm.
 CALIBRATE_COUNT = int(os.environ.get("CALIB_CALIBRATE_COUNT", "2"))
-CALIBRATION_FRACTION = 0.5
+#: Share of each calibration fold's labelset held out to READ the threshold from;
+#: the rest trains that fold's model.  0.5 since it was introduced, and never
+#: measured - the obvious default, not a result (issue #3287).
+#:
+#: It is a genuine trade-off rather than a "more is better" knob.  More Train
+#: gives better fold models, so their held-out orderings are a closer proxy for
+#: the final model's, but leaves fewer anchors and a coarser conformal quantile.
+#: More Calibrate gives finer quantiles but drifts the fold models further from
+#: the final model, which always trains on ALL votes - so the scale the cut is
+#: read on is less like the scale it is applied on.
+#:
+#: Like :data:`CALIBRATE_COUNT`, moving this moves the *trajectory* (different
+#: splits, different fold models, a different threshold and therefore a
+#: different Hard pick), so a fraction contrast is a run-level A/B and NOT a
+#: paired arm re-cut inside one run.
+#: ``None`` (env unset) = the app's per-space default: the harness resolves it
+#: per cell through ``production_split_for`` (0.3 single-vector / 0.5 patch,
+#: issue #3290), exactly as a live detector does.  Pinning a scalar here is a
+#: divergence preflight check 12 requires the study to declare.
+_CALIBRATION_FRACTION_ENV = os.environ.get("CALIB_CALIBRATION_FRACTION", "").strip()
+CALIBRATION_FRACTION: float | None = float(_CALIBRATION_FRACTION_ENV) if _CALIBRATION_FRACTION_ENV else None
+if CALIBRATION_FRACTION is not None and not 0.0 < CALIBRATION_FRACTION < 1.0:
+    raise ValueError(f"CALIB_CALIBRATION_FRACTION={CALIBRATION_FRACTION} must lie strictly in (0, 1)")
 #: The #2781 study pre-registered safe_thresholds OFF (conformal path only);
 #: the #2799 safe-threshold GMM study flips this on via CALIB_SAFE_THRESHOLDS=1.
 SAFE_THRESHOLDS = os.environ.get("CALIB_SAFE_THRESHOLDS", "0") == "1"
@@ -501,9 +545,64 @@ SCALE_BANDS: list[tuple[str, float, float]] = [
 ]
 
 
+#: Separator in a **paired embedder** name, ``"<text>+<learn>"``.
+#:
+#: Autopilot asks an embedding space for two different things, and nothing says
+#: they must be the same space:
+#:
+#: * the **opening** is a text sort - the user types a query and votes down the
+#:   cosine ranking - which needs a *text tower*;
+#: * everything after it - training the detector, pooling a dragged box, and
+#:   re-sorting by the trained model - happens in the *media* space, which needs
+#:   a *patch grid* for region voting and no text tower at all.
+#:
+#: ``dinov3_patch`` is the only patch-capable embedder in the pile and it has no
+#: text tower, so on its own it can never take the app's real opening: every
+#: DINOv3 cell falls back to the three-random-known-goods start.  That made the
+#: voting-mode contrast a *seeding* contrast as well - the binary arms opened on
+#: a text sort and the region arm did not - which is a confound in the axis the
+#: study exists to measure, not a detail.
+#:
+#: ``siglip+dinov3_patch`` removes it: SigLIP (the shipped default embedder, and
+#: the one whose text sort users actually see) ranks the typed query, and DINOv3
+#: does every piece of learning - vector learning, region learning, and the
+#: learn-sort.  Production would have to keep two vectors per image to ship it;
+#: the pile already does, which is why it is measurable here first.
+PAIR_SEP = "+"
+
+
+def split_embedder(embedder: str) -> tuple[str, str]:
+    """``"<text>+<learn>"`` -> ``(text_embedder, learn_embedder)``.
+
+    A plain name is both of its own halves, so callers can split
+    unconditionally instead of branching on whether a name is paired.
+    """
+    text, sep, learn = embedder.partition(PAIR_SEP)
+    return (text, learn) if sep else (embedder, embedder)
+
+
+def learn_embedder(embedder: str) -> str:
+    """The space the detector trains, scores and sorts in - i.e. which pickle."""
+    return split_embedder(embedder)[1]
+
+
+def text_embedder(embedder: str) -> str:
+    """The space the typed query is embedded in - i.e. which opening."""
+    return split_embedder(embedder)[0]
+
+
+def is_paired(embedder: str) -> bool:
+    """True when the opening and the learning run in *different* spaces."""
+    return PAIR_SEP in embedder
+
+
 def is_patch_embedder(embedder: str) -> bool:
-    """True for embedders that produce a patch grid + HAC tree."""
-    return embedder.endswith("_patch")
+    """True for embedders that produce a patch grid + HAC tree.
+
+    Reads the **learn** half: ``siglip+dinov3_patch`` region-votes because
+    DINOv3 supplies the patches, whatever supplies the opening.
+    """
+    return learn_embedder(embedder).endswith("_patch")
 
 
 def styles_for_embedder(embedder: str) -> list[str]:
@@ -536,11 +635,27 @@ def embedders_for_dataset(dataset: str) -> list[str]:
 
 
 def pickle_name(dataset: str, embedder: str) -> str:
-    return f"{dataset}__{embedder}.pkl"
+    """The cell pickle an arm loads its medias from.
+
+    A paired arm loads the **learn** half's pickle, because that is where the
+    vectors the detector is trained and scored on live.  The text half's pickle
+    is opened separately, once, and only to rank the opening - see
+    :func:`text_pickle_name` and ``run_cells._text_seed_scores``.
+    """
+    return f"{dataset}__{learn_embedder(embedder)}.pkl"
+
+
+def text_pickle_name(dataset: str, embedder: str) -> str:
+    """The pickle whose vectors the typed query is ranked against.
+
+    Equal to :func:`pickle_name` for an unpaired embedder, which is what makes
+    the paired path a generalisation of the ordinary one rather than a branch.
+    """
+    return f"{dataset}__{text_embedder(embedder)}.pkl"
 
 
 def crops_basename(dataset: str, embedder: str) -> str:
-    return f"{dataset}__{embedder}__crops"
+    return f"{dataset}__{learn_embedder(embedder)}__crops"
 
 
 def category_rng_seed(category: str) -> int:
@@ -627,6 +742,39 @@ CATEGORY_MODE = os.environ.get("CALIB_CATEGORY_MODE", "").strip().lower()
 #: replaced by the next eligible one instead of shrinking the grid.  0 (the
 #: default) is the behaviour of every run before #3267.
 REQUIRE_SEED_QUERY = os.environ.get("CALIB_REQUIRE_SEED_QUERY", "0") == "1"
+
+
+#: The opening this study **declares**, asserted per cell (#3278).
+#:
+#: Autopilot has two real starts and which one a cell takes is decided silently:
+#: a text sort when the (dataset, category) has a query *and* the embedder's text
+#: half has a tower, three random known-goods otherwise.  Since #3269 the harness
+#: takes the first wherever it can, which means a grid mixing SigLIP and DINOv3
+#: arms now opens two different ways along one axis - the confound
+#: ``lessons/2026-08-27-the-region-arm-could-not-open-the-way-the-app-does.md``
+#: describes, and the reason :data:`PAIR_SEP` exists.
+#:
+#: Values, all of them a *declaration* rather than a switch - none of them
+#: changes how a cell seeds, only what it is allowed to have seeded from:
+#:
+#: * ``"text"`` - every cell must open on a typed query.  A cell that falls back
+#:   raises instead of running, for the reason the paired-arm guard in
+#:   ``run_cells`` does: a mislabelled cell is invisible where a missing one is
+#:   not.
+#: * ``"known_good"`` - every cell must open on three random known-goods.  This
+#:   is the pin for a study whose subject *is* that flow (or one re-running a
+#:   finished grid that took it), and it fails if an arm silently gains a text
+#:   tower or a query.
+#: * ``"mixed"`` - the grid deliberately holds both openings, e.g. a re-runner
+#:   mirroring a completed study's arms.  Nothing is asserted per cell; the
+#:   declaration is what stops the mix reading as an oversight, and the analyzer
+#:   guard (``_cells_io.assert_one_opening``) is what stops two openings being
+#:   pooled into one number.
+#: * ``""`` (unset) - no assertion, the behaviour of every run before #3278.
+REQUIRE_OPENING = os.environ.get("CALIB_REQUIRE_OPENING", "").strip().lower()
+_OPENINGS = ("", "text", "known_good", "mixed")
+if REQUIRE_OPENING not in _OPENINGS:
+    raise ValueError(f"CALIB_REQUIRE_OPENING={REQUIRE_OPENING!r} is not one of {_OPENINGS[1:]}")
 
 
 def select_categories(

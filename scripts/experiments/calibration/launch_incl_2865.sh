@@ -65,9 +65,22 @@ export CALIB_ANALYZE=analyze_cutincl.py
 # it is the shipped default embedder.
 # Order matters: the array enumerates dataset -> embedder -> category -> seed,
 # so the long dinov3 arms are listed first and start in the first wave.
+#
+# Both region arms are the PAIR `siglip+dinov3_patch` (#3278).  The ship rule
+# above is a CROSS-MODE one -- a rule that restores the knob on region voting
+# while wrecking binary voting is not shippable -- so the two modes have to be
+# comparable, and bare `dinov3_patch` is not: with no text tower it opens on
+# three random known-goods while both siglip arms open on a typed query.  The
+# knob is a cost weight applied to a cut, so its measured effect rides on the
+# score distribution the opening starts building.
 export CALIB_DATASETS=visual_genome_m,coco_val
-export CALIB_VG_EMBEDDERS=dinov3_patch,siglip
-export CALIB_COCO_EMBEDDERS=dinov3_patch,siglip
+export CALIB_VG_EMBEDDERS=siglip+dinov3_patch,siglip
+export CALIB_COCO_EMBEDDERS=siglip+dinov3_patch,siglip
+export CALIB_REQUIRE_OPENING=text
+# A paired arm cannot fall back to the known-good start (`run_cells.py` raises),
+# so every selected category must have a typed query.  Selection filters to the
+# eligible ones before it picks, replacing rather than dropping.
+export CALIB_REQUIRE_SEED_QUERY=1
 # `max_patch` only: it *is* the production patch pipeline.  The HAC hybrids are
 # experiment-only arms and #2886 removed the tree from ingest, so scoring them
 # here would double the run to price geometry no user gets.
@@ -186,7 +199,7 @@ case "$MODE" in
     # is a REQUEST, and a boxed dataset on a single-vector embedder silently runs
     # binary (#2877).  Preflight takes one arm at a time, so it runs twice.
     if [[ -x "$WT/scripts/experiments/preflight.sh" ]]; then
-      for arm in visual_genome_m:dinov3_patch coco_val:dinov3_patch; do
+      for arm in visual_genome_m:siglip+dinov3_patch coco_val:siglip+dinov3_patch; do
         # No `--diverges`: this run pins nothing off-production.  The cut rule
         # is the axis it sweeps, and the shipped rule is one of the arms, so
         # even that is not a divergence - it is a comparison.

@@ -703,6 +703,14 @@ SIGLIP2_L_MODEL_ID = "google/siglip2-so400m-patch14-384"
 SIGLIP_L_MODEL_ID = "ViT-SO400M-14-SigLIP-384"
 SIGLIP_L_PRETRAINED = "webli"
 CLIP_MODEL_ID = "openai/clip-vit-base-patch32"
+# CLIP ViT-L/14, **evaluation only** (#3292): a single-vector, language-aligned
+# encoder from a different lineage than SigLIP, used to test whether #3287's
+# `calibration_fraction` optimum follows single-vector geometry or just the
+# SigLIP family.  Chosen over the base/32 checkpoint above because it emits
+# **768-d** vectors, exactly like `SIGLIP_MODEL_ID`, so a difference between the
+# two cannot be "CLIP's vectors are narrower".  Not offered in the app -- see
+# `ImageClipLargeEmbedder.eval_only`.
+CLIP_L_MODEL_ID = "openai/clip-vit-large-patch14"
 DINOV2_MODEL_ID = "facebook/dinov2-base"
 DINOV3_MODEL_ID = "facebook/dinov3-vitb16-pretrain-lvd1689m"
 EUPE_MODEL_ID = "https://huggingface.co/facebook/EUPE-ViT-B/resolve/main/EUPE-ViT-B.pt"
@@ -834,7 +842,12 @@ class CoreConfig:
 
     # Per-user settings (stored under each user's data dir)
     calibrate_count: int
-    calibration_fraction: float
+    # The user's *explicit* Train/Calibrate split, or ``None`` when unset.
+    # ``None`` is resolved at training time to the per-space production
+    # default for the detector's embedder (0.3 single-vector / 0.5 patch;
+    # issue #3287) - see
+    # :func:`vtscore.detectors.training.resolve_calibration_fraction`.
+    calibration_fraction: float | None
     enrich_descriptions: bool
     autopilot_goal_diversity: int
     inclusion: int

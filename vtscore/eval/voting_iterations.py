@@ -192,6 +192,18 @@ _VOTING_COLUMNS: tuple[str, ...] = (
     "cost",
     "fpr",
     "fnr",
+    #: The operating point in the words a reader picks off a menu (#3281).
+    #: ``recall`` is exactly ``1 - fnr`` and is emitted anyway: asking someone to
+    #: invert an FNR in their head is where the reading errors come from.  One
+    #: definition for all three, in ``calibration_metrics.detection_metrics``.
+    "precision",
+    "recall",
+    "f1",
+    #: The counts behind them, so a rate can be re-derived, weighted or pooled
+    #: without going back to the cells.
+    "n_test_pos",
+    "n_test_neg",
+    "n_flagged",
     "auroc",
     "average_precision",
     "train_seconds",
@@ -288,6 +300,12 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     "cost",
     "fpr",
     "fnr",
+    "precision",
+    "recall",
+    "f1",
+    "n_test_pos",
+    "n_test_neg",
+    "n_flagged",
     "auroc",
     "average_precision",
     "oracle_threshold",
@@ -766,7 +784,9 @@ def _evaluate_on_test(
     """Score *test_ids* with *step* and return the per-step metrics.
 
     Returns the operating-point metrics the user cares about — inclusion-weighted
-    ``cost``, ``fpr``, ``fnr`` (all computed at *threshold*) — plus the
+    ``cost``, ``fpr``, ``fnr``, ``precision``, ``recall`` and ``f1`` (all
+    computed at *threshold*, the last three via
+    :func:`~vtscore.eval.calibration_metrics.detection_metrics`) — plus the
     threshold-independent ranking metrics ``auroc`` and ``average_precision``,
     which isolate "how good is the ranking" from "how good is the threshold".
 
@@ -782,7 +802,19 @@ def _evaluate_on_test(
 
     nan = float("nan")
     if not test_ids:
-        return {"cost": nan, "fpr": nan, "fnr": nan, "auroc": nan, "average_precision": nan}
+        return {
+            "cost": nan,
+            "fpr": nan,
+            "fnr": nan,
+            "precision": nan,
+            "recall": nan,
+            "f1": nan,
+            "n_test_pos": nan,
+            "n_test_neg": nan,
+            "n_flagged": nan,
+            "auroc": nan,
+            "average_precision": nan,
+        }
 
     if style_obj is not None:
         # Explicit detection style (see vtscore.eval.patch_styles): the style
@@ -826,10 +858,14 @@ def _evaluate_on_test(
 
     scores_arr = np.asarray(scores, dtype=np.float64)
     labels_arr = np.asarray(true_labels, dtype=np.float64)
+    from vtscore.eval.calibration_metrics import detection_metrics  # noqa: PLC0415
+
+    det = detection_metrics(scores_arr, labels_arr, threshold)
     return {
         "cost": round(cost, 6),
         "fpr": round(fpr, 6),
         "fnr": round(fnr, 6),
+        **{k: _r(v) for k, v in det.items()},
         "auroc": round(_auroc(scores_arr, labels_arr), 6),
         "average_precision": round(_average_precision(scores_arr, labels_arr), 6),
     }
@@ -966,6 +1002,7 @@ def _operating_metrics(
     import numpy as np  # noqa: PLC0415
 
     from vtscore.eval.calibration_metrics import (  # noqa: PLC0415
+        detection_metrics,
         inclusion_weights,
         is_degenerate,
         operating_cost,
@@ -1041,6 +1078,7 @@ def _operating_metrics(
         "cost": _r(cost),
         "fpr": _r(fpr),
         "fnr": _r(fnr),
+        **{k: _r(v) for k, v in detection_metrics(scores, labels, threshold).items()},
         "auroc": _r(float(_auroc(scores, labels))),
         "average_precision": _r(float(_average_precision(scores, labels))),
         "oracle_threshold": _r(float(o_thr)),
@@ -1913,6 +1951,15 @@ def _calibration_metric_rows(
         # Under safe_thresholds the base row's threshold is the blended one;
         # record the pre-blend conformal cut alongside it (issue #2799).
         base["xcal_threshold"] = _r(float(details["xcal_threshold"]))
+    # How many held-out scores the conformal quantile was actually taken over,
+    # on the SHIPPED row rather than only on the fold-count variant rows (issue
+    # #3287).  It was declared in `_CALIBRATION_COLUMNS` and filled only by the
+    # #2897 arms, so the one quantity `calibration_fraction` directly controls -
+    # the resolution of the quantile the threshold is read from - was NaN on
+    # every production row.  A knob whose mechanism is invisible in the output
+    # can only be argued about; this makes it a column.
+    if base_cal_scores is not None:
+        base["n_cal_scores"] = int(np.asarray(base_cal_scores).size)
     rows.append(base)
 
     # --- Remedial re-pools: only where the same fold models exposed node data
@@ -2842,7 +2889,7 @@ def simulate_voting_iterations(  # noqa: C901
     sim_fraction: float = 0.5,
     safe_thresholds: bool = True,
     calibrate_count: int = 2,
-    calibration_fraction: float = 0.5,
+    calibration_fraction: Optional[float] = None,
     region_voting: bool = False,
     strategy: str = "autopilot",
     max_steps: Optional[int] = None,
@@ -2942,7 +2989,12 @@ def simulate_voting_iterations(  # noqa: C901
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for
-            calibration in each split (default 0.5).
+            calibration in each split.  ``None`` (default) resolves to the
+            **app's** per-space split
+            (:func:`vtscore.training.thresholds.production_split_for`, issue
+            #3287): 0.5 when the dataset carries a ``patch_grid`` (built by a
+            patch embedder), 0.3 otherwise - so a default run's folds are
+            split the way a live detector's are.
         region_voting: When ``True``, each Good vote trains on the region-pooled
             vector of the media's ground-truth box for *target_category* (the
             minimal box covering every annotated instance), instead of the
@@ -3214,6 +3266,22 @@ def simulate_voting_iterations(  # noqa: C901
         from vtscore.training.blend_schedules import production_schedule_for  # noqa: PLC0415
 
         blend_schedule = production_schedule_for(region_voting=region_aware)
+
+    # Mirror the app's per-space split default (#3287/#3290): with no explicit
+    # arm, the Train/Calibrate fraction of each fold is the one a live
+    # detector would resolve for this dataset's embedder.  ``region_aware``
+    # (any media carrying a ``patch_grid``) is the harness's spelling of "the
+    # pickle was built by a patch embedder" - the same capability the app
+    # reads off ``supports_patch_regions`` in
+    # ``vtscore.detectors.training.resolve_calibration_fraction``, which the
+    # ``training.split_fraction_default`` mirror in
+    # ``scripts/check-eval-app-sync.py`` pins against this block.  Note it is
+    # deliberately NOT the voting mode: ``dinov3_patch`` datasets take 0.5 in
+    # both their styles, including boxless ``whole_image``.
+    if calibration_fraction is None:
+        from vtscore.training.thresholds import production_split_for  # noqa: PLC0415
+
+        calibration_fraction = production_split_for(patch_space=region_aware)
 
     import torch  # noqa: PLC0415
 
@@ -3697,7 +3765,7 @@ def run_voting_iterations_eval(
     sim_fraction: float = 0.5,
     safe_thresholds: bool = True,
     calibrate_count: int = 2,
-    calibration_fraction: float = 0.5,
+    calibration_fraction: Optional[float] = None,
     region_voting: bool = False,
     strategies: Optional[list[str]] = None,
     max_steps: Optional[int] = None,
@@ -3728,7 +3796,9 @@ def run_voting_iterations_eval(
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for
-            calibration in each split (default 0.5).
+            calibration in each split.  ``None`` (default) resolves per
+            dataset to the app's per-space split (see
+            :func:`simulate_voting_iterations`).
         region_voting: When ``True``, Good votes train on the ground-truth
             region-pooled vector for patch datasets (see
             :func:`simulate_voting_iterations`).
@@ -3833,7 +3903,7 @@ def run_voting_iterations_eval_from_pickles(
     sim_fraction: float = 0.5,
     safe_thresholds: bool = True,
     calibrate_count: int = 2,
-    calibration_fraction: float = 0.5,
+    calibration_fraction: Optional[float] = None,
     region_voting: bool = False,
     strategies: Optional[list[str]] = None,
     max_steps: Optional[int] = None,
@@ -3858,7 +3928,9 @@ def run_voting_iterations_eval_from_pickles(
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for
-            calibration in each split (default 0.5).
+            calibration in each split.  ``None`` (default) resolves per
+            dataset to the app's per-space split (see
+            :func:`simulate_voting_iterations`).
         region_voting: When ``True``, Good votes train on the ground-truth
             region-pooled vector for patch datasets (see
             :func:`simulate_voting_iterations`).

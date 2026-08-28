@@ -257,7 +257,8 @@ class TestSettingsAPI:
         # the OS ``prefers-color-scheme`` at render time.
         assert data["theme"] == "system"
         assert data["calibrate_count"] == 2
-        assert data["calibration_fraction"] == 0.5
+        # ``None`` = no explicit split; the per-embedder default applies (#3290).
+        assert data["calibration_fraction"] is None
         assert isinstance(data["focus_mode_left"], dict)
         for v in data["focus_mode_left"].values():
             assert v == "click"

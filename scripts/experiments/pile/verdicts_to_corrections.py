@@ -9,6 +9,14 @@ Three sources feed one file, and they are *not* interchangeable:
 * **triage flags** -- a model pass over the ranked negatives, which finds
   contaminated negatives efficiently but draws no boxes.
 
+**Boxes are written NORMALISED, and say so.** A drawn box arrives as the app's
+`region_box`, which is already in [0, 1], while VG's and COCO's are in pixels.
+The builder normalises every box it merges, so an undeclared correction box was
+normalised twice and landed on the frame origin -- 130 of them, taking their
+band with them, invisible because the band is derived from the same box
+(#3281). Each row therefore carries `box_space`, and `build_pile.py` refuses a
+row whose boxes do not match what it declares.
+
 **A correction without a box excludes rather than promotes.** "There is a bus in
 this image" fixes a poisoned negative, but it cannot make the image a *positive*
 for any band, because a band is a claim about size and no size was measured. The
@@ -109,6 +117,7 @@ def main() -> int:
                     "class": key[1],
                     "present": True,
                     "boxes": [box] if box else [],
+                    "box_space": pc.CORRECTION_BOX_SPACE,
                     "source": "human_review",
                 }
                 stats["negative_fixed" if box else "negative_excluded"] += 1
@@ -122,6 +131,7 @@ def main() -> int:
                         "class": key[1],
                         "present": True,
                         "boxes": [box],
+                        "box_space": pc.CORRECTION_BOX_SPACE,
                         "source": "human_rebox",
                     }
                     stats["positive_reboxed"] += 1

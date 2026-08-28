@@ -330,7 +330,7 @@ def _pick_startup_round(ctx: ALContext) -> int:
 
 
 def _select_phase_faithful(ctx: ALContext, phase: str) -> int:
-    """Pick the next pool id using the app's Sort + Select pairing for *phase*.
+    r"""Pick the next pool id using the app's Sort + Select pairing for *phase*.
 
     Each branch below is one row of the mapping ``LabelViewComponent`` applies
     when the Autopilot phase changes (``restoreAutopilotSortSelect`` /

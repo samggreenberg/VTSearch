@@ -284,12 +284,13 @@ class TestCalibrationFractionCrossCalibration:
 class TestCalibrationFractionTrainAndScore:
     """Integration tests: train_and_score with calibration_fraction."""
 
-    def test_default_fraction_is_half(self):
+    def test_default_fraction_is_unset(self):
+        """``None`` = resolve the per-space production split (issue #3290)."""
         import inspect
 
         sig = inspect.signature(train_and_score)
         default = sig.parameters["calibration_fraction"].default
-        assert default == 0.5
+        assert default is None
 
     def test_custom_fraction_returns_valid_results(self):
         app_module.good_votes.update({k: None for k in [1, 2, 3]})
@@ -308,11 +309,12 @@ class TestCalibrationFractionTrainAndScore:
 class TestCalibrationFractionSetting:
     """Tests for calibration_fraction setting persistence."""
 
-    def test_default_is_half(self):
+    def test_default_is_unset(self):
+        """No stored value = ``None``: the per-embedder default applies."""
         from vtsearch import settings
 
         settings.reset()
-        assert settings.get_calibration_fraction() == 0.5
+        assert settings.get_calibration_fraction() is None
 
     def test_set_and_get(self):
         from vtsearch import settings
@@ -348,7 +350,17 @@ class TestCalibrationFractionAPI:
         assert resp.status_code == 200
         data = resp.get_json()
         assert "calibration_fraction" in data
-        assert isinstance(data["calibration_fraction"], float)
+        # ``null`` = no explicit split (per-embedder default); a float is an
+        # explicit user choice.
+        assert data["calibration_fraction"] is None or isinstance(data["calibration_fraction"], float)
+
+    def test_put_null_clears_to_automatic(self, client):
+        client.put("/api/settings", json={"calibration_fraction": 0.3})
+        resp = client.put("/api/settings", json={"calibration_fraction": None})
+        assert resp.status_code == 200
+        assert resp.get_json()["calibration_fraction"] is None
+        resp = client.get("/api/settings")
+        assert resp.get_json()["calibration_fraction"] is None
 
     def test_put_updates_calibration_fraction(self, client):
         resp = client.put("/api/settings", json={"calibration_fraction": 0.3})

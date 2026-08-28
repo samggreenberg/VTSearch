@@ -20,7 +20,8 @@ fall back toward availability when the fast types are busy. Selection order:
    fast queue slot.
 4. Failing that (nothing free anywhere), the type with the largest total pool,
    since the biggest pool drains soonest.
-5. Failing that (``scontrol`` unreachable, or none of the candidates exist here),
+5. Failing that (``scontrol`` unreachable, none of the candidates exist here,
+   or no node reports its GPU usage in a form this can read),
    ``$VTS_GPU_FALLBACK``.
 
 The chosen type goes to **stdout**; the reason goes to **stderr**, so callers can
@@ -79,6 +80,11 @@ _UNUSABLE_STATE = re.compile(
 # candidate even when it is idle.
 _GRES_RE = re.compile(r"gpu:([A-Za-z0-9_.-]+):(\d+)")
 
+# The same counts as they appear in `AllocTRES=`: `gres/gpu:a100=4`. The untyped
+# `gres/gpu=4` alongside it is a total over types and deliberately does not
+# match, or every allocated GPU would be counted twice.
+_ALLOC_GPU_RE = re.compile(r"gres/gpu:([A-Za-z0-9_.-]+)=(\d+)")
+
 
 @dataclass(frozen=True)
 class Availability:
@@ -89,8 +95,14 @@ class Availability:
     total: int
 
 
-def _field(line: str, key: str) -> str:
-    """Read ``key=value`` out of one ``scontrol show node --oneliner`` record.
+def _field_opt(line: str, key: str) -> str | None:
+    """``key=value`` from one node record, or None if the key is absent.
+
+    The distinction matters: ``AllocTRES=`` is written *empty* on a node with
+    nothing allocated, which is a measurement ("zero used"), while a key that
+    does not appear at all is the absence of a measurement. Collapsing the two
+    is what let :func:`_node_gpus_used` read "no usage field" as "nothing is
+    used" and report a fully-booked cluster as fully free (#3299).
 
     Regex rather than splitting on whitespace because a few values on that line
     (``Reason=``, ``OS=``) contain spaces, which would shift every field after
@@ -98,7 +110,12 @@ def _field(line: str, key: str) -> str:
     ``GresUsed=``.
     """
     match = re.search(rf"(?:^|\s){re.escape(key)}=(\S*)", line)
-    return match.group(1) if match else ""
+    return match.group(1) if match else None
+
+
+def _field(line: str, key: str) -> str:
+    """``key=value``, with an absent key flattened to the empty string."""
+    return _field_opt(line, key) or ""
 
 
 def _gpu_counts(gres: str) -> dict[str, int]:
@@ -108,13 +125,46 @@ def _gpu_counts(gres: str) -> dict[str, int]:
     return counts
 
 
+def _node_gpus_used(line: str) -> dict[str, int] | None:
+    """How many GPUs of each type this node has allocated, or None if unknowable.
+
+    Two fields can answer it, and which one exists depends on the Slurm build:
+
+    * ``GresUsed=gpu:a100:4(IDX:0-3)`` -- the direct answer, when present.
+    * ``AllocTRES=cpu=32,mem=384G,gres/gpu=4,gres/gpu:a100=4`` -- the same
+      number by another route. Written **empty** on a node with nothing
+      allocated, which is still an answer: zero.
+
+    The cluster this runs on (Slurm 23.11.6) emits ``GresUsed`` on *no* node in
+    ``scontrol show node --oneliner``, so the original reader -- which looked
+    only there and treated a missing field as an empty string -- computed
+    ``free == total`` for every node on the cluster and always returned the
+    first candidate type. It reported "a100 23/23 free" against 23 allocated
+    A100s and 109 idle V100s, and the resulting job was told it would start in
+    24 hours (#3299). Every test fixture wrote a ``GresUsed`` field, so nothing
+    caught it: the fixtures described a cluster the code never met.
+
+    Returning None rather than ``{}`` when neither field is present is the
+    point of the repair. "I cannot measure usage" must not be spellable as
+    "nothing is used", because those two produce opposite launches.
+    """
+    used = _field_opt(line, "GresUsed")
+    if used is not None:
+        return _gpu_counts(used)
+    alloc = _field_opt(line, "AllocTRES")
+    if alloc is not None:
+        return {t: int(n) for t, n in _ALLOC_GPU_RE.findall(alloc)}
+    return None
+
+
 def parse_node_availability(scontrol_output: str, partition: str = DEFAULT_PARTITION) -> dict[str, Availability]:
     """Sum free/total GPUs per type over the usable nodes of ``partition``.
 
     ``scontrol_output`` is ``scontrol show node --oneliner`` (one node per line).
-    Nodes outside the partition, and nodes in an unusable state, contribute
-    nothing at all -- not even to ``total`` -- so a drained node full of idle
-    A100s never advertises itself as the shortest queue.
+    Nodes outside the partition, in an unusable state, or whose GPU usage
+    cannot be read at all contribute nothing -- not even to ``total`` -- so a
+    drained node full of idle A100s never advertises itself as the shortest
+    queue, and neither does a node this parser cannot understand.
     """
     free: dict[str, int] = {}
     total: dict[str, int] = {}
@@ -130,7 +180,12 @@ def parse_node_availability(scontrol_output: str, partition: str = DEFAULT_PARTI
             continue
 
         node_total = _gpu_counts(_field(line, "Gres"))
-        node_used = _gpu_counts(_field(line, "GresUsed"))
+        node_used = _node_gpus_used(line)
+        if node_used is None:
+            # Unmeasurable: contribute nothing at all, exactly as a drained node
+            # does. A node whose usage cannot be read is not evidence of a free
+            # GPU, and pretending otherwise is the #3299 failure.
+            continue
         for gpu_type, count in node_total.items():
             total[gpu_type] = total.get(gpu_type, 0) + count
             # A node can report more used than configured only if the two fields

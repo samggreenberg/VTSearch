@@ -36,7 +36,25 @@ already using**, which silently breaks the per-name completion waiter below.
 Add `--reuse-prepare "$PREPARE_DIR"` when you are skipping a GPU prepare stage by
 reusing a finished study's output. It checks that every `crops/` entry still
 resolves — the links point into the study that generated them, and `readlink -f`
-recreates them happily after that study is archived (#2881).
+recreates them happily after that study is archived (#2881) — and it is where the
+grid-vs-prepare check reads from when the run has not copied `prepare_info.json`
+in yet.
+
+**Declare the opening.** `export CALIB_REQUIRE_OPENING=text` (or `known_good`, or
+`mixed`) in the launcher. Autopilot has two real starts and which one a cell takes
+is decided silently, by whether its category has a typed query and whether its
+embedder has a text tower — so a grid holding a SigLIP arm and a bare
+`dinov3_patch` one opens two ways along one axis, and nothing says so (#3278).
+The declaration is asserted per grid by preflight and per cell by `run_cells.py`,
+and `_cells_io.assert_one_opening` refuses to pool two openings at analysis time.
+An arm that must region-vote *and* open on a query is the pair
+`siglip+dinov3_patch` (#3276): SigLIP ranks the query, DINOv3 does the learning.
+
+Renaming an arm — pairing one included — means **re-running prepare**, even when
+every pickle is cached. `prepare_info.json` is keyed by embedder name and the grid
+enumerates from it, so an arm with no entry contributes zero cells silently and
+every later array index means a different cell. Preflight check 15 is what says
+whether you did.
 
 It refuses to pass when the results dir already holds another grid's cells,
 when the *actual* mount is low on space, when zero-byte cells from a previous
@@ -132,17 +150,130 @@ much more useful one than a false decimal.
 as the tables.** Prose plus a deep-regime table cannot show a curve's shape, a
 crossover, or how unlike the mean a single run is. At minimum:
 
-- the headline metric over the axis the user spends (votes / labels / time),
-  averaged over seeds, one line per arm, with a band — this is the figure that
-  answers "what do I get after 20 clicks?";
-- the same metric **broken out one line per run**, because a mean hides that
-  some runs never leave the floor, and the spread is usually the real finding;
+- **the quality-over-clicks pair** (see below) — mandatory for every simulated-user
+  study, no exceptions;
+- **the interactive viewer** (see below) — likewise mandatory, and linked from the
+  report;
 - whatever axis the study's mechanism runs on (scale band, prevalence, κ …);
 - the binding constraint, if the study found one.
 
 Put them in the study's own `figures/` directory, PNG at ~130 dpi, embedded with
 a relative-path image link and a caption that says how to read the figure and what it does *not* license
 (averaging across prevalences, log axes, unpaired panels).
+
+### The quality-over-clicks pair (mandatory, and there is one implementation)
+
+**Any study that simulates a VTSearch user clicking owes two figures showing how
+good that user's detector is as they click more.** Not positives mined — that is
+what the *acquisition* did; an arm can mine well and rank badly. The metric is
+the one the ship decision reads (`cost`, and `average_precision` beside it),
+plotted against the axis the user actually spends:
+
+- **the averages** — one panel **per dataset**, one line **per arm**, averaged
+  over every seed and category on that dataset, with an inter-quartile band.
+  This is the figure someone reads to pick an arm.
+- **the individuals** — one file per dataset, one panel **per arm**, and inside
+  it **every seed of that arm on that dataset as its own line**. A mean hides
+  that some runs never leave the floor, and on this axis the spread is routinely
+  the finding: two arms with the same mean can be "every run is mediocre" and
+  "half the runs are excellent and half never start".
+
+Do **not** write this plotting code again. `scripts/experiments/calibration/curves.py`
+is the single implementation — `curves.quality_vs_clicks(main, figdir, arms=…,
+denominator=…, baseline=…)` — so that the figure a reader learns to read in one
+report is literally the same figure in the next one. It also has a CLI, for
+regenerating a finished study's curves without redoing its analysis.
+`selftest_curves.py` is its planted-answer test.
+
+Three things it enforces, each of which is how one of these figures lies:
+
+- **Click 0 is the zero-click text sort, and it is not optional.** There is no
+  measurable detector at the far left, so the tempting thing is to start the
+  axis at the first trainable click — which throws away the comparison that
+  decides whether the loop is worth anything at all. Typing a query and reading
+  the ranked haystack is **free**; that is the number the clicked detector has
+  to beat. Anchor every curve at `t=0` on the cell's own text-sort quality
+  (`text_baseline.py` computes it, keyed by cell) and report the **crossover** —
+  the first click at which the arm is worth more than the query. An arm that
+  never crosses must say `never`. The left end is then "what typing got me", the
+  right end is "what clicking got me", and the distance between them is the
+  study's whole subject.
+
+  The anchor is **each series' own leftmost point**, not a rule across the
+  panel. A horizontal reference line dominates the figure to make a point the
+  leftmost marker already makes, and it implies a level that holds at every
+  click when it holds at one. Bridge the un-measured stretch between click 0 and
+  a series' first trained click with the dashed line — that is exactly what the
+  dash is for — and leave the crossing to the number.
+- **The denominator, drawn.** The metric frame starts at the first *trainable*
+  step, so a cell that never found both classes contributes no rows and silently
+  leaves the average. An arm starving on a third of its grid then gets its mean
+  computed over the two thirds that worked — and looks *better* for it. Pass the
+  cell list as `denominator`, and the figure carries a coverage strip plus a
+  dashed-where-partial rule so no level is quoted off a subset by accident.
+- **No silent subsampling.** If the per-run panel is capped, the cap goes in the
+  panel title. A hairball with a third of its lines removed reads as a tighter
+  arm, not a truncated figure.
+
+### The interactive viewer (mandatory, and there is one implementation)
+
+Two PNGs answer the questions the *analyzer* asked. They cannot answer the ones
+a reader has after reading it — *"does that hold on the other dataset?"*, *"is it
+the scarce categories doing all the work?"*, *"does it survive on recall, or only
+on cost?"* — because each is a different slice, and a PNG is one slice chosen in
+advance. Every simulated-user study therefore also ships
+`scripts/experiments/calibration/viewer.py`'s output, `viewer.html`, in its own
+directory, linked from the first section of the report. It carries every slice:
+
+| Control | Choices |
+|---|---|
+| dataset | one, **all** (averaged), or **each** (a line/panel per dataset) |
+| category | one, **all** (averaged), or **each** |
+| embedder | any **non-empty** subset — **one panel each, never averaged** |
+| arms | any **non-empty** subset |
+| seeds | averaged, or every seed its own line |
+| metric | every metric the run emitted |
+
+Four rules it enforces, none of which is optional:
+
+- **Hue means whatever the reader is comparing, and it is stated.** Three
+  dimensions can vary — arm, category, dataset. The first varying one (in that
+  order) with at most 8 values takes hue; every other varying one becomes a
+  panel. A ninth hue is never invented: a dimension with more values than the
+  palette has validated slots folds into small multiples instead. The legend
+  says *"Colour = arm · one panel per embedder × category"* in as many words,
+  because a legend that only lists values leaves the reader guessing which
+  dimension they are looking at. Colour follows the value's position in the
+  **study**, never in the current selection, so deselecting a series does not
+  repaint the survivors.
+- **Embedders are never averaged.** Two embedders are two representations of the
+  haystack and their mean describes no system anyone could run. Faceting makes
+  that structural rather than a rule someone has to remember.
+- **Pooling is weighted by the cells that contributed**, not a mean of means —
+  the payload stores `n` beside the moments so "all categories" is exact. The
+  two differ exactly when one category trained on fewer cells, which is the
+  survivorship the coverage strip exists to expose.
+- **Nothing is thinned in silence.** The per-seed payload is packed to a byte
+  budget by coarsening the *click* axis — never by dropping runs or metrics —
+  and the page says which grid it landed on. If it cannot fit, per-seed mode is
+  disabled with the reason on screen.
+- **Every subset control is non-empty, and says so.** An empty selection has no
+  honest rendering: the page either goes blank or quietly falls back to "all",
+  and a reader who did not notice takes a chart of everything for a chart of
+  nothing. The last remaining chip is **locked** rather than silently snapped
+  back on — both stop the same thing, but only one of them tells the reader why
+  the click did nothing, and a control that ignores a click reads as broken.
+
+`selftest_viewer.py` is its planted-answer test: it checks the codec round-trip,
+the weighted pooling against a hand-computed answer, the click-0 anchor, and the
+budget note.
+
+**The metrics come from the harness, not from the viewer.** `cost`, `precision`,
+`recall`, `f1`, `fpr`, `fnr`, `average_precision` and `auroc` are emitted by
+every run through `vtscore.eval.calibration_metrics.detection_metrics` and
+`DETECTION_METRICS`, which also carries each metric's label and *direction*. A
+report or viewer that decides for itself which way is "better" is how "lower is
+better" gets attached to recall. If you add a metric, add it there.
 
 **Show the errors themselves, not just the error rate.** Any claim about a
 *kind* of mistake ("it over-includes on scene categories") owes literal

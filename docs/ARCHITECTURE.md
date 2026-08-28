@@ -88,7 +88,7 @@ detector training and label export.
 | `audio` | `clap_general` (CLAP (general, larger)) | `laion/larger_clap_general` | `ast`, `beats`, `clap`, `clap_music`, `paraspeechclap`, `whisper_encoder` |
 | `document` | — (convert first) | — | — |
 | `face` | `face` (FaceNet (face identity, 512d)) | — | — |
-| `image` | `siglip` (SigLIP (general images)) | `google/siglip-base-patch16-224` | `clip`, `dinov2_patch`, `dinov2_single`, `dinov3_patch`, `dinov3_single`, `eupe_patch`, `eupe_single`, `sift_vlad`, `siglip2`, `siglip2_l`, `siglip_l` |
+| `image` | `siglip` (SigLIP (general images)) | `google/siglip-base-patch16-224` | `clip`, `clip_l`, `dinov2_patch`, `dinov2_single`, `dinov3_patch`, `dinov3_single`, `eupe_patch`, `eupe_single`, `sift_vlad`, `siglip2`, `siglip2_l`, `siglip_l` |
 | `text` | `e5` (E5 (text)) | `intfloat/e5-base-v2` | `bge` |
 | `video` | `xclip` (X-CLIP (video)) | `microsoft/xclip-base-patch32` | `languagebind`, `videomae` |
 
@@ -733,7 +733,7 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 | `converters` | library | Media converters | 8 |
 | `media_sources` | library | Media sources | 7 |
 | `media_types` | library | Media types | 6 |
-| `embedders` | library | Media embedders | 25 |
+| `embedders` | library | Media embedders | 26 |
 | `clippers` | library | Media clippers | 16 |
 | `cleaners` | library | Media cleaners | 7 |
 | `settings_importers` | app | Settings importers | 2 |

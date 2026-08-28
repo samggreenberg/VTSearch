@@ -3,6 +3,8 @@
 Issue [#3267](https://github.com/samggreenberg/VTSearch/issues/3267). Harness and
 study scaffolding: [#3268](https://github.com/samggreenberg/VTSearch/pull/3268).
 Run and analysis: [#3272](https://github.com/samggreenberg/VTSearch/pull/3272).
+Quality-over-clicks figures, the interactive viewer and the zero-click crossover:
+[#3280](https://github.com/samggreenberg/VTSearch/issues/3280).
 
 *Numbers are quoted to two significant digits. Every arm-vs-arm difference is
 paired within `(dataset, embedder, category, seed)` and carries its interval; a
@@ -175,6 +177,56 @@ is computed on the **balanced** grid — 1008 cells present in all eight arms, o
 > final cost −0.018, and it beats the length-matched control by +11 positives, so
 > the gain is **where** it clicks and not **how many** clicks it spends.
 
+### Does clicking beat typing at all?
+
+Every other table here compares arms with each other, which takes for granted
+that the loop is worth running. It has a **free** starting point: the user typed
+a query, and the ranked haystack plus its GMM cut cost nothing. So the first
+question is not which opening wins, it is whether 200 clicks beat 0.
+[`text_baseline.py`](../../../scripts/experiments/calibration/text_baseline.py)
+scores that zero-click sort on the same test split, in the same geometry, under
+the same inclusion weights, and the crossings are read off the same curves the
+figures plot. Both tables are in
+[`REPORT_generated.md`](REPORT_generated.md#is-clicking-worth-it-at-all--against-the-zero-click-text-sort).
+
+**On cost, yes — and well inside a real session.** Every arm crosses, and the
+four healthy arms do it in tens of clicks rather than hundreds:
+
+| | `prod` | `top_long` | `incl_k_wide` | `incl_k` |
+|---|---:|---:|---:|---:|
+| clicks to beat the typed query — `coco_val` | **10** | 14 | 16 | 17 |
+| clicks to beat the typed query — `visual_genome_m` | **23** | 24 | 28 | 32 |
+
+**The ship candidate is the slower of the two to pay off.** `prod` has a detector
+after ~7 clicks and passes the typed query at 10; `top_long` spends 8 of its
+first 12 clicks mining Goods, so it has nothing to score until later and does not
+pass until 14 (`coco_val`). It then keeps going and ends 0.018 lower. The arm
+that wins at the horizon is *behind* at click 12. Four clicks is small against a
+200-click horizon and both numbers sit inside any real session, so this is a
+caveat on the shipping decision rather than an objection to it — but it is the
+cost of mining, and it is invisible in every table that reads only the horizon.
+
+**On ranking, only on `coco_val`.** Average precision takes the threshold out and
+asks whether the *ranking* improved. On `coco_val` it does: `top_long` crosses at
+19 clicks and ends at 0.74 against the typed query's 0.67. On
+`visual_genome_m` **no arm's ranking beats the typed query inside 200 clicks** —
+the best is `top_long` at 0.52 against the query's 0.53.
+
+That is a fact about VG's whole loop rather than about openings, and it does not
+disturb the arm ordering (`top_long` is top on both metrics on both datasets).
+What it bounds is *what the clicking bought*: on that dataset every cost gain in
+this study — the shipped one included — is the detector learning **where to cut**,
+not learning to rank better than the query the user already typed. It is the
+strongest evidence here for keeping the typed query's own ranking in play once a
+detector exists, rather than handing the sort over to the detector wholesale.
+
+**Two rows in those tables must not be read as the grid.** `deep_first` appears to
+beat the typed query's ranking at click 8 on `coco_val` — on **8% of its cells**,
+the few easy ones that managed to train off a deep opening. It falls back below
+the baseline by click 15 and finishes at 0.48. That is what the `measured` column
+is for: a starved arm's mean is computed over the cells that trained, and the
+cells it starved on cannot pull it down.
+
 ### Did each opening actually move?
 
 An arm whose cut never left the control's rank position has *measured nothing*,
@@ -190,6 +242,16 @@ which is a different finding from "the lever does nothing". All seven moved.
 | `deep_first` | 0.35 | 0.009 | 32% | +0.097 [0.083, 0.11] |
 | `flat_mid` | 0.38 | 0.010 | 33% | +0.083 [0.070, 0.098] |
 | `prod` | 0.32 † | 0.43 | 0% | — (control) |
+
+**The `final cost Δ` column means different things down the table.** Every
+contrast here is paired, so a cell only enters if *both* arms trained a detector
+on it. `prod`, `top_long`, `incl_k_wide` and `incl_k` train on ~100% of cells, so
+their deltas describe the grid. `band_wide`, `flat_mid` and `deep_first` starve on
+22–33%, and those cells drop out — so **+0.045, +0.083 and +0.097 are what those
+openings cost on the runs that survived them**, and the runs they killed outright
+are counted in the `starved` column instead of in the cost. Both halves are real
+and neither is the whole picture; the arm ordering does not depend on which you
+read, but the levels do.
 
 Depth is a rank position in the seed sort, 0 = the top. **Read down this table:
 yield falls monotonically as the opening samples deeper, and starvation rises
@@ -295,6 +357,64 @@ user effort, a completely different training set.
 on 697; `top_long` and `incl_k_wide` on **none**.
 
 ## Figures
+
+**[`viewer.html`](viewer.html) carries every slice of this run, not the handful
+plotted below** — one dataset or both, one category or all 24, any subset of arms,
+seeds averaged or every seed as its own line, on any metric the run emitted. Open
+it when the question you have is a slice this report did not think to plot. (These
+cells predate `precision` / `recall` / `f1`, added to the harness in
+[#3279](https://github.com/samggreenberg/VTSearch/pull/3279) after the run, so the
+page offers cost, FPR, FNR, average precision and AUROC. It offers exactly what
+the run measured, which is the point.)
+
+The first two figures are the headline — **what the user's detector is worth as
+they keep clicking**, against the free typed query it started from. The mining
+figures after them explain *how* an opening got there; read these first.
+
+![cost_vs_clicks.png](figures/cost_vs_clicks.png)
+
+***The headline: how good the user's detector is as they keep clicking.** One
+panel per dataset, one line per arm, mean over every seed and category on that
+dataset, with an inter-quartile band. **Click 0 is the free text sort** — what the
+typed query got for nothing — drawn as each arm's own leftmost point, so the far
+left is what typing was worth and the far right is what clicking was worth.
+Nothing is measured between click 0 and an arm's first trained click, which is why
+that stretch is dashed; the click at which an arm overtakes its own start is
+reported as a number in the crossover table rather than eyeballed off the curve.
+The lower strip is the denominator: what fraction of that arm's cells are measured
+at that click (all of them at click 0, which has a text sort; from click 1 only
+the ones with a detector). The mean is **dashed** wherever that is below 95% —
+there it is a level over the subset of cells that trained, not over the grid, and
+an arm that starves looks better than it is on exactly those clicks. Read a level
+only off a solid segment. Averaged across a wide prevalence range, so it says
+which arm, not how well any one category does.*
+
+![average_precision_vs_clicks.png](figures/average_precision_vs_clicks.png)
+
+*The same figure for **average precision** — the ranking, with the threshold taken
+out of it. Higher is better here. An arm that improves cost but not AP moved the
+*threshold*; one that improves both moved the *ranking*. Same dashed-means-subset
+rule. Note the right-hand panel against where its curves start: on
+`visual_genome_m` no arm's ranking climbs back to the value it opened at, at any
+click.*
+
+![cost_vs_clicks_runs__coco_val.png](figures/cost_vs_clicks_runs__coco_val.png)
+
+![cost_vs_clicks_runs__visual_genome_m.png](figures/cost_vs_clicks_runs__visual_genome_m.png)
+
+***The individuals: every seed of every arm as its own line** (cost, lower is
+better), coloured by the category's prevalence in the pool. A mean cannot show
+that two arms with the same level are "every run is mediocre" and "half the runs
+are excellent and half never start", and on this axis that is usually the finding.
+A run that never trained a detector draws **no line at all** — the panel title
+counts those (246 and 247 of 504 for `flat_mid` and `deep_first` on `coco_val`,
+against 0 for `prod` and `top_long`), because an absent curve and a missing seed
+look identical otherwise. The black line is the median over the runs present at
+that click, dashed where that is a median over a subset. Each line starts at
+**that cell's own text-sort quality at click 0**, so the leftmost point is what the
+typed query was worth on that exact cell; a never-trained run is the lone `x` at
+click 0 with nothing to its right. The same pair for average precision is in
+[`REPORT_generated.md`](REPORT_generated.md).*
 
 ![mining_curve.png](figures/mining_curve.png)
 

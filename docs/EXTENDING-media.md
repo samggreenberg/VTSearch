@@ -319,6 +319,7 @@ embedder per media type should override the `is_default` property to return
 | `face/embedder_facenet.py` | `FaceEmbedder` | `face` | `face` |  |
 | `image/embedder_siglip.py` | `ImageSiglipEmbedder` | `siglip` | `image` | ✅ |
 | `image/embedder_clip.py` | `ImageClipEmbedder` | `clip` | `image` |  |
+| `image/embedder_clip_l.py` | `ImageClipLargeEmbedder` | `clip_l` | `image` |  |
 | `image/embedder_dinov2_patch.py` | `ImageDinov2PatchEmbedder` | `dinov2_patch` | `image` |  |
 | `image/embedder_dinov2_single.py` | `ImageDinov2SingleEmbedder` | `dinov2_single` | `image` |  |
 | `image/embedder_dinov3_patch.py` | `ImageDinov3PatchEmbedder` | `dinov3_patch` | `image` |  |
