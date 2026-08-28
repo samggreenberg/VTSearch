@@ -183,7 +183,15 @@ SCORE_LABEL_LIFT = 0.08 + 0.29 + LABEL_GAP
 #: the shorter candidate ticks, and every label that used to sit directly
 #: under a notch moves below the glyph row instead (#3296).
 VOTE_MARK_DROP = 0.36
-VOTE_LABEL_DROP = VOTE_MARK_DROP + CAP_16 + LABEL_GAP
+
+#: How big those glyphs are set. The knob panels carry seven well-spaced votes
+#: across the widest axis in the deck and can afford the room-legible size; the
+#: fold panels carry the same seven at a third of the width, where 22pt marks
+#: would touch. `VOTE_LABEL_DROP` is sized for the larger of the two, so one
+#: constant clears both.
+VOTE_MARK_PT = 16
+VOTE_PANEL_MARK_PT = 22
+VOTE_LABEL_DROP = VOTE_MARK_DROP + CAP_16 * VOTE_PANEL_MARK_PT / VOTE_MARK_PT + LABEL_GAP
 
 #: The half-width the held-out score marks below are quoted at, and the marks
 #: themselves: where each fold's Bad and Good votes land on its own score line,
@@ -1499,7 +1507,7 @@ def _xsemi_folds() -> list[tuple[GmmFit1D, np.ndarray, dict]]:
     return folds
 
 
-def _hump_marks(ax: plt.Axes, x0: float, y_base: float, w: float, anchors: dict) -> None:
+def _hump_marks(ax: plt.Axes, x0: float, y_base: float, w: float, anchors: dict, size: int = VOTE_MARK_PT) -> None:
     """This fold's held-out votes, drawn on the panel's baseline.
 
     The panel's baseline *is* the cross-calibration figure's score line: the
@@ -1537,7 +1545,7 @@ def _hump_marks(ax: plt.Axes, x0: float, y_base: float, w: float, anchors: dict)
                 glyph,
                 ha="center",
                 va="top",
-                fontsize=16,
+                fontsize=size,
                 color=color,
                 fontweight="bold",
                 zorder=6,
@@ -2546,7 +2554,7 @@ def _incl_panel(ax: plt.Axes, corpus: np.ndarray, *, y_base: float, top: float, 
             fontsize=15,
             color=INK,
         )
-        _hump_marks(ax, x0, y_base, w, INCL_VOTES)
+        _hump_marks(ax, x0, y_base, w, INCL_VOTES, size=VOTE_PANEL_MARK_PT)
 
 
 def _incl_gauges(
@@ -3143,7 +3151,7 @@ def _tilt_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
 
     # ── stage 1: the super-figure's conclusion, stacked into two rows ─────────
     _score_histogram(ax, x0, fold_base, w, TILT_PANEL_H, fit, scores, fill="class", mu_labels=False)
-    _hump_marks(ax, x0, fold_base, w, anchors)
+    _hump_marks(ax, x0, fold_base, w, anchors, size=VOTE_PANEL_MARK_PT)
     ax.text(x0, fold_top + LABEL_GAP, _sub("M_1(D_{-1})"), ha="left", va="bottom", fontsize=16, color=INK)
     ax.text(
         x0,
@@ -4079,7 +4087,10 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
     # labels. Moving those to the left — where the panel is already clear of the
     # notch, which reserves a corner and not a band — spends that width on the
     # panel instead, which is the row the room is asked to read (#3296).
-    x0, w = 5.9, TEACH_CANVAS[0] - 5.9 - 0.7
+    # 1.5 of right margin stays: the slide draws its own page number in the
+    # bottom-right corner, and a slider label run out to the canvas edge lands
+    # on top of it.
+    x0, w = 5.9, TEACH_CANVAS[0] - 5.9 - 1.5
     rank_y = TEACH_CANVAS[1] - 1.9
     panel_top = rank_y - 2.15
     panel_h = 5.0
@@ -4158,7 +4169,7 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
 
     # ── stage 5: the control that sets the ratio ──────────────────────────────
     if stage >= COST_STAGES:
-        _incl_slider(ax, x0, panel_base - 1.5, w)
+        _incl_slider(ax, x0, panel_base - 1.2, w)
     return fig
 
 
