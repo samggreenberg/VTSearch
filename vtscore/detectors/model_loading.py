@@ -98,8 +98,10 @@ def resolve_or_train_detector(  # noqa: C901
     X_list: list = []
     y_list: list[float] = []
     md5_to_emb = {}
+    md5_to_id: dict[str, int] = {}
     if snap:
         md5_to_emb = {c["md5"]: media_embedding(c, cold_embedder or None) for c in snap.values()}
+        md5_to_id = {c["md5"]: cid for cid, c in snap.items()}
 
     # Match origin-resolved label vectors to the cold-train space so the two
     # paths don't produce a mixed-space training set (silently garbage MLP).
@@ -109,6 +111,9 @@ def resolve_or_train_detector(  # noqa: C901
     if not dataset_embedder and snap:
         dataset_embedder = next(iter(snap.values()), {}).get("embedder", "") or ""
 
+    # Labels that live in the current dataset are also haystack members; the
+    # threshold path drops them from its population fit (issue #3308).
+    voted_ids: set[int] = set()
     unresolved: list[dict] = []
     for entry in label_entries:
         label_val = entry.get("label", "")
@@ -118,6 +123,7 @@ def resolve_or_train_detector(  # noqa: C901
         if md5 and md5 in md5_to_emb:
             X_list.append(md5_to_emb[md5])
             y_list.append(1.0 if label_val == "good" else 0.0)
+            voted_ids.add(md5_to_id[md5])
         else:
             unresolved.append(entry)
 
@@ -170,7 +176,7 @@ def resolve_or_train_detector(  # noqa: C901
         # the loaded context for this detector (None only for a never-loaded
         # detector, which simply skips the cache).  See train_and_threshold.
         trained_mlp, threshold = train_and_threshold(
-            X_list, y_list, snap=snap, embedder_name=cold_embedder or None, det_ctx=det_ctx
+            X_list, y_list, snap=snap, embedder_name=cold_embedder or None, det_ctx=det_ctx, voted_ids=voted_ids
         )
         return trained_mlp, threshold, None
 

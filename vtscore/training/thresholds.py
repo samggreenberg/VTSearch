@@ -1003,6 +1003,29 @@ FOLD_ANCHOR_CUT_RULE = "mid_tilt"
 #: shipped ``calibrate_count=2`` the mean and the median coincide.
 FOLD_ANCHOR_COMBINE = "qmean"
 
+#: Minimum unlabeled-remainder size for the voted-media haystack exclusion
+#: (issue #3308).  The fold-anchored estimator drops the voted media from its
+#: haystacks - their scores under the models trained on them are optimistically
+#: shifted - but only while the remainder is still big enough to *be* a
+#: population estimate.  Below this many remaining scores the exclusion is
+#: switched off entirely and the full (contaminated) haystack is used, because
+#: two failure modes take over at once: the empirical quantiles the transfer
+#: runs on lose resolution (1/n per order statistic), and after deep Autopilot
+#: voting the leftover items are exactly the ones acquisition never found
+#: interesting, so the remainder is a *selection-biased* sample of the corpus.
+#: Measured on the overlapping-data eval environment (60-item sim set, votes
+#: driven to exhaustion, 8 seeds paired step-for-step): exclusion is *neutral*
+#: at remainder 50-56 (-0.004 +/- 0.007 direct cost, and only trajectory noise
+#: downstream) and harmful below - +0.025 at remainder 40-49, +0.057 at 30-39,
+#: +0.18 under 10 (the cut collapses onto a handful of drained leftovers,
+#: FNR 0.7-0.9).  A 200-item synthetic single-vector environment is clearly
+#: *positive* (-0.03 to -0.06) at every measured remainder >=60, even with 70%
+#: of the corpus voted.  60 is therefore the smallest floor with a measured
+#: win above it and nothing but measured neutrality or harm below it.  The
+#: switch is all-or-nothing, never partial, so the fold haystacks and the
+#: final realization sample always cover one identical population.
+EXCLUSION_MIN_REMAINDER = 60
+
 #: Step size of the **eval-only** ``"q_tilt"`` cut rule (issue #2865's candidate
 #: 3), in units of combined-fold quantile per inclusion step.
 #:
