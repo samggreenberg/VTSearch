@@ -316,6 +316,7 @@ def main(argv: list[str] | None = None) -> int:
             r["seed_mode"] = seed_mode
             r["seed_query"] = seed_query
             r["seed_embedder"] = seed_embedder
+            r["calibration_fraction"] = cfg.CALIBRATION_FRACTION
         for sr in sweep_local:
             sr["embedder"] = emb
         for dr in cutdiag_local:
@@ -340,7 +341,18 @@ def main(argv: list[str] | None = None) -> int:
     # two exist: the #3156 rerun's root cause was that how a run started was
     # unnameable after the fact.  A paired arm's opening lives in a different
     # space than its `embedder` column implies, so the space has to be a column.
-    main_cols = [*_CALIBRATION_COLUMNS, "embedder", "seed_mode", "seed_query", "seed_embedder"]
+    # `calibration_fraction` joins them for the same reason (issue #3287): it is
+    # a run-level knob, so the only other record of which arm a cell belongs to
+    # is the directory it was read out of - and a frame that has been
+    # concatenated across arms no longer has one.
+    main_cols = [
+        *_CALIBRATION_COLUMNS,
+        "embedder",
+        "seed_mode",
+        "seed_query",
+        "seed_embedder",
+        "calibration_fraction",
+    ]
     out = outdir / f"task_{idx:04d}.csv"
     pd.DataFrame(all_rows, columns=pd.Index(main_cols)).to_csv(out, index=False)
     sweep_cols = [*_INCLUSION_SWEEP_COLUMNS, "embedder"]

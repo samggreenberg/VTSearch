@@ -12,6 +12,23 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Train/Calibrate split sizes are dithered rather than rounded.**
+  `calibration_folds` / `calibration_folds_cached` (and the grouped,
+  bag-aware path behind them) now round a fractional split size up with
+  probability equal to its fractional part, instead of calling `round`.
+  The count is unbiased either way; what changes is that a *tie* no longer
+  resolves the same way for every labelset of a given size. `round` is
+  round-half-to-even, so at the default `calibration_fraction=0.5` the odd
+  label's destination alternated with the label count - Train at
+  `n % 4 == 1`, Calibrate at `n % 4 == 3` - and every threshold read off
+  the fold models inherited that period-4 seesaw. Harmless for one
+  detector, but any study that advances one label at a time saw it
+  phase-locked across every run, where it survived averaging as a
+  spurious 4-label ripple (issue #3286). Thresholds remain a pure,
+  reproducible function of the labelset: the tie-break RNG is seeded from
+  a digest of the labels and training vectors, so the same votes still
+  give the same cut, and the calibration cache stays valid.
+
 - **Results exporters declare which payload kinds they handle, instead of
   sniffing the dict shape.** `LabelsetExporter` is now `ResultsExporter`
   (the old name stays as a permanent module-level alias), and it exposes
