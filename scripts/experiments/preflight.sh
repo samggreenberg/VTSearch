@@ -618,6 +618,16 @@ v = env("CALIB_BLEND_SCHEDULE")
 if v is not None:
     rows.append(("blend_schedule", v, "<unset> = the app's per-mode default"))
 
+# The #3314 adaptive fold count.  The app has no such thing: `calibrate_count`
+# is a constant there, so ANY schedule is a divergence and has to be declared -
+# including one whose early phase happens to equal today's constant, since the
+# knob's whole effect is that the count stops being one.  Checked separately
+# from `calibrate_count` above because the two can be set together and mean
+# different arms (the schedule's tail IS `calibrate_count`).
+v = env("CALIB_FOLD_COUNT_SCHEDULE")
+if v is not None:
+    rows.append(("fold_count_schedule", v, "<unset> = a constant calibrate_count, as the app has"))
+
 # The #3308 voted-media exclusion floor, which #3312 sweeps as an arm axis.
 # Unset resolves through the app's own `resolve_exclusion_floor`, so an unset
 # env var IS the production arm.  Every other value is a divergence - INCLUDING
