@@ -342,7 +342,12 @@ class UserSettings(BaseModel):
     theme: Theme = "system"
     enrich_descriptions: bool = False
     calibrate_count: Annotated[int, _clamp(1, 100)] = DEFAULT_CALIBRATE_COUNT
-    calibration_fraction: Annotated[float, _clamp(0.0, 1.0)] = 0.5
+    # ``None`` (the default) means "no explicit split": training resolves it
+    # to the per-embedder production default - 0.3 when the detector learns in
+    # a single-vector space, 0.5 on a patch grid (issue #3287).  A stored
+    # float is an explicit user choice and always wins; clearing the field in
+    # the GUI writes ``None`` and returns to automatic.
+    calibration_fraction: Annotated[float | None, _clamp(0.0, 1.0)] = None
     audio_playing: bool = True
     # Master switch for decorative motion (vote swipe, icon spins/waggles/tilts,
     # toast/banner slide-ins, smooth scrolling, projection-browser zoom tweens).

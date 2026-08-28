@@ -294,6 +294,53 @@ def _calibration_score_rows(
     return {g: np.asarray(score_rows[g], dtype=np.float32) for g in bag_ids}
 
 
+def _patch_space_for(embedder_name: str | None) -> bool | None:
+    """Whether *embedder_name* learns in a patch space, or ``None`` for unknown.
+
+    Reads the embedder's **capability** (``supports_patch_regions``), not what
+    it is doing in the current configuration: a patch embedder falling back to
+    whole-image voting on a boxless dataset still learns in its patch space's
+    pickle, and #3287 measured that it wants the patch split there too.  An
+    empty name or one the registry doesn't know maps to ``None`` ("unknown"),
+    not ``False`` - the split default has a three-state contract and an
+    unrecognised embedder takes the mode-agnostic fallback rather than a guess.
+    """
+    if not embedder_name:
+        return None
+    from vtscore.media import get_embedder  # noqa: PLC0415
+
+    try:
+        embedder = get_embedder(embedder_name)
+    except (KeyError, ValueError):
+        return None
+    return bool(getattr(embedder, "supports_patch_regions", False))
+
+
+def resolve_calibration_fraction(calibration_fraction: float | None, embedder_name: str | None) -> float:
+    """Resolve the Train/Calibrate split for a detector on *embedder_name*.
+
+    An explicit *calibration_fraction* (the user's persisted setting, or a
+    caller that pinned one) always wins.  ``None`` means "unset", which takes
+    the per-space production default (issue #3287): 0.3 when the detector
+    learns in a single-vector space, 0.5 on a patch grid, and 0.5 when the
+    space is unknown - see
+    :func:`vtscore.training.thresholds.production_split_for`.
+
+    Mirrored by the eval harness: ``simulate_voting_iterations`` resolves
+    ``calibration_fraction=None`` through the same
+    :func:`~vtscore.training.thresholds.production_split_for` table, keyed on
+    whether the dataset carries a ``patch_grid`` (its spelling of "built by a
+    patch embedder").  If the predicate here changes, the harness's has to
+    move with it - the ``training.split_fraction_default`` mirror in
+    ``scripts/check-eval-app-sync.py`` pins this function for that reason.
+    """
+    if calibration_fraction is not None:
+        return float(calibration_fraction)
+    from vtscore.training.thresholds import production_split_for  # noqa: PLC0415
+
+    return production_split_for(patch_space=_patch_space_for(embedder_name))
+
+
 def train_and_threshold(
     X_list: list,
     y_list: list[float],
@@ -387,6 +434,9 @@ def train_and_threshold(
     hidden_dim = LINEAR_SVM_HEAD
 
     inclusion = get_inclusion()
+    # The user's persisted split wins; unset resolves to the per-space
+    # production default for this detector's embedder (issue #3287).
+    calibration_fraction = resolve_calibration_fraction(get_calibration_fraction(), embedder_name)
     blend_ctx = BlendContext.from_labels(y_list, cal_groups)
     # The calibration folds are computed at *every* label count.  The pre-fusion
     # path skipped them below the blend schedule's floor, where the schedule
@@ -403,7 +453,7 @@ def train_and_threshold(
             y_list,
             input_dim,
             calibrate_count=get_calibrate_count(),
-            calibration_fraction=get_calibration_fraction(),
+            calibration_fraction=calibration_fraction,
             hidden_dim=hidden_dim,
             det_ctx=det_ctx,
             groups=cal_groups,
@@ -415,7 +465,7 @@ def train_and_threshold(
             y_list,
             input_dim,
             calibrate_count=get_calibrate_count(),
-            calibration_fraction=get_calibration_fraction(),
+            calibration_fraction=calibration_fraction,
             hidden_dim=hidden_dim,
             groups=cal_groups,
             score_rows_by_group=cal_score_rows,
@@ -977,7 +1027,7 @@ def _train_and_score_xy(
     *,
     inclusion_value: int,
     calibrate_count: int,
-    calibration_fraction: float,
+    calibration_fraction: float | None,
     det_ctx: Any,
     groups: list | None = None,
     score_rows: dict | None = None,
@@ -1022,6 +1072,10 @@ def _train_and_score_xy(
     # dataset score precedence when the detector has no primary yet.  Scoring
     # reads vectors from this same space the X_list were assembled in.
     score_emb = detector_score_embedder(det_ctx, clips_dict)
+
+    # ``None`` = no explicit user setting: take the per-space production split
+    # for the embedder the detector learns in (issue #3287).
+    calibration_fraction = resolve_calibration_fraction(calibration_fraction, score_emb)
 
     X = torch.from_numpy(stack_vectors(X_list, label="training vector"))
     y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
@@ -1090,7 +1144,7 @@ def train_and_score(
     bad_votes: dict[int, None],
     inclusion_value: int = 0,
     calibrate_count: int = 2,
-    calibration_fraction: float = 0.5,
+    calibration_fraction: float | None = None,
     vote_region_boxes: dict[int, tuple[float, float, float, float]] | None = None,
     det_ctx: Any = None,
 ) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
@@ -1111,8 +1165,10 @@ def train_and_score(
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
         calibration_fraction: Fraction of labelled data reserved for calibration
-            in each split (default 0.5).  For example, 0.2 means 80% Train /
-            20% Calibrate.
+            in each split.  For example, 0.2 means 80% Train / 20% Calibrate.
+            ``None`` (default) resolves to the per-space production split for
+            the detector's embedder - 0.3 single-vector, 0.5 patch (see
+            :func:`resolve_calibration_fraction`).
         vote_region_boxes: Optional ``media_id -> (x0, y0, x1, y1)`` map from
             yes-votes that designated a region.  When set and the source
             media carries a ``patch_grid``, the raw patch nearest the box
@@ -1206,7 +1262,7 @@ def train_detector_from_origins(
     media_type: str,
     embedder_name: str,
     calibrate_count: int = 2,
-    calibration_fraction: float = 0.5,
+    calibration_fraction: float | None = None,
 ) -> tuple[dict[str, list] | None, float]:
     """Resolve origin entries to files, embed them, and train a detector head.
 
@@ -1227,7 +1283,9 @@ def train_detector_from_origins(
             genuinely want the media type's default embedder (e.g. a
             brand-new detector with no recorded embedder yet).
         calibrate_count: Number of k-fold calibration splits.
-        calibration_fraction: Fraction reserved for calibration.
+        calibration_fraction: Fraction reserved for calibration.  ``None``
+            (default) resolves to the per-space production split for
+            *embedder_name* (see :func:`resolve_calibration_fraction`).
 
     Returns:
         A ``(weights, threshold)`` tuple.  ``weights`` is ``None`` if
@@ -1291,7 +1349,7 @@ def train_detector_from_origins(
         input_dim,
         inclusion,
         calibrate_count=calibrate_count,
-        calibration_fraction=calibration_fraction,
+        calibration_fraction=resolve_calibration_fraction(calibration_fraction, embedder_name),
         hidden_dim=LINEAR_SVM_HEAD,
     )
     model = train_model(X, y, input_dim, hidden_dim=LINEAR_SVM_HEAD)

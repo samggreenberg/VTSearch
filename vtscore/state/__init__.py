@@ -286,15 +286,25 @@ def set_calibrate_count(value: int) -> None:
         _core.invalidate_loaded_detector_models()
 
 
-def get_calibration_fraction() -> float:
-    """Return the calibration fraction."""
+def get_calibration_fraction() -> float | None:
+    """Return the user's explicit calibration fraction, or ``None`` when unset.
+
+    ``None`` means "no explicit setting": training resolves it to the
+    per-space production split for the detector's embedder - 0.3
+    single-vector, 0.5 patch (issue #3287; see
+    :func:`vtscore.detectors.training.resolve_calibration_fraction`).
+    """
     from vtscore.config import CoreConfig
 
     return CoreConfig.from_settings().calibration_fraction
 
 
-def set_calibration_fraction(value: float) -> None:
-    """Set the calibration fraction.  Persistence delegated to the registered hook."""
+def set_calibration_fraction(value: float | None) -> None:
+    """Set the calibration fraction.  Persistence delegated to the registered hook.
+
+    ``None`` clears the explicit setting back to the per-embedder automatic
+    default.
+    """
     changed = value != get_calibration_fraction()
     _persist_setting("calibration_fraction", value)
     if changed:

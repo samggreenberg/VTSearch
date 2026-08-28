@@ -47,7 +47,7 @@ python -m vtscore.eval [OPTIONS]
 | `--no-plot` | Disable plot generation | off |
 | `--enrich-descriptions` | Use enriched (wrapper-averaged) text embeddings for text-sort | off |
 | `--calibrate-count K` | Number of random Train/Calibrate splits for threshold calibration | `2` |
-| `--calibration-fraction F` | Fraction of training data reserved for calibration | `0.5` |
+| `--calibration-fraction F` | Fraction of training data reserved for calibration | unset = the app's per-space default (0.3 single-vector / 0.5 patch) |
 | `--embedder NAME` | Build each demo dataset with this embedder (empty = media-type default) | `` |
 | `--region-voting` | Region-pool learned-sort Good votes from each media's ground-truth box (needs `--embedder <patch>` + a dataset with stored regions, e.g. Visual Genome) | off |
 | `--list` | List available eval datasets and exit | - |
@@ -452,7 +452,7 @@ Three ways the harness relates to the app, in descending order of safety:
 |---|---|---|
 | **Delegated** | The harness calls the app's function. `MaxPatchStyle.good_vec` / `.bad_vecs` / `._rows_for_media` are thin wrappers over `pool_box_from_media`, `bad_negative_vecs`, and `media_score_rows`. | No — by construction. |
 | **Ported** | The app's logic is re-implemented, because the original is unreachable or unusable. `vtscore/eval/autopilot_flow.py` ports the phase machine from `AutopilotStateService.checkPhaseTransition` (TypeScript — nothing to import) and the three indicators from `vtscore.detectors.labeling_progress` (wrapped in an interactive, lock-guarded single-detector cache a simulation can't use). | Yes — a copy goes stale the moment the original moves. |
-| **Default resolution** | The harness resolves "no explicit arm" to whatever the app currently defaults to: `style=None` → `max_patch` on a patch dataset, `blend_schedule=None` → `production_schedule_for(...)`. | Yes — the app changes its default and the harness keeps serving the old one *under the name "default"*. |
+| **Default resolution** | The harness resolves "no explicit arm" to whatever the app currently defaults to: `style=None` → `max_patch` on a patch dataset, `blend_schedule=None` → `production_schedule_for(...)`, `calibration_fraction=None` → `production_split_for(...)` (0.3 single-vector / 0.5 patch, keyed on `patch_grid` presence — the harness's spelling of the app's `supports_patch_regions` predicate). | Yes — the app changes its default and the harness keeps serving the old one *under the name "default"*. |
 
 Prefer delegation whenever it's possible; it's the only fix that can't rot.
 

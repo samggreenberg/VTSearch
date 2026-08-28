@@ -12,6 +12,27 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`calibration_fraction` defaults are now per-embedder, and `None` means
+  "resolve it".** The shipped Train/Calibrate split of each calibration fold
+  is keyed on the space the detector learns in (issue #3287):
+  `PRODUCTION_SPLIT_BY_SPACE` in `vtscore.training.thresholds` maps
+  `single_vector` → 0.3 and `patch` → 0.5, with `PRODUCTION_SPLIT = 0.5` as
+  the unknown-space fallback, resolved by `production_split_for(patch_space=…)`
+  (a three-state contract mirroring `production_schedule_for`) and, with the
+  explicit-setting precedence, by
+  `vtscore.detectors.training.resolve_calibration_fraction`. Accordingly the
+  `calibration_fraction` parameters of `train_and_score`,
+  `labelset_train_and_score`, `train_detector_from_origins`,
+  `simulate_voting_iterations`, `run_voting_iterations_eval[_from_pickles]`,
+  `eval_learned_sort`, and `run_eval` changed from `float = 0.5` to
+  `float | None = None`, where `None` resolves to the per-space production
+  default (the eval keys it on `patch_grid` presence, matching the app).
+  `CoreConfig.calibration_fraction` is now `float | None` (`None` = no
+  explicit user setting), and `vtscore.state.get_calibration_fraction()` /
+  `set_calibration_fraction()` pass that tri-state through. Callers that
+  passed an explicit fraction are unaffected; callers that *relied* on the
+  implicit 0.5 default and want it back should pass `0.5` explicitly.
+
 - **Train/Calibrate split sizes are dithered rather than rounded.**
   `calibration_folds` / `calibration_folds_cached` (and the grouped,
   bag-aware path behind them) now round a fractional split size up with

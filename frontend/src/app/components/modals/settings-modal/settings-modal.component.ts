@@ -497,7 +497,10 @@ export class SettingsModalComponent implements OnInit, OnDestroy {
     this.save();
   }
 
-  onNumberChange(key: string, value: number): void {
+  // ``null`` is a legal value for nullable numeric settings: clearing the
+  // Tuning-fraction input writes null, which the server stores as "no
+  // explicit split" (the per-embedder automatic default applies).
+  onNumberChange(key: string, value: number | null): void {
     this.settings.update((s) => ({ ...(s as Record<string, unknown>), [key]: value }) as AppSettings);
     this.save();
   }

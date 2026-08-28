@@ -834,7 +834,12 @@ class CoreConfig:
 
     # Per-user settings (stored under each user's data dir)
     calibrate_count: int
-    calibration_fraction: float
+    # The user's *explicit* Train/Calibrate split, or ``None`` when unset.
+    # ``None`` is resolved at training time to the per-space production
+    # default for the detector's embedder (0.3 single-vector / 0.5 patch;
+    # issue #3287) - see
+    # :func:`vtscore.detectors.training.resolve_calibration_fraction`.
+    calibration_fraction: float | None
     enrich_descriptions: bool
     autopilot_goal_diversity: int
     inclusion: int

@@ -11,5 +11,6 @@
   "training.blend_schedule_default": "3737e6185aeb219673cbf8126a5306d6e435eba67e73c24cc1975a896bbab7e1",
   "training.calibration_score_rows": "1110937c8efc4198ff299328966afaa2a150ed856868033d701914995beadae1",
   "training.fused_threshold": "927b827f768bccccb354fc377ef696e2521c07070b9eeb27b85908b192d3f910",
-  "training.train_and_threshold": "3d6e9cca7103dfee1e7dbde5fba6f9de13f33b9c5b121fba7947cc497b1e2dc6"
+  "training.split_fraction_default": "fa4b1b9bd042b325086f8e22229e4922ff0b4fe7d862a89c47ec2e70276719a6",
+  "training.train_and_threshold": "c80c2eb97c815fa7c10b9ed4e5185b40c392b496e7235632b135859726b782c0"
 }
