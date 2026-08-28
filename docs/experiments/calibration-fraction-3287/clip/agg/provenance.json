@@ -1,0 +1,57 @@
+{
+  "0.30": {
+    "n_files": 48,
+    "n_read": 48,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [],
+    "no_base_rows": [],
+    "n_rows_all": 233157,
+    "n_rows": 7068,
+    "dir": "/expscratch/sgreenberg/calfrac-3287-clip/f030/results"
+  },
+  "0.40": {
+    "n_files": 48,
+    "n_read": 48,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [],
+    "no_base_rows": [],
+    "n_rows_all": 233150,
+    "n_rows": 7068,
+    "dir": "/expscratch/sgreenberg/calfrac-3287-clip/f040/results"
+  },
+  "0.50": {
+    "n_files": 48,
+    "n_read": 48,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [],
+    "no_base_rows": [],
+    "n_rows_all": 233183,
+    "n_rows": 7068,
+    "dir": "/expscratch/sgreenberg/calfrac-3287-clip/f050/results"
+  },
+  "0.60": {
+    "n_files": 48,
+    "n_read": 48,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [],
+    "no_base_rows": [],
+    "n_rows_all": 233137,
+    "n_rows": 7068,
+    "dir": "/expscratch/sgreenberg/calfrac-3287-clip/f060/results"
+  },
+  "0.70": {
+    "n_files": 48,
+    "n_read": 48,
+    "unreadable": [],
+    "zero_byte": [],
+    "no_positive_found": [],
+    "no_base_rows": [],
+    "n_rows_all": 233139,
+    "n_rows": 7068,
+    "dir": "/expscratch/sgreenberg/calfrac-3287-clip/f070/results"
+  }
+}

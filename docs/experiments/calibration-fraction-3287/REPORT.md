@@ -10,7 +10,7 @@ Design and pre-registered decision rules: [`PLAN.md`](PLAN.md). Every number her
 comes from [`agg/`](agg/), written by
 [`analyze_calfrac.py`](../../../scripts/experiments/calibration/analyze_calfrac.py).
 
-## The answer, in four lines
+## The answer, in five lines
 
 - **On the shipped default configuration (`siglip`, whole-image/binary voting), 0.5
   is not optimal.** Spending more of the votes on Train is worth **−0.013 ± 0.003**
@@ -26,6 +26,12 @@ comes from [`agg/`](agg/), written by
   like `siglip`: 0.3 beats 0.5 by **−0.013 ± 0.003**, winning in every band. Two of
   two single-vector arms want less than 0.5; `dinov3_patch` in two of two styles
   does not. [Below](#follow-up-siglip2_l-behaves-like-siglip-not-like-dinov3).
+- **A second follow-up settles "is it the SigLIP *family*?" — also no.** Two CLIP
+  checkpoints, a different lineage entirely, both want 0.3: **−0.011 ± 0.003**
+  (ViT-B/32) and **−0.016 ± 0.003** (ViT-L/14), negative in every band. Running two
+  capacities is what rules out the alternative reading — the effect is not the
+  family, not the vector width, and not the encoder's size.
+  [Below](#follow-up-clip-not-the-family-not-the-width-not-the-capacity).
 
 No production change is proposed here. This is the evidence; the decision is the
 owner's.
@@ -279,6 +285,157 @@ Until that runs, the defensible statement is: **the shipped default is measurabl
 not optimal for either single-vector embedder in the pile, the effect is not about
 voting mode, and one alternative explanation remains open.**
 
+## Follow-up: CLIP — not the family, not the width, not the capacity
+
+`siglip2_l` refuted "SigLIP specifically", but `siglip` and `siglip2_l` are the same
+lineage, so what the study had established was closer to *"the SigLIP family wants
+0.3"* than *"single-vector embedders want 0.3"* — and #3290 proposes to ship the
+second. CLIP is the cheapest way to tell them apart: single-vector and
+language-aligned like SigLIP, but a genuinely different model lineage — OpenAI's
+softmax/InfoNCE contrastive objective against SigLIP's pairwise sigmoid loss,
+different data, different recipe.
+
+**Two CLIP checkpoints were run, not one.** Leaving SigLIP changes the family *and*
+the capacity at once, which is the confound the pile's own `siglip → siglip2_l` note
+warns about and that #3115 turned into a wrong law. Two capacities of one lineage
+separate them:
+
+| arm | checkpoint | encoder | dim |
+|---|---|---|---|
+| `clip` | `openai/clip-vit-base-patch32` | ViT-B/32 | 512 |
+| `clip_l` | `openai/clip-vit-large-patch14` | ViT-L/14 | **768 — matches `siglip`** |
+
+`clip_l` is dimension-matched to `siglip` on purpose, so a difference cannot be
+"CLIP's vectors are narrower". Artifacts in [`clip/`](clip/) and
+[`clip_l/`](clip_l/); viewers at [`clip/viewer.html`](clip/viewer.html) and
+[`clip_l/viewer.html`](clip_l/viewer.html).
+
+**480/480 cells across the two grids, zero failures, zero zero-byte outputs, 7,068
+production rows in every one of the ten arms — nothing dropped.** Every metric row
+opened on a typed query in the arm's own space (`seed_mode=text`,
+`seed_embedder=clip`/`clip_l`, no blank queries), so neither arm fell back to the
+known-good opening that would have made it incomparable to the SigLIP rows (#3278).
+
+### The result
+
+Cost and `regret_honest`, paired vs 0.5, pooled inverse-variance across bands:
+
+| geometry | metric | 0.3 | 0.4 | 0.6 | 0.7 |
+|---|---|---|---|---|---|
+| `clip/whole_image` | cost | **−0.011 ± 0.003** | **−0.0087 ± 0.0031** | +0.0065 ± 0.0035 | +0.010 ± 0.0033 |
+| `clip/whole_image` | `regret_honest` | **−0.0062 ± 0.0013** | **−0.0040 ± 0.0013** | +0.0029 ± 0.0014 | +0.0077 ± 0.0015 |
+| `clip_l/whole_image` | cost | **−0.016 ± 0.003** | **−0.014 ± 0.003** | +0.0058 ± 0.0034 | +0.021 ± 0.0041 |
+| `clip_l/whole_image` | `regret_honest` | **−0.0082 ± 0.0016** | **−0.0083 ± 0.0014** | +0.0075 ± 0.0017 | +0.0096 ± 0.0019 |
+
+Negative is better than 0.5. **Bold** = resolved at more than 2 SE *and* not worse
+than 0.5 in any band.
+
+Per band, on cost — the shape is what matters, and it is monotone in both arms:
+
+| band | `clip` 0.3 | 0.4 | 0.6 | 0.7 | `clip_l` 0.3 | 0.4 | 0.6 | 0.7 |
+|---|---|---|---|---|---|---|---|---|
+| early 1–25 | −0.012 | −0.010 | +0.011 | +0.014 | −0.021 | −0.014 | +0.010 | +0.033 |
+| mid 26–60 | −0.014 | −0.0042 | +0.0036 | +0.0006 | −0.015 | −0.0094 | +0.0010 | +0.022 |
+| late 61–100 | −0.013 | −0.011 | +0.0034 | +0.0054 | −0.013 | −0.012 | +0.0027 | +0.012 |
+| deep 101–150 | −0.0083 | −0.0082 | +0.0034 | +0.0096 | −0.014 | −0.017 | +0.0029 | +0.011 |
+
+**Every cell of that table has the same sign structure**: 0.3 and 0.4 below zero in
+all eight band-arms, 0.6 and 0.7 above it in all eight. Individual band SEs run
+0.0045–0.011, so most single cells are not resolved on their own — the finding is the
+consistency, not any one of them. `clip_l`'s 0.3 arm is the exception that is also
+resolved band by band, in all four.
+
+Absolute deep-band cost, for scale — monotone increasing in the fraction, both arms:
+
+| geometry | 0.3 | 0.4 | 0.5 | 0.6 | 0.7 |
+|---|---|---|---|---|---|
+| `clip/whole_image` | 0.33 | 0.33 | 0.34 | 0.35 | 0.35 |
+| `clip_l/whole_image` | 0.31 | 0.31 | 0.32 | 0.33 | 0.33 |
+
+### Figures
+
+![cost over clicks, clip](clip/figures/cost_vs_clicks.png)
+![cost over clicks, clip_l](clip_l/figures/cost_vs_clicks.png)
+
+One panel per arm; colour is the fraction; the band is the inter-quartile range over
+cells. **Click 0 is the free text sort** — 0.45 for `clip`, 0.47 for `clip_l` — so the
+drop from the left marker to the right end is what clicking bought, and the ordering
+of the five lines at the right end is this study's whole subject. Dashed where fewer
+than 95% of that arm's cells are measured; the coverage strip beneath reaches 100% by
+click 4 and stays there, so every level quoted above is on solid segments. Do **not**
+read across the two panels: `clip` and `clip_l` have different absolute costs for
+reasons that have nothing to do with this knob.
+
+Every arm beats the free text sort, and the cheaper splits get there sooner and end
+lower — the crossover click, and the deep-band level it reaches:
+
+| arm | `clip` crossover | final cost | `clip_l` crossover | final cost |
+|---|---|---|---|---|
+| 0.3 | click 16 | 0.32 | click 13 | 0.30 |
+| 0.4 | click 14 | 0.33 | click 13 | 0.30 |
+| 0.5 | click 20 | 0.33 | click 14 | 0.31 |
+| 0.6 | click 20 | 0.34 | click 16 | 0.32 |
+| 0.7 | click 18 | 0.35 | click 19 | 0.32 |
+
+Per-run versions — every seed its own line — are in [`clip/figures/`](clip/figures/)
+and [`clip_l/figures/`](clip_l/figures/), and `average_precision_vs_clicks.png` beside
+each. **Every other slice is in the interactive viewers**, linked above.
+
+### What it settles
+
+The issue pre-registered the reading, and the answer is the first row:
+
+> **CLIP wants 0.3** → "single-vector ⇒ 0.3" survives a change of family; #3290's
+> gate is on much firmer ground and can ship as written.
+
+It survives it **twice, at two capacities and two vector widths**, which is more than
+was asked for and rules out the three alternative explanations that a single CLIP arm
+would have left open:
+
+- **not the family** — a different lineage, objective, data and recipe still wants 0.3;
+- **not the vector width** — 512-d and 768-d agree, and the 768-d arm is the *stronger*
+  of the two, so the effect does not track dimensionality;
+- **not the capacity** — ViT-B/32 and ViT-L/14 agree, so it is not an artifact of
+  small or large encoders.
+
+Four of four single-vector arms now want materially less than 0.5. `dinov3_patch`, in
+two of two styles, does not.
+
+### What it does not settle
+
+**The space-match confound is untouched, and CLIP makes the count worse rather than
+better.** Like `siglip` and `siglip2_l`, both CLIP arms have a text tower and open on
+their own text sort, so their opening and their learning happen in the *same* space;
+both `dinov3_patch` arms open through the `siglip+dinov3_patch` pair and learn
+elsewhere. So the split is now **four space-matched arms wanting 0.3 against two
+space-mismatched arms wanting 0.5** — and "space-match" still explains all six
+geometries exactly as well as "single-vector" does. Adding a fourth arm on the same
+side of that line cannot break it; only an arm that crosses it can.
+
+The discriminator remains the one the main report already names: a **`siglip+siglip2_l`
+pair** — open in SigLIP, learn in `siglip2_l` — which is single-vector *and*
+space-mismatched, the one combination the pile has never run. It is another ~20-minute
+grid, and it is now the single highest-value cell in this design.
+
+**So the honest statement of #3290's status is:** its constant is right for every
+configuration measured, and the predicate it is written on (`is_patch_embedder`) is
+still not known to be the predicate doing the work.
+
+### Keeping the arm out of production
+
+`clip_l` is a research arm and nothing has evaluated it *for the app*. `MediaEmbedder`
+therefore gained an `eval_only` property, and the two app-facing enumerations —
+`embedders_for_type` (every picker and every per-media-type default) and
+`all_embedders_dict` (what `GET /api/embedders` serialises) — withhold it. Resolution
+by name stays open, or a pile cell embedded by an eval arm could not load.
+
+A note on the issue's premise: it assumed no CLIP existed in the tree. `clip`
+(`clip-vit-base-patch32`) has shipped for a while and *is* app-selectable, so the
+"keep it out of the picker" instruction was written about a state that no longer
+held. That embedder is left exactly as it is — removing a shipped choice is a
+production decision, not an experiment's to make — and only the new `clip_l` is
+marked eval-only.
+
 ## Reproducing
 
 ```bash
@@ -310,3 +467,31 @@ launch to report. The same test removes `--patch`, `--require-region-voting` and
 `--contrasts-voting-modes` from its preflight — the last *should* fail on a
 single-vector grid, since nothing is in both voting modes, and a check that cannot
 apply is a claim in the run's record that nobody verified.
+
+### The CLIP follow-up's sizing
+
+```bash
+cd /exp/$USER/projects/vts-clip-3292/scripts/experiments/calibration
+bash run_3292.sh chain     # pile build + both grids, one SLURM chain
+bash run_3292.sh status    # progress, read off files rather than a live process
+```
+
+Chained on `afterok` rather than driven from a terminal, because every laptop-side
+watcher this project has run has eventually died with the VPN. Measured over all 480
+array cells:
+
+| | |
+|---|---|
+| pile build (`vg_scale` + derived `vg_scale_any`, both encoders, one v100) | 8m 24s |
+| per cell | **3.1 min** (1.8 – 3.9) |
+| RSS | **0.64 GB mean, 1.16 GB max** |
+| per study, prepare → report | ~19 min |
+| end to end, both studies | **47 min** (07:13 → 08:00) |
+
+**The memory sizing was wrong in the safe direction, and the measurement says so.**
+This run asked for 8G per task rather than the launcher's single-vector default of 4G,
+reasoning that `run_cells.py` embeds the text query per cell so CLIP ViT-L/14's weights
+would sit in every cell's RSS. The measured peak is **1.16 GB** — the 4G default had
+4× headroom all along, and the concurrency halved to %12 bought nothing. Next
+single-vector grid: take the default. The reasoning was sound and the number was not,
+which is the argument for `size` over arithmetic.
