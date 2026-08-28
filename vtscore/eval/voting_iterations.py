@@ -57,7 +57,7 @@ from vtscore.training.mlp import LINEAR_HEAD, LINEAR_SVM_HEAD, _auto_hidden_dim,
 from vtscore.training.thresholds import (
     ACQUISITION_INCLUSION_OFFSET,
     CUT_KIND_INTERIOR,
-    EXCLUSION_MIN_REMAINDER,
+    apply_vote_exclusion,
     FOLD_ANCHOR_QTILT_STEP,
     NO_GOOD_THRESHOLD,
     acquisition_inclusion,
@@ -164,6 +164,16 @@ _IDENT_COLUMNS: tuple[str, ...] = (
     "t",
     "n_good",
     "n_bad",
+    #: The simulation set this cell voted out of and fitted its threshold's
+    #: population estimate on, and what is left of it after this step's votes
+    #: (issue #3312).  ``n_remainder`` is exactly the count
+    #: :func:`~vtscore.training.thresholds.apply_vote_exclusion` compares
+    #: against the #3308 floor, so the pair reconstructs per step both whether
+    #: the exclusion fired and how big it could possibly have been - the effect
+    #: is bounded by ``1 - n_remainder / n_haystack``, the votes' share of the
+    #: haystack, which is the axis that study bands on.
+    "n_haystack",
+    "n_remainder",
     "phase",
     "app_trained",
     #: The parameterised opening this run took (issue #3267), verbatim - so a
@@ -693,6 +703,7 @@ def _safe_threshold_for_step(
     style_obj: Any = None,
     schedule: str | None = None,
     voted_ids: "set[int] | None" = None,
+    exclusion_min_remainder: float | None = None,
 ) -> tuple[float, list[float], list[int], list[Any], str, "FoldAnchoredCut | None"]:
     """The harness's **shipped** safe threshold - the same rule the app applies.
 
@@ -725,29 +736,28 @@ def _safe_threshold_for_step(
     the scorer preserved any ordering, and the per-fold haystack score arrays
     so the fold-anchored variant grid re-fits without re-scoring.
 
-    *voted_ids* mirrors the app's #3308 exclusion
-    (:func:`vtscore.detectors.training._fused_threshold`): the voted items are
-    dropped from every haystack the fold-anchored estimator fits on - the
-    per-fold arrays (which are also what the returned ``fold_haystacks`` carry,
-    so the variant grids inherit the same population convention) and the final
-    model's realization sample - unless the exclusion would leave fewer than
-    :data:`~vtscore.training.thresholds.EXCLUSION_MIN_REMAINDER` scores, in
-    which case it is switched off entirely, exactly as the app switches it off.
-    The *returned* sim scores stay complete: they feed evaluation and
-    acquisition, not the fit.
+    *voted_ids* drives the app's #3308 exclusion, and drives it through the app's
+    own :func:`~vtscore.training.thresholds.apply_vote_exclusion` /
+    :func:`~vtscore.training.thresholds.drop_voted` rather than a copy of them:
+    the voted items are dropped from every haystack the fold-anchored estimator
+    fits on - the per-fold arrays (which are also what the returned
+    ``fold_haystacks`` carry, so the variant grids inherit the same population
+    convention) and the final model's realization sample - unless the remainder
+    falls under the floor, in which case the whole step keeps its full
+    haystacks.  The *returned* sim scores stay complete: they feed evaluation
+    and acquisition, not the fit.
+
+    *exclusion_min_remainder* is the **#3312 arm knob** and the one thing here
+    that is allowed to differ from the app: ``None`` (every production caller,
+    and the harness's own default arm) resolves to the shipped floor, ``0``
+    excludes unconditionally, and ``math.inf`` switches the exclusion off
+    entirely - the pre-#3308 baseline.  Because the resolution happens inside
+    :func:`~vtscore.training.thresholds.resolve_exclusion_floor`, the default
+    arm cannot drift from the app even though the knob exists.
     """
     import numpy as np  # noqa: PLC0415
 
-    from vtscore.training.thresholds import fit_fold_anchored_cut  # noqa: PLC0415
-
-    exclude = voted_ids or set()
-
-    def _drop_voted(scores: list[float], score_ids: list[int]) -> "np.ndarray":
-        arr = np.asarray(scores, dtype=np.float64)
-        if not exclude:
-            return arr
-        keep = np.fromiter((i not in exclude for i in score_ids), dtype=bool, count=len(score_ids))
-        return arr[keep]
+    from vtscore.training.thresholds import drop_voted, fit_fold_anchored_cut  # noqa: PLC0415
 
     final_model = step.torch_model
     if style_obj is not None or region_aware:
@@ -762,11 +772,14 @@ def _safe_threshold_for_step(
 
     # The floor decision is taken once, on the final model's remainder, and
     # applies to every haystack in the step - all-or-nothing, so the fold and
-    # final populations can never diverge.
-    fit_final = _drop_voted(all_scores, ids)
-    if exclude and fit_final.size < EXCLUSION_MIN_REMAINDER:
-        exclude = set()
-        fit_final = np.asarray(all_scores, dtype=np.float64)
+    # final populations can never diverge.  ``apply_vote_exclusion`` is the
+    # app's own decision function, so the default arm reproduces production by
+    # construction rather than by a comment promising it does.
+    fit_final, excluding = apply_vote_exclusion(all_scores, ids, voted_ids, min_remainder=exclusion_min_remainder)
+
+    def _hay(scores: list[float], score_ids: list[int]) -> "np.ndarray":
+        """One fold's haystack under this step's exclusion decision."""
+        return drop_voted(scores, score_ids, voted_ids or ()) if excluding else np.asarray(scores, dtype=np.float64)
 
     fold_models = details.get("fold_models") or []
     fold_orderings = details.get("fold_orderings") or []
@@ -774,7 +787,7 @@ def _safe_threshold_for_step(
     fold_haystacks: list[Any] = []
     for model in fold_models[:n_folds]:
         fids, fscores = _score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
-        fold_haystacks.append(_drop_voted(fscores, fids))
+        fold_haystacks.append(_hay(fscores, fids))
 
     # #3116: the #2897 fold-count arms need a haystack per fold to re-fit the
     # *shipped* rule at each K, and `details["fold_models"]` is trimmed to the
@@ -789,7 +802,7 @@ def _safe_threshold_for_step(
         extended = list(fold_haystacks)
         for model in fold_data["models"][len(extended) :]:
             fids, fscores = _score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
-            extended.append(_drop_voted(fscores, fids))
+            extended.append(_hay(fscores, fids))
         fold_data["haystacks"] = extended
 
     cut = (
@@ -1813,7 +1826,7 @@ def _anchored_variant_rows(
     # are dropped from the free haystack sample instead of sitting in it twice
     # (once free, once clamped) - matching the shipped cut and the (already
     # filtered) *fold_haystacks* the fold family re-cuts.  *sim_fit_scores*
-    # carries the caller's floor decision (EXCLUSION_MIN_REMAINDER), so this
+    # carries the caller's floor decision (resolve_exclusion_floor), so this
     # family can never diverge from the shipped population convention.
     final_scores = np.asarray(sim_fit_scores if sim_fit_scores is not None else sim_scores, dtype=np.float64)
 
@@ -2977,6 +2990,7 @@ def simulate_voting_iterations(  # noqa: C901
     acq_rank_percentile: Optional[float] = None,
     startup_schedule: Optional[str] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
+    exclusion_min_remainder: Optional[float] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -3562,6 +3576,7 @@ def simulate_voting_iterations(  # noqa: C901
                     style_obj=style_obj,
                     schedule=blend_schedule,
                     voted_ids=set(good_votes) | set(bad_votes),
+                    exclusion_min_remainder=exclusion_min_remainder,
                 )
             )
             if emit_calibration_metrics:
@@ -3676,6 +3691,17 @@ def simulate_voting_iterations(  # noqa: C901
             "t": t,
             "n_good": len(good_votes),
             "n_bad": len(bad_votes),
+            # The haystack the threshold was fitted on, and what is left of it
+            # after this step's votes.  `n_remainder` is *exactly* the quantity
+            # the #3308 exclusion floor is compared against
+            # (`apply_vote_exclusion` counts the unvoted scores), and `pool` has
+            # already had this step's vote removed by the time this row is
+            # built - so an analyzer can reconstruct, per step, whether the
+            # exclusion fired, without the harness having to report it (#3312).
+            # Their ratio is the axis the mechanism runs on: the effect is
+            # bounded by the votes' share of the haystack.
+            "n_haystack": len(sim_ids),
+            "n_remainder": len(pool),
             "phase": flow.phase if flow is not None else "",
             "app_trained": 1 if (flow is None or app_has_detector(flow.phase)) else 0,
             "startup_schedule": startup_schedule or "",
@@ -3701,16 +3727,19 @@ def simulate_voting_iterations(  # noqa: C901
             # the voted items dropped, exactly as `_safe_threshold_for_step`
             # dropped them from the fold haystacks - so every fold-anchored
             # variant fit below stays paired with the shipped cut's population.
-            # The same EXCLUSION_MIN_REMAINDER floor applies: a too-small
-            # remainder keeps the full distribution, as the shipped cut did.
+            # The same floor applies, via the same decision function, so a
+            # variant grid can never sit on a different population than the
+            # shipped cut it is measured against.
             _voted_step_ids = set(good_votes) | set(bad_votes)
             sim_fit_scores: list[float] | None = None
             if sim_pooled_scores is not None:
-                sim_fit_scores = [
-                    s for i, s in zip(sim_pooled_ids, sim_pooled_scores, strict=True) if i not in _voted_step_ids
-                ]
-                if len(sim_fit_scores) < EXCLUSION_MIN_REMAINDER:
-                    sim_fit_scores = list(sim_pooled_scores)
+                _fit_arr, _ = apply_vote_exclusion(
+                    sim_pooled_scores,
+                    sim_pooled_ids,
+                    _voted_step_ids,
+                    min_remainder=exclusion_min_remainder,
+                )
+                sim_fit_scores = _fit_arr.tolist()
             # One extra row per safe-threshold GMM variant (issue #2799), all
             # evaluated against the same held-out max-pooled test scores.
             if X_sim_image is not None and sim_pooled_scores is not None:

@@ -16,6 +16,8 @@ scores are the only difference between the two runs.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 
 import vtscore.training.thresholds as thresholds_mod
@@ -125,7 +127,7 @@ class TestRemainderFloor:
     to be a population estimate, so the full haystack measures better there."""
 
     def test_small_remainder_keeps_the_full_haystack(self, monkeypatch):
-        # 60 media, 16 votes: the remainder (44) is under the floor (50).
+        # 60 media, 16 votes: the remainder (44) is under the floor (60).
         vecs, good_ids, bad_ids = _fixture(n_pos=20, n_neg=40)
 
         captured = _spy_fit_sizes(monkeypatch)
@@ -164,3 +166,147 @@ class TestLabeledMediaIds:
 
         assert labeled_media_ids(labelset, snap) == {2, 7}
         assert labeled_media_ids(labelset, None) == set()
+
+
+class TestSharedExclusionPolicy:
+    """``apply_vote_exclusion`` / ``drop_voted`` are the one definition of the
+    #3308 population convention - the app and the eval harness both route
+    through them, so the harness's default arm cannot drift from production."""
+
+    def test_resolve_floor_is_three_state(self):
+        assert thresholds_mod.resolve_exclusion_floor(None) == float(thresholds_mod.EXCLUSION_MIN_REMAINDER)
+        assert thresholds_mod.resolve_exclusion_floor(0) == 0.0
+        assert thresholds_mod.resolve_exclusion_floor(math.inf) == math.inf
+
+    def test_drop_voted_filters_by_this_arrays_own_ids(self):
+        # Deliberately unsorted ids: the harness's region scorer returns rows in
+        # score order, so a positional mask computed elsewhere would be wrong.
+        scores = [0.9, 0.1, 0.5, 0.3]
+        ids = [7, 2, 5, 1]
+        assert thresholds_mod.drop_voted(scores, ids, {2, 1}).tolist() == [0.9, 0.5]
+
+    def test_applies_above_the_floor(self):
+        scores = list(np.linspace(0.0, 1.0, 100))
+        ids = list(range(100))
+        kept, applied = thresholds_mod.apply_vote_exclusion(scores, ids, {0, 1, 2}, min_remainder=10)
+        assert applied and kept.size == 97
+
+    def test_declines_below_the_floor_and_returns_the_whole_haystack(self):
+        scores = list(np.linspace(0.0, 1.0, 100))
+        ids = list(range(100))
+        kept, applied = thresholds_mod.apply_vote_exclusion(scores, ids, set(range(50)), min_remainder=60)
+        assert not applied and kept.size == 100
+
+    def test_inf_floor_is_the_pre_3308_baseline(self):
+        scores, ids = [0.1, 0.2, 0.3], [1, 2, 3]
+        kept, applied = thresholds_mod.apply_vote_exclusion(scores, ids, {1}, min_remainder=math.inf)
+        assert not applied and kept.tolist() == scores
+
+    def test_zero_floor_still_refuses_an_empty_haystack(self):
+        # Everything voted: a remainder of nothing is not a population estimate,
+        # so even an unconditional floor declines rather than fitting on air.
+        scores, ids = [0.1, 0.2], [1, 2]
+        kept, applied = thresholds_mod.apply_vote_exclusion(scores, ids, {1, 2}, min_remainder=0)
+        assert not applied and kept.tolist() == scores
+
+    def test_nothing_voted_is_never_an_exclusion(self):
+        scores, ids = [0.1, 0.2], [1, 2]
+        for voted in (None, set()):
+            kept, applied = thresholds_mod.apply_vote_exclusion(scores, ids, voted, min_remainder=0)
+            assert not applied and kept.tolist() == scores
+
+
+class TestHarnessArmKnob:
+    """#3312: the eval harness can sweep the floor, and its *default* is the app's."""
+
+    def test_simulate_exposes_the_knob_defaulting_to_none(self):
+        import inspect
+
+        from vtscore.eval.voting_iterations import simulate_voting_iterations
+
+        param = inspect.signature(simulate_voting_iterations).parameters["exclusion_min_remainder"]
+        assert param.default is None, "the default arm must resolve through the app's own floor"
+
+    def test_off_arm_reproduces_the_pre_3308_haystack(self, monkeypatch):
+        """``inf`` puts every haystack back on the full population."""
+        vecs, good_ids, bad_ids = _fixture()
+        X, y = _xy(vecs, good_ids, bad_ids)
+        voted = set(good_ids) | set(bad_ids)
+
+        captured = _spy_fit_sizes(monkeypatch)
+        # The app has no floor override, so drive the policy directly: this is
+        # the exact call `_safe_threshold_for_step` makes for the `off` arm.
+        train_and_threshold(X, y, snap=_snap(vecs), voted_ids=voted)
+        excluded_sizes = captured[-1]
+
+        ids = list(range(len(vecs)))
+        scores = list(np.linspace(0.0, 1.0, len(vecs)))
+        off, off_applied = thresholds_mod.apply_vote_exclusion(scores, ids, voted, min_remainder=math.inf)
+        on, on_applied = thresholds_mod.apply_vote_exclusion(scores, ids, voted, min_remainder=None)
+
+        assert not off_applied and off.size == len(vecs)
+        assert on_applied and on.size == len(vecs) - len(voted)
+        assert all(size == on.size for size in excluded_sizes)
+
+
+class TestArmSemanticsEndToEnd:
+    """#3312: a full simulated run under each arm, which is what the GRID
+    submits.  These pin the two things the study's validity rests on - the
+    default arm IS production, and the arms are actually distinguishable."""
+
+    @staticmethod
+    def _medias(dim: int = 16, n_per_cat: int = 60) -> dict[int, dict]:
+        rng = np.random.RandomState(0)
+        out: dict[int, dict] = {}
+        mid = 1
+        for cat, centre in (("alpha", 0.3), ("beta", -0.3)):
+            for _ in range(n_per_cat):
+                vec = rng.normal(centre, 1.0, dim).astype(np.float32)
+                out[mid] = {"id": mid, "embeddings": {"emb": vec}, "category": cat}
+                mid += 1
+        return out
+
+    @staticmethod
+    def _run(floor):
+        from vtscore.eval.voting_iterations import simulate_voting_iterations
+
+        return simulate_voting_iterations(
+            TestArmSemanticsEndToEnd._medias(),
+            "alpha",
+            seed=42,
+            sim_fraction=0.5,
+            exclusion_min_remainder=floor,
+        )
+
+    @staticmethod
+    def _cuts(rows) -> list[float]:
+        return [round(r["acq_threshold"], 9) for r in rows]
+
+    def test_default_arm_is_the_shipped_floor(self):
+        """The load-bearing one: `None` must be byte-identical to the app's floor.
+
+        If this ever fails, every arm in the #3312 grid is being measured
+        against a baseline no user runs - the exact failure the eval/app sync
+        gate exists to prevent, here asserted on behaviour rather than on a
+        source digest.
+        """
+        assert self._cuts(self._run(None)) == self._cuts(self._run(float(thresholds_mod.EXCLUSION_MIN_REMAINDER)))
+
+    def test_unconditional_exclusion_is_distinguishable_from_the_floor(self):
+        # This environment's haystack (60) never clears the floor, so `always`
+        # is the only arm that can fire - which is precisely why it is the arm
+        # that measured harmful here, and why the floor exists.
+        assert self._cuts(self._run(0.0)) != self._cuts(self._run(None))
+
+    def test_a_floor_above_the_haystack_reproduces_the_off_arm(self):
+        assert self._cuts(self._run(250.0)) == self._cuts(self._run(math.inf))
+
+    def test_rows_carry_the_haystack_and_remainder(self):
+        rows = self._run(None)
+        assert rows, "the fixture must train at least one step"
+        first = rows[0]
+        assert first["n_haystack"] == 60
+        # The remainder shrinks by one per vote and is what the floor reads.
+        remainders = [r["n_remainder"] for r in rows]
+        assert remainders == sorted(remainders, reverse=True)
+        assert max(remainders) < first["n_haystack"]

@@ -214,6 +214,63 @@ Not to be confused with the older `analyze_folds.py` / `launch_folds_2861.sh`,
 which moved the fold count to 4 only to unlock the anchored `qmean`/`qmedian`
 combine question — it measures no cost and covers region voting only.
 
+## Voted-media exclusion floor (issue #3312)
+
+```bash
+cd /exp/$USER/projects/vts-exclusion-3312/scripts/experiments/calibration
+python selftest_analyze_exclusion.py          # planted answer; run before the array
+bash launch_exclusion_3308.sh prepare         # stage 0, ONCE, shared by every arm
+bash launch_exclusion_3308.sh baseline        # the click-0 text-sort anchor
+bash launch_exclusion_3308.sh size A 0        # time ONE cell per stage AND per geometry
+bash launch_exclusion_3308.sh size B 12
+bash launch_exclusion_3308.sh arms            # both stages, then one cross-arm analyze
+```
+
+Prices PR #3311: the #3308 exclusion drops the voted media from every haystack
+the fold-anchored estimator fits on, and ships behind a floor
+(`EXCLUSION_MIN_REMAINDER = 60`) that switches it off when too little of the
+collection would be left. **Both numbers behind that floor are synthetic**, which
+is what this study exists to fix.
+
+The arm axis is one number — `CALIB_EXCLUDE_VOTED`, the smallest remainder at
+which the exclusion still fires — so the arms are ordered and need no sentinel:
+`off` (= `inf`, the pre-#3308 baseline), `always` (= 0, no floor), a numeric
+floor such as `250`, and **unset**, which resolves through the app's own
+`resolve_exclusion_floor` and is therefore the incumbent. Unset is deliberate:
+pinning `60` would freeze the arm against a constant that can move underneath
+the study.
+
+Two stages, because the two questions live in different regimes, and
+`CALIB_SIM_FRACTION` is the instrument that separates them — it sets the
+haystack the threshold is fitted on, and therefore the votes-to-haystack ratio
+the effect is bounded by. **Stage A** (`sim_fraction=0.5`, 150 clicks) is
+production scale, where the remainder never falls below ~1950 and the floor is
+inert *by construction*: `always`, the app arm and `f250` are the same estimator
+there, so only `off` vs the app arm is a contrast. **Stage B**
+(`sim_fraction=0.10`, 380 clicks) drives the remainder 419 → 40, so each arm
+switches its exclusion off at a different, known step and a difference is
+attributable to the floor rather than to the arm.
+
+These are full runs, not paired re-cuts: the floor sets the threshold, which
+sets the acquisition cut, which sets the next vote — the same reason
+`calibrate_count` (#2897) and `calibration_fraction` (#3287) each needed live
+A/Bs after their screens.
+
+Two validity checks run before any verdict, both reported in `REPORT_exclusion.md`.
+The **trap check** asserts that two arms whose floors agree above some remainder
+produce *identical* thresholds above it — they are the same estimator there, so
+anything under 1.0 means an arm ran under the wrong environment. The **floor
+regime** table reconstructs, from `n_remainder` alone, where each arm's
+exclusion was actually live, so an arm that never excludes (or always does)
+cannot be mistaken for a contrast about the floor.
+
+Preflight gained a check for this study's own design error: a horizon that
+outruns its haystack does not fail, it silently *truncates*, which would make
+`max_steps` a property of the dataset rather than of the design.
+
+Analyzer: `analyze_exclusion.py`. Design and pre-registered decision rules:
+`docs/experiments/voted-exclusion-3308/PLAN.md`.
+
 ## Good Mining: sweeping the Autopilot **opening** (issue #3267)
 
 Getting enough Goods looks like what separates a VTSearch run that works from

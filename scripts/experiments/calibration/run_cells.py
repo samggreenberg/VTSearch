@@ -216,6 +216,7 @@ def main(argv: list[str] | None = None) -> int:
         f"(learn={cfg.learn_embedder(emb)} text={cfg.text_embedder(emb)}) category={cat} seed={seed} "
         f"styles={styles} head={cfg.HEAD or 'default (production)'} safe_thresholds={cfg.SAFE_THRESHOLDS} "
         f"calibrate_count={cfg.CALIBRATE_COUNT} fold_counts={cfg.FOLD_COUNTS or 'off'} "
+        f"sim_fraction={cfg.SIM_FRACTION} exclusion={cfg.exclusion_arm_name()} "
         f"cut_incl_ks={cfg.CUT_INCLUSION_KS or 'off'} "
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'}"
@@ -283,6 +284,7 @@ def main(argv: list[str] | None = None) -> int:
             safe_thresholds=cfg.SAFE_THRESHOLDS,
             calibrate_count=cfg.CALIBRATE_COUNT,
             calibration_fraction=cfg.CALIBRATION_FRACTION,
+            exclusion_min_remainder=cfg.EXCLUSION_MIN_REMAINDER,
             region_voting=region_voting,
             max_steps=cfg.MAX_STEPS,
             seed_scores=seed_scores,
@@ -322,12 +324,25 @@ def main(argv: list[str] | None = None) -> int:
             from vtscore.training.thresholds import production_split_for
 
             cell_calibration_fraction = production_split_for(patch_space=cfg.is_patch_embedder(emb))
+        # The exclusion arm, recorded as BOTH a label and the number the floor
+        # actually used (#3312).  Resolving the number here - through the app's
+        # own `resolve_exclusion_floor` when the arm is the default - is what
+        # lets the analyzer recompute, per step, whether the floor bound;
+        # reading the arm label alone would leave `app(...)` un-numbered in a
+        # frame concatenated across arms.
+        from vtscore.training.thresholds import resolve_exclusion_floor
+
+        exclusion_arm = cfg.exclusion_arm_name()
+        exclusion_floor = resolve_exclusion_floor(cfg.EXCLUSION_MIN_REMAINDER)
         for r in rows:
             r["embedder"] = emb
             r["seed_mode"] = seed_mode
             r["seed_query"] = seed_query
             r["seed_embedder"] = seed_embedder
             r["calibration_fraction"] = cell_calibration_fraction
+            r["sim_fraction"] = cfg.SIM_FRACTION
+            r["exclusion_arm"] = exclusion_arm
+            r["exclusion_min_remainder"] = exclusion_floor
         for sr in sweep_local:
             sr["embedder"] = emb
         for dr in cutdiag_local:
@@ -363,6 +378,9 @@ def main(argv: list[str] | None = None) -> int:
         "seed_query",
         "seed_embedder",
         "calibration_fraction",
+        "sim_fraction",
+        "exclusion_arm",
+        "exclusion_min_remainder",
     ]
     out = outdir / f"task_{idx:04d}.csv"
     pd.DataFrame(all_rows, columns=pd.Index(main_cols)).to_csv(out, index=False)
