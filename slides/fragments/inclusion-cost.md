@@ -15,19 +15,21 @@
 <!-- The previous slide put three cuts up and refused to choose between them.
      This is how you choose: put a price on each of the two mistakes. -->
 
-<!-- **a** — The same shape of ranking, drawn as a bare score line and longer:
-     mostly right, wrong in the middle, and nothing on it says where to cut. -->
+<!-- **a** — The same ten items, same order, with the photographs taken away and
+     only the labels left. Nothing has changed but the drawing. -->
 
-<!-- **b** — Weigh the two mistakes and you get a rule. At equal prices the best
-     cut is here, and it is not obviously the one anyone would want. -->
+<!-- **b** — Weigh the two mistakes equally and you get a curve — and its bottom
+     is *flat across all three cuts*. That is the last slide's claim, arithmetic
+     rather than assertion: at equal prices the ranking genuinely cannot choose
+     between them. -->
 
 <!-- **c** — Price a false alarm four times a miss — a user who cannot afford
-     noise — and the whole curve tilts. The cheapest cut moves *up* the ranking:
-     fewer items come back, and the ones that do are surer. -->
+     noise — and the tie breaks. One cut is cheapest now, and it is the tightest
+     of the three: fewer items come back, and the ones that do are surer. -->
 
-<!-- **d** — Price a miss four times a false alarm and it moves the other way.
-     Three defensible answers on one ranking. The data has not changed; the
-     person at the keyboard has. -->
+<!-- **d** — Price a miss four times a false alarm and it breaks the other way,
+     onto the loosest of the three. The data has not changed; the person at the
+     keyboard has. -->
 
 <!-- **e** — So we exposed it. Inclusion, minus ten to plus ten: each step up
      doubles the price of a miss, each step down the price of a false alarm.

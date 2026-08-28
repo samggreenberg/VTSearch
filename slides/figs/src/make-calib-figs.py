@@ -3801,10 +3801,13 @@ COST_ARMS = (
     (1.0, 4.0, "1 : 4"),
 )
 
-#: Dash patterns for those three arms, in the same order. One hue for all
-#: three, because all three are the same object — a cut — and the deck reserves
-#: hue for identity rather than for enumeration (`slides/STYLE.md`).
-COST_DASHES = ((0, (5, 3)), (0, ()), (0, (1.5, 2.5)))
+#: Line weights for those three arms, in the same order — light, normal, bold.
+#: All three are solid, and all three are black. Dash patterns were the obvious
+#: encoding and the wrong one: a dashed, a solid and a dotted line read as three
+#: *kinds* of thing, where these are one quantity at three settings, and a
+#: weight ramp is read as an ordering without being told (#3296). Bold is the
+#: most permissive arm, so the ramp runs the way the slider under it does.
+COST_WEIGHTS = (1.2, 2.8, 5.0)
 
 #: Which build stage each arm arrives on, in `COST_ARMS` order. The balanced
 #: one comes first because it is the cut the room already has in mind; the
@@ -3812,18 +3815,52 @@ COST_DASHES = ((0, (5, 3)), (0, ()), (0, (1.5, 2.5)))
 COST_REVEAL = (3, 2, 4)
 
 
-def _ranked_votes() -> tuple[np.ndarray, np.ndarray]:
-    """A deliberately imperfect ranking: scores for a Bad pile and a Good pile.
+#: The ranking this slide argues over — **the same ten items the slide before it
+#: puts on screen**, in the same left-to-right order, as `book` or not (see
+#: `slides/figs/src/make-book-figs.py`'s `RANKING`). It used to be twenty-three
+#: draws from a seeded pair of normals, which made this read as a second,
+#: unrelated ranking rather than as the one the room had just been shown
+#: (#3296).
+#:
+#: Ten items is also what makes the cuts nameable: they come out as the *same*
+#: three cuts, so "Include 3" there and the strict arm's minimum here are one
+#: thing seen twice.
+RANK_MARKS = (False, False, False, True, False, True, False, True, True, True)
 
-    Overlapping on purpose, and by more than a shipped detector usually manages:
-    a perfectly separated ranking has one obvious cut and the slide's whole
-    point is that it has several. Fixed seed, because a redraw that changes
-    which cut wins changes what the slide says.
+
+def _mark_score(index: int) -> float:
+    """Where the `index`-th item sits on the score line: evenly spaced, centred."""
+    return (index + 0.5) / len(RANK_MARKS)
+
+
+def _cut_score(admitted: int) -> float:
+    """The threshold admitting the top `admitted` items — the midpoint of its plateau."""
+    return (len(RANK_MARKS) - admitted) / len(RANK_MARKS)
+
+
+def _ranked_votes() -> tuple[np.ndarray, np.ndarray]:
+    """The Bad pile and the Good pile of `RANK_MARKS`, as scores.
+
+    Evenly spaced, because nothing downstream depends on the spacing: a
+    threshold's FPR and FNR are counts of marks either side of it, so the
+    ranking's *order* is the whole of what the cost panel reads.
     """
-    rng = np.random.default_rng(20)
-    bad = np.clip(rng.normal(0.36, 0.19, 15), 0.04, 0.96)
-    good = np.clip(rng.normal(0.66, 0.17, 8), 0.04, 0.96)
-    return np.sort(bad), np.sort(good)
+    scores = np.array([_mark_score(i) for i in range(len(RANK_MARKS))])
+    keep = np.array(RANK_MARKS)
+    return scores[~keep], scores[keep]
+
+
+def _optima(bad: np.ndarray, good: np.ndarray, w_fp: float, w_fn: float) -> list[int]:
+    """Every admitted-count that minimises this arm's cost.
+
+    A list rather than a number, because a tie is the honest answer for the
+    balanced arm on this ranking: three cuts cost exactly the same at equal
+    prices — which is what the previous slide said, and what pricing the two
+    mistakes differently is about to break.
+    """
+    counts = np.arange(len(RANK_MARKS) + 1)
+    costs = _cost_curve(bad, good, w_fp, w_fn, np.array([_cut_score(n) for n in counts]))
+    return [int(n) for n in counts[costs <= costs.min() + 1e-9]]
 
 
 def _cost_curve(bad: np.ndarray, good: np.ndarray, w_fp: float, w_fn: float, cuts: np.ndarray) -> np.ndarray:
@@ -3862,76 +3899,83 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
     # the same x scale, so a minimum in the panel is directly under the cut it
     # names. Indented from the left: the top row spans the drawing, which is the
     # one shape the title notch cannot be panned out of (`slides/STYLE.md`).
-    x0, w = 5.9, TEACH_CANVAS[0] - 5.9 - 3.4
+    #
+    # The right margin used to be 3.4 units holding nothing but three arm
+    # labels. Moving those to the left — where the panel is already clear of the
+    # notch, which reserves a corner and not a band — spends that width on the
+    # panel instead, which is the row the room is asked to read (#3296).
+    x0, w = 5.9, TEACH_CANVAS[0] - 5.9 - 0.7
     rank_y = TEACH_CANVAS[1] - 1.9
-    panel_top = rank_y - 1.85
+    panel_top = rank_y - 2.15
     panel_h = 5.0
     panel_base = panel_top - panel_h
 
-    cuts = np.linspace(0.02, 0.98, 400)
+    cuts = np.linspace(0.0, 1.0, 501)
     curves = [_cost_curve(bad, good, w_fp, w_fn, cuts) for w_fp, w_fn, _ in COST_ARMS]
     ceiling = max(float(c.max()) for c in curves)
     sy = panel_h / ceiling
 
     # ── stage 1: one imperfect ranking ────────────────────────────────────────
+    # One row of marks, under the line, in the order the previous slide's
+    # photographs are in. Good above the line and Bad below it made the two
+    # piles legible when there were twenty-three of them; with ten it only
+    # breaks the correspondence with the row of pictures the room has just been
+    # looking at.
     _range_line(ax, x0, x0 + w, rank_y, z=3)
-    for score in bad:
-        ax.text(x0 + score * w, rank_y - 0.14, "✗", ha="center", va="top", fontsize=16, color=RED, fontweight="bold")
-    for score in good:
+    for index, keep in enumerate(RANK_MARKS):
         ax.text(
-            x0 + score * w, rank_y + 0.10, "✓", ha="center", va="bottom", fontsize=16, color=GREEN, fontweight="bold"
+            x0 + _mark_score(index) * w,
+            rank_y - 0.22,
+            "✓" if keep else "✗",
+            ha="center",
+            va="top",
+            fontsize=30,
+            color=GREEN if keep else RED,
         )
-    ax.text(x0, rank_y + SCORE_LABEL_LIFT, "one ranking, imperfect", ha="left", va="bottom", fontsize=16, color=INK)
+    ax.text(x0, rank_y + SCORE_LABEL_LIFT, "the same ten items", ha="left", va="bottom", fontsize=16, color=INK)
     ax.text(x0 + w, rank_y + SCORE_LABEL_LIFT, "score", ha="right", va="bottom", fontsize=15, color=SOFT)
 
     # ── stages 2-4: one cost rule, three prices, three cuts ───────────────────
     # The rule names the panel rather than sitting in a row of its own: the
-    # three dotted drops from a minimum up to the cut it chooses have to cross
-    # that row, and a formula with three dotted lines through it is a formula
-    # nobody reads. Haloed for the same reason, and the same way the theme
-    # halos a full-bleed headline: white behind the letters, not a white plate
-    # over the drawing.
+    # dotted drops from a minimum up to the cut it chooses have to cross that
+    # row, and a formula with dotted lines through it is a formula nobody reads.
+    # Haloed for the same reason, and the same way the theme halos a full-bleed
+    # headline: white behind the letters, not a white plate over the drawing.
     if stage >= 2:
         ax.text(
-            x0,
+            x0 + w,
             panel_top + LABEL_GAP,
             "cost = " + _sub(r"w_f") + "·FPR + " + _sub(r"w_n") + "·FNR",
-            ha="left",
+            ha="right",
             va="bottom",
             fontsize=18,
             color=INK,
             zorder=6,
             path_effects=[patheffects.withStroke(linewidth=7, foreground="white")],
         )
-    for arm, ((w_fp, w_fn, name), curve, dash) in enumerate(zip(COST_ARMS, curves, COST_DASHES, strict=True)):
+    for arm, ((w_fp, w_fn, name), curve, weight) in enumerate(zip(COST_ARMS, curves, COST_WEIGHTS, strict=True)):
         # Balanced first, then strict, then permissive: the middle arm is the
         # one the room already has in mind, and the other two are what the
         # slide is arguing also exist.
         if stage < COST_REVEAL[arm]:
             continue
         ys = panel_base + curve * sy
-        ax.plot(x0 + cuts * w, ys, color=BLUE, linewidth=2.4, linestyle=dash, zorder=3)
-        best = int(np.argmin(curve))
-        cut_x = x0 + cuts[best] * w
-        ax.plot([cut_x], [panel_base + curve[best] * sy], marker="o", markersize=7, color=BLUE, zorder=5)
-        ax.plot(
-            [cut_x, cut_x],
-            [panel_base + curve[best] * sy, rank_y],
-            color=BLUE,
-            linewidth=1.4,
-            linestyle=(0, (2, 3)),
-            zorder=2,
-        )
-        ax.plot([cut_x] * 2, [rank_y - 0.32, rank_y], color=BLUE, linewidth=2.4, zorder=4)
-        # The arm is named at the right-hand end of its own curve, not under
-        # its minimum: the three minima are close together — that they differ
-        # at all is the slide's point — so three labels stacked there is three
-        # labels on top of each other.
+        ax.plot(x0 + cuts * w, ys, color=INK, linewidth=weight, zorder=3)
+        for admitted in _optima(bad, good, w_fp, w_fn):
+            cut_x = x0 + _cut_score(admitted) * w
+            cut_y = panel_base + float(_cost_curve(bad, good, w_fp, w_fn, np.array([_cut_score(admitted)]))[0]) * sy
+            ax.plot([cut_x], [cut_y], marker="o", markersize=8, color=BLUE, zorder=5)
+            ax.plot([cut_x, cut_x], [cut_y, rank_y], color=BLUE, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
+            ax.plot([cut_x] * 2, [rank_y - 0.32, rank_y], color=BLUE, linewidth=2.4, zorder=4)
+        # The arm is named at the left-hand end of its own curve. The three
+        # start a quarter of the panel apart there and converge on one another's
+        # ends, so the left is the one place a label can sit on the line it
+        # names without three of them stacking up.
         ax.text(
-            x0 + w + LABEL_GAP,
-            ys[-1],
+            x0 - LABEL_GAP,
+            ys[0],
             _sub(rf"w_f : w_n = {name}"),
-            ha="left",
+            ha="right",
             va="center",
             fontsize=15,
             color=INK,
