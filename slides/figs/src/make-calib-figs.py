@@ -279,8 +279,27 @@ def xcal_flow_fig() -> None:
     save(final, OUT, "calib-xcal-flow.png", column=FULL_BLEED, box=box)
 
 
-def _data_block(ax: plt.Axes, x0: float, y0: float, w: float, h: float, split: bool = False) -> None:
-    """A block of labelled media: an amorphous green (Good) region over a red (Bad) one."""
+#: The share of the votes each fold model trains on, as slide 13 draws it —
+#: `vtscore.training.thresholds` calls it `1 - calibration_fraction`. Quoted
+#: here to *draw* the split, not to compute one.
+SPLIT_TRAIN_FRACTION = 0.70
+
+#: How far a `split="overlap"` divider bows into the half it is not, at its
+#: widest, in drawing units. Enough to read as a bow at slide size and no more:
+#: the two curves say "these overlap", and the *amount* they overlap is the
+#: distance between them, which is already to scale. Capped by the D_1 disc,
+#: which sits in the exclusive part of its own share and must not be crossed
+#: by the other share's boundary.
+SPLIT_BULGE = 0.12
+
+
+def _data_block(ax: plt.Axes, x0: float, y0: float, w: float, h: float, split: bool | str = False) -> None:
+    """A block of labelled media: an amorphous green (Good) region over a red (Bad) one.
+
+    `split` draws how the votes are divided between the two folds: falsy for
+    not at all, `True` for one divider down the middle (the 50/50 the deck
+    carries until slide 13), `"overlap"` for the two bowed dividers of a 70/30.
+    """
     good_h = 0.42 * h
     ax.add_patch(
         Rectangle(
@@ -300,6 +319,28 @@ def _data_block(ax: plt.Axes, x0: float, y0: float, w: float, h: float, split: b
     ax.add_patch(Rectangle((x0, y0), w, h, facecolor="none", edgecolor=INK, linewidth=1.6, zorder=3))
     ax.plot([x0, x0 + w], [y0 + h - good_h] * 2, color=INK, linewidth=1.0, zorder=3)
     if not split:
+        return
+    if split == "overlap":
+        # Two dividers, because at a 70/30 split there is no single place to put
+        # one. Each fold draws its *own* 70% to train on out of the same votes
+        # (`_grouped_folds` permutes per fold), so two 70% shares of a 100% bar
+        # necessarily share 40% of it: D₁ runs from the left edge to the right
+        # divider, D₂ from the left divider to the right edge, and the lens
+        # between them is in both. Each bows away from its own half — that is
+        # the infringement drawn rather than asserted.
+        for frac, direction in ((1.0 - SPLIT_TRAIN_FRACTION, -1.0), (SPLIT_TRAIN_FRACTION, 1.0)):
+            t = np.linspace(0.0, 1.0, 80)
+            ax.plot(
+                x0 + frac * w + direction * SPLIT_BULGE * np.sin(np.pi * t),
+                y0 + t * h,
+                color=INK,
+                linewidth=1.6,
+                zorder=3,
+            )
+        # Named in the part of each share that is only its own, so a label never
+        # stands in the lens that belongs to both.
+        for cx, name in ((x0 + 0.13 * w, "D_1"), (x0 + 0.87 * w, "D_2")):
+            _disc_label(ax, cx, y0 + h / 2, name)
         return
     ax.plot([x0 + w / 2] * 2, [y0, y0 + h], color=INK, linewidth=1.6, zorder=3)
     # D₁ and D₂ ride *inside* the halves they name, each on a white disc that
@@ -2156,6 +2197,7 @@ def _xquant_fold_panel(
     top: float,
     score_from: tuple[float, float],
     score_to: tuple[float, float],
+    numbers: bool = True,
 ) -> None:
     """One fold's whole evidence display: `calib-fold-anchored-flow`'s panel.
 
@@ -2203,7 +2245,8 @@ def _xquant_fold_panel(
     )
     _score_histogram(ax, x0, y_base, w, h, fit, scores, fill="class", mu_labels=False)
     _hump_marks(ax, x0, y_base, w, anchors, size=XQUANT_MARK_PT)
-    _theta_notch(ax, x0 + theta * w, y_base, _sub(rf"\theta_{i + 1} = {theta:.2f}"))
+    label = rf"\theta_{i + 1} = {theta:.2f}" if numbers else rf"\theta_{i + 1}"
+    _theta_notch(ax, x0 + theta * w, y_base, _sub(label))
 
 
 def _gauge_left(cut_x: float, q: float, w: float) -> float:
@@ -2211,7 +2254,9 @@ def _gauge_left(cut_x: float, q: float, w: float) -> float:
     return cut_x - q * w
 
 
-def _xquant_gauges(ax: plt.Axes, xs: tuple[float, ...], y0: float, w: float, q_0: float, clear_x: float) -> None:
+def _xquant_gauges(
+    ax: plt.Axes, xs: tuple[float, ...], y0: float, w: float, q_0: float, clear_x: float, numbers: bool = True
+) -> None:
     """The three gauges of the combine step, in one row under the three panels.
 
     Drawn together because they are one comparison, not three readings: what the
@@ -2228,9 +2273,13 @@ def _xquant_gauges(ax: plt.Axes, xs: tuple[float, ...], y0: float, w: float, q_0
         xs,
         (*shown, q_0),
         (
-            _sub(rf"q_1 = {shown[0]:.0%}".replace("%", r"\%")),
-            _sub(rf"q_2 = {shown[1]:.0%}".replace("%", r"\%")),
-            _sub(rf"q_0 = avg(q_1,\, q_2) = {q_0:.0%}".replace("%", r"\%")),
+            (
+                _sub(rf"q_1 = {shown[0]:.0%}".replace("%", r"\%")),
+                _sub(rf"q_2 = {shown[1]:.0%}".replace("%", r"\%")),
+                _sub(rf"q_0 = avg(q_1,\, q_2) = {q_0:.0%}".replace("%", r"\%")),
+            )
+            if numbers
+            else (_sub("q_1"), _sub("q_2"), _sub(r"q_0 = avg(q_1,\, q_2)"))
         ),
         strict=True,
     ):
@@ -2246,7 +2295,9 @@ def _xquant_gauges(ax: plt.Axes, xs: tuple[float, ...], y0: float, w: float, q_0
         texts[-1].set_x(texts[-1].get_position()[0] - (box.x1 - clear_x))
 
 
-def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
+def _xquant_flow_stage(
+    stage: int, folds: list, final: np.ndarray, *, numbers: bool = True, split: bool | str = True
+) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in XQUANT_CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
@@ -2355,7 +2406,7 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
         hay_x0 + hay_w + LABEL_GAP, hay_y0 + hay_h / 2, "Unlabeled", ha="left", va="center", fontsize=15, color=SOFT
     )
     labeled_arrow((bx, hay_y0 - OBJECT_GAP), (bx, hay_y0 - OBJECT_GAP - vote_len), "vote")
-    data_block(block_x0, block_y0, block_w, block_h, split=stage >= 2)
+    data_block(block_x0, block_y0, block_w, block_h, split=split if stage >= 2 else False)
     good_h = 0.42 * block_h
     ax.text(block_x0 - LABEL_GAP, block_top - good_h / 2, "Good", ha="right", va="center", fontsize=15, color=GREEN)
     ax.text(
@@ -2390,6 +2441,7 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
                 top=panel_top,
                 score_from=(2 * bx - exit1[0], exit1[1]) if i else exit1,
                 score_to=(2 * bx - tip1[0], tip1[1]) if i else tip1,
+                numbers=numbers,
             )
 
     # ── stage 4: M₀ scores the haystack — a scale, not evidence ───────────────
@@ -2441,7 +2493,7 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
         ax.text(
             final_x + panel_w,
             strawman_y,
-            _sub(rf"avg(\theta_1,\, \theta_2) = {theta_cardinal:.2f}"),
+            _sub(rf"avg(\theta_1,\, \theta_2) = {theta_cardinal:.2f}" if numbers else r"avg(\theta_1,\, \theta_2)"),
             ha="right",
             va="bottom",
             fontsize=15,
@@ -2458,7 +2510,7 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
         gauge_x = tuple(
             _gauge_left(cut, q, gauge_w) for cut, q in zip(cuts, (*XQUANT_SHOWN_QUANTILES, q_0), strict=True)
         )
-        _xquant_gauges(ax, gauge_x, gauge_y0, gauge_w, q_0, clear_x)
+        _xquant_gauges(ax, gauge_x, gauge_y0, gauge_w, q_0, clear_x, numbers)
 
     # ── stage 7: realize the mean share on M₀'s own distribution ─────────────
     if stage >= 7:
@@ -3678,141 +3730,32 @@ def blend_schedule_fig() -> None:
     save(fig, OUT, "calib-blend-schedule.png", column=FULL_BLEED, tight=False)
 
 
-#: The Train/Check idea figure: its canvas, the bar it draws twice, and the
-#: vote count it is concrete about. Twenty votes is an early-session number —
-#: the regime the split actually matters in — and it divides cleanly under both
-#: splits, so every count on the drawing is a whole vote rather than a rounded
-#: one.
-SPLIT_CANVAS = (19.8, 7.36)
-SPLIT_BAR_X0, SPLIT_BAR_W, SPLIT_BAR_H = 6.0, 13.3, 1.05
-SPLIT_VOTES = 20
-
-#: The two splits, as `(train share, row name, bar bottom)`. The incumbent
-#: first, because it is the one every earlier slide in this section drew.
-SPLIT_ROWS = ((0.5, "50 / 50", 5.05), (0.7, "70 / 30", 2.40))
-
-#: Where the arrow between the two bars runs, and where the conclusion starts.
-SPLIT_MOVE_Y = 4.35
-SPLIT_CONCLUSION_Y = 1.70
-
-#: How many stages the figure reveals in: the incumbent split; the proposal;
-#: the votes that moved between them; what the move is for.
-SPLIT_IDEA_STAGES = 4
-
-
-def _split_bar(ax: plt.Axes, fraction: float, name: str, y0: float) -> None:
-    """One split of the votes: the block, its divider, and what each side is for."""
-    x0, w, h = SPLIT_BAR_X0, SPLIT_BAR_W, SPLIT_BAR_H
-    _data_block(ax, x0, y0, w, h)
-    divider = x0 + fraction * w
-    ax.plot([divider] * 2, [y0, y0 + h], color=INK, linewidth=1.6, zorder=3)
-    # The row's name shares the label row above the bar with the two counts,
-    # rather than hanging off the left edge: the top bar's own left edge is as
-    # far left as the title notch lets anything reach, so a name outside it
-    # would sit in the corner the slide's headline has (`slides/STYLE.md`).
-    ax.text(x0, y0 + h + LABEL_GAP, name, ha="left", va="bottom", fontsize=18, color=INK, fontweight="bold")
-    for centre, job, votes in (
-        ((x0 + divider) / 2, "train", round(fraction * SPLIT_VOTES)),
-        ((divider + x0 + w) / 2, "check", SPLIT_VOTES - round(fraction * SPLIT_VOTES)),
-    ):
-        ax.add_patch(Ellipse((centre, y0 + h / 2), 1.55, 0.62, facecolor="white", edgecolor="none", zorder=4))
-        ax.text(centre, y0 + h / 2, job, ha="center", va="center", fontsize=16, color=INK, zorder=5)
-        ax.text(
-            centre,
-            y0 + h + LABEL_GAP,
-            f"{votes} votes",
-            ha="center",
-            va="bottom",
-            fontsize=15,
-            color=SOFT,
-        )
-
-
 def split_idea_fig() -> None:
-    """What the Train/Check split *is*, and the one change made to it (#3287).
+    """Slide 13: the calibration schematic, with the Train/Check split moved.
 
-    The section's earlier figures all draw the same quiet choice — half the
-    votes train each fold's model, half are held out to read its threshold —
-    without ever naming it as a choice. This names it, and moves it: seventy
-    percent into Train, thirty into Check.
+    **The same drawing as `calib-quantile-flow`, not a diagram of the part that
+    changed.** The deck's shape is one big picture improved a step at a time, so
+    a slide that zooms into the improved corner breaks the thing that makes the
+    progression legible: the audience loses where the change sits in the
+    algorithm they have been watching get built (#3301). Two pages, and the only
+    ink that differs between them is the divider through D₀.
 
-    It is the idea, not the study. The measured curves live on the results
-    slide the deck now carries as an appendix; what belongs *here* is the
-    picture of four votes crossing the divider, which is the whole of what
-    changed (#3296).
+    Every number is dropped. The cuts, the shares and their average are slide
+    12's argument, and here they would be both a distraction and wrong — refit
+    at 70/30 they are different numbers, and the slide is not about their
+    values. What is left is the structure the split lives in.
     """
-    final = _split_idea_stage(SPLIT_IDEA_STAGES)
-    box = tight_box(final)
-    for stage in range(1, SPLIT_IDEA_STAGES):
-        save(_split_idea_stage(stage), OUT, f"calib-split-idea.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-split-idea.png", column=FULL_BLEED, box=box)
-
-
-def _split_idea_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of the split figure."""
-    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in SPLIT_CANVAS))
-    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
-    ax.set_xlim(0, SPLIT_CANVAS[0])
-    ax.set_ylim(0, SPLIT_CANVAS[1])
-    ax.set_axis_off()
-
-    x0, w, h = SPLIT_BAR_X0, SPLIT_BAR_W, SPLIT_BAR_H
-    (was_f, was_name, was_y), (now_f, now_name, now_y) = SPLIT_ROWS
-
-    # ── stage 1: the split every fold in this section has been drawing ────────
-    _split_bar(ax, was_f, was_name, was_y)
-
-    # ── stage 2: the same votes, divided somewhere else ───────────────────────
-    if stage >= 2:
-        _split_bar(ax, now_f, now_name, now_y)
-
-    # ── stage 3: the votes that crossed, as a path rather than as a jump ──────
-    # Both bars are on screen at once and neither ever moves — a build adds
-    # ink, it does not animate (`slides/STYLE.md`) — so what says "the divider
-    # moved" has to be drawn: two soft drops and one arrow between them, along
-    # the gap the two rows leave for it.
-    if stage >= 3:
-        was_x, now_x = x0 + was_f * w, x0 + now_f * w
-        move_y = SPLIT_MOVE_Y
-        ax.plot([was_x] * 2, [was_y, move_y], color=RULE, linewidth=1.4, zorder=1)
-        ax.plot([now_x] * 2, [move_y, now_y + h], color=RULE, linewidth=1.4, zorder=1)
-        _arrow(ax, (was_x, move_y), (now_x, move_y))
-        # Named past the arrowhead rather than over the shaft: the shaft has
-        # one of the two drops running into it, and a label centred on it
-        # covers the very line that says where the divider came from.
-        ax.text(
-            now_x + OBJECT_GAP,
-            move_y,
-            f"{round((now_f - was_f) * SPLIT_VOTES)} more votes",
-            ha="left",
-            va="center",
-            fontsize=16,
-            color=INK,
-        )
-
-    # ── stage 4: why that is the direction to move it ─────────────────────────
-    if stage >= 4:
-        centre = x0 + w / 2
-        ax.text(
-            centre,
-            SPLIT_CONCLUSION_Y,
-            "the fold model is what runs short when votes are scarce",
-            ha="center",
-            va="top",
-            fontsize=16,
-            color=INK,
-        )
-        ax.text(
-            centre,
-            SPLIT_CONCLUSION_Y - CAP_16 - LABEL_GAP,
-            "a threshold is only a quantile, and six scores still place one",
-            ha="center",
-            va="top",
-            fontsize=15,
-            color=SOFT,
-        )
-
-    return fig
+    folds, final = _xquant_populations()
+    final_stage = _xquant_flow_stage(XQUANT_FLOW_STAGES, folds, final, numbers=False, split="overlap")
+    box = tight_box(final_stage)
+    save(
+        _xquant_flow_stage(XQUANT_FLOW_STAGES, folds, final, numbers=False, split=True),
+        OUT,
+        "calib-split-idea.build1.png",
+        column=FULL_BLEED,
+        box=box,
+    )
+    save(final_stage, OUT, "calib-split-idea.png", column=FULL_BLEED, box=box)
 
 
 #: The six measured series, in legend order: the four single-vector models
