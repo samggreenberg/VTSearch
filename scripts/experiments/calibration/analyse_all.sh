@@ -21,10 +21,24 @@ cd "$WT/scripts/experiments/calibration" || exit 2
 # from a hung one, and nobody is watching this job when it runs.
 export PYTHONUNBUFFERED=1
 
+# Each step is bounded as well as non-fatal. "Non-fatal" only covers a step that
+# EXITS non-zero; a step that never exits takes the whole job with it, and one
+# did: `figures_trajectory` sat 50 minutes on its first figure here while the
+# identical command on more data finished in four elsewhere. The cause was never
+# established, so the control is a bound rather than a fix.
+STEP_TIMEOUT="${STEP_TIMEOUT:-1800}"
 step() {
   local name="$1"; shift
   echo; echo "=== $name  ($(date +%H:%M)) ==="
-  if "$@"; then echo "--- $name OK"; else echo "--- $name FAILED (rc=$?)"; fi
+  local rc=0
+  timeout -s KILL "$STEP_TIMEOUT" "$@" || rc=$?
+  if [[ "$rc" -eq 0 ]]; then
+    echo "--- $name OK"
+  elif [[ "$rc" -eq 137 ]]; then
+    echo "--- $name TIMED OUT after ${STEP_TIMEOUT}s - the rest of the chain continues"
+  else
+    echo "--- $name FAILED (rc=$rc)"
+  fi
 }
 
 CELLS=$(ls "$EXP/results/cells" 2>/dev/null | grep -c '^task_[0-9]*\.csv$')
