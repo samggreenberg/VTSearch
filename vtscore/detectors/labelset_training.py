@@ -588,10 +588,15 @@ def labeled_media_ids(labelset: LabelSet, snap: dict[int, dict[str, Any]] | None
     elements that resolve to nothing in *snap* are absent from the haystack
     already, so they contribute nothing here.
     """
-    lookups = _lookups_for_snap(snap)
-    if lookups is None or snap is None:
+    if not snap:
         return set()
     from vtscore.detectors.labelset_elements import resolve_current_dataset_cid  # noqa: PLC0415
+    from vtscore.state import build_media_lookup  # noqa: PLC0415
+
+    # ``build_media_lookup`` reads ``media["id"]``; every Flask-loaded snap
+    # carries it equal to the dict key, but minimal snaps (tests, embedded
+    # callers) may not - default it to the key rather than requiring it.
+    lookups = build_media_lookup({cid: {**m, "id": m.get("id", cid)} for cid, m in snap.items()})
 
     ids: set[int] = set()
     for elem in labelset.elements:

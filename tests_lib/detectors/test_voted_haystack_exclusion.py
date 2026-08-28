@@ -119,19 +119,29 @@ class TestTrainAndScorePassesVotes:
         assert captured and all(size == n_expected for size in captured[-1])
 
 
-class TestEverythingVotedFallsBack:
-    """A corpus that is entirely voted leaves no haystack; the blend fallback runs."""
+class TestRemainderFloor:
+    """Below ``EXCLUSION_MIN_REMAINDER`` leftover scores the exclusion switches
+    off entirely - a drained remainder is too coarse and too selection-biased
+    to be a population estimate, so the full haystack measures better there."""
 
-    def test_no_crash_and_finite_threshold(self):
+    def test_small_remainder_keeps_the_full_haystack(self, monkeypatch):
+        # 60 media, 16 votes: the remainder (44) is under the floor (50).
+        vecs, good_ids, bad_ids = _fixture(n_pos=20, n_neg=40)
+
+        captured = _spy_fit_sizes(monkeypatch)
+        train_and_score(_snap(vecs), dict.fromkeys(good_ids), dict.fromkeys(bad_ids))
+
+        assert len(vecs) - len(good_ids) - len(bad_ids) < thresholds_mod.EXCLUSION_MIN_REMAINDER
+        assert captured and all(size == len(vecs) for size in captured[-1])
+
+    def test_everything_voted_keeps_the_full_haystack(self):
         rng = np.random.default_rng(5)
         pos = rng.standard_normal((6, DIM)).astype(np.float32) + 1.0
         neg = rng.standard_normal((6, DIM)).astype(np.float32) - 1.0
         vecs = np.concatenate([pos, neg])
         good_ids, bad_ids = list(range(6)), list(range(6, 12))
 
-        _results, threshold, model = train_and_score(
-            _snap(vecs), dict.fromkeys(good_ids), dict.fromkeys(bad_ids)
-        )
+        _results, threshold, model = train_and_score(_snap(vecs), dict.fromkeys(good_ids), dict.fromkeys(bad_ids))
 
         assert model is not None
         assert np.isfinite(threshold)

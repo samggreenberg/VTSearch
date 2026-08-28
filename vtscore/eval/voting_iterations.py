@@ -57,6 +57,7 @@ from vtscore.training.mlp import LINEAR_HEAD, LINEAR_SVM_HEAD, _auto_hidden_dim,
 from vtscore.training.thresholds import (
     ACQUISITION_INCLUSION_OFFSET,
     CUT_KIND_INTERIOR,
+    EXCLUSION_MIN_REMAINDER,
     FOLD_ANCHOR_QTILT_STEP,
     NO_GOOD_THRESHOLD,
     acquisition_inclusion,
@@ -729,8 +730,11 @@ def _safe_threshold_for_step(
     dropped from every haystack the fold-anchored estimator fits on - the
     per-fold arrays (which are also what the returned ``fold_haystacks`` carry,
     so the variant grids inherit the same population convention) and the final
-    model's realization sample.  The *returned* sim scores stay complete: they
-    feed evaluation and acquisition, not the fit.
+    model's realization sample - unless the exclusion would leave fewer than
+    :data:`~vtscore.training.thresholds.EXCLUSION_MIN_REMAINDER` scores, in
+    which case it is switched off entirely, exactly as the app switches it off.
+    The *returned* sim scores stay complete: they feed evaluation and
+    acquisition, not the fit.
     """
     import numpy as np  # noqa: PLC0415
 
@@ -756,6 +760,14 @@ def _safe_threshold_for_step(
         ids = sorted(sim_ids)
         all_scores = np.asarray(step.predict(np.asarray(X_all_clips))).ravel().tolist()
 
+    # The floor decision is taken once, on the final model's remainder, and
+    # applies to every haystack in the step - all-or-nothing, so the fold and
+    # final populations can never diverge.
+    fit_final = _drop_voted(all_scores, ids)
+    if exclude and fit_final.size < EXCLUSION_MIN_REMAINDER:
+        exclude = set()
+        fit_final = np.asarray(all_scores, dtype=np.float64)
+
     fold_models = details.get("fold_models") or []
     fold_orderings = details.get("fold_orderings") or []
     n_folds = min(len(fold_models), len(fold_orderings))
@@ -780,8 +792,9 @@ def _safe_threshold_for_step(
             extended.append(_drop_voted(fscores, fids))
         fold_data["haystacks"] = extended
 
-    fit_final = _drop_voted(all_scores, ids).tolist()
-    cut = fit_fold_anchored_cut(fold_haystacks, fold_orderings[:n_folds], fit_final) if fold_haystacks else None
+    cut = (
+        fit_fold_anchored_cut(fold_haystacks, fold_orderings[:n_folds], fit_final.tolist()) if fold_haystacks else None
+    )
     if cut is not None:
         anchored = cut.threshold_at(inclusion)
         if np.isfinite(anchored):
@@ -1746,6 +1759,7 @@ def _anchored_variant_rows(
     rules: list[str],
     fold_combines: list[str],
     fold_anchored: bool,
+    sim_fit_scores: list[float] | None = None,
 ) -> list[dict[str, Any]]:
     """Metric rows for the anchored-mixture threshold arms (issue #2852).
 
@@ -1798,11 +1812,10 @@ def _anchored_variant_rows(
     # The #3308 population convention: the voted items anchor the fits, so they
     # are dropped from the free haystack sample instead of sitting in it twice
     # (once free, once clamped) - matching the shipped cut and the (already
-    # filtered) *fold_haystacks* the fold family re-cuts.
-    voted = set(good_ids) | set(bad_ids)
-    final_scores = np.asarray(
-        [s for i, s in zip(sim_ids, sim_scores, strict=True) if i not in voted], dtype=np.float64
-    )
+    # filtered) *fold_haystacks* the fold family re-cuts.  *sim_fit_scores*
+    # carries the caller's floor decision (EXCLUSION_MIN_REMAINDER), so this
+    # family can never diverge from the shipped population convention.
+    final_scores = np.asarray(sim_fit_scores if sim_fit_scores is not None else sim_scores, dtype=np.float64)
 
     rows: list[dict[str, Any]] = []
 
@@ -3688,12 +3701,16 @@ def simulate_voting_iterations(  # noqa: C901
             # the voted items dropped, exactly as `_safe_threshold_for_step`
             # dropped them from the fold haystacks - so every fold-anchored
             # variant fit below stays paired with the shipped cut's population.
+            # The same EXCLUSION_MIN_REMAINDER floor applies: a too-small
+            # remainder keeps the full distribution, as the shipped cut did.
             _voted_step_ids = set(good_votes) | set(bad_votes)
             sim_fit_scores: list[float] | None = None
             if sim_pooled_scores is not None:
                 sim_fit_scores = [
                     s for i, s in zip(sim_pooled_ids, sim_pooled_scores, strict=True) if i not in _voted_step_ids
                 ]
+                if len(sim_fit_scores) < EXCLUSION_MIN_REMAINDER:
+                    sim_fit_scores = list(sim_pooled_scores)
             # One extra row per safe-threshold GMM variant (issue #2799), all
             # evaluated against the same held-out max-pooled test scores.
             if X_sim_image is not None and sim_pooled_scores is not None:
@@ -3772,6 +3789,7 @@ def simulate_voting_iterations(  # noqa: C901
                             else list(_ANCHORED_FOLD_COMBINES)
                         ),
                         fold_anchored=anchored_fold_arms,
+                        sim_fit_scores=sim_fit_scores,
                     )
                 )
             for mr in metric_rows:

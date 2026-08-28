@@ -210,12 +210,18 @@ def _fused_threshold(
     which is the population the threshold actually decides - the voted items'
     verdicts are already known.  The effect is bounded by the votes' share of
     the (<=50k-sampled) haystack: invisible on a large corpus, a measured win
-    on small ones.  The schedule-blend *fallback* below deliberately keeps the
-    full distribution: it only fires when there are no usable folds (<4 votes,
-    or a single class), where the contamination is at most a few points, and
-    its blend weights were measured on the full population.  *final_ids* names
-    the media each entry of *final_scores* belongs to; without it (or with no
-    *voted_ids*) the historical include-everything behaviour is kept.
+    on small ones.  The exclusion switches off entirely when it would leave
+    fewer than :data:`~vtscore.training.thresholds.EXCLUSION_MIN_REMAINDER`
+    scores - a remainder that small is both too coarse to read quantiles from
+    and, after deep Autopilot voting, selection-biased toward whatever
+    acquisition never wanted; the full contaminated haystack measures better
+    there (see the constant's rationale).  The schedule-blend *fallback* below
+    deliberately keeps the full distribution: it only fires when there are no
+    usable folds (<4 votes, or a single class), where the contamination is at
+    most a few points, and its blend weights were measured on the full
+    population.  *final_ids* names the media each entry of *final_scores*
+    belongs to; the exclusion needs both it and *voted_ids*, and the
+    historical include-everything behaviour is kept otherwise.
 
     The extra scoring passes (one per fold) are the estimator's whole marginal
     cost.  Production trains the *linear* head, so a pass is a matrix multiply
@@ -244,6 +250,7 @@ def _fused_threshold(
     thing the user can act on.
     """
     from vtscore.training.thresholds import (  # noqa: PLC0415
+        EXCLUSION_MIN_REMAINDER,
         NO_GOOD_THRESHOLD,
         calculate_safe_threshold,
         fit_fold_anchored_cut,
@@ -259,7 +266,14 @@ def _fused_threshold(
             len(final_scores),
         )
 
-    exclude = voted_ids or None
+    exclude = voted_ids if (voted_ids and final_ids is not None) else None
+    fit_final = final_scores
+    if exclude is not None:
+        assert final_ids is not None
+        fit_final = [s for i, s in zip(final_ids, final_scores, strict=True) if i not in exclude]
+        if len(fit_final) < EXCLUSION_MIN_REMAINDER:
+            exclude, fit_final = None, final_scores
+
     cut = None
     if folds.fallback is None:
         n_folds = min(len(folds.models), len(folds.orderings))
@@ -271,9 +285,6 @@ def _fused_threshold(
                 keep = np.fromiter((i not in exclude for i in ids), dtype=bool, count=len(ids))
                 hay = hay[keep]
             fold_haystacks.append(hay)
-        fit_final = final_scores
-        if exclude is not None and final_ids is not None:
-            fit_final = [s for i, s in zip(final_ids, final_scores, strict=True) if i not in exclude]
         cut = fit_fold_anchored_cut(fold_haystacks, folds.orderings[:n_folds], fit_final)
 
     if det_ctx is not None:

@@ -311,9 +311,10 @@ Thresholding (`vtscore/training/thresholds.py`):
   final model's scale. Unconditional - there is no setting for it. The
   voted media themselves are dropped from every haystack the estimator
   fits or realizes on (their scores under the models trained on them
-  are optimistically shifted - issue #3308); the app-tier callers pass
-  the voted ids into `train_and_threshold` / `train_and_score` for
-  that.
+  are optimistically shifted - issue #3308), unless fewer than
+  `EXCLUSION_MIN_REMAINDER` scores would remain; the app-tier callers
+  pass the voted ids into `train_and_threshold` / `train_and_score`
+  for that.
 - `calculate_safe_threshold` blends the conformal cut with a plain GMM
   cut on a label-count schedule; the fallback for label sets too small
   to form calibration folds.

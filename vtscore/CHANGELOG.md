@@ -24,10 +24,13 @@ instead, since every commit on `dev` is effectively a new app release.)
   on `vtscore.detectors.training.train_and_threshold` (and the internal
   `_train_and_score_xy` / `_fused_threshold`); `train_and_score` and the
   labelset/model-loading pipelines pass it automatically, and omitting it
-  keeps the historical include-everything behaviour. Thresholds move only
-  where votes are a nontrivial share of the corpus (small datasets); on
-  large corpora the change is bounded by the votes' share of the ≤50k
-  haystack sample.
+  keeps the historical include-everything behaviour. The exclusion switches
+  off entirely when it would leave fewer than
+  `vtscore.training.thresholds.EXCLUSION_MIN_REMAINDER` (60) scores - a
+  drained remainder is too coarse and too selection-biased to be a
+  population estimate. Thresholds move only where votes are a nontrivial
+  share of the corpus (small datasets); on large corpora the change is
+  bounded by the votes' share of the ≤50k haystack sample.
 
 - **`calibration_fraction` defaults are now per-embedder, and `None` means
   "resolve it".** The shipped Train/Calibrate split of each calibration fold
