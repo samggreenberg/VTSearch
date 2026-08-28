@@ -288,8 +288,9 @@ _PICK_COLUMNS: tuple[str, ...] = (
 #: (issue #2799), tagged in ``gmm_variant`` (``""`` on every other row).  The
 #: fold-count arms (issues #2897, #3116, #3115) ride the same tag as
 #: ``folds_k{K}_{xcal,blend,anchored,anchored_qmedian,tmean,tmedian,qmean,qmedian}``
-#: and additionally fill ``fold_count`` / ``fold_seconds`` / ``n_cal_scores`` /
-#: ``n_folds_used``.
+#: and additionally fill ``fold_count`` / ``fold_seconds`` / ``fold_fit_seconds``
+#: / ``fold_score_seconds`` / ``anchored_seconds`` / ``cal_seconds`` /
+#: ``n_cal_scores`` / ``n_folds_used``.
 _CALIBRATION_COLUMNS: tuple[str, ...] = (
     *_IDENT_COLUMNS,
     "pool_variant",
@@ -335,6 +336,10 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     "n_pool_rows",
     "fold_count",
     "fold_seconds",
+    "fold_fit_seconds",
+    "fold_score_seconds",
+    "anchored_seconds",
+    "cal_seconds",
     "n_cal_scores",
     "n_folds_used",
     "train_seconds",
@@ -785,9 +790,21 @@ def _safe_threshold_for_step(
     fold_orderings = details.get("fold_orderings") or []
     n_folds = min(len(fold_models), len(fold_orderings))
     fold_haystacks: list[Any] = []
+    # Per-fold haystack scoring seconds (#3314).  Scoring the sim set with each
+    # fold model is a real, K-proportional part of the calibration a live run at
+    # K pays for - the shipped rule anchors every fold's mixture on that fold's
+    # own haystack - and it is paid *here*, outside `train_seconds`,
+    # `xcal_seconds`, `pool_score_seconds` and `test_score_seconds`.  Left
+    # unmeasured it is invisible to every cost model built out of those four,
+    # which would make a fold-count affordability ceiling read a fraction of
+    # what K actually costs.
+    haystack_seconds: list[float] = []
     for model in fold_models[:n_folds]:
+        t_hay = time.monotonic()
         fids, fscores = _score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
-        fold_haystacks.append(_hay(fscores, fids))
+        hay = _hay(fscores, fids)
+        haystack_seconds.append(time.monotonic() - t_hay)
+        fold_haystacks.append(hay)
 
     # #3116: the #2897 fold-count arms need a haystack per fold to re-fit the
     # *shipped* rule at each K, and `details["fold_models"]` is trimmed to the
@@ -801,9 +818,16 @@ def _safe_threshold_for_step(
     if fold_data is not None and fold_data.get("models"):
         extended = list(fold_haystacks)
         for model in fold_data["models"][len(extended) :]:
+            t_hay = time.monotonic()
             fids, fscores = _score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
-            extended.append(_hay(fscores, fids))
+            hay = _hay(fscores, fids)
+            haystack_seconds.append(time.monotonic() - t_hay)
+            extended.append(hay)
         fold_data["haystacks"] = extended
+        # Aligned with `haystacks`, so a K-prefix of one is a K-prefix of the
+        # other.  Every entry is one scoring pass over the same sim set, so the
+        # seconds are comparable across folds and across K by construction.
+        fold_data["haystack_seconds"] = haystack_seconds
 
     cut = (
         fit_fold_anchored_cut(fold_haystacks, fold_orderings[:n_folds], fit_final.tolist()) if fold_haystacks else None
@@ -1099,6 +1123,16 @@ def _operating_metrics(
         # conformal quantile is taken over, which is what K actually buys.
         "fold_count": nan,
         "fold_seconds": nan,
+        # #3314: `fold_seconds` counts the fold *fits* and the conformal rule's
+        # overhead only.  A live run at K also scores the sim set once per fold
+        # and fits production's anchored mixture over the prefix, both of which
+        # scale with K and neither of which lands in `train_seconds`,
+        # `xcal_seconds`, `pool_score_seconds` or `test_score_seconds`.
+        # `cal_seconds` is the sum of all four and is what a cost ceiling reads.
+        "fold_fit_seconds": nan,
+        "fold_score_seconds": nan,
+        "anchored_seconds": nan,
+        "cal_seconds": nan,
         "n_cal_scores": nan,
         # #3115: how many of the K folds actually contributed a cut, parsed off
         # the arm's own provenance.  A combine rule and a pooled quantile weight
@@ -1494,6 +1528,12 @@ def _schedule_variant_rows(
     return rows
 
 
+def _stop(timings: dict[str, float] | None, started: float) -> None:
+    """Record ``anchored_seconds`` since *started*, when the caller wants timings."""
+    if timings is not None:
+        timings["anchored_seconds"] = time.monotonic() - started
+
+
 def _fold_count_arms(
     prefix: list[tuple[list[float], list[float]]],
     xcal: float,
@@ -1504,8 +1544,17 @@ def _fold_count_arms(
     gmm_cut: float | None,
     gmm_fit: Any,
     schedule: str | None,
+    timings: dict[str, float] | None = None,
 ) -> list[tuple[str, float, str, float]]:
     """``(arm, threshold, provenance, blend weight)`` for one fold prefix.
+
+    *timings*, when given, collects the wall clock of the parts a **live** run
+    at this K would actually pay for (#3314) - currently ``anchored_seconds``,
+    the fit of production's fold-anchored mixture over this prefix.  The other
+    arms here are counterfactual re-cuts of the same folds and cost a live run
+    nothing, so they are deliberately not timed: a cost model built off the
+    whole function would price the study's own instrumentation as if the user
+    waited through it.
 
     Split out of :func:`_fold_count_variant_rows` so the arm table is one
     readable list rather than a branch pile inside the K loop; every arm here is
@@ -1576,14 +1625,28 @@ def _fold_count_arms(
     # the stronger contrast: the two rows differ in the combine and in *nothing
     # else*, including the fits' own numerical noise.
     if transferable is not None and final_scores is not None:
+        # Timed with the fallback inside it (#3314): a step whose anchored fit
+        # degenerates still pays for the attempt *and* for the ladder the
+        # shipped helper walks afterwards, and that is what a user waits
+        # through.  Charging those steps only for the branch they did not take
+        # would under-price exactly the cold-start regime this study reads.
+        t_anchored = time.monotonic()
         cut = fit_fold_anchored_cut(transferable, prefix, final_scores)
         if cut is None:
             # Both arms land on the same terminal fallback; take it from the
             # shipped helper rather than duplicating its ladder here.
             value, prov = fold_anchored_gmm_threshold(transferable, prefix, final_scores, inclusion)
+            _stop(timings, t_anchored)
             arms.extend([("anchored", value, prov, nan), ("anchored_qmedian", value, prov, nan)])
         else:
-            arms.append(("anchored", cut.threshold_at(inclusion), cut.provenance, nan))
+            shipped = cut.threshold_at(inclusion)
+            # The clock stops HERE, on production's own cut and before the
+            # `qmedian` re-cut: that arm is a counterfactual read of the same
+            # fitted mixture and costs a live run nothing, so timing it would
+            # charge K for the harness's own instrumentation.  (Sharing the fit
+            # is exactly why the two arms are cheap; see the note above.)
+            _stop(timings, t_anchored)
+            arms.append(("anchored", shipped, cut.provenance, nan))
             robust = dataclasses.replace(cut, combine="qmedian")
             arms.append(("anchored_qmedian", robust.threshold_at(inclusion), robust.provenance, nan))
     return arms
@@ -1661,10 +1724,29 @@ def _fold_count_variant_rows(
     touches, so re-fitting it per K would return the same cut at K times the
     price.  The gap #3116 identified is the missing arm above, not the hoist.
 
-    ``fold_seconds`` is the calibration wall clock this K would have cost: the
-    measured fit time of its own folds plus the count-independent overhead of
-    the threshold rule.  It is measured inside the Kmax run, so every K's timing
-    shares one machine, one process and one cache state - the *ratios* are the
+    **The cost columns.**  ``fold_seconds`` is what #2897 and #3116 read: the
+    measured fit time of this K's own folds plus the count-independent overhead
+    of the threshold rule.  It is *not* the whole price of K, and #3314 found
+    that reading it as one under-states the exchange rate badly, because two
+    other K-proportional pieces of the shipped calibration are paid outside it
+    and outside every other timing column the frame carries:
+
+    * ``fold_score_seconds`` - one scoring pass over the sim set per fold, so
+      the shipped rule can anchor each fold's mixture on that fold's own
+      haystack (measured in :func:`_safe_threshold_for_step`).
+    * ``anchored_seconds`` - production's ``fit_fold_anchored_cut`` over the
+      prefix: one anchored EM per fold.
+
+    ``cal_seconds`` sums all of it (``fold_fit_seconds + overhead +
+    fold_score_seconds + anchored_seconds``) and is the column an affordability
+    ceiling has to read.  ``train_seconds``, ``xcal_seconds``,
+    ``pool_score_seconds`` and ``test_score_seconds`` cover the *rest* of the
+    step and none of them covers the safe-threshold block, so
+    ``cal_seconds + train_seconds + pool_score_seconds + test_score_seconds`` is
+    the per-step wall clock a live run at K would have.
+
+    All of it is measured inside the one Kmax run, so every K's timing shares
+    one machine, one process and one cache state - the *ratios* are the
     load-bearing part, not the absolute seconds.
 
     This is the study's screen, not its verdict, for the usual reason (see
@@ -1687,6 +1769,7 @@ def _fold_count_variant_rows(
     seconds = fold_data["seconds"]
     overhead = float(fold_data.get("overhead_seconds") or 0.0)
     haystacks = fold_data.get("haystacks") or []
+    haystack_seconds = fold_data.get("haystack_seconds") or []
     if not orderings:
         return []
 
@@ -1708,7 +1791,14 @@ def _fold_count_variant_rows(
         cal_scores = np.array([s for scores, _ in prefix for s in scores])
         cal_labels = np.array([lb for _, labels_ in prefix for lb in labels_])
         xcal = threshold_from_fold_orderings(prefix, inclusion)
-        fold_seconds = _r(float(sum(seconds[:k])) + overhead)
+        fold_fit_seconds = float(sum(seconds[:k]))
+        fold_seconds = _r(fold_fit_seconds + overhead)
+        # The rest of what a live run at K pays for, beside the fold fits
+        # (#3314).  Scoring the sim set once per fold is K-proportional and is
+        # measured in `_safe_threshold_for_step`; the anchored fit over the
+        # prefix is measured below, inside `_fold_count_arms`.
+        fold_score_seconds = float(sum(haystack_seconds[:k])) if len(haystack_seconds) >= k else float("nan")
+        timings: dict[str, float] = {}
 
         arms = _fold_count_arms(
             prefix,
@@ -1720,7 +1810,16 @@ def _fold_count_variant_rows(
             gmm_cut,
             gmm_fit,
             schedule,
+            timings=timings,
         )
+        anchored_seconds = float(timings.get("anchored_seconds", float("nan")))
+        # The FULL calibration wall clock at K: fold fits + one haystack scoring
+        # pass per fold + production's anchored fit over the prefix + the
+        # count-independent overhead of the conformal rule.  `fold_seconds` is
+        # deliberately left as it was (#2897/#3116 read it, and archived runs
+        # are compared against it), but it is only the first of those four
+        # terms, so an affordability rule must read THIS column.
+        cal_seconds = _r(fold_fit_seconds + overhead + fold_score_seconds + anchored_seconds)
 
         for arm, threshold, provenance, weight in arms:
             row = _operating_metrics(
@@ -1741,6 +1840,10 @@ def _fold_count_variant_rows(
             row["blend_weight"] = _r(weight)
             row["fold_count"] = k
             row["fold_seconds"] = fold_seconds
+            row["fold_fit_seconds"] = _r(fold_fit_seconds)
+            row["fold_score_seconds"] = _r(fold_score_seconds)
+            row["anchored_seconds"] = _r(anchored_seconds)
+            row["cal_seconds"] = cal_seconds
             row["n_cal_scores"] = int(cal_scores.size)
             row["n_folds_used"] = _folds_used(provenance, k)
             rows.append(row)

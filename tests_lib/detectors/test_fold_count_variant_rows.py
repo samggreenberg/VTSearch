@@ -512,3 +512,109 @@ class TestFoldCountDeterminism:
             assert ra["gmm_variant"] == rb["gmm_variant"]
             assert ra["threshold"] == rb["threshold"]
             assert ra["regret"] == rb["regret"]
+
+
+class TestFoldCountCostColumns:
+    """What a live run at K would actually wait through (#3314).
+
+    ``fold_seconds`` prices the fold *fits* and the conformal rule's overhead,
+    and #2897 read it as the whole cost of K.  It is not: the shipped rule also
+    scores the sim set once per fold (so each fold's mixture can be anchored on
+    its own haystack) and fits one anchored mixture per fold, both of them
+    K-proportional and both paid inside the safe-threshold block - which no
+    other timing column in the frame covers.  ``train_seconds``,
+    ``xcal_seconds``, ``pool_score_seconds`` and ``test_score_seconds`` are all
+    measured outside it, so a cost model built from those four plus
+    ``fold_seconds`` silently drops most of what raising K costs.
+
+    ``cal_seconds`` is the sum, and it is the column an affordability ceiling
+    reads.  What these tests pin is the *arithmetic* and the *shape* - which
+    folds each K was billed for - never a race between two real stopwatches.
+    """
+
+    def test_cal_seconds_is_the_sum_of_its_parts(self):
+        rows = _run(fold_counts=_COUNTS, safe=True)
+        arms = [r for r in rows if r["gmm_variant"].startswith("folds_k")]
+        assert arms
+        for r in arms:
+            parts = r["fold_seconds"] + r["fold_score_seconds"] + r["anchored_seconds"]
+            assert r["cal_seconds"] == pytest.approx(parts, abs=1e-5), r["gmm_variant"]
+            # `fold_seconds` is one of four terms, so it can only under-report.
+            # A study that read it as the cost of K would be reading this gap
+            # as zero.
+            assert r["cal_seconds"] >= r["fold_seconds"]
+
+    def test_fold_fit_seconds_is_fold_seconds_without_the_overhead(self):
+        """The split exists so the count-independent part is separable.
+
+        ``overhead_seconds`` is paid once at every K (the pooled conformal rule,
+        the node max-pool), so a ratio taken over ``fold_seconds`` is diluted by
+        a constant while one taken over ``fold_fit_seconds`` is not.  Both are
+        emitted rather than one derived, because the overhead is not recoverable
+        from the other columns.
+        """
+        rows = _run(fold_counts=_COUNTS, safe=True)
+        for r in rows:
+            if r["gmm_variant"].startswith("folds_k"):
+                assert 0.0 <= r["fold_fit_seconds"] <= r["fold_seconds"] + 1e-9, r["gmm_variant"]
+
+    def test_scoring_and_fitting_are_billed_per_fold(self):
+        """Monotone in K, and strictly bigger at Kmax than at K=1.
+
+        Not a stopwatch race: ``fold_score_seconds`` is a *prefix sum* of one
+        non-negative per-fold list, so a stalled scoring pass inflates every K
+        at and above it and can never invert the order.  The strict inequality
+        at the ends is what says the extra folds were billed at all - a
+        constant column would pass monotonicity and measure nothing.
+        """
+        rows = _run(fold_counts=_COUNTS, safe=True)
+        by_step: dict[int, dict[int, float]] = {}
+        for r in rows:
+            if r["gmm_variant"].endswith("_anchored"):
+                by_step.setdefault(r["t"], {})[int(r["fold_count"])] = float(r["fold_score_seconds"])
+        assert by_step
+        strictly_grew = 0
+        for secs in by_step.values():
+            ordered = [secs[k] for k in sorted(secs)]
+            assert ordered == sorted(ordered)
+            strictly_grew += ordered[-1] > ordered[0]
+        assert strictly_grew == len(by_step), "extra folds cost no scoring time anywhere"
+
+    def test_anchored_seconds_is_a_fresh_fit_at_every_k(self):
+        """One anchored EM per fold, so every K pays for its own K of them.
+
+        Asserted as "positive everywhere" rather than as a monotone curve: the
+        anchored fit is refitted per K rather than accumulated, so its seconds
+        are K independent draws and jitter can legitimately invert two adjacent
+        ones.  Positivity is what says the term is measured at all; the
+        magnitude is what the run is for.
+        """
+        rows = _run(fold_counts=_COUNTS, safe=True)
+        arms = [r for r in rows if r["gmm_variant"].endswith("_anchored")]
+        assert arms
+        assert all(r["anchored_seconds"] > 0.0 for r in arms)
+
+    def test_no_haystacks_means_no_cost_claim(self):
+        """Without safe thresholds there is no shipped rule to price.
+
+        The fold fits still happen and are still reported, but nothing anchors
+        and nothing scores a haystack, so ``cal_seconds`` must be NaN rather
+        than silently equal to ``fold_seconds`` - which would read as "the
+        anchored rule is free" on exactly the runs that never ran it.
+        """
+        rows = _run(fold_counts=_COUNTS, safe=False)
+        arms = [r for r in rows if r["gmm_variant"].startswith("folds_k")]
+        assert arms
+        for r in arms:
+            assert np.isfinite(r["fold_seconds"])
+            assert np.isnan(r["cal_seconds"]), r["gmm_variant"]
+            assert np.isnan(r["anchored_seconds"]), r["gmm_variant"]
+
+    def test_columns_stay_nan_off_the_fold_arms(self):
+        """The base row and the #2799 variants never claim a fold-count cost."""
+        rows = _run(fold_counts=_COUNTS, safe=True)
+        others = [r for r in rows if not r["gmm_variant"].startswith("folds_k")]
+        assert others
+        for r in others:
+            for col in ("fold_fit_seconds", "fold_score_seconds", "anchored_seconds", "cal_seconds"):
+                assert np.isnan(r[col]), (r["gmm_variant"], col)
