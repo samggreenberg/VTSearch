@@ -42,11 +42,31 @@ decaying to 2 — could take most of the benefit for almost none of the cost.
 
 The laptop bench `scripts/experiments/calibration/scratch_folds_3310.py`
 (synthetic 2-class Gaussian embeddings, production code paths end to end,
-oracle-referenced regret, 40 replicates per cell) confirms the shape of both
-halves; its numbers are recorded in issue #3310. What it cannot settle — being
-synthetic, single-vector, and acquisition-free — is the size of the benefit on
-real data, the wall-clock exchange rate, or anything the acquisition loop
-does with a different threshold. That is this study.
+oracle-referenced regret, 40 replicates per cell; full tables in issue #3310)
+confirms both halves and adds a third finding that reshapes the question:
+
+- **Averaging improves with K, most where labelsets are small.** `tmean`
+  regret falls near-monotonically in K, by −0.005 to −0.02 at n ≤ 16 votes
+  (saturating by K≈6–8) and by less at n = 80 — the variance-reduction
+  prediction, including its decay.
+- **The pooled rule's target visibly moves with K.** Its mean threshold
+  drifts with K (0.502 → 0.475 across K=1→16 at n=8) while the anchored
+  rule's does not budge; the drift *helps* at n ≤ 12 and *hurts* at
+  n = 24–40 on cleanly separated classes — which is #2897's deep-regime
+  binary signature, reproduced and explained.
+- **The shipped anchored rule is nearly K-invariant on this bench** — paired
+  |Δ| ≤ ~0.002 at every K, no consistent sign. Mechanically sensible: at
+  κ = 0.3 each fold's cut is dominated by its ~3000-point haystack fit, so
+  per-fold draws barely vary and averaging more of them buys almost nothing.
+  On a single-vector geometry, K may simply not be a live knob on the shipped
+  path — the population term already bought the stability.
+
+What the bench cannot settle — being synthetic, single-vector, and
+acquisition-free — is whether that K-invariance survives real data and
+**region voting**, where per-fold variance is far larger and #2897 measured
+real (if pooled-rule) K gains; nor the wall-clock exchange rate on real
+embeddings, nor anything the acquisition loop does with a different
+threshold. That is this study.
 
 **Why the archived runs cannot answer it.** The #3115 run (SLURM 539811) does
 carry `folds_k{K}_anchored` rows, but it predates PR #3269: every trajectory
@@ -178,10 +198,10 @@ are read off `cost` / `regret_honest` only.
 
 Outcomes, all of which are results:
 
-- **"2 is fine everywhere, here is the price sheet."** The likely outcome for
-  binary voting (the scratch bench found nothing to buy there even at n=8),
-  and worth having measured: `calibrate_count=2` is currently defended by a
-  study that swept the wrong rule.
+- **"2 is fine everywhere, here is the price sheet."** The bench predicts
+  exactly this for single-vector geometries (the shipped rule was K-invariant
+  there even at n=8), and it is worth having measured: `calibrate_count=2` is
+  currently defended by a study that swept the wrong rule.
 - **A fixed K for region voting** — plausible given #2897's region table
   (benefit through K=6 at 2.68× cost); the new ceiling will price it honestly.
 - **The adaptive schedule ships** — the issue's own proposal, and the only
