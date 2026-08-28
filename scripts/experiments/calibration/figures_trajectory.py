@@ -234,7 +234,17 @@ def figure_average(
 
 
 def figure_runs(
-    runs, grid, modes, steps, out: Path, metric: str, label: str, band: str | None, plt, note: str = ""
+    runs,
+    grid,
+    modes,
+    steps,
+    out: Path,
+    metric: str,
+    label: str,
+    band: str | None,
+    plt,
+    note: str = "",
+    max_lines: int = 0,
 ) -> None:
     """One panel per arm: every run, with the median and the 10-90% band."""
     from matplotlib.collections import LineCollection  # noqa: PLC0415
@@ -247,11 +257,18 @@ def figure_runs(
     for ax, m in zip(axes, modes):
         colour = MODE_COLORS.get(m, "#57534e")
         series = [v for k, v in sub.items() if k[0] == m]
+        drawn = series
+        if max_lines and len(series) > max_lines:
+            # Deterministic stride, not a random sample: the same runs are drawn
+            # every time the figure is regenerated, so two versions of it differ
+            # only where the DATA differs.
+            stride = len(series) / max_lines
+            drawn = [series[int(i * stride)] for i in range(max_lines)]
         # One LineCollection, not one plot() per run. Matplotlib builds a Line2D
         # artist per call and the spaghetti is thousands of them: at 2000 runs
         # the per-artist overhead dominated everything else in this script, and
         # the grid this feeds has 6480. The drawn result is identical.
-        segs = [[(t, v) for t, v in run] for run in series if len(run) > 1]
+        segs = [[(t, v) for t, v in run] for run in drawn if len(run) > 1]
         if segs:
             ax.add_collection(LineCollection(segs, colors=colour, linewidths=0.3, alpha=0.05, zorder=2))
         rows = [v for k, v in gsub.items() if k[0] == m]
@@ -278,7 +295,11 @@ def figure_runs(
             ax.plot(xs, mid, color="#fcfcfb", linewidth=3.6, zorder=5)
             ax.plot(xs, mid, color=colour, linewidth=2.0, zorder=6)
         _style_axes(ax, "votes spent (clicks)", label if ax is axes[0] else "")
-        ax.set_title(f"{m}\n{len(series)} runs", fontsize=9.5, color="#292524", loc="left", pad=8)
+        # Say when the texture is a sample. A spaghetti plot silently showing a
+        # fifth of the runs is a different claim from one showing all of them,
+        # and the picture cannot be told apart by looking.
+        shown = "" if len(drawn) == len(series) else f", {len(drawn)} drawn"
+        ax.set_title(f"{m}\n{len(series)} runs{shown}", fontsize=9.5, color="#292524", loc="left", pad=8)
     fig.suptitle(
         f"Every run, one line each — {band or 'all bands'}  (band = 10–90%, line = median)",
         fontsize=11,
@@ -305,6 +326,13 @@ def main(argv: list[str] | None = None) -> int:
         help="stamped on every figure -- use it to say a run is still in flight, "
         "since a partial figure that looks final is how a preview becomes a fact",
     )
+    ap.add_argument(
+        "--max-run-lines",
+        type=int,
+        default=1200,
+        help="cap on the spaghetti drawn per panel (0 = all). The 10-90%% band and the "
+        "median are always computed over EVERY run; only the texture is sampled.",
+    )
     ap.add_argument("--by-band", action="store_true", default=True)
     ap.add_argument("--no-by-band", dest="by_band", action="store_false")
     args = ap.parse_args(argv)
@@ -330,12 +358,12 @@ def main(argv: list[str] | None = None) -> int:
         note = args.note or f"{len(seeds)} seeds present, {len(runs)} runs"
         grid = _grid(runs, steps)
         figure_average(grid, modes, steps, out, metric, label, None, plt, note)
-        figure_runs(runs, grid, modes, steps, out, metric, label, None, plt, note)
+        figure_runs(runs, grid, modes, steps, out, metric, label, None, plt, note, args.max_run_lines)
         if args.by_band:
             for band in BANDS:
                 if any(band_of(k[1]) == band for k in runs):
                     figure_average(grid, modes, steps, out, metric, label, band, plt, note)
-                    figure_runs(runs, grid, modes, steps, out, metric, label, band, plt, note)
+                    figure_runs(runs, grid, modes, steps, out, metric, label, band, plt, note, args.max_run_lines)
     return 0
 
 
