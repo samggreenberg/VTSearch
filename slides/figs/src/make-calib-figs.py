@@ -176,6 +176,15 @@ def arrow_len_for(label: str, fontsize: float = ARROW_LABEL_PT) -> float:
 CAP_16 = 0.36
 SCORE_LABEL_LIFT = 0.08 + 0.29 + LABEL_GAP
 
+#: How far under a panel's baseline the held-out votes' ✗s and ✓s hang, and
+#: how far under it anything that has to clear them hangs. Both rows of glyphs
+#: sit below the line now (see `_hump_marks`), which puts them under the cut
+#: notches that already hang there — so the drop clears a `_theta_notch` and
+#: the shorter candidate ticks, and every label that used to sit directly
+#: under a notch moves below the glyph row instead (#3296).
+VOTE_MARK_DROP = 0.36
+VOTE_LABEL_DROP = VOTE_MARK_DROP + CAP_16 + LABEL_GAP
+
 #: The half-width the held-out score marks below are quoted at, and the marks
 #: themselves: where each fold's Bad and Good votes land on its own score line,
 #: and where that fold's cut goes. Quoted once and rescaled by `_line_marks`,
@@ -1494,31 +1503,40 @@ def _hump_marks(ax: plt.Axes, x0: float, y_base: float, w: float, anchors: dict)
     """This fold's held-out votes, drawn on the panel's baseline.
 
     The panel's baseline *is* the cross-calibration figure's score line: the
-    same ✗s below it and ✓s above it, at the same offsets and the same weight,
-    because this is the identical evidence and the reader has already learnt
-    to read it that way. All that has changed is that the fold model's whole
-    scored haystack is now drawn standing on the same line, so the votes and
-    the population they anchor are read against one axis.
+    same ✗s and ✓s, the same glyphs at the same weight, because this is the
+    identical evidence and the reader has already learnt to read it that way.
+    All that has changed is that the fold model's whole scored haystack is now
+    drawn standing on the same line, so the votes and the population they
+    anchor are read against one axis.
 
     The one thing the panel adds is that a vote's position now means a score
     rather than a rank, which is what lets a vote the fold model ranked wrongly
     land visibly to the far side of its own fold's cut.
 
-    The glyphs are knocked out of whatever they land on with a white outline.
-    On the cross-calibration figure they sat on white paper; here a ✓ sits
-    just above the baseline where the Good hump's green hatch starts, and
-    green on green is not a mark. The halo is the smallest change that keeps
-    the glyph itself identical.
+    **Both rows sit below the baseline**, where the paper is white. The ✓s used
+    to sit just above it, inside the haystack, and a white halo was enough to
+    keep them from being green on green but not enough to make them *findable*:
+    a mark the size of a tick mark, in among the bars, is invisible from the
+    back of a room, while its ✗ counterpart on clean paper below the line is
+    not (#3296). Putting the two on one row also says the thing the panel
+    wants said — these are one set of votes, split by their label, on one axis
+    — where above-and-below said they were two different kinds of evidence.
+
+    `_score_line` deliberately keeps the split. Its marks stand on a bare
+    number line with white paper on both sides, so nothing is hidden there and
+    the two rows buy what they cost: room for marks that would otherwise
+    collide. The rule is about legibility, not about a house style for where a
+    ✓ goes.
     """
     halo = [patheffects.withStroke(linewidth=4.0, foreground="white")]
-    for key, color, glyph, dy, va in (("bad", RED, "✗", -0.12, "top"), ("good", GREEN, "✓", 0.08, "bottom")):
+    for key, color, glyph in (("bad", RED, "✗"), ("good", GREEN, "✓")):
         for score in anchors[key]:
             ax.text(
                 x0 + score * w,
-                y_base + dy,
+                y_base - VOTE_MARK_DROP,
                 glyph,
                 ha="center",
-                va=va,
+                va="top",
                 fontsize=16,
                 color=color,
                 fontweight="bold",
@@ -1745,7 +1763,7 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
             ax.plot([theta_x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
             ax.text(
                 theta_x,
-                y_base - 0.32 - LABEL_GAP,
+                y_base - VOTE_LABEL_DROP,
                 _sub(rf"\theta_{i + 1}"),
                 ha="center",
                 va="top",
@@ -2017,7 +2035,7 @@ def _theta_notch(ax: plt.Axes, x: float, y_base: float, label: str, ha: str = "c
     """The progression's one cut mark: a notch under the baseline, then a name."""
     ax.plot([x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
     dx = 0.0 if ha == "center" else (-0.10 if ha == "right" else 0.10)
-    ax.text(x + dx, y_base - 0.32 - LABEL_GAP, label, ha=ha, va="top", fontsize=16, color=INK)
+    ax.text(x + dx, y_base - VOTE_LABEL_DROP, label, ha=ha, va="top", fontsize=16, color=INK)
 
 
 def _xquant_numbers(folds: list, final: np.ndarray) -> tuple[list[float], float, float]:
@@ -2600,7 +2618,8 @@ def _incl_rows(canvas_h: float = INCL_CANVAS_H) -> dict:
     panel_top = canvas_h - (LABEL_GAP + CAP_16 + LABEL_GAP + CAP_16)
     y_base = panel_top - INCL_PANEL_H
     # Reserved on both: a cut notch under the panel and its name (knob only).
-    theta_bottom = y_base - 0.32 - LABEL_GAP - CAP_16
+    # The name clears the row of ✗s and ✓s that now hangs under the baseline.
+    theta_bottom = y_base - VOTE_LABEL_DROP - CAP_16
     mid_label_y = theta_bottom - OBJECT_GAP - CAP_16
     mid_top = mid_label_y - LABEL_GAP
     mid_h = 1.9
@@ -2799,7 +2818,7 @@ def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels:
         theta = cuts[0]
         ax.text(
             x0 + theta * w + 0.10,
-            y_base - 0.32 - LABEL_GAP,
+            y_base - VOTE_LABEL_DROP,
             _sub(r"\theta\ at\ all\ 21\ stops"),
             ha="left",
             va="top",
