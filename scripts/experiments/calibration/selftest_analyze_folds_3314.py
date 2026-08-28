@@ -60,24 +60,36 @@ STEPS = 150
 #: Planted per-step wall clock at K, as a multiple of K=2's.  K=8 is over the
 #: 1.5x ceiling on purpose and has the biggest benefit, so rule 3 is the only
 #: thing that can reject it.
-STEP_RATIO = {1: 0.8, 2: 1.0, 3: 1.15, 4: 1.3, 6: 1.45, 8: 1.9}
-#: The non-calibration part of a step.  Fixed across K, as it is in a real run:
-#: the screen holds the trajectory at `calibrate_count=2`, so the model, the
-#: pool scoring and the test scoring are the same work at every K.
-OTHER_SECONDS = 10.0
+STEP_RATIO = {1: 0.9, 2: 1.0, 3: 1.15, 4: 1.3, 6: 1.45, 8: 1.9}
+#: A production step's wall clock, split so the ratios above come out EXACTLY.
+#: The non-calibration part is fixed across K, as it is in a real screen: the
+#: trajectory stays at `calibrate_count=2`, so the model fit, the pool scoring
+#: and the test scoring are the same work at every K.  Only calibration moves,
+#: which is the whole reason a cost ceiling can be written on the step at all.
+STEP_SECONDS_K2 = 10.0
+OTHER_SECONDS = 8.0
 
 
-def planted_delta(geometry: str, k: int, votes: int) -> float:
-    """Delta(cost) of fold count *k* against production's 2, by construction."""
+def planted_level(geometry: str, k: int, votes: int) -> float:
+    """Cost offset at fold count *k*, before differencing against production.
+
+    Note the level, not the contrast: the analyzer differences against K=2, so
+    the delta a table reports is ``planted_level(k) - planted_level(2)``.
+    Writing the fixture as a level rather than as a delta is what keeps the two
+    from silently meaning the same thing - the first version of this file
+    planted deltas and then asserted them as if K=2 sat at zero, which made a
+    correct analyzer look wrong at K=3.
+    """
     if geometry != REGION:
         return 0.0  # K-invariant on a single-vector geometry
     if k == 1:
         return 0.03  # strictly worse than 2, everywhere: the harm gate's target
     if votes > 60:
         return 0.0  # the benefit has decayed out of the deep bands
-    # Saturating variance reduction: -0.02 * (1 - 1/k), so 3 already clears the
-    # 0.005 margin and 8 is only marginally better than 6.
-    return -0.02 * (1.0 - 1.0 / k)
+    # Saturating variance reduction.  Against K=2 this is -0.025 * (1 - 2/k):
+    # -0.008 at K=3, so even the smallest challenger clears the 0.005 margin,
+    # and 8 is only marginally better than 6.
+    return -0.05 * (1.0 - 1.0 / k)
 
 
 def build(cells: Path, *, with_cal_seconds: bool = True) -> None:
@@ -95,8 +107,10 @@ def build(cells: Path, *, with_cal_seconds: bool = True) -> None:
                     votes = n_good + n_bad
                     base_cost = 0.30 + rng.normal(0.0, 0.002)
                     for k in KS:
-                        cal = OTHER_SECONDS * (STEP_RATIO[k] - 1.0) + 2.0
-                        cost = base_cost + planted_delta(geometry, k, votes)
+                        # Exactly `STEP_RATIO[k]` times production's step, with
+                        # every extra second landing in calibration.
+                        cal = STEP_SECONDS_K2 * STEP_RATIO[k] - OTHER_SECONDS
+                        cost = base_cost + planted_level(geometry, k, votes)
                         common = {
                             "seed": seed,
                             "dataset": "vg_scale_any",
@@ -119,6 +133,8 @@ def build(cells: Path, *, with_cal_seconds: bool = True) -> None:
                             "train_seconds": OTHER_SECONDS * 0.5,
                             "pool_score_seconds": OTHER_SECONDS * 0.3,
                             "test_score_seconds": OTHER_SECONDS * 0.2,
+                            # `fold_seconds` is only the fold FITS; see the
+                            # planted disagreement with `cal_seconds` above.
                             "average_precision": 1.0 - cost,
                             "seed_mode": "text",
                             "seed_query": cat,
@@ -211,7 +227,15 @@ def main() -> int:
             failures.append("K=1 is worse everywhere and must fail the harm gate")
         for k in (3, 4, 6):
             if not bool(r.loc[k, "ship_candidate"]):
-                failures.append(f"region K={k} clears all three planted rules but did not ship")
+                # Name the rule that rejected it: "did not ship" is not enough
+                # to tell a broken analyzer from a mis-planted fixture, which
+                # cost this file one debugging round.
+                why = [c for c in ("rule1_benefit", "rule2_no_harm", "rule3_affordable") if not bool(r.loc[k, c])]
+                failures.append(
+                    f"region K={k} clears all three planted rules but did not ship "
+                    f"(failed {','.join(why) or 'nothing?'}; best delta {r.loc[k, 'best_delta']:.3g}, "
+                    f"worst {r.loc[k, 'worst_delta']:.3g}, max ratio {r.loc[k, 'max_step_ratio']:.3g})"
+                )
 
         # The measured ratio must be the PLANTED one, not the fold-fit one.
         got = float(cost[(cost["geometry"] == REGION) & (cost["k"] == 8)]["step_ratio"].iloc[0])
