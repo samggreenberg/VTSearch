@@ -193,11 +193,20 @@ def figure_average(
     # collision it exists to prevent.
     lo_y, hi_y = ax.get_ylim()
     gap = (hi_y - lo_y) * 0.038
+    # `ends` is sorted ascending, so "at least `gap` above the previous label"
+    # is a max(), not a search. It was written as a `while` that recomputed
+    # `y = placed[-1] + gap` until the gap was satisfied -- which never
+    # terminates the moment `placed[-1] + gap == placed[-1]` in floating point,
+    # because then `y` stops moving while the condition stays true. That is a
+    # LIVE lock with no error and no output: it cost two hours of a dedicated
+    # node and three wrong explanations (a quadratic scan, matplotlib artist
+    # overhead, node contention) before a faulthandler traceback named the line.
+    #
+    # A loop whose termination depends on floating-point addition making
+    # progress is a loop that should not be a loop.
     placed: list[float] = []
     for value, x, colour in ends:
-        y = value
-        while placed and abs(y - placed[-1]) < gap:
-            y = placed[-1] + gap
+        y = value if not placed else max(value, placed[-1] + gap)
         placed.append(y)
         ax.annotate(
             f"{value:.2f}",
