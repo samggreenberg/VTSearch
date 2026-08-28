@@ -66,6 +66,12 @@ export CALIB_SAFE_THRESHOLDS=1
 # default `production_split_for` resolves (#3287/#3290, PR #3289).  Each of
 # those is preflight check 12's business, and each is production here.
 export CALIB_ANALYZE="${CALIB_ANALYZE:-analyze_folds_3314.py}"
+# The click-0 anchor, for the analyze step `launch_cells.sh` chains: it submits
+# `python $CALIB_ANALYZE` with no arguments, and `curves` refuses to draw a
+# quality-over-clicks figure without the text-sort baseline.  Read from the
+# environment by `analyze_folds_3314.py` rather than passed, because the chained
+# submission has nowhere to put an argument.
+export CALIB_BASELINE="${CALIB_BASELINE:-$BASE/analysis/text_baseline.csv}"
 
 # --- environment -------------------------------------------------------------
 # ONE dataset, `vg_scale_any` (#3156): 12 hand-checked classes, 300 positives

@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -801,7 +802,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--results", default=None, help="the screen's results dir (default: $CALIB_RESULTS)")
     ap.add_argument("--out", default=None, help="where tables, figures and the report go (default: results/)")
-    ap.add_argument("--baseline", default=None, help="text_baseline.py CSV: the click-0 anchor")
+    # Defaulted from the environment so the CHAINED analyze step gets the
+    # click-0 anchor too: `launch_cells.sh` submits `python $CALIB_ANALYZE`
+    # with no arguments, and a figure that silently loses its anchor is the
+    # one thing `curves` exists to prevent.
+    ap.add_argument(
+        "--baseline",
+        default=os.environ.get("CALIB_BASELINE") or None,
+        help="text_baseline.py CSV: the click-0 anchor (default: $CALIB_BASELINE)",
+    )
     ap.add_argument("--ab", action="append", default=[], help="a stage-B arm's results dir (repeatable)")
     ap.add_argument("--no-figures", action="store_true")
     ap.add_argument("--no-viewer", action="store_true")
