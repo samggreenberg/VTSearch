@@ -30,6 +30,7 @@ select the *same* categories and their pickles are interchangeable.
 
 from __future__ import annotations
 
+import math
 import os
 import zlib
 
@@ -334,7 +335,26 @@ EXEMPLAR_CANDIDATES = int(os.environ.get("CALIB_EXEMPLAR_CANDIDATES", "8"))
 
 # --- Production-faithful fixed choices (pre-registered) ---
 INCLUSION = 0
-SIM_FRACTION = 0.5
+#: Share of a cell's medias that become the **simulation set** - the pool the
+#: user votes out of AND the haystack the threshold's population estimate is
+#: fitted on; the rest is the held-out test set every metric is scored against.
+#:
+#: 0.5 for every study before #3312, where it was a constant rather than a knob.
+#: It became one because it is that study's *instrument*: the #3308 voted-media
+#: exclusion is bounded in size by the votes' share of the haystack, so the
+#: only way to place cells on both sides of the effect - and on both sides of
+#: the ``EXCLUSION_MIN_REMAINDER`` floor - is to move the haystack's size while
+#: holding the horizon fixed.  At 0.5 on ``vg_scale_any`` a 150-click run votes
+#: ~7% of a ~2100-media haystack and the floor never binds; at 0.08 it votes
+#: ~45% of ~340 and the floor decides most of the run.
+#:
+#: Shrinking it cuts both ways and the trade is deliberate: the test set grows
+#: (tighter metrics) while the sim set's positive count falls with it, so a
+#: small fraction needs ``CALIB_MIN_SIM_POSITIVES`` to keep cells that cannot
+#: seed out of the frame.  The split is a plain permutation, not stratified.
+SIM_FRACTION = float(os.environ.get("CALIB_SIM_FRACTION", "0.5"))
+if not 0.0 < SIM_FRACTION < 1.0:
+    raise ValueError(f"CALIB_SIM_FRACTION={SIM_FRACTION} must lie strictly in (0, 1)")
 #: Number of cross-calibration folds.  Production is 2, which is why it was a
 #: constant - but 2 folds make the fold-anchored ``qmean``/``qmedian`` combine
 #: arms byte-identical, so the combine question cannot be asked without moving
@@ -364,6 +384,57 @@ _CALIBRATION_FRACTION_ENV = os.environ.get("CALIB_CALIBRATION_FRACTION", "").str
 CALIBRATION_FRACTION: float | None = float(_CALIBRATION_FRACTION_ENV) if _CALIBRATION_FRACTION_ENV else None
 if CALIBRATION_FRACTION is not None and not 0.0 < CALIBRATION_FRACTION < 1.0:
     raise ValueError(f"CALIB_CALIBRATION_FRACTION={CALIBRATION_FRACTION} must lie strictly in (0, 1)")
+#: The #3312 arm axis: the minimum unlabeled remainder at which the #3308
+#: voted-media exclusion still applies.  One scalar spans the whole axis, so
+#: the arms are ordered and no sentinel is needed:
+#:
+#:   ``off``    -> ``math.inf`` - the exclusion never fires (pre-#3308 baseline)
+#:   ``always`` -> ``0``        - unconditional exclusion, no floor
+#:   ``<int>``  -> that floor   - e.g. ``60``, the shipped constant
+#:   unset      -> ``None``     - resolve through the app's own
+#:                               ``resolve_exclusion_floor``, i.e. whatever a
+#:                               live detector does.  This is the DEFAULT and
+#:                               is what keeps the harness's default arm equal
+#:                               to production; pinning anything else is a
+#:                               divergence preflight check 12 requires the
+#:                               study to declare.
+#:
+#: Like every other knob upstream of the threshold, moving this moves the
+#: *trajectory* - a different cut is a different acquisition rank, which is a
+#: different next vote - so an exclusion contrast is a run-level A/B and NOT a
+#: paired arm re-cut inside one run.
+_EXCLUDE_VOTED_ENV = os.environ.get("CALIB_EXCLUDE_VOTED", "").strip().lower()
+if _EXCLUDE_VOTED_ENV in ("", "default", "app"):
+    EXCLUSION_MIN_REMAINDER: float | None = None
+elif _EXCLUDE_VOTED_ENV in ("off", "never", "inf"):
+    EXCLUSION_MIN_REMAINDER = math.inf
+elif _EXCLUDE_VOTED_ENV in ("always", "0"):
+    EXCLUSION_MIN_REMAINDER = 0.0
+else:
+    try:
+        EXCLUSION_MIN_REMAINDER = float(_EXCLUDE_VOTED_ENV)
+    except ValueError:
+        raise ValueError(
+            f"CALIB_EXCLUDE_VOTED={_EXCLUDE_VOTED_ENV!r} is not one of "
+            "'off' / 'always' / a non-negative number / unset (= the app's default)"
+        ) from None
+    if EXCLUSION_MIN_REMAINDER < 0:
+        raise ValueError(f"CALIB_EXCLUDE_VOTED={_EXCLUDE_VOTED_ENV!r} must not be negative")
+
+
+def exclusion_arm_name() -> str:
+    """Short label for this run's exclusion arm, for logs and the cell column."""
+    if EXCLUSION_MIN_REMAINDER is None:
+        from vtscore.training.thresholds import resolve_exclusion_floor
+
+        return f"app(f{resolve_exclusion_floor(None):g})"
+    if EXCLUSION_MIN_REMAINDER == math.inf:
+        return "off"
+    if EXCLUSION_MIN_REMAINDER == 0.0:
+        return "always"
+    return f"f{EXCLUSION_MIN_REMAINDER:g}"
+
+
 #: The #2781 study pre-registered safe_thresholds OFF (conformal path only);
 #: the #2799 safe-threshold GMM study flips this on via CALIB_SAFE_THRESHOLDS=1.
 SAFE_THRESHOLDS = os.environ.get("CALIB_SAFE_THRESHOLDS", "0") == "1"

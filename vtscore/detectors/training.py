@@ -250,9 +250,10 @@ def _fused_threshold(
     thing the user can act on.
     """
     from vtscore.training.thresholds import (  # noqa: PLC0415
-        EXCLUSION_MIN_REMAINDER,
         NO_GOOD_THRESHOLD,
+        apply_vote_exclusion,
         calculate_safe_threshold,
+        drop_voted,
         fit_fold_anchored_cut,
     )
     from vtscore.utils.scores import scored_only  # noqa: PLC0415
@@ -266,13 +267,14 @@ def _fused_threshold(
             len(final_scores),
         )
 
-    exclude = voted_ids if (voted_ids and final_ids is not None) else None
-    fit_final = final_scores
-    if exclude is not None:
-        assert final_ids is not None
-        fit_final = [s for i, s in zip(final_ids, final_scores, strict=True) if i not in exclude]
-        if len(fit_final) < EXCLUSION_MIN_REMAINDER:
-            exclude, fit_final = None, final_scores
+    # One decision, taken on the final model's scores and then obeyed by every
+    # fold haystack in this fit - the all-or-nothing contract lives in
+    # ``apply_vote_exclusion`` rather than being re-derived per haystack here.
+    fit_final, excluding = (
+        apply_vote_exclusion(final_scores, final_ids, voted_ids)
+        if final_ids is not None
+        else (np.asarray(final_scores, dtype=np.float64), False)
+    )
 
     cut = None
     if folds.fallback is None:
@@ -280,11 +282,7 @@ def _fused_threshold(
         fold_haystacks = []
         for model in folds.models[:n_folds]:
             ids, scores, _best = _score_all_media(model, clips_dict, score_emb)
-            hay = np.asarray(scores, dtype=np.float64)
-            if exclude is not None:
-                keep = np.fromiter((i not in exclude for i in ids), dtype=bool, count=len(ids))
-                hay = hay[keep]
-            fold_haystacks.append(hay)
+            fold_haystacks.append(drop_voted(scores, ids, voted_ids) if excluding else np.asarray(scores, np.float64))
         cut = fit_fold_anchored_cut(fold_haystacks, folds.orderings[:n_folds], fit_final)
 
     if det_ctx is not None:
