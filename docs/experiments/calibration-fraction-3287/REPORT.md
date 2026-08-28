@@ -10,7 +10,7 @@ Design and pre-registered decision rules: [`PLAN.md`](PLAN.md). Every number her
 comes from [`agg/`](agg/), written by
 [`analyze_calfrac.py`](../../../scripts/experiments/calibration/analyze_calfrac.py).
 
-## The answer, in three lines
+## The answer, in four lines
 
 - **On the shipped default configuration (`siglip`, whole-image/binary voting), 0.5
   is not optimal.** Spending more of the votes on Train is worth **−0.013 ± 0.003**
@@ -22,6 +22,10 @@ comes from [`agg/`](agg/), written by
 - **So the per-mode default the issue proposed is not what the data supports.** A
   `PRODUCTION_SPLIT_BY_MODE` written from the per-mode table would be reading an
   average across a disagreement.
+- **A follow-up run settles "is it SigLIP specifically?" — no.** `siglip2_l` behaves
+  like `siglip`: 0.3 beats 0.5 by **−0.013 ± 0.003**, winning in every band. Two of
+  two single-vector arms want less than 0.5; `dinov3_patch` in two of two styles
+  does not. [Below](#follow-up-siglip2_l-behaves-like-siglip-not-like-dinov3).
 
 No production change is proposed here. This is the evidence; the decision is the
 owner's.
@@ -227,14 +231,53 @@ viewer: [`viewer.html`](viewer.html).**
 - **Nothing here was run at a prevalence, horizon or class count a real user picks.**
   150 clicks is a long session.
 
-## Suggested next step
+## Follow-up: `siglip2_l` behaves like `siglip`, not like `dinov3`
 
-If the `siglip` result is worth acting on, the cheap confirmation is a second
-single-vector embedder (`siglip2_l` is already in the pile, at 1152-d) on the same
-grid. That is one more arm-set and it distinguishes the two live readings directly:
-"single-vector embedders want more Train" versus "SigLIP specifically does". Until
-then, the honest statement is that the shipped default is measurably not optimal for
-the shipped default embedder, and that we do not know what the knob follows.
+Run immediately after the main grid, identical except for the embedder:
+`vg_scale_any × siglip2_l`, whole-image, same 12 classes, 4 seeds, 150 clicks, 5
+fractions. **240/240 cells, zero failures, 7,051 rows per arm, nothing dropped.**
+Artifacts in [`siglip2l/`](siglip2l/), viewer at
+[`siglip2l/viewer.html`](siglip2l/viewer.html).
+
+| metric | 0.3 | 0.4 | 0.6 | 0.7 |
+|---|---|---|---|---|
+| cost | **−0.013 ± 0.003** | −0.005 ± 0.003 | +0.006 ± 0.003 | +0.006 ± 0.003 |
+| `regret_honest` | **−0.007 ± 0.002** | −0.001 ± 0.002 | +0.006 ± 0.002 | +0.012 ± 0.002 |
+
+0.3 beats 0.5 on both metrics and its worst band is **negative** (−0.0090) — it wins
+at every vote band, exactly as `siglip`'s 0.3 and 0.4 arms do:
+
+| band | 0.3 | 0.4 | 0.6 | 0.7 |
+|---|---|---|---|---|
+| early 1–25 | −0.018 | −0.010 | +0.005 | +0.019 |
+| mid 26–60 | −0.018 | −0.013 | −0.006 | −0.011 |
+| late 61–100 | −0.011 | −0.001 | +0.007 | −0.001 |
+| deep 101–150 | −0.009 | −0.001 | +0.013 | +0.008 |
+
+**So "SigLIP specifically" is refuted.** Two of two single-vector arms want
+materially less than 0.5; `dinov3_patch` in two of two styles does not. The optimum
+is a property of the representation the detector learns in — not of the voting mode,
+and not of one model.
+
+### What this still cannot separate
+
+The two arms that want 0.3 are also exactly the two where the **opening and the
+learning happen in the same space**. `siglip` and `siglip2_l` rank their own text
+sort and learn in that same space; both `dinov3_patch` arms reach their opening
+through the `siglip+dinov3_patch` pair, so they open in SigLIP space and learn in
+DINOv3 space. Embedder and *space-match* are therefore confounded in this design,
+and a mismatch plausibly changes which items get voted on — which is the labelset
+the split then divides.
+
+The discriminator is cheap and specific: a **`siglip+siglip2_l` pair** — open in
+SigLIP, learn in `siglip2_l`. If it still wants 0.3 the mismatch is not the driver
+and the effect belongs to the embedder; if it moves to 0.5 the story is about
+opening-vs-learning space and not about the embedder at all. That is another
+single-vector grid: ~12 minutes.
+
+Until that runs, the defensible statement is: **the shipped default is measurably
+not optimal for either single-vector embedder in the pile, the effect is not about
+voting mode, and one alternative explanation remains open.**
 
 ## Reproducing
 
@@ -258,3 +301,12 @@ early sample is how #3129 produced a 90-minute error):
 7.71 GB peak is why. Sizing from a binary cell would have picked a limit eight
 times too small. Five arms at `%16` each (80 concurrent × 12G = 89% of the
 per-user allowance) drained in **3h 43m**, 23:24 → 03:07.
+
+The `siglip2_l` follow-up is a different sizing problem, and the launcher now derives
+it rather than being told: with no patch cells the grid is **CPU-bound, not
+memory-bound** (0.94 GB peak measured, so 4G is 4× headroom), which lifts concurrency
+from 80 to the QOS's CPU cap of 120. 240 cells at ~3.1 min drained in **~12 minutes**,
+launch to report. The same test removes `--patch`, `--require-region-voting` and
+`--contrasts-voting-modes` from its preflight — the last *should* fail on a
+single-vector grid, since nothing is in both voting modes, and a check that cannot
+apply is a claim in the run's record that nobody verified.
