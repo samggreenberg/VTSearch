@@ -333,7 +333,24 @@ SIM_FRACTION = 0.5
 #: it.  Changing this changes the *trajectory* (different splits, different
 #: per-fold models), so a folds contrast is a run-level A/B, not a paired arm.
 CALIBRATE_COUNT = int(os.environ.get("CALIB_CALIBRATE_COUNT", "2"))
-CALIBRATION_FRACTION = 0.5
+#: Share of each calibration fold's labelset held out to READ the threshold from;
+#: the rest trains that fold's model.  0.5 since it was introduced, and never
+#: measured - the obvious default, not a result (issue #3287).
+#:
+#: It is a genuine trade-off rather than a "more is better" knob.  More Train
+#: gives better fold models, so their held-out orderings are a closer proxy for
+#: the final model's, but leaves fewer anchors and a coarser conformal quantile.
+#: More Calibrate gives finer quantiles but drifts the fold models further from
+#: the final model, which always trains on ALL votes - so the scale the cut is
+#: read on is less like the scale it is applied on.
+#:
+#: Like :data:`CALIBRATE_COUNT`, moving this moves the *trajectory* (different
+#: splits, different fold models, a different threshold and therefore a
+#: different Hard pick), so a fraction contrast is a run-level A/B and NOT a
+#: paired arm re-cut inside one run.
+CALIBRATION_FRACTION = float(os.environ.get("CALIB_CALIBRATION_FRACTION", "0.5"))
+if not 0.0 < CALIBRATION_FRACTION < 1.0:
+    raise ValueError(f"CALIB_CALIBRATION_FRACTION={CALIBRATION_FRACTION} must lie strictly in (0, 1)")
 #: The #2781 study pre-registered safe_thresholds OFF (conformal path only);
 #: the #2799 safe-threshold GMM study flips this on via CALIB_SAFE_THRESHOLDS=1.
 SAFE_THRESHOLDS = os.environ.get("CALIB_SAFE_THRESHOLDS", "0") == "1"

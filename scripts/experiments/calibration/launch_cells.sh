@@ -32,7 +32,14 @@ if ! [[ "$N" =~ ^[0-9]+$ ]] || [[ "$N" -eq 0 ]]; then
 fi
 echo "cells to run: $N (array 0-$((N-1))%$CONC, partition=$PARTITION gres=$GRES)"
 
-B=$(sbatch --parsable --job-name=cal-cells --array=0-$((N-1))%$CONC \
+# A study that submits SEVERAL arrays needs one name per arm: the completion
+# waiter in the `grid-experiments` skill counts jobs BY NAME (`squeue -n`), and
+# preflight's duplicate-name check reads the same field, so arms sharing a name
+# make "has this arm drained?" unanswerable.  Defaults to the historic name, so
+# every single-array launcher is unaffected.
+JOB_NAME="${CALIB_JOB_NAME:-cal-cells}"
+
+B=$(sbatch --parsable --job-name="$JOB_NAME" --array=0-$((N-1))%$CONC \
   "${GRES_ARG[@]}" --mem="$MEM" --cpus-per-task="$CPUS" --time="$TIME" --partition="$PARTITION" \
   --export=ALL --output="$LOGS/cells-%A_%a.out" \
   --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python run_cells.py")
@@ -47,7 +54,7 @@ ANALYZE="${CALIB_ANALYZE:-analyze.py}"
 # the cells have already been paid for.
 AMEM="${CALIB_ANALYZE_MEM:-16G}"
 ATIME="${CALIB_ANALYZE_TIME:-0:40:00}"
-A=$(sbatch --parsable --dependency=afterany:$B --job-name=cal-analyze --mem="$AMEM" \
+A=$(sbatch --parsable --dependency=afterany:$B --job-name="$JOB_NAME-analyze" --mem="$AMEM" \
   --cpus-per-task=4 --time="$ATIME" --partition=cpu \
   --export=ALL --output="$LOGS/analyze-%j.out" \
   --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python $ANALYZE")
