@@ -422,10 +422,9 @@ def schedule_table(v: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
                     "d": cost_sched - base.loc[idx, "cost"].to_numpy(dtype=float),
                     "ratio": secs_sched / base.loc[idx, "step_seconds"].to_numpy(dtype=float),
                     "band": base.loc[idx, "band"].to_numpy(),
-                    "geometry": base.loc[idx, "geometry"].to_numpy(),
                 },
                 index=idx,
-            ).reset_index()
+            ).reset_index()  # `geometry` is a STEP_KEYS index level, so it arrives as a column here
             for geom, g in j.groupby("geometry", dropna=False):
                 per_band = []
                 for band, w in g.groupby("band", dropna=False):
