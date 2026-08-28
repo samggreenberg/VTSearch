@@ -17,6 +17,16 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The calibrated cutoff no longer counts your own votes in its picture of
+  the collection.** The threshold estimator reads score distributions over
+  the whole collection to place the Good/Bad line; the voted items' scores
+  in those distributions are optimistically shifted (the models were trained
+  on them), so they are now dropped before the line is placed. On large
+  collections nothing visibly changes; on small ones (demo-sized, or heavy
+  voting) the cutoff gets slightly more accurate — simulation shows the
+  effect is never harmful and grows with the fraction of the collection
+  voted. (Issue #3308.)
+
 - **The Tuning-fraction default is now per-model.** With no explicit setting,
   the Train/Calibrate split of each calibration fold is 0.3 (70% Train / 30%
   Calibrate) for detectors that learn in a single-vector space and stays 0.5

@@ -12,6 +12,23 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **Voted media are excluded from the calibrated threshold's haystacks**
+  (issue #3308). The fold-anchored threshold estimator drops the voted
+  items from every population sample it touches - each calibration fold
+  model's corpus scores and the final model's realization sample - because
+  those models were trained on the votes, so the votes' own scores under
+  them are optimistically shifted (and the calibration votes previously sat
+  in the haystack twice: once as free points, once as anchors). All the
+  distributions in the quantile transfer now cover one identical
+  population, the unlabeled remainder. New optional `voted_ids` parameter
+  on `vtscore.detectors.training.train_and_threshold` (and the internal
+  `_train_and_score_xy` / `_fused_threshold`); `train_and_score` and the
+  labelset/model-loading pipelines pass it automatically, and omitting it
+  keeps the historical include-everything behaviour. Thresholds move only
+  where votes are a nontrivial share of the corpus (small datasets); on
+  large corpora the change is bounded by the votes' share of the ≤50k
+  haystack sample.
+
 - **`calibration_fraction` defaults are now per-embedder, and `None` means
   "resolve it".** The shipped Train/Calibrate split of each calibration fold
   is keyed on the space the detector learns in (issue #3287):
