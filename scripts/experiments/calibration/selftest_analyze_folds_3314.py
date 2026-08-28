@@ -56,6 +56,7 @@ GEOMETRIES = (
     ("siglip+dinov3_patch", "max_patch"),
 )
 REGION = "dinov3_patch/max_patch"
+GEOMETRIES_LABELS = tuple(f"{(e.partition('+')[2] or e)}/{st}" for e, st in GEOMETRIES)
 CATEGORIES = [f"cls{i}" for i in range(6)]
 SEEDS = (0, 1, 2, 3)
 STEPS = 150
@@ -266,6 +267,19 @@ def main() -> int:
         s = sched[(sched["geometry"] == REGION) & (sched["k_early"] == 8)]
         if s.empty or bool(s["eligible"].any()):
             failures.append("an 8-fold schedule is over the ceiling and must not be eligible")
+
+        # The literal rows exist, name the K the gate picked, and carry both
+        # thresholds - an aggregate-only report is what the standing feedback
+        # on reports rules out.
+        ex = pd.read_csv(agg / f"worked_examples_k{gate['k_best']}.csv")
+        if ex.empty:
+            failures.append("no worked examples were written")
+        else:
+            need = {"geometry", "category", "seed", "t", "threshold_k2", f"threshold_k{gate['k_best']}", "d_cost"}
+            if not need <= set(ex.columns):
+                failures.append(f"worked examples missing columns: {sorted(need - set(ex.columns))}")
+            elif set(ex["geometry"]) != set(GEOMETRIES_LABELS):
+                failures.append(f"worked examples cover {sorted(set(ex['geometry']))}, not every geometry")
 
         # (6) the arm split: the pooled rows carry the opposite sign, and the
         # shipped verdict must not be reading them.

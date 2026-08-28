@@ -593,6 +593,39 @@ def degenerate_table(v: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def worked_examples(v: pd.DataFrame, k: int, n: int = 12) -> pd.DataFrame:
+    """The literal steps where fold count *k* moved the cut most, per geometry.
+
+    An aggregate says a fold count is worth 0.006 of cost; it cannot say what
+    that looked like on a screen.  These are individual steps - named category,
+    seed, click, both thresholds and both operating points - so a reader can
+    ask the question no mean answers: did the extra folds move the cut in the
+    direction the story claims, and by enough to change what the user saw?
+
+    Picked by the largest |Delta cost| rather than by the largest gain, because
+    the worst steps are as much a part of the answer as the best ones, and a
+    table of wins only is an advertisement.
+    """
+    keys = list(STEP_KEYS)
+    cols = ["threshold", "cost", "fpr", "fnr", "n_flagged", "n_votes", "n_folds_used"]
+    have = [c for c in cols if c in v.columns]
+    base = v[v["k"] == BASELINE_K].set_index(keys)
+    arm = v[v["k"] == k].set_index(keys)
+    base, arm = base[~base.index.duplicated()], arm[~arm.index.duplicated()]
+    idx = arm.index.intersection(base.index)
+    if len(idx) == 0:
+        return pd.DataFrame()
+    j = base.loc[idx, have].add_suffix(f"_k{BASELINE_K}").join(arm.loc[idx, have].add_suffix(f"_k{k}"))
+    j["d_cost"] = j[f"cost_k{k}"] - j[f"cost_k{BASELINE_K}"]
+    j["d_threshold"] = j[f"threshold_k{k}"] - j[f"threshold_k{BASELINE_K}"]
+    j = j.reset_index()
+    out = []
+    for geom, g in j.groupby("geometry", dropna=False):
+        top = g.reindex(g["d_cost"].abs().sort_values(ascending=False).index).head(n)
+        out.append(top)
+    return pd.concat(out, ignore_index=True) if out else pd.DataFrame()
+
+
 def levels(v: pd.DataFrame) -> pd.DataFrame:
     """Mean level per (geometry, band, K) - the price sheet, whatever the verdict."""
     cols = {
@@ -782,6 +815,15 @@ def write_report(out: Path, blocks: dict) -> None:
         "",
         _md(blocks["schedule"]),
         "",
+        f"## The steps themselves: where K={blocks['example_k']} moved the cut most",
+        "",
+        "Individual steps, not means.  An aggregate says a fold count is worth",
+        "some fraction of cost; only a row can say what that looked like on a",
+        "screen.  Picked by the largest |delta| in either direction, so the worst",
+        "steps are here beside the best ones.",
+        "",
+        _md(blocks["examples"]),
+        "",
         "## Secondary: the pooled combine rule (#2897's axis, replicated)",
         "",
         "#2897's monotone worsening in K was a property of the POOLED rule, not",
@@ -853,6 +895,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     spread = threshold_spread(ship_v)
     degen = degenerate_table(v)
     pooled = paired_vs_baseline(v[v["arm"] == POOLED_ARM], "cost", rng)
+    # Literal rows for whichever K the table says is the interesting one - the
+    # gate's pick when it opened, else the K with the best banded delta, so a
+    # flat screen still ships examples of what "flat" looked like.
+    example_k = gate["k_best"] or (int(ship.loc[ship["best_delta"].idxmin(), "k"]) if not ship.empty else 1)
+    examples = worked_examples(ship_v, int(example_k))
 
     ab = pd.DataFrame()
     if args.ab:
@@ -868,6 +915,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         ("sd_threshold", spread),
         ("folds_used", degen),
         ("pooled_replication", pooled),
+        (f"worked_examples_k{example_k}", examples),
         ("ab_arms", ab),
     ):
         frame.to_csv(agg / f"{name}.csv", index=False)
@@ -921,6 +969,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             "degen": degen,
             "schedule": sched,
             "pooled": pooled,
+            "examples": examples,
+            "example_k": int(example_k),
             "ab": ab,
         },
     )
