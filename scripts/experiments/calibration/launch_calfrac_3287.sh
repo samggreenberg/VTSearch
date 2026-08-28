@@ -54,6 +54,19 @@ FRACTIONS="${CALFRAC_FRACTIONS:-0.3,0.4,0.5,0.6,0.7}"
 
 arm_dir() { printf '%s/f%03d' "$BASE" "$(python3 -c "print(round(float('$1')*100))")"; }
 
+# Does this grid contain any patch-capable embedder?  Three preflight flags and
+# the memory floor depend on the answer, and getting it from the embedder list
+# rather than from a hand-set variable is what keeps a follow-up grid honest:
+# `--contrasts-voting-modes` FAILS on a single-vector grid (nothing is in both
+# modes, correctly), `--require-region-voting` would assert a premise about a
+# cell the grid does not contain, and `--patch` would impose the 12G floor on
+# cells that peak under 1 GB - which is the difference between 80 and 120
+# concurrent tasks.
+HAS_PATCH=0
+case ",${CALIB_VGSCALE_EMBEDDERS:-siglip,siglip+dinov3_patch}," in
+  *_patch,*|*_patch) HAS_PATCH=1 ;;
+esac
+
 # --- science knobs -----------------------------------------------------------
 # The SHIPPED threshold path.  `docs/ML.md`: "Every trained threshold fuses the
 # haystack into the cut.  There is no setting for this."  The harness default
@@ -171,10 +184,20 @@ export CALIB_GRES=none
 # same argument as `CALIB_CELL_ORDER=seed` above, one level up, and the two only
 # work together: seed-major ordering inside an arm is worth nothing if the arms
 # themselves run one after another.
-export CALIB_MEM="${CALIB_MEM:-12G}"
+# A patch grid is memory-bound (7.71 GB peak measured, 12G floor enforced by
+# preflight check 7b); a single-vector grid is CPU-bound (0.94 GB peak measured,
+# so 4G is ~4x headroom) and can therefore run to the QOS's CPU cap instead.
+#   patch:        5 arms x %16 x 12G = 960G of 1074G  (memory-capped)
+#   single-vector: 5 arms x %24 x  4G = 480G, 120 tasks (cpu=240, 2/task: CPU-capped)
+if [[ "$HAS_PATCH" == "1" ]]; then
+  export CALIB_MEM="${CALIB_MEM:-12G}"
+  export CALIB_CONC="${CALIB_CONC:-16}"
+else
+  export CALIB_MEM="${CALIB_MEM:-4G}"
+  export CALIB_CONC="${CALIB_CONC:-24}"
+fi
 export CALIB_CPUS=1
 export CALIB_TIME="${CALIB_TIME:-12:00:00}"
-export CALIB_CONC="${CALIB_CONC:-16}"
 export CALIB_ANALYZE_MEM="${CALIB_ANALYZE_MEM:-48G}"
 export CALIB_ANALYZE_TIME="${CALIB_ANALYZE_TIME:-2:00:00}"
 
@@ -330,13 +353,18 @@ sys.exit(0 if 0.0 < f < 1.0 else 1)
       DIV=()
       [[ "$F" != "0.5" ]] && DIV=(--diverges "calibration_fraction")
 
+      # Only assert what this grid actually contains.  A check that cannot
+      # apply is not a check that passes - it is a claim in the run's record
+      # that nobody verified.
+      GEO=()
+      if [[ "$HAS_PATCH" == "1" ]]; then
+        GEO=(--require-region-voting vg_scale_any:siglip+dinov3_patch --contrasts-voting-modes --patch)
+      fi
       if [[ -x "$WT/scripts/experiments/preflight.sh" ]]; then
         bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb 20 \
-          --require-region-voting vg_scale_any:siglip+dinov3_patch \
           --require-min-positives 100 \
-          --contrasts-voting-modes \
           --reuse-prepare "$PREP" \
-          --patch \
+          "${GEO[@]}" \
           "${DIV[@]}" \
           --job-name "cal-cells-f$F" --mem "$CALIB_MEM" --conc "$STUDY_CONC" || {
           echo "preflight FAILED for fraction $F" >&2
