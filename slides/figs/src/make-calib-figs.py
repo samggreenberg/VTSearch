@@ -42,6 +42,7 @@ from slide_figure import (  # noqa: E402
     FULL_BLEED,
     LABEL_GAP_PT,
     OBJECT_GAP_PT,
+    enforce_rendered_px,
     save,
     tight_box,
 )
@@ -191,7 +192,22 @@ VOTE_MARK_DROP = 0.36
 #: constant clears both.
 VOTE_MARK_PT = 16
 VOTE_PANEL_MARK_PT = 22
+
+#: What a fold panel's vote glyph is meant to measure **on the slide**, in
+#: slide pixels. Two figures draw the same seven votes — the anchored-fold
+#: schematic and the EM aside beside it — and a shared point size does not make
+#: them the same size, because the two crop to different aspects and the slot
+#: therefore scales them differently: 16pt landed at 21px on one slide and 15pt
+#: at 24px on the next, which reads as the marks shrinking between two slides
+#: that are meant to be the same picture (#3301). Each figure carries the
+#: points that reach this target under *its* crop, and `enforce_rendered_px`
+#: fails the build if a reflow moves one of them.
+VOTE_MARK_PX = 24.0
 VOTE_LABEL_DROP = VOTE_MARK_DROP + CAP_16 * VOTE_PANEL_MARK_PT / VOTE_MARK_PT + LABEL_GAP
+
+#: The same label under a baseline that carries *no* vote glyphs: the notch's
+#: own length plus a gap, and nothing else to clear.
+NOTCH_LABEL_DROP = 0.32 + LABEL_GAP
 
 #: The half-width the held-out score marks below are quoted at, and the marks
 #: themselves: where each fold's Bad and Good votes land on its own score line,
@@ -1394,6 +1410,11 @@ XSEMI_FLOW_STAGES = 7
 #: or dropping a beat the figure exists to make.
 XSEMI_CANVAS = (24.2, 13.74)
 
+#: The fold panels' vote glyphs, in points, sized to hit `VOTE_MARK_PX` under
+#: this figure's own crop. Re-derive it if the layout reflows —
+#: `enforce_rendered_px` fails the build with the arithmetic when it has.
+XSEMI_MARK_PT = 18.0
+
 #: The fold panels' height. Shorter than the blend's 2.0 because there are two
 #: of them stacked under the flow rather than one beside it, and no shorter,
 #: because the Good hump has to stay tall enough to hold a vote *inside* it —
@@ -1482,6 +1503,7 @@ def xsemi_flow_fig() -> None:
             box=box,
         )
     save(final, OUT, "calib-fold-anchored-flow.png", column=FULL_BLEED, box=box)
+    enforce_rendered_px(OUT / "calib-fold-anchored-flow.png", XSEMI_MARK_PT, VOTE_MARK_PX, "vote glyph")
 
 
 def _xsemi_folds() -> list[tuple[GmmFit1D, np.ndarray, dict]]:
@@ -1507,7 +1529,15 @@ def _xsemi_folds() -> list[tuple[GmmFit1D, np.ndarray, dict]]:
     return folds
 
 
-def _hump_marks(ax: plt.Axes, x0: float, y_base: float, w: float, anchors: dict, size: int = VOTE_MARK_PT) -> None:
+def _hump_marks(
+    ax: plt.Axes,
+    x0: float,
+    y_base: float,
+    w: float,
+    anchors: dict,
+    size: float = VOTE_MARK_PT,
+    drop: float = VOTE_MARK_DROP,
+) -> None:
     """This fold's held-out votes, drawn on the panel's baseline.
 
     The panel's baseline *is* the cross-calibration figure's score line: the
@@ -1541,7 +1571,7 @@ def _hump_marks(ax: plt.Axes, x0: float, y_base: float, w: float, anchors: dict,
         for score in anchors[key]:
             ax.text(
                 x0 + score * w,
-                y_base - VOTE_MARK_DROP,
+                y_base - drop,
                 glyph,
                 ha="center",
                 va="top",
@@ -1746,7 +1776,7 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
         for i, (mx, sign) in enumerate(((m1x, 1.0), (m2x, -1.0))):
             entry_tail = (mx + sign * slope * (train_tail_y - my), train_tail_y)
             arrow(entry_tail, _box_edge(mx, my, entry_tail, OBJECT_GAP))
-            _hump_marks(ax, panel_x[i], y_base, panel_w, folds[i][2])
+            _hump_marks(ax, panel_x[i], y_base, panel_w, folds[i][2], size=XSEMI_MARK_PT)
             # Held out, and named: the votes in fold i's panel are the ones
             # its own model never trained on — the crossed strokes above are
             # where they came from.
@@ -1818,6 +1848,11 @@ XQUANT_FLOW_STAGES = 7
 #: and the theme's 20px floor; the figure is height-limited in that slot, so
 #: the extra width is free and only the 0.65 units of extra height are spent.
 XQUANT_CANVAS = (20.45, 13.99)
+
+#: The two fold panels' vote glyphs here, sized the same way and to the same
+#: target as `XSEMI_MARK_PT`; the number differs only because this figure
+#: crops to a different aspect and so lands in the slot at a different scale.
+XQUANT_MARK_PT = 18.5
 
 #: The left gutter that buys this figure its headline (#3242). Everything in
 #: the notch's vertical band — the "Unlabeled" / Good / Bad names hanging off
@@ -1968,6 +2003,7 @@ def xquant_flow_fig() -> None:
             box=box,
         )
     save(final_stage, OUT, "calib-quantile-flow.png", column=FULL_BLEED, box=box)
+    enforce_rendered_px(OUT / "calib-quantile-flow.png", XQUANT_MARK_PT, VOTE_MARK_PX, "vote glyph")
 
 
 def _xquant_populations() -> tuple[list[tuple[GmmFit1D, np.ndarray, dict]], np.ndarray]:
@@ -2039,11 +2075,20 @@ def _quantile_gauge(
     return ax.text(x0 + w / 2, y0 - LABEL_GAP, label, ha="center", va="top", fontsize=15, color=INK)
 
 
-def _theta_notch(ax: plt.Axes, x: float, y_base: float, label: str, ha: str = "center") -> None:
-    """The progression's one cut mark: a notch under the baseline, then a name."""
+def _theta_notch(
+    ax: plt.Axes, x: float, y_base: float, label: str, ha: str = "center", drop: float = VOTE_LABEL_DROP
+) -> None:
+    """The progression's one cut mark: a notch under the baseline, then a name.
+
+    `drop` is how far under the baseline the *name* hangs, and it defaults to
+    clearing a panel's row of vote glyphs. A baseline with no glyphs under it
+    has nothing to clear, and paying `VOTE_LABEL_DROP` there drives the label
+    into whatever sits below — which is how the crossing figure's θ_mid ended
+    up inside the sentence beneath it. Those callers pass `NOTCH_LABEL_DROP`.
+    """
     ax.plot([x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
     dx = 0.0 if ha == "center" else (-0.10 if ha == "right" else 0.10)
-    ax.text(x + dx, y_base - VOTE_LABEL_DROP, label, ha=ha, va="top", fontsize=16, color=INK)
+    ax.text(x + dx, y_base - drop, label, ha=ha, va="top", fontsize=16, color=INK)
 
 
 def _xquant_numbers(folds: list, final: np.ndarray) -> tuple[list[float], float, float]:
@@ -2120,7 +2165,7 @@ def _xquant_fold_panel(
         color=INK,
     )
     _score_histogram(ax, x0, y_base, w, h, fit, scores, fill="class", mu_labels=False)
-    _hump_marks(ax, x0, y_base, w, anchors)
+    _hump_marks(ax, x0, y_base, w, anchors, size=XQUANT_MARK_PT)
     _theta_notch(ax, x0 + theta * w, y_base, _sub(rf"\theta_{i + 1} = {theta:.2f}"))
 
 
@@ -4295,7 +4340,7 @@ def _crossing_stage(stage: int) -> plt.Figure:
 
     # ── stage 2: the shipped rule — halfway between the means ─────────────────
     if stage >= 2:
-        _theta_notch(ax, x0 + mid * w, shape_base, _sub(r"\theta_{mid}"))
+        _theta_notch(ax, x0 + mid * w, shape_base, _sub(r"\theta_{mid}"), drop=NOTCH_LABEL_DROP)
 
     # ── stage 3: the same two components, priced by how likely each is ────────
     if stage >= 3:
@@ -4322,7 +4367,7 @@ def _crossing_stage(stage: int) -> plt.Figure:
             fontsize=16,
             color=INK,
         )
-        _theta_notch(ax, x0 + crossing * w, weighted_base, _sub(r"\theta^*"))
+        _theta_notch(ax, x0 + crossing * w, weighted_base, _sub(r"\theta^*"), drop=NOTCH_LABEL_DROP)
         # The midpoint, carried down onto the weighted picture so the gap
         # between the two answers is a gap the room can measure by eye rather
         # than a claim about two numbers on two different rows.
@@ -4564,6 +4609,12 @@ EM_CAPTIONS = ("a guess", "who claims what", "re-fit to that", "repeat: done")
 #: What the arrows between the panels are called.
 EM_ARROWS = ("E", "M", "repeat")
 
+#: The vote glyphs on this figure's baselines, and how far under it they hang.
+#: The size is `VOTE_MARK_PX` converted through *this* figure's crop; the drop
+#: is tight because an EM panel's baseline has no cut notch under it.
+EM_MARK_PT = 15.0
+EM_MARK_DROP = 0.12
+
 
 def _em_iterate(scores: np.ndarray, anchors: dict | None, rounds: int) -> GmmFit1D:
     """`rounds` rounds of the **shipped** EM, from `EM_INIT`.
@@ -4677,10 +4728,12 @@ def _em_panel(
             ax.plot(x0 + xs[lo_v:hi_v] * w, curve[lo_v:hi_v], color=colour, linewidth=HUMP_LW, zorder=4)
 
     if anchors:
-        for score in anchors["bad"]:
-            ax.text(x0 + score * w, y_base - 0.12, "✗", ha="center", va="top", fontsize=15, color=RED, zorder=5)
-        for score in anchors["good"]:
-            ax.text(x0 + score * w, y_base - 0.12, "✓", ha="center", va="top", fontsize=15, color=GREEN, zorder=5)
+        # The same routine, the same weight and the same halo as the anchored
+        # fold schematic two slides earlier: this figure is that one's panel
+        # taken apart, and a mark that changes weight between them reads as a
+        # different kind of evidence. Only the drop differs, and it differs
+        # because this baseline carries no cut notch to clear.
+        _hump_marks(ax, x0, y_base, w, anchors, size=EM_MARK_PT, drop=EM_MARK_DROP)
 
     _range_line(ax, x0, x0 + w, y_base, z=5)
 
@@ -4715,6 +4768,8 @@ def em_steps_fig() -> None:
         for stage in range(1, EM_STAGES):
             save(_em_stage(stage, sample, votes), OUT, f"{name}.build{stage}.png", column=FULL_BLEED, box=box)
         save(final, OUT, f"{name}.png", column=FULL_BLEED, box=box)
+        if votes:
+            enforce_rendered_px(OUT / f"{name}.png", EM_MARK_PT, VOTE_MARK_PX, "vote glyph")
 
 
 def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figure:
@@ -4782,19 +4837,31 @@ def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figur
 
     # The two steps, named. Right of the title reserve, and above the row,
     # because they are what the row is a picture of.
+    # The two letters are expanded here and nowhere else. They are the only
+    # notation the aside introduces, the block arrows below repeat them bare,
+    # and a room meeting "EM" for the first time should not have to be told
+    # aloud what the initials stand for (#3301).
     lines = (
         (
-            "E — how much does each curve claim each score?",
-            "M — re-fit each curve to what it claims.",
+            "E (Expectation) — how much does each curve claim each score?",
+            "M (Maximization) — re-fit each curve to what it claims.",
         )
         if anchors is None
         else (
-            "E — a vote is claimed by its own side, whatever the curves say.",
-            "M — and it counts κ times over.",
+            "E (Expectation) — a vote is claimed by its own side.",
+            "M (Maximization) — and it counts κ times over.",
         )
     )
+    # Every line has to end left of the canvas edge. Not a nicety: this axes
+    # spans the whole figure, so `tight_box` crops to the canvas *unless* a
+    # label overhangs it — and one that does widens the crop, which changes the
+    # scale the slot fits the figure at, which changes how big every glyph in
+    # it lands on the slide. The anchored variant already overhung by a word
+    # and rendered its vote marks 14% larger than the schematic two slides
+    # earlier that draws the same seven votes (#3301). 16pt buys the room the
+    # spelled-out step names cost; the floor is 20px and these land at 26.
     for k, line in enumerate(lines):
-        ax.text(rule_x, canvas_h - 0.55 - k * 0.85, line, ha="left", va="top", fontsize=17, color=INK)
+        ax.text(rule_x, canvas_h - 0.55 - k * 0.85, line, ha="left", va="top", fontsize=16, color=INK)
 
     return fig
 
