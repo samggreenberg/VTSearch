@@ -1,0 +1,21 @@
+geometry,mode,band,arm,fraction,sd_threshold,n_steps
+clip/whole_image,binary,deep 101-150,0.30,0.3,0.01901586287489464,600
+clip/whole_image,binary,deep 101-150,0.40,0.4,0.01720898199845243,600
+clip/whole_image,binary,deep 101-150,0.50,0.5,0.017911024044546232,600
+clip/whole_image,binary,deep 101-150,0.60,0.6,0.016801866935444255,600
+clip/whole_image,binary,deep 101-150,0.70,0.7,0.015955918177123676,600
+clip/whole_image,binary,early 1-25,0.30,0.3,0.01661535587648344,268
+clip/whole_image,binary,early 1-25,0.40,0.4,0.018897614254894602,268
+clip/whole_image,binary,early 1-25,0.50,0.5,0.016312653164558412,268
+clip/whole_image,binary,early 1-25,0.60,0.6,0.015403928405921344,268
+clip/whole_image,binary,early 1-25,0.70,0.7,0.01988484761150191,268
+clip/whole_image,binary,late 61-100,0.30,0.3,0.01880662325210699,480
+clip/whole_image,binary,late 61-100,0.40,0.4,0.01608637340715148,480
+clip/whole_image,binary,late 61-100,0.50,0.5,0.01726807415071899,480
+clip/whole_image,binary,late 61-100,0.60,0.6,0.016285797679916857,480
+clip/whole_image,binary,late 61-100,0.70,0.7,0.016988512127882785,480
+clip/whole_image,binary,mid 26-60,0.30,0.3,0.02149983105207913,420
+clip/whole_image,binary,mid 26-60,0.40,0.4,0.02044859551612392,420
+clip/whole_image,binary,mid 26-60,0.50,0.5,0.019247362090587312,420
+clip/whole_image,binary,mid 26-60,0.60,0.6,0.01867738073101381,420
+clip/whole_image,binary,mid 26-60,0.70,0.7,0.021073046050451023,420

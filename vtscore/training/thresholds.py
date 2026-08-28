@@ -67,6 +67,51 @@ INCLUSION_MAX = 10
 # the safe-threshold blend, where N reaches ~250k (GUI Find) to 2M+ (CLI Find).
 _GMM_MAX_SAMPLES = 50_000
 
+#: The shipped Train/Calibrate split of each calibration fold, per the **space
+#: the detector learns in** (issue #3287 measured them separately; see
+#: ``docs/experiments/calibration-fraction-3287/REPORT.md``).  The value is the
+#: **Calibrate** share, so ``0.3`` means 70% Train / 30% Calibrate.
+#:
+#: * ``single_vector`` - one embedding vector per media.  Spending more votes
+#:   on fitting each fold's model and fewer on reading its threshold is worth
+#:   −0.012 to −0.013 ± 0.003 in cost on both single-vector embedders
+#:   measured, winning in every vote band; the gain is largest when votes are
+#:   scarce and decays toward 150 clicks.
+#: * ``patch`` - a patch-grid embedder (whatever style it currently votes in).
+#:   Nothing measured beats the incumbent 0.5 here, and 0.3 is +0.015 ± 0.005
+#:   *worse* on ``dinov3_patch/whole_image`` - which is why the key is the
+#:   embedder's capability rather than the voting mode: the same row-wise
+#:   calibrator wants opposite splits on ``siglip/whole`` vs ``dinov3/whole``,
+#:   while both ``dinov3`` styles agree on 0.5.
+PRODUCTION_SPLIT_BY_SPACE: dict[str, float] = {
+    "single_vector": 0.3,
+    "patch": 0.5,
+}
+
+#: Fallback when the space is unknown.  0.5 is the incumbent and the
+#: never-harmful choice: it is not significantly worse than any arm measured,
+#: on any geometry.
+PRODUCTION_SPLIT = 0.5
+
+
+def production_split_for(*, patch_space: bool | None) -> float:
+    """The shipped ``calibration_fraction`` for the space a detector learns in.
+
+    *patch_space* says whether the detector's embedder produces a patch grid
+    (its capability, not what it is doing in the current configuration -
+    ``dinov3_patch`` wants 0.5 in both its styles, including the boxless
+    fallback that emits no patches at all).  ``None`` means "unknown", which
+    takes :data:`PRODUCTION_SPLIT` rather than guessing - the same three-state
+    contract as :func:`vtscore.training.blend_schedules.production_schedule_for`.
+
+    An explicit user setting always wins over this table; callers resolve that
+    precedence via
+    :func:`vtscore.detectors.training.resolve_calibration_fraction`.
+    """
+    if patch_space is None:
+        return PRODUCTION_SPLIT
+    return PRODUCTION_SPLIT_BY_SPACE["patch" if patch_space else "single_vector"]
+
 
 def classify_threshold_provenance(fallback: float | None) -> str:
     """Name the code path a trained threshold came from, from its *fallback*.

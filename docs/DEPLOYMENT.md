@@ -678,7 +678,7 @@ An abridged example; the full field list is `UserSettings` in
   "theme": "system",
   "enrich_descriptions": false,
   "calibrate_count": 2,
-  "calibration_fraction": 0.5,
+  "calibration_fraction": null,
   "audio_playing": true,
   "show_animations": "show",
   "show_metadata": false,

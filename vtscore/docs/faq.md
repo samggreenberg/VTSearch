@@ -188,6 +188,7 @@ Depends on the embedder — each one declares its dimensionality via the
 | `face` | `face` | 512 |
 | `siglip` | `image` (default) | 768 |
 | `clip` | `image` | 512 |
+| `clip_l` | `image` | 768 |
 | `dinov2_patch` | `image` | 768 |
 | `dinov2_single` | `image` | 768 |
 | `dinov3_patch` | `image` | 768 |

@@ -245,7 +245,7 @@ Args:
 | `seed`                    | Random seed (default 42)                                      |
 | `enrich`                  | Use wrapper-averaged text embeddings (default False)          |
 | `calibrate_count`         | Cross-cal folds (default 2)                                   |
-| `calibration_fraction`    | Cross-cal calibrate split (default 0.5)                       |
+| `calibration_fraction`    | Cross-cal calibrate split (`None` = the app's per-space default: 0.3 single-vector / 0.5 patch) |
 
 ### `format_results_json(results)`
 

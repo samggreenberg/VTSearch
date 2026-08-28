@@ -52,7 +52,7 @@ after the table do have defaults, precisely so a library-only
 | `autofind_detectors`               | `tuple[str, ...]` | server   | Detector names to train + score automatically on every freshly-loaded dataset.                   |
 | `dataset_max_age_days`            | `int \| None`  | server      | Age-off horizon stamped into saved datasets. `None` = never expire.                              |
 | `calibrate_count`                 | `int`          | per-user    | Number of fold-training passes used to calibrate the operating threshold. Min 1.                 |
-| `calibration_fraction`            | `float`        | per-user    | Fraction of labels held out per calibration fold. Typical 0.5.                                   |
+| `calibration_fraction`            | `float \| None` | per-user    | Explicit fraction of labels held out per calibration fold. `None` = per-embedder default (0.3 single-vector / 0.5 patch). |
 | `enrich_descriptions`             | `bool`         | per-user    | When `True`, attach `custom_metadata` from origins to result rows on export.                     |
 | `autopilot_goal_diversity`        | `int`          | per-user    | Diversity target used by autopilot pacing.                                                       |
 | `inclusion`                       | `int`          | per-user    | The Inclusion knob, `[-10, +10]`. A pure threshold shift (it never enters training); `0` is the default operating point. See [`training.md`](training.md#decision-thresholds). |

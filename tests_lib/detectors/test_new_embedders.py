@@ -1108,12 +1108,19 @@ class TestAllEmbeddersRegistration:
         from vtscore.media import all_embedders
 
         embedders = all_embedders()
-        # 7 original + 10 image embedders (clip, siglip2, siglip2_l, siglip_l,
-        # plus single/patch variants for dinov2, dinov3, eupe) + 1 face embedder
+        # 7 original + 11 image embedders (clip, clip_l, siglip2, siglip2_l,
+        # siglip_l, plus single/patch variants for dinov2, dinov3, eupe)
+        # + 1 face embedder
         # + 1 structural image embedder (sift_vlad)
         # + 1 vision-only video embedder (videomae)
         # + 5 audio embedders (ast, beats, clap_general, whisper_encoder, paraspeechclap).
-        assert len(embedders) == 25
+        #
+        # `all_embedders` is the REGISTRY, so it counts `clip_l` even though that
+        # arm is `eval_only` and never reaches a picker (#3292). The listings the
+        # app builds from are `embedders_for_type` / `all_embedders_dict`; the
+        # `embedders_for_type("image")` set below is unchanged by `clip_l`, which
+        # is the check that the withholding actually works.
+        assert len(embedders) == 26
 
     def test_all_embedders_dict_includes_supports_text(self):
         """The new ``supports_text`` flag must round-trip through ``to_dict``
@@ -1168,6 +1175,7 @@ class TestAllEmbeddersRegistration:
             "siglip2_l",
             "siglip_l",
             "clip",
+            "clip_l",
             "dinov2_single",
             "dinov2_patch",
             "dinov3_single",

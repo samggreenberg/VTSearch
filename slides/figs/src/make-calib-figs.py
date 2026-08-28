@@ -3567,6 +3567,76 @@ def blend_schedule_fig() -> None:
     save(fig, OUT, "calib-blend-schedule.png", column=FULL_BLEED, tight=False)
 
 
+def split_fraction_fig() -> None:
+    """The Train/Calibrate split, paired against the 50/50 incumbent.
+
+    Redraws the committed curves from
+    `docs/experiments/calibration-fraction-3287/figures/cost_vs_clicks.csv`
+    (plus the `siglip2l/` follow-up) at slide scale, as the difference the
+    70/30 split makes at each click count. One line per geometry; below zero
+    means training on more of the votes beat holding more of them out. The
+    numbers are untouched apart from the pairing arithmetic (same cells run
+    under both arms, so the difference of means is the mean paired difference)
+    and a centred 7-vote rolling mean that the presenter note declares.
+    """
+    import csv
+
+    report = _REPO_ROOT / "docs" / "experiments" / "calibration-fraction-3287"
+    series: dict[tuple[str, float], dict[int, tuple[float, float]]] = {}
+    for path in (report / "figures" / "cost_vs_clicks.csv", report / "siglip2l" / "figures" / "cost_vs_clicks.csv"):
+        with path.open() as fh:
+            for row in csv.DictReader(fh):
+                if not row["mean"]:
+                    continue
+                geometry = row["dataset"].split(" · ")[1]
+                series.setdefault((geometry, float(row["arm"])), {})[int(row["t"])] = (
+                    float(row["mean"]),
+                    float(row["coverage"]),
+                )
+
+    def delta(geometry: str) -> tuple[np.ndarray, np.ndarray]:
+        """Rolling-mean Δcost (70/30 − 50/50) over the clicks both arms cover."""
+        low, high = series[(geometry, 0.3)], series[(geometry, 0.5)]
+        ts = np.array(sorted(t for t in low if t in high and low[t][1] == 1.0 and high[t][1] == 1.0))
+        raw = np.array([low[t][0] - high[t][0] for t in ts])
+        window = 7
+        smooth = np.convolve(raw, np.ones(window) / window, mode="valid")
+        return ts[window // 2 : len(ts) - (window // 2)], smooth
+
+    fig, ax = plt.subplots(figsize=(11.5, 6.5))
+    ax.axhline(0.0, color=SOFT, linewidth=1.2, linestyle=(0, (4, 3)), zorder=1)
+    for geometry, color, style, label, xy, va in (
+        ("siglip-whole_image", GREEN, "solid", "SigLIP", (108, -0.021), "top"),
+        ("siglip2_l-whole_image", GREEN, (0, (5, 2)), "SigLIP 2", (50, -0.024), "top"),
+        ("dinov3_patch-whole_image", RED, "solid", "DINOv3 — binary voting", (44, 0.0295), "bottom"),
+        ("dinov3_patch-max_patch", RED, (0, (5, 2)), "DINOv3 — region voting", (95, 0.0075), "bottom"),
+    ):
+        ts, values = delta(geometry)
+        ax.plot(ts, values, color=color, linestyle=style, linewidth=2.4, zorder=3)
+        ax.annotate(label, xy=xy, ha="left", va=va, fontsize=15, color=color)
+    # Region labels for the two half-planes, parked in the corners the curves
+    # leave empty: top-left above the rising DINOv3 line, bottom-right below
+    # the settled SigLIP pair.
+    ax.annotate("50/50 wins", xy=(4, 0.0335), ha="left", va="top", fontsize=15, color=SOFT)
+    ax.annotate("70/30 wins", xy=(148, -0.0335), ha="right", va="bottom", fontsize=15, color=SOFT)
+    ax.set_xlim(0, 152)
+    ax.set_xticks([0, 50, 100, 150])
+    ax.set_ylim(-0.037, 0.037)
+    ax.set_yticks([-0.03, -0.02, -0.01, 0, 0.01, 0.02, 0.03])
+    ax.set_xlabel("votes")
+    # Anchored to the bottom of the axis for the same reason as the schedule
+    # figure's: the title reserve is only the *top* left corner, so a label
+    # living low on the left costs the drawing nothing — and short enough not
+    # to climb back into it (the annotations above carry the sign convention).
+    ax.set_ylabel("Δ cost of a 70/30 split", loc="bottom")
+    ax.grid(axis="y", color=RULE, linewidth=0.8)
+    ax.set_axisbelow(True)
+    # Full-bleed with the axes indented past the title reserve, exactly as
+    # blend_schedule_fig: the blocker is horizontal, so the fix is horizontal.
+    fig.subplots_adjust(left=0.335, right=0.98, top=0.93, bottom=0.135)
+    save(fig, OUT, "calib-split-fraction.png", column=FULL_BLEED, tight=False)
+
+
 def anchored_fig() -> None:
     # Haystack whose negatives are themselves bimodal: unanchored EM splits the
     # negative bulk and parks the cut inside it. A handful of votes re-identify
@@ -4514,6 +4584,7 @@ if __name__ == "__main__":
     tilt_flow_fig()
     acq_flow_fig()
     blend_schedule_fig()
+    split_fraction_fig()
     anchored_fig()
     decomposition_fig()
     print("wrote figures to", OUT)

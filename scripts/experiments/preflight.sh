@@ -597,21 +597,16 @@ def must_contain(knob, var, shipped, default):
 pinned("head", "CALIB_HEAD", PRODUCTION_HEAD)
 pinned("acq_offset", "CALIB_ACQ_INCLUSION_OFFSET", T.ACQUISITION_INCLUSION_OFFSET)
 pinned("calibrate_count", "CALIB_CALIBRATE_COUNT", 2)
-# The Train/Calibrate split of each calibration fold (#3287).  Read off the
-# harness entry point's own signature default rather than hardcoded, because
-# 0.5 is not a named constant anywhere - it is a literal repeated across ~10
-# signatures, which is part of why it went unmeasured for so long.  Comparing
-# against the value the eval resolves to when nobody passes one is the closest
-# thing to a shipped value there is.
-import inspect  # noqa: PLC0415
-
-from vtscore.eval.voting_iterations import simulate_voting_iterations  # noqa: PLC0415
-
-pinned(
-    "calibration_fraction",
-    "CALIB_CALIBRATION_FRACTION",
-    "%g" % inspect.signature(simulate_voting_iterations).parameters["calibration_fraction"].default,
-)
+# The Train/Calibrate split of each calibration fold (#3287/#3290).  The
+# shipped default is no longer one scalar: unset resolves per embedder through
+# `production_split_for` (PRODUCTION_SPLIT_BY_SPACE), exactly as the app does,
+# so an unset env var IS the production arm.  A pinned scalar can match at
+# most one space on a run that mixes them, so - like CALIB_BLEND_SCHEDULE - an
+# explicit pin is always a divergence the study must declare.
+v = env("CALIB_CALIBRATION_FRACTION")
+if v is not None:
+    per_space = ", ".join("%s=%g" % (k, f) for k, f in sorted(T.PRODUCTION_SPLIT_BY_SPACE.items()))
+    rows.append(("calibration_fraction", v, "<unset> = the app's per-space default (%s)" % per_space))
 
 # The app has no safe-thresholds switch any more (#2799): fusion is always on.
 v = env("CALIB_SAFE_THRESHOLDS")

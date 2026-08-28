@@ -372,9 +372,24 @@ def scale_cell(category: str, band: str) -> str:
 #: capacity (base -> SO400M) at the same time, so a difference between them
 #: cannot be attributed to either alone. Rebuild a middle column if a result
 #: ever needs that split -- ``build_pile.py --embedders siglip2`` restores one.
+#: The two CLIP columns are **evaluation only** (#3292) and exist to test whether
+#: #3287's `calibration_fraction` optimum follows single-vector geometry or just
+#: the SigLIP lineage.  Both are run, not one, because a single CLIP arm cannot
+#: separate the two things that change when you leave SigLIP:
+#:
+#:   `clip`   ViT-B/32, 512-d - the checkpoint the app already ships
+#:   `clip_l` ViT-L/14, 768-d - dimension-matched to `siglip`, so a difference
+#:                              cannot be "CLIP's vectors are narrower"
+#:
+#: Agreement between them is what licenses reading their verdict as CLIP's
+#: lineage rather than CLIP's capacity.  Neither is selectable in the app
+#: (`MediaEmbedder.eval_only`); `clip_l` is not a production candidate at all.
 EMBEDDERS: dict[str, dict] = {
     "siglip": {"patch": False, "batch": 128},
     "siglip2_l": {"patch": False, "batch": 32},
+    "clip": {"patch": False, "batch": 128},
+    # ViT-L/14 at 224px: ~3x the base encoder's activation, so half the batch.
+    "clip_l": {"patch": False, "batch": 64},
     # Patch embedders hold an (N, H, W, D) grid per image, not one vector, so
     # they carry far more activation memory per item than their backbone size
     # alone suggests.

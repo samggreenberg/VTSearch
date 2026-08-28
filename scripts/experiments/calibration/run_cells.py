@@ -311,12 +311,23 @@ def main(argv: list[str] | None = None) -> int:
             startup_schedule=cfg.STARTUP_SCHEDULE,
             pick_sink=picks_local,
         )
+        # The recorded fraction is the one the run actually used: an explicit
+        # CALIB_CALIBRATION_FRACTION pin verbatim, else the per-space default
+        # the harness resolved for this cell's embedder (#3290) - recorded
+        # through the same production table so the column can't drift from
+        # what simulate_voting_iterations resolved.
+        if cfg.CALIBRATION_FRACTION is not None:
+            cell_calibration_fraction = cfg.CALIBRATION_FRACTION
+        else:
+            from vtscore.training.thresholds import production_split_for
+
+            cell_calibration_fraction = production_split_for(patch_space=cfg.is_patch_embedder(emb))
         for r in rows:
             r["embedder"] = emb
             r["seed_mode"] = seed_mode
             r["seed_query"] = seed_query
             r["seed_embedder"] = seed_embedder
-            r["calibration_fraction"] = cfg.CALIBRATION_FRACTION
+            r["calibration_fraction"] = cell_calibration_fraction
         for sr in sweep_local:
             sr["embedder"] = emb
         for dr in cutdiag_local:

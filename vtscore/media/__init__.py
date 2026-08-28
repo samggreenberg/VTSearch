@@ -275,13 +275,20 @@ def get_embedder(name: str) -> "MediaEmbedder":
 
 
 def embedders_for_type(type_id: str) -> list["MediaEmbedder"]:
-    """Return all embedders registered for a given media type.
+    """Return the **user-selectable** embedders registered for a media type.
 
     The default embedder (``is_default == True``) is sorted first so callers
     using ``embedders_for_type(t)[0]`` receive the default.  Remaining order
     follows registry insertion (which is alphabetical filename order).
+
+    Embedders declaring :attr:`~vtscore.media.embedder.MediaEmbedder.eval_only`
+    are withheld.  This function is what every picker, every "available
+    embedders" error message and every per-media-type default is built from, so
+    filtering here is what keeps a research arm out of the app; resolution by
+    name (:func:`get_embedder`) is deliberately *not* filtered, because a
+    dataset embedded by an eval arm still has to load.
     """
-    matches = [e for e in _embedder_registry.values() if e.media_type_id == type_id]
+    matches = [e for e in _embedder_registry.values() if e.media_type_id == type_id and not e.eval_only]
     return sorted(matches, key=lambda e: not e.is_default)
 
 
@@ -291,8 +298,14 @@ def all_embedders() -> list["MediaEmbedder"]:
 
 
 def all_embedders_dict() -> list[dict]:
-    """Return a list of JSON-serialisable dicts describing all registered embedders."""
-    return [e.to_dict() for e in _embedder_registry.values()]
+    """Return JSON-serialisable dicts for every **user-selectable** embedder.
+
+    This is what ``GET /api/embedders`` serialises, so it applies the same
+    :attr:`~vtscore.media.embedder.MediaEmbedder.eval_only` filter as
+    :func:`embedders_for_type`.  Use :func:`all_embedders` when you want the
+    registry itself (docs inventories, name validation, the eval harness).
+    """
+    return [e.to_dict() for e in _embedder_registry.values() if not e.eval_only]
 
 
 def embedder_for_medias(media_dict: dict) -> "MediaEmbedder | None":
