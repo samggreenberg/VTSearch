@@ -48,7 +48,10 @@ COCO_ROOT = Path(os.environ.get("VTS_COCO_ROOT", "/exp/scale26/datasets/external
 #: `coco_val` REBUILD-BROKEN against a source that was present and fine (#3299).
 COCO_VAL_ZIP = COCO_ROOT / "images" / "val2017.zip"
 #: Where the images live *if* somebody extracts them. Optional, and not part of
-#: the rebuild path; `box_sheets.py` looks here for pixels to draw.
+#: the rebuild path: nothing depends on this directory existing. `box_sheets.py`
+#: prefers it (a loose JPEG is cheaper than a zip member) but falls back to
+#: :data:`COCO_VAL_ZIP`, which is where the pixels have always actually been --
+#: it used to read only this path and drew empty sheets instead (#3305).
 COCO_IMAGES = COCO_ROOT / "images" / "val2017"
 COCO_ANNOTATIONS = COCO_ROOT / "derived" / "objects_flat_val2017.jsonl.gz"
 
