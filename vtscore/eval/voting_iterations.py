@@ -347,6 +347,10 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     #: is what the schedule resolved for this step's vote count.
     "calibrate_count",
     "train_seconds",
+    #: The final model's pass over the haystack (#3314): app work, paid once
+    #: per step whatever the fold count, so it belongs in the denominator of a
+    #: cost ratio rather than in the calibration term.
+    "final_score_seconds",
     "xcal_seconds",
     "pool_score_seconds",
     "test_score_seconds",
@@ -769,6 +773,12 @@ def _safe_threshold_for_step(
     from vtscore.training.thresholds import drop_voted, fit_fold_anchored_cut  # noqa: PLC0415
 
     final_model = step.torch_model
+    # The final model's pass over the haystack (#3314).  Real app work - it is
+    # what the shipped cut is realized on and what the browse view ranks - and
+    # it is K-INDEPENDENT, so it belongs in the denominator of a cost ratio and
+    # not in `cal_seconds`.  Untimed it would simply be missing from the step,
+    # which makes every fold count look more expensive than it is.
+    t_final = time.monotonic()
     if style_obj is not None or region_aware:
         assert final_model is not None
         ids, all_scores = _score_sim_set_with_model(
@@ -778,6 +788,7 @@ def _safe_threshold_for_step(
         # Trainer-agnostic: the SVM arms have no torch model to forward.
         ids = sorted(sim_ids)
         all_scores = np.asarray(step.predict(np.asarray(X_all_clips))).ravel().tolist()
+    details["final_score_seconds"] = time.monotonic() - t_final
 
     # The floor decision is taken once, on the final model's remainder, and
     # applies to every haystack in the step - all-or-nothing, so the fold and
@@ -3907,6 +3918,11 @@ def simulate_voting_iterations(  # noqa: C901
             # (#3287's `calibration_fraction` lesson, one knob over).
             "calibrate_count": step_calibrate_count,
             "train_seconds": round(timings["train_seconds"], 6),
+            #: The final model's own pass over the haystack, on the shipped
+            #: safe-threshold path (#3314).  NaN when safe thresholds are off,
+            #: where there is no such pass.  K-independent, so a per-step cost
+            #: ratio wants it in the denominator.
+            "final_score_seconds": round(float(details.get("final_score_seconds", float("nan"))), 6),
             "xcal_seconds": round(timings["xcal_seconds"], 6),
             "pool_score_seconds": round(pool_score_seconds, 6),
             "test_score_seconds": round(test_score_seconds, 6),

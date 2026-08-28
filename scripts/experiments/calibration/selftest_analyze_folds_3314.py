@@ -16,9 +16,12 @@ Six things are planted, each a different way this analyzer could be wrong:
 2. **A decay inside the horizon.**  The region benefit is real in the two early
    bands and exactly zero in the two deep ones - the shape the adaptive
    schedule exists to exploit.  A pooled read cannot see it.
-3. **The cost ceiling bites.**  K=8's per-step wall clock is planted at 1.9x
-   production's, above the 1.5x ceiling, while K<=6 sits under it.  K=8 has the
-   LARGEST benefit, so an analyzer that forgets rule 3 will pick it.
+3. **The cost ceiling bites, on the APP's step.**  K=8's per-step wall clock is
+   planted at 1.9x production's, above the 1.5x ceiling, while K<=6 sits under
+   it.  K=8 has the LARGEST benefit, so an analyzer that forgets rule 3 will
+   pick it.  A large `test_score_seconds` is planted beside it: that is
+   eval-only work no app step does, and an analyzer that divides by it instead
+   would let K=8 through.
 4. **The harm gate bites.**  K=1 is planted worse than K=2 everywhere by more
    than `HARM_TOLERANCE`, so it must fail rule 2 whatever else it does.
 5. **The cost model is `cal_seconds`, not `fold_seconds`.**  The two are
@@ -130,9 +133,17 @@ def build(cells: Path, *, with_cal_seconds: bool = True) -> None:
                             "fold_seconds": 1.0 + 0.02 * k,
                             "n_cal_scores": 10 * k,
                             "n_folds_used": k,
+                            # The app's own retrain, split so `STEP_RATIO`
+                            # comes out exactly: fit + score the haystack +
+                            # score the pool.
                             "train_seconds": OTHER_SECONDS * 0.5,
-                            "pool_score_seconds": OTHER_SECONDS * 0.3,
-                            "test_score_seconds": OTHER_SECONDS * 0.2,
+                            "final_score_seconds": OTHER_SECONDS * 0.3,
+                            "pool_score_seconds": OTHER_SECONDS * 0.2,
+                            # A TRAP, planted large: scoring a held-out test set
+                            # is eval-only work no app step does.  If it reaches
+                            # the denominator every ratio below shrinks and the
+                            # unaffordable K=8 slips under the ceiling.
+                            "test_score_seconds": 5.0,
                             # `fold_seconds` is only the fold FITS; see the
                             # planted disagreement with `cal_seconds` above.
                             "average_precision": 1.0 - cost,

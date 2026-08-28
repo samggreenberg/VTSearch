@@ -181,16 +181,40 @@ def fold_frame(df: pd.DataFrame) -> pd.DataFrame:
     # them overlaps it.  A run from before #3314 has no `cal_seconds`, so it
     # falls back to `fold_seconds` and SAYS SO in `cost_model`, rather than
     # quietly pricing K at a third of what it costs.
-    other = v["train_seconds"] + v["pool_score_seconds"] + v["test_score_seconds"]
     if "cal_seconds" in v.columns and v["cal_seconds"].notna().any():
         v["cal_seconds_used"] = v["cal_seconds"]
         v["cost_model"] = "cal_seconds"
     else:
         v["cal_seconds_used"] = v["fold_seconds"]
         v["cost_model"] = "fold_seconds (pre-#3314 run: fold FITS only)"
-    v["step_seconds"] = v["cal_seconds_used"] + other
+
+    # THE DENOMINATOR IS THE APP'S RETRAIN, NOT THE HARNESS CELL.  A screen step
+    # also computes six fold counts x eight arms of counterfactual rows, and a
+    # user waits through none of that - a ratio taken over the cell's own wall
+    # clock would divide by the study's instrumentation and report every K as
+    # nearly free.  So the step is reconstructed from the pieces the app itself
+    # performs on a retrain: fit the head, score the haystack with it, calibrate,
+    # score the pool for display.
+    #
+    # `test_score_seconds` is deliberately EXCLUDED: scoring a held-out test set
+    # is eval-only work that no app step does, and leaving it in would inflate
+    # the denominator and make every K look cheaper than it is.  It is kept as
+    # `harness_step_seconds` beside the app number so the two can be compared.
+    final = _optional(v, "final_score_seconds").fillna(0.0)
+    app_other = v["train_seconds"] + final + v["pool_score_seconds"]
+    v["step_seconds"] = v["cal_seconds_used"] + app_other
+    v["harness_step_seconds"] = v["step_seconds"] + v["test_score_seconds"]
     v["cal_share"] = v["cal_seconds_used"] / v["step_seconds"].replace(0, np.nan)
     return v
+
+
+def _optional(v: pd.DataFrame, col: str) -> pd.Series:
+    """*col* when the run emitted it, else an all-NaN stand-in of the right shape.
+
+    The #3314 timing columns postdate every archived run, so an analyzer that
+    must still read one cannot assume they are there.
+    """
+    return v[col] if col in v.columns else pd.Series(np.nan, index=v.index, dtype=float)
 
 
 def _boot_se(d: np.ndarray, rng: np.random.Generator) -> float:
