@@ -1063,6 +1063,29 @@ class MediaEmbedder(ABC):
         return False
 
     @property
+    def eval_only(self) -> bool:
+        """Whether this embedder exists for measurement rather than for users.
+
+        An eval-only embedder is a *research arm*: it is registered, resolvable
+        by name (:func:`vtscore.media.get_embedder`), and usable by the eval
+        harness and the pre-embedded pile, but it is withheld from every
+        app-facing listing -- the pickers, the per-media-type default, and the
+        serialised inventory the frontend reads.
+
+        The distinction is not cosmetic.  A study arm is chosen because it
+        *differs* from the shipped embedder in one controlled way; nothing in
+        that choice says it is good, supported, or licensed for the app.  A
+        deployment can already hide a plugin (``hidden_plugins``), but that is a
+        *setting* someone has to apply -- this is a property of the code, so an
+        eval arm cannot reach a picker by a deployment forgetting.
+
+        Resolution by name stays open on purpose: a pile cell embedded with an
+        eval-only embedder must still load, or the study could not read its own
+        vectors back.
+        """
+        return False
+
+    @property
     def supports_text(self) -> bool:
         """Whether this embedder can embed text queries into the same vector space.
 
@@ -1463,6 +1486,7 @@ class MediaEmbedder(ABC):
             "model_id": self.model_id,
             "media_type_id": self.media_type_id,
             "is_default": self.is_default,
+            "eval_only": self.eval_only,
             "supports_text": self.supports_text,
             "supports_patch_regions": self.supports_patch_regions,
             "supports_geometric_verification": self.supports_geometric_verification,
