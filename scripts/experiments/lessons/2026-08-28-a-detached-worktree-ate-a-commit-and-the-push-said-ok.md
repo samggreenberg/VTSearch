@@ -1,6 +1,6 @@
-# A detached worktree ate a commit, and `git push` said OK
+# 2026-08-28 — a detached worktree ate a commit, and `git push` said OK (#3292)
 
-**#3292, 2026-08-28.** Cost: one fix silently lost, one wasted 40-minute suite
+Cost: one fix silently lost, one wasted 40-minute suite
 run, and a green `PUSH_EXIT=0` that meant nothing.
 
 ## What happened
