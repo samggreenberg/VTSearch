@@ -41,6 +41,14 @@ MODE_COLORS = {
     "dinov3_patch/max_patch": "#a78bfa",
     "siglip/whole_image": "#0891b2",
     "siglip2_l/whole_image": "#b45309",
+    # The CLIP columns (#3292). `clip` is app-selectable; `clip_l` is
+    # `eval_only` and is a reference column rather than a mode a user can pick,
+    # which a figure cannot show -- so any report using these says which is
+    # which. Named here rather than left to the `C{i}` fallback because that
+    # fallback assigns by POSITION, so adding a column silently recolours the
+    # ones after it and two reports stop being comparable by eye.
+    "clip/whole_image": "#be123c",
+    "clip_l/whole_image": "#4d7c0f",
 }
 DEEP = 150
 
@@ -270,7 +278,7 @@ def main() -> int:
     ax.set_xticks(range(len(classes)))
     ax.set_xticklabels(classes, rotation=45, ha="right", fontsize=8)
     ax.set_ylabel(f"fraction of runs with cost >= {args.floor}")
-    ax.set_title("Which classes carry the size penalty (pooled over all three modes)")
+    ax.set_title(f"Which classes carry the size penalty (pooled over all {len(modes)} modes)")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.25, axis="y")
     fig.tight_layout()

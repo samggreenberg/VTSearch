@@ -1,14 +1,22 @@
 """What is VTSearch good at, what is it bad at, and why — descriptively.
 
-No arms, no winners. Three modes a real user could pick (`siglip` whole-image,
-`siglip2_l` whole-image, `siglip+dinov3_patch` region voting) run many times
-under shipped defaults, characterised rather than ranked.
+No arms, no winners. Five columns, run many times under shipped defaults and
+characterised rather than ranked: `siglip` whole-image (the shipped default),
+`siglip2_l` whole-image (the premium encoder), `clip` whole-image (a second
+lineage), `clip_l` whole-image, and `siglip+dinov3_patch` region voting.
+
+**Four of the five are modes a user could pick; `clip_l` is not.** It is
+`eval_only` (#3292) and is not offered in the app, so it belongs in a column
+that says "here is what a bigger CLIP does" and never in a sentence of the form
+"users should choose X". It is here because its 768-d output matches `siglip`'s
+exactly, which is what stops a SigLIP-vs-CLIP difference from being read as
+"CLIP's vectors are narrower".
 
 The region mode is a **pair** (#3276): SigLIP embeds the typed query and ranks
 the opening, DINOv3 does the learning. DINOv3 has no text tower, so bare
 `dinov3_patch` cannot open on a text sort at all -- it falls back to three
 random known-goods, which would put a seeding difference inside the voting-mode
-comparison this file draws. All three modes now open the same way and differ
+comparison this file draws. Every column now opens the same way and differs
 only in the space the detector learns in.
 
 The "why" comes from a decomposition the harness already emits per step:

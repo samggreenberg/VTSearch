@@ -164,6 +164,10 @@
       <label class="h" for="ds">Dataset</label>
       <select id="ds"></select>
     </div>
+    <div class="ctl" id="bandWrap">
+      <label class="h" for="band">Target size</label>
+      <select id="band"></select>
+    </div>
     <div class="ctl">
       <label class="h" for="cat">Category</label>
       <select id="cat"></select>
@@ -264,8 +268,29 @@
   const MAX_HUES = SERIES.length;
   const ALL = "__all__", EACH = "__each__";
 
+  // Categories in the #3156 map are `<class>@<band>` - the same twelve classes at
+  // three target sizes - and the band is that study's headline axis, so it gets
+  // its own control. Parsed out of the category names rather than added to the
+  // payload: every other study's categories are bare names, and a viewer that
+  // needs a schema change per study is a viewer nobody reuses. The control
+  // appears only when EVERY category carries a suffix and there is more than one
+  // band to choose between, for the same reason the embedder chips hide
+  // themselves at one embedder - a control with one option is furniture.
+  const BAND_ORDER = ["small", "medium", "large"];
+  const bandOf = (c) => { const i = String(c).lastIndexOf("@"); return i < 0 ? null : String(c).slice(i + 1); };
+  const BANDS = (() => {
+    const bs = P.categories.map(bandOf);
+    if (!bs.length || bs.some((b) => !b)) return [];
+    const u = [...new Set(bs)];
+    if (u.length < 2) return [];
+    const rank = (b) => { const i = BAND_ORDER.indexOf(b); return i < 0 ? BAND_ORDER.length : i; };
+    return u.sort((x, y) => rank(x) - rank(y) || x.localeCompare(y));
+  })();
+  const inBand = (c) => state.band === ALL || bandOf(c) === state.band;
+
   const state = {
     dataset: P.datasets.length > 1 ? ALL : P.datasets[0],
+    band: ALL,
     category: ALL,
     metric: P.metrics[0].key,
     embedders: new Set(P.embedders),
@@ -284,7 +309,7 @@
     const ds = new Set(datasetsInPlay());
     const s = new Set();
     P.groups.forEach((g, i) => { if (ds.has(gDataset(i))) s.add(gCat(i)); });
-    const all = [...s].sort();
+    const all = [...s].sort().filter(inBand);
     return state.category === ALL || state.category === EACH ? all : all.filter((c) => c === state.category);
   }
 
@@ -308,7 +333,7 @@
     const ds = new Set(datasetsInPlay());
     const s = new Set();
     P.groups.forEach((g, i) => { if (ds.has(gDataset(i))) s.add(gCat(i)); });
-    const cats = [...s].sort();
+    const cats = [...s].sort().filter(inBand);
     catSel.innerHTML =
       `<option value="${ALL}">All categories — averaged together</option>` +
       `<option value="${EACH}">Each category — one line each</option>` +
@@ -317,6 +342,20 @@
     catSel.value = state.category;
   }
   catSel.onchange = () => { state.category = catSel.value; render(); };
+
+  const bandSel = $("band");
+  if (!BANDS.length) {
+    $("bandWrap").style.display = "none";
+  } else {
+    bandSel.innerHTML =
+      `<option value="${ALL}">All sizes</option>` +
+      BANDS.map((b) => `<option value="${esc(b)}">${esc(b)}</option>`).join("");
+    bandSel.value = state.band;
+    // Narrowing the band can strip the category currently selected, so refill
+    // rather than leaving a selection that names no group: `fillCats` falls back
+    // to "all categories" when the current one is no longer on offer.
+    bandSel.onchange = () => { state.band = bandSel.value; fillCats(); render(); };
+  }
   fillCats();
 
   const mSel = $("metric");
@@ -588,9 +627,13 @@
     bits.push(pl.hueDim === "dataset" || pl.facetDims.includes("dataset")
       ? null
       : (state.dataset === ALL ? `all ${P.datasets.length} datasets pooled` : state.dataset));
+    const nCats = categoriesInPlay().length;
+    const pooled = state.band === ALL
+      ? `all ${nCats} categories pooled`
+      : `all ${nCats} ${state.band}-band categories pooled`;
     bits.push(pl.hueDim === "category" || pl.facetDims.includes("category")
-      ? null
-      : (state.category === ALL ? "all categories pooled" : state.category));
+      ? (state.band === ALL ? null : `${state.band} band`)
+      : (state.category === ALL ? pooled : state.category));
     bits.push(state.seedMode === "each" ? "every seed" : "seeds averaged");
     return bits.filter(Boolean).join(" · ");
   }

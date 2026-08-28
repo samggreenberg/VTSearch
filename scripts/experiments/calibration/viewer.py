@@ -66,6 +66,12 @@ Usage
 
     python viewer.py --results "$CALIB_RESULTS" --arms prod,top_long \\
         --baseline "$OUT/text_baseline.csv" --out "$OUT/viewer.html"
+
+A study with a single results directory names it and relabels it, so the page
+says what the arm IS rather than where it sits::
+
+    python viewer.py --results "$CALIB_EXP" --arms results=prod \\
+        --baseline "$OUT/text_baseline.csv" --out "$OUT/viewer.html"
 """
 
 from __future__ import annotations
@@ -510,7 +516,11 @@ def build_viewer(  # noqa: C901
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--results", default=str(common.RESULTS), help="results root holding one dir per arm")
-    ap.add_argument("--arms", required=True, help="comma-separated arm directories, in report order")
+    ap.add_argument(
+        "--arms",
+        required=True,
+        help="comma-separated arm directories, in report order; `dir=label` renames one on the page",
+    )
     ap.add_argument("--out", required=True, help="path to write the HTML to")
     ap.add_argument("--baseline", default=None, help="text_baseline.py CSV: the click-0 anchor")
     ap.add_argument("--title", default="Quality over clicks")
@@ -518,11 +528,22 @@ def main(argv: Sequence[str] | None = None) -> int:
     ap.add_argument("--runs-budget-mb", type=float, default=RUNS_BUDGET_MB)
     args = ap.parse_args(list(argv) if argv is not None else None)
 
-    arms = [a for a in args.arms.replace(",", " ").split() if a]
-    frame = curves._load(Path(args.results), arms)
+    # `dir=label` exists for the single-arm studies. A study that sweeps a knob
+    # has one results directory per arm and the directory name IS the arm name,
+    # which is why this started as a bare list. A descriptive study has one
+    # directory called `results`, and that word would then be the label on its
+    # only chip and in every caption -- naming the filesystem where the reader
+    # needs the configuration ("prod"). The pairing is positional so the arm
+    # ORDER, which sets colours and report order, still comes from one place.
+    specs = [a for a in args.arms.replace(",", " ").split() if a]
+    dirs = [spec.partition("=")[0] for spec in specs]
+    arms = [spec.partition("=")[2] or spec.partition("=")[0] for spec in specs]
+    frame = curves._load(Path(args.results), dirs)
     if frame.empty:
-        print(f"no rows under {args.results} for arms {arms}")
+        print(f"no rows under {args.results} for arms {dirs}")
         return 2
+    if arms != dirs:
+        frame["arm"] = frame["arm"].map(dict(zip(dirs, arms, strict=True)))
     baseline = curves.text_sort_baseline(args.baseline) if args.baseline else None
     out = build_viewer(
         frame,

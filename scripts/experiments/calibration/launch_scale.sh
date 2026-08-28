@@ -237,6 +237,29 @@ cells)
     echo "ERROR: could not determine cell count (got '$N')" >&2; exit 1
   fi
   echo "cells: $N (array 0-$((N-1))%$CONC on $PARTITION)"
+  # Record the shape beside the results, before the array exists. The analysis
+  # chain needs a denominator to say "6480 of 6480" honestly, and every other
+  # way of getting one is a literal that belongs to whichever grid was current
+  # when someone typed it -- wrong for the next grid, and wrong in the direction
+  # that reads missing cells as a complete run. The launcher is the only place
+  # that knows the shape at the moment it is fixed.
+  python - "$CALIB_RESULTS/grid_shape.json" "$N" <<PYSHAPE
+import json, sys
+
+json.dump(
+    {
+        "n_cells": int(sys.argv[2]),
+        "datasets": "$CALIB_DATASETS".split(","),
+        "embedders": "$CALIB_VGSCALE_EMBEDDERS".split(","),
+        "n_seeds": int("$CALIB_N_SEEDS"),
+        "max_steps": int("$CALIB_MAX_STEPS"),
+        "cell_order": "$CALIB_CELL_ORDER",
+        "job_name": "$JOB_NAME",
+    },
+    open(sys.argv[1], "w"),
+    indent=2,
+)
+PYSHAPE
   PATCH_FLAG=""
   case "$CALIB_VGSCALE_EMBEDDERS" in *_patch*) PATCH_FLAG="--patch" ;; esac
   # Both premises this study now rests on, asserted before the array rather
