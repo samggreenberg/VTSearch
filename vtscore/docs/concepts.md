@@ -94,6 +94,7 @@ declares it via its `embedding_dim` property):
 | `face` | `face` | 512 |
 | `siglip` | `image` (default) | 768 |
 | `clip` | `image` | 512 |
+| `clip_l` | `image` | 768 |
 | `dinov2_patch` | `image` | 768 |
 | `dinov2_single` | `image` | 768 |
 | `dinov3_patch` | `image` | 768 |
@@ -379,7 +380,7 @@ A **plugin family** is a registry enumerated by `vtscore.plugins.inventory` (`py
 | `converters` | library | Media converters | 8 |
 | `media_sources` | library | Media sources | 7 |
 | `media_types` | library | Media types | 6 |
-| `embedders` | library | Media embedders | 25 |
+| `embedders` | library | Media embedders | 26 |
 | `clippers` | library | Media clippers | 16 |
 | `cleaners` | library | Media cleaners | 7 |
 | `settings_importers` | app | Settings importers | 2 |

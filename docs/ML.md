@@ -160,6 +160,7 @@ Each embedder produces fixed-size embedding vectors from a pretrained model. The
 | `face` | `face` | FaceNet (face identity, 512d) | — | 512 | no text queries |
 | `image` | `siglip` | SigLIP (general images) | `google/siglip-base-patch16-224` | 768 | **default** for its media type |
 | `image` | `clip` | CLIP (general images) | `openai/clip-vit-base-patch32` | 512 | — |
+| `image` | `clip_l` | CLIP ViT-L/14 (evaluation only) | `openai/clip-vit-large-patch14` | 768 | **evaluation only** — registered, but withheld from the app's pickers |
 | `image` | `dinov2_patch` | DINOv2 patch (region-aware images) | `facebook/dinov2-base` | 768 | no text queries; patch grid (region-aware) |
 | `image` | `dinov2_single` | DINOv2 single (image vector) | `facebook/dinov2-base` | 768 | no text queries |
 | `image` | `dinov3_patch` | DINOv3 patch (region-aware images) | `facebook/dinov3-vitb16-pretrain-lvd1689m` | 768 | no text queries; patch grid (region-aware) |
