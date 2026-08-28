@@ -22,6 +22,33 @@
 >
 > See [the harness seeded from a crop](../../../scripts/experiments/lessons/2026-08-26-the-harness-seeded-from-a-crop.md).
 
+> # ⚠️ BOX CAVEAT — 130 of the boxes these runs ranked against were corrupt
+>
+> **Recorded 2026-08-28 (#3281, #3284).** `vg_scale` stored 130 region boxes
+> crushed onto the frame origin: `corrections.json` holds boxes that are already
+> normalised, and `build_pile.py` divided them by `(W, H)` a second time. The
+> defect is concentrated in the small band of three classes — **`backpack@small`
+> 44, `bird@small` 42, `bicycle@small` 34** of 100 positives each.
+>
+> **It is not only a region-voting problem.** Band membership is *derived from
+> box area*, so a crushed box also files its image in the wrong band. Whole-image
+> arms, which never read a box, were still asked to find small objects while
+> holding large ones. That is how the corruption reached the `siglip`
+> whole-image rows below.
+>
+> The pile was rebuilt 2026-08-27 15:09 and the whole grid rerun — array 570303,
+> 6480/6480 cells, `/expscratch/$USER/scale-3156-fixed`. **The rebuild moved the
+> positive set of 22 of 36 categories** (each cell draws 100 positives from a
+> ranked pool, so repairing one band re-selects the others), so only the
+> categories `diff_labels.py` calls unchanged are comparable across it — see
+> [what is still comparable](#what-is-still-comparable-across-the-rebuild).
+>
+> **What this withdrew:** every per-exemplar row in
+> [Literal examples](#literal-examples--and-two-annotation-error-candidates),
+> and the `bird@small` row of the header-only table. **What survived:** the two
+> annotation adjudications — both of those boxes are byte-identical before and
+> after the rebuild.
+
 
 **Verdict: the grid is complete and clean, and it measures the wrong head.**
 All 6480 cells ran, 0 failed, 0 are zero-byte — but every row of it carries
@@ -32,10 +59,11 @@ base **321 commits behind dev**, so `head=default (production)` resolved to the
 *previous* production. Read every number below as the **baseline arm** of a
 paired comparison, never as production's behaviour.
 
-The corrected rerun on `linear_svm` (job 549465, `/expscratch/$USER/scale-3156-svm`)
-is running now and lands the production answer. This report exists so that when
-it lands there is something to difference it against, and because three of its
-findings are about the **dataset**, not the head, and hold either way.
+~~The corrected rerun on `linear_svm` (job 549465, `/expscratch/$USER/scale-3156-svm`)
+is running now and lands the production answer.~~ **(#3284: it landed, and was
+superseded — see [What to do](#what-to-do) item 1.)** This report exists so that
+when it lands there is something to difference it against, and because three of
+its findings are about the **dataset**, not the head, and hold either way.
 
 - **Run:** 6480/6480 cells, 0 failures, 0 zero-byte, **23 header-only**, 931,013
   rows over 6457 runs. Every cell from job 540591 — none survives from the
@@ -146,34 +174,47 @@ throwing away 96% good runs to remove 4% bad ones.
 ![stuck rate per cell](figures/stuck_rate_per_cell.png)
 ![stuck rate by class](figures/stuck_rate_by_class.png)
 
+> **Both figures plot a quantity that no longer exists.** On the repaired grid
+> under text seeding the same rate is **1 run in 6480 (0.02%)**, so there is
+> nothing left for a per-cell or per-class breakdown to resolve. Kept as the
+> record of what the corrupt-box, crop-seeded grid looked like.
+
 ## Literal examples — and two annotation-error candidates
 
 Every rate above is a rate over runs, so here are the runs, by
 `exemplar_id`, checkable one at a time.
 
-**Worst individual stuck runs.** Each is a real seed on a real exemplar:
+> **⚠️ WITHDRAWN 2026-08-28 (#3284).** Both tables below are kept as filed and
+> struck through. Two of the exemplars in them held a **crushed box** (#3281),
+> and every remaining row sits in a cell whose positive roster the rebuild
+> re-selected. They are superseded by the rerun on repaired boxes,
+> `/expscratch/$USER/scale-3156-fixed` (array 570303). **What replaced them is at
+> the end of this chapter** — including why no re-measured version of the second
+> table can exist. Do not quote either table.
 
-| category | embedder | seed | `exemplar_id` | cost | `n_good` | AP |
-|---|---|---|---|---|---|---|
-| `bus@small` | `siglip` | 7 | 1159597 | 1.15 | 3 | 0.02 |
-| `knife@small` | `dinov3_patch` | 24 | 2322075 | 1.11 | 1 | 0.02 |
-| `bird@small` | `dinov3_patch` | 19 | 1222 | 1.10 | 1 | 0.03 |
-| `boat@medium` | `dinov3_patch` | 33 | 2321462 | 1.10 | 1 | 0.02 |
-| `backpack@small` | `siglip` | 26 | 2381555 | 1.07 | 2 | 0.02 |
-| `clock@medium` | `siglip` | 34 | 2330189 | 1.06 | 3 | 0.02 |
+~~**Worst individual stuck runs.** Each is a real seed on a real exemplar:~~
 
-**Seven exemplars are stuck on every seed that ever drew them** — these account
-for 46 of the 266 stuck runs (17%):
+| category | embedder | seed | `exemplar_id` | cost | `n_good` | AP | status |
+|---|---|---|---|---|---|---|---|
+| ~~`bus@small`~~ | ~~`siglip`~~ | ~~7~~ | ~~1159597~~ | ~~1.15~~ | ~~3~~ | ~~0.02~~ | box clean; roster identical, **one other box in the cell repaired** |
+| ~~`knife@small`~~ | ~~`dinov3_patch`~~ | ~~24~~ | ~~2322075~~ | ~~1.11~~ | ~~1~~ | ~~0.02~~ | box clean; roster unchanged |
+| ~~`bird@small`~~ | ~~`dinov3_patch`~~ | ~~19~~ | ~~1222~~ | ~~1.10~~ | ~~1~~ | ~~0.03~~ | box clean; **cell 42% corrupt** |
+| ~~`boat@medium`~~ | ~~`dinov3_patch`~~ | ~~33~~ | ~~2321462~~ | ~~1.10~~ | ~~1~~ | ~~0.02~~ | box clean; **roster moved** |
+| ~~`backpack@small`~~ | ~~`siglip`~~ | ~~26~~ | ~~2381555~~ | ~~1.07~~ | ~~2~~ | ~~0.02~~ | **BOX CRUSHED** |
+| ~~`clock@medium`~~ | ~~`siglip`~~ | ~~34~~ | ~~2330189~~ | ~~1.06~~ | ~~3~~ | ~~0.02~~ | box clean; roster unchanged |
 
-| category | embedder | `exemplar_id` | stuck / drawn |
-|---|---|---|---|
-| `backpack@small` | `siglip` | 2381555 | 8 / 8 |
-| `umbrella@medium` | `siglip` | 2414453 | 8 / 8 |
-| `boat@medium` | `siglip2_l` | 2321462 | 8 / 8 |
-| `bus@small` | `siglip` | 1159597 | 7 / 7 |
-| `boat@medium` | `siglip` | 2321462 | 6 / 6 |
-| `knife@small` | `siglip` | 2322075 | 5 / 5 |
-| `knife@small` | `siglip2_l` | 2322075 | 4 / 4 |
+~~**Seven exemplars are stuck on every seed that ever drew them** — these
+account for 46 of the 266 stuck runs (17%):~~
+
+| category | embedder | `exemplar_id` | stuck / drawn | status |
+|---|---|---|---|---|
+| ~~`backpack@small`~~ | ~~`siglip`~~ | ~~2381555~~ | ~~8 / 8~~ | **BOX CRUSHED** |
+| ~~`umbrella@medium`~~ | ~~`siglip`~~ | ~~2414453~~ | ~~8 / 8~~ | box clean; **roster moved** |
+| ~~`boat@medium`~~ | ~~`siglip2_l`~~ | ~~2321462~~ | ~~8 / 8~~ | box clean; **roster moved** |
+| ~~`bus@small`~~ | ~~`siglip`~~ | ~~1159597~~ | ~~7 / 7~~ | box clean; roster identical, **one other box in the cell repaired** |
+| ~~`boat@medium`~~ | ~~`siglip`~~ | ~~2321462~~ | ~~6 / 6~~ | box clean; **roster moved** |
+| ~~`knife@small`~~ | ~~`siglip`~~ | ~~2322075~~ | ~~5 / 5~~ | box clean; roster unchanged |
+| ~~`knife@small`~~ | ~~`siglip2_l`~~ | ~~2322075~~ | ~~4 / 4~~ | box clean; roster unchanged |
 
 **Two of them fail across all three embedders** — three independent
 representations and ~15–20 independent seeds, and essentially nothing ever gets
@@ -188,6 +229,12 @@ going:
 
 This was the interesting part, and it corrects the reasoning that produced the
 shortlist.
+
+> **These two survive #3281.** Both boxes are byte-identical before and after the
+> rebuild (see the table above), so neither adjudication rests on corrupt
+> geometry. What is withdrawn is the *stuck counts* that put them on the
+> shortlist, not the two verdicts about the images. The `knife@small` mislabel is
+> still a mislabel and still worth fixing.
 
 **`boat@medium` 2321462 — the label is CORRECT.** The image is a tennis court,
 and the box lands beyond the court fence. Behind the foliage there **is** a boat
@@ -243,6 +290,11 @@ report as app behaviour.** The `good`-phase bucket — 128 of the 266 stuck runs
 which never reached 3 positives — is the one most likely to shrink under text
 seeding, though that is one cell measured, not the grid re-run.
 
+> **Confirmed on the grid re-run, 2026-08-28.** It did not shrink; it emptied.
+> In both text-seeded grids **no run ends in the `good` phase at all**, and the
+> whole `cost ≥ 0.9` tail falls to 1 run in 6480. See
+> [what replaced them](#what-replaced-them-the-tail-is-gone-and-the-boxes-are-why-the-last-of-it-went).
+
 ### The heuristic that built this shortlist is too strong
 
 The shortlist came from the rule *"a model failure should not survive a change of
@@ -259,8 +311,124 @@ run that would have done it.
 **What that means for the stuck tail.** Of the 266 stuck runs, **13 trace to a
 confirmed mislabel** (2322075) and are recoverable by cleaning; **18 trace to a
 confirmed-real hard positive** (2321462) and are not — they are the dataset
-working as intended. The other five repeat-offender exemplars are
-**unadjudicated**: each is single-embedder, and none has been looked at.
+working as intended. ~~The other five repeat-offender exemplars are
+**unadjudicated**: each is single-embedder, and none has been looked at.~~
+**Superseded (#3284):** one of the five (2381555) was a crushed box rather than a
+hard positive, and the tail those 266 runs made up is itself withdrawn — see
+[what the boxes actually were](#what-the-boxes-actually-were--checked-not-assumed).
+
+### What the boxes actually were — checked, not assumed
+
+Each `exemplar_id` above was looked up in the pre-rebuild pickle
+(`scale-3156-pair/prefix_3281/vg_scale__siglip.pkl`) and in the live one, with
+[`box_history.py`](../../../scripts/experiments/pile/box_history.py) — written
+for this correction, because the only way to settle a named exemplar is to look
+it up on both sides rather than reason from the defect's footprint. Its census
+confirms the two sides: **130 crushed boxes before, 0 after** (130 of the 3600
+boxes that back a positive; #3281 quotes the same 130 against its own count of
+4687 raw region entries).
+
+| `exemplar_id` | box before | area | box after | area | verdict |
+|---|---|---|---|---|---|
+| **2381555** | `[0.00071, 0.00042, 0.00152, 0.00083]` | 0.000033% | `[0.3035, 0.2698, 0.6461, 0.5302]` | **8.92%** | **crushed; `backpack@small` → `backpack@large`** |
+| **2349789** | `[0.00000, 0.00175, 0.00048, 0.00234]` | 0.000004% | `[0.0000, 0.7463, 0.3056, 1.0000]` | **7.75%** | **crushed; `backpack@small` → `backpack@medium`** |
+| 1159597 | `[0.1529, 0.4531, 0.1878, 0.5641]` | 0.39% | identical | 0.39% | clean, unmoved |
+| 2322075 | `[0.4780, 0.7251, 0.5620, 0.7734]` | 0.41% | identical | 0.41% | clean, unmoved |
+| 2321462 | `[0.4078, 0.0819, 0.5460, 0.1656]` | 1.16% | identical | 1.16% | clean, unmoved |
+| 2414453 | `[0.1372, 0.1501, 0.2605, 0.2105]` | 0.74% | identical | 0.74% | clean, unmoved |
+| 2330189 | `[0.1880, 0.1947, 0.2720, 0.3013]` | 0.90% | identical | 0.90% | clean, unmoved |
+| 1222 | `[0.5625, 0.1579, 0.6000, 0.2068]` | 0.18% | identical | 0.18% | clean, unmoved |
+
+Three things fall out of that table, and only the first was expected.
+
+**1. `backpack@small` × `siglip` × 2381555 was manufactured by the corruption,
+on an arm that never reads a box.** `siglip`/`whole_image` cannot see the box, so
+this row looked immune. But *band membership is derived from box area*, and the
+crushed box is the only reason 2381555 was in `backpack@small` at all — its real
+backpack fills **8.92%** of the frame. The arm was hunting small backpacks while
+seeded with a large one. After the rebuild the image is not a member of
+`backpack@small` in any form, so **the row cannot be re-measured in place; it
+can only be withdrawn.** The path from a box defect to a whole-image finding is
+the band, not the box.
+
+**2. `backpack@small` × `dinov3_patch` seed 5 (exemplar 2349789, cost 1.06) is
+the same story, and neither #3281 nor #3284 named it.** It was the ninth-worst
+run in the grid, one place outside the table above. A second crushed box, a
+second wrong band (its backpack is 7.75% of frame, `@medium`). Two of the ten
+worst runs in a 6457-run grid were the same build defect.
+
+**3. `bird@small` 1222's own box is clean — it is the *cell* that was corrupt.**
+This is the row it would have been easiest to get wrong in either direction. The
+exemplar's geometry is byte-identical across the rebuild, so nothing about *it*
+was manufactured; but 42 of the 100 positives it was ranked against were
+crushed, and the rebuild replaced 33 of that roster. The run is unquotable
+because of the pool, not the seed. **A clean exemplar in a corrupt cell is still
+a withdrawn row.**
+
+### What replaced them: the tail is gone, and the boxes are why the last of it went
+
+The rerun is not a re-measurement of these rows — it cannot be, because two of
+them no longer exist as members of their cell. It answers the question the rows
+were evidence for: *does the stuck tail survive on clean data?* **It does not.**
+
+Three grids, differing in known ways:
+
+| grid | seeding | head | boxes | runs at `cost ≥ 0.9` |
+|---|---|---|---|---|
+| `scale-3156-final` (this report) | crop | `linear` | corrupt | **266 / 6457 — 4.12%** |
+| `scale-3156-pair` (#3276) | text | `linear_svm` | corrupt | **13 / 5162 — 0.25%** |
+| `scale-3156-fixed` (#3281 rerun) | text | `linear_svm` | **repaired** | **1 / 6480 — 0.02%** |
+
+![the catastrophic tail, and what removed it](figures/stuck_tail_after_3281.png)
+
+*(drawn by [`figures_tail_3281.py`](../../../scripts/experiments/calibration/figures_tail_3281.py),
+which also prints the table below)*
+
+**The first step is not attributable to any one change** — seeding, head and the
+third arm all moved between `final` and `pair` — though this report already
+predicted the direction: the 128 stuck runs still in the `good` phase were the
+ones most likely to shrink under text seeding, and in both text-seeded grids
+**no run ends in the `good` phase at all**.
+
+**The second step is clean.** `pair` and `fixed` share head, seeding, arms and
+analysis; the only difference is the pile rebuild. Median cost at 150 votes on
+the region arm, small band:
+
+| category | corrupt boxes | repaired | Δ | crushed boxes |
+|---|---|---|---|---|
+| `backpack@small` | 0.79 | **0.37** | **−0.42** | 44 |
+| `bird@small` | 0.69 | **0.49** | **−0.20** | 42 |
+| `bicycle@small` | 0.54 | **0.34** | **−0.20** | 34 |
+| `dog@small` | 0.46 | 0.48 | +0.02 | 1 |
+| `clock@small` | 0.43 | 0.45 | +0.02 | 0 |
+| `stop sign@small` | 0.43 | 0.44 | +0.01 | 0 |
+| `umbrella@small` | 0.41 | 0.38 | −0.03 | 2 |
+| `book@small` | 0.33 | 0.33 | 0.00 | 2 |
+| `bus@small` | 0.31 | 0.32 | +0.01 | 1 |
+| `knife@small` | 0.29 | 0.28 | −0.01 | 0 |
+| `boat@small` | 0.10 | 0.11 | +0.01 | 1 |
+| `kite@small` | 0.06 | 0.05 | −0.01 | 0 |
+
+The three classes that hold the corruption are the three that move, and the
+other nine move by ≤ 0.03 — most of that is the roster re-selection, since these
+cells were re-drawn too. `backpack@small`'s stuck count on the region arm goes
+**9/47 → 0/60**.
+
+*A note on how not to draw this.* The first version of the figure used each
+arm's **worst AP decile** per category, which is what #3281 quoted. That measure
+is a fixed 10% budget: when the corrupted classes leave the tail, some other
+class must fill it, so `stop sign@small` appeared to get *worse* (0.22 → 0.55)
+while its median cost moved 0.43 → 0.44. **A share-of-a-fixed-tail is zero-sum
+across the things sharing it**; the absolute measure is the one to plot.
+
+**And the second table has no re-measured form at all.** Under text seeding a run
+opens on a typed query, not on one boxed positive, so `exemplar_id` is not a
+column of the new grid — there is no per-run exemplar to be repeatedly stuck on.
+"Exemplars stuck on every seed that drew them" was a property of crop seeding,
+and it was retired by PR #3269 rather than refuted. The surviving shape of the
+finding is the per-*category* concentration: 68 `(category, seed)` pairs sit in
+every mode's worst decile in the repaired grid, and all 68 fall in ten
+categories — but no run in them ends stuck.
 
 ## The 23 header-only cells are seed-determined, not random
 
@@ -268,14 +436,14 @@ A cell whose category never collects both classes writes its CSV header and
 nothing else. It is non-empty, parses clean, and passes `find -size 0`, so it
 counts as present everywhere. The 23 here are **not** spread evenly:
 
-| category | count | seeds involved |
-|---|---|---|
-| `knife@small` | 9 | 0, 40, 48, 56 |
-| `umbrella@small` | 4 | 16, 24, 48 |
-| `boat@medium` | 4 | 17, 49 |
-| `bird@small` | 3 | 3, 27, 43 |
-| `backpack@large` | 2 | 5, 29 |
-| `umbrella@medium` | 1 | 2 |
+| category | count | seeds involved | status |
+|---|---|---|---|
+| `knife@small` | 9 | 0, 40, 48, 56 | roster unchanged |
+| `umbrella@small` | 4 | 16, 24, 48 | **roster moved** |
+| `boat@medium` | 4 | 17, 49 | **roster moved** |
+| ~~`bird@small`~~ | ~~3~~ | ~~3, 27, 43~~ | **withdrawn — 42% of the cell was crushed, 33 of 100 re-selected** |
+| `backpack@large` | 2 | 5, 29 | **roster moved** |
+| `umbrella@medium` | 1 | 2 | **roster moved** |
 
 The same `(category, seed)` pair recurs **across embedders** — `knife@small`
 seeds 0 and 48 are header-only in all three, `boat@medium` seeds 17 and 49 in
@@ -286,19 +454,65 @@ different routes.
 
 Reproducing one costs nothing: rerun `knife@small` at seed 0 on any embedder.
 
+**⚠️ The phenomenon does not survive the seeding fix — there are zero header-only
+cells in either text-seeded grid** (0 of 5162 in `scale-3156-pair`, 0 of 6480 in
+`scale-3156-fixed`, against 23 of 6480 here). That is consistent with the
+explanation given above rather than a correction to it: a header-only cell is one
+whose *exemplar draw* never collected both classes, and a run that opens on a
+typed query has no exemplar draw to fail. The `bird@small` row is struck for the
+separate #3281 reason — its roster was 42% corrupt and a third of it was
+replaced — but the whole table describes a failure mode that PR #3269 retired.
+
+### What is still comparable across the rebuild
+
+`diff_labels.py`, run against the preserved pre-rebuild pickle:
+
+- **14 of 36 categories are unchanged in every respect** — `boat@large`,
+  `book@medium`, `bus@large`, `bus@medium`, `clock@large`, `clock@medium`,
+  `clock@small`, `dog@large`, `knife@large`, `knife@medium`, `knife@small`,
+  `stop sign@large`, `stop sign@medium`, `stop sign@small`. Runs on these still
+  describe the live dataset.
+- **22 of 36 moved.** Six of them held no repaired box at all: each cell draws
+  100 positives from a ranked pool, so repairing one band re-selects the others
+  in the same class.
+
+**The 14-versus-15 disagreement noted on #3281 is resolved: both numbers are
+right, about different things.** `bus@small` has an *identical positive and
+evaluable set* — which is why a recount of positive sets gives 15 — but one of
+its boxes was repaired, which is why `diff_labels.py` calls it CHANGED. So the
+sharp rule is per-arm, not per-category: **`bus@small`'s whole-image runs are
+comparable across the rebuild and its region runs are not.** A category can be
+the same sample of images and still be a different measurement.
+
 ## What to do
 
 1. **Do not quote these numbers as production.** They are the retired `linear`
-   head. Difference them against 549465 when it lands.
+   head. ~~Difference them against 549465 when it lands.~~ **549465 is itself
+   superseded (#3284):** it completed 2026-08-26 at 4813 of 6480 cells, but it
+   still carries an `exemplar_id` column — so it crop-seeded — and it ran on the
+   corrupt boxes. It fixes the head and neither of the other two defects.
+   `scale-3156-fixed` fixes all three; difference against that.
 2. **Drop or relabel `knife@small` exemplar 2322075** — confirmed to contain no
    knife. Leave `boat@medium` 2321462 alone: the label is right, and its stuck
    count was a seeding artefact rather than anything about the image.
 3. **Look at `knife@small` as a cell.** 9 of 23 header-only cells, plus its worst
    exemplar now confirmed mislabelled, is enough signal to re-examine how its
    positives were drawn. Two independent routes point at the same class.
-4. **Adjudicate the other five repeat-offender exemplars by eye** — 2381555,
-   2414453, 1159597, and the two single-embedder repeats. No column in the run
-   can substitute for looking.
+4. ~~**Adjudicate the other five repeat-offender exemplars by eye** — 2381555,
+   2414453, 1159597, and the two single-embedder repeats.~~ **Done for 2381555
+   and dropped for the rest (#3284).** 2381555 needed no eye: its box was
+   crushed, its real backpack is 8.92% of frame, and it is not a member of
+   `backpack@small` after the rebuild. The other four have clean, unmoved boxes,
+   but the counts that nominated them came from crop seeding, which no longer
+   exists — there is nothing left to adjudicate them *for*. What did survive is
+   the point one line up: **no column in the run can substitute for looking**,
+   and the two cases that were looked at are the two findings still standing.
 5. **No cut-rule work from this grid.** `calibration_shift` dominates
    `rule_inefficiency` 8:1; that is transfer, and #2883 already showed cut rules
    cannot reach it. Re-check once the `linear_svm` rerun lands.
+6. **Read the repaired grid, not this one, for anything about the tail.**
+   `/expscratch/$USER/scale-3156-fixed` (array 570303) runs the shipped
+   `linear_svm` head on text seeding over repaired boxes. Its map is written up
+   on #3276. This report keeps its cost, regret and size-band structure — those
+   are within-cell contrasts where a per-arm defect largely cancels — but every
+   per-exemplar and per-run-tail claim in it has been withdrawn above.
