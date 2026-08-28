@@ -83,22 +83,27 @@ def load_runs(exp: str, metric: str) -> dict[tuple, list[tuple[int, float]]]:
     return runs
 
 
-def value_at(series: list[tuple[int, float]], step: int) -> float | None:
-    """The run's value as of *step*, carried forward from its last recorded row.
+def carry_forward(series: list[tuple[int, float]], steps: list[int]) -> list[float | None]:
+    """The run's value at each of *steps*, carried forward from its last row.
 
     A run does not emit a row at every t — the harness skips steps with too few
     votes to train — so sampling "the row where t == step" silently drops runs
     from the average at exactly the steps where runs differ most.  Carrying the
     last value forward is what a user would see on screen: the detector does not
     stop existing between votes.
+
+    Done as ONE merge over both sorted lists rather than a scan per step. The
+    scan-per-step version is quadratic in the run's length, which is invisible
+    at 1000 runs and is an hour of a chained, unattended job at 6480.
     """
-    best = None
-    for t, v in series:
-        if t <= step:
-            best = v
-        else:
-            break
-    return best
+    out: list[float | None] = []
+    i, last = 0, None
+    for step in steps:
+        while i < len(series) and series[i][0] <= step:
+            last = series[i][1]
+            i += 1
+        out.append(last)
+    return out
 
 
 def q(xs: list[float], p: float) -> float:
@@ -125,11 +130,17 @@ def _subset(runs, modes, band):
     return {k: v for k, v in runs.items() if k[0] in modes and (band is None or band_of(k[1]) == band)}
 
 
-def _mean_curve(runs, mode, steps):
+def _grid(runs, steps):
+    """``key -> [value at each step]``, computed once and reused by every figure."""
+    return {k: carry_forward(v, steps) for k, v in runs.items()}
+
+
+def _mean_curve(grid, mode, steps):
     """(steps, mean, se, n) for one arm — the ±SE is the mean's own uncertainty."""
+    series = [v for k, v in grid.items() if k[0] == mode]
     xs, ms, ses, ns = [], [], [], []
-    for s in steps:
-        vals = [v for k, series in runs.items() if k[0] == mode for v in (value_at(series, s),) if v is not None]
+    for i, s in enumerate(steps):
+        vals = [row[i] for row in series if row[i] is not None]
         if len(vals) < 2:
             continue
         m, se = mean_se(vals)
@@ -147,10 +158,10 @@ def _stamp(fig, note: str) -> None:
 
 
 def figure_average(
-    runs, modes, steps, out: Path, metric: str, label: str, band: str | None, plt, note: str = ""
+    grid, modes, steps, out: Path, metric: str, label: str, band: str | None, plt, note: str = ""
 ) -> None:
     """One panel: every arm's mean curve on one axis."""
-    sub = _subset(runs, modes, band)
+    sub = _subset(grid, modes, band)
     fig, ax = plt.subplots(figsize=(7.4, 4.6))
     n_by_mode = {}
     ends: list[tuple[float, float, str]] = []
@@ -182,11 +193,20 @@ def figure_average(
     # collision it exists to prevent.
     lo_y, hi_y = ax.get_ylim()
     gap = (hi_y - lo_y) * 0.038
+    # `ends` is sorted ascending, so "at least `gap` above the previous label"
+    # is a max(), not a search. It was written as a `while` that recomputed
+    # `y = placed[-1] + gap` until the gap was satisfied -- which never
+    # terminates the moment `placed[-1] + gap == placed[-1]` in floating point,
+    # because then `y` stops moving while the condition stays true. That is a
+    # LIVE lock with no error and no output: it cost two hours of a dedicated
+    # node and three wrong explanations (a quadratic scan, matplotlib artist
+    # overhead, node contention) before a faulthandler traceback named the line.
+    #
+    # A loop whose termination depends on floating-point addition making
+    # progress is a loop that should not be a loop.
     placed: list[float] = []
     for value, x, colour in ends:
-        y = value
-        while placed and abs(y - placed[-1]) < gap:
-            y = placed[-1] + gap
+        y = value if not placed else max(value, placed[-1] + gap)
         placed.append(y)
         ax.annotate(
             f"{value:.2f}",
@@ -222,28 +242,57 @@ def figure_average(
     print(f"  wrote {name}  ({counts})")
 
 
-def figure_runs(runs, modes, steps, out: Path, metric: str, label: str, band: str | None, plt, note: str = "") -> None:
+def figure_runs(
+    runs,
+    grid,
+    modes,
+    steps,
+    out: Path,
+    metric: str,
+    label: str,
+    band: str | None,
+    plt,
+    note: str = "",
+    max_lines: int = 0,
+) -> None:
     """One panel per arm: every run, with the median and the 10-90% band."""
+    from matplotlib.collections import LineCollection  # noqa: PLC0415
+
     sub = _subset(runs, modes, band)
+    gsub = _subset(grid, modes, band)
     fig, axes = plt.subplots(1, len(modes), figsize=(4.6 * len(modes), 4.4), sharey=True, sharex=True)
     if len(modes) == 1:
         axes = [axes]
     for ax, m in zip(axes, modes):
         colour = MODE_COLORS.get(m, "#57534e")
         series = [v for k, v in sub.items() if k[0] == m]
-        for run in series:
-            xs = [t for t, _ in run]
-            ys = [v for _, v in run]
-            ax.plot(xs, ys, color=colour, linewidth=0.3, alpha=0.05, zorder=2)
+        drawn = series
+        if max_lines and len(series) > max_lines:
+            # Deterministic stride, not a random sample: the same runs are drawn
+            # every time the figure is regenerated, so two versions of it differ
+            # only where the DATA differs.
+            stride = len(series) / max_lines
+            drawn = [series[int(i * stride)] for i in range(max_lines)]
+        # One LineCollection, not one plot() per run. Matplotlib builds a Line2D
+        # artist per call and the spaghetti is thousands of them: at 2000 runs
+        # the per-artist overhead dominated everything else in this script, and
+        # the grid this feeds has 6480. The drawn result is identical.
+        segs = [[(t, v) for t, v in run] for run in drawn if len(run) > 1]
+        if segs:
+            ax.add_collection(LineCollection(segs, colors=colour, linewidths=0.3, alpha=0.05, zorder=2))
+        rows = [v for k, v in gsub.items() if k[0] == m]
         lo, mid, hi, xs = [], [], [], []
-        for s in steps:
-            vals = [v for run in series for v in (value_at(run, s),) if v is not None]
+        for i, s in enumerate(steps):
+            vals = [row[i] for row in rows if row[i] is not None]
             if len(vals) < 2:
                 continue
             xs.append(s)
             lo.append(q(vals, 0.10))
             mid.append(q(vals, 0.50))
             hi.append(q(vals, 0.90))
+        # add_collection does not update the data limits, so the axes would keep
+        # matplotlib's default 0-1 range and clip every curve.
+        ax.autoscale_view()
         if xs:
             # The band has to read THROUGH the spaghetti it summarises, so it
             # carries hairline edges rather than relying on fill alpha alone,
@@ -255,7 +304,11 @@ def figure_runs(runs, modes, steps, out: Path, metric: str, label: str, band: st
             ax.plot(xs, mid, color="#fcfcfb", linewidth=3.6, zorder=5)
             ax.plot(xs, mid, color=colour, linewidth=2.0, zorder=6)
         _style_axes(ax, "votes spent (clicks)", label if ax is axes[0] else "")
-        ax.set_title(f"{m}\n{len(series)} runs", fontsize=9.5, color="#292524", loc="left", pad=8)
+        # Say when the texture is a sample. A spaghetti plot silently showing a
+        # fifth of the runs is a different claim from one showing all of them,
+        # and the picture cannot be told apart by looking.
+        shown = "" if len(drawn) == len(series) else f", {len(drawn)} drawn"
+        ax.set_title(f"{m}\n{len(series)} runs{shown}", fontsize=9.5, color="#292524", loc="left", pad=8)
     fig.suptitle(
         f"Every run, one line each — {band or 'all bands'}  (band = 10–90%, line = median)",
         fontsize=11,
@@ -282,6 +335,13 @@ def main(argv: list[str] | None = None) -> int:
         help="stamped on every figure -- use it to say a run is still in flight, "
         "since a partial figure that looks final is how a preview becomes a fact",
     )
+    ap.add_argument(
+        "--max-run-lines",
+        type=int,
+        default=1200,
+        help="cap on the spaghetti drawn per panel (0 = all). The 10-90%% band and the "
+        "median are always computed over EVERY run; only the texture is sampled.",
+    )
     ap.add_argument("--by-band", action="store_true", default=True)
     ap.add_argument("--no-by-band", dest="by_band", action="store_false")
     args = ap.parse_args(argv)
@@ -305,13 +365,14 @@ def main(argv: list[str] | None = None) -> int:
         steps = sorted({t for v in runs.values() for t, _ in v})
         print(f"{metric}: {len(runs)} runs, {len(modes)} arms, {len(seeds)} seeds present")
         note = args.note or f"{len(seeds)} seeds present, {len(runs)} runs"
-        figure_average(runs, modes, steps, out, metric, label, None, plt, note)
-        figure_runs(runs, modes, steps, out, metric, label, None, plt, note)
+        grid = _grid(runs, steps)
+        figure_average(grid, modes, steps, out, metric, label, None, plt, note)
+        figure_runs(runs, grid, modes, steps, out, metric, label, None, plt, note, args.max_run_lines)
         if args.by_band:
             for band in BANDS:
                 if any(band_of(k[1]) == band for k in runs):
-                    figure_average(runs, modes, steps, out, metric, label, band, plt, note)
-                    figure_runs(runs, modes, steps, out, metric, label, band, plt, note)
+                    figure_average(grid, modes, steps, out, metric, label, band, plt, note)
+                    figure_runs(runs, grid, modes, steps, out, metric, label, band, plt, note, args.max_run_lines)
     return 0
 
 
