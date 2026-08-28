@@ -53,6 +53,32 @@ MODE_COLORS = {
 DEEP = 150
 
 
+def panel_grid(n: int, w: float, h: float, ncols_max: int = 3):
+    """A wrapped grid of panels, plus the axes that need a y-label.
+
+    One panel per mode in a single row was fine at three modes and stops being
+    fine at five: the figure is then 23 inches wide, and a report renders it
+    scaled to the column width, so each panel arrives at a fifth of the page and
+    nothing in it can be read.  Wrapping at three keeps a panel the size it was
+    drawn at whatever the mode count does next.
+
+    Returns ``(fig, axes, leftmost)`` -- *axes* is exactly *n* visible axes in
+    order, and *leftmost* is the first of each row, which is where a shared
+    y-label belongs once there is more than one row.
+    """
+    import math
+
+    import matplotlib.pyplot as plt  # noqa: PLC0415  (the backend is chosen by the caller)
+
+    ncols = min(n, ncols_max)
+    nrows = math.ceil(n / ncols)
+    fig, grid = plt.subplots(nrows, ncols, figsize=(w * ncols, h * nrows), sharey=True, squeeze=False)
+    flat = [a for row in grid for a in row]
+    for a in flat[n:]:
+        a.set_visible(False)
+    return fig, flat[:n], [grid[r][0] for r in range(nrows)]
+
+
 def band_of(c: str) -> str:
     return c.rsplit("@", 1)[1] if "@" in c else ""
 
@@ -169,8 +195,7 @@ def main() -> int:
     plt.close(fig)
 
     # --- 2. the same, one line per run --------------------------------------
-    fig, axes = plt.subplots(1, len(modes), figsize=(4.6 * len(modes), 4.2), sharey=True)
-    axes = axes if len(modes) > 1 else [axes]
+    fig, axes, leftmost = panel_grid(len(modes), 4.6, 4.2)
     for axi, m in zip(axes, modes):
         sel = [v for k, v in runs.items() if k[0] == m]
         step = max(1, len(sel) // args.max_run_lines)
@@ -182,7 +207,8 @@ def main() -> int:
         axi.set_title(f"{m}\n({shown} runs)", fontsize=9)
         axi.set_xlabel("votes spent")
         axi.grid(alpha=0.2)
-    axes[0].set_ylabel("cost")
+    for axi in leftmost:
+        axi.set_ylabel("cost")
     fig.suptitle(f"Every run separately — the dashed line is the {args.floor} 'never got going' floor", fontsize=10)
     fig.tight_layout()
     fig.savefig(out / "cost_per_run.png", dpi=130)
@@ -207,8 +233,7 @@ def main() -> int:
     plt.close(fig)
 
     # --- 4. what the cost is made of ----------------------------------------
-    fig, axes = plt.subplots(1, len(modes), figsize=(4.3 * len(modes), 4.2), sharey=True)
-    axes = axes if len(modes) > 1 else [axes]
+    fig, axes, leftmost = panel_grid(len(modes), 4.3, 4.2)
     for axi, m in zip(axes, modes):
         o_, r_, c_ = [], [], []
         for b in BANDS:
@@ -222,7 +247,8 @@ def main() -> int:
         axi.bar(BANDS, c_, bottom=[a + b for a, b in zip(o_, r_)], color="#f59e0b", label="calibration_shift")
         axi.set_title(m, fontsize=9)
         axi.grid(alpha=0.2, axis="y")
-    axes[0].set_ylabel(f"cost at {DEEP} votes")
+    for axi in leftmost:
+        axi.set_ylabel(f"cost at {DEEP} votes")
     axes[-1].legend(fontsize=7.5)
     fig.suptitle("What the cost is made of — the dark block is what no cut rule can fix", fontsize=10)
     fig.tight_layout()
