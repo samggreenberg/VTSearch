@@ -38,11 +38,19 @@ export CALIB_DATASETS="${CALIB_DATASETS:-vg_scale}"
 # three-random-known-goods start while both whole-image arms opened on a typed
 # query. The study's headline axis is VOTING MODE, and a seeding difference sat
 # inside it -- an arm-dependent difference, so unlike the #3156 seeding fix it
-# does not cancel in a contrast. The pair removes it: all three arms now open on
+# does not cancel in a contrast. The pair removes it: every arm now opens on
 # the same SigLIP text sort of the same 7749 medias, and only the space the
 # detector learns in differs.
 #
-# All three columns are already embedded in the pile, so a column costs training
+# The two CLIP columns are the second lineage (#3292): `clip` (ViT-B/32, 512-d)
+# is app-selectable and is therefore a mode a user could really pick; `clip_l`
+# (ViT-L/14) is `eval_only` and is NOT offered in the app, so it is a reference
+# column rather than a mode -- included because its 768-d output matches
+# `siglip`'s exactly, which is what stops a SigLIP-vs-CLIP difference from being
+# "CLIP's vectors are narrower". Any report drawn from this grid has to say
+# which of its panels a user can actually select.
+#
+# All five columns are already embedded in the pile, so a column costs training
 # and inference only -- no encoder time; the pair adds one 26 MB pickle open per
 # cell. And the encoder here is a BLOCKING factor, not the contrast: the
 # question is whether the band effect holds across encoders, so a second
@@ -50,12 +58,25 @@ export CALIB_DATASETS="${CALIB_DATASETS:-vg_scale}"
 # first. ("siglip vs siglip2_l is unresolvable on cost at three seeds" is a fact
 # about comparing the two encoders, and says nothing about whether each one
 # shows the same size penalty.)
-export CALIB_VGSCALE_EMBEDDERS="${CALIB_VGSCALE_EMBEDDERS:-siglip,siglip2_l,siglip+dinov3_patch}"
+#
+# Cost is dominated by the pair: measured over job 570303's 6480 cells, the
+# whole-image arms average 44-52s a cell and the region arm 786s, so it is 89%
+# of the grid. Adding or dropping a whole-image column moves the wall clock by
+# a few percent; the seed count and the region arm are the only real knobs.
+export CALIB_VGSCALE_EMBEDDERS="${CALIB_VGSCALE_EMBEDDERS:-siglip,siglip2_l,clip,clip_l,siglip+dinov3_patch}"
 # Every category is a designated cell; selecting a subset would discard the
 # design, and prevalence-spreading is meaningless when prevalence is 0.0250
 # everywhere by construction.
 export CALIB_CATEGORY_MODE=all
-export CALIB_N_SEEDS="${CALIB_N_SEEDS:-3}"
+# Depth, and what it buys. A per-cell rate ("is `bicycle@small` reliably bad, or
+# was one seed unlucky?") needs runs to be a rate at all: `analyze_overview.py`
+# refuses to print one under `--min-seeds` (10). 20 clears that with margin
+# while costing a third of the 60-seed grid job 570303 ran -- ~3h against ~8h,
+# because the region arm is 89% of the cost and scales linearly in seeds. The
+# band contrasts are pooled over 36 categories, so 20 seeds still puts 720
+# paired runs behind each one; what 20 costs is RESOLUTION ON ONE CELL (a
+# per-cell stuck rate lands on a twentieth), not the headline.
+export CALIB_N_SEEDS="${CALIB_N_SEEDS:-20}"
 # Walk every environment at seed 0, then every environment at seed 1, and so on.
 # A SLURM array dispatches roughly in index order, so if this run is cut short
 # it loses SEEDS uniformly rather than whole categories: the design stays intact
