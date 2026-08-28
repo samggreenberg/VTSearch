@@ -100,7 +100,8 @@ step phases       bash -c "python analyze_phases.py --exp $EXP > $OUT/REPORT_pha
 step tail_overlap  bash -c "python analyze_tail_overlap.py --exp $EXP --metric average_precision > $OUT/REPORT_tail.txt 2>&1; tail -6 $OUT/REPORT_tail.txt"
 step figs_overview python figures_overview.py --exp "$EXP" --out "$FIGS"
 step figs_scale    python figures_scale.py --exp "$EXP" --out "$FIGS"
-step curves        python figures_trajectory.py --exp "$EXP" --out "$FIGS" --metric cost,average_precision
+step curves        python figures_trajectory.py --exp "$EXP" --out "$FIGS" --metric cost,average_precision \
+  --baseline "$TEXT_BASELINE"
 
 # Sessions across the landscape rather than one cherry-picked cell: three
 # classes that behaved differently in the preview, at both ends of the size
