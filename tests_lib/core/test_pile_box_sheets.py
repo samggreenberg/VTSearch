@@ -23,7 +23,8 @@ from pathlib import Path
 
 import pytest
 
-_PILE_DIR = Path(__file__).resolve().parents[2] / "scripts" / "experiments" / "pile"
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_PILE_DIR = _REPO_ROOT / "scripts" / "experiments" / "pile"
 _BOX_SHEETS = _PILE_DIR / "box_sheets.py"
 
 #: One positive per synthetic image; four fills a sheet row.
@@ -76,6 +77,12 @@ def _zip_images(zip_path: Path, names: list[str], tmp: Path) -> None:
 def _run(pile: Path, coco_root: Path, demo_cache: Path, args: list[str]) -> subprocess.CompletedProcess:
     env = {
         **os.environ,
+        # `common.setup_env()` defaults these to cluster paths, and neutralises
+        # the editable install, so `import vtscore` must be pointed at the tree
+        # under test explicitly.
+        "VTS_REPO": str(_REPO_ROOT),
+        "CALIB_EXP": str(pile / "calib"),
+        "CALIB_RESULTS": str(pile / "calib" / "results"),
         "VTS_PILE": str(pile),
         "VTSEARCH_DATA_DIR": str(pile / "datadir"),
         "VTSEARCH_MODELS_DIR": str(pile / "models"),
