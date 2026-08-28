@@ -92,14 +92,21 @@ const REGION_VOTES = {
   bad: { laptop: 2, tv: 1, dog: 1 },
 };
 
-// The region shot wants the opposite of a portrait: a photo where the books are
-// a *part* of the frame, so that a box drawn round them is visibly a claim
-// about where the evidence is rather than a box round the whole picture. Hence
-// one named frame with a hand-measured box rather than a preference list: a
-// bookcase behind a television, and the box goes round the shelf rather than
-// the room. The fractions are of the displayed image, measured off the source.
-const HERO_REGION = 'book/000000509260.jpg';
-const REGION_BOX = { x0: 0.46, y0: 0.06, x1: 0.86, y1: 0.44 };
+// The region shot wants the opposite of a portrait: a photo where the book is
+// a *part* of the frame, so that a box drawn round it is visibly a claim about
+// where the evidence is rather than a box round the whole picture. Hence one
+// named frame with a measured box rather than a preference list.
+//
+// It used to be a bookcase behind a television, with the box round one shelf.
+// That taught the wrong thing twice over: a frame already filled with books
+// makes the box look like a crop rather than a claim, and a box round a third
+// of fourteen tiny spines is not a region anyone would actually draw (#3296).
+// This is one book — a boxed game on a bed, a fifth of the frame — beside a
+// camera lens, a phone and a remote that are not books. The box is COCO's own
+// `book` annotation on that frame, as a fraction of the displayed image, which
+// is why it is tight on the object rather than eyeballed round it.
+const HERO_REGION = 'book/000000396729.jpg';
+const REGION_BOX = { x0: 0.156, y0: 0.222, x1: 0.910, y1: 0.601 };
 
 const log = (...a) => console.log('[slide-shots]', ...a);
 
