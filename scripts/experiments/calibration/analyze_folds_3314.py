@@ -748,11 +748,17 @@ def figures(v: pd.DataFrame, outdir: Path, baseline_csv: Path | None) -> list[st
 
 
 def _md(df: pd.DataFrame) -> str:
-    """Markdown table at two significant digits - the report rule, applied on the way in.
+    """Markdown table at THREE significant digits, and only three.
 
-    Four decimals do not make a table more rigorous, they make it harder to read
-    and they invent findings: an unpaired 0.0462 against 0.0508 reads as a trend
-    a +/-0.03 standard error cannot support.
+    The standing rule is two, because four decimals do not make a table more
+    rigorous - they make it harder to read and they invent findings: an unpaired
+    0.0462 against 0.0508 reads as a trend a +/-0.03 standard error cannot
+    support.  Three rather than two here because this study's decision constants
+    are 0.005 and 0.01, so the third digit is exactly where the ship rules are
+    read; rounding a -0.00512 delta to -0.005 would print a number that sits ON
+    the margin it has to clear.  Every such number is printed beside its own
+    standard error, and `resolved` says plainly when a difference is smaller
+    than twice it.
     """
     if df is None or len(df) == 0:
         return "_(no rows)_"
@@ -776,6 +782,12 @@ def write_report(out: Path, blocks: dict) -> None:
         "",
         f"Cost model: **{blocks['cost_model']}**.  Margin {MARGIN}, harm tolerance",
         f"{HARM_TOLERANCE}, step wall-clock ceiling {COST_CEILING_X}x, baseline K={BASELINE_K}.",
+        "",
+        "Numbers are printed to three significant digits because the decision",
+        "constants are 0.005 and 0.01 and the third digit is where the rules are",
+        "read; each is beside its own bootstrapped standard error, and `resolved`",
+        "says when a difference is smaller than twice it.  The standard errors",
+        "resample **cells**, never steps.",
         "",
         "## Gate",
         "",
