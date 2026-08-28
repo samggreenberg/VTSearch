@@ -31,7 +31,7 @@ comes from [`agg/`](agg/), written by
   (ViT-B/32) and **−0.016 ± 0.003** (ViT-L/14), negative in every band. Running two
   capacities is what rules out the alternative reading — the effect is not the
   family, not the vector width, and not the encoder's size.
-  [Below](#follow-up-clip-not-the-family-not-the-width-not-the-capacity).
+  [Below](#follow-up-clip-is-not-the-family-not-the-width-not-the-capacity).
 
 No production change is proposed here. This is the evidence; the decision is the
 owner's.
@@ -285,7 +285,7 @@ Until that runs, the defensible statement is: **the shipped default is measurabl
 not optimal for either single-vector embedder in the pile, the effect is not about
 voting mode, and one alternative explanation remains open.**
 
-## Follow-up: CLIP — not the family, not the width, not the capacity
+## Follow-up: CLIP is not the family, not the width, not the capacity
 
 `siglip2_l` refuted "SigLIP specifically", but `siglip` and `siglip2_l` are the same
 lineage, so what the study had established was closer to *"the SigLIP family wants
