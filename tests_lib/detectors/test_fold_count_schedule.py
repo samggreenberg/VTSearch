@@ -21,8 +21,10 @@ What is pinned here:
    readable from the frame rather than from the directory it was read out of.
 3. A schedule that never fires is byte-identical to no schedule -- the
    off-by-default guarantee every other study depends on.
-4. A schedule that does fire MOVES the trajectory.  If it did not, stage B
-   would be measuring nothing and the screen would already have answered it.
+4. A schedule that does fire reaches the SHIPPED cut - the base row is the
+   scheduled count's arm, not the other count's - and the two counts do cut
+   differently somewhere, so that check is not vacuous.  If they did not, stage
+   B would be measuring nothing and the screen would already have answered it.
 """
 
 from __future__ import annotations
@@ -42,7 +44,7 @@ CUT = 6
 K_EARLY = 4
 
 
-def _run(*, schedule=None, calibrate_count=2, seed=0, max_steps=10):
+def _run(*, schedule=None, calibrate_count=2, seed=0, max_steps=10, fold_counts=None):
     medias, _ = _planted_dataset(n_per_cat=40, seed=seed)
     return simulate_voting_iterations(
         medias,
@@ -57,7 +59,12 @@ def _run(*, schedule=None, calibrate_count=2, seed=0, max_steps=10):
         style="max_patch",
         emit_calibration_metrics=True,
         fold_count_schedule=schedule,
+        fold_count_variants=fold_counts,
     )
+
+
+def _arm_rows(rows, arm):
+    return {r["t"]: r for r in rows if r["gmm_variant"] == arm}
 
 
 def _base_rows(rows):
@@ -138,35 +145,45 @@ class TestScheduledRun:
                     a["gmm_variant"],
                 )
 
-    def test_a_schedule_that_fires_moves_the_trajectory(self):
-        """The reason stage B is a live A/B and not another screen.
+    def test_the_live_cut_is_the_scheduled_counts_cut(self):
+        """The assertion that the schedule reached the SHIPPED threshold.
 
-        The scheduled arm's early threshold differs, the acquisition cut is
-        ranked around it, and the votes diverge from there.  If this ever passed
-        vacuously - identical trajectories - the whole live-arm design would be
-        measuring nothing, so the assertion is that something DID move.
+        Run the counterfactual screen alongside it at ``{2, K_EARLY}``.  The
+        screen's arms are nested prefixes of one calibration, and the arm at
+        ``K == calibrate_count`` reproduces that step's own shipped cut
+        byte-for-byte (see ``test_fold_count_variant_rows.py``).  So the base
+        row must match the arm the SCHEDULE named at that step, and not the
+        other one - which is a statement about which count the live path used,
+        not about where a quantile happened to land.
         """
-        plain = _base_rows(_run(schedule=None))
-        sched = _base_rows(_run(schedule=f"{K_EARLY}@{CUT}"))
-        shared = sorted(set(plain) & set(sched))
-        assert shared, "no comparable steps"
-        moved = [t for t in shared if plain[t]["threshold"] != sched[t]["threshold"]]
-        assert moved, "the schedule changed no threshold; it is not reaching the live path"
+        rows = _run(schedule=f"{K_EARLY}@{CUT}", fold_counts=[2, K_EARLY])
+        base = _base_rows(rows)
+        arms = {k: _arm_rows(rows, f"folds_k{k}_anchored") for k in (2, K_EARLY)}
+        checked = 0
+        for t, row in base.items():
+            # Only where the shipped rule actually anchored; a step that fell
+            # back to the blend has no fold-anchored cut to reproduce.
+            if not str(row["threshold_provenance"]).startswith("fold_anchored"):
+                continue
+            k_live = int(row["calibrate_count"])
+            assert t in arms[k_live], (t, k_live)
+            assert row["threshold"] == arms[k_live][t]["threshold"], (t, k_live)
+            checked += 1
+        assert checked, "no step reached a fold-anchored cut; the fixture tests nothing"
 
-    def test_the_calibration_set_grows_with_the_live_count(self):
-        """`n_cal_scores` is the resolution of the quantile the cut is read from.
+    def test_the_two_counts_are_not_the_same_cut(self):
+        """...and the check above is not vacuous.
 
-        More folds pool more held-out scores, so the early steps of a scheduled
-        run must be reading a bigger calibration set than an unscheduled run's -
-        which is the mechanism the whole study is about, visible on the shipped
-        row rather than on a variant arm.
+        If ``K=2`` and ``K=K_EARLY`` produced the same threshold at every step,
+        matching the scheduled arm would prove nothing - and the study would
+        have no question. On a fixture this small neighbouring quantiles do
+        sometimes collide, so this asserts they separate SOMEWHERE rather than
+        everywhere.
         """
-        plain = _base_rows(_run(schedule=None))
-        sched = _base_rows(_run(schedule=f"{K_EARLY}@{CUT}"))
-        early = [
-            t
-            for t in sorted(set(plain) & set(sched))
-            if plain[t]["n_good"] + plain[t]["n_bad"] < CUT and sched[t]["n_good"] + sched[t]["n_bad"] < CUT
-        ]
-        assert early, "no step below the cut in both runs"
-        assert any(sched[t]["n_cal_scores"] > plain[t]["n_cal_scores"] for t in early)
+        rows = _run(schedule=f"{K_EARLY}@{CUT}", fold_counts=[2, K_EARLY])
+        a, b = _arm_rows(rows, "folds_k2_anchored"), _arm_rows(rows, f"folds_k{K_EARLY}_anchored")
+        shared = sorted(set(a) & set(b))
+        assert shared, "no step emitted both arms"
+        assert any(a[t]["threshold"] != b[t]["threshold"] for t in shared), (
+            "the two fold counts cut identically at every step of this fixture"
+        )
