@@ -1,7 +1,8 @@
-# The column named `fold_seconds` was a third of what a fold count costs
+# 2026-08-28 — the column named `fold_seconds` was a fifteenth of what a fold count costs (#3314)
 
-**2026-08-28, #3314 (stage A sizing).  Caught before the array, so it cost
-nothing; had it not been, it would have cost the study's whole cost half.**
+**Study:** #3314 fold-count cost/benefit, stage A sizing. **Cost:** near-miss —
+caught on the sizing cell, before the array. Had it not been, the study's whole
+cost half would have been wrong, with clean numbers and a plausible table.
 
 ## What happened
 
