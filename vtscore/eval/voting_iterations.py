@@ -1951,6 +1951,15 @@ def _calibration_metric_rows(
         # Under safe_thresholds the base row's threshold is the blended one;
         # record the pre-blend conformal cut alongside it (issue #2799).
         base["xcal_threshold"] = _r(float(details["xcal_threshold"]))
+    # How many held-out scores the conformal quantile was actually taken over,
+    # on the SHIPPED row rather than only on the fold-count variant rows (issue
+    # #3287).  It was declared in `_CALIBRATION_COLUMNS` and filled only by the
+    # #2897 arms, so the one quantity `calibration_fraction` directly controls -
+    # the resolution of the quantile the threshold is read from - was NaN on
+    # every production row.  A knob whose mechanism is invisible in the output
+    # can only be argued about; this makes it a column.
+    if base_cal_scores is not None:
+        base["n_cal_scores"] = int(np.asarray(base_cal_scores).size)
     rows.append(base)
 
     # --- Remedial re-pools: only where the same fold models exposed node data

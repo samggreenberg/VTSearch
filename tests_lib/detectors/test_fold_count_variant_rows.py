@@ -205,6 +205,32 @@ class TestFoldCountArms:
             assert sizes[4] == 4 * sizes[1]
             assert sizes[2] == 2 * sizes[1]
 
+    def test_base_row_reports_its_own_calibration_set_size(self):
+        """`n_cal_scores` on the SHIPPED row, not only on the variant rows (#3287).
+
+        It is the resolution of the quantile the threshold is read from, and it
+        is the one quantity `calibration_fraction` directly controls - so a study
+        of that knob needs it on the production row rather than on an arm the
+        app never runs.  It was declared in `_CALIBRATION_COLUMNS` and left NaN
+        there for every run before #3287.
+
+        The value is pinned rather than merely asserted finite: the base row
+        pools the same fold orderings the live count's `_xcal` arm does, so the
+        two must agree exactly.  That makes this a check on *which* scores were
+        counted, not just that some number arrived.
+        """
+        rows = _run(fold_counts=_COUNTS, calibrate_count=2)
+        base = _base_rows(rows)
+        live = _arm_rows(rows, "folds_k2_xcal")
+        shared = sorted(set(base) & set(live))
+        assert shared, "no step emitted both a base row and the live-count arm"
+        for t in shared:
+            assert base[t]["n_cal_scores"] > 0, f"step {t}: base row has no calibration-set size"
+            assert int(base[t]["n_cal_scores"]) == int(live[t]["n_cal_scores"]), (
+                f"step {t}: the base row and the live fold count disagree about how many "
+                "held-out scores the conformal quantile was taken over"
+            )
+
     def test_fold_seconds_is_monotone_in_k(self):
         """Not a stopwatch race despite the timings: each arm's ``fold_seconds``
         is a *prefix sum* of one non-negative per-fold list plus a shared
