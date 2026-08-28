@@ -156,14 +156,25 @@ export CALIB_GRES=none
 # OOM here is a lost cell, not a slow one.  Do not size from the binary cell -
 # 0.53 GB vs 7.12 GB is a 13x difference and the region cell sets the knob.
 #
-# 80 x 12G = 960G of the 1074G per-user allowance under QOS `cpu_limit` (89%),
-# just inside preflight check 8's 90% line.  An array claiming the whole
-# allowance parks your OWN later jobs behind it in QOSMaxMemoryPerUser (#3129,
-# three times in one evening) - and this study submits five arrays.
+# CONCURRENCY IS PER ARM, AND THE STUDY'S BUDGET IS THE SUM.  16 x 5 arms x 12G
+# = 960G of the 1074G per-user allowance under QOS `cpu_limit` (89%), just
+# inside preflight check 8's 90% line.
+#
+# 16-and-not-80 is a scheduling decision, not a politeness one.  Five arrays
+# submitted at %80 each request 4800G against a 1074G allowance, so SLURM would
+# run the FIRST arm at 80 wide and park the rest in QOSMaxMemoryPerUser (#3129,
+# three times in one evening).  Total throughput is the same either way - the
+# allowance is the cap - but the SHAPE of a truncated run is completely
+# different: at %80 a deadline that arrives early loses whole ARMS, and an arm
+# is the axis this study sweeps.  At %16 every arm advances in lockstep, so the
+# same deadline loses the last SEEDS, uniformly, across all five.  That is the
+# same argument as `CALIB_CELL_ORDER=seed` above, one level up, and the two only
+# work together: seed-major ordering inside an arm is worth nothing if the arms
+# themselves run one after another.
 export CALIB_MEM="${CALIB_MEM:-12G}"
 export CALIB_CPUS=1
 export CALIB_TIME="${CALIB_TIME:-12:00:00}"
-export CALIB_CONC="${CALIB_CONC:-80}"
+export CALIB_CONC="${CALIB_CONC:-16}"
 export CALIB_ANALYZE_MEM="${CALIB_ANALYZE_MEM:-48G}"
 export CALIB_ANALYZE_TIME="${CALIB_ANALYZE_TIME:-2:00:00}"
 
@@ -286,6 +297,14 @@ case "$MODE" in
     SUBMITTED=0
     DEPS=()
     ARM_DIRS=()
+    # Preflight's memory check asks "does this claim your whole allowance?", and
+    # for a five-array study the honest answer is about the SUM, not about one
+    # array.  Passing one arm's %N would report 18% and wave through a study
+    # that actually sits at 89%.
+    N_ARMS=0
+    for _f in ${WANT//,/ }; do N_ARMS=$((N_ARMS + 1)); done
+    STUDY_CONC=$((CALIB_CONC * N_ARMS))
+    echo "study footprint: $N_ARMS arms x %$CALIB_CONC x $CALIB_MEM = %$STUDY_CONC concurrent"
     for F in ${WANT//,/ }; do
       python3 -c "
 import sys
@@ -319,7 +338,7 @@ sys.exit(0 if 0.0 < f < 1.0 else 1)
           --reuse-prepare "$PREP" \
           --patch \
           "${DIV[@]}" \
-          --job-name "cal-cells-f$F" --mem "$CALIB_MEM" --conc "$CALIB_CONC" || {
+          --job-name "cal-cells-f$F" --mem "$CALIB_MEM" --conc "$STUDY_CONC" || {
           echo "preflight FAILED for fraction $F" >&2
           [[ "${PREFLIGHT_SKIP:-0}" == "1" ]] || exit 1
         }
