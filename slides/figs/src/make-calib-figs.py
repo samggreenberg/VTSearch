@@ -424,9 +424,9 @@ RANGE_FOOT = 0.13
 
 def _range_line(ax: plt.Axes, x_left: float, x_right: float, y: float, z: int = 2) -> None:
     """A range: a horizontal rule with a serif foot at each end."""
-    ax.plot([x_left, x_right], [y, y], color=INK, linewidth=1.8, zorder=z)
+    ax.plot([x_left, x_right], [y, y], color=INK, linewidth=BASELINE_LW, zorder=z)
     for x in (x_left, x_right):
-        ax.plot([x, x], [y - RANGE_FOOT, y + RANGE_FOOT], color=INK, linewidth=1.8, zorder=z)
+        ax.plot([x, x], [y - RANGE_FOOT, y + RANGE_FOOT], color=INK, linewidth=BASELINE_LW, zorder=z)
 
 
 def _score_line(
@@ -726,27 +726,41 @@ def _band(x0: float, y_base: float, w: float, edges, lower, upper) -> "Polygon":
     return Polygon(pts, closed=True)
 
 
-#: Height below which a fitted component's tail stops being drawn, in drawing
-#: units. Half the baseline's own stroke, so a tail that stops is already
-#: inside the black rule and merges with it — set as a fraction of the panel
-#: height instead, a tail on a tall panel stopped a visible step *above* the
-#: baseline and the curve appeared to drop off at both ends and in the valley
-#: (#3246). See `_score_histogram`.
-TAIL_FLOOR = 0.9 / FLOW_UNIT_PT
-
 #: Stroke width of a fitted component's curve, in points, and how far below
 #: the density it plots the curve is actually drawn, in drawing units.
 #:
-#: The drop exists because a stroke has width. Ended at `TAIL_FLOOR` — half the
-#: baseline's own stroke — the curve's *centre* is inside the black rule but
-#: its upper edge stands `HUMP_LW / 2` above it, so a red or green step
-#: appears at each of the four places a component starts and stops (#3254).
-#: Lowering the whole curve by that half-width puts its upper edge exactly on
-#: the baseline's, and the tails merge into the rule instead of sitting on it.
-#: Half a linewidth is 1.2pt — three slide pixels of drop at the peak, which is
-#: nothing, against four visible steps, which is not.
+#: The drop exists because a stroke has width. Drawn on the density itself, the
+#: curve's *centre* ends inside the black rule but its upper edge stands
+#: `HUMP_LW / 2` above it, so a red or green step appears at each of the four
+#: places a component starts and stops (#3254). Lowering the whole curve by
+#: that half-width is what makes the tails merge into the rule instead of
+#: sitting on it. Half a linewidth is 1.2pt — three slide pixels of drop at the
+#: peak, which is nothing, against four visible steps, which is not.
 HUMP_LW = 2.4
 HUMP_DROP = (HUMP_LW / 2) / FLOW_UNIT_PT
+
+#: Stroke width of the baseline a panel's curves stand on — `_range_line`'s
+#: rule, quoted here because `TAIL_FLOOR` is measured against it.
+BASELINE_LW = 1.8
+
+#: Height below which a fitted component's tail stops being drawn, in drawing
+#: units: the value that lands the stopped curve's **bottom** edge exactly on
+#: the baseline's bottom edge.
+#:
+#: It used to be half the baseline's stroke, which put the curve's centre
+#: inside the rule — but a centre inside the rule is not an edge inside it, and
+#: once `HUMP_DROP` lowered the whole curve as well, both tails and the valley
+#: floor hung 0.6pt of colour below a rule that is supposed to be the floor of
+#: the drawing (#3301). Solving for the bottom edge instead:
+#:
+#:     (density − HUMP_DROP) − HUMP_LW/2  =  y_base − BASELINE_LW/2
+#:
+#: which is `HUMP_LW − BASELINE_LW/2` above the baseline. The curve's top edge
+#: is then 0.6pt proud of the rule's top rather than flush with it; that is the
+#: unavoidable half of the trade — a stroke thicker than the rule it dies into
+#: cannot be flush at both edges — and it is the half that does not put ink
+#: under the base. See `_score_histogram`.
+TAIL_FLOOR = (HUMP_LW - BASELINE_LW / 2) / FLOW_UNIT_PT
 
 #: Stroke width of an unfitted histogram's bars. The narrowest panel in the
 #: progression is `calib-quantile-flow`'s, where `GMM_FLOW_BINS` bars share
@@ -3635,7 +3649,13 @@ def blend_schedule_fig() -> None:
     # the corner by spending half the slide, which `slides/STYLE.md` names as
     # the wrong repair for exactly this shape: the blocker is horizontal, so
     # the fix is horizontal (#3246).
-    fig.subplots_adjust(left=0.335, right=0.98, top=0.93, bottom=0.135)
+    # Indented past the title reserve, which ends at figure x 0.281 here — and
+    # further than the reserve alone needs. Centring the y-label on its axis
+    # (rather than parking it at the bottom, as it used to be) puts a 2.4-inch
+    # rotated string across the middle of the left margin, and the only way a
+    # *centred* label clears the reserve is horizontally. The width this costs
+    # the plot goes to the legend, which lives in the same margin.
+    fig.subplots_adjust(left=0.40, right=0.98, top=0.93, bottom=0.135)
     save(fig, OUT, "calib-blend-schedule.png", column=FULL_BLEED, tight=False)
 
 
@@ -3776,6 +3796,31 @@ def _split_idea_stage(stage: int) -> plt.Figure:
     return fig
 
 
+#: The six measured series, in legend order: the four single-vector models
+#: that agree, then DINOv3's two voting modes. Cool hues for the bundle, warm
+#: for the pair that disagrees with it, all from Okabe-Ito.
+SPLIT_SERIES = (
+    ("siglip-whole_image", "SigLIP", "#0072b2"),
+    ("siglip2_l-whole_image", "SigLIP 2", "#56b4e9"),
+    ("clip-whole_image", "CLIP", "#6e4b9e"),
+    ("clip_l-whole_image", "CLIP-L", "#cc79a7"),
+    ("dinov3_patch-whole_image", "DINOv3 · binary", "#d55e00"),
+    ("dinov3_patch-max_patch", "DINOv3 · region", "#e69f00"),
+)
+
+#: One weight for all six. Line weight encoded the grouping when every line was
+#: black; with a colour per series it would be a second encoding of the same
+#: fact, and a bold line among thin ones reads as "this one matters more".
+SPLIT_LINE_W = 1.9
+
+#: Where the key sits, in figure fractions, and how big it is set. The anchor
+#: clears the title reserve (which ends at y 0.665 here) and the axis's own
+#: label; the size is the smallest that still renders at 21.5px in a full-bleed
+#: slot, against the theme's 20px floor.
+SPLIT_LEGEND_ANCHOR = (0.035, 0.34)
+SPLIT_LEGEND_PT = 14
+
+
 def split_fraction_fig() -> None:
     """The Train/Check split, paired against the 50/50 incumbent.
 
@@ -3789,12 +3834,20 @@ def split_fraction_fig() -> None:
     paired difference) and a centred 7-vote rolling mean that the presenter
     note declares.
 
-    **Black at two weights, not green against red.** The old drawing coloured
-    the winning arms green and the losing ones red, on a slide whose curves are
-    about evaluations that hand out Good and Bad labels — the deck's two other
-    uses of exactly those hues (#3296). The line weight carries the only
-    grouping the chart actually has: four single-vector models that agree, and
-    the patch model that does not.
+    **One colour per curve, and a legend.** This is the deck's only ordinary
+    chart — six measured series with names — so it is drawn like one. Two
+    earlier attempts were not: green-against-red said "good arm / bad arm" in
+    the deck's own Good/Bad hues (#3296), and the black-at-two-weights that
+    replaced it left four indistinguishable lines under one shared label, so
+    the chart could not answer "which one is CLIP?" at all (#3301). Weight is
+    not an encoding here; every line is the same width.
+
+    The palette keeps the grouping the weight ramp used to carry, without
+    spending the deck's semantic colours on it: the four single-vector models
+    take four cool hues and DINOv3's two voting modes take two warm ones, so
+    "the four agree and the patch model does not" is still the first thing the
+    eye gets. Okabe-Ito, so the six stay separable to a colourblind reader —
+    which a weight ramp of four identical blacks never was.
     """
     import csv
 
@@ -3822,26 +3875,8 @@ def split_fraction_fig() -> None:
 
     fig, ax = plt.subplots(figsize=(11.5, 6.5))
     ax.axhline(0.0, color=SOFT, linewidth=1.2, linestyle=(0, (4, 3)), zorder=1)
-    # The four single-vector arms are drawn as one bundle and named once. They
-    # sit inside six thousandths of each other for most of the sweep, so four
-    # labels on four curves would be four labels on one curve — and the claim
-    # the bundle makes is a claim about all four at once.
-    for geometry in ("siglip-whole_image", "siglip2_l-whole_image", "clip-whole_image", "clip_l-whole_image"):
-        ax.plot(*delta(geometry), color=INK, linewidth=1.5, zorder=3)
-    for geometry, label, xy, va in (
-        ("dinov3_patch-whole_image", "DINOv3 — binary voting", (44, 0.0295), "bottom"),
-        ("dinov3_patch-max_patch", "DINOv3 — region voting", (95, 0.0080), "bottom"),
-    ):
-        ax.plot(*delta(geometry), color=INK, linewidth=3.4, zorder=3)
-        ax.annotate(label, xy=xy, ha="left", va=va, fontsize=15, color=INK)
-    ax.annotate(
-        "SigLIP · SigLIP 2 · CLIP · CLIP-L",
-        xy=(74, -0.0235),
-        ha="center",
-        va="top",
-        fontsize=15,
-        color=INK,
-    )
+    for geometry, label, colour in SPLIT_SERIES:
+        ax.plot(*delta(geometry), color=colour, linewidth=SPLIT_LINE_W, label=label, zorder=3)
     # Region labels for the two half-planes, parked in the corners the curves
     # leave empty: top-left above the rising DINOv3 line, bottom-right below
     # the settled single-vector bundle.
@@ -3852,16 +3887,31 @@ def split_fraction_fig() -> None:
     ax.set_ylim(-0.037, 0.037)
     ax.set_yticks([-0.03, -0.02, -0.01, 0, 0.01, 0.02, 0.03])
     ax.set_xlabel("votes")
-    # Anchored to the bottom of the axis for the same reason as the schedule
-    # figure's: the title reserve is only the *top* left corner, so a label
-    # living low on the left costs the drawing nothing — and short enough not
-    # to climb back into it (the annotations above carry the sign convention).
-    ax.set_ylabel("Δ cost of a 70/30 split", loc="bottom")
+    ax.set_ylabel("Δ cost of a 70/30 split")
     ax.grid(axis="y", color=RULE, linewidth=0.8)
     ax.set_axisbelow(True)
     # Full-bleed with the axes indented past the title reserve, exactly as
     # blend_schedule_fig: the blocker is horizontal, so the fix is horizontal.
-    fig.subplots_adjust(left=0.335, right=0.98, top=0.93, bottom=0.135)
+    # Indented past the title reserve, which ends at figure x 0.281 here — and
+    # further than the reserve alone needs. Centring the y-label on its axis
+    # (rather than parking it at the bottom, as it used to be) puts a 2.4-inch
+    # rotated string across the middle of the left margin, and the only way a
+    # *centred* label clears the reserve is horizontally. The width this costs
+    # the plot goes to the legend, which lives in the same margin.
+    fig.subplots_adjust(left=0.40, right=0.98, top=0.93, bottom=0.135)
+    # The legend goes in the left margin, under the title reserve: the axes are
+    # already indented past that reserve, so the strip below it is the one
+    # piece of empty paper on the slide that no curve wants. Inside the axes
+    # there is nowhere a six-row key does not sit on a line.
+    fig.legend(
+        loc="center left",
+        bbox_to_anchor=SPLIT_LEGEND_ANCHOR,
+        frameon=False,
+        handlelength=1.6,
+        handletextpad=0.6,
+        labelspacing=0.55,
+        fontsize=SPLIT_LEGEND_PT,
+    )
     save(fig, OUT, "calib-split-fraction.png", column=FULL_BLEED, tight=False)
 
 
