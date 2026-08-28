@@ -275,6 +275,10 @@ def _fused_threshold(
         if final_ids is not None
         else (np.asarray(final_scores, dtype=np.float64), False)
     )
+    # ``excluding`` is only ever True when ``voted_ids`` is a non-empty set, so
+    # binding it here narrows the type for the fold loop AND makes the coupling
+    # explicit: one name carries both "are we excluding" and "what by".
+    exclude: set[int] | None = voted_ids if (excluding and voted_ids) else None
 
     cut = None
     if folds.fallback is None:
@@ -282,7 +286,7 @@ def _fused_threshold(
         fold_haystacks = []
         for model in folds.models[:n_folds]:
             ids, scores, _best = _score_all_media(model, clips_dict, score_emb)
-            fold_haystacks.append(drop_voted(scores, ids, voted_ids) if excluding else np.asarray(scores, np.float64))
+            fold_haystacks.append(drop_voted(scores, ids, exclude) if exclude else np.asarray(scores, np.float64))
         cut = fit_fold_anchored_cut(fold_haystacks, folds.orderings[:n_folds], fit_final)
 
     if det_ctx is not None:
