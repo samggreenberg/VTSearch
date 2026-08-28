@@ -1427,7 +1427,7 @@ XSEMI_CANVAS = (24.2, 13.74)
 #: The fold panels' vote glyphs, in points, sized to hit `VOTE_MARK_PX` under
 #: this figure's own crop. Re-derive it if the layout reflows —
 #: `enforce_rendered_px` fails the build with the arithmetic when it has.
-XSEMI_MARK_PT = 18.0
+XSEMI_MARK_PT = 18.4
 
 #: The fold panels' height. Shorter than the blend's 2.0 because there are two
 #: of them stacked under the flow rather than one beside it, and no shorter,
@@ -1580,11 +1580,20 @@ def _hump_marks(
     collide. The rule is about legibility, not about a house style for where a
     ✓ goes.
     """
-    halo = [patheffects.withStroke(linewidth=4.0, foreground="white")]
-    for key, color, glyph in (("bad", RED, "✗"), ("good", GREEN, "✓")):
-        for score in anchors[key]:
+    # Two passes, and that is the point of them: every halo is laid down before
+    # any glyph. Drawn the obvious way — each glyph carrying its own white
+    # stroke — a mark drawn later erases part of one drawn earlier, and where a
+    # ✓ and a ✗ overlap (they do, on the fold panels: a vote the fold model
+    # ranked wrongly lands among its opposites) the ✓'s halo ate the ✗'s right
+    # arm and left a glyph that reads as a Y (#3301). A halo is for separating
+    # ink from the *bars behind it*, so it belongs strictly underneath the row
+    # it serves.
+    marks = [(x0 + score * w, RED, "✗") for score in anchors["bad"]]
+    marks += [(x0 + score * w, GREEN, "✓") for score in anchors["good"]]
+    for effects, zorder in (([patheffects.Stroke(linewidth=4.0, foreground="white")], 5.9), ([], 6)):
+        for x, color, glyph in marks:
             ax.text(
-                x0 + score * w,
+                x,
                 y_base - drop,
                 glyph,
                 ha="center",
@@ -1592,8 +1601,8 @@ def _hump_marks(
                 fontsize=size,
                 color=color,
                 fontweight="bold",
-                zorder=6,
-                path_effects=halo,
+                zorder=zorder,
+                path_effects=effects,
             )
 
 
@@ -1706,7 +1715,14 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
     train_len = max(1.5, arrow_len_for("train"))
     m0x = train_x + train_len + OBJECT_GAP + MODEL_W / 2
 
-    theta_bottom = y_base - 0.32 - LABEL_GAP - CAP_16
+    # The bottom of the θ label, and it has to be derived from the drop
+    # `_theta_notch` actually applies. Spelling it out as the notch's own
+    # length was right when the label hung directly under the notch; once the
+    # label moved below the panel's row of vote glyphs (`VOTE_LABEL_DROP`,
+    # #3296) this estimate stayed half a unit too high, and everything placed
+    # under it crept up into the label — on slide 12 the gauges' cut stubs
+    # ended up touching the θ they are a re-reading of (#3301).
+    theta_bottom = y_base - VOTE_LABEL_DROP - CAP_16
     conclusion_y = theta_bottom - OBJECT_GAP - CONCLUSION_PT / 72
 
     data_block = functools.partial(_data_block, ax)
@@ -1866,7 +1882,7 @@ XQUANT_CANVAS = (20.45, 13.99)
 #: The two fold panels' vote glyphs here, sized the same way and to the same
 #: target as `XSEMI_MARK_PT`; the number differs only because this figure
 #: crops to a different aspect and so lands in the slot at a different scale.
-XQUANT_MARK_PT = 18.5
+XQUANT_MARK_PT = 19.1
 
 #: The left gutter that buys this figure its headline (#3242). Everything in
 #: the notch's vertical band — the "Unlabeled" / Good / Bad names hanging off
@@ -2295,7 +2311,14 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
     # every unit off it is worth having.
     tip0 = (m0x, panel_top + 2 * OBJECT_GAP + CAP_16 + LABEL_GAP)
 
-    theta_bottom = y_base - 0.32 - LABEL_GAP - CAP_16
+    # The bottom of the θ label, and it has to be derived from the drop
+    # `_theta_notch` actually applies. Spelling it out as the notch's own
+    # length was right when the label hung directly under the notch; once the
+    # label moved below the panel's row of vote glyphs (`VOTE_LABEL_DROP`,
+    # #3296) this estimate stayed half a unit too high, and everything placed
+    # under it crept up into the label — on slide 12 the gauges' cut stubs
+    # ended up touching the θ they are a re-reading of (#3301).
+    theta_bottom = y_base - VOTE_LABEL_DROP - CAP_16
     gauge_top = theta_bottom - OBJECT_GAP - GAUGE_STUB
     gauge_y0 = gauge_top - XQUANT_GAUGE_H
     gauge_w = XQUANT_GAUGE_W * panel_w
@@ -3456,7 +3479,14 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     panel_top = row_y - MODEL_H / 2 - OBJECT_GAP - score_len - OBJECT_GAP - CAP_16 - LABEL_GAP
     y_base = panel_top - ACQ_PANEL_H
 
-    theta_bottom = y_base - 0.32 - LABEL_GAP - CAP_16
+    # The bottom of the θ label, and it has to be derived from the drop
+    # `_theta_notch` actually applies. Spelling it out as the notch's own
+    # length was right when the label hung directly under the notch; once the
+    # label moved below the panel's row of vote glyphs (`VOTE_LABEL_DROP`,
+    # #3296) this estimate stayed half a unit too high, and everything placed
+    # under it crept up into the label — on slide 12 the gauges' cut stubs
+    # ended up touching the θ they are a re-reading of (#3301).
+    theta_bottom = y_base - VOTE_LABEL_DROP - CAP_16
     gauge_top = theta_bottom - OBJECT_GAP - GAUGE_STUB
     gauge_y0 = gauge_top - ACQ_GAUGE_H
 
@@ -4673,7 +4703,7 @@ EM_ARROWS = ("E", "M", "repeat")
 #: The vote glyphs on this figure's baselines, and how far under it they hang.
 #: The size is `VOTE_MARK_PX` converted through *this* figure's crop; the drop
 #: is tight because an EM panel's baseline has no cut notch under it.
-EM_MARK_PT = 15.0
+EM_MARK_PT = 14.6
 EM_MARK_DROP = 0.12
 
 

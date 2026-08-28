@@ -263,7 +263,7 @@ def slot_px_per_pt(path: Path, column: float = FULL_BLEED) -> float:
 
 
 def enforce_rendered_px(
-    path: Path, pt: float, target_px: float, what: str, column: float = FULL_BLEED, tol: float = 1.5
+    path: Path, pt: float, target_px: float, what: str, column: float = FULL_BLEED, tol: float = 0.6
 ) -> None:
     """Raise unless `pt` type in the written figure renders at `target_px` on the slide.
 
