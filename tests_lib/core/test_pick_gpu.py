@@ -120,6 +120,76 @@ class TestParseNodeAvailability:
         assert pick_gpu.parse_node_availability("scontrol: error: Invalid node name\n") == {}
 
 
+class TestUsageWithoutGresUsed:
+    """The cluster does not write ``GresUsed``; usage has to come from ``AllocTRES``.
+
+    Every fixture above supplies a ``GresUsed`` field, which is why nothing
+    caught #3299: the HLTCOE cluster (Slurm 23.11.6) emits that field on **no**
+    node, so the reader saw an empty string, computed ``free == total``
+    everywhere and always returned the first candidate type. It advertised
+    "a100 23/23 free" while all 23 A100s were allocated and 109 V100s idled.
+    The records below are copied from that cluster rather than composed, so a
+    future reader cannot describe a machine the code never meets.
+    """
+
+    #: Verbatim `scontrol show node --oneliner` for rack5n06, 2026-08-28: four
+    #: A100s, all four allocated, and no GresUsed field anywhere on the line.
+    BUSY_A100 = (
+        "NodeName=rack5n06 Arch=x86_64 CoresPerSocket=24  CPUAlloc=32 CPUEfctv=96 CPUTot=96 CPULoad=5.06 "
+        "AvailableFeatures=a100,intel,40gb ActiveFeatures=a100,intel,40gb Gres=gpu:a100:4 NodeAddr=rack5n06 "
+        "NodeHostName=rack5n06 Version=23.11.6 OS=Linux 5.14.0-687.13.1.el9_8.x86_64 #1 SMP PREEMPT_DYNAMIC "
+        "Tue Jun 2 11:33:56 EDT 2026  RealMemory=750000 AllocMem=393216 FreeMem=8524 Sockets=2 Boards=1 "
+        "State=MIXED ThreadsPerCore=2 TmpDisk=6900000 Weight=1 Owner=N/A MCS_label=N/A Partitions=gpu  "
+        "BootTime=2026-06-25T09:05:36 SlurmdStartTime=2026-07-08T10:05:26 LastBusyTime=2026-08-24T02:01:17 "
+        "ResumeAfterTime=None CfgTRES=cpu=96,mem=750000M,billing=1950,gres/gpu=4,gres/gpu:a100=4 "
+        "AllocTRES=cpu=32,mem=384G,gres/gpu=4,gres/gpu:a100=4 CapWatts=n/a CurrentWatts=0 AveWatts=0 "
+        "ExtSensorsJoules=n/a ExtSensorsWatts=0 ExtSensorsTemp=n/a"
+    )
+
+    #: Same cluster, rack10n01: eight idle V100s. `AllocTRES=` is present and
+    #: **empty**, which is a real measurement (zero) and not a missing field.
+    IDLE_V100 = (
+        "NodeName=rack10n01 Arch=x86_64 CoresPerSocket=20 CPUAlloc=0 CPUEfctv=80 CPUTot=80 CPULoad=0.01 "
+        "AvailableFeatures=v100,intel ActiveFeatures=v100,intel Gres=gpu:v100:8 NodeAddr=rack10n01 "
+        "NodeHostName=rack10n01 Version=23.11.6 RealMemory=1000000 AllocMem=0 FreeMem=900000 Sockets=2 "
+        "Boards=1 State=IDLE ThreadsPerCore=2 TmpDisk=7100000 Weight=1 Owner=N/A MCS_label=N/A "
+        "Partitions=gpu  BootTime=2026-06-13T19:13:24 SlurmdStartTime=2026-07-08T10:05:26 "
+        "CfgTRES=cpu=80,mem=1000000M,billing=3208,gres/gpu=8,gres/gpu:v100=8 AllocTRES= "
+        "CapWatts=n/a CurrentWatts=0 AveWatts=0"
+    )
+
+    def test_a_fully_allocated_node_reports_zero_free(self):
+        avail = pick_gpu.parse_node_availability(self.BUSY_A100)
+        assert avail["a100"] == pick_gpu.Availability("a100", free=0, total=4)
+
+    def test_an_empty_alloctres_means_zero_used_not_unknown(self):
+        avail = pick_gpu.parse_node_availability(self.IDLE_V100)
+        assert avail["v100"] == pick_gpu.Availability("v100", free=8, total=8)
+
+    def test_the_slow_type_wins_when_the_fast_one_is_full(self):
+        """The whole point: this pair used to select a100 and pend for a day."""
+        avail = pick_gpu.parse_node_availability(self.BUSY_A100 + "\n" + self.IDLE_V100)
+        gpu_type, _ = pick_gpu.select_gpu_type(avail, need=3)
+        assert gpu_type == "v100"
+
+    def test_the_untyped_gres_gpu_total_is_not_double_counted(self):
+        """`AllocTRES` carries both `gres/gpu=4` and `gres/gpu:a100=4`."""
+        assert pick_gpu._node_gpus_used(self.BUSY_A100) == {"a100": 4}
+
+    def test_gres_used_still_wins_where_a_cluster_writes_it(self):
+        """Other Slurm builds do emit it; do not regress them onto AllocTRES."""
+        line = _node("n1", gres="gpu:l40s:8", used="gpu:l40s:3") + " AllocTRES=cpu=8,gres/gpu:l40s=7"
+        assert pick_gpu.parse_node_availability(line)["l40s"].free == 5
+
+    def test_a_node_with_no_usage_field_at_all_is_not_counted_as_free(self):
+        """Unmeasurable is not empty: it must not advertise a free GPU."""
+        line = (
+            "NodeName=n1 Arch=x86_64 Gres=gpu:a100:8 RealMemory=256000 State=MIXED Partitions=gpu "
+            "BootTime=2026-08-01T00:00:00"
+        )
+        assert pick_gpu.parse_node_availability(line) == {}
+
+
 class TestSelectGpuType:
     # No return annotation: pick_gpu is loaded by path, so its Availability is a
     # runtime attribute pyright cannot use in a type expression.

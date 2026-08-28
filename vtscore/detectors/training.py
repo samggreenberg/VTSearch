@@ -186,6 +186,8 @@ def _fused_threshold(
     blend_ctx: Any,
     schedule: str,
     det_ctx: Any = None,
+    final_ids: list[int] | None = None,
+    voted_ids: "set[int] | None" = None,
 ) -> float:
     """The shipped threshold: the fold-anchored cut, schedule blend as fallback.
 
@@ -197,6 +199,29 @@ def _fused_threshold(
     the estimator the 2026-08-05 deep-regime run picked over both pure
     cross-calibration and the schedule-blended GMM - see
     ``docs/experiments/population-anchored-calibration/REPORT.md``.
+
+    **Voted media are excluded from every haystack the estimator fits on**
+    (issue #3308).  Each model in the chain was trained on the votes, so the
+    votes' own scores under it are optimistically shifted - and the calibration
+    votes additionally sit in the haystack twice, once as free points and once
+    as anchors.  Dropping all of *voted_ids* from the fold haystacks *and* from
+    the final model's realization sample keeps every distribution in the
+    quantile transfer over the identical population (the unlabeled remainder),
+    which is the population the threshold actually decides - the voted items'
+    verdicts are already known.  The effect is bounded by the votes' share of
+    the (<=50k-sampled) haystack: invisible on a large corpus, a measured win
+    on small ones.  The exclusion switches off entirely when it would leave
+    fewer than :data:`~vtscore.training.thresholds.EXCLUSION_MIN_REMAINDER`
+    scores - a remainder that small is both too coarse to read quantiles from
+    and, after deep Autopilot voting, selection-biased toward whatever
+    acquisition never wanted; the full contaminated haystack measures better
+    there (see the constant's rationale).  The schedule-blend *fallback* below
+    deliberately keeps the full distribution: it only fires when there are no
+    usable folds (<4 votes, or a single class), where the contamination is at
+    most a few points, and its blend weights were measured on the full
+    population.  *final_ids* names the media each entry of *final_scores*
+    belongs to; the exclusion needs both it and *voted_ids*, and the
+    historical include-everything behaviour is kept otherwise.
 
     The extra scoring passes (one per fold) are the estimator's whole marginal
     cost.  Production trains the *linear* head, so a pass is a matrix multiply
@@ -226,7 +251,9 @@ def _fused_threshold(
     """
     from vtscore.training.thresholds import (  # noqa: PLC0415
         NO_GOOD_THRESHOLD,
+        apply_vote_exclusion,
         calculate_safe_threshold,
+        drop_voted,
         fit_fold_anchored_cut,
     )
     from vtscore.utils.scores import scored_only  # noqa: PLC0415
@@ -240,14 +267,27 @@ def _fused_threshold(
             len(final_scores),
         )
 
+    # One decision, taken on the final model's scores and then obeyed by every
+    # fold haystack in this fit - the all-or-nothing contract lives in
+    # ``apply_vote_exclusion`` rather than being re-derived per haystack here.
+    fit_final, excluding = (
+        apply_vote_exclusion(final_scores, final_ids, voted_ids)
+        if final_ids is not None
+        else (np.asarray(final_scores, dtype=np.float64), False)
+    )
+    # ``excluding`` is only ever True when ``voted_ids`` is a non-empty set, so
+    # binding it here narrows the type for the fold loop AND makes the coupling
+    # explicit: one name carries both "are we excluding" and "what by".
+    exclude: set[int] | None = voted_ids if (excluding and voted_ids) else None
+
     cut = None
     if folds.fallback is None:
         n_folds = min(len(folds.models), len(folds.orderings))
         fold_haystacks = []
         for model in folds.models[:n_folds]:
-            _ids, scores, _best = _score_all_media(model, clips_dict, score_emb)
-            fold_haystacks.append(np.asarray(scores, dtype=np.float64))
-        cut = fit_fold_anchored_cut(fold_haystacks, folds.orderings[:n_folds], final_scores)
+            ids, scores, _best = _score_all_media(model, clips_dict, score_emb)
+            fold_haystacks.append(drop_voted(scores, ids, exclude) if exclude else np.asarray(scores, np.float64))
+        cut = fit_fold_anchored_cut(fold_haystacks, folds.orderings[:n_folds], fit_final)
 
     if det_ctx is not None:
         det_ctx.anchored_cut_cache = cut
@@ -349,6 +389,7 @@ def train_and_threshold(
     det_ctx: Any = None,
     groups: list | None = None,
     score_rows: dict | None = None,
+    voted_ids: "set[int] | None" = None,
 ) -> tuple[Any, float]:
     """Train the detector head and compute a calibrated threshold.
 
@@ -393,6 +434,12 @@ def train_and_threshold(
         score_rows: Per-bag inference row stacks; see
             :func:`_calibration_score_rows`.  Only consulted when *groups*
             reveals flooding.
+        voted_ids: Media ids in *snap* whose labels the training set carries.
+            Excluded from every haystack the fold-anchored estimator fits on -
+            their scores under the models trained on them are optimistically
+            shifted (issue #3308; see :func:`_fused_threshold`).  ``None`` (the
+            callers with no way to name their labels' media) keeps the full
+            haystack.
 
     Returns:
         ``(model, threshold)``
@@ -497,9 +544,10 @@ def train_and_threshold(
     # (the CLI importer path, where the chunk is embedded later, per detector
     # group, by `route_and_embed`).  Both take the no-haystack branch rather
     # than fitting the estimator on an empty distribution.
+    all_ids: list[int] = []
     all_scores: list[float] = []
     if snap:
-        _all_ids, all_scores, _best_region = _score_all_media(model, snap, embedder_name)
+        all_ids, all_scores, _best_region = _score_all_media(model, snap, embedder_name)
     if snap and all_scores:
         threshold = _fused_threshold(
             threshold,
@@ -511,6 +559,8 @@ def train_and_threshold(
             blend_ctx,
             _blend_schedule_for_snap(snap),
             det_ctx=det_ctx,
+            final_ids=all_ids,
+            voted_ids=voted_ids,
         )
     elif det_ctx is not None:
         # Safe thresholds off: no population estimator to re-cut on a slide.
@@ -1031,6 +1081,7 @@ def _train_and_score_xy(
     det_ctx: Any,
     groups: list | None = None,
     score_rows: dict | None = None,
+    voted_ids: "set[int] | None" = None,
 ) -> tuple[list[dict[str, Any]], float, nn.Sequential | None]:
     """Train the detector head on ``(X_list, y_list)`` and score every media in *clips_dict*.
 
@@ -1051,6 +1102,9 @@ def _train_and_score_xy(
     collapses over the *scoring* rows *score_rows* supplies rather than the
     rows it trained on (see :func:`_calibration_score_rows`); otherwise every
     row is its own bag and the path is byte-for-byte the pre-flood behaviour.
+    *voted_ids* names the media in *clips_dict* the labels came from, so the
+    fold-anchored estimator can drop them from its haystacks (issue #3308; see
+    :func:`_fused_threshold`).
     Returns ``([], 0.5, None)`` when the labels don't satisfy ≥2 samples AND
     ≥1 good AND ≥1 bad.
     """
@@ -1132,6 +1186,8 @@ def _train_and_score_xy(
         blend_ctx,
         _blend_schedule_for_snap(clips_dict),
         det_ctx=det_ctx,
+        final_ids=all_ids,
+        voted_ids=voted_ids,
     )
 
     results = _format_results(all_ids, scores, best_region, clips_dict)
@@ -1202,6 +1258,7 @@ def train_and_score(
         det_ctx=det_ctx,
         groups=groups,
         score_rows=score_rows,
+        voted_ids=set(good_votes) | set(bad_votes),
     )
 
     # Stage-2 structural re-rank: a no-op for every non-structural dataset

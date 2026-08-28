@@ -42,6 +42,7 @@ from slide_figure import (  # noqa: E402
     FULL_BLEED,
     LABEL_GAP_PT,
     OBJECT_GAP_PT,
+    enforce_rendered_px,
     save,
     tight_box,
 )
@@ -191,7 +192,22 @@ VOTE_MARK_DROP = 0.36
 #: constant clears both.
 VOTE_MARK_PT = 16
 VOTE_PANEL_MARK_PT = 22
+
+#: What a fold panel's vote glyph is meant to measure **on the slide**, in
+#: slide pixels. Two figures draw the same seven votes — the anchored-fold
+#: schematic and the EM aside beside it — and a shared point size does not make
+#: them the same size, because the two crop to different aspects and the slot
+#: therefore scales them differently: 16pt landed at 21px on one slide and 15pt
+#: at 24px on the next, which reads as the marks shrinking between two slides
+#: that are meant to be the same picture (#3301). Each figure carries the
+#: points that reach this target under *its* crop, and `enforce_rendered_px`
+#: fails the build if a reflow moves one of them.
+VOTE_MARK_PX = 24.0
 VOTE_LABEL_DROP = VOTE_MARK_DROP + CAP_16 * VOTE_PANEL_MARK_PT / VOTE_MARK_PT + LABEL_GAP
+
+#: The same label under a baseline that carries *no* vote glyphs: the notch's
+#: own length plus a gap, and nothing else to clear.
+NOTCH_LABEL_DROP = 0.32 + LABEL_GAP
 
 #: The half-width the held-out score marks below are quoted at, and the marks
 #: themselves: where each fold's Bad and Good votes land on its own score line,
@@ -263,8 +279,27 @@ def xcal_flow_fig() -> None:
     save(final, OUT, "calib-xcal-flow.png", column=FULL_BLEED, box=box)
 
 
-def _data_block(ax: plt.Axes, x0: float, y0: float, w: float, h: float, split: bool = False) -> None:
-    """A block of labelled media: an amorphous green (Good) region over a red (Bad) one."""
+#: The share of the votes each fold model trains on, as slide 13 draws it —
+#: `vtscore.training.thresholds` calls it `1 - calibration_fraction`. Quoted
+#: here to *draw* the split, not to compute one.
+SPLIT_TRAIN_FRACTION = 0.70
+
+#: How far a `split="overlap"` divider bows into the half it is not, at its
+#: widest, in drawing units. Enough to read as a bow at slide size and no more:
+#: the two curves say "these overlap", and the *amount* they overlap is the
+#: distance between them, which is already to scale. Capped by the D_1 disc,
+#: which sits in the exclusive part of its own share and must not be crossed
+#: by the other share's boundary.
+SPLIT_BULGE = 0.12
+
+
+def _data_block(ax: plt.Axes, x0: float, y0: float, w: float, h: float, split: bool | str = False) -> None:
+    """A block of labelled media: an amorphous green (Good) region over a red (Bad) one.
+
+    `split` draws how the votes are divided between the two folds: falsy for
+    not at all, `True` for one divider down the middle (the 50/50 the deck
+    carries until slide 13), `"overlap"` for the two bowed dividers of a 70/30.
+    """
     good_h = 0.42 * h
     ax.add_patch(
         Rectangle(
@@ -284,6 +319,28 @@ def _data_block(ax: plt.Axes, x0: float, y0: float, w: float, h: float, split: b
     ax.add_patch(Rectangle((x0, y0), w, h, facecolor="none", edgecolor=INK, linewidth=1.6, zorder=3))
     ax.plot([x0, x0 + w], [y0 + h - good_h] * 2, color=INK, linewidth=1.0, zorder=3)
     if not split:
+        return
+    if split == "overlap":
+        # Two dividers, because at a 70/30 split there is no single place to put
+        # one. Each fold draws its *own* 70% to train on out of the same votes
+        # (`_grouped_folds` permutes per fold), so two 70% shares of a 100% bar
+        # necessarily share 40% of it: D₁ runs from the left edge to the right
+        # divider, D₂ from the left divider to the right edge, and the lens
+        # between them is in both. Each bows away from its own half — that is
+        # the infringement drawn rather than asserted.
+        for frac, direction in ((1.0 - SPLIT_TRAIN_FRACTION, -1.0), (SPLIT_TRAIN_FRACTION, 1.0)):
+            t = np.linspace(0.0, 1.0, 80)
+            ax.plot(
+                x0 + frac * w + direction * SPLIT_BULGE * np.sin(np.pi * t),
+                y0 + t * h,
+                color=INK,
+                linewidth=1.6,
+                zorder=3,
+            )
+        # Named in the part of each share that is only its own, so a label never
+        # stands in the lens that belongs to both.
+        for cx, name in ((x0 + 0.13 * w, "D_1"), (x0 + 0.87 * w, "D_2")):
+            _disc_label(ax, cx, y0 + h / 2, name)
         return
     ax.plot([x0 + w / 2] * 2, [y0, y0 + h], color=INK, linewidth=1.6, zorder=3)
     # D₁ and D₂ ride *inside* the halves they name, each on a white disc that
@@ -408,9 +465,9 @@ RANGE_FOOT = 0.13
 
 def _range_line(ax: plt.Axes, x_left: float, x_right: float, y: float, z: int = 2) -> None:
     """A range: a horizontal rule with a serif foot at each end."""
-    ax.plot([x_left, x_right], [y, y], color=INK, linewidth=1.8, zorder=z)
+    ax.plot([x_left, x_right], [y, y], color=INK, linewidth=BASELINE_LW, zorder=z)
     for x in (x_left, x_right):
-        ax.plot([x, x], [y - RANGE_FOOT, y + RANGE_FOOT], color=INK, linewidth=1.8, zorder=z)
+        ax.plot([x, x], [y - RANGE_FOOT, y + RANGE_FOOT], color=INK, linewidth=BASELINE_LW, zorder=z)
 
 
 def _score_line(
@@ -710,27 +767,41 @@ def _band(x0: float, y_base: float, w: float, edges, lower, upper) -> "Polygon":
     return Polygon(pts, closed=True)
 
 
-#: Height below which a fitted component's tail stops being drawn, in drawing
-#: units. Half the baseline's own stroke, so a tail that stops is already
-#: inside the black rule and merges with it — set as a fraction of the panel
-#: height instead, a tail on a tall panel stopped a visible step *above* the
-#: baseline and the curve appeared to drop off at both ends and in the valley
-#: (#3246). See `_score_histogram`.
-TAIL_FLOOR = 0.9 / FLOW_UNIT_PT
-
 #: Stroke width of a fitted component's curve, in points, and how far below
 #: the density it plots the curve is actually drawn, in drawing units.
 #:
-#: The drop exists because a stroke has width. Ended at `TAIL_FLOOR` — half the
-#: baseline's own stroke — the curve's *centre* is inside the black rule but
-#: its upper edge stands `HUMP_LW / 2` above it, so a red or green step
-#: appears at each of the four places a component starts and stops (#3254).
-#: Lowering the whole curve by that half-width puts its upper edge exactly on
-#: the baseline's, and the tails merge into the rule instead of sitting on it.
-#: Half a linewidth is 1.2pt — three slide pixels of drop at the peak, which is
-#: nothing, against four visible steps, which is not.
+#: The drop exists because a stroke has width. Drawn on the density itself, the
+#: curve's *centre* ends inside the black rule but its upper edge stands
+#: `HUMP_LW / 2` above it, so a red or green step appears at each of the four
+#: places a component starts and stops (#3254). Lowering the whole curve by
+#: that half-width is what makes the tails merge into the rule instead of
+#: sitting on it. Half a linewidth is 1.2pt — three slide pixels of drop at the
+#: peak, which is nothing, against four visible steps, which is not.
 HUMP_LW = 2.4
 HUMP_DROP = (HUMP_LW / 2) / FLOW_UNIT_PT
+
+#: Stroke width of the baseline a panel's curves stand on — `_range_line`'s
+#: rule, quoted here because `TAIL_FLOOR` is measured against it.
+BASELINE_LW = 1.8
+
+#: Height below which a fitted component's tail stops being drawn, in drawing
+#: units: the value that lands the stopped curve's **bottom** edge exactly on
+#: the baseline's bottom edge.
+#:
+#: It used to be half the baseline's stroke, which put the curve's centre
+#: inside the rule — but a centre inside the rule is not an edge inside it, and
+#: once `HUMP_DROP` lowered the whole curve as well, both tails and the valley
+#: floor hung 0.6pt of colour below a rule that is supposed to be the floor of
+#: the drawing (#3301). Solving for the bottom edge instead:
+#:
+#:     (density − HUMP_DROP) − HUMP_LW/2  =  y_base − BASELINE_LW/2
+#:
+#: which is `HUMP_LW − BASELINE_LW/2` above the baseline. The curve's top edge
+#: is then 0.6pt proud of the rule's top rather than flush with it; that is the
+#: unavoidable half of the trade — a stroke thicker than the rule it dies into
+#: cannot be flush at both edges — and it is the half that does not put ink
+#: under the base. See `_score_histogram`.
+TAIL_FLOOR = (HUMP_LW - BASELINE_LW / 2) / FLOW_UNIT_PT
 
 #: Stroke width of an unfitted histogram's bars. The narrowest panel in the
 #: progression is `calib-quantile-flow`'s, where `GMM_FLOW_BINS` bars share
@@ -1379,7 +1450,7 @@ def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Fi
 #: says out loud that which mound is Good is an assumption; and only then do
 #: the votes arrive and turn that assumption into a reading. Revealed together,
 #: the fit and its identification looked like one act.
-XSEMI_FLOW_STAGES = 7
+XSEMI_FLOW_STAGES = 8
 
 #: Taller than any of its parents, and the one figure in the progression that
 #: could not be talked down to `FLOW_CANVAS_H`. The blend fits in 11.4 because
@@ -1393,6 +1464,11 @@ XSEMI_FLOW_STAGES = 7
 #: the panels to a size where the votes inside the humps stop being legible,
 #: or dropping a beat the figure exists to make.
 XSEMI_CANVAS = (24.2, 13.74)
+
+#: The fold panels' vote glyphs, in points, sized to hit `VOTE_MARK_PX` under
+#: this figure's own crop. Re-derive it if the layout reflows —
+#: `enforce_rendered_px` fails the build with the arithmetic when it has.
+XSEMI_MARK_PT = 18.4
 
 #: The fold panels' height. Shorter than the blend's 2.0 because there are two
 #: of them stacked under the flow rather than one beside it, and no shorter,
@@ -1482,6 +1558,7 @@ def xsemi_flow_fig() -> None:
             box=box,
         )
     save(final, OUT, "calib-fold-anchored-flow.png", column=FULL_BLEED, box=box)
+    enforce_rendered_px(OUT / "calib-fold-anchored-flow.png", XSEMI_MARK_PT, VOTE_MARK_PX, "vote glyph")
 
 
 def _xsemi_folds() -> list[tuple[GmmFit1D, np.ndarray, dict]]:
@@ -1507,7 +1584,15 @@ def _xsemi_folds() -> list[tuple[GmmFit1D, np.ndarray, dict]]:
     return folds
 
 
-def _hump_marks(ax: plt.Axes, x0: float, y_base: float, w: float, anchors: dict, size: int = VOTE_MARK_PT) -> None:
+def _hump_marks(
+    ax: plt.Axes,
+    x0: float,
+    y_base: float,
+    w: float,
+    anchors: dict,
+    size: float = VOTE_MARK_PT,
+    drop: float = VOTE_MARK_DROP,
+) -> None:
     """This fold's held-out votes, drawn on the panel's baseline.
 
     The panel's baseline *is* the cross-calibration figure's score line: the
@@ -1536,20 +1621,29 @@ def _hump_marks(ax: plt.Axes, x0: float, y_base: float, w: float, anchors: dict,
     collide. The rule is about legibility, not about a house style for where a
     ✓ goes.
     """
-    halo = [patheffects.withStroke(linewidth=4.0, foreground="white")]
-    for key, color, glyph in (("bad", RED, "✗"), ("good", GREEN, "✓")):
-        for score in anchors[key]:
+    # Two passes, and that is the point of them: every halo is laid down before
+    # any glyph. Drawn the obvious way — each glyph carrying its own white
+    # stroke — a mark drawn later erases part of one drawn earlier, and where a
+    # ✓ and a ✗ overlap (they do, on the fold panels: a vote the fold model
+    # ranked wrongly lands among its opposites) the ✓'s halo ate the ✗'s right
+    # arm and left a glyph that reads as a Y (#3301). A halo is for separating
+    # ink from the *bars behind it*, so it belongs strictly underneath the row
+    # it serves.
+    marks = [(x0 + score * w, RED, "✗") for score in anchors["bad"]]
+    marks += [(x0 + score * w, GREEN, "✓") for score in anchors["good"]]
+    for effects, zorder in (([patheffects.Stroke(linewidth=4.0, foreground="white")], 5.9), ([], 6)):
+        for x, color, glyph in marks:
             ax.text(
-                x0 + score * w,
-                y_base - VOTE_MARK_DROP,
+                x,
+                y_base - drop,
                 glyph,
                 ha="center",
                 va="top",
                 fontsize=size,
                 color=color,
                 fontweight="bold",
-                zorder=6,
-                path_effects=halo,
+                zorder=zorder,
+                path_effects=effects,
             )
 
 
@@ -1662,7 +1756,14 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
     train_len = max(1.5, arrow_len_for("train"))
     m0x = train_x + train_len + OBJECT_GAP + MODEL_W / 2
 
-    theta_bottom = y_base - 0.32 - LABEL_GAP - CAP_16
+    # The bottom of the θ label, and it has to be derived from the drop
+    # `_theta_notch` actually applies. Spelling it out as the notch's own
+    # length was right when the label hung directly under the notch; once the
+    # label moved below the panel's row of vote glyphs (`VOTE_LABEL_DROP`,
+    # #3296) this estimate stayed half a unit too high, and everything placed
+    # under it crept up into the label — on slide 12 the gauges' cut stubs
+    # ended up touching the θ they are a re-reading of (#3301).
+    theta_bottom = y_base - VOTE_LABEL_DROP - CAP_16
     conclusion_y = theta_bottom - OBJECT_GAP - CONCLUSION_PT / 72
 
     data_block = functools.partial(_data_block, ax)
@@ -1737,16 +1838,21 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
             # the data; the question-mark fill is the fit *with* iteration 2's
             # assumption about which mound is which; the block's own hatching
             # is that assumption replaced by the votes' reading of it.
-            fill="class" if stage >= 5 else ("query" if stage >= 4 else "plain"),
+            fill="class" if stage >= 6 else ("query" if stage >= 4 else "plain"),
             mu_labels=False,
         )
 
-    # ── stage 5: the held-out votes arrive and name the two components ────────
+    # ── stage 5: the held-out votes arrive ────────────────────────────────────
+    # And *only* arrive. Naming the two components is stage 6, and the split is
+    # the point: one page put the votes on the baselines and resolved the
+    # question marks in the same advance, so "here is the other evidence" and
+    # "here is what the two of them together say" were one beat and neither
+    # could be pointed at (#3301).
     if stage >= 5:
         for i, (mx, sign) in enumerate(((m1x, 1.0), (m2x, -1.0))):
             entry_tail = (mx + sign * slope * (train_tail_y - my), train_tail_y)
             arrow(entry_tail, _box_edge(mx, my, entry_tail, OBJECT_GAP))
-            _hump_marks(ax, panel_x[i], y_base, panel_w, folds[i][2])
+            _hump_marks(ax, panel_x[i], y_base, panel_w, folds[i][2], size=XSEMI_MARK_PT)
             # Held out, and named: the votes in fold i's panel are the ones
             # its own model never trained on — the crossed strokes above are
             # where they came from.
@@ -1764,8 +1870,10 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
         # drawing needs: what this figure has to show is that the votes are in
         # the fit at all.
 
-    # ── stage 6: cut each fold at the midpoint of its two fitted means ────────
-    if stage >= 6:
+    # ── stage 6: the two sources read together — the fill above changes here ──
+
+    # ── stage 7: cut each fold at the midpoint of its two fitted means ────────
+    if stage >= 7:
         for i, (fit, _scores, _anchors) in enumerate(folds):
             theta_x = panel_x[i] + 0.5 * (fit.mu_lo + fit.mu_hi) * panel_w
             ax.plot([theta_x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
@@ -1779,14 +1887,14 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
                 color=INK,
             )
 
-    # ── stage 7: average the two cuts ─────────────────────────────────────────
+    # ── stage 8: average the two cuts ─────────────────────────────────────────
     # One line, and no `return (M₀, θ₀)` after it. Its parents close on a
     # return because they are each a whole algorithm; this one is a beat in the
     # middle of an argument, and the quantile figure that follows takes this
     # very average apart. Ending on the thing about to be corrected is the
     # point, and an arrow onward to a return would spend the slide's last
     # words settling something the next slide unsettles.
-    if stage >= 7:
+    if stage >= 8:
         ax.text(
             bx,
             conclusion_y,
@@ -1818,6 +1926,11 @@ XQUANT_FLOW_STAGES = 7
 #: and the theme's 20px floor; the figure is height-limited in that slot, so
 #: the extra width is free and only the 0.65 units of extra height are spent.
 XQUANT_CANVAS = (20.45, 13.99)
+
+#: The two fold panels' vote glyphs here, sized the same way and to the same
+#: target as `XSEMI_MARK_PT`; the number differs only because this figure
+#: crops to a different aspect and so lands in the slot at a different scale.
+XQUANT_MARK_PT = 19.1
 
 #: The left gutter that buys this figure its headline (#3242). Everything in
 #: the notch's vertical band — the "Unlabeled" / Good / Bad names hanging off
@@ -1968,6 +2081,7 @@ def xquant_flow_fig() -> None:
             box=box,
         )
     save(final_stage, OUT, "calib-quantile-flow.png", column=FULL_BLEED, box=box)
+    enforce_rendered_px(OUT / "calib-quantile-flow.png", XQUANT_MARK_PT, VOTE_MARK_PX, "vote glyph")
 
 
 def _xquant_populations() -> tuple[list[tuple[GmmFit1D, np.ndarray, dict]], np.ndarray]:
@@ -2039,11 +2153,20 @@ def _quantile_gauge(
     return ax.text(x0 + w / 2, y0 - LABEL_GAP, label, ha="center", va="top", fontsize=15, color=INK)
 
 
-def _theta_notch(ax: plt.Axes, x: float, y_base: float, label: str, ha: str = "center") -> None:
-    """The progression's one cut mark: a notch under the baseline, then a name."""
+def _theta_notch(
+    ax: plt.Axes, x: float, y_base: float, label: str, ha: str = "center", drop: float = VOTE_LABEL_DROP
+) -> None:
+    """The progression's one cut mark: a notch under the baseline, then a name.
+
+    `drop` is how far under the baseline the *name* hangs, and it defaults to
+    clearing a panel's row of vote glyphs. A baseline with no glyphs under it
+    has nothing to clear, and paying `VOTE_LABEL_DROP` there drives the label
+    into whatever sits below — which is how the crossing figure's θ_mid ended
+    up inside the sentence beneath it. Those callers pass `NOTCH_LABEL_DROP`.
+    """
     ax.plot([x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
     dx = 0.0 if ha == "center" else (-0.10 if ha == "right" else 0.10)
-    ax.text(x + dx, y_base - VOTE_LABEL_DROP, label, ha=ha, va="top", fontsize=16, color=INK)
+    ax.text(x + dx, y_base - drop, label, ha=ha, va="top", fontsize=16, color=INK)
 
 
 def _xquant_numbers(folds: list, final: np.ndarray) -> tuple[list[float], float, float]:
@@ -2074,6 +2197,7 @@ def _xquant_fold_panel(
     top: float,
     score_from: tuple[float, float],
     score_to: tuple[float, float],
+    numbers: bool = True,
 ) -> None:
     """One fold's whole evidence display: `calib-fold-anchored-flow`'s panel.
 
@@ -2120,8 +2244,9 @@ def _xquant_fold_panel(
         color=INK,
     )
     _score_histogram(ax, x0, y_base, w, h, fit, scores, fill="class", mu_labels=False)
-    _hump_marks(ax, x0, y_base, w, anchors)
-    _theta_notch(ax, x0 + theta * w, y_base, _sub(rf"\theta_{i + 1} = {theta:.2f}"))
+    _hump_marks(ax, x0, y_base, w, anchors, size=XQUANT_MARK_PT)
+    label = rf"\theta_{i + 1} = {theta:.2f}" if numbers else rf"\theta_{i + 1}"
+    _theta_notch(ax, x0 + theta * w, y_base, _sub(label))
 
 
 def _gauge_left(cut_x: float, q: float, w: float) -> float:
@@ -2129,7 +2254,9 @@ def _gauge_left(cut_x: float, q: float, w: float) -> float:
     return cut_x - q * w
 
 
-def _xquant_gauges(ax: plt.Axes, xs: tuple[float, ...], y0: float, w: float, q_0: float, clear_x: float) -> None:
+def _xquant_gauges(
+    ax: plt.Axes, xs: tuple[float, ...], y0: float, w: float, q_0: float, clear_x: float, numbers: bool = True
+) -> None:
     """The three gauges of the combine step, in one row under the three panels.
 
     Drawn together because they are one comparison, not three readings: what the
@@ -2146,9 +2273,13 @@ def _xquant_gauges(ax: plt.Axes, xs: tuple[float, ...], y0: float, w: float, q_0
         xs,
         (*shown, q_0),
         (
-            _sub(rf"q_1 = {shown[0]:.0%}".replace("%", r"\%")),
-            _sub(rf"q_2 = {shown[1]:.0%}".replace("%", r"\%")),
-            _sub(rf"q_0 = avg(q_1,\, q_2) = {q_0:.0%}".replace("%", r"\%")),
+            (
+                _sub(rf"q_1 = {shown[0]:.0%}".replace("%", r"\%")),
+                _sub(rf"q_2 = {shown[1]:.0%}".replace("%", r"\%")),
+                _sub(rf"q_0 = avg(q_1,\, q_2) = {q_0:.0%}".replace("%", r"\%")),
+            )
+            if numbers
+            else (_sub("q_1"), _sub("q_2"), _sub(r"q_0 = avg(q_1,\, q_2)"))
         ),
         strict=True,
     ):
@@ -2164,7 +2295,9 @@ def _xquant_gauges(ax: plt.Axes, xs: tuple[float, ...], y0: float, w: float, q_0
         texts[-1].set_x(texts[-1].get_position()[0] - (box.x1 - clear_x))
 
 
-def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
+def _xquant_flow_stage(
+    stage: int, folds: list, final: np.ndarray, *, numbers: bool = True, split: bool | str = True
+) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
     fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in XQUANT_CANVAS))
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
@@ -2236,7 +2369,14 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
     # every unit off it is worth having.
     tip0 = (m0x, panel_top + 2 * OBJECT_GAP + CAP_16 + LABEL_GAP)
 
-    theta_bottom = y_base - 0.32 - LABEL_GAP - CAP_16
+    # The bottom of the θ label, and it has to be derived from the drop
+    # `_theta_notch` actually applies. Spelling it out as the notch's own
+    # length was right when the label hung directly under the notch; once the
+    # label moved below the panel's row of vote glyphs (`VOTE_LABEL_DROP`,
+    # #3296) this estimate stayed half a unit too high, and everything placed
+    # under it crept up into the label — on slide 12 the gauges' cut stubs
+    # ended up touching the θ they are a re-reading of (#3301).
+    theta_bottom = y_base - VOTE_LABEL_DROP - CAP_16
     gauge_top = theta_bottom - OBJECT_GAP - GAUGE_STUB
     gauge_y0 = gauge_top - XQUANT_GAUGE_H
     gauge_w = XQUANT_GAUGE_W * panel_w
@@ -2266,7 +2406,7 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
         hay_x0 + hay_w + LABEL_GAP, hay_y0 + hay_h / 2, "Unlabeled", ha="left", va="center", fontsize=15, color=SOFT
     )
     labeled_arrow((bx, hay_y0 - OBJECT_GAP), (bx, hay_y0 - OBJECT_GAP - vote_len), "vote")
-    data_block(block_x0, block_y0, block_w, block_h, split=stage >= 2)
+    data_block(block_x0, block_y0, block_w, block_h, split=split if stage >= 2 else False)
     good_h = 0.42 * block_h
     ax.text(block_x0 - LABEL_GAP, block_top - good_h / 2, "Good", ha="right", va="center", fontsize=15, color=GREEN)
     ax.text(
@@ -2301,6 +2441,7 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
                 top=panel_top,
                 score_from=(2 * bx - exit1[0], exit1[1]) if i else exit1,
                 score_to=(2 * bx - tip1[0], tip1[1]) if i else tip1,
+                numbers=numbers,
             )
 
     # ── stage 4: M₀ scores the haystack — a scale, not evidence ───────────────
@@ -2352,7 +2493,7 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
         ax.text(
             final_x + panel_w,
             strawman_y,
-            _sub(rf"avg(\theta_1,\, \theta_2) = {theta_cardinal:.2f}"),
+            _sub(rf"avg(\theta_1,\, \theta_2) = {theta_cardinal:.2f}" if numbers else r"avg(\theta_1,\, \theta_2)"),
             ha="right",
             va="bottom",
             fontsize=15,
@@ -2369,7 +2510,7 @@ def _xquant_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure
         gauge_x = tuple(
             _gauge_left(cut, q, gauge_w) for cut, q in zip(cuts, (*XQUANT_SHOWN_QUANTILES, q_0), strict=True)
         )
-        _xquant_gauges(ax, gauge_x, gauge_y0, gauge_w, q_0, clear_x)
+        _xquant_gauges(ax, gauge_x, gauge_y0, gauge_w, q_0, clear_x, numbers)
 
     # ── stage 7: realize the mean share on M₀'s own distribution ─────────────
     if stage >= 7:
@@ -2426,7 +2567,12 @@ INCL_CANVAS_W = 23.45
 #: the notch's right edge falls at 6.48 and 6.70 clears it by 12px. The width
 #: spends the right margin to buy most of that back: the panel gives up 16% of
 #: its old span rather than the 24% the indent alone would have cost.
-INCL_PANEL_X0, INCL_PANEL_W, INCL_PANEL_H = 6.70, 16.40, 2.2
+#: The evidence row's left edge, width, and the air above its axis. The height
+#: used to be the histogram's; with the bars gone (`_incl_panel`) it is only
+#: what the walk figure's cap bracket and that bracket's own name need, which
+#: is what keeps the knob figure — which draws nothing up there at all — from
+#: opening on a band of white.
+INCL_PANEL_X0, INCL_PANEL_W, INCL_PANEL_H = 6.70, 16.40, 1.15
 
 #: The three stops each figure reads its gauges at. The retired rule returns one
 #: answer at every stop, so the knob's two ends and its middle are the fairest
@@ -2531,29 +2677,25 @@ def _normalised_cost(scores: np.ndarray, labels: np.ndarray, inclusion: int, gri
     return (fpr_weight * fpr + fnr_weight * fnr) / (fpr_weight + fnr_weight)
 
 
-def _incl_panel(ax: plt.Axes, corpus: np.ndarray, *, y_base: float, top: float, votes: bool = True) -> None:
-    """`calib-quantile-flow`'s left panel, unfitted: the corpus, and the votes on it.
+def _incl_panel(ax: plt.Axes, y_base: float, top: float, *, votes: bool = True) -> None:
+    """Part 2's shared evidence row: a score axis, and the held-out votes on it.
 
-    The bars carry no fill and no fitted curve because nothing is estimated on
-    them — the cut rules Part 2 compares read the seven marks on the baseline
-    and nothing else.
-    Both names are kept for the reason the quantile figure keeps both: a panel
-    holding two quantities has to name both, and which model scored which half
-    of the votes is the fact the whole progression turns on.
+    **No histogram.** Both rules this section compares — the retired cost search
+    and the shipped quantile walk — read the seven marks and nothing else, so
+    the scored corpus behind them was decoration on a slide whose whole claim is
+    about what the *votes* can and cannot resolve (#3301). Drawn, it invited the
+    reader to look for the answer in a distribution neither rule ever consults,
+    and it made this row a different object from the one the previous two slides
+    argue over, which is a bare axis with marks under it.
+
+    What the panel keeps is its name. The votes are M₁'s scores of D₂ — which
+    model scored which half is the fact the whole progression turns on — and
+    `M_1(D_{-1})` goes with the bars, because the corpus is no longer on screen.
     """
     x0, w = INCL_PANEL_X0, INCL_PANEL_W
-    _score_histogram(ax, x0, y_base, w, INCL_PANEL_H, None, corpus, fill="plain", mu_labels=False)
-    ax.text(x0, top + LABEL_GAP, _sub("M_1(D_{-1})"), ha="left", va="bottom", fontsize=16, color=INK)
+    _range_line(ax, x0, x0 + w, y_base, z=5)
     if votes:
-        ax.text(
-            x0,
-            top + LABEL_GAP + CAP_16 + LABEL_GAP,
-            _sub("M_1(D_2)"),
-            ha="left",
-            va="baseline",
-            fontsize=15,
-            color=INK,
-        )
+        ax.text(x0, top + LABEL_GAP, _sub("M_1(D_2)"), ha="left", va="bottom", fontsize=16, color=INK)
         _hump_marks(ax, x0, y_base, w, INCL_VOTES, size=VOTE_PANEL_MARK_PT)
 
 
@@ -2657,10 +2799,16 @@ def _incl_rows(canvas_h: float = INCL_CANVAS_H) -> dict:
 #: The knob figure's own height. Every row is measured down from the canvas
 #: top, so the two figures still draw an identical panel and an identical
 #: middle row; the knob figure simply has nothing under that row to hold up
-#: (#3265) and stops 0.25 units below its last line rather than reserving three
-#: more rows of white. Derived rather than set, so a retune of the shared rows
-#: moves it too.
-KNOB_CANVAS_H = INCL_CANVAS_H - _incl_rows()["mid_bottom"] + 0.25
+#: (#3265) and stops just below its last line rather than reserving three more
+#: rows of white. Derived rather than set, so a retune of the shared rows moves
+#: it too.
+#:
+#: Measured to `mid_base` — the cost row's own baseline — and not to
+#: `mid_bottom`, which reserves two further rows for the walk figure's anchor
+#: names. The knob figure used to fill those with the two sentences under its
+#: cost row; with the sentences gone (#3301) reserving them would open a band
+#: of white a third of the figure deep.
+KNOB_CANVAS_H = INCL_CANVAS_H - _incl_rows()["mid_base"] + RANGE_FOOT + 0.25
 
 
 def knob_flow_fig() -> None:
@@ -2683,13 +2831,12 @@ def knob_flow_fig() -> None:
     separable arm, and ~1.8 distinct admitted sizes across eleven stops on real
     embeddings).
     """
-    corpus = _incl_corpus()
     scores, labels = _incl_votes()
-    final = _knob_flow_stage(KNOB_FLOW_STAGES, corpus, scores, labels)
+    final = _knob_flow_stage(KNOB_FLOW_STAGES, scores, labels)
     box = tight_box(final)
     for stage in range(1, KNOB_FLOW_STAGES):
         save(
-            _knob_flow_stage(stage, corpus, scores, labels),
+            _knob_flow_stage(stage, scores, labels),
             OUT,
             f"calib-knob-flow.build{stage}.png",
             column=FULL_BLEED,
@@ -2698,7 +2845,7 @@ def knob_flow_fig() -> None:
     save(final, OUT, "calib-knob-flow.png", column=FULL_BLEED, box=box)
 
 
-def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
+def _knob_flow_stage(stage: int, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
     fig, ax = _incl_figure(KNOB_CANVAS_H)
     x0, w = INCL_PANEL_X0, INCL_PANEL_W
@@ -2711,7 +2858,7 @@ def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels:
     cost_label_y, cost_h, cost_base = rows["mid_label_y"], rows["mid_h"], rows["mid_base"]
 
     # ── stage 1: the corpus, and the seven held-out votes standing on it ──────
-    _incl_panel(ax, corpus, y_base=y_base, top=panel_top)
+    _incl_panel(ax, y_base, panel_top)
 
     # ── stage 2: the only cuts the search can return ──────────────────────────
     # A tick per observed vote score. Shorter than the progression's own cut
@@ -2798,41 +2945,17 @@ def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels:
         )
 
     # ── stage 4: turn the knob, twenty-one times, and watch ───────────────────
-    # The two lines under the cost row are the mechanism, and they stand in the
-    # rows `_incl_rows` reserves for the walk figure's anchor names — so the pair
-    # keeps its overlay and neither figure carries an empty band.
+    # Twenty-one cuts land on one score, so the reveal is one notch — named θ,
+    # like every other cut in the deck, and not narrated. The three sentences
+    # that used to stand here ("no ✗ ranks above a ✓", "so the search has one
+    # optimum, at every price", "θ at all 21 stops") were the presenter's lines
+    # written onto the slide; they are in the fragment's notes, where the rest
+    # of the deck keeps its prose (#3301).
     if stage >= 4:
-        ax.text(
-            x0 + band_mid * w,
-            cost_base - 0.32 - LABEL_GAP,
-            "no ✗ ranks above a ✓",
-            ha="center",
-            va="top",
-            fontsize=16,
-            color=INK,
-        )
-        ax.text(
-            x0 + band_mid * w,
-            cost_base - 0.32 - LABEL_GAP - CAP_16 - LABEL_GAP,
-            "so the search has one optimum, at every price",
-            ha="center",
-            va="top",
-            fontsize=15,
-            color=SOFT,
-        )
         cuts = [_argmin_cut(scores, labels, k) for k in INCL_KNOB]
         for cut in cuts:
             ax.plot([x0 + cut * w] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
-        theta = cuts[0]
-        ax.text(
-            x0 + theta * w + 0.10,
-            y_base - VOTE_LABEL_DROP,
-            _sub(r"\theta\ at\ all\ 21\ stops"),
-            ha="left",
-            va="top",
-            fontsize=16,
-            color=INK,
-        )
+        _theta_notch(ax, x0 + cuts[0] * w, y_base, _sub(r"\theta"))
 
     # There is deliberately no gauge row here. The figure's whole claim is that
     # the two ends of the knob minimise in the same place, and the two cost
@@ -2853,7 +2976,7 @@ WALK_TOP_Q = 0.75  # CONFORMAL_QPOS_MAX: the positives' quantile the k = -10 end
 def walk_flow_fig() -> None:
     """Schematic of the conformal quantile walk — Part 2's repair (#2693, #3218).
 
-    Same panel as `calib-knob-flow`, same seven votes, same corpus: only the
+    Same panel as `calib-knob-flow` and the same seven votes: only the
     middle row changes, from what the retired rule *computed* to what the
     shipped one computes. That is the comparison the pair exists to make.
 
@@ -2937,7 +3060,7 @@ def _walk_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels:
         )
 
     # ── stage 1: the same panel the retired rule was drawn on ─────────────────
-    _incl_panel(ax, corpus, y_base=y_base, top=panel_top)
+    _incl_panel(ax, y_base, panel_top)
     _range_line(ax, x0, x0 + w, rule_base, z=4)
     ax.text(
         x0 + band_mid * w, rule_label_y, "where the rule may cut", ha="center", va="bottom", fontsize=15, color=SOFT
@@ -3017,7 +3140,7 @@ def _walk_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels:
     # spends, and a tick per stop would have to be redrawn for every one of
     # them inside a fifth of a score unit.
     if stage >= 5:
-        brace_y = y_base + INCL_PANEL_H * 0.72
+        brace_y = y_base + INCL_PANEL_H - LABEL_GAP - CAP_16 - 0.06
         lo, hi = x0 + float(pos.min()) * w, x0 + float(pos.max()) * w
         ax.plot(
             [lo, lo, hi, hi], [brace_y - 0.12, brace_y, brace_y, brace_y - 0.12], color=SOFT, linewidth=1.6, zorder=6
@@ -3397,7 +3520,14 @@ def _acq_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
     panel_top = row_y - MODEL_H / 2 - OBJECT_GAP - score_len - OBJECT_GAP - CAP_16 - LABEL_GAP
     y_base = panel_top - ACQ_PANEL_H
 
-    theta_bottom = y_base - 0.32 - LABEL_GAP - CAP_16
+    # The bottom of the θ label, and it has to be derived from the drop
+    # `_theta_notch` actually applies. Spelling it out as the notch's own
+    # length was right when the label hung directly under the notch; once the
+    # label moved below the panel's row of vote glyphs (`VOTE_LABEL_DROP`,
+    # #3296) this estimate stayed half a unit too high, and everything placed
+    # under it crept up into the label — on slide 12 the gauges' cut stubs
+    # ended up touching the θ they are a re-reading of (#3301).
+    theta_bottom = y_base - VOTE_LABEL_DROP - CAP_16
     gauge_top = theta_bottom - OBJECT_GAP - GAUGE_STUB
     gauge_y0 = gauge_top - ACQ_GAUGE_H
 
@@ -3590,145 +3720,67 @@ def blend_schedule_fig() -> None:
     # the corner by spending half the slide, which `slides/STYLE.md` names as
     # the wrong repair for exactly this shape: the blocker is horizontal, so
     # the fix is horizontal (#3246).
-    fig.subplots_adjust(left=0.335, right=0.98, top=0.93, bottom=0.135)
+    # Indented past the title reserve, which ends at figure x 0.281 here — and
+    # further than the reserve alone needs. Centring the y-label on its axis
+    # (rather than parking it at the bottom, as it used to be) puts a 2.4-inch
+    # rotated string across the middle of the left margin, and the only way a
+    # *centred* label clears the reserve is horizontally. The width this costs
+    # the plot goes to the legend, which lives in the same margin.
+    fig.subplots_adjust(left=0.40, right=0.98, top=0.93, bottom=0.135)
     save(fig, OUT, "calib-blend-schedule.png", column=FULL_BLEED, tight=False)
 
 
-#: The Train/Check idea figure: its canvas, the bar it draws twice, and the
-#: vote count it is concrete about. Twenty votes is an early-session number —
-#: the regime the split actually matters in — and it divides cleanly under both
-#: splits, so every count on the drawing is a whole vote rather than a rounded
-#: one.
-SPLIT_CANVAS = (19.8, 7.36)
-SPLIT_BAR_X0, SPLIT_BAR_W, SPLIT_BAR_H = 6.0, 13.3, 1.05
-SPLIT_VOTES = 20
-
-#: The two splits, as `(train share, row name, bar bottom)`. The incumbent
-#: first, because it is the one every earlier slide in this section drew.
-SPLIT_ROWS = ((0.5, "50 / 50", 5.05), (0.7, "70 / 30", 2.40))
-
-#: Where the arrow between the two bars runs, and where the conclusion starts.
-SPLIT_MOVE_Y = 4.35
-SPLIT_CONCLUSION_Y = 1.70
-
-#: How many stages the figure reveals in: the incumbent split; the proposal;
-#: the votes that moved between them; what the move is for.
-SPLIT_IDEA_STAGES = 4
-
-
-def _split_bar(ax: plt.Axes, fraction: float, name: str, y0: float) -> None:
-    """One split of the votes: the block, its divider, and what each side is for."""
-    x0, w, h = SPLIT_BAR_X0, SPLIT_BAR_W, SPLIT_BAR_H
-    _data_block(ax, x0, y0, w, h)
-    divider = x0 + fraction * w
-    ax.plot([divider] * 2, [y0, y0 + h], color=INK, linewidth=1.6, zorder=3)
-    # The row's name shares the label row above the bar with the two counts,
-    # rather than hanging off the left edge: the top bar's own left edge is as
-    # far left as the title notch lets anything reach, so a name outside it
-    # would sit in the corner the slide's headline has (`slides/STYLE.md`).
-    ax.text(x0, y0 + h + LABEL_GAP, name, ha="left", va="bottom", fontsize=18, color=INK, fontweight="bold")
-    for centre, job, votes in (
-        ((x0 + divider) / 2, "train", round(fraction * SPLIT_VOTES)),
-        ((divider + x0 + w) / 2, "check", SPLIT_VOTES - round(fraction * SPLIT_VOTES)),
-    ):
-        ax.add_patch(Ellipse((centre, y0 + h / 2), 1.55, 0.62, facecolor="white", edgecolor="none", zorder=4))
-        ax.text(centre, y0 + h / 2, job, ha="center", va="center", fontsize=16, color=INK, zorder=5)
-        ax.text(
-            centre,
-            y0 + h + LABEL_GAP,
-            f"{votes} votes",
-            ha="center",
-            va="bottom",
-            fontsize=15,
-            color=SOFT,
-        )
-
-
 def split_idea_fig() -> None:
-    """What the Train/Check split *is*, and the one change made to it (#3287).
+    """Slide 13: the calibration schematic, with the Train/Check split moved.
 
-    The section's earlier figures all draw the same quiet choice — half the
-    votes train each fold's model, half are held out to read its threshold —
-    without ever naming it as a choice. This names it, and moves it: seventy
-    percent into Train, thirty into Check.
+    **The same drawing as `calib-quantile-flow`, not a diagram of the part that
+    changed.** The deck's shape is one big picture improved a step at a time, so
+    a slide that zooms into the improved corner breaks the thing that makes the
+    progression legible: the audience loses where the change sits in the
+    algorithm they have been watching get built (#3301). Two pages, and the only
+    ink that differs between them is the divider through D₀.
 
-    It is the idea, not the study. The measured curves live on the results
-    slide the deck now carries as an appendix; what belongs *here* is the
-    picture of four votes crossing the divider, which is the whole of what
-    changed (#3296).
+    Every number is dropped. The cuts, the shares and their average are slide
+    12's argument, and here they would be both a distraction and wrong — refit
+    at 70/30 they are different numbers, and the slide is not about their
+    values. What is left is the structure the split lives in.
     """
-    final = _split_idea_stage(SPLIT_IDEA_STAGES)
-    box = tight_box(final)
-    for stage in range(1, SPLIT_IDEA_STAGES):
-        save(_split_idea_stage(stage), OUT, f"calib-split-idea.build{stage}.png", column=FULL_BLEED, box=box)
-    save(final, OUT, "calib-split-idea.png", column=FULL_BLEED, box=box)
+    folds, final = _xquant_populations()
+    final_stage = _xquant_flow_stage(XQUANT_FLOW_STAGES, folds, final, numbers=False, split="overlap")
+    box = tight_box(final_stage)
+    save(
+        _xquant_flow_stage(XQUANT_FLOW_STAGES, folds, final, numbers=False, split=True),
+        OUT,
+        "calib-split-idea.build1.png",
+        column=FULL_BLEED,
+        box=box,
+    )
+    save(final_stage, OUT, "calib-split-idea.png", column=FULL_BLEED, box=box)
 
 
-def _split_idea_stage(stage: int) -> plt.Figure:
-    """Draw the first *stage* steps (1-based, cumulative) of the split figure."""
-    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in SPLIT_CANVAS))
-    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
-    ax.set_xlim(0, SPLIT_CANVAS[0])
-    ax.set_ylim(0, SPLIT_CANVAS[1])
-    ax.set_axis_off()
+#: The six measured series, in legend order: the four single-vector models
+#: that agree, then DINOv3's two voting modes. Cool hues for the bundle, warm
+#: for the pair that disagrees with it, all from Okabe-Ito.
+SPLIT_SERIES = (
+    ("siglip-whole_image", "SigLIP", "#0072b2"),
+    ("siglip2_l-whole_image", "SigLIP 2", "#56b4e9"),
+    ("clip-whole_image", "CLIP", "#6e4b9e"),
+    ("clip_l-whole_image", "CLIP-L", "#cc79a7"),
+    ("dinov3_patch-whole_image", "DINOv3 · binary", "#d55e00"),
+    ("dinov3_patch-max_patch", "DINOv3 · region", "#e69f00"),
+)
 
-    x0, w, h = SPLIT_BAR_X0, SPLIT_BAR_W, SPLIT_BAR_H
-    (was_f, was_name, was_y), (now_f, now_name, now_y) = SPLIT_ROWS
+#: One weight for all six. Line weight encoded the grouping when every line was
+#: black; with a colour per series it would be a second encoding of the same
+#: fact, and a bold line among thin ones reads as "this one matters more".
+SPLIT_LINE_W = 1.9
 
-    # ── stage 1: the split every fold in this section has been drawing ────────
-    _split_bar(ax, was_f, was_name, was_y)
-
-    # ── stage 2: the same votes, divided somewhere else ───────────────────────
-    if stage >= 2:
-        _split_bar(ax, now_f, now_name, now_y)
-
-    # ── stage 3: the votes that crossed, as a path rather than as a jump ──────
-    # Both bars are on screen at once and neither ever moves — a build adds
-    # ink, it does not animate (`slides/STYLE.md`) — so what says "the divider
-    # moved" has to be drawn: two soft drops and one arrow between them, along
-    # the gap the two rows leave for it.
-    if stage >= 3:
-        was_x, now_x = x0 + was_f * w, x0 + now_f * w
-        move_y = SPLIT_MOVE_Y
-        ax.plot([was_x] * 2, [was_y, move_y], color=RULE, linewidth=1.4, zorder=1)
-        ax.plot([now_x] * 2, [move_y, now_y + h], color=RULE, linewidth=1.4, zorder=1)
-        _arrow(ax, (was_x, move_y), (now_x, move_y))
-        # Named past the arrowhead rather than over the shaft: the shaft has
-        # one of the two drops running into it, and a label centred on it
-        # covers the very line that says where the divider came from.
-        ax.text(
-            now_x + OBJECT_GAP,
-            move_y,
-            f"{round((now_f - was_f) * SPLIT_VOTES)} more votes",
-            ha="left",
-            va="center",
-            fontsize=16,
-            color=INK,
-        )
-
-    # ── stage 4: why that is the direction to move it ─────────────────────────
-    if stage >= 4:
-        centre = x0 + w / 2
-        ax.text(
-            centre,
-            SPLIT_CONCLUSION_Y,
-            "the fold model is what runs short when votes are scarce",
-            ha="center",
-            va="top",
-            fontsize=16,
-            color=INK,
-        )
-        ax.text(
-            centre,
-            SPLIT_CONCLUSION_Y - CAP_16 - LABEL_GAP,
-            "a threshold is only a quantile, and six scores still place one",
-            ha="center",
-            va="top",
-            fontsize=15,
-            color=SOFT,
-        )
-
-    return fig
+#: Where the key sits, in figure fractions, and how big it is set. The anchor
+#: clears the title reserve (which ends at y 0.665 here) and the axis's own
+#: label; the size is the smallest that still renders at 21.5px in a full-bleed
+#: slot, against the theme's 20px floor.
+SPLIT_LEGEND_ANCHOR = (0.035, 0.34)
+SPLIT_LEGEND_PT = 14
 
 
 def split_fraction_fig() -> None:
@@ -3744,12 +3796,20 @@ def split_fraction_fig() -> None:
     paired difference) and a centred 7-vote rolling mean that the presenter
     note declares.
 
-    **Black at two weights, not green against red.** The old drawing coloured
-    the winning arms green and the losing ones red, on a slide whose curves are
-    about evaluations that hand out Good and Bad labels — the deck's two other
-    uses of exactly those hues (#3296). The line weight carries the only
-    grouping the chart actually has: four single-vector models that agree, and
-    the patch model that does not.
+    **One colour per curve, and a legend.** This is the deck's only ordinary
+    chart — six measured series with names — so it is drawn like one. Two
+    earlier attempts were not: green-against-red said "good arm / bad arm" in
+    the deck's own Good/Bad hues (#3296), and the black-at-two-weights that
+    replaced it left four indistinguishable lines under one shared label, so
+    the chart could not answer "which one is CLIP?" at all (#3301). Weight is
+    not an encoding here; every line is the same width.
+
+    The palette keeps the grouping the weight ramp used to carry, without
+    spending the deck's semantic colours on it: the four single-vector models
+    take four cool hues and DINOv3's two voting modes take two warm ones, so
+    "the four agree and the patch model does not" is still the first thing the
+    eye gets. Okabe-Ito, so the six stay separable to a colourblind reader —
+    which a weight ramp of four identical blacks never was.
     """
     import csv
 
@@ -3777,26 +3837,8 @@ def split_fraction_fig() -> None:
 
     fig, ax = plt.subplots(figsize=(11.5, 6.5))
     ax.axhline(0.0, color=SOFT, linewidth=1.2, linestyle=(0, (4, 3)), zorder=1)
-    # The four single-vector arms are drawn as one bundle and named once. They
-    # sit inside six thousandths of each other for most of the sweep, so four
-    # labels on four curves would be four labels on one curve — and the claim
-    # the bundle makes is a claim about all four at once.
-    for geometry in ("siglip-whole_image", "siglip2_l-whole_image", "clip-whole_image", "clip_l-whole_image"):
-        ax.plot(*delta(geometry), color=INK, linewidth=1.5, zorder=3)
-    for geometry, label, xy, va in (
-        ("dinov3_patch-whole_image", "DINOv3 — binary voting", (44, 0.0295), "bottom"),
-        ("dinov3_patch-max_patch", "DINOv3 — region voting", (95, 0.0080), "bottom"),
-    ):
-        ax.plot(*delta(geometry), color=INK, linewidth=3.4, zorder=3)
-        ax.annotate(label, xy=xy, ha="left", va=va, fontsize=15, color=INK)
-    ax.annotate(
-        "SigLIP · SigLIP 2 · CLIP · CLIP-L",
-        xy=(74, -0.0235),
-        ha="center",
-        va="top",
-        fontsize=15,
-        color=INK,
-    )
+    for geometry, label, colour in SPLIT_SERIES:
+        ax.plot(*delta(geometry), color=colour, linewidth=SPLIT_LINE_W, label=label, zorder=3)
     # Region labels for the two half-planes, parked in the corners the curves
     # leave empty: top-left above the rising DINOv3 line, bottom-right below
     # the settled single-vector bundle.
@@ -3807,16 +3849,31 @@ def split_fraction_fig() -> None:
     ax.set_ylim(-0.037, 0.037)
     ax.set_yticks([-0.03, -0.02, -0.01, 0, 0.01, 0.02, 0.03])
     ax.set_xlabel("votes")
-    # Anchored to the bottom of the axis for the same reason as the schedule
-    # figure's: the title reserve is only the *top* left corner, so a label
-    # living low on the left costs the drawing nothing — and short enough not
-    # to climb back into it (the annotations above carry the sign convention).
-    ax.set_ylabel("Δ cost of a 70/30 split", loc="bottom")
+    ax.set_ylabel("Δ cost of a 70/30 split")
     ax.grid(axis="y", color=RULE, linewidth=0.8)
     ax.set_axisbelow(True)
     # Full-bleed with the axes indented past the title reserve, exactly as
     # blend_schedule_fig: the blocker is horizontal, so the fix is horizontal.
-    fig.subplots_adjust(left=0.335, right=0.98, top=0.93, bottom=0.135)
+    # Indented past the title reserve, which ends at figure x 0.281 here — and
+    # further than the reserve alone needs. Centring the y-label on its axis
+    # (rather than parking it at the bottom, as it used to be) puts a 2.4-inch
+    # rotated string across the middle of the left margin, and the only way a
+    # *centred* label clears the reserve is horizontally. The width this costs
+    # the plot goes to the legend, which lives in the same margin.
+    fig.subplots_adjust(left=0.40, right=0.98, top=0.93, bottom=0.135)
+    # The legend goes in the left margin, under the title reserve: the axes are
+    # already indented past that reserve, so the strip below it is the one
+    # piece of empty paper on the slide that no curve wants. Inside the axes
+    # there is nowhere a six-row key does not sit on a line.
+    fig.legend(
+        loc="center left",
+        bbox_to_anchor=SPLIT_LEGEND_ANCHOR,
+        frameon=False,
+        handlelength=1.6,
+        handletextpad=0.6,
+        labelspacing=0.55,
+        fontsize=SPLIT_LEGEND_PT,
+    )
     save(fig, OUT, "calib-split-fraction.png", column=FULL_BLEED, tight=False)
 
 
@@ -4006,9 +4063,13 @@ COST_REVEAL = (3, 2, 4)
 #: (#3296).
 #:
 #: Ten items is also what makes the cuts nameable: they come out as the *same*
-#: three cuts, so "Include 3" there and the strict arm's minimum here are one
-#: thing seen twice.
-RANK_MARKS = (False, False, False, True, False, True, False, True, True, True)
+#: three cuts, so "Include 2" there and the strict arm's minimum here are one
+#: thing seen twice. **Keep this in step with that tuple by hand** — it is the
+#: same ranking written twice, once as photographs and once as marks.
+#:
+#: The arrangement is chosen so each arm has a *single* cheapest cut and no two
+#: arms choose the same one; see `RANKING` for why.
+RANK_MARKS = (False, False, True, False, False, True, True, False, True, True)
 
 
 def _mark_score(index: int) -> float:
@@ -4036,10 +4097,12 @@ def _ranked_votes() -> tuple[np.ndarray, np.ndarray]:
 def _optima(bad: np.ndarray, good: np.ndarray, w_fp: float, w_fn: float) -> list[int]:
     """Every admitted-count that minimises this arm's cost.
 
-    A list rather than a number, because a tie is the honest answer for the
-    balanced arm on this ranking: three cuts cost exactly the same at equal
-    prices — which is what the previous slide said, and what pricing the two
-    mistakes differently is about to break.
+    Still a list rather than a number, though on the shipped `RANK_MARKS` every
+    arm returns exactly one: the ranking is arranged so the three arms pick
+    three different cuts and none of them ties. Returning the whole set is what
+    makes that visible instead of assumed — if an edit to the ranking
+    re-introduces a tie, the figure draws two dots on one curve and says so,
+    rather than silently picking whichever count `argmin` reached first.
     """
     counts = np.arange(len(RANK_MARKS) + 1)
     costs = _cost_curve(bad, good, w_fp, w_fn, np.array([_cut_score(n) for n in counts]))
@@ -4150,9 +4213,14 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
         for admitted in _optima(bad, good, w_fp, w_fn):
             cut_x = x0 + _cut_score(admitted) * w
             cut_y = panel_base + float(_cost_curve(bad, good, w_fp, w_fn, np.array([_cut_score(admitted)]))[0]) * sy
-            ax.plot([cut_x], [cut_y], marker="o", markersize=8, color=BLUE, zorder=5)
-            ax.plot([cut_x, cut_x], [cut_y, rank_y], color=BLUE, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
-            ax.plot([cut_x] * 2, [rank_y - 0.32, rank_y], color=BLUE, linewidth=2.4, zorder=4)
+            # Black, like the curves they sit on and like the same three cuts
+            # on the previous slide. Blue is the palette's "the shipped thing"
+            # and these cuts are not that; drawn in it, the dots read as a
+            # fourth series rather than as three points on the three curves
+            # already there (#3301).
+            ax.plot([cut_x], [cut_y], marker="o", markersize=8, color=INK, zorder=5)
+            ax.plot([cut_x, cut_x], [cut_y, rank_y], color=INK, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
+            ax.plot([cut_x] * 2, [rank_y - 0.32, rank_y], color=INK, linewidth=2.4, zorder=4)
         # The arm is named at the left-hand end of its own curve. The three
         # start a quarter of the panel apart there and converge on one another's
         # ends, so the left is the one place a label can sit on the line it
@@ -4295,7 +4363,7 @@ def _crossing_stage(stage: int) -> plt.Figure:
 
     # ── stage 2: the shipped rule — halfway between the means ─────────────────
     if stage >= 2:
-        _theta_notch(ax, x0 + mid * w, shape_base, _sub(r"\theta_{mid}"))
+        _theta_notch(ax, x0 + mid * w, shape_base, _sub(r"\theta_{mid}"), drop=NOTCH_LABEL_DROP)
 
     # ── stage 3: the same two components, priced by how likely each is ────────
     if stage >= 3:
@@ -4322,7 +4390,7 @@ def _crossing_stage(stage: int) -> plt.Figure:
             fontsize=16,
             color=INK,
         )
-        _theta_notch(ax, x0 + crossing * w, weighted_base, _sub(r"\theta^*"))
+        _theta_notch(ax, x0 + crossing * w, weighted_base, _sub(r"\theta^*"), drop=NOTCH_LABEL_DROP)
         # The midpoint, carried down onto the weighted picture so the gap
         # between the two answers is a gap the room can measure by eye rather
         # than a claim about two numbers on two different rows.
@@ -4564,6 +4632,12 @@ EM_CAPTIONS = ("a guess", "who claims what", "re-fit to that", "repeat: done")
 #: What the arrows between the panels are called.
 EM_ARROWS = ("E", "M", "repeat")
 
+#: The vote glyphs on this figure's baselines, and how far under it they hang.
+#: The size is `VOTE_MARK_PX` converted through *this* figure's crop; the drop
+#: is tight because an EM panel's baseline has no cut notch under it.
+EM_MARK_PT = 14.6
+EM_MARK_DROP = 0.12
+
 
 def _em_iterate(scores: np.ndarray, anchors: dict | None, rounds: int) -> GmmFit1D:
     """`rounds` rounds of the **shipped** EM, from `EM_INIT`.
@@ -4677,10 +4751,12 @@ def _em_panel(
             ax.plot(x0 + xs[lo_v:hi_v] * w, curve[lo_v:hi_v], color=colour, linewidth=HUMP_LW, zorder=4)
 
     if anchors:
-        for score in anchors["bad"]:
-            ax.text(x0 + score * w, y_base - 0.12, "✗", ha="center", va="top", fontsize=15, color=RED, zorder=5)
-        for score in anchors["good"]:
-            ax.text(x0 + score * w, y_base - 0.12, "✓", ha="center", va="top", fontsize=15, color=GREEN, zorder=5)
+        # The same routine, the same weight and the same halo as the anchored
+        # fold schematic two slides earlier: this figure is that one's panel
+        # taken apart, and a mark that changes weight between them reads as a
+        # different kind of evidence. Only the drop differs, and it differs
+        # because this baseline carries no cut notch to clear.
+        _hump_marks(ax, x0, y_base, w, anchors, size=EM_MARK_PT, drop=EM_MARK_DROP)
 
     _range_line(ax, x0, x0 + w, y_base, z=5)
 
@@ -4715,6 +4791,8 @@ def em_steps_fig() -> None:
         for stage in range(1, EM_STAGES):
             save(_em_stage(stage, sample, votes), OUT, f"{name}.build{stage}.png", column=FULL_BLEED, box=box)
         save(final, OUT, f"{name}.png", column=FULL_BLEED, box=box)
+        if votes:
+            enforce_rendered_px(OUT / f"{name}.png", EM_MARK_PT, VOTE_MARK_PX, "vote glyph")
 
 
 def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figure:
@@ -4782,19 +4860,31 @@ def _em_stage(stage: int, scores: np.ndarray, anchors: dict | None) -> plt.Figur
 
     # The two steps, named. Right of the title reserve, and above the row,
     # because they are what the row is a picture of.
+    # The two letters are expanded here and nowhere else. They are the only
+    # notation the aside introduces, the block arrows below repeat them bare,
+    # and a room meeting "EM" for the first time should not have to be told
+    # aloud what the initials stand for (#3301).
     lines = (
         (
-            "E — how much does each curve claim each score?",
-            "M — re-fit each curve to what it claims.",
+            "E (Expectation) — how much does each curve claim each score?",
+            "M (Maximization) — re-fit each curve to what it claims.",
         )
         if anchors is None
         else (
-            "E — a vote is claimed by its own side, whatever the curves say.",
-            "M — and it counts κ times over.",
+            "E (Expectation) — a vote is claimed by its own side.",
+            "M (Maximization) — and it counts κ times over.",
         )
     )
+    # Every line has to end left of the canvas edge. Not a nicety: this axes
+    # spans the whole figure, so `tight_box` crops to the canvas *unless* a
+    # label overhangs it — and one that does widens the crop, which changes the
+    # scale the slot fits the figure at, which changes how big every glyph in
+    # it lands on the slide. The anchored variant already overhung by a word
+    # and rendered its vote marks 14% larger than the schematic two slides
+    # earlier that draws the same seven votes (#3301). 16pt buys the room the
+    # spelled-out step names cost; the floor is 20px and these land at 26.
     for k, line in enumerate(lines):
-        ax.text(rule_x, canvas_h - 0.55 - k * 0.85, line, ha="left", va="top", fontsize=17, color=INK)
+        ax.text(rule_x, canvas_h - 0.55 - k * 0.85, line, ha="left", va="top", fontsize=16, color=INK)
 
     return fig
 

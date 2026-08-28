@@ -12,10 +12,9 @@
 
 <!-- The knob is defined; now watch it not work. -->
 
-<!-- **a** — The panel is one you have seen twice: a fold model's scored corpus
-     in bare bars, with its held-out votes standing on the baseline. Nothing is
-     fitted — the rule about to be drawn reads the seven marks and nothing
-     else. -->
+<!-- **a** — One fold model's score axis, with its held-out votes standing on
+     it. That is the whole of the evidence: nothing is fitted, and the rule
+     about to be drawn reads these seven marks and nothing else. -->
 
 <!-- **b** — The only cuts the original rule could return. It searched for the
      minimum cost over the *observed held-out scores*, so its answer is always
@@ -26,10 +25,14 @@
      there are no errors to make, so both curves sit flat on zero: every cut in
      that band is optimal at every setting. -->
 
-<!-- **d** — And that is the common case, not a corner case. The cost has as
-     many distinct optima as the calibration set has ranking errors, and a
-     strongly fit model on a handful of separable votes usually has none.
-     Twenty-one stops of the slider, one answer. -->
+<!-- **d** — So the search returns θ, and returns it at *every* stop: no ✗ here
+     ranks above a ✓, so the cost has one optimum at every price, and the
+     twenty-one ticks the slider offers land on one score. -->
+
+<!-- And that is the common case, not a corner case. The cost has as many
+     distinct optima as the calibration set has ranking errors, and a strongly
+     fit model on a handful of separable votes usually has none. Twenty-one
+     stops of the slider, one answer. -->
 
 <!-- Measured: a hundred percent flat sweeps on the separable synthetic arm;
      forty-four percent on real AG News at twelve votes, and about 1.8 distinct

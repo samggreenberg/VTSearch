@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import os
+import pickle
 import re
 import subprocess
 import sys
@@ -41,13 +42,14 @@ def _stats(n: int = _N_CATEGORIES) -> dict[str, dict]:
     }
 
 
-def _run(pile: Path, code: str) -> subprocess.CompletedProcess:
+def _run(pile: Path, code: str, extra_env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     env = {
         **os.environ,
         "VTS_PILE": str(pile),
         "VTSEARCH_DATA_DIR": str(pile / "datadir"),
         "VTSEARCH_MODELS_DIR": str(pile / "models"),
         "HF_HOME": str(pile / "models"),
+        **(extra_env or {}),
     }
     return subprocess.run(  # noqa: S603  # interpreter + test-controlled source
         [sys.executable, "-c", code],
@@ -175,6 +177,109 @@ class TestRebuildableCanary:
         result = _run(tmp_path, "import build_pile; build_pile.rebuildable(['nope'])")
         assert result.returncode != 0
         assert "unknown dataset" in result.stderr
+
+
+class TestCanaryCatchesASilentDatasetChange:
+    """ "Would a rebuild run?" is weaker than "would a rebuild produce *this*?".
+
+    #3297 had two candidate repairs and both made selection run again; only one
+    kept picking the categories the published ``vg_box_*`` sets hold. Taking the
+    other would have redefined three datasets with the right media count, the
+    right vectors and nothing visible to say so. #3299 checked that by hand
+    against the live cells; this is the same check, in the canary.
+    """
+
+    def _cell(self, pile: Path, categories: list[str], embedder: str = "siglip") -> None:
+        """Write a `vg_box_small` cell holding exactly *categories*."""
+        embeddings = pile / "datadir" / "embeddings"
+        embeddings.mkdir(parents=True, exist_ok=True)
+        medias = {i: {"id": i, "categories": [c]} for i, c in enumerate(categories)}
+        with (embeddings / f"vg_box_small__{embedder}.pkl").open("wb") as fh:
+            pickle.dump(medias, fh, protocol=pickle.HIGHEST_PROTOCOL)
+
+    def _canary(self, pile: Path) -> subprocess.CompletedProcess:
+        return _run(pile, "import sys, build_pile; sys.exit(build_pile.rebuildable(['vg_box_small']))")
+
+    def _selected(self, pile: Path) -> list[str]:
+        _write_scan(pile, _stats())
+        return _chosen(_select(pile))
+
+    def test_agreeing_cell_passes(self, tmp_path: Path) -> None:
+        self._cell(tmp_path, self._selected(tmp_path))
+        result = self._canary(tmp_path)
+        assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+
+    def test_a_changed_vocabulary_is_reported_as_broken(self, tmp_path: Path) -> None:
+        chosen = self._selected(tmp_path)
+        self._cell(tmp_path, [*chosen[:-1], "something_else_entirely"])
+        result = self._canary(tmp_path)
+        assert result.returncode == 1
+        assert "REBUILD-BROKEN" in result.stdout
+        assert "would NOT reproduce" in result.stdout
+
+    def test_no_built_cell_is_not_a_failure(self, tmp_path: Path) -> None:
+        """A purged pile has nothing to reproduce; that is the rebuild case."""
+        _write_scan(tmp_path, _stats())
+        assert self._canary(tmp_path).returncode == 0
+
+
+class TestCanaryChecksThePathTheBuildReads:
+    """The canary must name the *same* source the builder opens (#3299).
+
+    Its first real run reported ``coco_val`` REBUILD-BROKEN. Nothing was
+    broken: ``_load_coco`` reads ``images/val2017.zip``, which was present,
+    while the canary checked ``images/val2017`` -- an extracted directory the
+    staging area has never held. A canary pointed at a path the build never
+    touches raises a false alarm exactly as loudly as a true one, which is the
+    fastest way to teach people to ignore it.
+    """
+
+    def _coco_canary(self, pile: Path, root: Path) -> subprocess.CompletedProcess:
+        return _run(
+            pile,
+            "import sys, build_pile; sys.exit(build_pile.rebuildable(['coco_val']))",
+            extra_env={"VTS_COCO_ROOT": str(root)},
+        )
+
+    def _stage(self, root: Path, *, zip_present: bool = True, extracted: bool = False) -> None:
+        (root / "images").mkdir(parents=True, exist_ok=True)
+        (root / "derived").mkdir(parents=True, exist_ok=True)
+        (root / "derived" / "objects_flat_val2017.jsonl.gz").write_bytes(b"")
+        if zip_present:
+            (root / "images" / "val2017.zip").write_bytes(b"")
+        if extracted:
+            (root / "images" / "val2017").mkdir(exist_ok=True)
+
+    def test_the_staged_zip_alone_is_a_rebuildable_source(self, tmp_path: Path) -> None:
+        """How the source actually sits on the cluster: a zip, never unpacked."""
+        _write_scan(tmp_path, _stats())
+        root = tmp_path / "COCO"
+        self._stage(root)
+        result = self._coco_canary(tmp_path, root)
+        assert result.returncode == 0, f"{result.stdout}\n{result.stderr}"
+        assert "REBUILD-BROKEN" not in result.stdout
+
+    def test_a_missing_zip_is_still_reported(self, tmp_path: Path) -> None:
+        """Relaxing the check must not turn it off: an extracted directory is
+        not a substitute for the zip the builder opens."""
+        _write_scan(tmp_path, _stats())
+        root = tmp_path / "COCO"
+        self._stage(root, zip_present=False, extracted=True)
+        result = self._coco_canary(tmp_path, root)
+        assert result.returncode == 1
+        assert "REBUILD-BROKEN" in result.stdout
+        assert "val2017.zip" in result.stdout
+
+    def test_the_canary_and_the_builder_name_one_path(self, tmp_path: Path) -> None:
+        """Pins the repair itself: both sides go through ``pc.COCO_VAL_ZIP``.
+
+        Spelling the zip inline in the builder while a constant named the
+        directory is what let the two drift apart in the first place.
+        """
+        source = (_PILE_DIR / "build_pile.py").read_text()
+        loader = source.split("def _load_coco(", 1)[1].split("\ndef ", 1)[0]
+        assert "pc.COCO_VAL_ZIP" in loader
+        assert 'val2017.zip"' not in loader, "the builder is spelling the zip path inline again"
 
 
 def test_selector_reads_only_fields_the_pre_envelope_scan_carries() -> None:

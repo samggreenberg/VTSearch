@@ -24,12 +24,22 @@ mkdir -p _out
 # Marp warns but exits 0 when a figure path doesn't resolve, producing a deck
 # with holes where the figures should be. Treat that warning as fatal.
 run_marp() {
-    local log
+    local log status
     log=$(mktemp)
     # --no-stdin: without it Marp waits for EOF on stdin before converting, so
     # a render started from anything that does not close stdin (a script, a CI
     # step, an agent shell) hangs forever with no output rather than failing.
     "${MARP[@]}" "$@" --theme-set themes/ --allow-local-files --no-stdin 2>&1 | tee "$log"
+    # `set -e` does not see a failure on the left of a pipe, and this script has
+    # no `pipefail`, so without this the whole render reports success after Marp
+    # has died — which is how a run that could not find a browser at all still
+    # printed "-> _out/<deck>.pdf" and exited 0, with no PDF anywhere (#3301).
+    status=${PIPESTATUS[0]}
+    if [[ $status -ne 0 ]]; then
+        rm -f "$log"
+        echo "ERROR: Marp exited $status." >&2
+        return "$status"
+    fi
     if grep -q "local files are missing" "$log"; then
         rm -f "$log"
         echo "ERROR: Marp could not resolve some figures." >&2

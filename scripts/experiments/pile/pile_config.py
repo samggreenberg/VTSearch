@@ -40,6 +40,18 @@ MODELS = PILE / "models"
 #: Shared, non-scratch sources the pile is rebuilt from.
 DEMO_CACHE = Path(os.environ.get("VTS_DEMO_CACHE", "/exp/scale26/datasets/external/vtsearch-demos"))
 COCO_ROOT = Path(os.environ.get("VTS_COCO_ROOT", "/exp/scale26/datasets/external/COCO"))
+#: The zip the builder reads pixels out of. This, not an extracted directory,
+#: is what a `coco_val` rebuild actually depends on -- the staging area holds
+#: `val2017.zip` and has never held `val2017/`. Named here because it was
+#: previously spelled inline in the builder while :data:`COCO_IMAGES` named the
+#: directory, and the rebuild canary checked the directory: it reported
+#: `coco_val` REBUILD-BROKEN against a source that was present and fine (#3299).
+COCO_VAL_ZIP = COCO_ROOT / "images" / "val2017.zip"
+#: Where the images live *if* somebody extracts them. Optional, and not part of
+#: the rebuild path: nothing depends on this directory existing. `box_sheets.py`
+#: prefers it (a loose JPEG is cheaper than a zip member) but falls back to
+#: :data:`COCO_VAL_ZIP`, which is where the pixels have always actually been --
+#: it used to read only this path and drew empty sheets instead (#3305).
 COCO_IMAGES = COCO_ROOT / "images" / "val2017"
 COCO_ANNOTATIONS = COCO_ROOT / "derived" / "objects_flat_val2017.jsonl.gz"
 

@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import math
 import time
+from collections.abc import Container, Sequence
 from dataclasses import dataclass
 from typing import Any, NamedTuple
 
@@ -1002,6 +1003,108 @@ FOLD_ANCHOR_CUT_RULE = "mid_tilt"
 #: Production fold-combine rule: mean of the per-fold quantiles.  With the
 #: shipped ``calibrate_count=2`` the mean and the median coincide.
 FOLD_ANCHOR_COMBINE = "qmean"
+
+#: Minimum unlabeled-remainder size for the voted-media haystack exclusion
+#: (issue #3308).  The fold-anchored estimator drops the voted media from its
+#: haystacks - their scores under the models trained on them are optimistically
+#: shifted - but only while the remainder is still big enough to *be* a
+#: population estimate.  Below this many remaining scores the exclusion is
+#: switched off entirely and the full (contaminated) haystack is used, because
+#: two failure modes take over at once: the empirical quantiles the transfer
+#: runs on lose resolution (1/n per order statistic), and after deep Autopilot
+#: voting the leftover items are exactly the ones acquisition never found
+#: interesting, so the remainder is a *selection-biased* sample of the corpus.
+#: Measured on the overlapping-data eval environment (60-item sim set, votes
+#: driven to exhaustion, 8 seeds paired step-for-step): exclusion is *neutral*
+#: at remainder 50-56 (-0.004 +/- 0.007 direct cost, and only trajectory noise
+#: downstream) and harmful below - +0.025 at remainder 40-49, +0.057 at 30-39,
+#: +0.18 under 10 (the cut collapses onto a handful of drained leftovers,
+#: FNR 0.7-0.9).  A 200-item synthetic single-vector environment is clearly
+#: *positive* (-0.03 to -0.06) at every measured remainder >=60, even with 70%
+#: of the corpus voted.  60 is therefore the smallest floor with a measured
+#: win above it and nothing but measured neutrality or harm below it.  The
+#: switch is all-or-nothing, never partial, so the fold haystacks and the
+#: final realization sample always cover one identical population.
+#:
+#: **Both measurements behind this number are synthetic**, which is why issue
+#: #3312 puts it on the GRID against real embeddings.  Until that run reports,
+#: read 60 as the value that no *measured* cell argues against rather than as a
+#: located optimum.
+EXCLUSION_MIN_REMAINDER = 60
+
+
+def resolve_exclusion_floor(min_remainder: float | None = None) -> float:
+    """The remainder floor the #3308 vote exclusion should use.
+
+    ``None`` - what every production caller passes - resolves to the shipped
+    :data:`EXCLUSION_MIN_REMAINDER`, the same three-state contract
+    :func:`production_split_for` and
+    :func:`~vtscore.training.blend_schedules.production_schedule_for` follow.
+    A float pins it, and ``math.inf`` switches the exclusion off entirely (the
+    pre-#3308 behaviour), so one scalar spans the whole axis with no sentinel:
+    0 always excludes, ``inf`` never does, and the shipped value sits between.
+
+    The override exists for the #3312 eval arms.  Nothing in the app passes it
+    - there is no user setting for the floor - so the app and the harness's
+    default arm resolve through this same call and cannot drift apart.
+    """
+    return float(EXCLUSION_MIN_REMAINDER if min_remainder is None else min_remainder)
+
+
+def drop_voted(
+    scores: "list[float] | np.ndarray",
+    score_ids: "Sequence[int]",
+    voted_ids: "Container[int]",
+) -> np.ndarray:
+    """*scores* with the entries whose id is in *voted_ids* removed.
+
+    Filters against **this array's own ids** rather than a mask computed
+    elsewhere, because the id order is not guaranteed to be the same for two
+    different models: the app's snapshot scorer is row-ordered and stable, but
+    the harness's region path returns rows sorted by score, which is
+    model-dependent by construction.  A shared positional mask would silently
+    drop the wrong media there.
+    """
+    arr = np.asarray(scores, dtype=np.float64)
+    if arr.size == 0:
+        return arr
+    keep = np.fromiter((i not in voted_ids for i in score_ids), dtype=bool, count=len(score_ids))
+    return arr[keep]
+
+
+def apply_vote_exclusion(
+    scores: "list[float] | np.ndarray",
+    score_ids: "Sequence[int]",
+    voted_ids: "set[int] | None",
+    *,
+    min_remainder: float | None = None,
+) -> tuple[np.ndarray, bool]:
+    """``(haystack, applied)`` - the population the threshold should be fitted on.
+
+    **The single decision point for the #3308 exclusion**, called once per
+    training step on the *final* model's scores.  When it returns
+    ``applied=True`` the caller must put every other haystack in that step -
+    each calibration fold's - through :func:`drop_voted` as well; when it
+    returns ``False`` every haystack keeps its full population.  Both the app
+    (:func:`vtscore.detectors.training._fused_threshold`) and the eval
+    harness's default arm route through here, so the floor policy exists in one
+    place and the "all-or-nothing, never partial" contract is structural rather
+    than a rule each caller has to remember.
+
+    The exclusion is declined - ``applied=False``, *scores* returned whole -
+    when nothing is voted, or when it would leave fewer than
+    :func:`resolve_exclusion_floor`'s remainder.  A remainder of zero always
+    declines, whatever the floor: an empty haystack is not a population
+    estimate, it is the absence of one.
+    """
+    arr = np.asarray(scores, dtype=np.float64)
+    if not voted_ids or arr.size == 0:
+        return arr, False
+    kept = drop_voted(arr, score_ids, voted_ids)
+    if kept.size == 0 or kept.size < resolve_exclusion_floor(min_remainder):
+        return arr, False
+    return kept, True
+
 
 #: Step size of the **eval-only** ``"q_tilt"`` cut rule (issue #2865's candidate
 #: 3), in units of combined-fold quantile per inclusion step.

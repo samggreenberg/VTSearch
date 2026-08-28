@@ -264,6 +264,29 @@ MIRRORS: list[Mirror] = [
         ),
     ),
     Mirror(
+        id="thresholds.vote_exclusion_floor",
+        app="py:vtscore.training.thresholds.resolve_exclusion_floor",
+        harness="vtscore/eval/voting_iterations.py::_safe_threshold_for_step",
+        kind="default",
+        note=(
+            "How the #3308 voted-media exclusion resolves its remainder floor when no override "
+            "is given (#3312). The exclusion DECISION itself is not mirrored and must never "
+            "become mirrored: both sides call apply_vote_exclusion / drop_voted, so the "
+            "all-or-nothing contract and the filtering are shared code rather than two copies. "
+            "What this digest watches is the *default*: the harness's exclusion_min_remainder "
+            "arm knob defaults to None, and None has to keep meaning 'whatever a live detector "
+            "does'. If the app's floor stops being one constant - keyed on the dataset size, "
+            "the voting mode, a per-user setting - that resolution has to reach the harness "
+            "too, or every arm in the #3312 grid is measured against a baseline nobody runs."
+        ),
+        divergence=(
+            "INTENTIONAL: the harness accepts an explicit floor (0 = exclude unconditionally, "
+            "math.inf = the pre-#3308 behaviour) where the app has no such setting. That is the "
+            "#3312 arm axis and is exactly the kind of deliberate deviation the harness exists "
+            "to measure; the DEFAULT arm still passes None and so resolves here."
+        ),
+    ),
+    Mirror(
         id="thresholds.fold_anchored_fit_then_cut",
         app="py:vtscore.training.thresholds.fold_anchored_gmm_threshold",
         harness="vtscore/eval/voting_iterations.py::_cut_inclusion_arms",

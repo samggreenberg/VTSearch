@@ -46,7 +46,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from coco_fixture import IMAGES, ensure_corpus  # noqa: E402
 from slide_figure import (  # noqa: E402
     FULL_BLEED,
-    SIDEBAR,
     save,
     tight_box,
 )
@@ -58,7 +57,6 @@ SOFT = "#5b6472"
 RULE = "#d8dee6"
 RED = "#b91c1c"
 GREEN = "#0d8a5f"
-BLUE = "#0b5fa5"
 
 #: Every frame the two figures use, as `name: (coco file, crop)`. The
 #: crop is `(left, top, side)` in fractions of the image's own *width*, square
@@ -70,6 +68,7 @@ TILES = {
     "stack": ("000000520077.jpg", (0.10, 0.05, 0.80)),
     "shelf": ("000000183049.jpg", (0.05, 0.10, 0.62)),
     "bookcase": ("000000509260.jpg", (0.42, 0.02, 0.45)),
+    "cover": ("000000251140.jpg", (0.00, 0.16, 1.00)),
     "open": ("000000262938.jpg", (0.45, 0.32, 0.50)),
     "bird": ("000000542776.jpg", (0.22, 0.05, 0.62)),
     "magazine": ("000000375278.jpg", (0.50, 0.42, 0.50)),
@@ -79,11 +78,18 @@ TILES = {
     "gamecase": ("000000379842.jpg", (0.02, 0.00, 0.60)),
 }
 
-#: The sidebar figure: three the room will call books, three it will argue
-#: about. Deliberately *not* three obvious rejects — a slide that answers its
-#: own question teaches nothing, and the argument the deck needs is that the
-#: second row is genuinely undecidable without being told whose corpus it is.
-BOUNDARY_YES = ("stack", "shelf", "bookcase")
+#: The top row: three the room will call books. Three *different* pictures of
+#: one, which is the part that has to be worked at — a pile, a shelf and a
+#: bookcase were all "many books, spines out", so the row read as one
+#: photograph printed three times and said nothing about what a book is
+#: (#3301). A single volume lying face up, its cover legible, is the case the
+#: other two do not cover.
+#:
+#: The bottom row: three it will argue about. Deliberately *not* three obvious
+#: rejects — a slide that answers its own question teaches nothing, and the
+#: argument the deck needs is that the second row is genuinely undecidable
+#: without being told whose corpus it is.
+BOUNDARY_YES = ("stack", "shelf", "cover")
 BOUNDARY_MAYBE = ("magazine", "dvd", "notebook")
 
 #: The full-bleed figure: ten items in the order a detector put them, and what
@@ -94,22 +100,33 @@ BOUNDARY_MAYBE = ("magazine", "dvd", "notebook")
 #: score axis in the deck does and the way a chart does: positives and high
 #: scores on the right (#3296). The admitted set is therefore the *tail* of
 #: this tuple, which is what `_cut_x` converts a "include N" count into.
+#:
+#: The two mistakes are placed, not sampled. Under this arrangement each of the
+#: three cuts below is the **unique** cheapest answer at exactly one of the
+#: three prices the next slide draws — 4:1 picks the tightest, 1:1 the middle,
+#: 1:4 the loosest — and no two cuts ever tie. The previous arrangement made
+#: all three cost the same at equal prices, which drew a cost curve with a
+#: three-way tied minimum and let "the ranking cannot choose" read as an
+#: artefact of a flat function rather than as a statement about prices (#3301).
+#: Every 5-and-5 arrangement was enumerated; this is the shape of the only
+#: family that separates all three cuts under a symmetric price triple.
 RANKING = (
     ("notebook", False),
     ("newspaper", False),
-    ("dvd", False),
     ("bird", True),
+    ("dvd", False),
     ("gamecase", False),
     ("open", True),
-    ("magazine", False),
     ("bookcase", True),
+    ("magazine", False),
     ("shelf", True),
     ("stack", True),
 )
 
-#: Where the three drawn cuts fall, as a count of items admitted. Each is a
-#: defensible answer on this ranking and they disagree about six of the ten.
-CUTS = (3, 5, 7)
+#: Where the three drawn cuts fall, as a count of items admitted. Each is the
+#: sole minimum of the cost at one of the next slide's three prices, so no two
+#: of them are ever worth the same thing.
+CUTS = (2, 5, 8)
 
 
 def tile(name: str, size: int = 512) -> np.ndarray:
@@ -145,36 +162,80 @@ def _canvas(width: float, height: float, unit: float) -> tuple[plt.Figure, plt.A
 # The sidebar figure: the concept, and its edge.
 # ---------------------------------------------------------------------------
 
-#: Points per drawing unit for the boundary figure. Chosen so the two row
-#: labels clear the type floor in a 56% sidebar: the drawing is 5.34 units
-#: wide, so a 15pt label renders at 15 * 717 / (5.34 * PT) pixels.
+#: The boundary figure is full-bleed, like every other content slide in the
+#: deck. It used to be the one exception — a `bg right:56%` sidebar beside a
+#: bulleted column — which is why its headline rendered small and centred and
+#: its page number sat bottom-*left*: Marpit lays a split slide's text into a
+#: foreignObject the width of the text column, so nothing in the section can
+#: reach the slide's right edge and the theme moves the folio to the column's
+#: own margin. Both differences were structural, not stylistic; going
+#: full-bleed is what removes them (#3301). The three bullets it carried are
+#: in the presenter notes, which is where the rest of the deck keeps its
+#: sentences.
+#:
+#: 16:9 at 80 slide pixels per unit, so the title notch — 300x200 px at a
+#: 60x42 inset — is the rectangle x 0.75..4.50, y 5.975..8.475. The grid is
+#: right-aligned past it: the tiles are height-bound at three columns, which
+#: leaves exactly the horizontal slack the headline needs.
+BOUNDARY_CANVAS = (16.0, 9.0)
 BOUNDARY_UNIT = 72.0
-BOUNDARY_TILE = 1.62
-BOUNDARY_GAP = 0.09
+#: Left edge of the grid: clear of the notch by an object gap, and the one
+#: number that keeps the headline off the photographs.
+BOUNDARY_LEFT = 5.17
+BOUNDARY_RIGHT_MARGIN = 0.5
+BOUNDARY_GAP = 0.14
+#: Height of a row's name, and the air above and below the pair of rows.
+BOUNDARY_LABEL_H = 0.62
+BOUNDARY_ROW_GAP = 0.42
+BOUNDARY_MARGIN_V = 0.32
+#: Renders at 33px in the slot — the deck's own body size, and the row names
+#: are read as body copy rather than as annotations on a chart.
+BOUNDARY_LABEL_PT = 30
+
+
+def _boundary_tile() -> float:
+    """The tile side that makes two labelled rows fill the canvas height."""
+    height = BOUNDARY_CANVAS[1]
+    fixed = 2 * BOUNDARY_MARGIN_V + 2 * BOUNDARY_LABEL_H + BOUNDARY_ROW_GAP
+    by_height = (height - fixed) / 2
+    span = BOUNDARY_CANVAS[0] - BOUNDARY_LEFT - BOUNDARY_RIGHT_MARGIN
+    by_width = (span - (len(BOUNDARY_YES) - 1) * BOUNDARY_GAP) / len(BOUNDARY_YES)
+    return min(by_height, by_width)
 
 
 def boundary_fig() -> None:
     """Three books over three things that are not books, or are, or it depends."""
-    cols = len(BOUNDARY_YES)
-    width = cols * BOUNDARY_TILE + (cols - 1) * BOUNDARY_GAP
-    label_h = 0.52
-    height = 2 * (BOUNDARY_TILE + label_h) + 0.28
+    width, height = BOUNDARY_CANVAS
     fig, ax = _canvas(width, height, BOUNDARY_UNIT)
+    tile_side = _boundary_tile()
 
     rows = (
         (BOUNDARY_YES, "Book", GREEN),
         (BOUNDARY_MAYBE, "Book?", RED),
     )
-    y = height
+    y = height - BOUNDARY_MARGIN_V
     for names, label, colour in rows:
-        y -= label_h
-        ax.text(0.0, y + 0.10, label, ha="left", va="bottom", fontsize=20, color=colour, fontweight="bold")
-        y -= BOUNDARY_TILE
+        y -= BOUNDARY_LABEL_H
+        ax.text(
+            BOUNDARY_LEFT,
+            y + 0.12,
+            label,
+            ha="left",
+            va="bottom",
+            fontsize=BOUNDARY_LABEL_PT,
+            color=colour,
+            fontweight="bold",
+        )
+        y -= tile_side
         for i, name in enumerate(names):
-            _photo(ax, name, i * (BOUNDARY_TILE + BOUNDARY_GAP), y, BOUNDARY_TILE)
-        y -= 0.28
+            _photo(ax, name, BOUNDARY_LEFT + i * (tile_side + BOUNDARY_GAP), y, tile_side)
+        y -= BOUNDARY_ROW_GAP
 
-    save(fig, OUT, "book-boundary.png", column=SIDEBAR)
+    # `tight=False`: the empty left column *is* the figure here. A tight crop
+    # would helpfully remove the corner the slide's headline is drawn into,
+    # and the notch check would then pass on an image that no longer has a
+    # corner to spare.
+    save(fig, OUT, "book-boundary.png", column=FULL_BLEED, tight=False)
 
 
 # ---------------------------------------------------------------------------
@@ -302,7 +363,7 @@ def _rank_stage(stage: int) -> plt.Figure:
             ax.plot(
                 [x, x],
                 [RANK_CUT_LABEL_Y + 0.12, RANK_TILE_Y + RANK_TILE + 0.22],
-                color=BLUE,
+                color=INK,
                 linewidth=2.2,
                 linestyle=(0, (4, 3)),
                 zorder=4,
@@ -314,7 +375,7 @@ def _rank_stage(stage: int) -> plt.Figure:
                 ha="center",
                 va="top",
                 fontsize=22,
-                color=BLUE,
+                color=INK,
                 fontweight="bold",
             )
             ax.text(

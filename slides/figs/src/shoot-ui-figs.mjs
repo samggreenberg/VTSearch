@@ -51,8 +51,30 @@ const FIXTURE_BUILDER = join(REPO, 'slides', 'figs', 'src', 'coco_fixture.py');
 // The window is also nearly square, because the slot is: a 16:10 frame wastes
 // two fifths of a `bg right:56%` box, which is the same as choosing to draw
 // the whole thing smaller.
-const VIEWPORT = { width: 1180, height: 940 };
+//
+// The *height* is the app's own layout knob. At 940 the shot filled the slide
+// top to bottom with no margin at all — a projector that overscans clips the
+// chrome — and the centre viewer, whose photo is width-bound, spent the
+// surplus on empty bands above and below it that pushed the Good/Bad buttons
+// into the bottom eighth of the slide (#3301). A shorter window takes that
+// surplus out of the app's own layout rather than out of the figure.
+//
+// How short is bounded by the headline, not by taste. The composed canvas is
+// 16:9, so the app's width on the slide is `720·(1−2·SHOT_MARGIN)·1180/height`
+// and what is left of 1280 is the column the title lives in. That column has
+// to clear `slide_figure.TITLE_NOTCH_PX` — 300px at a 60px inset — so:
+//
+//     height ≥ 720·1180·(1 − 2·SHOT_MARGIN) / (1280 − 375)
+//
+// which at SHOT_MARGIN = 0.06 is 826. 830 takes it with 4px to spare.
+const VIEWPORT = { width: 1180, height: 830 };
 const SCALE = 2;
+
+// White above and below the frame, as a fraction of the shot's own height, so
+// the app does not bleed to the slide's edges. Spent out of the same 16:9
+// canvas as the title column, which is why the two numbers are chosen
+// together.
+const SHOT_MARGIN = 0.06;
 
 // Which photo the centre viewer shows. Ranked by the detector, the top of the
 // list is whatever the model likes best, and "whatever the model likes best"
@@ -125,7 +147,8 @@ const log = (...a) => console.log('[slide-shots]', ...a);
  */
 async function shoot(page, name) {
   const png = await page.screenshot({ type: 'png' });
-  // Padded on the left to exactly 16:9 before the encode. These go on
+  // Padded on the left to exactly 16:9 before the encode, and by `SHOT_MARGIN`
+  // above and below so the frame does not run to the slide's own edges. These go on
   // `_class: full` slides, which reserve their top-left corner for the
   // headline; a 1.25:1 frame letterboxes into that slot with white bands too
   // narrow to hold it, so the title landed across the app's own chrome. The
@@ -140,11 +163,14 @@ async function shoot(page, name) {
       '-c',
       'import sys;from io import BytesIO;from PIL import Image;'
         + 'shot=Image.open(BytesIO(sys.stdin.buffer.read())).convert("RGB");'
-        + 'w=max(shot.width,round(shot.height*16/9));'
-        + 'canvas=Image.new("RGB",(w,shot.height),"white");'
-        + 'canvas.paste(shot,(w-shot.width,0));'
+        + 'm=round(shot.height*float(sys.argv[2]));'
+        + 'h=shot.height+2*m;'
+        + 'w=max(shot.width,round(h*16/9));'
+        + 'canvas=Image.new("RGB",(w,h),"white");'
+        + 'canvas.paste(shot,(w-shot.width,m));'
         + 'canvas.save(sys.argv[1],"WEBP",quality=92,method=6)',
       join(FIGS, `${name}.webp`),
+      String(SHOT_MARGIN),
     ],
     { cwd: REPO, input: png, stdio: ['pipe', 'inherit', 'inherit'] }
   );
