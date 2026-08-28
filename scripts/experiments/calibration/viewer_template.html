@@ -526,6 +526,10 @@
 
   // ---- render -------------------------------------------------------------
   const SOLID = P.solid_coverage;
+  // "Fully measured", for deciding whether the coverage strip has anything to
+  // show. Not 1.0: coverage is a ratio of integers and a pooled slice can land a
+  // hair under it, which would keep a flat strip on screen forever.
+  const COV_FLAT = 0.995;
   const MAX_PANELS = 16;
   const fmt = (v, d = 3) => (Number.isFinite(v) ? v.toFixed(d) : "—");
   const shortLabel = (dim, v) => (v === null ? (dim === "category" ? "all categories" : "all datasets") : String(v));
@@ -607,9 +611,42 @@
     const pad = (hi - lo) * 0.06 || 0.02;
     lo = Math.max(spec.lo, lo - pad); hi = Math.min(spec.hi, hi + pad);
 
-    for (const p of panels) host.appendChild(panel(p, pl, spec, lo, hi));
+    // Does the coverage strip earn its space in THIS selection?
+    //
+    // It exists to expose survivorship: a mean at click 140 pooled from a third
+    // of the cells is a different quantity from one pooled from all of them, and
+    // nothing else on the page says which you are looking at. But in a study
+    // where every cell runs to the horizon it is a flat 100% line under every
+    // panel -- a fifth of each panel's height, in every panel, carrying one bit
+    // that never changes. Same rule as the embedder chips at one embedder: an
+    // axis with one value is furniture.
+    //
+    // The run-up does NOT count as variation. Coverage climbs from nothing to
+    // full over the first clicks because detectors only start once a run has
+    // both classes, and the main chart already says so by DASHING the mean
+    // there. So the strip's only unique information is a dip AFTER every series
+    // has come up, and that is exactly what this tests.
+    //
+    // Decided across all panels rather than per panel: panels of two different
+    // heights are two charts, which is why the y-scale is shared already.
+    let covStart = -1;
+    for (let t = 1; t < nT && covStart < 0; t++) {
+      let all = true;
+      for (const p of panels) for (const q of p.per) if (!(q.agg.cov[t] >= COV_FLAT)) all = false;
+      if (all) covStart = t;
+    }
+    let showCov = true;
+    if (covStart >= 0) {
+      let covMin = 1;
+      for (const p of panels) for (const q of p.per) {
+        for (let t = covStart; t < nT; t++) if (Number.isFinite(q.agg.cov[t])) covMin = Math.min(covMin, q.agg.cov[t]);
+      }
+      showCov = covMin < COV_FLAT;
+    }
+
+    for (const p of panels) host.appendChild(panel(p, pl, spec, lo, hi, showCov));
     legend(pl, panels);
-    reading(spec, pl, hidden, facetKeys.length);
+    reading(spec, pl, hidden, facetKeys.length, showCov);
     tableView(spec, panels);
   }
 
@@ -638,7 +675,7 @@
     return bits.filter(Boolean).join(" · ");
   }
 
-  function panel(pnl, pl, spec, lo, hi) {
+  function panel(pnl, pl, spec, lo, hi, showCov) {
     const el = document.createElement("div");
     el.className = "panel";
     const tmax = P.t[nT - 1];
@@ -686,25 +723,30 @@
       // trained click, where nothing was measured at all.
       parts.push(
         `<path d="${path(P.t, q.agg.mean, x, y, lo, hi, true)}" fill="none" stroke="${q.color}" stroke-width="1.1" stroke-dasharray="3 3" opacity="0.85"/>`,
-        `<path d="${path(P.t, mask(q.agg.mean, q.agg.cov), x, y, lo, hi)}" fill="none" stroke="${q.color}" stroke-width="2"/>`,
-        `<path d="${path(P.t.slice(1), q.agg.cov.slice(1), x, yc, 0, 1)}" fill="none" stroke="${q.color}" stroke-width="1.2"/>`);
-      // Click 0 is a point, not the start of the line: every cell is measured
-      // there (it has a text sort) and none has a detector at click 1, so a
-      // joined line renders two different facts as a spike.
-      if (P.anchor.has && Number.isFinite(q.agg.cov[0])) parts.push(
-        `<circle cx="${x(0).toFixed(1)}" cy="${yc(q.agg.cov[0]).toFixed(1)}" r="2" fill="${q.color}"/>`);
+        `<path d="${path(P.t, mask(q.agg.mean, q.agg.cov), x, y, lo, hi)}" fill="none" stroke="${q.color}" stroke-width="2"/>`);
+      if (showCov) {
+        parts.push(
+          `<path d="${path(P.t.slice(1), q.agg.cov.slice(1), x, yc, 0, 1)}" fill="none" stroke="${q.color}" stroke-width="1.2"/>`);
+        // Click 0 is a point, not the start of the line: every cell is measured
+        // there (it has a text sort) and none has a detector at click 1, so a
+        // joined line renders two different facts as a spike.
+        if (P.anchor.has && Number.isFinite(q.agg.cov[0])) parts.push(
+          `<circle cx="${x(0).toFixed(1)}" cy="${yc(q.agg.cov[0]).toFixed(1)}" r="2" fill="${q.color}"/>`);
+      }
     }
-    parts.push(
+    if (showCov) parts.push(
       `<line x1="${M.l}" x2="${W - M.r}" y1="${yc(SOLID).toFixed(1)}" y2="${yc(SOLID).toFixed(1)}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="1 3"/>`,
       `<text x="${M.l - 8}" y="${(yc(1) + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">100%</text>`,
       `<text x="${M.l - 8}" y="${(yc(0) + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">0%</text>`,
-      `<text x="${W - M.r}" y="${(yc(0) + 14).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">cells measured</text>`,
-      `<text x="${(M.l + (W - M.l) / 2).toFixed(0)}" y="${H + CH + 12}" text-anchor="middle" font-size="11" fill="var(--muted)">clicks spent${P.anchor.has ? "  (0 = the free text sort)" : ""}</text>`,
+      `<text x="${W - M.r}" y="${(yc(0) + 14).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">cells measured</text>`);
+    const foot = showCov ? H + CH : H;
+    parts.push(
+      `<text x="${(M.l + (W - M.l) / 2).toFixed(0)}" y="${foot + 12}" text-anchor="middle" font-size="11" fill="var(--muted)">clicks spent${P.anchor.has ? "  (0 = the free text sort)" : ""}</text>`,
       `<text transform="translate(13,${(M.t + (H - M.b) / 2).toFixed(0)}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--muted)">${esc(spec.label)}</text>`);
 
     el.insertAdjacentHTML("beforeend",
-      `<svg viewBox="0 0 ${W} ${H + CH + 20}" role="img" aria-label="${esc(spec.label)} against clicks">${parts.join("")}</svg>`);
-    hover(el, pnl, spec, x, y);
+      `<svg viewBox="0 0 ${W} ${foot + 20}" role="img" aria-label="${esc(spec.label)} against clicks">${parts.join("")}</svg>`);
+    hover(el, pnl, spec, x, y, showCov);
     return el;
   }
 
@@ -791,7 +833,7 @@
   };
 
   // ---- hover: crosshair + tooltip ----------------------------------------
-  function hover(el, pnl, spec, x, y) {
+  function hover(el, pnl, spec, x, y, showCov) {
     const svg = el.querySelector("svg");
     const tip = document.createElement("div");
     tip.className = "tip";
@@ -816,11 +858,12 @@
       const rows = pnl.per.map((q) =>
         `<tr><td class="k"><span class="sw" style="background:${q.color}"></span>${esc(q.name)}</td>` +
         `<td class="v">${fmt(q.agg.mean[i])}</td>` +
-        `<td class="v" style="color:var(--muted);padding-left:10px">${(q.agg.cov[i] * 100).toFixed(0)}%</td></tr>`).join("");
+        (showCov ? `<td class="v" style="color:var(--muted);padding-left:10px">${(q.agg.cov[i] * 100).toFixed(0)}%</td>` : "") +
+        `</tr>`).join("");
       tip.innerHTML =
         `<div class="hd">${P.t[i]} click${P.t[i] === 1 ? "" : "s"}${P.t[i] === 0 && P.anchor.has ? " — " + esc(P.anchor.label) : ""}</div>` +
         `<table>${rows}</table>` +
-        `<div style="color:var(--muted);margin-top:4px">${esc(spec.label)} · % = cells measured</div>`;
+        `<div style="color:var(--muted);margin-top:4px">${esc(spec.label)}${showCov ? " · % = cells measured" : ""}</div>`;
       tip.style.opacity = "1";
       tip.style.left = Math.min(ev.clientX - r.left + 14, r.width - tip.offsetWidth - 8) + "px";
       tip.style.top = Math.max(4, ev.clientY - r.top - 10) + "px";
@@ -830,13 +873,18 @@
   }
 
   // ---- prose + table ------------------------------------------------------
-  function reading(spec, pl, hidden, wanted) {
+  function reading(spec, pl, hidden, wanted, showCov) {
     const bits = [];
     bits.push(
       `<b>Reading it.</b> Each line is the ${state.seedMode === "each" ? "individual run" : "mean over the cells it pools"}; ` +
       `the shaded band is ±1 SD. A line is <b>dashed</b> wherever fewer than ${(SOLID * 100).toFixed(0)}% of that ` +
       `series' cells are measured at that click — there it describes a subset, not the grid, so only a solid ` +
-      `segment is a level worth quoting. The strip underneath is that fraction.`);
+      `segment is a level worth quoting.` +
+      (showCov
+        ? ` The strip underneath is that fraction, and it drops below full somewhere in this slice.`
+        : ` <b>Every cell is measured at every click here</b>, so the coverage strip is omitted rather than drawn` +
+          ` as a flat 100% line: nothing in this slice dropped out, and the dashed run-up already says when each` +
+          ` series' detector started.`));
     if (P.anchor.has) bits.push(
       `<b>Click 0 is the ${esc(P.anchor.label)}</b> — what typing the query got for free. It is each series' own ` +
       `leftmost point, so a curve is worth its clicks only once it has moved past where it started. ` +
