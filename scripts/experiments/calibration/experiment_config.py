@@ -504,6 +504,19 @@ CUT_INCLUSION_QTILT_STEPS = [float(s) for s in os.environ.get("CALIB_CUT_INCL_QT
 #: grid's *maximum* sets the price, not its length.  Size it from a real cell.
 FOLD_COUNTS = [int(k) for k in os.environ.get("CALIB_FOLD_COUNTS", "").split(",") if k.strip()]
 
+#: The **live** fold count as a function of the vote count (issue #3314):
+#: ``"K@N"`` = ``K(n_votes) = K while n_votes < N, else`` :data:`CALIBRATE_COUNT`.
+#: Empty (the default) = off, and every other study runs exactly as before -
+#: this is the whole reason it is a separate knob rather than a widening of
+#: :data:`CALIBRATE_COUNT`, which stays a scalar that no other launcher has to
+#: learn a new grammar for.
+#:
+#: Unlike :data:`FOLD_COUNTS` this is NOT counterfactual: it moves the threshold
+#: the app would have shown, which moves the acquisition cut, which moves the
+#: votes.  It therefore needs a full run per schedule, exactly like
+#: :data:`CALIBRATE_COUNT` itself - the screen cannot see it.
+FOLD_COUNT_SCHEDULE = os.environ.get("CALIB_FOLD_COUNT_SCHEDULE", "").strip() or None
+
 #: Which head each step trains (``vtscore.eval.voting_iterations.HEADS``).
 #: Unset (the default) hands ``head=None`` to the harness, which resolves it to
 #: the head the live detector actually trains — ``linear_svm``.  That is the

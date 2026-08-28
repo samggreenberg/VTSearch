@@ -342,6 +342,10 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     "cal_seconds",
     "n_cal_scores",
     "n_folds_used",
+    #: The fold count the STEP lived at (#3314).  Equal to the run's
+    #: `calibrate_count` everywhere except under `fold_count_schedule`, where it
+    #: is what the schedule resolved for this step's vote count.
+    "calibrate_count",
     "train_seconds",
     "xcal_seconds",
     "pool_score_seconds",
@@ -1526,6 +1530,66 @@ def _schedule_variant_rows(
         row["blend_weight"] = _r(weight)
         rows.append(row)
     return rows
+
+
+def _fold_schedule_segment(part: str) -> tuple[int, int]:
+    """One ``"K@N"`` segment as ``(cut, count)``, or a ValueError naming it.
+
+    Split out of :func:`parse_fold_count_schedule` so the validation reads as a
+    list of the four ways a spec can be wrong rather than as branches inside the
+    parse loop.  The error says which SEGMENT was bad, because a schedule is
+    typed into a launcher and "invalid schedule" would leave a reader diffing
+    the string by eye.
+    """
+    k_str, sep, n_str = part.strip().partition("@")
+    if not sep:
+        raise ValueError(f"fold-count schedule segment {part!r} is not 'K@N'")
+    try:
+        k, n = int(k_str), int(n_str)
+    except ValueError as exc:
+        raise ValueError(f"fold-count schedule segment {part!r} is not 'K@N': {exc}") from exc
+    if k < 1:
+        raise ValueError(f"fold-count schedule segment {part!r}: K must be >= 1")
+    if n < 1:
+        raise ValueError(f"fold-count schedule segment {part!r}: N must be >= 1")
+    return n, k
+
+
+def parse_fold_count_schedule(spec: str | None, base: int) -> "Callable[[int], int] | None":
+    """Eval-only (#3314): resolve ``calibrate_count`` per step from the vote count.
+
+    ``"K@N"`` means ``K(n_votes) = K while n_votes < N, else base`` - the family
+    pre-registered in ``docs/experiments/calibration-fold-count-3310/PLAN.md``,
+    written the issue's way round: *more folds while the labelset is small,
+    decaying to production's count*.  Several segments may be chained
+    (``"8@25,4@60"``), and they are read in ascending ``N`` order, so the first
+    cut a vote count falls under wins and the ordering in the string does not
+    matter.
+
+    This is a **harness knob and not a shipped setting**.  ``CALIBRATE_COUNT``
+    and the app's own constant are untouched, so no other study's arm moves:
+    a run that does not set it resolves to *base* at every step, which is
+    exactly what the constant did before.  If the schedule ever ships, the
+    right shape is a ``production_fold_count_for(n_votes)`` beside
+    ``production_split_for``, with ``scripts/check-eval-app-sync.py`` gaining
+    the mirror - the same discipline #3287's split fraction went through.
+
+    Returns ``None`` for an empty spec, so the caller's fast path is the
+    unscheduled one.
+    """
+    if not spec or not spec.strip():
+        return None
+    segments = sorted(_fold_schedule_segment(part) for part in spec.split(",") if part.strip())
+    if not segments:
+        return None
+
+    def resolve(n_votes: int) -> int:
+        for cut, k in segments:
+            if n_votes < cut:
+                return k
+        return base
+
+    return resolve
 
 
 def _stop(timings: dict[str, float] | None, started: float) -> None:
@@ -3061,6 +3125,7 @@ def simulate_voting_iterations(  # noqa: C901
     sim_fraction: float = 0.5,
     safe_thresholds: bool = True,
     calibrate_count: int = 2,
+    fold_count_schedule: str | None = None,
     calibration_fraction: Optional[float] = None,
     region_voting: bool = False,
     strategy: str = "autopilot",
@@ -3161,6 +3226,15 @@ def simulate_voting_iterations(  # noqa: C901
             chain.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
+        fold_count_schedule: **Eval-only** (#3314).  ``"K@N"`` resolves
+            *calibrate_count* per step from the vote count -
+            ``K(n_votes) = K while n_votes < N, else calibrate_count`` - so a
+            run can spend more folds where they are cheapest and decay to
+            production's count as the labelset grows.  ``None`` (every other
+            caller) keeps *calibrate_count* constant, which is byte-identical
+            to the behaviour before the knob existed.  See
+            :func:`parse_fold_count_schedule` for why this is a harness knob
+            and not a shipped setting.
         calibration_fraction: Fraction of labelled data reserved for
             calibration in each split.  ``None`` (default) resolves to the
             **app's** per-space split
@@ -3317,6 +3391,11 @@ def simulate_voting_iterations(  # noqa: C901
     # These are pre-registered experiment knobs, so they are validated beside
     # the other argument checks rather than deep in the loop: a run that dies
     # forty minutes in on a typo has held a cluster slot for nothing.
+    # Parsed here, with the other pre-registered knobs, and not in the loop: a
+    # malformed schedule must kill the cell at second zero rather than forty
+    # minutes in, and the parse is what validates the spec at all.
+    _fold_schedule = parse_fold_count_schedule(fold_count_schedule, calibrate_count)
+
     startup_state: StartupState | None = None
     if startup_schedule:
         if seed_scores is None:
@@ -3617,6 +3696,7 @@ def simulate_voting_iterations(  # noqa: C901
                 }
             )
 
+        n_votes_now = len(good_votes) + len(bad_votes)
         # Need at least 1 good and 1 bad to train
         if not good_votes or not bad_votes:
             step = None
@@ -3633,6 +3713,11 @@ def simulate_voting_iterations(  # noqa: C901
                 )
             continue
 
+        # The live fold count for THIS step.  Constant unless #3314's schedule
+        # knob is set, and then a function of the vote count only - never of
+        # anything the step has already computed, so the count is decided
+        # before the fit and cannot depend on it.
+        step_calibrate_count = calibrate_count if _fold_schedule is None else _fold_schedule(n_votes_now)
         step, threshold, n_labels, timings, details = _train_and_calibrate(
             trainer,
             good_votes,
@@ -3642,7 +3727,7 @@ def simulate_voting_iterations(  # noqa: C901
             region_voting=region_voting,
             input_dim=input_dim,
             inclusion=inclusion,
-            calibrate_count=calibrate_count,
+            calibrate_count=step_calibrate_count,
             calibration_fraction=calibration_fraction,
             head=head,
             style_obj=style_obj,
@@ -3815,6 +3900,12 @@ def simulate_voting_iterations(  # noqa: C901
             "report_pool_percentile": _pool_percentile(pool_scores, threshold),
         }
         timing_cols = {
+            # The fold count this step actually LIVED at.  Constant on every run
+            # but #3314's scheduled arm - and recorded regardless, because a
+            # run-level knob whose only other record is the directory the cells
+            # were read out of is unreadable in a frame concatenated across arms
+            # (#3287's `calibration_fraction` lesson, one knob over).
+            "calibrate_count": step_calibrate_count,
             "train_seconds": round(timings["train_seconds"], 6),
             "xcal_seconds": round(timings["xcal_seconds"], 6),
             "pool_score_seconds": round(pool_score_seconds, 6),
