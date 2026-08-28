@@ -279,6 +279,68 @@ def trap_check(frame: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def verdict_by_geometry(paired: pd.DataFrame, metric: str) -> pd.DataFrame:
+    """The same rule, applied per GEOMETRY instead of per voting mode.
+
+    Reported beside the per-mode table because the per-mode table can hide a
+    disagreement inside itself.  "Binary" here is two geometries -
+    ``siglip/whole_image`` and ``dinov3_patch/whole_image`` - and if they want
+    different fractions then their pooled verdict is an average across exactly
+    the kind of crossing this study bands its axis to avoid.  #3115 made the
+    same discovery one level up: what looked like a law about voting mode was
+    two cells that happened to agree.
+
+    A per-mode default is only readable off the per-mode row when the
+    geometries under it point the same way; when they do not, the honest
+    finding is the disagreement.
+    """
+    rows: list[dict] = []
+    if paired.empty:
+        return pd.DataFrame()
+    for (geom, frac), g in paired.groupby(["geometry", "fraction"], dropna=False):
+        w = 1.0 / np.square(g["se"].to_numpy(dtype=float))
+        d = g["delta"].to_numpy(dtype=float)
+        ok = np.isfinite(w) & np.isfinite(d) & (w > 0)
+        pooled = float(np.sum(d[ok] * w[ok]) / np.sum(w[ok])) if ok.any() else float("nan")
+        pooled_se = float(np.sqrt(1.0 / np.sum(w[ok]))) if ok.any() else float("nan")
+        worst = float(g["delta"].max())
+        rows.append(
+            {
+                "geometry": geom,
+                "mode": voting_mode(str(geom)),
+                "fraction": frac,
+                "metric": metric,
+                "pooled_delta": pooled,
+                "pooled_se": pooled_se,
+                "beats_incumbent": bool(pooled < -2 * pooled_se),
+                "worst_band_delta": worst,
+                "worst_band": str(g.loc[g["delta"].idxmax(), "band"]),
+                # How much room the pointwise gate had, signed: negative means
+                # the arm cleared it, positive means it failed.  Printed because
+                # "passed" and "passed by 2e-5" are different facts and only one
+                # of them is a decision (see `_gate_margin_note`).
+                "harm_margin": worst - HARM_TOLERANCE,
+                "harms_a_band": bool(worst > HARM_TOLERANCE),
+                "candidate": bool(pooled < -2 * pooled_se and worst <= HARM_TOLERANCE),
+            }
+        )
+    return pd.DataFrame(rows).sort_values(["geometry", "fraction"]).reset_index(drop=True)
+
+
+def gate_is_indeterminate(worst: float, worst_se: float) -> bool:
+    """Is the pointwise harm gate actually decided, or did it land on the line?
+
+    The gate asks whether an arm's worst band exceeds :data:`HARM_TOLERANCE`.
+    That is a comparison between a measured number and a constant, and it is
+    only a decision when the number is far enough from the constant to be
+    distinguished from it.  An arm whose worst band is 0.00998 +/- 0.0069
+    "passes" by 2e-5 - a margin four hundred times smaller than its own standard
+    error - and reporting that as passing is precisely the false precision the
+    two-significant-digit rule exists to stop.
+    """
+    return abs(worst - HARM_TOLERANCE) < 2 * worst_se
+
+
 def verdict(paired: pd.DataFrame, metric: str) -> pd.DataFrame:
     """The pre-registered decision, per voting mode.
 
@@ -300,7 +362,9 @@ def verdict(paired: pd.DataFrame, metric: str) -> pd.DataFrame:
         ok = np.isfinite(w) & np.isfinite(d) & (w > 0)
         pooled = float(np.sum(d[ok] * w[ok]) / np.sum(w[ok])) if ok.any() else float("nan")
         pooled_se = float(np.sqrt(1.0 / np.sum(w[ok]))) if ok.any() else float("nan")
+        worst_i = g["delta"].idxmax()
         worst = float(g["delta"].max())
+        worst_se = float(g.loc[worst_i, "se"])
         rows.append(
             {
                 "mode": mode,
@@ -310,8 +374,14 @@ def verdict(paired: pd.DataFrame, metric: str) -> pd.DataFrame:
                 "pooled_se": pooled_se,
                 "beats_incumbent": bool(pooled < -2 * pooled_se),
                 "worst_band_delta": worst,
-                "worst_band": str(g.loc[g["delta"].idxmax(), "band"]),
+                "worst_band_se": worst_se,
+                "worst_band": str(g.loc[worst_i, "band"]),
+                "harm_margin": worst - HARM_TOLERANCE,
                 "harms_a_band": bool(worst > HARM_TOLERANCE),
+                # A gate that lands within 2 SE of its own threshold decided
+                # nothing; the boolean beside it is then an artefact of where
+                # the noise fell, not a result.
+                "gate_indeterminate": gate_is_indeterminate(worst, worst_se),
                 "candidate": bool(pooled < -2 * pooled_se and worst <= HARM_TOLERANCE),
             }
         )
@@ -417,6 +487,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     # --- the contrasts --------------------------------------------------------
     paired_all = []
     verdicts = []
+    verdicts_geom: list[pd.DataFrame] = []
     for metric in ("cost", "regret_honest"):
         if metric not in frame.columns:
             continue
@@ -427,10 +498,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         pv["metric"] = metric
         paired_all.append(pv)
         verdicts.append(verdict(pv, metric))
+        verdicts_geom.append(verdict_by_geometry(pv, metric))
     paired = pd.concat(paired_all, ignore_index=True) if paired_all else pd.DataFrame()
     paired.to_csv(out / "agg" / "paired_vs_incumbent.csv", index=False)
     vd = pd.concat(verdicts, ignore_index=True) if verdicts else pd.DataFrame()
     vd.to_csv(out / "agg" / "verdict.csv", index=False)
+    vg = pd.concat(verdicts_geom, ignore_index=True) if verdicts_geom else pd.DataFrame()
+    vg.to_csv(out / "agg" / "verdict_by_geometry.csv", index=False)
 
     spread = threshold_spread(frame)
     spread.to_csv(out / "agg" / "sd_threshold.csv", index=False)
@@ -460,7 +534,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             subtitle="Colour = calibration_fraction · one panel per geometry × category",
         )
 
-    write_report(out, frame, by_band, paired, vd, spread, trap, counts, prov, figs)
+    write_report(out, frame, by_band, paired, vd, vg, spread, trap, counts, prov, figs)
     print(f"wrote {out / 'REPORT_calfrac.md'}")
     return 0
 
@@ -490,7 +564,7 @@ def _fmt(x: float, digits: int = 2) -> str:
     return f"{x:.{digits}g}"
 
 
-def write_report(out, frame, by_band, paired, vd, spread, trap, counts, prov, figs) -> None:
+def write_report(out, frame, by_band, paired, vd, vg, spread, trap, counts, prov, figs) -> None:
     L: list[str] = []
     A = L.append
     A("# What Train/Calibrate split should a detector use? (#3287)\n")
@@ -539,6 +613,22 @@ def write_report(out, frame, by_band, paired, vd, spread, trap, counts, prov, fi
                     f"worst band {_fmt(best['worst_band_delta'])})."
                 )
         A("\n")
+
+    A("\n### The same rule, per geometry\n")
+    if not vg.empty:
+        A(_md(vg[vg["metric"] == "cost"].drop(columns=["metric"])))
+        A("\n\nA per-mode default is only readable off the table above when the geometries under it\n")
+        A("point the same way. Where they disagree, the disagreement is the finding — #3115 made the\n")
+        A("same discovery one level up, where a law about voting mode turned out to be two cells that\n")
+        A("happened to agree.\n")
+
+    if not vd.empty and bool(vd.get("gate_indeterminate", pd.Series(dtype=bool)).any()):
+        A("\n### Where the pointwise gate decided nothing\n")
+        g = vd[vd["gate_indeterminate"]]
+        A(_md(g[["mode", "fraction", "metric", "worst_band", "worst_band_delta", "worst_band_se", "harm_margin"]]))
+        A("\n\nThese arms' worst band lands within 2 SE of the 0.01 tolerance itself, so the\n")
+        A("`harms_a_band` boolean beside them is an artefact of where the noise fell rather than a\n")
+        A("decision. Read them as **undecided on harm**, whichever way the boolean points.\n")
 
     A("\n## Read across vote bands, not pooled\n")
     A("The trade-off is predicted to reverse with labelset size, so the banded table is the result and\n")
