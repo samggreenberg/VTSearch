@@ -27,7 +27,16 @@ _DROP_FIELDS = ("media_bytes", "thumbnail_bytes")
 #: matches the side frames too, and each new side frame has historically had to
 #: be excluded by hand in ~8 analyzers - which is exactly as reliable as it
 #: sounds.  Add the suffix here when you add a frame, not at the call sites.
-SIDE_FRAME_SUFFIXES = ("__sweep", "__cutdiag", "__cutincl")
+#:
+#: ``__picks`` (the #3267 per-click log) was added to ``run_cells.py`` and *not*
+#: here, which is the exact miss this constant exists to prevent: it is written
+#: unconditionally under ``CALIB_EMIT_PICKS`` (default on), so every analyzer
+#: calling :func:`main_frame_files` was concatenating one long-format table per
+#: cell into its metric frame.  The pick log shares ``seed``/``dataset``/
+#: ``category``/``t`` with the main frame and has no ``cost``, so the extra rows
+#: do not raise - they land as NaN in every metric column and change every
+#: ``groupby`` denominator silently.
+SIDE_FRAME_SUFFIXES = ("__sweep", "__cutdiag", "__cutincl", "__picks")
 
 
 def main_frame_files(cells_dir: str | Path) -> list[Path]:
