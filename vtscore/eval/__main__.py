@@ -113,8 +113,11 @@ def main() -> None:
     parser.add_argument(
         "--calibration-fraction",
         type=float,
-        default=0.5,
-        help="Fraction of training data used for calibration (default: 0.5).",
+        default=None,
+        help=(
+            "Fraction of training data used for calibration. Unset = the app's "
+            "per-space default (0.3 single-vector / 0.5 patch, issue #3287)."
+        ),
     )
     parser.add_argument(
         "--embedder",

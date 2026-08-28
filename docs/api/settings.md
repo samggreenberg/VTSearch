@@ -18,7 +18,7 @@ GET /api/settings
   "inclusion": 0,
   "enrich_descriptions": false,
   "calibrate_count": 2,
-  "calibration_fraction": 0.5,
+  "calibration_fraction": null,
   "audio_playing": true,
   "show_animations": "show",
   "show_metadata": false,
@@ -60,7 +60,8 @@ PUT /api/settings
 Supported keys: `volume` (number), `theme` (`"dark"` / `"light"` /
 `"highviz"`), `inclusion` (int, -10 to +10), `enrich_descriptions` (bool),
 `calibrate_count` (int), `calibration_fraction`
-(number), `audio_playing` (bool), `show_animations` (`"show"` / `"hide"` /
+(number or `null`; `null` = no explicit split, the per-embedder default
+applies — 0.3 single-vector / 0.5 patch), `audio_playing` (bool), `show_animations` (`"show"` / `"hide"` /
 `"os"`), `show_metadata` (bool),
 `focus_mode_left` (dict), `focus_mode_right` (dict), `grid_icon_size_left`
 (dict), `grid_icon_size_right` (dict), `panel_pct_left` (dict),

@@ -37,6 +37,7 @@ slides:
   anchored-gmm
   anchored-em
   quantile-transfer
+  split-fraction
 
   # 3 — Preference
   outline-hold-the-line +at3

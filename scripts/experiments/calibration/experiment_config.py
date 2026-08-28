@@ -348,8 +348,13 @@ CALIBRATE_COUNT = int(os.environ.get("CALIB_CALIBRATE_COUNT", "2"))
 #: splits, different fold models, a different threshold and therefore a
 #: different Hard pick), so a fraction contrast is a run-level A/B and NOT a
 #: paired arm re-cut inside one run.
-CALIBRATION_FRACTION = float(os.environ.get("CALIB_CALIBRATION_FRACTION", "0.5"))
-if not 0.0 < CALIBRATION_FRACTION < 1.0:
+#: ``None`` (env unset) = the app's per-space default: the harness resolves it
+#: per cell through ``production_split_for`` (0.3 single-vector / 0.5 patch,
+#: issue #3290), exactly as a live detector does.  Pinning a scalar here is a
+#: divergence preflight check 12 requires the study to declare.
+_CALIBRATION_FRACTION_ENV = os.environ.get("CALIB_CALIBRATION_FRACTION", "").strip()
+CALIBRATION_FRACTION: float | None = float(_CALIBRATION_FRACTION_ENV) if _CALIBRATION_FRACTION_ENV else None
+if CALIBRATION_FRACTION is not None and not 0.0 < CALIBRATION_FRACTION < 1.0:
     raise ValueError(f"CALIB_CALIBRATION_FRACTION={CALIBRATION_FRACTION} must lie strictly in (0, 1)")
 #: The #2781 study pre-registered safe_thresholds OFF (conformal path only);
 #: the #2799 safe-threshold GMM study flips this on via CALIB_SAFE_THRESHOLDS=1.

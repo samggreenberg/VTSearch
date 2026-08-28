@@ -475,7 +475,10 @@ def _score_with_cold_detector(
             _record_verdicts(media_results, dc["name"], all_ids, None, 0.0, "N/A")
             return
 
-        mlp, threshold = train_and_threshold(X_list, y_list)
+        # ``score_emb`` is the space the labelset was resolved and X_all built
+        # in; naming it lets the unset calibration_fraction resolve to that
+        # space's production split rather than the unknown-embedder fallback.
+        mlp, threshold = train_and_threshold(X_list, y_list, embedder_name=score_emb)
         with torch.no_grad():
             X_in = X_all.to(next(mlp.parameters()).device)
             scores = sigmoid_to_finite_scores(mlp(X_in))

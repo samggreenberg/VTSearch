@@ -17,6 +17,18 @@ not list every commit. Use `git log` for the full history.
 
 ### Changed
 
+- **The Tuning-fraction default is now per-model.** With no explicit setting,
+  the Train/Calibrate split of each calibration fold is 0.3 (70% Train / 30%
+  Calibrate) for detectors that learn in a single-vector space and stays 0.5
+  for patch-grid models — the #3287 measurement found more Train buys
+  −0.012 to −0.013 cost on single-vector embedders in every vote band, while
+  patch embedders want the incumbent 0.5 in both their voting styles. The
+  Settings → Sorting "Tuning fraction" field now reads empty ("auto") by
+  default; typing a value pins it for every detector as before, and clearing
+  the field returns to the automatic per-model default. Stored settings that
+  already carry an explicit `calibration_fraction` keep winning unchanged.
+  (Issues #3287/#3290.)
+
 - **The calibration deck is a talk about ideas again, and every reveal has a
   name.** `slides/decks/hold-the-line.deck` was rebuilt end to end: the
   measurement slides are parked after the Questions slide as backup, so the

@@ -812,7 +812,7 @@ def labelset_train_and_score(
     clips_dict: dict[int, dict[str, Any]],
     inclusion_value: int = 0,
     calibrate_count: int = 2,
-    calibration_fraction: float = 0.5,
+    calibration_fraction: float | None = None,
 ) -> tuple[list[dict[str, Any]], float, Any | None]:
     """Train an MLP on the full labelset, then score every media in *clips_dict*.
 
@@ -824,6 +824,11 @@ def labelset_train_and_score(
     pipelines stay in lock-step (region-aware scoring, NaN sanitisation,
     population-fused thresholding).  Scoring is still scoped to the active
     dataset's media, since that is what the user is sorting in the UI.
+
+    ``calibration_fraction=None`` (no explicit user setting) resolves inside
+    the shared core to the per-space production split for the detector's
+    embedder (see
+    :func:`~vtscore.detectors.training.resolve_calibration_fraction`).
     """
     from vtscore.detectors.training import _train_and_score_xy
 

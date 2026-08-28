@@ -443,7 +443,8 @@ class TestSettingsModule:
         # the OS ``prefers-color-scheme`` at render time.
         assert defaults["theme"] == "system"
         assert defaults["calibrate_count"] == 2
-        assert defaults["calibration_fraction"] == 0.5
+        # ``None`` = no explicit split; the per-embedder default applies (#3290).
+        assert defaults["calibration_fraction"] is None
         assert defaults["show_metadata"] is False
         assert isinstance(defaults["grid_icon_size_left"], dict)
         for v in defaults["grid_icon_size_left"].values():
