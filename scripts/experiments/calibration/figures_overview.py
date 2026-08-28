@@ -41,8 +41,62 @@ MODE_COLORS = {
     "dinov3_patch/max_patch": "#a78bfa",
     "siglip/whole_image": "#0891b2",
     "siglip2_l/whole_image": "#b45309",
+    # The CLIP columns (#3292). `clip` is app-selectable; `clip_l` is
+    # `eval_only` and is a reference column rather than a mode a user can pick,
+    # which a figure cannot show -- so any report using these says which is
+    # which. Named here rather than left to the `C{i}` fallback because that
+    # fallback assigns by POSITION, so adding a column silently recolours the
+    # ones after it and two reports stop being comparable by eye.
+    "clip/whole_image": "#be123c",
+    "clip_l/whole_image": "#4d7c0f",
 }
 DEEP = 150
+
+
+def panel_grid(n: int, w: float, h: float, ncols_max: int = 3):
+    """A wrapped grid of panels, plus the axes that need a y-label.
+
+    One panel per mode in a single row was fine at three modes and stops being
+    fine at five: the figure is then 23 inches wide, and a report renders it
+    scaled to the column width, so each panel arrives at a fifth of the page and
+    nothing in it can be read.  Wrapping at three keeps a panel the size it was
+    drawn at whatever the mode count does next.
+
+    Returns ``(fig, axes, leftmost, spare)`` -- *axes* is exactly *n* visible
+    axes in order, *leftmost* is the first of each row (where a shared y-label
+    belongs once there is more than one row), and *spare* is the empty slots the
+    wrap leaves over, which is where a legend belongs rather than on top of the
+    data in the last panel.
+    """
+    import math
+
+    import matplotlib.pyplot as plt  # noqa: PLC0415  (the backend is chosen by the caller)
+
+    ncols = min(n, ncols_max)
+    nrows = math.ceil(n / ncols)
+    fig, grid = plt.subplots(nrows, ncols, figsize=(w * ncols, h * nrows), sharey=True, squeeze=False)
+    flat = [a for row in grid for a in row]
+    for a in flat[n:]:
+        a.set_visible(False)
+    return fig, flat[:n], [grid[r][0] for r in range(nrows)], flat[n:]
+
+
+def legend_in_spare(axes, spare, **kw) -> bool:
+    """Put the legend in an empty grid slot; return False if there is none.
+
+    A legend drawn inside the last panel sits on top of that panel's data, and
+    the wrap usually leaves a hole exactly the right size next to it.
+    """
+    if not spare:
+        return False
+    handles, labels = axes[0].get_legend_handles_labels()
+    if not handles:
+        return False
+    ax = spare[0]
+    ax.set_visible(True)
+    ax.axis("off")
+    ax.legend(handles, labels, loc="center", frameon=False, **kw)
+    return True
 
 
 def band_of(c: str) -> str:
@@ -161,8 +215,7 @@ def main() -> int:
     plt.close(fig)
 
     # --- 2. the same, one line per run --------------------------------------
-    fig, axes = plt.subplots(1, len(modes), figsize=(4.6 * len(modes), 4.2), sharey=True)
-    axes = axes if len(modes) > 1 else [axes]
+    fig, axes, leftmost, spare = panel_grid(len(modes), 4.6, 4.2)
     for axi, m in zip(axes, modes):
         sel = [v for k, v in runs.items() if k[0] == m]
         step = max(1, len(sel) // args.max_run_lines)
@@ -174,7 +227,8 @@ def main() -> int:
         axi.set_title(f"{m}\n({shown} runs)", fontsize=9)
         axi.set_xlabel("votes spent")
         axi.grid(alpha=0.2)
-    axes[0].set_ylabel("cost")
+    for axi in leftmost:
+        axi.set_ylabel("cost")
     fig.suptitle(f"Every run separately — the dashed line is the {args.floor} 'never got going' floor", fontsize=10)
     fig.tight_layout()
     fig.savefig(out / "cost_per_run.png", dpi=130)
@@ -199,8 +253,7 @@ def main() -> int:
     plt.close(fig)
 
     # --- 4. what the cost is made of ----------------------------------------
-    fig, axes = plt.subplots(1, len(modes), figsize=(4.3 * len(modes), 4.2), sharey=True)
-    axes = axes if len(modes) > 1 else [axes]
+    fig, axes, leftmost, spare = panel_grid(len(modes), 4.3, 4.2)
     for axi, m in zip(axes, modes):
         o_, r_, c_ = [], [], []
         for b in BANDS:
@@ -214,8 +267,10 @@ def main() -> int:
         axi.bar(BANDS, c_, bottom=[a + b for a, b in zip(o_, r_)], color="#f59e0b", label="calibration_shift")
         axi.set_title(m, fontsize=9)
         axi.grid(alpha=0.2, axis="y")
-    axes[0].set_ylabel(f"cost at {DEEP} votes")
-    axes[-1].legend(fontsize=7.5)
+    for axi in leftmost:
+        axi.set_ylabel(f"cost at {DEEP} votes")
+    if not legend_in_spare(axes, spare, fontsize=8.5):
+        axes[-1].legend(fontsize=7.5)
     fig.suptitle("What the cost is made of — the dark block is what no cut rule can fix", fontsize=10)
     fig.tight_layout()
     fig.savefig(out / "cost_composition.png", dpi=130)
@@ -270,7 +325,7 @@ def main() -> int:
     ax.set_xticks(range(len(classes)))
     ax.set_xticklabels(classes, rotation=45, ha="right", fontsize=8)
     ax.set_ylabel(f"fraction of runs with cost >= {args.floor}")
-    ax.set_title("Which classes carry the size penalty (pooled over all three modes)")
+    ax.set_title(f"Which classes carry the size penalty (pooled over all {len(modes)} modes)")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.25, axis="y")
     fig.tight_layout()

@@ -19,7 +19,8 @@ remain valid for what they measured and are **not** comparable to this one.
 | positives | exactly **100 per cell**, each carrying its ground-truth box |
 | negatives | one shared pool of **3,900**, identical for every cell |
 | prevalence | **0.0250 in all 36 cells**, by construction |
-| embedders | `siglip`, `siglip2_l`, `dinov3_patch` (the last carries patch grids, so region voting is real) |
+| embedders | `siglip`, `siglip2_l`, `clip`, `clip_l`, `dinov3_patch` — five columns, all built from the same medias (`clip_l` is eval-only, not offered in the app) |
+| region arm | the **pair** `siglip+dinov3_patch`: DINOv3 carries the patch grids that make region voting real, SigLIP carries the text tower the run opens on. Bare `dinov3_patch` is a *column of the pile*, never an arm of a study — with no text tower it cannot open the way the app does (#3276). |
 
 Classes: `backpack` `bicycle` `bird` `boat` `book` `bus` `clock` `dog` `kite`
 `knife` `stop sign` `umbrella` — every one also a COCO-2017 class, which is what

@@ -151,6 +151,37 @@ def _mean_curve(grid, mode, steps):
     return xs, ms, ses, ns
 
 
+def load_anchor(path: str, metric: str) -> dict[tuple[str, str], float]:
+    """``(embedder, category) -> the zero-click text sort's value of *metric*``.
+
+    The free path through the product -- type a query, read the ranked haystack
+    under the same cut -- is what every one of these curves has to beat, and a
+    figure that omits it invites the reader to compare the arms only with each
+    other. Averaged over whatever seeds the baseline was computed on: the text
+    sort does not depend on the votes, only on the split, so a handful of seeds
+    fixes it.
+    """
+    from curves import BASELINE_COLUMNS  # one metric -> baseline-column map, not two
+
+    out: dict[tuple[str, str], list[float]] = defaultdict(list)
+    cols = (*BASELINE_COLUMNS.get(metric, ()), metric)
+    try:
+        with open(path, newline="") as fh:
+            for r in csv.DictReader(fh):
+                if r.get("supports_text") not in (None, "", "1"):
+                    continue
+                col = next((c for c in cols if c in r and r[c] not in (None, "")), None)
+                if col is None:
+                    continue
+                try:
+                    out[(r["embedder"], r["category"])].append(float(r[col]))
+                except (KeyError, ValueError, TypeError):
+                    continue
+    except OSError:
+        return {}
+    return {k: sum(v) / len(v) for k, v in out.items()}
+
+
 def _stamp(fig, note: str) -> None:
     """Say so, on the picture, when the data behind it is not the whole run."""
     if note:
@@ -158,11 +189,22 @@ def _stamp(fig, note: str) -> None:
 
 
 def figure_average(
-    grid, modes, steps, out: Path, metric: str, label: str, band: str | None, plt, note: str = ""
+    grid,
+    modes,
+    steps,
+    out: Path,
+    metric: str,
+    label: str,
+    band: str | None,
+    plt,
+    note: str = "",
+    anchor: dict[tuple[str, str], float] | None = None,
 ) -> None:
     """One panel: every arm's mean curve on one axis."""
     sub = _subset(grid, modes, band)
+    grid = sub
     fig, ax = plt.subplots(figsize=(7.4, 4.6))
+    drew_anchor: list[bool] = []
     n_by_mode = {}
     ends: list[tuple[float, float, str]] = []
     for m in modes:
@@ -182,6 +224,17 @@ def figure_average(
         )
         ax.plot(xs, ms, color=colour, linewidth=2.0, zorder=3, label=f"{m}  (n={max(ns)})")
         ends.append((ms[-1], xs[-1], colour))
+        # Click 0 is this arm's own text sort, drawn as a point rather than as a
+        # horizontal rule across the panel -- the same convention the viewer
+        # uses, and for the same reason: a rule implies a level that holds at
+        # every click when it holds at one, and it dominates the figure to make
+        # a point the leftmost marker already makes.
+        if anchor:
+            emb = m.split("/")[0]
+            vals = [anchor[(emb, c)] for c in {k[1] for k in grid if k[0] == m} if (emb, c) in anchor]
+            if vals:
+                ax.plot([0], [sum(vals) / len(vals)], marker="o", markersize=5.5, color=colour, zorder=7)
+                drew_anchor.append(True)
     # Direct-label the endpoints -- three series, so identity never rests on the
     # legend alone -- but de-collide them first.  Two arms that FINISH IN A TIE
     # is the most interesting thing this figure can show, and it is exactly the
@@ -232,6 +285,15 @@ def figure_average(
     _style_axes(ax, "votes spent (clicks)", label)
     title = f"How the detector improves with clicking — {band or 'all bands'}"
     ax.set_title(title, fontsize=11, color="#292524", loc="left", pad=10)
+    if drew_anchor:
+        ax.set_xlim(left=-3)
+        ax.annotate(
+            "dot at 0 = the free text sort",
+            (0.01, 0.02),
+            xycoords="axes fraction",
+            fontsize=8,
+            color="#57534e",
+        )
     ax.legend(frameon=False, fontsize=8, loc="best")
     fig.tight_layout()
     _stamp(fig, note)
@@ -342,6 +404,11 @@ def main(argv: list[str] | None = None) -> int:
         help="cap on the spaghetti drawn per panel (0 = all). The 10-90%% band and the "
         "median are always computed over EVERY run; only the texture is sampled.",
     )
+    ap.add_argument(
+        "--baseline",
+        default="",
+        help="text_baseline.py CSV; adds each arm's zero-click text sort as its own point at click 0",
+    )
     ap.add_argument("--by-band", action="store_true", default=True)
     ap.add_argument("--no-by-band", dest="by_band", action="store_false")
     args = ap.parse_args(argv)
@@ -366,12 +433,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{metric}: {len(runs)} runs, {len(modes)} arms, {len(seeds)} seeds present")
         note = args.note or f"{len(seeds)} seeds present, {len(runs)} runs"
         grid = _grid(runs, steps)
-        figure_average(grid, modes, steps, out, metric, label, None, plt, note)
+        anchor = load_anchor(args.baseline, metric) if args.baseline else None
+        figure_average(grid, modes, steps, out, metric, label, None, plt, note, anchor)
         figure_runs(runs, grid, modes, steps, out, metric, label, None, plt, note, args.max_run_lines)
         if args.by_band:
             for band in BANDS:
                 if any(band_of(k[1]) == band for k in runs):
-                    figure_average(grid, modes, steps, out, metric, label, band, plt, note)
+                    figure_average(grid, modes, steps, out, metric, label, band, plt, note, anchor)
                     figure_runs(runs, grid, modes, steps, out, metric, label, band, plt, note, args.max_run_lines)
     return 0
 
