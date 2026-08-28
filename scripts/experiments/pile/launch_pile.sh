@@ -52,15 +52,40 @@ BUILDENV="$ENVSET && export VTSEARCH_TORCH_THREADS=$CPUS OMP_NUM_THREADS=$CPUS M
 # so in their provenance.
 BUILDENV="$BUILDENV ATEN_CPU_CAPABILITY=${VTS_CPU_CAPABILITY:-avx2}"
 
-# --- Stage 1: weights (CPU, blocking) -------------------------------------
-echo "=== prefetching weights (CPU) ==="
-srun --job-name=pile-prefetch --partition=cpu --cpus-per-task=4 --mem=8G --time=2:00:00 \
-  bash -lc "$ENVSET && python prefetch_models.py" 2>&1 | tail -20
-
-# --- Stage 2: one GPU job per dataset -------------------------------------
 DATASETS=("${@:-visual_genome_m caltech101_m coco_val}")
 read -r -a DATASETS <<< "${DATASETS[@]}"
+DS_CSV="$(IFS=,; echo "${DATASETS[*]}")"
 
+# --- Stage 1: rebuild canary, then weights (CPU, blocking) ----------------
+# The canary runs in front of every launch because that is the only thing that
+# exercises the rebuild path on any schedule at all. `--verify` loads the built
+# cells and shares no code with the build, so a rebuild path can rot invisibly
+# behind a pile that verifies clean -- #3297 did, for eleven days, and surfaced
+# only when somebody asked for a rebuild. A purge is the worst possible moment
+# to discover that. It costs a fraction of a second, which is what makes here
+# the right place for it: a canary expensive enough to skip gets skipped.
+#
+# Two runs, on purpose. The first reports **every** dataset, so rot under one
+# you are not building today still gets seen. The second covers only the
+# datasets about to be built, and its exit code is what gates the launch: a
+# broken source under a dataset nobody asked for is news, not grounds to refuse
+# to submit. It runs inside the srun rather than on the login node because
+# build_pile.py asserts it is running against its own checkout's vtscore, which
+# needs the venv this ENVSET activates.
+echo "=== rebuild canary + weights (CPU) ==="
+if ! srun --job-name=pile-prefetch --partition=cpu --cpus-per-task=4 --mem=8G --time=2:00:00 \
+  bash -lc "$ENVSET \
+    && { python build_pile.py --rebuildable || true; } \
+    && python build_pile.py --rebuildable --datasets $DS_CSV >/dev/null \
+    && python prefetch_models.py"; then
+  echo >&2
+  echo "prelaunch FAILED -- nothing submitted." >&2
+  echo "  Either the rebuild canary found a source ${DATASETS[*]} cannot be built" >&2
+  echo "  from (look for REBUILD-BROKEN above), or the weight prefetch failed." >&2
+  exit 1
+fi
+
+# --- Stage 2: one GPU job per dataset -------------------------------------
 # Pick the GPU type from what is actually free, and do it *here* rather than at
 # the top of the script: stage 1 blocks on the queue, so availability measured
 # before the prefetch is stale by the time we submit. This used to be a

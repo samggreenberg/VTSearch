@@ -72,10 +72,12 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-08-28 | [a canary that checked a path the build never reads](lessons/2026-08-28-a-canary-that-checked-a-path-the-build-never-reads.md) | #3299 |
 | 2026-08-28 | [a committed figure is *output*, and git merged it clean](lessons/2026-08-28-a-committed-figure-is-output-not-a-file.md) | #3280 |
 | 2026-08-28 | [a detached worktree ate a commit, and `git push` said OK](lessons/2026-08-28-a-detached-worktree-ate-a-commit-and-the-push-said-ok.md) | #3292 |
 | 2026-08-28 | [a figure that hung, and three fixes that were not it](lessons/2026-08-28-a-figure-that-hung-and-three-fixes-that-were-not-it.md) | #3156 |
 | 2026-08-28 | [I nearly rebuilt a pile dataset another session was rebuilding (#3281, #3284)](lessons/2026-08-28-nearly-rebuilt-a-dataset-another-session-owned.md) | #3281, #3284 |
+| 2026-08-28 | [the GPU picker reported every GPU on the cluster as free](lessons/2026-08-28-the-gpu-picker-reported-every-gpu-free.md) | #3299 |
 | 2026-08-27 | [a box normalised twice](lessons/2026-08-27-a-box-normalised-twice.md) | #3281 |
 | 2026-08-27 | [a repair moves more than the defect](lessons/2026-08-27-a-repair-moves-more-than-the-defect.md) | #3281 |
 | 2026-08-27 | [The pick log was being concatenated into every analyzer's metric frame](lessons/2026-08-27-the-pick-log-was-in-every-metric-frame.md) | — |

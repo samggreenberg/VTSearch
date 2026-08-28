@@ -139,7 +139,7 @@ def _load_coco(medias: dict[int, dict], embedder_name: str) -> None:
     """
     if not pc.COCO_ANNOTATIONS.exists():
         raise SystemExit(f"missing COCO annotations: {pc.COCO_ANNOTATIONS}")
-    zip_path = pc.COCO_ROOT / "images" / "val2017.zip"
+    zip_path = pc.COCO_VAL_ZIP
     if not zip_path.exists():
         raise SystemExit(f"missing COCO images zip: {zip_path}")
 
@@ -1397,6 +1397,42 @@ def verify() -> int:
     return 0
 
 
+def _band_vocab_drift(dataset: str, chosen: list[str]) -> str:
+    """Would rebuilding this band reproduce the cells that already exist?
+
+    ``--rebuildable`` on its own answers a weaker question than it looks like it
+    answers: that selection *runs*, not that it selects the same thing. Those
+    come apart in the direction that hurts. #3297's two candidate repairs both
+    made the selector run again; only one of them kept picking the categories
+    the published ``vg_box_*`` sets were built from, and taking the other would
+    have silently redefined three datasets whose numbers are cited in #3129 and
+    #3156 -- with the right media count, the right vectors, and nothing to look
+    at that would say so.
+
+    So where a cell is already built, compare its vocabulary against what the
+    selector picks today. Reads the smallest present cell: every cell carries
+    ``categories``, so there is no reason to page in the multi-GB patch one.
+    Returns an empty string when they agree (or when nothing is built yet --
+    a purged pile has nothing to reproduce, which is not a failure).
+    """
+    present = [(pc.cell_path(dataset, e).stat().st_size, e) for e in pc.EMBEDDERS if pc.cell_path(dataset, e).exists()]
+    if not present:
+        return ""
+    _, emb = min(present)
+    medias = _cells_io().load_medias(pc.cell_path(dataset, emb))
+    live = {c for m in medias.values() for c in (m.get("categories") or [])}
+    gained = sorted(set(chosen) - live)
+    lost = sorted(live - set(chosen))
+    if not gained and not lost:
+        return ""
+    return (
+        f"{dataset}: a rebuild would NOT reproduce the built cells -- selection now differs "
+        f"from {dataset}__{emb}.pkl by {len(gained)} added and {len(lost)} dropped "
+        f"categories (added {gained[:5]}, dropped {lost[:5]}). That is a dataset change, "
+        f"not a rebuild; published numbers that cite this set would need re-examining."
+    )
+
+
 def rebuildable(datasets: list[str] | None = None) -> int:
     """Exercise every dataset's *selection* step without embedding anything.
 
@@ -1416,6 +1452,12 @@ def rebuildable(datasets: list[str] | None = None) -> int:
     reporting what it chose; elsewhere it means confirming the sources a
     rebuild would read are present and in a shape the current code accepts.
 
+    Where a banded dataset is already built it goes one question further, via
+    :func:`_band_vocab_drift`: not only "would a rebuild run?" but "would a
+    rebuild produce *this*?". A repair that restores the former while quietly
+    changing the latter is the expensive kind, and it is invisible from the
+    built cell.
+
     Deliberately does not parse the multi-GB sources (VG's ``objects.json``,
     the COCO zip). A canary nobody runs is worth nothing, and the way to make
     it run is to keep it cheap enough to sit in front of every build.
@@ -1434,12 +1476,19 @@ def rebuildable(datasets: list[str] | None = None) -> int:
                 pc.require_demo_source(ds)
                 log(f"  {ds:18s} ok       demo source staged")
             elif kind == "coco":
-                for path in (pc.COCO_ANNOTATIONS, pc.COCO_IMAGES):
+                # The *zip*, which is what `_load_coco` opens. Checking the
+                # extracted directory instead reported this dataset broken
+                # against sources that were entirely intact (#3299) -- a canary
+                # that names a different path than the build is not a canary.
+                for path in (pc.COCO_ANNOTATIONS, pc.COCO_VAL_ZIP):
                     if not path.exists():
                         raise SystemExit(f"{ds}: missing {path}")
-                log(f"  {ds:18s} ok       annotations + images present")
+                log(f"  {ds:18s} ok       annotations + image zip present")
             elif kind == "vg_band":
                 chosen = _band_categories(spec["band"])
+                drift = _band_vocab_drift(ds, chosen)
+                if drift:
+                    raise SystemExit(drift)
                 log(f"  {ds:18s} ok       {len(chosen)} categories selected")
             elif kind == "vg_scale":
                 objects_json = pc.DEMO_CACHE / "visual_genome" / "objects.json"
