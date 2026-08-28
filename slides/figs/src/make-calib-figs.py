@@ -4051,9 +4051,13 @@ COST_REVEAL = (3, 2, 4)
 #: (#3296).
 #:
 #: Ten items is also what makes the cuts nameable: they come out as the *same*
-#: three cuts, so "Include 3" there and the strict arm's minimum here are one
-#: thing seen twice.
-RANK_MARKS = (False, False, False, True, False, True, False, True, True, True)
+#: three cuts, so "Include 2" there and the strict arm's minimum here are one
+#: thing seen twice. **Keep this in step with that tuple by hand** — it is the
+#: same ranking written twice, once as photographs and once as marks.
+#:
+#: The arrangement is chosen so each arm has a *single* cheapest cut and no two
+#: arms choose the same one; see `RANKING` for why.
+RANK_MARKS = (False, False, True, False, False, True, True, False, True, True)
 
 
 def _mark_score(index: int) -> float:
@@ -4081,10 +4085,12 @@ def _ranked_votes() -> tuple[np.ndarray, np.ndarray]:
 def _optima(bad: np.ndarray, good: np.ndarray, w_fp: float, w_fn: float) -> list[int]:
     """Every admitted-count that minimises this arm's cost.
 
-    A list rather than a number, because a tie is the honest answer for the
-    balanced arm on this ranking: three cuts cost exactly the same at equal
-    prices — which is what the previous slide said, and what pricing the two
-    mistakes differently is about to break.
+    Still a list rather than a number, though on the shipped `RANK_MARKS` every
+    arm returns exactly one: the ranking is arranged so the three arms pick
+    three different cuts and none of them ties. Returning the whole set is what
+    makes that visible instead of assumed — if an edit to the ranking
+    re-introduces a tie, the figure draws two dots on one curve and says so,
+    rather than silently picking whichever count `argmin` reached first.
     """
     counts = np.arange(len(RANK_MARKS) + 1)
     costs = _cost_curve(bad, good, w_fp, w_fn, np.array([_cut_score(n) for n in counts]))
@@ -4195,9 +4201,14 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
         for admitted in _optima(bad, good, w_fp, w_fn):
             cut_x = x0 + _cut_score(admitted) * w
             cut_y = panel_base + float(_cost_curve(bad, good, w_fp, w_fn, np.array([_cut_score(admitted)]))[0]) * sy
-            ax.plot([cut_x], [cut_y], marker="o", markersize=8, color=BLUE, zorder=5)
-            ax.plot([cut_x, cut_x], [cut_y, rank_y], color=BLUE, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
-            ax.plot([cut_x] * 2, [rank_y - 0.32, rank_y], color=BLUE, linewidth=2.4, zorder=4)
+            # Black, like the curves they sit on and like the same three cuts
+            # on the previous slide. Blue is the palette's "the shipped thing"
+            # and these cuts are not that; drawn in it, the dots read as a
+            # fourth series rather than as three points on the three curves
+            # already there (#3301).
+            ax.plot([cut_x], [cut_y], marker="o", markersize=8, color=INK, zorder=5)
+            ax.plot([cut_x, cut_x], [cut_y, rank_y], color=INK, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
+            ax.plot([cut_x] * 2, [rank_y - 0.32, rank_y], color=INK, linewidth=2.4, zorder=4)
         # The arm is named at the left-hand end of its own curve. The three
         # start a quarter of the panel apart there and converge on one another's
         # ends, so the left is the one place a label can sit on the line it
