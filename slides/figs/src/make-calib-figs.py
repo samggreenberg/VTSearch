@@ -176,6 +176,23 @@ def arrow_len_for(label: str, fontsize: float = ARROW_LABEL_PT) -> float:
 CAP_16 = 0.36
 SCORE_LABEL_LIFT = 0.08 + 0.29 + LABEL_GAP
 
+#: How far under a panel's baseline the held-out votes' ✗s and ✓s hang, and
+#: how far under it anything that has to clear them hangs. Both rows of glyphs
+#: sit below the line now (see `_hump_marks`), which puts them under the cut
+#: notches that already hang there — so the drop clears a `_theta_notch` and
+#: the shorter candidate ticks, and every label that used to sit directly
+#: under a notch moves below the glyph row instead (#3296).
+VOTE_MARK_DROP = 0.36
+
+#: How big those glyphs are set. The knob panels carry seven well-spaced votes
+#: across the widest axis in the deck and can afford the room-legible size; the
+#: fold panels carry the same seven at a third of the width, where 22pt marks
+#: would touch. `VOTE_LABEL_DROP` is sized for the larger of the two, so one
+#: constant clears both.
+VOTE_MARK_PT = 16
+VOTE_PANEL_MARK_PT = 22
+VOTE_LABEL_DROP = VOTE_MARK_DROP + CAP_16 * VOTE_PANEL_MARK_PT / VOTE_MARK_PT + LABEL_GAP
+
 #: The half-width the held-out score marks below are quoted at, and the marks
 #: themselves: where each fold's Bad and Good votes land on its own score line,
 #: and where that fold's cut goes. Quoted once and rescaled by `_line_marks`,
@@ -1490,36 +1507,45 @@ def _xsemi_folds() -> list[tuple[GmmFit1D, np.ndarray, dict]]:
     return folds
 
 
-def _hump_marks(ax: plt.Axes, x0: float, y_base: float, w: float, anchors: dict) -> None:
+def _hump_marks(ax: plt.Axes, x0: float, y_base: float, w: float, anchors: dict, size: int = VOTE_MARK_PT) -> None:
     """This fold's held-out votes, drawn on the panel's baseline.
 
     The panel's baseline *is* the cross-calibration figure's score line: the
-    same ✗s below it and ✓s above it, at the same offsets and the same weight,
-    because this is the identical evidence and the reader has already learnt
-    to read it that way. All that has changed is that the fold model's whole
-    scored haystack is now drawn standing on the same line, so the votes and
-    the population they anchor are read against one axis.
+    same ✗s and ✓s, the same glyphs at the same weight, because this is the
+    identical evidence and the reader has already learnt to read it that way.
+    All that has changed is that the fold model's whole scored haystack is now
+    drawn standing on the same line, so the votes and the population they
+    anchor are read against one axis.
 
     The one thing the panel adds is that a vote's position now means a score
     rather than a rank, which is what lets a vote the fold model ranked wrongly
     land visibly to the far side of its own fold's cut.
 
-    The glyphs are knocked out of whatever they land on with a white outline.
-    On the cross-calibration figure they sat on white paper; here a ✓ sits
-    just above the baseline where the Good hump's green hatch starts, and
-    green on green is not a mark. The halo is the smallest change that keeps
-    the glyph itself identical.
+    **Both rows sit below the baseline**, where the paper is white. The ✓s used
+    to sit just above it, inside the haystack, and a white halo was enough to
+    keep them from being green on green but not enough to make them *findable*:
+    a mark the size of a tick mark, in among the bars, is invisible from the
+    back of a room, while its ✗ counterpart on clean paper below the line is
+    not (#3296). Putting the two on one row also says the thing the panel
+    wants said — these are one set of votes, split by their label, on one axis
+    — where above-and-below said they were two different kinds of evidence.
+
+    `_score_line` deliberately keeps the split. Its marks stand on a bare
+    number line with white paper on both sides, so nothing is hidden there and
+    the two rows buy what they cost: room for marks that would otherwise
+    collide. The rule is about legibility, not about a house style for where a
+    ✓ goes.
     """
     halo = [patheffects.withStroke(linewidth=4.0, foreground="white")]
-    for key, color, glyph, dy, va in (("bad", RED, "✗", -0.12, "top"), ("good", GREEN, "✓", 0.08, "bottom")):
+    for key, color, glyph in (("bad", RED, "✗"), ("good", GREEN, "✓")):
         for score in anchors[key]:
             ax.text(
                 x0 + score * w,
-                y_base + dy,
+                y_base - VOTE_MARK_DROP,
                 glyph,
                 ha="center",
-                va=va,
-                fontsize=16,
+                va="top",
+                fontsize=size,
                 color=color,
                 fontweight="bold",
                 zorder=6,
@@ -1745,7 +1771,7 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
             ax.plot([theta_x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
             ax.text(
                 theta_x,
-                y_base - 0.32 - LABEL_GAP,
+                y_base - VOTE_LABEL_DROP,
                 _sub(rf"\theta_{i + 1}"),
                 ha="center",
                 va="top",
@@ -2017,7 +2043,7 @@ def _theta_notch(ax: plt.Axes, x: float, y_base: float, label: str, ha: str = "c
     """The progression's one cut mark: a notch under the baseline, then a name."""
     ax.plot([x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
     dx = 0.0 if ha == "center" else (-0.10 if ha == "right" else 0.10)
-    ax.text(x + dx, y_base - 0.32 - LABEL_GAP, label, ha=ha, va="top", fontsize=16, color=INK)
+    ax.text(x + dx, y_base - VOTE_LABEL_DROP, label, ha=ha, va="top", fontsize=16, color=INK)
 
 
 def _xquant_numbers(folds: list, final: np.ndarray) -> tuple[list[float], float, float]:
@@ -2528,7 +2554,7 @@ def _incl_panel(ax: plt.Axes, corpus: np.ndarray, *, y_base: float, top: float, 
             fontsize=15,
             color=INK,
         )
-        _hump_marks(ax, x0, y_base, w, INCL_VOTES)
+        _hump_marks(ax, x0, y_base, w, INCL_VOTES, size=VOTE_PANEL_MARK_PT)
 
 
 def _incl_gauges(
@@ -2600,7 +2626,8 @@ def _incl_rows(canvas_h: float = INCL_CANVAS_H) -> dict:
     panel_top = canvas_h - (LABEL_GAP + CAP_16 + LABEL_GAP + CAP_16)
     y_base = panel_top - INCL_PANEL_H
     # Reserved on both: a cut notch under the panel and its name (knob only).
-    theta_bottom = y_base - 0.32 - LABEL_GAP - CAP_16
+    # The name clears the row of ✗s and ✓s that now hangs under the baseline.
+    theta_bottom = y_base - VOTE_LABEL_DROP - CAP_16
     mid_label_y = theta_bottom - OBJECT_GAP - CAP_16
     mid_top = mid_label_y - LABEL_GAP
     mid_h = 1.9
@@ -2799,7 +2826,7 @@ def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels:
         theta = cuts[0]
         ax.text(
             x0 + theta * w + 0.10,
-            y_base - 0.32 - LABEL_GAP,
+            y_base - VOTE_LABEL_DROP,
             _sub(r"\theta\ at\ all\ 21\ stops"),
             ha="left",
             va="top",
@@ -3124,7 +3151,7 @@ def _tilt_flow_stage(stage: int, folds: list, final: np.ndarray) -> plt.Figure:
 
     # ── stage 1: the super-figure's conclusion, stacked into two rows ─────────
     _score_histogram(ax, x0, fold_base, w, TILT_PANEL_H, fit, scores, fill="class", mu_labels=False)
-    _hump_marks(ax, x0, fold_base, w, anchors)
+    _hump_marks(ax, x0, fold_base, w, anchors, size=VOTE_PANEL_MARK_PT)
     ax.text(x0, fold_top + LABEL_GAP, _sub("M_1(D_{-1})"), ha="left", va="bottom", fontsize=16, color=INK)
     ax.text(
         x0,
@@ -3567,24 +3594,169 @@ def blend_schedule_fig() -> None:
     save(fig, OUT, "calib-blend-schedule.png", column=FULL_BLEED, tight=False)
 
 
+#: The Train/Check idea figure: its canvas, the bar it draws twice, and the
+#: vote count it is concrete about. Twenty votes is an early-session number —
+#: the regime the split actually matters in — and it divides cleanly under both
+#: splits, so every count on the drawing is a whole vote rather than a rounded
+#: one.
+SPLIT_CANVAS = (19.8, 7.36)
+SPLIT_BAR_X0, SPLIT_BAR_W, SPLIT_BAR_H = 6.0, 13.3, 1.05
+SPLIT_VOTES = 20
+
+#: The two splits, as `(train share, row name, bar bottom)`. The incumbent
+#: first, because it is the one every earlier slide in this section drew.
+SPLIT_ROWS = ((0.5, "50 / 50", 5.05), (0.7, "70 / 30", 2.40))
+
+#: Where the arrow between the two bars runs, and where the conclusion starts.
+SPLIT_MOVE_Y = 4.35
+SPLIT_CONCLUSION_Y = 1.70
+
+#: How many stages the figure reveals in: the incumbent split; the proposal;
+#: the votes that moved between them; what the move is for.
+SPLIT_IDEA_STAGES = 4
+
+
+def _split_bar(ax: plt.Axes, fraction: float, name: str, y0: float) -> None:
+    """One split of the votes: the block, its divider, and what each side is for."""
+    x0, w, h = SPLIT_BAR_X0, SPLIT_BAR_W, SPLIT_BAR_H
+    _data_block(ax, x0, y0, w, h)
+    divider = x0 + fraction * w
+    ax.plot([divider] * 2, [y0, y0 + h], color=INK, linewidth=1.6, zorder=3)
+    # The row's name shares the label row above the bar with the two counts,
+    # rather than hanging off the left edge: the top bar's own left edge is as
+    # far left as the title notch lets anything reach, so a name outside it
+    # would sit in the corner the slide's headline has (`slides/STYLE.md`).
+    ax.text(x0, y0 + h + LABEL_GAP, name, ha="left", va="bottom", fontsize=18, color=INK, fontweight="bold")
+    for centre, job, votes in (
+        ((x0 + divider) / 2, "train", round(fraction * SPLIT_VOTES)),
+        ((divider + x0 + w) / 2, "check", SPLIT_VOTES - round(fraction * SPLIT_VOTES)),
+    ):
+        ax.add_patch(Ellipse((centre, y0 + h / 2), 1.55, 0.62, facecolor="white", edgecolor="none", zorder=4))
+        ax.text(centre, y0 + h / 2, job, ha="center", va="center", fontsize=16, color=INK, zorder=5)
+        ax.text(
+            centre,
+            y0 + h + LABEL_GAP,
+            f"{votes} votes",
+            ha="center",
+            va="bottom",
+            fontsize=15,
+            color=SOFT,
+        )
+
+
+def split_idea_fig() -> None:
+    """What the Train/Check split *is*, and the one change made to it (#3287).
+
+    The section's earlier figures all draw the same quiet choice — half the
+    votes train each fold's model, half are held out to read its threshold —
+    without ever naming it as a choice. This names it, and moves it: seventy
+    percent into Train, thirty into Check.
+
+    It is the idea, not the study. The measured curves live on the results
+    slide the deck now carries as an appendix; what belongs *here* is the
+    picture of four votes crossing the divider, which is the whole of what
+    changed (#3296).
+    """
+    final = _split_idea_stage(SPLIT_IDEA_STAGES)
+    box = tight_box(final)
+    for stage in range(1, SPLIT_IDEA_STAGES):
+        save(_split_idea_stage(stage), OUT, f"calib-split-idea.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-split-idea.png", column=FULL_BLEED, box=box)
+
+
+def _split_idea_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the split figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in SPLIT_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, SPLIT_CANVAS[0])
+    ax.set_ylim(0, SPLIT_CANVAS[1])
+    ax.set_axis_off()
+
+    x0, w, h = SPLIT_BAR_X0, SPLIT_BAR_W, SPLIT_BAR_H
+    (was_f, was_name, was_y), (now_f, now_name, now_y) = SPLIT_ROWS
+
+    # ── stage 1: the split every fold in this section has been drawing ────────
+    _split_bar(ax, was_f, was_name, was_y)
+
+    # ── stage 2: the same votes, divided somewhere else ───────────────────────
+    if stage >= 2:
+        _split_bar(ax, now_f, now_name, now_y)
+
+    # ── stage 3: the votes that crossed, as a path rather than as a jump ──────
+    # Both bars are on screen at once and neither ever moves — a build adds
+    # ink, it does not animate (`slides/STYLE.md`) — so what says "the divider
+    # moved" has to be drawn: two soft drops and one arrow between them, along
+    # the gap the two rows leave for it.
+    if stage >= 3:
+        was_x, now_x = x0 + was_f * w, x0 + now_f * w
+        move_y = SPLIT_MOVE_Y
+        ax.plot([was_x] * 2, [was_y, move_y], color=RULE, linewidth=1.4, zorder=1)
+        ax.plot([now_x] * 2, [move_y, now_y + h], color=RULE, linewidth=1.4, zorder=1)
+        _arrow(ax, (was_x, move_y), (now_x, move_y))
+        # Named past the arrowhead rather than over the shaft: the shaft has
+        # one of the two drops running into it, and a label centred on it
+        # covers the very line that says where the divider came from.
+        ax.text(
+            now_x + OBJECT_GAP,
+            move_y,
+            f"{round((now_f - was_f) * SPLIT_VOTES)} more votes",
+            ha="left",
+            va="center",
+            fontsize=16,
+            color=INK,
+        )
+
+    # ── stage 4: why that is the direction to move it ─────────────────────────
+    if stage >= 4:
+        centre = x0 + w / 2
+        ax.text(
+            centre,
+            SPLIT_CONCLUSION_Y,
+            "the fold model is what runs short when votes are scarce",
+            ha="center",
+            va="top",
+            fontsize=16,
+            color=INK,
+        )
+        ax.text(
+            centre,
+            SPLIT_CONCLUSION_Y - CAP_16 - LABEL_GAP,
+            "a threshold is only a quantile, and six scores still place one",
+            ha="center",
+            va="top",
+            fontsize=15,
+            color=SOFT,
+        )
+
+    return fig
+
+
 def split_fraction_fig() -> None:
-    """The Train/Calibrate split, paired against the 50/50 incumbent.
+    """The Train/Check split, paired against the 50/50 incumbent.
 
     Redraws the committed curves from
     `docs/experiments/calibration-fraction-3287/figures/cost_vs_clicks.csv`
-    (plus the `siglip2l/` follow-up) at slide scale, as the difference the
-    70/30 split makes at each click count. One line per geometry; below zero
-    means training on more of the votes beat holding more of them out. The
-    numbers are untouched apart from the pairing arithmetic (same cells run
-    under both arms, so the difference of means is the mean paired difference)
-    and a centred 7-vote rolling mean that the presenter note declares.
+    (plus the `siglip2l/`, `clip/` and `clip_l/` follow-ups) at slide scale, as
+    the difference the 70/30 split makes at each click count. One line per
+    geometry; below zero means training on more of the votes beat holding more
+    of them out. The numbers are untouched apart from the pairing arithmetic
+    (same cells run under both arms, so the difference of means is the mean
+    paired difference) and a centred 7-vote rolling mean that the presenter
+    note declares.
+
+    **Black at two weights, not green against red.** The old drawing coloured
+    the winning arms green and the losing ones red, on a slide whose curves are
+    about evaluations that hand out Good and Bad labels — the deck's two other
+    uses of exactly those hues (#3296). The line weight carries the only
+    grouping the chart actually has: four single-vector models that agree, and
+    the patch model that does not.
     """
     import csv
 
     report = _REPO_ROOT / "docs" / "experiments" / "calibration-fraction-3287"
     series: dict[tuple[str, float], dict[int, tuple[float, float]]] = {}
-    for path in (report / "figures" / "cost_vs_clicks.csv", report / "siglip2l" / "figures" / "cost_vs_clicks.csv"):
-        with path.open() as fh:
+    for run in ("figures", "siglip2l/figures", "clip/figures", "clip_l/figures"):
+        with (report / run / "cost_vs_clicks.csv").open() as fh:
             for row in csv.DictReader(fh):
                 if not row["mean"]:
                     continue
@@ -3605,18 +3777,29 @@ def split_fraction_fig() -> None:
 
     fig, ax = plt.subplots(figsize=(11.5, 6.5))
     ax.axhline(0.0, color=SOFT, linewidth=1.2, linestyle=(0, (4, 3)), zorder=1)
-    for geometry, color, style, label, xy, va in (
-        ("siglip-whole_image", GREEN, "solid", "SigLIP", (108, -0.021), "top"),
-        ("siglip2_l-whole_image", GREEN, (0, (5, 2)), "SigLIP 2", (50, -0.024), "top"),
-        ("dinov3_patch-whole_image", RED, "solid", "DINOv3 — binary voting", (44, 0.0295), "bottom"),
-        ("dinov3_patch-max_patch", RED, (0, (5, 2)), "DINOv3 — region voting", (95, 0.0075), "bottom"),
+    # The four single-vector arms are drawn as one bundle and named once. They
+    # sit inside six thousandths of each other for most of the sweep, so four
+    # labels on four curves would be four labels on one curve — and the claim
+    # the bundle makes is a claim about all four at once.
+    for geometry in ("siglip-whole_image", "siglip2_l-whole_image", "clip-whole_image", "clip_l-whole_image"):
+        ax.plot(*delta(geometry), color=INK, linewidth=1.5, zorder=3)
+    for geometry, label, xy, va in (
+        ("dinov3_patch-whole_image", "DINOv3 — binary voting", (44, 0.0295), "bottom"),
+        ("dinov3_patch-max_patch", "DINOv3 — region voting", (95, 0.0080), "bottom"),
     ):
-        ts, values = delta(geometry)
-        ax.plot(ts, values, color=color, linestyle=style, linewidth=2.4, zorder=3)
-        ax.annotate(label, xy=xy, ha="left", va=va, fontsize=15, color=color)
+        ax.plot(*delta(geometry), color=INK, linewidth=3.4, zorder=3)
+        ax.annotate(label, xy=xy, ha="left", va=va, fontsize=15, color=INK)
+    ax.annotate(
+        "SigLIP · SigLIP 2 · CLIP · CLIP-L",
+        xy=(74, -0.0235),
+        ha="center",
+        va="top",
+        fontsize=15,
+        color=INK,
+    )
     # Region labels for the two half-planes, parked in the corners the curves
     # leave empty: top-left above the rising DINOv3 line, bottom-right below
-    # the settled SigLIP pair.
+    # the settled single-vector bundle.
     ax.annotate("50/50 wins", xy=(4, 0.0335), ha="left", va="top", fontsize=15, color=SOFT)
     ax.annotate("70/30 wins", xy=(148, -0.0335), ha="right", va="bottom", fontsize=15, color=SOFT)
     ax.set_xlim(0, 152)
@@ -3801,10 +3984,13 @@ COST_ARMS = (
     (1.0, 4.0, "1 : 4"),
 )
 
-#: Dash patterns for those three arms, in the same order. One hue for all
-#: three, because all three are the same object — a cut — and the deck reserves
-#: hue for identity rather than for enumeration (`slides/STYLE.md`).
-COST_DASHES = ((0, (5, 3)), (0, ()), (0, (1.5, 2.5)))
+#: Line weights for those three arms, in the same order — light, normal, bold.
+#: All three are solid, and all three are black. Dash patterns were the obvious
+#: encoding and the wrong one: a dashed, a solid and a dotted line read as three
+#: *kinds* of thing, where these are one quantity at three settings, and a
+#: weight ramp is read as an ordering without being told (#3296). Bold is the
+#: most permissive arm, so the ramp runs the way the slider under it does.
+COST_WEIGHTS = (1.2, 2.8, 5.0)
 
 #: Which build stage each arm arrives on, in `COST_ARMS` order. The balanced
 #: one comes first because it is the cut the room already has in mind; the
@@ -3812,18 +3998,52 @@ COST_DASHES = ((0, (5, 3)), (0, ()), (0, (1.5, 2.5)))
 COST_REVEAL = (3, 2, 4)
 
 
-def _ranked_votes() -> tuple[np.ndarray, np.ndarray]:
-    """A deliberately imperfect ranking: scores for a Bad pile and a Good pile.
+#: The ranking this slide argues over — **the same ten items the slide before it
+#: puts on screen**, in the same left-to-right order, as `book` or not (see
+#: `slides/figs/src/make-book-figs.py`'s `RANKING`). It used to be twenty-three
+#: draws from a seeded pair of normals, which made this read as a second,
+#: unrelated ranking rather than as the one the room had just been shown
+#: (#3296).
+#:
+#: Ten items is also what makes the cuts nameable: they come out as the *same*
+#: three cuts, so "Include 3" there and the strict arm's minimum here are one
+#: thing seen twice.
+RANK_MARKS = (False, False, False, True, False, True, False, True, True, True)
 
-    Overlapping on purpose, and by more than a shipped detector usually manages:
-    a perfectly separated ranking has one obvious cut and the slide's whole
-    point is that it has several. Fixed seed, because a redraw that changes
-    which cut wins changes what the slide says.
+
+def _mark_score(index: int) -> float:
+    """Where the `index`-th item sits on the score line: evenly spaced, centred."""
+    return (index + 0.5) / len(RANK_MARKS)
+
+
+def _cut_score(admitted: int) -> float:
+    """The threshold admitting the top `admitted` items — the midpoint of its plateau."""
+    return (len(RANK_MARKS) - admitted) / len(RANK_MARKS)
+
+
+def _ranked_votes() -> tuple[np.ndarray, np.ndarray]:
+    """The Bad pile and the Good pile of `RANK_MARKS`, as scores.
+
+    Evenly spaced, because nothing downstream depends on the spacing: a
+    threshold's FPR and FNR are counts of marks either side of it, so the
+    ranking's *order* is the whole of what the cost panel reads.
     """
-    rng = np.random.default_rng(20)
-    bad = np.clip(rng.normal(0.36, 0.19, 15), 0.04, 0.96)
-    good = np.clip(rng.normal(0.66, 0.17, 8), 0.04, 0.96)
-    return np.sort(bad), np.sort(good)
+    scores = np.array([_mark_score(i) for i in range(len(RANK_MARKS))])
+    keep = np.array(RANK_MARKS)
+    return scores[~keep], scores[keep]
+
+
+def _optima(bad: np.ndarray, good: np.ndarray, w_fp: float, w_fn: float) -> list[int]:
+    """Every admitted-count that minimises this arm's cost.
+
+    A list rather than a number, because a tie is the honest answer for the
+    balanced arm on this ranking: three cuts cost exactly the same at equal
+    prices — which is what the previous slide said, and what pricing the two
+    mistakes differently is about to break.
+    """
+    counts = np.arange(len(RANK_MARKS) + 1)
+    costs = _cost_curve(bad, good, w_fp, w_fn, np.array([_cut_score(n) for n in counts]))
+    return [int(n) for n in counts[costs <= costs.min() + 1e-9]]
 
 
 def _cost_curve(bad: np.ndarray, good: np.ndarray, w_fp: float, w_fn: float, cuts: np.ndarray) -> np.ndarray:
@@ -3862,76 +4082,86 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
     # the same x scale, so a minimum in the panel is directly under the cut it
     # names. Indented from the left: the top row spans the drawing, which is the
     # one shape the title notch cannot be panned out of (`slides/STYLE.md`).
-    x0, w = 5.9, TEACH_CANVAS[0] - 5.9 - 3.4
+    #
+    # The right margin used to be 3.4 units holding nothing but three arm
+    # labels. Moving those to the left — where the panel is already clear of the
+    # notch, which reserves a corner and not a band — spends that width on the
+    # panel instead, which is the row the room is asked to read (#3296).
+    # 1.5 of right margin stays: the slide draws its own page number in the
+    # bottom-right corner, and a slider label run out to the canvas edge lands
+    # on top of it.
+    x0, w = 5.9, TEACH_CANVAS[0] - 5.9 - 1.5
     rank_y = TEACH_CANVAS[1] - 1.9
-    panel_top = rank_y - 1.85
+    panel_top = rank_y - 2.15
     panel_h = 5.0
     panel_base = panel_top - panel_h
 
-    cuts = np.linspace(0.02, 0.98, 400)
+    cuts = np.linspace(0.0, 1.0, 501)
     curves = [_cost_curve(bad, good, w_fp, w_fn, cuts) for w_fp, w_fn, _ in COST_ARMS]
     ceiling = max(float(c.max()) for c in curves)
     sy = panel_h / ceiling
 
     # ── stage 1: one imperfect ranking ────────────────────────────────────────
+    # One row of marks, under the line, in the order the previous slide's
+    # photographs are in. Good above the line and Bad below it made the two
+    # piles legible when there were twenty-three of them; with ten it only
+    # breaks the correspondence with the row of pictures the room has just been
+    # looking at.
     _range_line(ax, x0, x0 + w, rank_y, z=3)
-    for score in bad:
-        ax.text(x0 + score * w, rank_y - 0.14, "✗", ha="center", va="top", fontsize=16, color=RED, fontweight="bold")
-    for score in good:
+    for index, keep in enumerate(RANK_MARKS):
         ax.text(
-            x0 + score * w, rank_y + 0.10, "✓", ha="center", va="bottom", fontsize=16, color=GREEN, fontweight="bold"
+            x0 + _mark_score(index) * w,
+            rank_y - 0.22,
+            "✓" if keep else "✗",
+            ha="center",
+            va="top",
+            fontsize=30,
+            color=GREEN if keep else RED,
         )
-    ax.text(x0, rank_y + SCORE_LABEL_LIFT, "one ranking, imperfect", ha="left", va="bottom", fontsize=16, color=INK)
+    ax.text(x0, rank_y + SCORE_LABEL_LIFT, "the same ten items", ha="left", va="bottom", fontsize=16, color=INK)
     ax.text(x0 + w, rank_y + SCORE_LABEL_LIFT, "score", ha="right", va="bottom", fontsize=15, color=SOFT)
 
     # ── stages 2-4: one cost rule, three prices, three cuts ───────────────────
     # The rule names the panel rather than sitting in a row of its own: the
-    # three dotted drops from a minimum up to the cut it chooses have to cross
-    # that row, and a formula with three dotted lines through it is a formula
-    # nobody reads. Haloed for the same reason, and the same way the theme
-    # halos a full-bleed headline: white behind the letters, not a white plate
-    # over the drawing.
+    # dotted drops from a minimum up to the cut it chooses have to cross that
+    # row, and a formula with dotted lines through it is a formula nobody reads.
+    # Haloed for the same reason, and the same way the theme halos a full-bleed
+    # headline: white behind the letters, not a white plate over the drawing.
     if stage >= 2:
         ax.text(
-            x0,
+            x0 + w,
             panel_top + LABEL_GAP,
             "cost = " + _sub(r"w_f") + "·FPR + " + _sub(r"w_n") + "·FNR",
-            ha="left",
+            ha="right",
             va="bottom",
             fontsize=18,
             color=INK,
             zorder=6,
             path_effects=[patheffects.withStroke(linewidth=7, foreground="white")],
         )
-    for arm, ((w_fp, w_fn, name), curve, dash) in enumerate(zip(COST_ARMS, curves, COST_DASHES, strict=True)):
+    for arm, ((w_fp, w_fn, name), curve, weight) in enumerate(zip(COST_ARMS, curves, COST_WEIGHTS, strict=True)):
         # Balanced first, then strict, then permissive: the middle arm is the
         # one the room already has in mind, and the other two are what the
         # slide is arguing also exist.
         if stage < COST_REVEAL[arm]:
             continue
         ys = panel_base + curve * sy
-        ax.plot(x0 + cuts * w, ys, color=BLUE, linewidth=2.4, linestyle=dash, zorder=3)
-        best = int(np.argmin(curve))
-        cut_x = x0 + cuts[best] * w
-        ax.plot([cut_x], [panel_base + curve[best] * sy], marker="o", markersize=7, color=BLUE, zorder=5)
-        ax.plot(
-            [cut_x, cut_x],
-            [panel_base + curve[best] * sy, rank_y],
-            color=BLUE,
-            linewidth=1.4,
-            linestyle=(0, (2, 3)),
-            zorder=2,
-        )
-        ax.plot([cut_x] * 2, [rank_y - 0.32, rank_y], color=BLUE, linewidth=2.4, zorder=4)
-        # The arm is named at the right-hand end of its own curve, not under
-        # its minimum: the three minima are close together — that they differ
-        # at all is the slide's point — so three labels stacked there is three
-        # labels on top of each other.
+        ax.plot(x0 + cuts * w, ys, color=INK, linewidth=weight, zorder=3)
+        for admitted in _optima(bad, good, w_fp, w_fn):
+            cut_x = x0 + _cut_score(admitted) * w
+            cut_y = panel_base + float(_cost_curve(bad, good, w_fp, w_fn, np.array([_cut_score(admitted)]))[0]) * sy
+            ax.plot([cut_x], [cut_y], marker="o", markersize=8, color=BLUE, zorder=5)
+            ax.plot([cut_x, cut_x], [cut_y, rank_y], color=BLUE, linewidth=1.4, linestyle=(0, (2, 3)), zorder=2)
+            ax.plot([cut_x] * 2, [rank_y - 0.32, rank_y], color=BLUE, linewidth=2.4, zorder=4)
+        # The arm is named at the left-hand end of its own curve. The three
+        # start a quarter of the panel apart there and converge on one another's
+        # ends, so the left is the one place a label can sit on the line it
+        # names without three of them stacking up.
         ax.text(
-            x0 + w + LABEL_GAP,
-            ys[-1],
+            x0 - LABEL_GAP,
+            ys[0],
             _sub(rf"w_f : w_n = {name}"),
-            ha="left",
+            ha="right",
             va="center",
             fontsize=15,
             color=INK,
@@ -3939,7 +4169,7 @@ def _cost_knob_stage(stage: int) -> plt.Figure:
 
     # ── stage 5: the control that sets the ratio ──────────────────────────────
     if stage >= COST_STAGES:
-        _incl_slider(ax, x0, panel_base - 1.5, w)
+        _incl_slider(ax, x0, panel_base - 1.2, w)
     return fig
 
 

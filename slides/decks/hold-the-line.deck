@@ -57,3 +57,8 @@ slides:
 
   # 5 — The End
   outline-hold-the-line +at5
+
+  # Appendix — after the end, for questions. The Train/Check result is a
+  # results slide, not an idea: the argument carries the change, this carries
+  # the sweep that justified it, and it comes up only if someone asks.
+  split-fraction-result
