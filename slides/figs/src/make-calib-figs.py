@@ -2508,7 +2508,12 @@ INCL_CANVAS_W = 23.45
 #: the notch's right edge falls at 6.48 and 6.70 clears it by 12px. The width
 #: spends the right margin to buy most of that back: the panel gives up 16% of
 #: its old span rather than the 24% the indent alone would have cost.
-INCL_PANEL_X0, INCL_PANEL_W, INCL_PANEL_H = 6.70, 16.40, 2.2
+#: The evidence row's left edge, width, and the air above its axis. The height
+#: used to be the histogram's; with the bars gone (`_incl_panel`) it is only
+#: what the walk figure's cap bracket and that bracket's own name need, which
+#: is what keeps the knob figure — which draws nothing up there at all — from
+#: opening on a band of white.
+INCL_PANEL_X0, INCL_PANEL_W, INCL_PANEL_H = 6.70, 16.40, 1.15
 
 #: The three stops each figure reads its gauges at. The retired rule returns one
 #: answer at every stop, so the knob's two ends and its middle are the fairest
@@ -2613,29 +2618,25 @@ def _normalised_cost(scores: np.ndarray, labels: np.ndarray, inclusion: int, gri
     return (fpr_weight * fpr + fnr_weight * fnr) / (fpr_weight + fnr_weight)
 
 
-def _incl_panel(ax: plt.Axes, corpus: np.ndarray, *, y_base: float, top: float, votes: bool = True) -> None:
-    """`calib-quantile-flow`'s left panel, unfitted: the corpus, and the votes on it.
+def _incl_panel(ax: plt.Axes, y_base: float, top: float, *, votes: bool = True) -> None:
+    """Part 2's shared evidence row: a score axis, and the held-out votes on it.
 
-    The bars carry no fill and no fitted curve because nothing is estimated on
-    them — the cut rules Part 2 compares read the seven marks on the baseline
-    and nothing else.
-    Both names are kept for the reason the quantile figure keeps both: a panel
-    holding two quantities has to name both, and which model scored which half
-    of the votes is the fact the whole progression turns on.
+    **No histogram.** Both rules this section compares — the retired cost search
+    and the shipped quantile walk — read the seven marks and nothing else, so
+    the scored corpus behind them was decoration on a slide whose whole claim is
+    about what the *votes* can and cannot resolve (#3301). Drawn, it invited the
+    reader to look for the answer in a distribution neither rule ever consults,
+    and it made this row a different object from the one the previous two slides
+    argue over, which is a bare axis with marks under it.
+
+    What the panel keeps is its name. The votes are M₁'s scores of D₂ — which
+    model scored which half is the fact the whole progression turns on — and
+    `M_1(D_{-1})` goes with the bars, because the corpus is no longer on screen.
     """
     x0, w = INCL_PANEL_X0, INCL_PANEL_W
-    _score_histogram(ax, x0, y_base, w, INCL_PANEL_H, None, corpus, fill="plain", mu_labels=False)
-    ax.text(x0, top + LABEL_GAP, _sub("M_1(D_{-1})"), ha="left", va="bottom", fontsize=16, color=INK)
+    _range_line(ax, x0, x0 + w, y_base, z=5)
     if votes:
-        ax.text(
-            x0,
-            top + LABEL_GAP + CAP_16 + LABEL_GAP,
-            _sub("M_1(D_2)"),
-            ha="left",
-            va="baseline",
-            fontsize=15,
-            color=INK,
-        )
+        ax.text(x0, top + LABEL_GAP, _sub("M_1(D_2)"), ha="left", va="bottom", fontsize=16, color=INK)
         _hump_marks(ax, x0, y_base, w, INCL_VOTES, size=VOTE_PANEL_MARK_PT)
 
 
@@ -2739,10 +2740,16 @@ def _incl_rows(canvas_h: float = INCL_CANVAS_H) -> dict:
 #: The knob figure's own height. Every row is measured down from the canvas
 #: top, so the two figures still draw an identical panel and an identical
 #: middle row; the knob figure simply has nothing under that row to hold up
-#: (#3265) and stops 0.25 units below its last line rather than reserving three
-#: more rows of white. Derived rather than set, so a retune of the shared rows
-#: moves it too.
-KNOB_CANVAS_H = INCL_CANVAS_H - _incl_rows()["mid_bottom"] + 0.25
+#: (#3265) and stops just below its last line rather than reserving three more
+#: rows of white. Derived rather than set, so a retune of the shared rows moves
+#: it too.
+#:
+#: Measured to `mid_base` — the cost row's own baseline — and not to
+#: `mid_bottom`, which reserves two further rows for the walk figure's anchor
+#: names. The knob figure used to fill those with the two sentences under its
+#: cost row; with the sentences gone (#3301) reserving them would open a band
+#: of white a third of the figure deep.
+KNOB_CANVAS_H = INCL_CANVAS_H - _incl_rows()["mid_base"] + RANGE_FOOT + 0.25
 
 
 def knob_flow_fig() -> None:
@@ -2765,13 +2772,12 @@ def knob_flow_fig() -> None:
     separable arm, and ~1.8 distinct admitted sizes across eleven stops on real
     embeddings).
     """
-    corpus = _incl_corpus()
     scores, labels = _incl_votes()
-    final = _knob_flow_stage(KNOB_FLOW_STAGES, corpus, scores, labels)
+    final = _knob_flow_stage(KNOB_FLOW_STAGES, scores, labels)
     box = tight_box(final)
     for stage in range(1, KNOB_FLOW_STAGES):
         save(
-            _knob_flow_stage(stage, corpus, scores, labels),
+            _knob_flow_stage(stage, scores, labels),
             OUT,
             f"calib-knob-flow.build{stage}.png",
             column=FULL_BLEED,
@@ -2780,7 +2786,7 @@ def knob_flow_fig() -> None:
     save(final, OUT, "calib-knob-flow.png", column=FULL_BLEED, box=box)
 
 
-def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
+def _knob_flow_stage(stage: int, scores: np.ndarray, labels: np.ndarray) -> plt.Figure:
     """Draw the first *stage* steps (1-based, cumulative) of the schematic."""
     fig, ax = _incl_figure(KNOB_CANVAS_H)
     x0, w = INCL_PANEL_X0, INCL_PANEL_W
@@ -2793,7 +2799,7 @@ def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels:
     cost_label_y, cost_h, cost_base = rows["mid_label_y"], rows["mid_h"], rows["mid_base"]
 
     # ── stage 1: the corpus, and the seven held-out votes standing on it ──────
-    _incl_panel(ax, corpus, y_base=y_base, top=panel_top)
+    _incl_panel(ax, y_base, panel_top)
 
     # ── stage 2: the only cuts the search can return ──────────────────────────
     # A tick per observed vote score. Shorter than the progression's own cut
@@ -2880,41 +2886,17 @@ def _knob_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels:
         )
 
     # ── stage 4: turn the knob, twenty-one times, and watch ───────────────────
-    # The two lines under the cost row are the mechanism, and they stand in the
-    # rows `_incl_rows` reserves for the walk figure's anchor names — so the pair
-    # keeps its overlay and neither figure carries an empty band.
+    # Twenty-one cuts land on one score, so the reveal is one notch — named θ,
+    # like every other cut in the deck, and not narrated. The three sentences
+    # that used to stand here ("no ✗ ranks above a ✓", "so the search has one
+    # optimum, at every price", "θ at all 21 stops") were the presenter's lines
+    # written onto the slide; they are in the fragment's notes, where the rest
+    # of the deck keeps its prose (#3301).
     if stage >= 4:
-        ax.text(
-            x0 + band_mid * w,
-            cost_base - 0.32 - LABEL_GAP,
-            "no ✗ ranks above a ✓",
-            ha="center",
-            va="top",
-            fontsize=16,
-            color=INK,
-        )
-        ax.text(
-            x0 + band_mid * w,
-            cost_base - 0.32 - LABEL_GAP - CAP_16 - LABEL_GAP,
-            "so the search has one optimum, at every price",
-            ha="center",
-            va="top",
-            fontsize=15,
-            color=SOFT,
-        )
         cuts = [_argmin_cut(scores, labels, k) for k in INCL_KNOB]
         for cut in cuts:
             ax.plot([x0 + cut * w] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
-        theta = cuts[0]
-        ax.text(
-            x0 + theta * w + 0.10,
-            y_base - VOTE_LABEL_DROP,
-            _sub(r"\theta\ at\ all\ 21\ stops"),
-            ha="left",
-            va="top",
-            fontsize=16,
-            color=INK,
-        )
+        _theta_notch(ax, x0 + cuts[0] * w, y_base, _sub(r"\theta"))
 
     # There is deliberately no gauge row here. The figure's whole claim is that
     # the two ends of the knob minimise in the same place, and the two cost
@@ -2935,7 +2917,7 @@ WALK_TOP_Q = 0.75  # CONFORMAL_QPOS_MAX: the positives' quantile the k = -10 end
 def walk_flow_fig() -> None:
     """Schematic of the conformal quantile walk — Part 2's repair (#2693, #3218).
 
-    Same panel as `calib-knob-flow`, same seven votes, same corpus: only the
+    Same panel as `calib-knob-flow` and the same seven votes: only the
     middle row changes, from what the retired rule *computed* to what the
     shipped one computes. That is the comparison the pair exists to make.
 
@@ -3019,7 +3001,7 @@ def _walk_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels:
         )
 
     # ── stage 1: the same panel the retired rule was drawn on ─────────────────
-    _incl_panel(ax, corpus, y_base=y_base, top=panel_top)
+    _incl_panel(ax, y_base, panel_top)
     _range_line(ax, x0, x0 + w, rule_base, z=4)
     ax.text(
         x0 + band_mid * w, rule_label_y, "where the rule may cut", ha="center", va="bottom", fontsize=15, color=SOFT
@@ -3099,7 +3081,7 @@ def _walk_flow_stage(stage: int, corpus: np.ndarray, scores: np.ndarray, labels:
     # spends, and a tick per stop would have to be redrawn for every one of
     # them inside a fifth of a score unit.
     if stage >= 5:
-        brace_y = y_base + INCL_PANEL_H * 0.72
+        brace_y = y_base + INCL_PANEL_H - LABEL_GAP - CAP_16 - 0.06
         lo, hi = x0 + float(pos.min()) * w, x0 + float(pos.max()) * w
         ax.plot(
             [lo, lo, hi, hi], [brace_y - 0.12, brace_y, brace_y, brace_y - 0.12], color=SOFT, linewidth=1.6, zorder=6
