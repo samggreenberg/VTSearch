@@ -293,8 +293,11 @@ sys.exit(0 if 0.0 < f < 1.0 else 1)
       # run's own record, so a reader of the results dir can see that 0.3 was a
       # deliberate arm and not a stale pin someone forgot (which is what
       # `CALIB_HEAD=linear` turned out to be in #2865).
+      # `--diverges` takes knob NAMES, not name=value: the check compares the
+      # env var against the shipped default itself and this only acknowledges
+      # that the difference is deliberate.
       DIV=()
-      [[ "$F" != "0.5" ]] && DIV=(--diverges "calibration_fraction=$F")
+      [[ "$F" != "0.5" ]] && DIV=(--diverges "calibration_fraction")
 
       if [[ -x "$WT/scripts/experiments/preflight.sh" ]]; then
         bash "$WT/scripts/experiments/preflight.sh" --exp "$CALIB_EXP" --need-gb 20 \
@@ -302,6 +305,7 @@ sys.exit(0 if 0.0 < f < 1.0 else 1)
           --require-min-positives 100 \
           --contrasts-voting-modes \
           --reuse-prepare "$PREP" \
+          --patch \
           "${DIV[@]}" \
           --job-name "cal-cells-f$F" --mem "$CALIB_MEM" --conc "$CALIB_CONC" || {
           echo "preflight FAILED for fraction $F" >&2
