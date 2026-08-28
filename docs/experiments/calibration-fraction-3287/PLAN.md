@@ -1,4 +1,4 @@
-# `calibration_fraction`: is a 50/50 Train/Calibrate split optimal? (#3287)
+# What Train/Calibrate split should a detector use? (#3287)
 
 **Status:** pre-registered before the run. Decision rules below are fixed at
 submission time; the report records the verdict they produce, including
@@ -6,11 +6,14 @@ submission time; the report records the verdict they produce, including
 
 ## The question
 
-`calibration_fraction` splits each calibration fold's labelset in two: a Train
-half that fits the fold model, and a Calibrate half whose held-out scores the
-threshold is read from. It has been `0.5` since it was introduced and was never
-measured — the obvious default, not a result — and it sits on the shipped
-threshold path, so it is priced on every detector anyone trains.
+Of the votes a user has cast, what share should **train** each calibration
+fold's model, and what share should be held out to **read that fold's
+threshold**?
+
+`calibration_fraction` is the knob that decides it. It has been `0.5` since it
+was introduced and was never measured — the obvious default, not a result — and
+it sits on the shipped threshold path, so it is priced on every detector anyone
+trains.
 
 It is a genuine trade-off in both directions:
 
@@ -19,31 +22,33 @@ It is a genuine trade-off in both directions:
 | better fold models, so their held-out orderings are a closer proxy for the final model's | more anchors for `fit_fold_anchored_cut`, a finer conformal quantile |
 | but fewer anchors and a coarser quantile | but the fold models drift further from the final model, which always trains on **all** votes — so the scale the cut is *read* on is less like the scale it is *applied* on |
 
-## What #3288 did to the premise, before the run
+## What is being measured
 
-The issue's evidence is #3286's period-4 wave: the whole-image arms were worst
-at the parity that spent the odd vote on Train, `max_patch` worst at the parity
-that spent it on Calibrate — anti-phase, pointing the same way twice.
+The cost a VTSearch user ends up paying, on average, at each split fraction —
+not a mechanism, and not an artifact. Everything except the fraction is held at
+the app's own behaviour: the fused threshold path, the production linear-SVM
+head, `calibrate_count=2`, the app's per-mode blend schedule, and the text-sort
+opening a user gets by typing a query.
 
-That wave was `round`'s round-half-to-even tie-break, and **PR #3288 (merged to
-`dev` hours before this run) replaced it with an unbiased dither.** On this code
-the wave does not exist, so its anti-phase reading is no longer evidence of
-anything. This is recorded here rather than quietly dropped, because a study
-that inherits a dissolved premise and reports a result as if it confirmed one is
-worse than a study that never ran.
+"On average, across scenarios" is the shape of the answer, so the grid spends
+its cells on scenarios rather than on precision at any one of them: three
+geometries, 12 classes at identical prevalence, 4 seeds, and four vote bands
+across a 150-click horizon.
 
-The *question* survives intact: the constant is still unmeasured, and the
-trade-off above is a property of the estimator, not of the rounding. The dither
-in fact makes the measurement cleaner — pre-dither, an arm at 0.3 and one at 0.5
-would have differed both in mean split and in which deterministic seesaw they
-rode; now they differ only in the mean.
+One note on provenance, because it changes how a number here should be read but
+is not itself the subject. The question surfaced from #3286's period-4 waves in
+the learning curves; PR #3288 has since traced those to `round`'s
+round-half-to-even tie-break and replaced it with an unbiased dither. So the
+waves are gone on this code and are **not** what this run is about — but their
+absence is what makes it a clean measurement, because two arms now differ only
+in their mean split and not also in which deterministic seesaw they rode.
 
-**One residual to read the results against.** The dither fires whenever
-`n × fraction` has a fractional part: most steps at 0.3/0.4/0.6/0.7, and only
-odd steps at 0.5. It is unbiased, so it does not move any arm's mean, but it
-adds a little within-arm variance to the four off-centre arms. That is why the
-headline is a level with a standard error and never a rank ordering of five
-point estimates.
+The dither does leave one residual worth reading the results against: it fires
+whenever `n × fraction` has a fractional part — most steps at 0.3/0.4/0.6/0.7,
+only odd steps at 0.5. It is unbiased, so it moves no arm's mean, but it adds a
+little within-arm variance to the four off-centre arms. That is why the headline
+is a level with a standard error and never a rank ordering of five point
+estimates.
 
 ## Design
 

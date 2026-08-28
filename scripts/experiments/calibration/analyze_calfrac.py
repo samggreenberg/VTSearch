@@ -448,7 +448,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Embedders are never averaged in the viewer, so the geometry goes in
         # that slot: it is the dimension that must not be pooled here.
         d["embedder"] = d["geometry"]
-        baseline = curves.text_sort_baseline(args.baseline) if args.baseline else None
+        # Same existence guard the figures use: a missing baseline costs the
+        # click-0 anchor, and losing the anchor must not cost the whole page.
+        baseline = curves.text_sort_baseline(args.baseline) if args.baseline and Path(args.baseline).exists() else None
         viewer.build_viewer(
             d,
             out / "viewer.html",
@@ -491,8 +493,13 @@ def _fmt(x: float, digits: int = 2) -> str:
 def write_report(out, frame, by_band, paired, vd, spread, trap, counts, prov, figs) -> None:
     L: list[str] = []
     A = L.append
-    A("# `calibration_fraction`: is 50/50 optimal? (#3287)\n")
+    A("# What Train/Calibrate split should a detector use? (#3287)\n")
     A("Draft written by `analyze_calfrac.py`; every number below comes from `agg/*.csv`.\n")
+    A("\nThe question: of the votes a user has cast, what share should **train** each\n")
+    A("calibration fold's model, and what share should be held out to **read its threshold**?\n")
+    A("The shipped answer is half and half. This measures what the user's cost would have been\n")
+    A("at five different splits, under a simulation held as close to the app as the harness\n")
+    A("allows — the same fused threshold path, the same production head, the same opening.\n")
 
     A("\n## What was run\n")
     A(f"- Arms: `calibration_fraction` ∈ {sorted(frame['fraction'].unique())}, one **full run** each.")
@@ -569,14 +576,6 @@ def write_report(out, frame, by_band, paired, vd, spread, trap, counts, prov, fi
     A("dashed wherever it describes fewer than 95% of that arm's cells — only a solid segment is a\n")
     A("level worth quoting. Click 0 is the free text sort.\n")
     A("\nEvery slice, including the ones these PNGs do not show: [`viewer.html`](viewer.html).\n")
-
-    A("\n## What #3288 did to this study's premise\n")
-    A("The issue's evidence was #3286's period-4 wave — whole-image arms worst at the parity that spent\n")
-    A("the odd vote on Train, `max_patch` worst at the parity that spent it on Calibrate. PR #3288\n")
-    A("replaced `round`'s round-half-to-even tie-break with an unbiased dither, so **on this code that\n")
-    A("wave does not exist** and its anti-phase reading is no longer evidence of anything. The question\n")
-    A("survives it: the constant was still unmeasured and the trade-off it sits on is real. This run\n")
-    A("measures the fraction directly instead of inferring it from a one-vote perturbation.\n")
 
     Path(out / "REPORT_calfrac.md").write_text("\n".join(L) + "\n")
 

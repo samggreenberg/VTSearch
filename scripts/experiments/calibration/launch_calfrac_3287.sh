@@ -18,24 +18,18 @@
 # paired on votes - they are paired on (dataset, category, seed, style), which
 # is what the analyzer bootstraps over.
 #
-# WHAT #3288 DID TO THE PREMISE, AND WHY THE STUDY SURVIVES IT.  The issue's
-# evidence is #3286's period-4 wave: whole-image arms were worst at the parity
-# that spent the odd vote on Train, `max_patch` worst at the parity that spent it
-# on Calibrate.  That wave was `round`'s round-half-to-even tie-break, and
-# PR #3288 replaced it with an unbiased dither - so on this code the wave is
-# gone and its anti-phase reading is no longer evidence of anything.  Good: the
-# suggestive artifact and the real question were never the same claim.  The
-# constant is still unmeasured, the trade-off it sits on is real, and this run
-# measures it directly instead of inferring it from a one-vote perturbation.
+# WHAT IT MEASURES.  Not a mechanism and not an artifact: the cost a VTSearch
+# user ends up paying, on average, at each split fraction -- under a simulation
+# held as close to the shipped app as the harness can hold it.  The fused
+# threshold path, the production linear-SVM head, `calibrate_count=2`, the app's
+# per-mode blend schedule, and the same text-sort opening a user gets by typing
+# a query.  The only thing that differs between arms is the fraction.
 #
-# It also makes the measurement cleaner.  Pre-dither, an arm at 0.3 and an arm
-# at 0.5 would have differed BOTH in their mean split and in which deterministic
-# seesaw they rode; the dither leaves only the mean.  Note the residual: the
-# dither fires whenever `n * fraction` is fractional, which is most steps at
-# 0.3/0.4/0.6/0.7 and only odd steps at 0.5.  That is unbiased, so it does not
-# move an arm's mean, but it does add a little within-arm variance to the
-# off-centre arms - which is why the headline is a level with a standard error
-# and not a rank ordering of five point estimates.
+# "On average, across scenarios" is the shape of the answer, so the grid spends
+# its cells on scenarios rather than on precision at one of them: three
+# geometries (two voting modes, with the embedder separable from the mode), 12
+# classes at identical prevalence, 4 seeds, and four vote bands across a
+# 150-click horizon.
 #
 # Design + pre-registered decision rules:
 #   docs/experiments/calibration-fraction-3287/PLAN.md
@@ -253,6 +247,24 @@ case "$MODE" in
     echo "size job: $S (cell $IDX, fraction $F)  ->  $BASE/sizing/logs/size-$S.out"
     ;;
 
+  baseline)
+    # The click-0 anchor: what typing the query was worth before any clicking.
+    # `curves` refuses to draw a quality-over-clicks figure without it, and it
+    # should not be optional -- the distance between the far left and the far
+    # right IS the study's subject.  Computed ONCE off the shared prepare, since
+    # every arm shares the categories and the text sort does not depend on the
+    # split fraction.
+    export CALIB_RESULTS="$PREP"
+    mkdir -p "$BASE/analysis" "$BASE/logs"
+    ENVX="export CALIB_EXP=$BASE CALIB_RESULTS=$PREP VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
+    T=$(sbatch --parsable --job-name=cf3287-baseline --mem=24G --cpus-per-task=2 \
+      --time=2:00:00 --partition=cpu --export=ALL \
+      --output="$BASE/logs/baseline-%j.out" \
+      --wrap="source $WT/gridenv.sh && $ENVX && cd $HERE && python text_baseline.py --results $PREP --out $BASE/analysis/text_baseline.csv")
+    require_jobid "$T" "text baseline"
+    echo "baseline job: $T  ->  $BASE/analysis/text_baseline.csv"
+    ;;
+
   arms)
     if [[ ! -f "$PREP/prepare_info.json" ]]; then
       echo "ERROR: no prepare_info.json at $PREP - run '$0 prepare' first." >&2
@@ -337,7 +349,7 @@ sys.exit(0 if 0.0 < f < 1.0 else 1)
     A=$(sbatch --parsable --dependency="afterany:$DEPSTR" --job-name=cf3287-analyze \
       --mem="$CALIB_ANALYZE_MEM" --cpus-per-task=4 --time="$CALIB_ANALYZE_TIME" \
       --partition=cpu --export=ALL --output="$ALOGS/analyze-%j.out" \
-      --wrap="source $WT/gridenv.sh && $AENVX && cd $HERE && python analyze_calfrac.py --base $BASE --out $BASE/analysis")
+      --wrap="source $WT/gridenv.sh && $AENVX && cd $HERE && python analyze_calfrac.py --base $BASE --out $BASE/analysis --baseline $BASE/analysis/text_baseline.csv")
     require_jobid "$A" "the cross-arm analyze step"
 
     echo
@@ -350,7 +362,7 @@ sys.exit(0 if 0.0 < f < 1.0 else 1)
     ;;
 
   *)
-    echo "usage: $0 {prepare|size [cell] [fraction]|arms [fractions]}" >&2
+    echo "usage: $0 {prepare|baseline|size [cell] [fraction]|arms [fractions]}" >&2
     exit 2
     ;;
 esac
