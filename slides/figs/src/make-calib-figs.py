@@ -3586,24 +3586,169 @@ def blend_schedule_fig() -> None:
     save(fig, OUT, "calib-blend-schedule.png", column=FULL_BLEED, tight=False)
 
 
+#: The Train/Check idea figure: its canvas, the bar it draws twice, and the
+#: vote count it is concrete about. Twenty votes is an early-session number —
+#: the regime the split actually matters in — and it divides cleanly under both
+#: splits, so every count on the drawing is a whole vote rather than a rounded
+#: one.
+SPLIT_CANVAS = (19.8, 7.36)
+SPLIT_BAR_X0, SPLIT_BAR_W, SPLIT_BAR_H = 6.0, 13.3, 1.05
+SPLIT_VOTES = 20
+
+#: The two splits, as `(train share, row name, bar bottom)`. The incumbent
+#: first, because it is the one every earlier slide in this section drew.
+SPLIT_ROWS = ((0.5, "50 / 50", 5.05), (0.7, "70 / 30", 2.40))
+
+#: Where the arrow between the two bars runs, and where the conclusion starts.
+SPLIT_MOVE_Y = 4.35
+SPLIT_CONCLUSION_Y = 1.70
+
+#: How many stages the figure reveals in: the incumbent split; the proposal;
+#: the votes that moved between them; what the move is for.
+SPLIT_IDEA_STAGES = 4
+
+
+def _split_bar(ax: plt.Axes, fraction: float, name: str, y0: float) -> None:
+    """One split of the votes: the block, its divider, and what each side is for."""
+    x0, w, h = SPLIT_BAR_X0, SPLIT_BAR_W, SPLIT_BAR_H
+    _data_block(ax, x0, y0, w, h)
+    divider = x0 + fraction * w
+    ax.plot([divider] * 2, [y0, y0 + h], color=INK, linewidth=1.6, zorder=3)
+    # The row's name shares the label row above the bar with the two counts,
+    # rather than hanging off the left edge: the top bar's own left edge is as
+    # far left as the title notch lets anything reach, so a name outside it
+    # would sit in the corner the slide's headline has (`slides/STYLE.md`).
+    ax.text(x0, y0 + h + LABEL_GAP, name, ha="left", va="bottom", fontsize=18, color=INK, fontweight="bold")
+    for centre, job, votes in (
+        ((x0 + divider) / 2, "train", round(fraction * SPLIT_VOTES)),
+        ((divider + x0 + w) / 2, "check", SPLIT_VOTES - round(fraction * SPLIT_VOTES)),
+    ):
+        ax.add_patch(Ellipse((centre, y0 + h / 2), 1.55, 0.62, facecolor="white", edgecolor="none", zorder=4))
+        ax.text(centre, y0 + h / 2, job, ha="center", va="center", fontsize=16, color=INK, zorder=5)
+        ax.text(
+            centre,
+            y0 + h + LABEL_GAP,
+            f"{votes} votes",
+            ha="center",
+            va="bottom",
+            fontsize=15,
+            color=SOFT,
+        )
+
+
+def split_idea_fig() -> None:
+    """What the Train/Check split *is*, and the one change made to it (#3287).
+
+    The section's earlier figures all draw the same quiet choice — half the
+    votes train each fold's model, half are held out to read its threshold —
+    without ever naming it as a choice. This names it, and moves it: seventy
+    percent into Train, thirty into Check.
+
+    It is the idea, not the study. The measured curves live on the results
+    slide the deck now carries as an appendix; what belongs *here* is the
+    picture of four votes crossing the divider, which is the whole of what
+    changed (#3296).
+    """
+    final = _split_idea_stage(SPLIT_IDEA_STAGES)
+    box = tight_box(final)
+    for stage in range(1, SPLIT_IDEA_STAGES):
+        save(_split_idea_stage(stage), OUT, f"calib-split-idea.build{stage}.png", column=FULL_BLEED, box=box)
+    save(final, OUT, "calib-split-idea.png", column=FULL_BLEED, box=box)
+
+
+def _split_idea_stage(stage: int) -> plt.Figure:
+    """Draw the first *stage* steps (1-based, cumulative) of the split figure."""
+    fig, ax = plt.subplots(figsize=tuple(c * FLOW_UNIT_PT / 72 for c in SPLIT_CANVAS))
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_xlim(0, SPLIT_CANVAS[0])
+    ax.set_ylim(0, SPLIT_CANVAS[1])
+    ax.set_axis_off()
+
+    x0, w, h = SPLIT_BAR_X0, SPLIT_BAR_W, SPLIT_BAR_H
+    (was_f, was_name, was_y), (now_f, now_name, now_y) = SPLIT_ROWS
+
+    # ── stage 1: the split every fold in this section has been drawing ────────
+    _split_bar(ax, was_f, was_name, was_y)
+
+    # ── stage 2: the same votes, divided somewhere else ───────────────────────
+    if stage >= 2:
+        _split_bar(ax, now_f, now_name, now_y)
+
+    # ── stage 3: the votes that crossed, as a path rather than as a jump ──────
+    # Both bars are on screen at once and neither ever moves — a build adds
+    # ink, it does not animate (`slides/STYLE.md`) — so what says "the divider
+    # moved" has to be drawn: two soft drops and one arrow between them, along
+    # the gap the two rows leave for it.
+    if stage >= 3:
+        was_x, now_x = x0 + was_f * w, x0 + now_f * w
+        move_y = SPLIT_MOVE_Y
+        ax.plot([was_x] * 2, [was_y, move_y], color=RULE, linewidth=1.4, zorder=1)
+        ax.plot([now_x] * 2, [move_y, now_y + h], color=RULE, linewidth=1.4, zorder=1)
+        _arrow(ax, (was_x, move_y), (now_x, move_y))
+        # Named past the arrowhead rather than over the shaft: the shaft has
+        # one of the two drops running into it, and a label centred on it
+        # covers the very line that says where the divider came from.
+        ax.text(
+            now_x + OBJECT_GAP,
+            move_y,
+            f"{round((now_f - was_f) * SPLIT_VOTES)} more votes",
+            ha="left",
+            va="center",
+            fontsize=16,
+            color=INK,
+        )
+
+    # ── stage 4: why that is the direction to move it ─────────────────────────
+    if stage >= 4:
+        centre = x0 + w / 2
+        ax.text(
+            centre,
+            SPLIT_CONCLUSION_Y,
+            "the fold model is what runs short when votes are scarce",
+            ha="center",
+            va="top",
+            fontsize=16,
+            color=INK,
+        )
+        ax.text(
+            centre,
+            SPLIT_CONCLUSION_Y - CAP_16 - LABEL_GAP,
+            "a threshold is only a quantile, and six scores still place one",
+            ha="center",
+            va="top",
+            fontsize=15,
+            color=SOFT,
+        )
+
+    return fig
+
+
 def split_fraction_fig() -> None:
-    """The Train/Calibrate split, paired against the 50/50 incumbent.
+    """The Train/Check split, paired against the 50/50 incumbent.
 
     Redraws the committed curves from
     `docs/experiments/calibration-fraction-3287/figures/cost_vs_clicks.csv`
-    (plus the `siglip2l/` follow-up) at slide scale, as the difference the
-    70/30 split makes at each click count. One line per geometry; below zero
-    means training on more of the votes beat holding more of them out. The
-    numbers are untouched apart from the pairing arithmetic (same cells run
-    under both arms, so the difference of means is the mean paired difference)
-    and a centred 7-vote rolling mean that the presenter note declares.
+    (plus the `siglip2l/`, `clip/` and `clip_l/` follow-ups) at slide scale, as
+    the difference the 70/30 split makes at each click count. One line per
+    geometry; below zero means training on more of the votes beat holding more
+    of them out. The numbers are untouched apart from the pairing arithmetic
+    (same cells run under both arms, so the difference of means is the mean
+    paired difference) and a centred 7-vote rolling mean that the presenter
+    note declares.
+
+    **Black at two weights, not green against red.** The old drawing coloured
+    the winning arms green and the losing ones red, on a slide whose curves are
+    about evaluations that hand out Good and Bad labels — the deck's two other
+    uses of exactly those hues (#3296). The line weight carries the only
+    grouping the chart actually has: four single-vector models that agree, and
+    the patch model that does not.
     """
     import csv
 
     report = _REPO_ROOT / "docs" / "experiments" / "calibration-fraction-3287"
     series: dict[tuple[str, float], dict[int, tuple[float, float]]] = {}
-    for path in (report / "figures" / "cost_vs_clicks.csv", report / "siglip2l" / "figures" / "cost_vs_clicks.csv"):
-        with path.open() as fh:
+    for run in ("figures", "siglip2l/figures", "clip/figures", "clip_l/figures"):
+        with (report / run / "cost_vs_clicks.csv").open() as fh:
             for row in csv.DictReader(fh):
                 if not row["mean"]:
                     continue
@@ -3624,18 +3769,29 @@ def split_fraction_fig() -> None:
 
     fig, ax = plt.subplots(figsize=(11.5, 6.5))
     ax.axhline(0.0, color=SOFT, linewidth=1.2, linestyle=(0, (4, 3)), zorder=1)
-    for geometry, color, style, label, xy, va in (
-        ("siglip-whole_image", GREEN, "solid", "SigLIP", (108, -0.021), "top"),
-        ("siglip2_l-whole_image", GREEN, (0, (5, 2)), "SigLIP 2", (50, -0.024), "top"),
-        ("dinov3_patch-whole_image", RED, "solid", "DINOv3 — binary voting", (44, 0.0295), "bottom"),
-        ("dinov3_patch-max_patch", RED, (0, (5, 2)), "DINOv3 — region voting", (95, 0.0075), "bottom"),
+    # The four single-vector arms are drawn as one bundle and named once. They
+    # sit inside six thousandths of each other for most of the sweep, so four
+    # labels on four curves would be four labels on one curve — and the claim
+    # the bundle makes is a claim about all four at once.
+    for geometry in ("siglip-whole_image", "siglip2_l-whole_image", "clip-whole_image", "clip_l-whole_image"):
+        ax.plot(*delta(geometry), color=INK, linewidth=1.5, zorder=3)
+    for geometry, label, xy, va in (
+        ("dinov3_patch-whole_image", "DINOv3 — binary voting", (44, 0.0295), "bottom"),
+        ("dinov3_patch-max_patch", "DINOv3 — region voting", (95, 0.0080), "bottom"),
     ):
-        ts, values = delta(geometry)
-        ax.plot(ts, values, color=color, linestyle=style, linewidth=2.4, zorder=3)
-        ax.annotate(label, xy=xy, ha="left", va=va, fontsize=15, color=color)
+        ax.plot(*delta(geometry), color=INK, linewidth=3.4, zorder=3)
+        ax.annotate(label, xy=xy, ha="left", va=va, fontsize=15, color=INK)
+    ax.annotate(
+        "SigLIP · SigLIP 2 · CLIP · CLIP-L",
+        xy=(74, -0.0235),
+        ha="center",
+        va="top",
+        fontsize=15,
+        color=INK,
+    )
     # Region labels for the two half-planes, parked in the corners the curves
     # leave empty: top-left above the rising DINOv3 line, bottom-right below
-    # the settled SigLIP pair.
+    # the settled single-vector bundle.
     ax.annotate("50/50 wins", xy=(4, 0.0335), ha="left", va="top", fontsize=15, color=SOFT)
     ax.annotate("70/30 wins", xy=(148, -0.0335), ha="right", va="bottom", fontsize=15, color=SOFT)
     ax.set_xlim(0, 152)
