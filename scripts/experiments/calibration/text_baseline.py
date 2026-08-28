@@ -76,21 +76,37 @@ def main() -> int:
             cats = info.get("selected_categories") or []
             if not cats:
                 continue
-            pkl = _loader.EMBEDDINGS_DIR / cfg.pickle_name(ds, emb)
+            # The opening runs in the TEXT half's space, which for a paired arm
+            # is not the space the cell learns in (#3276).  `run_cells.
+            # _text_seed_scores` embeds the query with `cfg.text_embedder(emb)`
+            # and scores it against that half's media vectors, so the anchor has
+            # to be built the same way or it is not the sort the arm opened on.
+            #
+            # Reading the pair name here instead cost the anchor outright:
+            # `siglip+dinov3_patch` probes DINOv3's (absent) text tower and
+            # records `n/a`, so every region panel lost its click-0 point - and
+            # the click-0 point is the whole comparison, since it is what the
+            # clicked detector has to beat.  Scoring the SigLIP query against
+            # the DINOv3 pickle would have been worse: two different spaces, and
+            # a number rather than a blank.
+            text_emb = cfg.text_embedder(emb)
+            pkl = _loader.EMBEDDINGS_DIR / cfg.text_pickle_name(ds, emb)
             if not pkl.exists():
-                common.log(f"SKIP {ds} x {emb}: no pickle")
+                common.log(f"SKIP {ds} x {emb}: no text pickle {pkl.name}")
                 continue
 
             # Probe the text tower once before loading a multi-GB pickle.
-            probe = embed_text_query("a photo", "image", embedder_name=emb)
+            probe = embed_text_query("a photo", "image", embedder_name=text_emb)
             if probe is None:
-                common.log(f"{ds} x {emb}: NO TEXT TOWER (vision-only) - recorded as n/a")
+                common.log(f"{ds} x {emb}: NO TEXT TOWER on {text_emb} (vision-only) - recorded as n/a")
                 for cat in cats:
                     rows.append({"dataset": ds, "embedder": emb, "category": cat, "supports_text": 0})
                 continue
 
             medias = load_medias(pkl)
-            common.log(f"\n=== {ds} x {emb} === {len(medias)} medias, {len(cats)} categories")
+            common.log(
+                f"\n=== {ds} x {emb} === {len(medias)} medias, {len(cats)} categories (opening space: {text_emb})"
+            )
             style = resolve_style("whole_image")
 
             for cat in cats:
@@ -102,7 +118,7 @@ def main() -> int:
                 # measured a *different sort* from the one every arm opened on,
                 # so the zero-click anchor was not the run's own seed sort.
                 query = cfg.seed_query_text(ds, cat) or cat
-                tvec = embed_text_query(query, "image", embedder_name=emb)
+                tvec = embed_text_query(query, "image", embedder_name=text_emb)
                 if tvec is None:
                     rows.append({"dataset": ds, "embedder": emb, "category": cat, "supports_text": 0})
                     continue
