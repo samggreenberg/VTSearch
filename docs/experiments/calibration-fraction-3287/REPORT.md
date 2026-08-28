@@ -311,7 +311,14 @@ separate them:
 [`clip_l/viewer.html`](clip_l/viewer.html).
 
 **480/480 cells across the two grids, zero failures, zero zero-byte outputs, 7,068
-production rows in every one of the ten arms — nothing dropped.** Every metric row
+production rows in every one of the ten arms — nothing dropped.** The comparison to the
+SigLIP rows is paired at the dataset level and was checked rather than assumed: all
+five `vg_scale_any` cells — `siglip`, `siglip2_l`, `dinov3_patch`, `clip`, `clip_l` —
+carry the **same 7,747 medias and the identical parent-label digest**
+(`b973e7398e15…`), so the CLIP arms ran on the same images, labels, boxes and #3281
+corrections as the arms they are being read beside. That is the check #3115 lost a
+run to: a derived cell inherits its parent silently, and a `vg_scale_any` built after
+a parent rebuild is not the same dataset as one built before it. Every metric row
 opened on a typed query in the arm's own space (`seed_mode=text`,
 `seed_embedder=clip`/`clip_l`, no blank queries), so neither arm fell back to the
 known-good opening that would have made it incomparable to the SigLIP rows (#3278).

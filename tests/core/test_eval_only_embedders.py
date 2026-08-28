@@ -83,9 +83,14 @@ class TestStillResolvable:
         assert emb.name == "clip_l"
         assert emb.media_type_id == "image"
 
-    def test_to_dict_carries_the_flag(self):
-        """So a listing that does obtain one can tell what it is looking at."""
-        assert get_embedder("clip_l").to_dict()["eval_only"] is True
+    def test_to_dict_does_not_carry_the_flag(self):
+        """`eval_only` is a property, not part of the serialised contract.
+
+        The one listing that serialises embedders filters eval-only ones out, so
+        the key could only ever be ``False`` there. Pinned so it is not helpfully
+        added back.
+        """
+        assert "eval_only" not in get_embedder("clip_l").to_dict()
 
 
 class TestClipLIdentity:

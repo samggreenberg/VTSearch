@@ -1082,6 +1082,12 @@ class MediaEmbedder(ABC):
         Resolution by name stays open on purpose: a pile cell embedded with an
         eval-only embedder must still load, or the study could not read its own
         vectors back.
+
+        Deliberately **not** in :meth:`to_dict`. The one serialised listing,
+        :func:`vtscore.media.all_embedders_dict`, filters eval-only embedders
+        out, so the field could only ever serialise as ``False`` -- a constant
+        in the API contract, and eighteen exact-equality assertions to carry it.
+        Ask the embedder, not its dict.
         """
         return False
 
@@ -1486,7 +1492,6 @@ class MediaEmbedder(ABC):
             "model_id": self.model_id,
             "media_type_id": self.media_type_id,
             "is_default": self.is_default,
-            "eval_only": self.eval_only,
             "supports_text": self.supports_text,
             "supports_patch_regions": self.supports_patch_regions,
             "supports_geometric_verification": self.supports_geometric_verification,
