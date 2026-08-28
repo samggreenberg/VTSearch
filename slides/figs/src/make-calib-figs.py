@@ -1409,7 +1409,7 @@ def _blend_flow_stage(stage: int, fit: "GmmFit1D", scores: np.ndarray) -> plt.Fi
 #: says out loud that which mound is Good is an assumption; and only then do
 #: the votes arrive and turn that assumption into a reading. Revealed together,
 #: the fit and its identification looked like one act.
-XSEMI_FLOW_STAGES = 7
+XSEMI_FLOW_STAGES = 8
 
 #: Taller than any of its parents, and the one figure in the progression that
 #: could not be talked down to `FLOW_CANVAS_H`. The blend fits in 11.4 because
@@ -1797,11 +1797,16 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
             # the data; the question-mark fill is the fit *with* iteration 2's
             # assumption about which mound is which; the block's own hatching
             # is that assumption replaced by the votes' reading of it.
-            fill="class" if stage >= 5 else ("query" if stage >= 4 else "plain"),
+            fill="class" if stage >= 6 else ("query" if stage >= 4 else "plain"),
             mu_labels=False,
         )
 
-    # ── stage 5: the held-out votes arrive and name the two components ────────
+    # ── stage 5: the held-out votes arrive ────────────────────────────────────
+    # And *only* arrive. Naming the two components is stage 6, and the split is
+    # the point: one page put the votes on the baselines and resolved the
+    # question marks in the same advance, so "here is the other evidence" and
+    # "here is what the two of them together say" were one beat and neither
+    # could be pointed at (#3301).
     if stage >= 5:
         for i, (mx, sign) in enumerate(((m1x, 1.0), (m2x, -1.0))):
             entry_tail = (mx + sign * slope * (train_tail_y - my), train_tail_y)
@@ -1824,8 +1829,10 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
         # drawing needs: what this figure has to show is that the votes are in
         # the fit at all.
 
-    # ── stage 6: cut each fold at the midpoint of its two fitted means ────────
-    if stage >= 6:
+    # ── stage 6: the two sources read together — the fill above changes here ──
+
+    # ── stage 7: cut each fold at the midpoint of its two fitted means ────────
+    if stage >= 7:
         for i, (fit, _scores, _anchors) in enumerate(folds):
             theta_x = panel_x[i] + 0.5 * (fit.mu_lo + fit.mu_hi) * panel_w
             ax.plot([theta_x] * 2, [y_base - 0.32, y_base], color=INK, linewidth=2.2, zorder=6)
@@ -1839,14 +1846,14 @@ def _xsemi_flow_stage(stage: int, folds: list) -> plt.Figure:
                 color=INK,
             )
 
-    # ── stage 7: average the two cuts ─────────────────────────────────────────
+    # ── stage 8: average the two cuts ─────────────────────────────────────────
     # One line, and no `return (M₀, θ₀)` after it. Its parents close on a
     # return because they are each a whole algorithm; this one is a beat in the
     # middle of an argument, and the quantile figure that follows takes this
     # very average apart. Ending on the thing about to be corrected is the
     # point, and an arrow onward to a return would spend the slide's last
     # words settling something the next slide unsettles.
-    if stage >= 7:
+    if stage >= 8:
         ax.text(
             bx,
             conclusion_y,
