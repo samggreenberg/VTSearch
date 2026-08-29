@@ -501,15 +501,40 @@ case "$MODE" in
     DEPSTR="$(IFS=:; echo "${DEPS[*]}")"
     ALOGS="$BASE/logs"; mkdir -p "$ALOGS"
     AENVX="export VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
+
+    # The analysis scope is WHAT IS ON DISK, not what this invocation submitted.
+    # The two halves can go in as two invocations -- they did here, because the
+    # first stopped at preflight's patch-memory floor -- and an analyze scoped to
+    # one of them does not merely report half a study: with one voting mode in
+    # the frame `by_mode` is absent entirely, so the POOLED table silently
+    # becomes the verdict.  That is the failure the per-mode split exists to
+    # prevent, arriving through the launcher instead of through the statistics.
+    # So the scope is discovered, and a dependency narrower than the scope is
+    # said out loud rather than left to be noticed in the report.
+    ASCOPE=""
+    for h in bin reg; do
+      [[ -d "$BASE/$h" ]] && ASCOPE="${ASCOPE:+$ASCOPE,}$h"
+    done
+    ASCOPE="${ASCOPE:-$WHICH}"
+
     A=$(sbatch --parsable --dependency="afterany:$DEPSTR" --job-name=acq2877-analyze \
       --mem="$CALIB_ANALYZE_MEM" --cpus-per-task=4 --time="$CALIB_ANALYZE_TIME" \
       --partition=cpu --export=ALL --output="$ALOGS/analyze-%j.out" \
-      --wrap="source $WT/gridenv.sh && $AENVX && cd $HERE && python analyze_acq.py --base $BASE --halves $WHICH --out $BASE/analysis")
+      --wrap="source $WT/gridenv.sh && $AENVX && cd $HERE && python analyze_acq.py --base $BASE --halves $ASCOPE --out $BASE/analysis")
     require_jobid "$A" "the cross-arm analyze step"
 
     echo
     echo "Submitted $SUBMITTED array(s): ${DEPS[*]}"
-    echo "cross-arm analyze: $A (afterany on every array)  ->  $ALOGS/analyze-$A.out"
+    echo "cross-arm analyze: $A (afterany on this invocation's arrays)  ->  $ALOGS/analyze-$A.out"
+    echo "analysis scope: --halves $ASCOPE (read off $BASE, not off this invocation)"
+    if [[ "$ASCOPE" != "${WHICH//,/ }" && "$ASCOPE" != "$WHICH" ]]; then
+      echo
+      echo "WARNING: this analyze will read halves [$ASCOPE] but only waits on [$WHICH]."
+      echo "         Extend it once the other half's arrays are known:"
+      echo "           scontrol update JobId=$A Dependency=afterany:<id>:<id>:..."
+      echo "         An analysis that runs before its inputs exist reports a study that"
+      echo "         is missing a voting mode, and reports it as complete."
+    fi
     echo "report -> $BASE/analysis/REPORT_acq.md"
     echo
     echo "A submission is not a launch: confirm the ids above are numeric and that"
