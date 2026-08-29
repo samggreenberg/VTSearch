@@ -195,7 +195,8 @@ export CALIB_N_SEEDS="${CALIB_N_SEEDS:-24}"
 export CALIB_PARTITION=cpu
 export CALIB_GRES=none
 export CALIB_CPUS=1
-export CALIB_TIME="${CALIB_TIME:-8:00:00}"
+# Per-half; see half_env.  A 17-minute cell asking for 8 hours backfills slower
+# for no benefit.
 export CALIB_ANALYZE_MEM="${CALIB_ANALYZE_MEM:-48G}"
 export CALIB_ANALYZE_TIME="${CALIB_ANALYZE_TIME:-2:00:00}"
 
@@ -213,21 +214,36 @@ source "$WT/scripts/experiments/pile/pile_env.sh"
 # Per-half environment.  The halves differ ONLY in which embedder the grid
 # enumerates, which is what makes them two index spaces off one prepare.
 #
-# Memory is from GRID-PLAYBOOK's measured table -- `max_patch` on `vg_scale`
-# peaks ~9.1 GB (its designated cells cut the evaluable pool to ~4000, so it is
-# cheaper than the 4-5k whole-VG patch cells at ~13 GB), whole-image ~1.1 GB --
-# and is re-derived from THIS study's own `size` run before `arms` is trusted.
+# MEASURED ON THIS GRID, on 2026-08-29, by `size` (jobs 590192/590193/590194),
+# not inherited from a table:
+#
+#   reg (`siglip+dinov3_patch`, whole_image + max_patch)  16m05s / 16m42s, 5.0 GB
+#   bin (`siglip`, whole_image)                            3m21s,          0.9 GB
+#
+# GRID-PLAYBOOK's table would have said 16G for the region cell (its ~9.1 GB
+# entry is `vg_scale x max_patch` under a different horizon); the cell actually
+# peaks at 5.0 GB, and the difference is 8 slots of concurrency per arm.  That is
+# the whole reason the playbook says to size from a cell rather than a table.
+#
+# The two `%N` throttles are then chosen to (a) stay inside `cpu_limit`
+# (cpu=240 with 2 charged per task => 120 concurrent tasks; 7 arms x 16 = 112,
+# leaving room for the analyze step) and (b) make the halves FINISH TOGETHER.
+# A region cell is ~4.9x a binary one, so equal throttles would leave the cheap
+# half idle for hours and then the analyze step waiting on the expensive one
+# anyway.
 half_env() {
   case "$1" in
     bin)
       export CALIB_VGSCALE_EMBEDDERS="siglip"
-      export CALIB_MEM="${ACQ_BIN_MEM:-6G}"
-      export CALIB_CONC="${ACQ_BIN_CONC:-24}"
+      export CALIB_MEM="${ACQ_BIN_MEM:-3G}"
+      export CALIB_CONC="${ACQ_BIN_CONC:-4}"
+      export CALIB_TIME="${ACQ_BIN_TIME:-0:30:00}"
       ;;
     reg)
       export CALIB_VGSCALE_EMBEDDERS="siglip+dinov3_patch"
-      export CALIB_MEM="${ACQ_REG_MEM:-16G}"
-      export CALIB_CONC="${ACQ_REG_CONC:-8}"
+      export CALIB_MEM="${ACQ_REG_MEM:-8G}"
+      export CALIB_CONC="${ACQ_REG_CONC:-12}"
+      export CALIB_TIME="${ACQ_REG_TIME:-1:30:00}"
       ;;
     *) echo "ERROR: unknown half '$1' (expected bin or reg)" >&2; exit 2 ;;
   esac
@@ -388,6 +404,7 @@ case "$MODE" in
       echo "=== half $HALF: embedders=$CALIB_VGSCALE_EMBEDDERS  $NENV envs/seed"
       echo "    seeds ${SLO}..${SHI} of $CALIB_N_SEEDS declared -> array ${LO}-${HI} = $NPER cells/arm"
       echo "    $n_arms arms x %$CALIB_CONC x $CALIB_MEM = %$study_conc concurrent"
+      GEO_DONE=0
 
       for ARM in ${ARMS_ALL//,/ }; do
         read -r OFF PCT <<<"$(arm_offset "$ARM")"
@@ -409,9 +426,17 @@ case "$MODE" in
         DIV=()
         [[ "$OFF" != "$SHIPPED_K" ]] && DIV=(--diverges "acq_offset")
 
+        # The region-voting premise and the mode-contrast confound are
+        # properties of the (dataset, embedder) CELL, so they are the same for
+        # every arm of a half -- and asserting the first one costs a 2.4 GB
+        # pickle load on the login node.  Checked once per half, on its first
+        # arm, rather than seven times: a gate that is expensive enough to be
+        # skipped is worse than one that runs.  `--patch` (the memory sizing)
+        # rides along with it because it is equally per-half.
         GEO=()
-        if [[ "$HALF" == "reg" ]]; then
+        if [[ "$HALF" == "reg" && "$GEO_DONE" == "0" ]]; then
           GEO=(--require-region-voting "vg_scale_any:siglip+dinov3_patch" --contrasts-voting-modes --patch)
+          GEO_DONE=1
         fi
 
         if [[ -x "$WT/scripts/experiments/preflight.sh" ]]; then
