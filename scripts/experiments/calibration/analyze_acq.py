@@ -22,6 +22,26 @@ Three things this analyzer refuses to do quietly:
 3. **Read the falsification arm as decoration.** ``acq_p2`` must move positives
    the wrong way; if it does not, the mechanism is wrong and the verdict is
    withheld.
+4. **Pool two voting modes into one verdict.** Added for #2877's pile re-run,
+   whose grid deliberately holds both.  The whole reason this question is still
+   open is that the answer moved between environments, so a mean over a grid
+   that spans them is precisely the number that would hide it: the ship rule is
+   evaluated **per mode** and the pooled table is printed as descriptive only.
+
+Two things it adds beyond the per-mode split, both from what the earlier runs
+cost:
+
+* **Sizing, as an output rather than an assumption.**  #2877 inherited #2876's
+  seed count and came back with a decision-endpoint CI spanning two opposite
+  shipping decisions.  The realized paired SD on ``final_cost`` is reported per
+  mode together with the ``n`` a +/-0.010 half-width needs, so "run more seeds"
+  is a number the run itself produces.
+* **The mode contrast as a difference-in-differences, within one embedder.**
+  ``siglip+dinov3_patch`` runs ``whole_image`` and ``max_patch`` inside one
+  task, off one loaded pickle, on one sim/test split and one exemplar - so
+  ``(arm - prod | region) - (arm - prod | binary)`` is paired cell-for-cell and
+  carries no embedder with it.  #3115 reported a per-mode headline off a grid
+  whose modes were disjoint embedders; this is the same contrast without that.
 
 Writes ``agg/*.csv``, ``acq_summary.json``, ``figures/*.png`` and
 ``REPORT_acq.md`` under ``$CALIB_EXP/analysis``.
@@ -69,6 +89,11 @@ ARM_LABEL: dict[str, str] = {
 COST_REGRESSION_TOLERANCE = float(os.environ.get("ACQ_COST_TOL", "0.01"))
 ALPHA = 0.05
 
+#: The decision endpoint's target half-width, in cost units.  The sizing block
+#: reports the ``n`` this needs; it is the same +/-0.010 #2877 derived against,
+#: so the two runs' power statements are the same statement.
+TARGET_HALF_WIDTH = float(os.environ.get("ACQ_TARGET_HALFWIDTH", "0.010"))
+
 OUT = Path(os.environ.get("ACQ_OUT", str(common.EXP / "analysis")))
 
 
@@ -86,9 +111,65 @@ def load_all(root: Path) -> tuple[pd.DataFrame, dict]:
     return pd.concat(parts, ignore_index=True), prov
 
 
+def load_halves(base: Path, halves: list[str]) -> tuple[pd.DataFrame, dict]:
+    """Load ``base/<half>/<arm>/results`` for a study split into index spaces.
+
+    The #2877 pile re-run submits one array per ``(half, arm)`` because a region
+    cell holds a 2.4 GB patch pickle and a whole-image cell holds 26 MB, so they
+    cannot share a memory request.  They are two index spaces and therefore two
+    directory trees; they are *not* two studies, and nothing downstream should
+    have to know which half a row came from -- the mode a row belongs to is read
+    off its own ``(dataset, embedder, style)``, not off the path.
+
+    Provenance keys stay per ``(half, arm)``, because "which cells did we fail
+    to read" is a question about a submission.
+    """
+    parts, prov = [], {}
+    for half in halves:
+        for arm in ARMS:
+            arm_dir = base / half / arm / "results"
+            if not (arm_dir / "cells").is_dir():
+                continue
+            df, p = sp.load_arm(arm_dir)
+            prov[f"{half}/{arm}"] = p
+            if not df.empty:
+                df = df.copy()
+                df["arm"] = arm
+                df["half"] = half
+                parts.append(df)
+    if not parts:
+        return pd.DataFrame(), prov
+    return pd.concat(parts, ignore_index=True), prov
+
+
+def voting_mode(dataset: str, embedder: str, style: str) -> str:
+    """``"region"`` or ``"binary"``, asserted from the cell rather than the flag.
+
+    Both halves are required and neither is sufficient: a boxed dataset supplies
+    the box to drag, a patch embedder supplies the grid to pool it over, and the
+    ``whole_image`` style declines to use either.  Reading `region_voting=True`
+    off the run's configuration instead is how #2877, #2897 and #2905 each came
+    to report a binary environment as a region one.
+    """
+    import experiment_config as cfg  # noqa: PLC0415
+
+    if str(style) == "whole_image":
+        return "binary"
+    return "region" if cfg.region_voting_for(str(dataset), str(embedder)) else "binary"
+
+
+#: What makes a trajectory.  ``style`` is in it because a patch cell runs BOTH
+#: styles inside one task: without it the whole-image and max_patch rows of the
+#: same ``(category, seed)`` collapse into one group, and every endpoint below
+#: becomes a mixture of two voting modes.  ``arm`` leads it; :data:`PAIR_KEYS`
+#: is the same list with ``arm`` removed, which is what a paired test joins on.
+TRAJ_KEYS: tuple[str, ...] = ("arm", "dataset", "embedder", "style", "category", "seed")
+PAIR_KEYS: tuple[str, ...] = TRAJ_KEYS[1:]
+
+
 def trajectory_stats(df: pd.DataFrame) -> pd.DataFrame:
-    """One row per ``(arm, category, seed)``, carrying every endpoint at once."""
-    keys = [k for k in ("arm", "dataset", "embedder", "category", "seed") if k in df.columns]
+    """One row per ``(arm, dataset, embedder, style, category, seed)``."""
+    keys = [k for k in TRAJ_KEYS if k in df.columns]
     out = []
     for key, g in df.groupby(keys, dropna=False):
         g = g.sort_values("t")
@@ -124,7 +205,15 @@ def trajectory_stats(df: pd.DataFrame) -> pd.DataFrame:
             ),
         )
         out.append(rec)
-    return pd.DataFrame(out)
+    traj = pd.DataFrame(out)
+    if not traj.empty:
+        # Derived here rather than at load time so it exists on every path into
+        # the analyzer -- including the self-test's fabricated frames, which
+        # carry no `half` column and never saw a launcher.
+        traj["mode"] = [
+            voting_mode(r.get("dataset", ""), r.get("embedder", ""), r.get("style", "")) for _, r in traj.iterrows()
+        ]
+    return traj
 
 
 def _paired(traj: pd.DataFrame, metric: str, arm: str, control: str = CONTROL) -> dict:
@@ -133,7 +222,7 @@ def _paired(traj: pd.DataFrame, metric: str, arm: str, control: str = CONTROL) -
     The CI is what the ship rule reads: "cost did not regress" is a claim about
     an interval, not a p-value.
     """
-    keys = [k for k in ("dataset", "embedder", "category", "seed") if k in traj.columns]
+    keys = [k for k in PAIR_KEYS if k in traj.columns]
     a = traj[traj["arm"] == control].set_index(keys)[metric]
     b = traj[traj["arm"] == arm].set_index(keys)[metric]
     j = pd.concat([a.rename("ctl"), b.rename("arm")], axis=1).dropna()
@@ -161,7 +250,7 @@ def _paired(traj: pd.DataFrame, metric: str, arm: str, control: str = CONTROL) -
 
 
 def _mcnemar(traj: pd.DataFrame, arm: str, flag: str, control: str = CONTROL) -> dict:
-    keys = [k for k in ("dataset", "embedder", "category", "seed") if k in traj.columns]
+    keys = [k for k in PAIR_KEYS if k in traj.columns]
     a = traj[traj["arm"] == control].set_index(keys)[flag]
     b = traj[traj["arm"] == arm].set_index(keys)[flag]
     j = pd.concat([a.rename("ctl"), b.rename("arm")], axis=1).dropna()
@@ -208,7 +297,7 @@ def verify_lever(traj: pd.DataFrame) -> dict:
     return out
 
 
-def build_summary(traj: pd.DataFrame, prov: dict) -> dict:
+def _core_summary(traj: pd.DataFrame) -> dict:
     per_arm = {}
     for arm in ARMS:
         a = traj[traj["arm"] == arm]
@@ -274,14 +363,7 @@ def build_summary(traj: pd.DataFrame, prov: dict) -> dict:
 
     adopt = [a for a, v in ship.items() if v["ADOPT"]]
     return {
-        "config": {
-            "cost_regression_tolerance": COST_REGRESSION_TOLERANCE,
-            "alpha": ALPHA,
-            "warm_t": sp.WARM_T,
-            "deep_cost": sp.DEEP_COST,
-            "deep_excess": sp.DEEP_EXCESS,
-        },
-        "provenance": prov,
+        "n_trajectories": int(len(traj)),
         "lever_verification": lever,
         "falsifier_behaved": falsifier_ok,
         "per_arm": per_arm,
@@ -291,7 +373,157 @@ def build_summary(traj: pd.DataFrame, prov: dict) -> dict:
     }
 
 
-def make_figures(traj: pd.DataFrame, summary: dict, outdir: Path) -> list[str]:
+def sizing(traj: pd.DataFrame, metric: str = "final_cost") -> dict:
+    """Realized paired SD on the DECISION endpoint, and the ``n`` it implies.
+
+    #2877's one unrecoverable mistake was inheriting a seed count with an arm
+    table: #2876's 8 seeds gave a decision-endpoint CI of [-0.014, +0.019],
+    which is not a null - it is an interval containing both "ship it" and
+    "revert it", reported as though it were one.  The input that would have
+    caught it (the paired SD on ``final_cost`` in *this* environment) cannot be
+    known before cells exist, so the fix is not a better guess up front but a
+    number the run itself reports.
+
+    Computed over the k<0 arms only.  The falsifier is a different distribution
+    by construction and ``rank_pin`` is not on the inclusion scale, so pooling
+    either would inflate the SD that sizes the arms the decision is about.
+    """
+    out: dict = {"metric": metric, "target_half_width": TARGET_HALF_WIDTH, "per_arm": {}}
+    sds = []
+    for arm in ("acq_m1", "acq_m2", "acq_m3", "acq_m4"):
+        keys = [k for k in PAIR_KEYS if k in traj.columns]
+        a = traj[traj["arm"] == CONTROL].set_index(keys)[metric]
+        b = traj[traj["arm"] == arm].set_index(keys)[metric]
+        j = pd.concat([a.rename("ctl"), b.rename("arm")], axis=1).dropna()
+        if len(j) < 2:
+            continue
+        d = (j["arm"] - j["ctl"]).to_numpy(dtype=float)
+        sd = float(np.std(d, ddof=1))
+        need = int(np.ceil((1.96 * sd / TARGET_HALF_WIDTH) ** 2)) if TARGET_HALF_WIDTH > 0 else 0
+        out["per_arm"][arm] = {
+            "n_pairs": int(len(j)),
+            "paired_sd": sd,
+            "half_width_now": float(1.96 * sd / np.sqrt(len(j))),
+            "n_for_target": need,
+        }
+        sds.append(sd)
+    if sds:
+        sd = float(max(sds))  # size for the worst arm, not the average one
+        out["binding_sd"] = sd
+        out["n_for_target"] = int(np.ceil((1.96 * sd / TARGET_HALF_WIDTH) ** 2)) if TARGET_HALF_WIDTH > 0 else 0
+    return out
+
+
+def mode_did(traj: pd.DataFrame) -> dict:
+    """``(arm - prod | region) - (arm - prod | binary)``, paired within a cell.
+
+    This is the mode question with the embedder taken out of it.  A patch cell
+    runs ``whole_image`` and ``max_patch`` in one task off one loaded pickle, so
+    for a given ``(embedder, category, seed)`` the two styles share the sim/test
+    split and the startup exemplar and differ *only* in the scoring geometry.
+    The difference of the two arm effects is therefore attributable to the mode.
+
+    Restricted to embedders that appear in **both** modes.  #3115's per-mode
+    headline came off a grid whose binary cells were all SigLIP and whose region
+    cells were all DINOv3: the effect was real and its attribution was not, and
+    check 13b exists because nothing had asserted otherwise.  Returning ``{}``
+    when no embedder spans the modes is the honest answer to that grid.
+    """
+    if "mode" not in traj.columns or traj["mode"].nunique() < 2:
+        return {}
+    spanning = sorted(
+        {emb for emb in traj["embedder"].unique() if traj[traj["embedder"] == emb]["mode"].nunique() >= 2}
+    )
+    if not spanning:
+        return {"embedders": [], "note": "no embedder runs in both modes; a DiD here would be a per-embedder contrast"}
+
+    t = traj[traj["embedder"].isin(spanning)]
+    keys = [k for k in ("dataset", "embedder", "category", "seed") if k in t.columns]
+    out: dict = {"embedders": spanning, "contrasts": {}}
+    rng = np.random.default_rng(2877)
+    for metric in ("final_cost", "final_ap", "positives_100", "final_oracle_cost"):
+        if metric not in t.columns:
+            continue
+        per_metric = {}
+        for arm in ARMS:
+            if arm == CONTROL:
+                continue
+            frames = {}
+            for mode in ("binary", "region"):
+                m = t[t["mode"] == mode]
+                a = m[m["arm"] == CONTROL].set_index(keys)[metric]
+                b = m[m["arm"] == arm].set_index(keys)[metric]
+                frames[mode] = (b - a).dropna()
+            j = pd.concat([frames["binary"].rename("binary"), frames["region"].rename("region")], axis=1).dropna()
+            if len(j) < 2:
+                continue
+            d = (j["region"] - j["binary"]).to_numpy(dtype=float)
+            boot = np.array([np.mean(rng.choice(d, size=len(d), replace=True)) for _ in range(4000)])
+            rec = {
+                "n_pairs": int(len(j)),
+                "binary_mean_delta": float(j["binary"].mean()),
+                "region_mean_delta": float(j["region"].mean()),
+                "did": float(np.mean(d)),
+                "ci95_lo": float(np.percentile(boot, 2.5)),
+                "ci95_hi": float(np.percentile(boot, 97.5)),
+            }
+            if _wilcoxon is not None and np.any(d != 0):
+                try:
+                    rec["p"] = float(_wilcoxon(j["region"], j["binary"]).pvalue)
+                except Exception:  # noqa: BLE001
+                    pass
+            per_metric[arm] = rec
+        if per_metric:
+            out["contrasts"][metric] = per_metric
+    return out
+
+
+def build_summary(traj: pd.DataFrame, prov: dict) -> dict:
+    """The pooled summary, plus one of the same shape per voting mode.
+
+    The pooled numbers stay at the top level so every earlier caller and the
+    self-test read what they always read - but for a grid holding both modes
+    they are **descriptive**, not the verdict.  The whole reason this question
+    survived three runs is that the answer moved between environments, and a
+    mean over a grid spanning them is the number that hides it.
+    """
+    summary = {
+        "config": {
+            "cost_regression_tolerance": COST_REGRESSION_TOLERANCE,
+            "alpha": ALPHA,
+            "warm_t": sp.WARM_T,
+            "deep_cost": sp.DEEP_COST,
+            "deep_excess": sp.DEEP_EXCESS,
+            "target_half_width": TARGET_HALF_WIDTH,
+        },
+        "provenance": prov,
+        **_core_summary(traj),
+    }
+    summary["sizing"] = sizing(traj)
+
+    modes = sorted(traj["mode"].dropna().unique()) if "mode" in traj.columns else []
+    summary["modes_present"] = list(modes)
+    if len(modes) > 1:
+        summary["by_mode"] = {}
+        for mode in modes:
+            sub = traj[traj["mode"] == mode]
+            summary["by_mode"][mode] = {**_core_summary(sub), "sizing": sizing(sub)}
+        summary["mode_did"] = mode_did(traj)
+        # The pooled verdict is not a verdict here.  Stated in the object rather
+        # than only in the prose, so a reader of the JSON cannot take
+        # `adopt` for an answer without meeting this key.
+        summary["pooled_is_descriptive"] = True
+    return summary
+
+
+def make_figures(traj: pd.DataFrame, summary: dict, outdir: Path, prefix: str = "") -> list[str]:
+    """The three figures, optionally name-spaced by *prefix*.
+
+    A grid holding both voting modes draws them once per mode: the frontier's
+    whole point is its SHAPE, and one curve averaged over two modes is a curve
+    of neither.  *prefix* is what keeps the two sets from overwriting each other
+    while the drawing code stays single-sourced.
+    """
     import matplotlib
 
     matplotlib.use("Agg")
@@ -330,7 +562,7 @@ def make_figures(traj: pd.DataFrame, summary: dict, outdir: Path) -> list[str]:
     axes[2].grid(alpha=0.25, ls=":")
 
     fig.tight_layout()
-    p = outdir / "fig1_frontier.png"
+    p = outdir / f"{prefix}fig1_frontier.png"
     fig.savefig(p, dpi=dpi)
     plt.close(fig)
     made.append(p.name)
@@ -353,7 +585,7 @@ def make_figures(traj: pd.DataFrame, summary: dict, outdir: Path) -> list[str]:
     ax.legend(fontsize=8)
     ax.grid(alpha=0.25, axis="y", ls=":")
     fig.tight_layout()
-    p = outdir / "fig2_lever_verification.png"
+    p = outdir / f"{prefix}fig2_lever_verification.png"
     fig.savefig(p, dpi=dpi)
     plt.close(fig)
     made.append(p.name)
@@ -374,7 +606,7 @@ def make_figures(traj: pd.DataFrame, summary: dict, outdir: Path) -> list[str]:
     axes[1].set_title("decision endpoint, full distribution", fontsize=9)
     axes[1].grid(alpha=0.25, axis="y", ls=":")
     fig.tight_layout()
-    p = outdir / "fig3_guardrails.png"
+    p = outdir / f"{prefix}fig3_guardrails.png"
     fig.savefig(p, dpi=dpi)
     plt.close(fig)
     made.append(p.name)
@@ -385,16 +617,18 @@ def _f(x, d=3):
     return "n/a" if x is None or (isinstance(x, float) and not np.isfinite(x)) else f"{x:.{d}f}"
 
 
-def write_report(summary: dict, figs: list[str], outdir: Path) -> Path:
-    L: list[str] = []
-    A = L.append
-    A("# Acquisition/reporting threshold decoupling — does it buy back the positives?\n")
-    A(
-        "Design: `docs/ML.md` (threshold calibration). Reporting is cut at "
-        "inclusion 0 in **every** arm; only the selector's cut moves.\n"
-    )
+def _mode_sections(A, s: dict, heading: str, note: str = "") -> None:
+    """The lever / per-arm / contrast / ship-rule block for ONE summary.
 
-    if not summary["falsifier_behaved"]:
+    Factored out of :func:`write_report` so a per-mode section and the pooled one
+    are literally the same tables — a reader comparing them is comparing
+    numbers, not two renderings that might differ.
+    """
+    A(f"\n{heading}\n")
+    if note:
+        A(f"{note}\n")
+
+    if not s["falsifier_behaved"]:
         A(
             "> **VERDICT WITHHELD.** The falsification arm `acq_p2` (k=+2) did not "
             "significantly *reduce* positives found. The mechanism this run assumes — "
@@ -403,15 +637,15 @@ def write_report(summary: dict, figs: list[str], outdir: Path) -> Path:
             "for it. Everything below is descriptive.\n"
         )
 
-    bad_levers = [a for a, v in summary["lever_verification"].items() if not v["moved"]]
+    bad_levers = [a for a, v in s["lever_verification"].items() if not v["moved"]]
     if bad_levers:
         A(f"> **Arms whose sampling position never moved: {', '.join(bad_levers)}.** These measured nothing.\n")
 
-    A("\n## Lever verification — where each arm actually sampled\n")
+    A("\n### Lever verification — where each arm actually sampled\n")
     A("| arm | median `acq_pool_percentile` | shift vs control | steps where acq ≠ reporting |")
     A("|---|---:|---:|---:|")
     for a in ARMS:
-        v = summary["lever_verification"].get(a)
+        v = s["lever_verification"].get(a)
         if not v:
             continue
         A(
@@ -419,14 +653,14 @@ def write_report(summary: dict, figs: list[str], outdir: Path) -> Path:
             f"{v['shift_vs_control']:+.4f} | {100 * v['frac_steps_acq_differs']:.0f}% |"
         )
 
-    A("\n## Per-arm\n")
+    A("\n### Per-arm\n")
     A(
         "| arm | trajectories | positives @100 | positives @50 | final cost | mean warm cost | "
         "final AP | oracle cost | genuine blips |"
     )
     A("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
     for a in ARMS:
-        v = summary["per_arm"].get(a)
+        v = s["per_arm"].get(a)
         if not v:
             continue
         A(
@@ -437,11 +671,11 @@ def write_report(summary: dict, figs: list[str], outdir: Path) -> Path:
             f"{100 * v['genuine_blip_rate']:.1f}% |"
         )
 
-    A(f"\n## Paired against `{CONTROL}` — cells are `(category, seed)`, never steps\n")
+    A(f"\n### Paired against `{CONTROL}` — cells are `(category, seed, style)`, never steps\n")
     A("| arm | metric | n | control | arm | median Δ | 95% CI on mean Δ | p |")
     A("|---|---|---:|---:|---:|---:|---:|---:|")
     for arm in ARMS:
-        c = summary["contrasts_vs_control"].get(arm)
+        c = s["contrasts_vs_control"].get(arm)
         if not c:
             continue
         for metric in ("positives_100", "final_cost", "mean_cost_warm", "final_oracle_cost", "final_ap"):
@@ -453,7 +687,7 @@ def write_report(summary: dict, figs: list[str], outdir: Path) -> Path:
                 f"{r['median_delta']:+.3f} | [{r['ci95_lo']:+.4f}, {r['ci95_hi']:+.4f}] | {_f(r.get('p'), 5)} |"
             )
 
-    A("\n## Ship rule (pre-registered)\n")
+    A("\n### Ship rule (pre-registered)\n")
     A(
         f"Adopt iff positives rise (p<{ALPHA}) **and** the 95% upper bound on the "
         f"final-cost delta is below +{COST_REGRESSION_TOLERANCE} **and** deep-spike "
@@ -461,13 +695,108 @@ def write_report(summary: dict, figs: list[str], outdir: Path) -> Path:
     )
     A("| arm | positives rose | cost did not regress | spikes did not rise | lever moved | **ADOPT** |")
     A("|---|:--:|:--:|:--:|:--:|:--:|")
-    for arm, v in summary["ship_rule"].items():
+    for arm, v in s["ship_rule"].items():
         y = lambda b: "yes" if b else "no"  # noqa: E731
         A(
             f"| `{arm}` | {y(v['positives_rose'])} | {y(v['cost_did_not_regress'])} | "
             f"{y(v['spikes_did_not_rise'])} | {y(v['lever_moved'])} | **{y(v['ADOPT'])}** |"
         )
-    A(f"\n**Arms passing every criterion:** {', '.join(summary['adopt']) if summary['adopt'] else '_none_'}\n")
+    A(f"\n**Arms passing every criterion:** {', '.join(s['adopt']) if s['adopt'] else '_none_'}\n")
+
+    sz = s.get("sizing") or {}
+    if sz.get("per_arm"):
+        A("\n### Power on the decision endpoint\n")
+        A(
+            "The realized paired SD on `final_cost`, and the `n` a "
+            f"±{sz['target_half_width']:g} half-width would need. A CI wider than the "
+            "tolerance is not a null — it is an interval that can contain both "
+            "shipping decisions, which is what #2877 reported as a null.\n"
+        )
+        A("| arm | pairs | paired SD | current half-width | n for target |")
+        A("|---|---:|---:|---:|---:|")
+        for arm, v in sz["per_arm"].items():
+            A(
+                f"| `{arm}` | {v['n_pairs']} | {_f(v['paired_sd'], 4)} | "
+                f"±{v['half_width_now']:.4f} | {v['n_for_target']} |"
+            )
+        if "n_for_target" in sz:
+            A(
+                f"\n**Binding: n ≈ {sz['n_for_target']} pairs** for ±{sz['target_half_width']:g} "
+                f"(worst arm's SD {_f(sz.get('binding_sd'), 4)}).\n"
+            )
+
+    for fig in s.get("figures") or []:
+        A(f"\n![{fig}](figures/{fig})\n")
+
+
+def write_report(summary: dict, figs: list[str], outdir: Path) -> Path:
+    L: list[str] = []
+    A = L.append
+    A("# Acquisition/reporting threshold decoupling — does it buy back the positives?\n")
+    A(
+        "Design: `docs/ML.md` (threshold calibration). Reporting is cut at "
+        "inclusion 0 in **every** arm; only the selector's cut moves.\n"
+    )
+
+    by_mode = summary.get("by_mode") or {}
+    if by_mode:
+        A(
+            "\n> **This grid holds both voting modes, so the verdict is per mode.** The "
+            "acquisition offset has now been measured in four environments and the "
+            "answer has moved between them — which is exactly what a mean over a grid "
+            "spanning them would hide. The pooled tables are printed last and are "
+            "**descriptive only**.\n"
+        )
+        A("\n## Verdict at a glance\n")
+        A("| voting mode | trajectories | arms adopted | falsifier behaved |")
+        A("|---|---:|---|:--:|")
+        for mode, s in by_mode.items():
+            A(
+                f"| **{mode}** | {s['n_trajectories']} | "
+                f"{', '.join(f'`{a}`' for a in s['adopt']) if s['adopt'] else '_none_'} | "
+                f"{'yes' if s['falsifier_behaved'] else '**no**'} |"
+            )
+        for mode, s in by_mode.items():
+            _mode_sections(A, s, f"## Voting mode: {mode}")
+
+        did = summary.get("mode_did") or {}
+        if did.get("contrasts"):
+            A("\n## Is the offset actually mode-dependent? (difference-in-differences)\n")
+            A(
+                "`(arm − prod | region) − (arm − prod | binary)`, paired cell-for-cell "
+                f"within **{', '.join(f'`{e}`' for e in did['embedders'])}** — one embedder "
+                "running both styles inside one task, off one loaded pickle, on one "
+                "sim/test split and one exemplar. The two modes therefore differ only in "
+                "the scoring geometry, so the difference of the arm effects is "
+                "attributable to the mode and not to the embedder (#3115 reported a "
+                "per-mode headline off a grid where those two moved together).\n"
+            )
+            A("| metric | arm | n | Δ binary | Δ region | DiD | 95% CI | p |")
+            A("|---|---|---:|---:|---:|---:|---:|---:|")
+            for metric, per_arm in did["contrasts"].items():
+                for arm, r in per_arm.items():
+                    A(
+                        f"| {metric} | `{arm}` | {r['n_pairs']} | {r['binary_mean_delta']:+.3f} | "
+                        f"{r['region_mean_delta']:+.3f} | {r['did']:+.4f} | "
+                        f"[{r['ci95_lo']:+.4f}, {r['ci95_hi']:+.4f}] | {_f(r.get('p'), 5)} |"
+                    )
+            A(
+                "\nA DiD whose CI covers 0 says the offset behaves the same way in both "
+                "modes **in this environment** — which is a result about gating, not a "
+                "failure to find one.\n"
+            )
+        elif did.get("note"):
+            A(f"\n## Mode contrast\n\n> Not computed: {did['note']}.\n")
+
+        _mode_sections(
+            A,
+            summary,
+            "## Pooled across modes — descriptive only",
+            "> Not a verdict. Kept because it is the shape every earlier "
+            "environment's report had, and so the four runs stay comparable.",
+        )
+    else:
+        _mode_sections(A, summary, "## Result")
 
     A("\n## Data read\n")
     A("| arm | cell files | trajectories | never found a positive | unreadable | zero-byte |")
@@ -479,9 +808,10 @@ def write_report(summary: dict, figs: list[str], outdir: Path) -> Path:
             f"{len(v.get('zero_byte', []))} |"
         )
 
-    if figs:
+    extra = [f for f in figs if f not in set(summary.get("figures") or [])]
+    if extra:
         A("\n## Figures\n")
-        for f in figs:
+        for f in extra:
             A(f"![{f}](figures/{f})\n")
 
     out = outdir / "REPORT_acq.md"
@@ -493,38 +823,74 @@ def main(argv: list[str] | None = None) -> int:
     import argparse
 
     ap = argparse.ArgumentParser(description="Acquisition-inclusion decoupling analysis.")
+    # Two layouts, because two studies wrote them.  `--results-root` is the flat
+    # `<root>/<arm>` every earlier environment used and is still the default;
+    # `--base` + `--halves` is the #2877 pile re-run's `<base>/<half>/<arm>`,
+    # which exists because a region cell and a whole-image cell cannot share a
+    # memory request and therefore cannot share an array.
     ap.add_argument("--results-root", default=str(common.EXP / "results"))
+    ap.add_argument("--base", default=None, help="study root holding <half>/<arm>/results")
+    ap.add_argument("--halves", default="bin,reg", help="comma-separated halves under --base")
     ap.add_argument("--out", default=str(OUT))
     args = ap.parse_args(argv)
 
     outdir = Path(args.out)
     (outdir / "agg").mkdir(parents=True, exist_ok=True)
 
-    df, prov = load_all(Path(args.results_root))
+    if args.base:
+        halves = [h.strip() for h in args.halves.split(",") if h.strip()]
+        source = f"{args.base} (halves: {', '.join(halves)})"
+        df, prov = load_halves(Path(args.base), halves)
+    else:
+        source = args.results_root
+        df, prov = load_all(Path(args.results_root))
     if df.empty:
-        print(f"no cells under {args.results_root}")
+        print(f"no cells under {source}")
         return 1
-    print(f"loaded {len(df)} base rows across {df['arm'].nunique()} arms")
+    print(f"loaded {len(df)} base rows across {df['arm'].nunique()} arms from {source}")
 
     traj = trajectory_stats(df)
     traj.to_csv(outdir / "agg" / "trajectories.csv", index=False)
     summary = build_summary(traj, prov)
+
+    # Figures per mode, then pooled.  Attached to the summary each one belongs
+    # to so the report renders a mode's frontier inside that mode's section --
+    # a frontier is a shape, and a reader who has to scroll to a shared gallery
+    # to find it is reading the table instead.
+    figdir = outdir / "figures"
+    figs: list[str] = []
+    for mode, sub in (summary.get("by_mode") or {}).items():
+        made = make_figures(traj[traj["mode"] == mode], sub, figdir, prefix=f"{mode}_")
+        sub["figures"] = made
+        figs.extend(made)
+    pooled = make_figures(traj, summary, figdir)
+    summary["figures"] = pooled
+    figs.extend(pooled)
+
     (outdir / "acq_summary.json").write_text(json.dumps(summary, indent=2, default=str))
-    figs = make_figures(traj, summary, outdir / "figures")
     rep = write_report(summary, figs, outdir)
 
     print(f"wrote {rep}")
-    for a in ARMS:
-        v = summary["per_arm"].get(a)
-        if not v:
-            continue
-        print(
-            f"  {a:9s} pos@100={v['median_positives_100']:5.1f}  final_cost={v['median_final_cost']:.3f}  "
-            f"genuine_blips={100 * v['genuine_blip_rate']:5.1f}%  "
-            f"acq_pct={summary['lever_verification'][a]['median_acq_pool_percentile']:.4f}"
-        )
-    print(f"  falsifier behaved: {summary['falsifier_behaved']}")
-    print(f"  ADOPT: {summary['adopt'] or 'none'}")
+    for label, s in [("pooled", summary), *((m, v) for m, v in (summary.get("by_mode") or {}).items())]:
+        print(f"--- {label} ({s['n_trajectories']} trajectories)")
+        for a in ARMS:
+            v = s["per_arm"].get(a)
+            if not v:
+                continue
+            print(
+                f"  {a:9s} pos@100={v['median_positives_100']:5.1f}  final_cost={v['median_final_cost']:.3f}  "
+                f"genuine_blips={100 * v['genuine_blip_rate']:5.1f}%  "
+                f"acq_pct={s['lever_verification'][a]['median_acq_pool_percentile']:.4f}"
+            )
+        print(f"  falsifier behaved: {s['falsifier_behaved']}")
+        print(f"  ADOPT: {s['adopt'] or 'none'}")
+        sz = s.get("sizing") or {}
+        if "n_for_target" in sz:
+            print(
+                f"  sizing: n\u2248{sz['n_for_target']} pairs for \u00b1{sz['target_half_width']:g} (SD {sz['binding_sd']:.4f})"
+            )
+    if summary.get("by_mode"):
+        print("  NOTE: the pooled block above is descriptive; the verdict is per mode.")
     return 0
 
 
