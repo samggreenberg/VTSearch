@@ -256,3 +256,68 @@ on one voting mode.
   produces; cross-run comparisons of anything that depends on how a run starts —
   positive starvation, `n_good`, early-trajectory cost — are qualified by that,
   and `_cells_io.assert_one_opening` refuses to pool the two.
+
+---
+
+## Amendment 1 — the region half is topped up to 22 seeds
+
+**Recorded 2026-08-29 07:10 EDT, while the region arrays were still running and
+before any region contrast had been read.** The ordering matters: a sizing
+change made after seeing the answer is a different act from one made after
+seeing the *variance*, and only the second is what this plan pre-registered.
+
+The plan said: *"Wave 1 is 16 seeds … if the realized SD is larger, the top-up is
+`arms 16-23`."* It is larger, in one of the three environments.
+
+Realized paired SD on `final_cost`, measured on the cells that existed at 07:00
+(the completed binary half at 16 seeds; the region half at ~8 seeds):
+
+| environment | paired SD | n for ±0.010 | 16 seeds gives |
+|---|---:|---:|---:|
+| `siglip × whole_image` | 0.0653 | 164 | 192 ✔ |
+| `siglip+dinov3_patch × max_patch` (region) | 0.0580 | 130 | 192 ✔ |
+| `siglip+dinov3_patch × whole_image` (binary) | **0.0778** | **233** | 192 ✘ |
+
+**Topped up to seeds 16–21** (`ACQ_JOB_TAG=t2 … arms 16-21 reg`), giving 264
+pairs per arm per mode and a half-width of ±0.0094 at the observed SD. Six
+seeds, not the full eight to 24, because 264 clears the target with margin and
+the region half is the study's critical path; the remaining seeds stay declared
+and available.
+
+**Only the region half is topped up.** The binary half's 192 already clears its
+own 164, and spending grid time to over-power a question that is already
+answered is not thoroughness. The three environments therefore end at different
+`n` — 192, 264, 264 — which is a property of each environment's variance, not an
+imbalance in the design: every contrast is paired *within* an environment.
+
+**What this does not do.** It does not change the arms, the endpoints, the ship
+rule, the tolerance, or which mode the verdict is read per. Seeds are an array
+*prefix* under `CALIB_CELL_ORDER=seed`, so every cell already on disk keeps its
+index and its meaning, and the top-up is a range extension rather than a
+re-grid — which is the whole reason the seed count was declared at 24 and run as
+a prefix.
+
+**One thing the plan did not anticipate.** Preflight refuses a job name already
+in the queue, rightly, since the per-name completion waiter counts jobs by name.
+A top-up wave therefore needs its own tag (`ACQ_JOB_TAG`); the results dir, the
+index space and the cells are unchanged, so the tag is about the queue and never
+about the data.
+
+## Amendment 2 — a prediction in this plan was wrong
+
+The section *"One guardrail does not transfer"* predicted that
+`SPIKE_DEEP_COST = 0.25`, an **absolute** cost calibrated to COCO's ~0.137
+scale, would leave the deep-spike guardrail near-saturated here, since costs run
+0.18–0.42.
+
+**It is not.** A deep spike needs *both* a high absolute cost **and** an excess
+of ≥ 0.20 over the oracle for the same ranking. Cost is high here because the
+*rankings* are hard — oracle cost is 0.24–0.37 — so the excess is ~0.03, nowhere
+near the trigger. Measured base rates are 0–1%, against the 24% #2877 saw.
+
+Recorded rather than quietly dropped, because the corrected form is the more
+useful rule: an absolute threshold does not transfer, and *which direction* it
+fails in depends on whether the environment's cost is driven by the **cut** or
+by the **ranking**. #2877's environment was expensive at the cut; this one is
+expensive at the ranking. Nothing about the analysis changes — the guardrail was
+always read as a paired McNemar contrast, which is valid at any base rate.
