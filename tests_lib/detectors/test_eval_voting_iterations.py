@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 
 from vtscore.eval.voting_iterations import (
+    TIMING_COLUMNS,
     _good_training_vec,
     _inclusion_weights,
     _labelset_error_costs,
@@ -253,7 +254,7 @@ class TestSimulateVotingIterations:
         rows2 = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
         assert len(rows1) == len(rows2)
         # Wall-clock timing columns vary between runs; compare everything else.
-        _timing = {"elapsed_seconds", "train_seconds", "xcal_seconds", "pool_score_seconds", "test_score_seconds"}
+        _timing = TIMING_COLUMNS
 
         def _same(a, b) -> bool:
             """Value equality that reads NaN as reproducing itself.

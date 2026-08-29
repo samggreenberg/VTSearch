@@ -198,6 +198,31 @@ _IDENT_COLUMNS: tuple[str, ...] = (
 
 #: Canonical column order for the voting-iterations result frame.  Kept in one
 #: place so :func:`run_voting_iterations_eval` and downstream tooling agree.
+#: Every column that is a **wall clock**, and therefore the set a determinism
+#: check has to exclude.  Defined here, beside the code that emits them, because
+#: it was defined in three test files instead: adding one timing column (#3314's
+#: `final_score_seconds`) then broke four tests in two of the three, each with
+#: its own private copy of this list, and the fourth would have gone on silently
+#: comparing a column it no longer covered.  A new timing column now joins one
+#: tuple and every consumer follows.
+TIMING_COLUMNS: frozenset[str] = frozenset(
+    {
+        "elapsed_seconds",
+        "train_seconds",
+        "xcal_seconds",
+        "final_score_seconds",
+        "pool_score_seconds",
+        "test_score_seconds",
+        # Per-K calibration clocks (#3314), on the fold-count arms only.
+        "fold_seconds",
+        "fold_fit_seconds",
+        "fold_score_seconds",
+        "anchored_seconds",
+        "cal_seconds",
+    }
+)
+
+
 _VOTING_COLUMNS: tuple[str, ...] = (
     *_IDENT_COLUMNS,
     "cost",
@@ -217,8 +242,20 @@ _VOTING_COLUMNS: tuple[str, ...] = (
     "n_flagged",
     "auroc",
     "average_precision",
+    #: The fold count the STEP lived at (#3314).  Equal to the run's
+    #: `calibrate_count` everywhere except under `fold_count_schedule`, where it
+    #: is what the schedule resolved for this step's vote count.  On the plain
+    #: frame as well as the calibration one, because it describes the step and
+    #: not the study: a frame that cannot say how many folds a row was cut with
+    #: cannot be pooled with one that can.
+    "calibrate_count",
     "train_seconds",
     "xcal_seconds",
+    #: The final model's own pass over the haystack, on the shipped
+    #: safe-threshold path (#3314); NaN when safe thresholds are off, where
+    #: there is no such pass.  A wall clock like its neighbours, so it varies
+    #: run to run.
+    "final_score_seconds",
     "pool_score_seconds",
     "test_score_seconds",
     "backend",
@@ -288,8 +325,9 @@ _PICK_COLUMNS: tuple[str, ...] = (
 #: (issue #2799), tagged in ``gmm_variant`` (``""`` on every other row).  The
 #: fold-count arms (issues #2897, #3116, #3115) ride the same tag as
 #: ``folds_k{K}_{xcal,blend,anchored,anchored_qmedian,tmean,tmedian,qmean,qmedian}``
-#: and additionally fill ``fold_count`` / ``fold_seconds`` / ``n_cal_scores`` /
-#: ``n_folds_used``.
+#: and additionally fill ``fold_count`` / ``fold_seconds`` / ``fold_fit_seconds``
+#: / ``fold_score_seconds`` / ``anchored_seconds`` / ``cal_seconds`` /
+#: ``n_cal_scores`` / ``n_folds_used``.
 _CALIBRATION_COLUMNS: tuple[str, ...] = (
     *_IDENT_COLUMNS,
     "pool_variant",
@@ -335,9 +373,21 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     "n_pool_rows",
     "fold_count",
     "fold_seconds",
+    "fold_fit_seconds",
+    "fold_score_seconds",
+    "anchored_seconds",
+    "cal_seconds",
     "n_cal_scores",
     "n_folds_used",
+    #: The fold count the STEP lived at (#3314).  Equal to the run's
+    #: `calibrate_count` everywhere except under `fold_count_schedule`, where it
+    #: is what the schedule resolved for this step's vote count.
+    "calibrate_count",
     "train_seconds",
+    #: The final model's pass over the haystack (#3314): app work, paid once
+    #: per step whatever the fold count, so it belongs in the denominator of a
+    #: cost ratio rather than in the calibration term.
+    "final_score_seconds",
     "xcal_seconds",
     "pool_score_seconds",
     "test_score_seconds",
@@ -760,6 +810,12 @@ def _safe_threshold_for_step(
     from vtscore.training.thresholds import drop_voted, fit_fold_anchored_cut  # noqa: PLC0415
 
     final_model = step.torch_model
+    # The final model's pass over the haystack (#3314).  Real app work - it is
+    # what the shipped cut is realized on and what the browse view ranks - and
+    # it is K-INDEPENDENT, so it belongs in the denominator of a cost ratio and
+    # not in `cal_seconds`.  Untimed it would simply be missing from the step,
+    # which makes every fold count look more expensive than it is.
+    t_final = time.monotonic()
     if style_obj is not None or region_aware:
         assert final_model is not None
         ids, all_scores = _score_sim_set_with_model(
@@ -769,6 +825,7 @@ def _safe_threshold_for_step(
         # Trainer-agnostic: the SVM arms have no torch model to forward.
         ids = sorted(sim_ids)
         all_scores = np.asarray(step.predict(np.asarray(X_all_clips))).ravel().tolist()
+    details["final_score_seconds"] = time.monotonic() - t_final
 
     # The floor decision is taken once, on the final model's remainder, and
     # applies to every haystack in the step - all-or-nothing, so the fold and
@@ -785,9 +842,21 @@ def _safe_threshold_for_step(
     fold_orderings = details.get("fold_orderings") or []
     n_folds = min(len(fold_models), len(fold_orderings))
     fold_haystacks: list[Any] = []
+    # Per-fold haystack scoring seconds (#3314).  Scoring the sim set with each
+    # fold model is a real, K-proportional part of the calibration a live run at
+    # K pays for - the shipped rule anchors every fold's mixture on that fold's
+    # own haystack - and it is paid *here*, outside `train_seconds`,
+    # `xcal_seconds`, `pool_score_seconds` and `test_score_seconds`.  Left
+    # unmeasured it is invisible to every cost model built out of those four,
+    # which would make a fold-count affordability ceiling read a fraction of
+    # what K actually costs.
+    haystack_seconds: list[float] = []
     for model in fold_models[:n_folds]:
+        t_hay = time.monotonic()
         fids, fscores = _score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
-        fold_haystacks.append(_hay(fscores, fids))
+        hay = _hay(fscores, fids)
+        haystack_seconds.append(time.monotonic() - t_hay)
+        fold_haystacks.append(hay)
 
     # #3116: the #2897 fold-count arms need a haystack per fold to re-fit the
     # *shipped* rule at each K, and `details["fold_models"]` is trimmed to the
@@ -801,9 +870,16 @@ def _safe_threshold_for_step(
     if fold_data is not None and fold_data.get("models"):
         extended = list(fold_haystacks)
         for model in fold_data["models"][len(extended) :]:
+            t_hay = time.monotonic()
             fids, fscores = _score_sim_set_with_model(model, region_aware, sim_clips, X_all_clips, sim_ids, style_obj)
-            extended.append(_hay(fscores, fids))
+            hay = _hay(fscores, fids)
+            haystack_seconds.append(time.monotonic() - t_hay)
+            extended.append(hay)
         fold_data["haystacks"] = extended
+        # Aligned with `haystacks`, so a K-prefix of one is a K-prefix of the
+        # other.  Every entry is one scoring pass over the same sim set, so the
+        # seconds are comparable across folds and across K by construction.
+        fold_data["haystack_seconds"] = haystack_seconds
 
     cut = (
         fit_fold_anchored_cut(fold_haystacks, fold_orderings[:n_folds], fit_final.tolist()) if fold_haystacks else None
@@ -1099,6 +1175,16 @@ def _operating_metrics(
         # conformal quantile is taken over, which is what K actually buys.
         "fold_count": nan,
         "fold_seconds": nan,
+        # #3314: `fold_seconds` counts the fold *fits* and the conformal rule's
+        # overhead only.  A live run at K also scores the sim set once per fold
+        # and fits production's anchored mixture over the prefix, both of which
+        # scale with K and neither of which lands in `train_seconds`,
+        # `xcal_seconds`, `pool_score_seconds` or `test_score_seconds`.
+        # `cal_seconds` is the sum of all four and is what a cost ceiling reads.
+        "fold_fit_seconds": nan,
+        "fold_score_seconds": nan,
+        "anchored_seconds": nan,
+        "cal_seconds": nan,
         "n_cal_scores": nan,
         # #3115: how many of the K folds actually contributed a cut, parsed off
         # the arm's own provenance.  A combine rule and a pooled quantile weight
@@ -1494,6 +1580,72 @@ def _schedule_variant_rows(
     return rows
 
 
+def _fold_schedule_segment(part: str) -> tuple[int, int]:
+    """One ``"K@N"`` segment as ``(cut, count)``, or a ValueError naming it.
+
+    Split out of :func:`parse_fold_count_schedule` so the validation reads as a
+    list of the four ways a spec can be wrong rather than as branches inside the
+    parse loop.  The error says which SEGMENT was bad, because a schedule is
+    typed into a launcher and "invalid schedule" would leave a reader diffing
+    the string by eye.
+    """
+    k_str, sep, n_str = part.strip().partition("@")
+    if not sep:
+        raise ValueError(f"fold-count schedule segment {part!r} is not 'K@N'")
+    try:
+        k, n = int(k_str), int(n_str)
+    except ValueError as exc:
+        raise ValueError(f"fold-count schedule segment {part!r} is not 'K@N': {exc}") from exc
+    if k < 1:
+        raise ValueError(f"fold-count schedule segment {part!r}: K must be >= 1")
+    if n < 1:
+        raise ValueError(f"fold-count schedule segment {part!r}: N must be >= 1")
+    return n, k
+
+
+def parse_fold_count_schedule(spec: str | None, base: int) -> "Callable[[int], int] | None":
+    """Eval-only (#3314): resolve ``calibrate_count`` per step from the vote count.
+
+    ``"K@N"`` means ``K(n_votes) = K while n_votes < N, else base`` - the family
+    pre-registered in ``docs/experiments/calibration-fold-count-3310/PLAN.md``,
+    written the issue's way round: *more folds while the labelset is small,
+    decaying to production's count*.  Several segments may be chained
+    (``"8@25,4@60"``), and they are read in ascending ``N`` order, so the first
+    cut a vote count falls under wins and the ordering in the string does not
+    matter.
+
+    This is a **harness knob and not a shipped setting**.  ``CALIBRATE_COUNT``
+    and the app's own constant are untouched, so no other study's arm moves:
+    a run that does not set it resolves to *base* at every step, which is
+    exactly what the constant did before.  If the schedule ever ships, the
+    right shape is a ``production_fold_count_for(n_votes)`` beside
+    ``production_split_for``, with ``scripts/check-eval-app-sync.py`` gaining
+    the mirror - the same discipline #3287's split fraction went through.
+
+    Returns ``None`` for an empty spec, so the caller's fast path is the
+    unscheduled one.
+    """
+    if not spec or not spec.strip():
+        return None
+    segments = sorted(_fold_schedule_segment(part) for part in spec.split(",") if part.strip())
+    if not segments:
+        return None
+
+    def resolve(n_votes: int) -> int:
+        for cut, k in segments:
+            if n_votes < cut:
+                return k
+        return base
+
+    return resolve
+
+
+def _stop(timings: dict[str, float] | None, started: float) -> None:
+    """Record ``anchored_seconds`` since *started*, when the caller wants timings."""
+    if timings is not None:
+        timings["anchored_seconds"] = time.monotonic() - started
+
+
 def _fold_count_arms(
     prefix: list[tuple[list[float], list[float]]],
     xcal: float,
@@ -1504,8 +1656,17 @@ def _fold_count_arms(
     gmm_cut: float | None,
     gmm_fit: Any,
     schedule: str | None,
+    timings: dict[str, float] | None = None,
 ) -> list[tuple[str, float, str, float]]:
     """``(arm, threshold, provenance, blend weight)`` for one fold prefix.
+
+    *timings*, when given, collects the wall clock of the parts a **live** run
+    at this K would actually pay for (#3314) - currently ``anchored_seconds``,
+    the fit of production's fold-anchored mixture over this prefix.  The other
+    arms here are counterfactual re-cuts of the same folds and cost a live run
+    nothing, so they are deliberately not timed: a cost model built off the
+    whole function would price the study's own instrumentation as if the user
+    waited through it.
 
     Split out of :func:`_fold_count_variant_rows` so the arm table is one
     readable list rather than a branch pile inside the K loop; every arm here is
@@ -1576,14 +1737,28 @@ def _fold_count_arms(
     # the stronger contrast: the two rows differ in the combine and in *nothing
     # else*, including the fits' own numerical noise.
     if transferable is not None and final_scores is not None:
+        # Timed with the fallback inside it (#3314): a step whose anchored fit
+        # degenerates still pays for the attempt *and* for the ladder the
+        # shipped helper walks afterwards, and that is what a user waits
+        # through.  Charging those steps only for the branch they did not take
+        # would under-price exactly the cold-start regime this study reads.
+        t_anchored = time.monotonic()
         cut = fit_fold_anchored_cut(transferable, prefix, final_scores)
         if cut is None:
             # Both arms land on the same terminal fallback; take it from the
             # shipped helper rather than duplicating its ladder here.
             value, prov = fold_anchored_gmm_threshold(transferable, prefix, final_scores, inclusion)
+            _stop(timings, t_anchored)
             arms.extend([("anchored", value, prov, nan), ("anchored_qmedian", value, prov, nan)])
         else:
-            arms.append(("anchored", cut.threshold_at(inclusion), cut.provenance, nan))
+            shipped = cut.threshold_at(inclusion)
+            # The clock stops HERE, on production's own cut and before the
+            # `qmedian` re-cut: that arm is a counterfactual read of the same
+            # fitted mixture and costs a live run nothing, so timing it would
+            # charge K for the harness's own instrumentation.  (Sharing the fit
+            # is exactly why the two arms are cheap; see the note above.)
+            _stop(timings, t_anchored)
+            arms.append(("anchored", shipped, cut.provenance, nan))
             robust = dataclasses.replace(cut, combine="qmedian")
             arms.append(("anchored_qmedian", robust.threshold_at(inclusion), robust.provenance, nan))
     return arms
@@ -1661,10 +1836,29 @@ def _fold_count_variant_rows(
     touches, so re-fitting it per K would return the same cut at K times the
     price.  The gap #3116 identified is the missing arm above, not the hoist.
 
-    ``fold_seconds`` is the calibration wall clock this K would have cost: the
-    measured fit time of its own folds plus the count-independent overhead of
-    the threshold rule.  It is measured inside the Kmax run, so every K's timing
-    shares one machine, one process and one cache state - the *ratios* are the
+    **The cost columns.**  ``fold_seconds`` is what #2897 and #3116 read: the
+    measured fit time of this K's own folds plus the count-independent overhead
+    of the threshold rule.  It is *not* the whole price of K, and #3314 found
+    that reading it as one under-states the exchange rate badly, because two
+    other K-proportional pieces of the shipped calibration are paid outside it
+    and outside every other timing column the frame carries:
+
+    * ``fold_score_seconds`` - one scoring pass over the sim set per fold, so
+      the shipped rule can anchor each fold's mixture on that fold's own
+      haystack (measured in :func:`_safe_threshold_for_step`).
+    * ``anchored_seconds`` - production's ``fit_fold_anchored_cut`` over the
+      prefix: one anchored EM per fold.
+
+    ``cal_seconds`` sums all of it (``fold_fit_seconds + overhead +
+    fold_score_seconds + anchored_seconds``) and is the column an affordability
+    ceiling has to read.  ``train_seconds``, ``xcal_seconds``,
+    ``pool_score_seconds`` and ``test_score_seconds`` cover the *rest* of the
+    step and none of them covers the safe-threshold block, so
+    ``cal_seconds + train_seconds + pool_score_seconds + test_score_seconds`` is
+    the per-step wall clock a live run at K would have.
+
+    All of it is measured inside the one Kmax run, so every K's timing shares
+    one machine, one process and one cache state - the *ratios* are the
     load-bearing part, not the absolute seconds.
 
     This is the study's screen, not its verdict, for the usual reason (see
@@ -1687,6 +1881,7 @@ def _fold_count_variant_rows(
     seconds = fold_data["seconds"]
     overhead = float(fold_data.get("overhead_seconds") or 0.0)
     haystacks = fold_data.get("haystacks") or []
+    haystack_seconds = fold_data.get("haystack_seconds") or []
     if not orderings:
         return []
 
@@ -1708,7 +1903,14 @@ def _fold_count_variant_rows(
         cal_scores = np.array([s for scores, _ in prefix for s in scores])
         cal_labels = np.array([lb for _, labels_ in prefix for lb in labels_])
         xcal = threshold_from_fold_orderings(prefix, inclusion)
-        fold_seconds = _r(float(sum(seconds[:k])) + overhead)
+        fold_fit_seconds = float(sum(seconds[:k]))
+        fold_seconds = _r(fold_fit_seconds + overhead)
+        # The rest of what a live run at K pays for, beside the fold fits
+        # (#3314).  Scoring the sim set once per fold is K-proportional and is
+        # measured in `_safe_threshold_for_step`; the anchored fit over the
+        # prefix is measured below, inside `_fold_count_arms`.
+        fold_score_seconds = float(sum(haystack_seconds[:k])) if len(haystack_seconds) >= k else float("nan")
+        timings: dict[str, float] = {}
 
         arms = _fold_count_arms(
             prefix,
@@ -1720,7 +1922,16 @@ def _fold_count_variant_rows(
             gmm_cut,
             gmm_fit,
             schedule,
+            timings=timings,
         )
+        anchored_seconds = float(timings.get("anchored_seconds", float("nan")))
+        # The FULL calibration wall clock at K: fold fits + one haystack scoring
+        # pass per fold + production's anchored fit over the prefix + the
+        # count-independent overhead of the conformal rule.  `fold_seconds` is
+        # deliberately left as it was (#2897/#3116 read it, and archived runs
+        # are compared against it), but it is only the first of those four
+        # terms, so an affordability rule must read THIS column.
+        cal_seconds = _r(fold_fit_seconds + overhead + fold_score_seconds + anchored_seconds)
 
         for arm, threshold, provenance, weight in arms:
             row = _operating_metrics(
@@ -1741,6 +1952,10 @@ def _fold_count_variant_rows(
             row["blend_weight"] = _r(weight)
             row["fold_count"] = k
             row["fold_seconds"] = fold_seconds
+            row["fold_fit_seconds"] = _r(fold_fit_seconds)
+            row["fold_score_seconds"] = _r(fold_score_seconds)
+            row["anchored_seconds"] = _r(anchored_seconds)
+            row["cal_seconds"] = cal_seconds
             row["n_cal_scores"] = int(cal_scores.size)
             row["n_folds_used"] = _folds_used(provenance, k)
             rows.append(row)
@@ -2958,6 +3173,7 @@ def simulate_voting_iterations(  # noqa: C901
     sim_fraction: float = 0.5,
     safe_thresholds: bool = True,
     calibrate_count: int = 2,
+    fold_count_schedule: str | None = None,
     calibration_fraction: Optional[float] = None,
     region_voting: bool = False,
     strategy: str = "autopilot",
@@ -3058,6 +3274,15 @@ def simulate_voting_iterations(  # noqa: C901
             chain.
         calibrate_count: Number of random Train/Calibrate splits for threshold
             calibration (default 2).
+        fold_count_schedule: **Eval-only** (#3314).  ``"K@N"`` resolves
+            *calibrate_count* per step from the vote count -
+            ``K(n_votes) = K while n_votes < N, else calibrate_count`` - so a
+            run can spend more folds where they are cheapest and decay to
+            production's count as the labelset grows.  ``None`` (every other
+            caller) keeps *calibrate_count* constant, which is byte-identical
+            to the behaviour before the knob existed.  See
+            :func:`parse_fold_count_schedule` for why this is a harness knob
+            and not a shipped setting.
         calibration_fraction: Fraction of labelled data reserved for
             calibration in each split.  ``None`` (default) resolves to the
             **app's** per-space split
@@ -3214,6 +3439,11 @@ def simulate_voting_iterations(  # noqa: C901
     # These are pre-registered experiment knobs, so they are validated beside
     # the other argument checks rather than deep in the loop: a run that dies
     # forty minutes in on a typo has held a cluster slot for nothing.
+    # Parsed here, with the other pre-registered knobs, and not in the loop: a
+    # malformed schedule must kill the cell at second zero rather than forty
+    # minutes in, and the parse is what validates the spec at all.
+    _fold_schedule = parse_fold_count_schedule(fold_count_schedule, calibrate_count)
+
     startup_state: StartupState | None = None
     if startup_schedule:
         if seed_scores is None:
@@ -3514,6 +3744,7 @@ def simulate_voting_iterations(  # noqa: C901
                 }
             )
 
+        n_votes_now = len(good_votes) + len(bad_votes)
         # Need at least 1 good and 1 bad to train
         if not good_votes or not bad_votes:
             step = None
@@ -3530,6 +3761,11 @@ def simulate_voting_iterations(  # noqa: C901
                 )
             continue
 
+        # The live fold count for THIS step.  Constant unless #3314's schedule
+        # knob is set, and then a function of the vote count only - never of
+        # anything the step has already computed, so the count is decided
+        # before the fit and cannot depend on it.
+        step_calibrate_count = calibrate_count if _fold_schedule is None else _fold_schedule(n_votes_now)
         step, threshold, n_labels, timings, details = _train_and_calibrate(
             trainer,
             good_votes,
@@ -3539,7 +3775,7 @@ def simulate_voting_iterations(  # noqa: C901
             region_voting=region_voting,
             input_dim=input_dim,
             inclusion=inclusion,
-            calibrate_count=calibrate_count,
+            calibrate_count=step_calibrate_count,
             calibration_fraction=calibration_fraction,
             head=head,
             style_obj=style_obj,
@@ -3712,7 +3948,18 @@ def simulate_voting_iterations(  # noqa: C901
             "report_pool_percentile": _pool_percentile(pool_scores, threshold),
         }
         timing_cols = {
+            # The fold count this step actually LIVED at.  Constant on every run
+            # but #3314's scheduled arm - and recorded regardless, because a
+            # run-level knob whose only other record is the directory the cells
+            # were read out of is unreadable in a frame concatenated across arms
+            # (#3287's `calibration_fraction` lesson, one knob over).
+            "calibrate_count": step_calibrate_count,
             "train_seconds": round(timings["train_seconds"], 6),
+            #: The final model's own pass over the haystack, on the shipped
+            #: safe-threshold path (#3314).  NaN when safe thresholds are off,
+            #: where there is no such pass.  K-independent, so a per-step cost
+            #: ratio wants it in the denominator.
+            "final_score_seconds": round(float(details.get("final_score_seconds", float("nan"))), 6),
             "xcal_seconds": round(timings["xcal_seconds"], 6),
             "pool_score_seconds": round(pool_score_seconds, 6),
             "test_score_seconds": round(test_score_seconds, 6),

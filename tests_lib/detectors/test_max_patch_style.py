@@ -32,10 +32,15 @@ from vtscore.eval.patch_styles import (
     resolve_style,
     snap_box_to_region,
 )
-from vtscore.eval.voting_iterations import _VOTING_COLUMNS, run_voting_iterations_eval, simulate_voting_iterations
+from vtscore.eval.voting_iterations import (
+    _VOTING_COLUMNS,
+    TIMING_COLUMNS,
+    run_voting_iterations_eval,
+    simulate_voting_iterations,
+)
 from vtscore.media.patch_embed import nearest_patch_to_box
 
-_TIMING_COLS = {"elapsed_seconds", "train_seconds", "xcal_seconds", "pool_score_seconds", "test_score_seconds"}
+_TIMING_COLS = TIMING_COLUMNS
 
 DIM = 32
 GRID = 4  # 4x4 patch grid

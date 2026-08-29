@@ -216,6 +216,7 @@ def main(argv: list[str] | None = None) -> int:
         f"(learn={cfg.learn_embedder(emb)} text={cfg.text_embedder(emb)}) category={cat} seed={seed} "
         f"styles={styles} head={cfg.HEAD or 'default (production)'} safe_thresholds={cfg.SAFE_THRESHOLDS} "
         f"calibrate_count={cfg.CALIBRATE_COUNT} fold_counts={cfg.FOLD_COUNTS or 'off'} "
+        f"fold_count_schedule={cfg.FOLD_COUNT_SCHEDULE or 'off'} "
         f"sim_fraction={cfg.SIM_FRACTION} exclusion={cfg.exclusion_arm_name()} "
         f"cut_incl_ks={cfg.CUT_INCLUSION_KS or 'off'} "
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
@@ -305,6 +306,7 @@ def main(argv: list[str] | None = None) -> int:
             anchored_fold_arms=cfg.ANCHORED_FOLD_ARMS,
             anchored_fold_combines=cfg.ANCHORED_FOLD_COMBINES,
             fold_count_variants=cfg.FOLD_COUNTS or None,
+            fold_count_schedule=cfg.FOLD_COUNT_SCHEDULE,
             cut_inclusion_ks=cfg.CUT_INCLUSION_KS or None,
             cut_inclusion_sink=cutincl_local,
             cut_inclusion_qtilt_steps=cfg.CUT_INCLUSION_QTILT_STEPS or None,
