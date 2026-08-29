@@ -198,6 +198,31 @@ _IDENT_COLUMNS: tuple[str, ...] = (
 
 #: Canonical column order for the voting-iterations result frame.  Kept in one
 #: place so :func:`run_voting_iterations_eval` and downstream tooling agree.
+#: Every column that is a **wall clock**, and therefore the set a determinism
+#: check has to exclude.  Defined here, beside the code that emits them, because
+#: it was defined in three test files instead: adding one timing column (#3314's
+#: `final_score_seconds`) then broke four tests in two of the three, each with
+#: its own private copy of this list, and the fourth would have gone on silently
+#: comparing a column it no longer covered.  A new timing column now joins one
+#: tuple and every consumer follows.
+TIMING_COLUMNS: frozenset[str] = frozenset(
+    {
+        "elapsed_seconds",
+        "train_seconds",
+        "xcal_seconds",
+        "final_score_seconds",
+        "pool_score_seconds",
+        "test_score_seconds",
+        # Per-K calibration clocks (#3314), on the fold-count arms only.
+        "fold_seconds",
+        "fold_fit_seconds",
+        "fold_score_seconds",
+        "anchored_seconds",
+        "cal_seconds",
+    }
+)
+
+
 _VOTING_COLUMNS: tuple[str, ...] = (
     *_IDENT_COLUMNS,
     "cost",
