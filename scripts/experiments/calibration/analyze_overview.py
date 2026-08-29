@@ -1,14 +1,22 @@
 """What is VTSearch good at, what is it bad at, and why — descriptively.
 
-No arms, no winners. Three modes a real user could pick (`siglip` whole-image,
-`siglip2_l` whole-image, `siglip+dinov3_patch` region voting) run many times
-under shipped defaults, characterised rather than ranked.
+No arms, no winners. Five columns, run many times under shipped defaults and
+characterised rather than ranked: `siglip` whole-image (the shipped default),
+`siglip2_l` whole-image (the premium encoder), `clip` whole-image (a second
+lineage), `clip_l` whole-image, and `siglip+dinov3_patch` region voting.
+
+**Four of the five are modes a user could pick; `clip_l` is not.** It is
+`eval_only` (#3292) and is not offered in the app, so it belongs in a column
+that says "here is what a bigger CLIP does" and never in a sentence of the form
+"users should choose X". It is here because its 768-d output matches `siglip`'s
+exactly, which is what stops a SigLIP-vs-CLIP difference from being read as
+"CLIP's vectors are narrower".
 
 The region mode is a **pair** (#3276): SigLIP embeds the typed query and ranks
 the opening, DINOv3 does the learning. DINOv3 has no text tower, so bare
 `dinov3_patch` cannot open on a text sort at all -- it falls back to three
 random known-goods, which would put a seeding difference inside the voting-mode
-comparison this file draws. All three modes now open the same way and differ
+comparison this file draws. Every column now opens the same way and differs
 only in the space the detector learns in.
 
 The "why" comes from a decomposition the harness already emits per step:
@@ -91,6 +99,93 @@ def fnum(r: dict, key: str) -> float:
         return float("nan")
 
 
+def click_zero_section(path: str, rows: list[dict], mode, modes: list[str], mw: int, floor: float) -> None:
+    """What the clicking bought over typing the query and stopping.
+
+    Click 0 is not a zero: it is the whole product's cheap path -- type a query,
+    read the ranked haystack under the same cut rule -- and it costs nothing.
+    Every curve here is therefore only worth the votes it spends once it has
+    moved past it, and a mode that never gets there is a mode whose clicking is
+    ceremony. This is the one comparison in the report a user would make without
+    being asked, so it is the one the analyzer must not leave to the figures.
+
+    Reported per mode as a level, and per cell as a CROSSING: the median cell's
+    first click at which the mean cost is at or below its own text sort, plus
+    how many cells never get there. A level alone hides the cells that start
+    ahead and stay ahead.
+    """
+    import csv as _csv
+    from collections import defaultdict as _dd
+
+    base: dict[tuple[str, str], list[float]] = _dd(list)
+    try:
+        with open(path, newline="") as fh:
+            for r in _csv.DictReader(fh):
+                if r.get("supports_text") not in (None, "", "1"):
+                    continue
+                try:
+                    base[(r["embedder"], r["category"])].append(float(r["text_cost"]))
+                except (KeyError, ValueError, TypeError):
+                    continue
+    except OSError:
+        print(f"\n(no zero-click baseline at {path})")
+        return
+    if not base:
+        print(f"\n(zero-click baseline at {path} carried no usable rows)")
+        return
+    anchor = {k: sum(v) / len(v) for k, v in base.items()}
+
+    # (mode, category, t) -> costs, so a crossing is read off the same mean the
+    # level is.
+    by: dict[tuple[str, str, int], list[float]] = _dd(list)
+    for r in rows:
+        try:
+            t = int(r["t"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        c = fnum(r, "cost")
+        if c == c:
+            by[(mode(r), r.get("category", ""), t)].append(c)
+
+    print()
+    print("=== what the clicking bought over the free text sort ===")
+    print("Click 0 is the typed query alone, cut the same way and costing nothing.")
+    print(f"{'mode':<{mw}}{'text sort':>10}{'@20':>8}{'@150':>8}{'crossing':>10}{'never':>8}")
+    print("-" * (mw + 44))
+    for m in modes:
+        emb = m.split("/")[0]
+        cats = sorted({c for (mm, c, _t) in by if mm == m})
+        cats = [c for c in cats if (emb, c) in anchor]
+        if not cats:
+            continue
+
+        def lvl(t: int, cats=cats, m=m) -> float:
+            xs = [x for c in cats for x in by.get((m, c, t), [])]
+            return sum(xs) / len(xs) if xs else float("nan")
+
+        crossings, never = [], 0
+        for c in cats:
+            a = anchor[(emb, c)]
+            ts = sorted({t for (mm, cc, t) in by if mm == m and cc == c and t >= 1})
+            hit = None
+            for t in ts:
+                xs = by.get((m, c, t), [])
+                if xs and sum(xs) / len(xs) <= a:
+                    hit = t
+                    break
+            if hit is None:
+                never += 1
+            else:
+                crossings.append(hit)
+        med = q(crossings, 0.5) if crossings else float("nan")
+        anchor_lvl = sum(anchor[(emb, c)] for c in cats) / len(cats)
+        cross = f"{med:.0f}" if crossings else "-"
+        print(f"{m:<{mw}}{anchor_lvl:>10.2f}{lvl(20):>8.2f}{lvl(150):>8.2f}{cross:>10}{never:>4}/{len(cats):<3}")
+    print()
+    print("crossing = the median cell's first click whose mean cost is at or below its own")
+    print("text sort; 'never' counts cells that do not get there within the horizon.")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--exp", default=f"/expscratch/{os.environ.get('USER', 'sgreenberg')}/scale-3156-final")
@@ -98,6 +193,12 @@ def main() -> int:
     ap.add_argument("--expect", type=int, default=0, help="expected cell count; 0 = infer from the grid")
     ap.add_argument("--min-seeds", type=int, default=10, help="per-cell rates need at least this many runs")
     ap.add_argument("--top", type=int, default=15, help="rows in the per-cell listings")
+    ap.add_argument(
+        "--baseline",
+        default=None,
+        help="text_baseline.py CSV: the zero-click text sort. Without it the report cannot say "
+        "whether the clicking beat typing the query, which is the first thing a reader asks.",
+    )
     args = ap.parse_args()
 
     cells = Path(args.exp) / "results" / "cells"
@@ -289,6 +390,9 @@ def main() -> int:
     for cat, m, rate, med, n in sorted(scored, key=lambda r: -r[2])[: args.top]:
         bar = "#" * int(round(rate * 20))
         print(f"{cat:<20}{m:<{MW}}rate {rate:>5.2f}  median {med:>5.2f}  n={n:<4} {bar}")
+
+    if args.baseline:
+        click_zero_section(args.baseline, rows, mode, modes, MW, args.floor)
 
     print()
     print("=== hard for everyone, or hard for one mode? ===")

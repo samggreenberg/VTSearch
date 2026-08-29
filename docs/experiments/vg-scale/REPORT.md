@@ -1,131 +1,274 @@
-# Finding small things is expensive, and region voting pays for part of it
+# Where VTSearch stands on `vg_scale`
 
-**Study:** the scale study on `vg_scale` (#3156) — one class list at three box
-sizes, 324 cells: 12 classes × {small, medium, large} × 3 encoders × 3 seeds,
-150 votes each, shipped defaults throughout.
+**A map, not a decision.** Five configurations a user could be in, run over the
+same twelve classes at three target sizes, under shipped defaults, and described
+rather than ranked. Nothing here is a proposal to change anything.
 
-Two questions, both answerable for the first time. The published `vg_box_*` sets
-band each category by its *median* box, so their vocabularies are disjoint and a
-small-vs-large gap there could always have been "noses are harder than fences".
-Here the twelve classes are held fixed, the bands share one negative pool, and
-prevalence is 0.0250 in every cell by construction — so a difference between
-bands is a difference of **size**.
+**Grid:** array 582417, `/expscratch/$USER/scale-3156-map`, 2026-08-28.
+**3600 / 3600 cells, 0 missing, 0 unreadable, 526,873 metric rows.**
+36 cells (12 classes × {small, medium, large}) × 5 columns × 20 seeds, 150 votes
+each. The dataset is [`DATASHEET.md`](DATASHEET.md): 7,747 images, exactly 100
+positives per cell against one shared negative pool, prevalence 0.0250
+everywhere by construction, so a difference between bands is a difference of
+**size** and nothing else.
 
-## 1. Cost roughly triples from large targets to small ones
+## The five columns
 
-Cost at 150 votes, paired within `(class, seed)`:
+| column | what it is | a user can pick it? |
+|---|---|---|
+| `siglip` / whole image | the shipped default | yes |
+| `siglip2_l` / whole image | the premium encoder | yes |
+| `clip` / whole image | a second lineage (ViT-B/32, 512-d) | yes |
+| `clip_l` / whole image | ViT-L/14, 768-d | **no — `eval_only`** |
+| `siglip+dinov3_patch` / max_patch | region voting: SigLIP ranks the opening, DINOv3 learns | yes |
 
-| arm | small | medium | large | paired small − large |
+`clip_l` is a **reference column, not a mode**. It is not offered in the app; it
+is here because its 768-d output matches `siglip`'s exactly, so a SigLIP-vs-CLIP
+difference cannot be read as "CLIP's vectors are narrower". Read it as *what a
+bigger CLIP would do*, never as advice.
+
+Every column opens the same way — a typed query, text-sorted — which is what the
+pair exists to make true (#3276). All 3600 cells record `seed_mode=text`.
+Shipped defaults include the per-space Train/Calibrate split (#3290): 0.3 in the
+four single-vector columns, 0.5 on the pair, resolved per cell and recorded in
+the `calibration_fraction` column.
+
+## Start here, not with this page
+
+**[`viewer.html`](viewer.html)** carries every slice of this run — any metric
+(cost, precision, recall, F1, FPR, FNR, AP, AUROC), any category, any band, any
+subset of columns, seeds averaged or one line each. Everything below is one
+slice of it, chosen in advance; the viewer is where you ask your own question
+instead of asking for a re-run. Its **Target size** control is the axis this
+study is about, and click 0 on every chart is the free text sort.
+
+## What a session actually looks like
+
+Twelve clicks of one `bird@small` session, the same seed in all five columns —
+green is a Good vote, red a Bad one, `s` is the item's rank in the full text
+sort:
+
+![a bird@small session, twelve clicks, five columns](figures/session_bird_small_s0.jpg)
+
+Two things are visible here that no table shows. The first three clicks of
+`siglip` and of the pair are **the same three images in the same order**
+(`s17`, `s52`, `s68`) — the pair opens on SigLIP's sort by construction, so its
+Good phase is SigLIP's Good phase, and the phase table below reports byte-for-byte
+identical click counts for the two. And what the runs vote on after that is
+mostly not birds: a sandwich, a surfer, a cat, zebras. That is the `bad` phase
+doing its job, and it is what the small band costs.
+
+The same class at the large end is a different product:
+
+![a bird@large session](figures/session_bird_large_s0.jpg)
+
+## Cost at 150 clicks
+
+Cost is the harness's operating-point cost (weighted FPR+FNR); lower is better.
+Distribution over the 720 runs in each column, because the tail is the product
+problem and a mean hides it:
+
+| column | p10 | median | p90 | worst |
 |---|---:|---:|---:|---:|
-| `dinov3_patch` / max_patch | 0.43 ± 0.05 | 0.29 ± 0.04 | 0.12 ± 0.02 | **0.31 ± 0.05** |
-| `siglip` / whole_image | 0.59 ± 0.05 | 0.44 ± 0.04 | 0.18 ± 0.02 | **0.41 ± 0.05** |
-| `siglip2_l` / whole_image | 0.60 ± 0.05 | 0.40 ± 0.04 | 0.20 ± 0.03 | **0.41 ± 0.06** |
+| `siglip+dinov3_patch` / max_patch | 0.04 | **0.15** | 0.44 | 0.84 |
+| `siglip2_l` / whole image | 0.03 | 0.19 | 0.51 | 0.76 |
+| `siglip` / whole image | 0.04 | 0.25 | 0.56 | 0.92 |
+| `clip_l` / whole image | 0.03 | 0.27 | 0.59 | 0.85 |
+| `clip` / whole image | 0.07 | 0.31 | 0.64 | 1.02 |
 
-Every difference is several times its standard error. The ordering
-small > medium > large holds in all three arms, at every point along the
-trajectory, and in **83–94% of individual runs** — so it is not an artefact of
-averaging.
+![how the detector improves with clicking](figures/learning_cost.png)
 
-![cost over votes spent](figures/cost_vs_votes.png)
+*Mean over all 720 runs per column, ±SE shaded, endpoints labelled. The dot at
+click 0 is that column's own free text sort — see the next section. `siglip`'s
+dot and the pair's sit on top of each other because they are the same sort.*
 
-*Mean over runs, one panel per arm. Read the vertical gap between bands, not the
-absolute heights: the three arms differ in encoder as well as geometry. The
-bands separate within the first ~20 votes and never re-converge.*
+Averages hide shape, so the same data one line per run, and as a distribution:
 
-The gap is worst early, which is when a user decides whether the tool works:
+![every run separately](figures/cost_vs_votes_per_run.png)
+![the shape a mean hides](figures/cost_ecdf.png)
 
-| arm | small @ 20 votes | large @ 20 votes |
+### Where the cost lives
+
+`cost = oracle_cost + regret` — the best any threshold could do on that run's own
+ranking, plus what the shipped cut gives away on top of it. Mean ± SE over 720
+runs:
+
+| column | cost | oracle | regret | regret share |
+|---|---:|---:|---:|---:|
+| `siglip+dinov3_patch` / max_patch | 0.21 ± 0.01 | 0.15 ± 0.00 | 0.06 ± 0.00 | 0.29 |
+| `siglip2_l` / whole image | 0.24 ± 0.01 | 0.19 ± 0.01 | 0.05 ± 0.00 | 0.20 |
+| `siglip` / whole image | 0.28 ± 0.01 | 0.23 ± 0.01 | 0.05 ± 0.00 | 0.19 |
+| `clip_l` / whole image | 0.30 ± 0.01 | 0.25 ± 0.01 | 0.05 ± 0.00 | 0.18 |
+| `clip` / whole image | 0.34 ± 0.01 | 0.27 ± 0.01 | 0.06 ± 0.00 | 0.19 |
+
+**Four fifths of the cost is the ranking, in every column.** The columns are
+separated almost entirely by their `oracle_cost` — the spread there is 0.15 to
+0.27 — while `regret` is 0.05–0.06 everywhere and does not distinguish them.
+Whatever a user experiences as the difference between these five configurations
+is the order the items come back in, not where the cut lands.
+
+![what the cost is made of](figures/cost_composition.png)
+
+A caution about that figure's two upper blocks. `regret` splits into
+`rule_inefficiency` and `calibration_shift`, and on this grid the first is
+**negative** in all four whole-image columns (−0.02 to −0.03) against a
+`calibration_shift` of 0.07–0.08 — i.e. the shipped cut lands *better* out of
+sample than the best cut on the calibration scores. That is worth knowing and
+not worth building on: the two terms are constrained to sum to `regret` and
+[#3287](../../../scripts/experiments/calibration/analyze_calfrac.py) measured
+them moving 1.3–8.2× more than `regret` itself while anticorrelating −0.6 to
+−0.999. Read the sum; treat a story about either half alone as unsupported.
+
+## Did the clicking earn its keep?
+
+Click 0 is not a zero. It is the product's cheap path — type the query, read the
+ranked haystack under the same cut — and it costs nothing:
+
+| column | free text sort | @20 clicks | @150 clicks | median cell crosses at | cells never crossing |
+|---|---:|---:|---:|---:|---:|
+| `siglip+dinov3_patch` / max_patch | 0.45 | **0.29** | 0.21 | **5** | 1 / 36 |
+| `siglip2_l` / whole image | **0.36** | 0.40 | 0.24 | **29** | 4 / 36 |
+| `siglip` / whole image | 0.45 | 0.44 | 0.28 | 17 | 1 / 36 |
+| `clip_l` / whole image | 0.54 | 0.46 | 0.30 | 11 | 0 / 36 |
+| `clip` / whole image | 0.51 | 0.50 | 0.34 | 13 | 2 / 36 |
+
+*"Crosses at" is the median cell's first click whose mean cost is at or below its
+own text sort.*
+
+**The best free sort belongs to the column with the least to gain from
+clicking.** `siglip2_l` starts at 0.36 where everything else starts at 0.45–0.54,
+and it is *worse than its own text sort at 20 clicks* (0.40), taking a median of
+29 clicks to get back to where typing had already put it — on 4 of its 36 cells
+it never does inside 150. The pair is the opposite: it starts where `siglip`
+starts, is ahead of it by click 5, and ends lowest.
+
+Every column also gets **worse before it gets better** — the curves spike to
+0.85–0.96 in the first handful of clicks, well above every anchor, before
+descending. A user who types a query, votes a few times and looks at the result
+is, at that moment, looking at something worse than what they had before they
+started.
+
+## Target size
+
+The axis the dataset was built for. Cost at 150 clicks:
+
+| column | small | medium | large | paired small − large |
+|---|---:|---:|---:|---:|
+| `siglip+dinov3_patch` / max_patch | 0.35 ± 0.01 | 0.19 ± 0.01 | 0.08 ± 0.00 | **0.27 ± 0.01** |
+| `siglip2_l` / whole image | 0.39 ± 0.01 | 0.24 ± 0.01 | 0.09 ± 0.01 | **0.30 ± 0.01** |
+| `siglip` / whole image | 0.43 ± 0.01 | 0.30 ± 0.01 | 0.11 ± 0.01 | **0.32 ± 0.01** |
+| `clip_l` / whole image | 0.46 ± 0.01 | 0.32 ± 0.01 | 0.12 ± 0.01 | **0.34 ± 0.01** |
+| `clip` / whole image | 0.51 ± 0.01 | 0.35 ± 0.01 | 0.15 ± 0.01 | **0.36 ± 0.01** |
+
+Paired within `(class, seed)` over 240 pairs, so the only thing differing inside
+a pair is the size of the thing being looked for. Every difference is many times
+its standard error, and the ordering holds in all five columns.
+
+![cost by band, per column](figures/cost_vs_votes.png)
+
+**Small targets cost about four times what large ones do**, and the penalty is
+again in the ranking: for `siglip`, `oracle_cost` runs 0.36 → 0.24 → 0.08 across
+the bands while `regret` moves 0.07 → 0.06 → 0.03. Region voting has the
+smallest size penalty of the five (0.27) and the lowest cost in every band, but
+it does not remove the effect — a sub-patch target is below what the grid
+resolves, and the pair's small band (0.35) is still worse than any column's
+medium band.
+
+Which classes carry it:
+
+![which classes carry the size penalty](figures/size_penalty_per_class.png)
+
+## The tail
+
+**8 runs of 3600 (0.2%) end at cost ≥ 0.9** — seven of them `clip`, one
+`siglip`, none in the other three columns. What separates them from the other
+3592 is not their threshold:
+
+| | stuck (n=8) | healthy (n=3592) |
 |---|---:|---:|
-| `dinov3_patch` / max_patch | 0.57 ± 0.05 | 0.16 ± 0.03 |
-| `siglip` / whole_image | 0.81 ± 0.05 | 0.37 ± 0.05 |
-| `siglip2_l` / whole_image | 0.80 ± 0.05 | 0.33 ± 0.05 |
+| positives ever seen (`n_good`) | 3.12 ± 0.64 | 10.57 ± 0.08 |
+| average precision | 0.06 ± 0.01 | 0.59 ± 0.01 |
+| AUROC | 0.61 ± 0.04 | 0.93 ± 0.00 |
+| `oracle_cost` | 0.77 ± 0.05 | 0.22 ± 0.00 |
+| `regret` | 0.21 ± 0.04 | 0.05 ± 0.00 |
 
-## 2. Region voting helps most in the middle, and does not rescue the small band
+A stuck run is one that never found positives to learn from; its ranking is
+barely better than chance, so there is no threshold that would have saved it.
 
-The clean contrast is region voting against **the same encoder with geometry
-off** — same cells, same seeds, only `max_patch` vs `whole_image` differing.
-(Comparing against `siglip` would confound geometry with encoder.)
+**No cell is hard as a cell.** Zero of 180 (category × column) cells have a
+median cost ≥ 0.9, and zero are hard for one column but not others. The worst
+per-cell rates are `knife@small` and `umbrella@small` on `clip`, at 3 stuck runs
+in 20.
 
-| band | max_patch | whole_image | paired difference |
-|---|---:|---:|---:|
-| small | 0.43 | 0.67 | **−0.24 ± 0.03** |
-| medium | 0.29 | 0.60 | **−0.31 ± 0.04** |
-| large | 0.12 | 0.30 | **−0.18 ± 0.04** |
+![per-cell stuck rate](figures/stuck_rate_per_cell.png)
 
-Region voting wins everywhere, and its advantage is **largest in the middle
-band**, not at the extremes. That shape makes sense: a large target is already
-most of the frame, so pooling over its patches adds little; a sub-patch target
-is smaller than the grid can resolve, so the geometry has nothing to isolate.
-The middle band is where a region is both resolvable and much smaller than the
-image — exactly where max-pooling over patches earns its keep.
+The columns do, however, fail the *same* categories. Ranking each column's
+categories by its worst-decile rate, `siglip`, `siglip2_l` and the pair agree at
+**ρ = 0.98–0.99**; `clip` agrees with them at 0.68–0.79. All 11 runs that sit in
+every column's worst decile fall in ten categories, led by `backpack@small`
+(0.65–0.95 across columns), `umbrella@small` and `stop sign@small`. A tail
+concentrated in a few categories is a **data** property, not a harness one — and
+`backpack@small` and `umbrella@small` are exactly the cells worth looking at by
+eye before anything else is concluded about them.
 
-It narrows the size penalty (0.31 vs 0.37 for the same encoder) but does not
-remove it. **Region voting mitigates the small-target problem; it does not
-solve it.**
+## Where the clicks go
 
-![cost by band](figures/cost_by_band.png)
+Clicks per run by Autopilot phase, and how often each phase's clicks land on a
+positive:
 
-*Endpoint cost at 150 votes with standard errors, encoders side by side. The
-band ordering is identical in each, which is the point: the effect survives a
-change of encoder and a change of voting geometry.*
+| column | good | bad | hard | done | hit rate in `good` |
+|---|---:|---:|---:|---:|---:|
+| `siglip2_l` / whole image | 5.1 | 3.8 | 118.8 | 34.0 | **0.59** |
+| `siglip+dinov3_patch` / max_patch | 8.2 | 3.7 | 116.0 | 37.0 | 0.36 |
+| `siglip` / whole image | 8.2 | 3.7 | 119.6 | 28.6 | 0.36 |
+| `clip_l` / whole image | 9.2 | 3.7 | 119.3 | 30.6 | 0.33 |
+| `clip` / whole image | 12.4 | 3.5 | 121.1 | 23.7 | 0.24 |
 
-## 3. The effect is broad, not carried by a few classes
+The `good` phase is the opening: vote down the text sort until three positives
+are found. `siglip2_l` needs 5.1 clicks to get them where `clip` needs 12.4 —
+the same fact as its lower click-0 cost, seen from the user's side. `siglip` and
+the pair are identical here to the click, which is the shared-opening design
+working exactly as intended and is the cheapest available check that it does.
 
-![per-class size penalty](figures/size_penalty_per_class.png)
+## Provenance
 
-*Paired `cost(small) − cost(large)` per class. Above zero means the small band is
-harder. Positive for 11 of 12 classes in every arm; `kite` sits near zero and
-`book` goes slightly negative under region voting. This is the figure that
-would have exposed a pooled mean produced by two outliers — it isn't one.*
+This replaces two reports drawn from a grid that is three defects behind this
+one (job 540591: crop-seeded, the since-retired `linear` head, and the corrupt
+boxes of #3281), plus the intermediate reruns that fixed them one at a time. The
+history is in git and in
+[`scripts/experiments/lessons/`](../../../scripts/experiments/lessons/); it is
+deliberately not re-narrated here, because this report is about where the
+product stands, not about how the measurement got fixed.
 
-`bird` carries the largest penalty (~0.75), which fits: 58% of COCO's bird
-instances are sub-patch, and a distant bird is a few dark pixels against sky.
-`kite` is the exception, and plausibly for the same reason in reverse — kites
-are high-contrast against uniform sky at any size.
+Produced by [`analyse_all.sh`](../../../scripts/experiments/calibration/analyse_all.sh):
+[`analyze_overview.py`](../../../scripts/experiments/calibration/analyze_overview.py),
+[`analyze_scale.py`](../../../scripts/experiments/calibration/analyze_scale.py),
+[`analyze_phases.py`](../../../scripts/experiments/calibration/analyze_phases.py),
+[`analyze_tail_overlap.py`](../../../scripts/experiments/calibration/analyze_tail_overlap.py),
+[`figures_trajectory.py`](../../../scripts/experiments/calibration/figures_trajectory.py),
+[`figures_overview.py`](../../../scripts/experiments/calibration/figures_overview.py),
+[`figures_scale.py`](../../../scripts/experiments/calibration/figures_scale.py),
+[`viewer.py`](../../../scripts/experiments/calibration/viewer.py) and
+[`pick_sheets.py`](../../../scripts/experiments/calibration/pick_sheets.py).
+Launched by [`launch_scale.sh`](../../../scripts/experiments/calibration/launch_scale.sh),
+which records the grid's shape beside its results so a partial run cannot be
+read as a complete one.
 
-## 4. The two whole-image encoders are indistinguishable here
+**Depth.** 20 seeds, not 60. The region column is ~890s a cell against 44–62s
+for the whole-image ones, so it is ~89% of the grid and depth is the only knob
+that moves the wall clock: this ran in 3h50m where 60 seeds would have taken
+~11h. Every band contrast above pools 720 paired runs; what 20 seeds costs is
+resolution on a single cell, where a stuck rate lands on a twentieth.
 
-`siglip` and `siglip2_l` produce the same size penalty (0.41 ± 0.05 vs
-0.41 ± 0.06) and overlapping costs in every band. A premium encoder does not buy
-its way out of the small-target problem — consistent with the overview
-benchmark, which also could not resolve these two on cost at three seeds. Their
-value in this study is as **replication**: the effect is not a property of one
-encoder.
+## What this does not tell you
 
-## What this does not license
-
-- **Cost is the harness's operating-point cost**, not accuracy. A band that
-  costs more is one where the user spends more to reach the shipped decision
-  rule's operating point.
-- **The small band's labels are the least verifiable part of the dataset.**
-  Boxed review confirms only ~2/3 of sub-patch positives, by human or model
-  (`DATASHEET.md`). The small-band numbers rest on labels whose residual
-  uncertainty is real and measured, not zero.
-- **The negative pool carries ~2.0% residual contamination** (95% CI 0.8–5.0%),
-  concentrated in `book` — which is also the one class whose penalty flips sign
-  under region voting. `book` is very likely a *definition* problem rather than
-  sloppy annotation: COCO has no magazine class, so magazines land in `book`,
-  62% of its instances are shelf spines, and a DVD case on a TV stand is a coin
-  toss. **It changes nothing.** Dropping `book` entirely moves the headline from
-  0.31/0.41/0.41 to 0.34/0.43/0.43 — inside the standard error, and in the
-  direction of a *stronger* effect. It dilutes the result slightly; it does not
-  produce it. No conclusion here rests on `book`.
-- **Three seeds.** Differences smaller than twice their standard error are
-  reported as unresolvable rather than quoted to a decimal the sample cannot
-  support.
-
-## Reproducing
-
-```bash
-bash scripts/experiments/calibration/launch_scale.sh prepare   # asserts region voting resolves
-bash scripts/experiments/calibration/launch_scale.sh cells     # 324 cells, ~16G for patch cells
-python scripts/experiments/calibration/analyze_scale.py \
-    --extra-cells /expscratch/$USER/scale-3156/results-dinov3-wholeimage
-python scripts/experiments/calibration/figures_scale.py
-```
-
-The `results-dinov3-wholeimage/` control arm exists because the first run's patch
-cells silently fell back to whole-image geometry
-(`scripts/experiments/lessons/2026-08-25-sized-from-the-wrong-configuration.md`).
-Preserving that failure turned it into the paired control the region-voting
-result now rests on.
+- **Nothing about a mode a user cannot pick.** `clip_l` is a reference column.
+- **Nothing about `bus`, `kite` or the other easy classes at large size**, where
+  every column is already at 0.02–0.10 and the differences stop being
+  interesting.
+- **Nothing about why `backpack@small` is bad.** Ten categories carry the whole
+  shared tail, and the next step there is looking at the images, not another
+  grid. `figures/boxes_backpack_medium.jpg` and its siblings are the start of
+  that.
+- **Nothing about a change to the cut rule.** Regret is a fifth of cost and does
+  not separate the columns; the ranking is where the remaining cost is.

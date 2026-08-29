@@ -164,6 +164,10 @@
       <label class="h" for="ds">Dataset</label>
       <select id="ds"></select>
     </div>
+    <div class="ctl" id="bandWrap">
+      <label class="h" for="band">Target size</label>
+      <select id="band"></select>
+    </div>
     <div class="ctl">
       <label class="h" for="cat">Category</label>
       <select id="cat"></select>
@@ -264,8 +268,29 @@
   const MAX_HUES = SERIES.length;
   const ALL = "__all__", EACH = "__each__";
 
+  // Categories in the #3156 map are `<class>@<band>` - the same twelve classes at
+  // three target sizes - and the band is that study's headline axis, so it gets
+  // its own control. Parsed out of the category names rather than added to the
+  // payload: every other study's categories are bare names, and a viewer that
+  // needs a schema change per study is a viewer nobody reuses. The control
+  // appears only when EVERY category carries a suffix and there is more than one
+  // band to choose between, for the same reason the embedder chips hide
+  // themselves at one embedder - a control with one option is furniture.
+  const BAND_ORDER = ["small", "medium", "large"];
+  const bandOf = (c) => { const i = String(c).lastIndexOf("@"); return i < 0 ? null : String(c).slice(i + 1); };
+  const BANDS = (() => {
+    const bs = P.categories.map(bandOf);
+    if (!bs.length || bs.some((b) => !b)) return [];
+    const u = [...new Set(bs)];
+    if (u.length < 2) return [];
+    const rank = (b) => { const i = BAND_ORDER.indexOf(b); return i < 0 ? BAND_ORDER.length : i; };
+    return u.sort((x, y) => rank(x) - rank(y) || x.localeCompare(y));
+  })();
+  const inBand = (c) => state.band === ALL || bandOf(c) === state.band;
+
   const state = {
     dataset: P.datasets.length > 1 ? ALL : P.datasets[0],
+    band: ALL,
     category: ALL,
     metric: P.metrics[0].key,
     embedders: new Set(P.embedders),
@@ -284,7 +309,7 @@
     const ds = new Set(datasetsInPlay());
     const s = new Set();
     P.groups.forEach((g, i) => { if (ds.has(gDataset(i))) s.add(gCat(i)); });
-    const all = [...s].sort();
+    const all = [...s].sort().filter(inBand);
     return state.category === ALL || state.category === EACH ? all : all.filter((c) => c === state.category);
   }
 
@@ -308,7 +333,7 @@
     const ds = new Set(datasetsInPlay());
     const s = new Set();
     P.groups.forEach((g, i) => { if (ds.has(gDataset(i))) s.add(gCat(i)); });
-    const cats = [...s].sort();
+    const cats = [...s].sort().filter(inBand);
     catSel.innerHTML =
       `<option value="${ALL}">All categories — averaged together</option>` +
       `<option value="${EACH}">Each category — one line each</option>` +
@@ -317,6 +342,20 @@
     catSel.value = state.category;
   }
   catSel.onchange = () => { state.category = catSel.value; render(); };
+
+  const bandSel = $("band");
+  if (!BANDS.length) {
+    $("bandWrap").style.display = "none";
+  } else {
+    bandSel.innerHTML =
+      `<option value="${ALL}">All sizes</option>` +
+      BANDS.map((b) => `<option value="${esc(b)}">${esc(b)}</option>`).join("");
+    bandSel.value = state.band;
+    // Narrowing the band can strip the category currently selected, so refill
+    // rather than leaving a selection that names no group: `fillCats` falls back
+    // to "all categories" when the current one is no longer on offer.
+    bandSel.onchange = () => { state.band = bandSel.value; fillCats(); render(); };
+  }
   fillCats();
 
   const mSel = $("metric");
@@ -487,6 +526,10 @@
 
   // ---- render -------------------------------------------------------------
   const SOLID = P.solid_coverage;
+  // "Fully measured", for deciding whether the coverage strip has anything to
+  // show. Not 1.0: coverage is a ratio of integers and a pooled slice can land a
+  // hair under it, which would keep a flat strip on screen forever.
+  const COV_FLAT = 0.995;
   const MAX_PANELS = 16;
   const fmt = (v, d = 3) => (Number.isFinite(v) ? v.toFixed(d) : "—");
   const shortLabel = (dim, v) => (v === null ? (dim === "category" ? "all categories" : "all datasets") : String(v));
@@ -568,9 +611,42 @@
     const pad = (hi - lo) * 0.06 || 0.02;
     lo = Math.max(spec.lo, lo - pad); hi = Math.min(spec.hi, hi + pad);
 
-    for (const p of panels) host.appendChild(panel(p, pl, spec, lo, hi));
+    // Does the coverage strip earn its space in THIS selection?
+    //
+    // It exists to expose survivorship: a mean at click 140 pooled from a third
+    // of the cells is a different quantity from one pooled from all of them, and
+    // nothing else on the page says which you are looking at. But in a study
+    // where every cell runs to the horizon it is a flat 100% line under every
+    // panel -- a fifth of each panel's height, in every panel, carrying one bit
+    // that never changes. Same rule as the embedder chips at one embedder: an
+    // axis with one value is furniture.
+    //
+    // The run-up does NOT count as variation. Coverage climbs from nothing to
+    // full over the first clicks because detectors only start once a run has
+    // both classes, and the main chart already says so by DASHING the mean
+    // there. So the strip's only unique information is a dip AFTER every series
+    // has come up, and that is exactly what this tests.
+    //
+    // Decided across all panels rather than per panel: panels of two different
+    // heights are two charts, which is why the y-scale is shared already.
+    let covStart = -1;
+    for (let t = 1; t < nT && covStart < 0; t++) {
+      let all = true;
+      for (const p of panels) for (const q of p.per) if (!(q.agg.cov[t] >= COV_FLAT)) all = false;
+      if (all) covStart = t;
+    }
+    let showCov = true;
+    if (covStart >= 0) {
+      let covMin = 1;
+      for (const p of panels) for (const q of p.per) {
+        for (let t = covStart; t < nT; t++) if (Number.isFinite(q.agg.cov[t])) covMin = Math.min(covMin, q.agg.cov[t]);
+      }
+      showCov = covMin < COV_FLAT;
+    }
+
+    for (const p of panels) host.appendChild(panel(p, pl, spec, lo, hi, showCov));
     legend(pl, panels);
-    reading(spec, pl, hidden, facetKeys.length);
+    reading(spec, pl, hidden, facetKeys.length, showCov);
     tableView(spec, panels);
   }
 
@@ -588,14 +664,18 @@
     bits.push(pl.hueDim === "dataset" || pl.facetDims.includes("dataset")
       ? null
       : (state.dataset === ALL ? `all ${P.datasets.length} datasets pooled` : state.dataset));
+    const nCats = categoriesInPlay().length;
+    const pooled = state.band === ALL
+      ? `all ${nCats} categories pooled`
+      : `all ${nCats} ${state.band}-band categories pooled`;
     bits.push(pl.hueDim === "category" || pl.facetDims.includes("category")
-      ? null
-      : (state.category === ALL ? "all categories pooled" : state.category));
+      ? (state.band === ALL ? null : `${state.band} band`)
+      : (state.category === ALL ? pooled : state.category));
     bits.push(state.seedMode === "each" ? "every seed" : "seeds averaged");
     return bits.filter(Boolean).join(" · ");
   }
 
-  function panel(pnl, pl, spec, lo, hi) {
+  function panel(pnl, pl, spec, lo, hi, showCov) {
     const el = document.createElement("div");
     el.className = "panel";
     const tmax = P.t[nT - 1];
@@ -643,25 +723,30 @@
       // trained click, where nothing was measured at all.
       parts.push(
         `<path d="${path(P.t, q.agg.mean, x, y, lo, hi, true)}" fill="none" stroke="${q.color}" stroke-width="1.1" stroke-dasharray="3 3" opacity="0.85"/>`,
-        `<path d="${path(P.t, mask(q.agg.mean, q.agg.cov), x, y, lo, hi)}" fill="none" stroke="${q.color}" stroke-width="2"/>`,
-        `<path d="${path(P.t.slice(1), q.agg.cov.slice(1), x, yc, 0, 1)}" fill="none" stroke="${q.color}" stroke-width="1.2"/>`);
-      // Click 0 is a point, not the start of the line: every cell is measured
-      // there (it has a text sort) and none has a detector at click 1, so a
-      // joined line renders two different facts as a spike.
-      if (P.anchor.has && Number.isFinite(q.agg.cov[0])) parts.push(
-        `<circle cx="${x(0).toFixed(1)}" cy="${yc(q.agg.cov[0]).toFixed(1)}" r="2" fill="${q.color}"/>`);
+        `<path d="${path(P.t, mask(q.agg.mean, q.agg.cov), x, y, lo, hi)}" fill="none" stroke="${q.color}" stroke-width="2"/>`);
+      if (showCov) {
+        parts.push(
+          `<path d="${path(P.t.slice(1), q.agg.cov.slice(1), x, yc, 0, 1)}" fill="none" stroke="${q.color}" stroke-width="1.2"/>`);
+        // Click 0 is a point, not the start of the line: every cell is measured
+        // there (it has a text sort) and none has a detector at click 1, so a
+        // joined line renders two different facts as a spike.
+        if (P.anchor.has && Number.isFinite(q.agg.cov[0])) parts.push(
+          `<circle cx="${x(0).toFixed(1)}" cy="${yc(q.agg.cov[0]).toFixed(1)}" r="2" fill="${q.color}"/>`);
+      }
     }
-    parts.push(
+    if (showCov) parts.push(
       `<line x1="${M.l}" x2="${W - M.r}" y1="${yc(SOLID).toFixed(1)}" y2="${yc(SOLID).toFixed(1)}" stroke="var(--muted)" stroke-width="1" stroke-dasharray="1 3"/>`,
       `<text x="${M.l - 8}" y="${(yc(1) + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">100%</text>`,
       `<text x="${M.l - 8}" y="${(yc(0) + 4).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">0%</text>`,
-      `<text x="${W - M.r}" y="${(yc(0) + 14).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">cells measured</text>`,
-      `<text x="${(M.l + (W - M.l) / 2).toFixed(0)}" y="${H + CH + 12}" text-anchor="middle" font-size="11" fill="var(--muted)">clicks spent${P.anchor.has ? "  (0 = the free text sort)" : ""}</text>`,
+      `<text x="${W - M.r}" y="${(yc(0) + 14).toFixed(1)}" text-anchor="end" font-size="10" fill="var(--muted)">cells measured</text>`);
+    const foot = showCov ? H + CH : H;
+    parts.push(
+      `<text x="${(M.l + (W - M.l) / 2).toFixed(0)}" y="${foot + 12}" text-anchor="middle" font-size="11" fill="var(--muted)">clicks spent${P.anchor.has ? "  (0 = the free text sort)" : ""}</text>`,
       `<text transform="translate(13,${(M.t + (H - M.b) / 2).toFixed(0)}) rotate(-90)" text-anchor="middle" font-size="11" fill="var(--muted)">${esc(spec.label)}</text>`);
 
     el.insertAdjacentHTML("beforeend",
-      `<svg viewBox="0 0 ${W} ${H + CH + 20}" role="img" aria-label="${esc(spec.label)} against clicks">${parts.join("")}</svg>`);
-    hover(el, pnl, spec, x, y);
+      `<svg viewBox="0 0 ${W} ${foot + 20}" role="img" aria-label="${esc(spec.label)} against clicks">${parts.join("")}</svg>`);
+    hover(el, pnl, spec, x, y, showCov);
     return el;
   }
 
@@ -748,7 +833,7 @@
   };
 
   // ---- hover: crosshair + tooltip ----------------------------------------
-  function hover(el, pnl, spec, x, y) {
+  function hover(el, pnl, spec, x, y, showCov) {
     const svg = el.querySelector("svg");
     const tip = document.createElement("div");
     tip.className = "tip";
@@ -773,11 +858,12 @@
       const rows = pnl.per.map((q) =>
         `<tr><td class="k"><span class="sw" style="background:${q.color}"></span>${esc(q.name)}</td>` +
         `<td class="v">${fmt(q.agg.mean[i])}</td>` +
-        `<td class="v" style="color:var(--muted);padding-left:10px">${(q.agg.cov[i] * 100).toFixed(0)}%</td></tr>`).join("");
+        (showCov ? `<td class="v" style="color:var(--muted);padding-left:10px">${(q.agg.cov[i] * 100).toFixed(0)}%</td>` : "") +
+        `</tr>`).join("");
       tip.innerHTML =
         `<div class="hd">${P.t[i]} click${P.t[i] === 1 ? "" : "s"}${P.t[i] === 0 && P.anchor.has ? " — " + esc(P.anchor.label) : ""}</div>` +
         `<table>${rows}</table>` +
-        `<div style="color:var(--muted);margin-top:4px">${esc(spec.label)} · % = cells measured</div>`;
+        `<div style="color:var(--muted);margin-top:4px">${esc(spec.label)}${showCov ? " · % = cells measured" : ""}</div>`;
       tip.style.opacity = "1";
       tip.style.left = Math.min(ev.clientX - r.left + 14, r.width - tip.offsetWidth - 8) + "px";
       tip.style.top = Math.max(4, ev.clientY - r.top - 10) + "px";
@@ -787,13 +873,18 @@
   }
 
   // ---- prose + table ------------------------------------------------------
-  function reading(spec, pl, hidden, wanted) {
+  function reading(spec, pl, hidden, wanted, showCov) {
     const bits = [];
     bits.push(
       `<b>Reading it.</b> Each line is the ${state.seedMode === "each" ? "individual run" : "mean over the cells it pools"}; ` +
       `the shaded band is ±1 SD. A line is <b>dashed</b> wherever fewer than ${(SOLID * 100).toFixed(0)}% of that ` +
       `series' cells are measured at that click — there it describes a subset, not the grid, so only a solid ` +
-      `segment is a level worth quoting. The strip underneath is that fraction.`);
+      `segment is a level worth quoting.` +
+      (showCov
+        ? ` The strip underneath is that fraction, and it drops below full somewhere in this slice.`
+        : ` <b>Every cell is measured at every click here</b>, so the coverage strip is omitted rather than drawn` +
+          ` as a flat 100% line: nothing in this slice dropped out, and the dashed run-up already says when each` +
+          ` series' detector started.`));
     if (P.anchor.has) bits.push(
       `<b>Click 0 is the ${esc(P.anchor.label)}</b> — what typing the query got for free. It is each series' own ` +
       `leftmost point, so a curve is worth its clicks only once it has moved past where it started. ` +
