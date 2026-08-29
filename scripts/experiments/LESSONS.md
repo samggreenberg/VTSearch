@@ -72,6 +72,7 @@ correct union of the two branches with no judgement involved.
 
 | Date | Lesson | Issue |
 |---|---|---|
+| 2026-08-29 | [a per-mode split that still pooled two environments](lessons/2026-08-29-a-per-mode-split-that-still-pooled-two-environments.md) | #2877 |
 | 2026-08-28 | [a canary that checked a path the build never reads](lessons/2026-08-28-a-canary-that-checked-a-path-the-build-never-reads.md) | #3299 |
 | 2026-08-28 | [a committed figure is *output*, and git merged it clean](lessons/2026-08-28-a-committed-figure-is-output-not-a-file.md) | #3280 |
 | 2026-08-28 | [a detached worktree ate a commit, and `git push` said OK](lessons/2026-08-28-a-detached-worktree-ate-a-commit-and-the-push-said-ok.md) | #3292 |
