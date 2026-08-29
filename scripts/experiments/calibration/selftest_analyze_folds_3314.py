@@ -268,6 +268,23 @@ def main() -> int:
         if s.empty or bool(s["eligible"].any()):
             failures.append("an 8-fold schedule is over the ceiling and must not be eligible")
 
+        # The gate asks the fixed counts and the schedules INDEPENDENTLY: a
+        # schedule only pays the ceiling in the bands where it raises the count,
+        # which is the whole reason the adaptive arm exists.  Planted by
+        # deleting every fixed-K candidate and checking the schedule still opens
+        # the gate on its own.
+        no_fixed = ship.copy()
+        no_fixed["ship_candidate"] = False
+        g2 = A.pick_stage_b(no_fixed, sched)
+        if not g2["gate_open"] or g2["schedule"] != "6@60":
+            failures.append(
+                f"with no fixed-K candidate the schedule must still open the gate; got {g2['gate_open']}/{g2['schedule']}"
+            )
+        # ...and a closed gate has to say WHICH rule closed it.
+        g3 = A.pick_stage_b(no_fixed, sched.assign(eligible=False))
+        if g3["gate_open"] or "priced out of reach" not in g3["reason"]:
+            failures.append(f"a gate closed by COST must say so; reason was {g3['reason']!r}")
+
         # The literal rows exist, name the K the gate picked, and carry both
         # thresholds - an aggregate-only report is what the standing feedback
         # on reports rules out.

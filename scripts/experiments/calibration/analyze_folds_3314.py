@@ -501,12 +501,25 @@ def schedule_table(v: pd.DataFrame, rng: np.random.Generator) -> pd.DataFrame:
 
 
 def pick_stage_b(ship: pd.DataFrame, sched: pd.DataFrame) -> dict:
-    """The gate, and the two arms it books - decided by the rules, not by eye.
+    """The gate, and the arms it books - decided by the rules, not by eye.
 
-    ``k_best`` is the SMALLEST fixed K that is a ship candidate, chosen from the
+    The PLAN's gate is band-local: *"some K clearing the benefit margin in some
+    band within the cost ceiling"*.  A fixed K has to clear the ceiling in every
+    band because it applies in every band; a schedule only has to clear it where
+    it raises the count, which is the entire reason the ceiling is banded and
+    the entire reason the adaptive arm exists.  So the two are asked
+    **independently** and either can open the gate.
+
+    (An earlier draft of this function required a fixed-K candidate before it
+    would even look at the schedules, which is stricter than the PLAN.  Fixed
+    on 2026-08-28, *after* the screen had run - and the verdict is identical
+    either way, because no schedule cleared rule 3 either.  Said out loud
+    because a decision rule edited after seeing the data has to be.)
+
+    ``k_best`` is the SMALLEST fixed K that is a ship candidate, from the
     geometry where the most K's clear (ties to the smaller K).  ``k_adaptive``
-    is the eligible schedule with the largest total benefit, ties to the smaller
-    ``K_early`` then the smaller ``N_cut``.
+    is the eligible schedule with the largest overall benefit, ties to the
+    smaller ``K_early`` then the smaller ``N_cut``.
 
     When nothing clears, the gate is closed and that is the study's answer:
     folds buy nothing worth their price even where they are cheapest.  The
@@ -521,23 +534,38 @@ def pick_stage_b(ship: pd.DataFrame, sched: pd.DataFrame) -> dict:
         "reason": "",
     }
     cands = ship[ship["ship_candidate"]] if not ship.empty else pd.DataFrame()
-    if cands.empty:
-        out["reason"] = (
-            "no fixed K cleared all three rules in any geometry: the screen is flat or the benefit is not affordable"
-        )
-        return out
-    counts = cands.groupby("geometry")["k"].count().sort_values(ascending=False)
-    geom = str(counts.index[0])
-    out["gate_open"] = True
-    out["k_best"] = int(cands[cands["geometry"] == geom]["k"].min())
-    out["k_best_geometry"] = geom
-    out["reason"] = f"{len(cands)} (geometry, K) pairs cleared all three rules"
     elig = sched[sched["eligible"]] if not sched.empty else pd.DataFrame()
+
+    if not cands.empty:
+        counts = cands.groupby("geometry")["k"].count().sort_values(ascending=False)
+        geom = str(counts.index[0])
+        out["k_best"] = int(cands[cands["geometry"] == geom]["k"].min())
+        out["k_best_geometry"] = geom
     if not elig.empty:
-        elig = elig.sort_values(["overall_delta", "k_early", "n_cut"], ascending=[True, True, True])
-        top = elig.iloc[0]
+        top = elig.sort_values(["overall_delta", "k_early", "n_cut"], ascending=[True, True, True]).iloc[0]
         out["schedule"] = f"{int(top['k_early'])}@{int(top['n_cut'])}"
         out["schedule_geometry"] = str(top["geometry"])
+
+    out["gate_open"] = bool(len(cands) or len(elig))
+    if out["gate_open"]:
+        out["reason"] = (
+            f"{len(cands)} (geometry, K) pairs and {len(elig)} (geometry, schedule) pairs cleared all three rules"
+        )
+    else:
+        # Say WHICH rule closed it.  "Nothing cleared" is compatible with a flat
+        # screen and with a large benefit priced out of reach, and those are
+        # completely different findings - the first says stop, the second says
+        # make the calibration cheaper.
+        beat = ship[ship["rule1_benefit"]] if not ship.empty else pd.DataFrame()
+        if beat.empty:
+            out["reason"] = "no fold count beat K=2 by the margin in any band: the screen is flat"
+        else:
+            worst = float(beat["max_step_ratio"].min())
+            out["reason"] = (
+                f"{len(beat)} (geometry, K) pairs beat the margin, and every one of them "
+                f"failed the {COST_CEILING_X}x step ceiling (cheapest was {worst:.2f}x); "
+                f"no schedule cleared it either. The benefit is real and priced out of reach."
+            )
     return out
 
 
