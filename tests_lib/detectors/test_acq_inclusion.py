@@ -89,7 +89,7 @@ def test_default_is_the_shipped_offset_not_the_coupled_behaviour():
     A default of 0 would silently make every future arm's control the *old*
     behaviour, so a baseline run would stop measuring what users get.
     """
-    assert ACQUISITION_INCLUSION_OFFSET == -1
+    assert ACQUISITION_INCLUSION_OFFSET == -3
     rows = [r for r in _run() if r["threshold_provenance"].startswith("fold_anchored")]
     assert rows, "no fold-anchored steps to check"
     moved = [r for r in rows if r["acq_threshold"] != r["threshold"]]
@@ -108,14 +108,14 @@ def test_offset_zero_is_the_coupled_control():
 def test_the_offset_is_relative_to_the_reporting_inclusion():
     """The shipped reading: the *gap* is what was measured, not an absolute cut.
 
-    Read absolutely, ``-1`` would collapse to a no-op at reporting inclusion -1
+    Read absolutely, ``-3`` would collapse to a no-op at reporting inclusion -3
     and invert below it - the direction the study's falsification arm ruled out.
     Relative, the selector stays above the reporting line wherever the user puts
     the slider.
     """
-    assert acquisition_inclusion(0) == -1
-    assert acquisition_inclusion(-3) == -4
-    assert acquisition_inclusion(4) == 3
+    assert acquisition_inclusion(0) == -3
+    assert acquisition_inclusion(-3) == -6
+    assert acquisition_inclusion(4) == 1
     assert acquisition_inclusion(0, offset=0) == 0
 
     rows = [r for r in _run(inclusion=-1) if r["threshold_provenance"].startswith("fold_anchored")]
