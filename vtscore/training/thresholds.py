@@ -167,49 +167,73 @@ def inclusion_cost_weights(inclusion_value: int) -> tuple[float, float]:
 #: moves it *up* the ranking, and so returns *more* positives.
 #:
 #: ``-1`` is the only value that passes the pre-registered ship rule in **all
-#: **two** binary environments measured, and this constant is deliberately **not**
-#: gated by voting mode.  The history is worth keeping, because the first answer
-#: was bigger and did not survive:
+#: **four** environments measured, and this constant is deliberately **not**
+#: gated by voting mode.  The history is worth keeping, because the value moved
+#: twice before it settled:
 #:
 #: * ``coco_val x siglip2`` (binary, PR #2876) found an interior optimum at
 #:   ``-3``: positives per 100 votes 4 -> 18, final cost 0.137 -> 0.129 (95% CI
 #:   [-0.025, -0.005]), average precision 0.696 -> 0.817.  #2878 shipped it.
 #: * ``visual_genome_m x siglip`` (binary, PR #2891) **rejected** ``-3``: cost CI
-#:   [+0.003, +0.022] against a +0.01 tolerance.  Only ``-1`` passed.
+#:   [+0.003, +0.022] against a +0.01 tolerance.  #2909 cut the value to ``-1``.
+#: * ``visual_genome_m x dinov3_patch`` (region, PR #2909) was **voided** by
+#:   #2943 - see ``REPORT_REGION_VOTING.md``'s banner.
+#: * ``vg_scale_any`` (PR #3318, #2877 on the pile) measured three environments
+#:   at once, on **verified labels at 7.1% prevalence in every cell**, and
+#:   restores ``-3``.
 #:
-#: So the disagreement runs along the *environment*, not the voting mode: the
-#: largest split (``-3`` ships on COCO, fails on VG) is **within** binary voting,
-#: which no mode gate can reach - and that leg alone is what sets this value.
-#: ``-1`` is the value with no measured harm in either environment.  Do not raise
-#: it without a further environment; do not gate it by mode without evidence that
-#: mode - and not label supply - is the axis.
+#: **Why ``-3`` and not ``-1``.**  Against the shipped ``-1``, paired on the same
+#: cells, ``-3`` improves *every* endpoint at once on the shipped default arm
+#: (``siglip x whole_image``, 192 pairs): final cost **-0.020** (95% CI
+#: [-0.029, -0.011]), positives per 100 votes **11 -> 20**, AP **+0.045**, oracle
+#: cost -0.011, and deep-spike incidence unchanged at 0.0%.  It is not a trade.
+#: On ``siglip+dinov3_patch x max_patch`` (real region voting) ``-3`` is free:
+#: +12 positives, cost CI [-0.001, +0.010], no spike rise.
 #:
-#: **The region-voting check is still OUTSTANDING.**  It was run (PR #2909) and
-#: its result is **void**: that run predates #2943, which fixed the harness
-#: scoring the acquisition pool by each media's whole-image vector while cutting
-#: the threshold on region max-pooled scores.  On a patch dataset that put the
-#: cut above the entire pool - pinned on 39% of ``k=-3`` steps against 1.5% of
-#: the ``k=+2`` falsifier - so the aggressive arms were clamped and the lever was
-#: partly inert exactly where the decision needed it live.  The two binary
-#: environments are unaffected (``patch_grid`` on 0/4193, so they scored and cut
-#: in one space).  Read the banner on
-#: ``docs/experiments/acquisition-inclusion/REPORT_REGION_VOTING.md`` before
-#: citing anything from that run, and re-run it before concluding anything about
-#: voting mode.
+#: **Why #2891's rejection does not block it.**  That environment is
+#: ``visual_genome_m``, whose free-text labels have measured recall **0.76** over
+#: these classes (``scripts/experiments/pile/coco_anchor.py``).  Roughly a
+#: quarter of true positives are labelled negative there, so an arm that finds
+#: *more* true positives is charged for them as false alarms - a bias against
+#: precisely the aggressive arms under test.  ``vg_scale_any`` exists to remove
+#: it (COCO-exhaustive labels plus a human review pass), and on it ``-3`` passes.
+#: The pattern fits: every clean-label environment adopts ``-3``; the one noisy
+#: one rejects it.  This is a well-supported explanation, not a proven cause -
+#: #2877's cells are archived and the counterfactual was not re-run.
 #:
-#: **The known cost of this conservatism**: on a starved COCO-like environment
-#: ``-1`` finds 6 positives per 100 votes where ``-3`` finds 18.  Under binary
-#: voting the benefit is sharply concentrated in *starved* cells and turns
-#: negative in well-supplied ones (measured on arm-independent axes: AP response
-#: slope -0.0207 on log prevalence, CI [-0.0259, -0.0159]).  A **supply-dependent**
-#: offset - aggressive while positives are scarce, relaxing as they accumulate -
-#: is the way to recover COCO's gain without charging the other environments'
-#: tails, and it subsumes the voting-mode question entirely (#2910).
+#: **The one environment that wants ``-1`` is not a mode.**  A patch embedder
+#: with no box supervision (``siglip+dinov3_patch x whole_image`` - a DINOv3
+#: detector whose users vote whole images instead of dragging boxes) rejects
+#: ``-2``/``-3``/``-4`` on deep-spike incidence, 4.5% -> 22.7/28.8/35.6%
+#: (p<1e-4), while their *cost* deltas are negative.  That arm is not reachable
+#: today (DINOv3 does not ship), and it is **not** what a voting-mode gate would
+#: select: the two *binary* environments disagree with each other more than the
+#: modes do.  If a patch embedder ever ships, gate on the **scoring geometry**
+#: that actually resolves (a patch embedder falling back to ``whole_image``), not
+#: on how the user voted.
 #:
-#: See ``docs/experiments/acquisition-inclusion/REPORT.md`` (COCO) and
-#: ``REPORT_SECOND_ENVIRONMENT.md`` (VG binary) for the two live environments,
-#: and ``REPORT_REGION_VOTING.md`` for the voided region run and how to redo it.
-ACQUISITION_INCLUSION_OFFSET = -1
+#: **The mechanism is threshold stability, not cost.**  Measured within one
+#: embedder on the same 264 cells, region voting takes oracle cost 0.382 -> 0.218
+#: and AP 0.517 -> 0.762, and the 8x spike rise that rejects ``-3`` under
+#: whole-image scoring does not happen at all (2.7% -> 1.5%, p=0.51).  Aggressive
+#: acquisition destabilises the cut when the ranking is poorly separated; it is
+#: safe when the ranking separates well.
+#:
+#: **Not measured past ``-4``.**  On the shipped default ``-4`` is at least as
+#: good as ``-3`` on every endpoint (+18 positives, AP +0.057, cost -0.017) and
+#: the trend has not turned - so ``-4`` is the edge of the grid, not an optimum.
+#: It is not shipped because it costs a small but resolvable regression under
+#: region voting (+0.006, CI [+0.001, +0.013]) where ``-3`` is free.  Extending
+#: the grid to ``-5``/``-6`` on the shipped arm is filed as #3319.
+#:
+#: Everything here is measured at a **100-click horizon**, as every prior
+#: environment was.  Nothing says what this value does in the deep regime.
+#:
+#: See ``docs/experiments/acquisition-inclusion/REPORT_PILE_2877.md`` (the three
+#: environments this value rests on), ``REPORT.md`` (COCO), and
+#: ``REPORT_SECOND_ENVIRONMENT.md`` / ``REPORT_REGION_VOTING.md`` for the two
+#: superseded readings.
+ACQUISITION_INCLUSION_OFFSET = -3
 
 
 def acquisition_inclusion(inclusion_value: int, offset: int = ACQUISITION_INCLUSION_OFFSET) -> int:
@@ -220,7 +244,7 @@ def acquisition_inclusion(inclusion_value: int, offset: int = ACQUISITION_INCLUS
     same discipline :func:`inclusion_cost_weights` follows.  *offset* exists for
     the harness's arms; production always takes the default.
 
-    An *offset*, not an absolute value.  The run that measured ``-3`` held
+    An *offset*, not an absolute value.  The runs that measured ``-3`` held
     reporting at inclusion 0, where the two readings coincide; away from 0 only
     the offset preserves what was measured, because the mechanism is the *gap*
     between where the line is drawn and where sampling happens.  Reading ``-3``
