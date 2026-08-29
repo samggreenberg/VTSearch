@@ -220,6 +220,8 @@ source "$WT/scripts/experiments/pile/pile_env.sh"
 #   reg (`siglip+dinov3_patch`, whole_image + max_patch)  16m05s / 16m42s, 5.0 GB
 #   bin (`siglip`, whole_image)                            3m21s,          0.9 GB
 #
+# The region request is 12G anyway; see the note in `half_env`.
+#
 # GRID-PLAYBOOK's table would have said 16G for the region cell (its ~9.1 GB
 # entry is `vg_scale x max_patch` under a different horizon); the cell actually
 # peaks at 5.0 GB, and the difference is 8 slots of concurrency per arm.  That is
@@ -241,8 +243,24 @@ half_env() {
       ;;
     reg)
       export CALIB_VGSCALE_EMBEDDERS="siglip+dinov3_patch"
-      export CALIB_MEM="${ACQ_REG_MEM:-8G}"
-      export CALIB_CONC="${ACQ_REG_CONC:-12}"
+      # 12G, not the 5.0 GB two cells of this exact kind actually peaked at.
+      # Preflight check 7b refuses a patch array under 12G, because sizing one
+      # from a cell that silently fell back to `whole_image` is not a near miss
+      # -- it is OUT_OF_MEMORY on most of the arm, hours in, after the array has
+      # been running long enough to look healthy (#3156: 74 of 108 cells).
+      #
+      # That is not what happened here: the sizing cells resolved to
+      # `styles=['whole_image', 'max_patch']` and emitted 3201 max_patch rows
+      # each.  So the floor is a TABLE disagreeing with a MEASUREMENT, and the
+      # measurement is 2.4x under it.  Obeying the floor anyway is deliberate:
+      # `sacct`'s MaxRSS is sampled, so it can miss a short peak, and the cost
+      # of being wrong is asymmetric -- an over-request costs concurrency, an
+      # under-request costs the arm.  What it costs is real and worth naming:
+      # 7G x 63 slots = 441G of a 1074G quota, which is ~40% of this run's wall
+      # clock.  Recorded rather than silently paid, and the honest fix is a
+      # check that reads a study's own sizing evidence, not `--warn-only`.
+      export CALIB_MEM="${ACQ_REG_MEM:-12G}"
+      export CALIB_CONC="${ACQ_REG_CONC:-9}"
       export CALIB_TIME="${ACQ_REG_TIME:-1:30:00}"
       ;;
     *) echo "ERROR: unknown half '$1' (expected bin or reg)" >&2; exit 2 ;;
