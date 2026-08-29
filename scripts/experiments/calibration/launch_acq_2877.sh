@@ -7,7 +7,7 @@
 #   bash launch_acq_2877.sh size bin|reg [cell]  # time ONE cell per half FIRST
 #   bash launch_acq_2877.sh arms 8               # 8 seeds, both halves
 #   bash launch_acq_2877.sh arms 8 bin           # just the cheap half
-#   bash launch_acq_2877.sh arms 8-23 reg        # the top-up, same index space
+#   ACQ_JOB_TAG=t2 bash launch_acq_2877.sh arms 16-21 reg   # a top-up wave
 #
 # WHAT IS BEING MEASURED.  `ACQUISITION_INCLUSION_OFFSET` is the gap between the
 # reported decision line and the rank position Autopilot's Hard pick samples
@@ -435,7 +435,13 @@ case "$MODE" in
         mkdir -p "$CALIB_EXP/logs"
         link_prepare "$CALIB_RESULTS"
 
-        JOB_NAME="acq2877-$HALF-$ARM"
+        # A top-up is a SECOND array over the same results dir, and preflight
+        # refuses a job name already in the queue -- rightly, since the per-name
+        # completion waiter counts jobs by name and two waves sharing one name
+        # make "has this arm drained?" unanswerable.  `ACQ_JOB_TAG=t2` names the
+        # wave; the results dir, the index space and the cells are unchanged, so
+        # the tag is about the QUEUE, never about the data.
+        JOB_NAME="acq2877-$HALF-$ARM${ACQ_JOB_TAG:+-$ACQ_JOB_TAG}"
 
         # Check 12 reads `acq_offset` against the SHIPPED constant, which is -1.
         # So `acq_m1` matches and every other arm is a declared divergence --
