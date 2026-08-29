@@ -808,7 +808,14 @@ def write_report(summary: dict, figs: list[str], outdir: Path) -> Path:
             f"{len(v.get('zero_byte', []))} |"
         )
 
-    extra = [f for f in figs if f not in set(summary.get("figures") or [])]
+    # Only figures no section already showed.  Each mode renders its own inside
+    # its section (a frontier is a shape, and one a reader has to scroll to a
+    # shared gallery to find is a table), so a trailing gallery that repeats
+    # them would print every figure twice.
+    shown = set(summary.get("figures") or [])
+    for s_mode in (summary.get("by_mode") or {}).values():
+        shown |= set(s_mode.get("figures") or [])
+    extra = [f for f in figs if f not in shown]
     if extra:
         A("\n## Figures\n")
         for f in extra:
