@@ -127,18 +127,35 @@ export CALIB_N_SEEDS="${CALIB_N_SEEDS:-4}"
 export CALIB_PARTITION=cpu
 export CALIB_GRES=none
 
-# MEASURED on THIS grid by `size` before `screen` went in; see the PLAN's sizing
-# note.  No prior grid's seconds transfer: the screen trains 8 folds per step
-# (~4x production's fold fits) and re-cuts them under ~8 arms per K, which is a
-# different cell from #3287's (no fold grid at all) and from #3115's (K<=16 and
-# the anchored EM sweep, so strictly more).  Fill these in from `size`.
+# MEASURED on THIS grid by `size` before `screen` went in.  No prior grid's
+# seconds transfer: the screen trains 8 folds per step (~4x production's fold
+# fits) and re-cuts them under ~8 arms per K, which is a different cell from
+# #3287's (no fold grid at all) and from #3115's (K<=16 plus the anchored EM
+# sweep, so strictly more).
+#
+#   cell  0  vg_scale_any x siglip              whole_image              11m52s  0.80 GB
+#   cell 12  vg_scale_any x siglip+dinov3_patch whole_image + max_patch  1h27m53s  5.86 GB
+#
+# The pair cell runs BOTH styles in one task, which is why it is 7x the other
+# and why it, not the binary cell, sets every limit here.  12G is 2.0x its
+# measured peak; sizing off the binary cell would have picked ~2G and lost half
+# the grid to OOM, which costs cells rather than minutes.
 export CALIB_MEM="${CALIB_MEM:-12G}"
 export CALIB_CPUS=1
+# 12h against a measured 1h28m: generous on purpose, because a cell that times
+# out loses its LATE steps - the deep bands, where the benefit is predicted to
+# have decayed and where the no-harm rule is read.
 export CALIB_TIME="${CALIB_TIME:-12:00:00}"
 # ONE array of 96 cells, so the whole study's footprint is this number.
 # 1074G is the per-user allowance under QOS `cpu_limit`; %72 x 12G = 864G is
-# 80% of it, under preflight check 8's 90% line, and leaves room for the
+# 80% of it, under preflight check 8's 90% line, and leaves room for the 64G
 # analyze step.  Above 96 the extra width buys nothing - there is no 97th cell.
+#
+# Going wider buys almost nothing anyway, and that is worth writing down: the
+# critical path is ONE pair cell at 1h28m, and 96 cells of work is ~4800
+# cell-minutes, so even at infinite width the array cannot finish sooner than
+# that single cell.  %72 costs about ten minutes over %96 and keeps 210G free
+# for the analyze step and for anything else on this account.
 export CALIB_CONC="${CALIB_CONC:-72}"
 export CALIB_ANALYZE_MEM="${CALIB_ANALYZE_MEM:-64G}"
 export CALIB_ANALYZE_TIME="${CALIB_ANALYZE_TIME:-3:00:00}"
