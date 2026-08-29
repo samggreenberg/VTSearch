@@ -290,6 +290,12 @@ Per-run versions — every seed its own line, one file per geometry — are in
 **Every other slice — per category, per seed, every metric the run emitted — is
 in the interactive viewer: [`viewer.html`](viewer.html).**
 
+A zoomable reading copy of this report, figures inlined, is at
+[`docs/reports/2026-08-28-fold-count-3314.html`](../../reports/2026-08-28-fold-count-3314.html)
+— generated from this file by
+[`make_bench_html.py`](../../../scripts/experiments/calibration/make_bench_html.py),
+never hand-written, so the two cannot drift.
+
 ## The steps themselves
 
 Aggregates say a fold count is worth thousandths of cost; only rows say what that
