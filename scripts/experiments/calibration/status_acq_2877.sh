@@ -25,6 +25,14 @@ for half in bin reg; do
     # A zero-byte file counts as "done" to resume and must be deleted before
     # one; a header-only file parses cleanly and passes `-size 0`, so it is
     # counted separately rather than trusted.
+    #
+    # BUT READ THIS COLUMN AGAINST A DRAINED QUEUE.  `to_csv` creates the file
+    # before it flushes, so a cell being written *right now* is zero bytes for a
+    # moment and the count blinks 1.  Against a drained queue that is debris a
+    # resume would silently skip; during a run it is a cell in progress, and
+    # deleting it destroys work rather than recovering it.  Same number,
+    # opposite meaning -- seen once on this study at 08:10, gone by 08:12, with
+    # no failed or cancelled task behind it.
     z=$(find "$d" -maxdepth 1 -name 'task_*.csv' ! -name '*__*' -size 0 | wc -l)
     h=0
     for f in $(find "$d" -maxdepth 1 -name 'task_*.csv' ! -name '*__*' -size -2k); do
