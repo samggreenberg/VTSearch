@@ -217,8 +217,20 @@ _VOTING_COLUMNS: tuple[str, ...] = (
     "n_flagged",
     "auroc",
     "average_precision",
+    #: The fold count the STEP lived at (#3314).  Equal to the run's
+    #: `calibrate_count` everywhere except under `fold_count_schedule`, where it
+    #: is what the schedule resolved for this step's vote count.  On the plain
+    #: frame as well as the calibration one, because it describes the step and
+    #: not the study: a frame that cannot say how many folds a row was cut with
+    #: cannot be pooled with one that can.
+    "calibrate_count",
     "train_seconds",
     "xcal_seconds",
+    #: The final model's own pass over the haystack, on the shipped
+    #: safe-threshold path (#3314); NaN when safe thresholds are off, where
+    #: there is no such pass.  A wall clock like its neighbours, so it varies
+    #: run to run.
+    "final_score_seconds",
     "pool_score_seconds",
     "test_score_seconds",
     "backend",

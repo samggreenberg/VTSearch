@@ -253,7 +253,16 @@ class TestSimulateVotingIterations:
         rows2 = simulate_voting_iterations(medias, "alpha", seed=42, calibrate_count=1)
         assert len(rows1) == len(rows2)
         # Wall-clock timing columns vary between runs; compare everything else.
-        _timing = {"elapsed_seconds", "train_seconds", "xcal_seconds", "pool_score_seconds", "test_score_seconds"}
+        _timing = {
+            "elapsed_seconds",
+            "train_seconds",
+            "xcal_seconds",
+            # #3314: the final model's pass over the haystack. A wall
+            # clock like its neighbours, and excluded for the same reason.
+            "final_score_seconds",
+            "pool_score_seconds",
+            "test_score_seconds",
+        }
 
         def _same(a, b) -> bool:
             """Value equality that reads NaN as reproducing itself.

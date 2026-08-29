@@ -91,6 +91,7 @@ class TestParseFoldCountSchedule:
         set one, which is exactly the kind of pin that outlives what it pinned.
         """
         f = parse_fold_count_schedule("8@10", 3)
+        assert f is not None
         assert f(5) == 8
         assert f(50) == 3
 
@@ -98,7 +99,8 @@ class TestParseFoldCountSchedule:
         """`"4@60,8@25"` and `"8@25,4@60"` must be the same schedule."""
         a = parse_fold_count_schedule("8@25,4@60", 2)
         b = parse_fold_count_schedule("4@60,8@25", 2)
-        assert a is not None and b is not None
+        assert a is not None
+        assert b is not None
         for n in (1, 24, 25, 59, 60, 200):
             assert a(n) == b(n), n
         assert [a(n) for n in (1, 24, 25, 59, 60)] == [8, 8, 4, 4, 2]
