@@ -74,6 +74,30 @@ end. There is no flat band anywhere near 0 under either head, and the red
 over 7,344 steps per line; it does not license a claim about any single cell,
 which is what the per-cell figure below is for.*
 
+### The head change, on the axis the user spends
+
+The two arms are full trajectories, so the run also prices the head switch itself
+— for free, and on the only axis a user experiences.
+
+![cost over clicks](figures/cost_vs_clicks.png)
+
+*Cost against clicks spent, mean over 288 cells per arm, click 0 being the free
+text sort. The shipped SVM is below the logistic head at essentially every click
+count, reaches the zero-click text sort in **15 clicks against 18**, and ends at
+**0.27 against 0.28**. Dashed where fewer than 95% of an arm's cells have a
+detector yet; the band is ±1 sd across cells, and it is wide — see the per-run
+panel, [`cost_vs_clicks_runs__vg_scale.png`](figures/cost_vs_clicks_runs__vg_scale.png),
+where some runs never leave the floor.*
+
+That is a side result — PR #3198 shipped on a ranking measurement, not this one —
+but it points the same way as everything above: whatever the head change did to
+the score distribution, it did not cost the user the Inclusion knob, and it did
+not cost them quality.
+
+**Slice it yourself:** [`viewer.html`](viewer.html) carries both arms over every
+dataset, category, seed and metric the run emitted (cost, precision, recall, F1,
+FPR, FNR, average precision, AUROC), self-contained and offline.
+
 ## H2 — has the knob gone soft in absolute terms? No
 
 Read on the shipped head only, in the deep regime, against the bars fixed in the
