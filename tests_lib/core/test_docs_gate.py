@@ -294,7 +294,12 @@ class TestStudyDirCheck:
     def test_nested_directories_inside_a_study_are_not_studies(self):
         # `figures/`, `agg/` and friends live one level down and are not named
         # for a date; only the study directory itself is.
-        dirs = DIRS | {"docs/experiments/2026-01-01-brand-new-study/figures"}
+        dirs = DIRS | {
+            "docs/experiments/2026-01-01-brand-new-study",
+            "docs/experiments/2026-01-01-brand-new-study/figures",
+        }
+        # One failure, not two: the study itself is unindexed, and `figures/`
+        # is not a study at all.
         assert [f.message for f in gate.check_study_dirs(frozenset(dirs))] == [
             "study '2026-01-01-brand-new-study' has no row in docs/experiments/README.md"
         ]
