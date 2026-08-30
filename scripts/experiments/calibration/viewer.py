@@ -136,6 +136,7 @@ says what the arm IS rather than where it sits::
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import base64
 import gzip
 import json
@@ -561,6 +562,20 @@ def load_skyline(results: Path, dirs: Sequence[str], arms: Sequence[str]) -> pd.
     the frame is tiny next to the main one.  ``arm`` is set to the *results*
     arm's label, matching the main frame; the skyline arm's own name lands in
     ``gmm_variant``.
+
+    *results* need not be the root the curves came from (``--skyline-results``).
+    Vote-independence is what makes that sound: the floor is what the same head
+    reaches on the same split with every label handed to it, so a later pass
+    over the same cells measures the same quantity as the original run would
+    have, had it been asked.  The alternative -- re-running the loop to collect
+    a floor -- **replaces** the performance rows a finished report's tables were
+    read off, which is a worse trade than the one this avoids.
+
+    What it does not do is check that the two roots describe the same study: a
+    skyline row lands by ``(dataset, embedder, category)``, so rows from a
+    foreign grid are dropped rather than merged, but rows from the same grid at
+    a different configuration would be taken at face value.  Point it at a pass
+    over the same cells.
     """
     import _cells_io
 
@@ -678,6 +693,7 @@ def build_viewer(  # noqa: C901
     runs_budget_mb: float = RUNS_BUDGET_MB,
     anchor_label: str = curves.BASELINE_LABEL,
     template: Path = TEMPLATE,
+    build: dict | None = None,
 ) -> Path:
     """Write the self-contained viewer HTML.  Returns *out_path*."""
     if main.empty:
@@ -794,6 +810,18 @@ def build_viewer(  # noqa: C901
         "runs_note": runs_note,
         "n_cells": int(sum(cells.values())),
         "oracle_metrics": [k for k in oracle_keys if k not in RANKING_METRICS],
+        # How this page was built, when the builder knew (the CLI does; an
+        # analyzer calling `build_viewer` is itself in the tree, so its
+        # invocation is already recoverable and it passes nothing).
+        #
+        # Rebuilding a committed page is a routine job -- it is the whole of
+        # #3326 -- and until now the arguments were nowhere: `inclusion-knob-3196`
+        # ships two chips called `linear` and `logistic` over two results
+        # directories called `svm` and `linear`, and which carried which had to
+        # be settled by building BOTH orders and diffing them against the
+        # committed numbers.  A swap is invisible on screen and inverts the
+        # study's finding.
+        **({"build": build} if build else {}),
         "payload_kb": {k: round(v / 1024) for k, v in sizes.items()},
     }
 
@@ -861,6 +889,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="skip the supervised-skyline pass over the cell CSVs (issue #3322)",
     )
+    ap.add_argument(
+        "--skyline-results",
+        default=None,
+        metavar="ROOT",
+        help="read the skyline rows from a SECOND results root over the same cells "
+        "(default: --results), for a floor measured after the run it describes",
+    )
     args = ap.parse_args(list(argv) if argv is not None else None)
 
     if args.reskin:
@@ -888,13 +923,25 @@ def main(argv: Sequence[str] | None = None) -> int:
     if arms != dirs:
         frame["arm"] = frame["arm"].map(dict(zip(dirs, arms, strict=True)))
     baseline = curves.text_sort_baseline(args.baseline) if args.baseline else None
-    skyline = None if args.no_skyline else load_skyline(Path(args.results), dirs, arms)
+    # The skyline may live in its own results root -- see `load_skyline`'s note
+    # on why a floor is allowed to arrive later than the curve it sits beside.
+    sky_root = Path(args.skyline_results or args.results)
+    skyline = None if args.no_skyline else load_skyline(sky_root, dirs, arms)
+    if args.skyline_results:
+        print(f"skyline from {sky_root} ({0 if skyline is None else len(skyline)} rows)")
     out = build_viewer(
         frame,
         Path(args.out),
         arms=arms,
         baseline=baseline,
         skyline=skyline,
+        build={
+            "results": str(Path(args.results).resolve()),
+            "arms": args.arms,
+            "baseline": str(Path(args.baseline).resolve()) if args.baseline else None,
+            "skyline_results": str(sky_root.resolve()) if args.skyline_results else None,
+            "built": _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        },
         title=args.title,
         subtitle=args.subtitle,
         runs_budget_mb=args.runs_budget_mb,
@@ -902,10 +949,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"wrote {out}  ({out.stat().st_size / 1e6:.2f} MB)")
     if not args.baseline:
         print("NOTE: no --baseline, so the page has no click-0 anchor and nothing to compare the far right against.")
-    if skyline is None or skyline.empty:
+    if args.no_skyline:
+        print("NOTE: --no-skyline, so the cell CSVs were not read for a learnability floor and the page has none.")
+    elif skyline is None or skyline.empty:
         print(
-            "NOTE: no supervised-skyline rows under --results, so the page has no learnability floor. "
-            "Re-run with CALIB_SKYLINE_ARMS=skyline_train_full to get one (issue #3322)."
+            "NOTE: no supervised-skyline rows under "
+            f"{'--skyline-results' if args.skyline_results else '--results'}, so the page has no "
+            "learnability floor. Re-run with CALIB_SKYLINE_ARMS=skyline_train_full to get one, over "
+            "these cells or over a subset of them passed as --skyline-results (issue #3322)."
         )
     return 0
 

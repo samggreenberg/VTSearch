@@ -169,6 +169,12 @@ ENVX="$ENVX CALIB_PATCH_STYLES=$CALIB_PATCH_STYLES"
 # travel with the rest or a task enumerates a different grid than the launcher
 # counted.  `REQUIRE_OPENING` is checked per cell and travels beside it.
 ENVX="$ENVX CALIB_REQUIRE_OPENING=$CALIB_REQUIRE_OPENING CALIB_REQUIRE_SEED_QUERY=$CALIB_REQUIRE_SEED_QUERY"
+# The supervised skyline (#3322) is off unless asked for, and asking for it is
+# the whole point of a re-run like #3326.  It reaches the task through
+# `--export=ALL` today -- exactly the implicit path the block above refuses to
+# rely on for every other knob, and the one whose failure mode is a grid that
+# ran the full loop and emitted no floor.  Name it with the rest.
+ENVX="$ENVX CALIB_SKYLINE_ARMS=${CALIB_SKYLINE_ARMS:-}"
 
 # A submission is not a launch: --parsable returns an EMPTY id when the submit
 # filter refuses the job (#2897 lost both arms exactly this way).

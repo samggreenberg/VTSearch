@@ -399,6 +399,63 @@ def main() -> int:  # noqa: C901
         ok &= _check("the payload token was substituted exactly once", V.TOKEN not in html)
         ok &= _check("the page reports its own payload budget", bool(P.get("payload_kb")))
 
+        # --- how the page was built (#3326) ----------------------------------
+        # A page whose build arguments are nowhere costs the next rebuild a
+        # guess, and one wrong guess (which results dir carried which chip)
+        # inverts a study silently.  Recorded only when the caller knew them.
+        stamped = V.build_viewer(
+            main_df,
+            tmp / "stamped.html",
+            arms=ARMS,
+            denominator=cells,
+            baseline=base,
+            runs_budget_mb=0.25,
+            build={"results": "/somewhere", "arms": "d1=ctl,d2=alt"},
+        )
+        ok &= _check(
+            "the build arguments reach the page when the caller knows them",
+            _payload(stamped).get("build", {}).get("arms") == "d1=ctl,d2=alt",
+            str(_payload(stamped).get("build")),
+        )
+        ok &= _check(
+            "...and no empty `build` key when it does not",
+            "build" not in P,
+        )
+
+        # --- a floor measured after the fact (#3326) -------------------------
+        # `--skyline-results` reads the skyline from a SECOND results root.  It
+        # is sound because the skyline is vote-independent: a later, cheaper
+        # pass over the same cells measures the same quantity, where re-running
+        # the loop to collect one would replace the curves a finished report was
+        # read off.  What has to hold is that the rows come from that root and
+        # from nowhere else -- a silent fallback to the curve root would show on
+        # screen as "this study has no floor", which is indistinguishable from
+        # the truth for a study that never measured one.
+        curve_root, floor_root = tmp / "curves", tmp / "floor"
+        for root, frame in ((curve_root, main_df), (floor_root, sky)):
+            (root / "ctl" / "cells").mkdir(parents=True)
+            frame[frame["arm"] == "ctl"].to_csv(root / "ctl" / "cells" / "task_0000.csv", index=False)
+        ok &= _check(
+            "the curve root alone carries no floor",
+            V.load_skyline(curve_root, ["ctl"], ["ctl"]).empty,
+        )
+        picked = V.load_skyline(floor_root, ["ctl"], ["control"])
+        ok &= _check(
+            "a second results root supplies one",
+            len(picked) == int((sky["arm"] == "ctl").sum()) and not picked.empty,
+            f"{len(picked)} rows",
+        )
+        ok &= _check(
+            "...carrying the PAGE's arm label, so it lands beside the right curve",
+            set(picked["arm"]) == {"control"},
+            str(set(picked["arm"])),
+        )
+        ok &= _check(
+            "...and the skyline arm's own name, so `_skyline_arrays` can pick between arms",
+            set(picked["gmm_variant"]) == {"skyline_train_full"},
+            str(set(picked["gmm_variant"])),
+        )
+
         # --- reskin ----------------------------------------------------------
         # A template improvement has to be pushable onto a committed report
         # whose results directory is long gone, and it must move the SHELL
