@@ -50,17 +50,22 @@ STEPS = [5, 10, 15, 20]
 
 #: Planted per-arm levels.  Region clears H1 and H2; the binary control clears
 #: H1's lower bar and fails H2, which is the study's predicted shape.
-TAIL_RATIO = {"siglip/whole_image": 1.35, "siglip+dinov3_patch/whole_image": 1.30,
-              "siglip+dinov3_patch/max_patch": 2.10}
-SKEW_POOLED = {"siglip/whole_image": 0.10, "siglip+dinov3_patch/whole_image": 0.15,
-               "siglip+dinov3_patch/max_patch": 0.95}
+TAIL_RATIO = {
+    "siglip/whole_image": 1.35,
+    "siglip+dinov3_patch/whole_image": 1.30,
+    "siglip+dinov3_patch/max_patch": 2.10,
+}
+SKEW_POOLED = {
+    "siglip/whole_image": 0.10,
+    "siglip+dinov3_patch/whole_image": 0.15,
+    "siglip+dinov3_patch/max_patch": 0.95,
+}
 #: Trap 2: the image-scope skew is planted so the WITHIN-run difference is 0.60
 #: on the region arm, which is not any difference of the level medians above.
 SKEW_IMAGE = {a: SKEW_POOLED[a] - 0.60 for a in SKEW_POOLED}
 #: Trap 3: the middle arm has inert mass but a large mean movement, so "inert"
 #: must be False for it even though its mass share is tiny.
-DMU_LO = {"siglip/whole_image": 0.001, "siglip+dinov3_patch/whole_image": 0.25,
-          "siglip+dinov3_patch/max_patch": 0.002}
+DMU_LO = {"siglip/whole_image": 0.001, "siglip+dinov3_patch/whole_image": 0.25, "siglip+dinov3_patch/max_patch": 0.002}
 MASS = 1e-4
 
 
@@ -81,42 +86,78 @@ def build(root: Path) -> None:
                     tail = TAIL_RATIO[arm] * (1.0 + 0.02 * t)
                     regret = 0.5 - 0.03 * np.log(n_pos) + float(rng.normal(0, 0.001))
                     base = {
-                        "seed": seed, "dataset": "vg_scale_any", "category": cat,
-                        "style": style, "t": t, "embedder": emb,
-                        "seed_mode": "text", "seed_embedder": "siglip",
+                        "seed": seed,
+                        "dataset": "vg_scale_any",
+                        "category": cat,
+                        "style": style,
+                        "t": t,
+                        "embedder": emb,
+                        "seed_mode": "text",
+                        "seed_embedder": "siglip",
                     }
-                    fq_rows.append({
-                        **base, "scope": "sim:pooled", "fit_ok": True,
-                        "tail_ratio": tail, "shape_skew_neg": SKEW_POOLED[arm],
-                        "shape_n_neg": 500.0, "shape_n_pos": 100.0,
-                        "anchored_dmu_lo": np.nan, "anchor_mass_frac": np.nan,
-                        "anchor_kappa": np.nan,
-                    })
-                    fq_rows.append({
-                        **base, "scope": "sim:image", "fit_ok": True,
-                        "tail_ratio": tail * 0.8, "shape_skew_neg": SKEW_IMAGE[arm],
-                        "shape_n_neg": 500.0, "shape_n_pos": 100.0,
-                        "anchored_dmu_lo": np.nan, "anchor_mass_frac": np.nan,
-                        "anchor_kappa": np.nan,
-                    })
+                    fq_rows.append(
+                        {
+                            **base,
+                            "scope": "sim:pooled",
+                            "fit_ok": True,
+                            "tail_ratio": tail,
+                            "shape_skew_neg": SKEW_POOLED[arm],
+                            "shape_n_neg": 500.0,
+                            "shape_n_pos": 100.0,
+                            "anchored_dmu_lo": np.nan,
+                            "anchor_mass_frac": np.nan,
+                            "anchor_kappa": np.nan,
+                        }
+                    )
+                    fq_rows.append(
+                        {
+                            **base,
+                            "scope": "sim:image",
+                            "fit_ok": True,
+                            "tail_ratio": tail * 0.8,
+                            "shape_skew_neg": SKEW_IMAGE[arm],
+                            "shape_n_neg": 500.0,
+                            "shape_n_pos": 100.0,
+                            "anchored_dmu_lo": np.nan,
+                            "anchor_mass_frac": np.nan,
+                            "anchor_kappa": np.nan,
+                        }
+                    )
                     # Trap 1: fold rows carry NaN in every labelled column.
                     for f in (0, 1):
-                        fq_rows.append({
-                            **base, "scope": f"fold{f}", "fit_ok": True,
-                            "tail_ratio": np.nan, "shape_skew_neg": np.nan,
-                            "shape_n_neg": np.nan, "shape_n_pos": np.nan,
-                            "anchored_dmu_lo": DMU_LO[arm], "anchor_mass_frac": MASS,
-                            "anchor_kappa": 0.3,
-                        })
-                    main_rows.append({
-                        **base, "gmm_variant": "", "pool_variant": "",
-                        "regret_honest": regret, "n_test_pos": n_pos,
-                    })
+                        fq_rows.append(
+                            {
+                                **base,
+                                "scope": f"fold{f}",
+                                "fit_ok": True,
+                                "tail_ratio": np.nan,
+                                "shape_skew_neg": np.nan,
+                                "shape_n_neg": np.nan,
+                                "shape_n_pos": np.nan,
+                                "anchored_dmu_lo": DMU_LO[arm],
+                                "anchor_mass_frac": MASS,
+                                "anchor_kappa": 0.3,
+                            }
+                        )
+                    main_rows.append(
+                        {
+                            **base,
+                            "gmm_variant": "",
+                            "pool_variant": "",
+                            "regret_honest": regret,
+                            "n_test_pos": n_pos,
+                        }
+                    )
                     # Trap 5: a variant row with wild regret that must be dropped.
-                    main_rows.append({
-                        **base, "gmm_variant": "folds_k4_anchored", "pool_variant": "",
-                        "regret_honest": regret + 5.0, "n_test_pos": n_pos,
-                    })
+                    main_rows.append(
+                        {
+                            **base,
+                            "gmm_variant": "folds_k4_anchored",
+                            "pool_variant": "",
+                            "regret_honest": regret + 5.0,
+                            "n_test_pos": n_pos,
+                        }
+                    )
                 pd.DataFrame(main_rows).to_csv(cells / f"task_{idx:04d}.csv", index=False)
                 pd.DataFrame(fq_rows).to_csv(cells / f"task_{idx:04d}__fitq.csv", index=False)
                 idx += 1
