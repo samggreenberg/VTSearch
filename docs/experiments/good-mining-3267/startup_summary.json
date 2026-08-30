@@ -1955,5 +1955,267 @@
   },
   "n_main_rows": 1315452,
   "n_pick_rows": 1612800,
-  "verdict": "CANDIDATE: top_long (g8@top,b4@mid) mines +5 more positives per 100 clicks with cost regression bounded at -0.014. It also beats the length-matched control (flat_mid) by +9 positives, so the gain is depth rather than budget."
+  "verdict": "CANDIDATE: top_long (g8@top,b4@mid) mines +5 more positives per 100 clicks with cost regression bounded at -0.014. It also beats the length-matched control (flat_mid) by +9 positives, so the gain is depth rather than budget.",
+  "crossover": {
+    "cost": [
+      {
+        "arm": "band_wide",
+        "dataset": "coco_val",
+        "baseline": 0.390491875,
+        "final": 0.3052076959247649,
+        "crossover_t": 53,
+        "coverage_final": 0.6329365079365079
+      },
+      {
+        "arm": "band_wide",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5108799583333333,
+        "final": 0.4350164086021505,
+        "crossover_t": 87,
+        "coverage_final": 0.9226190476190476
+      },
+      {
+        "arm": "deep_first",
+        "dataset": "coco_val",
+        "baseline": 0.390491875,
+        "final": 0.3676895875486382,
+        "crossover_t": 114,
+        "coverage_final": 0.5099206349206349
+      },
+      {
+        "arm": "deep_first",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5108799583333333,
+        "final": 0.5031120792540793,
+        "crossover_t": 181,
+        "coverage_final": 0.8511904761904762
+      },
+      {
+        "arm": "easy_med_hard",
+        "dataset": "coco_val",
+        "baseline": 0.390491875,
+        "final": 0.2050904852320675,
+        "crossover_t": 17,
+        "coverage_final": 0.9404761904761904
+      },
+      {
+        "arm": "easy_med_hard",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5108799583333333,
+        "final": 0.3952937243460764,
+        "crossover_t": 36,
+        "coverage_final": 0.9861111111111112
+      },
+      {
+        "arm": "flat_mid",
+        "dataset": "coco_val",
+        "baseline": 0.390491875,
+        "final": 0.3438449069767442,
+        "crossover_t": 104,
+        "coverage_final": 0.5119047619047619
+      },
+      {
+        "arm": "flat_mid",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5108799583333333,
+        "final": 0.4953809689737469,
+        "crossover_t": 172,
+        "coverage_final": 0.8313492063492064
+      },
+      {
+        "arm": "incl_k",
+        "dataset": "coco_val",
+        "baseline": 0.390491875,
+        "final": 0.2013929679358717,
+        "crossover_t": 17,
+        "coverage_final": 0.9900793650793652
+      },
+      {
+        "arm": "incl_k",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5108799583333333,
+        "final": 0.3901556765873016,
+        "crossover_t": 32,
+        "coverage_final": 1.0
+      },
+      {
+        "arm": "incl_k_wide",
+        "dataset": "coco_val",
+        "baseline": 0.390491875,
+        "final": 0.1842435555555555,
+        "crossover_t": 16,
+        "coverage_final": 1.0
+      },
+      {
+        "arm": "incl_k_wide",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5108799583333333,
+        "final": 0.3817091785714285,
+        "crossover_t": 28,
+        "coverage_final": 1.0
+      },
+      {
+        "arm": "prod",
+        "dataset": "coco_val",
+        "baseline": 0.390491875,
+        "final": 0.1996711805555555,
+        "crossover_t": 10,
+        "coverage_final": 1.0
+      },
+      {
+        "arm": "prod",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5108799583333333,
+        "final": 0.3916268650793651,
+        "crossover_t": 23,
+        "coverage_final": 1.0
+      },
+      {
+        "arm": "top_long",
+        "dataset": "coco_val",
+        "baseline": 0.390491875,
+        "final": 0.1822878630952381,
+        "crossover_t": 14,
+        "coverage_final": 1.0
+      },
+      {
+        "arm": "top_long",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5108799583333333,
+        "final": 0.3735570555555555,
+        "crossover_t": 24,
+        "coverage_final": 1.0
+      }
+    ],
+    "average_precision": [
+      {
+        "arm": "band_wide",
+        "dataset": "coco_val",
+        "baseline": 0.6661504583333333,
+        "final": 0.5483445423197492,
+        "crossover_t": NaN,
+        "coverage_final": 0.6329365079365079
+      },
+      {
+        "arm": "band_wide",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5302047916666667,
+        "final": 0.4454131612903226,
+        "crossover_t": NaN,
+        "coverage_final": 0.9226190476190476
+      },
+      {
+        "arm": "deep_first",
+        "dataset": "coco_val",
+        "baseline": 0.6661504583333333,
+        "final": 0.480429887159533,
+        "crossover_t": 8.0,
+        "coverage_final": 0.5099206349206349
+      },
+      {
+        "arm": "deep_first",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5302047916666667,
+        "final": 0.3971070046620046,
+        "crossover_t": NaN,
+        "coverage_final": 0.8511904761904762
+      },
+      {
+        "arm": "easy_med_hard",
+        "dataset": "coco_val",
+        "baseline": 0.6661504583333333,
+        "final": 0.693209953586498,
+        "crossover_t": 45.0,
+        "coverage_final": 0.9404761904761904
+      },
+      {
+        "arm": "easy_med_hard",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5302047916666667,
+        "final": 0.4837767806841045,
+        "crossover_t": NaN,
+        "coverage_final": 0.9861111111111112
+      },
+      {
+        "arm": "flat_mid",
+        "dataset": "coco_val",
+        "baseline": 0.6661504583333333,
+        "final": 0.5068774689922481,
+        "crossover_t": NaN,
+        "coverage_final": 0.5119047619047619
+      },
+      {
+        "arm": "flat_mid",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5302047916666667,
+        "final": 0.4061128782816229,
+        "crossover_t": NaN,
+        "coverage_final": 0.8313492063492064
+      },
+      {
+        "arm": "incl_k",
+        "dataset": "coco_val",
+        "baseline": 0.6661504583333333,
+        "final": 0.6997328376753508,
+        "crossover_t": 57.0,
+        "coverage_final": 0.9900793650793652
+      },
+      {
+        "arm": "incl_k",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5302047916666667,
+        "final": 0.4941330634920635,
+        "crossover_t": NaN,
+        "coverage_final": 1.0
+      },
+      {
+        "arm": "incl_k_wide",
+        "dataset": "coco_val",
+        "baseline": 0.6661504583333333,
+        "final": 0.7340266884920635,
+        "crossover_t": 23.0,
+        "coverage_final": 1.0
+      },
+      {
+        "arm": "incl_k_wide",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5302047916666667,
+        "final": 0.513282138888889,
+        "crossover_t": NaN,
+        "coverage_final": 1.0
+      },
+      {
+        "arm": "prod",
+        "dataset": "coco_val",
+        "baseline": 0.6661504583333333,
+        "final": 0.7169225337301587,
+        "crossover_t": 29.0,
+        "coverage_final": 1.0
+      },
+      {
+        "arm": "prod",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5302047916666667,
+        "final": 0.4920086884920635,
+        "crossover_t": NaN,
+        "coverage_final": 1.0
+      },
+      {
+        "arm": "top_long",
+        "dataset": "coco_val",
+        "baseline": 0.6661504583333333,
+        "final": 0.7428857043650794,
+        "crossover_t": 19.0,
+        "coverage_final": 1.0
+      },
+      {
+        "arm": "top_long",
+        "dataset": "visual_genome_m",
+        "baseline": 0.5302047916666667,
+        "final": 0.5241760674603175,
+        "crossover_t": NaN,
+        "coverage_final": 1.0
+      }
+    ]
+  }
 }

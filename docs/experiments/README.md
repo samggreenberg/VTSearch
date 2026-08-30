@@ -40,8 +40,13 @@ from the same CSVs as everything else, self-contained, no network.
 the viewer's behaviour and the payload only the study's numbers, so
 `python viewer.py --reskin docs/experiments/*/viewer.html` pushes a template
 improvement onto every committed report — even one whose results directory is
-long gone. It cannot add data the payload never carried: a study that measured
-no oracle cut and no skyline still shows neither.
+long gone. It cannot add data the payload never carried, so a *series* still
+needs a rebuild from the cell CSVs. Both of the ones added in #3325 were
+backfilled that way in #3326: the oracle cut cost nothing to recover (its inputs
+are on every base row ever emitted), and the skyline was measured by a second,
+cheaper pass over the same cells and merged in with `--skyline-results`, because
+it is vote-independent and re-running the loop for it would have replaced the
+performance rows the reports' tables were read off.
 
 **The other archives.** [`docs/reports/`](../reports/) holds standalone HTML study
 pages (narrative write-ups with inlined charts — see [its

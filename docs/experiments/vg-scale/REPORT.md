@@ -48,11 +48,36 @@ tables, drawn. Off (the default) each column gets its own chart with the ±1 SD
 spread of the population shaded under its line, which is the only arrangement
 where that shadow is readable.
 
-Two of the page's controls stay empty here, and both need a re-run rather than a
-re-draw: this study measured no **oracle threshold** (so the dotted
-cheating-cut line is unavailable and the checkbox says why) and no **supervised
-skyline** (#3322 postdates the run, so there is no learnability-floor notch at
-the right margin). See #3326.
+Two more of its controls carry quantities no PNG here does.
+
+Tick **oracle threshold** and every solid line gains a dotted companion: the
+same momentary model, cut where the test labels say it should have been cut.
+The gap between the two is the **calibration regret** — what the threshold rule
+left on the table with the model held fixed, which is a different quantity from
+what a better model would have bought. It is offered on the six metrics that
+are statements about one cut, and withheld on AP and AUROC, which integrate over
+every threshold and so cannot move when the cut does; there the box disables
+itself and says why.
+
+The notch in each chart's **right** margin is the **supervised skyline**
+(#3322): the same head, through the same trainer, handed every label in the
+training split. It is the learnability floor of that column's embedding space,
+so the drop from the curve to the notch is what better clicking could still buy
+and the notch itself is what only a better space can move. It does not shift as
+the reader clicks, which is why it is a notch and not a rule across the panel.
+
+`siglip+dinov3_patch` has none. The v1 skyline is scoped to whole-image columns:
+a patch column's floor needs a supervision decision — ground-truth boxes against
+a multiple-instance problem — that is still open on #3321, and the harness skips
+it rather than improvising one.
+
+Both were added after the run (#3326). The oracle cut needed no new compute:
+`oracle_cost`, `oracle_fpr`, `oracle_fnr` and the split's class counts are on
+every base row this grid ever wrote, and the page reconstructs precision, recall
+and F1 at that cut from them. The floor did, and it was collected by a second
+pass over the same cells rather than by re-running the loop — the skyline is
+vote-independent, so a later pass measures the same quantity, where a re-run
+would have replaced the very curves the tables below are read off.
 
 ## What a session actually looks like
 
