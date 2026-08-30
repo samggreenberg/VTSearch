@@ -58,6 +58,20 @@ def _envs(df: pd.DataFrame) -> list[str]:
     return sorted(df["env"].unique())
 
 
+def _legend(fig, axes, spare, **kw) -> None:
+    """Legend in a spare panel when the wrap left one, else under the figure.
+
+    Never inside a panel: these panels are lines that run along the top or the
+    bottom of their own axes, so an in-panel legend lands on the data exactly
+    where the finding is.
+    """
+    if legend_in_spare(axes, spare, **kw):
+        return
+    handles, labels = axes[0].get_legend_handles_labels()
+    if handles:
+        fig.legend(handles, labels, loc="lower center", ncol=min(len(labels), 3), frameon=False, **kw)
+
+
 def fig_flat_band(per_k: pd.DataFrame, incumbent: str, out: Path) -> None:
     sub = per_k[per_k["arm"] == incumbent]
     envs = _envs(sub)
@@ -74,11 +88,9 @@ def fig_flat_band(per_k: pd.DataFrame, incumbent: str, out: Path) -> None:
         ax.set_xlabel("inclusion k")
     for ax in leftmost:
         ax.set_ylabel("share of steps whose\nadmitted set moved")
-    legend_in_spare(axes, spare, fontsize=9)
-    if not spare:
-        axes[0].legend(fontsize=8, frameon=False)
+    _legend(fig, axes, spare, fontsize=9)
     fig.suptitle("Where the Inclusion knob is dead, per head", fontsize=11)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.07, 1, 1))
     fig.savefig(out / "flat_band.png", dpi=DPI)
     plt.close(fig)
 
@@ -107,11 +119,9 @@ def fig_authority(per_k: pd.DataFrame, incumbent: str, out: Path) -> None:
         ax.set_xlabel("inclusion k")
     for ax in leftmost:
         ax.set_ylabel("admitted fraction")
-    legend_in_spare(axes, spare, fontsize=8)
-    if not spare:
-        axes[0].legend(fontsize=7, frameon=False)
+    _legend(fig, axes, spare, fontsize=8)
     fig.suptitle("What dragging the slider is worth (solid), and what the rule asked for (dashed)", fontsize=10)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.12, 1, 1))
     fig.savefig(out / "knob_authority.png", dpi=DPI)
     plt.close(fig)
 
@@ -141,9 +151,9 @@ def fig_per_cell(cells: pd.DataFrame, incumbent: str, out: Path) -> None:
         ax.set_title(_short(env), fontsize=9)
     for ax in leftmost:
         ax.set_ylabel("admitted-fraction span\nover the whole knob (per cell)")
-    legend_in_spare(axes, spare, fontsize=8)
+    _legend(fig, axes, spare, fontsize=8)
     fig.suptitle("Knob authority per cell — the bar is the mean", fontsize=11)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.07, 1, 1))
     fig.savefig(out / "authority_per_cell.png", dpi=DPI)
     plt.close(fig)
 
@@ -176,9 +186,9 @@ def fig_by_band(bands: pd.DataFrame, out: Path) -> None:
         ax.set_title(_short(env), fontsize=9)
     for ax in leftmost:
         ax.set_ylabel("dead-step rate")
-    legend_in_spare(axes, spare, fontsize=8)
+    _legend(fig, axes, spare, fontsize=8)
     fig.suptitle("Does the flat band follow target size? (box-size band = separability)", fontsize=10)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.07, 1, 1))
     fig.savefig(out / "flatness_by_band.png", dpi=DPI)
     plt.close(fig)
 
@@ -199,9 +209,9 @@ def fig_offset(gaps: pd.DataFrame, out: Path) -> None:
         ax.set_xlabel("reporting inclusion k")
     for ax in leftmost:
         ax.set_ylabel(f"share of steps where the\noffset ({offset}) admits nothing new")
-    legend_in_spare(axes, spare, fontsize=9)
+    _legend(fig, axes, spare, fontsize=9)
     fig.suptitle("What the acquisition offset is still worth (#2896's collapse)", fontsize=11)
-    fig.tight_layout()
+    fig.tight_layout(rect=(0, 0.07, 1, 1))
     fig.savefig(out / "offset_collapse.png", dpi=DPI)
     plt.close(fig)
 

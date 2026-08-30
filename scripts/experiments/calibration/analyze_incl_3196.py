@@ -170,7 +170,13 @@ def per_cell(per_step: pd.DataFrame, head: str) -> pd.DataFrame:
         .reset_index()
     )
     g.insert(0, "head_arm", head)
-    g["band"] = _band(g["cell"].astype(str).str.split("/").str[3])
+    # Plain strings, not categoricals: the two head arms are concatenated and
+    # then merged on these keys, and two categoricals built from different
+    # frames carry different category sets - which pandas merges as object
+    # anyway on a good day and refuses on a bad one.
+    for col in ("arm", "env", "cell"):
+        g[col] = g[col].astype(str)
+    g["band"] = _band(g["cell"].str.split("/").str[3])
     return g
 
 
