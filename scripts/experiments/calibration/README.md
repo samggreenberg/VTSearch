@@ -468,6 +468,27 @@ above). `viewer.py` reads them straight out of the cell CSVs, because
 the app can never see. A run without them still builds; the page just has no
 floor, and the builder says so. `--no-skyline` skips the pass.
 
+A study that finished before #3322 can still get a floor without re-running its
+loop. The skyline is vote-independent, so a second, cheaper pass over the same
+cells measures the same quantity — and `--skyline-results` reads it from that
+pass's results root while the curves keep coming from the original one:
+
+```bash
+CALIB_EXP=/expscratch/$USER/<study>-skyline CALIB_SKYLINE_ARMS=skyline_train_full \
+  CALIB_VGSCALE_EMBEDDERS=<the whole-image columns> bash launch_scale.sh cells
+python viewer.py --results "$ORIGINAL" --arms results=prod \
+  --skyline-results /expscratch/$USER/<study>-skyline \
+  --baseline "$OUT/text_baseline.csv" --out "$OUT/viewer.html"
+```
+
+Point the second root at a pass over the **same cells** — symlink the original
+run's `prepare_info.json` and `crops` into it, as `launch_scale.sh size` does,
+so the two agree on what each cell is. Rows from a foreign grid are dropped
+(they land by `(dataset, embedder, category)`), but rows from the same grid at a
+different configuration would be taken at face value. Re-running the loop
+instead would work too, and costs more than the floor: it **replaces** the
+performance rows the report's tables were read off.
+
 To redraw the PNGs without re-running the analysis:
 
 ```bash
