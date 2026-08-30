@@ -101,7 +101,11 @@ export CALIB_REQUIRE_OPENING="${CALIB_REQUIRE_OPENING:-text}"
 export CALIB_REQUIRE_SEED_QUERY="${CALIB_REQUIRE_SEED_QUERY:-1}"
 
 LOGS="$CALIB_EXP/logs"
-mkdir -p "$LOGS" "$CALIB_RESULTS/cells"
+# `analysis/` is created here rather than by the job that writes into it:
+# `text_baseline.py` does its whole pass and hands the path to pandas only at
+# the end, so a missing directory costs the entire run and surfaces as a write
+# error 47s in, with nothing to show for it.
+mkdir -p "$LOGS" "$CALIB_RESULTS/cells" "$CALIB_EXP/analysis"
 
 # MEASURED on this configuration by `size 0,12` (2026-08-30, jobs 601323/601324
 # on rack2n09 -- backpack/seed 0 of each embedder, off a clean worktree at
