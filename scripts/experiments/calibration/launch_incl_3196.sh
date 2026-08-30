@@ -118,19 +118,34 @@ export CALIB_N_SEEDS="${CALIB_N_SEEDS:-4}"
 export CALIB_PARTITION=cpu
 export CALIB_GRES=none
 
-# MEASURED on THIS grid by `size` before either arm went in - see the report's
-# ops section.  No prior grid's seconds transfer: this cell has no fold grid
-# (#3314's had 8 folds) but carries a 21-stop x 9-arm re-cut per step that no
-# earlier cell paid for.
-export CALIB_MEM="${CALIB_MEM:-16G}"
+# MEASURED on THIS grid, 2026-08-29, by `size` before either arm went in.  No
+# prior grid's seconds transfer: this cell has no fold grid (#3314's had 8
+# folds) but carries a 21-stop x 9-arm re-cut per step that no earlier cell paid
+# for.  Both cells ran at the same threading as the array (see the BLAS pins).
+#
+#   cell  0  vg_scale x siglip              whole_image              7m16s  0.74 GB
+#   cell 36  vg_scale x siglip+dinov3_patch whole_image + max_patch  39m47s  5.07 GB
+#
+# The pair cell runs BOTH geometries in one task, which is why it is 5.5x the
+# other and why it, not the binary cell, sets every limit here.  Sizing off the
+# binary one would have picked ~2G and lost half of each arm to OOM, which costs
+# cells rather than minutes (#3255 lost 74 of 108 that way).
+export CALIB_MEM="${CALIB_MEM:-12G}"
 export CALIB_CPUS=1
-export CALIB_TIME="${CALIB_TIME:-12:00:00}"
+# 4h against a measured 39m47s.  Generous on purpose: a cell that times out loses
+# its LATE steps, and the deep regime (n_votes >= 100) is exactly where H2 is
+# read - a truncated cell would answer the study's own question with its cheap
+# half.
+export CALIB_TIME="${CALIB_TIME:-4:00:00}"
 # BOTH ARMS RUN AT ONCE, so the width below is per arm and the footprint is
-# twice it.  1074G is the per-user allowance under QOS `cpu_limit`; 2 x 28 x 16G
-# = 896G is 83% of it, under preflight check 8's 90% line, and leaves room for
-# the analyze steps.  (`cpu_limit` also charges 2 CPUs per task, so 56 concurrent
-# tasks is 112 of the 240-CPU ceiling - memory binds first here, as usual.)
-export CALIB_CONC="${CALIB_CONC:-28}"
+# twice it.  1074G is the per-user allowance under QOS `cpu_limit`; 2 x 36 x 12G
+# = 864G is 80% of it, under preflight check 8's 90% line, and leaves room for
+# the two analyze steps.  (`cpu_limit` also charges 2 CPUs per task, so 72
+# concurrent tasks is 144 of the 240-CPU ceiling - memory binds first, as usual.)
+#
+# Going wider buys little: 2 x 288 cells is ~13,560 cell-minutes, so 72 slots put
+# the array at ~3h10m while the critical path - one pair cell - is 40 minutes.
+export CALIB_CONC="${CALIB_CONC:-36}"
 # The cross-head frame is ~24 M rows over both arms; 16G/40min is where such an
 # analysis dies, after the cells have already been paid for.
 export CALIB_ANALYZE_MEM="${CALIB_ANALYZE_MEM:-64G}"
