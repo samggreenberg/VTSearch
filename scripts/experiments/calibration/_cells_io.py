@@ -36,7 +36,7 @@ _DROP_FIELDS = ("media_bytes", "thumbnail_bytes")
 #: ``category``/``t`` with the main frame and has no ``cost``, so the extra rows
 #: do not raise - they land as NaN in every metric column and change every
 #: ``groupby`` denominator silently.
-SIDE_FRAME_SUFFIXES = ("__sweep", "__cutdiag", "__cutincl", "__picks")
+SIDE_FRAME_SUFFIXES = ("__sweep", "__cutdiag", "__cutincl", "__picks", "__fitq")
 
 
 def main_frame_files(cells_dir: str | Path) -> list[Path]:
