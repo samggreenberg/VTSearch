@@ -399,6 +399,29 @@ def main() -> int:  # noqa: C901
         ok &= _check("the payload token was substituted exactly once", V.TOKEN not in html)
         ok &= _check("the page reports its own payload budget", bool(P.get("payload_kb")))
 
+        # --- how the page was built (#3326) ----------------------------------
+        # A page whose build arguments are nowhere costs the next rebuild a
+        # guess, and one wrong guess (which results dir carried which chip)
+        # inverts a study silently.  Recorded only when the caller knew them.
+        stamped = V.build_viewer(
+            main_df,
+            tmp / "stamped.html",
+            arms=ARMS,
+            denominator=cells,
+            baseline=base,
+            runs_budget_mb=0.25,
+            build={"results": "/somewhere", "arms": "d1=ctl,d2=alt"},
+        )
+        ok &= _check(
+            "the build arguments reach the page when the caller knows them",
+            _payload(stamped).get("build", {}).get("arms") == "d1=ctl,d2=alt",
+            str(_payload(stamped).get("build")),
+        )
+        ok &= _check(
+            "...and no empty `build` key when it does not",
+            "build" not in P,
+        )
+
         # --- a floor measured after the fact (#3326) -------------------------
         # `--skyline-results` reads the skyline from a SECOND results root.  It
         # is sound because the skyline is vote-independent: a later, cheaper

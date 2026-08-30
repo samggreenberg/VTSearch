@@ -136,6 +136,7 @@ says what the arm IS rather than where it sits::
 from __future__ import annotations
 
 import argparse
+import datetime as _dt
 import base64
 import gzip
 import json
@@ -692,6 +693,7 @@ def build_viewer(  # noqa: C901
     runs_budget_mb: float = RUNS_BUDGET_MB,
     anchor_label: str = curves.BASELINE_LABEL,
     template: Path = TEMPLATE,
+    build: dict | None = None,
 ) -> Path:
     """Write the self-contained viewer HTML.  Returns *out_path*."""
     if main.empty:
@@ -808,6 +810,18 @@ def build_viewer(  # noqa: C901
         "runs_note": runs_note,
         "n_cells": int(sum(cells.values())),
         "oracle_metrics": [k for k in oracle_keys if k not in RANKING_METRICS],
+        # How this page was built, when the builder knew (the CLI does; an
+        # analyzer calling `build_viewer` is itself in the tree, so its
+        # invocation is already recoverable and it passes nothing).
+        #
+        # Rebuilding a committed page is a routine job -- it is the whole of
+        # #3326 -- and until now the arguments were nowhere: `inclusion-knob-3196`
+        # ships two chips called `linear` and `logistic` over two results
+        # directories called `svm` and `linear`, and which carried which had to
+        # be settled by building BOTH orders and diffing them against the
+        # committed numbers.  A swap is invisible on screen and inverts the
+        # study's finding.
+        **({"build": build} if build else {}),
         "payload_kb": {k: round(v / 1024) for k, v in sizes.items()},
     }
 
@@ -921,6 +935,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         arms=arms,
         baseline=baseline,
         skyline=skyline,
+        build={
+            "results": str(Path(args.results).resolve()),
+            "arms": args.arms,
+            "baseline": str(Path(args.baseline).resolve()) if args.baseline else None,
+            "skyline_results": str(sky_root.resolve()) if args.skyline_results else None,
+            "built": _dt.datetime.now(_dt.UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        },
         title=args.title,
         subtitle=args.subtitle,
         runs_budget_mb=args.runs_budget_mb,
