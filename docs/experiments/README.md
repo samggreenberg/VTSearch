@@ -24,11 +24,24 @@ do not write it again.
 **…and it owes an interactive `viewer.html`, linked from the report.** The PNGs
 answer the questions the analyzer asked; the viewer is what lets a reader ask
 their own — any dataset (one / all / each), any category (one / all / each), any
-subset of arms, any subset of embedders (one panel each, never averaged), seeds
-averaged or every seed, and any metric the run emitted (cost, precision, recall,
-F1, FPR, FNR, average precision, AUROC). Built by
-[`scripts/experiments/calibration/viewer.py`](../../scripts/experiments/calibration/viewer.py)
+subset of arms, any subset of embedders, seeds averaged or every seed, and any
+metric the run emitted (cost, precision, recall, F1, FPR, FNR, average
+precision, AUROC). Two draw toggles decide the shape: **overlay** puts every
+varying dimension on one chart in distinct hues (off, each gets its own chart
+with the ±1 SD shadow, which is the only place that shadow is readable), and
+**oracle threshold** adds the cut the test labels say the model should have
+used, dotted beside the solid line it achieved. Two more reference marks are
+notched into the margins: the free text sort at the left and, for a run
+launched with `CALIB_SKYLINE_ARMS`, the supervised skyline at the right. Built
+by [`scripts/experiments/calibration/viewer.py`](../../scripts/experiments/calibration/viewer.py)
 from the same CSVs as everything else, self-contained, no network.
+
+**A page can be re-skinned without its results.** The template carries all of
+the viewer's behaviour and the payload only the study's numbers, so
+`python viewer.py --reskin docs/experiments/*/viewer.html` pushes a template
+improvement onto every committed report — even one whose results directory is
+long gone. It cannot add data the payload never carried: a study that measured
+no oracle cut and no skyline still shows neither.
 
 **The other archives.** [`docs/reports/`](../reports/) holds standalone HTML study
 pages (narrative write-ups with inlined charts — see [its

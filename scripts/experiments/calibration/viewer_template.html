@@ -122,11 +122,26 @@
   .legend-key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px; margin-top: 6px; }
   .legend-key span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
   .legend-key svg { display: inline-block; width: 22px; height: 10px; overflow: visible; }
+  /* Sits ABOVE the swatches, not below them: at sixty series the swatch list is
+     taller than the viewport, so a warning under it is a warning nobody reads. */
+  .legend-warn {
+    font-size: 12.5px; color: var(--ink); margin-bottom: 7px;
+    border-left: 3px solid var(--s2); padding: 3px 0 3px 9px;
+  }
+  .legend-warn b { font-weight: 600; }
+  /* Cap the swatch list so a hairball's legend cannot push the chart itself
+     off the screen; it scrolls in place instead. */
+  .legend { max-height: 148px; overflow-y: auto; }
 
   /* Grid, not flex: a flex row lets the last panel of an uneven row stretch to
      the full width, so the same series is drawn at two different sizes on one
      screen and the small multiples stop being comparable. */
   .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); gap: 14px; }
+  /* A lone panel - the overlay view, or a study with one series - must not
+     stretch to the full page. The SVG scales its 660-wide viewBox to whatever
+     width it gets, so a full-bleed panel renders 11px axis labels as
+     billboards and pushes the rotated y-axis title off its own left edge. */
+  .panels.one { grid-template-columns: minmax(0, 940px); justify-content: center; }
   .panel {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
     padding: 10px 12px 6px; position: relative; min-width: 0;
@@ -670,6 +685,7 @@
   function render() {
     const host = $("panels");
     host.innerHTML = "";
+    host.classList.remove("one");
     const pl = plan();
     const mi = P.metrics.findIndex((m) => m.key === state.metric);
     const spec = P.metrics[mi];
@@ -787,6 +803,7 @@
 
     const nSeries = new Set(panels.flatMap((p) => p.per.map((q) => q.name))).size;
     const opt = { showCov, showOracle, showSky, useOverlay, nSeries };
+    host.classList.toggle("one", panels.length === 1);
     for (const p of panels) host.appendChild(panel(p, pl, spec, lo, hi, opt));
     legend(pl, panels, opt);
     reading(spec, pl, hidden, facetKeys.length, opt);
@@ -835,8 +852,10 @@
     const yc = (c) => H + 16 + (1 - c) * (CH - 22);
 
     const nCells = pnl.per.reduce((a, q) => a + q.agg.cells, 0);
+    // In overlay the panel IS the page, so its heading would be the <h1> again.
+    const head = useOverlay ? "" : panelTitle(pnl.fk, pl);
     el.innerHTML =
-      `<h2>${esc(panelTitle(pnl.fk, pl))}</h2>` +
+      (head ? `<h2>${esc(head)}</h2>` : "") +
       `<p class="pn">${esc(panelSub(pl))} · ${nCells} cell${nCells === 1 ? "" : "s"}</p>`;
 
     const parts = [];
@@ -857,7 +876,7 @@
     // the first trained click and the two reference marks sit in the margins.
     const t0 = P.anchor.has ? 1 : 0;
     const ts = P.t.slice(t0);
-    const NOTCH = 9;
+    const NOTCH = 12;
     const clamp = (v) => Math.min(hi, Math.max(lo, v));
     const inRange = (v) => Number.isFinite(v) && v >= lo && v <= hi;
 
@@ -938,12 +957,21 @@
       : (panels.length > 1
         ? `<b>One chart per ${pl.facetDims.map(esc).join(" × ")}</b> — one line each, so the shaded spread underneath it is readable. Colour carries no meaning here; tick <b>overlay on one chart</b> to compare them directly.`
         : `One series`);
-    let rows = "";
+    let rows = "", warn = "";
     if (opt.useOverlay) {
       const seen = new Map();
       for (const p of panels) for (const q of p.per) if (!seen.has(q.name)) seen.set(q.name, q.color);
       rows = `<div class="legend">` + [...seen].map(([name, col]) =>
         `<span><i style="background:${col}"></i>${esc(name)}</span>`).join("") + `</div>`;
+      // The palette has 8 contrast-checked slots; past them hues are generated
+      // on the golden angle so a twelve-class overlay is drawable at all. That
+      // is a real trade and the reader is told where it starts, at the top,
+      // where the swatch list has not already pushed it off screen.
+      if (seen.size > SERIES.length) warn =
+        `<div class="legend-warn"><b>${seen.size} series on one chart</b> — past the palette's ` +
+        `${SERIES.length} contrast-checked slots, so the rest are generated on the golden angle: ` +
+        `distinguishable, but not validated${seen.size > 20 ? ", and at this count the chart is a hairball" : ""}. ` +
+        `Narrow the selection, or untick <b>overlay</b> for one chart each.</div>`;
     }
     const key = [];
     const stroke = (extra) => `<svg viewBox="0 0 22 10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" stroke="var(--ink-2)" ${extra}/></svg>`;
@@ -956,7 +984,7 @@
       `<span><svg viewBox="0 0 22 10" aria-hidden="true"><line x1="13" y1="5" x2="22" y2="5" stroke="var(--ink-2)" stroke-width="3"/></svg>${esc(P.skyline.label)}</span>`);
     if (!opt.useOverlay) key.push(`<span><i style="width:16px;height:9px;border-radius:2px;background:${SOLO};opacity:.22;display:inline-block"></i>±1 SD across cells</span>`);
     host.innerHTML =
-      `<div class="legend-head">${heading}</div>` + rows +
+      warn + `<div class="legend-head">${heading}</div>` + rows +
       `<div class="legend-key">${key.join("")}</div>`;
   }
 
@@ -1106,12 +1134,6 @@
     if (opt.useOverlay && state.embedders.size > 1) bits.push(
       `<b>Overlaying embedders is not averaging them.</b> Two embedders are two representations of the haystack and ` +
       `their mean describes no system anyone could run — but two lines pool nothing, so the comparison is fair.`);
-    if (opt.useOverlay) {
-      const n = opt.nSeries;
-      if (n > 8) bits.push(
-        `<b>${n} series share this chart</b>, past the palette's 8 contrast-checked slots; the rest are generated on ` +
-        `the golden angle and are distinguishable but not validated. Narrow the selection if two hues read alike.`);
-    }
     if (hidden) bits.push(
       `<b>${hidden} of ${wanted} charts are not drawn</b> (the page caps at ${MAX_PANELS}). Narrow the selection, ` +
       `or tick <b>overlay on one chart</b> to put them all on one.`);

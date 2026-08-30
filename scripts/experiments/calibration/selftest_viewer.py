@@ -399,6 +399,20 @@ def main() -> int:  # noqa: C901
         ok &= _check("the payload token was substituted exactly once", V.TOKEN not in html)
         ok &= _check("the page reports its own payload budget", bool(P.get("payload_kb")))
 
+        # --- reskin ----------------------------------------------------------
+        # A template improvement has to be pushable onto a committed report
+        # whose results directory is long gone, and it must move the SHELL
+        # without touching a byte of the numbers.
+        V.reskin(out)
+        again = out.read_text(encoding="utf-8")
+        ok &= _check(
+            "reskin rewrites the page and leaves the payload byte-identical",
+            _payload(out) == P
+            and re.search(r'type="application/json">(.*?)</script>', again, re.S).group(1)
+            == re.search(r'type="application/json">(.*?)</script>', html, re.S).group(1),
+        )
+        ok &= _check("...and the reskinned page is still whole", again == html)
+
         print("\n" + ("SELFTEST PASSED" if ok else "SELFTEST FAILED"))
         return 0 if ok else 1
     finally:

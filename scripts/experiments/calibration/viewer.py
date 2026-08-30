@@ -140,6 +140,7 @@ import base64
 import gzip
 import json
 import os
+import re
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -562,7 +563,6 @@ def load_skyline(results: Path, dirs: Sequence[str], arms: Sequence[str]) -> pd.
     ``gmm_variant``.
     """
     import _cells_io
-    import analyze_spikes as sp  # noqa: F401  (kept beside _cells_io: same reader family)
 
     want = set(SKYLINE_ARMS)
     parts = []
@@ -572,7 +572,10 @@ def load_skyline(results: Path, dirs: Sequence[str], arms: Sequence[str]) -> pd.
                 continue
             try:
                 fr = pd.read_csv(f)
-            except Exception:  # noqa: BLE001, S112
+            except Exception:  # noqa: BLE001
+                # A cell whose CSV is truncated costs its skyline, never the
+                # page: the main frame's own loader reports unreadable cells,
+                # and this pass must not be the thing that fails the build.
                 continue
             if fr.empty or "gmm_variant" not in fr.columns:
                 continue
@@ -767,7 +770,12 @@ def build_viewer(  # noqa: C901
         runs_note = "No per-seed rows were found, so per-seed lines are unavailable."
 
     payload = {
-        "schema": 1,
+        # 2 adds `agg.omean` / `agg.on` (the oracle companion) and `skyline`.
+        # Nothing branches on it - the page treats both as optional, which is
+        # what lets `--reskin` push a template improvement onto a schema-1 page
+        # built before either existed.  It is here so a reader can tell which
+        # reports still predate them.
+        "schema": 2,
         "title": title,
         "subtitle": subtitle,
         "anchor": {"has": has_anchor, "label": anchor_label},
@@ -802,15 +810,48 @@ def build_viewer(  # noqa: C901
     return out_path
 
 
+def reskin(page: Path, template: Path = TEMPLATE) -> Path:
+    """Re-substitute *page*'s own payload into the current template, in place.
+
+    The template is the whole of the viewer's behaviour — every control, every
+    drawing rule, every word of the reading note — and the payload is just the
+    study's numbers.  So a change to how the page *reads* can be pushed onto a
+    committed report without the results directory it was built from, which for
+    a finished study lives on the GRID and may be gone.
+
+    It cannot add data the payload never carried: a page rebuilt this way keeps
+    whatever ``schema`` it had, so a study that measured no oracle cut and no
+    skyline still shows neither, and the page disables those controls rather
+    than drawing an empty one.  Re-running the analyzer is the only way to get
+    them.
+    """
+    page = Path(page)
+    html = page.read_text(encoding="utf-8")
+    m = re.search(r'<script id="payload" type="application/json">(.*?)</script>', html, re.S)
+    if not m:
+        raise SystemExit(f"{page}: no payload script tag - not a viewer page")
+    blob = m.group(1)
+    fresh = template.read_text(encoding="utf-8")
+    if fresh.count(TOKEN) != 1:
+        raise SystemExit(f"{template}: expected exactly 1 {TOKEN}, found {fresh.count(TOKEN)}")
+    page.write_text(fresh.replace(TOKEN, blob), encoding="utf-8")
+    return page
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument(
+        "--reskin",
+        nargs="+",
+        metavar="PAGE",
+        help="re-substitute each built viewer.html's own payload into the current template, in place",
+    )
     ap.add_argument("--results", default=str(common.RESULTS), help="results root holding one dir per arm")
     ap.add_argument(
         "--arms",
-        required=True,
         help="comma-separated arm directories, in report order; `dir=label` renames one on the page",
     )
-    ap.add_argument("--out", required=True, help="path to write the HTML to")
+    ap.add_argument("--out", help="path to write the HTML to")
     ap.add_argument("--baseline", default=None, help="text_baseline.py CSV: the click-0 anchor")
     ap.add_argument("--title", default="Quality over clicks")
     ap.add_argument("--subtitle", default="")
@@ -821,6 +862,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="skip the supervised-skyline pass over the cell CSVs (issue #3322)",
     )
     args = ap.parse_args(list(argv) if argv is not None else None)
+
+    if args.reskin:
+        for page in args.reskin:
+            out = reskin(Path(page))
+            print(f"reskinned {out}  ({out.stat().st_size / 1e6:.2f} MB)")
+        return 0
+    if not args.arms or not args.out:
+        ap.error("--arms and --out are required unless --reskin is given")
 
     # `dir=label` exists for the single-arm studies. A study that sweeps a knob
     # has one results directory per arm and the directory name IS the arm name,
