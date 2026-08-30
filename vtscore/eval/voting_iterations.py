@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 from vtscore.embedding.media_vectors import media_embedding
 from vtscore.eval.al_strategies import ALContext, select_next
 from vtscore.eval.autopilot_flow import SMART_WINDOW, AutopilotFlow, app_has_detector
+from vtscore.eval.fit_quality import FIT_QUALITY_COLUMNS, fit_quality_row
 from vtscore.eval.startup_schedule import StartupState, parse_startup_schedule, round_cut
 from vtscore.eval.labels import evaluable_pool, media_is_positive, region_box_for_category
 from vtscore.eval.score_dumps import maybe_dump_predictions
@@ -59,6 +60,7 @@ from vtscore.training.thresholds import (
     CUT_KIND_INTERIOR,
     apply_vote_exclusion,
     FOLD_ANCHOR_QTILT_STEP,
+    FOLD_ANCHOR_WEIGHT,
     NO_GOOD_THRESHOLD,
     acquisition_inclusion,
     anchored_gmm_fit,
@@ -571,6 +573,52 @@ _CUT_DIAGNOSTIC_COLUMNS: tuple[str, ...] = (
     "oracle_lo_sf_gauss",
     "oracle_lo_sf_evt",
 )
+
+#: Column order for the **goodness-of-fit** side frame (issue #3329): one row per
+#: (step, scope), where *scope* is either a calibration fold of the **shipped**
+#: fold-anchored cut or the labelled sim set under one pooling geometry.
+#:
+#: This frame exists because every other diagnostic in this module is
+#: *relative* - ``evt_loglik_gain`` prices one family against another, the
+#: ``tau_*`` chain prices one cut against another - and a misfit both sides share
+#: cancels in every one of them.  ``vtscore.eval.fit_quality`` scores a fit
+#: against its own data instead, and this is where those statistics leave the
+#: run.
+#:
+#: Two scopes, because the two questions live on different populations and
+#: conflating them would silently compare a fold model's haystack with the final
+#: model's sim set:
+#:
+#: * ``fold<i>`` - fold *i* of the shipped :class:`FoldAnchoredCut`, scored
+#:   against **its own** haystack.  Label-free, so it carries the distance and
+#:   anchoring columns only.  Nothing in the eval tier has ever read
+#:   ``FoldAnchoredCut.fits``; these are the shipped mixture's first observations.
+#: * ``sim:<geometry>`` - the unanchored mixture on the labelled sim scores.
+#:   Carries the class-shape and identification columns, which need labels.
+_FIT_QUALITY_COLUMNS: tuple[str, ...] = (
+    *_IDENT_COLUMNS,
+    "scope",
+    "fold_index",
+    "n_folds",
+    "n_fit_sample",
+    "fit_ok",
+    # The fitted mixture itself, so a row is self-contained: an analyzer can
+    # re-derive any statistic here without needing the run's other frames.
+    "fq_w_lo",
+    "fq_mu_lo",
+    "fq_var_lo",
+    "fq_w_hi",
+    "fq_mu_hi",
+    "fq_var_hi",
+    "fq_cut",
+    *FIT_QUALITY_COLUMNS,
+)
+
+#: Emit a goodness-of-fit row every this many steps (plus the first three, where
+#: the fit moves fastest).  The mixture evolves slowly against the vote count, so
+#: a row per step would multiply the fit cost by the horizon to resolve a curve
+#: that a fifth of the points already resolves.
+FIT_QUALITY_STRIDE_DEFAULT = 5
 
 #: Column order for the inclusion-budget sweep side frame (long format, one row
 #: per (step, inclusion k)); written to a separate CSV by the runner.
@@ -1403,6 +1451,107 @@ _ORACLE_VARIANTS: frozenset[str] = frozenset(
         "pooled_sim_oracle_smooth",
     }
 )
+
+
+def _fit_quality_rows(
+    base_row: dict[str, Any],
+    safe_cut: Any,
+    sim_scores_by_geometry: dict[str, Any],
+    sim_labels_by_geometry: dict[str, Any],
+    threshold: float,
+) -> list[dict[str, Any]]:
+    """Goodness-of-fit rows for one step (issue #3329).
+
+    Two scopes, deliberately not pooled - see :data:`_FIT_QUALITY_COLUMNS`.
+
+    The **fold** scopes read ``safe_cut.fits`` against ``safe_cut.fold_haystacks``,
+    which is the shipped estimator scored against its own data.  Nothing else in
+    the eval tier reads those fits at all, so a fold row is the only place the
+    threshold the app actually computes is compared to the distribution it claims
+    to describe.  They are label-free: a fold haystack is the unlabelled
+    remainder under *that fold's* model, and the sim labels belong to the final
+    model's score scale, so attaching them here would compare two scalings.
+
+    The **sim** scopes fit the unanchored mixture to the labelled sim scores and
+    carry the shape and identification statistics.  Both pooling geometries are
+    emitted because ``pooled`` and ``image`` are the same media under the same
+    model with only the pooling changed - the exactly-paired form of "does
+    max-pooling make the Bad mode non-Gaussian?".
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.training.thresholds import fit_score_gmm, gmm_fit_array  # noqa: PLC0415
+
+    rows: list[dict[str, Any]] = []
+
+    if safe_cut is not None:
+        fits = getattr(safe_cut, "fits", ()) or ()
+        haystacks = getattr(safe_cut, "fold_haystacks", ()) or ()
+        n_anchored = int(getattr(safe_cut, "n_anchored", 0) or 0)
+        for i, (fit, hay) in enumerate(zip(fits, haystacks, strict=False)):
+            arr = np.asarray(hay, dtype=np.float64).ravel()
+            # ``n_anchored`` is a per-cut count of folds that anchored, not a
+            # per-fold vote count; the votes each fold anchors on are its
+            # held-out share, which is what the mass fraction needs.  Recorded
+            # from the cut rather than recomputed so the two cannot disagree.
+            fq = fit_quality_row(
+                arr,
+                fit,
+                cut=threshold,
+                n_anchors=n_anchored,
+                anchor_weight=float(getattr(safe_cut, "anchor_weight", FOLD_ANCHOR_WEIGHT)),
+            )
+            rows.append(
+                {
+                    **base_row,
+                    "scope": f"fold{i}",
+                    "fold_index": i,
+                    "n_folds": len(fits),
+                    "n_fit_sample": int(arr.size),
+                    "fit_ok": fit is not None,
+                    "fq_w_lo": fit.w_lo,
+                    "fq_mu_lo": fit.mu_lo,
+                    "fq_var_lo": fit.var_lo,
+                    "fq_w_hi": fit.w_hi,
+                    "fq_mu_hi": fit.mu_hi,
+                    "fq_var_hi": fit.var_hi,
+                    "fq_cut": float(threshold),
+                    **fq,
+                }
+            )
+
+    for geometry, scores in sim_scores_by_geometry.items():
+        if scores is None:
+            continue
+        labels = sim_labels_by_geometry.get(geometry)
+        arr = gmm_fit_array(np.asarray(scores, dtype=np.float64).ravel())
+        fit = fit_score_gmm(arr)
+        fq = fit_quality_row(
+            arr,
+            fit,
+            cut=threshold,
+            labels=labels,
+            label_scores=np.asarray(scores, dtype=np.float64).ravel() if labels is not None else None,
+        )
+        rows.append(
+            {
+                **base_row,
+                "scope": f"sim:{geometry}",
+                "fold_index": -1,
+                "n_folds": 0,
+                "n_fit_sample": int(arr.size),
+                "fit_ok": fit is not None,
+                "fq_w_lo": None if fit is None else fit.w_lo,
+                "fq_mu_lo": None if fit is None else fit.mu_lo,
+                "fq_var_lo": None if fit is None else fit.var_lo,
+                "fq_w_hi": None if fit is None else fit.w_hi,
+                "fq_mu_hi": None if fit is None else fit.mu_hi,
+                "fq_var_hi": None if fit is None else fit.var_hi,
+                "fq_cut": float(threshold),
+                **fq,
+            }
+        )
+    return rows
 
 
 def _safe_gmm_variant_rows(
@@ -3583,6 +3732,8 @@ def simulate_voting_iterations(  # noqa: C901
     blend_schedule: Optional[str] = None,
     schedule_variants: Optional[list[str]] = None,
     cut_diag_sink: Optional[list[dict[str, Any]]] = None,
+    fit_quality_sink: Optional[list[dict[str, Any]]] = None,
+    fit_quality_stride: int = FIT_QUALITY_STRIDE_DEFAULT,
     autopilot_fidelity: bool = True,
     anchored_thresholds: bool = False,
     anchored_weights: Optional[list[float]] = None,
@@ -4445,6 +4596,26 @@ def simulate_voting_iterations(  # noqa: C901
                 if cut_diag_sink is not None:
                     for dr in diag_rows:
                         cut_diag_sink.append({**base_row, **dr})
+            # The #3329 goodness-of-fit frame.  Deliberately NOT nested in the
+            # block above: that one needs `X_sim_image`, which only a region run
+            # has, and the binary control arm is half of this study's design -
+            # gating on it would have emitted nothing for exactly the arm the
+            # max-pooling hypothesis is contrasted against.  The `image`
+            # geometry rides along only where it exists.
+            if (
+                fit_quality_sink is not None
+                and sim_pooled_scores is not None
+                and (t <= 3 or t % max(1, fit_quality_stride) == 0)
+            ):
+                fq_scores: dict[str, Any] = {"pooled": sim_pooled_scores}
+                fq_labels: dict[str, Any] = {
+                    "pooled": np.array([pool_labels[cid] for cid in sim_pooled_ids], dtype=np.float64)
+                }
+                if X_sim_image is not None:
+                    fq_image_ids = sorted(sim_ids)
+                    fq_scores["image"] = np.asarray(step.predict(X_sim_image)).ravel().tolist()
+                    fq_labels["image"] = np.array([pool_labels[cid] for cid in fq_image_ids], dtype=np.float64)
+                fit_quality_sink.extend(_fit_quality_rows(base_row, safe_cut, fq_scores, fq_labels, threshold))
             # One extra row per mix-in schedule (issue #2841), on the production
             # cut.  Independent of the cut-variant rows above: the schedule
             # screen only needs the pooled sim scores the blend actually fits.

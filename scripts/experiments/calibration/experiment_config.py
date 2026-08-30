@@ -450,6 +450,15 @@ ANCHORED = os.environ.get("CALIB_ANCHORED", "0") == "1"
 #: in the anchored EM.  Log-spaced from "one label = one haystack point" to
 #: "labels dominate the fit" - the fusion knob the sweep exists to place.
 ANCHORED_WEIGHTS = [float(w) for w in os.environ.get("CALIB_ANCHORED_WEIGHTS", "1,3,10,30,100").split(",") if w]
+#: #3329: emit the goodness-of-fit side frame (``__fitq.csv``).  Off by default
+#: - it costs one extra unanchored EM fit per emitted step per geometry, which
+#: is pure overhead for every study that is not asking whether the mixture fits.
+FIT_QUALITY = os.environ.get("CALIB_FIT_QUALITY", "0") == "1"
+#: Emit a goodness-of-fit row every this many steps (the first three always
+#: emit).  5 keeps ~20 points on a 100-click horizon, which resolves the
+#: trajectory at a fifth of the fit cost of every step.
+FIT_QUALITY_STRIDE = int(os.environ.get("CALIB_FIT_QUALITY_STRIDE", "5"))
+
 #: Cut rules re-cutting each anchored fit: production midpoint, and the
 #: rate-optimal crossing (well-founded on an anchored fit, where the
 #: components *are* the classes - the #2836 identification term is gone).

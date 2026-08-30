@@ -230,6 +230,7 @@ def main(argv: list[str] | None = None) -> int:
         _CALIBRATION_COLUMNS,
         _CUT_DIAGNOSTIC_COLUMNS,
         _CUT_INCLUSION_COLUMNS,
+        _FIT_QUALITY_COLUMNS,
         _INCLUSION_SWEEP_COLUMNS,
         _PICK_COLUMNS,
         simulate_voting_iterations,
@@ -269,12 +270,14 @@ def main(argv: list[str] | None = None) -> int:
     all_sweep: list[dict] = []
     all_cutdiag: list[dict] = []
     all_cutincl: list[dict] = []
+    all_fitq: list[dict] = []
     all_picks: list[dict] = []
     for style in styles:
         variants = cfg.REPOOL_VARIANTS if style == cfg.REPOOL_STYLE else []
         sweep_local: list[dict] = []
         cutdiag_local: list[dict] = []
         cutincl_local: list[dict] = []
+        fitq_local: list[dict] = [] if cfg.FIT_QUALITY else None
         picks_local: list[dict] | None = [] if cfg.EMIT_PICKS else None
         rows = simulate_voting_iterations(
             medias,
@@ -301,6 +304,8 @@ def main(argv: list[str] | None = None) -> int:
             blend_schedule=cfg.BLEND_SCHEDULE,
             schedule_variants=cfg.SCHEDULE_VARIANTS,
             cut_diag_sink=cutdiag_local,
+            fit_quality_sink=fitq_local,
+            fit_quality_stride=cfg.FIT_QUALITY_STRIDE,
             anchored_thresholds=cfg.ANCHORED,
             anchored_weights=cfg.ANCHORED_WEIGHTS,
             anchored_rules=cfg.ANCHORED_RULES,
@@ -355,14 +360,18 @@ def main(argv: list[str] | None = None) -> int:
             cr["embedder"] = emb
         for pr in picks_local or []:
             pr["embedder"] = emb
+        for fr in fitq_local or []:
+            fr["embedder"] = emb
         all_rows.extend(rows)
         all_sweep.extend(sweep_local)
         all_cutdiag.extend(cutdiag_local)
         all_cutincl.extend(cutincl_local)
         all_picks.extend(picks_local or [])
+        all_fitq.extend(fitq_local or [])
         common.log(
             f"  style={style}: {len(rows)} rows, {len(sweep_local)} sweep rows, "
-            f"{len(cutdiag_local)} cut-diagnostic rows, {len(cutincl_local)} cut-inclusion rows"
+            f"{len(cutdiag_local)} cut-diagnostic rows, {len(cutincl_local)} cut-inclusion rows, "
+            f"{len(fitq_local or [])} fit-quality rows"
         )
 
     outdir = common.Path(args.outdir)
@@ -408,11 +417,17 @@ def main(argv: list[str] | None = None) -> int:
     picks_cols = [*_PICK_COLUMNS, "embedder"]
     picks_out = outdir / f"task_{idx:04d}__picks.csv"
     pd.DataFrame(all_picks, columns=pd.Index(picks_cols)).to_csv(picks_out, index=False)
+    # The #3329 goodness-of-fit frame (one row per step per scope).  Same
+    # unconditional-write rule as every frame above.
+    fitq_cols = [*_FIT_QUALITY_COLUMNS, "embedder"]
+    fitq_out = outdir / f"task_{idx:04d}__fitq.csv"
+    pd.DataFrame(all_fitq, columns=pd.Index(fitq_cols)).to_csv(fitq_out, index=False)
     common.log(
         f"wrote {len(all_rows)} rows to {out}, {len(all_sweep)} sweep rows to {sweep_out}, "
         f"{len(all_cutdiag)} cut-diagnostic rows to {cutdiag_out}, "
         f"{len(all_cutincl)} cut-inclusion rows to {cutincl_out}, "
-        f"and {len(all_picks)} pick rows to {picks_out}"
+        f"{len(all_picks)} pick rows to {picks_out}, "
+        f"and {len(all_fitq)} fit-quality rows to {fitq_out}"
     )
     return 0
 
