@@ -545,13 +545,9 @@ def check_study_dirs(dirs: frozenset[str]) -> list[Failure]:
         name = rel[len(prefix) :]
         path = ROOT / rel
         if not STUDY_DIR_RE.match(name):
-            failures.append(
-                Failure("STUDY", path, 0, f"study directory '{name}' is not named YYYY-MM-DD-<slug>")
-            )
+            failures.append(Failure("STUDY", path, 0, f"study directory '{name}' is not named YYYY-MM-DD-<slug>"))
         elif f"]({name}/" not in index_text:
-            failures.append(
-                Failure("STUDY", path, 0, f"study '{name}' has no row in {EXPERIMENTS_INDEX}")
-            )
+            failures.append(Failure("STUDY", path, 0, f"study '{name}' has no row in {EXPERIMENTS_INDEX}"))
     return failures
 
 
