@@ -1307,7 +1307,7 @@ def detector_acquisition_threshold(ctx: "DetectorContext", inclusion_value: int)
     inclusion steps below it, because the picks read a threshold as a rank
     position rather than a boundary and so want it further *up* the ranking.
     Decoupling the two buys 4.5x the positives per 100 votes at lower cost - see
-    ``docs/experiments/acquisition-inclusion/REPORT.md`` (PR #2876).
+    ``docs/experiments/2026-08-07-acquisition-inclusion/REPORT.md`` (PR #2876).
 
     Derived on demand rather than stored beside ``ctx.threshold``: there are
     four places that write a threshold onto a detector context, and a second

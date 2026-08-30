@@ -273,6 +273,44 @@ class TestPlanRefCheck:
         )
 
 
+class TestStudyDirCheck:
+    """Study directories are dated and indexed, or the archive is unbrowsable."""
+
+    def test_repo_studies_are_all_dated_and_indexed(self):
+        assert gate.check_study_dirs(DIRS) == []
+
+    def test_undated_study_directory_fires(self):
+        dirs = DIRS | {"docs/experiments/brand-new-study"}
+        failures = gate.check_study_dirs(frozenset(dirs))
+        assert [f.check for f in failures] == ["STUDY"]
+        assert "YYYY-MM-DD" in failures[0].message
+
+    def test_dated_but_unindexed_study_directory_fires(self):
+        dirs = DIRS | {"docs/experiments/2026-01-01-brand-new-study"}
+        failures = gate.check_study_dirs(frozenset(dirs))
+        assert [f.check for f in failures] == ["STUDY"]
+        assert "no row" in failures[0].message
+
+    def test_nested_directories_inside_a_study_are_not_studies(self):
+        # `figures/`, `agg/` and friends live one level down and are not named
+        # for a date; only the study directory itself is.
+        dirs = DIRS | {"docs/experiments/2026-01-01-brand-new-study/figures"}
+        assert [f.message for f in gate.check_study_dirs(frozenset(dirs))] == [
+            "study '2026-01-01-brand-new-study' has no row in docs/experiments/README.md"
+        ]
+
+    def test_every_index_row_points_at_a_directory_that_exists(self):
+        # The other direction: the LINK check already proves each row's target
+        # resolves, so a row can only rot into a link failure, never a silent one.
+        rows = [
+            line
+            for line in (REPO_ROOT / "docs" / "experiments" / "README.md").read_text(encoding="utf-8").splitlines()
+            if line.startswith("| [`")
+        ]
+        studies = {d.split("/")[2] for d in DIRS if d.startswith("docs/experiments/") and d.count("/") == 2}
+        assert len(rows) == len(studies)
+
+
 class TestAllowlistsStayHonest:
     """An allowlist entry that no longer describes reality is dead weight."""
 

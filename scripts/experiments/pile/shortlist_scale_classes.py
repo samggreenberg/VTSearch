@@ -101,7 +101,7 @@ COCO_ALIASES: dict[str, str] = {
 
 #: Categories the overview benchmark already ran, so a corrected re-run can be
 #: compared against a published number rather than starting from nothing.
-#: Sources: `docs/experiments/overview-bench/REPORT.md`, "Classes used".
+#: Sources: `docs/experiments/2026-08-12-overview-bench/REPORT.md`, "Classes used".
 BENCHMARKED: frozenset[str] = frozenset(
     # wave 1, visual_genome_m
     """ball bed bus cat laptop nose sink sky""".split()

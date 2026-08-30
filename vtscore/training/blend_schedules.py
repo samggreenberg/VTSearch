@@ -333,7 +333,7 @@ SAFE_BLEND_SCHEDULES: dict[str, BlendSchedule] = {s.name: s for s in _SCHEDULES}
 
 #: The shipped schedule per **voting mode** (issue #2841 measured them
 #: separately and they want different curves; see
-#: ``docs/experiments/mixin-schedule/REPORT.md``).
+#: ``docs/experiments/2026-08-04-mixin-schedule/REPORT.md``).
 #:
 #: * ``region`` - a patch dataset, which always scores by max-pooling over
 #:   regions.  Its x-cal cut needs far longer to become trustworthy *and* never

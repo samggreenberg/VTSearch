@@ -127,4 +127,4 @@ vg_box_small x siglip2_l      0.59    0.65   0.82        130.5     169.8
 INDIVIDUAL TRACES
 ====================================================================================================
 
-(these tables were also written to docs/experiments/overview-bench/ANALYSIS_TABLES_vgbox2.txt)
+(these tables were also written to docs/experiments/2026-08-12-overview-bench/ANALYSIS_TABLES_vgbox2.txt)

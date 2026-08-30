@@ -335,7 +335,7 @@ MIRRORS: list[Mirror] = [
             "it wants a neutral, rule-independent stand-in - production's continuation exists "
             "only for 'rate' and would make it incomparable to its cross/priorfree siblings (at "
             "inclusion 0 it would break the rate == priorfree identity every report in "
-            "docs/experiments/gmm-cut/ relies on). The divergence is recorded per row in "
+            "docs/experiments/2026-08-04-gmm-cut/ relies on). The divergence is recorded per row in "
             "cut_fallback_kind ('midpoint' vs 'continued'/'degenerate_midpoint'), so an analysis "
             "that needs the shipped path filters on it. The fold-anchored family calls "
             "gmm_cut_from_fit directly and is the faithful stand-in for the app. When re-pinning "

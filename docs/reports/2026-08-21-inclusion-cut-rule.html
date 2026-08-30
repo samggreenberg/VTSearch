@@ -146,10 +146,10 @@ bash scripts/experiments/calibration/launch_incl_2865.sh arms      # 336 cells +
 # analysis and figures (both read the same CSVs)
 python scripts/experiments/calibration/selftest_analyze_cutincl.py  # planted answers, no cluster data
 python scripts/experiments/calibration/analyze_cutincl.py
-python scripts/experiments/calibration/make_cutincl_figs.py --out docs/experiments/inclusion-cut-rule/figures</code></pre>
+python scripts/experiments/calibration/make_cutincl_figs.py --out docs/experiments/2026-08-21-inclusion-cut-rule/figures</code></pre>
 <p>The run lived at <code>/expscratch/sgreenberg/cut-incl-2865</code>; its cells were sized from a real cell rather than a guess (75 and 83 minutes for the two dinov3 region arms at MaxRSS 5.3 G, 8–9 minutes for the two binary arms), and the array ran 120-wide on the cpu partition — the <code>cpu_limit</code> QOS charges 2 CPUs per task, so 120 is the real cap.</p>
 <footer class="foot">
-  Generated from <code>docs/experiments/inclusion-cut-rule/REPORT.md</code> by
+  Generated from <code>docs/experiments/2026-08-21-inclusion-cut-rule/REPORT.md</code> by
   <code>scripts/experiments/calibration/make_bench_html.py</code> — edit the report,
   not this page, and re-run the script.
 </footer>

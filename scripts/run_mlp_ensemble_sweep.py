@@ -2,7 +2,9 @@
 
 Throwaway experiment script for issue #2497 ("MLP uncertainty").  It
 exercises the two ensemble axes added to the eval harness and writes the
-results (CSVs, plots, a README) under ``docs/experiments/mlp-ensemble/``:
+results (CSVs, plots, a README) under ``docs/experiments/<today>-mlp-ensemble/``
+(study directories are named ``YYYY-MM-DD-<slug>``; see
+``docs/experiments/README.md``):
 
 1. **Label-curve axis** (`vtscore.eval.label_curve`) - trains the single
    MLP, the SVM baselines, and the ``mlp_ens{3,5,7,10}`` ensembles over a
@@ -21,7 +23,7 @@ Usage::
 
     python scripts/run_mlp_ensemble_sweep.py \\
         --datasets urbansound8k_s \\
-        --out-dir docs/experiments/mlp-ensemble \\
+        --out-dir docs/experiments/2026-08-30-mlp-ensemble \\
         --label-counts 5 10 20 50 \\
         --seeds 0 1 2 \\
         --max-steps 40
@@ -32,6 +34,7 @@ Designed to be deleted once the results are committed.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import math
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -313,7 +316,11 @@ def _voting_headline_table(df: "pd.DataFrame") -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--datasets", nargs="+", default=list(DEFAULT_DATASETS), metavar="DEMO_ID")
-    ap.add_argument("--out-dir", type=Path, default=Path("docs/experiments/mlp-ensemble"))
+    ap.add_argument(
+        "--out-dir",
+        type=Path,
+        default=Path(f"docs/experiments/{dt.date.today().isoformat()}-mlp-ensemble"),
+    )
     ap.add_argument("--label-counts", nargs="+", type=int, default=list(DEFAULT_LABEL_COUNTS))
     ap.add_argument("--seeds", nargs="+", type=int, default=list(DEFAULT_SEEDS))
     ap.add_argument("--ensemble-sizes", nargs="+", type=int, default=list(DEFAULT_ENSEMBLE_SIZES))

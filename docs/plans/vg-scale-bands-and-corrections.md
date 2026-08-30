@@ -7,7 +7,7 @@
 median lands in. A category therefore lives in exactly one band, and the three
 sets carry disjoint vocabularies — the overview benchmark ran `nose`, `glasses`,
 `watch` against `fence`, `hill`, `lady`
-([`docs/experiments/overview-bench/REPORT.md`](../experiments/overview-bench/REPORT.md)).
+([`docs/experiments/2026-08-12-overview-bench/REPORT.md`](../experiments/2026-08-12-overview-bench/REPORT.md)).
 
 So the published small-vs-large gap confounds **box size** with **class
 identity**: it cannot distinguish "small regions are hard" from "noses are

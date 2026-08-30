@@ -1,6 +1,6 @@
 """Did the #3156 stuck tail survive the #3281 box repair? Two panels that answer it.
 
-Draws `docs/experiments/vg-scale/figures/stuck_tail_after_3281.png` for #3284.
+Draws `docs/experiments/2026-08-25-vg-scale/figures/stuck_tail_after_3281.png` for #3284.
 
 Three grids of the same design differ in known ways, which is what makes the
 question answerable at all::
@@ -20,7 +20,7 @@ sign@small` reads as 0.22 -> 0.55 "worse" while its median cost moves 0.43 ->
 0.44. A share of a fixed tail is zero-sum across the things sharing it; plot the
 absolute quantity.
 
-    python figures_tail_3281.py --out docs/experiments/vg-scale/figures
+    python figures_tail_3281.py --out docs/experiments/2026-08-25-vg-scale/figures
 """
 
 from __future__ import annotations

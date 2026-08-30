@@ -70,7 +70,7 @@ _GMM_MAX_SAMPLES = 50_000
 
 #: The shipped Train/Calibrate split of each calibration fold, per the **space
 #: the detector learns in** (issue #3287 measured them separately; see
-#: ``docs/experiments/calibration-fraction-3287/REPORT.md``).  The value is the
+#: ``docs/experiments/2026-08-27-calibration-fraction-3287/REPORT.md``).  The value is the
 #: **Calibrate** share, so ``0.3`` means 70% Train / 30% Calibrate.
 #:
 #: * ``single_vector`` - one embedding vector per media.  Spending more votes
@@ -229,7 +229,7 @@ def inclusion_cost_weights(inclusion_value: int) -> tuple[float, float]:
 #: Everything here is measured at a **100-click horizon**, as every prior
 #: environment was.  Nothing says what this value does in the deep regime.
 #:
-#: See ``docs/experiments/acquisition-inclusion/REPORT_PILE_2877.md`` (the three
+#: See ``docs/experiments/2026-08-07-acquisition-inclusion/REPORT_PILE_2877.md`` (the three
 #: environments this value rests on), ``REPORT.md`` (COCO), and
 #: ``REPORT_SECOND_ENVIRONMENT.md`` / ``REPORT_REGION_VOTING.md`` for the two
 #: superseded readings.
@@ -986,7 +986,7 @@ def rank_transfer(
 #: and found performance degrading monotonically as κ grew, leaving the optimum
 #: on the grid's bottom edge; the 2026-08-06 anchor-mass sweep extended the grid
 #: to κ ∈ {0.01 … 3} across six environments and found the optimum **interior**
-#: at κ=0.3 (docs/experiments/population-anchored-calibration/REPORT.md).
+#: at κ=0.3 (docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md).
 FOLD_ANCHOR_WEIGHT = 0.3
 
 #: Production cut rule for the fold-anchored threshold: the **midpoint
@@ -1013,7 +1013,7 @@ FOLD_ANCHOR_WEIGHT = 0.3
 #:
 #: **The tilt is measured** (issue #2865, 336 cells over four environments and
 #: thirteen stops of the knob, on the shipped head; see
-#: ``docs/experiments/inclusion-cut-rule/REPORT.md``).  It held: no candidate
+#: ``docs/experiments/2026-08-21-inclusion-cut-rule/REPORT.md``).  It held: no candidate
 #: both delivered more of the knob and stayed within the pre-registered 0.01
 #: regret tolerance at every stop.  Two numbers worth keeping here - the ``mid``
 #: cut this replaced admitted **one** set for the whole slider in every one of
@@ -1142,7 +1142,7 @@ def apply_vote_exclusion(
 #:
 #: **The step size has now been swept, and the rule lost at every value of it**
 #: (issue #2865: {0.005, 0.01, 0.02, 0.04, 0.08} x four environments; see
-#: ``docs/experiments/inclusion-cut-rule/REPORT.md``).  Small steps keep the
+#: ``docs/experiments/2026-08-21-inclusion-cut-rule/REPORT.md``).  Small steps keep the
 #: knob and cannot move far enough at large ``|k|``; large steps run the
 #: quantile past 1.0 and admit nothing at the ends.  There is no value at which
 #: ``q_tilt`` is not worse than the shipped ``mid_tilt``, so 0.02 remains what
@@ -1388,7 +1388,7 @@ def fold_anchored_gmm_threshold(
     it beats the previously shipped ``κ=1, rate`` head to head in 6 of 6
     environments, and forcing it everywhere leaves each environment within
     0.0067 of its own optimum.  See
-    ``docs/experiments/population-anchored-calibration/REPORT.md``.  The eval
+    ``docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md``.  The eval
     harness calls this same function for its default arm, so a measured
     baseline cannot drift from the app.
 
@@ -1448,7 +1448,7 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
     :func:`_weighted_gaussian_crossing`) on the geometry argument that max-pooling
     fattens the Bad mode, so the midpoint cuts inside Bad mass.  #2799 measured the
     two as paired within-step variants and the crossing lost on cost in every
-    max-pooled window (report ``docs/experiments/safe-thresholds/REPORT.md``), so
+    max-pooled window (report ``docs/experiments/2026-08-03-safe-thresholds/REPORT.md``), so
     #2833 reverted to the midpoint.  The crossing solver is retained for the eval
     variant family and for #2836, which is looking for a third, better-founded cut.
 
@@ -1670,7 +1670,7 @@ def conformal_threshold(
     distinct optima as the calibration set had ranking errors, so on
     well-separated votes (the common case) the threshold never moved with
     inclusion; quantiles move whenever the scores have any spread (see
-    docs/experiments/inclusion-knob/REPORT.md and issue #2693).
+    docs/experiments/2026-07-27-inclusion-knob/REPORT.md and issue #2693).
 
     The rule, for ``k = inclusion_value`` (``BASE = CONFORMAL_BASE_BUDGET``):
 
@@ -2563,7 +2563,7 @@ def calculate_safe_threshold(
     instead, because the two modes want different curves.
 
     **No longer the shipped safe threshold.**  The 2026-08-05 population-
-    anchored run (docs/experiments/population-anchored-calibration/REPORT.md)
+    anchored run (docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md)
     retired the schedule in favour of *fusing* the two estimators rather than
     averaging them as rivals: :func:`fold_anchored_gmm_threshold` is the
     production path now.  This blend survives as its fallback, for the label

@@ -451,7 +451,7 @@ Top block: categories where MaxPatch beats MaxHAC most; bottom block: where MaxH
 
 All code is on branch `claude/max-patch-hac` (built on the corrected harness, PR
 #2732). The report, figures, `metrics.json`, and `prepare_info.json` are
-committed under `docs/experiments/max-patch/`; the full per-cell CSVs (too large
+committed under `docs/experiments/2026-07-29-max-patch/`; the full per-cell CSVs (too large
 for the repo's file-size hook) and the cached embedding pickles stay on the Grid
 under `/exp/$USER/max-patch/{results/cells,datadir/embeddings}`.
 

@@ -30,7 +30,7 @@ mechanism `511770`–`511772` / `514200`–`514202` / `514749`–`514750`, dispa
 **Code:** `scripts/experiments/gpu_node/`
 
 Issue [#3160](https://github.com/samggreenberg/VTSearch/issues/3160) was filed out
-of [#3143](../embed-precision-3143/REPORT.md) §5, which measured two nodes both
+of [#3143](../2026-08-17-embed-precision-3143/REPORT.md) §5, which measured two nodes both
 answering to `gres/gpu:v100` producing `siglip2_l` vectors **1.5e-04** apart —
 50× what switching the whole forward to fp16 costs, and 30× the 0.005 the
 calibration studies resolve. #3143 localised it to one V100 part and left the

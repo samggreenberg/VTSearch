@@ -8,7 +8,7 @@
 #   bash launch_folds_3314.sh ab K_BEST SCHEDULE   # STAGE B, only if the gate passes
 #
 # Design + pre-registered decision rules:
-#   docs/experiments/calibration-fold-count-3310/PLAN.md
+#   docs/experiments/2026-08-28-calibration-fold-count-3310/PLAN.md
 #
 # WHY STAGE A IS ONE RUN AND NOT SIX ARMS.  The folds are NESTED:
 # `compute_fold_orderings` draws each fold as an independent stratified split off

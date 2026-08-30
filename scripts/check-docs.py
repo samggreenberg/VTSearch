@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Documentation drift gate — links, anchors, code-path references, path leaks.
 
-Six invariants over every tracked markdown file. All of them are *pure*: they
-compare the docs against the repo as it exists right now, so there is nothing to
-re-pin and no maintenance beyond the allowlists at the top of this file.
+Seven invariants over the docs. All of them are *pure*: they compare the docs
+against the repo as it exists right now, so there is nothing to re-pin and no
+maintenance beyond the allowlists at the top of this file.
 
   1. LINK    every relative markdown link resolves to a real file or directory;
   2. ANCHOR  every ``#anchor`` resolves to a real heading in the target document,
@@ -19,7 +19,10 @@ re-pin and no maintenance beyond the allowlists at the top of this file.
              point at them are exactly the "why is this code shaped like this"
              pointers a maintainer follows;
   6. FENCE   no code fence is preceded by text on the same line (``-> ```json``
-             renders as a paragraph, silently swallowing the block).
+             renders as a paragraph, silently swallowing the block);
+  7. STUDY   every ``docs/experiments/`` study directory is named
+             ``YYYY-MM-DD-<slug>`` and carries a row in that tree's index, so the
+             archive sorts chronologically and nothing lands in it unlisted.
 
 Dependency-free, imports nothing from the app, and reads each file once, so it
 costs well under a second and can sit early in ``run-tests.sh``.
@@ -119,7 +122,7 @@ PLAN_SELF_REFERENCE = frozenset(
 # Absolute-path leaks that are legitimate: experiment reports record the cluster
 # directory a run actually lived in, which is provenance, not a leaked checkout.
 ALLOWED_LEAKS: dict[str, str] = {
-    "docs/experiments/acquisition-inclusion/REPORT_REGION_VOTING.md": (
+    "docs/experiments/2026-08-07-acquisition-inclusion/REPORT_REGION_VOTING.md": (
         "records the GRID scratch directory the run lived in (provenance)"
     ),
 }
@@ -175,6 +178,14 @@ LEAK_RE = re.compile(r"(?:/home/[A-Za-z0-9._-]+|/Users/[A-Za-z0-9._-]+)/\S*")
 LINE_SUFFIX_RE = re.compile(r":\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$")
 # Markdown emphasis/links inside heading text, stripped before slugging.
 HEADING_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
+
+# `docs/experiments/` holds one directory per study, named for the day its report
+# first landed. The date is what makes the archive browsable — `ls` alone answers
+# "what is the latest result?" — and it only stays true if nothing can be added
+# without one.
+EXPERIMENTS_DIR = "docs/experiments"
+EXPERIMENTS_INDEX = f"{EXPERIMENTS_DIR}/README.md"
+STUDY_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$")
 
 
 class Failure:
@@ -514,6 +525,36 @@ def check_plan_refs(files: frozenset[str]) -> list[Failure]:
     return failures
 
 
+def check_study_dirs(dirs: frozenset[str]) -> list[Failure]:
+    """(7) STUDY — experiment study directories are dated, and all are indexed.
+
+    Two failures with one cause: an archive nobody can browse. The date prefix is
+    what puts the newest run at the end of an `ls`, and the index row is what
+    says which question it answered — a study missing either is present but
+    undiscoverable, which is how a third of this tree went unlisted.
+    """
+    index = ROOT / EXPERIMENTS_INDEX
+    try:
+        index_text = index.read_text(encoding="utf-8")
+    except OSError:  # pragma: no cover - the index is tracked
+        return [Failure("STUDY", index, 0, f"{EXPERIMENTS_INDEX} is missing")]
+
+    prefix = f"{EXPERIMENTS_DIR}/"
+    failures: list[Failure] = []
+    for rel in sorted(d for d in dirs if d.startswith(prefix) and d.count("/") == 2):
+        name = rel[len(prefix) :]
+        path = ROOT / rel
+        if not STUDY_DIR_RE.match(name):
+            failures.append(
+                Failure("STUDY", path, 0, f"study directory '{name}' is not named YYYY-MM-DD-<slug>")
+            )
+        elif f"]({name}/" not in index_text:
+            failures.append(
+                Failure("STUDY", path, 0, f"study '{name}' has no row in {EXPERIMENTS_INDEX}")
+            )
+    return failures
+
+
 # --------------------------------------------------------------------------
 # Entry point
 # --------------------------------------------------------------------------
@@ -549,6 +590,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
         failures.extend(check_markdown(doc, text, files, dirs, top_level, anchor_cache))
     failures.extend(check_plan_refs(files))
+    failures.extend(check_study_dirs(dirs))
 
     if failures:
         print("check-docs FAILED:")
@@ -559,7 +601,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.verbose:
         print(f"check-docs: scanned {len(docs)} markdown files, {len(files)} tracked paths")
-    print(f"check-docs OK: {len(docs)} markdown files, 6 invariants, no drift.")
+    print(f"check-docs OK: {len(docs)} markdown files, 7 invariants, no drift.")
     return 0
 
 

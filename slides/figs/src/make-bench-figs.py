@@ -6,7 +6,7 @@ Run from the repo root:
     python slides/figs/src/make-bench-figs.py
 
 The four figures these produce were previously used on slides as-is, straight
-out of `docs/experiments/overview-bench/figures/`. That does not work, and the
+out of `docs/experiments/2026-08-12-overview-bench/figures/`. That does not work, and the
 arithmetic says why. A report figure is ~12.8in wide with 10pt tick labels;
 dropped into a `bg right:56%` slot it is displayed 717px wide, so each printed
 point lands on 0.78 slide pixels and a 10pt label reads at **8px** — against

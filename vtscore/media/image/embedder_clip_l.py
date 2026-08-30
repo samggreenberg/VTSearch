@@ -19,7 +19,7 @@ Why ``patch14`` and not the already-shipped :mod:`~vtscore.media.image.embedder_
 like ``siglip``, which takes output dimensionality off the table as an
 explanation for any difference.  The base/32 arm is run *beside* it rather than
 instead of it, because the two together separate CLIP's lineage from its
-capacity -- see ``docs/experiments/calibration-fraction-3287/REPORT.md``.
+capacity -- see ``docs/experiments/2026-08-27-calibration-fraction-3287/REPORT.md``.
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 
 Code that runs the MLP-vs-SVM ranker study on the HLTCOE Grid and generates the
 report. The design, the pre-registered decision rule and the verdict are in
-[`docs/experiments/mlp-vs-svm/REPORT.md`](../../../docs/experiments/mlp-vs-svm/REPORT.md). Everything is image + SigLIP only.
+[`docs/experiments/2026-07-22-mlp-vs-svm/REPORT.md`](../../../docs/experiments/2026-07-22-mlp-vs-svm/REPORT.md). Everything is image + SigLIP only.
 
 ## What each stage does
 

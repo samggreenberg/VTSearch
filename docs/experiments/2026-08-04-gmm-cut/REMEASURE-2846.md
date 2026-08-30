@@ -27,7 +27,7 @@ _The Visual Genome run #2846 asked for and #2875 could not do. Every number come
 from `scripts/experiments/calibration/analyze_cut.py` over
 `/exp/$USER/calibration-cut2846`, plus the direct paired contrasts in
 `make_cut_2846_fig.py`; the prose is written on top of those numbers. The study
-being re-measured is `docs/experiments/gmm-cut/REPORT.md`._
+being re-measured is `docs/experiments/2026-08-04-gmm-cut/REPORT.md`._
 
 ## BLUF
 
@@ -299,7 +299,7 @@ run rules out is one particular way of trying to claim it.
    Keep `gumbel_any_*` as the measured variant it is — it is strictly the more
    correct of the two implementations — but do not promote it, and do not spend
    more on the crossing.
-2. **Update `docs/experiments/gmm-cut/REPORT.md`'s fidelity claim**, which is now
+2. **Update `docs/experiments/2026-08-04-gmm-cut/REPORT.md`'s fidelity claim**, which is now
    stale in a way that would mislead the next reader into thinking the harness
    broke.
 3. **The live question is no longer "which cut".** Production's fold-anchored

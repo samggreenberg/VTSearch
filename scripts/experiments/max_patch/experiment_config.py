@@ -23,7 +23,7 @@ single-vector baseline.
 **The ``max_hac`` arm the study ran against is gone.**  It was a delegation to
 the production HAC region tree, which #2886 deleted when it adopted MaxPatch, so
 the arm cannot be re-run from this tree; its published numbers live in
-``docs/experiments/max-patch/REPORT.md`` and ``analyze.py`` still labels
+``docs/experiments/2026-07-29-max-patch/REPORT.md`` and ``analyze.py`` still labels
 ``max_hac`` rows found in archived result CSVs.
 """
 
