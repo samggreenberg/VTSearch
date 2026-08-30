@@ -300,7 +300,7 @@ Monotone non-increasing in `k` by construction, so included sets are
 nested as the knob rises. Returns `0.5` when the input is empty or
 single-class. (Replaced the old min-cost `find_optimal_threshold`
 argmin, which provably could not move with inclusion on well-separated
-calibration folds - see `docs/experiments/inclusion-knob/REPORT.md`.)
+calibration folds - see `docs/experiments/2026-07-27-inclusion-knob/REPORT.md`.)
 
 ### `calculate_cross_calibration_threshold(...)`
 
@@ -398,7 +398,7 @@ the baseline every number in the study's report is a delta against.
 Other registry entries vary the endpoints, the curve shape, the statistic
 the ramp reads (total labels vs the rarer class), or replace the weighted
 average with a clamp into the GMM's component means.
-See `docs/experiments/mixin-schedule/REPORT.md`.
+See `docs/experiments/2026-08-04-mixin-schedule/REPORT.md`.
 
 When `xcal_threshold` is `float("inf")` (no valid fold split), falls
 back entirely to the GMM threshold.

@@ -502,7 +502,7 @@ bash scripts/experiments/calibration/launch_folds_3115.sh prepare   # cpu; reads
 bash scripts/experiments/calibration/launch_folds_3115.sh size      # time ONE cell first
 bash scripts/experiments/calibration/launch_folds_3115.sh arms      # array + analysis
 python scripts/experiments/calibration/make_folds_3115_figs.py \
-    --results "$CALIB_RESULTS" --out docs/experiments/calibration-fold-combine/figures
+    --results "$CALIB_RESULTS" --out docs/experiments/2026-08-25-calibration-fold-combine/figures
 ```
 
 The run reads the shared pre-embedded pile (`scripts/experiments/pile/pile_env.sh`),

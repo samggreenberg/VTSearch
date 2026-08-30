@@ -1,6 +1,6 @@
 """Aggregate the selection-bias sweep CSV into the tables SELECTION-BIAS.md embeds.
 
-Reads ``docs/experiments/inclusion-knob/selection_sweep.csv`` and writes
+Reads ``docs/experiments/2026-07-27-inclusion-knob/selection_sweep.csv`` and writes
 ``selection_tables.md`` next to it.  The headline metric is the **budget
 violation rate**: among conformal cells at inclusion >= 0, how often the
 realized pool FNR exceeds the advertised ``alpha(k)`` cap, split by vote

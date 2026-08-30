@@ -28,7 +28,7 @@ scales with that offset, and that the prior-free crossing beats both incumbents.
 **The tail sweep** (#2881) rides along in both halves: ``tail_alpha_stability``
 says where the oracle cut sits in the fitted Bad tail, and ``tail_alpha_curve``
 says what it costs to aim there, as a function of the one constant.  Its
-pre-registration is ``docs/experiments/gmm-cut/PREREG-2881.md``.
+pre-registration is ``docs/experiments/2026-08-04-gmm-cut/PREREG-2881.md``.
 
 Writes ``results/summary_cut.json``, ``results/agg/cut_*.csv``,
 ``results/figures/cut_*.png`` and a ``results/REPORT_CUT.md`` draft.

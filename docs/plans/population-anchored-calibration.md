@@ -3,7 +3,7 @@
 **Status:** Adopted at κ=0.3 with the `mid_tilt` cut (the measured midpoint at
 inclusion 0, rate-rule tilt away from it), and the tilt is now measured across
 the whole knob — it held (#2865,
-[`REPORT.md`](../experiments/inclusion-cut-rule/REPORT.md)). One known gap
+[`REPORT.md`](../experiments/2026-08-21-inclusion-cut-rule/REPORT.md)). One known gap
 remains: the fused path covers binary voting, where it does not beat the blend
 it replaced.
 
@@ -19,7 +19,7 @@ of which decay with label count).
 The 2026-08-05 deep-regime run measured the candidates and the **fold-anchored
 mixture** ("cross-LabeledGMM") won; the 2026-08-06 anchor-mass sweep moved its
 operating point to the interior optimum, **κ=0.3 with the midpoint cut** — see
-[`docs/experiments/population-anchored-calibration/REPORT.md`](../experiments/population-anchored-calibration/REPORT.md)
+[`docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md`](../experiments/2026-08-05-population-anchored-calibration/REPORT.md)
 for the numbers and
 [`docs/ML.md`](../ML.md) for what production now computes. The schedule blend
 survives only as the fallback for label sets too small to form calibration

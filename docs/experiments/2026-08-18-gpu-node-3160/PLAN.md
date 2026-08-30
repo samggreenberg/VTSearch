@@ -1,7 +1,7 @@
 # A type is not a device: what the V100 split costs (#3160)
 
 **Issue:** [#3160](https://github.com/samggreenberg/VTSearch/issues/3160) ·
-**Predecessor:** [#3143](../embed-precision-3143/REPORT.md) §5 ·
+**Predecessor:** [#3143](../2026-08-17-embed-precision-3143/REPORT.md) §5 ·
 **Code:** `scripts/experiments/gpu_node/`
 
 #3143 measured, as a control, that two nodes both answering to `gres/gpu:v100`

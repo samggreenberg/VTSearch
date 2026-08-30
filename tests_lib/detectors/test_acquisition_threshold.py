@@ -5,7 +5,7 @@ New picks read a threshold as a **rank position** instead, so they take their ow
 cut :data:`~vtscore.training.thresholds.ACQUISITION_INCLUSION_OFFSET` inclusion
 steps below it - which raises it and moves it *up* the ranking.  PR #2876
 measured that at 4.5x the positives per 100 votes and lower cost; see
-``docs/experiments/acquisition-inclusion/REPORT.md``.
+``docs/experiments/2026-08-07-acquisition-inclusion/REPORT.md``.
 
 The direction is the opposite of the intuition from the cost weights, and the
 offset is relative rather than absolute.  Both are easy to get backwards and

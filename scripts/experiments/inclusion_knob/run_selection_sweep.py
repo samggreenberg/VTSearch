@@ -9,7 +9,7 @@ sampling biases the calibration positives in the opposite direction, so this arm
 overstates - and mis-signs - the production effect.  It is retained because it
 is a fair model of a user manually reviewing a learned-sort result list
 top-down, and a useful worst case.  See
-``docs/experiments/inclusion-knob/SELECTION-BIAS.md``.
+``docs/experiments/2026-07-27-inclusion-knob/SELECTION-BIAS.md``.
 
 Grid: arms (AG News categories if cached, plus 3 synthetic separability
 levels) x seeds x vote counts x **vote-selection policies**:

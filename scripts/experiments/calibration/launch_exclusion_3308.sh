@@ -52,7 +52,7 @@
 # analyzer bootstraps over.
 #
 # Design + pre-registered decision rules:
-#   docs/experiments/voted-exclusion-3308/PLAN.md
+#   docs/experiments/2026-08-28-voted-exclusion-3308/PLAN.md
 set -uo pipefail
 trap 'echo "ABORTED: $0 line $LINENO exited $? -- NOTHING WAS SUBMITTED" >&2' ERR
 

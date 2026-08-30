@@ -6,7 +6,7 @@ sweeps, which live **only on the `evaluation-framework` branch** and are not
 present on `dev` (see
 [`lessons/2026-08-07-a-five-seed-check-nearly-produced-a-wrong.md`](lessons/2026-08-07-a-five-seed-check-nearly-produced-a-wrong.md)
 and
-`docs/experiments/spike-check-2847/REPORT.md` for why that harness can't be
+`docs/experiments/2026-08-07-spike-check-2847/REPORT.md` for why that harness can't be
 pointed at `dev`). The patterns are general; HLTCOE-specific values are marked
 **[HLTCOE]**. Read this before launching a big sweep — most of it was learned by
 getting it wrong.

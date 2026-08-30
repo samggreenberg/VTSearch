@@ -92,4 +92,4 @@ INDIVIDUAL TRACES
 134       5    129 0.4567 0.4340 0.0227  0.2965             0.7688            conformal           0
 146       5    141 0.4426 0.4199 0.0227  0.2790             0.7724            conformal           0
 
-(these tables were also written to docs/experiments/overview-bench/ANALYSIS_TABLES_binary.txt)
+(these tables were also written to docs/experiments/2026-08-12-overview-bench/ANALYSIS_TABLES_binary.txt)

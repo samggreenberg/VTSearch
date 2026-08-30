@@ -19,7 +19,7 @@
 # sharing a results dir is how two grids get analysed as one.
 #
 # Pre-registration -- read it before reading the output:
-#   docs/experiments/transfer-2883/PREREG.md
+#   docs/experiments/2026-08-24-transfer-2883/PREREG.md
 #
 # The theory bench is deliberately not launched: #2883 item 3 is explicit that it
 # has mis-sized this family twice at full power and any bench-only result here is
@@ -145,5 +145,5 @@ X=$(sbatch --parsable --dependency=afterany:"$CUT_JOB" --job-name=cal-transfer \
   --partition=cpu --export=ALL --output="$LOGS/transfer-%j.out" \
   --wrap="source $WT/gridenv.sh && export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME && cd $HERE && python analyze_transfer.py")
 echo "transfer analyze: $X (after $CUT_JOB)"
-echo "Pre-registration -> $WT/docs/experiments/transfer-2883/PREREG.md"
+echo "Pre-registration -> $WT/docs/experiments/2026-08-24-transfer-2883/PREREG.md"
 echo "Report           -> $CALIB_RESULTS/REPORT_TRANSFER.md"

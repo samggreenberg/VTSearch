@@ -43,7 +43,7 @@
 # half its K axis, which is the axis the growth-with-K mechanism lives on.
 #
 # Design + pre-registered decision rules:
-#   docs/experiments/calibration-fold-combine/REPORT.md
+#   docs/experiments/2026-08-25-calibration-fold-combine/REPORT.md
 set -uo pipefail
 trap 'echo "ABORTED: $0 line $LINENO exited $? -- NOTHING WAS SUBMITTED" >&2' ERR
 

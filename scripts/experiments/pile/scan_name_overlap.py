@@ -10,7 +10,7 @@ different experiments.
 The overview benchmark already got burned reaching for a cheap proxy: its error
 report flagged false positives carrying a name that *contains* the target,
 which for `bus` matched 80 images annotated **`bush`**
-(`docs/experiments/overview-bench/REPORT.md`). String similarity is not evidence
+(`docs/experiments/2026-08-12-overview-bench/REPORT.md`). String similarity is not evidence
 about objects. Box geometry is.
 
 **The test.** On images where both names appear, ask how often an `a` box

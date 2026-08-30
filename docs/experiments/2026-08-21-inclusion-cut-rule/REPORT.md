@@ -466,7 +466,7 @@ bash scripts/experiments/calibration/launch_incl_2865.sh arms      # 336 cells +
 # analysis and figures (both read the same CSVs)
 python scripts/experiments/calibration/selftest_analyze_cutincl.py  # planted answers, no cluster data
 python scripts/experiments/calibration/analyze_cutincl.py
-python scripts/experiments/calibration/make_cutincl_figs.py --out docs/experiments/inclusion-cut-rule/figures
+python scripts/experiments/calibration/make_cutincl_figs.py --out docs/experiments/2026-08-21-inclusion-cut-rule/figures
 ```
 
 The run lived at `/expscratch/sgreenberg/cut-incl-2865`; its cells were sized

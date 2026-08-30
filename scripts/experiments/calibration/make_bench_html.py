@@ -11,7 +11,7 @@ and every photograph embedded.
 page cannot drift from the report the way a hand-maintained second copy would.
 Re-run it after editing the report:
 
-    python make_bench_html.py --report docs/experiments/overview-bench/REPORT.md \\
+    python make_bench_html.py --report docs/experiments/2026-08-12-overview-bench/REPORT.md \\
         --out docs/reports/2026-08-17-overview-bench.html \\
         --subtitle "What a user actually gets from each shipped configuration"
 

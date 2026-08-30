@@ -4,7 +4,7 @@
 region voting + Caltech binary voting) on both the pre- and post-#2784
 calibration code. Results, verdict, and the pre-registered decision-rule
 outcomes are in
-[`docs/experiments/calibration/REPORT.md`](../experiments/calibration/REPORT.md);
+[`docs/experiments/2026-07-31-calibration/REPORT.md`](../experiments/2026-07-31-calibration/REPORT.md);
 the harness lives
 in `vtscore/eval/calibration_metrics.py` + the `emit_calibration_metrics` path of
 `vtscore/eval/voting_iterations.py` (+ the provenance/node-score surface in

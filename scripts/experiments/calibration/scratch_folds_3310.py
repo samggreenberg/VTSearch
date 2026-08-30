@@ -8,7 +8,7 @@ the production code paths end to end: liblinear SVM fold fits via
 :func:`vtscore.training.thresholds.calibration_folds`, the pooled conformal
 rule, the ``tmean`` challenger (#3115), and the shipped fold-anchored rule.
 
-The theory it checks (see ``docs/experiments/calibration-fold-count-3310/PLAN.md``):
+The theory it checks (see ``docs/experiments/2026-08-28-calibration-fold-count-3310/PLAN.md``):
 
 * ``calibrate_count`` draws **independent repeated splits** at a fixed per-fold
   size, so per-fold statistics are i.i.d. draws and raising K adds draws

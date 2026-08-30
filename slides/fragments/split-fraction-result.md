@@ -27,4 +27,4 @@
 
 <!-- Numbers if asked: −0.011 to −0.016 ± 0.003 on the four, +0.015 ± 0.005
      against 70/30 on DINOv3-binary; curves are a centred 7-vote rolling mean.
-     Evidence: `docs/experiments/calibration-fraction-3287/`. -->
+     Evidence: `docs/experiments/2026-08-27-calibration-fraction-3287/`. -->

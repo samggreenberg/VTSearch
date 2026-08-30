@@ -241,7 +241,7 @@ POLYSEMOUS_NAMES: frozenset[str] = frozenset(
 #: pervasive: its negative pool is both thin and least trustworthy, since a
 #: ubiquitous thing is exactly what an annotator stops bothering to mark. `sky`
 #: is the worked example -- 18.8% prevalent as annotated, plainly higher in
-#: truth (`docs/experiments/overview-bench/REPORT.md`). Measured, not listed,
+#: truth (`docs/experiments/2026-08-12-overview-bench/REPORT.md`). Measured, not listed,
 #: because which names are pervasive is a property of the corpus.
 PERVASIVE_PREVALENCE = float(os.environ.get("VTS_PERVASIVE_PREVALENCE", "0.10"))
 

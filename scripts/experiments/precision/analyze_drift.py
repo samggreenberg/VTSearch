@@ -51,7 +51,7 @@ def log(msg: str) -> None:
 
 def sig2(x: float) -> str:
     """Two significant digits.  Four decimals are clutter that *invents*
-    findings; the report standard is two (docs/experiments/overview-bench)."""
+    findings; the report standard is two (docs/experiments/2026-08-12-overview-bench)."""
     if x == 0 or not np.isfinite(x):
         return f"{x:.0f}"
     if abs(x) >= 0.01:

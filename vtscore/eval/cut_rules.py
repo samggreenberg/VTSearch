@@ -89,7 +89,7 @@ from vtscore.training.thresholds import (
 #: what keeps ``rate`` comparable to its ``cross``/``priorfree`` siblings - and
 #: at inclusion 0, where the cost weights are ``(1, 1)``, it is what keeps
 #: ``rate`` *identical* to ``priorfree`` by construction, an identity every
-#: report in ``docs/experiments/gmm-cut/`` reads its ``*_rate`` rows through.
+#: report in ``docs/experiments/2026-08-04-gmm-cut/`` reads its ``*_rate`` rows through.
 #:
 #: Production does not do this.  It is not a bug on either side; the two answer
 #: different questions, and this value in the emitted rows is what lets an
