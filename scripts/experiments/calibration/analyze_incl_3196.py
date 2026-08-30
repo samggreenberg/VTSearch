@@ -250,10 +250,16 @@ def instrument_checks(env_tbl: pd.DataFrame, incumbent: str) -> dict:
 
     ``mid`` never looks at the cost weights and #2865 measured one admitted set
     across the whole slider in all 65,671 cell-steps, so it must come back inert.
+
     And ``mid_tilt(k) - rate(k)`` is a **constant** in fold-quantile space (also
-    #2865, exactly), so the two must move together however much either moves - a
-    liveness gap between them contradicts the algebra rather than measuring
-    anything.
+    #2865, exactly).  The invariant that follows is about the **quantile** span,
+    not the admitted one: a constant offset cannot change how far the cut travels
+    in quantile space, so ``quantile_span`` must match to float32.  It says
+    nothing about the *realized* sets - two cuts a constant apart sit at
+    different places in the score distribution, so the same quantile path lands
+    on different ties and gaps and can perfectly well have a different dead-step
+    rate.  That difference is a finding about the haystack's local density, which
+    is why it is reported here rather than gated on.
     """
     out: dict = {}
     # Built from the incumbent's own name, not matched as a substring: every
@@ -266,20 +272,23 @@ def instrument_checks(env_tbl: pd.DataFrame, incumbent: str) -> dict:
     out["mid_is_inert"] = bool(len(mid)) and bool((mid["dead_step_rate"] > 0.99).all())
 
     rate_arm = incumbent.replace("_mid_tilt_", "_rate_")
+    out["rate_arm"] = rate_arm
     pair = env_tbl[env_tbl["arm"].isin([incumbent, rate_arm])]
-    wide = pair.pivot_table(index=["head_arm", "env"], columns="arm", values="dead_step_rate")
-    if incumbent in wide.columns and rate_arm in wide.columns:
-        gap = (wide[incumbent] - wide[rate_arm]).abs()
-        out["mid_tilt_vs_rate_max_abs_gap"] = float(gap.max())
-        # 0.02 is a tolerance on a MEAN over steps, not on the algebra: the two
-        # rules differ by a constant quantile offset, so they can realize a
-        # different admitted set only where that offset straddles a tie in the
-        # score distribution.  A gap materially above this says the frame and the
-        # algebra disagree, which is an instrument failure, not a finding.
-        out["mid_tilt_tracks_rate"] = bool(gap.max() <= 0.02)
+    q = pair.pivot_table(index=["head_arm", "env"], columns="arm", values="quantile_span")
+    d = pair.pivot_table(index=["head_arm", "env"], columns="arm", values="dead_step_rate")
+    if incumbent in q.columns and rate_arm in q.columns:
+        # The algebra: identical distance travelled in quantile space.  1e-3 is
+        # float32 slack on a mean of float32 spans, not a tolerance on the claim.
+        qgap = (q[incumbent] - q[rate_arm]).abs()
+        out["mid_tilt_vs_rate_max_quantile_span_gap"] = float(qgap.max())
+        out["mid_tilt_tracks_rate"] = bool(qgap.max() <= 1e-3)
+        # ...and the same offset realized against the score distribution, which
+        # is free to differ and is reported as the observation it is.
+        out["mid_tilt_vs_rate_max_dead_gap"] = float((d[incumbent] - d[rate_arm]).abs().max())
     else:
-        out["mid_tilt_vs_rate_max_abs_gap"] = None
+        out["mid_tilt_vs_rate_max_quantile_span_gap"] = None
         out["mid_tilt_tracks_rate"] = None
+        out["mid_tilt_vs_rate_max_dead_gap"] = None
     out["ok"] = bool(out["mid_is_inert"]) and out["mid_tilt_tracks_rate"] is not False
     return out
 

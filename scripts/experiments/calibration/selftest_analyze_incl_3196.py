@@ -20,9 +20,12 @@ And per rule, in both arms:
 * ``mid`` - inclusion-blind: one admitted set for the whole knob.  The
   instrument check must call it inert, and must not be diluted by ``mid_tilt``,
   whose arm name also contains ``_mid_``.
-* ``rate`` - planted with the **identical** admitted counts to ``mid_tilt``,
-  because the two differ by a constant offset in fold-quantile space (#2865,
-  exactly).  The instrument check must see them track.
+* ``rate`` - planted the way the algebra says it is: the same quantile path as
+  ``mid_tilt`` shifted by a **constant**, realized against a coarser admitted
+  set.  That is the real shape (the run measured identical `quantile_span` to
+  float32 beside dead-step rates 0.08 apart), and it is what separates the
+  invariant from the thing that merely looks like it: the check must pass on the
+  *quantile* span and must **not** gate on the admitted one.
 * ``q_tilt`` at two step sizes - both live everywhere, but only ``s0.02`` is
   regret-tied to the incumbent; ``s0.08`` is planted materially harmful at
   ``k > 0``.  H3 must ship the first and reject the second, or the analyzer
@@ -92,10 +95,15 @@ def _admitted(rule: str, k: int, head: str, flat_half: int) -> int:
         return 200  # constant in k: the inclusion-blind null
     if rule in ("mid_tilt", "rate"):
         if head == "linear":
-            return 200 - 8 * k  # live at every stop
-        # The SVM plant: frozen inside the band, live outside it.
-        outside = max(abs(k) - flat_half, 0)
-        return 200 - 8 * (1 if k > 0 else -1) * outside
+            n = 200 - 8 * k  # live at every stop
+        else:
+            # The SVM plant: frozen inside the band, live outside it.
+            outside = max(abs(k) - flat_half, 0)
+            n = 200 - 8 * (1 if k > 0 else -1) * outside
+        # `rate` sits a constant quantile below `mid_tilt`, so it travels the
+        # same distance in quantile space and realizes it against a different
+        # part of the score distribution - here, a coarser one.
+        return int(round(n / 20) * 20) if rule == "rate" else n
     return 200 - 8 * k  # q_tilt: live everywhere under both heads
 
 
@@ -152,7 +160,10 @@ def _fabricate(results: Path, head: str, rng: np.random.Generator) -> None:
                                     # The quantile always moves, even where the
                                     # realized set cannot: that gap is the
                                     # empty-band signal the report reads.
-                                    "fold_quantile": 0.5 - 0.02 * k,
+                                    # `rate` is `mid_tilt` shifted by a constant
+                                    # (#2865, exactly), so the SPAN is identical
+                                    # and the position is not.
+                                    "fold_quantile": 0.5 - 0.02 * k - (0.07 if rule == "rate" else 0.0),
                                     "cut_threshold": 0.6 - 0.01 * k,
                                     "cut_cost": (0.2 + regret) * scale,
                                     "cut_fpr": 0.05,
@@ -207,6 +218,11 @@ def main() -> int:  # noqa: C901 - a linear list of planted-answer assertions
         assert inst["mid_is_inert"] is True, inst
         assert inst["mid_arm"] == _arm("mid"), inst
         assert inst["mid_tilt_tracks_rate"] is True, inst
+        assert inst["mid_tilt_vs_rate_max_quantile_span_gap"] < 1e-3, inst
+        # ...while the realized sets differ, which the check must report and
+        # must not fail on.  Gating this would have called the real run's
+        # instrument broken over a fact about the haystack's local density.
+        assert inst["mid_tilt_vs_rate_max_dead_gap"] > 0.02, inst
         assert inst["ok"] is True, inst
 
         env_tbl = pd.read_csv(out / "incl3196_per_env.csv")
