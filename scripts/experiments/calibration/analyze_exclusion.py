@@ -555,7 +555,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             arms=sorted(set(d["arm"])),
             baseline=baseline,
             title="voted-media exclusion floor (#3312)",
-            subtitle="Colour = exclusion arm · one panel per stage × geometry × category",
+            subtitle="One chart per exclusion arm × stage × geometry × category; tick 'overlay on one chart' to compare them directly.",
         )
 
     write_report(out, frame, by_band, paired, vd, regime, trap, counts, prov, figs, stages)

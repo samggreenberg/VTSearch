@@ -40,7 +40,19 @@ the `calibration_fraction` column.
 subset of columns, seeds averaged or one line each. Everything below is one
 slice of it, chosen in advance; the viewer is where you ask your own question
 instead of asking for a re-run. Its **Target size** control is the axis this
-study is about, and click 0 on every chart is the free text sort.
+study is about, and the notch in each chart's left margin is the free text sort.
+
+Tick **overlay on one chart** to put all five columns on one pair of axes in
+distinct hues — that is the five-way comparison this report keeps making in
+tables, drawn. Off (the default) each column gets its own chart with the ±1 SD
+spread of the population shaded under its line, which is the only arrangement
+where that shadow is readable.
+
+Two of the page's controls stay empty here, and both need a re-run rather than a
+re-draw: this study measured no **oracle threshold** (so the dotted
+cheating-cut line is unavailable and the checkbox says why) and no **supervised
+skyline** (#3322 postdates the run, so there is no learnability-floor notch at
+the right margin). See #3326.
 
 ## What a session actually looks like
 
