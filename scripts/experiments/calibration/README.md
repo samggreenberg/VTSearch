@@ -412,12 +412,36 @@ their own without a re-run.
 | arms | any **non-empty** subset |
 | seeds | averaged, or every seed its own line |
 | metric | cost, precision, recall, F1, FPR, FNR, average precision, AUROC |
+| draw › oracle threshold | off (default), or the cheating-threshold line dotted beside the solid performance line |
+| draw › overlay on one chart | off (default), one chart per varying dimension with its ±1 SD shadow; on, all of them on one chart in distinct hues, shadows off |
 
-Hue is assigned to whichever dimension is actually being compared — the first
-varying one among arm → category → dataset that has at most 8 values — and every
-other varying dimension becomes a panel. The legend states which, in words. A
-dimension with more values than the palette's 8 validated slots folds into small
-multiples rather than getting invented hues.
+**Overlay is the shadow/comparison trade, made explicit.** Off, every varying
+dimension becomes its own chart holding exactly one bold line, so the shaded
+spread underneath it is readable and colour carries no meaning. On, they all
+land on one chart in distinct hues with the shadows dropped — because two
+translucent bands over one another are a third shape nobody can read the overlap
+of. Embedders overlay like anything else: the ban that keeps them out of one
+*number* is a ban on pooling, and two lines pool nothing. Past the palette's 8
+contrast-checked slots hues are generated on the golden angle, and the page says
+when that happened.
+
+**Four reference quantities, drawn as what each one is.** Two lines — the
+performance the loop achieved (solid) and the same model at the **oracle
+threshold** (dotted, same hue, behind the checkbox; the gap between them is the
+calibration regret) — and two points, notched into the margins: the free **text
+sort** at the left and the supervised **skyline** (issue #3322) at the right.
+Nothing joins the text-sort notch to the curve: no detector exists in between, so
+the gap is the honest drawing. The notches are marks in the margin rather than
+rules across the panel because each is a level that holds at one x, and a rule
+would claim it holds at every x — which for the skyline would read as "the
+learnability floor was reachable at click 3".
+
+The oracle is offered on every metric that is a statement about **one cut**.
+The harness emits only the oracle cut's cost and its FPR/FNR, so precision,
+recall and F1 there are reconstructed from those rates and the split's class
+counts — the same confusion matrix in a different unit. `average_precision` and
+`auroc` integrate over every threshold, so re-cutting cannot move them; the box
+disables itself and says so rather than drawing one line twice.
 
 Both chip controls are non-empty by construction — the last remaining chip is
 locked, with a tooltip, rather than snapping silently back — because an empty
@@ -435,6 +459,14 @@ python viewer.py --results "$CALIB_EXP/results" \
   --baseline "$OUT/text_baseline.csv" --out "$OUT/viewer.html"
 python selftest_viewer.py     # planted-answer check on the codec and the pooling
 ```
+
+The skyline notch needs skyline rows, so it appears only for a run launched with
+`CALIB_SKYLINE_ARMS` (see [Supervised skyline / training regret](#supervised-skyline--training-regret-issue-3322)
+above). `viewer.py` reads them straight out of the cell CSVs, because
+`analyze_spikes.load_arm` — which every analyzer goes through — filters
+`gmm_variant`-tagged rows out by design, and a skyline reads ground-truth labels
+the app can never see. A run without them still builds; the page just has no
+floor, and the builder says so. `--no-skyline` skips the pass.
 
 To redraw the PNGs without re-running the analysis:
 

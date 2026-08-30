@@ -51,15 +51,50 @@ N_SEED, T_MAX = 8, 40
 TEXT_COST = 0.30
 LEVEL = {"ctl": 0.20, "alt": 0.10}
 
+#: The planted oracle cut.  Only the two rates and the split's class counts are
+#: emitted, exactly as the harness emits them - precision / recall / F1 at that
+#: cut have to be *reconstructed* by the builder, which is the point of the
+#: check: a wrong reconstruction is invisible on screen (it draws a plausible
+#: dotted line) and would misprice the calibration regret in every report.
+ORACLE_COST, ORACLE_FPR, ORACLE_FNR = 0.05, 0.02, 0.10
+N_TEST_POS, N_TEST_NEG = 100.0, 900.0
+_TP = N_TEST_POS * (1.0 - ORACLE_FNR)
+_FP = N_TEST_NEG * ORACLE_FPR
+_FN = N_TEST_POS * ORACLE_FNR
+ORACLE_PRECISION = _TP / (_TP + _FP)
+ORACLE_F1 = 2.0 * _TP / (2.0 * _TP + _FP + _FN)
 
-def _frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    rows, cells, base = [], [], []
+#: The planted supervised skyline (#3322), one row per cell, differing between
+#: the two categories so a wrong pool shows up as a level rather than as noise.
+SKY_COST = {"rich": 0.06, "lean": 0.16}
+
+
+def _frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    rows, cells, base, sky = [], [], [], []
     for arm in ARMS:
         for ds in DSS:
             for emb in EMBS:
                 for cat, trained in CATS.items():
                     for seed in range(N_SEED):
                         cells.append({"arm": arm, "dataset": ds, "embedder": emb, "category": cat, "seed": seed})
+                        # The skyline is vote-independent, so every attempted
+                        # cell has one whether or not the loop ever trained.
+                        sky.append(
+                            {
+                                "arm": arm,
+                                "dataset": ds,
+                                "embedder": emb,
+                                "category": cat,
+                                "seed": seed,
+                                "t": 0,
+                                "gmm_variant": "skyline_train_full",
+                                "cost": SKY_COST[cat],
+                                "precision": 0.9,
+                                "recall": 0.85,
+                                "f1": 0.87,
+                                "average_precision": 0.95,
+                            }
+                        )
                         if seed >= trained:
                             continue  # never trained: no metric row at all
                         for t in range(1, T_MAX + 1):
@@ -78,6 +113,14 @@ def _frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
                                     "recall": 0.6,
                                     "f1": 0.65,
                                     "average_precision": 0.8,
+                                    # The oracle cut, as the harness emits it:
+                                    # the cost and the two rates, never the
+                                    # confusion-matrix metrics at that cut.
+                                    "oracle_cost": ORACLE_COST,
+                                    "oracle_fpr": ORACLE_FPR,
+                                    "oracle_fnr": ORACLE_FNR,
+                                    "n_test_pos": N_TEST_POS,
+                                    "n_test_neg": N_TEST_NEG,
                                 }
                             )
     for ds in DSS:
@@ -98,7 +141,7 @@ def _frames() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
                             "text_AP": 0.5,
                         }
                     )
-    return pd.DataFrame(rows), pd.DataFrame(cells), pd.DataFrame(base)
+    return pd.DataFrame(rows), pd.DataFrame(cells), pd.DataFrame(base), pd.DataFrame(sky)
 
 
 def _payload(path: Path) -> dict:
@@ -131,9 +174,15 @@ def _check(label: str, ok: bool, detail: str = "") -> bool:
 def main() -> int:  # noqa: C901
     tmp = Path(tempfile.mkdtemp(prefix="viewer-selftest-"))
     try:
-        main_df, cells, base = _frames()
+        main_df, cells, base, sky = _frames()
         out = V.build_viewer(
-            main_df, tmp / "viewer.html", arms=ARMS, denominator=cells, baseline=base, runs_budget_mb=0.25
+            main_df,
+            tmp / "viewer.html",
+            arms=ARMS,
+            denominator=cells,
+            baseline=base,
+            skyline=sky,
+            runs_budget_mb=0.25,
         )
         P = _payload(out)
 
@@ -223,6 +272,87 @@ def main() -> int:  # noqa: C901
         cov = n_lean / cellsA[g_lean, ai["ctl"], 0]
         ok &= _check(
             "...so a starving category reports coverage well below 1", abs(cov - 1.0 / N_SEED) < 1e-6, f"{cov:.3f}"
+        )
+
+        # --- the oracle companion -------------------------------------------
+        # Reconstructed, not emitted: the harness ships an (FPR, FNR) pair and
+        # the split's class counts, and the builder turns that back into a full
+        # confusion matrix.  Checked against numbers computed the long way here,
+        # because a wrong reconstruction draws a perfectly plausible line.
+        oracle_on = {m["key"]: m["oracle"] for m in P["metrics"]}
+        ok &= _check(
+            "every cut metric gets an oracle, and the ranking metric does not",
+            all(oracle_on[k] for k in ("cost", "precision", "recall", "f1")) and not oracle_on["average_precision"],
+            str(oracle_on),
+        )
+        ok &= _check(
+            "...and the page is told which metrics those are",
+            set(P["oracle_metrics"]) >= {"cost", "precision", "recall", "f1"}
+            and "average_precision" not in P["oracle_metrics"],
+            str(P["oracle_metrics"]),
+        )
+        omean = _decode(P["agg"]["omean"])
+        on = _decode(P["agg"]["on"])
+        g0, a0 = gi[("dsA", "embA", "rich")], ai["ctl"]
+        step = 1.0 / P["agg"]["omean"]["scale"]
+        want = {
+            "cost": ORACLE_COST,
+            "recall": 1.0 - ORACLE_FNR,
+            "precision": ORACLE_PRECISION,
+            "f1": ORACLE_F1,
+        }
+        for key, expect in want.items():
+            got_o = omean[g0, a0, keys.index(key), ti]
+            ok &= _check(
+                f"oracle {key} is reconstructed exactly ({expect:.4f})",
+                abs(got_o - expect) <= 2 * step,
+                f"{got_o} vs {expect}",
+            )
+        ok &= _check(
+            "the oracle carries its own n, so a pooled oracle is weighted too",
+            abs(on[g0, a0, keys.index("cost"), ti] - CATS["rich"]) < 0.5,
+            str(on[g0, a0, keys.index("cost"), ti]),
+        )
+        ok &= _check(
+            "no oracle value is invented for the ranking metric",
+            not np.isfinite(omean[g0, a0, keys.index("average_precision"), ti]),
+        )
+        ok &= _check(
+            "the oracle line does not reach back to click 0 (there is no model there)",
+            not np.isfinite(omean[g0, a0, keys.index("cost"), P["t"].index(0)]),
+        )
+
+        # --- the supervised skyline -----------------------------------------
+        ok &= _check(
+            "the skyline reaches the page, named by arm",
+            P["skyline"] is not None and P["skyline"]["arm"] == "skyline_train_full",
+            str(P["skyline"] and P["skyline"]["arm"]),
+        )
+        sky_v = _decode(P["skyline"]["mean"])
+        sky_n = _decode(P["skyline"]["n"])
+        mi_cost = keys.index("cost")
+        got_s = sky_v[g0, a0, mi_cost, 0]
+        ok &= _check(
+            "a skyline value round-trips",
+            abs(got_s - SKY_COST["rich"]) <= 2.0 / P["skyline"]["mean"]["scale"],
+            f"{got_s} vs {SKY_COST['rich']}",
+        )
+        # Vote-independent: EVERY attempted cell has one, including the seven
+        # `lean` seeds that never trained a detector - which is exactly why the
+        # skyline can be a floor for a run that produced no curve at all.
+        ok &= _check(
+            "the skyline counts every attempted cell, trained or not",
+            abs(sky_n[gi[("dsA", "embA", "lean")], a0, mi_cost, 0] - N_SEED) < 0.5,
+            str(sky_n[gi[("dsA", "embA", "lean")], a0, mi_cost, 0]),
+        )
+        pooled_sky = (
+            sky_n[g0, a0, mi_cost, 0] * sky_v[g0, a0, mi_cost, 0]
+            + sky_n[gi[("dsA", "embA", "lean")], a0, mi_cost, 0] * sky_v[gi[("dsA", "embA", "lean")], a0, mi_cost, 0]
+        ) / (sky_n[g0, a0, mi_cost, 0] + sky_n[gi[("dsA", "embA", "lean")], a0, mi_cost, 0])
+        ok &= _check(
+            "a pooled skyline is the cell-weighted mean of the two categories",
+            abs(pooled_sky - (SKY_COST["rich"] + SKY_COST["lean"]) / 2) < 3e-3,
+            f"{pooled_sky:.5f}",
         )
 
         # --- the per-seed payload -------------------------------------------

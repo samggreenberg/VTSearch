@@ -979,7 +979,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             arms=["K=" + str(k) for k in sorted(set(ship_v["k"]))],
             baseline=baseline,
             title="calibration fold count (#3314)",
-            subtitle="Colour = fold count K · one panel per geometry × category",
+            subtitle="One chart per fold count K × geometry × category; tick 'overlay on one chart' to compare them directly.",
         )
 
     summary = {
