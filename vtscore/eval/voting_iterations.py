@@ -131,6 +131,82 @@ PRODUCTION_HEAD: str = "linear_svm"
 #: region tree from ingest.
 PRODUCTION_PATCH_STYLE: str = "max_patch"
 
+#: The one detection style the #3322 skyline is defined for in v1 - spelled here
+#: rather than imported for the same reason :data:`_SAFE_GMM_VARIANTS` spells its
+#: rule names: this module is deliberately import-light at module scope.
+#: ``test_skyline_arm`` pins it against :class:`~vtscore.eval.patch_styles.WholeImageStyle`.
+_WHOLE_IMAGE_STYLE: str = "whole_image"
+
+
+#: The **supervised-skyline** arms (issue #3322), tagged in the ``gmm_variant``
+#: column exactly like every other variant family, and emitted **once per run**
+#: rather than once per step: a skyline is vote-independent, so its row is a
+#: constant of the ``(cell, seed)`` and repeating it 150 times would only invite
+#: a reader to average it against itself.
+#:
+#: * ``skyline_train_full`` - the **primary** arm and the one the decomposition
+#:   is defined against.  The same head, trained through the same trainer, on the
+#:   **entire simulation split with full ground-truth labels**, evaluated on the
+#:   untouched test split.  The standard supervised-skyline arm from the
+#:   active-learning literature: same hypothesis class, same features, full
+#:   supervision, disjoint eval, so its cost is "how learnable is this class in
+#:   this embedding with this head" and nothing else.
+#: * ``skyline_test_xfit`` - the optional **bracket** partner, cross-fitted over
+#:   the test split (train on K-1 folds, score the held-out one).  Never a naive
+#:   train-on-test fit: a ~769-parameter linear head on a test set of comparable
+#:   size can shatter near-arbitrary labelings, so a naive fit would report
+#:   ``d / n_test`` under the name "learnability" and hand back near-zero cost on
+#:   a class nothing can learn.  Cross-fitting is the SVM analogue of
+#:   :func:`~vtscore.eval.transfer_rules.honest_test_oracle`, which does the same
+#:   thing one level down for the *cut*.
+SKYLINE_TRAIN_FULL: str = "skyline_train_full"
+SKYLINE_TEST_XFIT: str = "skyline_test_xfit"
+SKYLINE_ARMS: tuple[str, ...] = (SKYLINE_TRAIN_FULL, SKYLINE_TEST_XFIT)
+
+#: ``threshold_provenance`` on a skyline row.  A skyline is a statement about a
+#: **ranking**, so it is deliberately *not* routed through a calibrated cut - that
+#: would re-mix in exactly the term ``regret`` already isolates.  Its threshold is
+#: the test oracle's, which makes ``cost == oracle_cost`` and ``regret == 0`` on
+#: the row **by construction**: read a skyline row's ``oracle_cost``, never its
+#: ``regret``.
+SKYLINE_PROVENANCE: str = "skyline_test_oracle"
+
+#: RNG salt for the cross-fitted arm's test-set partition.  Combined with the
+#: run's own ``seed`` so the folds are reproducible per cell, and kept off the
+#: trajectory's ``RandomState`` so turning the arm on cannot move a single vote.
+_SKYLINE_SEED: int = 3322
+
+#: The three-term decomposition the skyline unlocks (issue #3322), NaN on every
+#: row of a run that did not ask for :data:`SKYLINE_TRAIN_FULL`.
+#:
+#: ``cost = skyline_oracle_cost + training_regret + regret`` - the learnability
+#: floor, what the interactive loop left on the table, and what the cut rule gave
+#: away on the ranking it got.  ``oracle_cost`` alone conflates the first two:
+#: a cell can be expensive because no linear head in this embedding separates the
+#: class, or because 10-200 clicks did not find the head that does, and those two
+#: diagnoses buy different things (a better embedder vs. a better acquisition
+#: loop).  ``training_regret`` is defined on **rankings** -
+#: ``oracle_cost(mortal) - oracle_cost(skyline)`` - which is what makes the
+#: telescope exact.
+#:
+#: The honest columns re-base the same split off the cross-fitted reference, so
+#: ``cost = skyline_oracle_cost_honest + training_regret_honest + regret_honest``
+#: telescopes too.  **The terms share noise by construction** (they sum to a
+#: pinned total), so the sum-pinned caution `_operating_metrics` documents for
+#: ``rule_inefficiency`` / ``calibration_shift`` transfers verbatim: do not read
+#: one half moving as an effect when the knob also moves the yardstick.
+#:
+#: **Negative ``training_regret`` is legal and is information, not a bug.**
+#: Unlike the threshold oracle, the skyline is not a per-run optimum over the
+#: same object: region votes carry box information an image-labelled skyline
+#: lacks, and small samples get lucky.  Nothing clamps it.
+_SKYLINE_COLUMNS: tuple[str, ...] = (
+    "skyline_oracle_cost",
+    "skyline_oracle_cost_honest",
+    "training_regret",
+    "training_regret_honest",
+)
+
 
 def _resolve_hidden_dim(head: str, n_votes: int) -> int:
     """``hidden_dim`` sentinel for *head* at *n_votes* votes.
@@ -370,6 +446,7 @@ _CALIBRATION_COLUMNS: tuple[str, ...] = (
     "rule_inefficiency",
     "calibration_shift",
     "calibration_shift_honest",
+    *_SKYLINE_COLUMNS,
     "n_pool_rows",
     "fold_count",
     "fold_seconds",
@@ -1229,6 +1306,11 @@ def _operating_metrics(
         "rule_inefficiency": _r(rule_inefficiency),
         "calibration_shift": _r(calibration_shift),
         "calibration_shift_honest": _r(calibration_shift_honest),
+        # The #3322 decomposition (see `_SKYLINE_COLUMNS`).  Filled in one pass
+        # after the run, from the skyline arm's own row - a skyline is
+        # vote-independent, so there is nothing per-step to compute here, and
+        # NaN is the honest value on a run that asked for no skyline.
+        **dict.fromkeys(_SKYLINE_COLUMNS, nan),
         "n_pool_rows": _r(float(n_pool_rows)),
     }
 
@@ -3160,6 +3242,315 @@ def _svm_train_and_calibrate(
 
 
 # ------------------------------------------------------------------
+# Supervised skyline (issue #3322)
+# ------------------------------------------------------------------
+
+
+def _skyline_fit_and_score(
+    good_ids: list[int],
+    bad_ids: list[int],
+    score_ids: list[int],
+    clips_dict: dict[int, dict[str, Any]],
+    target_category: str,
+    *,
+    trainer: str,
+    head: str,
+    style_obj: Any,
+    region_voting: bool,
+    input_dim: int,
+    inclusion: int,
+    calibrate_count: int,
+    calibration_fraction: float,
+) -> tuple[dict[int, float], _StepModel, dict[str, float], float]:
+    """Train one fully-supervised head and score *score_ids* with it.
+
+    The whole point of the skyline is that it differs from a mortal step in
+    **the labels and nothing else**, so this goes through
+    :func:`_train_and_calibrate` rather than fitting an estimator of its own:
+    same head, same inclusion class-weights, same pinned fit seed, same backend,
+    same bag-aware flooding.  A skyline that trained through a private
+    ``LinearSVC`` would report "fewer labels" and "different trainer" as one
+    number, and would need its own ``Mirror(...)`` entry in
+    ``scripts/check-eval-app-sync.py`` to stay honest; delegation needs neither.
+
+    The threshold the trainer calibrates is computed and **discarded** - the
+    caller takes the test oracle's cut instead (see :data:`SKYLINE_PROVENANCE`).
+    It is paid for rather than skipped because the alternative is a second entry
+    point into the trainer that only the skyline uses, which is exactly the kind
+    of near-copy this module keeps out.
+
+    Returns ``({media_id: score}, step, timings, test_score_seconds)``.
+    """
+    from vtscore.eval import calibration_metrics as cm  # noqa: PLC0415
+
+    step, _threshold, _n_labels, timings, _details = _train_and_calibrate(
+        trainer,
+        dict.fromkeys(good_ids),
+        dict.fromkeys(bad_ids),
+        clips_dict,
+        target_category,
+        region_voting=region_voting,
+        input_dim=input_dim,
+        inclusion=inclusion,
+        calibrate_count=calibrate_count,
+        calibration_fraction=calibration_fraction,
+        head=head,
+        style_obj=style_obj,
+        emit_calibration_metrics=False,
+    )
+    assert step.torch_model is not None  # v1 runs the styled torch path only
+    t_score = time.monotonic()
+    ids, flat, seg = style_obj.node_scores(step.torch_model, {cid: clips_dict[cid] for cid in score_ids})
+    pooled = cm.segment_max_pool(flat, seg)
+    score_seconds = time.monotonic() - t_score
+    return ({cid: float(v) for cid, v in zip(ids, pooled, strict=True)}, step, timings, score_seconds)
+
+
+def _skyline_arm_rows(
+    arms: list[str],
+    clips_dict: dict[int, dict[str, Any]],
+    target_category: str,
+    sim_ids: list[int],
+    test_ids: list[int],
+    inclusion: int,
+    *,
+    trainer: str,
+    head: str,
+    style_obj: Any,
+    region_voting: bool,
+    input_dim: int,
+    calibrate_count: int,
+    calibration_fraction: float,
+    seed: int,
+) -> list[dict[str, Any]]:
+    """One metric row per requested skyline arm (issue #3322), or ``[]``.
+
+    Both arms are scored on the **untouched test split** - the same ``test_ids``
+    every mortal row is scored on, pooled through the same
+    ``style_obj.node_scores`` + segment max, so the two sides of
+    ``training_regret`` differ in the model and in nothing else.  The #3308
+    population convention is satisfied trivially rather than by re-applying
+    :func:`~vtscore.training.thresholds.apply_vote_exclusion`: that convention is
+    about the *haystack a threshold's population estimate is fitted on*, and a
+    skyline fits no such estimate - it takes the test oracle's cut - so there is
+    no haystack here to exclude votes from.
+
+    ``skyline_test_xfit`` pools **cross-fitted** scores: the test split is
+    partitioned into :data:`~vtscore.eval.transfer_rules.HONEST_ORACLE_FOLDS`
+    folds and each item is scored by a head that never saw it.  Two caveats ride
+    on that row and neither is a defect:
+
+    * The pooled scores come from K different heads, so they share a *ranking*
+      but not a calibrated scale.  That is fine for ``oracle_cost`` / ``auroc`` /
+      ``average_precision``, which is all this arm is read for.
+    * Its ``oracle_cost`` is still a sample minimum over those pooled scores, and
+      is optimistic for exactly the reason ``oracle_cost`` always is - which is
+      why ``oracle_cost_honest`` ships beside it, cross-fitting the *cut* on top
+      of the cross-fitted *model*.
+
+    Returns each row already carrying its ``gmm_variant`` tag and its own timing
+    / backend columns; the caller supplies the identifying columns.
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval import calibration_metrics as cm  # noqa: PLC0415
+
+    nan = float("nan")
+    started = time.monotonic()
+    ordered_test = sorted(test_ids)
+    test_labels = np.array(
+        [1.0 if media_is_positive(clips_dict[cid], target_category) else 0.0 for cid in ordered_test],
+        dtype=np.float64,
+    )
+    wf, wn = cm.inclusion_weights(inclusion)
+
+    def _row(name: str, score_map: dict[int, float], step: _StepModel, timings: dict[str, float], secs: float):
+        scores = np.array([score_map[cid] for cid in ordered_test], dtype=np.float64)
+        o_thr, _o_cost, _o_fpr, _o_fnr = cm.oracle_cut(scores, test_labels, wf, wn)
+        if not np.isfinite(o_thr):
+            return None
+        row = _operating_metrics(
+            scores,
+            test_labels,
+            float(o_thr),
+            inclusion,
+            None,
+            None,
+            pool_variant="max",
+            provenance=SKYLINE_PROVENANCE,
+            n_pool_rows=1.0,
+        )
+        row["gmm_variant"] = name
+        row["schedule"] = ""
+        row.update(
+            {
+                "calibrate_count": calibrate_count,
+                "train_seconds": round(timings["train_seconds"], 6),
+                "final_score_seconds": nan,
+                "xcal_seconds": round(timings["xcal_seconds"], 6),
+                "pool_score_seconds": nan,
+                "test_score_seconds": round(secs, 6),
+                "backend": step.backend,
+                "device": step.device,
+                "elapsed_seconds": round(time.monotonic() - started, 3),
+            }
+        )
+        return row
+
+    rows: list[dict[str, Any]] = []
+
+    if SKYLINE_TRAIN_FULL in arms:
+        sim_pos = [cid for cid in sorted(sim_ids) if media_is_positive(clips_dict[cid], target_category)]
+        sim_neg = [cid for cid in sorted(sim_ids) if not media_is_positive(clips_dict[cid], target_category)]
+        if sim_pos and sim_neg:
+            score_map, step, timings, secs = _skyline_fit_and_score(
+                sim_pos,
+                sim_neg,
+                ordered_test,
+                clips_dict,
+                target_category,
+                trainer=trainer,
+                head=head,
+                style_obj=style_obj,
+                region_voting=region_voting,
+                input_dim=input_dim,
+                inclusion=inclusion,
+                calibrate_count=calibrate_count,
+                calibration_fraction=calibration_fraction,
+            )
+            row = _row(SKYLINE_TRAIN_FULL, score_map, step, timings, secs)
+            if row is not None:
+                rows.append(row)
+
+    if SKYLINE_TEST_XFIT in arms:
+        xfit = _skyline_xfit_scores(
+            ordered_test,
+            clips_dict,
+            target_category,
+            trainer=trainer,
+            head=head,
+            style_obj=style_obj,
+            region_voting=region_voting,
+            input_dim=input_dim,
+            inclusion=inclusion,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+            seed=seed,
+        )
+        if xfit is not None:
+            row = _row(SKYLINE_TEST_XFIT, *xfit)
+            if row is not None:
+                rows.append(row)
+
+    return rows
+
+
+def _skyline_xfit_scores(
+    ordered_test: list[int],
+    clips_dict: dict[int, dict[str, Any]],
+    target_category: str,
+    *,
+    trainer: str,
+    head: str,
+    style_obj: Any,
+    region_voting: bool,
+    input_dim: int,
+    inclusion: int,
+    calibrate_count: int,
+    calibration_fraction: float,
+    seed: int,
+) -> tuple[dict[int, float], _StepModel, dict[str, float], float] | None:
+    """Cross-fitted test-side skyline scores: every item scored by a head that never saw it.
+
+    Partitions *ordered_test* into :data:`~vtscore.eval.transfer_rules.HONEST_ORACLE_FOLDS`
+    folds, trains the fully-supervised head on the complement of each, and scores
+    the held-out fold with it.  ``None`` when the split cannot be made honestly -
+    fewer items than folds, or a fold whose complement carries only one class -
+    which leaves the bracket arm out of the frame rather than quietly falling back
+    to the train-on-test fit it exists to avoid.
+
+    Returns the same tuple shape as :func:`_skyline_fit_and_score`, with the
+    per-fold wall clocks summed and the *last* fold's step standing in for the
+    backend/device columns (every fold trains on the same backend).
+    """
+    import numpy as np  # noqa: PLC0415
+
+    from vtscore.eval.transfer_rules import HONEST_ORACLE_FOLDS  # noqa: PLC0415
+
+    if len(ordered_test) < HONEST_ORACLE_FOLDS:
+        return None
+    # Seeded off the run's own seed, never off the trajectory's RandomState:
+    # drawing from `rng` would move every subsequent vote, so turning the arm on
+    # would silently change the run it is meant to describe.
+    order = np.random.default_rng([_SKYLINE_SEED, seed]).permutation(len(ordered_test))
+    scores: dict[int, float] = {}
+    timings = {"train_seconds": 0.0, "xcal_seconds": 0.0}
+    total_secs = 0.0
+    step: _StepModel | None = None
+    for part in np.array_split(order, HONEST_ORACLE_FOLDS):
+        held = [ordered_test[i] for i in part]
+        if not held:
+            continue
+        held_set = set(held)
+        fit_pos: list[int] = []
+        fit_neg: list[int] = []
+        for cid in ordered_test:
+            if cid in held_set:
+                continue
+            (fit_pos if media_is_positive(clips_dict[cid], target_category) else fit_neg).append(cid)
+        if not fit_pos or not fit_neg:
+            return None
+        score_map, step, fold_timings, secs = _skyline_fit_and_score(
+            fit_pos,
+            fit_neg,
+            held,
+            clips_dict,
+            target_category,
+            trainer=trainer,
+            head=head,
+            style_obj=style_obj,
+            region_voting=region_voting,
+            input_dim=input_dim,
+            inclusion=inclusion,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+        )
+        scores.update({cid: score_map[cid] for cid in held})
+        timings["train_seconds"] += fold_timings["train_seconds"]
+        timings["xcal_seconds"] += fold_timings["xcal_seconds"]
+        total_secs += secs
+    if step is None or len(scores) != len(ordered_test):
+        return None
+    return scores, step, timings, total_secs
+
+
+def _apply_skyline_decomposition(rows: list[dict[str, Any]], skyline_rows: list[dict[str, Any]]) -> None:
+    """Fill the :data:`_SKYLINE_COLUMNS` on *rows* from the primary skyline arm.
+
+    ``training_regret = oracle_cost(row) - oracle_cost(skyline)`` on the naive
+    reference and the cross-fitted one alike, so both decompositions telescope
+    exactly against the ``regret`` / ``regret_honest`` the row already carries.
+    Applied to the skyline rows too, which makes ``skyline_train_full``'s own
+    ``training_regret`` exactly ``0`` and ``skyline_test_xfit``'s the bracket
+    between the two references - both of which are the right readings.
+
+    A no-op when :data:`SKYLINE_TRAIN_FULL` did not run: the columns stay NaN
+    rather than being re-based on the bracket partner, which measures capacity on
+    the test sample and not learnability.
+    """
+    ref = next((r for r in skyline_rows if r["gmm_variant"] == SKYLINE_TRAIN_FULL), None)
+    if ref is None:
+        return
+    floor = ref["oracle_cost"]
+    floor_honest = ref["oracle_cost_honest"]
+    for row in [*rows, *skyline_rows]:
+        row["skyline_oracle_cost"] = floor
+        row["skyline_oracle_cost_honest"] = floor_honest
+        row["training_regret"] = _r(row["oracle_cost"] - floor)
+        row["training_regret_honest"] = _r(row["oracle_cost_honest"] - floor_honest)
+
+
+# ------------------------------------------------------------------
 # Single (seed, dataset, category) evaluation
 # ------------------------------------------------------------------
 
@@ -3207,6 +3598,7 @@ def simulate_voting_iterations(  # noqa: C901
     startup_schedule: Optional[str] = None,
     pick_sink: Optional[list[dict[str, Any]]] = None,
     exclusion_min_remainder: Optional[float] = None,
+    skyline_arms: Optional[list[str]] = None,
 ) -> list[dict[str, Any]]:
     """Simulate voting on *clips_dict* and evaluate at every step.
 
@@ -3400,6 +3792,15 @@ def simulate_voting_iterations(  # noqa: C901
             ``K == calibrate_count`` reproduces this step's own conformal cut;
             see :func:`_fold_count_variant_rows`.  Costs ``Kmax - calibrate_count``
             extra fold fits per step and nothing else.
+        skyline_arms: **Supervised-skyline** arms to measure once per run
+            (issue #3322; see :data:`SKYLINE_ARMS`).  ``None``/``[]`` (default)
+            = off, and every other study runs exactly as before.  Requires
+            ``emit_calibration_metrics``, because the arm exists to split that
+            frame's ``oracle_cost`` into a learnability floor plus a
+            ``training_regret``; skipped with a warning on a patch column, whose
+            skyline needs a supervision decision this does not improvise (see
+            :data:`_SKYLINE_COLUMNS` and issue #3321).  Costs one extra fit per
+            arm per run - the skyline is vote-independent - not one per step.
         autopilot_fidelity: When ``True`` (default) the simulated user follows
             the app's own phase machine
             (:class:`vtscore.eval.autopilot_flow.AutopilotFlow`): no detector is
@@ -3454,6 +3855,18 @@ def simulate_voting_iterations(  # noqa: C901
         if not autopilot_fidelity or strategy != "autopilot":
             raise ValueError("startup_schedule requires autopilot_fidelity and the autopilot strategy")
         startup_state = StartupState(parse_startup_schedule(startup_schedule))
+
+    skyline_arms = list(skyline_arms or [])
+    if skyline_arms:
+        unknown = [a for a in skyline_arms if a not in SKYLINE_ARMS]
+        if unknown:
+            raise ValueError(f"unknown skyline arm(s) {unknown}; expected a subset of {list(SKYLINE_ARMS)}")
+        if not emit_calibration_metrics:
+            raise ValueError(
+                "skyline_arms requires emit_calibration_metrics: the decomposition is defined "
+                "against the calibration frame's oracle_cost/regret columns, which the plain "
+                "frame does not carry"
+            )
 
     if acq_rank_percentile is not None:
         if acq_inclusion_offset != 0:
@@ -3557,6 +3970,29 @@ def simulate_voting_iterations(  # noqa: C901
         from vtscore.eval.patch_styles import resolve_style  # noqa: PLC0415
 
         style_obj = resolve_style(style)
+
+    # **v1 is the whole-image columns.**  Full supervision hands out *image*
+    # labels, but the mortal max_patch flow trains on GT-box-pooled vectors (the
+    # sim user drags a box), so a patch column's skyline is a design decision -
+    # "oracle boxes + all images", or the multiple-instance problem of which
+    # patch of a positive image is the positive - and not something to improvise
+    # inside a metric row.  That decision is the named open item on #3321.  Skip
+    # rather than raise: a sweep over `styles=["whole_image", "max_patch"]` should
+    # get the decomposition on the column that has one instead of dying on the
+    # column that doesn't, and the skip is loud here and visible in the frame
+    # (no `skyline_*` rows, NaN decomposition columns) rather than silent.
+    if skyline_arms and (style_obj is None or style_obj.name != _WHOLE_IMAGE_STYLE):
+        import warnings  # noqa: PLC0415
+
+        warnings.warn(
+            f"skyline_arms={skyline_arms} skipped for style={style or 'none'!r}: the supervised "
+            f"skyline is scoped to the {_WHOLE_IMAGE_STYLE!r} column in v1, because a patch "
+            "column's skyline needs a supervision decision (GT boxes vs. multiple-instance) "
+            "that is still open - see issue #3321.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        skyline_arms = []
     # Mirror the app's per-mode schedule default (#2841): with no explicit arm, a
     # patch dataset blends under the region schedule and a single-vector one
     # under the binary schedule, exactly as `_blend_schedule_for_snap` decides in
@@ -4097,6 +4533,62 @@ def simulate_voting_iterations(  # noqa: C901
                     cut_inclusion_sink.append({**base_row, **cr})
         else:
             rows.append({**base_row, **metrics, **timing_cols})
+
+    # --- The supervised skyline (issue #3322), once per run. ---
+    #
+    # Deliberately **after** the loop rather than before it: every fit here draws
+    # from some RNG somewhere, and a skyline computed up front would have to be
+    # proved not to perturb the trajectory it is meant to describe.  Computed
+    # here it cannot, whatever the trainer does internally - the votes are
+    # already cast.  `test_skyline_does_not_perturb_the_trajectory` pins that.
+    if skyline_arms:
+        skyline_rows = _skyline_arm_rows(
+            skyline_arms,
+            clips_dict,
+            target_category,
+            sim_ids,
+            test_ids,
+            inclusion,
+            trainer=trainer,
+            head=head,
+            style_obj=style_obj,
+            region_voting=region_voting,
+            input_dim=input_dim,
+            calibrate_count=calibrate_count,
+            calibration_fraction=calibration_fraction,
+            seed=seed,
+        )
+        _apply_skyline_decomposition(rows, skyline_rows)
+        # `t=0` and `app_trained=0`: the skyline belongs to no step, so it is
+        # given a step index no trajectory can occupy (the first *trainable*
+        # step is t>=2) rather than being duplicated onto all of them.  The vote
+        # counts are the full supervision it was handed, and `n_remainder=0`
+        # says exactly what that means - nothing in the haystack was left
+        # unlabelled.
+        n_sky_good = sum(1 for cid in sim_ids if pool_labels[cid] == 1.0)
+        skyline_ident = {
+            "seed": seed,
+            "dataset": dataset_name,
+            "category": target_category,
+            "strategy": strategy,
+            "trainer": trainer,
+            "head": head if trainer == "mlp" else "",
+            "style": style or "",
+            "prevalence_arm": prevalence_arm,
+            "realized_prevalence": realized_prevalence,
+            "t": 0,
+            "n_good": n_sky_good,
+            "n_bad": len(sim_ids) - n_sky_good,
+            "n_haystack": len(sim_ids),
+            "n_remainder": 0,
+            "phase": "",
+            "app_trained": 0,
+            "startup_schedule": startup_schedule or "",
+            "acq_threshold": float("nan"),
+            "acq_pool_percentile": float("nan"),
+            "report_pool_percentile": float("nan"),
+        }
+        rows.extend({**skyline_ident, **sr} for sr in skyline_rows)
 
     return rows
 

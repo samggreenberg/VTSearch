@@ -219,6 +219,7 @@ def main(argv: list[str] | None = None) -> int:
         f"fold_count_schedule={cfg.FOLD_COUNT_SCHEDULE or 'off'} "
         f"sim_fraction={cfg.SIM_FRACTION} exclusion={cfg.exclusion_arm_name()} "
         f"cut_incl_ks={cfg.CUT_INCLUSION_KS or 'off'} "
+        f"skyline_arms={cfg.SKYLINE_ARMS or 'off'} "
         f"acq_inclusion_offset={cfg.ACQ_INCLUSION_OFFSET} acq_rank_percentile={cfg.ACQ_RANK_PERCENTILE} "
         f"startup_schedule={cfg.STARTUP_SCHEDULE or 'app default'}"
     )
@@ -306,6 +307,7 @@ def main(argv: list[str] | None = None) -> int:
             anchored_fold_arms=cfg.ANCHORED_FOLD_ARMS,
             anchored_fold_combines=cfg.ANCHORED_FOLD_COMBINES,
             fold_count_variants=cfg.FOLD_COUNTS or None,
+            skyline_arms=cfg.SKYLINE_ARMS or None,
             fold_count_schedule=cfg.FOLD_COUNT_SCHEDULE,
             cut_inclusion_ks=cfg.CUT_INCLUSION_KS or None,
             cut_inclusion_sink=cutincl_local,

@@ -214,6 +214,46 @@ Not to be confused with the older `analyze_folds.py` / `launch_folds_2861.sh`,
 which moved the fold count to 4 only to unlock the anchored `qmean`/`qmedian`
 combine question — it measures no cost and covers region voting only.
 
+## Supervised skyline / training regret (issue #3322)
+
+```bash
+CALIB_SKYLINE_ARMS=skyline_train_full ./launch_cells.sh
+```
+
+Splits the frame's `oracle_cost` into a **learnability floor** and the headroom
+the interactive loop left on the table:
+
+```
+cost = skyline_oracle_cost + training_regret + regret
+```
+
+`skyline_train_full` trains the same head, through the same trainer, on the
+**entire sim split with full ground-truth labels**, and scores the untouched
+test split. That answers the routing question no other column answers: when a
+cell is expensive, buy a better *embedder* (high floor) or a better
+*acquisition loop* (high `training_regret`)? A stuck run with a low floor was a
+findable class the loop missed; one with a high floor was never learnable in
+that space.
+
+Add `skyline_test_xfit` for the cross-fitted test-side bracket partner. It is
+**never** a naive train-on-test fit — a ~769-parameter head on a test set of
+comparable size shatters near-arbitrary labelings and would report `d / n_test`
+under the name "learnability" — so it folds the test split and scores each item
+with a head that never saw it, the SVM analogue of `honest_test_oracle`.
+
+Nearly free: the skyline is vote-independent, so it costs **one extra fit per
+arm per cell**, not one per click. Both arms emit a single `t = 0` row tagged in
+`gmm_variant`, and the four decomposition columns
+(`skyline_oracle_cost{,_honest}`, `training_regret{,_honest}`) are filled on
+every row of the run so the identity holds within a row.
+
+Scoped to the **whole-image** column in v1: a patch column's skyline needs a
+supervision decision (GT boxes vs. a multiple-instance problem) that is still
+open on #3321, so the harness warns and skips there rather than improvising one.
+See [`docs/EVAL.md`](../../../docs/EVAL.md) for the full read, and
+`tests_lib/detectors/test_skyline_arm.py` for the telescope, vote-independence
+and cross-fitting checks.
+
 ## Voted-media exclusion floor (issue #3312)
 
 ```bash

@@ -517,6 +517,20 @@ FOLD_COUNTS = [int(k) for k in os.environ.get("CALIB_FOLD_COUNTS", "").split(","
 #: :data:`CALIBRATE_COUNT` itself - the screen cannot see it.
 FOLD_COUNT_SCHEDULE = os.environ.get("CALIB_FOLD_COUNT_SCHEDULE", "").strip() or None
 
+#: **Supervised-skyline** arms to measure once per run (issue #3322), splitting
+#: ``oracle_cost`` into a learnability floor plus the headroom the interactive
+#: loop left on the table.  Empty (the default) = off, and every other study runs
+#: exactly as before.
+#:
+#: ``CALIB_SKYLINE_ARMS=skyline_train_full`` is the headline: the same head,
+#: through the same trainer, on the entire sim split with full ground-truth
+#: labels.  Add ``skyline_test_xfit`` for the cross-fitted test-side bracket
+#: partner.  Both are vote-independent, so the price is one extra fit per arm per
+#: cell rather than one per click - and both are scoped to the whole-image column
+#: in v1 (a patch column's skyline needs a supervision decision that is still
+#: open on #3321; the harness warns and skips there rather than improvising one).
+SKYLINE_ARMS = [a.strip() for a in os.environ.get("CALIB_SKYLINE_ARMS", "").split(",") if a.strip()]
+
 #: Which head each step trains (``vtscore.eval.voting_iterations.HEADS``).
 #: Unset (the default) hands ``head=None`` to the harness, which resolves it to
 #: the head the live detector actually trains — ``linear_svm``.  That is the
