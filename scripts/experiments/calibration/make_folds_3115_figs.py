@@ -18,7 +18,7 @@ figure and a table cannot disagree.  Four things the tables cannot show:
 Usage::
 
     python make_folds_3115_figs.py --results /exp/$USER/calibration-folds-3115/results \\
-        --out docs/experiments/calibration-fold-combine/figures
+        --out docs/experiments/2026-08-25-calibration-fold-combine/figures
 """
 
 from __future__ import annotations

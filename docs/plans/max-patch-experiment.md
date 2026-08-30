@@ -6,7 +6,7 @@ The study asked whether the HAC region tree earned its keep against scoring an
 image by max-pooling the MLP over its **raw patch grid**. Its verdict — **ship
 tree-free MaxPatch; drop the HAC tree from ingest** — shipped in #2886, and the
 numbers are in
-[`docs/experiments/max-patch/REPORT.md`](../experiments/max-patch/REPORT.md).
+[`docs/experiments/2026-07-29-max-patch/REPORT.md`](../experiments/2026-07-29-max-patch/REPORT.md).
 
 Two consequences shape anything that revisits this:
 

@@ -35,7 +35,7 @@ Run on the HLTCOE Grid, image + SigLIP only, 3 datasets × 5 categories ×
 ## Regenerate the report from the CSVs
 
 ```bash
-cd docs/experiments/mlp-vs-svm && mkdir -p stage_b && \
+cd docs/experiments/2026-07-22-mlp-vs-svm && mkdir -p stage_b && \
   gunzip -c stage_b.csv.gz | ...  # split back per-cell, or point summarize at a dir of CSVs
 gunzip -k stage_a.csv.gz
 python ../../../scripts/experiments/mlp_vs_svm/summarize.py --results .

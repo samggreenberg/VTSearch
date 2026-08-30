@@ -6,7 +6,7 @@ first).  Unlike the MLP-vs-SVM grid study this experiment is sized to run
 on a single CPU box: the embedding cache and scratch data live under an
 experiment directory outside the repo (``INCKNOB_EXP``, defaulting to a
 temp-style path), while the committed outputs (CSVs, figures, report) go
-to ``docs/experiments/inclusion-knob/`` in the worktree.
+to ``docs/experiments/2026-07-27-inclusion-knob/`` in the worktree.
 """
 
 from __future__ import annotations

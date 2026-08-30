@@ -32,7 +32,7 @@
 # 150-click horizon.
 #
 # Design + pre-registered decision rules:
-#   docs/experiments/calibration-fraction-3287/PLAN.md
+#   docs/experiments/2026-08-27-calibration-fraction-3287/PLAN.md
 set -uo pipefail
 trap 'echo "ABORTED: $0 line $LINENO exited $? -- NOTHING WAS SUBMITTED" >&2' ERR
 

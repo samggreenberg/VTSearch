@@ -9,7 +9,7 @@
 #   bash launch_incl_3196.sh analyze        # cross-head analysis, after both drain
 #
 # Design + pre-registered decision rules:
-#   docs/experiments/inclusion-knob-3196/PLAN.md
+#   docs/experiments/2026-08-29-inclusion-knob-3196/PLAN.md
 #
 # WHY THE HEAD IS TWO RUNS AND NOT TWO ARMS.  The fold-anchored threshold drives
 # Autopilot's `hard` pick, so a different head collects DIFFERENT VOTES from its

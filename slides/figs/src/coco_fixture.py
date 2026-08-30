@@ -9,7 +9,7 @@ the screenshots have to be a real session hunting books, and that needs a
 corpus where books are a real concept with real near-misses in the pile.
 Caltech-101, which these shots used to be taken against, has no such category;
 COCO does, and it is the set whose `book` annotation the `vg_scale` review
-found hardest to agree with (`docs/experiments/vg-scale/DATASHEET.md`).
+found hardest to agree with (`docs/experiments/2026-08-25-vg-scale/DATASHEET.md`).
 
 So: download COCO val2017 into `data/coco-val2017/` once, and materialise
 fixture folders under `data/slide-fixtures/` filed by category, exactly the

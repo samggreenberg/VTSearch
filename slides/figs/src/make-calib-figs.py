@@ -14,7 +14,7 @@ The two mixture figures run the *real* vtscore estimators (`fit_score_gmm`,
 `fit_anchored_score_gmm`) on labelled synthetic data — schematic inputs, real
 code. The schedule figure plots the shipped `blend_schedules` registry verbatim.
 The decomposition figure re-plots published numbers from
-`docs/experiments/gmm-cut/REPORT-2881.md` (the #2879 re-measure).
+`docs/experiments/2026-08-04-gmm-cut/REPORT-2881.md` (the #2879 re-measure).
 """
 
 import functools
@@ -2637,7 +2637,7 @@ def _argmin_cut(scores: np.ndarray, labels: np.ndarray, inclusion: int) -> float
     `vtscore`, because the code it draws no longer exists: `find_optimal_threshold`
     was deleted when the conformal rule shipped (#2693), which is the whole
     point of the slide. It is reconstructed from the rule as
-    `docs/experiments/inclusion-knob/REPORT.md` states it — the minimum of
+    `docs/experiments/2026-07-27-inclusion-knob/REPORT.md` states it — the minimum of
     ``fpr_weight·FPR + fnr_weight·FNR`` over the observed held-out cut points,
     with the weights from the shipped :func:`inclusion_cost_weights` so the
     *knob* half of the picture is still the live definition.
@@ -2827,7 +2827,7 @@ def knob_flow_fig() -> None:
     to one in opposite directions, and *both cost curves are zero across the
     whole band*, so every cut in it ties at every setting. Twenty-one stops, one
     answer (#2693,
-    ``docs/experiments/inclusion-knob/REPORT.md``: 100% flat sweeps on the
+    ``docs/experiments/2026-07-27-inclusion-knob/REPORT.md``: 100% flat sweeps on the
     separable arm, and ~1.8 distinct admitted sizes across eleven stops on real
     embeddings).
     """
@@ -3212,7 +3212,7 @@ def tilt_flow_fig() -> None:
     the knob went silent again — measured, not argued: one admitted set for the
     whole slider in **65,671 of 65,671** cell-steps across four environments, at
     up to **+0.18±0.02** regret away from inclusion 0
-    (``docs/experiments/inclusion-cut-rule/REPORT.md``).
+    (``docs/experiments/2026-08-21-inclusion-cut-rule/REPORT.md``).
 
     The shipped rule (:data:`~vtscore.training.thresholds.FOLD_ANCHOR_CUT_RULE`,
     ``"mid_tilt"``) keeps the measured winner exactly where it was measured and
@@ -3467,7 +3467,7 @@ def acq_flow_fig() -> None:
     rejected −3 against a +0.01 tolerance, and only −1 passed in both. The
     region-voting leg is void pending a re-run (#2943), and a supply-dependent
     offset is the open frontier (#2910). See
-    ``docs/experiments/acquisition-inclusion/REPORT.md``.
+    ``docs/experiments/2026-08-07-acquisition-inclusion/REPORT.md``.
     """
     folds, final = _xquant_populations()
     last = _acq_flow_stage(ACQ_FLOW_STAGES, folds, final)
@@ -3787,7 +3787,7 @@ def split_fraction_fig() -> None:
     """The Train/Check split, paired against the 50/50 incumbent.
 
     Redraws the committed curves from
-    `docs/experiments/calibration-fraction-3287/figures/cost_vs_clicks.csv`
+    `docs/experiments/2026-08-27-calibration-fraction-3287/figures/cost_vs_clicks.csv`
     (plus the `siglip2l/`, `clip/` and `clip_l/` follow-ups) at slide scale, as
     the difference the 70/30 split makes at each click count. One line per
     geometry; below zero means training on more of the votes beat holding more
@@ -3957,7 +3957,7 @@ def anchored_fig() -> None:
 
 
 def decomposition_fig() -> None:
-    # docs/experiments/gmm-cut/REPORT-2881.md — the #2879 re-measure of #2836's
+    # docs/experiments/2026-08-04-gmm-cut/REPORT-2881.md — the #2879 re-measure of #2836's
     # decomposition (region arm, ramp 6-20): total excess cost 0.0686.
     terms = [
         ("identification", 0.0057),

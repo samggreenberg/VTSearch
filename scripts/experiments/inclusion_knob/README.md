@@ -2,16 +2,16 @@
 
 Measures why the Inclusion slider fails to move the decision threshold and
 compares candidate knob designs. Findings + recommendation:
-[`docs/experiments/inclusion-knob/REPORT.md`](../../../docs/experiments/inclusion-knob/REPORT.md).
+[`docs/experiments/2026-07-27-inclusion-knob/REPORT.md`](../../../docs/experiments/2026-07-27-inclusion-knob/REPORT.md).
 
 A follow-on study asks whether the conformal rule's `alpha(k)` budget — a
 split-conformal guarantee, so it assumes exchangeable calibration votes —
 survives the fact that VTSearch's votes are chosen by the detector's own sort:
-[`docs/experiments/inclusion-knob/SELECTION-BIAS.md`](../../../docs/experiments/inclusion-knob/SELECTION-BIAS.md).
+[`docs/experiments/2026-07-27-inclusion-knob/SELECTION-BIAS.md`](../../../docs/experiments/2026-07-27-inclusion-knob/SELECTION-BIAS.md).
 
 Runs on a single CPU box (no GPU, no SLURM). Scratch data (AG News CSV, E5
 embedding cache) lives under `INCKNOB_EXP` (default `~/.cache/incknob-exp`);
-committed outputs go to `docs/experiments/inclusion-knob/`.
+committed outputs go to `docs/experiments/2026-07-27-inclusion-knob/`.
 
 ## Stages
 

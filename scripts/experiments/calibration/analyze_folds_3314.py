@@ -3,7 +3,7 @@
 
 Reads the stage-A screen (``launch_folds_3314.sh screen``) and applies the
 decision rules pre-registered in
-``docs/experiments/calibration-fold-count-3310/PLAN.md``.  Stage B's arms, when
+``docs/experiments/2026-08-28-calibration-fold-count-3310/PLAN.md``.  Stage B's arms, when
 the gate books them, come in through ``--ab`` and are contrasted across runs.
 
 **Why this is not `analyze_folds_2897.py`.**  That analyzer owns the #2897 /
@@ -805,7 +805,7 @@ def write_report(out: Path, blocks: dict) -> None:
         "# Fold count vs its wall-clock price (#3314, stage A screen)",
         "",
         "Mechanical output of the rules pre-registered in",
-        "`docs/experiments/calibration-fold-count-3310/PLAN.md`.  The prose report",
+        "`docs/experiments/2026-08-28-calibration-fold-count-3310/PLAN.md`.  The prose report",
         "lives beside that PLAN; this file is the analyzer's own record.",
         "",
         f"Cost model: **{blocks['cost_model']}**.  Margin {MARGIN}, harm tolerance",

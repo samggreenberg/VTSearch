@@ -55,7 +55,7 @@ def log(msg: str) -> None:
 
 
 def sig2(x: float) -> str:
-    """Two significant digits — the report standard (docs/experiments/overview-bench)."""
+    """Two significant digits — the report standard (docs/experiments/2026-08-12-overview-bench)."""
     if x == 0 or not np.isfinite(x):
         return f"{x:.0f}"
     if abs(x) >= 0.01:

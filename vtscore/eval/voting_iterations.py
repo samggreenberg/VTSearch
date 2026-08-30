@@ -1444,7 +1444,7 @@ def _safe_gmm_variant_rows(
     stand-in is what keeps ``rate`` commensurable with the ``cross`` and
     ``priorfree`` siblings it is differenced against - at inclusion 0 it is what
     keeps ``rate`` bit-identical to ``priorfree``, which is how every report in
-    ``docs/experiments/gmm-cut/`` reads those rows.  It is no longer *invisible*
+    ``docs/experiments/2026-08-04-gmm-cut/`` reads those rows.  It is no longer *invisible*
     though: ``cut_fallback_kind`` carries
     :data:`~vtscore.eval.cut_rules.CUT_KIND_MIDPOINT` on exactly these steps,
     against the production family's ``continued`` / ``degenerate_midpoint``, so
@@ -1689,7 +1689,7 @@ def parse_fold_count_schedule(spec: str | None, base: int) -> "Callable[[int], i
     """Eval-only (#3314): resolve ``calibrate_count`` per step from the vote count.
 
     ``"K@N"`` means ``K(n_votes) = K while n_votes < N, else base`` - the family
-    pre-registered in ``docs/experiments/calibration-fold-count-3310/PLAN.md``,
+    pre-registered in ``docs/experiments/2026-08-28-calibration-fold-count-3310/PLAN.md``,
     written the issue's way round: *more folds while the labelset is small,
     decaying to production's count*.  Several segments may be chained
     (``"8@25,4@60"``), and they are read in ascending ``N`` order, so the first
@@ -3940,7 +3940,7 @@ def simulate_voting_iterations(  # noqa: C901
             "region_voting=True but no media carries a patch_grid, so every Good "
             "vote falls back to its whole-image embedding: this run is BINARY "
             "voting. Region voting needs a patch embedder (e.g. dinov3_patch). "
-            "See docs/experiments/acquisition-inclusion/REPORT_SECOND_ENVIRONMENT.md.",
+            "See docs/experiments/2026-08-07-acquisition-inclusion/REPORT_SECOND_ENVIRONMENT.md.",
             RuntimeWarning,
             stacklevel=2,
         )

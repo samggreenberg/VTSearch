@@ -198,7 +198,7 @@ def _fused_threshold(
     (:func:`~vtscore.training.thresholds.fold_anchored_gmm_threshold`).  This is
     the estimator the 2026-08-05 deep-regime run picked over both pure
     cross-calibration and the schedule-blended GMM - see
-    ``docs/experiments/population-anchored-calibration/REPORT.md``.
+    ``docs/experiments/2026-08-05-population-anchored-calibration/REPORT.md``.
 
     **Voted media are excluded from every haystack the estimator fits on**
     (issue #3308).  Each model in the chain was trained on the votes, so the
@@ -600,7 +600,7 @@ def pool_box_from_media(
     where the hypothesis said it would - below leaf scale, where the tree's
     smallest pooled candidate already blends object with context while a raw
     patch is a near-pure object sample.  See
-    ``docs/experiments/max-patch/REPORT.md``.
+    ``docs/experiments/2026-07-29-max-patch/REPORT.md``.
 
     Note the drawn box's width and height are discarded in essentially every
     case: ``nearest_patch_to_box`` collapses to "the patch nearest the box

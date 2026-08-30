@@ -15,7 +15,7 @@ genuinely cannot show, and the reason this script exists:
 
 Usage (paths default to the study's scratch dirs):
 
-    python make_bench_figs.py --out docs/experiments/overview-bench/figures \\
+    python make_bench_figs.py --out docs/experiments/2026-08-12-overview-bench/figures \\
         --wave1 /expscratch/$USER/bench-overview/results \\
         --vgbox /expscratch/$USER/bench-vgbox2/results \\
         --binary /expscratch/$USER/bench-binary/results

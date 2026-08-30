@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Acquisition/reporting threshold decoupling — docs/experiments/acquisition-inclusion/REPORT.md
+# Acquisition/reporting threshold decoupling — docs/experiments/2026-08-07-acquisition-inclusion/REPORT.md
 #
 # #2847 (PR #2873) found today's fused threshold finds HALF as many positives as
 # the conformal path it replaced (median 9 -> 4 per 100 votes, p=1e-20) while

@@ -134,7 +134,7 @@ TRANSFER_ORACLE_RULES: tuple[str, ...] = (*SUBSAMPLE_RULES, *VARIANCE_REDUCED_RU
 
 #: The **label-free** arm: the same variance-reduction idea applied to the
 #: unsupervised mixture fit, which is the only side of this that could ship.
-#: Exploratory - see ``docs/experiments/transfer-2883/PREREG.md``; #2883 item 1
+#: Exploratory - see ``docs/experiments/2026-08-24-transfer-2883/PREREG.md``; #2883 item 1
 #: asks for the characterisation *before* a remedy, so these are measured and
 #: excluded from the ship gate rather than allowed to win on this run.
 BAGGED_FIT_RULES: tuple[str, ...] = ("bagfit_mid", "bagfit_priorfree")
