@@ -327,6 +327,33 @@ Each metric row carries the operating point at that step's threshold — `cost` 
 
 `DETECTION_METRICS` in the same module carries each metric's label and its **direction**, and is what the report figures and the interactive viewer read — so nothing downstream decides for itself which way is "better".
 
+#### The supervised skyline and training regret (`skyline_arms`)
+
+`cost = oracle_cost + regret` splits a step's cost into "the ranking" and "the cut", but `oracle_cost` still conflates two causes that call for opposite fixes: **no linear head in this embedding can separate the class**, and **a head could, but 10–200 clicks did not find it**. Pass `skyline_arms=["skyline_train_full"]` (requires `emit_calibration_metrics`) to split them:
+
+```
+cost = skyline_oracle_cost   (learnability floor: embedding + head capacity)
+     + training_regret       (headroom the interactive loop left on the table)
+     + regret                (what the cut rule gave away on the ranking it got)
+```
+
+`skyline_train_full` is the standard supervised-skyline arm: the **same head, through the same trainer**, trained on the entire simulation split with **full ground-truth labels** and evaluated on the untouched test split — same hypothesis class, same features, full supervision, disjoint eval. It delegates to `_train_and_calibrate` rather than fitting an estimator of its own, so the gap it measures is "fewer labels" and not "a different trainer" (and so it needs no `Mirror(...)` entry to stay drift-proof).
+
+`training_regret` is defined on **rankings** — `oracle_cost(mortal) − oracle_cost(skyline)` — which is what makes the telescope exact. Routing the skyline through a calibrated cut would re-mix in the term `regret` already isolates, so the skyline's own threshold is the test oracle's: `cost == oracle_cost` and `regret == 0` on a skyline row **by construction**. Read its `oracle_cost`, never its `regret`.
+
+Four things to know before reading the numbers:
+
+- **The row is per *run*, not per step.** A skyline is vote-independent, so it is emitted once per `(cell, seed)` at `t = 0` with `app_trained = 0`, tagged in `gmm_variant` like every other variant family. The four decomposition columns (`skyline_oracle_cost`, `skyline_oracle_cost_honest`, `training_regret`, `training_regret_honest`) are then filled on *every* row of the run, so the identity holds within a row. Cost: one extra fit per arm per cell, not per click.
+- **Negative `training_regret` is legal.** Unlike the threshold oracle, the skyline is not a per-run optimum over the same object — region votes carry box information an image-labelled skyline lacks, and small samples get lucky. Nothing clamps it.
+- **The terms are sum-pinned**, so the same caution `_operating_metrics` documents for `rule_inefficiency` / `calibration_shift` applies verbatim: they share noise by construction, so don't read one half moving as an effect when the knob also moves the yardstick.
+- **The gap bundles several causes** — how many labels, *which* labels (the acquisition policy), and the full split's imbalance. Read it as "headroom left by the interactive loop", not as one cause.
+
+`skyline_test_xfit` is the optional bracket partner, and it is **cross-fitted**: the test split is partitioned into folds and each item is scored by a head that never saw it. A naive train-on-test fit is not an option — a ~769-parameter linear head on a test set of comparable size can shatter near-arbitrary labelings, so it would report near-zero cost on a genuinely unlearnable class and its "regret" would measure `d / n_test` rather than learnability. It is the SVM analogue of `honest_test_oracle`, which does the same thing one level down for the *cut*; its pooled scores share a ranking but not a calibrated scale, so read it for `oracle_cost` / `auroc` / `average_precision` only.
+
+**v1 is the whole-image column.** Full supervision hands out *image* labels, but the mortal `max_patch` flow trains on GT-box-pooled vectors, so a patch column's skyline is a design decision — "oracle boxes + all images", or the multiple-instance problem of which patch of a positive image is the positive — and issue #3321 holds it open. The harness warns and skips on a patch style rather than improvising one, so a sweep over both columns still gets the decomposition on the column that has one.
+
+Set `CALIB_SKYLINE_ARMS=skyline_train_full` to turn the arm on in the calibration experiment runner.
+
 #### The pick log (`pick_sink`)
 
 Pass a list as `pick_sink` to get one row per **click** (columns: `_PICK_COLUMNS`) — what was picked, whether it was a positive, and where on the seed sort it came from. The main frame starts at the first *trainable* step, because before one Good and one Bad vote coexist there is no model, no threshold and no metrics row; so the opening is exactly the part it does not record. An opening that never finds both classes emits **no main row at all**, which is a result about that opening rather than a missing cell.
