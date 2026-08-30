@@ -139,11 +139,15 @@ def build(root: Path) -> None:
                                 "anchor_kappa": 0.3,
                             }
                         )
+                    # `pool_variant` is "max" on the base row, not blank -- that
+                    # is what the harness actually writes, and planting a blank
+                    # here is what let the base-row filter drop every real cell
+                    # while this test stayed green.
                     main_rows.append(
                         {
                             **base,
                             "gmm_variant": "",
-                            "pool_variant": "",
+                            "pool_variant": "max",
                             "regret_honest": regret,
                             "n_test_pos": n_pos,
                         }
@@ -153,8 +157,18 @@ def build(root: Path) -> None:
                         {
                             **base,
                             "gmm_variant": "folds_k4_anchored",
-                            "pool_variant": "",
+                            "pool_variant": "max",
                             "regret_honest": regret + 5.0,
+                            "n_test_pos": n_pos,
+                        }
+                    )
+                    # Trap 5b: a REPOOL arm, dropped on `pool_variant` alone.
+                    main_rows.append(
+                        {
+                            **base,
+                            "gmm_variant": "",
+                            "pool_variant": "mean",
+                            "regret_honest": regret - 5.0,
                             "n_test_pos": n_pos,
                         }
                     )

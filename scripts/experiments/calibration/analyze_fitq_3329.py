@@ -105,9 +105,21 @@ def load_main(results: Path) -> pd.DataFrame:
     out = pd.concat(frames, ignore_index=True)
     # The base row only: variant arms carry their own cuts and would enter the
     # regression as extra, non-independent rows for the same step.
-    for col, blank in (("gmm_variant", ""), ("pool_variant", "")):
+    #
+    # The two columns do NOT mark their base the same way, and assuming they did
+    # silently emptied the whole frame on the first real run: `gmm_variant` is
+    # blank on the base cut, but `pool_variant` is stamped with the base
+    # pooling's own NAME, "max" (a repool arm carries "mean", "topk", ...), so
+    # filtering it to blank dropped all 192 cells and H4 scored as a null it had
+    # never actually computed. The selftest passed because its fixture planted a
+    # blank `pool_variant`, which the harness never emits. Name each column's
+    # base values rather than assuming blank means base.
+    for col, base_values in (
+        ("gmm_variant", ("", "nan")),
+        ("pool_variant", ("", "nan", "max")),
+    ):
         if col in out.columns:
-            out = out[out[col].fillna(blank).astype(str).isin([blank, "nan"])]
+            out = out[out[col].fillna("").astype(str).isin(base_values)]
     out["arm"] = _arm(out)
     return out
 
