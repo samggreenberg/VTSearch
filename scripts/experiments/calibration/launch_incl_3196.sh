@@ -316,10 +316,18 @@ PYLIST
     export CALIB_EXP="$BASE" CALIB_RESULTS="$BASE/svm/results"
     mkdir -p "$BASE/logs" "$BASE/analysis"
     AENVX="export CALIB_EXP=$CALIB_EXP CALIB_RESULTS=$CALIB_RESULTS VTSEARCH_DATA_DIR=$VTSEARCH_DATA_DIR VTSEARCH_MODELS_DIR=$VTSEARCH_MODELS_DIR HF_HOME=$HF_HOME"
-    A=$(sbatch --parsable --job-name=incl3196-analyze --mem="$CALIB_ANALYZE_MEM" \
+    # Chain it GRID-side on the two arrays when their ids are known
+    # (`INCL3196_DEPEND=594924:594962`), so the analysis still happens if the VPN
+    # drops - three watchers died in one day doing this from a laptop.
+    # `afterany`, not `afterok`: an arm that loses cells to a node failure still
+    # has to be read and its loss COUNTED, and an analyzer that never runs
+    # reports nothing at all.
+    DEP=()
+    [[ -n "${INCL3196_DEPEND:-}" ]] && DEP=(--dependency="afterany:${INCL3196_DEPEND}")
+    A=$(sbatch --parsable "${DEP[@]}" --job-name=incl3196-analyze --mem="$CALIB_ANALYZE_MEM" \
       --cpus-per-task=4 --time="$CALIB_ANALYZE_TIME" --partition=cpu --export=ALL \
       --output="$BASE/logs/analyze-%j.out" \
-      --wrap="source $WT/gridenv.sh && $AENVX && cd $HERE && python analyze_incl_3196.py --svm $BASE/svm/results --linear $BASE/linear/results --out $BASE/analysis")
+      --wrap="source $WT/gridenv.sh && $AENVX && cd $HERE && python analyze_incl_3196.py --svm $BASE/svm/results --linear $BASE/linear/results --out $BASE/analysis && python figures_incl_3196.py --analysis $BASE/analysis")
     require_jobid "$A" "the cross-head analyze step"
     echo "cross-head analyze: $A  ->  $BASE/analysis"
     ;;
