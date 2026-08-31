@@ -104,12 +104,30 @@ def paired(df: pd.DataFrame, arm: str, base: str = "plain", metric: str = "ap") 
     b = df[df["arm"] == arm].set_index(keys)[metric]
     joined = pd.concat({"base": a, "arm": b}, axis=1).dropna().reset_index()
     joined["delta"] = joined["arm"] - joined["base"]
+    # The clustering unit: one category of one corpus, however many size slices
+    # of that corpus it appears in.
+    joined["cluster"] = joined["corpus"] + "|" + joined["category"]
     return joined
+
+
+def summarise_by(pair: pd.DataFrame, keys: list[str]) -> pd.DataFrame:
+    """`summarise` over each group of *keys*, as a flat frame.
+
+    Written as an explicit loop rather than ``groupby.apply``: the grouping
+    columns a summary needs (`cluster`, `dataset`) are exactly the ones
+    ``include_groups=False`` takes away.
+    """
+    rows = []
+    for vals, g in pair.groupby(keys, sort=True):
+        rec = dict(zip(keys, vals if isinstance(vals, tuple) else (vals,)))
+        rec.update(summarise(g))
+        rows.append(rec)
+    return pd.DataFrame(rows)
 
 
 def summarise(group: pd.DataFrame) -> dict:
     d = group["delta"].to_numpy()
-    clusters = (group["corpus"] + "|" + group["category"]).to_numpy()
+    clusters = group["cluster"].to_numpy()
     se = cluster_se(d, clusters)
     return {
         "n_pairs": int(d.size),
@@ -130,18 +148,25 @@ def planted_answer_check(df: pd.DataFrame) -> pd.DataFrame:
     """The `{text}` wrapper is an identity: its arm must reproduce `plain`.
 
     If it does not, the harness moved, not the setting -- so this is checked
-    before any verdict is read off the same rows.
+    before any verdict is read off the same rows.  The identity sits at a
+    *different index per embedder* (`w2` for `clap_general` and `e5`, `w3` for
+    `siglip`), so the check is per (embedder, arm), never per arm: pooling the
+    arms compares "an image of X" against a plain query and calls the harness
+    broken.
     """
     rows = []
-    identity_arms = df[df["wrapper"] == "{text}"]["arm"].unique()
-    for arm in identity_arms:
-        pair = paired(df, arm)
+    identity = df[df["wrapper"] == "{text}"][["embedder", "arm"]].drop_duplicates()
+    for _, r in identity.iterrows():
+        sub = df[df["embedder"] == r["embedder"]]
+        pair = paired(sub, r["arm"])
+        worst = float(pair["delta"].abs().max()) if len(pair) else float("nan")
         rows.append(
             {
-                "arm": arm,
+                "embedder": r["embedder"],
+                "arm": r["arm"],
                 "n": len(pair),
-                "max_abs_delta": float(pair["delta"].abs().max()) if len(pair) else float("nan"),
-                "ok": bool(len(pair)) and float(pair["delta"].abs().max()) < 1e-9,
+                "max_abs_delta": worst,
+                "ok": bool(len(pair)) and worst < 1e-9,
             }
         )
     return pd.DataFrame(rows)
@@ -198,21 +223,15 @@ def main() -> int:
     pair.to_csv(tables / "paired_categories.csv", index=False)
 
     # --- 1. per dataset ---
-    per_ds = (
-        pair.groupby(["embedder", "media_type", "corpus", "dataset"], as_index=False)
-        .apply(lambda g: pd.Series(summarise(g)), include_groups=False)
-        .sort_values(["media_type", "embedder", "dataset"])
+    per_ds = summarise_by(pair, ["embedder", "media_type", "corpus", "dataset"]).sort_values(
+        ["media_type", "embedder", "dataset"]
     )
     n_media = df.groupby(["embedder", "dataset"], as_index=False)["n_media"].first()
     per_ds = per_ds.merge(n_media, on=["embedder", "dataset"], how="left")
     per_ds.to_csv(tables / "per_dataset.csv", index=False)
 
     # --- 2. per media type (the unit the rule reads) ---
-    per_mt = (
-        pair.groupby(["media_type", "embedder"], as_index=False)
-        .apply(lambda g: pd.Series(summarise(g)), include_groups=False)
-        .sort_values(["media_type", "embedder"])
-    )
+    per_mt = summarise_by(pair, ["media_type", "embedder"]).sort_values(["media_type", "embedder"])
     per_mt.to_csv(tables / "per_media_type.csv", index=False)
 
     # --- 3. the equal-weighted pool over the four defaults ---
