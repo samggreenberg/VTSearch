@@ -10,6 +10,8 @@ and ``scripts/profiling/fit_load_weights.py`` (which fits the table).
 from __future__ import annotations
 
 import importlib.util
+import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -202,3 +204,68 @@ def test_fit_finalize_slots_skips_empty_cell():
     shares, summary = fit._fit_finalize_slots({("cpu", "audio"): {"dedup": [0.0]}})
     assert shares == {}
     assert summary == []
+
+
+# --- the affine embed/finalize fit ---------------------------------------------
+
+
+def _phase_rows(n, *, cold, embed, finalize):
+    """The JSONL rows one calibration load emits, trimmed to what the fit reads."""
+    common = {
+        "device": "cuda:0",
+        "media_type": "audio",
+        "embedder": "beats",
+        "cuml": True,
+        "n": n,
+        "cold_model": cold,
+        "cold_download": False,
+    }
+    return [
+        {**common, "phase": "embed", "seconds": embed},
+        {**common, "phase": "finalize", "seconds": finalize},
+    ]
+
+
+def _run_fit(tmp_path, monkeypatch, capsys, rows):
+    fit = _load_fit_module()
+    path = tmp_path / "calib.jsonl"
+    path.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    monkeypatch.setattr(sys, "argv", ["fit_load_weights.py", str(path)])
+    assert fit.main() == 0
+    out = capsys.readouterr().out
+    body = out.split("# ===== _load_cost_model.py body =====", 1)[1]
+    body = body.split("DOWNLOAD_MB_PER_S", 1)[0]
+    ns = {}
+    exec(body, ns)  # noqa: S102 - the fit script's own emitted table
+    return ns["LOAD_COST_MODEL"][("cuda+cuml", "audio", "beats")]
+
+
+def test_fit_excludes_cold_row_from_embed_and_finalize(tmp_path, monkeypatch, capsys):
+    # A cold first load folds one-time per-process costs (CUDA context, the
+    # cuML/UMAP JIT behind finalize:coverage) into these phases, and it always
+    # lands at the smallest n measured -- so it has outsized leverage on the
+    # slope. The warm rows below sit exactly on finalize = 0.004*n, embed =
+    # 0.03*n; the cold row is wildly off it. Regression guard for issue #3062,
+    # where including the cold row halved b_fin and collapsed R^2 to 0.08.
+    rows = _phase_rows(245, cold=True, embed=48.6, finalize=16.3)
+    for n in (245, 588, 1127, 1960):
+        rows += _phase_rows(n, cold=False, embed=0.03 * n, finalize=0.004 * n)
+
+    coeffs = _run_fit(tmp_path, monkeypatch, capsys, rows)
+
+    assert coeffs["b_embed"] == pytest.approx(0.03, rel=1e-3)
+    assert coeffs["b_fin"] == pytest.approx(0.004, rel=1e-3)
+    assert coeffs["a_embed"] == pytest.approx(0.0, abs=1e-3)
+    assert coeffs["a_fin"] == pytest.approx(0.0, abs=1e-3)
+
+
+def test_fit_falls_back_to_cold_rows_when_no_warm_row_exists(tmp_path, monkeypatch, capsys):
+    # A cell measured only once (every load cold) still gets a row rather than
+    # dropping out of the table entirely.
+    rows = _phase_rows(500, cold=True, embed=20.0, finalize=5.0)
+    rows += _phase_rows(1000, cold=True, embed=40.0, finalize=10.0)
+
+    coeffs = _run_fit(tmp_path, monkeypatch, capsys, rows)
+
+    assert coeffs["b_embed"] == pytest.approx(0.04, rel=1e-3)
+    assert coeffs["b_fin"] == pytest.approx(0.01, rel=1e-3)
