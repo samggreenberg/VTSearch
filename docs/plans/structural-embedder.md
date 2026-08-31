@@ -77,12 +77,13 @@ reorders what was previously planned here.
   stored — a shared class id for "must be found together", a permanent
   `separations.json` entry for "must be told apart" — because a threshold alone
   decides the second one, and moving the threshold silently rewrites it. Owed:
-  - **Run it, SPODS-first.** `build_corpus.py --probe`, cluster into candidates,
-    `shortlist.py` to rank, pick ~24, then the `membership` and `confusable`
-    passes, then `embed_corpus.py`. Nothing has touched the real archives yet:
-    the parsers are tested against fixtures built from each source's documented
-    layout, and SPODS's layout is confirmed from its RAR headers, but StaVer's
-    and Tobacco800's Kaggle mirrors are unverified until a token is present.
+  - [ ] #3343 — Build the full corpus on the GRID: all four sources, three
+    tiers, embedding cells. Measured at 0.75 UCSF pages/s, tier `m` is 18.5 h
+    and tier `l` is 74 h of wall clock against a shared public API, which is
+    what makes it a queue job. The ~2,800-page anchor layer does *not* need the
+    GRID and is where all the hand-annotation happens, so the human loop is not
+    blocked on it; the real blocker there is a Kaggle token for StaVer and
+    Tobacco800, whose mirrors stay unverified without one.
   - **The eval side of the contamination rule.** `classes.json` records each
     class's `eligible_distractor_sources`, and `roster.eligible_pages` splits a
     corpus into positive / known-negative / presumed-negative — but *nothing
