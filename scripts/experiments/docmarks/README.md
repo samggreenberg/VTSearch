@@ -231,12 +231,26 @@ dataset × embedder cross-product, so adding DocMarks and `sift_vlad` there woul
 silently schedule `sift_vlad` cells for all six existing datasets, on a mount
 the playbook already calls chronically full.
 
-## Before running this on the grid
+## Looking at what you built
 
-`python build_corpus.py --probe` first. Every source fails differently — a
-decommissioned hostname, a missing Kaggle token, an absent RAR extractor — and
-finding out which costs seconds now and a queue slot later. SPODS needs one of
-`bsdtar` / `7z` / `unar` / `unrar`; StaVer and Tobacco800 need a Kaggle token.
+```bash
+python make_report.py --corpus <dir> --out docs/reports/<date>-docmarks.html
+```
 
-Then `bash ../preflight.sh`, and size from a real cell rather than a guess:
-build tier `s` first and read its actual seconds.
+One self-contained HTML page: counts per source and provenance, whole pages with
+marks boxed in situ (the only way to see how small the target is), every class
+as a strip of its own instances, the distractor pool, and the mark-size
+distribution against the 32px structural floor. Images are inlined, so the file
+survives being archived or opened on a machine with no access to `/expscratch`.
+
+## Running it at full scale
+
+A tier-`s` SPODS-only build fits on a laptop. Tiers `m` and `l` need the
+cluster — see **[`GRID-RUNBOOK.md`](GRID-RUNBOOK.md)** for sizing, staging, the
+resume story and what to check afterwards.
+
+`python build_corpus.py --probe` first, wherever you run. Every source fails
+differently — a decommissioned hostname, a missing Kaggle token, an absent RAR
+extractor — and finding out which costs seconds now and a queue slot later.
+SPODS needs one of `bsdtar` / `7z` / `unar` / `unrar`; StaVer and Tobacco800
+need a Kaggle token.
