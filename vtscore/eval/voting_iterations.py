@@ -1487,19 +1487,28 @@ def _fit_quality_rows(
     if safe_cut is not None:
         fits = getattr(safe_cut, "fits", ()) or ()
         haystacks = getattr(safe_cut, "fold_haystacks", ()) or ()
-        n_anchored = int(getattr(safe_cut, "n_anchored", 0) or 0)
+        anchor_counts = getattr(safe_cut, "anchor_counts", ()) or ()
         for i, (fit, hay) in enumerate(zip(fits, haystacks, strict=False)):
             arr = np.asarray(hay, dtype=np.float64).ravel()
-            # ``n_anchored`` is a per-cut count of folds that anchored, not a
-            # per-fold vote count; the votes each fold anchors on are its
-            # held-out share, which is what the mass fraction needs.  Recorded
-            # from the cut rather than recomputed so the two cannot disagree.
+            # The votes THIS fold anchored on - its held-out share - which is
+            # what the mass fraction needs.  The obvious-looking `n_anchored` is
+            # a count of FOLDS (0/1/2), and passing it produced a mass share
+            # flat at 2.9e-4 across every click of the first real run, off by
+            # the fold's vote count (#3329).  Recorded on the cut rather than
+            # recomputed here so the two cannot disagree.
+            n_anchors = int(anchor_counts[i]) if i < len(anchor_counts) else 0
+            # The counterfactual the H3 delta is against: the same sample, the
+            # same estimator, no anchors.  `fold_haystacks[i]` IS the array the
+            # shipped fit was fitted to (sorted), so the two fits are comparable
+            # point for point.
+            unanchored = fit_score_gmm(arr)
             fq = fit_quality_row(
                 arr,
                 fit,
                 cut=threshold,
-                n_anchors=n_anchored,
+                n_anchors=n_anchors,
                 anchor_weight=float(getattr(safe_cut, "anchor_weight", FOLD_ANCHOR_WEIGHT)),
+                unanchored_fit=unanchored,
             )
             rows.append(
                 {

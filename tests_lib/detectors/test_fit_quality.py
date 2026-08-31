@@ -215,6 +215,22 @@ class TestAnchorMassFraction:
         assert frac == pytest.approx(6.0 / 50_006.0, rel=1e-9)
         assert frac < 2e-4
 
+    def test_the_share_is_an_order_of_magnitude_larger_on_a_small_haystack(self):
+        # The 1.2e-4 headline is mostly the 50k denominator, and the denominator
+        # is not a constant: `vg_scale_any` fits ~2k. The same votes then carry
+        # >1e-3, which is the far side of the bar H3 was pre-registered against,
+        # so the share has to be read per step rather than argued once (#3329).
+        assert anchor_mass_fraction(2_000, 20, 0.3) > 10 * anchor_mass_fraction(50_000, 20, 0.3)
+        assert anchor_mass_fraction(2_000, 20, 0.3) > 1e-3
+
+    def test_the_count_is_votes_not_folds(self):
+        # Passing the FOLD count where the vote count belongs is exactly the
+        # error that flattened this statistic to 2.9e-4 at every click of the
+        # first real run: two folds against ~2k reads a hundredfold smaller
+        # than the ~50 held-out votes those folds actually anchored on.
+        folds, votes = 2, 50
+        assert anchor_mass_fraction(2_000, votes, 0.3) > 20 * anchor_mass_fraction(2_000, folds, 0.3)
+
     def test_labels_dominate_at_a_large_kappa(self):
         assert anchor_mass_fraction(100, 50, 100.0) > 0.9
 
@@ -241,7 +257,7 @@ class TestFitQualityRow:
             cut=0.5,
             labels=labels,
             label_scores=sample,
-            anchored_fit=WELL_SEPARATED,
+            unanchored_fit=WELL_SEPARATED,
             n_anchors=12,
             anchor_weight=0.3,
         )
@@ -250,6 +266,33 @@ class TestFitQualityRow:
         # drift - the H3 statistic's null.
         assert row["anchored_dmu_lo"] == 0.0
         assert row["anchored_dmu_hi"] == 0.0
+
+    def test_the_drift_is_anchored_minus_unanchored_and_is_signed(self):
+        # The H3 statistic's ALTERNATIVE, which the null above cannot see: with
+        # the counterfactual displaced by a known amount, the row must report
+        # that amount, with the sign of (shipped - counterfactual). The old
+        # `anchored_fit` parameter was never passed by any call site, so these
+        # columns were NaN on every row of the first real run and H3 read as a
+        # refutation it had never measured (#3329).
+        moved = GmmFit1D(
+            w_lo=WELL_SEPARATED.w_lo - 0.05,
+            mu_lo=WELL_SEPARATED.mu_lo - 0.20,
+            var_lo=WELL_SEPARATED.var_lo,
+            w_hi=WELL_SEPARATED.w_hi + 0.05,
+            mu_hi=WELL_SEPARATED.mu_hi + 0.10,
+            var_hi=WELL_SEPARATED.var_hi,
+        )
+        row = fit_quality_row(np.zeros(10), WELL_SEPARATED, unanchored_fit=moved)
+        assert row["anchored_dmu_lo"] == pytest.approx(0.20)
+        assert row["anchored_dmu_hi"] == pytest.approx(-0.10)
+        assert row["anchored_dw_lo"] == pytest.approx(0.05)
+
+    def test_no_counterfactual_leaves_the_drift_unmeasured(self):
+        # NaN means "not measured", and must never be read as "did not move".
+        row = fit_quality_row(np.zeros(10), WELL_SEPARATED)
+        assert math.isnan(row["anchored_dmu_lo"])
+        assert math.isnan(row["anchored_dmu_hi"])
+        assert math.isnan(row["anchored_dw_lo"])
 
     def test_anchor_columns_are_filled_without_a_fit(self):
         row = fit_quality_row(np.zeros(500), None, n_anchors=10, anchor_weight=0.3)
