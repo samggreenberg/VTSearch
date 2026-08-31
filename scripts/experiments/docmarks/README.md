@@ -295,20 +295,29 @@ repair is done by hand. Both directions of every hand decision are recorded in
 merging is not undone the next time a number moves. A pair ruled both ways is
 refused rather than resolved by whichever is applied last.
 
-Measured on 2,096 real SPODS marks with the 256-bit hash:
+Measured on 2,054 real SPODS marks with the 256-bit hash, after the mask
+decomposition was fixed:
 
 | threshold | classes | largest component | share | classes with ≥10 |
 |---:|---:|---:|---:|---:|
-| 0.08 | 969 | 60 | 2.9% | 36 |
-| **0.16** | **503** | **60** | **2.9%** | **51** |
-| 0.18 | 413 | 90 | 4.3% | 50 |
-| 0.20 | 367 | 126 | 6.0% | 49 |
-| 0.22 | 288 | 593 | 28.3% | 37 |
-| 0.26 | 124 | 1,474 | 70.3% | 16 |
+| 0.02 | 1,261 | 31 | 1.5% | 31 |
+| 0.08 | 800 | 31 | 1.5% | 40 |
+| **0.10** | **672** | **31** | **1.5%** | **44** |
+| 0.12 | 523 | 166 | 8.1% | 47 |
+| 0.14 | 428 | 354 | 17.2% | 43 |
+| 0.16 | 310 | 653 | 31.8% | 36 |
+| 0.22 | 138 | 1,288 | 62.7% | 22 |
 
-Read the **share** column, not the class count. 0.16 is the top of the flat
+Read the **share** column, not the class count. 0.10 is the top of the flat
 region: the most the clustering assembles before it starts assembling things
-that do not belong together.
+that do not belong together. Note that 0.16 — the value read off the *previous*
+sweep, and perfectly defensible against those marks — now chains a third of the
+corpus while still reporting a plausible 310 classes. **The threshold is a
+property of the marks, so a change in what a mark *is* invalidates it.** Fixing
+the decomposition (issue #3361) replaced "the one chunkiest fragment of each
+stamp" with "the whole stamp", which is a different object to hash; the sweep
+had to be re-read from scratch, and the class count moving the *right* way (36
+usable classes at 0.16 before, 44 at 0.10 now) is not what tells you so.
 
 ## The descriptor had to be widened to get here
 

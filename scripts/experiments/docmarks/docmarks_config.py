@@ -179,17 +179,23 @@ CLUSTER_BACKEND = os.environ.get("VTS_DOCMARKS_CLUSTER_BACKEND", "phash")
 #: with every merge recorded in ``adjudications.json`` and replayed on each
 #: re-cluster so the work is done once.
 #:
-#: 0.16 is read off a sweep of the real corpus (2,096 SPODS marks, 256-bit
-#: hash).  Between 0.08 and 0.16 the largest component is pinned at 60 marks
-#: (2.9%) while usable classes climb from 36 to 51; it starts merging at 0.18,
-#: reaches 28% at 0.22 and chains outright by 0.26.  0.16 is the top of the
-#: flat region — the most the clustering can assemble before it starts
-#: assembling things that do not belong together.
+#: 0.10 is read off a sweep of the real corpus (2,054 SPODS marks, 256-bit
+#: hash).  From 0.02 to 0.10 the largest component is pinned at 31 marks (1.5%)
+#: — the size of a legitimate class here — while usable classes climb from 31 to
+#: 44; it breaks at 0.12 (166 marks, 8.1%), reaches 31.8% at 0.16 and chains
+#: outright by 0.22.  0.10 is the top of the flat region — the most the
+#: clustering can assemble before it starts assembling things that do not belong
+#: together — and it sits in the valley of a now cleanly bimodal distance
+#: histogram (a within-class mode below 0.06, the between-class bulk above 0.18).
 #:
 #: Re-run ``tune_clustering.py`` whenever the source set or the descriptor
-#: changes; this number is a property of the data, and it does not travel. It
-#: moved from 0.05 when the hash went from 64 to 256 bits.
-CLUSTER_THRESHOLD = float(os.environ.get("VTS_DOCMARKS_CLUSTER_THRESHOLD", "0.16"))
+#: changes; this number is a property of the data, and it does not travel.  It
+#: moved from 0.05 when the hash went from 64 to 256 bits, and from 0.16 when
+#: the mask decomposition was fixed (issue #3361) — that is the point.  The
+#: marks the descriptor sees are different objects now: whole stamps instead of
+#: the one chunkiest fragment of each, so 0.16 chained 653 marks (31.8%) into a
+#: single class while still reporting a plausible-looking 310.
+CLUSTER_THRESHOLD = float(os.environ.get("VTS_DOCMARKS_CLUSTER_THRESHOLD", "0.10"))
 
 # --------------------------------------------------------------------------
 # Synthesis (layer 3)
