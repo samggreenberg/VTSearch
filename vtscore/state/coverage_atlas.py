@@ -86,6 +86,18 @@ _CALIBRATION_MIN_NODE = 20
 # one point from a near-zero resultant flips it), which reads every query as
 # "more typical than everything".  K-means cells are cohesive and land well
 # above this floor.
+#
+# This is a **cosine-magnitude** constant, and the one such constant on the live
+# click loop: :meth:`CoverageAtlas.next_sample` gates on it too, to decide
+# whether to probe a node's typical half or the whole node.  Absolute cosines
+# live in different ranges per embedder, so the #3347 audit checked the margin
+# against the #3329 part-2 grid rather than assuming it.  Node r̄ by embedder
+# (median / 10th percentile): clip 0.70/0.53, siglip 0.69/0.52, siglip2_l
+# 0.67/0.49, clip_l 0.66/0.50, and the least concentrated space in the grid,
+# dinov3_patch, 0.61/0.38.  The worst decile of the worst embedder clears this
+# floor by ~4x, and the floor exists to catch the *degenerate* r̄ ~ 0 case (the
+# root), not to assert concentration — so it holds on patch spaces.  The tail
+# below the 10th percentile was not measured; that is the residual.
 _CALIBRATION_MIN_RBAR = 0.1
 
 # Quantile grid stored per node for typicality calibration.  21 points
