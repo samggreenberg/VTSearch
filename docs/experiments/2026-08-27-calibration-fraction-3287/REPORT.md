@@ -368,8 +368,8 @@ One panel per arm; colour is the fraction; the band is the inter-quartile range 
 cells. **Click 0 is the free text sort** — 0.45 for `clip`, 0.47 for `clip_l` — so the
 drop from the left marker to the right end is what clicking bought, and the ordering
 of the five lines at the right end is this study's whole subject. Dashed where fewer
-than 95% of that arm's cells are measured; the coverage strip beneath reaches 100% by
-click 4 and stays there, so every level quoted above is on solid segments. Do **not**
+than 95% of that arm's cells are measured; coverage reaches 100% by click 4 and stays
+there, so every level quoted above is on solid segments. Do **not**
 read across the two panels: `clip` and `clip_l` have different absolute costs for
 reasons that have nothing to do with this knob.
 

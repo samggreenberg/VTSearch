@@ -391,11 +391,20 @@ panel. The far left is what typing was worth, the far right is what clicking was
 worth, and how many clicks it took to overtake the query is reported as a number
 in `REPORT_startup.md`'s crossover table rather than eyeballed off a crossing.
 
-The coverage strip under each panel is the denominator: a starved cell trains no
-detector and emits no metric row, so an arm that starves on a third of its grid
-would otherwise have its mean computed over the two thirds that worked and look
-*better* for it. The mean is dashed wherever it describes fewer than 95% of the
-arm's cells; only a solid segment is a level worth quoting.
+**Coverage is the denominator.** A starved cell trains no detector and emits no
+metric row, so an arm that starves on a third of its grid would otherwise have
+its mean computed over the two thirds that worked and look *better* for it. The
+mean is dashed wherever it describes fewer than 95% of the arm's cells; only a
+solid segment is a level worth quoting.
+
+A coverage strip under the panel draws that fraction outright, but only when the
+dashing does not already tell it: on a healthy grid every arm ramps to full
+inside the first handful of clicks and then holds a flat 100% line across the
+rest of the axis, so the strip is drawn only when a shortfall reaches past
+`CURVE_STRIP_SPAN` (default 25%) of the click axis, or when coverage falls back
+after reaching full. Suppressed, the panel title names the click from which
+every arm is fully measured. `coverage` is a column of the emitted CSV either
+way; set `CURVE_STRIP_SPAN=0` to get the strip unconditionally.
 
 ### The interactive viewer
 

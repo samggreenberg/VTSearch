@@ -45,12 +45,20 @@ into a good-looking curve:
    the first *trainable* step — before one Good and one Bad vote coexist there
    is no model, no threshold and no row.  So a starved cell simply is not in
    the average, and an arm that starves on a third of its cells gets its mean
-   computed over the two thirds that worked.  Every mean here is drawn against
-   a **coverage strip** showing what fraction of that arm's cells are
-   measured at each click, and the mean is dashed wherever coverage is below
-   :data:`SOLID_COVERAGE`.  A dashed line means "this level describes a subset".
-   The stretch between ``t=0`` and the first trainable click is dashed by the
-   same rule and for the same reason: nothing was measured in there.
+   computed over the two thirds that worked.  Every mean is therefore dashed
+   wherever coverage — the fraction of that arm's cells measured at that click
+   — is below :data:`SOLID_COVERAGE`.  A dashed line means "this level
+   describes a subset".  The stretch between ``t=0`` and the first trainable
+   click is dashed by the same rule and for the same reason: nothing was
+   measured in there.
+
+   A **coverage strip** under the panel draws that fraction outright, but only
+   when it is not already told by the dashing (:func:`_strip_worth_drawing`):
+   on a healthy grid every arm ramps to full inside a handful of clicks and
+   then holds a flat 100% line across the rest of the axis, which spends a
+   quarter of the figure restating one number per arm.  Suppressed, the panel
+   title names the click from which everything is measured, and ``coverage``
+   is in the CSV either way.
 2. **Count a cell that never trained as absent.**  Pass ``denominator`` — one
    row per ``(arm, *keys)`` cell the run *attempted* — and coverage is measured
    against the cells that exist rather than against the cells that produced
@@ -94,6 +102,11 @@ import pandas as pd  # noqa: E402
 #: Below this fraction of an arm's cells carrying a detector, the mean is drawn
 #: dashed: it describes a subset of the grid, not the grid.
 SOLID_COVERAGE = float(os.environ.get("CURVE_SOLID_COVERAGE", "0.95"))
+
+#: How far into the click axis a shortfall in coverage has to reach before the
+#: coverage strip is drawn at all.  See :func:`_strip_worth_drawing`; set to 0
+#: to get the strip on every figure unconditionally.
+STRIP_SPAN = float(os.environ.get("CURVE_STRIP_SPAN", "0.25"))
 
 #: Default identity of a cell.  Filtered to the columns actually present, so a
 #: frame without an ``embedder`` column keys on the other three.
@@ -234,6 +247,69 @@ def _coverage(wide: pd.DataFrame, n_cells: int) -> np.ndarray:
     return wide.notna().sum(axis=1).to_numpy(dtype=float) / float(n_cells)
 
 
+def _strip_worth_drawing(covs: Sequence[np.ndarray], t_index: np.ndarray) -> bool:
+    """Does a coverage strip say anything the mean above it does not?
+
+    The mean is already drawn dashed below :data:`SOLID_COVERAGE` and solid
+    above it, so the *crossing* is on the figure twice: once as the strip's
+    ramp and once as the line thickening.  On a healthy grid that is the whole
+    content of the strip — every arm ramps to full inside the first handful of
+    clicks and then draws a flat 100% line across the rest of the axis, which
+    is a quarter of the figure spent restating one number per arm.
+
+    What the dashed/solid switch cannot show is **how far** below full the
+    denominator went and **whether it came back**, and that only matters where
+    a reader would otherwise trust the average:
+
+    * a shortfall reaching past :data:`STRIP_SPAN` of the click axis — an arm
+      starving over a meaningful part of the run, or never recovering; and
+    * coverage that goes *down* at any point after the first click — cells
+      dropping out of the average partway is a different failure from starting
+      late, and it is worth its depth being drawn however early it happens.
+
+    Either shape keeps the strip; neither present, the panel gets the height
+    and the click from which everything is measured is written in its title.
+    ``coverage`` stays in the CSV regardless, so suppressing the strip drops a
+    drawing, not a record.
+    """
+    if STRIP_SPAN <= 0:
+        return True
+    if len(t_index) == 0:
+        return False
+    late = float(t_index.max()) * STRIP_SPAN
+    # Click 0 is fully covered by construction (every cell has a text sort) and
+    # click 1 has no detectors yet, so that one step down is the axis, not a
+    # denominator shrinking.  Monotonicity is asked of the clicked stretch.
+    clicked = t_index >= 1
+    for cov in covs:
+        cov = np.asarray(cov, dtype=float)
+        short = cov < SOLID_COVERAGE
+        if short.any() and float(t_index[np.flatnonzero(short)].max()) > late:
+            return True
+        if bool((np.diff(cov[clicked]) < -1e-9).any()):
+            return True
+    return False
+
+
+def _fully_measured_from(covs: Sequence[np.ndarray], t_index: np.ndarray) -> int | None:
+    """The click from which **every** series here is measured on every cell.
+
+    ``None`` when some series never gets there, or when there was never a
+    shortfall to report — in the first case the strip is being drawn anyway,
+    and in the second there is nothing for a reader to discount.
+    """
+    firsts: list[int] = []
+    for cov in covs:
+        short = np.asarray(cov, dtype=float) < SOLID_COVERAGE
+        if not short.any():
+            continue
+        after = int(np.flatnonzero(short).max()) + 1
+        if after >= len(t_index):
+            return None
+        firsts.append(int(t_index[after]))
+    return max(firsts) if firsts else None
+
+
 def _cell_index(
     main: pd.DataFrame,
     keys: list[str],
@@ -283,10 +359,15 @@ def mean_figure(  # noqa: C901
     lower_is_better: bool = True,
     dpi: int = FIG_DPI,
 ) -> tuple[str | None, pd.DataFrame]:
-    """Per-dataset mean curves with an inter-quartile band and a coverage strip.
+    """Per-dataset mean curves with an inter-quartile band.
+
+    Carries a coverage strip under each panel when coverage says something the
+    dashed/solid switch does not — see :func:`_strip_worth_drawing`; otherwise
+    the panel takes the height and its title names the click from which every
+    arm is fully measured.
 
     Returns ``(filename, curves)``; ``curves`` is the plotted numbers, long
-    format, one row per ``(arm, dataset, t)``.
+    format, one row per ``(arm, dataset, t)``, and always carries ``coverage``.
     """
     import matplotlib
 
@@ -306,27 +387,63 @@ def mean_figure(  # noqa: C901
     index = _cell_index(main, kk, denominator)
     rows: list[dict] = []
 
-    fig = plt.figure(figsize=(6.6 * len(datasets), 5.4), layout="constrained")
-    gs = fig.add_gridspec(2, len(datasets), height_ratios=[3.1, 1.0], hspace=0.04)
-    palette = {a: f"C{i}" for i, a in enumerate(arms_present)}
-    top_axes = []
-    for di, ds in enumerate(datasets):
-        ax = fig.add_subplot(gs[0, di])
-        axc = fig.add_subplot(gs[1, di], sharex=ax)
-        top_axes.append(ax)
-        base_level = float("nan")
+    # Everything the figure plots, computed before a single axis exists: the
+    # coverage strip only gets a row of the gridspec when it has something to
+    # say (see _strip_worth_drawing), and that cannot be known until every
+    # arm's coverage has been measured.
+    series: dict[tuple[str, str], dict] = {}
+    for ds in datasets:
         for arm in arms_present:
             g = main[(main["arm"] == arm) & (main["dataset"] == ds)]
             if g.empty:
                 continue
             wide = _wide(g, metric, kk, t_index, base, index.get((arm, ds)))
-            n_cells = int(wide.shape[1])
-            cov = _coverage(wide, n_cells)
             centre = wide.mean(axis=1) if stat == "mean" else wide.median(axis=1)
-            lo, hi = wide.quantile(0.25, axis=1), wide.quantile(0.75, axis=1)
-            y = centre.to_numpy(dtype=float)
-            if base and 0 in wide.index:
-                base_level = float(centre.loc[0])
+            n_cells = int(wide.shape[1])
+            series[(ds, arm)] = {
+                "y": centre.to_numpy(dtype=float),
+                "cov": _coverage(wide, n_cells),
+                "lo": wide.quantile(0.25, axis=1).to_numpy(dtype=float),
+                "hi": wide.quantile(0.75, axis=1).to_numpy(dtype=float),
+                "n_cells": n_cells,
+                "base_level": float(centre.loc[0]) if (base and 0 in wide.index) else float("nan"),
+            }
+    if not series:
+        return None, pd.DataFrame()
+    for (ds, arm), sr in series.items():
+        for t, yy, c, l_, h_ in zip(t_index, sr["y"], sr["cov"], sr["lo"], sr["hi"], strict=False):
+            rows.append(
+                {
+                    "arm": arm,
+                    "dataset": ds,
+                    "t": int(t),
+                    stat: yy,
+                    "q25": float(l_),
+                    "q75": float(h_),
+                    "coverage": float(c),
+                    "n_cells": int(sr["n_cells"]),
+                    "baseline": sr["base_level"],
+                }
+            )
+
+    strip = _strip_worth_drawing([sr["cov"] for sr in series.values()], t_index)
+    fig = plt.figure(figsize=(6.6 * len(datasets), 5.4 if strip else 4.4), layout="constrained")
+    gs = (
+        fig.add_gridspec(2, len(datasets), height_ratios=[3.1, 1.0], hspace=0.04)
+        if strip
+        else fig.add_gridspec(1, len(datasets))
+    )
+    palette = {a: f"C{i}" for i, a in enumerate(arms_present)}
+    top_axes = []
+    for di, ds in enumerate(datasets):
+        ax = fig.add_subplot(gs[0, di])
+        axc = fig.add_subplot(gs[1, di], sharex=ax) if strip else None
+        top_axes.append(ax)
+        for arm in arms_present:
+            sr = series.get((ds, arm))
+            if sr is None:
+                continue
+            y, cov = sr["y"], sr["cov"]
             # The whole curve, thin and dashed: this is the level over whatever
             # subset of cells had a detector at that click.  Bridged across the
             # clicks with no measurement, which is what carries the line from
@@ -340,8 +457,8 @@ def mean_figure(  # noqa: C901
             band = np.where(cov >= SOLID_COVERAGE, 1.0, np.nan)
             ax.fill_between(
                 t_index,
-                lo.to_numpy(dtype=float) * band,
-                hi.to_numpy(dtype=float) * band,
+                sr["lo"] * band,
+                sr["hi"] * band,
                 color=palette[arm],
                 alpha=0.09,
                 lw=0,
@@ -357,31 +474,29 @@ def mean_figure(  # noqa: C901
             # implied a level that holds at every click when it holds at one.
             if base and np.isfinite(y[0]):
                 ax.plot(0, y[0], marker="o", ms=4.5, color=palette[arm], zorder=5)
-            axc.plot(t_index[clicked], 100.0 * cov[clicked], color=palette[arm], lw=1.2)
-            if not clicked.all():
-                axc.plot(0, 100.0 * cov[0], marker="o", ms=2.5, color=palette[arm])
-            for t, yy, c, l_, h_ in zip(t_index, y, cov, lo, hi, strict=False):
-                rows.append(
-                    {
-                        "arm": arm,
-                        "dataset": ds,
-                        "t": int(t),
-                        stat: yy,
-                        "q25": float(l_),
-                        "q75": float(h_),
-                        "coverage": float(c),
-                        "n_cells": int(n_cells),
-                        "baseline": base_level,
-                    }
-                )
-        ax.set_title(ds, fontsize=10)
-        ax.tick_params(labelbottom=False)
-        axc.set_ylim(0, 105)
-        axc.set_xlabel(f"clicks spent  (0 = {baseline_label})" if base else "clicks spent")
+            if axc is not None:
+                axc.plot(t_index[clicked], 100.0 * cov[clicked], color=palette[arm], lw=1.2)
+                if not clicked.all():
+                    axc.plot(0, 100.0 * cov[0], marker="o", ms=2.5, color=palette[arm])
+        title = ds
+        if axc is None:
+            # The one fact the suppressed strip was carrying: every arm in this
+            # panel is measured on every cell from here on, so the dashed
+            # stretch to its left is the only part a reader has to discount.
+            from_t = _fully_measured_from([sr["cov"] for (d, _a), sr in series.items() if d == ds], t_index)
+            if from_t:
+                title = f"{ds}\nall cells measured from click {from_t}"
+        ax.set_title(title, fontsize=10)
+        if axc is not None:
+            ax.tick_params(labelbottom=False)
+            axc.set_ylim(0, 105)
+            axc.axhline(100.0 * SOLID_COVERAGE, color="#888", lw=0.8, ls=":")
+        xlabel = f"clicks spent  (0 = {baseline_label})" if base else "clicks spent"
+        (axc or ax).set_xlabel(xlabel)
         if di == 0:
             ax.set_ylabel(f"{metric} ({stat} over cells)", fontsize=9)
-            axc.set_ylabel("% of cells\nmeasured", fontsize=8)
-        axc.axhline(100.0 * SOLID_COVERAGE, color="#888", lw=0.8, ls=":")
+            if axc is not None:
+                axc.set_ylabel("% of cells\nmeasured", fontsize=8)
     top_axes[0].legend(fontsize=7, ncol=2)
     better = "lower is better" if lower_is_better else "higher is better"
     fig.suptitle(
