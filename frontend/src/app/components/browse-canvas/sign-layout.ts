@@ -32,6 +32,19 @@
 // edge fade and stays visible when zoomed in. The size curve is unchanged —
 // `interpolateScale` clamps outside the band — so a terminal sign simply holds
 // its smallest/largest size at full opacity past the edge instead of vanishing.
+//
+// **Approximate signs.** The coarse end of the stack is measured, and it is
+// weak: across 2832 regions in 25 environments, the two coarsest clustered
+// layers have no ground-truth category holding even half a region's members
+// 45–48 % of the time, against 19 % at the finest layer (issue #3346; the C4
+// section of `docs/experiments/2026-08-30-fit-quality-3329/REPORT.md`). The
+// regions themselves are fine — every one of the 2832 is more self-similar
+// than it is similar to everything else — so the fix is not to re-cluster them
+// nor to stop naming them, but to stop the *sign* claiming more than the
+// region supports. Those bands render hedged rather than confident: a `~`
+// prefix, italic lettering, slightly lower opacity, and no drop shadow (they
+// lie flat on the map instead of floating toward the viewer). See
+// {@link approximateLevelKeys} for which bands qualify.
 
 import type { RegionLabelPayload, ViewTransform } from '../../models/projection.models';
 import { projToScreen } from './view-transform';
@@ -48,6 +61,14 @@ export interface SignAppearance {
 /** A sign that survived visibility + de-cluttering, ready to paint. */
 export interface PlacedSign {
   label: RegionLabelPayload;
+  /** The lettering to paint — `label.text`, prefixed with
+   *  {@link SIGN_APPROXIMATE_PREFIX} when {@link approximate}. Always use this
+   *  rather than `label.text`, so the painted glyphs match the measured pill. */
+  text: string;
+  /** Whether this sign names one of the weak coarse bands and is therefore
+   *  presented as a hedge rather than a name: italic, `~`-prefixed, dimmed, and
+   *  shadowless. See the module comment and {@link approximateLevelKeys}. */
+  approximate: boolean;
   /** Screen (canvas CSS px) centre of the sign. */
   sx: number;
   sy: number;
@@ -77,6 +98,27 @@ export interface SignViewContext {
 export const SIGN_BASE_FONT_PX = 13;
 /** Font the signs render/measure with. Weight rides separately (600). */
 export const SIGN_FONT_FAMILY = 'system-ui, sans-serif';
+
+/** ``source`` of a sign lettered straight from a dataset's ground-truth
+ *  taxonomy (`vtscore/projection/demo_signposts.py`) rather than from
+ *  clustering. Its regions *are* the categories the C4 purity was measured
+ *  against, so they are exact by construction at every depth and are never
+ *  hedged. Any other source is a clustered namer and is hedged at the coarse
+ *  bands — the conservative direction for a namer added later. */
+export const GROUND_TRUTH_SIGN_SOURCE = 'ground-truth';
+
+/** How many bands coarser than the finest a clustered sign must sit before it
+ *  is presented as approximate. Two: the C4 table's layers 2 and 3, counted
+ *  from the finest layer exactly as the measurement counted them. */
+export const SIGN_APPROXIMATE_RANK = 2;
+
+/** Prepended to an approximate sign's lettering, so the hedge survives at sizes
+ *  where the italic alone is easy to miss. */
+export const SIGN_APPROXIMATE_PREFIX = '~ ';
+
+/** Opacity multiplier applied to an approximate sign, so it sits back from the
+ *  crisp names around it. */
+export const SIGN_APPROXIMATE_ALPHA = 0.85;
 
 /** `delta` below which a sign is invisible: it lives that many levels finer
  *  than the view ("far below the user's zoom"). */
@@ -138,8 +180,17 @@ export interface SignShadow {
  * `fontPx`, so the shadow stays proportional to the sign at every size (a bigger
  * sign both is larger and throws a larger shadow, compounding the "coming toward
  * you" read). Pure and total — the canvas painter just applies the result.
+ *
+ * An `approximate` sign never casts one, at any scale: the lift is the cue that
+ * a sign is asserting itself over the map, which is exactly what a hedged name
+ * should not do. It stays flat on the map instead.
  */
-export function signShadow(scale: number, fontPx: number): SignShadow | null {
+export function signShadow(
+  scale: number,
+  fontPx: number,
+  approximate = false,
+): SignShadow | null {
+  if (approximate) return null;
   const span = SIGN_SHADOW_MAX_SCALE - SIGN_SHADOW_MIN_SCALE;
   const lift = span > 0 ? (scale - SIGN_SHADOW_MIN_SCALE) / span : 0;
   if (!(lift > 0)) return null;
@@ -219,11 +270,51 @@ function interpolateScale(delta: number): number {
   return stops[stops.length - 1][1];
 }
 
+/** Quantise a `level` into a bucket key, so the float arithmetic that produced
+ *  it (`(n_layers - 1 - i) * 1.8` server-side) doesn't split one band in two. */
+function levelKey(level: number): number {
+  return Math.round(level * 1000);
+}
+
+/**
+ * The quantised `level`s (see {@link levelKey}) whose signs render as
+ * approximate: the {@link SIGN_APPROXIMATE_RANK} rank and coarser, counting
+ * bands from the **finest** one present.
+ *
+ * Ranking the bands actually in the payload — rather than testing `level`
+ * against a constant — is what makes this match the measurement on every
+ * dataset. Server-side a Toponymy layer `i` (0 = finest) becomes
+ * `level = (n_layers - 1 - i) * 1.8`, so the absolute level of "layer 2"
+ * depends on how many layers that corpus's tree grew; its rank from the finest
+ * band does not, and rank *is* the C4 table's layer index. A tree with three
+ * layers therefore hedges only its coarsest, a four-layer tree its coarsest
+ * two — in both cases exactly the rows the measurement found weak.
+ *
+ * {@link GROUND_TRUTH_SIGN_SOURCE} signs are excluded from both the ranking and
+ * the result: they are not clustered, so the finding does not apply to them.
+ */
+export function approximateLevelKeys(
+  labels: readonly RegionLabelPayload[],
+): ReadonlySet<number> {
+  const bands = new Set<number>();
+  for (const label of labels) {
+    if (!label.text || label.source === GROUND_TRUTH_SIGN_SOURCE) continue;
+    if (Number.isFinite(label.level)) bands.add(levelKey(label.level));
+  }
+  // Descending level == finest band first, so index in this array is the C4
+  // layer index.
+  const finestFirst = [...bands].sort((a, b) => b - a);
+  return new Set(finestFirst.slice(SIGN_APPROXIMATE_RANK));
+}
+
 /**
  * Resolve which signs are visible at the current view and where, de-cluttered
  * so no two pills overlap. `measure` returns the rendered width of `text` at
  * `fontPx` (the canvas passes `ctx.measureText`; tests pass a stub), keeping
- * this module free of any canvas dependency.
+ * this module free of any canvas dependency. It is handed the *painted*
+ * text — `~`-prefixed for an approximate sign — plus that sign's `approximate`
+ * flag, because the hedged bands letter in italic and the pill has to be
+ * measured in the face it is drawn in.
  *
  * De-cluttering is greedy by priority: larger (coarser-relative) signs first,
  * score as the tiebreak, so when a country name and a state name compete for
@@ -234,9 +325,10 @@ function interpolateScale(delta: number): number {
 export function layoutSigns(
   labels: readonly RegionLabelPayload[],
   view: SignViewContext,
-  measure: (text: string, fontPx: number) => number,
+  measure: (text: string, fontPx: number, approximate: boolean) => number,
   baseFontPx: number = SIGN_BASE_FONT_PX,
 ): PlacedSign[] {
+  const approximateBands = approximateLevelKeys(labels);
   const candidates: PlacedSign[] = [];
   for (const label of labels) {
     if (!label.text) continue;
@@ -247,15 +339,29 @@ export function layoutSigns(
     );
     if (!appearance || appearance.alpha <= 0.02) continue;
 
+    const approximate = approximateBands.has(levelKey(label.level));
+    const text = approximate ? SIGN_APPROXIMATE_PREFIX + label.text : label.text;
+    const alpha = approximate ? appearance.alpha * SIGN_APPROXIMATE_ALPHA : appearance.alpha;
     const [sx, sy] = projToScreen(label.x, label.y, view.transform, view.width, view.height);
     const fontPx = baseFontPx * appearance.scale;
-    const w = measure(label.text, fontPx) + 2 * SIGN_PAD_X_EM * fontPx;
+    const w = measure(text, fontPx, approximate) + 2 * SIGN_PAD_X_EM * fontPx;
     const h = SIGN_HEIGHT_EM * fontPx;
     // Cull signs entirely off screen (their pill can't reach the viewport).
     if (sx + w / 2 < 0 || sx - w / 2 > view.width) continue;
     if (sy + h / 2 < 0 || sy - h / 2 > view.height) continue;
 
-    candidates.push({ label, sx, sy, fontPx, scale: appearance.scale, alpha: appearance.alpha, w, h });
+    candidates.push({
+      label,
+      text,
+      approximate,
+      sx,
+      sy,
+      fontPx,
+      scale: appearance.scale,
+      alpha,
+      w,
+      h,
+    });
   }
 
   // Priority: bigger signs first (they're the ones nearest their own zoom

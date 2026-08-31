@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  approximateLevelKeys,
+  GROUND_TRUTH_SIGN_SOURCE,
   layoutSigns,
   SIGN_APPEAR_DELTA,
+  SIGN_APPROXIMATE_ALPHA,
+  SIGN_APPROXIMATE_PREFIX,
   SIGN_BASE_FONT_PX,
   SIGN_EXPIRE_DELTA,
   SIGN_FADE_IN_SPAN,
@@ -187,6 +191,13 @@ describe('signShadow', () => {
     expect(big.offsetY).toBeCloseTo(small.offsetY * 2, 10);
     expect(big.alpha).toBeCloseTo(small.alpha, 10);
   });
+
+  it('never lifts an approximate sign off the map, at any scale', () => {
+    // The lift reads as a sign asserting itself; a hedged name should not.
+    expect(signShadow(1.2, SIGN_BASE_FONT_PX)).not.toBeNull();
+    expect(signShadow(1.2, SIGN_BASE_FONT_PX, true)).toBeNull();
+    expect(signShadow(SIGN_SHADOW_MAX_SCALE, 20, true)).toBeNull();
+  });
 });
 
 describe('layoutSigns', () => {
@@ -273,5 +284,153 @@ describe('layoutSigns', () => {
     // ...but a root (no coarser parent naming the area) stays on the map.
     const placed = layoutSigns([label({ level: 3, has_coarser: false })], centeredView(0), measure);
     expect(placed).toHaveLength(1);
+  });
+});
+
+/** The server's zoom-band step between adjacent Toponymy layers
+ *  (`signpost_build._LEVEL_STEP`); a four-layer tree lands on 5.4/3.6/1.8/0. */
+const STEP = 1.8;
+
+/** A four-layer clustered tree, finest (rank 0, `level` 5.4) to coarsest
+ *  (rank 3, `level` 0) — the shape the C4 table measured. Anchors are spread
+ *  across the 800 px viewport so nothing de-clutters or falls off screen. */
+const fourLayers = (): RegionLabelPayload[] =>
+  [0, 1, 2, 3].map((rank) =>
+    label({
+      level: (3 - rank) * STEP,
+      x: -300 + rank * 200,
+      text: `layer-${rank}`,
+      source: 'keyphrase',
+    }),
+  );
+
+/** A view level showing exactly one crisp band (rank 1) and one hedged band
+ *  (rank 2): with bands 1.8 apart and a 4-level-wide visibility window, those
+ *  are the only two of the four in view. */
+const CRISP_AND_HEDGED_VIEW = 3.0;
+
+describe('approximateLevelKeys', () => {
+  it('marks the two coarsest bands of a four-layer tree', () => {
+    const keys = approximateLevelKeys(fourLayers());
+    // Ranks 0 and 1 (levels 5.4, 3.6) are crisp; ranks 2 and 3 (1.8, 0) hedge.
+    expect(keys.has(Math.round(3 * STEP * 1000))).toBe(false);
+    expect(keys.has(Math.round(2 * STEP * 1000))).toBe(false);
+    expect(keys.has(Math.round(STEP * 1000))).toBe(true);
+    expect(keys.has(0)).toBe(true);
+  });
+
+  it('ranks from the finest band present, so a three-layer tree hedges only its coarsest', () => {
+    // A three-layer tree emits 3.6 / 1.8 / 0 — the same absolute levels as a
+    // four-layer tree's ranks 1–3, but only one of them is the C4 table's layer
+    // 2. Ranking, not a level threshold, is what gets this right.
+    const keys = approximateLevelKeys([
+      label({ level: 2 * STEP, text: 'fine' }),
+      label({ level: STEP, x: 200, text: 'mid' }),
+      label({ level: 0, x: 400, text: 'coarse' }),
+    ]);
+    expect(keys.has(Math.round(2 * STEP * 1000))).toBe(false);
+    expect(keys.has(Math.round(STEP * 1000))).toBe(false);
+    expect(keys.has(0)).toBe(true);
+  });
+
+  it('hedges nothing when the tree has two bands or fewer', () => {
+    expect(approximateLevelKeys([label({ level: 0 })]).size).toBe(0);
+    expect(
+      approximateLevelKeys([label({ level: STEP }), label({ level: 0, x: 200 })]).size,
+    ).toBe(0);
+  });
+
+  it('never hedges ground-truth signs, however deep the taxonomy', () => {
+    const gt = fourLayers().map((l) => ({ ...l, source: GROUND_TRUTH_SIGN_SOURCE }));
+    expect(approximateLevelKeys(gt).size).toBe(0);
+  });
+
+  it('buckets levels that differ by a float hair into one band', () => {
+    // Bands are derived from a float product server-side (`(n_layers - 1 - i) *
+    // 1.8`). Two signs of one band splitting into two would shift every rank
+    // below them and hedge a layer the measurement found fine, so the bucketing
+    // has to be tolerant rather than exact.
+    const drifted = 3 * STEP + Number.EPSILON * 4;
+    expect(drifted).not.toBe(3 * STEP);
+    const keys = approximateLevelKeys([
+      label({ level: drifted, text: 'a' }),
+      label({ level: 3 * STEP, x: 200, text: 'b' }),
+      label({ level: STEP, x: 400, text: 'c' }),
+      label({ level: 0, x: 600, text: 'd' }),
+    ]);
+    // Three bands, not four → only the coarsest hedges.
+    expect(keys.size).toBe(1);
+    expect(keys.has(0)).toBe(true);
+  });
+
+  it('ignores empty-text labels when ranking bands', () => {
+    // An unnamed band never reaches the map, so it must not push real bands
+    // one rank coarser.
+    const keys = approximateLevelKeys([
+      label({ level: 3 * STEP, text: '' }),
+      label({ level: 2 * STEP, x: 200, text: 'fine' }),
+      label({ level: STEP, x: 400, text: 'mid' }),
+      label({ level: 0, x: 600, text: 'coarse' }),
+    ]);
+    expect(keys.size).toBe(1);
+    expect(keys.has(0)).toBe(true);
+  });
+});
+
+describe('layoutSigns — approximate coarse bands', () => {
+  it('hedges a coarse band and leaves the fine one alone', () => {
+    const placed = layoutSigns(fourLayers(), centeredView(CRISP_AND_HEDGED_VIEW), measure);
+    expect(placed.map((p) => p.label.text).sort()).toEqual(['layer-1', 'layer-2']);
+
+    const crisp = placed.find((p) => p.label.text === 'layer-1')!;
+    expect(crisp.approximate).toBe(false);
+    expect(crisp.text).toBe('layer-1');
+
+    const hedged = placed.find((p) => p.label.text === 'layer-2')!;
+    expect(hedged.approximate).toBe(true);
+    expect(hedged.text).toBe(`${SIGN_APPROXIMATE_PREFIX}layer-2`);
+    // `label.text` stays the raw name — only the painted text carries the hedge.
+    expect(hedged.label.text).toBe('layer-2');
+  });
+
+  it('dims an approximate sign by SIGN_APPROXIMATE_ALPHA', () => {
+    const placed = layoutSigns(fourLayers(), centeredView(CRISP_AND_HEDGED_VIEW), measure);
+    // Both bands sit inside the opaque plateau, so the only alpha difference is
+    // the hedge.
+    expect(placed.find((p) => p.label.text === 'layer-1')!.alpha).toBe(1);
+    expect(placed.find((p) => p.label.text === 'layer-2')!.alpha).toBeCloseTo(
+      SIGN_APPROXIMATE_ALPHA,
+      6,
+    );
+  });
+
+  it('measures the prefixed text, and tells the measurer which face to use', () => {
+    const seen: [string, boolean][] = [];
+    const spy = (text: string, fontPx: number, approximate: boolean) => {
+      seen.push([text, approximate]);
+      return measure(text, fontPx);
+    };
+    layoutSigns(fourLayers(), centeredView(CRISP_AND_HEDGED_VIEW), spy);
+    expect(seen).toContainEqual(['layer-1', false]);
+    expect(seen).toContainEqual([`${SIGN_APPROXIMATE_PREFIX}layer-2`, true]);
+  });
+
+  it('changes only presentation — the same bands appear either way', () => {
+    const clustered = layoutSigns(fourLayers(), centeredView(CRISP_AND_HEDGED_VIEW), measure);
+    const groundTruth = layoutSigns(
+      fourLayers().map((l) => ({ ...l, source: GROUND_TRUTH_SIGN_SOURCE })),
+      centeredView(CRISP_AND_HEDGED_VIEW),
+      measure,
+    );
+    expect(clustered.map((p) => p.label.text).sort()).toEqual(
+      groundTruth.map((p) => p.label.text).sort(),
+    );
+    expect(groundTruth.every((p) => !p.approximate)).toBe(true);
+  });
+
+  it('leaves a single-band label set entirely un-hedged', () => {
+    const placed = layoutSigns([label({ level: 0 })], centeredView(0), measure);
+    expect(placed[0].approximate).toBe(false);
+    expect(placed[0].text).toBe('Birdsong');
   });
 });
