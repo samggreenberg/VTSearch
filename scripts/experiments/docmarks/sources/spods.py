@@ -22,18 +22,22 @@ the dataset, and nothing verified them.  This adapter therefore emits marks with
 ``class_id=None`` and leaves identity to :mod:`cluster_marks`, whose output is
 explicitly flagged ``provenance="clustered"`` and routed through a human audit.
 
-Signature and text masks are parsed and recorded but never promoted to query
-classes: a handwritten signature is a different mark every time it is made, so
-it is not an *instance* in the sense structural search means, and the text mask
-is the page body.  Keeping them costs nothing and gives the study a documented
-negative control.
+Signature masks are parsed and recorded but never promoted to query classes:
+a handwritten signature is a different mark every time it is made, so it is not
+an *instance* in the sense structural search means.  It costs nothing and gives
+the study a documented negative control.
+
+The text mask is **not** a set of marks.  It is the page body — a property of
+the page rather than a thing on it — so it is recorded as ``meta["text_frac"]``
+and ``meta["text_components"]`` and emits no :class:`Mark`.  See
+:func:`marks_for_page` for what emitting it used to cost.
 """
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Any, NamedTuple, Optional
 
 from . import _common
 from ._common import Mark, Page
@@ -48,9 +52,13 @@ SPODS_SIZE_BYTES = 2_937_772_915
 PAGES_DIR = "SPODS_Dataset"
 GT_DIR = "Ground truth (GT1)"
 
-#: Categories that become query classes, and those kept only as context.
+#: Categories that become query classes.
 MARK_CATEGORIES = ("logo", "stamp")
-CONTEXT_CATEGORIES = ("signature", "text")
+
+#: Recorded as marks but never promoted to a query class.  ``text`` is
+#: deliberately absent: it is the page body, and is kept as page metadata
+#: instead — see :func:`marks_for_page`.
+LOCALISED_CONTEXT_CATEGORIES = ("signature",)
 
 _IMAGE_RE = re.compile(r"image\s*\((\d+)\)\.png$", re.IGNORECASE)
 
@@ -87,32 +95,89 @@ def find_tree(unpacked: Path) -> tuple[Path, Path]:
     return pages, gt
 
 
-def marks_for_page(gt_dir: Path, page_no: int, *, min_area_frac: float, merge_gap: int = 6) -> list[Mark]:
+class PageMarks(NamedTuple):
+    """What one page's four masks yield: its marks, page-level facts, complaints."""
+
+    marks: list[Mark]
+    meta: dict[str, Any]
+    warnings: list[str]
+
+
+def marks_for_page(
+    gt_dir: Path,
+    page_no: int,
+    *,
+    width: int,
+    height: int,
+    min_area_frac: float,
+    merge_gap: int | None = None,
+    max_area_frac: float = 1.0,
+) -> PageMarks:
     """Every mark on one page, from that page's four category masks.
 
-    Each mask is reduced to connected components, and components within
-    *merge_gap* pixels are merged: a stamp's mask is typically a ring plus the
-    text inside it plus a broken arc where the ink did not take, and treating
-    those as three marks would poison the class inventory.
+    Each mask is decomposed into connected components, components within
+    *merge_gap* pixels are merged, and only then is the area floor applied to
+    the merged group's ink.  That order is the whole point: a stamp's mask is a
+    ring plus the text inside it plus a broken arc where the ink did not take,
+    and filtering first deletes the fragments before the merge can reassemble
+    them (issue #3361).  ``merge_gap`` defaults to
+    :func:`_common.merge_gap_for_page`.
+
+    **The ``text`` mask yields no marks.**  It is the page body — not a thing
+    *on* the page but a property *of* it — and its components are words, which
+    are not marks in any sense this corpus uses.  Filtered, what survives is not
+    even words: it is whichever headings and ruled tables happened to have an
+    underline welding their glyphs into one component.  Those were never query
+    classes (``MARK_CATEGORIES``), but they were real entries in ``page.marks``
+    and leaked into every consumer that iterated it without a kind filter.  The
+    mask's information is kept where it belongs, as ``meta["text_frac"]`` and
+    ``meta["text_components"]``; the non-queryable negative control the study
+    wanted is ``signature``, which is a localised mark and stays one.
     """
     from PIL import Image
 
+    if merge_gap is None:
+        merge_gap = _common.merge_gap_for_page(width, height)
+
     marks: list[Mark] = []
-    for kind in (*MARK_CATEGORIES, *CONTEXT_CATEGORIES):
+    meta: dict[str, Any] = {}
+    warnings: list[str] = []
+
+    for kind in (*MARK_CATEGORIES, *LOCALISED_CONTEXT_CATEGORIES):
         mask_path = gt_dir / kind / f"image ({page_no}).png"
         if not mask_path.exists():
             continue
         with Image.open(mask_path) as im:
-            boxes = _common.mask_to_boxes(im.convert("L"), min_area_frac=min_area_frac)
-        # Text masks are per-word and must not be merged into one page-sized blob.
-        if kind != "text":
-            boxes = _common.merge_overlapping(boxes, gap=merge_gap)
+            boxes = _common.mask_to_boxes(im.convert("L"), min_area_frac=min_area_frac, merge_gap=merge_gap)
+        boxes, oversize = _common.reject_oversize(boxes, width, height, max_area_frac)
+        for box in oversize:
+            frac = box[2] * box[3] / float(width * height)
+            warnings.append(f"spods/{page_no:05d}: dropped a {kind} box covering {frac:.1%} of the page")
         marks.extend(Mark(kind=kind, box=b, class_id=None, provenance="gt") for b in boxes)
-    return marks
+
+    text_mask = gt_dir / "text" / f"image ({page_no}).png"
+    if text_mask.exists():
+        with Image.open(text_mask) as im:
+            comps = _common.mask_components(im.convert("L"))
+        meta["text_components"] = len(comps)
+        meta["text_frac"] = round(sum(c.ink for c in comps) / float(width * height), 5)
+
+    return PageMarks(marks, meta, warnings)
 
 
-def build_pages(unpacked: Path, *, min_area_frac: float, limit: int | None = None) -> list[Page]:
-    """Every SPODS page as a :class:`Page`, marks attached, identities unset."""
+def build_pages(
+    unpacked: Path,
+    *,
+    min_area_frac: float,
+    max_area_frac: float = 1.0,
+    limit: int | None = None,
+) -> tuple[list[Page], list[str]]:
+    """Every SPODS page as a :class:`Page`, marks attached, identities unset.
+
+    Returns ``(pages, warnings)``; *warnings* names every box rejected for
+    covering more than *max_area_frac* of its page, so a mask artefact is
+    reported rather than silently vanishing.
+    """
     from PIL import Image
 
     pages_dir, gt_dir = find_tree(unpacked)
@@ -124,9 +189,19 @@ def build_pages(unpacked: Path, *, min_area_frac: float, limit: int | None = Non
         numbered = numbered[:limit]
 
     out: list[Page] = []
+    warnings: list[str] = []
     for page_no, path in numbered:
         with Image.open(path) as im:
             width, height = im.size
+        found = marks_for_page(
+            gt_dir,
+            page_no,
+            width=width,
+            height=height,
+            min_area_frac=min_area_frac,
+            max_area_frac=max_area_frac,
+        )
+        warnings.extend(found.warnings)
         out.append(
             Page(
                 page_id=f"spods/{page_no:05d}",
@@ -134,8 +209,8 @@ def build_pages(unpacked: Path, *, min_area_frac: float, limit: int | None = Non
                 path=str(path),
                 width=width,
                 height=height,
-                marks=marks_for_page(gt_dir, page_no, min_area_frac=min_area_frac),
-                meta={"page_no": page_no},
+                marks=found.marks,
+                meta={"page_no": page_no, **found.meta},
             )
         )
-    return out
+    return out, warnings
