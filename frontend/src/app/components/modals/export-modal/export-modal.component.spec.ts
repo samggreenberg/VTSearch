@@ -696,4 +696,127 @@ describe('ExportModalComponent', () => {
       table.remove();
     });
   });
+
+  // An exporter whose destination list is only knowable at runtime. Before
+  // issue #3360 the select rendered `field.options` verbatim, so a
+  // `dynamic_options` field was permanently empty here.
+  describe('dynamic_options exporter fields', () => {
+    const dynamicExporter = {
+      name: 'remote_queue',
+      display_name: 'Remote Queue',
+      supported_payloads: ['find_results', 'labelset'],
+      fields: [
+        {
+          key: 'account',
+          field_type: 'select',
+          label: 'Account',
+          options: ['personal', 'team'],
+          default: 'personal',
+        },
+        {
+          key: 'queue',
+          field_type: 'select',
+          label: 'Queue',
+          required: true,
+          dynamic_options: true,
+          depends_on: ['account'],
+        },
+      ],
+    };
+
+    /** Flush one options POST, asserting the exporter and body it carried. */
+    function flushOptions(
+      values: Record<string, string>,
+      options: { value: string; label: string }[],
+    ): void {
+      const req = httpMock.expectOne(
+        '/api/exporters/field-options/remote_queue',
+      );
+      expect(req.request.body).toEqual({ field_key: 'queue', values });
+      req.flush({ options });
+    }
+
+    it('fetches the option list when the exporter tab is selected', async () => {
+      await flushInit([...mockExporters, dynamicExporter]);
+      component.selectExporterTab(dynamicExporter as never);
+
+      flushOptions({ account: 'personal', queue: '' }, [
+        { value: 'p-1', label: 'Personal 1' },
+        { value: 'p-2', label: 'Personal 2' },
+      ]);
+      await settleResource();
+
+      const field = component.activeTabExporterFields[1];
+      expect(component.fieldOptions.optionsFor(field)).toEqual([
+        { value: 'p-1', label: 'Personal 1' },
+        { value: 'p-2', label: 'Personal 2' },
+      ]);
+      // Required with no default: the first fetched option is selected, so the
+      // export body carries a real value rather than a blank.
+      expect(component.formValues['queue']).toBe('p-1');
+    });
+
+    it('renders the fetched options in the select', async () => {
+      await flushInit([...mockExporters, dynamicExporter]);
+      component.selectExporterTab(dynamicExporter as never);
+      flushOptions({ account: 'personal', queue: '' }, [
+        { value: 'p-1', label: 'Personal 1' },
+      ]);
+      await settleResource();
+
+      const labels = Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll(
+          '.tab-field select option',
+        ),
+      ).map((o) => o.textContent?.trim());
+      expect(labels).toContain('Personal 1');
+    });
+
+    it('re-fetches a dependent field when its dependency changes', async () => {
+      await flushInit([...mockExporters, dynamicExporter]);
+      component.selectExporterTab(dynamicExporter as never);
+      flushOptions({ account: 'personal', queue: '' }, [
+        { value: 'p-1', label: 'Personal 1' },
+      ]);
+      await settleResource();
+
+      component.formValues['account'] = 'team';
+      component.onFieldChanged('account');
+      flushOptions({ account: 'team', queue: '' }, [
+        { value: 't-1', label: 'Team 1' },
+      ]);
+      await settleResource();
+
+      // The stale personal-account selection is gone, replaced by one the new
+      // list offers.
+      expect(component.formValues['queue']).toBe('t-1');
+    });
+
+    it('surfaces a fetch failure inline instead of silently emptying the dropdown', async () => {
+      await flushInit([...mockExporters, dynamicExporter]);
+      component.selectExporterTab(dynamicExporter as never);
+      httpMock
+        .expectOne('/api/exporters/field-options/remote_queue')
+        .flush(
+          { message: 'queue service down' },
+          { status: 502, statusText: 'Bad Gateway' },
+        );
+      await settleResource();
+
+      expect(component.fieldOptions.error()['queue']).toBe(
+        'queue service down',
+      );
+      expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+        'queue service down',
+      );
+    });
+
+    it('does not fetch anything for an exporter with only static fields', async () => {
+      await flushInit([...mockExporters, dynamicExporter]);
+      component.selectExporterTab(mockExporters[0] as never);
+      // `httpMock.verify()` in `afterEach` fails the test if a request was made.
+      expect(component.fieldOptions.options()).toEqual({});
+    });
+  });
+
 });

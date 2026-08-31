@@ -59,13 +59,55 @@ describe('AutoFindSettingsComponent', () => {
     },
   ] as unknown as ExporterEntry[];
 
+  /** An exporter whose destination list is only knowable at runtime: the
+   *  shape issue #3360 reported as broken on this panel. */
+  const dynamicExporter = {
+    name: 'remote_queue',
+    display_name: 'Remote Queue',
+    description: 'Post results to a queue',
+    icon: '',
+    hidden_from_picker: false,
+    supported_payloads: ['find_results'],
+    ui_mode: 'form',
+    fields: [
+      { key: 'account', field_type: 'select', label: 'Account', options: ['personal', 'team'], default: 'personal' },
+      {
+        key: 'queue',
+        field_type: 'select',
+        label: 'Queue',
+        required: true,
+        dynamic_options: true,
+        depends_on: ['account'],
+      },
+    ] as ImporterField[],
+  } as unknown as ExporterEntry;
+
   let exportersResponse: () => Observable<unknown>;
+  /** Every `(field, values)` pair the panel asked options for, in order. */
+  let optionsCalls: { exporter: string; field: string; values: Record<string, string> }[];
+  let optionsResponse: (
+    exporter: string,
+    field: string,
+    values: Record<string, string>,
+  ) => Observable<{ options: { value: string; label: string }[] }>;
 
   beforeEach(() => {
     exportersResponse = () => of(exporters);
+    optionsCalls = [];
+    optionsResponse = (_exporter, _field, values) =>
+      of({
+        options: [
+          { value: `${values['account']}-a`, label: `${values['account']} A` },
+          { value: `${values['account']}-b`, label: `${values['account']} B` },
+        ],
+      });
 
     const exportersStub: Partial<ExportersApiService> = {
       getExporters: () => exportersResponse() as Observable<never>,
+      getFieldOptions: (exporter: string, field: string, values: Record<string, string>) => {
+        optionsCalls.push({ exporter, field, values });
+        return optionsResponse(exporter, field, values) as Observable<never>;
+      },
     };
 
     TestBed.configureTestingModule({
@@ -217,6 +259,83 @@ describe('AutoFindSettingsComponent', () => {
     expect(component.inputType({ field_type: 'anything-else' } as unknown as ImporterField)).toBe(
       'text',
     );
+  });
+
+  describe('dynamic_options fields (issue #3360)', () => {
+    beforeEach(() => {
+      exportersResponse = () => of([...exporters, dynamicExporter]);
+    });
+
+    it('fetches the option list for the exporter restored from settings', async () => {
+      await create({ exporter: 'remote_queue', fieldValues: { remote_queue: { account: 'team' } } });
+
+      expect(optionsCalls).toEqual([
+        { exporter: 'remote_queue', field: 'queue', values: { account: 'team' } },
+      ]);
+      expect(component.fieldOptions.optionsFor(component.activeFields[1])).toEqual([
+        { value: 'team-a', label: 'team A' },
+        { value: 'team-b', label: 'team B' },
+      ]);
+    });
+
+    it('renders the fetched options rather than the (empty) declared ones', async () => {
+      await create({ exporter: 'remote_queue', fieldValues: { remote_queue: { account: 'team' } } });
+
+      const options = Array.from(
+        (fixture.nativeElement as HTMLElement).querySelectorAll('select.form-select option'),
+      ).map((o) => o.textContent?.trim());
+      expect(options).toContain('team A');
+      expect(options).toContain('team B');
+    });
+
+    it('persists the auto-selected option so the parent saves a real value', async () => {
+      await create({ exporter: 'remote_queue', fieldValues: { remote_queue: { account: 'team' } } });
+      // `queue` is required with no default: the helper picks the first option,
+      // which is only useful if the panel emits it onward.
+      expect(component.fieldValue('queue')).toBe('team-a');
+      expect(component.fieldValues['remote_queue']).toEqual({ account: 'team', queue: 'team-a' });
+    });
+
+    it('fetches options when the exporter tab is selected', async () => {
+      await create();
+      component.selectExporter('remote_queue');
+      expect(optionsCalls).toEqual([
+        { exporter: 'remote_queue', field: 'queue', values: { account: 'personal' } },
+      ]);
+    });
+
+    it('re-fetches a dependent field when the field it depends on changes', async () => {
+      await create({ exporter: 'remote_queue', fieldValues: { remote_queue: { account: 'personal' } } });
+      optionsCalls = [];
+
+      component.setFieldValue('account', 'team');
+
+      expect(optionsCalls).toEqual([
+        { exporter: 'remote_queue', field: 'queue', values: { account: 'team', queue: '' } },
+      ]);
+      // The stale selection is replaced by one the new list actually offers.
+      expect(component.fieldValue('queue')).toBe('team-a');
+    });
+
+    it('shows the fetch failure inline instead of an empty dropdown', async () => {
+      // The 502 the options route returns when the plugin's remote service
+      // fails, in the `flask_smorest.abort` envelope the app emits.
+      optionsResponse = () =>
+        throwError(() => ({ status: 502, error: { message: 'queue service down' } }));
+      await create({ exporter: 'remote_queue' });
+
+      expect(component.fieldOptions.error()['queue']).toContain('queue service down');
+      const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+      expect(text).toContain('queue service down');
+    });
+
+    it('drops the previous tab\'s options when switching exporters', async () => {
+      await create({ exporter: 'remote_queue' });
+      expect(component.fieldOptions.options()['queue']).toBeTruthy();
+
+      component.selectExporter('server_json_file');
+      expect(component.fieldOptions.options()['queue']).toBeUndefined();
+    });
   });
 
   it('emits a cloned field-value map so the parent cannot mutate the working copy', async () => {

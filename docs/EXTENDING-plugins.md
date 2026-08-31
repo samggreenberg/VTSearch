@@ -869,8 +869,13 @@ The frontend wiring is fully automatic:
    dropdown the user has already navigated away from, and it can never
    auto-select a value for an importer that is no longer on screen.
 
-API contract: `POST /api/dataset/import/<name>/options` with body
-`{"field_key": "...", "values": {...}}` returns
+API contract: every plugin family that renders a field form has an options
+route of the same shape — `POST /api/dataset/import/<name>/options`
+(dataset importers), `POST /api/label-importers/field-options/<name>`,
+`POST /api/datasource-import/<name>/options`,
+`POST /api/seed-import/<name>/options`, and
+`POST /api/exporters/field-options/<name>` (results exporters). With body
+`{"field_key": "...", "values": {...}}` each returns
 `{"options": [{"value": "...", "label": "..."}, ...]}` — both the plain-
 string and `(value, label)` shapes are coerced to `{value, label}` before
 serialisation. Any exception your `get_field_options()` raises is returned
@@ -1611,10 +1616,23 @@ The library-side guide has the full worked example and the encoding/truncation
 pitfalls: [`vtscore/docs/extending/results-exporters.md` § Opening a URL in the
 browser](../vtscore/docs/extending/results-exporters.md#opening-a-url-in-the-browser).
 
+### Dynamic select options
+
+Dynamic select options work exactly as for dataset importers: declare a
+field with `dynamic_options=True` and implement
+`get_field_options(field_key, current_values)`
+(see [Dynamic field options](#dynamic-field-options)). Both surfaces that
+render an exporter's fields honour them — the Export modal and the
+Settings › Auto-Find **Results Exporter** tab — so a destination list that
+is only knowable at runtime (mailboxes, buckets, remote queues) fills in
+the same way in each.
+
 ### How it gets invoked
 
 1. `GET /api/exporters` returns available exporters.
 2. `POST /api/exporters/export` with `exporter_name` and `field_values`.
+3. `POST /api/exporters/field-options/<name>` serves dynamic field
+   options.
 
 ### CLI usage
 
