@@ -40,35 +40,16 @@ external consumer asks for it. For now, install the repo and import
 ## Quickstart (90 seconds)
 
 The library exports three core flows: **load a dataset**, **train a
-detector from labels**, **score new media**. Here's the shortest possible
-end-to-end script - see [docs/quickstart.md](docs/quickstart.md) for the
-walkthrough with all of the details.
-
-```python
-from pathlib import Path
-import numpy as np, torch
-
-from vtscore.media import audio  # noqa: F401 - registers the audio MediaType
-from vtscore.datasets.loader import load_dataset_from_folder
-from vtscore.training import train_model, calculate_cross_calibration_threshold
-
-# 1. Load a folder.
-medias: dict[int, dict] = {}
-load_dataset_from_folder(Path("/path/to/audio"), media_type="audio",
-                        medias=medias, recursive=True)
-
-# 2. Train a detector.
-X_list = [m["embedding"] for m in labelled_medias]
-y_list = [1.0 if m["label"] == "good" else 0.0 for m in labelled_medias]
-X = torch.from_numpy(np.stack(X_list).astype(np.float32))
-y = torch.tensor(y_list, dtype=torch.float32).unsqueeze(1)
-model = train_model(X, y, input_dim=X.shape[1])
-threshold = calculate_cross_calibration_threshold(
-    X_list, y_list, input_dim=X.shape[1], inclusion_value=0,
-)
-
-# 3. Score new media (load another folder, embed, forward-pass, rank).
-```
+detector from labels**, **score new media**. The shortest end-to-end
+script is a few dozen lines — see
+[docs/quickstart.md](docs/quickstart.md) for the full walkthrough (with
+the `CoreConfig` builder, origin stamping, embedding step, and hand-off
+between the three flows). This top-level README does not carry a
+copy-paste snippet, because the "shortest possible" version has to skip
+so much wiring (origins, embedder setup, labelset serialisation) that
+the copy-paste doesn't actually run. The quickstart is validated
+end-to-end by `tests_lib/integration/test_docs_quickstart.py`, so its
+snippets stay honest.
 
 ## Public surface
 

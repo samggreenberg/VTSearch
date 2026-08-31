@@ -240,28 +240,23 @@ class FetchError(RuntimeError):
     """A source could not be fetched, with an actionable reason."""
 
 
-def kaggle_download(slug: str, dest: Path, *, unzip: bool = True) -> Path:
-    """Download a Kaggle dataset *slug* (``owner/name``) into *dest*.
+def require_kaggle_credentials(slug: str) -> None:
+    """Raise :class:`FetchError` unless a Kaggle credential is in place.
 
-    Uses the Kaggle CLI, which reads ``~/.kaggle/kaggle.json``,
-    ``~/.kaggle/access_token`` or the ``KAGGLE_USERNAME`` / ``KAGGLE_KEY``
-    environment pair.  Raises :class:`FetchError` with the setup instruction
-    when no credential is present, rather than failing halfway through a grid
-    job with a 403.
+    The Kaggle CLI reads ``~/.kaggle/kaggle.json``, ``~/.kaggle/access_token``
+    or the ``KAGGLE_USERNAME`` / ``KAGGLE_KEY`` environment pair.  Checking here
+    means a missing token is reported with the setup instruction, rather than as
+    a 403 halfway through a grid job.
 
-    ``access_token`` is checked because it is what Kaggle's own "Create New
+    ``access_token`` is in that list because it is what Kaggle's own "Create New
     Token" now writes, and what ``kagglesdk`` reads natively (its
     ``kaggle_creds.py`` / ``kaggle_oauth.py``).  Accepting only ``kaggle.json``
     made a *working* credential look like a missing one: on the GRID the probe
     reported both Kaggle sources BLOCKED while ``kaggle datasets download``
-    succeeded from the very same shell, against the very same token.  This gate
-    exists to fail fast instead of 403-ing mid-job, so a false BLOCKED is the
-    one way it can be worse than having no gate at all.
+    succeeded from the very same shell, against the very same token.  Since the
+    whole point of this gate is to fail fast rather than 403 mid-job, a false
+    BLOCKED is the one way it can be worse than having no gate at all.
     """
-    dest.mkdir(parents=True, exist_ok=True)
-    if any(dest.iterdir()):
-        return dest
-
     has_env = bool(os.environ.get("KAGGLE_USERNAME") and os.environ.get("KAGGLE_KEY"))
     kaggle_dir = Path.home() / ".kaggle"
     has_file = (kaggle_dir / "kaggle.json").exists() or (kaggle_dir / "access_token").exists()
@@ -272,6 +267,52 @@ def kaggle_download(slug: str, dest: Path, *, unzip: bool = True) -> Path:
             "(Kaggle > Settings > Create New Token writes one of the two), "
             "or export KAGGLE_USERNAME and KAGGLE_KEY."
         )
+
+
+def kaggle_probe(slug: str) -> None:
+    """Check that *slug* is reachable with the credential in place, fetching nothing.
+
+    This is the reachability half of :func:`kaggle_download`, and it exists so
+    that ``build_corpus.py --probe`` costs seconds rather than gigabytes: it
+    lists the dataset's files (a metadata call) instead of pulling the bundle.
+    A missing token, a revoked token and a slug that has been renamed or taken
+    down all surface here, which is every Kaggle failure mode the real fetch has.
+
+    **The CLI's exit code is not enough on its own.** ``kaggle datasets files``
+    catches API errors itself, prints them, and still exits 0 — so a 403 would
+    read as a pass. Success is therefore recognised positively: a CSV listing
+    with a ``name`` column and at least one row. Anything else is a failure and
+    the raw output is quoted back.
+    """
+    require_kaggle_credentials(slug)
+
+    cmd = ["kaggle", "datasets", "files", "-d", slug, "--csv"]
+    try:
+        proc = subprocess.run(cmd, check=True, capture_output=True, text=True)  # noqa: S603
+    except FileNotFoundError as exc:
+        raise FetchError("The 'kaggle' CLI is not installed (pip install kaggle).") from exc
+    except subprocess.CalledProcessError as exc:
+        raise FetchError(f"kaggle metadata call for '{slug}' failed: {exc.stderr.strip()[:400]}") from exc
+
+    rows = [line for line in (proc.stdout or "").splitlines() if line.strip()]
+    header = rows[0].lower().split(",") if rows else []
+    if "name" not in header or len(rows) < 2:
+        detail = " ".join((proc.stdout or "").split())[:400] or "(no output)"
+        raise FetchError(f"kaggle could not list '{slug}': {detail}")
+
+
+def kaggle_download(slug: str, dest: Path, *, unzip: bool = True) -> Path:
+    """Download a Kaggle dataset *slug* (``owner/name``) into *dest*.
+
+    Uses the Kaggle CLI; see :func:`require_kaggle_credentials` for how the
+    token is found.  Use :func:`kaggle_probe` when you only want to know whether
+    the source is reachable — this one transfers the whole bundle.
+    """
+    dest.mkdir(parents=True, exist_ok=True)
+    if any(dest.iterdir()):
+        return dest
+
+    require_kaggle_credentials(slug)
 
     cmd = ["kaggle", "datasets", "download", "-d", slug, "-p", str(dest)]
     if unzip:

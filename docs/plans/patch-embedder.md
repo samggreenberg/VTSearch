@@ -13,21 +13,11 @@ Cross-cutting, still open:
 
 <!-- item-sep -->
 
-- [ ] #2668 — Spike: validate trio score-precedence (structural vs patch) on a real patch+structural dataset (open question #3)
-
-<!-- item-sep -->
-
 - **`patch_grid` / `local_features` stay singular.** The
   binding allows at most one patch and one structural embedder, so these are
   single-valued (owned by that role's embedder) rather than dict-keyed. Only
   revisit if ">1 patch (or structural) embedder per dataset" ever comes off the
   non-goals list.
-
-<!-- item-sep -->
-
-- [ ] #2667 — Combine Datasets per-embedder-type conflict resolution: instead of refusing a mismatched triple, the modal detects each conflicting type (semantic / patch_semantic / structural) and lets the user re-embed every source to one winner or drop that type; the combine route bakes the choice into the load (open question #2, now addressed by resolution rather than refusal)
-
-<!-- item-sep -->
 
 <!-- item-sep -->
 
@@ -46,20 +36,19 @@ V3 open questions (design-level, still unresolved):
    `dataset.embedder` field probably can't just be renamed without breaking
    labelset sync. Likely: keep the legacy field as a computed read-only alias to
    the score-role slot for one release, then drop it. Confirm during impl.
-2. **Combine Datasets ergonomics.** *(Resolved — see #2667.)* Rather than a strict
+2. **Combine Datasets ergonomics.** *Resolved (shipped).* Rather than a strict
    "embedder triple must match" refusal, combine now detects per-embedder-type
    conflicts and offers, for each conflicting type, "re-embed every source to one
    winner" or "drop that type". The route still refuses (400) an *unresolved*
    conflict from a programmatic caller, so the strict guard remains the backstop.
-3. **Coverage-atlas vs score backbone (patch vs structural).** (Validation
-   tracked in #2668.) Structural-over-
-   patch for the shared score role is the less obvious call — a structural
-   embedder is a deliberate specialist pick, but its Stage-1 VLAD vector may
-   cluster *worse* than patch for the coverage atlas. Two sub-decisions to
-   validate on a real patch+structural dataset: does the detector default to
-   structural two-stage when both are bound, and should the coverage atlas use a
-   different preference than the detector? Until then both use the single score
-   precedence.
+3. **Coverage-atlas vs score backbone (patch vs structural).** *Validated
+   (spike shipped).* Structural-over-patch for the shared score role is the
+   less obvious call — a structural embedder is a deliberate specialist pick,
+   but its Stage-1 VLAD vector may cluster *worse* than patch for the coverage
+   atlas. The trio spike validated the score precedence on a real
+   patch+structural dataset and confirmed the current single-precedence
+   default; the coverage-atlas revisit was folded into
+   [`coverage-atlas.md`](coverage-atlas.md) as a follow-up.
 4. **Patch + structural coexistence at score time.** Storage and routing support
    binding both; the open piece is whether a single detector can ever run *both*
    visual pipelines at once (region max-pool MLP *and* geometric verify) rather
@@ -191,7 +180,7 @@ is the **score** embedder (structural ▸ patch ▸ text) the model was trained 
 - **Combine Datasets** resolves per-embedder-type conflicts across the sources
   (re-embed to one winner, or drop the type) instead of requiring identical
   `(text_embedder, patch_embedder, structural_embedder)` triples; an unresolved
-  conflict from a non-UI caller is still refused. (See #2667.)
+  conflict from a non-UI caller is still refused.
 
 ### Frontend
 

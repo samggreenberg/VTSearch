@@ -461,7 +461,10 @@ def build_dataset_coverage_atlas(dataset_id: str):
 @datasets_registry_bp.response(200, DatasetDomainShiftResponseSchema)
 @datasets_registry_bp.alt_response(
     400,
-    description="Reference dataset has no coverage atlas, embedders differ, or the active dataset has no embeddings.",
+    description=(
+        "Reference dataset has no coverage atlas, embedders differ, the reference uses a "
+        "patch embedder (unsupported), or the active dataset has no embeddings."
+    ),
 )
 @datasets_registry_bp.alt_response(403, description="Access denied for the current user.")
 @datasets_registry_bp.alt_response(404, description="Dataset not found.")
@@ -476,11 +479,19 @@ def dataset_domain_shift(dataset_id: str):
     reference domain, and ``shifted`` is the headline verdict.  Use it
     before trusting a detector trained on *dataset_id* against the active
     dataset without hands-on verification.
+
+    **Refused for patch embedders** (400).  The guard's separation between
+    "my own data" and "a different corpus" collapses to 0.13 on
+    ``dinov3_patch`` — close to a constant — because patch spaces are far
+    less concentrated than single-vector ones, and every threshold repair
+    was priced and failed.  See
+    ``docs/experiments/2026-08-30-fit-quality-3329/REPORT.md`` (B4-B6).
     """
     import numpy as np
 
     from vtsearch.auth import get_current_user
     from vtsearch.state import get_active_context, get_context
+    from vtscore.embedding.binding import embedder_supports_patch_regions
     from vtscore.embedding.media_vectors import media_embedding
     from vtscore.state.coverage_atlas import domain_shift_report
 
@@ -511,6 +522,23 @@ def dataset_domain_shift(dataset_id: str):
             message=(
                 f"Embedder mismatch: reference uses {ref_embedder or 'unknown'!r}, "
                 f"active dataset uses {active_embedder or 'unknown'!r}"
+            ),
+        )
+    # Patch spaces are too diffuse for the atlas's fixed-alpha guard to carry
+    # information — measured, not assumed: on ``dinov3_patch`` it fires on 80%
+    # of the reference dataset's *own* held-out data against 93% for a
+    # different corpus, a separation of 0.13, i.e. close to a constant.  Both
+    # obvious repairs (dropping the path averaging, refitting alpha per
+    # embedder) were priced and made it worse.  Refusing is the honest answer;
+    # returning a verdict here answers a direct question with noise.  See
+    # docs/experiments/2026-08-30-fit-quality-3329/REPORT.md (B4-B6).
+    if embedder_supports_patch_regions(ref_embedder):
+        abort(
+            400,
+            message=(
+                f"Domain-shift checks are not supported for patch embedders "
+                f"({ref_embedder!r}): the typicality guard does not separate "
+                f"in-domain from out-of-domain data in a patch space"
             ),
         )
 

@@ -1477,6 +1477,14 @@ def calculate_gmm_threshold(scores: list[float]) -> float:
         A float threshold. Scores at or above this value are classified as Good.
         Returns ``0.5`` when fewer than 2 scores are provided; falls back to
         the median of scores if GMM fitting fails.
+
+    The two-Gaussian fit is refit on whatever distribution it is handed, so this
+    is scale-adaptive: it is the reason every cosine sort draws an embedder-
+    appropriate line without a per-embedder constant (#3347).  The ``0.5``
+    literal is the sole exception — a sigmoid-scale sentinel returned on a
+    haystack of 0 or 1 items, where there is no distribution to fit.  On a
+    cosine sort it is a cosine-scale number that was never fitted on cosines;
+    with at most one item ranked it changes nothing, which is why it stands.
     """
     if len(scores) < 2:
         return 0.5

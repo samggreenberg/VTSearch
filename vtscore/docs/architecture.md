@@ -387,10 +387,12 @@ the library without the library knowing:
    `register_detector_context_resolver`. Wired in `vtsearch/shim/`.
 2. **`CoreConfig` builder** - `register_core_config_builder`. Maps
    `vtsearch.settings` to `CoreConfig`. Wired in `vtsearch/shim/`.
-3. **Plugin families** - `register_plugin_family(name, provider)`. Lets
+3. **Plugin families** - `register_plugin_family(provider)`. Lets
    the app contribute `settings_importers`, `settings_exporters`,
    `settings_sources` to the registry that library tools (like
-   `python app.py --list-plugins`) enumerate. Wired in `vtsearch/shim/`.
+   `python app.py --list-plugins`) enumerate. The family key comes off
+   the `FamilyProvider` object itself; there is no separate positional.
+   Wired in `vtsearch/shim/`.
 4. **Current-user resolver** - `register_request_user_resolver`. Tells
    `vtscore.state.current_user.get_current_user()` how to read the
    *request-scoped* user; `vtsearch/auth/` wires it to `flask.g.user` at

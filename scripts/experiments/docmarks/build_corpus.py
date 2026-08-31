@@ -403,6 +403,26 @@ def load_ucsf(
 # --------------------------------------------------------------------------
 
 
+def _reclaim_probe_dirs(raw: Path) -> tuple[int, int]:
+    """Delete the ``_probe_*`` staging dirs an older probe left behind.
+
+    The probe used to reach Kaggle by *downloading* into ``raw/_probe_<source>``
+    — ~2 GB that the real build then fetched again into ``raw/<source>``, and
+    that nothing ever read or reclaimed.  The probe no longer writes them; this
+    sweeps up after the versions that did.  Returns ``(dirs, bytes)`` removed.
+    """
+    import shutil
+
+    dirs = bytes_freed = 0
+    for stale in sorted(raw.glob("_probe_*")) if raw.is_dir() else []:
+        if not stale.is_dir():
+            continue
+        bytes_freed += sum(f.stat().st_size for f in stale.rglob("*") if f.is_file())
+        shutil.rmtree(stale, ignore_errors=True)
+        dirs += 1
+    return dirs, bytes_freed
+
+
 def probe(raw: Path) -> int:
     """Report what each source can currently be reached and unpacked from.
 
@@ -410,6 +430,13 @@ def probe(raw: Path) -> int:
     — a decommissioned hostname, a missing Kaggle token, an absent RAR extractor
     — and finding out which one applies costs seconds now and an overnight queue
     slot later.
+
+    **The probe fetches nothing.**  Every check here is a metadata call: a
+    ``HEAD`` for SPODS, a file listing for the Kaggle mirrors, a result count for
+    UCSF.  That is the whole point of it — a check you can ask repeatedly on a
+    login node, for free.  If you add a source, probe it the same way; an early
+    version reached Kaggle by downloading the bundle, which made the "seconds
+    now" advice above a lie worth ~2 GB of transfer (issue #3356).
     """
     import requests
 
@@ -430,7 +457,7 @@ def probe(raw: Path) -> int:
 
     for name, slug in (("staver", staver.KAGGLE_SLUG), ("tobacco800", tobacco800.KAGGLE_SLUG)):
         try:
-            _common.kaggle_download(slug, raw / f"_probe_{name}")
+            _common.kaggle_probe(slug)
             print(f"  {name:<11} OK           kaggle:{slug}")
         except _common.FetchError as exc:
             print(f"  {name:<11} BLOCKED      {exc}")
@@ -449,6 +476,10 @@ def probe(raw: Path) -> int:
     found = [t for t in ("bsdtar", "7z", "unar", "unrar") if shutil.which(t)]
     print(", ".join(found) if found else "NONE FOUND (needed for SPODS)")
     ok &= bool(found)
+
+    stale_dirs, stale_bytes = _reclaim_probe_dirs(raw)
+    if stale_dirs:
+        print(f"  reclaimed:     {stale_dirs} stale _probe_* dir(s), {stale_bytes / 1e9:.2f} GB")
 
     print("\n" + ("probe passed" if ok else "probe FAILED — see above"))
     return 0 if ok else 1
@@ -499,7 +530,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         default=None,
         help="an earlier build_report.json; reuse its tier cutoffs so this build stays comparable to it",
     )
-    ap.add_argument("--probe", action="store_true", help="check every source is reachable, then exit")
+    ap.add_argument(
+        "--probe",
+        action="store_true",
+        help="metadata-only reachability check for every source (downloads nothing), then exit",
+    )
     ap.add_argument("--survival", action="store_true", help="print the class survival curve and exit")
     args = ap.parse_args(argv)
 

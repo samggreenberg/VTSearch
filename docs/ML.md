@@ -2,7 +2,7 @@
 
 VTSearch learns a binary classifier from user votes ("good" vs "bad") using a **linear SVM head** — a single `Linear(input_dim, 1)` fitted to the maximum-margin boundary between the two vote classes (hinge loss + L2, class-balanced). The model operates on embeddings produced by pretrained feature extractors (LAION-CLAP for audio, SigLIP for images, X-CLIP for video, E5-base-v2 for text) and outputs a score in [0, 1] for each item in the dataset.
 
-Alongside the head, each dataset carries a **[Coverage Atlas](#coverage-atlas)** — a hierarchical partition of the embedding space that guides the autopilot's diversity sampling and provides calibrated typicality scores for domain-shift detection.
+Alongside the head, each dataset carries a **[Coverage Atlas](#coverage-atlas)** — a hierarchical partition of the embedding space that guides the autopilot's diversity sampling and provides typicality ranks for domain-shift detection.
 
 ## Architecture
 
@@ -199,7 +199,7 @@ Embeddings are computed once when a dataset is loaded. The full-image vector lan
 
 ### Description enrichment
 
-The Settings toggle **Enrich descriptions** (`enrich_descriptions`, off by default) changes one thing: the *query* vector. With it on, `embed_text_query` replaces the embedding of what you typed with the L2-normalised mean over the embedder's `description_wrappers` applied to it — SigLIP's are `"a photo of {text}"`, `"a photograph of {text}"`, `"an image of {text}"`, `"{text}"`, `"a picture of {text}"` — via `MediaEmbedder.embed_text_enriched`. Media vectors are untouched, and the Text Sort box (`vtsearch/routes/sorting.py`) is its only consumer. It costs 5 text-encoder passes instead of 1 on the query alone (~20-30 ms), cached per `(embedder, media type, enrich, text)`.
+The Settings toggle **Enrich descriptions** (`enrich_descriptions`, off by default) changes one thing: the *query* vector. With it on, `embed_text_query` replaces the embedding of what you typed with the L2-normalised mean over the embedder's `description_wrappers` applied to it — `clap_general`'s are `"the sound of {text}"`, `"a recording of {text}"`, `"{text}"`, `"audio of {text}"`, `"the noise of {text}"` — via `MediaEmbedder.embed_text_enriched`. Media vectors are untouched, and the Text Sort box (`vtsearch/routes/sorting.py`) is its only consumer. It costs 5 text-encoder passes instead of 1 on the query alone (~20-30 ms), cached per `(embedder, media type, enrich, text)`.
 
 **It is not a general improvement, and the default stays off.** Measured across every media-type default on 22 eval datasets and 560 paired queries ([`docs/experiments/2026-08-31-enrich-descriptions-3127/`](experiments/2026-08-31-enrich-descriptions-3127/REPORT.md), issue #3127), paired difference in text-sort average precision:
 
@@ -214,8 +214,12 @@ The Settings toggle **Enrich descriptions** (`enrich_descriptions`, off by defau
 
 Two things worth knowing before changing any of this:
 
-- **The effect belongs to the embedder-and-corpus pair, not to enrichment.** The wrappers were written per media type, and only two templates in the tree have a positive point estimate on their own embedder: `"the sound of {text}"` on `clap_general` (+0.014, which is the whole of that media type's gain) and `"a media showing {text}"` on `xclip`. Every wrapper is negative on `siglip`, `e5`, `bge` and `clap`.
-- **`{text}` is itself one of the five templates**, so enrichment always averages the plain query back in. Where the other four hurt, that is the only reason the ensemble does not hurt as much as they do.
+- **The effect belongs to the embedder-and-corpus pair, not to enrichment.** The wrappers were written per media type, and only two templates in the tree have a positive point estimate on their own embedder: `"the sound of {text}"` on `clap_general` (+0.014, which is the whole of that media type's gain) and `"a media showing {text}"` on `xclip`. Every wrapper measured negative on `siglip`, `e5`, `bge` and `clap`.
+- **`{text}` is itself one of the five templates**, so where an embedder has wrappers, enrichment always averages the plain query back in. Where the other four hurt, that is the only reason the ensemble did not hurt as much as they did — it is why `siglip`'s four negative templates netted out to only −0.001.
+
+**Which is why the wrapper list is now per-embedder** (issue #3341). Because the sign belongs to the model rather than the media type, `siglip`, `e5`, `bge` and `clap` declare **no wrappers at all**: `embed_text_enriched` falls back to `embed_text`, and the toggle is a no-op for them instead of a small silent cost. `clap_general` and `xclip` — the only two with a positive point estimate on their own model — keep theirs. The global default still stays off: `clap_general`'s +0.014 does not clear its own 2 SE, ESC-50's 50 categories are already fully used, and resolving it needs a second audio corpus.
+
+Two general CLAP checkpoints disagree on the *identical* five templates, so **a sibling model's prompts are not evidence for yours**. A new embedder should leave `description_wrappers` empty unless it has measured otherwise — see [EXTENDING-media.md](EXTENDING-media.md#adding-a-media-embedder).
 
 `face` (no text tower) and `document` (no embedder of its own) cannot text-sort, so the setting is inert for them.
 
@@ -321,13 +325,24 @@ How a query is scored:
 3. At every **calibrated** node along the path — at least 20 points *and* `rbar ≥ 0.1` — compute the alignment `t = mu . x` and read a p-value off the node's stored quantile grid.
 4. Average the p-values along the path.
 
-Three details make the p-values honest rather than merely monotone:
+Three details are meant to make the p-values honest rather than merely monotone. Each does real work, and together they still fall short of calibration — see [How good are these p-values?](#how-good-are-these-p-values) below:
 
 - **Leave-one-out calibration.** Each node's quantile grid is built from scores of its own points against the mean direction of the *other* points (closed form on the sphere: `(R.x - 1) / ||R - x||`). Scoring a point against a mean it helped shape is optimistic, and without the correction fresh in-domain queries systematically read as atypical.
 - **The `rbar` gate.** A node with no concentrated direction has a meaningless `mu` and pathological leave-one-out scores; the gate excludes it — notably the always-degenerate root. Sparse branches terminate shallow, which is the adaptive bandwidth: dense regions are judged at fine scale, sparse ones at coarse scale.
 - **Path averaging.** A hard partition has boundary artifacts (a fresh in-domain query near a k-means cell edge looks atypical at leaf scale); averaging across scales smooths them the way a tree ensemble would, at zero extra build cost.
 
-`domain_shift_report(atlas, matrix, alpha=0.05)` aggregates the p-values into a dataset-level verdict. Under no shift, about `alpha` of items fall below `alpha`; the report gives the observed fraction (`frac_atypical` — roughly the shifted proportion), a binomial z-score for the excess, the median p-value, and a headline `shifted` boolean (excess both statistically clear, z > 3, and practically large, ≥ 2×`alpha`).
+`domain_shift_report(atlas, matrix, alpha=0.05)` aggregates the p-values into a dataset-level verdict: the observed fraction below `alpha` (`frac_atypical` — roughly the shifted proportion), a binomial z-score for the excess against the *nominal* rate, the median p-value, and a headline `shifted` boolean (excess both statistically clear, z > 3, and practically large, ≥ 2×`alpha`).
+
+#### How good are these p-values?
+
+Not calibrated, and the gap was unmeasured for as long as the atlas existed. Measured on held-out in-domain data across five embedders ([the #3329 fit-quality study](experiments/2026-08-30-fit-quality-3329/REPORT.md), B1–B6):
+
+- The values are **under-dispersed** — sd 0.250 against the 0.289 a uniform would give — and sit **KS 0.103** from uniform. An in-domain query does not have an `alpha` chance of scoring below `alpha`, so `expected_atypical` is nominal, not measured.
+- **No combiner is calibrated.** Median 0.071, mean (shipped) 0.103, deepest-only 0.132, Fisher 0.186, min 0.329. Dropping the path averaging — the obvious suspect — makes it *worse*, not better.
+- **The shipped combiner looks right at exactly the number a spot check reads** (4.3 % flagged against a nominal 5 %) while being second-worst in overall shape. That is why this went unnoticed.
+- **Patch embedders are where it breaks.** Their spaces are the least concentrated (node `rbar` 0.61 against 0.66–0.70), and `dinov3_patch` puts 13.7 % of its own in-domain items below 0.05 — the verdict fires on 80 % of the atlas's own held-out data against 93 % cross-corpus, a separation of 0.13. The domain-shift route therefore **refuses patch embedders outright** rather than answering with noise. Refitting `alpha` per embedder was priced and does not rescue it; the fix, if it is ever wanted there, is the per-node vMF model.
+
+The **ranking** is unaffected, which is what the autopilot's diversity sampling actually uses (`next_sample` reads each node's score-sorted `ids` and gates on `rbar`, never a p-value). The defect is confined to the calibrated *value* and its one consumer, the domain-shift endpoint.
 
 ### Tutorial: how a diversity session works
 

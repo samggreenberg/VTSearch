@@ -479,6 +479,18 @@ def build_patch_hac_tree(
         cos_d = np.clip((1.0 - sim @ sim.T) * 0.5, 0.0, 1.0)
         centers = np.stack([(cols + 0.5) / width, (rows + 0.5) / height], axis=1).astype(np.float32)
         spatial = np.sqrt(((centers[:, None, :] - centers[None, :, :]) ** 2).sum(-1)) / np.sqrt(2.0)
+        # *alpha* mixes two terms that share a nominal [0, 1] range but not a
+        # realised one: *spatial* fills its range on every image by
+        # construction, while *cos_d* only spans whatever the embedder's
+        # patch-to-patch cosines happen to span.  A concentrated space keeps
+        # cos_d in a narrow band near 0 and the merge order comes out mostly
+        # spatial; a less concentrated one gives the cosine term more say at
+        # the same *alpha*.  So the **effective** alpha is per-embedder, and
+        # `max_patch_hac` results are not alpha-comparable across embedders
+        # (#3347; the within-image patch cosine spread was not itself measured
+        # by #3329, which read media-level vectors).  Whitening cos_d per image
+        # would fix it, and would change the arm's definition — so it is a
+        # caveat here rather than an edit.
         blended = alpha * cos_d + (1.0 - alpha) * spatial
         np.fill_diagonal(blended, 0.0)
         linkage_matrix = linkage(squareform(blended, checks=False), method="average")

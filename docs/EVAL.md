@@ -45,7 +45,7 @@ python -m vtscore.eval [OPTIONS]
 | `--output FILE` | Write JSON results to FILE | none |
 | `--plot-dir DIR` | Save visualisation PNGs to DIR | none |
 | `--no-plot` | Disable plot generation | off |
-| `--enrich-descriptions` | Use enriched (wrapper-averaged) text embeddings for text-sort | off |
+| `--enrich-descriptions` | Use enriched (wrapper-averaged) text embeddings for text-sort. A no-op on embedders that declare no wrappers, which since #3341 is most of them — `siglip`, `clap`, `e5` and `bge` all measured worse enriched than plain | off |
 | `--calibrate-count K` | Number of random Train/Calibrate splits for threshold calibration | `2` |
 | `--calibration-fraction F` | Fraction of training data reserved for calibration | unset = the app's per-space default (0.3 single-vector / 0.5 patch) |
 | `--embedder NAME` | Build each demo dataset with this embedder (empty = media-type default) | `` |
@@ -61,7 +61,8 @@ python -m vtscore.eval --mode text --datasets caltech101_s caltech256_a --output
 # Learned sort with a different train/test split
 python -m vtscore.eval --mode learned --train-fraction 0.7 --seed 123 --plot-dir eval_output
 
-# Learned sort with safe thresholds and calibration tuning
+# Learned sort with more calibration folds (the "safe thresholds" toggle is gone;
+# the trainer's fold-anchored path is now unconditional)
 python -m vtscore.eval --mode learned --calibrate-count 4 --plot-dir eval_output
 
 # Region voting on Visual Genome: re-embed with a patch embedder, then have

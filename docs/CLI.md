@@ -60,7 +60,7 @@ python app.py --autodetect --importer http_archive --url https://example.com/dat
 python app.py --autodetect --importer http_archive --url /data/sounds.tar.gz --media-type audio --settings settings.json
 ```
 
-Use `python app.py --list-importers` to see all available importers. The full set includes: `server_folder`, `server_files`, `local_folder`, `local_files`, `pickle`, `http_archive`, `combine_datasets`, `demo`, `synthetic`. Each importer adds its own flags; run `python app.py --autodetect --importer <name> --help` to see them. `--help` resolves the named plugin first, so its flags are listed at the end of the usual help output (the same works for `--exporter <name> --help`).
+Use `python app.py --list-importers` to see all available importers. The full set includes: `server_folder`, `server_files`, `local_folder`, `local_files`, `local_archive_member`, `pickle`, `http_archive`, `combine_datasets`, `demo`, `synthetic`, `recaller`. Each importer adds its own flags; run `python app.py --autodetect --importer <name> --help` to see them. `--help` resolves the named plugin first, so its flags are listed at the end of the usual help output (the same works for `--exporter <name> --help`).
 
 **Chunked loading**: for large datasets, use `--chunk-size N` to process in batches to limit memory:
 
@@ -107,7 +107,7 @@ python app.py --autodetect --dataset data.pkl --settings settings.json --exporte
 python app.py --autodetect --dataset data.pkl --settings settings.json --exporter email_smtp --to recipient@example.com
 ```
 
-Available exporters: `server_json_file` (JSON to server path), `server_csv_file` (CSV to server path), `webhook` (HTTP POST, optional `--auth-header`), `email_smtp` (SMTP email, requires `--to`), `portable_detector` (standalone ONNX scoring bundles; see below), `gui` (default: print to console).
+Available exporters: `server_json_file` (JSON to server path), `server_csv_file` (CSV to server path), `webhook` (HTTP POST, optional `--auth-header`), `email_smtp` (SMTP email, requires `--to`), `portable_detector` (standalone ONNX scoring bundles; see below), `gui` (default: print to console), `open_url` (open a scheme-validated URL per hit, useful for hand-off to another tool), `holder` (in-process capture — an integration hook, not a shipping destination). Run `python app.py --list-exporters` for the current set.
 
 **Exporting the detectors themselves** (`portable_detector`): instead of the
 scored hits, write one standalone, portable scoring bundle per detector the run
@@ -526,9 +526,10 @@ and their choice persists across restarts.
 **Hidden plugins** (`--hide-plugin family:name`, repeatable): drop a
 plugin from picker / listing API responses for this deployment without
 editing plugin code. The format is `family:name` where `family` is one
-of the keys printed by `--list-plugins` (`importers`, `exporters`,
-`label_importers`, `labelset_sources`, `converters`, `media_sources`,
-`media_types`, `embedders`, `clippers`, `cleaners`, `settings_importers`,
+of the keys printed by `--list-plugins` (`importers`,
+`datasource_importers`, `seed_importers`, `exporters`, `label_importers`,
+`labelset_sources`, `converters`, `media_sources`, `media_types`,
+`embedders`, `clippers`, `cleaners`, `settings_importers`,
 `settings_exporters`, `settings_sources`) and `name` is the plugin's
 registered name:
 
@@ -646,7 +647,8 @@ same `--format` flag:
 python app.py --list-importers                        # dataset importers
 python app.py --list-exporters --format names         # results exporters, bare names
 python app.py --list-embedders --format json          # embedders as JSON
-# Also: --list-converters, --list-clippers, --list-cleaners,
+# Also: --list-datasource-importers, --list-seed-importers,
+# --list-converters, --list-clippers, --list-cleaners,
 # --list-media-types, --list-media-sources, --list-label-importers,
 # --list-labelset-sources, --list-settings-importers,
 # --list-settings-exporters, --list-settings-sources.

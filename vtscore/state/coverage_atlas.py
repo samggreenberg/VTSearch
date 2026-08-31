@@ -1,4 +1,4 @@
-"""Coverage Atlas: hierarchical partition with evidence channels and calibrated typicality.
+"""Coverage Atlas: hierarchical partition with evidence channels and typicality ranks.
 
 The atlas recursively partitions a set of embeddings with k-means, like the
 Diversity Tree it replaces, but keeps what the tree threw away
@@ -17,10 +17,12 @@ Diversity Tree it replaces, but keeps what the tree threw away
   component — so the atlas read at any depth is a multiresolution mixture
   model.
 - **Calibration**: each node stores a quantile grid of its own points'
-  typicality ``t(x) = mu . x``, so a query returns a p-value ("what fraction of the
-  build data looks less typical than x?"), never a raw distance.  This is
+  typicality ``t(x) = mu . x``, so a query returns a rank ("what fraction of
+  the build data looks less typical than x?"), never a raw distance.  This is
   what powers domain-shift detection when a detector trained on dataset A
-  is pointed at dataset B.
+  is pointed at dataset B.  The scores are *ranks on a p-value-like scale*,
+  not calibrated p-values - see :meth:`CoverageAtlas.typicality_pvalues` for
+  the measured deviation and what it costs.
 
 The atlas supports:
 
@@ -34,7 +36,7 @@ The atlas supports:
   a concentrated direction, so the surprise is a representative
   counterexample rather than a lone oddball — with siblings visited
   largest-first so each click covers the biggest unexplored region.
-- Typicality: calibrated p-values for arbitrary query vectors, and a
+- Typicality: a typicality rank for arbitrary query vectors, and a
   dataset-level domain-shift report built on them.
 """
 
@@ -84,6 +86,18 @@ _CALIBRATION_MIN_NODE = 20
 # one point from a near-zero resultant flips it), which reads every query as
 # "more typical than everything".  K-means cells are cohesive and land well
 # above this floor.
+#
+# This is a **cosine-magnitude** constant, and the one such constant on the live
+# click loop: :meth:`CoverageAtlas.next_sample` gates on it too, to decide
+# whether to probe a node's typical half or the whole node.  Absolute cosines
+# live in different ranges per embedder, so the #3347 audit checked the margin
+# against the #3329 part-2 grid rather than assuming it.  Node r̄ by embedder
+# (median / 10th percentile): clip 0.70/0.53, siglip 0.69/0.52, siglip2_l
+# 0.67/0.49, clip_l 0.66/0.50, and the least concentrated space in the grid,
+# dinov3_patch, 0.61/0.38.  The worst decile of the worst embedder clears this
+# floor by ~4x, and the floor exists to catch the *degenerate* r̄ ~ 0 case (the
+# root), not to assert concentration — so it holds on patch spaces.  The tail
+# below the 10th percentile was not measured; that is the residual.
 _CALIBRATION_MIN_RBAR = 0.1
 
 # Quantile grid stored per node for typicality calibration.  21 points
@@ -533,15 +547,38 @@ class CoverageAtlas:
     # ------------------------------------------------------------------
 
     def typicality_pvalues(self, matrix: np.ndarray) -> np.ndarray:
-        """Return one calibrated typicality p-value per row of *matrix*.
+        """Return one typicality score per row of *matrix*, on a p-value-like scale.
 
         Each query is centered into the atlas frame, routed down the tree
-        (cosine-nearest child), and scored at the deepest node with at least
-        ``_CALIBRATION_MIN_NODE`` build points — sparse regions terminate
-        shallow, which is the adaptive bandwidth.  The p-value is the
-        fraction of that node's own points whose typicality ``t = mu . x``
-        is below the query's, read off the stored quantiles: small p means
-        "almost nothing the atlas was built on looks this atypical here".
+        (cosine-nearest child), and scored at **every** calibrated node along
+        that path — not only the deepest — with the per-node values averaged.
+        A node qualifies on ``_CALIBRATION_MIN_NODE`` build points and
+        ``_CALIBRATION_MIN_RBAR`` concentration, so sparse regions drop out of
+        the average, which is the adaptive bandwidth.  A node's own value is
+        the fraction of its build points whose typicality ``t = mu . x`` is
+        below the query's, read off the stored quantiles: small means "almost
+        nothing the atlas was built on looks this atypical here".
+
+        **These are not calibrated p-values, despite the name.**  Measured on
+        held-out in-domain data across five embedders, the values are
+        **under-dispersed** (sd 0.250 against the 0.289 a uniform would give)
+        and sit KS 0.103 from uniform — an in-domain query does *not* have an
+        alpha chance of scoring below alpha.  The path averaging is the
+        mechanism: it smooths the hard partition's boundary artifacts, which
+        is why it is here, but a mean of correlated per-node values is
+        narrower than any one of them.  No combiner tried is calibrated
+        either (median 0.071, mean 0.103, deepest-only 0.132, Fisher 0.186,
+        min 0.329), and dropping the averaging makes it worse, not better.
+        The distortion is largest on **patch embedders**, whose spaces are the
+        least concentrated: ``dinov3_patch`` puts 13.7% of its own in-domain
+        items below 0.05.
+
+        So read the output as a *ranking* of typicality — which is all
+        :meth:`next_sample` uses it for, via ``node["ids"]`` — and not as a
+        probability.  Thresholding it against a nominal alpha is what
+        :func:`domain_shift_report` does; see there for what that costs.  Full
+        measurement: ``docs/experiments/2026-08-30-fit-quality-3329/REPORT.md``
+        (B1-B6).
 
         Returns an array of 1.0 (fully typical) for an empty atlas.
         """
@@ -592,7 +629,11 @@ class CoverageAtlas:
         return np.where(p_counts > 0, p_sums / np.maximum(p_counts, 1), 1.0).astype(np.float32)
 
     def typicality_pvalue(self, vector: np.ndarray) -> float:
-        """Return the calibrated typicality p-value of a single query vector."""
+        """Return the typicality score of a single query vector.
+
+        Row-of-one wrapper for :meth:`typicality_pvalues`; see there for why
+        the value is a ranking rather than a calibrated probability.
+        """
         return float(self.typicality_pvalues(np.asarray(vector)[None, :])[0])
 
     # ------------------------------------------------------------------
@@ -736,17 +777,34 @@ class CoverageAtlas:
 def domain_shift_report(atlas: CoverageAtlas, matrix: np.ndarray, alpha: float = 0.05) -> dict:
     """Compare a dataset's embeddings against an atlas and report domain shift.
 
-    Under the null "the queried items are drawn from the atlas's build
-    distribution", typicality p-values are roughly uniform, so about *alpha*
-    of them fall below *alpha*.  A large excess means the atlas's detector is
-    being pointed at data unlike what it was trained on and shouldn't be
-    trusted without hands-on verification.
+    A large excess of atypical items means the atlas's detector is being
+    pointed at data unlike what it was trained on and shouldn't be trusted
+    without hands-on verification.
+
+    **The null this is built on is false, and by how much depends on the
+    embedder.**  It reads as "typicality p-values are roughly uniform under
+    the atlas's own build distribution, so about *alpha* of them fall below
+    *alpha*" — but :meth:`CoverageAtlas.typicality_pvalues` returns
+    under-dispersed, uncalibrated scores (KS 0.103 from uniform on held-out
+    in-domain data, all five embedders measured), so ``expected_atypical`` is
+    nominal rather than measured and ``z_score`` is a binomial z against a
+    rate that does not hold.  On the four single-vector embedders the
+    verdict still separates usefully (``frac_atypical`` 0.00-0.20 on
+    in-domain data against 0.50-0.71 on a different corpus); on
+    ``dinov3_patch`` it fires on 80% of the atlas's *own* held-out data
+    against 93% cross-corpus, a separation of 0.13 — close to a constant.
+    Callers should therefore not run this on a patch embedder; the one
+    production caller (the domain-shift route) refuses those outright.
+    Refitting alpha per embedder was priced and does not rescue it; the fix,
+    if this is ever wanted on patch spaces, is the atlas's per-node vMF
+    model.  Measurements:
+    ``docs/experiments/2026-08-30-fit-quality-3329/REPORT.md`` (B4-B6).
 
     Returns a dict with ``n_items``, ``alpha``, ``frac_atypical`` (observed
-    fraction with p < alpha), ``expected_atypical`` (= alpha), ``z_score``
-    (binomial z of the excess), ``median_pvalue``, and ``shifted`` (True when
-    the excess is both statistically clear, z > 3, and practically large,
-    at least double the expected rate).
+    fraction scoring below alpha), ``expected_atypical`` (= alpha, the
+    nominal rate), ``z_score`` (binomial z of the excess), ``median_pvalue``,
+    and ``shifted`` (True when the excess is both statistically clear,
+    z > 3, and practically large, at least double the nominal rate).
     """
     pvals = atlas.typicality_pvalues(matrix)
     n = int(pvals.shape[0])

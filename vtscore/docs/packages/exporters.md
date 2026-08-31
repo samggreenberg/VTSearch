@@ -287,7 +287,7 @@ user's data dir - before `export()` runs:
 | `{YYYYMMDD-HHMMSS}` | Current UTC timestamp, e.g. `20260516-143022` - included in the default path so consecutive runs do not silently overwrite each other |
 | `{YYYYMMDD}` / `{YYYY}` / `{MM}` / `{DD}` | Current UTC date parts, so a scheduled (e.g. daily) Auto-Find can write to a path named after today's date, e.g. `results_{YYYY}.{MM}.{DD}.csv` |
 | `{detector_name}` | The active `DetectorContext.name`, sanitised by `vtscore.security.sanitize_template_value` |
-| `{username}` | The current request user (from `vtsearch.auth.get_current_user`), sanitised the same way; falls back to `"default"` |
+| `{username}` | The current request user (from `vtscore.state.current_user.get_current_user`), sanitised the same way; falls back to `"default"` |
 
 Defaults for `server_json_file` and `server_csv_file` already
 interpolate from `DATA_DIR`:
@@ -303,11 +303,13 @@ resolves against `vtscore.config.DATA_DIR` (which honours
 implicit-cwd relative paths. Custom exporters writing path defaults
 should follow the same pattern.
 
-The template resolver imports `vtsearch.auth.get_current_user`, so
-`{username}` interpolation is only meaningful inside the app process.
-Library-tier callers that drive an exporter directly should either
-avoid `{username}` in their paths or set up an auth provider before
-invoking `export()`.
+The template resolver reads `vtscore.state.current_user.get_current_user`
+(app-tier wires the request-scoped resolver via
+`register_request_user_resolver`; the library-side default is `"default"`),
+so `{username}` interpolation is only useful when a resolver or the
+thread-local has been set. Library-tier callers that drive an exporter
+directly should either avoid `{username}` in their paths or register a
+user resolver before invoking `export()`.
 
 ## Writing a custom exporter
 

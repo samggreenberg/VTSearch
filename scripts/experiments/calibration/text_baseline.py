@@ -96,7 +96,7 @@ def main() -> int:
                 continue
 
             # Probe the text tower once before loading a multi-GB pickle.
-            probe = embed_text_query("a photo", "image", embedder_name=text_emb)
+            probe = embed_text_query("a photo", "image", enrich=cfg.SEED_ENRICH, embedder_name=text_emb)
             if probe is None:
                 common.log(f"{ds} x {emb}: NO TEXT TOWER on {text_emb} (vision-only) - recorded as n/a")
                 for cat in cats:
@@ -118,7 +118,7 @@ def main() -> int:
                 # measured a *different sort* from the one every arm opened on,
                 # so the zero-click anchor was not the run's own seed sort.
                 query = cfg.seed_query_text(ds, cat) or cat
-                tvec = embed_text_query(query, "image", embedder_name=text_emb)
+                tvec = embed_text_query(query, "image", enrich=cfg.SEED_ENRICH, embedder_name=text_emb)
                 if tvec is None:
                     rows.append({"dataset": ds, "embedder": emb, "category": cat, "supports_text": 0})
                     continue

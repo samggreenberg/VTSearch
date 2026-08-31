@@ -4,8 +4,18 @@
 ``enrich_descriptions`` is a single **global** setting whose only production
 consumer is the Text Sort query embedding (``vtsearch/routes/sorting.py`` ->
 ``embed_text_query(..., enrich=...)``).  Enrichment replaces the query vector
-with the L2-normalised mean of the embedder's ``description_wrappers`` applied
-to the typed text; the *media* vectors are untouched.
+with the L2-normalised mean of a set of ``description_wrappers`` applied to the
+typed text; the *media* vectors are untouched.
+
+Since #3341 the wrapper set is **per-embedder and measured**: this study's own
+result is why ``siglip``, ``e5``, ``bge`` and ``clap`` now ship an empty list.
+So the harness cannot simply read ``embedder.description_wrappers`` any more -
+on those four it would find nothing, emit an ``enriched`` arm identical to
+``plain``, and report a flat zero while looking perfectly healthy.  It resolves
+through :data:`CANDIDATE_WRAPPERS` instead (the embedder's own list when it has
+one, else the pre-#3341 templates for its media type) and overrides the
+embedder for the cell, so a re-run reproduces this report and a new checkpoint
+can be measured against a wrapper set it does not yet ship.
 
 That is what makes this study cheap and exactly paired: one dataset load serves
 every arm, so the two arms differ in the query vector and in nothing else -
@@ -33,6 +43,7 @@ Usage::
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import json
 import os
@@ -82,11 +93,88 @@ def _git(repo: Path, *args: str) -> str:
     return out.stdout.strip()
 
 
-def _arms(embedder, want_wrappers: bool) -> list[tuple[str, str]]:
+#: Wrapper templates per media type, as they stood before #3341 emptied the
+#: list on ``siglip``, ``e5``, ``bge`` and ``clap``.
+#:
+#: Production reads the embedder; this study has to be able to measure a
+#: *candidate* set the model does not ship - both to reproduce its own report
+#: (whose whole point was that these templates lose) and to put a wrapper set
+#: in front of a new checkpoint before deciding whether to ship it.  Keeping
+#: the deleted templates only in git history would make the report
+#: unreproducible and quietly turn the ``w<i>`` arms - and with them the
+#: ``{text}`` planted answer - into an empty set.
+CANDIDATE_WRAPPERS: dict[str, list[str]] = {
+    "audio": [
+        "the sound of {text}",
+        "a recording of {text}",
+        "{text}",
+        "audio of {text}",
+        "the noise of {text}",
+    ],
+    "image": [
+        "a photo of {text}",
+        "a photograph of {text}",
+        "an image of {text}",
+        "{text}",
+        "a picture of {text}",
+    ],
+    "text": [
+        "a document about {text}",
+        "an article discussing {text}",
+        "{text}",
+        "a text passage about {text}",
+        "writing on the topic of {text}",
+    ],
+    "video": [
+        "a video of {text}",
+        "a media showing {text}",
+        "{text}",
+        "footage of {text}",
+        "a video media of {text}",
+    ],
+}
+
+
+def _wrappers_for(embedder) -> tuple[list[str], str]:
+    """The wrapper set this cell measures, and where it came from.
+
+    An embedder that ships wrappers is measured on its own (that is the
+    production path).  One that ships none - the four #3341 emptied - falls
+    back to the pre-#3341 templates for its media type, so the arms stay
+    comparable to the rows already in this study's tables.
+    """
+    own = list(embedder.description_wrappers)
+    if own:
+        return own, "embedder"
+    return list(CANDIDATE_WRAPPERS.get(embedder.media_type_id, [])), "candidate"
+
+
+@contextlib.contextmanager
+def _wrappers_override(embedder, wrappers: list[str]):
+    """Make *embedder* report *wrappers* for the duration of the block.
+
+    ``eval_text_sort(enrich=True)`` reaches ``embed_text_enriched``, which
+    reads the property off the class - so measuring a candidate set means
+    patching the class, not passing a list.  Scoped to one cell; a no-op when
+    the embedder already reports exactly this set.
+    """
+    cls = type(embedder)
+    if list(embedder.description_wrappers) == wrappers:
+        yield
+        return
+    original = cls.description_wrappers
+    cls.description_wrappers = property(lambda _self: list(wrappers))
+    try:
+        yield
+    finally:
+        cls.description_wrappers = original
+
+
+def _arms(wrappers: list[str], want_wrappers: bool) -> list[tuple[str, str]]:
     """(arm name, wrapper template) pairs.  Empty template = no rewrite."""
     arms: list[tuple[str, str]] = [("plain", ""), ("enriched", "")]
     if want_wrappers:
-        for i, wrapper in enumerate(embedder.description_wrappers):
+        for i, wrapper in enumerate(wrappers):
             arms.append((f"w{i}", wrapper))
     return arms
 
@@ -138,14 +226,25 @@ def run_cell(
         return "failed"
 
     embedder = get_embedder(loaded)
+    wrappers, source = _wrappers_for(embedder)
+    if not wrappers:
+        print(
+            f"[{ds_id}] FAILED: no wrappers for {loaded!r} (media type {embedder.media_type_id!r}); "
+            "add a CANDIDATE_WRAPPERS entry -- an enrichment study with nothing to "
+            "enrich reports a flat zero rather than an error",
+            file=sys.stderr,
+            flush=True,
+        )
+        return "failed"
     queries = cfg["queries"]
     print(
-        f"[{ds_id}] {len(medias)} medias, {len(queries)} queries, embedder={loaded}, load={load_s:.0f}s",
+        f"[{ds_id}] {len(medias)} medias, {len(queries)} queries, embedder={loaded}, "
+        f"wrappers={len(wrappers)} ({source}), load={load_s:.0f}s",
         flush=True,
     )
 
     rows: list[dict] = []
-    for arm, wrapper in _arms(embedder, want_wrappers):
+    for arm, wrapper in _arms(wrappers, want_wrappers):
         armed = [
             EvalQuery(
                 text=wrapper.format(text=q.text) if wrapper else q.text,
@@ -154,14 +253,15 @@ def run_cell(
             for q in queries
         ]
         t_arm = time.monotonic()
-        metrics = eval_text_sort(
-            medias,
-            armed,
-            media_type,
-            K_VALUES,
-            enrich=(arm == "enriched"),
-            embedder_name=loaded,
-        )
+        with _wrappers_override(embedder, wrappers):
+            metrics = eval_text_sort(
+                medias,
+                armed,
+                media_type,
+                K_VALUES,
+                enrich=(arm == "enriched"),
+                embedder_name=loaded,
+            )
         arm_s = time.monotonic() - t_arm
         m_ap = sum(m.average_precision for m in metrics) / len(metrics)
         print(f"    {arm:10s} mAP={m_ap:.4f}  ({arm_s:.1f}s)", flush=True)

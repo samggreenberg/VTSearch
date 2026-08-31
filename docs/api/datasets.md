@@ -770,12 +770,19 @@ trusting a detector trained on the reference against the active dataset.
 "frac_atypical": 0.31, "expected_atypical": 0.05, "z_score": 24.1,
 "median_pvalue": 0.18, "shifted": true}`
 
-`frac_atypical` is the fraction of active-dataset items whose calibrated
-typicality p-value falls below `alpha` — roughly the shifted proportion
-(it stays near `expected_atypical` when there is no shift). `shifted` is
-the headline verdict (statistically clear **and** practically large
-excess).
+`frac_atypical` is the fraction of active-dataset items whose typicality
+score falls below `alpha` — roughly the shifted proportion (it stays near
+`expected_atypical` when there is no shift). `shifted` is the headline
+verdict (statistically clear **and** practically large excess).
+
+**Not supported for patch embedders** (`dinov3_patch`, `dinov2_patch`,
+`eupe_patch`), which are refused with 400. In a patch space the guard does
+not separate in-domain from out-of-domain data: on `dinov3_patch` it fires
+on 80 % of the reference's own held-out data against 93 % for a different
+corpus. See [`docs/ML.md`](../ML.md#how-good-are-these-p-values) for what
+the scores are and are not.
 
 400 if either dataset isn't loaded, the reference has no coverage atlas,
-the two datasets use different embedders, or the active dataset equals the
-reference; 403 if access is denied; 404 if the reference doesn't exist.
+the two datasets use different embedders, the reference uses a patch
+embedder, or the active dataset equals the reference; 403 if access is
+denied; 404 if the reference doesn't exist.

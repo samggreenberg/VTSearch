@@ -25,13 +25,11 @@ class TestImageSiglipEmbedderProperties:
         emb = ImageSiglipEmbedder()
         assert emb.media_type_id == "image"
 
-    def test_description_wrappers_non_empty(self):
+    def test_no_description_wrappers(self):
+        """#3341: every wrapper measured below the typed query on SigLIP."""
         from vtscore.media.image.embedder_siglip import ImageSiglipEmbedder
 
-        emb = ImageSiglipEmbedder()
-        wrappers = emb.description_wrappers
-        assert len(wrappers) > 0
-        assert all("{text}" in w for w in wrappers)
+        assert ImageSiglipEmbedder().description_wrappers == []
 
     def test_registered_in_registry(self):
         from vtscore.media import get_embedder
@@ -729,13 +727,11 @@ class TestTextBGEEmbedderProperties:
         emb = TextBGEEmbedder()
         assert emb.media_type_id == "text"
 
-    def test_description_wrappers_non_empty(self):
+    def test_no_description_wrappers(self):
+        """#3341: enrichment lost on 45 of 45 text categories for bge."""
         from vtscore.media.text.embedder_bge import TextBGEEmbedder
 
-        emb = TextBGEEmbedder()
-        wrappers = emb.description_wrappers
-        assert len(wrappers) > 0
-        assert all("{text}" in w for w in wrappers)
+        assert TextBGEEmbedder().description_wrappers == []
 
     def test_registered_in_registry(self):
         from vtscore.media import get_embedder

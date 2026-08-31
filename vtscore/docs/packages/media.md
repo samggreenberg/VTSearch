@@ -125,7 +125,7 @@ embedders. Subclasses implement four things:
 | `_embed_media_impl(media)`                    | yes      | Forward pass for one item            |
 | `embed_text(text)`                            | optional | Embed a query into the same space    |
 | `_embed_media_bulk_impl(medias)`              | optional | Batched forward; default loops       |
-| `description_wrappers`                        | optional | Prompts used by `embed_text_enriched`|
+| `description_wrappers`                        | optional | Prompts used by `embed_text_enriched`; `[]` (the default, and the measured answer for most models) makes it plain `embed_text` |
 
 Threading and lock contract:
 
