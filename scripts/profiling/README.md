@@ -87,7 +87,14 @@ slice window / `items_per_category` for ≥3 distinct `n`). Run each cell ≥3×
 cells so coverage gaps are explicit.
 
 **Fitting.** Per (device, media_type, embedder): `a_model` = median warm
-model-load; `(a_embed, b_embed)` and `(a_fin, b_fin)` = least-squares vs `n`;
+model-load; `(a_embed, b_embed)` and `(a_fin, b_fin)` = least-squares vs `n`
+over the **warm** loads only (a cell with no warm row falls back to its cold
+ones). A process's cold first load folds one-time costs into the embed and
+finalize phases — CUDA context creation, the encoder's first forward, and the
+cuML/UMAP JIT behind `finalize:coverage` — and it always lands at the smallest
+`n` in the sweep, so it has outsized leverage on the slope. Measured on
+`audio/beats` (#3062): keeping the cold row put `b_fin` at 0.0018 s/item where
+the warm rows give 0.0040, with R² 0.08 against 0.999;
 `bandwidth(device)` = fit of cold download vs `download_size_mb`. Sanity-check
 R²/residuals; fall back to the generic profile where a cell is thin. The audio
 rows' checked-in `b_load` (0.11 s/item decode) is carried from a live GTZAN
