@@ -103,7 +103,10 @@ against media embeddings. When `embedder_name` is set, that specific
 embedder is used; otherwise it falls back to the default for the
 given `media_type`. `enrich=True` runs `embed_text_enriched`, which
 averages the query across the embedder's `description_wrappers`
-(e.g. `"a photo of {text}"`, `"a video of {text}"`).
+(e.g. `"a photo of {text}"`, `"a video of {text}"`). Most embedders
+declare no wrappers - the ensemble was measured to *lose* to the typed
+query on `siglip`, `clap`, `e5` and `bge` (#3127/#3341) - so on those
+`enrich=True` is simply `embed_text`.
 
 Results are cached in a small process-wide LRU
 (`_query_cache` in `vtscore/embedding/helpers.py`):

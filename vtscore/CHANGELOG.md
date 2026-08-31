@@ -12,6 +12,27 @@ instead, since every commit on `dev` is effectively a new app release.)
 
 ### Changed
 
+- **`description_wrappers` is now a per-embedder, measured choice, and four
+  built-in embedders return `[]`** (issue #3341, following #3127). Issue
+  #3127 measured wrapper-averaged text embedding on/off across 22 eval
+  datasets and 560 paired queries (paired Δ in text-sort average precision,
+  SEs clustered on (corpus, category)). The result splits by *model*, not by
+  media type: `clap_general` +0.014 ± 0.009 and `xclip` +0.008 ± 0.014, but
+  `siglip` −0.001 ± 0.002, `clap` −0.010 ± 0.008, `e5` −0.057 ± 0.009 and
+  `bge` −0.059 ± 0.009 (the two text embedders lost on 45 of 45 categories,
+  and every individual template was negative on all four). Those four now
+  override `description_wrappers` to return `[]`, so `embed_text_enriched`
+  degrades to `embed_text` and the app's `enrich_descriptions` setting is a
+  no-op for them. `clap_general`, `xclip` and the unmeasured cross-modal
+  siblings are unchanged.
+
+  **For plugin authors:** the base-class default is still `[]` and nothing in
+  the ABC moved, so no out-of-tree embedder is affected. But the default is
+  now documented as a *measured answer* rather than an unfilled slot — do not
+  add wrappers to your own embedder without measuring that they beat the typed
+  query on your checkpoint, because a sibling model's templates are not
+  evidence (`clap` and `clap_general` disagree on the identical five).
+
 - **Voted media are excluded from the calibrated threshold's haystacks**
   (issue #3308). The fold-anchored threshold estimator drops the voted
   items from every population sample it touches - each calibration fold
@@ -120,6 +141,11 @@ instead, since every commit on `dev` is effectively a new app release.)
   flooding weights a Bad image's many region rows down to one image's worth.
 
 ### Added
+
+- `vtscore.eval.seed_scores.build_seed_scores` accepts an `enrich` keyword
+  (default `False`, matching the app's shipped `enrich_descriptions`
+  default), so a simulated-user study can open on the same sort a real user
+  sees instead of silently always embedding the query plainly (issue #3341).
 
 - **`vtscore.concurrency.notifications`** - `notify()`, `Notification` and
   `NotificationBroker`: a fan-out channel for one-off user-facing messages.

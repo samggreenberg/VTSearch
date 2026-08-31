@@ -51,6 +51,21 @@ class ImageSiglipEmbedder(_CrossModalHFEmbedder):
     def is_default(self) -> bool:
         return True
 
+    @property
+    def description_wrappers(self) -> list[str]:
+        """No wrappers: the CLIP-style prompt ensemble does not help SigLIP.
+
+        #3127 measured enrichment on/off over the image eval corpora and every
+        one of the four non-identity templates inherited from
+        :class:`~vtscore.media.image._cross_modal_shared._CrossModalHFEmbedder`
+        scored *below* the typed query here; the ensemble only netted out to
+        -0.001 +/- 0.002 AP because the bare ``"{text}"`` template averages the
+        plain query back in.  Dropping them makes the Enrich Sort Descriptions
+        setting a no-op on the default image embedder rather than a small,
+        silent loss.  See #3341.
+        """
+        return []
+
     def _load_models_impl(self) -> None:
         if self._model is not None:
             return

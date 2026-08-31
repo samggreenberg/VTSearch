@@ -185,6 +185,25 @@ EXPERIMENT_QUERIES: dict[str, dict[str, str]] = {
 }
 
 
+#: Whether the simulated user's opening query is embedded through the
+#: embedder's ``description_wrappers`` ensemble ("Enrich Sort Descriptions") or
+#: plainly.
+#:
+#: This must track the app's shipped default for ``enrich_descriptions``
+#: (``vtsearch/settings_models.py``), which is ``False``: the opening and the
+#: click-0 anchor are supposed to be the sort a real user sees, and a harness
+#: that quietly embeds plainly while the app enriches is measuring a different
+#: opening than the one it reports.  Every ``embed_text_query`` call in this
+#: harness passes it explicitly rather than leaning on the library default, so
+#: that if the app's default ever moves there is exactly one line to change and
+#: it is grep-able (#3341).
+#:
+#: Note that under #3341 enrichment is per-embedder: ``siglip`` -- this study's
+#: text half -- returns no wrappers at all, so flipping this to ``True`` is a
+#: no-op there rather than a silent re-ranking.
+SEED_ENRICH = os.environ.get("CALIB_SEED_ENRICH", "0") == "1"
+
+
 def seed_query_text(dataset: str, category: str) -> str:
     """The text a user would type to find *category* in *dataset*, or "".
 

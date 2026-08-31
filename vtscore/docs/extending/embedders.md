@@ -45,7 +45,7 @@ Optional but commonly overridden:
 | `display_name` | `name` | Friendlier label for the picker UI |
 | `is_default` | `False` | Exactly one embedder per media type should return `True` - that one is what `embedders_for_type(t)[0]` returns |
 | `embed_text(text)` | `None` | Return `None` to disable text-query sort, or a vector in the same space as `_embed_media_impl` |
-| `description_wrappers` | `[]` | Templates with `{text}` for enriched text embedding (e.g. `["the sound of {text}"]`) |
+| `description_wrappers` | `[]` | Templates with `{text}` for enriched text embedding (e.g. `["the sound of {text}"]`). Keep the default unless you have measured that the ensemble beats the typed query on your checkpoint - it is a loss on most (#3127/#3341) |
 | `_embed_media_bulk_impl(medias)` | per-item loop | Native bulk hook for service embedders or batched GPU forward passes |
 | `_patch_forward_impl(media)` | `None` | For patch-capable image encoders; required when `supports_patch_regions = True` |
 
