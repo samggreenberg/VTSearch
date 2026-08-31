@@ -285,8 +285,15 @@ def kaggle_download(slug: str, dest: Path, *, unzip: bool = True) -> Path:
     return dest
 
 
-def http_download(url: str, dest: Path, *, chunk: int = 1 << 20) -> Path:
-    """Stream *url* to *dest*, resuming a partial file and writing atomically."""
+def http_download(url: str, dest: Path, *, chunk: int = 1 << 20, session: Any = None) -> Path:
+    """Stream *url* to *dest*, resuming a partial file and writing atomically.
+
+    Pass *session* to reuse one connection across a long pull.  Measured on the
+    UCSF endpoint it is worth only ~1.09x (307ms -> 281ms per PDF, so the cost
+    is the archive generating and sending the file, not the TLS handshake), but
+    it is free and it is strictly *less* load on a shared public service than
+    re-handshaking once per document across 216,000 of them.
+    """
     import requests
 
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -296,7 +303,8 @@ def http_download(url: str, dest: Path, *, chunk: int = 1 << 20) -> Path:
     tmp = dest.with_suffix(dest.suffix + ".part")
     have = tmp.stat().st_size if tmp.exists() else 0
     headers = {"Range": f"bytes={have}-"} if have else {}
-    with requests.get(url, headers=headers, stream=True, timeout=(20, 120)) as resp:
+    get = session.get if session is not None else requests.get
+    with get(url, headers=headers, stream=True, timeout=(20, 120)) as resp:
         if resp.status_code not in (200, 206):
             raise FetchError(f"{url} returned HTTP {resp.status_code}")
         mode = "ab" if have and resp.status_code == 206 else "wb"

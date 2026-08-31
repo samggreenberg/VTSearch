@@ -51,6 +51,8 @@ import time
 from pathlib import Path
 from typing import Any, Iterator, Optional
 
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
 from . import _common
 from ._common import Mark, Page
 
@@ -248,6 +250,58 @@ def doc_to_page(
     )
 
 
+def _render_workers() -> int:
+    """How many render processes to run.
+
+    ``os.cpu_count()`` reports the NODE (40 on these boxes), not this job's
+    cgroup, so trusting it would oversubscribe an 8-core allocation eightfold
+    and steal time from whoever else is on the node.  SLURM's own variable is
+    the only honest source.  Capped at 4 because the measured speedup plateaus
+    there (3.99x at 4 workers, 3.95x at 8).
+    """
+    import os
+
+    allocated = int(os.environ.get("SLURM_CPUS_PER_TASK") or os.environ.get("SLURM_CPUS_ON_NODE") or 2)
+    return max(1, min(4, allocated - 1))
+
+
+def _render_to_disk(
+    pdf_path: str, out_images: str, doc_id: str, dpi: int, max_pages_per_doc: int
+) -> list[tuple[int, str, int, int]]:
+    """Render one already-downloaded PDF and save its pages.  Runs in a worker.
+
+    Returns ``(page_index, image_path, width, height)`` per page -- deliberately
+    small, so no PIL image ever crosses the process boundary.
+
+    The existing-file fast path matters more than it looks: rendering is 0.188 s
+    a page, so re-rendering 200k already-saved pages would cost ~10 h on every
+    resume of a job that is explicitly designed to be resumable.
+    """
+    from pathlib import Path as _Path
+
+    out_dir = _Path(out_images)
+    targets = [out_dir / f"{doc_id}_{i}.png" for i in range(max_pages_per_doc)]
+    if targets and all(t.exists() for t in targets):
+        from PIL import Image as _Image
+
+        done = []
+        for idx, t in enumerate(targets):
+            with _Image.open(t) as im:
+                done.append((idx, str(t), im.width, im.height))
+        return done
+
+    from vtscore.datasets.pdf import render_pdf_pages
+
+    rendered = render_pdf_pages(_Path(pdf_path), dpi=dpi)
+    out: list[tuple[int, str, int, int]] = []
+    for idx, (_name, image) in enumerate(rendered[:max_pages_per_doc]):
+        image_path = out_dir / f"{doc_id}_{idx}.png"
+        if not image_path.exists():
+            image.save(image_path)
+        out.append((idx, str(image_path), image.width, image.height))
+    return out
+
+
 def fetch_and_render(
     docs: list[dict[str, Any]],
     raw_root: Path,
@@ -266,40 +320,89 @@ def fetch_and_render(
     than a slightly short one.  Every skip is reported through *on_error* so the
     count is visible instead of silent.
     """
-    from vtscore.datasets.pdf import render_pdf_pages
+    import requests
 
     pdf_dir = raw_root / "ucsf" / "pdf"
     pdf_dir.mkdir(parents=True, exist_ok=True)
     out_images.mkdir(parents=True, exist_ok=True)
 
-    pages: list[Page] = []
-    for doc in docs:
-        doc_id = str(doc.get("id", ""))
-        if len(doc_id) < 4:
-            continue
-        pdf_path = pdf_dir / f"{doc_id}.pdf"
-        try:
-            _common.http_download(pdf_url(doc_id), pdf_path)
-            rendered = render_pdf_pages(pdf_path, dpi=dpi)
-        except Exception as exc:  # noqa: BLE001 - a dead id must not kill a 200k pull
-            if on_error:
-                on_error(doc_id, exc)
-            pdf_path.unlink(missing_ok=True)
-            continue
+    # THE SHAPE OF THIS LOOP IS THE WHOLE POINT.  Measured in steady state on
+    # job 602799: 0.327 s/page waiting on UCSF and 0.188 s/page rendering, on
+    # one core of eight.  Rendering is local CPU that involves UCSF not at all,
+    # so it parallelises with no ethical question attached; fetching does not,
+    # and README/GRID-RUNBOOK are explicit that widening it would be rude to a
+    # shared public archive and probably get us rate-limited.
+    #
+    # So: ONE serial fetcher -- UCSF sees exactly the request pattern it saw
+    # before this change -- feeding a pool that renders.  Throughput goes from
+    # 1.94 to ~3.2 pages/s and the bottleneck becomes the archive's own latency,
+    # which is where it should be.  Do not "improve" this by widening the fetch.
+    #
+    # Processes rather than threads: measured 3.99x vs 3.04x on 48 real PDFs
+    # (PyMuPDF and PIL release the GIL, but not enough of the time).  Both
+    # plateau at 4 workers, so more is waste.
+    workers = _render_workers()
+    inflight_cap = max(2 * workers, 4)
 
-        for idx, (_name, image) in enumerate(rendered[:max_pages_per_doc]):
-            image_path = out_images / f"{doc_id}_{idx}.png"
-            if not image_path.exists():
-                image.save(image_path)
-            pages.append(
-                doc_to_page(
-                    doc,
-                    str(image_path),
-                    image.width,
-                    image.height,
-                    page_index=idx,
-                    letterhead_author=letterhead_author,
-                    band_frac=band_frac,
+    indexed: list[tuple[int, Page]] = []
+    order = 0
+    session = requests.Session()
+
+    def _drain(futures: dict, block_until: int) -> None:
+        while len(futures) > block_until:
+            done = next(as_completed(futures))
+            doc, seq = futures.pop(done)
+            doc_id = str(doc.get("id", ""))
+            try:
+                rendered = done.result()
+            except Exception as exc:  # noqa: BLE001 - a dead id must not kill a 200k pull
+                if on_error:
+                    on_error(doc_id, exc)
+                (pdf_dir / f"{doc_id}.pdf").unlink(missing_ok=True)
+                continue
+            for idx, image_path, width, height in rendered:
+                indexed.append(
+                    (
+                        seq * 100 + idx,
+                        doc_to_page(
+                            doc,
+                            image_path,
+                            width,
+                            height,
+                            page_index=idx,
+                            letterhead_author=letterhead_author,
+                            band_frac=band_frac,
+                        ),
+                    )
                 )
+
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        futures: dict = {}
+        for doc in docs:
+            doc_id = str(doc.get("id", ""))
+            if len(doc_id) < 4:
+                continue
+            pdf_path = pdf_dir / f"{doc_id}.pdf"
+            try:
+                _common.http_download(pdf_url(doc_id), pdf_path, session=session)
+            except Exception as exc:  # noqa: BLE001 - a dead id must not kill a 200k pull
+                if on_error:
+                    on_error(doc_id, exc)
+                pdf_path.unlink(missing_ok=True)
+                continue
+
+            futures[pool.submit(_render_to_disk, str(pdf_path), str(out_images), doc_id, dpi, max_pages_per_doc)] = (
+                doc,
+                order,
             )
-    return pages
+            order += 1
+            # Bounded in-flight work: an unbounded submit queue would hold every
+            # rendered page's metadata and starve nothing but memory.
+            _drain(futures, inflight_cap)
+        _drain(futures, 0)
+
+    # Restore document order.  Tier assignment hashes the page id so it does not
+    # care, but a manifest that reshuffles between runs is a needless diff and
+    # makes two builds hard to compare by eye.
+    indexed.sort(key=lambda kv: kv[0])
+    return [p for _, p in indexed]
