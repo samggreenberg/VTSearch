@@ -1302,7 +1302,15 @@ class TestReportWholePageFigure:
         # Same contract as the provenance glosses: a kind with no swatch falls
         # back to grey and reads as "some other mark", which is the one thing
         # this figure is supposed to stop doing.
-        emitted = set(mods["spods"].MARK_CATEGORIES) | set(mods["spods"].CONTEXT_CATEGORIES)
+        # `LOCALISED_CONTEXT_CATEGORIES` since #3366: this assertion was written
+        # against `CONTEXT_CATEGORIES` in #3364, and #3366 renamed the constant
+        # in the same week -- both merged green on their own branches and dev
+        # was left red, because neither ran against the other.  The name here is
+        # deliberately the localised one: #3366 dropped `text` from the marks
+        # entirely (it was the page body, a property of the page rather than a
+        # thing on it), so a kind that is no longer emitted must not be required
+        # to carry a swatch.
+        emitted = set(mods["spods"].MARK_CATEGORIES) | set(mods["spods"].LOCALISED_CONTEXT_CATEGORIES)
         assert emitted <= set(mods["report"]._KIND_COLOURS)
         assert emitted <= set(mods["report"]._KIND_MEANING)
 
