@@ -534,6 +534,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
     # identity.  UCSF is in this list on purpose: its `author` metadata is a
     # candidate pool, not a class, so its letterhead bands are adjudicated by
     # the same path as SPODS's and StaVer's marks rather than being trusted.
+    #
+    # Tobacco800 is in it for a subtler reason (#3343).  It ships identity for
+    # its SIGNATURES -- GEDI carries an author id on those zones -- and none at
+    # all for its LOGOS, which is the half of the source this corpus exists to
+    # use.  Reading "Tobacco800 has ground-truth identities" as a fact about the
+    # whole source left its 432 logo marks unclustered and therefore classless,
+    # so the one source with a published logo protocol contributed 1,290 pages
+    # of distractors and zero eval classes, while its 130 signature classes were
+    # rejected as unqueryable.  Nothing warned: an absent class is not an error.
+    # `collect_refs` already takes only `class_id is None` marks of the queryable
+    # kinds, so listing the source here clusters the logos and cannot disturb a
+    # signature identity.
     from cluster_marks import cluster_source, load_adjudications, write_cluster_report
 
     same, different = load_adjudications(args.out / "adjudications.json")
@@ -541,7 +553,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:  # noqa: C901
         print(f"\nhonouring {len(same)} hand-merged and {len(different)} hand-separated pair(s)")
 
     summaries = []
-    for source in ("spods", "staver", "ucsf"):
+    for source in ("spods", "staver", "tobacco800", "ucsf"):
         if source not in selected:
             continue
         summary = cluster_source(

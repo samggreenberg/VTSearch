@@ -1161,3 +1161,48 @@ class TestRealMirrorLayouts:
         # The key exists with an empty list -- that is what made `if marks:`
         # the wrong test, and it is the behaviour the fix depends on.
         assert parsed == {"aao54e00_1": []}
+
+
+class TestTobacco800LogosAreClustered:
+    """Tobacco800 ships identity for signatures and none for logos.
+
+    The distinction is invisible at source level -- "Tobacco800 has GEDI ground
+    truth" is true, and taking it as a fact about the whole source is what left
+    the logos out of the clustering loop in #3343.  The result was a silent
+    one: 432 logo marks with no class_id, so the only source with a published
+    logo protocol contributed 1,290 distractor pages and zero eval classes,
+    while its 130 signature classes were rejected as unqueryable.  An absent
+    class raises nothing, and the survival curve counted the signature classes
+    it would never admit, so even the printed numbers looked plausible.
+    """
+
+    def _pages(self, mods):
+        signature = mods["common"].Mark(
+            kind="signature", box=(10, 10, 40, 20), class_id="tobacco800/signature_rjr", provenance="gt"
+        )
+        logo = mods["common"].Mark(kind="logo", box=(10, 200, 80, 60), class_id=None, provenance="gt")
+        return [
+            mods["common"].Page(
+                page_id=f"tobacco800/p{i}",
+                source="tobacco800",
+                path=f"/nonexistent/p{i}.tif",
+                width=600,
+                height=800,
+                marks=[signature, logo],
+                meta={},
+            )
+            for i in range(3)
+        ]
+
+    def test_collect_refs_takes_the_logos_and_leaves_the_signatures(self, mods):
+        refs = mods["cluster"].collect_refs(self._pages(mods), kinds=("logo", "stamp"), source="tobacco800")
+        # One per page, and every one a logo: signatures are out by kind, and an
+        # already-identified mark is out by class_id.  This is what makes adding
+        # the source to the loop safe rather than destructive.
+        assert len(refs) == 3
+        assert {r.kind for r in refs} == {"logo"}
+
+    def test_builder_clusters_tobacco800(self):
+        """The loop must name the source; a comment saying it should is not enough."""
+        src = (_DOCMARKS / "build_corpus.py").read_text()
+        assert 'for source in ("spods", "staver", "tobacco800", "ucsf"):' in src
