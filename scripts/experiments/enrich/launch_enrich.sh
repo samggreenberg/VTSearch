@@ -153,6 +153,25 @@ chunks)
   echo "watch: bash $0 status   |   block: bash $0 wait"
   ;;
 
+control)
+  # A non-default embedder, on datasets of its own media type.  The audio chunk
+  # carries `clap` inline because that control is the issue's premise; this is
+  # for the ones a result asks for afterwards -- e.g. `bge` on the text corpora,
+  # which says whether enrichment's damage there belongs to the media type or to
+  # E5's asymmetric query:/passage: convention.
+  shift
+  EMB="${1:?usage: launch_enrich.sh control <embedder> <dataset>...}"
+  shift
+  DS="${*:?usage: launch_enrich.sh control <embedder> <dataset>...}"
+  gpu="$(pick_gpu)"
+  jid=$(sbatch --parsable --job-name="$JOB_PREFIX-ctl-$EMB" --partition=gpu \
+    --gres="gpu:${gpu}:1" --cpus-per-task="$CPUS" --mem="$MEM" --time="$TIME" \
+    --output="$LOGS/ctl-$EMB-%j.out" \
+    --wrap "source $WT/gridenv.sh && $RUNENV && cd $HERE && python run_enrich.py --exp $EXP --wrappers --embedder $EMB --datasets $DS")
+  [[ "$jid" =~ ^[0-9]+$ ]] || { echo "CONTROL SUBMIT FAILED (empty job id)" >&2; exit 1; }
+  echo "control $EMB -> job $jid (gpu:$gpu, log: $LOGS/ctl-$EMB-$jid.out)"
+  ;;
+
 status)
   echo "=== queue ==="
   squeue -u "$USER" -o "%.10i %.18j %.9T %.11M %.6D %R" | grep -E "$JOB_PREFIX-|JOBID" || echo "(no $JOB_PREFIX-* jobs)"
@@ -186,6 +205,6 @@ wait)
   ;;
 
 *)
-  echo "usage: $0 {size [dataset]|chunks [chunk...]|status|wait}" >&2; exit 1
+  echo "usage: $0 {size [dataset]|chunks [chunk...]|control <embedder> <dataset>...|status|wait}" >&2; exit 1
   ;;
 esac

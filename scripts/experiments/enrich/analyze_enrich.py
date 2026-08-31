@@ -242,6 +242,16 @@ def main() -> int:
         "n_media_types": int(len(defaults)),
     }
 
+    # --- 3b. the secondary metric, on the same pairing ---
+    # P@10 is what a user sees on the first screen; AP is what the study decides
+    # on.  Reported so a win that only lives deep in the ranking cannot pass for
+    # a win the user would notice.
+    for metric in ("p10", "p5"):
+        alt = paired(df, "enriched", metric=metric)
+        summarise_by(alt, ["media_type", "embedder"]).sort_values(["media_type", "embedder"]).to_csv(
+            tables / f"per_media_type_{metric}.csv", index=False
+        )
+
     # --- 4. per-wrapper diagnostic ---
     wrap_rows = []
     for arm in sorted(a for a in df["arm"].unique() if a.startswith("w")):
