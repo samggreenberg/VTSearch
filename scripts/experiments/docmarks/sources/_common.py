@@ -295,13 +295,15 @@ def mask_to_boxes(
     ``merge_gap=0`` only for a mask whose components are genuinely separate
     marks.  :func:`merge_gap_for_page` derives the gap from the page size.
     """
-    comps = mask_components(mask, polarity=polarity, speckle_px=speckle_px)
+    import numpy as np
+
+    # Convert once and hand the array on: these masks are 8-megapixel scans, and
+    # a second np.asarray(PIL image) here costs as much as the decomposition.
+    arr = np.asarray(mask)
+    comps = mask_components(arr, polarity=polarity, speckle_px=speckle_px)
     if not comps:
         return []
 
-    import numpy as np
-
-    arr = np.asarray(mask)
     height, width = arr.shape[:2]
     min_ink = max(1.0, min_area_frac * float(width * height))
 
