@@ -305,6 +305,67 @@ def combiner_panel(results: Path, comb: pd.DataFrame, outdir: Path) -> list[str]
     return [name]
 
 
+def region_coherence_panel(regions: pd.DataFrame, outdir: Path) -> list[str]:
+    """Are the canvas's regions coherent, and does that degrade sensibly with zoom?
+
+    Left: within- against between-cluster cosine, one point per region. Anything
+    on or below the diagonal is a sign drawn over nothing. Right: the same gap
+    and the ground-truth purity against the layer the canvas shows at each zoom.
+    """
+    plt = _plt()
+    if regions.empty:
+        return []
+    fig, axes = plt.subplots(1, 2, figsize=(10.6, 4.3), layout="constrained")
+
+    ax = axes[0]
+    for emb, g in regions.groupby("embedder"):
+        ax.scatter(
+            g["between_cosine"],
+            g["within_cosine"],
+            s=6,
+            alpha=0.35,
+            color=EMB_COLOURS.get(str(emb), "#666"),
+            label=str(emb),
+        )
+    lo = float(np.nanmin(regions[["within_cosine", "between_cosine"]].to_numpy()))
+    hi = float(np.nanmax(regions[["within_cosine", "between_cosine"]].to_numpy()))
+    ax.plot([lo, hi], [lo, hi], color="#111", ls="--", lw=1.2)
+    ax.annotate(
+        "a region that means nothing\nwould sit on this line",
+        xy=(0.03, 0.93),
+        xycoords="axes fraction",
+        fontsize=7.5,
+        va="top",
+    )
+    ax.set_xlabel("mean cosine to everything else")
+    ax.set_ylabel("mean cosine within the region")
+    ax.set_title(f"Every one of {len(regions)} regions is above the line", fontsize=9)
+    ax.grid(alpha=0.25, lw=0.5)
+    leg = ax.legend(fontsize=7, frameon=False, markerscale=3)
+    for h in leg.legend_handles:
+        h.set_alpha(1.0)
+
+    ax = axes[1]
+    by = regions.groupby("layer")
+    layers = sorted(by.groups)
+    gap = [by.get_group(k)["coherence_gap"].median() for k in layers]
+    pur = [by.get_group(k)["gt_purity"].median() for k in layers]
+    ax.plot(layers, gap, "-o", color="#2b6cb0", lw=1.8, label="coherence gap (within − between)")
+    ax.plot(layers, pur, "-s", color="#d68910", lw=1.8, label="ground-truth purity")
+    ax.axhline(0.5, color="#d68910", ls=":", lw=1.0)
+    ax.set_xticks(layers)
+    ax.set_xlabel("Toponymy layer  (0 = finest, shown at deepest zoom)")
+    ax.set_title("Coherence degrades with zoom-out, in order", fontsize=9)
+    ax.grid(alpha=0.25, lw=0.5)
+    ax.legend(fontsize=8, frameon=False)
+
+    outdir.mkdir(parents=True, exist_ok=True)
+    name = "region_coherence.png"
+    fig.savefig(outdir / name, dpi=DPI)
+    plt.close(fig)
+    return [name]
+
+
 def all_figures(
     df: pd.DataFrame,
     shift: pd.DataFrame,
@@ -313,6 +374,7 @@ def all_figures(
     outdir: Path,
     results: Path,
     comb: pd.DataFrame | None = None,
+    regions: pd.DataFrame | None = None,
 ) -> list[str]:
     written: list[str] = []
     written += atlas_pit(Path(results), outdir)
@@ -321,4 +383,6 @@ def all_figures(
     written += dispersion_vs_pathlen(uni, outdir)
     written += domain_shift_matrix(shift, outdir)
     written += projection_panel(df, proj, Path(results), outdir)
+    if regions is not None:
+        written += region_coherence_panel(regions, outdir)
     return written

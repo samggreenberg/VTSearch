@@ -406,7 +406,10 @@ is not**, and both halves were unmeasured until now: neighbourhoods survive
 and the projection costs about 1.7 points of k-NN class purity.
 
 **The compaction radius is honest** — the one fit in this whole inventory that
-does what it says.
+does what it says — and so is the region clustering: **all 2832 browse regions
+are more self-similar than they are similar to everything else**, though by
+layer 3 nearly half of them have no ground-truth category holding even half
+their members.
 
 **And the obvious repair does not work.** Calibrating α per embedder — the first
 thing this report recommended — was then priced, and it makes `dinov3_patch`
@@ -425,6 +428,7 @@ how this whole issue started.
 | C1 | local structure kept, global lost | trust > 0.95 **and** Shepard < 0.6 | **0.956** and **0.288** | **confirmed** |
 | C2 | projection costs class purity | drop > 0 on ≥ 4 embedders | **5/5**, median **0.017** | **confirmed (small)** |
 | C3 | the 90th-percentile radius contains ~90 % | 0.85–0.95 | **0.894** | **confirmed** |
+| C4 | *(not pre-registered)* browse regions are coherent | — | **0 of 2832** below the diagonal | **coherent** |
 
 ## What was run
 
@@ -643,6 +647,63 @@ atlas.
 0.90, on every cell, independent of embedder. `_build_units` fits a statistic
 and that statistic means what it says.
 
+## C4 — are the browse canvas's named regions coherent? (inventory item 10)
+
+The inventory asks for "within-vs-between cosine coherence per named cluster".
+The *naming* half needs the captioner stack, but the **regions** do not:
+Toponymy clusters in its own dedicated ~5-D cosine UMAP
+(`signpost_build._clusterable_vectors`), and that clustering is what decides
+which items share a sign. Measuring it needs no texts, no namer and no LLM — so
+nothing below is confounded by caption quality.
+
+**2832 regions across all 25 environments**, with within- and between-cluster
+mean cosine computed in the *original* embedding rather than the 5-D reduction
+the clustering happened in.
+
+| layer | regions | median size | within | between | gap | GT purity | share purity < 0.5 |
+|---|---|---|---|---|---|---|---|
+| 0 (finest) | 1850 | 42 | 0.68 | 0.49 | **0.22** | 0.79 | 0.19 |
+| 1 | 696 | 133 | 0.63 | 0.49 | 0.17 | 0.65 | 0.25 |
+| 2 | 244 | 328 | 0.59 | 0.49 | 0.12 | 0.54 | 0.45 |
+| 3 (coarsest) | 42 | 703 | 0.54 | 0.48 | 0.065 | 0.51 | 0.48 |
+
+![region coherence](figures/region_coherence.png)
+
+*Left: every region's within-cluster cosine against its between-cluster cosine.
+A region that meant nothing would sit on the diagonal. Right: the coherence gap
+and ground-truth purity against the Toponymy layer, which is the zoom band the
+canvas shows each sign at.*
+
+**Every one of the 2832 regions has within > between — none sits on the
+diagonal.** The clustering is doing real work everywhere, which is the first
+time anyone has checked.
+
+**Coherence degrades with zoom-out, and it degrades in order.** The gap falls
+0.22 → 0.065 and purity 0.79 → 0.51 from the finest layer to the coarsest. That
+is the *desirable* shape — a sign shown at low zoom covers more ground and is
+allowed to be broader — but it puts a number on where the signs stop meaning
+much: at layers 2 and 3, **45–48 % of regions have no ground-truth category
+holding even half their members**, so nearly half the coarse signs are naming
+something no single label describes.
+
+**And `dinov3_patch` separates again — for the fourth time, independently.**
+Its regions sit in a completely different band of the left panel (between-cosine
+0.0–0.1 against 0.4–0.6 for the other four) while having the *largest* coherence
+gap (0.31 at the finest layer). The same low-concentration geometry that the
+atlas's r̄ = 0.61 flagged, that the Shepard panel showed as a displaced distance
+range, and that drives its domain-shift false alarms, shows up here as well. Its
+absolute similarities are compressed; its relative structure is the strongest in
+the grid. **Any threshold tuned on cosine magnitudes from the other four
+embedders will be wrong for it** — which is the general form of the
+`domain_shift_report` failure, arrived at from four unrelated measurements.
+
+**What is still not measured for item 10:** Toponymy's suppressed warnings
+(#2558). Capturing them needs a full fit including the namer, and the namer
+needs per-item texts — which on these datasets would have to be synthesised from
+the ground-truth categories, making the naming easier than production's and the
+warning rate unrepresentative. Rather than report a number that flatters the
+thing under test, this half is left open.
+
 ## Part D — the r² that was computed and thrown away
 
 `vtscore/timing/fit.py` was the one place in the tree that already computed a
@@ -680,7 +741,18 @@ running this guard on patch embedders**, and if it is wanted there, fix the
 atlas's per-node vMF model rather than any threshold on top of it.
 
 **The browse canvas needs no change.** C1's split verdict is the expected
-behaviour of UMAP, C2's cost is 1.7 points, and C3 is correct.
+behaviour of UMAP, C2's cost is 1.7 points, C3 is correct, and C4 finds every
+region coherent. The one thing worth knowing is that coarse signs are weak: at
+the two coarsest layers roughly half the regions have no dominant ground-truth
+category, so a sign at low zoom should be read as "roughly this way" rather than
+as a label.
+
+**`dinov3_patch`'s geometry is the run's through-line.** Four independent
+measurements — the atlas's node r̄, the Shepard distance range, and both the
+within- and between-cluster cosines of the browse regions — say the same thing:
+its embedding space is far less concentrated than the four single-vector spaces.
+That is why a guard with a fixed α fails on it, and it is a standing warning
+about any other threshold in the tree tuned on cosine magnitudes.
 
 **Nothing here contradicts part 1**, and one thing rhymes with it: the arm with
 the worst structural fit statistics (`dinov3_patch`) is again the arm that works

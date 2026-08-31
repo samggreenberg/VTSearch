@@ -83,6 +83,49 @@ def load_shift(results: Path) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
+#: C4: a region whose within-similarity does not exceed its between-similarity
+#: is a sign the canvas draws over nothing.
+C4_MIN_GAP = 0.0
+#: And one whose dominant ground-truth category holds less than half its members
+#: is a region no single name describes.
+C4_PURITY_FLOOR = 0.5
+
+
+def load_regions(results: Path) -> pd.DataFrame:
+    """Per-cluster coherence rows from ``region_coherence_3329.py``."""
+    frames = [pd.read_csv(p) for p in sorted(Path(results).glob("regions_*.csv")) if p.stat().st_size > 0]
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def c4_region_coherence(regions: pd.DataFrame) -> pd.DataFrame:
+    """Are the browse canvas's regions coherent, and by how much, per zoom layer?
+
+    Reported per LAYER because the canvas shows different layers at different
+    zooms: a coarse region is allowed to be broader than a fine one, and a
+    single pooled number would hide whether the degradation is orderly.
+    """
+    if regions.empty:
+        return pd.DataFrame()
+    rows = []
+    for layer, g in regions.groupby("layer", sort=True):
+        gap = g["coherence_gap"].dropna()
+        pur = g["gt_purity"].dropna()
+        rows.append(
+            {
+                "layer": int(layer),
+                "n_clusters": int(len(g)),
+                "size_median": float(g["size"].median()),
+                "within_cosine_median": float(g["within_cosine"].median()),
+                "between_cosine_median": float(g["between_cosine"].median()),
+                "coherence_gap_median": float(gap.median()) if len(gap) else float("nan"),
+                "share_gap_at_or_below_zero": float((gap <= C4_MIN_GAP).mean()) if len(gap) else float("nan"),
+                "gt_purity_median": float(pur.median()) if len(pur) else float("nan"),
+                "share_purity_below_floor": float((pur < C4_PURITY_FLOOR).mean()) if len(pur) else float("nan"),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
 def _pick(df: pd.DataFrame, family: str, scope: str, statistic: str) -> pd.DataFrame:
     m = (df["family"] == family) & (df["scope"] == scope) & (df["statistic"] == statistic)
     return df[m]
@@ -451,6 +494,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     comb = combiner_comparison(df)
     b5src = b5_by_source(shift)
     repair = per_embedder_alpha_repair(results, shift)
+    regions = load_regions(results)
+    c4 = c4_region_coherence(regions)
 
     for name, frame in (
         ("b1_b2_atlas_uniformity", uni),
@@ -462,6 +507,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         ("b5_power_by_source", b5src),
         ("b2_combiner_comparison", comb),
         ("b6_alpha_repair", repair),
+        ("c4_region_coherence", c4),
     ):
         frame.to_csv(out / "agg" / f"{name}.csv", index=False)
 
@@ -531,6 +577,17 @@ def main(argv: Optional[list[str]] = None) -> int:
         "c2_meets_bar": _by_embedder_count(proj.assign(drops=proj["purity_drop"] > 0), "drops") >= C2_MIN_EMBEDDERS,
         "c3_containment_median": float(proj["containment_core"].median()),
         "c3_meets_bar": bool(C3_LO <= proj["containment_core"].median() <= C3_HI),
+        "c4_n_clusters": int(len(regions)),
+        "c4_share_gap_at_or_below_zero": float((regions["coherence_gap"].dropna() <= C4_MIN_GAP).mean())
+        if not regions.empty
+        else float("nan"),
+        "c4_share_purity_below_floor": float((regions["gt_purity"].dropna() < C4_PURITY_FLOOR).mean())
+        if not regions.empty and regions["gt_purity"].notna().any()
+        else float("nan"),
+        "c4_gap_finest_layer": float(c4.loc[c4["layer"] == 0, "coherence_gap_median"].iloc[0])
+        if not c4.empty and (c4["layer"] == 0).any()
+        else float("nan"),
+        "c4_gap_coarsest_layer": float(c4["coherence_gap_median"].iloc[-1]) if not c4.empty else float("nan"),
         "conformal_control_ks_median": float(conf.loc[conf["resolvable"], "ks_in"].median())
         if conf["resolvable"].any()
         else float("nan"),
@@ -543,7 +600,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if not args.no_figures:
         import figures_structure_3329 as F  # noqa: PLC0415
 
-        written = F.all_figures(df, shift, uni, proj, out / "figures", results, comb)
+        written = F.all_figures(df, shift, uni, proj, out / "figures", results, comb, regions)
         if written:
             print("figures: " + ", ".join(written))
     return 0

@@ -43,6 +43,11 @@
   "c2_meets_bar": true,
   "c3_containment_median": 0.8944660272444243,
   "c3_meets_bar": true,
+  "c4_n_clusters": 2832,
+  "c4_share_gap_at_or_below_zero": 0.0,
+  "c4_share_purity_below_floor": 0.22954303931987247,
+  "c4_gap_finest_layer": 0.216755425175717,
+  "c4_gap_coarsest_layer": 0.06519388969893215,
   "conformal_control_ks_median": 0.0467960942204635,
   "conformal_unresolvable_cells": 0,
   "path_len_unresolvable_cells": 9
