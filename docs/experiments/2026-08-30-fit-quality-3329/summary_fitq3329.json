@@ -1,0 +1,23 @@
+{
+  "n_fitq_rows": 23064,
+  "n_cells_dropped": {
+    "missing": 0,
+    "empty": 0,
+    "unreadable": 0,
+    "header_only": 0
+  },
+  "arms": [
+    "siglip+dinov3_patch/max_patch",
+    "siglip+dinov3_patch/whole_image",
+    "siglip/whole_image"
+  ],
+  "h1_any_arm_meets_bar": false,
+  "h2_region_meets_bar": true,
+  "h3_anchors_inert": false,
+  "h4_misfit_predicts_regret": false,
+  "share_steps_below_class_floor": 0.0,
+  "share_steps_with_a_fit": 1.0,
+  "shape_unresolved": false,
+  "degenerate_fit_rate_high": false,
+  "verdict": "misfit may be real but does not predict regret at the operating point"
+}

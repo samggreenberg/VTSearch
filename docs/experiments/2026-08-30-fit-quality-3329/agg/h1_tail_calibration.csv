@@ -1,0 +1,4 @@
+arm,n_steps,tail_ratio_median,tail_ratio_se,bar,resolvable_above_one,meets_bar
+siglip+dinov3_patch/max_patch,1924,1.0488500414144122,0.0016443012687285454,1.5,True,False
+siglip+dinov3_patch/whole_image,1924,1.023569049665086,0.0012970589446310795,1.2,True,False
+siglip/whole_image,1924,1.0418854286373902,0.0010460075218722362,1.2,True,False

@@ -326,11 +326,53 @@ def _ols_slope(X: np.ndarray, y: np.ndarray) -> tuple[float, float]:
     return float(beta[-1]), float(math.sqrt(max(0.0, cov[-1, -1])))
 
 
+def _figures(fq: pd.DataFrame, main_frame: pd.DataFrame, out: Path, args: Any) -> list[str]:
+    """Every figure this report owes, from the same frames as its tables.
+
+    Kept behind ``--no-figures`` so a re-analysis that only wants the CSVs does
+    not pay for matplotlib, and so the selftest (which plants numbers, not
+    pictures) can skip it.
+    """
+    import figures_fitq_3329 as F  # noqa: PLC0415
+
+    figdir = out / "figures"
+    baseline = args.baseline or (out / "text_baseline.csv")
+    written = F.quality_pair(main_frame, figdir, baseline)
+    written += F.statistics_over_clicks(
+        fq,
+        figdir,
+        bars={"h2": H2_SKEW_REGION, "h3_mass": H3_MASS_MAX, "h3_dmu": H3_DMU_MAX},
+    )
+    if args.worked:
+        worked = Path(args.worked)
+        written += F.worked_cell(
+            {
+                "siglip": worked / "worked_0.npz",
+                "siglip+dinov3_patch": worked / "worked_12.npz",
+            },
+            figdir,
+            checkpoints=(5, 20, 50, 100),
+        )
+    return written
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     ap = argparse.ArgumentParser(description="Analyse the #3329 goodness-of-fit run.")
     ap.add_argument("--results", required=True, help="CALIB_RESULTS directory")
     ap.add_argument("--out", required=True, help="output directory")
     ap.add_argument("--no-figures", action="store_true")
+    ap.add_argument(
+        "--baseline",
+        default=None,
+        help="text_baseline.py CSV: the click-0 anchor the quality curves are drawn from "
+        "(default: <out>/text_baseline.csv)",
+    )
+    ap.add_argument(
+        "--worked",
+        default=None,
+        metavar="DIR",
+        help="directory of worked_cell_3329.py .npz captures, for the fit-overlay figure",
+    )
     args = ap.parse_args(argv)
 
     results = Path(args.results)
@@ -358,6 +400,11 @@ def main(argv: Optional[list[str]] = None) -> int:
         ("h4_regret", h4),
     ):
         frame.to_csv(out / "agg" / f"{name}.csv", index=False)
+
+    if not args.no_figures:
+        figures = _figures(fq, main_frame, out, args)
+        if figures:
+            print("figures: " + ", ".join(figures))
 
     # The denominator, stated rather than implied.
     shape_floor_share = float("nan")
