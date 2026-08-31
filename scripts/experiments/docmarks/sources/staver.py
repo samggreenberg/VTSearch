@@ -141,14 +141,22 @@ def build_pages(
     unpacked: Path,
     *,
     min_area_frac: float,
-    merge_gap: int = 10,
+    max_area_frac: float = 1.0,
+    merge_gap: int | None = None,
     limit: int | None = None,
 ) -> tuple[list[Page], list[str]]:
     """Every StaVer page as a :class:`Page`.
 
     Returns ``(pages, warnings)``; *warnings* names pages where the number of
     merged components disagrees with the count the dataset records, which is the
-    signal that the merge gap needs tuning rather than that the data is wrong.
+    signal that the merge gap needs tuning rather than that the data is wrong,
+    plus any box rejected for covering more than *max_area_frac* of its page.
+
+    ``merge_gap`` defaults to :func:`_common.merge_gap_for_page`, derived per
+    page from its size.  The merge runs over the *unfiltered* components and the
+    area floor is applied to each merged group's ink; reversing that deletes a
+    broken stamp's fragments before the merge can reassemble them, which is the
+    bug this counter was built to detect (issue #3361).
     """
     from PIL import Image
 
@@ -172,8 +180,12 @@ def build_pages(
         with Image.open(scan) as im:
             width, height = im.size
         with Image.open(mask_path) as im:
-            boxes = _common.mask_to_boxes(im.convert("L"), min_area_frac=min_area_frac)
-        boxes = _common.merge_overlapping(boxes, gap=merge_gap)
+            gap = merge_gap if merge_gap is not None else _common.merge_gap_for_page(width, height)
+            boxes = _common.mask_to_boxes(im.convert("L"), min_area_frac=min_area_frac, merge_gap=gap)
+        boxes, oversize = _common.reject_oversize(boxes, width, height, max_area_frac)
+        for box in oversize:
+            frac = box[2] * box[3] / float(width * height)
+            warnings.append(f"staver/{stem}: dropped a stamp box covering {frac:.1%} of the page")
 
         meta: dict[str, Any] = {}
         info_path = info_by_stem.get(stem)

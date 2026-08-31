@@ -124,6 +124,19 @@ not list every commit. Use `git log` for the full history.
 
 ### Fixed
 
+- **A results exporter's `dynamic_options` select is now filled in, in both
+  places an exporter is configured.** A `"select"` field declared with
+  `dynamic_options=True` is supposed to have its options computed at runtime by
+  the plugin's `get_field_options()`, which is how an exporter whose
+  destinations are only knowable then (mailboxes, buckets, remote queues) offers
+  real choices. Exporters never had the route the importer families have, so the
+  dropdown rendered the (usually empty) list frozen into the plugin definition —
+  the only way to get options was to hard-code them at definition time. Both the
+  Export modal and Settings › Auto-Find's **Results Exporter** tab now fetch the
+  live list (`POST /api/exporters/field-options/<name>`), re-fetch a field when
+  something it declares in `depends_on` changes, show fetch failures inline, and
+  honour `allow_free_text` by rendering a combobox. (Issue #3360.)
+
 - **One file a host won't serve no longer sinks a whole multi-file demo
   download.** The Apollo 11 Mission Audio demo pulls its tracks as separate
   files from the Internet Archive, which serves each one from a data node that

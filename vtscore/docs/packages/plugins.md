@@ -128,9 +128,23 @@ a decimal - e.g. `step="0.1"` or `default="1.0"`.
 
 A `"select"` field marked `dynamic_options=True` has its options
 computed at runtime by the plugin's `get_field_options(field_key,
-current_values) -> list[str]` method. List dependencies in
-`depends_on=[...]` so the frontend re-fetches whenever any depended-on
-field changes.
+current_values) -> list[FieldOption]` method, which `PluginBase`
+declares (the default raises `NotImplementedError`, naming the field).
+List dependencies in `depends_on=[...]` so the frontend re-fetches
+whenever any depended-on field changes.
+
+Every family that renders a field form serves the options over a route
+of the same shape, so the hook works the same wherever the plugin lives:
+dataset importers (`POST /api/dataset/import/<name>/options`), label
+importers (`POST /api/label-importers/field-options/<name>`), datasource
+importers (`POST /api/datasource-import/<name>/options`), seed importers
+(`POST /api/seed-import/<name>/options`), and results exporters
+(`POST /api/exporters/field-options/<name>`).
+
+A dynamic select's declared `options` are only a seed for the first
+render, so the CLI does *not* pin the generated flag's `choices` to them
+and the request schema does not validate against them - the value a
+plugin resolves at runtime is by definition not in the declared list.
 
 `PluginField.to_dict()` returns the JSON shape served by every plugin
 listing endpoint; the keys mirror the dataclass attributes 1-to-1 (with

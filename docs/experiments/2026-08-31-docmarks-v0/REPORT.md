@@ -1,5 +1,11 @@
 # DocMarks v0 — what the stamp-detection corpus looks like
 
+> **Superseded in part by [v1](../2026-08-31-docmarks-v1/REPORT.md).** The look-at-it
+> pass below stands, but two of its numbers were artefacts of a mask-decomposition bug
+> ([#3361](https://github.com/samggreenberg/VTSearch/issues/3361)): the bimodal size
+> distribution and the 45.95% "largest mark". Fixing it also invalidated the 0.16
+> clustering threshold read off these marks. Kept as written — it is the evidence.
+
 **2026-08-31.** The pictures are the point, and they are in the self-contained
 page beside this file: [`report.html`](report.html) (open it in a browser —
 GitHub renders raw HTML as source). 356 real images: whole pages with their

@@ -52,6 +52,27 @@ arrival. That path runs the same `validate_browser_url` check, but drops an
 unusable URL and notes it in `message` rather than failing the request: the
 export already happened and the scored results must survive it.
 
+### Dynamic field options
+
+```
+POST /api/exporters/field-options/{exporter_name}
+```
+
+**Body:** `{"field_key": "...", "values": {...}}` (`values` is a snapshot of
+the form's current field values)
+
+Returns the dropdown options for a `dynamic_options` field on a results
+exporter, for an exporter whose destinations are only knowable at runtime.
+Both surfaces that render exporter fields use it: the Export modal and the
+Settings › Auto-Find results exporter.
+
+→ `{"options": [{"value": "...", "label": "..."}, ...]}` (same shape as the
+label-importer route below).
+
+Errors: 400 (unknown/non-dynamic field key), 404 (unknown exporter),
+501 (exporter does not implement `get_field_options`),
+502 (remote service backing dynamic options failed).
+
 **Streaming support** (CLI `--autodetect --stream-results` for sources larger
 than RAM): `server_json_file` (NDJSON), `server_csv_file`, and `gui` write hits
 incrementally; `webhook` and `email_smtp` deliver in `batch_size`-sized batches
@@ -78,7 +99,8 @@ GET /api/label-importers
 POST /api/label-importers/field-options/{importer_name}
 ```
 
-**Body:** `{"field_key": "...", "field_values": {...}}`
+**Body:** `{"field_key": "...", "values": {...}}` (`values` is a snapshot of
+the form's current field values)
 
 Returns the dropdown options for a dynamic-options field on a label importer
 (used to populate dependent selects in the importer form).

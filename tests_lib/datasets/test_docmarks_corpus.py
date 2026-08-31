@@ -144,6 +144,97 @@ class TestMaskToBoxes:
             mods["common"].mask_to_boxes(np.zeros((10, 10), dtype=np.uint8), polarity="sideways")
 
 
+#: A page the size of a real scan, so that the 0.0002 area floor is a real
+#: number (260 px of ink) rather than something a toy fixture can clear by
+#: accident.
+_PAGE_W, _PAGE_H = 1000, 1300
+
+
+def _stroke_stamp(origin=(120, 120), strokes=12):
+    """A "stamp" mask built the way a real one decomposes: many thin strokes.
+
+    Each stroke is 2 px wide and 24 px tall -- 48 filled px against a floor of
+    ``0.0002 * 1000 * 1300`` = 260 px, so *every* fragment is individually well
+    below it -- and consecutive strokes sit 10 px apart, further than the old
+    fixed ``gap=6`` could bridge.
+    """
+    mask = np.zeros((_PAGE_H, _PAGE_W), dtype=np.uint8)
+    ox, oy = origin
+    for i in range(strokes):
+        x = ox + i * 10
+        mask[oy : oy + 24, x : x + 2] = 255
+    return mask
+
+
+class TestFragmentingStamps:
+    """The geometry bug of issue #3361, pinned from both ends.
+
+    A stamp's mask is not one component: it is a ring, the text inside it, and a
+    broken arc where the ink did not take -- or, for a script stamp, one
+    component per pen stroke. Every one of those is individually below the area
+    floor. Running the floor *before* the merge therefore deleted eleven of the
+    dozen as "speckle", left the merge nothing to reassemble, and promoted the
+    one or two chunkiest survivors to classes of their own. That is how
+    ``spods/stamp_00129_1`` came to be 38 instances of the word "New".
+
+    The failure is silent in both directions, which is why both are pinned: too
+    strict a floor yields *zero* boxes where a mark plainly is, and too small a
+    gap yields *two*.
+    """
+
+    def test_a_stamp_of_sub_floor_strokes_is_one_box_not_zero_and_not_two(self, mods):
+        mask = _stroke_stamp()
+        gap = mods["common"].merge_gap_for_page(_PAGE_W, _PAGE_H)
+
+        boxes = mods["common"].mask_to_boxes(mask, min_area_frac=0.0002, merge_gap=gap)
+
+        assert len(boxes) == 1, f"expected one stamp, got {len(boxes)}: {boxes}"
+        x, y, w, h = boxes[0]
+        assert (x, y) == (120, 120)
+        assert (w, h) == (112, 24)
+
+    def test_filtering_before_merging_is_what_loses_it(self, mods):
+        # The old order, spelled out: floor first (mask_to_boxes with no merge),
+        # then merge. Every stroke is below the floor, so nothing survives to
+        # merge and the stamp vanishes entirely.
+        mask = _stroke_stamp()
+        filtered_first = mods["common"].mask_to_boxes(mask, min_area_frac=0.0002, merge_gap=0)
+        assert mods["common"].merge_overlapping(filtered_first, gap=6) == []
+
+    def test_the_merged_group_is_judged_on_its_ink_not_its_box(self, mods):
+        # A ring is mostly hole, so a merged group's box area wildly overstates
+        # how much ink it carries. The floor must see the ink.
+        comps = mods["common"].mask_components(_stroke_stamp())
+        merged = mods["common"].merge_components(comps, gap=16)
+        assert len(merged) == 1
+        assert merged[0].ink == sum(c.ink for c in comps) == 12 * 48
+        assert merged[0].ink < merged[0].box[2] * merged[0].box[3]
+
+    def test_true_single_pixel_speckle_cannot_bridge_two_marks(self, mods):
+        # The one filter that must still run *before* the merge. Two marks 40 px
+        # apart, with a trail of single pixels between them: keep the trail and
+        # the merge welds the pair into one mark.
+        mask = np.zeros((300, 300), dtype=np.uint8)
+        mask[100:140, 40:80] = 255
+        mask[100:140, 160:200] = 255
+        for x in range(85, 160, 10):
+            mask[120, x] = 255
+        boxes = mods["common"].mask_to_boxes(mask, min_area_frac=0.0, merge_gap=12)
+        assert len(boxes) == 2
+
+
+class TestMergeGap:
+    def test_scales_with_the_page(self, mods):
+        gap = mods["common"].merge_gap_for_page
+        # A gap in pixels does not travel between a 950 px scan and a 2,500 px
+        # one: the fragments of a broken stamp sit a fixed fraction of the stamp
+        # apart, and the stamp is a fixed fraction of the page.
+        assert gap(2500, 3300) > gap(950, 1300) > gap(200, 200)
+
+    def test_never_falls_below_the_absolute_floor(self, mods):
+        assert mods["common"].merge_gap_for_page(10, 10) == mods["common"].MERGE_GAP_MIN_PX
+
+
 class TestMergeOverlapping:
     def test_merges_a_fragmented_stamp_into_one_mark(self, mods):
         # A rubber stamp's mask breaks into a ring plus its inner text; left
@@ -158,6 +249,21 @@ class TestMergeOverlapping:
         assert len(mods["common"].merge_overlapping(boxes, gap=6)) == 2
 
 
+class TestRejectOversize:
+    def test_a_page_sized_box_is_rejected_and_reported(self, mods):
+        # spods/00975: a ruled table whose borders weld the whole grid into one
+        # component, boxed at 45.9% of the page and captioned "the largest mark".
+        table = (30, 40, 900, 700)
+        stamp = (100, 100, 200, 200)
+        kept, rejected = mods["common"].reject_oversize([stamp, table], 1000, 1400, 0.25)
+        assert kept == [stamp]
+        assert rejected == [table]
+
+    def test_an_ordinary_mark_is_untouched(self, mods):
+        kept, rejected = mods["common"].reject_oversize([(10, 10, 90, 90)], 1000, 1400, 0.25)
+        assert (kept, rejected) == ([(10, 10, 90, 90)], [])
+
+
 # ------------------------------------------------------------------- sources
 
 
@@ -169,23 +275,79 @@ class TestSpods:
     def test_page_number(self, mods, name, expected):
         assert mods["spods"].page_number(Path(name)) == expected
 
-    def test_marks_for_page_reads_every_category(self, mods, tmp_path):
+    @staticmethod
+    def _write_gt(gt, page_no, masks):
+        """``{kind: 2-D array}`` -> ``gt/<kind>/image (n).png``."""
         from PIL import Image
 
-        gt = tmp_path / "gt"
-        for kind, box in (("logo", (20, 20, 60, 40)), ("stamp", (200, 300, 80, 80))):
-            arr = np.zeros((600, 500), dtype=np.uint8)
-            x, y, w, h = box
-            arr[y : y + h, x : x + w] = 255
-            (gt / kind).mkdir(parents=True)
-            Image.fromarray(arr).save(gt / kind / "image (7).png")
+        for kind, arr in masks.items():
+            (gt / kind).mkdir(parents=True, exist_ok=True)
+            Image.fromarray(arr).save(gt / kind / f"image ({page_no}).png")
 
-        marks = mods["spods"].marks_for_page(gt, 7, min_area_frac=0.0)
-        by_kind = {m.kind: m.box for m in marks}
+    @staticmethod
+    def _box_mask(box, shape=(600, 500)):
+        arr = np.zeros(shape, dtype=np.uint8)
+        x, y, w, h = box
+        arr[y : y + h, x : x + w] = 255
+        return arr
+
+    def test_marks_for_page_reads_every_category(self, mods, tmp_path):
+        gt = tmp_path / "gt"
+        self._write_gt(
+            gt,
+            7,
+            {
+                "logo": self._box_mask((20, 20, 60, 40)),
+                "stamp": self._box_mask((200, 300, 80, 80)),
+            },
+        )
+
+        found = mods["spods"].marks_for_page(gt, 7, width=500, height=600, min_area_frac=0.0)
+        by_kind = {m.kind: m.box for m in found.marks}
         assert by_kind == {"logo": (20, 20, 60, 40), "stamp": (200, 300, 80, 80)}
         # Identity is never invented at parse time: SPODS does not ship it.
-        assert all(m.class_id is None for m in marks)
-        assert all(m.provenance == "gt" for m in marks)
+        assert all(m.class_id is None for m in found.marks)
+        assert all(m.provenance == "gt" for m in found.marks)
+
+    def test_a_stroke_built_stamp_survives_the_floor_as_one_mark(self, mods, tmp_path):
+        # The end-to-end shape of issue #3361, through the real adapter: a stamp
+        # whose components are each below the area floor must come out as one
+        # box, not zero and not several.
+        gt = tmp_path / "gt"
+        self._write_gt(gt, 3, {"stamp": _stroke_stamp()})
+
+        found = mods["spods"].marks_for_page(gt, 3, width=_PAGE_W, height=_PAGE_H, min_area_frac=0.0002)
+        assert [m.kind for m in found.marks] == ["stamp"]
+        assert found.marks[0].box == (120, 120, 112, 24)
+
+    def test_the_text_mask_becomes_page_metadata_not_marks(self, mods, tmp_path):
+        # SPODS' text mask is the page body. Emitted as marks it produced ~1.1
+        # "marks" per page -- whichever headings and table rules had an underline
+        # welding their glyphs into one component -- which were never query
+        # classes but leaked into every consumer that read `page.marks` without a
+        # kind filter, starting with the synthetic-background selector.
+        gt = tmp_path / "gt"
+        body = np.zeros((600, 500), dtype=np.uint8)
+        body[100:130, 40:460] = 255  # an underlined heading: one fat component
+        body[200:210, 40:200] = 255
+        self._write_gt(gt, 9, {"logo": self._box_mask((20, 20, 60, 40)), "text": body})
+
+        found = mods["spods"].marks_for_page(gt, 9, width=500, height=600, min_area_frac=0.0002)
+
+        assert [m.kind for m in found.marks] == ["logo"]
+        assert found.meta["text_components"] == 2
+        assert found.meta["text_frac"] == pytest.approx((30 * 420 + 10 * 160) / (500 * 600), rel=1e-3)
+
+    def test_a_page_scale_box_is_rejected_with_a_warning(self, mods, tmp_path):
+        # spods/00975 boxed 45.9% of the page and the report captioned it "the
+        # largest mark".
+        gt = tmp_path / "gt"
+        self._write_gt(gt, 11, {"stamp": self._box_mask((20, 20, 400, 350))})
+
+        found = mods["spods"].marks_for_page(gt, 11, width=500, height=600, min_area_frac=0.0002, max_area_frac=0.25)
+        assert found.marks == []
+        assert len(found.warnings) == 1
+        assert "46.7% of the page" in found.warnings[0]
 
     def test_find_tree_reports_an_unrecognised_layout(self, mods, tmp_path):
         (tmp_path / "something-else").mkdir()

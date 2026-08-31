@@ -20,7 +20,7 @@ import subprocess
 import zipfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Iterator, Optional
+from typing import Any, Iterable, Iterator, NamedTuple, Optional, Sequence
 
 # --------------------------------------------------------------------------
 # Records
@@ -129,19 +129,98 @@ def stable_rank(key: str, salt: str) -> float:
 # --------------------------------------------------------------------------
 # Masks -> boxes
 # --------------------------------------------------------------------------
+#
+# The order of operations here is load-bearing, and getting it wrong is silent.
+#
+# A mark's mask is *not* one connected component.  A rubber stamp breaks into a
+# ring, the text inside it, and a dozen broken arcs where the ink did not take;
+# a script stamp breaks into one component per pen stroke.  Individually those
+# strokes are thin and tiny.  So an area floor applied to *raw* components
+# deletes eleven fragments of the dozen as "speckle", the merge that exists to
+# reassemble them never sees them, and what survives is the one or two chunkiest
+# pieces — which then become their own "classes".  That is how ``stamp_00129_1``
+# came to be 38 instances of the word "New" (issue #3361).
+#
+# The correct order is therefore: **decompose, merge, then filter.**  The floor
+# asks "does this assembled group carry enough ink to be a mark?", which is the
+# question it was always meant to ask, rather than "is this individual pen
+# stroke big enough to be a mark?", which has no useful answer.
+#
+# The one thing that must still be dropped *before* the merge is true single-
+# pixel scan noise: it carries no evidence either way, but it can extend a box
+# or bridge a gap between two marks that should stay apart.  That is
+# ``speckle_px`` — an absolute, deliberately tiny floor, not a page fraction.
 
 
-def mask_to_boxes(
+#: Filled-pixel count at or below which a raw component is scan noise rather
+#: than evidence.  Dropped *before* the merge; see the note above for why this
+#: is the only pre-merge filter.
+SPECKLE_PX = 4
+
+#: Merge gap as a fraction of the page's longest side, with an absolute floor.
+#: A gap in pixels does not travel between a 950 px thumbnail and a 3,500 px
+#: scan, and the distance between a broken stamp's fragments scales with the
+#: stamp, which scales with the page.  See :func:`merge_gap_for_page`.
+#:
+#: **0.035 is read off the data, not chosen.**  Swept over all 1,088 SPODS pages
+#: (A4 at 300 DPI, ~2,476x3,480), the per-page mark count falls as the gap grows
+#: and then stops dead: every kind reaches exactly one mark per page that has
+#: one, and from **gap 90 px through gap 300 px the output is identical** — same
+#: counts, same median (428 px), same p90, same largest box (758 px, 3.5% of the
+#: page).  Nothing changes over a 3.3x range because on these pages there is
+#: nothing else within 300 px of a mark to merge with, which is as clean a
+#: plateau as a parameter ever gets.  Below 90 the merge under-runs and splits
+#: real stamps: at 60 the three-line "RTI Unit" stamp on ``spods/00837`` breaks
+#: across its 70 px line spacing, and at 20 the ``spods/00129`` stamp splits into
+#: the fragments that became the "New" class.  0.035 lands at 122 px on a SPODS
+#: page — 1.35x inside the plateau's lower edge, and kept nearer that edge than
+#: the middle because other sources (StaVer) do carry two stamps on one page,
+#: where an over-large gap would weld them.
+#:
+#: **One value, not one per kind**, because the sweep says so: the three SPODS
+#: kinds settle at different points (logo from 42 px, signature from 60, stamp
+#: from 90) but they settle into the *same* plateau, so any gap at or above the
+#: stamp's requirement is simultaneously correct for all three.  Splitting it per
+#: kind would be three numbers where the data supports one.
+MERGE_GAP_FRAC = 0.035
+MERGE_GAP_MIN_PX = 6
+
+
+class Component(NamedTuple):
+    """One connected component of a mask: where it is, and how much ink it is.
+
+    ``ink`` is the filled-pixel count, which is *not* the box area — a ring is
+    mostly hole.  Keeping the two apart is what lets the area floor run after
+    the merge: a merged group's ink is the sum of its parts' ink, while its box
+    area would count the paper between them.
+    """
+
+    box: tuple[int, int, int, int]  # x, y, w, h
+    ink: int
+
+
+def merge_gap_for_page(width: int, height: int) -> int:
+    """The merge gap to use on a page of this size, in pixels.
+
+    Scale-relative rather than fixed: the fragments of a broken stamp sit a
+    fixed fraction of the stamp apart, and a stamp is a fixed fraction of the
+    page.  ``MERGE_GAP_MIN_PX`` keeps a thumbnail-sized page from merging
+    nothing at all.
+    """
+    return max(MERGE_GAP_MIN_PX, round(MERGE_GAP_FRAC * max(width, height)))
+
+
+def mask_components(
     mask: Any,
-    min_area_frac: float = 0.0002,
     *,
     polarity: str = "auto",
-) -> list[tuple[int, int, int, int]]:
-    """Connected components of a binary *mask* as ``(x, y, w, h)`` boxes.
+    speckle_px: int = SPECKLE_PX,
+) -> list[Component]:
+    """Every connected component of a binary *mask*, unfiltered but de-speckled.
 
-    SPODS and StaVer both ship per-category pixel masks rather than boxes, so
-    this is the first step for either.  Components below *min_area_frac* of the
-    page are dropped as scanning speckle.
+    This is the raw decomposition: no page-fraction floor, no merging.  Callers
+    that want *marks* rather than components want :func:`mask_to_boxes`, which
+    applies both in the right order.
 
     **Polarity is detected, not assumed.**  SPODS ships 1-bit masks with the
     mark in *black* on white paper, so a naive "non-zero is foreground" reads
@@ -177,18 +256,15 @@ def mask_to_boxes(
     if not binary.any():
         return []
 
-    page_area = float(binary.shape[0] * binary.shape[1])
-    min_area = max(1.0, min_area_frac * page_area)
-
-    boxes: list[tuple[int, int, int, int]] = []
+    comps: list[Component] = []
     try:
         import cv2
 
         n, _labels, stats, _centroids = cv2.connectedComponentsWithStats(binary, connectivity=8)
         for i in range(1, n):  # 0 is background
-            x, y, w, h, area = (int(v) for v in stats[i])
-            if area >= min_area:
-                boxes.append((x, y, w, h))
+            x, y, w, h, ink = (int(v) for v in stats[i])
+            if ink > speckle_px:
+                comps.append(Component((x, y, w, h), ink))
     except ImportError:
         from scipy import ndimage  # type: ignore[import-untyped]
 
@@ -197,38 +273,102 @@ def mask_to_boxes(
             if sl is None:
                 continue
             ys, xs = sl
-            area = int((labels[sl] == i).sum())
-            if area >= min_area:
-                boxes.append((int(xs.start), int(ys.start), int(xs.stop - xs.start), int(ys.stop - ys.start)))
+            ink = int((labels[sl] == i).sum())
+            if ink > speckle_px:
+                box = (int(xs.start), int(ys.start), int(xs.stop - xs.start), int(ys.stop - ys.start))
+                comps.append(Component(box, ink))
 
-    boxes.sort(key=lambda b: (b[1], b[0]))
-    return boxes
+    comps.sort(key=lambda c: (c.box[1], c.box[0]))
+    return comps
 
 
-def merge_overlapping(boxes: list[tuple[int, int, int, int]], gap: int = 6) -> list[tuple[int, int, int, int]]:
-    """Merge boxes that touch or nearly touch, within *gap* pixels.
+def mask_to_boxes(
+    mask: Any,
+    min_area_frac: float = 0.0002,
+    *,
+    polarity: str = "auto",
+    merge_gap: int = 0,
+    speckle_px: int = SPECKLE_PX,
+) -> list[tuple[int, int, int, int]]:
+    """Marks of a binary *mask* as ``(x, y, w, h)`` boxes.
+
+    SPODS and StaVer both ship per-category pixel masks rather than boxes, so
+    this is the first step for either.
+
+    Components within *merge_gap* pixels of each other are merged **first**, and
+    the *min_area_frac* floor is then applied to each merged group's total ink.
+    Do not reverse that (see the note at the top of this section); pass
+    ``merge_gap=0`` only for a mask whose components are genuinely separate
+    marks.  :func:`merge_gap_for_page` derives the gap from the page size.
+    """
+    import numpy as np
+
+    # Convert once and hand the array on: these masks are 8-megapixel scans, and
+    # a second np.asarray(PIL image) here costs as much as the decomposition.
+    arr = np.asarray(mask)
+    comps = mask_components(arr, polarity=polarity, speckle_px=speckle_px)
+    if not comps:
+        return []
+
+    height, width = arr.shape[:2]
+    min_ink = max(1.0, min_area_frac * float(width * height))
+
+    merged = merge_components(comps, gap=merge_gap) if merge_gap > 0 else comps
+    return [c.box for c in merged if c.ink >= min_ink]
+
+
+def merge_components(components: Sequence[Component], *, gap: int = 6) -> list[Component]:
+    """Merge components that touch or nearly touch, summing their ink.
 
     A rubber stamp's mask usually breaks into a dozen components — the ring, the
     text inside it, a broken arc where the ink did not take.  Left unmerged,
     every fragment becomes its own "mark" and the class inventory is nonsense.
     """
-    remaining = list(boxes)
-    out: list[tuple[int, int, int, int]] = []
+    remaining = list(components)
+    out: list[Component] = []
     while remaining:
-        x, y, w, h = remaining.pop()
+        (x, y, w, h), ink = remaining.pop()
         changed = True
         while changed:
             changed = False
             for other in list(remaining):
-                ox, oy, ow, oh = other
+                (ox, oy, ow, oh), oink = other
                 if x - gap < ox + ow and ox - gap < x + w and y - gap < oy + oh and oy - gap < y + h:
                     nx, ny = min(x, ox), min(y, oy)
                     x, y, w, h = nx, ny, max(x + w, ox + ow) - nx, max(y + h, oy + oh) - ny
+                    ink += oink
                     remaining.remove(other)
                     changed = True
-        out.append((x, y, w, h))
-    out.sort(key=lambda b: (b[1], b[0]))
+        out.append(Component((x, y, w, h), ink))
+    out.sort(key=lambda c: (c.box[1], c.box[0]))
     return out
+
+
+def merge_overlapping(boxes: list[tuple[int, int, int, int]], gap: int = 6) -> list[tuple[int, int, int, int]]:
+    """:func:`merge_components` for callers that have boxes but no ink counts."""
+    return [c.box for c in merge_components([Component(b, 0) for b in boxes], gap=gap)]
+
+
+def reject_oversize(
+    boxes: Sequence[tuple[int, int, int, int]],
+    width: int,
+    height: int,
+    max_area_frac: float,
+) -> tuple[list[tuple[int, int, int, int]], list[tuple[int, int, int, int]]]:
+    """Split *boxes* into ``(kept, rejected)`` on the fraction of page they cover.
+
+    A mark is a thing *on* a page, not the page.  A box covering half the sheet
+    is a mask artefact — most often a ruled table, whose borders weld the whole
+    grid into one connected component — and admitting it as a mark puts a
+    page-sized crop into the class inventory.  Rejections are returned rather
+    than dropped so the caller can report them: an unexplained missing mark is
+    worse than a noisy one.
+    """
+    page_area = float(width * height)
+    kept, rejected = [], []
+    for box in boxes:
+        (kept if page_area and box[2] * box[3] < max_area_frac * page_area else rejected).append(box)
+    return kept, rejected
 
 
 # --------------------------------------------------------------------------
