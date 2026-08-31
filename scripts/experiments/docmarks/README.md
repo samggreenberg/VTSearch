@@ -231,31 +231,62 @@ dataset × embedder cross-product, so adding DocMarks and `sift_vlad` there woul
 silently schedule `sift_vlad` cells for all six existing datasets, on a mount
 the playbook already calls chronically full.
 
-## The clustering threshold is measured, not chosen
+## Strict partition, cheap merge
 
-Single linkage does not degrade gracefully. Measured on SPODS's 2,096 real
-marks:
+The two clustering errors do not cost the same, so the threshold is not set
+where it is "most accurate":
+
+- An **over-split** shows up in the audit as one obvious pair of near-identical
+  classes. One click.
+- An **over-merge** shows up nowhere. The class quietly means two things for as
+  long as the corpus lives, and every number computed on it is wrong in a
+  direction nobody can see.
+
+So the threshold runs **strict**, the partition over-splits on purpose, and the
+repair is done by hand. Both directions of every hand decision are recorded in
+`adjudications.json` as page-id pairs and replayed on every future re-cluster —
+`same` becomes a must-link, `different` a cannot-link — so an afternoon of
+merging is not undone the next time a number moves. A pair ruled both ways is
+refused rather than resolved by whichever is applied last.
+
+Measured on 2,096 real SPODS marks with the 256-bit hash:
 
 | threshold | classes | largest component | share | classes with ≥10 |
 |---:|---:|---:|---:|---:|
-| 0.005–0.030 | 1,153 | 31 | 1.5% | 32 |
-| **0.040–0.060** | **728** | **60** | **2.9%** | **41** |
-| 0.080 | 458 | 382 | 18.2% | 43 |
-| 0.100 | 230 | 1,021 | 48.7% | 28 |
-| 0.180 | 34 | 1,818 | 86.7% | 9 |
+| 0.08 | 969 | 60 | 2.9% | 36 |
+| **0.16** | **503** | **60** | **2.9%** | **51** |
+| 0.18 | 413 | 90 | 4.3% | 50 |
+| 0.20 | 367 | 126 | 6.0% | 49 |
+| 0.22 | 288 | 593 | 28.3% | 37 |
+| 0.26 | 124 | 1,474 | 70.3% | 16 |
 
-Read the **share** column, not the class count: at 0.18 the corpus reports 34
-classes, which sounds like an inventory and is actually one blob of 1,818 marks
-with a tail. An earlier default of 0.18 — validated on a three-class fixture —
-produced exactly that, and it did not look like an error.
+Read the **share** column, not the class count. 0.16 is the top of the flat
+region: the most the clustering assembles before it starts assembling things
+that do not belong together.
 
-The plateaus are wide because pHash distances are quantised to multiples of
-1/64, so every threshold between two steps gives an identical partition; 0.04,
-0.05 and 0.06 are the same corpus. That makes 0.05 a safe working point rather
-than a knife edge.
+## The descriptor had to be widened to get here
+
+The first real run merged a red **book** stamp (5 instances) and a blue
+**elephant** stamp (27) into one class, and no threshold separated them — a
+single pair at Hamming 2/64 bridged the set, so it was one group at 0.04 and 21
+fragments at 0.03.
+
+The mechanism is frequency. A stamp's border ring is big, smooth and
+low-frequency; the interior that says *which* stamp is not. An 8×8 DCT block
+keeps almost nothing but the ring, so a 64-bit hash encoded "is a round stamp".
+The hash is now 16×16 (256 bits) with a soft radial taper toward the crop's own
+mean, and on that class it gives exactly {27 elephants} + {5 books}.
+
+It stays **greyscale** on purpose: the same elephant appears in blue on 26
+pages and red on one, and belongs in a single class.
+
+Clustering on SigLIP crop vectors would have separated them trivially and was
+rejected: SigLIP is one arm of the eval, so letting it define the classes would
+tilt the comparison toward it. The proposal step stays model-free.
 
 Re-run `tune_clustering.py` whenever the source set or the descriptor changes.
-The number is a property of the data and does not travel.
+The number is a property of the data and does not travel — it moved from 0.05
+to 0.16 when the hash went from 64 to 256 bits.
 
 ## Looking at what you built
 

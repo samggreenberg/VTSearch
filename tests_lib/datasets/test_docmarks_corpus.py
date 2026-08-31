@@ -726,35 +726,67 @@ class TestClustering:
         labels = mods["cluster"].single_linkage(dist, 0.2, cannot_link=[(0, 1)])
         assert labels[0] != labels[1]
 
-    def test_separations_resolve_by_page_id_not_row_index(self, mods):
+    def test_pairs_resolve_by_page_id_not_row_index(self, mods):
         MarkRef = mods["cluster"].MarkRef
         refs = [
             MarkRef(0, 0, "spods/001", "logo", (0, 0, 10, 10)),
             MarkRef(1, 0, "spods/002", "logo", (0, 0, 10, 10)),
         ]
-        assert mods["cluster"].resolve_separations(refs, [("spods/001", "spods/002")]) == [(0, 1)]
+        assert mods["cluster"].resolve_pairs(refs, [("spods/001", "spods/002")]) == [(0, 1)]
 
-    def test_a_separation_naming_a_dropped_page_is_skipped(self, mods):
+    def test_a_pair_naming_a_dropped_page_is_skipped(self, mods):
         MarkRef = mods["cluster"].MarkRef
         refs = [MarkRef(0, 0, "spods/001", "logo", (0, 0, 10, 10))]
         # Pages come and go with tier budgets; a stale pair must not refuse the
         # build.
-        assert mods["cluster"].resolve_separations(refs, [("spods/001", "spods/999")]) == []
+        assert mods["cluster"].resolve_pairs(refs, [("spods/001", "spods/999")]) == []
 
-    def test_separations_round_trip_and_deduplicate(self, mods, tmp_path):
-        path = tmp_path / "separations.json"
-        mods["cluster"].save_separations(
-            [
-                {"left_page_id": "b", "right_page_id": "a"},
-                {"left_page_id": "a", "right_page_id": "b"},
-            ],
+    def test_adjudications_round_trip_and_deduplicate(self, mods, tmp_path):
+        path = tmp_path / "adjudications.json"
+        mods["cluster"].save_adjudications(
+            [{"left_page_id": "d", "right_page_id": "c"}],
+            [{"left_page_id": "b", "right_page_id": "a"}, {"left_page_id": "a", "right_page_id": "b"}],
             path,
         )
+        same, different = mods["cluster"].load_adjudications(path)
         # (a, b) and (b, a) are one decision, not two.
-        assert mods["cluster"].load_separations(path) == [("a", "b")]
+        assert same == [("c", "d")]
+        assert different == [("a", "b")]
 
-    def test_no_separations_file_means_no_constraints(self, mods, tmp_path):
-        assert mods["cluster"].load_separations(tmp_path / "missing.json") == []
+    def test_no_adjudication_file_means_no_constraints(self, mods, tmp_path):
+        assert mods["cluster"].load_adjudications(tmp_path / "missing.json") == ([], [])
+
+    def test_a_pair_ruled_both_ways_is_refused(self, mods, tmp_path):
+        # Storing both would let whichever is applied last silently win, and the
+        # loser is a human decision nobody would know had been discarded.
+        with pytest.raises(ValueError, match="both same and different"):
+            mods["cluster"].save_adjudications(
+                [{"left_page_id": "a", "right_page_id": "b"}],
+                [{"left_page_id": "a", "right_page_id": "b"}],
+                tmp_path / "adjudications.json",
+            )
+
+    def test_must_link_joins_marks_the_threshold_would_split(self, mods):
+        # The operating strategy: run strict so the partition over-splits, then
+        # repair by hand. A merge has to beat the distance, or the repair does
+        # not survive the next re-cluster.
+        dist = np.array([[0.0, 0.9], [0.9, 0.0]])
+        assert mods["cluster"].single_linkage(dist, 0.1) == [0, 1]
+        assert mods["cluster"].single_linkage(dist, 0.1, must_link=[(0, 1)]) == [0, 0]
+
+    def test_a_merge_and_a_separation_that_conflict_are_refused(self, mods):
+        dist = np.array([[0.0, 0.9], [0.9, 0.0]])
+        with pytest.raises(ValueError, match="both same and different"):
+            mods["cluster"].single_linkage(dist, 0.1, must_link=[(0, 1)], cannot_link=[(0, 1)])
+
+    def test_a_merge_carries_its_group_across_a_separation(self, mods):
+        # a must-link b; c is separated from a. c must therefore stay apart from
+        # b too, or the separation is honoured only against the row that
+        # happened to be named in it.
+        dist = np.array([[0.0, 0.9, 0.01], [0.9, 0.0, 0.01], [0.01, 0.01, 0.0]])
+        labels = mods["cluster"].single_linkage(dist, 0.1, must_link=[(0, 1)], cannot_link=[(0, 2)])
+        assert labels[0] == labels[1]
+        assert labels[2] != labels[0]
 
     def test_merge_order_is_independent_of_row_order(self, mods):
         # Once constraints can block a merge, "which merge happened first"

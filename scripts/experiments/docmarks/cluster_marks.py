@@ -228,23 +228,29 @@ def single_linkage(
     threshold: float,
     *,
     cannot_link: Optional[Sequence[tuple[int, int]]] = None,
+    must_link: Optional[Sequence[tuple[int, int]]] = None,
 ) -> list[int]:
     """Union-find single-linkage clustering.  Returns a label per row.
 
-    *cannot_link* is a list of index pairs a human has adjudicated as **different
-    marks**.  Those pairs are never merged, however similar they look, and the
-    constraint propagates: once ``a`` and ``b`` are separated, nothing may join
-    their groups through some third crop either.
+    Two kinds of human decision override the distances, and both are honoured
+    before the threshold gets a say:
 
-    This is the half of the ground truth that pure clustering cannot supply.
-    Two visually confusable marks — the same company's logo beside its
-    subsidiary's, a stamp and its reissue — are precisely the pairs an
-    instance-retrieval benchmark must pin, and precisely the pairs single
-    linkage will chain together.  Recording "these are different" makes the
-    distinction enforceable rather than a matter of where the threshold landed.
+    * *must_link* — pairs adjudicated as the **same mark**.  Joined whatever
+      their distance, because a clustering that splits one mark in two is a
+      thing a person can see and the descriptor cannot.
+    * *cannot_link* — pairs adjudicated as **different marks**.  Never joined,
+      however similar they look, and the constraint propagates: once ``a`` and
+      ``b`` are apart, nothing may reunite their groups through a third crop.
 
-    Merges are applied in increasing distance order so the result does not
-    depend on iteration order once constraints start blocking merges.
+    The asymmetry between the two is the whole operating strategy.  Run the
+    threshold **strict**, so the partition over-splits: a split is one visible
+    mistake that a person fixes with one merge, while a bad merge is invisible
+    contamination that quietly makes a class mean two things.  These two lists
+    are how that repair survives — they are replayed on every re-cluster, so
+    the work is done once rather than re-done whenever a number moves.
+
+    Threshold merges are applied in increasing distance order, so the result
+    does not depend on iteration order once constraints start blocking merges.
     """
     n = dist.shape[0]
     parent = list(range(n))
@@ -267,7 +273,34 @@ def single_linkage(
     def blocked(ra: int, rb: int) -> bool:
         return (min(ra, rb), max(ra, rb)) in forbidden
 
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra == rb:
+            return
+        keep, gone = min(ra, rb), max(ra, rb)
+        parent[gone] = keep
+        nonlocal forbidden
+        if forbidden:
+            forbidden = {
+                (
+                    min(keep if x == gone else x, keep if y == gone else y),
+                    max(keep if x == gone else x, keep if y == gone else y),
+                )
+                for x, y in forbidden
+            }
+
+    # Human merges first, so a subsequent separation is checked against the
+    # groups the person actually meant rather than against raw rows.
+    for a, b in must_link or ():
+        union(a, b)
+
     for a, b in cannot_link or ():
+        if find(a) == find(b):
+            raise ValueError(
+                f"rows {a} and {b} are adjudicated both same and different — "
+                "one of the two verdicts is wrong, and guessing which would "
+                "silently pick a side"
+            )
         forbid(a, b)
 
     candidates = sorted(
@@ -336,18 +369,18 @@ def assign_class_ids(
     return out
 
 
-def resolve_separations(
+def resolve_pairs(
     refs: Sequence[MarkRef],
-    separations: Sequence[tuple[str, str]],
+    pairs: Sequence[tuple[str, str]],
 ) -> list[tuple[int, int]]:
     """Turn adjudicated ``(page_id, page_id)`` pairs into row-index pairs.
 
-    Separations are stored against **page ids**, not row indices or class ids,
-    because those are the only identifiers that survive a re-cluster.  A row
-    index changes whenever the corpus grows; a class id changes whenever the
-    threshold moves — and a human decision that "these two marks are different"
-    must outlive both, or every re-run quietly discards the adjudication it was
-    supposed to be built on.
+    Adjudications are stored against **page ids**, not row indices or class
+    ids, because those are the only identifiers that survive a re-cluster.  A
+    row index changes whenever the corpus grows; a class id changes whenever
+    the threshold moves — and a human decision about two marks must outlive
+    both, or every re-run quietly discards the annotation it was supposed to be
+    built on.
 
     A pair naming a page that is no longer in the corpus is skipped rather than
     raising: pages come and go with tier budgets, and a dropped page is not a
@@ -358,7 +391,7 @@ def resolve_separations(
         rows_by_page.setdefault(ref.page_id, []).append(index)
 
     out: list[tuple[int, int]] = []
-    for left, right in separations:
+    for left, right in pairs:
         for a in rows_by_page.get(left, ()):
             for b in rows_by_page.get(right, ()):
                 if a != b:
@@ -386,14 +419,15 @@ def cluster_source(
     kinds: Iterable[str] = ("logo", "stamp"),
     backend: str = "phash",
     threshold: float = 0.18,
-    separations: Optional[Sequence[tuple[str, str]]] = None,
+    same: Optional[Sequence[tuple[str, str]]] = None,
+    different: Optional[Sequence[tuple[str, str]]] = None,
     provenance: str = "clustered",
 ) -> dict[str, Any]:
     """Cluster one source's marks in place.  Returns a summary for the report.
 
-    *separations* are adjudicated "these are different marks" pairs, as
-    ``(page_id, page_id)``.  They survive re-clustering: a human decision about
-    two marks must not be undone by someone later nudging the threshold.
+    *same* and *different* are adjudicated ``(page_id, page_id)`` pairs. They
+    survive re-clustering: a human decision about two marks must not be undone
+    by someone later nudging the threshold.
     """
     refs = collect_refs(pages, kinds=kinds, source=source)
     if not refs:
@@ -401,8 +435,9 @@ def cluster_source(
 
     desc = describe_marks(pages, refs, backend=backend)
     dist = distance_matrix(desc, refs, backend=backend)
-    cannot_link = resolve_separations(refs, separations or ())
-    labels = single_linkage(dist, threshold, cannot_link=cannot_link)
+    must_link = resolve_pairs(refs, same or ())
+    cannot_link = resolve_pairs(refs, different or ())
+    labels = single_linkage(dist, threshold, cannot_link=cannot_link, must_link=must_link)
     classes = assign_class_ids(pages, refs, labels, source=source, provenance=provenance)
 
     sizes = sorted((len(v) for v in classes.values()), reverse=True)
@@ -412,6 +447,7 @@ def cluster_source(
         "classes": len(classes),
         "backend": backend,
         "threshold": threshold,
+        "merges_applied": len(must_link),
         "separations_applied": len(cannot_link),
         "largest_clusters": sizes[:10],
         "singletons": sum(1 for s in sizes if s == 1),
@@ -434,26 +470,55 @@ def write_cluster_report(summaries: list[dict[str, Any]], path: Path) -> None:
 # `cannot_link` in single_linkage does with these.
 
 
-def load_separations(path: Path) -> list[tuple[str, str]]:
-    """Read adjudicated different-mark pairs.  Missing file means none yet."""
+def load_adjudications(path: Path) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
+    """``(same, different)`` page-id pairs a human has ruled on.
+
+    Both directions live in one file because they are one decision procedure
+    seen from two sides, and because a pair appearing in both is a conflict
+    that has to be catchable — which it is not if they sit in separate stores
+    that nothing reads together.
+    """
     if not path.exists():
-        return []
+        return [], []
     payload = json.loads(path.read_text(encoding="utf-8"))
-    return [(row["left_page_id"], row["right_page_id"]) for row in payload.get("separations", [])]
+
+    def rows(key: str) -> list[tuple[str, str]]:
+        return [(r["left_page_id"], r["right_page_id"]) for r in payload.get(key, [])]
+
+    return rows("same"), rows("different")
 
 
-def save_separations(pairs: Sequence[dict[str, Any]], path: Path) -> None:
-    """Write adjudicated different-mark pairs, deduplicated and ordered.
+def save_adjudications(
+    same: Sequence[dict[str, Any]],
+    different: Sequence[dict[str, Any]],
+    path: Path,
+) -> None:
+    """Write both directions, deduplicated and ordered, refusing a conflict.
 
-    Pairs are stored unordered-within-pair (sorted) so that adjudicating
+    Pairs are stored unordered-within-pair (sorted) so that ruling on
     ``(a, b)`` and later ``(b, a)`` records one decision rather than two.
     """
-    seen: dict[tuple[str, str], dict[str, Any]] = {}
-    for row in pairs:
-        key = tuple(sorted((row["left_page_id"], row["right_page_id"])))
-        merged = dict(row)
-        merged["left_page_id"], merged["right_page_id"] = key
-        seen[key] = merged  # type: ignore[index]
+
+    def canon(rows: Sequence[dict[str, Any]]) -> dict[tuple[str, str], dict[str, Any]]:
+        out: dict[tuple[str, str], dict[str, Any]] = {}
+        for row in rows:
+            key = tuple(sorted((row["left_page_id"], row["right_page_id"])))
+            merged = dict(row)
+            merged["left_page_id"], merged["right_page_id"] = key
+            out[key] = merged  # type: ignore[index]
+        return out
+
+    same_map, diff_map = canon(same), canon(different)
+    clash = sorted(set(same_map) & set(diff_map))
+    if clash:
+        raise ValueError(
+            f"{len(clash)} pair(s) adjudicated both same and different, e.g. {clash[0]} — "
+            "resolve the verdicts before writing; storing both would let whichever "
+            "is applied last silently win"
+        )
     path.parent.mkdir(parents=True, exist_ok=True)
-    payload = {"separations": [seen[k] for k in sorted(seen)]}
+    payload = {
+        "same": [same_map[k] for k in sorted(same_map)],
+        "different": [diff_map[k] for k in sorted(diff_map)],
+    }
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
