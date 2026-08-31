@@ -176,6 +176,12 @@ SPECKLE_PX = 4
 #: page — 1.35x inside the plateau's lower edge, and kept nearer that edge than
 #: the middle because other sources (StaVer) do carry two stamps on one page,
 #: where an over-large gap would weld them.
+#:
+#: **One value, not one per kind**, because the sweep says so: the three SPODS
+#: kinds settle at different points (logo from 42 px, signature from 60, stamp
+#: from 90) but they settle into the *same* plateau, so any gap at or above the
+#: stamp's requirement is simultaneously correct for all three.  Splitting it per
+#: kind would be three numbers where the data supports one.
 MERGE_GAP_FRAC = 0.035
 MERGE_GAP_MIN_PX = 6
 
