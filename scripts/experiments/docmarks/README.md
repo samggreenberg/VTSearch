@@ -130,6 +130,52 @@ with it: **synthetic numbers quantify a mechanism, real numbers size the
 effect.** A finding that appears only in `synth` is a hypothesis about the
 pipeline, not a claim about documents.
 
+## Masks to marks: decompose, merge, *then* filter
+
+SPODS and StaVer ship pixel masks, not boxes, so `sources/_common.py` has to
+decide what counts as one mark. The order of those three steps is the whole
+game, and getting it wrong is silent.
+
+A mark's mask is **not one connected component**. A rubber stamp is a ring, the
+text inside it, and however many broken arcs the ink left behind; a script stamp
+is one component per pen stroke. Each of those is individually tiny. So an area
+floor applied to *raw* components deletes eleven fragments of the dozen as
+speckle, the merge that exists to reassemble them never sees them, and the one
+or two chunkiest survivors get promoted to classes of their own. That is how a
+class called `spods/stamp_00129_1` came to be 38 instances of the word **New**,
+clipped out of a three-line "Dy.Manager / NewEastZone" stamp (issue #3361).
+
+So: **decompose, merge, then filter**, with the floor applied to the merged
+group's *ink* (a ring is mostly hole, so its box area proves nothing). The only
+filter that runs before the merge is an absolute few-pixel one, because true
+single-pixel scan noise carries no evidence either way but can bridge the gap
+between two marks that should stay apart.
+
+The merge gap is a fraction of the page's longest side (`MERGE_GAP_FRAC`), not a
+pixel count — SPODS pages are A4 at 300 DPI (~2,476×3,480) and StaVer's are not.
+0.035 is read off a sweep of all 1,088 SPODS pages: **from gap 90 px through gap
+300 px the output is byte-identical** — one mark per page that has one, median
+428 px, largest box 3.5% of the page — because nothing else lies within 300 px
+of a mark. Below 90 the merge under-runs and splits real stamps across their own
+line spacing. StaVer's recorded stamp count is the independent check on the
+other side; it is the source that actually carries two stamps on one page.
+
+Two consequences worth stating plainly:
+
+- **The `text` mask yields no marks.** It is the page body — a property of the
+  page, not a thing on it. Filtered, what survived was not even words: it was
+  whichever headings and ruled tables had an underline welding their glyphs into
+  one component, about 1.1 per page. They were never query classes, but they
+  were real entries in `page.marks` and leaked into everything that read it
+  without a kind filter, starting with the synthetic-background selector. The
+  mask is kept as `meta["text_frac"]` and `meta["text_components"]`; the
+  documented non-queryable negative control is `signature`, which is a localised
+  mark and stays one.
+- **A box covering more than `MAX_MARK_AREA_FRAC` of its page is rejected**,
+  with a warning naming the page. Nothing in SPODS trips it after the above —
+  the largest surviving mark is 3.5% — which is the point: it is a tripwire for
+  the next source, not a filter this one needs.
+
 ## Three kinds of negative
 
 Not all distractors are equal, and the manifest keeps them distinct:

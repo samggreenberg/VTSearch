@@ -158,10 +158,25 @@ def stable_rank(key: str, salt: str) -> float:
 SPECKLE_PX = 4
 
 #: Merge gap as a fraction of the page's longest side, with an absolute floor.
-#: A gap in pixels does not travel between a 950 px scan and a 2,500 px one, and
-#: the distance between a broken stamp's fragments scales with the stamp, which
-#: scales with the page.  See :func:`merge_gap_for_page`.
-MERGE_GAP_FRAC = 0.012
+#: A gap in pixels does not travel between a 950 px thumbnail and a 3,500 px
+#: scan, and the distance between a broken stamp's fragments scales with the
+#: stamp, which scales with the page.  See :func:`merge_gap_for_page`.
+#:
+#: **0.035 is read off the data, not chosen.**  Swept over all 1,088 SPODS pages
+#: (A4 at 300 DPI, ~2,476x3,480), the per-page mark count falls as the gap grows
+#: and then stops dead: every kind reaches exactly one mark per page that has
+#: one, and from **gap 90 px through gap 300 px the output is identical** — same
+#: counts, same median (428 px), same p90, same largest box (758 px, 3.5% of the
+#: page).  Nothing changes over a 3.3x range because on these pages there is
+#: nothing else within 300 px of a mark to merge with, which is as clean a
+#: plateau as a parameter ever gets.  Below 90 the merge under-runs and splits
+#: real stamps: at 60 the three-line "RTI Unit" stamp on ``spods/00837`` breaks
+#: across its 70 px line spacing, and at 20 the ``spods/00129`` stamp splits into
+#: the fragments that became the "New" class.  0.035 lands at 122 px on a SPODS
+#: page — 1.35x inside the plateau's lower edge, and kept nearer that edge than
+#: the middle because other sources (StaVer) do carry two stamps on one page,
+#: where an over-large gap would weld them.
+MERGE_GAP_FRAC = 0.035
 MERGE_GAP_MIN_PX = 6
 
 

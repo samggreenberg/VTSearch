@@ -343,9 +343,7 @@ class TestSpods:
         gt = tmp_path / "gt"
         self._write_gt(gt, 11, {"stamp": self._box_mask((20, 20, 400, 350))})
 
-        found = mods["spods"].marks_for_page(
-            gt, 11, width=500, height=600, min_area_frac=0.0002, max_area_frac=0.25
-        )
+        found = mods["spods"].marks_for_page(gt, 11, width=500, height=600, min_area_frac=0.0002, max_area_frac=0.25)
         assert found.marks == []
         assert len(found.warnings) == 1
         assert "46.7% of the page" in found.warnings[0]
