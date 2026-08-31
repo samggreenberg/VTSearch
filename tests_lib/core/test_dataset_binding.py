@@ -367,3 +367,37 @@ class TestRealRegisteredEmbedder:
         ctx = _ctx_with_embedder(struct_emb.name)
         assert ctx.structural_embedder == struct_emb.name
         assert ctx.supports_geometric_verification is True
+
+
+class TestEmbedderSupportsPatchRegions:
+    """The public single-capability read used to gate patch-embedder callers.
+
+    Added for the #3329 fit-quality finding: the coverage atlas's typicality
+    guard is uninformative in a patch space, so the domain-shift route refuses
+    those references.  The gate reads the declared capability rather than a
+    hard-coded name list, so a newly registered patch embedder is covered the
+    day it lands.
+    """
+
+    def test_agrees_with_the_registry_for_every_embedder(self):
+        from vtscore.embedding.binding import embedder_supports_patch_regions
+        from vtscore.media import all_embedders
+
+        for emb in all_embedders():
+            assert embedder_supports_patch_regions(emb.name) is bool(emb.supports_patch_regions), emb.name
+
+    def test_finds_at_least_one_of_each(self):
+        """Guard against the agreement test passing vacuously on an empty side."""
+        from vtscore.embedding.binding import embedder_supports_patch_regions
+        from vtscore.media import all_embedders
+
+        names = [e.name for e in all_embedders()]
+        assert any(embedder_supports_patch_regions(n) for n in names)
+        assert any(not embedder_supports_patch_regions(n) for n in names)
+
+    def test_blank_and_unknown_names_are_false(self):
+        from vtscore.embedding.binding import embedder_supports_patch_regions
+
+        assert embedder_supports_patch_regions(None) is False
+        assert embedder_supports_patch_regions("") is False
+        assert embedder_supports_patch_regions("no_such_embedder") is False

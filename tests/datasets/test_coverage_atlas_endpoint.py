@@ -200,3 +200,44 @@ class TestDomainShiftEndpoint:
         )
         assert resp.status_code == 400
         assert "mismatch" in resp.get_json()["message"].lower()
+
+    def test_patch_embedder_returns_400(self, client):
+        """A patch-embedder reference is refused rather than answered with noise.
+
+        The typicality guard does not separate in-domain from out-of-domain
+        data in a patch space - on ``dinov3_patch`` it fires on 80% of the
+        reference's own held-out data against 93% cross-corpus, a separation
+        of 0.13.  See ``docs/experiments/2026-08-30-fit-quality-3329/`` (B4-B6).
+        """
+        from vtscore.state.coverage_atlas import CoverageAtlas
+
+        ref_entry, ref_ctx = _loaded_dataset(120, name="RefPatch", seed_offset=7000, embedder="dinov3_patch")
+        ref_ctx.coverage_atlas = CoverageAtlas({cid: m["embeddings"]["clap"] for cid, m in ref_ctx.medias.items()}, k=3)
+        target_entry, _ = _loaded_dataset(10, name="TargetPatch", seed_offset=8000, embedder="dinov3_patch")
+
+        resp = client.get(
+            f"/api/datasets/registry/{ref_entry['id']}/domain-shift",
+            headers={"X-Dataset-Id": target_entry["id"]},
+        )
+        assert resp.status_code == 400
+        assert "patch embedder" in resp.get_json()["message"].lower()
+
+    def test_single_vector_embedder_still_reports(self, client):
+        """The patch gate reads the capability, so single-vector siblings pass.
+
+        ``dinov3_single`` is the same model family as the refused
+        ``dinov3_patch`` and must not be caught by the gate: what fails is the
+        patch *space*, not the architecture.
+        """
+        from vtscore.state.coverage_atlas import CoverageAtlas
+
+        ref_entry, ref_ctx = _loaded_dataset(120, name="RefSingle", seed_offset=9000, embedder="dinov3_single")
+        ref_ctx.coverage_atlas = CoverageAtlas({cid: m["embeddings"]["clap"] for cid, m in ref_ctx.medias.items()}, k=3)
+        target_entry, _ = _loaded_dataset(10, name="TargetSingle", seed_offset=9500, embedder="dinov3_single")
+
+        resp = client.get(
+            f"/api/datasets/registry/{ref_entry['id']}/domain-shift",
+            headers={"X-Dataset-Id": target_entry["id"]},
+        )
+        assert resp.status_code == 200
+        assert resp.get_json()["n_items"] == 10
