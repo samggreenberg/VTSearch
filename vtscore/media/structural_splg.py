@@ -4,7 +4,7 @@ The learned-feature backend the structural-embedder design doc reserves: same
 two-stage architecture, but Stage-2 keypoints/descriptors come from SuperPoint
 and correspondences from LightGlue instead of SIFT + Lowe-ratio matching.
 Evaluated against the SIFT backend in the 2026-07-13 screenshot-iconography
-study (docs/reports).
+study (docs/experiments).
 
 Integration notes
 -----------------

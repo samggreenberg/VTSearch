@@ -4,7 +4,7 @@ Extends the 4-DoF similarity fit baked into :class:`SiftMatcher.verify` with a
 **3-DoF scale+translation model** (isotropic scale + translation, no rotation)
 — the natural geometry for screenshots and scanned documents, where a target
 is a digital overlay that never rotates.  The 2026-07-13 screenshot-iconography
-study (docs/reports) measured the 3-DoF model against production 4-DoF on
+study (docs/experiments) measured the 3-DoF model against production 4-DoF on
 shared correspondences.
 
 Both models emit the production :class:`MatchStats` bundle and share the

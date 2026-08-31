@@ -3,17 +3,20 @@
 `docs/experiments/<study>/REPORT.md` is the archival record and renders fine on
 GitHub. It is not a comfortable *read*: bitmap plots that cannot be zoomed, and a
 figure that is only a link away from the claim it supports. This turns the same
-markdown into the `docs/reports/` convention — a single file with every figure
+markdown into a `report.html` beside it — a single file with every figure
 inlined (SVG where one exists, so plots stay crisp at any zoom, base64 otherwise)
-and every photograph embedded.
+and every photograph embedded. It lands in the study's own directory so a reader
+never has to look for the reading copy anywhere else.
 
 **Generated, not hand-written.** The narrative has exactly one source, so the
 page cannot drift from the report the way a hand-maintained second copy would.
 Re-run it after editing the report:
 
     python make_bench_html.py --report docs/experiments/2026-08-12-overview-bench/REPORT.md \\
-        --out docs/reports/2026-08-17-overview-bench.html \\
         --subtitle "What a user actually gets from each shipped configuration"
+
+`--out` defaults to `report.html` beside the report it was built from; pass it
+only to write the page somewhere else.
 
 The markdown subset is the one experiment reports actually use: headings, pipe
 tables, fenced code, block quotes, bullet and numbered lists, images with an
@@ -317,7 +320,7 @@ def render_table(rows: list[str]) -> str:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--report", required=True)
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--out", default=None)
     ap.add_argument("--title", default=None)
     ap.add_argument("--subtitle", default="")
     ap.add_argument("--kicker", default="VTSearch · experiment report")
@@ -364,7 +367,7 @@ def main() -> int:
 </body>
 </html>
 """
-    out = Path(args.out)
+    out = Path(args.out) if args.out else report.with_name("report.html")
     out.parent.mkdir(parents=True, exist_ok=True)
     # No trailing whitespace: the repo's pre-commit hook would strip it, and a
     # hook-rewritten page no longer matches what this script emits.

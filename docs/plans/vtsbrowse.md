@@ -35,7 +35,7 @@ embedders, embedding matrix, media serving, clipper, and concurrency stack.
 - **Empirical tuning pass:** the UMAP knobs are settled (per-embedder
   `n_neighbors`/`min_dist`, compaction off — see
   [`vtsbrowse-empirical-tuning.md`](vtsbrowse-empirical-tuning.md) and the
-  [tuning report](../reports/2026-07-22-vtsbrowse-umap-tuning.html)). Still owed
+  [tuning report](../experiments/2026-07-22-vtsbrowse-umap-tuning/REPORT.md)). Still owed
   there: the pyramid-parameter sweep and the canvas/hover review, which needs an
   environment with a browser (visual layout and hover judgment can't be done in
   the headless cloud container).

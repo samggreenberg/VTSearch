@@ -83,5 +83,5 @@ cache does not fit on the 50 GB `/exp/$USER` volume; results write to
 | `sweep.py` | the grid × seeds × compact sweep → CSV rows |
 | `summarize.py` | recommendations, compaction verdict, N-analysis → `summary.json` |
 | `plots.py`, `visualize.py` | report figures + layout scatter grids |
-| `build_report.py` | assemble the self-contained HTML report (figures inlined) → `docs/reports/` |
+| `build_report.py` | assemble the self-contained HTML report (figures inlined) → the study's `docs/experiments/<study>/report.html` |
 | `run_all.sbatch` | the end-to-end GRID job |

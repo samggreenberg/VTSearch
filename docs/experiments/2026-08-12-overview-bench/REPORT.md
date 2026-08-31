@@ -749,7 +749,7 @@ entailment test), `make_error_sheets.py` (the image sheets; it runs on the
 cluster, where the source images are). Generated tables are committed beside this
 file as `ANALYSIS_TABLES*.txt`.
 
-**Reading copy.** [`docs/reports/2026-08-17-overview-bench.html`](../../reports/2026-08-17-overview-bench.html)
+**Reading copy.** [`report.html`](report.html), beside this file,
 is this document as one self-contained page — plots as zoomable vector art,
 photographs embedded. It is **generated** from this file by `make_bench_html.py`;
 edit the report, then re-run the script so the two cannot disagree.
