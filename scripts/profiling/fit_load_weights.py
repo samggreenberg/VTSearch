@@ -129,7 +129,21 @@ def main() -> int:
             # warm rows only; fall back to all if none warm
             groups[key]["model_warm" if not r.get("cold_model") else "model_cold"].append((n, secs))
         elif phase in ("embed", "finalize"):
-            groups[key][phase].append((n, secs))
+            # Warm rows only, for the same reason ``model_load`` uses them: a
+            # cold first load folds one-time *per-process* costs into these
+            # phases - CUDA context creation, the encoder's first forward, and
+            # (behind ``finalize:coverage``) the cuML/UMAP JIT warmup. Those are
+            # paid once per server process, not once per dataset load, so they
+            # are not a fittable per-load cost; and because the cold row always
+            # lands at the smallest ``n`` measured, it has enormous leverage on
+            # the slope. Measured on audio/beats (issue #3062, 12 GPU loads):
+            # including the single cold row pulled b_fin down to 0.0018 s/item
+            # from the warm 0.0040 and collapsed R^2 to 0.08 from 0.999 - and
+            # 0.0040 is the value that agrees with the five sibling audio rows,
+            # whose finalize work is identical. Fall back to the cold rows only
+            # if a cell has no warm row at all.
+            bucket = phase if not r.get("cold_model") else phase + "_cold"
+            groups[key][bucket].append((n, secs))
 
     # Bandwidth (MB/s), device-pooled then collapsed if similar.
     bw: dict[str, float] = {}
@@ -160,11 +174,13 @@ def main() -> int:
         else:
             a_model, b_load, r2_m = _WARM_MODEL_FLOOR_S, 0.0, 0.0
         cold_model = statistics.median([s for _, s in cold_rows]) if cold_rows else a_model
-        e_xs = [n for n, _ in g.get("embed", [])]
-        e_ys = [s for _, s in g.get("embed", [])]
+        embed_pts = g.get("embed") or g.get("embed_cold", [])
+        e_xs = [n for n, _ in embed_pts]
+        e_ys = [s for _, s in embed_pts]
         a_e, b_e, r2_e = _affine_fit(e_xs, e_ys)
-        f_xs = [n for n, _ in g.get("finalize", [])]
-        f_ys = [s for _, s in g.get("finalize", [])]
+        fin_pts = g.get("finalize") or g.get("finalize_cold", [])
+        f_xs = [n for n, _ in fin_pts]
+        f_ys = [s for _, s in fin_pts]
         a_f, b_f, r2_f = _affine_fit(f_xs, f_ys)
         model[key] = {
             "a_model": round(max(0.0, a_model), 4),
