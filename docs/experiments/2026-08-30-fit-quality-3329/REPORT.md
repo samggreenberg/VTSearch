@@ -406,7 +406,9 @@ is not**, and both halves were unmeasured until now: neighbourhoods survive
 and the projection costs about 1.7 points of k-NN class purity.
 
 **The compaction radius is honest** — the one fit in this whole inventory that
-does what it says — and so is the region clustering: **all 2832 browse regions
+does what it says, though it is fitted in code that is *off* in production
+(compaction was switched off by the July sweep; see C3) — and so is the region
+clustering: **all 2832 browse regions
 are more self-similar than they are similar to everything else**, though by
 layer 3 nearly half of them have no ground-truth category holding even half
 their members.
@@ -433,7 +435,7 @@ how this whole issue started.
 | B6 | *(not pre-registered)* the per-embedder α repair | — | separation 0.13 → **0.043** | **repair fails** |
 | C1 | local structure kept, global lost | trust > 0.95 **and** Shepard < 0.6 | **0.956** and **0.288** | **confirmed** |
 | C2 | projection costs class purity | drop > 0 on ≥ 4 embedders | **5/5**, median **0.017** | **confirmed (small)** |
-| C3 | the 90th-percentile radius contains ~90 % | 0.85–0.95 | **0.894** | **confirmed** |
+| C3 | the 90th-percentile radius contains ~90 % | 0.85–0.95 | **0.894** | **confirmed** *(dormant code — compaction is off)* |
 | C4 | *(not pre-registered)* browse regions are coherent | — | **0 of 2832** below the diagonal | **coherent** |
 
 ## What was run
@@ -686,10 +688,31 @@ low-concentration geometry the r̄ table above blames for its atlas
 miscalibration, showing up in a measurement that has nothing to do with the
 atlas.
 
-**C3 confirmed, and it is the good news of the inventory.** The
+**C3 confirmed — but read it as a property of dormant code.** The
 90th-percentile core radius realises **0.894** containment against a nominal
 0.90, on every cell, independent of embedder. `_build_units` fits a statistic
 and that statistic means what it says.
+
+**Compaction is off in production and this measurement does not change that.**
+`PROJECTION_COMPACT_DEFAULT` is `False` and has been since the July UMAP-tuning
+sweep ([`2026-07-22-vtsbrowse-umap-tuning.html`](../../reports/2026-07-22-vtsbrowse-umap-tuning.html)),
+which found `compact_layout` costs ~2 % taxonomy separability and ~5–6 %
+neighbourhood structure on *every* dataset and embedder. `compact` is not a
+user-facing setting: `resolve_projection_params` hard-wires it to that constant
+with no override path, and all three production call sites
+(`datasets/stages/projection.py`, `detectors/positives_browse.py`,
+`routes/projection.py`) thread that one resolved value. So no shipped layout is
+compacted, and the layout measured here was fit at the default — this is the
+radius the packer *would* use, evaluated on the uncompacted layout users
+actually see.
+
+That is worth knowing in one direction only. The sweep rejected compaction on
+what it *costs*, and a reasonable objection to that verdict would be that the
+packing had been mis-fitted — that the circles were wrong and the cost was an
+artefact. They are not. The radius statistic is sound, so the price the sweep
+measured is the real price of the idea. **This is not evidence for turning
+compaction back on**: nothing in this run re-examined the separability cost that
+switched it off.
 
 ## C4 — are the browse canvas's named regions coherent? (inventory item 10)
 
@@ -790,8 +813,8 @@ running this guard on patch embedders**, and if it is wanted there, fix the
 atlas's per-node vMF model rather than any threshold on top of it.
 
 **The browse canvas needs no change.** C1's split verdict is the expected
-behaviour of UMAP, C2's cost is 1.7 points, C3 is correct, and C4 finds every
-region coherent. The one thing worth knowing is that coarse signs are weak: at
+behaviour of UMAP, C2's cost is 1.7 points, C3 is correct (of a packer that is
+switched off), and C4 finds every region coherent. The one thing worth knowing is that coarse signs are weak: at
 the two coarsest layers roughly half the regions have no dominant ground-truth
 category, so a sign at low zoom should be read as "roughly this way" rather than
 as a label.

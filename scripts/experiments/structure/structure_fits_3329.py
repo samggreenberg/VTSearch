@@ -472,7 +472,11 @@ def main(argv: list[str] | None = None) -> int:  # noqa: C901, PLR0915
                     shared.append(hits / 10.0)
                 add("umap", space, "knn_class_purity_k10", float(np.mean(shared)), len(shared))
 
-        # Compaction: a fitted 90th percentile should contain 90%.
+        # Compaction: a fitted 90th percentile should contain 90%.  NOTE this
+        # packer is OFF in production (PROJECTION_COMPACT_DEFAULT is False since
+        # the 2026-07-22 UMAP sweep, and `compact` has no override path), and the
+        # layout below is fit at that default, i.e. uncompacted.  What is measured
+        # is the radius statistic the packer WOULD use, on the layout users see.
         labels = _cluster(Y, min_cluster_size=max(5, Y.shape[0] // 100))
         units, centres, radii = _build_units(Y, labels)
         # The radius is fitted to the CORE members only (`_build_units` excludes
