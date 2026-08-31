@@ -1,9 +1,9 @@
 # DocMarks v1 — the same corpus, with the marks drawn correctly
 
 **2026-08-31.** Companion to [`report.html`](report.html) (open it in a browser —
-GitHub renders raw HTML as source). Same sources, same 1,088 SPODS pages, same
-generator as [v0](../2026-08-31-docmarks-v0/REPORT.md); what changed is the
-extractor that decides where a mark *is*.
+GitHub renders raw HTML as source). Same sources, same 1,088 SPODS pages and 432
+UCSF distractors, same generator as [v0](../2026-08-31-docmarks-v0/REPORT.md);
+what changed is the extractor that decides where a mark *is*.
 
 Regenerate with:
 
@@ -118,3 +118,7 @@ recorded yet, so none was invalidated.
 `spods/stamp_00129_1` still exists as a class *id* — ids are derived from the
 anchor page number, so the name recurs. It is now 12 instances at median 330 px,
 and it is the complete three-line stamp.
+
+The 432 UCSF distractors are unchanged and were never affected: they carry no
+masks, so nothing here touched them. They are rebuilt only so the haystack
+section stays comparable to v0's.
